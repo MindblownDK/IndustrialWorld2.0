@@ -1,0 +1,50 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c731d42220a11514daa3ec8913dbf5a1, type: 3}
+  m_Name: Biome_Wasteland
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Biomes.BiomeDefinition
+  biomeName: Wasteland
+  debugColor: {r: 0.55, g: 0.45, b: 0.35, a: 1}
+  minTemperature: 0.55
+  maxTemperature: 0.8
+  minHumidity: 0.2
+  maxHumidity: 0.45
+  priority: 1
+  heightOffset: 4
+  heightAmplitude: 20
+  heightFrequency: 0.03
+  ridgedness: 0.4
+  surfaceMaterial: 3
+  surfaceDepth: 1
+  subsurfaceMaterial: 1
+  subsurfaceDepth: 3
+  allowBeach: 1
+  isOceanic: 0
+  scatter:
+  - prefab: {fileID: 1480472396823231524, guid: 837cd7d55cf2e4043ae1983c85af5314, type: 3}
+    density: 0.03
+    minScale: 0.8
+    maxScale: 1.4
+    minHeight: 0
+    maxHeight: 9999
+  - prefab: {fileID: 8423442238557347234, guid: 9e6f0fb94a76d5f45951e61e197c6c09, type: 3}
+    density: 0.02
+    minScale: 0.7
+    maxScale: 1.6
+    minHeight: 0
+    maxHeight: 9999
+  - prefab: {fileID: 4678339936082795127, guid: 03bfb1fa930064d4d955fd8192867fae, type: 3}
+    density: 0.04
+    minScale: 0.4
+    maxScale: 1.1
+    minHeight: 0
+    maxHeight: 9999

@@ -1,0 +1,39 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe52eb4685f86c44d967d9cd3e4bd91a, type: 3}
+  m_Name: res_electricity
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Research.ResearchNode
+  nodeId: res_electricity
+  displayName: Electricity
+  description: Generate and store electric power. Unlocks the Coal Generator and
+    copper/iron cables.
+  iconTint: {r: 0.95, g: 0.85, b: 0.3, a: 1}
+  category: 0
+  subCategory: 3
+  tier: 2
+  column: 1
+  prerequisites:
+  - {fileID: 11400000, guid: e247e51d80f22f64e9b33433d456d53b, type: 2}
+  researchSeconds: 40
+  cost:
+  - pack: {fileID: 11400000, guid: 5c6861815f491e546a7fd36f4b664f0e, type: 2}
+    count: 10
+  - pack: {fileID: 11400000, guid: e7eec7f45c4b5fb4db5018e3431f77f0, type: 2}
+    count: 5
+  unlocksRecipes:
+  - {fileID: 11400000, guid: 05afc51e21a04ff43be6147f7946c9d8, type: 2}
+  - {fileID: 11400000, guid: 755fbe37b90de644284a5404af6c15cf, type: 2}
+  - {fileID: 11400000, guid: a7fc79f6136e2fc4db9da5ea56fb8f0e, type: 2}
+  upgradeKind: 0
+  upgradePerRankAmount: 0
+  maxRanks: 1
+  costScalesWithRank: 1

@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 49141256dab82754d964ee6bcb7937a5, type: 3}
+  m_Name: Proc_RefineOil
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Crafting.ProcessingRecipe
+  displayName: Refine Crude Oil
+  category: Refinery
+  inputs:
+  - item: {fileID: 11400000, guid: 114d4089a60a1254fbe14853a6bf199f, type: 2}
+    count: 1
+  outputs:
+  - item: {fileID: 11400000, guid: 3fa3f2566b1c02546bf3672c2a40f16b, type: 2}
+    count: 1
+  secondsPerBatch: 12
+  powerDrawMultiplier: 1

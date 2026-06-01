@@ -1,0 +1,40 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe52eb4685f86c44d967d9cd3e4bd91a, type: 3}
+  m_Name: res_nuclear_fission
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Research.ResearchNode
+  nodeId: res_nuclear_fission
+  displayName: Nuclear Fission
+  description: "Uranium enrichment, reactor cores, steam turbines, portable reactors.
+    The pinnacle of power generation \u2014 extremely dangerous if mismanaged."
+  iconTint: {r: 0.4, g: 0.95, b: 0.4, a: 1}
+  category: 0
+  subCategory: 3
+  tier: 5
+  column: 2
+  prerequisites:
+  - {fileID: 11400000, guid: 353c57d429eda7b4a9a49fb77ece5e83, type: 2}
+  - {fileID: 11400000, guid: 2553122ac3803d244a29462ad63779ac, type: 2}
+  researchSeconds: 200
+  cost:
+  - pack: {fileID: 11400000, guid: d5b7bf57e47a51c4db099afff757b24d, type: 2}
+    count: 60
+  unlocksRecipes:
+  - {fileID: 11400000, guid: 69593115895a76d46a7b43d13abbc0da, type: 2}
+  - {fileID: 11400000, guid: 82ed6b31e6e5c3e45bcc7fde9d63d2b2, type: 2}
+  - {fileID: 11400000, guid: 1bc782c555978814ea565fac04275937, type: 2}
+  - {fileID: 11400000, guid: 89269ea3b138a4241b2800b9a17bea1c, type: 2}
+  - {fileID: 11400000, guid: 2cea98c93f67c18448ffc055e4a92358, type: 2}
+  upgradeKind: 0
+  upgradePerRankAmount: 0
+  maxRanks: 1
+  costScalesWithRank: 1

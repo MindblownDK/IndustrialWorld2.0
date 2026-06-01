@@ -1,0 +1,41 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe52eb4685f86c44d967d9cd3e4bd91a, type: 3}
+  m_Name: res_gas_processing
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Research.ResearchNode
+  nodeId: res_gas_processing
+  displayName: Gas Processing
+  description: Split ice into hydrogen and oxygen with an Electrolyser. Burn the
+    hydrogen in a clean engine for steady, fuel-light power.
+  iconTint: {r: 0.5, g: 0.85, b: 0.45, a: 1}
+  category: 0
+  subCategory: 4
+  tier: 4
+  column: 4
+  prerequisites:
+  - {fileID: 11400000, guid: 2cefe90b25446eb47b7db442dbc27da5, type: 2}
+  - {fileID: 11400000, guid: 66e45ddfb22042b40b46ba58354169cd, type: 2}
+  researchSeconds: 100
+  cost:
+  - pack: {fileID: 11400000, guid: e7eec7f45c4b5fb4db5018e3431f77f0, type: 2}
+    count: 25
+  - pack: {fileID: 11400000, guid: d5b7bf57e47a51c4db099afff757b24d, type: 2}
+    count: 15
+  unlocksRecipes:
+  - {fileID: 11400000, guid: 1828fec1b94f57f4bbc33d7649679330, type: 2}
+  - {fileID: 11400000, guid: b114dc226c6cc2841b56ffb323cb3a2d, type: 2}
+  - {fileID: 11400000, guid: 15978731672a30a428a8c13505edb3b5, type: 2}
+  - {fileID: 11400000, guid: 010da5333b0fa034fbfb024cbddb7b6d, type: 2}
+  upgradeKind: 0
+  upgradePerRankAmount: 0
+  maxRanks: 1
+  costScalesWithRank: 1

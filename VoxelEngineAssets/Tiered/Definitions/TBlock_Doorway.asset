@@ -1,0 +1,50 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f36bfc5b50d54a24593f2613e8d30e7e, type: 3}
+  m_Name: TBlock_Doorway
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.Tiered.TieredBlockDefinition
+  family: 2
+  displayName: Doorway
+  woodPrefab: {fileID: 3324206976780945992, guid: 296abeb4bb1c59e4db9b7223dad4d495, type: 3}
+  stonePrefab: {fileID: 1867734239895121661, guid: 48278f1cb2b868342853ad1ad7065ee9, type: 3}
+  ironPrefab: {fileID: 3823779780225800289, guid: 178bf99d35fa5504bb3d836dfd08ef07, type: 3}
+  steelPrefab: {fileID: 6123115747581803649, guid: 1a2980d2b05c88b41899bbadbc5c149d, type: 3}
+  wood:
+    hp: 200
+    miningTier: 1
+  stone:
+    hp: 500
+    miningTier: 2
+  iron:
+    hp: 1500
+    miningTier: 3
+  steel:
+    hp: 4000
+    miningTier: 4
+  placeCost:
+    items:
+    - item: {fileID: 11400000, guid: 2bf41f52862e713449cf236f0fc98a76, type: 2}
+      count: 3
+    - item: {fileID: 11400000, guid: 9d6d95f597410644d9afb502a8d7c376, type: 2}
+      count: 2
+  woodToStone:
+    items:
+    - item: {fileID: 11400000, guid: 1d021671658255b40920a3434d268dd1, type: 2}
+      count: 5
+  stoneToIron:
+    items:
+    - item: {fileID: 11400000, guid: 50c6b1ff7afb6ad41bb10ae26e7891c0, type: 2}
+      count: 3
+  ironToSteel:
+    items:
+    - item: {fileID: 11400000, guid: 58f76a24d63953d46bf36461272e622f, type: 2}
+      count: 3

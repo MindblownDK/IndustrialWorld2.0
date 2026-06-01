@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 692233060c58e2b49afa48b285228faa, type: 3}
+  m_Name: Tool_LevelingTool
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Items.LevelingTool
+  itemId: leveling_tool
+  displayName: Leveling Tool
+  description: "FIRST left-click: anchors the target height (the surface you look
+    at). Next left-clicks flatten terrain to that height in a 3m brush radius \u2014
+    fills low spots with stone, carves out high spots. Perfect for building plots."
+  icon: {fileID: 0}
+  iconTint: {r: 0.85, g: 0.8, b: 0.3, a: 1}
+  maxStack: 1
+  massPerUnit: 1
+  category: Tools
+  toolType: 4
+  miningTier: 2
+  strength: 1
+  brushRadius: 3
+  fireRate: 3
+  maxDurability: 500

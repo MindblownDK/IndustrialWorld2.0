@@ -1,0 +1,44 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c731d42220a11514daa3ec8913dbf5a1, type: 3}
+  m_Name: Biome_Desert
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Biomes.BiomeDefinition
+  biomeName: Desert
+  debugColor: {r: 0.93, g: 0.83, b: 0.45, a: 1}
+  minTemperature: 0.65
+  maxTemperature: 1
+  minHumidity: 0
+  maxHumidity: 0.3
+  priority: 2
+  heightOffset: 3
+  heightAmplitude: 14
+  heightFrequency: 0.025
+  ridgedness: 0.1
+  surfaceMaterial: 2
+  surfaceDepth: 2
+  subsurfaceMaterial: 2
+  subsurfaceDepth: 6
+  allowBeach: 1
+  isOceanic: 0
+  scatter:
+  - prefab: {fileID: 8512433147035222299, guid: a31271f74467dc84d8e20c530028b8ea, type: 3}
+    density: 0.02
+    minScale: 0.8
+    maxScale: 1.5
+    minHeight: 0
+    maxHeight: 9999
+  - prefab: {fileID: 4678339936082795127, guid: 03bfb1fa930064d4d955fd8192867fae, type: 3}
+    density: 0.01
+    minScale: 0.4
+    maxScale: 0.9
+    minHeight: 0
+    maxHeight: 9999

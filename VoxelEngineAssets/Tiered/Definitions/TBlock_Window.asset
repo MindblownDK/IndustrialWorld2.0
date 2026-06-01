@@ -1,0 +1,50 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f36bfc5b50d54a24593f2613e8d30e7e, type: 3}
+  m_Name: TBlock_Window
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.Tiered.TieredBlockDefinition
+  family: 3
+  displayName: Window
+  woodPrefab: {fileID: 4122058171216761706, guid: 0e97caf18949dce44b878f2f910e053d, type: 3}
+  stonePrefab: {fileID: 7314679100367107187, guid: c908785d09ce28642a55a194ca0ab714, type: 3}
+  ironPrefab: {fileID: 4763351700862336009, guid: 4cbcd81f9e2d85e4ab471331ffb49137, type: 3}
+  steelPrefab: {fileID: 2926781391821047704, guid: a20e19a7edd4a664bb7806c6509c61a6, type: 3}
+  wood:
+    hp: 200
+    miningTier: 1
+  stone:
+    hp: 500
+    miningTier: 2
+  iron:
+    hp: 1500
+    miningTier: 3
+  steel:
+    hp: 4000
+    miningTier: 4
+  placeCost:
+    items:
+    - item: {fileID: 11400000, guid: 2bf41f52862e713449cf236f0fc98a76, type: 2}
+      count: 2
+    - item: {fileID: 11400000, guid: 9d6d95f597410644d9afb502a8d7c376, type: 2}
+      count: 3
+  woodToStone:
+    items:
+    - item: {fileID: 11400000, guid: 1d021671658255b40920a3434d268dd1, type: 2}
+      count: 4
+  stoneToIron:
+    items:
+    - item: {fileID: 11400000, guid: 50c6b1ff7afb6ad41bb10ae26e7891c0, type: 2}
+      count: 2
+  ironToSteel:
+    items:
+    - item: {fileID: 11400000, guid: 58f76a24d63953d46bf36461272e622f, type: 2}
+      count: 2

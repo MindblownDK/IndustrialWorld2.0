@@ -1,0 +1,38 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe52eb4685f86c44d967d9cd3e4bd91a, type: 3}
+  m_Name: res_oil_extraction
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Research.ResearchNode
+  nodeId: res_oil_extraction
+  displayName: Oil Extraction
+  description: Press steel into Empty Barrels and assemble Pumpjacks to extract Crude
+    Oil from underground reservoirs.
+  iconTint: {r: 0.1, g: 0.08, b: 0.06, a: 1}
+  category: 0
+  subCategory: 4
+  tier: 3
+  column: 4
+  prerequisites:
+  - {fileID: 11400000, guid: 72d8bd865e3b56e43a76ee48a826f4f4, type: 2}
+  researchSeconds: 70
+  cost:
+  - pack: {fileID: 11400000, guid: e7eec7f45c4b5fb4db5018e3431f77f0, type: 2}
+    count: 20
+  - pack: {fileID: 11400000, guid: d5b7bf57e47a51c4db099afff757b24d, type: 2}
+    count: 10
+  unlocksRecipes:
+  - {fileID: 11400000, guid: 22e819b7dda30a44c834463c5a817d69, type: 2}
+  - {fileID: 11400000, guid: cca3ad0a9942eb14d98b800d3ace7766, type: 2}
+  upgradeKind: 0
+  upgradePerRankAmount: 0
+  maxRanks: 1
+  costScalesWithRank: 1

@@ -1,0 +1,39 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe52eb4685f86c44d967d9cd3e4bd91a, type: 3}
+  m_Name: res_quarrying
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Research.ResearchNode
+  nodeId: res_quarrying
+  displayName: Quarrying
+  description: "Industrial-scale automated mining. The Quarry block strip-mines an
+    entire 16\xD716 area down to bedrock without player input."
+  iconTint: {r: 0.5, g: 0.55, b: 0.6, a: 1}
+  category: 0
+  subCategory: 2
+  tier: 4
+  column: 6
+  prerequisites:
+  - {fileID: 11400000, guid: 72d8bd865e3b56e43a76ee48a826f4f4, type: 2}
+  - {fileID: 11400000, guid: 87582b1c6cfc8f74db8116cc077559b7, type: 2}
+  researchSeconds: 110
+  cost:
+  - pack: {fileID: 11400000, guid: e7eec7f45c4b5fb4db5018e3431f77f0, type: 2}
+    count: 30
+  - pack: {fileID: 11400000, guid: d5b7bf57e47a51c4db099afff757b24d, type: 2}
+    count: 18
+  unlocksRecipes:
+  - {fileID: 11400000, guid: 1ee3bd28ba69a4a44848e4bd036ced9f, type: 2}
+  - {fileID: 11400000, guid: 12f40cf08ad2bb4469d7c7272614cda8, type: 2}
+  upgradeKind: 0
+  upgradePerRankAmount: 0
+  maxRanks: 1
+  costScalesWithRank: 1

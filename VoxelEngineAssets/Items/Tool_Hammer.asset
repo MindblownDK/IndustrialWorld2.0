@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4f3145573ad693f46af0ef229483ba5a, type: 3}
+  m_Name: Tool_Hammer
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.Tiered.Hammer
+  itemId: hammer
+  displayName: Hammer
+  description: Used to upgrade placed buildings to their next tier. Hold in active
+    hotbar slot, look at a placed wood/stone/iron building, then LMB. Each upgrade
+    consumes the cost shown on the block. Wood -> Stone -> Iron -> Steel.
+  icon: {fileID: 0}
+  iconTint: {r: 0.85, g: 0.55, b: 0.2, a: 1}
+  maxStack: 999
+  massPerUnit: 1
+  category: Misc
+  toolType: 4
+  miningTier: 0
+  strength: 1
+  brushRadius: 0.1
+  fireRate: 4
+  maxDurability: 500

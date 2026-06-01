@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9b76ccf0d2c60d942965b00c15422682, type: 3}
+  m_Name: Block_GasTank
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Items.BlockItem
+  itemId: block_gastank
+  displayName: Gas Tank
+  description: Buffers up to 1000 units of one gas type. Auto-locks to first gas
+    inserted. Pipe-in from Electrolyser, pipe-out to Engine.
+  icon: {fileID: 0}
+  iconTint: {r: 0.55, g: 0.7, b: 0.85, a: 1}
+  maxStack: 50
+  massPerUnit: 4
+  category: Gas
+  placedPrefab: {fileID: 3368476983473009200, guid: 5d52f41555434f54088b42d2b8073907, type: 3}
+  gridSize: {x: 1, y: 1, z: 1}
+  allowStacking: 0
+  blockHealth: 350
+  miningTier: 1
+  placedMaterial: {fileID: 0}
+  texture: {fileID: 0}

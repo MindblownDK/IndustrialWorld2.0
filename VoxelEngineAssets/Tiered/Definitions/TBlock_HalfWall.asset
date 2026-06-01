@@ -1,0 +1,50 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f36bfc5b50d54a24593f2613e8d30e7e, type: 3}
+  m_Name: TBlock_HalfWall
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.Tiered.TieredBlockDefinition
+  family: 8
+  displayName: HalfWall
+  woodPrefab: {fileID: 5021791571576292165, guid: 461bf369fa3a34e4e944d3d4dc679136, type: 3}
+  stonePrefab: {fileID: 3197673639197971068, guid: 7d79d4c389718b2418e2fbb684862086, type: 3}
+  ironPrefab: {fileID: 1103857212686873385, guid: a761e3d1ccf53584bb871cbe1b30e377, type: 3}
+  steelPrefab: {fileID: 3165925965849365415, guid: 81bd0c3c49d83c24ebc82fa6e5f8b64a, type: 3}
+  wood:
+    hp: 200
+    miningTier: 1
+  stone:
+    hp: 500
+    miningTier: 2
+  iron:
+    hp: 1500
+    miningTier: 3
+  steel:
+    hp: 4000
+    miningTier: 4
+  placeCost:
+    items:
+    - item: {fileID: 11400000, guid: 2bf41f52862e713449cf236f0fc98a76, type: 2}
+      count: 1
+    - item: {fileID: 11400000, guid: 9d6d95f597410644d9afb502a8d7c376, type: 2}
+      count: 1
+  woodToStone:
+    items:
+    - item: {fileID: 11400000, guid: 1d021671658255b40920a3434d268dd1, type: 2}
+      count: 2
+  stoneToIron:
+    items:
+    - item: {fileID: 11400000, guid: 50c6b1ff7afb6ad41bb10ae26e7891c0, type: 2}
+      count: 1
+  ironToSteel:
+    items:
+    - item: {fileID: 11400000, guid: 58f76a24d63953d46bf36461272e622f, type: 2}
+      count: 1

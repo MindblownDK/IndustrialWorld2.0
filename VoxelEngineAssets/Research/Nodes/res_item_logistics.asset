@@ -1,0 +1,37 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe52eb4685f86c44d967d9cd3e4bd91a, type: 3}
+  m_Name: res_item_logistics
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Research.ResearchNode
+  nodeId: res_item_logistics
+  displayName: Item Logistics
+  description: Item Pipes carry stacks between chests and machines without manual
+    hauling.
+  iconTint: {r: 0.4, g: 0.85, b: 0.95, a: 1}
+  category: 0
+  subCategory: 1
+  tier: 3
+  column: 6
+  prerequisites:
+  - {fileID: 11400000, guid: b7c5808767158cb44adea430a03ce665, type: 2}
+  researchSeconds: 50
+  cost:
+  - pack: {fileID: 11400000, guid: e7eec7f45c4b5fb4db5018e3431f77f0, type: 2}
+    count: 15
+  - pack: {fileID: 11400000, guid: d5b7bf57e47a51c4db099afff757b24d, type: 2}
+    count: 5
+  unlocksRecipes:
+  - {fileID: 11400000, guid: 6871cff0492487c40a4bd2b4f804b2ba, type: 2}
+  upgradeKind: 0
+  upgradePerRankAmount: 0
+  maxRanks: 1
+  costScalesWithRank: 1

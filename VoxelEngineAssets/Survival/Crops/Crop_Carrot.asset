@@ -1,0 +1,37 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 36af89c9ea408e444ad8515b212d80b9, type: 3}
+  m_Name: Crop_Carrot
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Farming.CropDefinition
+  cropName: Carrot
+  icon: {fileID: 0}
+  growthTime: 120
+  growthStages: 4
+  requiresWater: 1
+  irrigatedSpeedMultiplier: 2
+  droughtToleranceSec: 30
+  harvestItem: {fileID: 11400000, guid: 36c195e9a91fcf1488c2ba2a5a81f4fb, type: 2}
+  harvestAmount: 2
+  seedItem: {fileID: 11400000, guid: 8f4c689bd53d8604d828641bc363f652, type: 2}
+  seedReturnAmount: 1
+  foodValue: 10
+  stageColors:
+  - {r: 0.4, g: 0.6, b: 0.2, a: 1}
+  - {r: 0.5, g: 0.7, b: 0.3, a: 1}
+  - {r: 0.6, g: 0.8, b: 0.3, a: 1}
+  - {r: 0.8, g: 0.9, b: 0.2, a: 1}
+  stageScales:
+  - 0.2
+  - 0.4
+  - 0.7
+  - 1
+  wildPrefab: {fileID: 0}

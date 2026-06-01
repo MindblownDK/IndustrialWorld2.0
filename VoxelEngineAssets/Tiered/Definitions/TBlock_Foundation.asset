@@ -1,0 +1,48 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f36bfc5b50d54a24593f2613e8d30e7e, type: 3}
+  m_Name: TBlock_Foundation
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.Tiered.TieredBlockDefinition
+  family: 0
+  displayName: Foundation
+  woodPrefab: {fileID: 2337153849841092310, guid: 3cd8f4347f873eb4f9ceeb44b17a3bfa, type: 3}
+  stonePrefab: {fileID: 7195782492112461115, guid: 920e4f3f147b5a94f9a57a3cfc4e6f4c, type: 3}
+  ironPrefab: {fileID: 3136571182532210022, guid: a38bcb7c2d61a28468a6167c98a49588, type: 3}
+  steelPrefab: {fileID: 5818237774289461945, guid: c464fdc330bf43e49ba3e4d8a8abef94, type: 3}
+  wood:
+    hp: 200
+    miningTier: 1
+  stone:
+    hp: 500
+    miningTier: 2
+  iron:
+    hp: 1500
+    miningTier: 3
+  steel:
+    hp: 4000
+    miningTier: 4
+  placeCost:
+    items:
+    - item: {fileID: 11400000, guid: 2bf41f52862e713449cf236f0fc98a76, type: 2}
+      count: 4
+  woodToStone:
+    items:
+    - item: {fileID: 11400000, guid: 1d021671658255b40920a3434d268dd1, type: 2}
+      count: 8
+  stoneToIron:
+    items:
+    - item: {fileID: 11400000, guid: 50c6b1ff7afb6ad41bb10ae26e7891c0, type: 2}
+      count: 4
+  ironToSteel:
+    items:
+    - item: {fileID: 11400000, guid: 58f76a24d63953d46bf36461272e622f, type: 2}
+      count: 4

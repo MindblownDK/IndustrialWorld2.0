@@ -1,0 +1,40 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe52eb4685f86c44d967d9cd3e4bd91a, type: 3}
+  m_Name: res_plating
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Research.ResearchNode
+  nodeId: res_plating
+  displayName: Plating
+  description: Stamp ingots into plates and cut them into gears. Plates are the structural
+    backbone of every advanced machine.
+  iconTint: {r: 0.78, g: 0.8, b: 0.85, a: 1}
+  category: 0
+  subCategory: 2
+  tier: 2
+  column: 2
+  prerequisites:
+  - {fileID: 11400000, guid: f354bc28489e7f940aec59c10fca06df, type: 2}
+  researchSeconds: 35
+  cost:
+  - pack: {fileID: 11400000, guid: 5c6861815f491e546a7fd36f4b664f0e, type: 2}
+    count: 15
+  - pack: {fileID: 11400000, guid: e7eec7f45c4b5fb4db5018e3431f77f0, type: 2}
+    count: 8
+  unlocksRecipes:
+  - {fileID: 11400000, guid: be2f5564e6188894ab7414f1114083a0, type: 2}
+  - {fileID: 11400000, guid: d1e7ef03d33781e4c96f8b67487f98da, type: 2}
+  - {fileID: 11400000, guid: bf840d5baca9b3e4bb93c4142c24dc0e, type: 2}
+  - {fileID: 11400000, guid: 88ce23fedf07f3e4cb11b0e19c8e8798, type: 2}
+  upgradeKind: 0
+  upgradePerRankAmount: 0
+  maxRanks: 1
+  costScalesWithRank: 1

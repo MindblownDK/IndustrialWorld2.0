@@ -1,0 +1,40 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe52eb4685f86c44d967d9cd3e4bd91a, type: 3}
+  m_Name: res_high_voltage
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Research.ResearchNode
+  nodeId: res_high_voltage
+  displayName: High-Voltage Transmission
+  description: Premium wire tiers carry more wattage between machines. Also unlocks
+    Wireless Transmitter and Receiver.
+  iconTint: {r: 0.45, g: 0.85, b: 1, a: 1}
+  category: 0
+  subCategory: 3
+  tier: 3
+  column: 2
+  prerequisites:
+  - {fileID: 11400000, guid: b7c5808767158cb44adea430a03ce665, type: 2}
+  researchSeconds: 60
+  cost:
+  - pack: {fileID: 11400000, guid: e7eec7f45c4b5fb4db5018e3431f77f0, type: 2}
+    count: 10
+  - pack: {fileID: 11400000, guid: d5b7bf57e47a51c4db099afff757b24d, type: 2}
+    count: 5
+  unlocksRecipes:
+  - {fileID: 11400000, guid: 31aeae5f0a6ba8d4f9a11c95063b31a3, type: 2}
+  - {fileID: 11400000, guid: abe1ccc39a511e641becd5afceb61ae5, type: 2}
+  - {fileID: 11400000, guid: e0c6a12ff1234ec4a85ce6f92c12dc6c, type: 2}
+  - {fileID: 11400000, guid: 6fd3230af5584d24da088ac81ba7662f, type: 2}
+  upgradeKind: 0
+  upgradePerRankAmount: 0
+  maxRanks: 1
+  costScalesWithRank: 1

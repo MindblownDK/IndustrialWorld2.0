@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 49141256dab82754d964ee6bcb7937a5, type: 3}
+  m_Name: Proc_MakePlastic
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Crafting.ProcessingRecipe
+  displayName: Synthesise Plastic
+  category: Plastics
+  inputs:
+  - item: {fileID: 11400000, guid: 3fa3f2566b1c02546bf3672c2a40f16b, type: 2}
+    count: 1
+  - item: {fileID: 11400000, guid: 5beba3cbb57bebf4ea06940ff296e78a, type: 2}
+    count: 1
+  outputs:
+  - item: {fileID: 11400000, guid: 211d2cf6c421ac647b36c0a6f8a32168, type: 2}
+    count: 2
+  - item: {fileID: 11400000, guid: 84d464069ef1264449d531ddf58fea27, type: 2}
+    count: 1
+  secondsPerBatch: 14
+  powerDrawMultiplier: 1.25

@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9b76ccf0d2c60d942965b00c15422682, type: 3}
+  m_Name: Block_Pumpjack
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Items.BlockItem
+  itemId: block_pumpjack
+  displayName: Pumpjack
+  description: Powered surface extractor. Scans the column below itself for Crude
+    Oil voxels, lifts one barrel per cycle (consumes an Empty Barrel). Place over
+    an oil pool. ~250 W while running.
+  icon: {fileID: 0}
+  iconTint: {r: 0.2, g: 0.2, b: 0.22, a: 1}
+  maxStack: 50
+  massPerUnit: 8
+  category: Industrial
+  placedPrefab: {fileID: 1251327189756825026, guid: f0e80c6cb7fc2884ab5be275875147c4, type: 3}
+  gridSize: {x: 1, y: 1, z: 1}
+  allowStacking: 0
+  blockHealth: 600
+  miningTier: 2
+  placedMaterial: {fileID: 0}
+  texture: {fileID: 0}

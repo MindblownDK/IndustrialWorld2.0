@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9b76ccf0d2c60d942965b00c15422682, type: 3}
+  m_Name: Block_ReactorCore
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Items.BlockItem
+  itemId: block_reactorcore
+  displayName: Reactor Core
+  description: Big nuclear reactor. Burns Enriched Fuel Rods to boil water into steam.
+    Pipe water IN (via fluid pipes), pipe steam OUT (via gas pipes) to a Steam Turbine.
+    KEEP IT COOLED or it overheats.
+  icon: {fileID: 0}
+  iconTint: {r: 0.4, g: 0.65, b: 0.4, a: 1}
+  maxStack: 50
+  massPerUnit: 4
+  category: Nuclear
+  placedPrefab: {fileID: 2607899938652250346, guid: b9710d1fd4cd1c0468c7f7513ae790aa, type: 3}
+  gridSize: {x: 1, y: 1, z: 1}
+  allowStacking: 0
+  blockHealth: 1500
+  miningTier: 3
+  placedMaterial: {fileID: 0}
+  texture: {fileID: 0}
