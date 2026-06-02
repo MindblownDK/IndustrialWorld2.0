@@ -25,6 +25,9 @@ namespace VoxelEngine.Power
         {
             EnsureContainers();
             _gen = GetComponent<PowerGenerator>();
+            // Per-face PortConfig UI removed by design — cables auto-connect to all
+            // sides of generators / consumers. Future per-resource I/O selection
+            // belongs on the cable / pipe end, not the machine.
         }
 
         public void EnsureContainers()

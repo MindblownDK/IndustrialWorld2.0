@@ -127,7 +127,11 @@ namespace VoxelEngine.Player
             {
                 if (Time.time >= _nextHit && BuildSystem.Instance != null && BuildSystem.Instance.TryPlace(heldBlock, hit, ray.direction))
                 {
-                    inventory.container.Remove(heldBlock, 1);
+                    // Consume from inventory first; if empty AND the player has
+                    // researched "Wireless Build Sync" with an active transmitter,
+                    // pull the replacement from the storage network.
+                    int taken = inventory.container.Remove(heldBlock, 1);
+                    if (taken == 0) TryNetworkConsume(heldBlock, 1);
                     VoxelEngine.UI.BuildFeedbackHud.ShowBlockPlaced(heldBlock.displayName, heldBlock, 1);
                     _nextHit = Time.time + 0.2f;
                 }
@@ -278,11 +282,30 @@ namespace VoxelEngine.Player
                 if (Time.time < _nextHit) return;
                 if (BuildSystem.Instance != null && BuildSystem.Instance.TryPlace(block, hit, ray.direction))
                 {
-                    inventory.container.Remove(block, 1);
+                    int taken = inventory.container.Remove(block, 1);
+                    if (taken == 0) TryNetworkConsume(block, 1);
                     VoxelEngine.UI.BuildFeedbackHud.ShowBlockPlaced(block.displayName, block, 1);
                     _nextHit = Time.time + 0.2f;
                 }
             }
+        }
+
+        /// <summary>
+        /// Pulls <paramref name="count"/> of <paramref name="item"/> from the storage
+        /// network through the player's selected Wireless Transmitter. No-op unless
+        /// the research node "res_build_from_network" is unlocked AND a transmitter
+        /// is online. Used by the place-block path so building a wall doesn't stop
+        /// the moment the player's hotbar stack runs out.
+        /// </summary>
+        private void TryNetworkConsume(VoxelEngine.Items.ItemDefinition item, int count)
+        {
+            if (item == null || count <= 0) return;
+            var rm = VoxelEngine.Research.ResearchManager.Instance;
+            if (rm == null || !rm.IsUnlocked("res_build_from_network")) return;
+            var ui = VoxelEngine.UI.GameUIController.Instance;
+            var rack = ui != null ? ui.GetActiveWirelessRack() : null;
+            if (rack == null || !rack.IsOnline) return;
+            rack.NetworkExtract(item.itemId, count);
         }
 
         private void HitTree(Tree tree)

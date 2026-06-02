@@ -1,0 +1,39 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe52eb4685f86c44d967d9cd3e4bd91a, type: 3}
+  m_Name: res_data_cables
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Research.ResearchNode
+  nodeId: res_data_cables
+  displayName: Data Cables
+  description: Wired conduit that links Server Racks, Storage Terminals, Importers
+    and Exporters into a single logistics network. Connects on all 6 axes - including
+    vertically - so multi-storey storage halls finally fit together cleanly.
+  iconTint: {r: 0.3, g: 0.85, b: 0.4, a: 1}
+  category: 0
+  subCategory: 5
+  tier: 3
+  column: 6
+  prerequisites:
+  - {fileID: 11400000, guid: 2cefe90b25446eb47b7db442dbc27da5, type: 2}
+  - {fileID: 11400000, guid: ee5348718b566e04093832af29e418dc, type: 2}
+  researchSeconds: 45
+  cost:
+  - pack: {fileID: 11400000, guid: e7eec7f45c4b5fb4db5018e3431f77f0, type: 2}
+    count: 15
+  - pack: {fileID: 11400000, guid: d5b7bf57e47a51c4db099afff757b24d, type: 2}
+    count: 5
+  unlocksRecipes:
+  - {fileID: 11400000, guid: c0bb1ed00a7a4a2b8e0d0001da7ab10e, type: 2}
+  upgradeKind: 0
+  upgradePerRankAmount: 0
+  maxRanks: 1
+  costScalesWithRank: 1

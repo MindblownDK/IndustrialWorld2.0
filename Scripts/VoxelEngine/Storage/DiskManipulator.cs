@@ -50,9 +50,25 @@ namespace VoxelEngine.Storage
             if (dstSlot.IsEmpty || !(dstSlot.item is StorageDisk))
             { _dstDisk = null; IsTransferring = false; StatusText = "Insert destination disk"; return; }
 
-            // Init disk data if needed.
-            if (_srcDisk == null) _srcDisk = new DiskData { tier = ((StorageDisk)srcSlot.item).tier };
-            if (_dstDisk == null) _dstDisk = new DiskData { tier = ((StorageDisk)dstSlot.item).tier };
+            // Pull the disks' persistent DiskData straight off the inserted ItemStacks.
+            // This means a disk full of items keeps those items when slotted here, and
+            // the transfer below operates on the SAME object the rack saw — so when the
+            // disk is pulled out and put back in a rack, the new contents are still there.
+            _srcDisk = srcSlot.payload as DiskData;
+            if (_srcDisk == null || _srcDisk.tier != ((StorageDisk)srcSlot.item).tier)
+            {
+                _srcDisk = new DiskData { tier = ((StorageDisk)srcSlot.item).tier };
+                srcSlot.payload = _srcDisk;
+                sourceSlot.SetSlot(0, srcSlot);
+            }
+
+            _dstDisk = dstSlot.payload as DiskData;
+            if (_dstDisk == null || _dstDisk.tier != ((StorageDisk)dstSlot.item).tier)
+            {
+                _dstDisk = new DiskData { tier = ((StorageDisk)dstSlot.item).tier };
+                dstSlot.payload = _dstDisk;
+                destSlot.SetSlot(0, dstSlot);
+            }
 
             if (_srcDisk.totalStored == 0)
             { IsTransferring = false; StatusText = "Source disk empty"; Progress01 = 1f; return; }

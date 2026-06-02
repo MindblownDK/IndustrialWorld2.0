@@ -18,6 +18,15 @@ namespace VoxelEngine.Items
         // Per-instance state (for ToolItem we store remaining durability here).
         public int            durability;
 
+        /// <summary>
+        /// Per-instance state object for items that carry their own runtime data
+        /// (e.g. a StorageDisk carries a DiskData of its stored items). Survives
+        /// being picked up / dropped / moved between containers and disables stack
+        /// merging with stacks of a different payload.
+        /// Use any reference type — keep it small and serialisation-safe.
+        /// </summary>
+        [System.NonSerialized] public object payload;
+
         public bool IsEmpty => item == null || count <= 0;
 
         public ItemStack() { }
@@ -34,7 +43,8 @@ namespace VoxelEngine.Items
             {
                 item       = item,
                 count      = count,
-                durability = durability
+                durability = durability,
+                payload    = payload,        // share reference — the payload object IS the state
             };
         }
 
@@ -43,7 +53,11 @@ namespace VoxelEngine.Items
             if (a.IsEmpty || b.IsEmpty) return true;
             if (a.item != b.item) return false;
             if (!a.item.IsStackable) return false;
-            return a.count < a.item.maxStack;
+            if (a.count >= a.item.maxStack) return false;
+            // Never merge two payload-bearing stacks — each instance is unique.
+            if (a.payload != null || b.payload != null) return false;
+            return true;
         }
     }
 }
+

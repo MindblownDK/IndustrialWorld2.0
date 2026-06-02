@@ -13,6 +13,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UIElements;
 using VoxelEngine.Settings;
+using VoxelEngine.UI;
 using T = VoxelEngine.UI.UITheme;
 
 namespace VoxelEngine.Menu
@@ -43,12 +44,29 @@ namespace VoxelEngine.Menu
         private enum STab { Display, Camera, Audio, Keybinds }
         private STab _settingsTab = STab.Display;
 
+        // ── Cached fonts (loaded once per scene-load) ──────────────
+        private static Font _cachedTextFont;
+        private static Font _cachedIconFont;
+
         // ── Unity Lifecycle ────────────────────────────────────────
         private void Awake()
         {
             _doc = GetComponent<UIDocument>();
+
+            // 1) Prefer a project-authored PanelSettings (drag-assigned in inspector
+            //    OR placed under any Resources/ folder as "MenuPanelSettings").
+            // 2) Otherwise synthesise a complete one at runtime — theme + font included.
             if (_doc.panelSettings == null)
-                _doc.panelSettings = CreateDefaultPanelSettings();
+            {
+                var preset = Resources.Load<PanelSettings>("MenuPanelSettings");
+                _doc.panelSettings = preset != null ? preset : CreateDefaultPanelSettings();
+            }
+            else if (_doc.panelSettings.themeStyleSheet == null)
+            {
+                // Existing PanelSettings but missing theme → patch it so the
+                // "No Theme Style Sheet set" warning disappears.
+                _doc.panelSettings.themeStyleSheet = LoadOrCreateDefaultTheme();
+            }
 
             if (_newSeed == 0)
                 _newSeed = UnityEngine.Random.Range(1, int.MaxValue);
@@ -73,6 +91,13 @@ namespace VoxelEngine.Menu
             _root.style.alignItems      = Align.Center;
             _root.style.justifyContent  = Justify.Center;
 
+            // GUARANTEED FONT — without this, a missing TSS theme means every
+            // Label/Button renders only its background colour (no glyphs).
+            // We force-cascade a font from the root so all children inherit it.
+            var fallbackFont = LoadFallbackFont();
+            if (fallbackFont != null)
+                _root.style.unityFontDefinition = new StyleFontDefinition(fallbackFont);
+
             switch (_page)
             {
                 case Page.Main:     BuildMainPage();     break;
@@ -96,11 +121,8 @@ namespace VoxelEngine.Menu
             brand.style.marginBottom = 8;
             brand.pickingMode = PickingMode.Ignore;
 
-            var logoIco = new Label("🏭");
-            logoIco.style.fontSize        = 36;
-            logoIco.style.unityTextAlign  = TextAnchor.MiddleCenter;
+            var logoIco = MakeIcon(LucideIcons.Factory, 40, T.AccentCyan);
             logoIco.style.marginBottom    = 6;
-            logoIco.pickingMode = PickingMode.Ignore;
             brand.Add(logoIco);
 
             var gameTitle = new Label("INDUSTRIAL WORLD");
@@ -122,13 +144,13 @@ namespace VoxelEngine.Menu
             panel.Add(T.Spacer(12));
 
             // Action buttons.
-            panel.Add(PrimaryBtn("▶   PLAY",       () => { _page = Page.Saves;    BuildUI(); }, T.AccentCyan));
+            panel.Add(PrimaryBtn("PLAY",      () => { _page = Page.Saves;    BuildUI(); }, T.AccentCyan, LucideIcons.Play));
             panel.Add(T.Spacer(8));
-            panel.Add(PrimaryBtn("✦   NEW WORLD",  () => { _page = Page.NewWorld; BuildUI(); }, T.AccentTeal));
+            panel.Add(PrimaryBtn("NEW WORLD", () => { _page = Page.NewWorld; BuildUI(); }, T.AccentTeal, LucideIcons.Plus));
             panel.Add(T.Spacer(8));
-            panel.Add(PrimaryBtn("⚙   SETTINGS",   () => { _page = Page.Settings; BuildUI(); }, T.BgSlot));
+            panel.Add(PrimaryBtn("SETTINGS",  () => { _page = Page.Settings; BuildUI(); }, T.BgSlot,    LucideIcons.Settings));
             panel.Add(T.Spacer(8));
-            panel.Add(PrimaryBtn("✕   QUIT",       QuitGame,                                    T.AccentRed));
+            panel.Add(PrimaryBtn("QUIT",      QuitGame,                                    T.AccentRed, LucideIcons.X));
 
             panel.Add(T.Spacer(20));
             var ver = T.Muted($"Build {Application.version}");
@@ -144,7 +166,7 @@ namespace VoxelEngine.Menu
             var panel = MakePanel(660, 0);
             _root.Add(panel);
 
-            panel.Add(PageHeader("SAVES", "⬅  BACK", () => { _page = Page.Main; BuildUI(); }));
+            panel.Add(PageHeader("SAVES", "BACK", () => { _page = Page.Main; BuildUI(); }));
             panel.Add(T.AccentDivider());
             panel.Add(T.Spacer(4));
 
@@ -164,11 +186,7 @@ namespace VoxelEngine.Menu
                 empty.style.marginBottom  = 60;
                 empty.pickingMode = PickingMode.Ignore;
 
-                var ico = new Label("🌍");
-                ico.style.fontSize       = 32;
-                ico.style.unityTextAlign = TextAnchor.MiddleCenter;
-                ico.pickingMode = PickingMode.Ignore;
-                empty.Add(ico);
+                empty.Add(MakeIcon(LucideIcons.Globe, 36, T.TextSecondary));
 
                 var msg = T.Muted("No saved worlds yet.\nCreate your first world below.");
                 msg.style.unityTextAlign = TextAnchor.MiddleCenter;
@@ -182,7 +200,7 @@ namespace VoxelEngine.Menu
                     scroll.Add(BuildSaveRow(w));
             }
 
-            panel.Add(PrimaryBtn("✦   NEW WORLD", () => { _page = Page.NewWorld; BuildUI(); }, T.AccentTeal));
+            panel.Add(PrimaryBtn("NEW WORLD", () => { _page = Page.NewWorld; BuildUI(); }, T.AccentTeal, LucideIcons.Plus));
         }
 
         private VisualElement BuildSaveRow(WorldSummary w)
@@ -231,12 +249,14 @@ namespace VoxelEngine.Menu
             info.Add(meta);
             row.Add(info);
 
-            // Action buttons.
-            var playBtn = T.SmallButton("▶  PLAY",    () => LoadWorld(w.name), T.AccentCyan);
+            // Action buttons — built locally so we can mix the icon font in.
+            var playBtn = BuildIconSmallButton(LucideIcons.Play, "PLAY",
+                () => LoadWorld(w.name), T.AccentCyan);
             playBtn.style.marginRight = 6;
             row.Add(playBtn);
 
-            var delBtn  = T.SmallButton("✕  DELETE",  () => { _session.DeleteWorld(w.name); BuildUI(); }, T.AccentRed);
+            var delBtn = BuildIconSmallButton(LucideIcons.Trash, "DELETE",
+                () => { _session.DeleteWorld(w.name); BuildUI(); }, T.AccentRed);
             row.Add(delBtn);
 
             return row;
@@ -250,7 +270,7 @@ namespace VoxelEngine.Menu
             var panel = MakePanel(560, 0);
             _root.Add(panel);
 
-            panel.Add(PageHeader("NEW WORLD", "⬅  BACK", () => { _page = Page.Main; BuildUI(); }));
+            panel.Add(PageHeader("NEW WORLD", "BACK", () => { _page = Page.Main; BuildUI(); }));
             panel.Add(T.AccentDivider());
             panel.Add(T.Spacer(4));
 
@@ -276,7 +296,7 @@ namespace VoxelEngine.Menu
             seedField.style.flexGrow = 1;
             seedField.RegisterValueChangedCallback(e => _newSeed = e.newValue);
             seedRow.Add(seedField);
-            var rndBtn = T.SmallButton("RANDOM", () =>
+            var rndBtn = BuildIconSmallButton(LucideIcons.Dice5, "RANDOM", () =>
             {
                 _newSeed = UnityEngine.Random.Range(1, int.MaxValue);
                 seedField.SetValueWithoutNotify(_newSeed);
@@ -299,7 +319,7 @@ namespace VoxelEngine.Menu
             scroll.Add(T.Spacer(20));
 
             panel.Add(T.Spacer(8));
-            panel.Add(PrimaryBtn("✦   CREATE & PLAY", CreateAndLoadWorld, T.AccentCyan));
+            panel.Add(PrimaryBtn("CREATE & PLAY", CreateAndLoadWorld, T.AccentCyan, LucideIcons.Play));
         }
 
         // ════════════════════════════════════════════════════════════
@@ -310,7 +330,7 @@ namespace VoxelEngine.Menu
             var panel = MakePanel(720, 0);
             _root.Add(panel);
 
-            panel.Add(PageHeader("SETTINGS", "⬅  BACK", () => { _page = Page.Main; BuildUI(); }));
+            panel.Add(PageHeader("SETTINGS", "BACK", () => { _page = Page.Main; BuildUI(); }));
             panel.Add(T.AccentDivider());
 
             // Tab bar.
@@ -377,6 +397,7 @@ namespace VoxelEngine.Menu
             var s = new Slider(0f, 1f) { value = vol, showInputField = true };
             s.style.marginBottom = 4;
             s.RegisterValueChangedCallback(e => { GameSettings.MasterVolume = e.newValue; BuildUI(); });
+            StyleInnerInput(s);
             p.Add(s);
         }
 
@@ -464,17 +485,73 @@ namespace VoxelEngine.Menu
             return v;
         }
 
-        private Button PrimaryBtn(string text, Action onClick, Color bg)
+        private Button PrimaryBtn(string text, Action onClick, Color bg, string icon = null)
         {
-            var b = new Button(onClick) { text = text };
+            var b = new Button(onClick);
+            b.text = string.Empty; // we build label content ourselves
             b.style.minHeight               = 44;
             b.style.fontSize                = 13;
             b.style.unityFontStyleAndWeight = FontStyle.Bold;
             b.style.letterSpacing           = 0.8f;
             b.style.color                   = Color.white;
             b.style.backgroundColor         = new StyleColor(new Color(bg.r, bg.g, bg.b, 0.85f));
+            b.style.flexDirection           = FlexDirection.Row;
+            b.style.alignItems              = Align.Center;
+            b.style.justifyContent          = Justify.Center;
+            b.style.paddingLeft             = 16;
+            b.style.paddingRight            = 16;
             T.Radius(b, T.ButtonRadius);
             T.Border(b, 0, Color.clear);
+
+            if (!string.IsNullOrEmpty(icon))
+            {
+                var ic = MakeIcon(icon, 16, Color.white);
+                ic.style.marginRight = 10;
+                b.Add(ic);
+            }
+
+            var lbl = new Label(text) { pickingMode = PickingMode.Ignore };
+            lbl.style.color                   = Color.white;
+            lbl.style.fontSize                = 13;
+            lbl.style.unityFontStyleAndWeight = FontStyle.Bold;
+            lbl.style.letterSpacing           = 0.8f;
+            lbl.style.unityTextAlign          = TextAnchor.MiddleCenter;
+            b.Add(lbl);
+
+            return b;
+        }
+
+        /// <summary>
+        /// Compact icon+label button, sized like UITheme.SmallButton but composed
+        /// from two child labels so the Lucide font can be used for the glyph
+        /// while keeping the regular text font for the label.
+        /// </summary>
+        private static Button BuildIconSmallButton(string iconGlyph, string text, Action onClick, Color bg)
+        {
+            var b = new Button(onClick);
+            b.text = string.Empty;
+            b.style.minHeight               = 30;
+            b.style.color                   = Color.white;
+            b.style.backgroundColor         = new StyleColor(new Color(bg.r, bg.g, bg.b, 0.85f));
+            b.style.flexDirection           = FlexDirection.Row;
+            b.style.alignItems              = Align.Center;
+            b.style.justifyContent          = Justify.Center;
+            b.style.paddingLeft             = 10;
+            b.style.paddingRight            = 12;
+            T.Radius(b, T.ButtonRadius);
+            T.Border(b, 0, Color.clear);
+
+            var ic = MakeIcon(iconGlyph, 12, Color.white);
+            ic.style.marginRight = 6;
+            b.Add(ic);
+
+            var lbl = new Label(text) { pickingMode = PickingMode.Ignore };
+            lbl.style.color                   = Color.white;
+            lbl.style.fontSize                = 11;
+            lbl.style.unityFontStyleAndWeight = FontStyle.Bold;
+            lbl.style.unityTextAlign          = TextAnchor.MiddleCenter;
+            b.Add(lbl);
+
             return b;
         }
 
@@ -508,17 +585,32 @@ namespace VoxelEngine.Menu
             t.style.flexGrow = 1;
             row.Add(t);
 
-            var back = new Button(backAction) { text = backText };
-            back.style.minHeight               = 28;
-            back.style.minWidth                = 90;
-            back.style.fontSize                = 10;
-            back.style.unityFontStyleAndWeight = FontStyle.Bold;
-            back.style.color                   = Color.white;
-            back.style.backgroundColor         = new StyleColor(new Color(T.BgSlot.r, T.BgSlot.g, T.BgSlot.b, 0.90f));
+            var back = new Button(backAction);
+            back.text = string.Empty;
+            back.style.minHeight        = 28;
+            back.style.minWidth         = 90;
+            back.style.color            = Color.white;
+            back.style.backgroundColor  = new StyleColor(new Color(T.BgSlot.r, T.BgSlot.g, T.BgSlot.b, 0.90f));
+            back.style.flexDirection    = FlexDirection.Row;
+            back.style.alignItems       = Align.Center;
+            back.style.justifyContent   = Justify.Center;
+            back.style.paddingLeft      = 10;
+            back.style.paddingRight     = 12;
             T.Radius(back, T.ButtonRadius);
             T.Border(back, 0, Color.clear);
-            row.Add(back);
 
+            var ic = MakeIcon(LucideIcons.ArrowLeft, 13, Color.white);
+            ic.style.marginRight = 6;
+            back.Add(ic);
+
+            var lbl = new Label(backText) { pickingMode = PickingMode.Ignore };
+            lbl.style.color                   = Color.white;
+            lbl.style.fontSize                = 10;
+            lbl.style.unityFontStyleAndWeight = FontStyle.Bold;
+            lbl.style.unityTextAlign          = TextAnchor.MiddleCenter;
+            back.Add(lbl);
+
+            row.Add(back);
             return row;
         }
 
@@ -541,6 +633,7 @@ namespace VoxelEngine.Menu
             f.style.fontSize          = 13;
             T.Radius(f, 5f);
             T.Border(f, 1, T.BorderDim);
+            StyleInnerInput(f);
         }
 
         private static void StyleField(IntegerField f)
@@ -552,6 +645,53 @@ namespace VoxelEngine.Menu
             f.style.fontSize        = 13;
             T.Radius(f, 5f);
             T.Border(f, 1, T.BorderDim);
+            StyleInnerInput(f);
+        }
+
+        /// <summary>
+        /// Forces every text-rendering descendant of a TextField / IntegerField / Slider
+        /// input to use our theme colour. Unity Toolkit's input control is a deep tree
+        /// (Field → TextInputBase → TextElement) and `color` does NOT cascade reliably
+        /// onto the inner TextElement that actually draws typed glyphs. Without this
+        /// fix, the caret + characters render in the default white, which is invisible
+        /// against our dark BgCard backgrounds.
+        /// </summary>
+        private static void StyleInnerInput(VisualElement field)
+        {
+            if (field == null) return;
+
+            void Apply(VisualElement root)
+            {
+                // 1) Style the input box wrapper (the visible "well" inside the field).
+                var input = root.Q(className: "unity-base-text-field__input")
+                            ?? root.Q("unity-text-input");
+                if (input != null)
+                {
+                    input.style.color           = new StyleColor(T.TextPrimary);
+                    input.style.backgroundColor = new StyleColor(T.BgCard);
+                    input.style.unityTextAlign  = TextAnchor.MiddleLeft;
+                    input.style.paddingLeft     = 6;
+                    input.style.paddingRight    = 6;
+                }
+
+                // 2) Walk every descendant and force colour on real text renderers.
+                //    This catches the inner TextElement that draws the actual glyphs,
+                //    plus any Label that Unity adds for the field's display value.
+                root.Query<TextElement>().ForEach(te =>
+                {
+                    te.style.color = new StyleColor(T.TextPrimary);
+                });
+            }
+
+            Apply(field);
+            // Re-apply once the panel has had a chance to materialise lazy children.
+            field.RegisterCallback<AttachToPanelEvent>(_ => Apply(field));
+            field.RegisterCallback<GeometryChangedEvent>(_ => Apply(field));
+            // And again whenever the value changes — covers the SliderInt input field
+            // which Unity sometimes rebuilds when its value crosses an integer step.
+            field.RegisterCallback<ChangeEvent<string>>(_ => Apply(field));
+            field.RegisterCallback<ChangeEvent<int>>(_ => Apply(field));
+            field.RegisterCallback<ChangeEvent<float>>(_ => Apply(field));
         }
 
         private static VisualElement BuildIntSlider(int min, int max, int value, Action<int> onChange)
@@ -559,6 +699,7 @@ namespace VoxelEngine.Menu
             var s = new SliderInt(min, max) { value = value, showInputField = true };
             s.style.marginBottom = 4;
             s.RegisterValueChangedCallback(e => onChange(e.newValue));
+            StyleInnerInput(s);
             return s;
         }
 
@@ -567,6 +708,7 @@ namespace VoxelEngine.Menu
             var s = new Slider(min, max) { value = value, showInputField = true };
             s.style.marginBottom = 4;
             s.RegisterValueChangedCallback(e => onChange(e.newValue));
+            StyleInnerInput(s);
             return s;
         }
 
@@ -583,9 +725,94 @@ namespace VoxelEngine.Menu
         private static PanelSettings CreateDefaultPanelSettings()
         {
             var ps = ScriptableObject.CreateInstance<PanelSettings>();
-            ps.scaleMode = PanelScaleMode.ScaleWithScreenSize;
+            ps.name                = "MainMenu_RuntimePanelSettings";
+            ps.scaleMode           = PanelScaleMode.ScaleWithScreenSize;
             ps.referenceResolution = new Vector2Int(1920, 1080);
+            ps.match               = 0.5f;
+
+            // CRITICAL — without a ThemeStyleSheet, UI Toolkit logs the warning
+            // "No Theme Style Sheet set to PanelSettings, UI will not render properly"
+            // and falls back to *no* styling (no fonts, no default rules).
+            ps.themeStyleSheet = LoadOrCreateDefaultTheme();
             return ps;
+        }
+
+        /// <summary>
+        /// Loads the default Unity runtime theme. Tries (in order):
+        /// 1) A user-authored theme placed at  Resources/MenuTheme.tss
+        /// 2) Resources.Load on the default theme name
+        /// 3) A freshly-instantiated empty ThemeStyleSheet (last-resort, suppresses
+        ///    the warning but provides no styling).
+        /// Never returns null.
+        /// </summary>
+        private static ThemeStyleSheet LoadOrCreateDefaultTheme()
+        {
+            var theme = Resources.Load<ThemeStyleSheet>("MenuTheme");
+            if (theme != null) return theme;
+
+            theme = Resources.Load<ThemeStyleSheet>("UnityDefaultRuntimeTheme");
+            if (theme != null) return theme;
+
+            // Final safety net — empty sheet still satisfies the validator.
+            var empty = ScriptableObject.CreateInstance<ThemeStyleSheet>();
+            empty.name = "MainMenu_RuntimeEmptyTheme";
+            return empty;
+        }
+
+        /// <summary>
+        /// Returns a usable Font for UI Toolkit. Order:
+        /// 1) Resources/Fonts/MenuFont (project-shipped)
+        /// 2) Built-in "LegacyRuntime" (Unity 6 default UI font, always present)
+        /// 3) Built-in "Arial" (older fallback)
+        /// Never throws; may return null only if no fonts exist on the platform.
+        /// </summary>
+        private static Font LoadFallbackFont()
+        {
+            if (_cachedTextFont != null) return _cachedTextFont;
+
+            _cachedTextFont = Resources.Load<Font>("Fonts/MenuFont");
+            if (_cachedTextFont != null) return _cachedTextFont;
+
+            // Unity 6 ships LegacyRuntime.ttf as the universal built-in UI font.
+            _cachedTextFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            if (_cachedTextFont != null) return _cachedTextFont;
+
+            _cachedTextFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            return _cachedTextFont;
+        }
+
+        /// <summary>
+        /// Loads the Lucide icon font (Resources/Fonts/Lucide.ttf).
+        /// Returns null gracefully if the font is missing — callers must handle.
+        /// </summary>
+        private static Font LoadIconFont()
+        {
+            if (_cachedIconFont != null) return _cachedIconFont;
+            _cachedIconFont = Resources.Load<Font>(LucideIcons.ResourcePath);
+            return _cachedIconFont;
+        }
+
+        /// <summary>
+        /// Builds a single-glyph Lucide-font Label sized to fit a button row.
+        /// Falls back to an empty (zero-width) element if the icon font isn't loaded,
+        /// so layout never collapses.
+        /// </summary>
+        private static Label MakeIcon(string glyph, int sizePx, Color color)
+        {
+            var icon = new Label(glyph)
+            {
+                pickingMode = PickingMode.Ignore
+            };
+            icon.style.fontSize       = sizePx;
+            icon.style.color          = new StyleColor(color);
+            icon.style.unityTextAlign = TextAnchor.MiddleCenter;
+            icon.style.marginRight    = 0;
+
+            var font = LoadIconFont();
+            if (font != null)
+                icon.style.unityFontDefinition = new StyleFontDefinition(font);
+
+            return icon;
         }
     }
 }

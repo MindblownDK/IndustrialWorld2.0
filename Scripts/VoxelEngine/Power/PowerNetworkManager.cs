@@ -104,11 +104,16 @@ namespace VoxelEngine.Power
                     {
                         if (b == n) continue;
                         float r = Mathf.Max(rA, b.connectRadius);
-                        if ((n.transform.position - b.transform.position).sqrMagnitude <= r * r)
-                        {
-                            // Avoid duplicate add (we'll see each pair twice — once from each side).
-                            if (!n.neighbours.Contains(b)) n.neighbours.Add(b);
-                        }
+                        if ((n.transform.position - b.transform.position).sqrMagnitude > r * r) continue;
+
+                        // New: ask BOTH ends whether the link is legal.
+                        // This enforces grid-alignment for cables AND line-of-sight checks,
+                        // so cables never connect diagonally or through solid blocks.
+                        if (!n.CanLinkTo(b)) continue;
+                        if (!b.CanLinkTo(n)) continue;
+
+                        // Avoid duplicate add (we'll see each pair twice — once from each side).
+                        if (!n.neighbours.Contains(b)) n.neighbours.Add(b);
                     }
                 }
             }
@@ -132,6 +137,9 @@ namespace VoxelEngine.Power
                 }
                 net.Recompute();
             }
+
+            // Notify every node so visuals (cable arms, indicator LEDs, etc.) can rebuild.
+            foreach (var n in snapshot) n.onNeighboursChanged?.Invoke();
         }
 
         // ============================================================

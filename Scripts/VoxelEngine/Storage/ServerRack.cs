@@ -41,9 +41,14 @@ namespace VoxelEngine.Storage
         /// <summary>True when actual power draw exceeds PSU rating — rack shuts down.</summary>
         public bool IsPsuOverloaded        { get; private set; }
 
-        // ── Disk-data registry (persists when disk is removed) ──────
-        // Key: disk item GUID (instanceID of the ScriptableObject asset).
-        private readonly Dictionary<string, DiskData> _diskRegistry = new();
+        // ── Disk-data persistence ────────────────────────────────────
+        // DiskData now lives on the ItemStack itself (via ItemStack.payload), so
+        // a partially-filled disk taken OUT of one rack keeps its contents and
+        // can be slotted back into a different rack — or into a Disk Manipulator
+        // — without losing items. The rack still keeps a per-slot reference in
+        // activeDisks so the Recalculate() pass can find storage targets quickly.
+        // The legacy in-rack registry was per-rack/per-slot which orphaned data
+        // the moment a disk left the slot; removed.
 
         private PowerConsumer _power;
         private float         _tickTimer;
@@ -141,27 +146,31 @@ namespace VoxelEngine.Storage
 
         private void PersistDiskData()
         {
-            // Save any non-null activeDisks back to registry keyed by slot position
-            // (since we can't rely on a GUID from the ScriptableObject at runtime).
-            // We use "slotIndex:diskTier" as a stable-enough key per slot.
+            // Mirror the disk slots into activeDisks for the simulation loop.
+            // The DiskData itself lives on ItemStack.payload — it's created on
+            // first insertion of a brand-new disk, and re-used on every subsequent
+            // insertion into this or any other rack/manipulator. That means a
+            // partially-filled disk pulled out, dropped, picked up, and slotted
+            // into a different rack still carries its full contents.
             for (int i = 0; i < diskSlots.Size; i++)
             {
                 var slot = diskSlots.GetSlot(i);
-                string key = $"{name}_{GetEntityId()}_disk{i}";
+                while (activeDisks.Count <= i) activeDisks.Add(null);
 
                 if (!slot.IsEmpty && slot.item is StorageDisk sd)
                 {
-                    // Disk inserted: restore existing data or create new.
-                    if (!_diskRegistry.TryGetValue(key, out var data) || data.tier != sd.tier)
+                    var data = slot.payload as DiskData;
+                    if (data == null || data.tier != sd.tier)
+                    {
                         data = new DiskData { tier = sd.tier };
-                    while (activeDisks.Count <= i) activeDisks.Add(null);
+                        slot.payload = data;
+                        // Write the modified stack back so the container persists the payload reference.
+                        diskSlots.SetSlot(i, slot);
+                    }
                     activeDisks[i] = data;
-                    _diskRegistry[key] = data;
                 }
                 else
                 {
-                    // Disk removed: data stays in _diskRegistry, slot cleared.
-                    while (activeDisks.Count <= i) activeDisks.Add(null);
                     activeDisks[i] = null;
                 }
             }
@@ -221,16 +230,21 @@ namespace VoxelEngine.Storage
             for (int i = 0; i < diskSlots.Size; i++)
             {
                 var slot = diskSlots.GetSlot(i);
-                string key = $"{name}_{GetEntityId()}_disk{i}";
-
                 if (slot.IsEmpty || !(slot.item is StorageDisk sd))
                 { activeDisks[i] = null; continue; }
 
-                if (!_diskRegistry.TryGetValue(key, out var data) || data.tier != sd.tier)
+                // Read DiskData from the stack's payload (mints a fresh one for
+                // brand-new disks). This is the same logic used by PersistDiskData;
+                // both paths converge on the stack-bound payload so contents follow
+                // the disk wherever it goes.
+                var data = slot.payload as DiskData;
+                if (data == null || data.tier != sd.tier)
+                {
                     data = new DiskData { tier = sd.tier };
-
-                activeDisks[i]    = data;
-                _diskRegistry[key] = data;
+                    slot.payload = data;
+                    diskSlots.SetSlot(i, slot);
+                }
+                activeDisks[i] = data;
             }
 
             // Include NAS disks connected via data cables.

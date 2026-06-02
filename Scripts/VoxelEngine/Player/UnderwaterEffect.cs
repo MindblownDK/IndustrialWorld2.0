@@ -45,46 +45,86 @@ namespace VoxelEngine.Player
                 }
             }
 
-            if (IsUnderwater && !_prev)
+            // Enter water: save the pre-underwater render state ONCE so we can
+            // faithfully restore the player's normal sky / fog / clear flags when
+            // the head leaves the water again. (Old code accidentally tied the
+            // restore branch to an "else if" on the debug timer, so it almost
+            // never ran — leaving the camera permanently fogged after one dip.)
+            if (IsUnderwater && !_prev && !_saved)
             {
-                _sBg = _cam.backgroundColor; _sF = _cam.clearFlags; _sFar = _cam.farClipPlane;
-                _sFog = RenderSettings.fog; _sFC = RenderSettings.fogColor;
-                _sFD = RenderSettings.fogDensity; _sFM = RenderSettings.fogMode; _saved = true;
+                _sBg  = _cam.backgroundColor;
+                _sF   = _cam.clearFlags;
+                _sFar = _cam.farClipPlane;
+                _sFog = RenderSettings.fog;
+                _sFC  = RenderSettings.fogColor;
+                _sFD  = RenderSettings.fogDensity;
+                _sFM  = RenderSettings.fogMode;
+                _saved = true;
             }
+
             if (IsUnderwater)
             {
-                _cam.backgroundColor = underwaterTint;
-                _cam.clearFlags = CameraClearFlags.SolidColor;
-                _cam.farClipPlane = 40f;
-                RenderSettings.fog = true;
-                RenderSettings.fogMode = FogMode.Exponential;
-                RenderSettings.fogColor = underwaterTint;
+                _cam.backgroundColor      = underwaterTint;
+                _cam.clearFlags           = CameraClearFlags.SolidColor;
+                _cam.farClipPlane         = 40f;
+                RenderSettings.fog        = true;
+                RenderSettings.fogMode    = FogMode.Exponential;
+                RenderSettings.fogColor   = underwaterTint;
                 RenderSettings.fogDensity = fogDensity;
             }
-            // Debug: uncomment to diagnose underwater detection.
+            else if (_prev && _saved)
+            {
+                // Leave-water transition: restore everything we touched.
+                _cam.backgroundColor = _sBg;
+                _cam.clearFlags      = _sF;
+                _cam.farClipPlane    = _sFar;
+                // Don't yank fog from the WeatherManager if it's the live owner of fog.
+                if (Weather.WeatherManager.Instance == null)
+                {
+                    RenderSettings.fog        = _sFog;
+                    RenderSettings.fogColor   = _sFC;
+                    RenderSettings.fogDensity = _sFD;
+                    RenderSettings.fogMode    = _sFM;
+                }
+                _saved = false; // ready to snapshot again next dive
+            }
+
+            // Optional debug — kept in its own block so it can never gate the
+            // enter/leave logic above.
             _dbgTimer += Time.deltaTime;
             if (_dbgTimer > 2f)
             {
                 _dbgTimer = 0;
+#if VOXEL_UW_DEBUG
                 var w = VoxelEngine.Core.VoxelWorld.Instance;
                 if (w != null)
                 {
                     var vp = w.WorldToVoxel(transform.position);
-                    var v = w.GetVoxelWorld(vp);
+                    var v  = w.GetVoxelWorld(vp);
                     float surfY = ws != null ? ws.WaterSurfaceY : -9999;
-                    Debug.Log($"[UW] cam={transform.position.y:F1} voxelWater={v.waterLevel} surfY={surfY:F1} isUW={IsUnderwater} headUW={ws?.IsHeadUnderwater}");
+                    Debug.Log($"[UW] cam={transform.position.y:F1} voxelWater={v.waterLevel} " +
+                              $"surfY={surfY:F1} isUW={IsUnderwater} headUW={ws?.IsHeadUnderwater}");
                 }
-            }
-
-            else if (_prev && _saved)
-            {
-                _cam.backgroundColor = _sBg; _cam.clearFlags = _sF; _cam.farClipPlane = _sFar;
-                if (Weather.WeatherManager.Instance == null)
-                { RenderSettings.fog = _sFog; RenderSettings.fogColor = _sFC;
-                  RenderSettings.fogDensity = _sFD; RenderSettings.fogMode = _sFM; }
+#endif
             }
         }
 
-        void OnDisable() { if (_saved) { _cam.backgroundColor = _sBg; _cam.clearFlags = _sF; _cam.farClipPlane = _sFar; } }
+        void OnDisable()
+        {
+            if (_saved)
+            {
+                _cam.backgroundColor = _sBg;
+                _cam.clearFlags      = _sF;
+                _cam.farClipPlane    = _sFar;
+                if (Weather.WeatherManager.Instance == null)
+                {
+                    RenderSettings.fog        = _sFog;
+                    RenderSettings.fogColor   = _sFC;
+                    RenderSettings.fogDensity = _sFD;
+                    RenderSettings.fogMode    = _sFM;
+                }
+                _saved = false;
+            }
+        }
     }
 }

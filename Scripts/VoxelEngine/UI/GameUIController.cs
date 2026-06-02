@@ -324,8 +324,110 @@ namespace VoxelEngine.UI
             _rightContainer = null;
             _openStation    = null;
             _activeQueue    = null;
+
+            // QoL: if the player has at least one online wireless transmitter,
+            // pressing Inventory auto-opens the wireless storage panel beside the
+            // inventory — exactly as if they had clicked a Storage Terminal —
+            // so they don't have to walk back to a rack just to deposit items.
+            // We clear all OTHER open-X first (above) so this never hijacks an
+            // already-open machine UI; it only kicks in when the player pressed
+            // I from the world.
+            _openStorageTerminal = ResolveWirelessTerminal();
+            _openServerRack      = null;
+            _openPatternTerminal = null; _openCraftTerminal   = null;
+            _openImporter        = null; _openExporter        = null;
+            _openDiskManipulator = null; _openNAS             = null;
+
             UnlockCursor();
             Refresh();
+        }
+
+        // Cached synthetic terminal so we don't allocate one each frame.
+        private VoxelEngine.Storage.StorageTerminal _wirelessTerminalProxy;
+
+        // ── Wireless transmitter selection ─────────────────────────
+        // Player can pick which online transmitter to route through (a dropdown
+        // appears in the inventory panel whenever more than one is online).
+        // Persisted across sessions via PlayerPrefs by the transmitter's name.
+        private const string _wirelessTxPrefKey = "iw.wireless.selectedTx";
+        private string _selectedTransmitterName;   // null = "Auto" (nearest)
+
+        /// <summary>Returns the rack the player currently wants to use, honouring
+        /// their dropdown selection. Falls back to the nearest online transmitter
+        /// when "Auto" is selected (the default) or the named one went offline.</summary>
+        public VoxelEngine.Storage.ServerRack GetActiveWirelessRack()
+        {
+            var tx = GetActiveWirelessTransmitter();
+            return tx != null ? tx.ConnectedRack : null;
+        }
+
+        public VoxelEngine.Storage.WirelessTransmitter GetActiveWirelessTransmitter()
+        {
+            var all = VoxelEngine.Storage.WirelessTransmitter.GetAllOnline();
+            if (all == null || all.Length == 0) return null;
+
+            if (_selectedTransmitterName == null)
+                _selectedTransmitterName = PlayerPrefs.GetString(_wirelessTxPrefKey, "");
+
+            // Match by name when one was chosen. Empty string = "Auto" (nearest).
+            if (!string.IsNullOrEmpty(_selectedTransmitterName))
+            {
+                foreach (var t in all)
+                    if (t != null && t.transmitterName == _selectedTransmitterName && t.ConnectedRack != null)
+                        return t;
+                // Selected one went offline → silently fall through to Auto.
+            }
+
+            // Auto: pick the closest online transmitter that has a rack.
+            VoxelEngine.Storage.WirelessTransmitter best = null;
+            float bestSqr = float.MaxValue;
+            Vector3 origin = inventory != null ? inventory.transform.position : Vector3.zero;
+            foreach (var t in all)
+            {
+                if (t == null || t.ConnectedRack == null) continue;
+                float d = (t.transform.position - origin).sqrMagnitude;
+                if (d < bestSqr) { bestSqr = d; best = t; }
+            }
+            return best;
+        }
+
+        public void SetSelectedTransmitter(string nameOrEmpty)
+        {
+            _selectedTransmitterName = nameOrEmpty ?? "";
+            PlayerPrefs.SetString(_wirelessTxPrefKey, _selectedTransmitterName);
+            PlayerPrefs.Save();
+            Refresh();
+        }
+
+        /// <summary>
+        /// Returns a "virtual" StorageTerminal pointed at the nearest online
+        /// wireless transmitter's connected ServerRack, or null if no transmitter
+        /// is online. Used by OpenInventory() so plain I auto-opens the storage
+        /// network panel for players carrying a powered wireless transmitter.
+        /// </summary>
+        private VoxelEngine.Storage.StorageTerminal ResolveWirelessTerminal()
+        {
+            // Honour the player's dropdown selection (or Auto = nearest).
+            var best = GetActiveWirelessTransmitter();
+            if (best == null) return null;
+
+            // Reuse a single hidden proxy so the StorageUI thinks it's looking
+            // at a real wired terminal — but pre-wired to the wireless rack.
+            if (_wirelessTerminalProxy == null)
+            {
+                var go = new GameObject("WirelessTerminalProxy");
+                go.hideFlags = HideFlags.HideAndDontSave;
+                go.transform.SetParent(transform, false);
+                // StorageTerminal requires a PlacedBlock — add a stub.
+                go.AddComponent<VoxelEngine.Building.PlacedBlock>();
+                _wirelessTerminalProxy = go.AddComponent<VoxelEngine.Storage.StorageTerminal>();
+                _wirelessTerminalProxy.isWireless = true;
+            }
+            // Force-set the connected rack via reflection-free path: the proxy's
+            // own Update() would re-search by distance; instead we drop it next
+            // to the transmitter so its built-in search picks the right rack.
+            _wirelessTerminalProxy.transform.position = best.transform.position;
+            return _wirelessTerminalProxy;
         }
         public void OpenContainer(IItemContainer c)
         {
@@ -516,6 +618,7 @@ namespace VoxelEngine.UI
             _openImporter   = null; _openExporter     = null;
             _openDiskManipulator = null; _openNAS     = null;
             _openPowerstation= null;
+            _openStorageTerminal = null; _openServerRack = null;
             _activeQueue    = null;
             _openCoalGen    = null;
             UnwatchAllContainers();
@@ -688,18 +791,58 @@ namespace VoxelEngine.UI
             // Backpack grid with sort button
             panel.Add(BuildSortableSlotGrid(inventory.container, Inventory.HOTBAR_SIZE, Inventory.TOTAL_SIZE));
 
+            // ── Wireless transmitter selector ────────────────────────
+            // Drop-down appears once any transmitter is online so the player can
+            // pick which network to route shift-clicks / drag-drops / crafting
+            // ingredients through. Selection is remembered across sessions.
+            BuildWirelessTransmitterSelector(panel);
+
             // Crafting list — filtered by category + search.
             panel.Add(Spacer(12));
             panel.Add(MakeSubtitle("Crafting"));
+
+            // ── Crafting source priority (per user spec) ─────────────
+            //   1) If the player has opened a Storage Terminal (wired OR wireless),
+            //      OR is in the inventory with an active wireless transmitter, we
+            //      treat the storage network as a tier-Assembler crafting station
+            //      AND let crafting pull ingredients from inventory FIRST, then
+            //      from the network.
+            //   2) Otherwise, crafting only uses the inventory and respects normal
+            //      station-tier rules (Crafting Bench / Furnace / Assembler).
+            //
+            // The "storage = highest tier station" behaviour is gated by the
+            // res_storage_crafting research node so it doesn't appear before
+            // the player has earned it.
+            var rmCheck = VoxelEngine.Research.ResearchManager.Instance;
+            bool storageCraftingUnlocked = rmCheck != null
+                && rmCheck.IsUnlocked("res_storage_crafting");
+
+            VoxelEngine.Storage.ServerRack craftRack = null;
+            if (_openStorageTerminal != null && _openStorageTerminal.ConnectedRack != null
+                && _openStorageTerminal.ConnectedRack.IsOnline)
+                craftRack = _openStorageTerminal.ConnectedRack;
+
+            VoxelEngine.Storage.ServerRack passiveWirelessRack = GetActiveWirelessRack();
+            bool wirelessActive = passiveWirelessRack != null && passiveWirelessRack.IsOnline;
+
             var maxStation = Crafter.MaxAccessibleStation(inventory.transform.position, stationRadius);
+            // Storage-as-station upgrade — Assembler tier.
+            if (storageCraftingUnlocked && (craftRack != null || wirelessActive)
+                && (int)maxStation < (int)Crafting.StationTier.Assembler)
+                maxStation = Crafting.StationTier.Assembler;
+
             var allRecipes = Crafter.AvailableRecipes(recipeRegistry, maxStation);
 
-            // If a wireless transmitter is online, use the combined network+inventory as
-            // the crafting source so the player can craft using stored items.
+            // Wrap the inventory in a NetworkItemSource ONLY when the storage UI is
+            // open / the wireless transmitter selection is active. With no terminal
+            // open and no transmitter, crafting uses inventory only — the user's
+            // explicit rule "craft with the items in inventory first, and only with
+            // network items when the storage terminal is opened or a transmitter is
+            // active".
             IItemContainer craftSource = inventory.container;
-            var transmittersForCraft = VoxelEngine.Storage.WirelessTransmitter.GetAllOnline();
-            if (transmittersForCraft.Length > 0 && transmittersForCraft[0].ConnectedRack != null)
-                craftSource = new VoxelEngine.Storage.NetworkItemSource(inventory.container, transmittersForCraft[0].ConnectedRack);
+            var craftRackForSource = craftRack ?? (wirelessActive ? passiveWirelessRack : null);
+            if (craftRackForSource != null)
+                craftSource = new VoxelEngine.Storage.NetworkItemSource(inventory.container, craftRackForSource);
 
             BuildRecipeBrowser(panel, allRecipes, craftSource, inventory.container,
                 emptyMessage: "No recipes available — craft a Crafting Bench first.", panelId: "inventory");
@@ -799,6 +942,76 @@ namespace VoxelEngine.UI
         private bool _showWirelessStorage;
         // Prevents I from re-opening inventory the same frame it closed a machine panel.
         private bool _justClosedThisFrame;
+
+        /// <summary>
+        /// Wireless transmitter dropdown — appears in the inventory panel whenever
+        /// any transmitter is online. Lets the player route storage actions through
+        /// a chosen network (or "Auto" = nearest). Selection persists via PlayerPrefs.
+        /// </summary>
+        private void BuildWirelessTransmitterSelector(VisualElement parent)
+        {
+            var all = VoxelEngine.Storage.WirelessTransmitter.GetAllOnline();
+            if (all == null || all.Length == 0) return;
+
+            parent.Add(Spacer(10));
+            var row = new VisualElement();
+            row.style.flexDirection  = FlexDirection.Row;
+            row.style.alignItems     = Align.Center;
+            row.style.marginBottom   = 4;
+            row.style.paddingTop     = 6;
+            row.style.paddingBottom  = 6;
+            row.style.paddingLeft    = 10;
+            row.style.paddingRight   = 10;
+            row.style.backgroundColor = new StyleColor(UITheme.BgCard);
+            SetBorderRadius(row, UITheme.CardRadius);
+            UITheme.Border(row, 1, UITheme.BorderDim);
+            parent.Add(row);
+
+            var lbl = new Label("\ud83d\udce1 Network:");
+            lbl.style.color    = new StyleColor(UITheme.TextSecondary);
+            lbl.style.fontSize = 11;
+            lbl.style.unityFontStyleAndWeight = FontStyle.Bold;
+            lbl.style.marginRight = 8;
+            lbl.pickingMode = PickingMode.Ignore;
+            row.Add(lbl);
+
+            // Build the list of "Auto" + every online transmitter's name.
+            var names = new System.Collections.Generic.List<string> { "Auto (nearest)" };
+            foreach (var t in all)
+            {
+                if (t == null) continue;
+                var n = string.IsNullOrEmpty(t.transmitterName) ? "Wireless Network" : t.transmitterName;
+                if (!names.Contains(n)) names.Add(n);
+            }
+
+            var dd = new DropdownField(names, 0);
+            dd.style.flexGrow  = 1;
+            dd.style.minHeight = 26;
+
+            // Reflect current selection.
+            string current = string.IsNullOrEmpty(_selectedTransmitterName) ? "Auto (nearest)" : _selectedTransmitterName;
+            int idx = names.IndexOf(current);
+            dd.SetValueWithoutNotify(idx >= 0 ? current : "Auto (nearest)");
+
+            dd.RegisterValueChangedCallback(e =>
+            {
+                string chosen = e.newValue == "Auto (nearest)" ? "" : e.newValue;
+                SetSelectedTransmitter(chosen);
+            });
+            row.Add(dd);
+
+            // Status hint — shows which rack the active transmitter is pointed at.
+            var rack = GetActiveWirelessRack();
+            var statusTxt = rack != null && rack.IsOnline
+                ? $"  \u2713 online ({rack.TotalStored:N0}/{rack.TotalCapacity:N0})"
+                : "  \u26A0 offline";
+            var status = new Label(statusTxt);
+            status.style.color    = new StyleColor(rack != null && rack.IsOnline ? UITheme.AccentGreen : UITheme.AccentRed);
+            status.style.fontSize = 10;
+            status.style.marginLeft = 6;
+            status.pickingMode = PickingMode.Ignore;
+            row.Add(status);
+        }
 
         private void BuildRecipeBrowser(VisualElement parent,
             System.Collections.Generic.List<Crafting.RecipeDefinition> recipes,
@@ -1182,13 +1395,9 @@ namespace VoxelEngine.UI
             panel.Add(status);
 
             panel.Add(MakeDivider());
-            // Port configuration
-            var portConfig = f.GetComponent<VoxelEngine.Transport.PortConfig>();
-            if (portConfig != null)
-            {
-                panel.Add(MakeDivider());
-                panel.Add(PortConfigHud.Build(portConfig, Refresh));
-            }
+            // (Port configuration UI removed per design — cables now connect to any
+            // face automatically; future per-resource I/O selection lives in the
+            // cable's own UI rather than per-machine.)
             var hint = new Label("Tip: place Coal in the fuel slot to start producing power. " +
                                  "Wood logs and planks also work but burn faster.");
             hint.style.color = new StyleColor(new Color(0.6f, 0.6f, 0.65f));
@@ -1339,13 +1548,7 @@ namespace VoxelEngine.UI
 
             // Footer hint.
             panel.Add(Spacer(14));
-            // Port configuration
-            var portConfig = ef.GetComponent<VoxelEngine.Transport.PortConfig>();
-            if (portConfig != null)
-            {
-                panel.Add(MakeDivider());
-                panel.Add(PortConfigHud.Build(portConfig, Refresh));
-            }
+            // (Port configuration UI removed — see BuildRightCoalGenerator note.)
             var hint = new Label("Tip: connect cables from a generator. Insert Speed/Efficiency modules to tune output vs power use.");
             hint.style.color = new StyleColor(new Color(0.6f, 0.6f, 0.65f));
             hint.style.fontSize = 10;
@@ -1666,29 +1869,71 @@ namespace VoxelEngine.UI
                 c.SetSlot(idx, leftover);
         }
 
+        /// <summary>
+        /// If a storage network is reachable (open storage terminal OR an online
+        /// wireless transmitter), push the currently dragged stack into it and
+        /// clear the source slot. Returns true if the stack was fully consumed.
+        /// Used by the drag-onto-empty handler so users can drop items into
+        /// storage without the obscure shift-click ritual.
+        /// </summary>
+        private bool TryInsertDraggedIntoNetwork()
+        {
+            if (!_dragSource.active) return false;
+            var srcC   = _dragSource.container;
+            int srcIdx = _dragSource.slotIndex;
+            var stack  = srcC.GetSlot(srcIdx);
+            if (stack.IsEmpty) return false;
+
+            VoxelEngine.Storage.ServerRack rack = null;
+            if (_openStorageTerminal != null) rack = _openStorageTerminal.ConnectedRack;
+            if (rack == null)
+            {
+                var transmitters = VoxelEngine.Storage.WirelessTransmitter.GetAllOnline();
+                if (transmitters.Length > 0) rack = transmitters[0].ConnectedRack;
+            }
+            if (rack == null) return false;
+
+            int leftover = rack.NetworkInsert(stack.item, stack.count);
+            int moved    = stack.count - leftover;
+            if (moved <= 0) return false;
+
+            if (leftover <= 0) srcC.SetSlot(srcIdx, new ItemStack());
+            else { stack.count = leftover; srcC.SetSlot(srcIdx, stack); }
+
+            BuildFeedbackHud.Show($"Stored {stack.item.displayName}",
+                $"+{moved}", stack.item.icon, UITheme.AccentCyan);
+            Refresh();
+            return leftover <= 0;
+        }
+
         /// <summary>Drop the item from the given container slot into the world.</summary>
         public void DropItemFromSlot(IItemContainer c, int idx)
         {
             if (c == null) return;
             var stack = c.GetSlot(idx);
             if (stack.IsEmpty) return;
-            // Spawn in front of the player.
-            Vector3 spawnPos = Vector3.zero;
-            Vector3 tossDir = Vector3.forward;
+
+            // Spawn the drop a short distance in front of the player at chest
+            // height. Using a fixed offset relative to the player root (not the
+            // camera) avoids two failure modes the user reported:
+            //   • Camera.main returning null → drop ends up at the world origin
+            //     and is "invisible" because it's far away.
+            //   • Spawning inside the camera near-clip plane → drop is rendered
+            //     behind the near plane and culled.
+            Vector3 spawnPos;
+            Vector3 tossDir;
             if (inventory != null)
             {
-                var cam = Camera.main;
-                if (cam != null)
-                {
-                    spawnPos = cam.transform.position + cam.transform.forward * 1.5f;
-                    tossDir = cam.transform.forward;
-                }
-                else
-                {
-                    spawnPos = inventory.transform.position + Vector3.up * 1.5f + inventory.transform.forward * 1.5f;
-                    tossDir = inventory.transform.forward;
-                }
+                var root = inventory.transform;
+                tossDir = root.forward;
+                spawnPos = root.position + Vector3.up * 1.0f + root.forward * 1.0f;
             }
+            else
+            {
+                spawnPos = Vector3.up * 2f;
+                tossDir  = Vector3.forward;
+            }
+
             VoxelEngine.Items.DroppedItem.Spawn(stack, spawnPos, tossDir);
             c.SetSlot(idx, new ItemStack());
             VoxelEngine.UI.BuildFeedbackHud.Show(
@@ -1953,10 +2198,22 @@ namespace VoxelEngine.UI
                 {
                     if (_dragSource.active)
                     {
-                        // Dragging to empty area ALWAYS drops the item to the world.
-                        // Use Shift+Click on an inventory slot to store into the network.
-                        DropItemFromSlot(_dragSource.container, _dragSource.slotIndex);
-                        CancelDrag();
+                        // QoL: dragging an inventory item onto the empty area inside
+                        // a storage terminal (or with a wireless transmitter online)
+                        // INSERTS it into the network instead of tossing it to the
+                        // ground. Dragging onto truly empty UI still drops to world,
+                        // because some players use that as a quick discard gesture
+                        // when no storage panel is open.
+                        if (_dragSource.container == inventory?.container &&
+                            TryInsertDraggedIntoNetwork())
+                        {
+                            CancelDrag();
+                        }
+                        else
+                        {
+                            DropItemFromSlot(_dragSource.container, _dragSource.slotIndex);
+                            CancelDrag();
+                        }
                     }
                     return;
                 }
@@ -1988,15 +2245,48 @@ namespace VoxelEngine.UI
 
         /// <summary>Shift-click: send the whole stack at (sourceC, sourceIdx) to the "other side".
         /// Smart routing: from player inventory, fuel items go to fuel slot, anything else goes to input.
-        /// From any furnace slot back to player.</summary>
+        /// From any furnace slot back to player.
+        ///
+        /// Order matters here: an *explicit* container (chest / furnace / server rack / disk
+        /// manipulator) ALWAYS wins over the wireless-storage-terminal proxy that
+        /// OpenInventory() creates automatically. Without that ordering, shift-clicking coal
+        /// while a furnace was open would route it into the wireless network instead of the
+        /// furnace's fuel slot.</summary>
         private void QuickTransfer(IItemContainer sourceC, int sourceIdx)
         {
             if (inventory == null) return;
             var srcStack = sourceC.GetSlot(sourceIdx);
             if (srcStack.IsEmpty) return;
 
-            // Storage terminal open: shift-click from inventory → insert into network.
-            if (sourceC == inventory.container && _openStorageTerminal != null && _openStorageTerminal.ConnectedRack != null)
+            // 1) Inventory → an EXPLICIT open machine takes priority. This block must come
+            // before any wireless / storage-terminal routing below, otherwise coal-into-furnace
+            // breaks the moment a transmitter is online.
+            if (sourceC == inventory.container)
+            {
+                IItemContainer explicitDest = ResolveQuickTransferDestination(sourceC, srcStack.item);
+                if (explicitDest != null)
+                {
+                    var clone1 = new ItemStack { item = srcStack.item, count = srcStack.count, durability = srcStack.durability, payload = srcStack.payload };
+                    var leftover1 = explicitDest.Insert(clone1);
+                    int moved1 = leftover1 == null ? srcStack.count : (srcStack.count - leftover1.count);
+                    if (moved1 > 0)
+                    {
+                        if (moved1 >= srcStack.count) sourceC.SetSlot(sourceIdx, new ItemStack());
+                        else                          { srcStack.count -= moved1; sourceC.SetSlot(sourceIdx, srcStack); }
+                        return;
+                    }
+                    // If the explicit destination refused (full, wrong type), fall through to
+                    // network/inventory routing so the player isn't left holding a "stuck" stack.
+                }
+            }
+
+            // 2) Inventory → storage terminal that the PLAYER explicitly opened.
+            //    The auto-spawned wireless proxy is excluded here so it doesn't override
+            //    machine routing above. The explicit terminal path is handled by the
+            //    real opener (StorageTerminal interact → OpenMachine → _openStorageTerminal).
+            if (sourceC == inventory.container && _openStorageTerminal != null
+                && _openStorageTerminal != _wirelessTerminalProxy
+                && _openStorageTerminal.ConnectedRack != null)
             {
                 var rack = _openStorageTerminal.ConnectedRack;
                 int netLeftover = rack.NetworkInsert(srcStack.item, srcStack.count);
@@ -2011,13 +2301,14 @@ namespace VoxelEngine.UI
                 return;
             }
 
-            // Wireless transmitter active + plain inventory open: shift-click from inventory → insert into network.
-            if (sourceC == inventory.container && _openStorageTerminal == null)
+            // 3) Plain inventory ↔ wireless transmitter (selected one) — shift-click stores
+            //    into the network. This is the case where the player pressed I with a
+            //    transmitter online but is NOT looking at any machine.
+            if (sourceC == inventory.container)
             {
-                var transmitters = VoxelEngine.Storage.WirelessTransmitter.GetAllOnline();
-                if (transmitters.Length > 0 && transmitters[0].ConnectedRack != null)
+                var rack = GetActiveWirelessRack();
+                if (rack != null)
                 {
-                    var rack = transmitters[0].ConnectedRack;
                     int netLeftover = rack.NetworkInsert(srcStack.item, srcStack.count);
                     int netMoved = srcStack.count - netLeftover;
                     if (netMoved > 0)
@@ -2031,10 +2322,11 @@ namespace VoxelEngine.UI
                 }
             }
 
+            // 4) Fallback (machine → inventory etc).
             IItemContainer dest = ResolveQuickTransferDestination(sourceC, srcStack.item);
             if (dest == null) return;
 
-            var clone = new ItemStack { item = srcStack.item, count = srcStack.count, durability = srcStack.durability };
+            var clone = new ItemStack { item = srcStack.item, count = srcStack.count, durability = srcStack.durability, payload = srcStack.payload };
             var leftover = dest.Insert(clone);
             int moved = leftover == null ? srcStack.count : (srcStack.count - leftover.count);
             if (moved <= 0) return;
@@ -2058,13 +2350,36 @@ namespace VoxelEngine.UI
                     bool isUpgrade = item is FurnaceUpgradeItem;
                     return isUpgrade ? _openElectric.upgradeC : _openElectric.inputC;
                 }
+                // Coal Generator: only fuel items go in.
+                if (_openCoalGen != null)
+                {
+                    bool isFuel = item is ResourceItem rg && rg.fuelSeconds > 0f;
+                    return isFuel ? _openCoalGen.fuelC : null;
+                }
                 if (_openQuarry != null)         return _openQuarry.Output;
                 if (_openDiskManipulator != null) return _openDiskManipulator.sourceSlot;
                 if (_openNAS != null)             return _openNAS.diskSlots;
                 if (_openImporter != null)        return _openImporter.upgradeSlots;
                 if (_openExporter != null)        return _openExporter.upgradeSlots;
                 if (_openPowerstation != null)    return _openPowerstation.psuSlots;
-                if (_openServerRack != null)      return _openServerRack.diskSlots;
+
+                // Server Rack: hardware items go to their dedicated slots — never wrong-typed.
+                if (_openServerRack != null)
+                {
+                    if (item is VoxelEngine.Storage.StorageDisk) return _openServerRack.diskSlots;
+                    if (item is VoxelEngine.Storage.ServerComponent sc)
+                    {
+                        switch (sc.componentType)
+                        {
+                            case VoxelEngine.Storage.ComponentType.CPU: return _openServerRack.cpuSlot;
+                            case VoxelEngine.Storage.ComponentType.RAM: return _openServerRack.ramSlots;
+                            case VoxelEngine.Storage.ComponentType.PSU: return _openServerRack.psuSlot;
+                        }
+                    }
+                    // Any other item type is not a valid rack component — refuse the transfer
+                    // so the player doesn't accidentally lose a coal stack in the disk slots.
+                    return null;
+                }
                 return null;
             }
             // Source is ANY non-player container: send to the player inventory.

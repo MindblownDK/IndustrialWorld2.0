@@ -13,7 +13,10 @@ namespace VoxelEngine.Items
         public float lifetime = 300f;
 
         private float _spawnTime;
-        private float _pickupDelay = 0.8f;
+        // Longer pickup grace so a player who drops an item can SEE it before
+        // walking forward and instantly re-picking it (the previous 0.8s was
+        // shorter than the typical post-drop step).
+        private float _pickupDelay = 1.5f;
         private float _bobPhase;
         private Rigidbody _rb;
         private bool _settled;
@@ -24,8 +27,11 @@ namespace VoxelEngine.Items
 
             var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
             go.name = $"Drop_{stack.item.displayName}";
-            go.transform.position = position + Vector3.up * 0.5f;
-            go.transform.localScale = Vector3.one * 0.35f;
+            // Bigger drop cube (0.5m vs 0.35m) so it's clearly visible at typical
+            // player viewing distances. Also lift the spawn just above the toss
+            // position so it never embeds in the floor / player capsule.
+            go.transform.position = position + Vector3.up * 0.25f;
+            go.transform.localScale = Vector3.one * 0.5f;
             go.layer = 0;
 
             // Force a 100% visible opaque material that works in URP/Standard/HDRP.

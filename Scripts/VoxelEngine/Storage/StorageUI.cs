@@ -65,15 +65,15 @@ namespace VoxelEngine.Storage
             p.Add(fillBar);
             p.Add(T.Spacer(6));
 
-            // ── Search ────────────────────────────────────────────
+            // ── Search + Sort ─────────────────────────────────────
             var searchRow = new VisualElement();
             searchRow.style.flexDirection = FlexDirection.Row;
             searchRow.style.alignItems    = Align.Center;
             searchRow.style.marginBottom  = 6;
 
             var searchIco = new Label("⚲");
-            searchIco.style.fontSize  = 13;
-            searchIco.style.color     = new StyleColor(T.TextMuted);
+            searchIco.style.fontSize    = 13;
+            searchIco.style.color       = new StyleColor(T.TextMuted);
             searchIco.style.marginRight = 5;
             searchIco.pickingMode = PickingMode.Ignore;
             searchRow.Add(searchIco);
@@ -82,6 +82,21 @@ namespace VoxelEngine.Storage
             searchField.style.flexGrow  = 1;
             searchField.style.minHeight = 26;
             searchRow.Add(searchField);
+
+            // Sort selector — two modes × ascending/descending. Default = item
+            // count ascending (smallest stacks first) per the new QoL spec.
+            var sortBtn = new Button { text = "Count ↑" };
+            sortBtn.style.minHeight     = 26;
+            sortBtn.style.minWidth      = 90;
+            sortBtn.style.marginLeft    = 6;
+            sortBtn.style.fontSize      = 10;
+            sortBtn.style.color         = Color.white;
+            sortBtn.style.unityFontStyleAndWeight = FontStyle.Bold;
+            sortBtn.style.backgroundColor = new StyleColor(T.BgSlot);
+            T.Radius(sortBtn, 5f);
+            T.Border(sortBtn, 1, T.BorderDim);
+            sortBtn.tooltip = "Click to cycle sort:\n• Count ↑ (default)\n• Count ↓\n• Name A→Z\n• Name Z→A";
+            searchRow.Add(sortBtn);
             p.Add(searchRow);
 
             // ── Slot grid (scrollable) ────────────────────────────
@@ -111,11 +126,42 @@ namespace VoxelEngine.Storage
 #endif
             }
 
+            // Sort mode state — persists for the lifetime of this panel instance.
+            // 0 = Count ascending (default), 1 = Count descending,
+            // 2 = Name A→Z, 3 = Name Z→A.
+            int sortMode = 0;
+
+            void ApplySortLabel()
+            {
+                sortBtn.text = sortMode switch
+                {
+                    0 => "Count ↑",
+                    1 => "Count ↓",
+                    2 => "Name A→Z",
+                    3 => "Name Z→A",
+                    _ => "Count ↑"
+                };
+            }
+
             void RebuildGrid(string filterQ)
             {
                 grid.Clear();
 
                 var allItems = rack.GetAllItems();
+
+                // Sort BEFORE filtering so the order is stable as the user types.
+                switch (sortMode)
+                {
+                    case 0: allItems.Sort((a, b) => a.count.CompareTo(b.count)); break;
+                    case 1: allItems.Sort((a, b) => b.count.CompareTo(a.count)); break;
+                    case 2: allItems.Sort((a, b) => string.Compare(
+                                a.displayName, b.displayName,
+                                System.StringComparison.OrdinalIgnoreCase)); break;
+                    case 3: allItems.Sort((a, b) => string.Compare(
+                                b.displayName, a.displayName,
+                                System.StringComparison.OrdinalIgnoreCase)); break;
+                }
+
                 string q = filterQ.Trim().ToLowerInvariant();
 
                 foreach (var entry in allItems)
@@ -243,7 +289,15 @@ namespace VoxelEngine.Storage
                         : "No items match the search."));
             }
 
+            sortBtn.clicked += () =>
+            {
+                sortMode = (sortMode + 1) % 4;
+                ApplySortLabel();
+                RebuildGrid(searchField.value);
+            };
+
             searchField.RegisterValueChangedCallback(e => RebuildGrid(e.newValue));
+            ApplySortLabel();
             RebuildGrid("");
 
             // ── Hint bar ─────────────────────────────────────────

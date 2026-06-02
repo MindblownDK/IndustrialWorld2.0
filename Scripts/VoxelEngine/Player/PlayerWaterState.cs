@@ -27,12 +27,20 @@ namespace VoxelEngine.Player
             var feetVoxel = world.GetVoxelWorld(world.WorldToVoxel(feet));
             var headVoxel = world.GetVoxelWorld(world.WorldToVoxel(head));
 
-            IsSwimming = feetVoxel.waterLevel > 10;
-            IsHeadUnderwater = headVoxel.waterLevel > 10;
-
-            // Find the water surface Y for buoyancy calculation.
+            // Find the water surface Y so we can decide swim-vs-wade from real depth,
+            // not just from "any water cell touches my feet". Sampling first lets us
+            // gate buoyancy on actual submersion depth below.
             WaterSurfaceY = SampleWaterSurface(world, feet);
-            WaterDepth = IsSwimming ? Mathf.Clamp01((WaterSurfaceY - feet.y) / 1.8f) : 0;
+            float submerged = WaterSurfaceY > -9000 ? (WaterSurfaceY - feet.y) : 0f;
+
+            // Swim only when the player is genuinely in the water (waist deep or
+            // more). Knee-deep water is just visual; the player still walks normally.
+            // Without this guard buoyancy kicks in on the first puddle and the
+            // player floats across the surface as if it were a solid road.
+            const float SWIM_DEPTH = 0.85f;       // metres of submersion
+            IsSwimming       = feetVoxel.waterLevel > 10 && submerged > SWIM_DEPTH;
+            IsHeadUnderwater = headVoxel.waterLevel > 10;
+            WaterDepth       = IsSwimming ? Mathf.Clamp01(submerged / 1.8f) : 0f;
         }
 
         /// <summary>Find the Y position of the water surface above a world position.</summary>

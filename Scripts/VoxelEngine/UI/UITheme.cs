@@ -220,28 +220,42 @@ namespace VoxelEngine.UI
         public static (VisualElement bar, VisualElement fill) ProgressBar(
             float t, Color fillColor, float height = 8, bool flexGrow = false)
         {
-            var bar = new VisualElement();
-            if (flexGrow)
-                bar.style.flexGrow = 1;
-            else
-                bar.style.width = 240;   // fixed width — prevents full-panel stretch
-            bar.style.height          = height;
-            bar.style.backgroundColor = new StyleColor(new Color(0.05f, 0.055f, 0.075f));
-            Radius(bar, height * 0.5f);
-            Border(bar, 1, BorderSubtle);
-            bar.style.overflow     = Overflow.Hidden;
-            bar.style.flexDirection = FlexDirection.Row;  // fill expands left→right
-            bar.pickingMode        = PickingMode.Ignore;
+            // Hard cap: machine UIs should never get a bar taller than 8px regardless
+            // of what the caller asked for. Crafting/recipe rows pass flexGrow=true
+            // and explicitly want their 8px bar to span the row width — that still
+            // works, the cap only applies to height.
+            const float MAX_BAR_HEIGHT = 8f;
+            float h = Mathf.Min(Mathf.Max(2f, height), MAX_BAR_HEIGHT);
 
-            // Fill: full height of bar, width driven by percentage.
+            // Wrapper row gives us a stable parent that the inner bar can't escape.
+            // The wrapper either takes a fixed width (240px) or fills its parent row
+            // horizontally; in BOTH cases it stays exactly h pixels tall.
+            var wrapper = new VisualElement();
+            wrapper.style.height        = h;
+            wrapper.style.minHeight     = h;
+            wrapper.style.maxHeight     = h;
+            wrapper.style.flexShrink    = 0;
+            wrapper.style.flexGrow      = flexGrow ? 1 : 0;
+            if (!flexGrow) wrapper.style.width = 240;
+            wrapper.style.alignSelf     = Align.Center;
+            wrapper.pickingMode         = PickingMode.Ignore;
+
+            // Track styling lives on the wrapper itself — it IS the bar visually.
+            wrapper.style.backgroundColor = new StyleColor(new Color(0.05f, 0.055f, 0.075f));
+            Radius(wrapper, h * 0.5f);
+            Border(wrapper, 1, BorderSubtle);
+            wrapper.style.overflow      = Overflow.Hidden;
+            wrapper.style.flexDirection = FlexDirection.Row;
+
+            // Fill: width-percent only. Height matches wrapper exactly (100%).
             var fill = new VisualElement();
-            fill.style.height          = StyleKeyword.Auto;  // stretch to parent height
-            fill.style.alignSelf       = Align.Stretch;
+            fill.style.height          = new StyleLength(new Length(100f, LengthUnit.Percent));
             fill.style.width           = new StyleLength(new Length(Mathf.Clamp01(t) * 100f, LengthUnit.Percent));
             fill.style.backgroundColor = new StyleColor(fillColor);
             fill.pickingMode           = PickingMode.Ignore;
-            bar.Add(fill);
-            return (bar, fill);
+            wrapper.Add(fill);
+
+            return (wrapper, fill);
         }
 
         // ── Tank Gauge ────────────────────────────────────────────────────
