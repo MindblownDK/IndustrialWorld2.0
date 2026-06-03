@@ -140,6 +140,22 @@ namespace VoxelEngine.Building
         // ---------- Placement math ----------
         private Vector3 ComputePlacementPosition(RaycastHit hit, BlockItem block)
         {
+            // ── BUSBAR SNAP ─────────────────────────────────────────────────
+            // If the player is placing a Power Busbar AND looking at the END
+            // face of an existing busbar, snap the ghost to that busbar's tip
+            // so consecutive bars line up perfectly into one long run. This
+            // makes "extend the bus" feel like a single intuitive gesture.
+            // For any other case we fall through to the normal grid-snap below.
+            var existingBus = hit.collider != null
+                ? hit.collider.GetComponentInParent<VoxelEngine.Power.PowerBusbar>()
+                : null;
+            if (existingBus != null && block != null && block.placedPrefab != null &&
+                block.placedPrefab.GetComponent<VoxelEngine.Power.PowerBusbar>() != null)
+            {
+                var snapPos = TrySnapToBusbarEnd(existingBus, hit);
+                if (snapPos.HasValue) return snapPos.Value;
+            }
+
             // Free placement = hit point pushed along surface normal by half block size.
             Vector3 free = hit.point + hit.normal * (gridSize * 0.5f);
             if (!gridSnap) return free;
@@ -159,6 +175,64 @@ namespace VoxelEngine.Building
                 snapped += hit.normal * gs;
 
             return snapped;
+        }
+
+        /// <summary>
+        /// Smart placement target for a new busbar near an existing one.
+        ///
+        ///   • Click the TIP face → snap to tip-to-tip continuation
+        ///     (centres exactly <c>busLength</c> apart so the bars form
+        ///     one perfectly continuous run).
+        ///   • Click any SIDE face → snap to a parallel bar one grid
+        ///     cell out along the clicked face's normal (so two busbars
+        ///     side-by-side without overlapping).
+        ///
+        /// Either way the result is guaranteed to clear the existing
+        /// bar's stretched collider, preventing the "busbar inside
+        /// busbar" overlap the user reported.
+        /// </summary>
+        private Vector3? TrySnapToBusbarEnd(VoxelEngine.Power.PowerBusbar existing,
+                                            RaycastHit hit)
+        {
+            if (existing == null) return null;
+
+            // Convert the bus axis to world space (busbars are placed with
+            // identity rotation in the current build flow, so transform.right /
+            // transform.up / transform.forward all align with world axes).
+            Vector3 axisWorld = existing.busAxis switch
+            {
+                VoxelEngine.Power.PowerBusbar.BusAxis.X => existing.transform.right,
+                VoxelEngine.Power.PowerBusbar.BusAxis.Y => existing.transform.up,
+                _                                       => existing.transform.forward,
+            };
+
+            Vector3 hitNormal = hit.normal.normalized;
+            float alignment   = Vector3.Dot(hitNormal, axisWorld);
+
+            // TIP face → tip-to-tip snap.
+            if (Mathf.Abs(alignment) >= 0.6f)
+            {
+                float sign = Mathf.Sign(alignment);
+                return existing.transform.position + axisWorld * sign * existing.busLength;
+            }
+
+            // SIDE face → parallel snap, one grid cell out along the face normal.
+            //
+            // We round the face normal to the nearest cardinal axis (in case the
+            // physics raycast returned a slightly off normal) and offset by exactly
+            // one grid cell so the new bar runs parallel to the existing one with
+            // a clean 1 m gap between their centres.
+            Vector3 perpAxis = NearestCardinal(hitNormal);
+            if (perpAxis.sqrMagnitude < 0.01f) return null;
+            return existing.transform.position + perpAxis * Mathf.Max(gridSize, 1f);
+        }
+
+        private static Vector3 NearestCardinal(Vector3 v)
+        {
+            float ax = Mathf.Abs(v.x), ay = Mathf.Abs(v.y), az = Mathf.Abs(v.z);
+            if (ax >= ay && ax >= az) return new Vector3(Mathf.Sign(v.x), 0, 0);
+            if (ay >= ax && ay >= az) return new Vector3(0, Mathf.Sign(v.y), 0);
+            return new Vector3(0, 0, Mathf.Sign(v.z));
         }
 
         private bool IsPlacementValid(Vector3 pos, BlockItem block)

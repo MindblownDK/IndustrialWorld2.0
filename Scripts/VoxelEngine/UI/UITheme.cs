@@ -44,6 +44,10 @@ namespace VoxelEngine.UI
         public static readonly Color AccentOrange = new(0.88f, 0.52f, 0.12f);
         public static readonly Color AccentPurple = new(0.58f, 0.30f, 0.84f);
         public static readonly Color AccentBlue   = new(0.20f, 0.50f, 0.92f);
+        /// <summary>Low-emphasis "informational / inactive" accent used by toast HUDs
+        /// when reporting non-actionable status (e.g. "No connections"). Reads as a
+        /// soft, desaturated steel-grey so it never competes with success/danger pills.</summary>
+        public static readonly Color AccentDim    = new(0.46f, 0.50f, 0.58f);
 
         // Typography hierarchy
         public static readonly Color TextPrimary   = new(0.92f, 0.94f, 0.97f);
@@ -143,6 +147,22 @@ namespace VoxelEngine.UI
             return l;
         }
 
+        /// <summary>
+        /// Compact inline label used inside dense form rows (e.g. "Direction:",
+        /// "Network Type:" inside the PortConfig widget). Uses TextSecondary at the
+        /// supplied size so it sits visually below Body/Subtitle but above Muted.
+        /// </summary>
+        public static Label Label(string text, int fontSize = 11)
+        {
+            var l = new Label(text);
+            l.style.color    = new StyleColor(TextSecondary);
+            l.style.fontSize = fontSize;
+            l.style.unityFontStyleAndWeight = FontStyle.Bold;
+            l.style.marginRight = 4;
+            l.pickingMode = PickingMode.Ignore;
+            return l;
+        }
+
         /// <summary>Muted fine-print label — 10px, dim colour.</summary>
         public static Label Muted(string text)
         {
@@ -199,12 +219,91 @@ namespace VoxelEngine.UI
 
             var l = new Label(text);
             l.style.color                   = new StyleColor(bg);
-            l.style.fontSize                = 9;
+            l.style.fontSize                = 10;
             l.style.unityFontStyleAndWeight = FontStyle.Bold;
             l.style.letterSpacing           = 1.2f;
+            // Centre the text vertically inside the pill — without this the
+            // label defaults to TopLeft, which made "RUNNING" sit at the very
+            // top of the pill (visible bug in the user's screenshot where the
+            // text was clipped above the rounded border).
+            l.style.unityTextAlign          = TextAnchor.MiddleCenter;
+            l.style.height                  = new StyleLength(new Length(100f, LengthUnit.Percent));
+            l.style.flexShrink              = 0;
             l.pickingMode = PickingMode.Ignore;
             pill.Add(l);
             return (pill, l);
+        }
+
+        /// <summary>
+        /// Compact ON/OFF toggle pill — pairs with <see cref="StatusPill"/>.
+        /// Hook <paramref name="onToggle"/> for click handling. The returned
+        /// pill reflects <paramref name="initial"/> state on first render.
+        /// </summary>
+        public static (VisualElement pill, Label label) MachineToggle(
+            bool initial, System.Action<bool> onToggle, string onText = "ENABLED", string offText = "DISABLED")
+        {
+            bool state = initial;
+            Color onColor  = AccentGreen;
+            Color offColor = AccentRed;
+
+            var pill = new VisualElement();
+            pill.style.flexDirection = FlexDirection.Row;
+            pill.style.alignItems    = Align.Center;
+            pill.style.paddingLeft   = 9;
+            pill.style.paddingRight  = 11;
+            pill.style.paddingTop    = 3;
+            pill.style.paddingBottom = 3;
+            pill.style.height        = 22;
+            pill.style.marginRight   = 8; // gap before the status pill on the right
+            Radius(pill, PillRadius);
+
+            var dot = new VisualElement();
+            dot.style.width  = 6; dot.style.height = 6;
+            Radius(dot, 3f);
+            dot.style.marginRight = 6;
+            dot.pickingMode = PickingMode.Ignore;
+            pill.Add(dot);
+
+            var label = new Label();
+            label.style.fontSize                = 10;
+            label.style.unityFontStyleAndWeight = FontStyle.Bold;
+            label.style.letterSpacing           = 1.2f;
+            label.style.unityTextAlign          = TextAnchor.MiddleCenter;
+            label.style.height                  = new StyleLength(new Length(100f, LengthUnit.Percent));
+            label.style.flexShrink              = 0;
+            label.pickingMode = PickingMode.Ignore;
+            pill.Add(label);
+
+            void Apply()
+            {
+                Color c = state ? onColor : offColor;
+                pill.style.backgroundColor = new StyleColor(new Color(c.r, c.g, c.b, 0.22f));
+                Border(pill, 1, new Color(c.r, c.g, c.b, 0.70f));
+                dot.style.backgroundColor = new StyleColor(c);
+                label.style.color = new StyleColor(c);
+                label.text = state ? onText : offText;
+            }
+            Apply();
+
+            // Hover sheen + click toggle.
+            pill.RegisterCallback<PointerEnterEvent>(_ =>
+            {
+                Color c = state ? onColor : offColor;
+                pill.style.backgroundColor = new StyleColor(new Color(c.r, c.g, c.b, 0.35f));
+            });
+            pill.RegisterCallback<PointerLeaveEvent>(_ =>
+            {
+                Color c = state ? onColor : offColor;
+                pill.style.backgroundColor = new StyleColor(new Color(c.r, c.g, c.b, 0.22f));
+            });
+            pill.RegisterCallback<ClickEvent>(_ =>
+            {
+                state = !state;
+                Apply();
+                onToggle?.Invoke(state);
+            });
+
+            return (pill, label);
         }
 
         // ── Progress Bar ──────────────────────────────────────────────────
@@ -237,6 +336,15 @@ namespace VoxelEngine.UI
             wrapper.style.flexShrink    = 0;
             wrapper.style.flexGrow      = flexGrow ? 1 : 0;
             if (!flexGrow) wrapper.style.width = 240;
+            else
+            {
+                // Belt-and-braces: when flexGrow is on, also set width=100% so the
+                // bar fills its parent even when the parent is a COLUMN container
+                // (where flexGrow alone only stretches vertically). Without this,
+                // the bar collapsed to 0px width inside row/column wrappers — the
+                // Coal Generator's fuel bar was the visible victim.
+                wrapper.style.width = new StyleLength(new Length(100f, LengthUnit.Percent));
+            }
             wrapper.style.alignSelf     = Align.Center;
             wrapper.pickingMode         = PickingMode.Ignore;
 

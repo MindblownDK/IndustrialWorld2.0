@@ -78,12 +78,18 @@ namespace VoxelEngine.Transport
                     var a = _pipes[i];
                     var b = _pipes[j];
                     float maxDist = Mathf.Max(a.connectRadius, b.connectRadius);
-                    if (Vector3.SqrMagnitude(a.transform.position - b.transform.position)
-                        <= maxDist * maxDist)
-                    {
-                        if (!a.neighbours.Contains(b)) a.neighbours.Add(b);
-                        if (!b.neighbours.Contains(a)) b.neighbours.Add(a);
-                    }
+                    Vector3 pa = a.transform.position, pb = b.transform.position;
+
+                    if (Vector3.SqrMagnitude(pa - pb) > maxDist * maxDist) continue;
+
+                    // STRICT cardinal-neighbour gate.
+                    if (!VoxelEngine.Networks.PipeAdjacency.IsCardinalNeighbour(pa, pb)) continue;
+
+                    // Wrench blacklist — explicit player disconnect persists.
+                    if (VoxelEngine.Networks.WrenchBlacklist.IsBlocked(a, b)) continue;
+
+                    if (!a.neighbours.Contains(b)) a.neighbours.Add(b);
+                    if (!b.neighbours.Contains(a)) b.neighbours.Add(a);
                 }
             }
         }

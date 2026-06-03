@@ -1,8 +1,8 @@
-// Assets/Scripts/VoxelEngine/Transport/ItemPipe.cs
 using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.Building;
 using VoxelEngine.Items;
+using VoxelEngine.Networks;
 
 namespace VoxelEngine.Transport
 {
@@ -13,6 +13,10 @@ namespace VoxelEngine.Transport
     ///
     /// Each pipe has a small internal buffer. Every <see cref="tickInterval"/>
     /// seconds the pipe pushes its buffer toward the nearest valid sink.
+    ///
+    /// VISUAL: hands its live neighbour list to a <see cref="PipeVisualBuilder"/>
+    /// so the pipe presents the same chunky core+arms style as Power / Data
+    /// cables. Glass variant exposes an inner core showing the carried stream.
     /// </summary>
     public class ItemPipe : MonoBehaviour
     {
@@ -26,10 +30,18 @@ namespace VoxelEngine.Transport
         [Tooltip("Seconds between item-push ticks.")]
         public float tickInterval = 0.5f;
 
+        [Header("Visual")]
+        [Tooltip("Render as a translucent glass pipe with the carried items visible inside.")]
+        public bool isGlass = false;
+
         // ── Runtime ────────────────────────────────────────────────────────
         [System.NonSerialized] public List<ItemPipe> neighbours = new();
         private ItemContainer _buffer;
         private float _tickTimer;
+
+        // ── Visual integration ─────────────────────────────────────────────
+        private PipeVisualBuilder _visuals;
+        private readonly List<Vector3> _neighbourPosBuf = new(6);
 
         /// <summary>Read-only view of the items currently in transit inside this pipe.</summary>
         public IReadOnlyList<ItemStack> Buffer
@@ -38,7 +50,19 @@ namespace VoxelEngine.Transport
         }
 
         // ── Lifecycle ──────────────────────────────────────────────────────
-        private void Awake() => EnsureBuffer();
+        private void Awake()
+        {
+            EnsureBuffer();
+
+            _visuals = GetComponent<PipeVisualBuilder>();
+            if (_visuals == null) _visuals = gameObject.AddComponent<PipeVisualBuilder>();
+            _visuals.neighbourPositionsProvider = GetNeighbourPositions;
+            _visuals.isGlass = isGlass;
+            // Item pipes use the BuildCraft / Thermal-Expansion "sleeve" style —
+            // chunky terminal end-blocks at every junction, hazard-band sleeve
+            // along the run.
+            _visuals.style = VoxelEngine.Networks.PipeStyle.Sleeve;
+        }
 
         private void OnEnable()  { ItemPipeNetwork.EnsureInstance(); ItemPipeNetwork.Instance?.Register(this); }
         private void OnDisable() => ItemPipeNetwork.Instance?.Unregister(this);
@@ -96,6 +120,14 @@ namespace VoxelEngine.Transport
                 _buffer = new ItemContainer("PipeBuffer", bufferSize);
             else
                 _buffer.Resize(bufferSize);
+        }
+
+        private List<Vector3> GetNeighbourPositions()
+        {
+            _neighbourPosBuf.Clear();
+            foreach (var n in neighbours)
+                if (n != null) _neighbourPosBuf.Add(n.transform.position);
+            return _neighbourPosBuf;
         }
 
         /// <summary>

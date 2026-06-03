@@ -73,21 +73,35 @@ namespace VoxelEngine.WaterSim
                     continue;
                 }
 
+                // ── Job-system safety ──────────────────────────────────────
+                // Block until any pending SurfaceNetsJob that READS this
+                // chunk's `voxels` NativeArray has finished. Without this
+                // call Unity throws "you must include SurfaceNetsJob as a
+                // dependency" because both jobs touch the same NativeArray.
+                world.CompleteMeshJobForChunk(chunk);
+
                 // Run the fluid sim job synchronously (small, fast with Burst).
+                // try/finally guarantees the TempJob NativeArray is disposed even
+                // if anything in the loop throws — otherwise Unity raises the
+                // "JobTempAlloc has allocations more than 4 frames old" leak warning.
                 var changed = new NativeArray<int>(1, Allocator.TempJob);
-                var job = new FluidSimJob
+                bool didChange;
+                try
                 {
-                    voxels = chunk.voxels,
-                    chunkSize = VoxelConstants.CHUNK_SIZE,
-                    chunkSizeP = VoxelConstants.CHUNK_SIZE_P,
-                    changed = changed
-                };
-
-                // Complete the job inline (it's fast enough for 1 chunk).
-                job.Run();
-
-                bool didChange = changed[0] != 0;
-                changed.Dispose();
+                    var job = new FluidSimJob
+                    {
+                        voxels     = chunk.voxels,
+                        chunkSize  = VoxelConstants.CHUNK_SIZE,
+                        chunkSizeP = VoxelConstants.CHUNK_SIZE_P,
+                        changed    = changed
+                    };
+                    job.Run();
+                    didChange = changed[0] != 0;
+                }
+                finally
+                {
+                    if (changed.IsCreated) changed.Dispose();
+                }
 
                 if (didChange)
                 {

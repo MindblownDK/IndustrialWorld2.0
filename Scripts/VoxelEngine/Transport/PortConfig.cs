@@ -124,6 +124,7 @@ namespace VoxelEngine.Transport
                 {
                     ports[i].direction = dir;
                     UpdatePortIndicator(face);
+                    NotifyNetworksChanged();
                     return;
                 }
             }
@@ -139,6 +140,7 @@ namespace VoxelEngine.Transport
                 {
                     ports[i].networkType = type;
                     UpdatePortIndicator(face);
+                    NotifyNetworksChanged();
                     return;
                 }
             }
@@ -154,9 +156,33 @@ namespace VoxelEngine.Transport
                 {
                     ports[i].enabled = enabled;
                     UpdatePortIndicator(face);
+                    NotifyNetworksChanged();
                     return;
                 }
             }
+        }
+
+        /// <summary>
+        /// Called after any port edit. Two responsibilities:
+        ///   1) Clear THIS machine's entries from <see cref="WrenchBlacklist"/>
+        ///      so re-enabling a face intuitively restores its connections —
+        ///      the player obviously WANTS the cable to relink now.
+        ///   2) Dirty every network manager so the next Update tick rebuilds
+        ///      topology immediately (otherwise the cable visuals lag behind
+        ///      the face change until something else triggers a register churn).
+        /// </summary>
+        private void NotifyNetworksChanged()
+        {
+            // Drop any blacklist entries that involve this machine — the user
+            // is clearly re-configuring it, so previous wrench-disconnects
+            // shouldn't permanently veto the freshly-enabled face.
+            try { VoxelEngine.Networks.WrenchBlacklist.ClearForGameObject(gameObject); } catch { }
+
+            // Nudge every topology rebuilder so visuals refresh next frame.
+            try { VoxelEngine.Power.PowerNetworkManager.Instance?.SetDirty(); } catch { }
+            try { VoxelEngine.Gas.GasNetwork.Instance?.SetDirty(); }           catch { }
+            try { VoxelEngine.Transport.ItemPipeNetwork.Instance?.SetDirty(); } catch { }
+            try { VoxelEngine.Fluids.FluidNetworkManager.Instance?.SetDirty(); } catch { }
         }
 
         /// <summary>Check if this port accepts connections from a specific network type.</summary>

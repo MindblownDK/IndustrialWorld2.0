@@ -51,6 +51,11 @@ namespace VoxelEngine.Power
             node.neighbours?.Clear();
         }
 
+        /// <summary>Force a topology rebuild on the next Update tick — used
+        /// by the wrench after it edits the WrenchBlacklist so the visual
+        /// change is reflected instantly without waiting for register churn.</summary>
+        public void SetDirty() => _topologyDirty = true;
+
         private void Update()
         {
             if (_topologyDirty)
@@ -111,6 +116,11 @@ namespace VoxelEngine.Power
                         // so cables never connect diagonally or through solid blocks.
                         if (!n.CanLinkTo(b)) continue;
                         if (!b.CanLinkTo(n)) continue;
+
+                        // Wrench blacklist — the player explicitly broke this link.
+                        // Skip it on every subsequent topology rebuild until a wrench
+                        // re-bonds them (or one of them is removed/replaced).
+                        if (VoxelEngine.Networks.WrenchBlacklist.IsBlocked(n, b)) continue;
 
                         // Anti-redundancy: if both are cables AND they're on the same cardinal axis
                         // with an intermediate node between them, only keep the closer link to

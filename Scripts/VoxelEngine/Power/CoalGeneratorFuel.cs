@@ -19,7 +19,15 @@ namespace VoxelEngine.Power
         public float fuelRemaining;
         public float fuelMaxDuration;
 
-        public bool IsBurning => fuelRemaining > 0f;
+        /// <summary>
+        /// Player-controlled hard-disable toggle. When false the generator
+        /// stops consuming fuel and sets the PowerGenerator to off, even if
+        /// there's fuel in the input slot. Exposed via the UI's "ENABLED"
+        /// pill to the left of the status badge.
+        /// </summary>
+        public bool userEnabled = true;
+
+        public bool IsBurning => userEnabled && fuelRemaining > 0f;
         public float FuelProgress01 => fuelMaxDuration > 0 ? Mathf.Clamp01(fuelRemaining / fuelMaxDuration) : 0f;
 
         private PowerGenerator _gen;
@@ -80,6 +88,13 @@ namespace VoxelEngine.Power
         {
             EnsureContainers();
             if (_gen == null) _gen = GetComponent<PowerGenerator>();
+
+            // Player toggled the generator OFF — freeze fuel, stop generating.
+            if (!userEnabled)
+            {
+                _gen.isOn = false;
+                return;
+            }
 
             // Burn down current fuel.
             if (fuelRemaining > 0f)

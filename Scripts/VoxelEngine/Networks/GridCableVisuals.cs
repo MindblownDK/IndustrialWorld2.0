@@ -45,105 +45,47 @@ namespace VoxelEngine.Networks
             Vector3 cableWorldPos,
             IReadOnlyList<Vector3> neighbourWorldPositions,
             float gridSize,
-            float coreSize,
-            float armThickness,
+            float coreSize,       // kept for API compat — IndustrialPipeMesh
+            float armThickness,   //   sizes via its own profile constants
             Material material,
-            bool showUnusedFaceCaps)
+            bool showUnusedFaceCaps) // kept for API compat
         {
             if (visualRoot == null) return;
 
-            // Tear down previous meshes.
-            for (int i = visualRoot.childCount - 1; i >= 0; i--)
-                Object.Destroy(visualRoot.GetChild(i).gameObject);
-
-            float gs = gridSize > 0 ? gridSize : 1f;
-
-            // 1) Central hub cube.
-            BuildCube(visualRoot, "Core", Vector3.zero,
-                new Vector3(coreSize, coreSize, coreSize), material);
-
-            // 2) Arms — one per neighbour, snapped to nearest cardinal axis.
-            //    Arm length stretches all the way to the neighbour's *projected* face,
-            //    so a cable sitting beside a 1m gap from a multi-voxel generator
-            //    still gets a visible arm that touches the generator's collider edge.
-            bool[] axisUsed = new bool[6];
-            if (neighbourWorldPositions != null)
-            {
-                for (int j = 0; j < neighbourWorldPositions.Count; j++)
-                {
-                    Vector3 d = neighbourWorldPositions[j] - cableWorldPos;
-                    if (d.sqrMagnitude < 1e-4f) continue;
-
-                    Vector3 dir = NearestCardinalAxis(d);
-                    int axisIdx = AxisIndex(dir);
-                    if (axisIdx < 0 || axisUsed[axisIdx]) continue; // first neighbour on this axis wins
-                    axisUsed[axisIdx] = true;
-
-                    // Project the neighbour's offset onto the chosen axis. This is the
-                    // distance the arm needs to span from the cable's centre to the
-                    // neighbour's centre (or near-face for big blocks). We cap it at
-                    // 1.5 grid units so a wildly far neighbour can't grow a goofy arm.
-                    float projected = Mathf.Abs(Vector3.Dot(d, dir));
-                    float armEnd    = Mathf.Min(projected, gs * 1.5f);
-                    float armLen    = Mathf.Max(0.05f, armEnd - coreSize * 0.5f);
-
-                    Vector3 size = AxisAlignedSize(dir, armLen, armThickness);
-                    Vector3 pos  = dir * (coreSize * 0.5f + armLen * 0.5f);
-                    BuildCube(visualRoot, $"Arm_{axisIdx}", pos, size, material);
-                }
-            }
-
-            // 3) Optional terminator nubs on unused faces.
-            if (showUnusedFaceCaps)
-            {
-                for (int i = 0; i < CardinalAxes.Length; i++)
-                {
-                    if (axisUsed[i]) continue;
-                    Vector3 dir  = CardinalAxes[i];
-                    Vector3 size = AxisAlignedSize(dir, armThickness * 0.4f, armThickness * 0.7f);
-                    Vector3 pos  = dir * (coreSize * 0.5f + armThickness * 0.2f);
-                    BuildCube(visualRoot, $"Cap_{i}", pos, size, material);
-                }
-            }
+            // ── Premium renderer path ──────────────────────────
+            // Delegate to IndustrialPipeMesh with the WireArm profile so
+            // cables (PowerCable / DataCable) get the same round-shaft,
+            // dome-hub, flange-collar treatment as the new realistic pipes.
+            // Every conduit in the game now shares one premium visual language.
+            var accentMat = MakeAccentVariant(material);
+            IndustrialPipeMesh.Rebuild(
+                visualRoot,
+                cableWorldPos,
+                neighbourWorldPositions,
+                gridSize,
+                PipeStyle.WireArm,
+                material,
+                /* innerMat */ null,
+                accentMat);
         }
 
-        private static Vector3 NearestCardinalAxis(Vector3 v)
+        /// <summary>
+        /// Build a slightly brighter / more polished variant of the supplied
+        /// material so cable collars catch a little extra light. Cached on the
+        /// owning material via name suffix so we don't allocate every rebuild.
+        /// </summary>
+        private static Material MakeAccentVariant(Material src)
         {
-            float ax = Mathf.Abs(v.x), ay = Mathf.Abs(v.y), az = Mathf.Abs(v.z);
-            if (ax >= ay && ax >= az) return new Vector3(Mathf.Sign(v.x), 0, 0);
-            if (ay >= ax && ay >= az) return new Vector3(0, Mathf.Sign(v.y), 0);
-            return new Vector3(0, 0, Mathf.Sign(v.z));
-        }
-
-        private static int AxisIndex(Vector3 axis)
-        {
-            if (Mathf.Abs(axis.x) > 0.5f) return axis.x > 0 ? 0 : 1;
-            if (Mathf.Abs(axis.y) > 0.5f) return axis.y > 0 ? 2 : 3;
-            if (Mathf.Abs(axis.z) > 0.5f) return axis.z > 0 ? 4 : 5;
-            return -1;
-        }
-
-        private static Vector3 AxisAlignedSize(Vector3 axis, float along, float across)
-        {
-            if (Mathf.Abs(axis.x) > 0.5f) return new Vector3(along, across, across);
-            if (Mathf.Abs(axis.y) > 0.5f) return new Vector3(across, along, across);
-            return new Vector3(across, across, along);
-        }
-
-        private static void BuildCube(Transform parent, string name, Vector3 localPos,
-                                       Vector3 localSize, Material mat)
-        {
-            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            go.name = name;
-            var col = go.GetComponent<Collider>();
-            if (col != null) Object.Destroy(col);
-            var t = go.transform;
-            t.SetParent(parent, worldPositionStays: false);
-            t.localPosition = localPos;
-            t.localRotation = Quaternion.identity;
-            t.localScale    = localSize;
-            var mr = go.GetComponent<MeshRenderer>();
-            if (mr != null && mat != null) mr.sharedMaterial = mat;
+            if (src == null) return null;
+            Color baseTint = src.color;
+            // Lift each channel ~25% toward white; keep alpha 1.
+            Color accent = new Color(
+                Mathf.Clamp01(baseTint.r * 0.7f + 0.30f),
+                Mathf.Clamp01(baseTint.g * 0.7f + 0.30f),
+                Mathf.Clamp01(baseTint.b * 0.7f + 0.30f),
+                1f);
+            return IndustrialPipeMesh.CreateMetalMaterial(accent,
+                $"{src.name}_Accent", metallic: 0.95f, smoothness: 0.88f);
         }
 
         /// <summary>

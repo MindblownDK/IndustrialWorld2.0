@@ -744,6 +744,15 @@ namespace VoxelEngine.Core
             }
         }
 
+        /// <summary>
+        /// Block until any pending mesh job (SurfaceNetsJob) that READS this chunk's
+        /// voxel NativeArray completes, then finalize it. Public so other systems
+        /// — most importantly the fluid sim — can call it BEFORE scheduling a job
+        /// that WRITES to the same voxel buffer, satisfying Unity's Job-System
+        /// dependency safety check.
+        /// </summary>
+        public void CompleteMeshJobForChunk(Chunk chunk) => CompleteMeshJobFor(chunk);
+
         // Block until any pending mesh job for 'chunk' completes (and finalize it).
         private void CompleteMeshJobFor(Chunk chunk)
         {

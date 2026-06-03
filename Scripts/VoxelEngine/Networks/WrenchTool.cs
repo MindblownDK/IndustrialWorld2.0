@@ -9,6 +9,13 @@
 
 using System.Collections.Generic;
 using UnityEngine;
+// Support BOTH the standard Unity define (ENABLE_INPUT_SYSTEM) AND the project's
+// own version-define from VoxelEngine.asmdef (VE_HAS_INPUT_SYSTEM). When either
+// is on, we route shift-detection through the new Input System; otherwise we
+// fall back to legacy. This makes the wrench work in every project configuration.
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+#endif
 using VoxelEngine.Items;
 using VoxelEngine.Transport;
 
@@ -33,6 +40,84 @@ namespace VoxelEngine.Networks
         // Visual indicator for selection
         private GameObject _selectionIndicator;
 
+        /// <summary>
+        /// Returns true if either Left or Right Shift is currently held.
+        /// Guarded with try/catch so a misconfigured input backend can never
+        /// crash the wrench — worst case, shift is simply treated as not held
+        /// and the user falls back to the non-shift command.
+        /// </summary>
+        private static bool ShiftHeld()
+        {
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
+            try
+            {
+                var kb = Keyboard.current;
+                if (kb == null) return false;
+                return (kb.leftShiftKey  != null && kb.leftShiftKey.isPressed)
+                    || (kb.rightShiftKey != null && kb.rightShiftKey.isPressed);
+            }
+            catch { return false; }
+#else
+            try
+            {
+                return Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+            }
+            catch { return false; } // Old Input Manager disabled — treat as not held.
+#endif
+        }
+
+        // ── Cable / pipe selection state ──────────────────────────
+        // The wrench works in two modes depending on what the player clicks:
+        //   1) ConnectionAnchor  (data cables / machines that opted in)
+        //   2) Plain conduit     (PowerCable / GasPipe / ItemPipe / WaterPipe /
+        //                         DataCable) which use distance-auto-discovery
+        // For mode 2 we remember the GameObject of the first click so the
+        // second click can disconnect ONE specific pair via WrenchBlacklist.
+        private GameObject _selectedConduit;
+
+        /// <summary>
+        /// Returns true if <paramref name="go"/> is any of the auto-discovery
+        /// conduits the wrench can disconnect via the blacklist.
+        /// </summary>
+        private static bool IsWrenchableConduit(GameObject go)
+        {
+            if (go == null) return false;
+            return go.GetComponentInParent<VoxelEngine.Power.PowerCable>()       != null
+                || go.GetComponentInParent<VoxelEngine.Networks.DataCable>()     != null
+                || go.GetComponentInParent<VoxelEngine.Gas.GasPipe>()            != null
+                || go.GetComponentInParent<VoxelEngine.Transport.ItemPipe>()     != null
+                || go.GetComponentInParent<VoxelEngine.Fluids.WaterPipe>()       != null;
+        }
+
+        /// <summary>Resolve a hit to the "owning" conduit GameObject for blacklist purposes.</summary>
+        private static GameObject ResolveConduitRoot(Collider c)
+        {
+            if (c == null) return null;
+            var pc = c.GetComponentInParent<VoxelEngine.Power.PowerCable>();
+            if (pc != null) return pc.gameObject;
+            var dc = c.GetComponentInParent<VoxelEngine.Networks.DataCable>();
+            if (dc != null) return dc.gameObject;
+            var gp = c.GetComponentInParent<VoxelEngine.Gas.GasPipe>();
+            if (gp != null) return gp.gameObject;
+            var ip = c.GetComponentInParent<VoxelEngine.Transport.ItemPipe>();
+            if (ip != null) return ip.gameObject;
+            var wp = c.GetComponentInParent<VoxelEngine.Fluids.WaterPipe>();
+            if (wp != null) return wp.gameObject;
+            return null;
+        }
+
+        /// <summary>
+        /// Force every network manager to re-evaluate topology so wrench-induced
+        /// changes are reflected immediately (without waiting for the next dirty tick).
+        /// </summary>
+        private static void NudgeAllNetworks()
+        {
+            try { VoxelEngine.Power.PowerNetworkManager.Instance?.SetDirty(); } catch { }
+            try { VoxelEngine.Gas.GasNetwork.Instance?.SetDirty(); }            catch { }
+            try { VoxelEngine.Transport.ItemPipeNetwork.Instance?.SetDirty(); } catch { }
+            try { VoxelEngine.Fluids.FluidNetworkManager.Instance?.SetDirty(); } catch { }
+        }
+
         /// <summary>Called when the player LMB with the wrench.</summary>
         public void OnUse(RaycastHit hit, Player.PlayerInteractionTool tool)
         {
@@ -40,7 +125,7 @@ namespace VoxelEngine.Networks
             var portConfig = hit.collider.GetComponentInParent<PortConfig>();
 
             // Shift+Click: Cycle port direction on machines
-            if (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))
+            if (ShiftHeld())
             {
                 if (portConfig != null)
                 {
@@ -49,8 +134,15 @@ namespace VoxelEngine.Networks
                 }
             }
 
+            // No anchor? Try the cable/pipe conduit selection workflow.
             if (anchor == null)
             {
+                var conduit = ResolveConduitRoot(hit.collider);
+                if (conduit != null)
+                {
+                    HandleConduitClick(conduit);
+                    return;
+                }
                 ClearSelection();
                 return;
             }
@@ -114,14 +206,68 @@ namespace VoxelEngine.Networks
             }
         }
 
+        /// <summary>
+        /// LMB workflow for plain conduits (PowerCable / GasPipe / ItemPipe /
+        /// WaterPipe / DataCable). First click selects, second click on a
+        /// DIFFERENT conduit blacklists the pair so they stop being auto-linked.
+        /// Re-clicking the same pair (or shift+LMB) un-blacklists them.
+        /// </summary>
+        private void HandleConduitClick(GameObject conduit)
+        {
+            if (conduit == null) return;
+
+            if (_selectedConduit == null)
+            {
+                _selectedConduit = conduit;
+                _selectedTime    = Time.time;
+                CreateSelectionIndicator(conduit.transform.position);
+                UI.BuildFeedbackHud.Show("Wrench: Selected",
+                    $"{conduit.name} — click an adjacent conduit to break/reconnect",
+                    null, UI.UITheme.AccentCyan);
+                return;
+            }
+
+            if (_selectedConduit == conduit)
+            {
+                ClearSelection();
+                return;
+            }
+
+            // Second click — toggle blacklist for this pair.
+            if (WrenchBlacklist.IsBlocked(_selectedConduit, conduit))
+            {
+                WrenchBlacklist.Unblock(_selectedConduit, conduit);
+                UI.BuildFeedbackHud.Show("Reconnected",
+                    $"{_selectedConduit.name} ↔ {conduit.name}", null, UI.UITheme.AccentGreen);
+            }
+            else
+            {
+                WrenchBlacklist.Block(_selectedConduit, conduit);
+                UI.BuildFeedbackHud.Show("Disconnected",
+                    $"{_selectedConduit.name} ↔ {conduit.name}", null, UI.UITheme.AccentOrange);
+            }
+            NudgeAllNetworks();
+            ClearSelection();
+        }
+
         /// <summary>Called when the player RMB with the wrench — disconnect.</summary>
         public void OnAltUse(RaycastHit hit)
         {
             var anchor = hit.collider.GetComponentInParent<ConnectionAnchor>();
-            if (anchor == null) return;
+            if (anchor == null)
+            {
+                // RMB on a plain conduit — break it from EVERY current neighbour.
+                var conduit = ResolveConduitRoot(hit.collider);
+                if (conduit != null)
+                {
+                    DisconnectAllConduitNeighbours(conduit);
+                    return;
+                }
+                return;
+            }
 
             // Shift+Click: Disconnect SPECIFIC connection (the one you clicked on)
-            if (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))
+            if (ShiftHeld())
             {
                 if (_selectedAnchor != null && _selectedAnchor != anchor)
                 {
@@ -309,14 +455,98 @@ namespace VoxelEngine.Networks
 
         private void ClearSelection()
         {
-            _selectedAnchor = null;
+            _selectedAnchor  = null;
+            _selectedConduit = null;
             DestroySelectionIndicator();
+        }
+
+        /// <summary>
+        /// RMB-on-cable behaviour: blacklist this conduit's link with EVERY
+        /// current neighbour (cable, pipe, machine) so the next topology rebuild
+        /// leaves it standing alone. Re-wrenching individual pairs (LMB select →
+        /// LMB the same target) re-bonds them one at a time.
+        /// </summary>
+        private void DisconnectAllConduitNeighbours(GameObject conduit)
+        {
+            if (conduit == null) return;
+            int blocked = 0;
+
+            // Power cable neighbours.
+            var pc = conduit.GetComponent<VoxelEngine.Power.PowerCable>();
+            if (pc != null && pc.neighbours != null)
+            {
+                foreach (var nb in pc.neighbours)
+                {
+                    if (nb == null) continue;
+                    WrenchBlacklist.Block(conduit, nb.gameObject);
+                    blocked++;
+                }
+            }
+
+            // Gas pipe neighbours.
+            var gp = conduit.GetComponent<VoxelEngine.Gas.GasPipe>();
+            if (gp != null && gp.neighbours != null)
+            {
+                foreach (var nb in gp.neighbours)
+                {
+                    if (nb == null) continue;
+                    WrenchBlacklist.Block(conduit, nb.gameObject);
+                    blocked++;
+                }
+            }
+
+            // Item pipe neighbours.
+            var ip = conduit.GetComponent<VoxelEngine.Transport.ItemPipe>();
+            if (ip != null && ip.neighbours != null)
+            {
+                foreach (var nb in ip.neighbours)
+                {
+                    if (nb == null) continue;
+                    WrenchBlacklist.Block(conduit, nb.gameObject);
+                    blocked++;
+                }
+            }
+
+            // Water pipe (FluidNode) neighbours.
+            var wp = conduit.GetComponent<VoxelEngine.Fluids.WaterPipe>();
+            if (wp != null && wp.neighbours != null)
+            {
+                foreach (var nb in wp.neighbours)
+                {
+                    if (nb == null) continue;
+                    WrenchBlacklist.Block(conduit, nb.gameObject);
+                    blocked++;
+                }
+            }
+
+            // Data cable neighbours (via ConnectionAnchor).
+            var dc = conduit.GetComponent<VoxelEngine.Networks.DataCable>();
+            if (dc != null && dc.anchor != null)
+            {
+                var copy = new List<ConnectionAnchor>(dc.anchor.connections);
+                foreach (var other in copy)
+                {
+                    if (other == null) continue;
+                    WrenchBlacklist.Block(conduit, other.gameObject);
+                    dc.anchor.Disconnect(other);
+                    blocked++;
+                }
+            }
+
+            NudgeAllNetworks();
+
+            UI.BuildFeedbackHud.Show(
+                blocked > 0 ? "Disconnected" : "No connections",
+                blocked > 0 ? $"{blocked} link(s) broken on {conduit.name}"
+                            : $"{conduit.name} has no active links",
+                null,
+                blocked > 0 ? UI.UITheme.AccentOrange : UI.UITheme.AccentDim);
         }
 
         /// <summary>Auto-clear selection after timeout and update indicator position.</summary>
         public void Tick()
         {
-            if (_selectedAnchor != null)
+            if (_selectedAnchor != null || _selectedConduit != null)
             {
                 if (Time.time - _selectedTime > SELECTION_TIMEOUT)
                 {
@@ -324,10 +554,13 @@ namespace VoxelEngine.Networks
                     return;
                 }
 
-                // Update indicator position to follow the selected anchor
-                if (_selectionIndicator != null && _selectedAnchor != null)
+                // Update indicator position to follow the selected anchor / conduit.
+                if (_selectionIndicator != null)
                 {
-                    _selectionIndicator.transform.position = _selectedAnchor.transform.position;
+                    if (_selectedAnchor != null)
+                        _selectionIndicator.transform.position = _selectedAnchor.transform.position;
+                    else if (_selectedConduit != null)
+                        _selectionIndicator.transform.position = _selectedConduit.transform.position;
                 }
             }
         }

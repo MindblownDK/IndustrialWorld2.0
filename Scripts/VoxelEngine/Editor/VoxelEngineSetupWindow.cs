@@ -84,9 +84,10 @@ namespace VoxelEngine.EditorTools
                 "Step 11 fills in EVERY system the research nodes were already pointing at:\n" +
                 "  • Farming  (Wheat / Corn / Carrot crops + Seeds + Foods + Hoe + Tilled Soil + Sprinkler + Harvester + cooking)\n" +
                 "  • Storage  (RAM / CPU / PSU at 4 tiers + 5 Disk tiers + ServerRack / NAS / Terminals / Importer / Exporter / Powerstation / Disk Manipulator)\n" +
-                "  • Item Pipes\n" +
+                "  • Wrench tool (universal network connector)\n" +
+                "  • Item Pipes  (Solid + Glass variants)\n" +
                 "  • Quarry + Landmark\n" +
-                "  • Gas  (Electrolyser / Hydrogen Engine / Gas Tank / Gas Pipe + Hydrogen / Oxygen markers)\n" +
+                "  • Gas  (Electrolyser / Hydrogen Engine / Gas Tank / Gas Pipe Solid+Glass + Hydrogen / Oxygen markers)\n" +
                 "  • Nuclear  (Enriched Fuel Rod / LEU Pellet / Depleted Uranium / Spent Fuel Rod / High-Level Waste +\n" +
                 "              Uranium Processor / Reactor Core / Steam Turbine / Portable Reactor / Waste Reprocessor)\n" +
                 "  • New research node:  Farming (gates seeds/farm-plot/sprinkler/harvester/cooking)\n" +
@@ -2119,26 +2120,46 @@ namespace VoxelEngine.EditorTools
             var pumpPrefab = MakePumpPrefab("WaterPump", new Color(0.55f, 0.30f, 0.20f));
 
             // ---- 4) Pipe prefab(s) ----
-            GameObject MakePipePrefab(string name, Color color, bool isGlass)
+            // Pipes use the shared PipeVisualBuilder so they render the same chunky
+            // core+arms style as Power / Data cables. The stretched cube is removed
+            // here so the runtime visual is the only one shown.
+            GameObject MakePipePrefab(string name, Color shellColor, Color innerColor, bool isGlass)
             {
                 string path = $"{prefabsFolder}/{name}.prefab";
                 var root = new GameObject(name);
-                var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                cube.transform.SetParent(root.transform, false);
-                cube.transform.localScale = new Vector3(0.25f, 0.25f, 1f);
-                var mat = MakeColoredMat(prefabsFolder, $"Mat_{name}",
-                    isGlass ? new Color(color.r, color.g, color.b, 0.6f) : color);
-                cube.GetComponent<Renderer>().sharedMaterial = mat;
+
+                // Tiny invisible collider so raycasts (wrench, build-system) still register.
+                var col = root.AddComponent<BoxCollider>();
+                col.size = new Vector3(0.50f, 0.50f, 0.50f);
+
                 var pipe = root.AddComponent<VoxelEngine.Fluids.WaterPipe>();
-                pipe.maxFlowLps = 50f;
-                pipe.isGlass = isGlass;
+                pipe.maxFlowLps    = 50f;
+                pipe.isGlass       = isGlass;
                 pipe.connectRadius = 1.4f;
+
+                var vb = root.AddComponent<VoxelEngine.Networks.PipeVisualBuilder>();
+                vb.shellTint        = shellColor;
+                vb.accentTint       = new Color(
+                    Mathf.Clamp01(shellColor.r * 0.7f + 0.30f),
+                    Mathf.Clamp01(shellColor.g * 0.7f + 0.30f),
+                    Mathf.Clamp01(shellColor.b * 0.7f + 0.30f), 1f);
+                vb.innerMediumTint  = innerColor;
+                vb.isGlass          = isGlass;
+                vb.style            = VoxelEngine.Networks.PipeStyle.Copper;
+                vb.gridSize         = 1f;
+
                 var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
                 Object.DestroyImmediate(root);
                 return prefab;
             }
-            var pipeSolid = MakePipePrefab("Pipe_Solid", new Color(0.55f, 0.30f, 0.20f), false);
-            var pipeGlass = MakePipePrefab("Pipe_Glass", new Color(0.55f, 0.75f, 0.95f), true);
+            // Solid water pipe — warm burnished copper. Glass — translucent copper-tinted
+            // shell with a vivid water-blue inner that previews the fluid.
+            var pipeSolid = MakePipePrefab("Pipe_Solid",
+                new Color(0.78f, 0.45f, 0.20f),
+                new Color(0.25f, 0.55f, 0.90f), false);
+            var pipeGlass = MakePipePrefab("Pipe_Glass",
+                new Color(0.90f, 0.70f, 0.55f),
+                new Color(0.25f, 0.65f, 0.95f), true);
 
             // ---- 5) BlockItems for the placeables ----
             VoxelEngine.Items.BlockItem MakeFluidBlock(string assetName, string display, Color tint, GameObject prefab, string desc, int hp = 200)
@@ -3270,20 +3291,125 @@ namespace VoxelEngine.EditorTools
             AddRecipe(FARM_RECIPES, "Recipe_Cook_Stew",  "Vegetable Stew",   foodStew,  1, VoxelEngine.Crafting.StationTier.Furnace,       unlockedByDefault: false, (foodCarrotRaw, 2), (foodCornRaw, 1));
 
             // ════════════════════════════════════════════════════════════
-            //  ITEM PIPES
+            //  WRENCH — universal network connector tool
+            //  LMB on a ConnectionAnchor selects, LMB on a second connects them.
+            //  RMB disconnects ALL connections from the clicked anchor.
+            //  Shift+RMB cycles a machine face port between None / Input / Output.
+            //  Required for advanced wiring: data cables, power cables, port config.
             // ════════════════════════════════════════════════════════════
-            var pipeItemPrefab = MakePref(MISC_PREFABS, "ItemPipe",
-                new Color(0.70f, 0.55f, 0.30f), new Vector3(0.25f, 0.25f, 1f),
+            string wrenchPath = $"{ITEMS}/Tool_Wrench.asset";
+            if (AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(wrenchPath) != null)
+                AssetDatabase.DeleteAsset(wrenchPath);
+            var wrench = ScriptableObject.CreateInstance<VoxelEngine.Networks.WrenchTool>();
+            wrench.itemId        = "wrench";
+            wrench.displayName   = "Wrench";
+            wrench.description   = "Industrial multi-tool for wiring networks together.\n\n" +
+                                   "• LMB anchor → select. LMB second anchor → connect.\n" +
+                                   "• RMB anchor → disconnect ALL.\n" +
+                                   "• Shift+LMB anchor → disconnect the specific link you clicked.\n" +
+                                   "• Shift+RMB machine face → cycle port: None ▸ Input ▸ Output.";
+            wrench.toolType      = VoxelEngine.Items.ToolType.Other;
+            wrench.miningTier    = 0;
+            wrench.maxDurability = 1000;
+            wrench.strength      = 0f;
+            wrench.fireRate      = 4f;
+            wrench.brushRadius   = 0.0f;
+            wrench.iconTint      = new Color(0.85f, 0.55f, 0.20f);
+            wrench.maxStack      = 1;
+            wrench.category      = "Tools";
+            AssetDatabase.CreateAsset(wrench, wrenchPath);
+
+            // Recipe: 2 iron plates + 1 iron gear, crafted at the Crafting Bench.
+            AddRecipe(MISC_RECIPES, "Recipe_Wrench", "Wrench", wrench, 1,
+                VoxelEngine.Crafting.StationTier.CraftingBench,
+                unlockedByDefault: false, (ironPlate, 2), (ironGear, 1));
+
+            // ════════════════════════════════════════════════════════════
+            //  POWER BUSBAR — clean cable-organization conduit
+            //  A fat copper bar with brass tap-sockets that behaves like a
+            //  PowerCable but lets the player run one trunk along the
+            //  ceiling/floor of a factory with many machine cables snapping
+            //  into it. Inherits all topology / wrench / PortConfig logic.
+            // ════════════════════════════════════════════════════════════
+            var busbarPrefab = MakePref(MISC_PREFABS, "PowerBusbar",
+                new Color(0.78f, 0.45f, 0.20f), new Vector3(0.4f, 0.4f, 0.4f),
                 root =>
                 {
-                    var p = root.AddComponent<VoxelEngine.Transport.ItemPipe>();
-                    p.connectRadius = 3f; p.bufferSize = 4; p.tickInterval = 0.5f;
+                    var bus = root.AddComponent<VoxelEngine.Power.PowerBusbar>();
+                    bus.busAxis       = VoxelEngine.Power.PowerBusbar.BusAxis.X;
+                    bus.busLength     = 2f;
+                    bus.busRadius     = 0.18f;
+                    bus.socketRadius  = 0.24f;
+                    bus.socketSpacing = 0.50f;
+                    bus.barTint       = new Color(0.78f, 0.45f, 0.20f);
+                    bus.socketTint    = new Color(0.95f, 0.80f, 0.35f);
+                    bus.connectRadius = 3.5f;
+                    bus.gridSize      = 1f;
                 });
+            var blockBusbar = MakeBlk(MISC_BLOCKS, "Block_PowerBusbar", "Power Busbar",
+                "A copper power-distribution bar with brass tap-sockets. Acts as a " +
+                "thicker, longer power cable — perfect for running a single trunk " +
+                "along the ceiling of a factory and snapping every machine cable into it.",
+                new Color(0.78f, 0.45f, 0.20f), busbarPrefab, "Logistics", hp: 250, maxStack: 16);
+            AddRecipe(MISC_RECIPES, "Recipe_PowerBusbar", "Power Busbar", blockBusbar, 1,
+                VoxelEngine.Crafting.StationTier.CraftingBench,
+                unlockedByDefault: false, (copperPlate, 4), (ironPlate, 1));
+
+            // ════════════════════════════════════════════════════════════
+            //  ITEM PIPES
+            // ════════════════════════════════════════════════════════════
+            // Item pipes use the wire-style PipeVisualBuilder. Solid = brushed steel,
+            // glass variant exposes a vivid "item stream" inner core so the player
+            // can see stacks flowing through the network.
+            // BuildCraft / Thermal-Expansion look: dark steel sleeve along the
+            // run + bright AMBER/orange terminal end-blocks at every junction.
+            GameObject MakeItemPipePrefab(string assetName, Color shell, Color accent, Color inner, bool glass)
+            {
+                string path = $"{MISC_PREFABS}/{assetName}.prefab";
+                var root = new GameObject(assetName);
+                var col  = root.AddComponent<BoxCollider>();
+                col.size = new Vector3(0.55f, 0.55f, 0.55f);
+
+                var p = root.AddComponent<VoxelEngine.Transport.ItemPipe>();
+                p.connectRadius = 3f; p.bufferSize = 4; p.tickInterval = 0.5f;
+                p.isGlass = glass;
+
+                var vb = root.AddComponent<VoxelEngine.Networks.PipeVisualBuilder>();
+                vb.shellTint        = shell;
+                vb.accentTint       = accent;
+                vb.innerMediumTint  = inner;
+                vb.isGlass          = glass;
+                vb.style            = VoxelEngine.Networks.PipeStyle.Sleeve;
+                vb.gridSize         = 1f;
+
+                var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
+                Object.DestroyImmediate(root);
+                return prefab;
+            }
+            // Solid item pipe — dark steel sleeve, amber/orange terminals.
+            var pipeItemPrefab      = MakeItemPipePrefab("ItemPipe",
+                new Color(0.18f, 0.18f, 0.20f),   // sleeve
+                new Color(0.95f, 0.55f, 0.12f),   // amber terminals (BC look)
+                new Color(0.95f, 0.75f, 0.25f),
+                false);
+            // Glass item pipe — frosted shell + warm amber stream visible inside.
+            var pipeItemGlassPrefab = MakeItemPipePrefab("ItemPipe_Glass",
+                new Color(0.85f, 0.92f, 1.00f),
+                new Color(0.95f, 0.55f, 0.12f),
+                new Color(0.95f, 0.65f, 0.20f),
+                true);
+
             var blockItemPipe = MakeBlk(MISC_BLOCKS, "Block_ItemPipe", "Item Pipe",
                 "Carries item stacks between machines and chests automatically. Tick every 0.5 s.",
-                new Color(0.70f, 0.55f, 0.30f), pipeItemPrefab, "Logistics", hp: 100, maxStack: 99);
-            AddRecipe(MISC_RECIPES, "Recipe_ItemPipe", "Item Pipe x4", blockItemPipe, 4,
+                new Color(0.55f, 0.55f, 0.60f), pipeItemPrefab, "Logistics", hp: 100, maxStack: 99);
+            var blockItemPipeGlass = MakeBlk(MISC_BLOCKS, "Block_ItemPipe_Glass", "Item Pipe (Glass)",
+                "Translucent variant of the Item Pipe — exposes the items flowing through. Same throughput.",
+                new Color(0.92f, 0.96f, 1.00f), pipeItemGlassPrefab, "Logistics", hp: 100, maxStack: 99);
+
+            AddRecipe(MISC_RECIPES, "Recipe_ItemPipe",       "Item Pipe x4",         blockItemPipe,      4,
                 VoxelEngine.Crafting.StationTier.CraftingBench, unlockedByDefault: false, (ironPlate, 1));
+            AddRecipe(MISC_RECIPES, "Recipe_ItemPipe_Glass", "Item Pipe (Glass) x4", blockItemPipeGlass, 4,
+                VoxelEngine.Crafting.StationTier.CraftingBench, unlockedByDefault: false, (ironPlate, 1), (glass, 1));
 
             // ════════════════════════════════════════════════════════════
             //  QUARRY + LANDMARK
@@ -3367,21 +3493,58 @@ namespace VoxelEngine.EditorTools
                 "Buffers up to 1000 units of one gas type. Auto-locks to first gas inserted. Pipe-in from Electrolyser, pipe-out to Engine.",
                 new Color(0.55f, 0.70f, 0.85f), gasTankPrefab, "Gas", hp: 350);
 
-            var gasPipePrefab = MakePref(GAS_PREFABS, "GasPipe",
-                new Color(0.30f, 0.80f, 0.60f), new Vector3(0.25f, 0.25f, 1f),
-                root =>
-                {
-                    var p = root.AddComponent<VoxelEngine.Gas.GasPipe>();
-                    p.maxPressure = 100f; p.connectRadius = 3f;
-                });
+            // Gas pipes use the wire-style PipeVisualBuilder. Solid = industrial
+            // yellow gas-line steel (real-world H₂ pipeline standard), glass shows
+            // a soft cyan-green hydrogen tint flowing inside.
+            // Gas pipes use the SLIM BRASS profile — clearly different
+            // silhouette from the fatter copper water pipes.
+            GameObject MakeGasPipePrefab(string assetName, Color shell, Color accent, Color inner, bool glass)
+            {
+                string path = $"{GAS_PREFABS}/{assetName}.prefab";
+                var root = new GameObject(assetName);
+                var col  = root.AddComponent<BoxCollider>();
+                col.size = new Vector3(0.40f, 0.40f, 0.40f);
+
+                // GasPipe has [RequireComponent(typeof(PlacedBlock))] — Unity
+                // auto-adds PlacedBlock when GasPipe is added.
+                var p = root.AddComponent<VoxelEngine.Gas.GasPipe>();
+                p.maxPressure = 100f; p.connectRadius = 3f; p.isGlass = glass;
+
+                var vb = root.AddComponent<VoxelEngine.Networks.PipeVisualBuilder>();
+                vb.shellTint        = shell;
+                vb.accentTint       = accent;
+                vb.innerMediumTint  = inner;
+                vb.isGlass          = glass;
+                vb.style            = VoxelEngine.Networks.PipeStyle.Brass;
+                vb.gridSize         = 1f;
+
+                var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
+                Object.DestroyImmediate(root);
+                return prefab;
+            }
+            // Solid gas pipe — warm polished brass with bright gold collars.
+            var gasPipePrefab      = MakeGasPipePrefab("GasPipe",
+                new Color(0.78f, 0.62f, 0.20f),
+                new Color(0.98f, 0.85f, 0.35f),
+                new Color(0.45f, 0.95f, 0.75f), false);
+            // Glass gas pipe — translucent gold shell + cyan-green hydrogen glow.
+            var gasPipeGlassPrefab = MakeGasPipePrefab("GasPipe_Glass",
+                new Color(0.95f, 0.88f, 0.65f),
+                new Color(0.98f, 0.85f, 0.35f),
+                new Color(0.40f, 0.95f, 0.70f), true);
+
             var blockGasPipe = MakeBlk(GAS_BLOCKS, "Block_GasPipe", "Gas Pipe",
                 "Universal gas conduit. Auto-connects to neighbour pipes / tanks / engines / electrolysers within 3 m.",
-                new Color(0.30f, 0.80f, 0.60f), gasPipePrefab, "Gas", hp: 80, maxStack: 99);
+                new Color(0.92f, 0.78f, 0.18f), gasPipePrefab, "Gas", hp: 80, maxStack: 99);
+            var blockGasPipeGlass = MakeBlk(GAS_BLOCKS, "Block_GasPipe_Glass", "Gas Pipe (Glass)",
+                "Translucent gas conduit. Same throughput as the solid pipe, but you can see the gas inside.",
+                new Color(0.88f, 0.96f, 0.92f), gasPipeGlassPrefab, "Gas", hp: 80, maxStack: 99);
 
             AddRecipe(GAS_RECIPES, "Recipe_Electrolyser",    "Electrolyser",    blockElectrolyser,    1, VoxelEngine.Crafting.StationTier.Assembler, unlockedByDefault: false, (steelPlate, 4), (circuit, 3), (copperWire, 6), (glass, 2));
             AddRecipe(GAS_RECIPES, "Recipe_HydrogenEngine",  "Hydrogen Engine", blockHydrogenEngine,  1, VoxelEngine.Crafting.StationTier.Assembler, unlockedByDefault: false, (steelPlate, 4), (ironGear, 4), (circuit, 2));
             AddRecipe(GAS_RECIPES, "Recipe_GasTank",         "Gas Tank",        blockGasTank,         1, VoxelEngine.Crafting.StationTier.CraftingBench, unlockedByDefault: false, (steelPlate, 3), (glass, 1));
-            AddRecipe(GAS_RECIPES, "Recipe_GasPipe",         "Gas Pipe x4",     blockGasPipe,         4, VoxelEngine.Crafting.StationTier.CraftingBench, unlockedByDefault: false, (copperPlate, 1));
+            AddRecipe(GAS_RECIPES, "Recipe_GasPipe",         "Gas Pipe x4",         blockGasPipe,         4, VoxelEngine.Crafting.StationTier.CraftingBench, unlockedByDefault: false, (copperPlate, 1));
+            AddRecipe(GAS_RECIPES, "Recipe_GasPipe_Glass",   "Gas Pipe (Glass) x4", blockGasPipeGlass,    4, VoxelEngine.Crafting.StationTier.CraftingBench, unlockedByDefault: false, (copperPlate, 1), (glass, 1));
 
             // ════════════════════════════════════════════════════════════
             //  NUCLEAR — items + processor + reactors + waste processing
@@ -3697,7 +3860,9 @@ namespace VoxelEngine.EditorTools
                 RGet("Recipe_CPU_4"));
 
             // Item Logistics: item pipe.
-            AppendUnlocks("res_item_logistics", RGet("Recipe_ItemPipe"));
+            AppendUnlocks("res_item_logistics",
+                RGet("Recipe_ItemPipe"), RGet("Recipe_ItemPipe_Glass"),
+                RGet("Recipe_Wrench"), RGet("Recipe_PowerBusbar"));
 
             // Quarrying.
             AppendUnlocks("res_quarrying", RGet("Recipe_Quarry"), RGet("Recipe_QuarryLandmark"));
@@ -3705,7 +3870,7 @@ namespace VoxelEngine.EditorTools
             // Gas Processing.
             AppendUnlocks("res_gas_processing",
                 RGet("Recipe_Electrolyser"), RGet("Recipe_HydrogenEngine"),
-                RGet("Recipe_GasTank"), RGet("Recipe_GasPipe"));
+                RGet("Recipe_GasTank"), RGet("Recipe_GasPipe"), RGet("Recipe_GasPipe_Glass"));
 
             // Nuclear Fission.
             AppendUnlocks("res_nuclear_fission",
@@ -3776,9 +3941,11 @@ namespace VoxelEngine.EditorTools
                 "  • Server Rack, NAS, Storage / Crafting / Pattern Terminals\n" +
                 "  • Importer, Exporter, Powerstation, Disk Manipulator\n\n" +
                 "OTHER\n" +
-                "  • Item Pipes\n" +
+                "  • Wrench (universal network connector tool)\n" +
+                "  • Power Busbar (clean cable-organization conduit)\n" +
+                "  • Item Pipes (Solid + Glass) — BuildCraft sleeve style\n" +
                 "  • Quarry + Landmark\n" +
-                "  • Electrolyser, Hydrogen Engine, Gas Tank, Gas Pipe\n" +
+                "  • Electrolyser, Hydrogen Engine, Gas Tank, Gas Pipe (Solid + Glass)\n" +
                 "  • Enriched Fuel Rod, LEU Pellet, Depleted Uranium, Spent Fuel Rod, High-Level Waste\n" +
                 "  • Uranium Processor, Reactor Core, Steam Turbine, Portable Reactor, Waste Reprocessor\n\n" +
                 "All recipes wired into the existing research nodes (Logistics Network, Mass Storage,\n" +

@@ -190,8 +190,11 @@ namespace VoxelEngine.UI
             BuildCostHud.Tick();
             if (_openQuarry != null) QuarryHud.Tick(_openQuarry);
             // Periodic refresh for machine panels that need live updates (1 Hz).
+            // SUSPENDED while a PortConfig dropdown is open — otherwise the
+            // dropdown gets destroyed mid-click as the panel rebuilds.
             _machineRefreshAccum += Time.unscaledDeltaTime;
-            if (_machineRefreshAccum >= 1.0f && (_openCoalGen != null || _openReactor != null || _openTurbine != null || _openPortReactor != null || _openProcessor != null || _openReprocessor != null || _openElectrolyser != null || _openHydroEngine != null || _openGasTank != null))
+            if (_machineRefreshAccum >= 1.0f && !PortConfigHud.IsAnyDropdownOpen &&
+                (_openCoalGen != null || _openReactor != null || _openTurbine != null || _openPortReactor != null || _openProcessor != null || _openReprocessor != null || _openElectrolyser != null || _openHydroEngine != null || _openGasTank != null))
             { _machineRefreshAccum = 0f; Refresh(); }
             ResearchHud.Tick();
             TickUpgradePrompt();
@@ -1357,8 +1360,18 @@ namespace VoxelEngine.UI
         }
 
         // ----- RIGHT (coal generator) -----
+        // Logged once per Unity session so the player can confirm the latest
+        // build of this controller is actually loaded. If you don't see this
+        // line in the console after opening a Coal Generator, Unity is still
+        // running a stale assembly cache — close and reopen the project.
+        private static bool _coalGenBuildLogged;
         private void BuildRightCoalGenerator(VisualElement root, VoxelEngine.Power.CoalGeneratorFuel f)
         {
+            if (!_coalGenBuildLogged)
+            {
+                _coalGenBuildLogged = true;
+                Debug.Log("[IndustrialWorld] CoalGenerator UI v3 loaded (toggle pill + fuel bar + centred status).");
+            }
             f.EnsureContainers();
             var panel = MakePanel();
             panel.style.position = Position.Absolute;
@@ -1371,22 +1384,55 @@ namespace VoxelEngine.UI
             headerRow.style.marginBottom = 14;
             var t = MakeTitle("Coal Generator"); t.style.flexGrow = 1;
             headerRow.Add(t);
+
+            // ENABLED / DISABLED toggle (left of the status pill) — lets the
+            // player switch the generator off without removing the fuel.
+            var (togglePill, _) = UITheme.MachineToggle(
+                f.userEnabled,
+                isOn =>
+                {
+                    f.userEnabled = isOn;
+                    // The 1Hz refresh picks up the new status; nudge the pill
+                    // label here so the change feels instant.
+                });
+            headerRow.Add(togglePill);
+
             var (pill, pillLbl) = MakeStatusPillWithLabel(
                 f.IsBurning ? "RUNNING" : "OFFLINE",
                 f.IsBurning ? new Color(0.95f, 0.50f, 0.15f) : new Color(0.30f, 0.30f, 0.35f));
             headerRow.Add(pill);
+
+            // Live wattage output — to the RIGHT of the status pill, so the
+            // player can see exactly how much power the generator is feeding
+            // into the network. Reads off the PowerGenerator component.
+            var coalWatt = new Label("");
+            coalWatt.style.color    = new StyleColor(new Color(1f, 0.92f, 0.40f));
+            coalWatt.style.fontSize = 13;
+            coalWatt.style.unityFontStyleAndWeight = FontStyle.Bold;
+            coalWatt.style.marginLeft = 10;
+            coalWatt.tooltip = "Live wattage being produced and pushed into the connected power network.";
+            var coalGen = f.GetComponent<VoxelEngine.Power.PowerGenerator>();
+            coalWatt.text = (coalGen != null && coalGen.isOn)
+                ? $"{coalGen.wattsPerSecond:0} W"
+                : "0 W";
+            headerRow.Add(coalWatt);
             panel.Add(headerRow);
 
             panel.Add(MakeSubtitle("Fuel"));
             var row = new VisualElement(); row.style.flexDirection = FlexDirection.Row;
             row.style.alignItems = Align.Center; row.style.marginTop = 8;
             row.Add(MakeLabeledSlot("Fuel", f.fuelC, 0));
-            var barHolder = new VisualElement();
-            barHolder.style.flexGrow = 1; barHolder.style.marginLeft = 12;
-            var (bar, fill) = MakeProgressBarWithFill(f.FuelProgress01, new Color(0.95f, 0.55f, 0.10f), 0, 12, fillFlexGrow: true);
-            barHolder.Add(bar);
-            row.Add(barHolder);
+            // Explicit-width bar — flexGrow path had layout-collapse issues
+            // when the parent row hadn't computed its width yet. A fixed
+            // 320px bar always renders, regardless of layout pass timing,
+            // and comfortably fits inside the 460px panel beside the 64px
+            // slot card.
+            var (fuelBar, fuelFill) = MakeProgressBarWithFill(f.FuelProgress01,
+                new Color(0.95f, 0.55f, 0.10f), width: 320, height: 8, fillFlexGrow: false);
+            fuelBar.style.marginLeft = 12;
+            row.Add(fuelBar);
             panel.Add(row);
+            _liveFuelFill = fuelFill;
 
             panel.Add(Spacer(8));
             var status = new Label($"Fuel left: {f.fuelRemaining:0.0}s / {f.fuelMaxDuration:0.0}s");
@@ -1395,9 +1441,30 @@ namespace VoxelEngine.UI
             panel.Add(status);
 
             panel.Add(MakeDivider());
-            // (Port configuration UI removed per design — cables now connect to any
-            // face automatically; future per-resource I/O selection lives in the
-            // cable's own UI rather than per-machine.)
+
+            // ── Port Configuration ────────────────────────────────────
+            // Restored: every machine with a PortConfig component now
+            // displays the 6-face grid so the player can flip individual
+            // faces between Input / Output / None and select per-face
+            // network type (Power vs Data vs Fluid vs Gas). Hooked into
+            // the wrench via Shift+RMB as well — the two UIs stay in sync.
+            var pc = f.GetComponent<VoxelEngine.Transport.PortConfig>();
+            if (pc != null)
+            {
+                // Coal Generator only deals with Power — restrict the dropdown so
+                // the player never accidentally picks Fluid/Gas/Data on this machine.
+                var portUi = VoxelEngine.UI.PortConfigHud.Build(pc,
+                    onChanged: () =>
+                    {
+                        pillLbl.text = f.IsBurning ? "RUNNING" : "OFFLINE";
+                    },
+                    allowedTypes: new[] {
+                        VoxelEngine.Transport.PortNetworkType.Power
+                    });
+                panel.Add(portUi);
+                panel.Add(MakeDivider());
+            }
+
             var hint = new Label("Tip: place Coal in the fuel slot to start producing power. " +
                                  "Wood logs and planks also work but burn faster.");
             hint.style.color = new StyleColor(new Color(0.6f, 0.6f, 0.65f));
@@ -1425,6 +1492,11 @@ namespace VoxelEngine.UI
             var title = MakeTitle("Electric Furnace");
             title.style.flexGrow = 1;
             headerRow.Add(title);
+
+            // ENABLED / DISABLED toggle to the LEFT of the status pill.
+            var (efTogglePill, _) = UITheme.MachineToggle(
+                ef.userEnabled, isOn => ef.userEnabled = isOn);
+            headerRow.Add(efTogglePill);
 
             var (pillE, pillELabel) = MakeStatusPillWithLabel(online ? "ONLINE" : "OFFLINE",
                 online ? new Color(0.20f, 0.60f, 0.30f) : new Color(0.60f, 0.20f, 0.20f));
@@ -1548,7 +1620,23 @@ namespace VoxelEngine.UI
 
             // Footer hint.
             panel.Add(Spacer(14));
-            // (Port configuration UI removed — see BuildRightCoalGenerator note.)
+
+            // ── Port Configuration ────────────────────────────────────
+            // Per-face Input / Output / network-type controls. Only added
+            // when the machine actually carries a PortConfig component, so
+            // future machines without per-face routing simply skip this
+            // block silently.
+            var pcEf = ef.GetComponent<VoxelEngine.Transport.PortConfig>();
+            if (pcEf != null)
+            {
+                // Electric Furnace only uses Power input — restrict the dropdown.
+                panel.Add(VoxelEngine.UI.PortConfigHud.Build(pcEf,
+                    allowedTypes: new[] {
+                        VoxelEngine.Transport.PortNetworkType.Power
+                    }));
+                panel.Add(Spacer(10));
+            }
+
             var hint = new Label("Tip: connect cables from a generator. Insert Speed/Efficiency modules to tune output vs power use.");
             hint.style.color = new StyleColor(new Color(0.6f, 0.6f, 0.65f));
             hint.style.fontSize = 10;
@@ -2277,6 +2365,32 @@ namespace VoxelEngine.UI
                     }
                     // If the explicit destination refused (full, wrong type), fall through to
                     // network/inventory routing so the player isn't left holding a "stuck" stack.
+                }
+                // ── HOTBAR → BACKPACK quick-transfer ─────────────────────────
+                // When NO machine/network destination accepted the stack AND the
+                // click came from a HOTBAR slot, push the items into the first
+                // free BACKPACK slot. Inversely, a click on a BACKPACK slot with
+                // no machine open promotes the items down to the first free
+                // HOTBAR slot. This mirrors the Minecraft / Terraria quick-move
+                // convention: shift-click always sends items "to the other half"
+                // of the inventory when there's no external container.
+                if (sourceC is ItemContainer ic)
+                {
+                    bool fromHotbar = sourceIdx < Inventory.HOTBAR_SIZE;
+                    int destStart = fromHotbar ? Inventory.HOTBAR_SIZE : 0;
+                    int destCount = fromHotbar
+                        ? (Inventory.TOTAL_SIZE - Inventory.HOTBAR_SIZE)
+                        : Inventory.HOTBAR_SIZE;
+
+                    var clone2 = new ItemStack { item = srcStack.item, count = srcStack.count, durability = srcStack.durability, payload = srcStack.payload };
+                    var leftover2 = ic.InsertRange(clone2, destStart, destCount);
+                    int moved2 = leftover2 == null ? srcStack.count : (srcStack.count - leftover2.count);
+                    if (moved2 > 0)
+                    {
+                        if (moved2 >= srcStack.count) sourceC.SetSlot(sourceIdx, new ItemStack());
+                        else                          { srcStack.count -= moved2; sourceC.SetSlot(sourceIdx, srcStack); }
+                        return;
+                    }
                 }
             }
 

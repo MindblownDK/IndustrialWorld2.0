@@ -11,6 +11,7 @@ using VoxelEngine.Crafting;
 using VoxelEngine.Items;
 using VoxelEngine.Materials;
 using VoxelEngine.Modification;
+using VoxelEngine.Networks;
 using VoxelEngine.Settings;
 using VoxelEngine.Trees;
 using InputAction = VoxelEngine.Settings.InputAction;
@@ -36,6 +37,9 @@ namespace VoxelEngine.Player
 
         private float _nextHit;
         private ToolFeedback _feedback;
+
+        // Lazy-init wrench runtime — only created the first time the player swings a wrench.
+        private WrenchInteraction _wrench;
 
         private void Awake()
         {
@@ -65,13 +69,32 @@ namespace VoxelEngine.Player
             if (world == null || shootCamera == null || inventory == null) return;
 
             bool mineHeld  = GameSettings.IsHeld (InputAction.Mine);
+            bool mineDown  = GameSettings.WasPressed(InputAction.Mine);
             bool buildHeld = GameSettings.IsHeld (InputAction.Build);
             bool buildDown = GameSettings.WasPressed(InputAction.Build);
+
+            // Wrench owns its own per-frame tick (selection timeout + indicator follow)
+            // so call it BEFORE the early-out — otherwise a player holding the wrench
+            // but not pressing any button never sees their selection time-out.
+            if (_wrench != null) _wrench.Tick();
 
             if (!mineHeld && !buildHeld && !buildDown) return;
 
             var ray = shootCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
             if (!Physics.Raycast(ray, out var hit, reach)) return;
+
+            // ── WRENCH dispatch — short-circuits all other tool behaviour. ──
+            //   LMB = connect/select  •  RMB = disconnect  •  Shift modifies both
+            var heldStack = inventory.ActiveStack;
+            if (!heldStack.IsEmpty && heldStack.item is WrenchTool)
+            {
+                if (_wrench == null) _wrench = new WrenchInteraction();
+                if (mineDown)  { _wrench.OnUse(hit, this);    _nextHit = Time.time + 0.15f; return; }
+                if (buildDown) { _wrench.OnAltUse(hit);        _nextHit = Time.time + 0.15f; return; }
+                // Holding either button without a fresh press: swallow input so the
+                // wrench never accidentally mines a block or places a phantom item.
+                if (mineHeld || buildHeld) return;
+            }
 
             // ---------- LMB ----------
             if (mineHeld)

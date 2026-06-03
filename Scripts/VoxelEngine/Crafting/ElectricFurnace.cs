@@ -30,6 +30,13 @@ namespace VoxelEngine.Crafting
         [Tooltip("Watts/s drawn while idle (heating element kept warm).")]
         public float idleWattsPerSecond = 5f;
 
+        /// <summary>
+        /// Player-controlled hard-disable toggle. When false, the furnace
+        /// stops drawing power and pauses smelting. Exposed via the UI's
+        /// ENABLED pill to the left of the status badge.
+        /// </summary>
+        public bool userEnabled = true;
+
         // Runtime
         private SmeltingRecipe _current;
         private float _smeltProgress;
@@ -74,6 +81,15 @@ namespace VoxelEngine.Crafting
         private void Update()
         {
             EnsureContainers();
+
+            // Player has hard-disabled the furnace — draw nothing, smelt nothing.
+            if (!userEnabled)
+            {
+                CurrentWattage = 0f;
+                if (_power != null) _power.wattsPerSecond = 0f;
+                return;
+            }
+
             // Drive the PowerConsumer's draw — idle if not smelting, full when active.
             float wantWattage = (_current != null) ? baseWattsPerSecond * EfficiencyMultiplier : idleWattsPerSecond;
             CurrentWattage = wantWattage;

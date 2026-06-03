@@ -55,10 +55,19 @@ namespace VoxelEngine.Gas
             {
                 var a = _pipes[i]; var b = _pipes[j];
                 float r = Mathf.Max(a.connectRadius, b.connectRadius);
-                if ((a.transform.position - b.transform.position).sqrMagnitude <= r * r)
-                {
-                    a.neighbours.Add(b); b.neighbours.Add(a);
-                }
+                Vector3 pa = a.transform.position, pb = b.transform.position;
+
+                // Distance gate is cheap, do it first.
+                if ((pa - pb).sqrMagnitude > r * r) continue;
+
+                // STRICT cardinal-neighbour gate (mirrors the wire renderer).
+                if (!VoxelEngine.Networks.PipeAdjacency.IsCardinalNeighbour(pa, pb)) continue;
+
+                // Wrench blacklist — player wrenched these two apart; honour it
+                // until a wrench reconnect or one of them is broken/replaced.
+                if (VoxelEngine.Networks.WrenchBlacklist.IsBlocked(a, b)) continue;
+
+                a.neighbours.Add(b); b.neighbours.Add(a);
             }
         }
 

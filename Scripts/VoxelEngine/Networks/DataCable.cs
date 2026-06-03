@@ -133,6 +133,8 @@ namespace VoxelEngine.Networks
                 if (other == null || other == this) continue;
                 if (!IsCardinalNeighbour(transform.position, other.transform.position)) continue;
                 if (!HasLineOfSight(transform.position, other.transform.position, other.anchor)) continue;
+                // Wrench blacklist — honour explicit player disconnects.
+                if (WrenchBlacklist.IsBlocked(this, other)) continue;
                 if (other.anchor != null) desired.Add(other.anchor);
             }
 
@@ -161,6 +163,8 @@ namespace VoxelEngine.Networks
                     if (!HasLineOfSight(self, existing.transform.position, existing)) continue;
                     // Anti-redundancy: if another cable is closer on the same axis, skip.
                     if (IsConnectionShadowed(self, existing.transform.position)) continue;
+                    // Wrench blacklist — explicit player disconnect persists.
+                    if (WrenchBlacklist.IsBlocked(gameObject, existing.gameObject)) continue;
                     
                     // Check PortConfig if the device has one
                     var portConfig = existing.GetComponent<PortConfig>();
@@ -198,20 +202,25 @@ namespace VoxelEngine.Networks
                 if (!HasLineOfSight(self, newAnchor.transform.position, newAnchor)) continue;
                 // Anti-redundancy: if another cable is closer on the same axis, skip.
                 if (IsConnectionShadowed(self, newAnchor.transform.position)) continue;
-                
-                // Check PortConfig if the device has one
-                var portConfig = newAnchor.GetComponent<PortConfig>();
-                if (portConfig != null)
+                // Wrench blacklist — honour explicit player disconnects.
+                if (WrenchBlacklist.IsBlocked(gameObject, newAnchor.gameObject)) continue;
+
+                // Check PortConfig if the device has one. Renamed from `portConfig`
+                // to avoid C# scope-collision with the identically-named local in the
+                // earlier `if (existing != null)` branch (the C# 9+ scope rules treat
+                // both branches as one enclosing scope inside the foreach body).
+                var newPortConfig = newAnchor.GetComponent<PortConfig>();
+                if (newPortConfig != null)
                 {
-                    var match = portConfig.GetMatchingFace(self, PortDirection.Input);
-                    if (!match.HasValue) match = portConfig.GetMatchingFace(self, PortDirection.Output);
+                    var match = newPortConfig.GetMatchingFace(self, PortDirection.Input);
+                    if (!match.HasValue) match = newPortConfig.GetMatchingFace(self, PortDirection.Output);
                     if (!match.HasValue) continue;
-                    if (!portConfig.AcceptsNetworkType(match.Value.face, NetworkType.Data)) continue;
-                    
+                    if (!newPortConfig.AcceptsNetworkType(match.Value.face, NetworkType.Data)) continue;
+
                     // Record which face this connection uses
                     _connectionFaces[newAnchor] = match.Value.face;
                 }
-                
+
                 desired.Add(newAnchor);
             }
 

@@ -72,10 +72,27 @@ namespace VoxelEngine.Items
         {
             EnsureValid();
             if (stack == null || stack.IsEmpty) return null;
-            // Pass 1: merge into existing partial stacks.
+            return InsertRange(stack, 0, _slots.Count);
+        }
+
+        /// <summary>
+        /// Insert <paramref name="stack"/> ONLY into slots [start .. start+count).
+        /// Used by the hotbar quick-transfer so shift-clicking a hotbar slot
+        /// pushes items into the BACKPACK range without bouncing right back
+        /// into the (empty) hotbar slot we just emptied.
+        /// </summary>
+        public ItemStack InsertRange(ItemStack stack, int start, int count)
+        {
+            EnsureValid();
+            if (stack == null || stack.IsEmpty) return null;
+            int end = Mathf.Min(_slots.Count, start + count);
+            start = Mathf.Max(0, start);
+            if (end <= start) return stack;
+
+            // Pass 1: merge into existing partial stacks inside the range.
             if (stack.item.IsStackable)
             {
-                for (int i = 0; i < _slots.Count && stack.count > 0; i++)
+                for (int i = start; i < end && stack.count > 0; i++)
                 {
                     var s = _slots[i];
                     if (s.IsEmpty || s.item != stack.item) continue;
@@ -86,8 +103,8 @@ namespace VoxelEngine.Items
                     stack.count -= add;
                 }
             }
-            // Pass 2: place into empty slots.
-            for (int i = 0; i < _slots.Count && stack.count > 0; i++)
+            // Pass 2: place into the first empty slot inside the range.
+            for (int i = start; i < end && stack.count > 0; i++)
             {
                 if (!_slots[i].IsEmpty) continue;
                 int add = stack.item.IsStackable ? Mathf.Min(stack.item.maxStack, stack.count) : 1;
