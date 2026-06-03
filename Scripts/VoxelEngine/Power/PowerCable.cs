@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.Networks;
+using VoxelEngine.Transport;
 
 namespace VoxelEngine.Power
 {
@@ -14,6 +15,11 @@ namespace VoxelEngine.Power
     /// away on a single cardinal axis (±X / ±Y / ±Z) AND have an unobstructed line of
     /// sight. This means cables stack vertically, never connect diagonally, and refuse
     /// to "tunnel" through solid blocks.
+    ///
+    /// Port Config: Cables respect machine PortConfig. They only connect to faces that:
+    /// - Are enabled
+    /// - Have direction = Input (machines receiving power) or Output (machines sending power)
+    /// - Accept Power network type
     ///
     /// Visuals: a central chunky core cube + up to 6 short arm cubes pointing toward
     /// each connected neighbour. The arms are spawned/torn down whenever the network
@@ -40,6 +46,9 @@ namespace VoxelEngine.Power
         private Transform _visualRoot;        // parent for all generated meshes
         private Material  _tintedMaterial;    // shared per cable so MPB stays simple
         private readonly List<Vector3> _neighbourPositionsBuf = new(6);
+
+        // Track which face each neighbour is connected through
+        private readonly Dictionary<PowerNode, CubeFace> _neighbourFaces = new();
 
         protected override void OnEnable()
         {
@@ -77,7 +86,49 @@ namespace VoxelEngine.Power
         protected override void OnDisable()
         {
             onNeighboursChanged -= RebuildVisuals;
+            _neighbourFaces.Clear();
+            // Force a visual rebuild so this cable's own arms disappear immediately.
+            // When neighbours list is empty (after Unregister), RebuildVisuals clears all arms.
+            RebuildVisuals();
             base.OnDisable();
+        }
+
+        /// <summary>
+        /// Override to respect PortConfig on target machines.
+        /// Only connect if the target has an enabled, compatible port.
+        /// </summary>
+        public override bool CanLinkTo(PowerNode other)
+        {
+            if (!base.CanLinkTo(other)) return false;
+
+            // Machines with PortConfig need special handling
+            var portConfig = other.GetComponent<PortConfig>();
+            if (portConfig != null)
+            {
+                // Find if there's a compatible face
+                var match = portConfig.GetMatchingFace(transform.position, PortDirection.Input);
+                if (!match.HasValue)
+                {
+                    // Also check Output direction (for generators that send power)
+                    match = portConfig.GetMatchingFace(transform.position, PortDirection.Output);
+                }
+
+                if (!match.HasValue) return false;
+
+                // Check if this face accepts power cables
+                if (!portConfig.AcceptsNetworkType(match.Value.face, NetworkType.Power))
+                    return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// After connection is established, record which face we're using.
+        /// </summary>
+        public void RecordConnectionFace(PowerNode target, CubeFace face)
+        {
+            _neighbourFaces[target] = face;
         }
 
         // ── Visual construction ──────────────────────────────────
@@ -106,6 +157,18 @@ namespace VoxelEngine.Power
             foreach (var nb in neighbours)
             {
                 if (nb == null) continue;
+
+                // If we have a recorded face for this neighbour, use the face point
+                if (_neighbourFaces.TryGetValue(nb, out var face) && face != CubeFace.PosX)
+                {
+                    var portConfig = nb.GetComponent<PortConfig>();
+                    if (portConfig != null)
+                    {
+                        _neighbourPositionsBuf.Add(portConfig.FaceWorldPoint(face));
+                        continue;
+                    }
+                }
+
                 _neighbourPositionsBuf.Add(nb.transform.position);
             }
 

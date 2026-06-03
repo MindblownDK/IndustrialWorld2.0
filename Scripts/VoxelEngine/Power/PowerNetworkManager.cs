@@ -112,11 +112,35 @@ namespace VoxelEngine.Power
                         if (!n.CanLinkTo(b)) continue;
                         if (!b.CanLinkTo(n)) continue;
 
+                        // Anti-redundancy: if both are cables AND they're on the same cardinal axis
+                        // with an intermediate node between them, only keep the closer link to
+                        // prevent multiple arms from chain cables all reaching the same block.
+                        // A cable chain A->B->C should only have each pair directly connected, not
+                        // C also connecting directly to A's attached machine.
+                        if (n.Kind == PowerNodeKind.Cable && b.Kind == PowerNodeKind.Cable &&
+                            AreOnSameAxisAndInBetween(n.transform.position, b.transform.position))
+                        {
+                            // Check if there's an even closer cable between them that already
+                            // has a direct path to b. If so, skip this link.
+                            if (HasCloserCableOnAxis(n, b, snapshot)) continue;
+                        }
+
                         // Avoid duplicate add (we'll see each pair twice — once from each side).
-                        if (!n.neighbours.Contains(b)) n.neighbours.Add(b);
+                        if (!n.neighbours.Contains(b)) 
+                        {
+                            n.neighbours.Add(b);
+                            
+                            // Record connection faces for cables connecting to machines
+                            RecordConnectionFace(n, b);
+                        }
                     }
                 }
             }
+
+            // === Secondary pass: prune cable→machine links that are shadowed by a closer cable ===
+            // If a machine is connected to multiple cables on the same axis, only the closest
+            // cable should keep the link. Others should drop it to avoid redundant visual arms.
+            PruneShadowedCableMachineLinks(snapshot);
 
             // BFS to assign each node to a network.
             foreach (var seed in snapshot)
@@ -229,5 +253,176 @@ namespace VoxelEngine.Power
 
         // For UI / debugging.
         public IReadOnlyList<PowerNetwork> Networks => _networks;
+
+        // ============================================================
+        //              AXIS-CONFLICT HELPERS (anti-redundancy)
+        // ============================================================
+
+        /// <summary>
+        /// Returns true if a and b are on the same cardinal axis (±X, ±Y, or ±Z),
+        /// exactly one grid step apart, and there is an intermediate node between them.
+        /// </summary>
+        private bool AreOnSameAxisAndInBetween(Vector3 a, Vector3 b)
+        {
+            Vector3 delta = b - a;
+            float dx = Mathf.Abs(delta.x), dy = Mathf.Abs(delta.y), dz = Mathf.Abs(delta.z);
+            float gs = 1f; // gridSize is always 1m for cables
+            const float TOL = 0.15f;
+
+            // Must be exactly 1 step along one axis, others must be near-zero.
+            int axisCount = 0;
+            if (Mathf.Abs(dx - gs) < TOL) axisCount++;
+            else if (dx > TOL) return false;
+            if (Mathf.Abs(dy - gs) < TOL) axisCount++;
+            else if (dy > TOL) return false;
+            if (Mathf.Abs(dz - gs) < TOL) axisCount++;
+            else if (dz > TOL) return false;
+
+            return axisCount == 1; // exactly one axis has distance ~= 1m
+        }
+
+        /// <summary>
+        /// Checks if there's a third cable (c) that is:
+        /// - On the same axis between a and b
+        /// - Closer to b than a is
+        /// - Already connected to b
+        /// If so, a's connection to b is "shadowed" and should be skipped.
+        /// </summary>
+        private bool HasCloserCableOnAxis(PowerNode a, PowerNode b, List<PowerNode> snapshot)
+        {
+            Vector3 posA = a.transform.position;
+            Vector3 posB = b.transform.position;
+            Vector3 delta = posB - posA;
+
+            // Determine which axis we're on
+            Vector3 axisDir;
+            if (Mathf.Abs(delta.x) > 0.5f) axisDir = new Vector3(Mathf.Sign(delta.x), 0, 0);
+            else if (Mathf.Abs(delta.y) > 0.5f) axisDir = new Vector3(0, Mathf.Sign(delta.y), 0);
+            else axisDir = new Vector3(0, 0, Mathf.Sign(delta.z));
+
+            // Find cables between A and B on this axis
+            foreach (var candidate in snapshot)
+            {
+                if (candidate == a || candidate == b) continue;
+                if (candidate.Kind != PowerNodeKind.Cable) continue;
+
+                Vector3 cPos = candidate.transform.position;
+                Vector3 toC = cPos - posA;
+
+                // Is C between A and B on this axis?
+                float dot = Vector3.Dot(toC, axisDir);
+                if (dot <= 0 || dot >= Vector3.Dot(delta, axisDir)) continue; // not between
+
+                // Is C's direction on the same axis?
+                Vector3 cDelta = posB - cPos;
+                Vector3 cAxisDir;
+                if (Mathf.Abs(cDelta.x) > 0.5f) cAxisDir = new Vector3(Mathf.Sign(cDelta.x), 0, 0);
+                else if (Mathf.Abs(cDelta.y) > 0.5f) cAxisDir = new Vector3(0, Mathf.Sign(cDelta.y), 0);
+                else cAxisDir = new Vector3(0, 0, Mathf.Sign(cDelta.z));
+
+                if (cAxisDir != axisDir) continue; // not on same axis direction
+
+                // C is between A and B, closer to B. If C already connects to B, skip A→B.
+                if (candidate.neighbours.Contains(b)) return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// After all connections are built, prune redundant cable→machine links.
+        /// If multiple cables on the same axis connect to the same non-cable node,
+        /// only the closest cable keeps its connection. Others drop it.
+        /// </summary>
+        private void PruneShadowedCableMachineLinks(List<PowerNode> snapshot)
+        {
+            // Group connections by target node
+            var targetToCables = new Dictionary<PowerNode, List<PowerNode>>();
+
+            // Find all cable→nonCable connections
+            foreach (var cable in snapshot)
+            {
+                if (cable.Kind != PowerNodeKind.Cable) continue;
+                if (cable.neighbours == null) continue;
+
+                foreach (var target in cable.neighbours)
+                {
+                    if (target == null) continue;
+                    if (target.Kind == PowerNodeKind.Cable) continue; // only care about machines
+
+                    if (!targetToCables.TryGetValue(target, out var list))
+                        targetToCables[target] = list = new List<PowerNode>();
+                    list.Add(cable);
+                }
+            }
+
+            // For each machine with multiple cables connecting to it
+            foreach (var kvp in targetToCables)
+            {
+                if (kvp.Value.Count < 2) continue; // only one cable, no conflict
+
+                var machine = kvp.Key;
+                var cablesOnAxis = new Dictionary<Vector3, List<(PowerNode cable, float dist)>>();
+
+                foreach (var cable in kvp.Value)
+                {
+                    Vector3 delta = machine.transform.position - cable.transform.position;
+                    Vector3 axisDir = NearestAxis(delta);
+                    float dist = delta.magnitude;
+
+                    if (!cablesOnAxis.TryGetValue(axisDir, out var list))
+                        cablesOnAxis[axisDir] = list = new List<(PowerNode, float)>();
+                    list.Add((cable, dist));
+                }
+
+                // For each axis, keep only the closest cable, prune others
+                foreach (var axisKvp in cablesOnAxis)
+                {
+                    if (axisKvp.Value.Count < 2) continue;
+
+                    // Sort by distance (closest first)
+                    axisKvp.Value.Sort((a, b) => a.dist.CompareTo(b.dist));
+
+                    // Keep first (closest), prune rest
+                    for (int i = 1; i < axisKvp.Value.Count; i++)
+                    {
+                        var farCable = axisKvp.Value[i].cable;
+                        farCable.neighbours.Remove(machine);
+                    }
+                }
+            }
+        }
+
+        private Vector3 NearestAxis(Vector3 v)
+        {
+            float ax = Mathf.Abs(v.x), ay = Mathf.Abs(v.y), az = Mathf.Abs(v.z);
+            if (ax >= ay && ax >= az) return new Vector3(Mathf.Sign(v.x), 0, 0);
+            if (ay >= ax && ay >= az) return new Vector3(0, Mathf.Sign(v.y), 0);
+            return new Vector3(0, 0, Mathf.Sign(v.z));
+        }
+
+        /// <summary>
+        /// When a cable connects to a machine, record which face of the machine it connects to.
+        /// This is used for visual arm placement and connection validation.
+        /// </summary>
+        private void RecordConnectionFace(PowerNode cable, PowerNode machine)
+        {
+            if (cable.Kind != PowerNodeKind.Cable) return;
+
+            var portConfig = machine.GetComponent<Transport.PortConfig>();
+            if (portConfig == null) return;
+
+            var match = portConfig.GetMatchingFace(cable.transform.position, Transport.PortDirection.Input);
+            if (!match.HasValue)
+                match = portConfig.GetMatchingFace(cable.transform.position, Transport.PortDirection.Output);
+
+            if (!match.HasValue) return;
+
+            // Record on the cable which face it uses
+            if (cable is PowerCable powerCable)
+            {
+                powerCable.RecordConnectionFace(machine, match.Value.face);
+            }
+        }
     }
 }

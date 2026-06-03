@@ -10,6 +10,7 @@
 
 using System.Collections.Generic;
 using UnityEngine;
+using VoxelEngine.Transport;
 
 namespace VoxelEngine.Networks
 {
@@ -39,6 +40,9 @@ namespace VoxelEngine.Networks
         private float _scanTimer;
         private const float SCAN_INTERVAL = 0.5f;   // re-evaluate twice/second
 
+        // Track which face each connection uses
+        private readonly Dictionary<ConnectionAnchor, CubeFace> _connectionFaces = new();
+
         // Cached, shared registry — every DataCable adds itself so neighbour lookups
         // are O(k) instead of FindObjectsOfType every frame.
         private static readonly HashSet<DataCable> _AllCables = new();
@@ -63,12 +67,16 @@ namespace VoxelEngine.Networks
         private void OnDisable()
         {
             _AllCables.Remove(this);
+            _connectionFaces.Clear();
             // Notify neighbours so they drop their arms next rebuild.
             if (anchor != null) anchor.DisconnectAll();
             // Adjacent cables need to know they just lost a neighbour.
             foreach (var c in _AllCables)
                 if (c != null && IsCardinalNeighbour(transform.position, c.transform.position))
                     c.RebuildVisuals();
+            // Force a visual rebuild so this cable's own arms disappear immediately.
+            // When anchor has no connections, RebuildVisuals clears all arms.
+            RebuildVisuals();
         }
 
         private void Update()
@@ -151,6 +159,22 @@ namespace VoxelEngine.Networks
                     && existing != anchor)
                 {
                     if (!HasLineOfSight(self, existing.transform.position, existing)) continue;
+                    // Anti-redundancy: if another cable is closer on the same axis, skip.
+                    if (IsConnectionShadowed(self, existing.transform.position)) continue;
+                    
+                    // Check PortConfig if the device has one
+                    var portConfig = existing.GetComponent<PortConfig>();
+                    if (portConfig != null)
+                    {
+                        var match = portConfig.GetMatchingFace(self, PortDirection.Input);
+                        if (!match.HasValue) match = portConfig.GetMatchingFace(self, PortDirection.Output);
+                        if (!match.HasValue) continue;
+                        if (!portConfig.AcceptsNetworkType(match.Value.face, NetworkType.Data)) continue;
+                        
+                        // Record which face this connection uses
+                        _connectionFaces[existing] = match.Value.face;
+                    }
+                    
                     desired.Add(existing);
                     continue;
                 }
@@ -172,6 +196,22 @@ namespace VoxelEngine.Networks
                 var newAnchor = rootGo.AddComponent<ConnectionAnchor>();
                 newAnchor.networkType = NetworkType.Data;
                 if (!HasLineOfSight(self, newAnchor.transform.position, newAnchor)) continue;
+                // Anti-redundancy: if another cable is closer on the same axis, skip.
+                if (IsConnectionShadowed(self, newAnchor.transform.position)) continue;
+                
+                // Check PortConfig if the device has one
+                var portConfig = newAnchor.GetComponent<PortConfig>();
+                if (portConfig != null)
+                {
+                    var match = portConfig.GetMatchingFace(self, PortDirection.Input);
+                    if (!match.HasValue) match = portConfig.GetMatchingFace(self, PortDirection.Output);
+                    if (!match.HasValue) continue;
+                    if (!portConfig.AcceptsNetworkType(match.Value.face, NetworkType.Data)) continue;
+                    
+                    // Record which face this connection uses
+                    _connectionFaces[newAnchor] = match.Value.face;
+                }
+                
                 desired.Add(newAnchor);
             }
 
@@ -189,6 +229,46 @@ namespace VoxelEngine.Networks
                     changed = true;
 
             return changed;
+        }
+
+        /// <summary>
+        /// Checks if there's another DataCable closer to the same target on the same axis.
+        /// If so, this cable's connection to that target is "shadowed" and should be skipped.
+        /// </summary>
+        private bool IsConnectionShadowed(Vector3 myPos, Vector3 targetPos)
+        {
+            Vector3 delta = targetPos - myPos;
+            Vector3 axisDir = NearestAxis(delta);
+            float myDist = delta.magnitude;
+
+            foreach (var other in _AllCables)
+            {
+                if (other == null || other == this) continue;
+
+                Vector3 otherPos = other.transform.position;
+                Vector3 otherDelta = targetPos - otherPos;
+
+                // Check if other is on the same axis direction toward target
+                if (Vector3.Dot(otherDelta, axisDir) <= 0) continue; // not toward target
+                if (Vector3.Dot(otherDelta, axisDir) >= Vector3.Dot(delta, axisDir)) continue; // not closer
+
+                // Check axis alignment
+                Vector3 otherAxis = NearestAxis(otherDelta);
+                if (otherAxis != axisDir) continue;
+
+                // Other is closer on the same axis — this connection is shadowed
+                return true;
+            }
+
+            return false;
+        }
+
+        private Vector3 NearestAxis(Vector3 v)
+        {
+            float ax = Mathf.Abs(v.x), ay = Mathf.Abs(v.y), az = Mathf.Abs(v.z);
+            if (ax >= ay && ax >= az) return new Vector3(Mathf.Sign(v.x), 0, 0);
+            if (ay >= ax && ay >= az) return new Vector3(0, Mathf.Sign(v.y), 0);
+            return new Vector3(0, 0, Mathf.Sign(v.z));
         }
 
         private bool IsCardinalNeighbour(Vector3 a, Vector3 b)
@@ -242,7 +322,22 @@ namespace VoxelEngine.Networks
                 // face and grows arms to actually meet the device (works for
                 // big multi-voxel server racks placed beside the cable).
                 foreach (var c in anchor.connections)
-                    if (c != null) _neighbourPositionsBuf.Add(c.transform.position);
+                {
+                    if (c == null) continue;
+                    
+                    // If we have a recorded face for this connection, use the face point
+                    if (_connectionFaces.TryGetValue(c, out var face))
+                    {
+                        var portConfig = c.GetComponent<PortConfig>();
+                        if (portConfig != null)
+                        {
+                            _neighbourPositionsBuf.Add(portConfig.FaceWorldPoint(face));
+                            continue;
+                        }
+                    }
+                    
+                    _neighbourPositionsBuf.Add(c.transform.position);
+                }
             }
             GridCableVisuals.Rebuild(
                 _visualRoot,
