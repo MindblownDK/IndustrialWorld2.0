@@ -1699,13 +1699,12 @@ namespace VoxelEngine.UI
             var recipes = Crafter.AvailableRecipes(recipeRegistry, st.tier);
             BuildRecipeBrowser(panel, recipes, inventory.container, inventory.container,
                 emptyMessage: "No recipes available at this station tier.",
-                // GetInstanceID() — Unity's built-in per-MonoBehaviour ID. Replaces
-                // a phantom CraftingStation.GetEntityId() that never existed in
-                // this codebase; the bogus call had been silently killing the
-                // entire VoxelEngine assembly compile for several commits, so
-                // Unity was running the last-good cached DLL and none of the
-                // recent UI / pipe / cable changes were visible at runtime.
-                panelId: "station_" + st.GetInstanceID());
+                // GetEntityId — Unity 6+ replacement for the now-deprecated
+                // GetInstanceID. Same semantics: a unique, stable int per
+                // UnityObject. (Earlier this call was incorrectly "fixed" to
+                // GetInstanceID, which the Unity 6.4 compiler immediately
+                // flagged as obsolete — reverted to GetEntityId here.)
+                panelId: "station_" + st.GetEntityId());
         }
 
         // ============================================================

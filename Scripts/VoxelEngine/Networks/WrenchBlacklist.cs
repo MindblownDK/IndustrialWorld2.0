@@ -29,15 +29,17 @@ namespace VoxelEngine.Networks
     public static class WrenchBlacklist
     {
         // Stable, order-independent hash for an unordered GameObject pair.
-        // Using GetInstanceID keeps the key small and avoids holding strong
-        // references that would survive scene unloads.
+        // Using GetEntityId keeps the key small and avoids holding strong
+        // references that would survive scene unloads. GetEntityId is the
+        // Unity 6+ replacement for GetInstanceID (deprecated in Unity 6.4) —
+        // same semantics: a unique, stable int per UnityObject.
         private static readonly HashSet<long> _blocked = new();
 
         private static long PairKey(GameObject a, GameObject b)
         {
             if (a == null || b == null) return 0L;
-            int ia = a.GetInstanceID();
-            int ib = b.GetInstanceID();
+            int ia = a.GetEntityId();
+            int ib = b.GetEntityId();
             int lo = Mathf.Min(ia, ib);
             int hi = Mathf.Max(ia, ib);
             // Pack into a long so the order never matters.
@@ -91,7 +93,7 @@ namespace VoxelEngine.Networks
         public static void ClearForGameObject(GameObject go)
         {
             if (go == null || _blocked.Count == 0) return;
-            int id = go.GetInstanceID();
+            int id = go.GetEntityId();
             // Walk the set and drop every key whose hi OR lo half matches.
             // Using ToArray() so we can mutate the underlying set safely.
             long[] snapshot = new long[_blocked.Count];
