@@ -66,11 +66,13 @@ namespace VoxelEngine.Networks
             public float boltRadius;       // bolt sphere radius (world units)
             public float boltProtrusion;   // how far the bolt sits OUTSIDE the
                                            //   collar radius (negative = inset)
-            public bool  twinShaft;        // render TWO parallel shafts per arm
-                                           //   (matches the dual-wire reference
-                                           //   for power cables)
-            public float twinSeparation;   // gap between the two shafts (centre-
+            public bool  twinShaft;        // render TWO (or three, if tripleShaft)
+                                           //   parallel shafts per arm
+            public float twinSeparation;   // gap between OUTER shafts (centre-
                                            //   to-centre, world units)
+            public bool  tripleShaft;      // when true AND twinShaft is true,
+                                           //   render a THIRD conductor in the
+                                           //   middle — industrial 3-wire cable look
         }
 
         public static StyleProfile ProfileFor(PipeStyle style)
@@ -101,14 +103,20 @@ namespace VoxelEngine.Networks
                         twinShaft      = false, twinSeparation = 0f,
                     };
                 case PipeStyle.Copper:
+                    // FLUID / WATER pipes — chunky burnished-copper plumbing.
+                    // Significantly fatter than the brass GAS pipes so the
+                    // player can read the size difference at a glance, even
+                    // from across a room. Bolts on every collar sell the
+                    // industrial-plumbing look (reference: Modular Pipes
+                    // Vol 02 brass-copper kit).
                     return new StyleProfile
                     {
-                        hubRadius      = 0.20f,
-                        armRadius      = 0.135f,
-                        collarRadius   = 0.175f,
-                        collarLength   = 0.06f,
+                        hubRadius      = 0.30f,   // was 0.20 — sphere joint is now visibly thicker
+                        armRadius      = 0.22f,   // was 0.135 — shafts are clearly larger than gas
+                        collarRadius   = 0.30f,   // matches hub so the joint flange reads as ONE chunky fitting
+                        collarLength   = 0.11f,   // longer collar = beefier mechanical look
                         capInset       = 0.06f,
-                        shaftSegments  = 16,
+                        shaftSegments  = 18,      // smoother round shaft at the bigger radius
                         useSphereHub   = true,
                         drawCollar     = true,
                         drawEndCaps    = true,
@@ -120,7 +128,9 @@ namespace VoxelEngine.Networks
                         armSquareScale = 1f,
                         squareEndCaps  = false,
                         endCapRadiusMul= 1.0f,
-                        boltCount      = 6,    boltRadius     = 0.024f, boltProtrusion = 0.005f, // copper plumbing bolts
+                        boltCount      = 8,       // was 6 — more bolts to match the larger flange
+                        boltRadius     = 0.035f,  // bigger bolt heads to match the bigger pipe
+                        boltProtrusion = 0.008f,
                         twinShaft      = false, twinSeparation = 0f,
                     };
                 case PipeStyle.Sleeve:
@@ -158,22 +168,25 @@ namespace VoxelEngine.Networks
                     };
                 case PipeStyle.WireArm:
                 default:
-                    // CABLE / WIRE — TWO PARALLEL SHAFTS per arm, with bright
-                    // bolted terminal clamps at every junction. Matches the
-                    // dual-wire reference image (Wires & Cables Constructor):
+                    // CABLE / WIRE — industrial three-conductor bundle.
                     //
-                    //   ════════╗            ╔════════
-                    //   ════════║[TERMINAL]║════════
+                    //   ════╤════                                  ════╤════
+                    //   ════╪════  ╔═══════════════════════╗      ════╪════
+                    //   ════╧════  ║   TIER-COLOURED CLAMP ║      ════╧════
+                    //                ╚═══════════════════════╝
                     //
-                    // The central hub is invisibly tiny — the terminal collars
-                    // are what the player sees at junctions, with two thin
-                    // sleeved shafts entering each one.
+                    // The three slim shafts share the SLEEVE colour (a neutral
+                    // dark rubber-jacket tint baked in PowerCable.RebuildVisuals)
+                    // while the wide terminal CLAMP at every junction shows the
+                    // wire's TIER tint — so the player can read the tier at a
+                    // glance from across the factory without losing the premium
+                    // "real industrial cable" silhouette.
                     return new StyleProfile
                     {
-                        hubRadius      = 0.06f,   // invisibly small — collar covers it
-                        armRadius      = 0.05f,   // slim individual wire (×2)
-                        collarRadius   = 0.20f,   // bright terminal clamp
-                        collarLength   = 0.14f,
+                        hubRadius      = 0.10f,   // small sphere, hidden inside the clamp
+                        armRadius      = 0.045f,  // each individual conductor
+                        collarRadius   = 0.26f,   // wide bright tier-coloured clamp
+                        collarLength   = 0.18f,   // chunky terminal block at every junction
                         capInset       = 0.04f,
                         shaftSegments  = 12,
                         useSphereHub   = true,
@@ -187,12 +200,14 @@ namespace VoxelEngine.Networks
                         armSquareScale = 1f,
                         squareEndCaps  = false,
                         endCapRadiusMul= 1.0f,
-                        boltCount      = 0,    boltRadius     = 0f,   boltProtrusion = 0f,
-                        // Two parallel shafts, centre-to-centre 0.16 m apart —
-                        // wide enough to read as "two wires" from gameplay
-                        // distance but tight enough that both fit inside the
-                        // 0.20 m collar that wraps the joint.
-                        twinShaft      = true,  twinSeparation = 0.16f,
+                        // Two cosmetic bolts on every terminal — riveted clamp look.
+                        boltCount      = 4,    boltRadius     = 0.018f, boltProtrusion = 0.006f,
+                        // THREE parallel conductors (twinShaft semantics extended
+                        // to "multiShaft" via tripleShaft below). Separation
+                        // 0.13 m so all three fit comfortably inside the 0.26 m
+                        // terminal collar at every junction.
+                        twinShaft      = true,  twinSeparation = 0.13f,
+                        tripleShaft    = true,
                     };
             }
         }
@@ -334,9 +349,11 @@ namespace VoxelEngine.Networks
                     }
                     else if (p.twinShaft && p.twinSeparation > 0f)
                     {
-                        // TWO PARALLEL ROUND SHAFTS — power-cable look (dual wire).
-                        // We need a stable axis perpendicular to `dir` so the two
-                        // wires offset on a consistent side. Picking world UP for
+                        // MULTI-CONDUCTOR PARALLEL ROUND SHAFTS — power-cable look.
+                        //   • twinShaft only           → 2 wires (outer pair)
+                        //   • twinShaft + tripleShaft  → 3 wires (outer pair + centre)
+                        // We need a stable axis perpendicular to `dir` so wires
+                        // offset on a consistent side. Picking world UP for
                         // horizontal runs and world RIGHT for vertical runs is
                         // visually consistent regardless of player camera angle.
                         Vector3 perp = Mathf.Abs(dir.y) > 0.5f
@@ -344,10 +361,18 @@ namespace VoxelEngine.Networks
                             : Vector3.up;
                         Vector3 offset = perp * (p.twinSeparation * 0.5f);
 
+                        // Outer pair.
                         BuildCylinder(visualRoot, $"Arm_{axisIdx}_A", armCentre + offset,
                                       dir, armLen, p.armRadius, shellMat);
                         BuildCylinder(visualRoot, $"Arm_{axisIdx}_B", armCentre - offset,
                                       dir, armLen, p.armRadius, shellMat);
+
+                        // Centre conductor (industrial 3-wire cable).
+                        if (p.tripleShaft)
+                        {
+                            BuildCylinder(visualRoot, $"Arm_{axisIdx}_C", armCentre,
+                                          dir, armLen, p.armRadius, shellMat);
+                        }
 
                         if (innerMat != null)
                         {
@@ -355,6 +380,11 @@ namespace VoxelEngine.Networks
                                           dir, armLen, p.armRadius * 0.55f, innerMat);
                             BuildCylinder(visualRoot, $"ArmCore_{axisIdx}_B", armCentre - offset,
                                           dir, armLen, p.armRadius * 0.55f, innerMat);
+                            if (p.tripleShaft)
+                            {
+                                BuildCylinder(visualRoot, $"ArmCore_{axisIdx}_C", armCentre,
+                                              dir, armLen, p.armRadius * 0.55f, innerMat);
+                            }
                         }
                     }
                     else

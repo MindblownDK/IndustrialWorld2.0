@@ -34,8 +34,8 @@ namespace VoxelEngine.Core
     public static class GameVersion
     {
         public const int    Major = 0;
-        public const int    Minor = 4;
-        public const int    Patch = 1;
+        public const int    Minor = 5;
+        public const int    Patch = 0;
 
         /// <summary>Optional channel suffix — "" for stable releases,
         /// "dev.N" for in-progress builds, "rc.N" for release candidates.</summary>
