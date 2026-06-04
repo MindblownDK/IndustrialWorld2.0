@@ -465,77 +465,91 @@ public static VisualElement QuarryPanel(Quarry q, SlotBuilder slot)
     var (progBar, _) = T.ProgressBar(q.IsMining ? q.MineProgress01 : 0f, T.AccentCyan, 8, true);
     p.Add(progBar);
 
-    // Upgrade slots (actual drop-target slots)
+    // ── Upgrade Slots (left side panel) ──────────────────
     q.EnsureUpgrades();
-    p.Add(T.Divider());
-    p.Add(T.Subtitle("Upgrades"));
-    var upgGrid = T.SlotGrid();
-    for (int i = 0; i < q.upgradeC.Size; i++)
-        upgGrid.Add(slot(q.upgradeC, i, q.upgradeC.GetSlot(i), false, false));
-    p.Add(upgGrid);
-    // Upgrade level cards
-    var ug = new VisualElement();
-    ug.style.flexDirection = FlexDirection.Row;
-    ug.style.flexWrap = Wrap.Wrap;
-    ug.style.marginTop = 6;
-    ug.Add(UpgCard("Range",      q.InstalledRangeLevel,      Quarry.MaxRangeLevel,      T.AccentGold,   "\uD83D\uDCCF", "+1 size  \u00B7  +25W"));
-    ug.Add(UpgCard("Speed",      q.InstalledSpeedLevel,      Quarry.MaxSpeedLevel,      T.AccentTeal,   "\u26A1",       "-0.04s  \u00B7  +25W"));
-    ug.Add(UpgCard("Efficiency", q.InstalledEfficiencyLevel, Quarry.MaxEfficiencyLevel, T.AccentPurple, "\u2B50",       "-35W"));
-    p.Add(ug);
+    var upgCard = T.Card();
+    upgCard.style.marginBottom = 8;
+    var upgTitle = T.Subtitle("Upgrades");
+    upgTitle.style.marginBottom = 4;
+    upgCard.Add(upgTitle);
 
-    // Port Config button
+    var upgSlots = new VisualElement();
+    upgSlots.style.flexDirection = FlexDirection.Row;
+    for (int i = 0; i < q.upgradeC.Size; i++)
+        upgSlots.Add(slot(q.upgradeC, i, q.upgradeC.GetSlot(i), false, false));
+    upgCard.Add(upgSlots);
+
+    // Level summary row
+    var lvlRow = new VisualElement();
+    lvlRow.style.flexDirection = FlexDirection.Row;
+    lvlRow.style.marginTop = 6;
+    lvlRow.Add(UpgBadge("R", q.InstalledRangeLevel,      Quarry.MaxRangeLevel,      T.AccentGold));
+    lvlRow.Add(UpgBadge("S", q.InstalledSpeedLevel,      Quarry.MaxSpeedLevel,      T.AccentTeal));
+    lvlRow.Add(UpgBadge("E", q.InstalledEfficiencyLevel, Quarry.MaxEfficiencyLevel, T.AccentPurple));
+    upgCard.Add(lvlRow);
+    p.Add(upgCard);
+
+    // ── Port Config ────────────────────────────────────────
     var portCfg = q.GetComponent<VoxelEngine.Transport.PortConfig>();
     if (portCfg != null)
     {
-        p.Add(T.Spacer(6));
-        p.Add(T.SmallButton("\u2699  Configure Ports", () =>
-            PortConfigHud.Open(q.gameObject, portCfg), T.AccentTeal));
+        var portSection = T.Card();
+        portSection.style.marginBottom = 8;
+        portSection.Add(VoxelEngine.UI.PortConfigHud.Build(portCfg));
+        p.Add(portSection);
     }
 
-    // Output    // Output
-    p.Add(T.Divider());
-    p.Add(T.Subtitle("Output"));
-    p.Add(SortRow(q.Output));
-    var grid = T.SlotGrid();
-    var output = q.Output;
-    for (int i = 0; i < output.Size; i++)
-        grid.Add(slot(output, i, output.GetSlot(i), false, true));
-    p.Add(grid);
+    // ── Output ─────────────────────────────────────────────
+    var outCard = T.Card();
+    var outHdr = new VisualElement();
+    outHdr.style.flexDirection = FlexDirection.Row;
+    outHdr.style.alignItems = Align.Center;
+    outHdr.style.marginBottom = 6;
+    var outTitle = T.Subtitle("Output");
+    outTitle.style.flexGrow = 1;
+    outTitle.style.marginBottom = 0;
+    outHdr.Add(outTitle);
+    outHdr.Add(SortRow(q.Output));
+    outCard.Add(outHdr);
+    var outGrid = T.SlotGrid();
+    for (int i = 0; i < q.Output.Size; i++)
+        outGrid.Add(slot(q.Output, i, q.Output.GetSlot(i), false, true));
+    outCard.Add(outGrid);
+    p.Add(outCard);
+
     p.Add(T.Spacer(8));
-    p.Add(T.Muted("Right-click with Quarry Upgrades to install. Connect item pipes to auto-export."));
+    p.Add(T.Muted("Drop Quarry Upgrades into the slots above. Connect item pipes to export."));
     return p;
 }
 
-private static VisualElement UpgCard(string name, int lvl, int max, Color accent, string icon, string desc)
+private static VisualElement UpgBadge(string label, int lvl, int max, Color accent)
 {
-    var card = new VisualElement();
-    card.style.flexGrow = 1; card.style.minWidth = 110;
-    card.style.paddingTop = 7; card.style.paddingBottom = 7;
-    card.style.paddingLeft = 9; card.style.paddingRight = 9;
-    card.style.marginRight = 5; card.style.marginBottom = 5;
-    card.style.backgroundColor = new StyleColor(new Color(T.BgCard.r, T.BgCard.g, T.BgCard.b, 0.92f));
-    T.Radius(card, T.CardRadius);
-    T.Border(card, 1, new Color(accent.r, accent.g, accent.b, 0.18f));
-    card.pickingMode = PickingMode.Ignore;
+    var b = new VisualElement();
+    b.style.flexDirection = FlexDirection.Row;
+    b.style.alignItems = Align.Center;
+    b.style.marginRight = 10;
+    b.style.paddingTop = 3; b.style.paddingBottom = 3;
+    b.style.paddingLeft = 7; b.style.paddingRight = 7;
+    b.style.backgroundColor = new StyleColor(new Color(accent.r, accent.g, accent.b, 0.12f));
+    T.Radius(b, 6);
+    T.Border(b, 1, new Color(accent.r, accent.g, accent.b, 0.30f));
+    b.pickingMode = PickingMode.Ignore;
 
-    var tr = new VisualElement();
-    tr.style.flexDirection = FlexDirection.Row; tr.style.alignItems = Align.Center; tr.style.marginBottom = 3;
-    tr.pickingMode = PickingMode.Ignore;
-    var ico = new Label(icon); ico.style.fontSize = 11; ico.style.marginRight = 4; ico.style.color = new StyleColor(accent); ico.pickingMode = PickingMode.Ignore;
-    tr.Add(ico);
-    var nm = new Label(name); nm.style.fontSize = 9; nm.style.color = new StyleColor(T.TextSecondary); nm.style.unityFontStyleAndWeight = FontStyle.Bold; nm.style.flexGrow = 1; nm.pickingMode = PickingMode.Ignore;
-    tr.Add(nm);
-    var lv = new Label($"{lvl}/{max}"); lv.style.fontSize = 10; lv.style.color = new StyleColor(lvl >= max ? T.AccentGreen : accent); lv.style.unityFontStyleAndWeight = FontStyle.Bold; lv.pickingMode = PickingMode.Ignore;
-    tr.Add(lv);
-    card.Add(tr);
+    var lbl = new Label(label);
+    lbl.style.fontSize = 10;
+    lbl.style.color = new StyleColor(accent);
+    lbl.style.unityFontStyleAndWeight = FontStyle.Bold;
+    lbl.style.marginRight = 5;
+    lbl.pickingMode = PickingMode.Ignore;
+    b.Add(lbl);
 
-    var bg = new VisualElement(); bg.style.height = 4; bg.style.backgroundColor = new StyleColor(new Color(T.BgBase.r, T.BgBase.g, T.BgBase.b, 0.8f)); T.Radius(bg, 2); bg.style.marginBottom = 3; bg.pickingMode = PickingMode.Ignore;
-    var fill = new VisualElement(); fill.style.height = 4; fill.style.backgroundColor = new StyleColor(accent); T.Radius(fill, 2); fill.style.width = Length.Percent((float)lvl / Mathf.Max(1, max) * 100f); fill.pickingMode = PickingMode.Ignore;
-    bg.Add(fill); card.Add(bg);
-
-    var dl = new Label(desc); dl.style.fontSize = 8; dl.style.color = new StyleColor(T.TextMuted); dl.pickingMode = PickingMode.Ignore;
-    card.Add(dl);
-    return card;
+    var val = new Label($"{lvl}/{max}");
+    val.style.fontSize = 10;
+    val.style.color = new StyleColor(lvl >= max ? T.AccentGreen : T.TextSecondary);
+    val.style.unityFontStyleAndWeight = FontStyle.Bold;
+    val.pickingMode = PickingMode.Ignore;
+    b.Add(val);
+    return b;
 }
     }
 }
