@@ -4,10 +4,10 @@
 // ║  INDUSTRIAL QUARRY — BuildCraft-inspired automated strip-miner ║
 // ║                                                                ║
 // ║  • 16×16 default area (configurable via 2 QuarryLandmarks)     ║
-// ║  • Configurable mining height (default 5 layers)               ║
+// ║  • Mines straight to bedrock — frame shows full pit depth      ║
 // ║  • Construction-tape holographic preview before frame build    ║
 // ║  • Full 3D steel frame with corner pillars & accent beams      ║
-// ║  • Sleek laser drill-head with subtle particle trail           ║
+// ║  • Sleek laser drill-head with rotating beam                   ║
 // ║                                                                ║
 // ║  Design: Dark steel industrial frame + orange accent glow.     ║
 // ║  Clean, minimal, premium — per IndustrialWorld guidelines.     ║
@@ -32,9 +32,6 @@ namespace VoxelEngine.Transport
         [Tooltip("Default square side length when no landmarks are placed.")]
         public int defaultSize = 16;
 
-        [Tooltip("How many layers to mine down from the surface. Default 5.")]
-        public int miningHeight = 5;
-
         [Tooltip("Distance in front of the quarry block where mining starts.")]
         public float forwardOffset = 2f;
 
@@ -53,6 +50,9 @@ namespace VoxelEngine.Transport
 
         [Tooltip("Accent glow colour on frame corners — orange hazard.")]
         public Color frameAccentColor = new Color(0.92f, 0.52f, 0.08f, 0.85f);
+
+        [Tooltip("How tall the frame pillars are (visual depth, mining always goes to bedrock).")]
+        public float frameHeight = 5f;
 
         [Header("Construction Tape")]
         [Tooltip("How long the tape preview animates before frame building starts.")]
@@ -334,8 +334,10 @@ namespace VoxelEngine.Transport
 
         private void CalculateMaxDepth()
         {
-            // Mine exactly `miningHeight` layers down from the surface.
-            MaxDepth = Mathf.Max(1, miningHeight);
+            // Mine from surface down to bedrock (y <= 2). Bedrock is unbreakable
+            // so we stop one layer above it (y = 3).
+            int bedrockTop = 3;
+            MaxDepth = Mathf.Max(1, AreaMin.y - bedrockTop);
         }
 
         // ── Ghost Preview ──────────────────────────────────────────
@@ -343,7 +345,7 @@ namespace VoxelEngine.Transport
         {
             _ghostObj = new GameObject("QuarryGhost");
             float y = AreaMin.y;
-            float bottomY = AreaMin.y - miningHeight;
+            float bottomY = AreaMin.y - frameHeight;
 
             Color gc = new Color(1f, 0.8f, 0.2f, 0.5f); // gold translucent
 
@@ -503,8 +505,8 @@ namespace VoxelEngine.Transport
         private void PrepareFramePlan()
         {
             _framePlan.Clear();
-            float yTop = AreaMin.y + 0.05f;       // top surface
-            float yBottom = AreaMin.y - miningHeight; // bottom of pit
+            float yTop = AreaMin.y + 0.05f;           // top surface
+            float yBottom = AreaMin.y - frameHeight;  // bottom of pit
 
             Vector3 v00 = new Vector3(AreaMin.x, 0, AreaMin.z);
             Vector3 v10 = new Vector3(AreaMax.x + 1, 0, AreaMin.z);
