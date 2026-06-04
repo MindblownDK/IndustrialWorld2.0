@@ -1698,7 +1698,13 @@ namespace VoxelEngine.UI
 
             var recipes = Crafter.AvailableRecipes(recipeRegistry, st.tier);
             BuildRecipeBrowser(panel, recipes, inventory.container, inventory.container,
-                emptyMessage: "No recipes available at this station tier.", panelId: "station_" + st.GetEntityId());
+                emptyMessage: "No recipes available at this station tier.",
+                // GetEntityId — Unity 6+ replacement for the now-deprecated
+                // GetInstanceID. Same semantics: a unique, stable int per
+                // UnityObject. (Earlier this call was incorrectly "fixed" to
+                // GetInstanceID, which the Unity 6.4 compiler immediately
+                // flagged as obsolete — reverted to GetEntityId here.)
+                panelId: "station_" + st.GetEntityId());
         }
 
         // ============================================================
