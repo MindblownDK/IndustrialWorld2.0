@@ -465,20 +465,34 @@ public static VisualElement QuarryPanel(Quarry q, SlotBuilder slot)
     var (progBar, _) = T.ProgressBar(q.IsMining ? q.MineProgress01 : 0f, T.AccentCyan, 8, true);
     p.Add(progBar);
 
-    // Upgrades
+    // Upgrade slots (actual drop-target slots)
+    q.EnsureUpgrades();
     p.Add(T.Divider());
     p.Add(T.Subtitle("Upgrades"));
+    var upgGrid = T.SlotGrid();
+    for (int i = 0; i < q.upgradeC.Size; i++)
+        upgGrid.Add(slot(q.upgradeC, i, q.upgradeC.GetSlot(i), false, false));
+    p.Add(upgGrid);
+    // Upgrade level cards
     var ug = new VisualElement();
     ug.style.flexDirection = FlexDirection.Row;
     ug.style.flexWrap = Wrap.Wrap;
-    ug.style.marginTop = 4;
-    ug.style.marginBottom = 4;
+    ug.style.marginTop = 6;
     ug.Add(UpgCard("Range",      q.InstalledRangeLevel,      Quarry.MaxRangeLevel,      T.AccentGold,   "\uD83D\uDCCF", "+1 size  \u00B7  +25W"));
     ug.Add(UpgCard("Speed",      q.InstalledSpeedLevel,      Quarry.MaxSpeedLevel,      T.AccentTeal,   "\u26A1",       "-0.04s  \u00B7  +25W"));
     ug.Add(UpgCard("Efficiency", q.InstalledEfficiencyLevel, Quarry.MaxEfficiencyLevel, T.AccentPurple, "\u2B50",       "-35W"));
     p.Add(ug);
 
-    // Output
+    // Port Config button
+    var portCfg = q.GetComponent<VoxelEngine.Transport.PortConfig>();
+    if (portCfg != null)
+    {
+        p.Add(T.Spacer(6));
+        p.Add(T.SmallButton("\u2699  Configure Ports", () =>
+            PortConfigHud.Open(q.gameObject, portCfg), T.AccentTeal));
+    }
+
+    // Output    // Output
     p.Add(T.Divider());
     p.Add(T.Subtitle("Output"));
     p.Add(SortRow(q.Output));

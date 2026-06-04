@@ -515,7 +515,7 @@ namespace VoxelEngine.UI
             _rightContainer = null; _openStation = null;
             _inventoryOpen  = true;
             UnwatchAllContainers();
-            if (quarry != null) { quarry.EnsureOutputPublic(); WatchContainer(quarry.Output); }
+            if (quarry != null) { quarry.EnsureOutputPublic(); quarry.EnsureUpgrades(); WatchContainer(quarry.Output); WatchContainer(quarry.upgradeC); }
             UnlockCursor();
             Refresh();
         }

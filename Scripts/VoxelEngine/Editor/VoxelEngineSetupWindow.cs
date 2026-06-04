@@ -3436,6 +3436,7 @@ root =>
                     q.forwardOffset = 2f; q.frameBuildInterval = 0.06f; q.frameDepth = 5f;
                     q.frameColor = new Color(0.18f, 0.19f, 0.22f);
                     q.outputSlots = 6;
+                    q.EnsureUpgrades();
                 });
             var blockQuarry = MakeBlk(MISC_BLOCKS, "Block_Quarry", "Quarry",
                 "Automated industrial strip-miner. Builds a frame, then digs out the rectangle in front of itself (default 16×16) down to bedrock. Accepts Range, Speed & Efficiency upgrades. Powered (~500 W). Tier-3 mining.",
