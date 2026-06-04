@@ -493,15 +493,15 @@ namespace VoxelEngine.UI
 
             if (pc != null)
                 right.Add(T.StatRow("\u26A1", "Power",
-                    powered ? $"{q.EffectivePowerDraw:0} W  \u00B7  Connected" : "Disconnected",
+                    powered ? $"{q.EffPowerDraw:0} W  \u00B7  Connected" : "Disconnected",
                     powered ? T.AccentGreen : T.AccentRed));
 
             right.Add(T.StatRow("\uD83D\uDCD0", "Area",
-                $"{q.AreaX}\u00D7{q.AreaZ}  ({q.EffectiveSize}\u00B2)", T.AccentCyan));
+                $"{q.AreaX}\u00D7{q.AreaZ}  ({q.EffSize}\u00B2)", T.AccentCyan));
             right.Add(T.StatRow("\u2B07", "Depth",
                 $"{q.CurrentDepth} / {q.MaxDepth}", T.TextPrimary));
             right.Add(T.StatRow("\u23F1", "Speed",
-                $"{q.EffectiveMineInterval:F2}s", T.AccentTeal));
+                $"{q.EffInterval:F2}s", T.AccentTeal));
             right.Add(T.StatRow("\uD83D\uDD27", "Tier",
                 $"{q.quarryTier}", T.TextSecondary));
 
