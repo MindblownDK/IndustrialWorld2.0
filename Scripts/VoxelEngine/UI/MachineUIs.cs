@@ -472,7 +472,7 @@ namespace VoxelEngine.UI
             p.Add(grid);
 
             p.Add(T.Spacer(8));
-            p.Add(T.Muted("Connect item pipes to auto-export resources. Place landmarks to set a custom area."));
+            p.Add(T.Muted("Connect item pipes to auto-export resources. Install Range/Speed/Efficiency upgrades to improve performance."));
             return p;
         }
     }

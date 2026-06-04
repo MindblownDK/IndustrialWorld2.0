@@ -86,7 +86,7 @@ namespace VoxelEngine.EditorTools
                 "  • Storage  (RAM / CPU / PSU at 4 tiers + 5 Disk tiers + ServerRack / NAS / Terminals / Importer / Exporter / Powerstation / Disk Manipulator)\n" +
                 "  • Wrench tool (universal network connector)\n" +
                 "  • Item Pipes  (Solid + Glass variants)\n" +
-                "  • Quarry + Landmark\n" +
+                "  • Quarry + Upgrades (Range / Speed / Efficiency)\n" +
                 "  • Gas  (Electrolyser / Hydrogen Engine / Gas Tank / Gas Pipe Solid+Glass + Hydrogen / Oxygen markers)\n" +
                 "  • Nuclear  (Enriched Fuel Rod / LEU Pellet / Depleted Uranium / Spent Fuel Rod / High-Level Waste +\n" +
                 "              Uranium Processor / Reactor Core / Steam Turbine / Portable Reactor / Waste Reprocessor)\n" +
@@ -2841,11 +2841,11 @@ namespace VoxelEngine.EditorTools
 
             // ─ Quarrying ─
             var nQuarrying = MakeOrUpdateEnvNode("res_quarrying", "Quarrying",
-                "Industrial-scale automated mining. The Quarry block strip-mines an entire 16×16 area down to bedrock without player input.",
+                "Industrial-scale automated mining. The Quarry block strip-mines an entire 16×16 area down to bedrock without player input. Upgrade with Range, Speed & Efficiency modules.",
                 tier: 4, col: 6, sub: VoxelEngine.Research.ResearchSubCategory.Production,
                 tint: new Color(0.50f, 0.55f, 0.60f), seconds: 110f,
                 cost: new[] { (sciT2, 30), (sciT3, 18) },
-                unlocks: StorageRecipes("Recipe_Quarry","Recipe_QuarryLandmark"),
+                unlocks: StorageRecipes("Recipe_Quarry","Recipe_QuarryUpgradeRange","Recipe_QuarryUpgradeSpeed","Recipe_QuarryUpgradeEfficiency"),
                 prereqs: new[] { nSteelAlloy, nItemLogistics });
 
             // ─ Gas Processing (Electrolyser, Hydrogen Engine, Gas Tank/Pipe) ─
@@ -3016,13 +3016,14 @@ namespace VoxelEngine.EditorTools
             const string MISC_PREFABS  = ROOT + "/MiscPrefabs";
             const string MISC_BLOCKS   = ROOT + "/MiscBlocks";
             const string MISC_RECIPES  = ROOT + "/MiscRecipes";
+            const string MISC_ITEMS    = ROOT + "/MiscItems";
 
             foreach (var f in new[] {
                 ROOT, ITEMS, FARM_PREFABS, FARM_BLOCKS, FARM_CROPS, FARM_RECIPES,
                 STORE_PREFABS, STORE_BLOCKS, STORE_ITEMS, STORE_RECIPES,
                 NUKE_PREFABS, NUKE_BLOCKS, NUKE_ITEMS, NUKE_RECIPES,
                 GAS_PREFABS, GAS_BLOCKS, GAS_RECIPES,
-                MISC_PREFABS, MISC_BLOCKS, MISC_RECIPES,
+                MISC_PREFABS, MISC_BLOCKS, MISC_RECIPES, MISC_ITEMS,
             }) EnsureFolder(f);
 
             // -------- Required existing items --------
@@ -3412,44 +3413,83 @@ namespace VoxelEngine.EditorTools
                 VoxelEngine.Crafting.StationTier.CraftingBench, unlockedByDefault: false, (ironPlate, 1), (glass, 1));
 
             // ════════════════════════════════════════════════════════════
-            //  QUARRY + LANDMARK
+            //  QUARRY + UPGRADES (Range / Speed / Efficiency)
             // ════════════════════════════════════════════════════════════
-            var landmarkPrefab = MakePref(MISC_PREFABS, "QuarryLandmark",
-                new Color(0.20f, 0.50f, 1f), new Vector3(0.3f, 1.5f, 0.3f),
-                root =>
-                {
-                    var l = root.AddComponent<VoxelEngine.Transport.QuarryLandmark>();
-                    l.beamColor = new Color(0.20f, 0.50f, 1f, 0.6f);
-                    l.beamHeight = 20f;
-                });
-            var blockLandmark = MakeBlk(MISC_BLOCKS, "Block_QuarryLandmark", "Quarry Landmark",
-                "Place TWO landmarks on diagonally-opposite corners to define a Quarry's mining area. They project a blue beam upward when detected.",
-                new Color(0.20f, 0.50f, 1f), landmarkPrefab, "Logistics", hp: 150, maxStack: 16);
-
             var quarryPrefab = MakePref(MISC_PREFABS, "Quarry",
                 new Color(0.35f, 0.35f, 0.40f), new Vector3(2f, 2.4f, 2f),
                 root =>
                 {
                     var pc = root.AddComponent<VoxelEngine.Power.PowerConsumer>();
                     pc.wattsPerSecond = 500f; pc.connectRadius = 2f;
+                    var portCfg = root.AddComponent<VoxelEngine.Transport.PortConfig>();
+                    portCfg.ports = new VoxelEngine.Transport.PortConfig.FacePort[]
+                    {
+                        new() { face = VoxelEngine.Transport.CubeFace.PosX, direction = VoxelEngine.Transport.PortDirection.Output, networkType = VoxelEngine.Transport.PortNetworkType.Any, enabled = true },
+                        new() { face = VoxelEngine.Transport.CubeFace.NegX, direction = VoxelEngine.Transport.PortDirection.None,   networkType = VoxelEngine.Transport.PortNetworkType.Any, enabled = true },
+                        new() { face = VoxelEngine.Transport.CubeFace.PosY, direction = VoxelEngine.Transport.PortDirection.None,   networkType = VoxelEngine.Transport.PortNetworkType.Any, enabled = true },
+                        new() { face = VoxelEngine.Transport.CubeFace.NegY, direction = VoxelEngine.Transport.PortDirection.None,   networkType = VoxelEngine.Transport.PortNetworkType.Any, enabled = true },
+                        new() { face = VoxelEngine.Transport.CubeFace.PosZ, direction = VoxelEngine.Transport.PortDirection.None,   networkType = VoxelEngine.Transport.PortNetworkType.Any, enabled = true },
+                        new() { face = VoxelEngine.Transport.CubeFace.NegZ, direction = VoxelEngine.Transport.PortDirection.Input,  networkType = VoxelEngine.Transport.PortNetworkType.Power, enabled = true },
+                    };
                     var q = root.AddComponent<VoxelEngine.Transport.Quarry>();
                     q.defaultSize = 16; q.mineInterval = 0.5f; q.quarryTier = 3;
-                    q.forwardOffset = 2f; q.frameBuildInterval = 0.08f;
-                    q.frameColor = new Color(0.3f, 0.3f, 0.35f);
-                    q.outputSlots = 6; q.landmarkSearchRadius = 64f;
+                    q.forwardOffset = 2f; q.frameBuildInterval = 0.06f;
+                    q.frameColor = new Color(0.18f, 0.19f, 0.22f);
+                    q.outputSlots = 6;
                 });
             var blockQuarry = MakeBlk(MISC_BLOCKS, "Block_Quarry", "Quarry",
-                "Automated industrial strip-miner. Builds a frame, then digs out the rectangle in front of itself (default 16×16) down to bedrock. Powered (~500 W). Tier-3 mining (cannot mine Cobalt / Gold).",
+                "Automated industrial strip-miner. Builds a frame, then digs out the rectangle in front of itself (default 16×16) down to bedrock. Accepts Range, Speed & Efficiency upgrades. Powered (~500 W). Tier-3 mining.",
                 new Color(0.35f, 0.35f, 0.40f), quarryPrefab, "Logistics", hp: 800, miningTier: 3);
 
-            AddRecipe(MISC_RECIPES, "Recipe_QuarryLandmark", "Quarry Landmark", blockLandmark, 1,
-                VoxelEngine.Crafting.StationTier.CraftingBench, unlockedByDefault: false, (ironPlate, 1), (copperWire, 1));
+            // ── Quarry Upgrade items ────────────────────────
+            var upgRange = ScriptableObject.CreateInstance<VoxelEngine.Items.QuarryUpgradeItem>();
+            upgRange.itemId = "upgrade_quarry_range"; upgRange.displayName = "Range Upgrade";
+            upgRange.description = "Increases the Quarry's mining area by +1 per module (max 10)."; upgRange.maxStack = 1;
+            upgRange.category = "Upgrades"; upgRange.massPerUnit = 2;
+            upgRange.iconTint = new Color(0.88f, 0.72f, 0.22f);
+            upgRange.upgradeKind = VoxelEngine.Items.QuarryUpgradeKind.Range;
+            upgRange.maxInstalled = 10; upgRange.level = 1;
+            upgRange.badgeTint = new Color(0.88f, 0.72f, 0.22f);
+            AssetDatabase.CreateAsset(upgRange, MISC_ITEMS + "/Upgrade_QuarryRange.asset");
+
+            var upgSpeed = ScriptableObject.CreateInstance<VoxelEngine.Items.QuarryUpgradeItem>();
+            upgSpeed.itemId = "upgrade_quarry_speed"; upgSpeed.displayName = "Speed Upgrade";
+            upgSpeed.description = "Speeds up the Quarry's mining by -0.04s per module (max 10)."; upgSpeed.maxStack = 1;
+            upgSpeed.category = "Upgrades"; upgSpeed.massPerUnit = 2;
+            upgSpeed.iconTint = new Color(0.12f, 0.60f, 0.68f);
+            upgSpeed.upgradeKind = VoxelEngine.Items.QuarryUpgradeKind.Speed;
+            upgSpeed.maxInstalled = 10; upgSpeed.level = 1;
+            upgSpeed.badgeTint = new Color(0.12f, 0.60f, 0.68f);
+            AssetDatabase.CreateAsset(upgSpeed, MISC_ITEMS + "/Upgrade_QuarrySpeed.asset");
+
+            var upgEff = ScriptableObject.CreateInstance<VoxelEngine.Items.QuarryUpgradeItem>();
+            upgEff.itemId = "upgrade_quarry_efficiency"; upgEff.displayName = "Efficiency Upgrade";
+            upgEff.description = "Makes the Quarry mine +1 extra voxel per tick (max 2)."; upgEff.maxStack = 1;
+            upgEff.category = "Upgrades"; upgEff.massPerUnit = 2;
+            upgEff.iconTint = new Color(0.58f, 0.30f, 0.84f);
+            upgEff.upgradeKind = VoxelEngine.Items.QuarryUpgradeKind.Efficiency;
+            upgEff.maxInstalled = 2; upgEff.level = 1;
+            upgEff.badgeTint = new Color(0.58f, 0.30f, 0.84f);
+            AssetDatabase.CreateAsset(upgEff, MISC_ITEMS + "/Upgrade_QuarryEfficiency.asset");
+
+            // ── Recipes ─────────────────────────────────────
             AddRecipe(MISC_RECIPES, "Recipe_Quarry", "Quarry", blockQuarry, 1,
                 VoxelEngine.Crafting.StationTier.Assembler, unlockedByDefault: false,
                 (steelPlate, 10), (ironGear, 8), (circuit, 4), (copperWire, 6));
 
-            // ════════════════════════════════════════════════════════════
-            //  GAS — Electrolyser, Hydrogen Engine, Gas Tank, Gas Pipe
+            AddRecipe(MISC_RECIPES, "Recipe_QuarryUpgradeRange", "Range Upgrade", upgRange, 1,
+                VoxelEngine.Crafting.StationTier.Assembler, unlockedByDefault: false,
+                (steelPlate, 4), (copperWire, 8), (ironGear, 4));
+
+            AddRecipe(MISC_RECIPES, "Recipe_QuarryUpgradeSpeed", "Speed Upgrade", upgSpeed, 1,
+                VoxelEngine.Crafting.StationTier.Assembler, unlockedByDefault: false,
+                (steelPlate, 4), (circuit, 3), (ironGear, 2));
+
+            AddRecipe(MISC_RECIPES, "Recipe_QuarryUpgradeEfficiency", "Efficiency Upgrade", upgEff, 1,
+                VoxelEngine.Crafting.StationTier.Assembler, unlockedByDefault: false,
+                (steelPlate, 6), (circuit, 6), (ironGear, 4), (goldOreOrFallback(goldOre, ironIngot), 2));
+
+            // ════════════════════════════════════════════════════════════//  GAS — Electrolyser, Hydrogen Engine, Gas Tank, Gas Pipe
             // ════════════════════════════════════════════════════════════
             // (Gas itself lives on the GasTank/Network components, not as items —
             //  no item-defs needed for hydrogen/oxygen.)
@@ -3865,7 +3905,9 @@ namespace VoxelEngine.EditorTools
                 RGet("Recipe_Wrench"), RGet("Recipe_PowerBusbar"));
 
             // Quarrying.
-            AppendUnlocks("res_quarrying", RGet("Recipe_Quarry"), RGet("Recipe_QuarryLandmark"));
+            AppendUnlocks("res_quarrying", RGet("Recipe_Quarry"),
+                RGet("Recipe_QuarryUpgradeRange"), RGet("Recipe_QuarryUpgradeSpeed"),
+                RGet("Recipe_QuarryUpgradeEfficiency"));
 
             // Gas Processing.
             AppendUnlocks("res_gas_processing",
@@ -3944,7 +3986,7 @@ namespace VoxelEngine.EditorTools
                 "  • Wrench (universal network connector tool)\n" +
                 "  • Power Busbar (clean cable-organization conduit)\n" +
                 "  • Item Pipes (Solid + Glass) — BuildCraft sleeve style\n" +
-                "  • Quarry + Landmark\n" +
+                "  • Quarry + Upgrades (Range / Speed / Efficiency)\n" +
                 "  • Electrolyser, Hydrogen Engine, Gas Tank, Gas Pipe (Solid + Glass)\n" +
                 "  • Enriched Fuel Rod, LEU Pellet, Depleted Uranium, Spent Fuel Rod, High-Level Waste\n" +
                 "  • Uranium Processor, Reactor Core, Steam Turbine, Portable Reactor, Waste Reprocessor\n\n" +
