@@ -36,12 +36,17 @@ namespace VoxelEngine.Transport
 
         [Header("Mining")]
         [Tooltip("Base seconds between each voxel mined (before Speed upgrades).")]
-        public float mineInterval = 0.5f;
+        public float baseMineInterval = 0.5f;
 
         [Tooltip("Base voxels mined per tick (before Efficiency upgrades).")]
         public int minePerTick = 1;
 
         [Range(0, 4)] public int quarryTier = 3;
+
+        [Header("Power")]
+        public float basePowerDraw = 500f;
+        public float powerPerPerfUpgrade = 25f;
+        public float powerSavePerEffUpgrade = 35f;
 
         [Header("Frame")]
         public float frameBuildInterval = 0.06f;
@@ -77,13 +82,16 @@ namespace VoxelEngine.Transport
         public int InstalledEfficiencyLevel { get; private set; }
         public const int MaxRangeLevel = 10;
         public const int MaxSpeedLevel = 10;
-        public const int MaxEfficiencyLevel = 2;
+        public const int MaxEfficiencyLevel = 5;
 
         /// <summary>Effective area side length after Range upgrades.</summary>
         public int EffectiveSize => defaultSize + InstalledRangeLevel;
 
         /// <summary>Effective mining interval after Speed upgrades.</summary>
-        public float EffectiveMineInterval => Mathf.Max(0.05f, mineInterval - InstalledSpeedLevel * 0.04f);
+        public float EffectiveMineInterval => Mathf.Max(0.05f, baseMineInterval - InstalledSpeedLevel * 0.04f);
+        public float EffectivePowerDraw => Mathf.Max(10f,
+            basePowerDraw + (InstalledRangeLevel + InstalledSpeedLevel) * powerPerPerfUpgrade
+                          - InstalledEfficiencyLevel * powerSavePerEffUpgrade);
 
         private ItemContainer _output;
         private float _mineTimer;
@@ -135,6 +143,7 @@ namespace VoxelEngine.Transport
         private void Update()
         {
             if (!_initialized) return;
+            if (_power != null) _power.wattsPerSecond = EffectivePowerDraw;
             bool hasPower = _power == null || _power.IsPowered;
 
             switch (Phase)
@@ -166,7 +175,7 @@ namespace VoxelEngine.Transport
                     if (_mineTimer >= EffectiveMineInterval)
                     {
                         _mineTimer -= EffectiveMineInterval;
-                        for (int i = 0; i < minePerTick + InstalledEfficiencyLevel; i++)
+                        for (int i = 0; i < minePerTick; i++)
                             MineNextVoxel();
                     }
                     UpdateDrillHead();

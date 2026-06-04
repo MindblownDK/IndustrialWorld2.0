@@ -96,7 +96,7 @@ namespace VoxelEngine.UI
                 out _speedBar, out _speedLbl));
             upgGrid.Add(BuildUpgradeSlot("Efficiency",
                 quarry.InstalledEfficiencyLevel, Quarry.MaxEfficiencyLevel,
-                T.AccentPurple, "\u2B50", "+1 vox/tick per",
+                T.AccentPurple, "\u26A1", "-35W per",
                 out _effBar, out _effLbl));
 
             panel.Add(upgGrid);

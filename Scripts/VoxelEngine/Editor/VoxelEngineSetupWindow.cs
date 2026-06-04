@@ -3432,7 +3432,7 @@ namespace VoxelEngine.EditorTools
                         new() { face = VoxelEngine.Transport.CubeFace.NegZ, direction = VoxelEngine.Transport.PortDirection.Input,  networkType = VoxelEngine.Transport.PortNetworkType.Power, enabled = true },
                     };
                     var q = root.AddComponent<VoxelEngine.Transport.Quarry>();
-                    q.defaultSize = 16; q.mineInterval = 0.5f; q.quarryTier = 3;
+                    q.defaultSize = 16; q.baseMineInterval = 0.5f; q.quarryTier = 3;
                     q.forwardOffset = 2f; q.frameBuildInterval = 0.06f;
                     q.frameColor = new Color(0.18f, 0.19f, 0.22f);
                     q.outputSlots = 6;
@@ -3464,11 +3464,11 @@ namespace VoxelEngine.EditorTools
 
             var upgEff = ScriptableObject.CreateInstance<VoxelEngine.Items.QuarryUpgradeItem>();
             upgEff.itemId = "upgrade_quarry_efficiency"; upgEff.displayName = "Efficiency Upgrade";
-            upgEff.description = "Makes the Quarry mine +1 extra voxel per tick (max 2)."; upgEff.maxStack = 1;
+            upgEff.description = "Makes the Quarry use 35W less power per module (max 5)."; upgEff.maxStack = 1;
             upgEff.category = "Upgrades"; upgEff.massPerUnit = 2;
             upgEff.iconTint = new Color(0.58f, 0.30f, 0.84f);
             upgEff.upgradeKind = VoxelEngine.Items.QuarryUpgradeKind.Efficiency;
-            upgEff.maxInstalled = 2; upgEff.level = 1;
+            upgEff.maxInstalled = 5; upgEff.level = 1;
             upgEff.badgeTint = new Color(0.58f, 0.30f, 0.84f);
             AssetDatabase.CreateAsset(upgEff, MISC_ITEMS + "/Upgrade_QuarryEfficiency.asset");
 
@@ -3487,7 +3487,7 @@ namespace VoxelEngine.EditorTools
 
             AddRecipe(MISC_RECIPES, "Recipe_QuarryUpgradeEfficiency", "Efficiency Upgrade", upgEff, 1,
                 VoxelEngine.Crafting.StationTier.Assembler, unlockedByDefault: false,
-                (steelPlate, 6), (circuit, 6), (ironGear, 4), (goldOreOrFallback(goldOre, ironIngot), 2));
+                (steelPlate, 6), (circuit, 6), (ironGear, 4), (copperWire, 2));
 
             // ════════════════════════════════════════════════════════════//  GAS — Electrolyser, Hydrogen Engine, Gas Tank, Gas Pipe
             // ════════════════════════════════════════════════════════════

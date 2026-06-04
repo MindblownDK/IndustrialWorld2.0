@@ -187,6 +187,9 @@ namespace VoxelEngine.Persistence
                     cursorX = q.CursorX,
                     cursorZ = q.CursorZ,
                     phase = (int)q.Phase,
+                    rangeLvl = q.InstalledRangeLevel,
+                    speedLvl = q.InstalledSpeedLevel,
+                    effLvl = q.InstalledEfficiencyLevel,
                     outputContainer = SerializeContainer(q.Output)
                 });
             }
@@ -210,7 +213,7 @@ namespace VoxelEngine.Persistence
                 }
                 if (best != null)
                 {
-                    best.RestoreState(sq.currentDepth, sq.cursorX, sq.cursorZ, sq.phase);
+                    best.RestoreState(sq.currentDepth, sq.cursorX, sq.cursorZ, sq.phase, sq.rangeLvl, sq.speedLvl, sq.effLvl);
                     if (sq.outputContainer != null)
                     {
                         best.EnsureOutputPublic();
@@ -451,7 +454,7 @@ namespace VoxelEngine.Persistence
         {
             public Vector3 pos; public float rotY;
             public int currentDepth; public int cursorX; public int cursorZ;
-            public int phase; // 0=idle, 1=building, 2=mining, 3=complete
+            public int phase; public int rangeLvl; public int speedLvl; public int effLvl; // upgrade levels
             public SavedContainer outputContainer;
         }
     }
