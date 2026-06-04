@@ -291,22 +291,15 @@ namespace VoxelEngine.Menu
             scroll.Add(FormLabel("World Seed"));
             var seedRow = new VisualElement();
             seedRow.style.flexDirection = FlexDirection.Row;
-            // TextField with integer parsing — chosen over IntegerField because
-            // IntegerField was editor-only in Unity ≤ 2022 and only became a
-            // runtime UIElement in Unity 6. Using TextField + int.TryParse here
-            // keeps the menu portable across every supported Unity version.
-            var seedField = new TextField { value = _newSeed.ToString() };
+            var seedField = new IntegerField { value = _newSeed };
             StyleField(seedField);
             seedField.style.flexGrow = 1;
-            seedField.RegisterValueChangedCallback(e =>
-            {
-                if (int.TryParse(e.newValue, out var parsed)) _newSeed = parsed;
-            });
+            seedField.RegisterValueChangedCallback(e => _newSeed = e.newValue);
             seedRow.Add(seedField);
             var rndBtn = BuildIconSmallButton(LucideIcons.Dice5, "RANDOM", () =>
             {
                 _newSeed = UnityEngine.Random.Range(1, int.MaxValue);
-                seedField.SetValueWithoutNotify(_newSeed.ToString());
+                seedField.SetValueWithoutNotify(_newSeed);
             }, T.AccentTeal);
             rndBtn.style.marginLeft = 8;
             seedRow.Add(rndBtn);
@@ -643,11 +636,20 @@ namespace VoxelEngine.Menu
             StyleInnerInput(f);
         }
 
-        // (Removed) IntegerField overload — seed input is now a TextField with
-        // int parsing, so the typed overload above handles every styling caller.
+        private static void StyleField(IntegerField f)
+        {
+            f.style.minHeight       = 30;
+            f.style.marginBottom    = 4;
+            f.style.backgroundColor = new StyleColor(T.BgCard);
+            f.style.color           = new StyleColor(T.TextPrimary);
+            f.style.fontSize        = 13;
+            T.Radius(f, 5f);
+            T.Border(f, 1, T.BorderDim);
+            StyleInnerInput(f);
+        }
 
         /// <summary>
-        /// Forces every text-rendering descendant of a TextField / Slider
+        /// Forces every text-rendering descendant of a TextField / IntegerField / Slider
         /// input to use our theme colour. Unity Toolkit's input control is a deep tree
         /// (Field → TextInputBase → TextElement) and `color` does NOT cascade reliably
         /// onto the inner TextElement that actually draws typed glyphs. Without this

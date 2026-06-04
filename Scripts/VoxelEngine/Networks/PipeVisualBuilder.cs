@@ -77,22 +77,6 @@ namespace VoxelEngine.Networks
         // running a stale assembly cache.
         private static bool _builderLoggedOnce;
 
-        /// <summary>
-        /// FIRES BEFORE ANY SCENE LOADS — guaranteed to execute the moment
-        /// the assembly is loaded into the Unity runtime, regardless of any
-        /// scene / prefab state. If you don't see THIS in the console after
-        /// pressing Play, the new VoxelEngine assembly DID NOT compile and
-        /// Unity is running a stale cached DLL. Solutions:
-        ///   1. Close Unity → delete the `Library/ScriptAssemblies` folder
-        ///      from the project → reopen Unity.
-        ///   2. OR: in Unity menu, Assets → Reimport All.
-        /// </summary>
-        [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.BeforeSceneLoad)]
-        private static void AssemblyLoadProbe()
-        {
-            Debug.Log("[IndustrialWorld] ✓ VoxelEngine assembly v5 loaded — PipeVisualBuilder is ready.");
-        }
-
         // ── Internals ───────────────────────────────────────────
         private Transform _visualRoot;
         private Material  _shellMat;
