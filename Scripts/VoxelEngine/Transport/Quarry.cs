@@ -186,7 +186,7 @@ namespace VoxelEngine.Transport
             Vector3Int amax = new(Mathf.Max(s.x, e.x) - 1, vox.y, Mathf.Max(s.z, e.z) - 1);
 
             float yTop = vox.y + 0.5f;
-            float yBot = worldPos.y - 0.5f; // quarry block bottom
+            float yBot = worldPos.y - 1.2f; // quarry model bottom (2.4 tall)
             Color gc = new(1f, 0.8f, 0.2f, 0.5f);
 
             Vector3 v0 = new(amin.x, yTop, amin.z), v1 = new(amax.x + 1, yTop, amin.z);
@@ -216,6 +216,15 @@ namespace VoxelEngine.Transport
             lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         }
 
+        // ── Model bottom helper ─────────────────────────────
+        private float GetModelBottom()
+        {
+            var col = GetComponentInChildren<Collider>();
+            if (col != null) return col.bounds.min.y;
+            // Fallback: quarry prefab is 2.4m tall centred on transform.position
+            return transform.position.y - 1.2f;
+        }
+
         // ── Ghost ──────────────────────────────────────────
         private void CreateGhostPreview()
         {
@@ -223,7 +232,7 @@ namespace VoxelEngine.Transport
             _ghostObj = new("QuarryGhost");
 
             float yTop = _originVoxel.y + 0.5f;
-            float yBot = transform.position.y - 0.5f; // FRAME BOTTOM = QUARRY BLOCK BOTTOM
+            float yBot = GetModelBottom();
 
             Color gc = new(1f, 0.8f, 0.2f, 0.5f);
             Vector3 v0 = new(AreaMin.x, yTop, AreaMin.z), v1 = new(AreaMax.x + 1, yTop, AreaMin.z);
@@ -252,7 +261,7 @@ namespace VoxelEngine.Transport
         {
             _framePlan.Clear();
             float yTop = _originVoxel.y + 0.5f;    // mining surface top
-            float yBot = transform.position.y - 0.5f; // quarry block bottom
+            float yBot = GetModelBottom();
             Vector3 v00 = new(AreaMin.x, 0, AreaMin.z), v10 = new(AreaMax.x + 1, 0, AreaMin.z);
             Vector3 v11 = new(AreaMax.x + 1, 0, AreaMax.z + 1), v01 = new(AreaMin.x, 0, AreaMax.z + 1);
             float pH = yTop - yBot + 0.3f, pCY = (yTop + yBot) * 0.5f;
