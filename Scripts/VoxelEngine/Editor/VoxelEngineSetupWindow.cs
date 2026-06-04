@@ -3417,18 +3417,18 @@ namespace VoxelEngine.EditorTools
             // ════════════════════════════════════════════════════════════
             var quarryPrefab = MakePref(MISC_PREFABS, "Quarry",
                 new Color(0.35f, 0.35f, 0.40f), new Vector3(2f, 2.4f, 2f),
-                root =>
+root =>
                 {
                     var pc = root.AddComponent<VoxelEngine.Power.PowerConsumer>();
                     pc.wattsPerSecond = 500f; pc.connectRadius = 2f;
                     var portCfg = root.AddComponent<VoxelEngine.Transport.PortConfig>();
                     portCfg.ports = new VoxelEngine.Transport.PortConfig.FacePort[]
                     {
-                        new() { face = VoxelEngine.Transport.CubeFace.PosX, direction = VoxelEngine.Transport.PortDirection.Output, networkType = VoxelEngine.Transport.PortNetworkType.Any, enabled = true },
-                        new() { face = VoxelEngine.Transport.CubeFace.NegX, direction = VoxelEngine.Transport.PortDirection.None,   networkType = VoxelEngine.Transport.PortNetworkType.Any, enabled = true },
-                        new() { face = VoxelEngine.Transport.CubeFace.PosY, direction = VoxelEngine.Transport.PortDirection.None,   networkType = VoxelEngine.Transport.PortNetworkType.Any, enabled = true },
-                        new() { face = VoxelEngine.Transport.CubeFace.NegY, direction = VoxelEngine.Transport.PortDirection.None,   networkType = VoxelEngine.Transport.PortNetworkType.Any, enabled = true },
-                        new() { face = VoxelEngine.Transport.CubeFace.PosZ, direction = VoxelEngine.Transport.PortDirection.None,   networkType = VoxelEngine.Transport.PortNetworkType.Any, enabled = true },
+                        new() { face = VoxelEngine.Transport.CubeFace.PosX, direction = VoxelEngine.Transport.PortDirection.Output, networkType = VoxelEngine.Transport.PortNetworkType.Any,   enabled = true },
+                        new() { face = VoxelEngine.Transport.CubeFace.NegX, direction = VoxelEngine.Transport.PortDirection.None,   networkType = VoxelEngine.Transport.PortNetworkType.Any,   enabled = true },
+                        new() { face = VoxelEngine.Transport.CubeFace.PosY, direction = VoxelEngine.Transport.PortDirection.None,   networkType = VoxelEngine.Transport.PortNetworkType.Any,   enabled = true },
+                        new() { face = VoxelEngine.Transport.CubeFace.NegY, direction = VoxelEngine.Transport.PortDirection.None,   networkType = VoxelEngine.Transport.PortNetworkType.Any,   enabled = true },
+                        new() { face = VoxelEngine.Transport.CubeFace.PosZ, direction = VoxelEngine.Transport.PortDirection.None,   networkType = VoxelEngine.Transport.PortNetworkType.Any,   enabled = true },
                         new() { face = VoxelEngine.Transport.CubeFace.NegZ, direction = VoxelEngine.Transport.PortDirection.Input,  networkType = VoxelEngine.Transport.PortNetworkType.Power, enabled = true },
                     };
                     var q = root.AddComponent<VoxelEngine.Transport.Quarry>();

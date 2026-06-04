@@ -414,66 +414,114 @@ namespace VoxelEngine.UI
             return p;
         }
 
-        // ════════════════════════════════════════════════════════════
-        //                        QUARRY
-        // ════════════════════════════════════════════════════════════
-        public static VisualElement QuarryPanel(Quarry q, SlotBuilder slot)
-        {
-            q.EnsureOutputPublic();
-            var p = T.MachinePanel();
+// ════════════════════════════════════════════════════════════
+//                        QUARRY
+// ════════════════════════════════════════════════════════════
+public static VisualElement QuarryPanel(Quarry q, SlotBuilder slot)
+{
+    q.EnsureOutputPublic();
+    var p = T.MachinePanel();
+    var pc = q.GetComponent<VoxelEngine.Power.PowerConsumer>();
+    bool powered = pc == null || pc.IsPowered;
 
-            string status = q.Phase switch
-            {
-                QuarryPhase.BuildingFrame => "BUILDING",
-                QuarryPhase.Mining        => q.IsOutputFull ? "OUTPUT FULL" : "DRILLING",
-                QuarryPhase.Complete      => "COMPLETE",
-                _                         => "IDLE"
-            };
-            Color statusCol = q.Phase switch
-            {
-                QuarryPhase.BuildingFrame => T.AccentOrange,
-                QuarryPhase.Mining        => q.IsOutputFull ? T.AccentRed : T.AccentGreen,
-                QuarryPhase.Complete      => T.AccentCyan,
-                _                         => T.TextMuted
-            };
+    string status = !powered ? "NO POWER" : q.Phase switch
+    {
+        QuarryPhase.TapeFrame     => "SURVEYING",
+        QuarryPhase.BuildingFrame => "BUILDING",
+        QuarryPhase.Mining        => q.IsOutputFull ? "OUTPUT FULL" : "DRILLING",
+        QuarryPhase.Complete      => "COMPLETE",
+        _                         => "IDLE"
+    };
+    Color sc = !powered ? T.AccentRed : q.Phase switch
+    {
+        QuarryPhase.TapeFrame     => T.AccentOrange,
+        QuarryPhase.BuildingFrame => T.AccentOrange,
+        QuarryPhase.Mining        => q.IsOutputFull ? T.AccentRed : T.AccentGreen,
+        QuarryPhase.Complete      => T.AccentCyan,
+        _                         => T.TextMuted
+    };
 
-            p.Add(BuildHeader("⛏", "Quarry Drill", status, statusCol, T.AccentGold));
-            p.Add(T.AccentDivider(statusCol));
+    p.Add(BuildHeader("\u26CF", "Quarry Drill", status, sc, T.AccentGold));
+    p.Add(T.AccentDivider(sc));
 
-            // Power
-            var pc = q.GetComponent<VoxelEngine.Power.PowerConsumer>();
-            if (pc != null)
-            {
-                bool powered = pc.IsPowered;
-                p.Add(T.StatRow("⚡", "Power",
-                    powered ? $"{pc.wattsPerSecond:0} W  ·  Connected" : "Disconnected",
-                    powered ? T.AccentGreen : T.AccentRed));
-            }
+    // Power
+    if (pc != null)
+        p.Add(T.StatRow("\u26A1", "Power",
+            powered ? $"{q.EffectivePowerDraw:0} W  \u00B7  Connected" : "Disconnected",
+            powered ? T.AccentGreen : T.AccentRed));
 
-            p.Add(T.StatRow("📐", "Area",  $"{q.AreaX} × {q.AreaZ}",          T.AccentCyan));
-            p.Add(T.StatRow("⬇",  "Depth", $"{q.CurrentDepth} / {q.MaxDepth}", T.TextPrimary));
-            p.Add(T.StatRow("🔧", "Tier",  $"{q.quarryTier}",                  T.TextSecondary));
+    // Stats
+    p.Add(T.StatRow("\uD83D\uDCD0", "Area",
+        $"{q.AreaX}\u00D7{q.AreaZ}  ({q.EffectiveSize}\u00B2)", T.AccentCyan));
+    p.Add(T.StatRow("\u2B07", "Depth",
+        $"{q.CurrentDepth} / {q.MaxDepth}", T.TextPrimary));
+    p.Add(T.StatRow("\u23F1", "Speed",
+        $"{q.EffectiveMineInterval:F2}s", T.AccentTeal));
+    p.Add(T.StatRow("\uD83D\uDD27", "Tier",
+        $"{q.quarryTier}", T.TextSecondary));
 
-            if (q.IsMining)
-            {
-                p.Add(T.Spacer(4));
-                var (progBar, _) = T.ProgressBar(q.MineProgress01, T.AccentCyan, 8, false);
-                p.Add(progBar);
-            }
+    // Mining progress
+    p.Add(T.Spacer(4));
+    var (progBar, _) = T.ProgressBar(q.IsMining ? q.MineProgress01 : 0f, T.AccentCyan, 8, true);
+    p.Add(progBar);
 
-            p.Add(T.Divider());
-            p.Add(T.Subtitle("Output Inventory"));
-            p.Add(SortRow(q.Output));
+    // Upgrades
+    p.Add(T.Divider());
+    p.Add(T.Subtitle("Upgrades"));
+    var ug = new VisualElement();
+    ug.style.flexDirection = FlexDirection.Row;
+    ug.style.flexWrap = Wrap.Wrap;
+    ug.style.marginTop = 4;
+    ug.style.marginBottom = 4;
+    ug.Add(UpgCard("Range",      q.InstalledRangeLevel,      Quarry.MaxRangeLevel,      T.AccentGold,   "\uD83D\uDCCF", "+1 size  \u00B7  +25W"));
+    ug.Add(UpgCard("Speed",      q.InstalledSpeedLevel,      Quarry.MaxSpeedLevel,      T.AccentTeal,   "\u26A1",       "-0.04s  \u00B7  +25W"));
+    ug.Add(UpgCard("Efficiency", q.InstalledEfficiencyLevel, Quarry.MaxEfficiencyLevel, T.AccentPurple, "\u2B50",       "-35W"));
+    p.Add(ug);
 
-            var grid   = T.SlotGrid();
-            var output = q.Output;
-            for (int i = 0; i < output.Size; i++)
-                grid.Add(slot(output, i, output.GetSlot(i), false, true));
-            p.Add(grid);
+    // Output
+    p.Add(T.Divider());
+    p.Add(T.Subtitle("Output"));
+    p.Add(SortRow(q.Output));
+    var grid = T.SlotGrid();
+    var output = q.Output;
+    for (int i = 0; i < output.Size; i++)
+        grid.Add(slot(output, i, output.GetSlot(i), false, true));
+    p.Add(grid);
+    p.Add(T.Spacer(8));
+    p.Add(T.Muted("Right-click with Quarry Upgrades to install. Connect item pipes to auto-export."));
+    return p;
+}
 
-            p.Add(T.Spacer(8));
-            p.Add(T.Muted("Connect item pipes to auto-export resources. Install Range/Speed/Efficiency upgrades to improve performance."));
-            return p;
-        }
+private static VisualElement UpgCard(string name, int lvl, int max, Color accent, string icon, string desc)
+{
+    var card = new VisualElement();
+    card.style.flexGrow = 1; card.style.minWidth = 110;
+    card.style.paddingTop = 7; card.style.paddingBottom = 7;
+    card.style.paddingLeft = 9; card.style.paddingRight = 9;
+    card.style.marginRight = 5; card.style.marginBottom = 5;
+    card.style.backgroundColor = new StyleColor(new Color(T.BgCard.r, T.BgCard.g, T.BgCard.b, 0.92f));
+    T.Radius(card, T.CardRadius);
+    T.Border(card, 1, new Color(accent.r, accent.g, accent.b, 0.18f));
+    card.pickingMode = PickingMode.Ignore;
+
+    var tr = new VisualElement();
+    tr.style.flexDirection = FlexDirection.Row; tr.style.alignItems = Align.Center; tr.style.marginBottom = 3;
+    tr.pickingMode = PickingMode.Ignore;
+    var ico = new Label(icon); ico.style.fontSize = 11; ico.style.marginRight = 4; ico.style.color = new StyleColor(accent); ico.pickingMode = PickingMode.Ignore;
+    tr.Add(ico);
+    var nm = new Label(name); nm.style.fontSize = 9; nm.style.color = new StyleColor(T.TextSecondary); nm.style.unityFontStyleAndWeight = FontStyle.Bold; nm.style.flexGrow = 1; nm.pickingMode = PickingMode.Ignore;
+    tr.Add(nm);
+    var lv = new Label($"{lvl}/{max}"); lv.style.fontSize = 10; lv.style.color = new StyleColor(lvl >= max ? T.AccentGreen : accent); lv.style.unityFontStyleAndWeight = FontStyle.Bold; lv.pickingMode = PickingMode.Ignore;
+    tr.Add(lv);
+    card.Add(tr);
+
+    var bg = new VisualElement(); bg.style.height = 4; bg.style.backgroundColor = new StyleColor(new Color(T.BgBase.r, T.BgBase.g, T.BgBase.b, 0.8f)); T.Radius(bg, 2); bg.style.marginBottom = 3; bg.pickingMode = PickingMode.Ignore;
+    var fill = new VisualElement(); fill.style.height = 4; fill.style.backgroundColor = new StyleColor(accent); T.Radius(fill, 2); fill.style.width = Length.Percent((float)lvl / Mathf.Max(1, max) * 100f); fill.pickingMode = PickingMode.Ignore;
+    bg.Add(fill); card.Add(bg);
+
+    var dl = new Label(desc); dl.style.fontSize = 8; dl.style.color = new StyleColor(T.TextMuted); dl.pickingMode = PickingMode.Ignore;
+    card.Add(dl);
+    return card;
+}
     }
 }
