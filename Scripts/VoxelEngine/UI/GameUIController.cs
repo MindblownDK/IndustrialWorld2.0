@@ -2476,7 +2476,11 @@ namespace VoxelEngine.UI
                     bool isFuel = item is ResourceItem rg && rg.fuelSeconds > 0f;
                     return isFuel ? _openCoalGen.fuelC : null;
                 }
-                if (_openQuarry != null)         return _openQuarry.Output;
+                if (_openQuarry != null)
+                {
+                    bool isUpgrade = item is QuarryUpgradeItem;
+                    return isUpgrade ? _openQuarry.upgradeC : _openQuarry.Output;
+                }
                 if (_openDiskManipulator != null) return _openDiskManipulator.sourceSlot;
                 if (_openNAS != null)             return _openNAS.diskSlots;
                 if (_openImporter != null)        return _openImporter.upgradeSlots;

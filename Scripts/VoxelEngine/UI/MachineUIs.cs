@@ -450,43 +450,45 @@ namespace VoxelEngine.UI
             body.style.flexDirection = FlexDirection.Row;
             body.pickingMode = PickingMode.Ignore;
 
-            // LEFT COLUMN: Upgrades
+            // ═══ LEFT: UPGRADE SLOTS ═══
             var left = new VisualElement();
-            left.style.width = 88;
-            left.style.marginRight = 12;
+            left.style.width = 128;
+            left.style.marginRight = 14;
             left.pickingMode = PickingMode.Ignore;
 
-            var leftLbl = new Label("UPG");
-            leftLbl.style.fontSize = 9;
-            leftLbl.style.color = new StyleColor(T.TextMuted);
-            leftLbl.style.unityFontStyleAndWeight = FontStyle.Bold;
-            leftLbl.style.marginBottom = 4;
-            leftLbl.style.unityTextAlign = TextAnchor.MiddleCenter;
-            leftLbl.pickingMode = PickingMode.Ignore;
-            left.Add(leftLbl);
+            // "UPGRADES" label
+            var lbl = new Label("UPGRADES");
+            lbl.style.fontSize = 9;
+            lbl.style.color = new StyleColor(T.AccentGold);
+            lbl.style.unityFontStyleAndWeight = FontStyle.Bold;
+            lbl.style.marginBottom = 6;
+            lbl.style.unityTextAlign = TextAnchor.MiddleCenter;
+            lbl.pickingMode = PickingMode.Ignore;
+            left.Add(lbl);
 
-            var upgSlots = new VisualElement();
-            upgSlots.style.flexDirection = FlexDirection.Column;
-            upgSlots.style.alignItems = Align.Center;
-            for (int i = 0; i < q.upgradeC.Size; i++)
-            {
-                var slotVE = slot(q.upgradeC, i, q.upgradeC.GetSlot(i), false, false);
-                slotVE.style.marginBottom = 4;
-                upgSlots.Add(slotVE);
-            }
-            left.Add(upgSlots);
+            // 3 upgrade slots with R/S/E icons
+            var upgCol = new VisualElement();
+            upgCol.style.flexDirection = FlexDirection.Column;
+            upgCol.style.alignItems = Align.Center;
 
-            var badges = new VisualElement();
-            badges.style.flexDirection = FlexDirection.Column;
-            badges.style.alignItems = Align.Center;
-            badges.style.marginTop = 6;
-            badges.Add(QBadge("R " + q.InstalledRangeLevel      + "/" + Quarry.MaxRangeLevel,      T.AccentGold));
-            badges.Add(QBadge("S " + q.InstalledSpeedLevel      + "/" + Quarry.MaxSpeedLevel,      T.AccentTeal));
-            badges.Add(QBadge("E " + q.InstalledEfficiencyLevel + "/" + Quarry.MaxEfficiencyLevel, T.AccentPurple));
-            left.Add(badges);
+            // Range slot
+            var rRow = UpgSlotRow(q.upgradeC, 0, "R", T.AccentGold, slot);
+            rRow.style.marginBottom = 6;
+            upgCol.Add(rRow);
+
+            // Speed slot
+            var sRow = UpgSlotRow(q.upgradeC, 1, "S", T.AccentTeal, slot);
+            sRow.style.marginBottom = 6;
+            upgCol.Add(sRow);
+
+            // Efficiency slot
+            var eRow = UpgSlotRow(q.upgradeC, 2, "E", T.AccentPurple, slot);
+            upgCol.Add(eRow);
+
+            left.Add(upgCol);
             body.Add(left);
 
-            // RIGHT COLUMN: Stats + Ports + Output
+            // ═══ RIGHT: Stats + Ports + Output ═══
             var right = new VisualElement();
             right.style.flexGrow = 1;
             right.pickingMode = PickingMode.Ignore;
@@ -533,6 +535,37 @@ namespace VoxelEngine.UI
             return p;
         }
 
+        private static VisualElement UpgSlotRow(ItemContainer c, int idx, string letter, Color accent, SlotBuilder slot)
+        {
+            var row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.pickingMode = PickingMode.Ignore;
+
+            // Icon badge
+            var badge = new VisualElement();
+            badge.style.width = 22;
+            badge.style.height = 22;
+            badge.style.backgroundColor = new StyleColor(new Color(accent.r, accent.g, accent.b, 0.18f));
+            T.Radius(badge, 5);
+            badge.style.alignItems = Align.Center;
+            badge.style.justifyContent = Justify.Center;
+            badge.style.marginRight = 6;
+            badge.pickingMode = PickingMode.Ignore;
+
+            var bl = new Label(letter);
+            bl.style.fontSize = 11;
+            bl.style.color = new StyleColor(accent);
+            bl.style.unityFontStyleAndWeight = FontStyle.Bold;
+            bl.pickingMode = PickingMode.Ignore;
+            badge.Add(bl);
+            row.Add(badge);
+
+            // The slot
+            row.Add(slot(c, idx, c.GetSlot(idx), false, false));
+            return row;
+        }
+
         private static VisualElement QBadge(string txt, Color accent)
         {
             var b = new VisualElement();
@@ -550,5 +583,7 @@ namespace VoxelEngine.UI
             b.Add(l);
             return b;
         }
+
+
     }
 }
