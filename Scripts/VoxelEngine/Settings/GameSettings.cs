@@ -176,7 +176,11 @@ namespace VoxelEngine.Settings
 
             int rw = ResolutionWidth, rh = ResolutionHeight;
             var fsm = FullscreenMode;
-            if (rw > 0 && rh > 0 && (rw != Screen.width || rh != Screen.height || fsm != Screen.fullScreenMode))
+            int curHz = Mathf.RoundToInt((float)Screen.currentResolution.refreshRateRatio.value);
+            bool resChanged     = rw > 0 && rh > 0 && (rw != Screen.width || rh != Screen.height);
+            bool modeChanged    = fsm != Screen.fullScreenMode;
+            bool refreshChanged = RefreshRate > 0 && RefreshRate != curHz;
+            if (rw > 0 && rh > 0 && (resChanged || modeChanged || refreshChanged))
                 Screen.SetResolution(rw, rh, fsm,
                     new RefreshRate { numerator = (uint)Mathf.Max(1, RefreshRate), denominator = 1 });
 

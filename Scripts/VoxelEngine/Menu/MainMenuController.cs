@@ -373,77 +373,12 @@ namespace VoxelEngine.Menu
         }
 
         // ── Settings Tab Implementations ───────────────────────────
-        private void DisplayTab(VisualElement p)
-        {
-            p.Add(FormLabel($"View Distance  —  {GameSettings.ViewDistance} chunks"));
-            p.Add(BuildIntSlider(2, 16, GameSettings.ViewDistance, v => { GameSettings.ViewDistance = v; BuildUI(); }));
-            p.Add(T.Spacer(10));
-            p.Add(FormLabel($"VSync  —  {GameSettings.VSync}"));
-            p.Add(BuildIntSlider(0, 2, GameSettings.VSync, v => { GameSettings.VSync = v; BuildUI(); }));
-        }
-
-        private void CameraTab(VisualElement p)
-        {
-            p.Add(FormLabel($"Field of View  —  {GameSettings.Fov:0}°"));
-            p.Add(BuildFloatSlider(40f, 120f, GameSettings.Fov, v => { GameSettings.Fov = v; BuildUI(); }));
-            p.Add(T.Spacer(10));
-            p.Add(FormLabel($"Mouse Sensitivity  —  {GameSettings.MouseSensitivity:0.00}"));
-            p.Add(BuildFloatSlider(0.02f, 1.5f, GameSettings.MouseSensitivity, v => { GameSettings.MouseSensitivity = v; BuildUI(); }));
-            p.Add(T.Spacer(10));
-            p.Add(FormLabel("Invert Y-Axis"));
-            var t = new Toggle { value = GameSettings.InvertY };
-            t.style.marginBottom = 4;
-            t.RegisterValueChangedCallback(e => GameSettings.InvertY = e.newValue);
-            p.Add(t);
-        }
-
-        private void AudioTab(VisualElement p)
-        {
-            float vol = GameSettings.MasterVolume;
-            p.Add(FormLabel($"Master Volume  —  {Mathf.Round(vol * 100f):0}%"));
-            var s = new Slider(0f, 1f) { value = vol, showInputField = true };
-            s.style.marginBottom = 4;
-            s.RegisterValueChangedCallback(e => { GameSettings.MasterVolume = e.newValue; BuildUI(); });
-            StyleInnerInput(s);
-            p.Add(s);
-        }
-
-        private void KeybindTab(VisualElement p)
-        {
-            foreach (InputAction a in Enum.GetValues(typeof(InputAction)))
-            {
-                var row = new VisualElement();
-                row.style.flexDirection   = FlexDirection.Row;
-                row.style.alignItems      = Align.Center;
-                row.style.marginBottom    = 5;
-                row.style.paddingTop      = 6;
-                row.style.paddingBottom   = 6;
-                row.style.paddingLeft     = 10;
-                row.style.paddingRight    = 10;
-                row.style.backgroundColor = new StyleColor(T.BgCard);
-                T.Radius(row, 5f);
-
-                var lbl = new Label(a.ToString());
-                lbl.style.color    = new StyleColor(T.TextSecondary);
-                lbl.style.fontSize = 12;
-                lbl.style.flexGrow = 1;
-                lbl.style.minHeight = 22;
-                row.Add(lbl);
-
-                var btn = T.SmallButton(GameSettings.GetKey(a), null, T.AccentTeal);
-                btn.style.minWidth = 120;
-                btn.clickable.clicked += () =>
-                {
-                    btn.text = "Press key…";
-                    btn.style.backgroundColor = new StyleColor(
-                        new Color(T.AccentGold.r, T.AccentGold.g, T.AccentGold.b, 0.80f));
-                    var cap = gameObject.AddComponent<KeyRebindCapture>();
-                    cap.onCaptured = code => { GameSettings.SetKey(a, code); BuildUI(); };
-                };
-                row.Add(btn);
-                p.Add(row);
-            }
-        }
+        // All four tabs now delegate to the shared SettingsUI builder so the
+        // main menu and the in-game pause menu can never drift apart.
+        private void DisplayTab(VisualElement p)  => SettingsUI.DisplayTab(p, BuildUI);
+        private void CameraTab(VisualElement p)   => SettingsUI.CameraTab(p, BuildUI);
+        private void AudioTab(VisualElement p)    => SettingsUI.AudioTab(p, BuildUI);
+        private void KeybindTab(VisualElement p)  => SettingsUI.KeybindTab(p, this, BuildUI);
 
         // ── Page Actions ───────────────────────────────────────────
         private void LoadWorld(string worldName)
