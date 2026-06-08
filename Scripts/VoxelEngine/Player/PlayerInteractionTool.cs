@@ -505,13 +505,11 @@ namespace VoxelEngine.Player
                 try
                 {
                     var msfx = VoxelEngine.FX.SfxLibrary.MiningSfxForMaterial(v.material);
-                    if (msfx != null)
-                    {
-                        VoxelEngine.FX.AudioManager.PlayAt(
-                            VoxelEngine.FX.SfxLibrary.GetVariant(msfx, 3),
-                            hit.point, volume: 0.7f,
-                            pitch: UnityEngine.Random.Range(0.92f, 1.08f), maxDistance: 22f);
-                    }
+                    // Note: Sfx is an enum, so we can't compare to null. We just attempt playback.
+                    VoxelEngine.FX.AudioManager.PlayAt(
+                        VoxelEngine.FX.SfxLibrary.GetVariant(msfx, 3),
+                        hit.point, volume: 0.7f,
+                        pitch: UnityEngine.Random.Range(0.92f, 1.08f), maxDistance: 22f);
                 }
                 catch { /* Audio system not fully implemented yet */ }
             }
