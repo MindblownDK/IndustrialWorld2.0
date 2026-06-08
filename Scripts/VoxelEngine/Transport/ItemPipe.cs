@@ -52,8 +52,17 @@ namespace VoxelEngine.Transport
         // Per-tick accumulator of directions the pipe is actively feeding, plus
         // the item being carried — handed to the flow visualizer as a continuous
         // stream so the animation is always visible while items move.
-        private readonly List<Vector3> _flowDirs = new(6);
+        // Directed flow segments accumulated this tick: each is (fromDir → toDir)
+        // in world space so the visualizer animates a true one-way path through
+        // the pipe (entry side → hub → exit side) instead of pulsing outward.
+        private readonly List<(Vector3 from, Vector3 to)> _flowSegments = new(6);
         private ItemDefinition _flowItem;
+
+        // World-space direction the most recent item ARRIVED from (set by an
+        // upstream pipe via ReceiveFlow). Used as the "entry" side when this
+        // pipe forwards onward, so flow looks continuous across joints.
+        private Vector3 _pendingEntryDir;
+        private float   _pendingEntryUntil;
 
         // Cache of nearby container endpoints (chests/machines) refreshed each
         // tick — used both to draw connecting arms AND to drive flow direction.
@@ -246,11 +255,15 @@ namespace VoxelEngine.Transport
         {
             EnsureBuffer();
 
-            // Reset this tick's flow accumulator. Any successful move appends the
-            // outbound direction; at the end we hand them to the visualizer as a
-            // single continuous stream so the animation reads clearly.
-            _flowDirs.Clear();
+            // Reset this tick's flow accumulator. Each successful move appends a
+            // directed (from → to) segment; at the end we hand them to the
+            // visualizer so pellets travel one-way through the pipe.
+            _flowSegments.Clear();
             _flowItem = null;
+
+            // The side items arrived from this tick (defaults to "none/hub" when
+            // injected directly by an adjacent chest with no upstream pipe).
+            Vector3 entryDir = (Time.time < _pendingEntryUntil) ? _pendingEntryDir : Vector3.zero;
 
             for (int i = 0; i < _buffer.Size; i++)
             {
@@ -258,7 +271,7 @@ namespace VoxelEngine.Transport
                 if (stack.IsEmpty) continue;
 
                 // 1) Try to push into any sink (chest/machine).
-                TryPushToSinks(stack);
+                TryPushToSinks(stack, entryDir);
                 if (stack.IsEmpty || stack.count <= 0)
                 {
                     _buffer.SetSlot(i, new ItemStack());
@@ -277,9 +290,14 @@ namespace VoxelEngine.Transport
                     if (accepted > 0)
                     {
                         Vector3 toDir = (nb.transform.position - transform.position).normalized;
-                        RecordFlow(stack.item, toDir);
-                        // Feed the receiving pipe an INBOUND stream from our side
-                        // so the animation reads as continuous across segments.
+                        // Don't let an item visually U-turn out the same side it
+                        // entered: if entry == exit (shouldn't happen) drop entry.
+                        Vector3 fromDir = entryDir;
+                        if (fromDir.sqrMagnitude > 0.01f && Vector3.Dot(fromDir, toDir) > 0.9f)
+                            fromDir = Vector3.zero;
+                        RecordSegment(stack.item, fromDir, toDir);
+                        // Tell the receiving pipe which side WE are on so it can
+                        // continue the same one-way path next tick.
                         nb.ReceiveFlow(stack.item, -toDir);
                         stack.count -= accepted;
                     }
@@ -292,8 +310,8 @@ namespace VoxelEngine.Transport
                 }
             }
 
-            // Publish the accumulated stream for this tick.
-            if (_flowItem != null && _flowDirs.Count > 0)
+            // Publish the accumulated directed stream for this tick.
+            if (_flowItem != null && _flowSegments.Count > 0)
                 PublishFlow();
         }
 
@@ -301,7 +319,7 @@ namespace VoxelEngine.Transport
         /// Scans all colliders within connectRadius for IItemContainer components
         /// (excluding other ItemPipes) and tries to insert items.
         /// </summary>
-        private void TryPushToSinks(ItemStack stack)
+        private void TryPushToSinks(ItemStack stack, Vector3 entryDir)
         {
             var hits = Physics.OverlapSphere(transform.position, connectRadius);
             foreach (var col in hits)
@@ -318,7 +336,7 @@ namespace VoxelEngine.Transport
                     if (accepted > 0)
                     {
                         Vector3 toDir = (chest.transform.position - transform.position).normalized;
-                        RecordFlow(stack.item, toDir);
+                        RecordSegment(stack.item, SafeEntry(entryDir, toDir), toDir);
                         stack.count -= accepted;
                         if (stack.IsEmpty || stack.count <= 0) return;
                     }
@@ -334,11 +352,19 @@ namespace VoxelEngine.Transport
                     if (stack.count < before)
                     {
                         Vector3 toDir = (col.bounds.center - transform.position).normalized;
-                        RecordFlow(stack.item, toDir);
+                        RecordSegment(stack.item, SafeEntry(entryDir, toDir), toDir);
                     }
                     if (stack.IsEmpty || stack.count <= 0) return;
                 }
             }
+        }
+
+        /// <summary>Drop the entry side if it points the same way as the exit (avoids a U-turn).</summary>
+        private static Vector3 SafeEntry(Vector3 entryDir, Vector3 exitDir)
+        {
+            if (entryDir.sqrMagnitude > 0.01f && Vector3.Dot(entryDir, exitDir) > 0.9f)
+                return Vector3.zero;
+            return entryDir;
         }
 
         private void TryPushIntoContainer(IItemContainer container, ItemStack stack)
@@ -350,38 +376,39 @@ namespace VoxelEngine.Transport
             stack.count -= accepted;
         }
 
-        /// <summary>Accumulate an outbound flow direction for this tick.</summary>
-        private void RecordFlow(ItemDefinition item, Vector3 worldDir)
+        /// <summary>Accumulate a directed (from → to) flow segment for this tick.</summary>
+        private void RecordSegment(ItemDefinition item, Vector3 fromDir, Vector3 toDir)
         {
-            if (item == null || worldDir.sqrMagnitude < 0.0001f) return;
+            if (item == null || toDir.sqrMagnitude < 0.0001f) return;
             _flowItem = item;
-            Vector3 norm = worldDir.normalized;
-            // De-dup near-identical directions.
-            foreach (var d in _flowDirs)
-                if (Vector3.Dot(d, norm) > 0.97f) return;
-            _flowDirs.Add(norm);
+            Vector3 to   = toDir.normalized;
+            Vector3 from = fromDir.sqrMagnitude > 0.0001f ? fromDir.normalized : Vector3.zero;
+            // De-dup identical segments (same exit + entry).
+            foreach (var seg in _flowSegments)
+                if (Vector3.Dot(seg.to, to) > 0.97f &&
+                    Vector3.Dot(seg.from, from) > 0.97f) return;
+            _flowSegments.Add((from, to));
         }
 
-        /// <summary>Hand this tick's accumulated stream to the glass visualizer.</summary>
+        /// <summary>Hand this tick's accumulated directed stream to the glass visualizer.</summary>
         private void PublishFlow()
         {
             EnsureFlow();
             if (_flow == null) return;
-            _flow.SetFlow(_flowItem, _flowDirs);
+            _flow.SetFlow(_flowItem, _flowSegments);
         }
 
         /// <summary>
-        /// Called by an upstream pipe so the RECEIVING segment also shows an
-        /// inbound stream (keeps the animation continuous across pipe joints).
+        /// Called by an upstream pipe: records which world-space side items are
+        /// arriving FROM, so when THIS pipe forwards them next tick the pellet
+        /// path continues one-way across the joint. The hint expires quickly so a
+        /// stale entry doesn't mislead later flow.
         /// </summary>
-        public void ReceiveFlow(ItemDefinition item, Vector3 worldDir)
+        public void ReceiveFlow(ItemDefinition item, Vector3 fromWorldDir)
         {
-            EnsureFlow();
-            if (_flow == null || item == null) return;
-            _scratchDir.Clear();
-            _scratchDir.Add(worldDir.normalized);
-            _flow.SetFlow(item, _scratchDir);
+            if (item == null || fromWorldDir.sqrMagnitude < 0.0001f) return;
+            _pendingEntryDir   = fromWorldDir.normalized;
+            _pendingEntryUntil = Time.time + Mathf.Max(tickInterval * 2f, 0.5f);
         }
-        private readonly List<Vector3> _scratchDir = new(1);
     }
 }

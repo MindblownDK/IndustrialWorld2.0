@@ -1,15 +1,14 @@
 // Assets/Scripts/VoxelEngine/Transport/ItemFlowVisualizer.cs
 //
 // ╔══════════════════════════════════════════════════════════════════╗
-// ║   ITEM FLOW VISUALIZER — continuous pellet stream in glass pipe  ║
+// ║   ITEM FLOW VISUALIZER — directed pellet stream in glass pipe    ║
 // ║                                                                  ║
-// ║   Driven by ItemPipe. The pipe calls SetFlow() whenever it is    ║
-// ║   actively carrying items, supplying the item + the world-space   ║
-// ║   directions it is currently feeding (one per active endpoint).   ║
-// ║   While flow is "hot" the visualizer animates an evenly-spaced    ║
-// ║   STREAM of small emissive pellets sliding hub → exit along each  ║
-// ║   active direction, looping continuously so it's always visible.  ║
-// ║   When the pipe stops moving items the stream fades out.          ║
+// ║   Driven by ItemPipe. The pipe calls SetFlow() with one or more  ║
+// ║   DIRECTED segments (entryDir → exitDir, world space). Each       ║
+// ║   pellet rides the full one-way path  entryTip → hub → exitTip,   ║
+// ║   so flow reads as a real stream travelling THROUGH the pipe      ║
+// ║   instead of pulsing outward from the middle. A missing entry/exit║
+// ║   side simply starts/ends the pellet at the hub centre.           ║
 // ║                                                                  ║
 // ║   • Object-pooled, zero steady-state allocation.                 ║
 // ║   • Self-contained: no edits to the mesh rebuild pipeline.       ║
@@ -40,8 +39,9 @@ namespace VoxelEngine.Transport
         public float flowLinger = 0.9f;
 
         // ── Stream state ────────────────────────────────────────────────────
-        // Local-space directions the pipe is currently feeding (one per sink).
-        private readonly List<Vector3> _streams = new(6);
+        // Local-space directed segments (entry → exit) the pipe is feeding.
+        // A zero entry/exit means "start/end at the hub centre".
+        private readonly List<(Vector3 from, Vector3 to)> _streams = new(6);
         private float _hotUntil;          // stream renders while Time.time < this
         private float _intensity;         // 0..1 eased fade for scale/brightness
 
@@ -73,27 +73,31 @@ namespace VoxelEngine.Transport
 
         /// <summary>
         /// Tell the visualizer the pipe is actively moving <paramref name="item"/>
-        /// toward the given world-space directions (one per active sink/neighbour).
-        /// Call this every tick the pipe moves something; the stream lingers
-        /// briefly after the last call so brief gaps don't strobe.
+        /// along the given DIRECTED segments (entryDir → exitDir, world space).
+        /// Pellets ride entry → hub → exit so the stream reads one-way. A zero
+        /// entry or exit vector means that end sits at the hub centre. Call every
+        /// tick the pipe moves something; the stream lingers briefly afterwards.
         /// </summary>
-        public void SetFlow(ItemDefinition item, List<Vector3> worldDirs)
+        public void SetFlow(ItemDefinition item, List<(Vector3 from, Vector3 to)> worldSegments)
         {
-            if (item == null || worldDirs == null || worldDirs.Count == 0) return;
+            if (item == null || worldSegments == null || worldSegments.Count == 0) return;
 
             Color c = item.iconTint;
             if (c.maxColorComponent < 0.05f) c = new Color(0.95f, 0.7f, 0.3f);
             c.a = 1f;
             _color = c;
 
-            // Rebuild stream descriptors (cheap — at most 6).
+            // Rebuild stream descriptors in LOCAL space (cheap — at most 6).
             _streams.Clear();
-            for (int i = 0; i < worldDirs.Count; i++)
+            for (int i = 0; i < worldSegments.Count; i++)
             {
-                Vector3 d = worldDirs[i];
-                if (d.sqrMagnitude < 0.01f) continue;
-                Vector3 local = transform.InverseTransformDirection(d).normalized;
-                _streams.Add(local);
+                var seg = worldSegments[i];
+                if (seg.to.sqrMagnitude < 0.01f && seg.from.sqrMagnitude < 0.01f) continue;
+                Vector3 fromL = seg.from.sqrMagnitude > 0.01f
+                    ? transform.InverseTransformDirection(seg.from).normalized : Vector3.zero;
+                Vector3 toL = seg.to.sqrMagnitude > 0.01f
+                    ? transform.InverseTransformDirection(seg.to).normalized : Vector3.zero;
+                _streams.Add((fromL, toL));
             }
 
             _hotUntil = Time.time + flowLinger;
@@ -117,16 +121,23 @@ namespace VoxelEngine.Transport
             int idx = 0;
             for (int s = 0; s < _streams.Count; s++)
             {
-                Vector3 dir = _streams[s];
+                Vector3 fromTip = _streams[s].from * armReach; // entry side (or hub if zero)
+                Vector3 toTip   = _streams[s].to   * armReach; // exit side  (or hub if zero)
+
                 for (int k = 0; k < pelletsPerStream; k++)
                 {
-                    // Evenly spaced pellets, all marching outward along the arm,
-                    // looping 0→1 so the stream looks continuous.
+                    // Evenly spaced pellets marching from entry → exit, looping
+                    // 0→1 so the stream looks continuous and ONE-WAY.
                     float p = (globalPhase + (float)k / pelletsPerStream) % 1f;
 
+                    // Two-leg path: entryTip → hub for first half, hub → exitTip
+                    // for the second. Half collapses to a point when a side is
+                    // the hub, so single-sided flow still moves cleanly one way.
+                    Vector3 pos = (p < 0.5f)
+                        ? Vector3.Lerp(fromTip, Vector3.zero, p * 2f)
+                        : Vector3.Lerp(Vector3.zero, toTip, (p - 0.5f) * 2f);
+
                     var tf = _pellets[idx];
-                    // Pellet rides from just inside the hub out to the arm tip.
-                    Vector3 pos = dir * Mathf.Lerp(0.05f, armReach, p);
                     tf.localPosition = pos;
 
                     // Fade the head/tail of each pellet's life + global intensity.
