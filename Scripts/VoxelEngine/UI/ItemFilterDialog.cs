@@ -47,6 +47,7 @@ namespace VoxelEngine.UI
         public static void Open(VisualElement uiRoot, ItemPortRouting routing, CubeFace face, Action onChanged)
         {
             if (uiRoot == null || routing == null) return;
+            EnsureItems();   // build the searchable item list once, up front
             var panelRoot = uiRoot.panel?.visualTree ?? uiRoot;
 
             // ── Overlay ────────────────────────────────────────────
@@ -191,7 +192,6 @@ namespace VoxelEngine.UI
                 resultsScroll.Clear();
                 q = (q ?? "").Trim().ToLowerInvariant();
                 if (q.Length == 0) return;   // empty search → no result list
-                EnsureItems();
                 var owned = new HashSet<ItemDefinition>(routing.GetFilter(face));
                 int shown = 0;
                 foreach (var it in _allItems)
@@ -326,11 +326,35 @@ namespace VoxelEngine.UI
 
         private static void EnsureItems()
         {
-            if (_allItems != null && _allItems.Length > 0) return;
-            _allItems = Resources.LoadAll<ItemDefinition>("")
-                .Where(i => i != null && !string.IsNullOrEmpty(i.itemId))
-                .OrderBy(i => i.displayName)
-                .ToArray();
+            // Item assets in this project don't live under a Resources/ folder, so
+            // Resources.LoadAll("") returns nothing. Instead harvest EVERY loaded
+            // ItemDefinition (those referenced by the recipe registry, block items,
+            // prefabs, etc. are all in memory once the game runs). Rebuilt each time
+            // the dialog opens (cheap, user-driven) so newly-loaded items appear.
+            var set = new HashSet<ItemDefinition>();
+
+            foreach (var it in Resources.FindObjectsOfTypeAll<ItemDefinition>())
+                if (it != null && !string.IsNullOrEmpty(it.itemId)) set.Add(it);
+
+            foreach (var it in Resources.LoadAll<ItemDefinition>(""))
+                if (it != null && !string.IsNullOrEmpty(it.itemId)) set.Add(it);
+
+            // Belt-and-suspenders: pull every item referenced by recipe registries
+            // so even items not otherwise loaded yet are searchable.
+            foreach (var reg in Resources.FindObjectsOfTypeAll<VoxelEngine.Crafting.RecipeRegistry>())
+            {
+                if (reg?.recipes == null) continue;
+                foreach (var r in reg.recipes)
+                {
+                    if (r == null) continue;
+                    if (r.outputItem != null && !string.IsNullOrEmpty(r.outputItem.itemId)) set.Add(r.outputItem);
+                    if (r.inputs != null)
+                        foreach (var ing in r.inputs)
+                            if (ing.item != null && !string.IsNullOrEmpty(ing.item.itemId)) set.Add(ing.item);
+                }
+            }
+
+            _allItems = set.OrderBy(i => i.displayName).ToArray();
         }
     }
 }
