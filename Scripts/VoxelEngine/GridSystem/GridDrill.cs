@@ -1,6 +1,6 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridDrill.cs
 //
-// Ship-mounted drill block. Mines terrain when activated.
+// Advanced ship drill.
 
 using UnityEngine;
 
@@ -14,7 +14,6 @@ namespace VoxelEngine.GridSystem
         public float drillRate = 3f;
 
         public override float PowerDraw => _isActive ? 450f : 0f;
-
         public bool IsActive => _isActive;
 
         private bool _isActive;
@@ -22,7 +21,11 @@ namespace VoxelEngine.GridSystem
 
         private void Update()
         {
-            if (Grid == null || !Grid.IsControlled || !Grid.HasPower) { _isActive = false; return; }
+            if (Grid == null || !Grid.IsControlled || !Grid.HasPower)
+            {
+                _isActive = false;
+                return;
+            }
 
             _isActive = Input.GetMouseButton(0);
 
@@ -32,7 +35,7 @@ namespace VoxelEngine.GridSystem
             if (_drillTimer < 1f / drillRate) return;
             _drillTimer = 0;
 
-            // Mining logic would go here (integrate with VoxelEditor)
+            // Mining logic placeholder
         }
     }
 }

@@ -1,6 +1,6 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridBuilder.cs
 //
-// Improved GridBuilder with gapless placement and better snapping.
+// GridBuilder with grid size selection when creating a new ship.
 
 using UnityEngine;
 using VoxelEngine.Items;
@@ -18,6 +18,9 @@ namespace VoxelEngine.GridSystem
 
         [Header("Ghost")]
         public Color ghostColor = new Color(0.3f, 0.8f, 1f, 0.3f);
+
+        [Header("Grid Size Selection")]
+        public GridSize defaultGridSize = GridSize.Large;   // Player can change this
 
         private GameObject _ghost;
         private MeshRenderer _ghostRenderer;
@@ -55,14 +58,16 @@ namespace VoxelEngine.GridSystem
 
             if (targetGrid != null && targetGrid.gridSize == gbi.gridSize)
             {
-                // Gapless snapping
                 gridPos = targetGrid.WorldToGrid(hit.point + hit.normal * cs * 0.5f);
                 worldPos = targetGrid.GridToWorld(gridPos);
                 if (!targetGrid.CanPlace(gridPos)) { HideGhost(); return; }
             }
             else
             {
-                // Free placement with proper alignment
+                // New grid - use selected size
+                gbi.gridSize = defaultGridSize;
+                cs = gbi.gridSize.CellSize();
+
                 worldPos = new Vector3(
                     Mathf.Round(hit.point.x / cs + hit.normal.x * 0.5f) * cs,
                     Mathf.Round(hit.point.y / cs + hit.normal.y * 0.5f) * cs,
@@ -133,7 +138,7 @@ namespace VoxelEngine.GridSystem
 
             _ghost.SetActive(true);
             _ghost.transform.position = pos;
-            _ghost.transform.localScale = Vector3.one * cellSize * 0.98f; // Tighter fit
+            _ghost.transform.localScale = Vector3.one * cellSize * 0.98f;
         }
 
         private void HideGhost()

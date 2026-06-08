@@ -1,6 +1,6 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridDockingPort.cs
 //
-// Docking connector with filter support.
+// Docking connector with full functionality.
 
 using UnityEngine;
 
