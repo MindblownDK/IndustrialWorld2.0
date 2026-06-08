@@ -497,11 +497,19 @@ namespace VoxelEngine.Player
             // so repeated hits never sound identical).
             if (v.density > 0)
             {
-                var msfx = VoxelEngine.FX.SfxLibrary.MiningSfxForMaterial(v.material);
-                VoxelEngine.FX.AudioManager.PlayAt(
-                    VoxelEngine.FX.SfxLibrary.GetVariant(msfx, 3),
-                    hit.point, volume: 0.7f,
-                    pitch: UnityEngine.Random.Range(0.92f, 1.08f), maxDistance: 22f);
+                // Safe audio call (stubs may not implement MiningSfxForMaterial yet)
+                try
+                {
+                    var msfx = VoxelEngine.FX.SfxLibrary.MiningSfxForMaterial(v.material);
+                    if (msfx != null)
+                    {
+                        VoxelEngine.FX.AudioManager.PlayAt(
+                            VoxelEngine.FX.SfxLibrary.GetVariant(msfx, 3),
+                            hit.point, volume: 0.7f,
+                            pitch: UnityEngine.Random.Range(0.92f, 1.08f), maxDistance: 22f);
+                    }
+                }
+                catch { /* Audio system not fully implemented yet */ }
             }
             if (!stack.IsEmpty && stack.item is ToolItem) ConsumeDurability(stack);
             _nextHit = Time.time + 1f / Mathf.Max(0.1f, rate);
