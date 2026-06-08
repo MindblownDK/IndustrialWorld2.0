@@ -406,7 +406,7 @@ namespace VoxelEngine.Player
 
         private void MineVoxel(Ray ray, RaycastHit hit)
         {
-            if (world == null || registry == null || inventory == null) return;
+            if (world == null || registry == null || inventory == null || inventory.container == null) return;
 
             var stack = inventory.ActiveStack;
 
@@ -481,7 +481,7 @@ namespace VoxelEngine.Player
             // Tier check on the surface voxel material (cheap).
             var hitVoxelPos = world.WorldToVoxel(hit.point - ray.direction.normalized * 0.2f);
             var v = world.GetVoxelWorld(hitVoxelPos);
-            if (v.density > 0)
+            if (v.density > 0 && registry != null)
             {
                 var def = registry.Get(v.material);
                 if (def != null && def.miningTier > tier) return; // wrong tool tier — no progress
