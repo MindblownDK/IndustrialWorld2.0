@@ -46,7 +46,7 @@ namespace VoxelEngine.Player
             if (world      == null) world      = VoxelWorld.Instance;
             if (shootCamera== null) shootCamera= Camera.main;
             if (inventory  == null) inventory  = GetComponentInParent<Inventory>();
-            if (registry   == null) registry   = FindObjectOfType<MaterialRegistry>();
+            if (registry   == null) registry   = Object.FindFirstObjectByType<MaterialRegistry>();
             if (shootCamera != null)
             {
                 _feedback = shootCamera.GetComponent<ToolFeedback>();
@@ -67,7 +67,7 @@ namespace VoxelEngine.Player
             IsGrinding = false; // reset each frame — HandleGrind sets it true when active
             if (world      == null) world      = VoxelWorld.Instance;
             if (inventory  == null) inventory  = GetComponentInParent<Inventory>();
-            if (registry   == null) registry   = FindObjectOfType<MaterialRegistry>();
+            if (registry   == null) registry   = Object.FindFirstObjectByType<MaterialRegistry>();
             if (world == null || shootCamera == null || inventory == null) return;
 
             bool mineHeld  = GameSettings.IsHeld (InputAction.Mine);

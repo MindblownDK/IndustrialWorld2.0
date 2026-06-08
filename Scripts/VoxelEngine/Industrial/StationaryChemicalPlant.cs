@@ -13,11 +13,8 @@ namespace VoxelEngine.Industrial
         public float powerDraw = 720f;
         public float mixRate = 3.5f;
 
-        private bool _isProducing;
-
         private void FixedUpdate()
         {
-            _isProducing = true;
         }
     }
 }

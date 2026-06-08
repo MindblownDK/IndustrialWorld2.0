@@ -38,10 +38,10 @@ namespace VoxelEngine.Networks
         private static long PairKey(GameObject a, GameObject b)
         {
             if (a == null || b == null) return 0L;
-            int ia = a.GetEntityId();
-            int ib = b.GetEntityId();
-            int lo = Mathf.Min(ia, ib);
-            int hi = Mathf.Max(ia, ib);
+            var idA = a.GetEntityId(); uint ia = (uint)idA;
+            var idB = b.GetEntityId(); uint ib = (uint)idB;
+            uint lo = (ia < ib) ? ia : ib;
+            uint hi = (ia < ib) ? ib : ia;
             // Pack into a long so the order never matters.
             return ((long)(uint)lo << 32) | (uint)hi;
         }
@@ -93,7 +93,7 @@ namespace VoxelEngine.Networks
         public static void ClearForGameObject(GameObject go)
         {
             if (go == null || _blocked.Count == 0) return;
-            int id = go.GetEntityId();
+            var entityId = go.GetEntityId(); uint id = (uint)entityId;
             // Walk the set and drop every key whose hi OR lo half matches.
             // Using ToArray() so we can mutate the underlying set safely.
             long[] snapshot = new long[_blocked.Count];
@@ -101,9 +101,9 @@ namespace VoxelEngine.Networks
             foreach (var key in _blocked) snapshot[i++] = key;
             foreach (var key in snapshot)
             {
-                int lo = (int)(key & 0xFFFFFFFF);
-                int hi = (int)((key >> 32) & 0xFFFFFFFF);
-                if (lo == id || hi == id) _blocked.Remove(key);
+                uint lo = (uint)(key & 0xFFFFFFFF);
+                uint hi = (uint)((key >> 32) & 0xFFFFFFFF);
+                if (lo == (uint)id || hi == (uint)id) _blocked.Remove(key);
             }
         }
 

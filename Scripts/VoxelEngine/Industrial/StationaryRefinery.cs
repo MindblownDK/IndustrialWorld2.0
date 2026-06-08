@@ -14,11 +14,8 @@ namespace VoxelEngine.Industrial
         public float keroseneProductionRate = 5f;
         public float powerDraw = 850f;
 
-        private bool _isProcessing;
-
         private void FixedUpdate()
         {
-            _isProcessing = true; // Would check power network here
         }
     }
 }

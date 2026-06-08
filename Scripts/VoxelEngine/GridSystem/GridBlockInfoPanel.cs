@@ -7,10 +7,9 @@ using UnityEngine.UIElements;
 
 namespace VoxelEngine.GridSystem
 {
-    public class GridBlockInfoPanel : VisualElement
+    [UxmlElement]
+    public partial class GridBlockInfoPanel : VisualElement
     {
-        public new class UxmlFactory : UxmlFactory<GridBlockInfoPanel> { }
-
         private Label _nameLabel;
         private Label _statsLabel;
         private Toggle _enabledToggle;
