@@ -46,6 +46,7 @@ namespace VoxelEngine.Player
             if (world      == null) world      = VoxelWorld.Instance;
             if (shootCamera== null) shootCamera= Camera.main;
             if (inventory  == null) inventory  = GetComponentInParent<Inventory>();
+            if (registry   == null) registry   = FindObjectOfType<MaterialRegistry>();
             if (shootCamera != null)
             {
                 _feedback = shootCamera.GetComponent<ToolFeedback>();
@@ -66,6 +67,7 @@ namespace VoxelEngine.Player
             IsGrinding = false; // reset each frame — HandleGrind sets it true when active
             if (world      == null) world      = VoxelWorld.Instance;
             if (inventory  == null) inventory  = GetComponentInParent<Inventory>();
+            if (registry   == null) registry   = FindObjectOfType<MaterialRegistry>();
             if (world == null || shootCamera == null || inventory == null) return;
 
             bool mineHeld  = GameSettings.IsHeld (InputAction.Mine);
@@ -404,6 +406,8 @@ namespace VoxelEngine.Player
 
         private void MineVoxel(Ray ray, RaycastHit hit)
         {
+            if (world == null || registry == null || inventory == null) return;
+
             var stack = inventory.ActiveStack;
 
             // Water Bucket: LMB scoops one water cell. Only works if the bucket is EMPTY.
