@@ -32,7 +32,6 @@ namespace VoxelEngine.EditorTools
         private void OnGUI()
         {
             _scrollPos = EditorGUILayout.BeginScrollView(_scrollPos);
-        {
             GUILayout.Label("Voxel Engine — Setup Wizard", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(
                 "Click each step in order.\n" +

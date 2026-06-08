@@ -24,8 +24,7 @@ namespace VoxelEngine.UI
             if (_root == uiRoot && _box != null && _box.parent == uiRoot) return;
             
             // If the old box was removed from the hierarchy (e.g. by Clear()),
-            // we need to re-add it without resetting our _isVisible state,
-            // otherwise we'd trigger the entrance animation every frame.
+            // we need to re-add it without resetting our _isVisible state.
             if (_box != null && _box.parent == null)
             {
                 uiRoot.Add(_box);
@@ -112,6 +111,13 @@ namespace VoxelEngine.UI
                     _box.style.opacity = 1f;
                     _box.style.scale   = new StyleScale(new Scale(Vector3.one));
                 }).ExecuteLater(10);
+            }
+            else
+            {
+                // Ensure visible and opaque if it was already on screen.
+                _box.style.display = DisplayStyle.Flex;
+                _box.style.opacity = 1f;
+                _box.style.scale   = new StyleScale(new Scale(Vector3.one));
             }
         }
 
