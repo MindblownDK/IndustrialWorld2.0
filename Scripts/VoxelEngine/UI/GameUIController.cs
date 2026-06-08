@@ -701,9 +701,9 @@ namespace VoxelEngine.UI
                 else if (_openElectric != null) BuildRightElectricFurnace(_root, _openElectric);
                 else if (_openCoalGen  != null) BuildRightCoalGenerator(_root, _openCoalGen);
                 else if (_openQuarry   != null) { var mp = MachineUIs.QuarryPanel(_openQuarry, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openQuarry); }
-                else if (_openReactor  != null) _root.Add(MachineUIs.ReactorCorePanel(_openReactor, BuildSlot));
+                else if (_openReactor  != null) { var mp = MachineUIs.ReactorCorePanel(_openReactor, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openReactor); }
                 else if (_openTurbine  != null) _root.Add(MachineUIs.SteamTurbinePanel(_openTurbine));
-                else if (_openPortReactor != null) _root.Add(MachineUIs.PortableReactorPanel(_openPortReactor, BuildSlot));
+                else if (_openPortReactor != null) { var mp = MachineUIs.PortableReactorPanel(_openPortReactor, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openPortReactor); }
                 else if (_openProcessor != null) { var mp = MachineUIs.UraniumProcessorPanel(_openProcessor, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openProcessor); }
                 else if (_openReprocessor != null) { var mp = MachineUIs.WasteReprocessorPanel(_openReprocessor, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openReprocessor); }
                 else if (_openElectrolyser != null) { var mp = MachineUIs.ElectrolyserPanel(_openElectrolyser, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openElectrolyser); }
@@ -1649,6 +1649,9 @@ namespace VoxelEngine.UI
             hint.style.fontSize = 11;
             hint.style.whiteSpace = WhiteSpace.Normal;
             panel.Add(hint);
+
+            // Advanced item ports — auto-feed the fuel slot via pipes.
+            AppendItemPorts(panel, f);
         }
 
         // ----- RIGHT (electric furnace) -----

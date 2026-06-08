@@ -3,16 +3,20 @@
 // Small RTG-style reactor. Uses LEU pellets + ice for direct electricity.
 // No water pipes needed — just ice in the input and fuel rods.
 
+using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.Building;
 using VoxelEngine.Items;
 using VoxelEngine.Power;
+using VoxelEngine.Transport;
 
 namespace VoxelEngine.Nuclear
 {
     [RequireComponent(typeof(PlacedBlock))]
     [RequireComponent(typeof(PowerGenerator))]
-    public class PortableReactor : MonoBehaviour
+    [RequireComponent(typeof(PortConfig))]
+    [RequireComponent(typeof(ItemPortRouting))]
+    public class PortableReactor : MonoBehaviour, IItemPortHost
     {
         [Header("Fuel")]
         public ItemDefinition leuPelletItem;
@@ -53,6 +57,34 @@ namespace VoxelEngine.Nuclear
             else iceC.Resize(4);
             if (wasteC == null) wasteC = new ItemContainer("Waste", 4);
             else wasteC.Resize(4);
+        }
+
+        // ── IItemPortHost ───────────────────────────────────────────────────
+        private PortConfig _portConfig;
+        private ItemPortContainer[] _portContainers;
+
+        public PortConfig PortConfig
+        {
+            get
+            {
+                if (_portConfig == null)
+                {
+                    _portConfig = GetComponent<PortConfig>();
+                    if (_portConfig == null) _portConfig = gameObject.AddComponent<PortConfig>();
+                    _portConfig.EnsureAllFaces();
+                }
+                return _portConfig;
+            }
+        }
+
+        public IReadOnlyList<ItemPortContainer> GetPortContainers()
+        {
+            EnsureContainers();
+            _portContainers ??= new ItemPortContainer[3];
+            _portContainers[0] = new ItemPortContainer("LEU Fuel",    fuelC,  canInput: true,  canOutput: false);
+            _portContainers[1] = new ItemPortContainer("Ice Coolant", iceC,   canInput: true,  canOutput: false);
+            _portContainers[2] = new ItemPortContainer("Waste",       wasteC, canInput: false, canOutput: true);
+            return _portContainers;
         }
 
         private void Update()

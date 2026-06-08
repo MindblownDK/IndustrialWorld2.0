@@ -190,8 +190,7 @@ namespace VoxelEngine.UI
             {
                 resultsScroll.Clear();
                 q = (q ?? "").Trim().ToLowerInvariant();
-                if (q.Length == 0) { wm.style.display = DisplayStyle.Flex; return; }
-                wm.style.display = DisplayStyle.None;
+                if (q.Length == 0) return;   // empty search → no result list
                 EnsureItems();
                 var owned = new HashSet<ItemDefinition>(routing.GetFilter(face));
                 int shown = 0;

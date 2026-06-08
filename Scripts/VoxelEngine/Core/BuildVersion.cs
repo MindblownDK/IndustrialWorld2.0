@@ -14,8 +14,8 @@ namespace VoxelEngine.Core
     public static class BuildVersion
     {
         public const int Major = 0;
-        public const int Minor = 8;
-        public const int Patch = 2;
+        public const int Minor = 9;
+        public const int Patch = 0;
 
         public static string Full => $"{Major}.{Minor}.{Patch}";
         public static string Display => $"v{Full}";

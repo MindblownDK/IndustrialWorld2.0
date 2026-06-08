@@ -4,6 +4,7 @@
 // power while a fuel item is burning. Burn time comes from ResourceItem.fuelSeconds.
 // Now uses PortConfig for face-based connection control.
 
+using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.Crafting;
 using VoxelEngine.Items;
@@ -13,7 +14,8 @@ namespace VoxelEngine.Power
 {
     [RequireComponent(typeof(PowerGenerator))]
     [RequireComponent(typeof(PortConfig))]
-    public class CoalGeneratorFuel : MonoBehaviour
+    [RequireComponent(typeof(ItemPortRouting))]
+    public class CoalGeneratorFuel : MonoBehaviour, IItemPortHost
     {
         public ItemContainer fuelC;
         public float fuelRemaining;
@@ -82,6 +84,33 @@ namespace VoxelEngine.Power
         {
             if (fuelC == null) fuelC = new ItemContainer("Fuel", 1);
             else fuelC.Resize(1);
+        }
+
+        // ── IItemPortHost ───────────────────────────────────────────────────
+        // Reuses the existing _portConfig field. Exposes the single Fuel slot so
+        // pipes can auto-feed coal/wood through configured INPUT faces.
+        private ItemPortContainer[] _portContainers;
+
+        public PortConfig PortConfig
+        {
+            get
+            {
+                if (_portConfig == null)
+                {
+                    _portConfig = GetComponent<PortConfig>();
+                    if (_portConfig == null) _portConfig = gameObject.AddComponent<PortConfig>();
+                    _portConfig.EnsureAllFaces();
+                }
+                return _portConfig;
+            }
+        }
+
+        public IReadOnlyList<ItemPortContainer> GetPortContainers()
+        {
+            EnsureContainers();
+            _portContainers ??= new ItemPortContainer[1];
+            _portContainers[0] = new ItemPortContainer("Fuel", fuelC, canInput: true, canOutput: false);
+            return _portContainers;
         }
 
         private void Update()
