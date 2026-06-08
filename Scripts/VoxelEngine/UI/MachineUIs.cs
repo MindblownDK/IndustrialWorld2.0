@@ -544,13 +544,9 @@ namespace VoxelEngine.UI
             var (progBar, _) = T.ProgressBar(q.IsMining ? q.MineProgress01 : 0f, T.AccentCyan, 8, true);
             right.Add(progBar);
 
-            // ── Port Config (functional, like coal generator) ──
-            var portCfg = q.GetComponent<VoxelEngine.Transport.PortConfig>();
-            if (portCfg != null)
-            {
-                right.Add(T.Spacer(8));
-                right.Add(VoxelEngine.UI.PortConfigHud.Build(portCfg));
-            }
+            // Item ports are appended by GameUIController via AppendItemPorts so
+            // the quarry uses the SAME advanced per-face item widget as every
+            // other machine (routing + searchable filters), not the old grid.
 
             body.Add(right);
             p.Add(body);

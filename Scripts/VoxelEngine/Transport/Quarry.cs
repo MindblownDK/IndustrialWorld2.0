@@ -12,7 +12,9 @@ namespace VoxelEngine.Transport
     public enum QuarryPhase { Idle, TapeFrame, BuildingFrame, Mining, Complete }
 
     [RequireComponent(typeof(PlacedBlock))]
-    public class Quarry : MonoBehaviour
+    [RequireComponent(typeof(PortConfig))]
+    [RequireComponent(typeof(ItemPortRouting))]
+    public class Quarry : MonoBehaviour, IItemPortHost
     {
         [Header("Area")]
         public int defaultSize = 16;
@@ -239,6 +241,32 @@ namespace VoxelEngine.Transport
         void OI(ItemDefinition it,int n){int rem=n;var hs=Physics.OverlapSphere(transform.position,1.6f);foreach(var c in hs){if(c.gameObject==gameObject)continue;var p=c.GetComponent<ItemPipe>();if(!p)continue;int a=p.TryInsert(it,Mathf.Min(p.GetInputCapacity(it),rem));rem-=a;if(rem<=0)return;}if(rem>0){EnsureOutput();_out.Insert(new(it,rem));}}
         void EnsureOutput(){if(_out==null)_out=new("Output",outputSlots);else _out.Resize(outputSlots);}
         public void EnsureOutputPublic()=>EnsureOutput();
+
+        // ── IItemPortHost ───────────────────────────────────────────────────
+        private PortConfig _portConfig;
+        private ItemPortContainer[] _portContainers;
+
+        public PortConfig PortConfig
+        {
+            get
+            {
+                if (_portConfig == null)
+                {
+                    _portConfig = GetComponent<PortConfig>();
+                    if (_portConfig == null) _portConfig = gameObject.AddComponent<PortConfig>();
+                    _portConfig.EnsureAllFaces();
+                }
+                return _portConfig;
+            }
+        }
+
+        public IReadOnlyList<ItemPortContainer> GetPortContainers()
+        {
+            EnsureOutput();
+            _portContainers ??= new ItemPortContainer[1];
+            _portContainers[0] = new ItemPortContainer("Output", Output, canInput: false, canOutput: true);
+            return _portContainers;
+        }
         public void RestoreState(int d,int cx,int cz,int ph,int rl,int sl,int el){CurrentDepth=d;_cx=cx;_cz=cz;Phase=(QuarryPhase)ph;InstalledRangeLevel=rl;InstalledSpeedLevel=sl;InstalledEfficiencyLevel=el;if(Phase==QuarryPhase.Complete){if(_dr)Destroy(_dr);if(_bm)Destroy(_bm);}}
         void OnDestroy(){DestroyGhost();DTp();HPP();foreach(var fb in _fs)if(fb)Destroy(fb);_fs.Clear();if(_dr)Destroy(_dr);if(_bm)Destroy(_bm);}
         static Material ME(Color c,float es){var s=Shader.Find("Universal Render Pipeline/Lit")??Shader.Find("Standard");var m=new Material(s);m.color=c;m.SetColor("_BaseColor",c);m.SetColor("_EmissionColor",c*es);m.EnableKeyword("_EMISSION");return m;}

@@ -121,21 +121,28 @@ namespace VoxelEngine.Transport
             int idx = 0;
             for (int s = 0; s < _streams.Count; s++)
             {
-                Vector3 fromTip = _streams[s].from * armReach; // entry side (or hub if zero)
-                Vector3 toTip   = _streams[s].to   * armReach; // exit side  (or hub if zero)
+                // Resolve a FULL-LENGTH path across the tube. A pipe often knows
+                // only one side (just an exit, or just an entry); mirror the known
+                // side so the pellet always travels the whole segment and visually
+                // reaches the next pipe instead of stopping at the hub.
+                Vector3 from = _streams[s].from;
+                Vector3 to   = _streams[s].to;
+                if (to.sqrMagnitude < 0.01f && from.sqrMagnitude > 0.01f) to = -from;
+                if (from.sqrMagnitude < 0.01f && to.sqrMagnitude > 0.01f) from = -to;
+
+                Vector3 fromTip = from * armReach; // entry tip
+                Vector3 toTip   = to   * armReach; // exit tip
 
                 for (int k = 0; k < pelletsPerStream; k++)
                 {
-                    // Evenly spaced pellets marching from entry → exit, looping
-                    // 0→1 so the stream looks continuous and ONE-WAY.
+                    // Evenly spaced pellets marching from entry tip → exit tip,
+                    // looping 0→1 so the stream looks continuous and ONE-WAY.
                     float p = (globalPhase + (float)k / pelletsPerStream) % 1f;
 
-                    // Two-leg path: entryTip → hub for first half, hub → exitTip
-                    // for the second. Half collapses to a point when a side is
-                    // the hub, so single-sided flow still moves cleanly one way.
-                    Vector3 pos = (p < 0.5f)
-                        ? Vector3.Lerp(fromTip, Vector3.zero, p * 2f)
-                        : Vector3.Lerp(Vector3.zero, toTip, (p - 0.5f) * 2f);
+                    // Straight interpolation across the full tube (entry → exit).
+                    // Passes through the hub at p=0.5 automatically when the two
+                    // tips are opposite, so the motion is smooth end-to-end.
+                    Vector3 pos = Vector3.Lerp(fromTip, toTip, p);
 
                     var tf = _pellets[idx];
                     tf.localPosition = pos;

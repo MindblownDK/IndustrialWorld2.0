@@ -700,7 +700,7 @@ namespace VoxelEngine.UI
                 else if (_openFurnace  != null) BuildRightFurnace(_root, _openFurnace);
                 else if (_openElectric != null) BuildRightElectricFurnace(_root, _openElectric);
                 else if (_openCoalGen  != null) BuildRightCoalGenerator(_root, _openCoalGen);
-                else if (_openQuarry   != null) _root.Add(MachineUIs.QuarryPanel(_openQuarry, BuildSlot));
+                else if (_openQuarry   != null) { var mp = MachineUIs.QuarryPanel(_openQuarry, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openQuarry); }
                 else if (_openReactor  != null) _root.Add(MachineUIs.ReactorCorePanel(_openReactor, BuildSlot));
                 else if (_openTurbine  != null) _root.Add(MachineUIs.SteamTurbinePanel(_openTurbine));
                 else if (_openPortReactor != null) _root.Add(MachineUIs.PortableReactorPanel(_openPortReactor, BuildSlot));
@@ -2434,6 +2434,17 @@ namespace VoxelEngine.UI
                     }
                     return;
                 }
+                // If a filter dialog is open and capturing, shift-clicking (or even
+                // plain clicking) an item routes it INTO the filter instead of the
+                // normal quick-transfer / pick-up.
+                if (VoxelEngine.UI.ItemFilterDialog.IsCapturing)
+                {
+                    var capStack = slotRef.container.GetSlot(slotRef.index);
+                    if (!capStack.IsEmpty &&
+                        VoxelEngine.UI.ItemFilterDialog.TryCaptureItem(capStack.item))
+                        return;
+                }
+
                 // Shift+LMB = quick-transfer to the OTHER side (player inventory <-> open container).
                 if (shiftHeld)
                 {

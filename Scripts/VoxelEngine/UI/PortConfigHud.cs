@@ -323,7 +323,6 @@ namespace VoxelEngine.UI
         // ════════════════════════════════════════════════════════════
 
         // Cache of every loadable item, sorted for the picker. Rebuilt lazily.
-        private static ItemDefinition[] _allItemsCache;
 
         /// <summary>
         /// Build the premium item-port widget for a <see cref="Chest"/> (or any
@@ -372,6 +371,9 @@ namespace VoxelEngine.UI
             head.Add(MakeLegendChip(ColNone, "OFF"));
             root.Add(head);
 
+            // Distribution mode toggle — only meaningful when >1 OUTPUT face.
+            root.Add(BuildDistributionToggle(routing, onChanged));
+
             var grid = new VisualElement();
             grid.style.flexDirection = FlexDirection.Row;
             grid.style.flexWrap = Wrap.Wrap;
@@ -407,6 +409,57 @@ namespace VoxelEngine.UI
             root.Add(hint);
 
             return root;
+        }
+
+        // Round-Robin / Priority toggle for competing OUTPUT faces.
+        private static VisualElement BuildDistributionToggle(ItemPortRouting routing, Action onChanged)
+        {
+            var row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.style.marginTop = 8;
+
+            var lbl = new Label("OUTPUT SHARING");
+            lbl.style.color = new StyleColor(T.TextMuted);
+            lbl.style.fontSize = 9;
+            lbl.style.unityFontStyleAndWeight = FontStyle.Bold;
+            lbl.style.letterSpacing = 1f;
+            lbl.style.flexGrow = 1;
+            row.Add(lbl);
+
+            Button rr = null, pr = null;
+            void Restyle()
+            {
+                bool isRR = routing.distribution == DistributionMode.RoundRobin;
+                StylePill(rr, isRR);
+                StylePill(pr, !isRR);
+            }
+            rr = MiniPill("ROUND-ROBIN", () => { routing.distribution = DistributionMode.RoundRobin; Restyle(); onChanged?.Invoke(); });
+            pr = MiniPill("PRIORITY",    () => { routing.distribution = DistributionMode.Priority;   Restyle(); onChanged?.Invoke(); });
+            row.Add(rr); row.Add(pr);
+            Restyle();
+            return row;
+        }
+
+        private static Button MiniPill(string text, Action onClick)
+        {
+            var b = new Button { text = text };
+            b.style.height = 22; b.style.fontSize = 9;
+            b.style.unityFontStyleAndWeight = FontStyle.Bold;
+            b.style.marginLeft = 4;
+            b.style.paddingLeft = 8; b.style.paddingRight = 8;
+            T.Radius(b, 6f);
+            b.clicked += onClick;
+            return b;
+        }
+
+        private static void StylePill(Button b, bool active)
+        {
+            if (b == null) return;
+            var c = T.AccentCyan;
+            b.style.backgroundColor = new StyleColor(new Color(c.r, c.g, c.b, active ? 0.85f : 0.14f));
+            b.style.color = new StyleColor(active ? Color.white : T.TextSecondary);
+            T.Border(b, 1, new Color(c.r, c.g, c.b, active ? 0.7f : 0.3f));
         }
 
         private static VisualElement BuildItemFaceCard(IItemPortHost host, ItemPortRouting routing,
@@ -557,12 +610,40 @@ namespace VoxelEngine.UI
             var wrap = new VisualElement();
             wrap.style.marginTop = 8;
 
-            var lbl = new Label(routing.HasFilter(face) ? "FILTER" : "FILTER · ALL");
+            // Header: FILTER label + current mode badge (WHITELIST / BLACKLIST).
+            var hdr = new VisualElement();
+            hdr.style.flexDirection = FlexDirection.Row;
+            hdr.style.alignItems = Align.Center;
+            hdr.pickingMode = PickingMode.Ignore;
+            var lbl = new Label("FILTER");
             lbl.style.color = new StyleColor(T.TextMuted);
             lbl.style.fontSize = 9;
             lbl.style.unityFontStyleAndWeight = FontStyle.Bold;
             lbl.style.letterSpacing = 1f;
-            wrap.Add(lbl);
+            lbl.style.flexGrow = 1;
+            hdr.Add(lbl);
+            if (routing.HasFilter(face))
+            {
+                bool wl = routing.GetFilterMode(face) == FilterMode.Whitelist;
+                var modeCol = wl ? T.AccentGreen : T.AccentRed;
+                var badge = new Label(wl ? "WHITELIST" : "BLACKLIST");
+                badge.style.fontSize = 8;
+                badge.style.unityFontStyleAndWeight = FontStyle.Bold;
+                badge.style.color = new StyleColor(modeCol);
+                badge.style.paddingLeft = 5; badge.style.paddingRight = 5;
+                badge.style.paddingTop = 1; badge.style.paddingBottom = 1;
+                badge.style.backgroundColor = new StyleColor(new Color(modeCol.r, modeCol.g, modeCol.b, 0.16f));
+                T.Radius(badge, 6f);
+                hdr.Add(badge);
+            }
+            else
+            {
+                var allLbl = new Label("ALL");
+                allLbl.style.fontSize = 8;
+                allLbl.style.color = new StyleColor(T.TextMuted);
+                hdr.Add(allLbl);
+            }
+            wrap.Add(hdr);
 
             // Existing filter chips (each with a delete button).
             var chips = new VisualElement();
@@ -570,7 +651,6 @@ namespace VoxelEngine.UI
             chips.style.flexWrap = Wrap.Wrap;
             chips.style.marginTop = 4;
             wrap.Add(chips);
-
             foreach (var item in routing.GetFilter(face))
                 chips.Add(MakeFilterChip(item, () =>
                 {
@@ -578,71 +658,19 @@ namespace VoxelEngine.UI
                     inlineChanged?.Invoke();
                 }));
 
-            // Inline search field — typing filters a dropdown result list below it.
-            var search = new TextField { value = "" };
-            search.style.marginTop = 4;
-            search.style.height = 22;
-            search.style.fontSize = 11;
-            wrap.Add(search);
-
-            // Watermark (UI Toolkit placeholder isn't reliable across versions).
-            var watermark = new Label("🔍  Search item to add…");
-            watermark.style.position = Position.Absolute;
-            watermark.style.left = 8; watermark.style.top = 26;
-            watermark.style.fontSize = 10;
-            watermark.style.color = new StyleColor(T.TextMuted);
-            watermark.pickingMode = PickingMode.Ignore;
-            wrap.Add(watermark);
-
-            // Results dropdown list (hidden until the player types).
-            var results = new VisualElement();
-            results.style.marginTop = 2;
-            results.style.maxHeight = 156;
-            results.style.display = DisplayStyle.None;
-            results.style.backgroundColor = new StyleColor(T.BgDark);
-            T.Radius(results, 6f);
-            T.Border(results, 1, T.BorderDim);
-            var resultsScroll = new ScrollView(ScrollViewMode.Vertical);
-            resultsScroll.style.maxHeight = 154;
-            results.Add(resultsScroll);
-            wrap.Add(results);
-
-            void Populate(string query)
+            // ＋ Add Filter — opens the modal prompt (search / drop / shift-click).
+            var add = new Button { text = "＋  Add Filter" };
+            add.style.marginTop = 6; add.style.height = 24; add.style.fontSize = 10;
+            add.style.color = new StyleColor(T.TextSecondary);
+            add.style.backgroundColor = new StyleColor(new Color(T.AccentCyan.r, T.AccentCyan.g, T.AccentCyan.b, 0.16f));
+            T.Radius(add, 7f);
+            T.Border(add, 1, new Color(T.AccentCyan.r, T.AccentCyan.g, T.AccentCyan.b, 0.40f));
+            add.clicked += () =>
             {
-                resultsScroll.Clear();
-                var q = (query ?? "").Trim().ToLowerInvariant();
-                if (q.Length == 0)
-                {
-                    results.style.display = DisplayStyle.None;
-                    watermark.style.display = DisplayStyle.Flex;
-                    return;
-                }
-                watermark.style.display = DisplayStyle.None;
-                EnsureItemCache();
-                var owned = new HashSet<ItemDefinition>(routing.GetFilter(face));
-                int shown = 0;
-                foreach (var item in _allItemsCache)
-                {
-                    if (item == null || owned.Contains(item)) continue;
-                    if (!(item.displayName ?? "").ToLowerInvariant().Contains(q) &&
-                        !(item.itemId ?? "").ToLowerInvariant().Contains(q)) continue;
-                    resultsScroll.Add(MakePickerRow(item, () =>
-                    {
-                        routing.AddFilter(face, item);
-                        inlineChanged?.Invoke();   // rebuilds the card → chip appears, search clears
-                    }));
-                    if (++shown >= 60) break;
-                }
-                if (shown == 0) resultsScroll.Add(T.Muted("No matching items."));
-                results.style.display = DisplayStyle.Flex;
-            }
-
-            search.RegisterValueChangedCallback(evt => Populate(evt.newValue));
-            // Treat the search field like a dropdown so the panel doesn't auto-refresh
-            // and destroy it mid-type.
-            search.RegisterCallback<FocusInEvent>(_ => IsAnyDropdownOpen = true);
-            search.RegisterCallback<FocusOutEvent>(_ =>
-                search.schedule.Execute(() => IsAnyDropdownOpen = false).StartingIn(120));
+                var uiRoot = add.panel?.visualTree ?? add;
+                ItemFilterDialog.Open(uiRoot, routing, face, onChanged: () => inlineChanged?.Invoke());
+            };
+            wrap.Add(add);
 
             return wrap;
         }
@@ -696,55 +724,7 @@ namespace VoxelEngine.UI
             return chip;
         }
 
-        private static VisualElement MakePickerRow(ItemDefinition item, Action onPick)
-        {
-            var row = new Button();
-            row.style.flexDirection = FlexDirection.Row;
-            row.style.alignItems = Align.Center;
-            row.style.height = 30;
-            row.style.marginBottom = 2;
-            row.style.paddingLeft = 8; row.style.paddingRight = 8;
-            row.style.backgroundColor = new StyleColor(T.BgSlot);
-            T.Radius(row, 5f);
-            T.Border(row, 1, T.BorderDim);
 
-            if (item.icon != null)
-            {
-                var img = new Image { sprite = item.icon };
-                img.style.width = 20; img.style.height = 20; img.style.marginRight = 8;
-                img.pickingMode = PickingMode.Ignore;
-                row.Add(img);
-            }
-            else
-            {
-                var box = new VisualElement();
-                box.style.width = 16; box.style.height = 16; box.style.marginRight = 8;
-                box.style.backgroundColor = new StyleColor(item.iconTint);
-                T.Radius(box, 3f);
-                box.pickingMode = PickingMode.Ignore;
-                row.Add(box);
-            }
-
-            var name = new Label(item.displayName);
-            name.style.color = new StyleColor(T.TextPrimary);
-            name.style.fontSize = 11; name.style.flexGrow = 1;
-            name.pickingMode = PickingMode.Ignore;
-            row.Add(name);
-
-            row.RegisterCallback<PointerEnterEvent>(_ => row.style.backgroundColor = new StyleColor(T.BgHover));
-            row.RegisterCallback<PointerLeaveEvent>(_ => row.style.backgroundColor = new StyleColor(T.BgSlot));
-            row.clicked += () => onPick?.Invoke();
-            return row;
-        }
-
-        private static void EnsureItemCache()
-        {
-            if (_allItemsCache != null && _allItemsCache.Length > 0) return;
-            _allItemsCache = Resources.LoadAll<ItemDefinition>("")
-                .Where(i => i != null && !string.IsNullOrEmpty(i.itemId))
-                .OrderBy(i => i.displayName)
-                .ToArray();
-        }
 
         // ────────────────────────────────────────────────────────────
         // HELPERS
