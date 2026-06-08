@@ -7,7 +7,6 @@ using UnityEngine;
 using VoxelEngine.Core;
 using VoxelEngine.Items;
 using VoxelEngine.Settings;
-using VoxelEngine.Transport;
 using InputAction = VoxelEngine.Settings.InputAction;
 
 namespace VoxelEngine.Building
@@ -69,9 +68,6 @@ namespace VoxelEngine.Building
                 _ghostYaw += Mathf.Sign(wheel) * yawStep;
 
             UpdateGhost();
-
-            // Quarry placement preview
-            UpdateQuarryPreview();
         }
 
         // ---------- Ghost ----------
@@ -109,19 +105,9 @@ namespace VoxelEngine.Building
             ApplyGhostMaterial(_ghost, valid ? _ghostMaterialValid : _ghostMaterialInvalid);
         }
 
-        private void UpdateQuarryPreview()
-        {
-            if (_ghost == null || _ghostItem == null) { Quarry.HidePlacementPreview(); return; }
-            var block = _ghostItem;
-            if (block.placedPrefab == null) { Quarry.HidePlacementPreview(); return; }
-            var q = block.placedPrefab.GetComponent<Quarry>();
-            if (q == null) { Quarry.HidePlacementPreview(); return; }
-            Quarry.ShowPlacementPreview(_ghost.transform.position, _ghost.transform.rotation, q.defaultSize, q.forwardOffset);
-        }
-
         private void HideGhost()
         {
-            if (_ghost != null) { Destroy(_ghost); _ghost = null; _ghostItem = null; } Quarry.HidePlacementPreview();
+            if (_ghost != null) { Destroy(_ghost); _ghost = null; _ghostItem = null; }
         }
 
         public bool TryPlace(BlockItem block, RaycastHit hit, Vector3 viewDir)

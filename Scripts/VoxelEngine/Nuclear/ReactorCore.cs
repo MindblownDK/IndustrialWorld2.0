@@ -4,19 +4,15 @@
 // Steam is output via GasPipe network to a SteamTurbine.
 // Has internal water and steam tanks.
 
-using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.Building;
 using VoxelEngine.Gas;
 using VoxelEngine.Items;
-using VoxelEngine.Transport;
 
 namespace VoxelEngine.Nuclear
 {
     [RequireComponent(typeof(PlacedBlock))]
-    [RequireComponent(typeof(PortConfig))]
-    [RequireComponent(typeof(ItemPortRouting))]
-    public class ReactorCore : MonoBehaviour, IItemPortHost
+    public class ReactorCore : MonoBehaviour
     {
         [Header("Fuel")]
         public ItemDefinition fuelRodItem;
@@ -62,33 +58,6 @@ namespace VoxelEngine.Nuclear
             else fuelC.Resize(4);
             if (spentC == null) spentC = new ItemContainer("Spent Rods", 4);
             else spentC.Resize(4);
-        }
-
-        // ── IItemPortHost ───────────────────────────────────────────────────
-        private PortConfig _portConfig;
-        private ItemPortContainer[] _portContainers;
-
-        public PortConfig PortConfig
-        {
-            get
-            {
-                if (_portConfig == null)
-                {
-                    _portConfig = GetComponent<PortConfig>();
-                    if (_portConfig == null) _portConfig = gameObject.AddComponent<PortConfig>();
-                    _portConfig.EnsureAllFaces();
-                }
-                return _portConfig;
-            }
-        }
-
-        public IReadOnlyList<ItemPortContainer> GetPortContainers()
-        {
-            EnsureContainers();
-            _portContainers ??= new ItemPortContainer[2];
-            _portContainers[0] = new ItemPortContainer("Fuel Rods",  fuelC,  canInput: true,  canOutput: false);
-            _portContainers[1] = new ItemPortContainer("Spent Rods", spentC, canInput: false, canOutput: true);
-            return _portContainers;
         }
 
         private void Update()

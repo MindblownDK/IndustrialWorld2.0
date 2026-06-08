@@ -41,7 +41,7 @@ namespace VoxelEngine.Menu
         private float  _newContinentScale = 0.0015f;
 
         // Settings tabs.
-        private enum STab { Display, Camera, Audio, Saving, Keybinds }
+        private enum STab { Display, Camera, Audio, Keybinds }
         private STab _settingsTab = STab.Display;
 
         // ── Cached fonts (loaded once per scene-load) ──────────────
@@ -85,7 +85,6 @@ namespace VoxelEngine.Menu
         private void BuildUI()
         {
             _root = _doc.rootVisualElement;
-            VoxelEngine.FX.UiAudio.Attach(_root);   // click/hover audio (idempotent)
             _root.Clear();
             _root.style.flexGrow        = 1;
             _root.style.backgroundColor = new StyleColor(T.BgBase);
@@ -292,22 +291,15 @@ namespace VoxelEngine.Menu
             scroll.Add(FormLabel("World Seed"));
             var seedRow = new VisualElement();
             seedRow.style.flexDirection = FlexDirection.Row;
-            // TextField with integer parsing — chosen over IntegerField because
-            // IntegerField was editor-only in Unity ≤ 2022 and only became a
-            // runtime UIElement in Unity 6. Using TextField + int.TryParse here
-            // keeps the menu portable across every supported Unity version.
-            var seedField = new TextField { value = _newSeed.ToString() };
+            var seedField = new IntegerField { value = _newSeed };
             StyleField(seedField);
             seedField.style.flexGrow = 1;
-            seedField.RegisterValueChangedCallback(e =>
-            {
-                if (int.TryParse(e.newValue, out var parsed)) _newSeed = parsed;
-            });
+            seedField.RegisterValueChangedCallback(e => _newSeed = e.newValue);
             seedRow.Add(seedField);
             var rndBtn = BuildIconSmallButton(LucideIcons.Dice5, "RANDOM", () =>
             {
                 _newSeed = UnityEngine.Random.Range(1, int.MaxValue);
-                seedField.SetValueWithoutNotify(_newSeed.ToString());
+                seedField.SetValueWithoutNotify(_newSeed);
             }, T.AccentTeal);
             rndBtn.style.marginLeft = 8;
             seedRow.Add(rndBtn);
@@ -348,7 +340,6 @@ namespace VoxelEngine.Menu
             tabs.Add(TabBtn("Display",  STab.Display));
             tabs.Add(TabBtn("Camera",   STab.Camera));
             tabs.Add(TabBtn("Audio",    STab.Audio));
-            tabs.Add(TabBtn("Saving",   STab.Saving));
             tabs.Add(TabBtn("Keybinds", STab.Keybinds));
             panel.Add(tabs);
 
@@ -362,7 +353,6 @@ namespace VoxelEngine.Menu
                 case STab.Display:  DisplayTab(scroll);  break;
                 case STab.Camera:   CameraTab(scroll);   break;
                 case STab.Audio:    AudioTab(scroll);     break;
-                case STab.Saving:   SavingTab(scroll);    break;
                 case STab.Keybinds: KeybindTab(scroll);   break;
             }
 
@@ -376,13 +366,77 @@ namespace VoxelEngine.Menu
         }
 
         // ── Settings Tab Implementations ───────────────────────────
-        // All four tabs now delegate to the shared SettingsUI builder so the
-        // main menu and the in-game pause menu can never drift apart.
-        private void DisplayTab(VisualElement p)  => SettingsUI.DisplayTab(p, BuildUI);
-        private void CameraTab(VisualElement p)   => SettingsUI.CameraTab(p, BuildUI);
-        private void AudioTab(VisualElement p)    => SettingsUI.AudioTab(p, BuildUI);
-        private void SavingTab(VisualElement p)   => SettingsUI.SavingTab(p, BuildUI);
-        private void KeybindTab(VisualElement p)  => SettingsUI.KeybindTab(p, this, BuildUI);
+        private void DisplayTab(VisualElement p)
+        {
+            p.Add(FormLabel($"View Distance  —  {GameSettings.ViewDistance} chunks"));
+            p.Add(BuildIntSlider(2, 16, GameSettings.ViewDistance, v => { GameSettings.ViewDistance = v; BuildUI(); }));
+            p.Add(T.Spacer(10));
+            p.Add(FormLabel($"VSync  —  {GameSettings.VSync}"));
+            p.Add(BuildIntSlider(0, 2, GameSettings.VSync, v => { GameSettings.VSync = v; BuildUI(); }));
+        }
+
+        private void CameraTab(VisualElement p)
+        {
+            p.Add(FormLabel($"Field of View  —  {GameSettings.Fov:0}°"));
+            p.Add(BuildFloatSlider(40f, 120f, GameSettings.Fov, v => { GameSettings.Fov = v; BuildUI(); }));
+            p.Add(T.Spacer(10));
+            p.Add(FormLabel($"Mouse Sensitivity  —  {GameSettings.MouseSensitivity:0.00}"));
+            p.Add(BuildFloatSlider(0.02f, 1.5f, GameSettings.MouseSensitivity, v => { GameSettings.MouseSensitivity = v; BuildUI(); }));
+            p.Add(T.Spacer(10));
+            p.Add(FormLabel("Invert Y-Axis"));
+            var t = new Toggle { value = GameSettings.InvertY };
+            t.style.marginBottom = 4;
+            t.RegisterValueChangedCallback(e => GameSettings.InvertY = e.newValue);
+            p.Add(t);
+        }
+
+        private void AudioTab(VisualElement p)
+        {
+            float vol = GameSettings.MasterVolume;
+            p.Add(FormLabel($"Master Volume  —  {Mathf.Round(vol * 100f):0}%"));
+            var s = new Slider(0f, 1f) { value = vol, showInputField = true };
+            s.style.marginBottom = 4;
+            s.RegisterValueChangedCallback(e => { GameSettings.MasterVolume = e.newValue; BuildUI(); });
+            StyleInnerInput(s);
+            p.Add(s);
+        }
+
+        private void KeybindTab(VisualElement p)
+        {
+            foreach (InputAction a in Enum.GetValues(typeof(InputAction)))
+            {
+                var row = new VisualElement();
+                row.style.flexDirection   = FlexDirection.Row;
+                row.style.alignItems      = Align.Center;
+                row.style.marginBottom    = 5;
+                row.style.paddingTop      = 6;
+                row.style.paddingBottom   = 6;
+                row.style.paddingLeft     = 10;
+                row.style.paddingRight    = 10;
+                row.style.backgroundColor = new StyleColor(T.BgCard);
+                T.Radius(row, 5f);
+
+                var lbl = new Label(a.ToString());
+                lbl.style.color    = new StyleColor(T.TextSecondary);
+                lbl.style.fontSize = 12;
+                lbl.style.flexGrow = 1;
+                lbl.style.minHeight = 22;
+                row.Add(lbl);
+
+                var btn = T.SmallButton(GameSettings.GetKey(a), null, T.AccentTeal);
+                btn.style.minWidth = 120;
+                btn.clickable.clicked += () =>
+                {
+                    btn.text = "Press key…";
+                    btn.style.backgroundColor = new StyleColor(
+                        new Color(T.AccentGold.r, T.AccentGold.g, T.AccentGold.b, 0.80f));
+                    var cap = gameObject.AddComponent<KeyRebindCapture>();
+                    cap.onCaptured = code => { GameSettings.SetKey(a, code); BuildUI(); };
+                };
+                row.Add(btn);
+                p.Add(row);
+            }
+        }
 
         // ── Page Actions ───────────────────────────────────────────
         private void LoadWorld(string worldName)
@@ -582,11 +636,20 @@ namespace VoxelEngine.Menu
             StyleInnerInput(f);
         }
 
-        // (Removed) IntegerField overload — seed input is now a TextField with
-        // int parsing, so the typed overload above handles every styling caller.
+        private static void StyleField(IntegerField f)
+        {
+            f.style.minHeight       = 30;
+            f.style.marginBottom    = 4;
+            f.style.backgroundColor = new StyleColor(T.BgCard);
+            f.style.color           = new StyleColor(T.TextPrimary);
+            f.style.fontSize        = 13;
+            T.Radius(f, 5f);
+            T.Border(f, 1, T.BorderDim);
+            StyleInnerInput(f);
+        }
 
         /// <summary>
-        /// Forces every text-rendering descendant of a TextField / Slider
+        /// Forces every text-rendering descendant of a TextField / IntegerField / Slider
         /// input to use our theme colour. Unity Toolkit's input control is a deep tree
         /// (Field → TextInputBase → TextElement) and `color` does NOT cascade reliably
         /// onto the inner TextElement that actually draws typed glyphs. Without this

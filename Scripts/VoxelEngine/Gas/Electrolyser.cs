@@ -12,15 +12,11 @@ using UnityEngine;
 using VoxelEngine.Building;
 using VoxelEngine.Items;
 using VoxelEngine.Power;
-using VoxelEngine.Transport;
-using System.Collections.Generic;
 
 namespace VoxelEngine.Gas
 {
     [RequireComponent(typeof(PlacedBlock))]
-    [RequireComponent(typeof(PortConfig))]
-    [RequireComponent(typeof(ItemPortRouting))]
-    public class Electrolyser : MonoBehaviour, IItemPortHost
+    public class Electrolyser : MonoBehaviour
     {
         [Header("Input")]
         [Tooltip("Ice item consumed for electrolysis.")]
@@ -63,32 +59,6 @@ namespace VoxelEngine.Gas
         {
             if (iceInputC == null) iceInputC = new ItemContainer("Ice Input", 2);
             else iceInputC.Resize(2);
-        }
-
-        // ── IItemPortHost ───────────────────────────────────────────────────
-        private PortConfig _portConfig;
-        private ItemPortContainer[] _portContainers;
-
-        public PortConfig PortConfig
-        {
-            get
-            {
-                if (_portConfig == null)
-                {
-                    _portConfig = GetComponent<PortConfig>();
-                    if (_portConfig == null) _portConfig = gameObject.AddComponent<PortConfig>();
-                    _portConfig.EnsureAllFaces();
-                }
-                return _portConfig;
-            }
-        }
-
-        public IReadOnlyList<ItemPortContainer> GetPortContainers()
-        {
-            EnsureContainers();
-            _portContainers ??= new ItemPortContainer[1];
-            _portContainers[0] = new ItemPortContainer("Ice Input", iceInputC, canInput: true, canOutput: false);
-            return _portContainers;
         }
 
         private void Update()

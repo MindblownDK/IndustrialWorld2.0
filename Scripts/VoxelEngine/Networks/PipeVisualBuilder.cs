@@ -47,11 +47,6 @@ namespace VoxelEngine.Networks
         [Tooltip("Render as translucent glass with a visible inner medium core.")]
         public bool isGlass = false;
 
-        [Tooltip("Glass pipes only: leave the tube HOLLOW (skip the opaque inner " +
-                 "medium core) so external content — e.g. animated item pellets — " +
-                 "is visible THROUGH the transparent shell. Item pipes set this true.")]
-        public bool hollowGlass = false;
-
         [Header("Performance")]
         [Tooltip("Seconds between neighbour-change checks.")]
         public float rebuildInterval = 0.4f;
@@ -81,22 +76,6 @@ namespace VoxelEngine.Networks
         // see this line in the console after a pipe spawns, Unity is still
         // running a stale assembly cache.
         private static bool _builderLoggedOnce;
-
-        /// <summary>
-        /// FIRES BEFORE ANY SCENE LOADS — guaranteed to execute the moment
-        /// the assembly is loaded into the Unity runtime, regardless of any
-        /// scene / prefab state. If you don't see THIS in the console after
-        /// pressing Play, the new VoxelEngine assembly DID NOT compile and
-        /// Unity is running a stale cached DLL. Solutions:
-        ///   1. Close Unity → delete the `Library/ScriptAssemblies` folder
-        ///      from the project → reopen Unity.
-        ///   2. OR: in Unity menu, Assets → Reimport All.
-        /// </summary>
-        [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.BeforeSceneLoad)]
-        private static void AssemblyLoadProbe()
-        {
-            Debug.Log("[IndustrialWorld] ✓ VoxelEngine assembly v5 loaded — PipeVisualBuilder is ready.");
-        }
 
         // ── Internals ───────────────────────────────────────────
         private Transform _visualRoot;
@@ -254,7 +233,7 @@ namespace VoxelEngine.Networks
                 gridSize > 0 ? gridSize : 1f,
                 style,
                 _shellMat,
-                (isGlass && !hollowGlass) ? _innerMat : null,
+                isGlass ? _innerMat : null,
                 _accentMat);
         }
 

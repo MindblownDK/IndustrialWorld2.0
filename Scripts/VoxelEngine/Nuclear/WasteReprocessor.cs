@@ -11,15 +11,11 @@ using UnityEngine;
 using VoxelEngine.Building;
 using VoxelEngine.Items;
 using VoxelEngine.Power;
-using VoxelEngine.Transport;
-using System.Collections.Generic;
 
 namespace VoxelEngine.Nuclear
 {
     [RequireComponent(typeof(PlacedBlock))]
-    [RequireComponent(typeof(PortConfig))]
-    [RequireComponent(typeof(ItemPortRouting))]
-    public class WasteReprocessor : MonoBehaviour, IItemPortHost
+    public class WasteReprocessor : MonoBehaviour
     {
         [Header("Processing")]
         public float processTime = 60f;
@@ -62,34 +58,6 @@ namespace VoxelEngine.Nuclear
             else outputC.Resize(4);
             if (wasteOutputC == null) wasteOutputC = new ItemContainer("HL Waste", 2);
             else wasteOutputC.Resize(2);
-        }
-
-        // ── IItemPortHost ───────────────────────────────────────────────────
-        private PortConfig _portConfig;
-        private ItemPortContainer[] _portContainers;
-
-        public PortConfig PortConfig
-        {
-            get
-            {
-                if (_portConfig == null)
-                {
-                    _portConfig = GetComponent<PortConfig>();
-                    if (_portConfig == null) _portConfig = gameObject.AddComponent<PortConfig>();
-                    _portConfig.EnsureAllFaces();
-                }
-                return _portConfig;
-            }
-        }
-
-        public IReadOnlyList<ItemPortContainer> GetPortContainers()
-        {
-            EnsureContainers();
-            _portContainers ??= new ItemPortContainer[3];
-            _portContainers[0] = new ItemPortContainer("Input",    inputC,       canInput: true,  canOutput: false);
-            _portContainers[1] = new ItemPortContainer("Output",   outputC,      canInput: false, canOutput: true);
-            _portContainers[2] = new ItemPortContainer("HL Waste", wasteOutputC, canInput: false, canOutput: true);
-            return _portContainers;
         }
 
         private void Update()

@@ -136,8 +136,6 @@ namespace VoxelEngine.Items
             {
                 UI.BuildFeedbackHud.Show($"Picked up {stack.item.displayName}",
                     $"+{stack.count}", stack.item.icon, new Color(0.30f, 0.75f, 0.40f));
-                FX.AudioManager.PlayUI(FX.SfxLibrary.Get(FX.Sfx.Pickup), 0.45f,
-                    UnityEngine.Random.Range(0.97f, 1.06f));
                 Destroy(gameObject);
                 return true;
             }
@@ -146,8 +144,6 @@ namespace VoxelEngine.Items
             {
                 UI.BuildFeedbackHud.Show($"Picked up {stack.item.displayName}",
                     $"+{picked}", stack.item.icon, new Color(0.30f, 0.75f, 0.40f));
-                FX.AudioManager.PlayUI(FX.SfxLibrary.Get(FX.Sfx.Pickup), 0.45f,
-                    UnityEngine.Random.Range(0.97f, 1.06f));
                 stack.count = leftover.count;
             }
             return false;

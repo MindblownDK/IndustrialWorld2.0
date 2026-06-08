@@ -420,167 +420,60 @@ namespace VoxelEngine.UI
         public static VisualElement QuarryPanel(Quarry q, SlotBuilder slot)
         {
             q.EnsureOutputPublic();
-            q.EnsureUpgrades();
             var p = T.MachinePanel();
-            var pc = q.GetComponent<VoxelEngine.Power.PowerConsumer>();
-            bool powered = pc == null || pc.IsPowered;
 
-            string status = !powered ? "NO POWER" : q.Phase switch
+            string status = q.Phase switch
             {
-                QuarryPhase.TapeFrame     => "SURVEYING",
                 QuarryPhase.BuildingFrame => "BUILDING",
                 QuarryPhase.Mining        => q.IsOutputFull ? "OUTPUT FULL" : "DRILLING",
                 QuarryPhase.Complete      => "COMPLETE",
                 _                         => "IDLE"
             };
-            Color sc = !powered ? T.AccentRed : q.Phase switch
+            Color statusCol = q.Phase switch
             {
-                QuarryPhase.TapeFrame     => T.AccentOrange,
                 QuarryPhase.BuildingFrame => T.AccentOrange,
                 QuarryPhase.Mining        => q.IsOutputFull ? T.AccentRed : T.AccentGreen,
                 QuarryPhase.Complete      => T.AccentCyan,
                 _                         => T.TextMuted
             };
 
-            p.Add(BuildHeader("\u26CF", "Quarry Drill", status, sc, T.AccentGold));
-            p.Add(T.AccentDivider(sc));
+            p.Add(BuildHeader("⛏", "Quarry Drill", status, statusCol, T.AccentGold));
+            p.Add(T.AccentDivider(statusCol));
 
-            // ═══ BODY: LEFT (upgrades + output) | RIGHT (stats + ports) ═══
-            var body = new VisualElement();
-            body.style.flexDirection = FlexDirection.Row;
-            body.pickingMode = PickingMode.Ignore;
-
-            // ═══ LEFT COLUMN: Upgrades then Output ═══
-            var left = new VisualElement();
-            left.style.width = 140;
-            left.style.marginRight = 14;
-            left.style.alignItems = Align.Center;
-            left.pickingMode = PickingMode.Ignore;
-
-            // -- UPGRADES --
-            var upgLbl = new Label("UPGRADES");
-            upgLbl.style.fontSize = 9;
-            upgLbl.style.color = new StyleColor(T.AccentGold);
-            upgLbl.style.unityFontStyleAndWeight = FontStyle.Bold;
-            upgLbl.style.marginBottom = 4;
-            upgLbl.style.unityTextAlign = TextAnchor.MiddleCenter;
-            upgLbl.pickingMode = PickingMode.Ignore;
-            left.Add(upgLbl);
-
-            var upgCol = new VisualElement();
-            upgCol.style.flexDirection = FlexDirection.Column;
-            upgCol.style.alignItems = Align.Center;
-            upgCol.style.marginBottom = 10;
-
-            var rRow = UpgSlotRow(q.upgradeC, 0, "R", T.AccentGold, slot);
-            rRow.style.marginBottom = 4;
-            upgCol.Add(rRow);
-
-            var sRow = UpgSlotRow(q.upgradeC, 1, "S", T.AccentTeal, slot);
-            sRow.style.marginBottom = 4;
-            upgCol.Add(sRow);
-
-            var eRow = UpgSlotRow(q.upgradeC, 2, "E", T.AccentPurple, slot);
-            upgCol.Add(eRow);
-
-            left.Add(upgCol);
-
-            // -- OUTPUT --
-            var outLbl = new Label("OUTPUT");
-            outLbl.style.fontSize = 9;
-            outLbl.style.color = new StyleColor(T.AccentCyan);
-            outLbl.style.unityFontStyleAndWeight = FontStyle.Bold;
-            outLbl.style.marginBottom = 4;
-            outLbl.style.unityTextAlign = TextAnchor.MiddleCenter;
-            outLbl.pickingMode = PickingMode.Ignore;
-            left.Add(outLbl);
-
-            var outCol = new VisualElement();
-            outCol.style.flexDirection = FlexDirection.Column;
-            outCol.style.alignItems = Align.Center;
-            // Output as 3 rows of 2 items each
-            for (int row = 0; row < 3; row++)
-            {
-                var orow = new VisualElement();
-                orow.style.flexDirection = FlexDirection.Row;
-                orow.style.justifyContent = Justify.Center;
-                orow.style.marginBottom = 3;
-                for (int col = 0; col < 2; col++)
-                {
-                    int idx = row * 2 + col;
-                    if (idx < q.Output.Size)
-                    {
-                        var sv = slot(q.Output, idx, q.Output.GetSlot(idx), false, true);
-                        sv.style.marginRight = col == 0 ? 3 : 0;
-                        orow.Add(sv);
-                    }
-                }
-                outCol.Add(orow);
-            }
-            left.Add(outCol);
-
-            body.Add(left);
-
-            // ═══ RIGHT COLUMN: Stats + Ports ═══
-            var right = new VisualElement();
-            right.style.flexGrow = 1;
-            right.pickingMode = PickingMode.Ignore;
-
+            // Power
+            var pc = q.GetComponent<VoxelEngine.Power.PowerConsumer>();
             if (pc != null)
-                right.Add(T.StatRow("\u26A1", "Power",
-                    powered ? $"{q.EffPowerDraw:0} W  \u00B7  Connected" : "Disconnected",
+            {
+                bool powered = pc.IsPowered;
+                p.Add(T.StatRow("⚡", "Power",
+                    powered ? $"{pc.wattsPerSecond:0} W  ·  Connected" : "Disconnected",
                     powered ? T.AccentGreen : T.AccentRed));
+            }
 
-            right.Add(T.StatRow("\uD83D\uDCD0", "Area",
-                $"{q.AreaX}\u00D7{q.AreaZ}  ({q.EffSize}\u00B2)", T.AccentCyan));
-            right.Add(T.StatRow("\u2B07", "Depth",
-                $"{q.CurrentDepth} / {q.MaxDepth}", T.TextPrimary));
-            right.Add(T.StatRow("\u23F1", "Speed",
-                $"{q.EffInterval:F2}s", T.AccentTeal));
-            right.Add(T.StatRow("\uD83D\uDD27", "Tier",
-                $"{q.quarryTier}", T.TextSecondary));
+            p.Add(T.StatRow("📐", "Area",  $"{q.AreaX} × {q.AreaZ}",          T.AccentCyan));
+            p.Add(T.StatRow("⬇",  "Depth", $"{q.CurrentDepth} / {q.MaxDepth}", T.TextPrimary));
+            p.Add(T.StatRow("🔧", "Tier",  $"{q.quarryTier}",                  T.TextSecondary));
 
-            right.Add(T.Spacer(4));
-            var (progBar, _) = T.ProgressBar(q.IsMining ? q.MineProgress01 : 0f, T.AccentCyan, 8, true);
-            right.Add(progBar);
+            if (q.IsMining)
+            {
+                p.Add(T.Spacer(4));
+                var (progBar, _) = T.ProgressBar(q.MineProgress01, T.AccentCyan, 8, false);
+                p.Add(progBar);
+            }
 
-            // Item ports are appended by GameUIController via AppendItemPorts so
-            // the quarry uses the SAME advanced per-face item widget as every
-            // other machine (routing + searchable filters), not the old grid.
+            p.Add(T.Divider());
+            p.Add(T.Subtitle("Output Inventory"));
+            p.Add(SortRow(q.Output));
 
-            body.Add(right);
-            p.Add(body);
+            var grid   = T.SlotGrid();
+            var output = q.Output;
+            for (int i = 0; i < output.Size; i++)
+                grid.Add(slot(output, i, output.GetSlot(i), false, true));
+            p.Add(grid);
 
             p.Add(T.Spacer(8));
-            p.Add(T.Muted("Drop upgrades into the left slots. Cycles: Tape -> Frame -> Mining."));
+            p.Add(T.Muted("Connect item pipes to auto-export resources. Place landmarks to set a custom area."));
             return p;
-        }
-
-        private static VisualElement UpgSlotRow(ItemContainer c, int idx, string letter, Color accent, SlotBuilder slot)
-        {
-            var row = new VisualElement();
-            row.style.flexDirection = FlexDirection.Row;
-            row.style.alignItems = Align.Center;
-            row.pickingMode = PickingMode.Ignore;
-
-            var badge = new VisualElement();
-            badge.style.width = 22; badge.style.height = 22;
-            badge.style.backgroundColor = new StyleColor(new Color(accent.r, accent.g, accent.b, 0.18f));
-            T.Radius(badge, 5);
-            badge.style.alignItems = Align.Center;
-            badge.style.justifyContent = Justify.Center;
-            badge.style.marginRight = 6;
-            badge.pickingMode = PickingMode.Ignore;
-
-            var bl = new Label(letter);
-            bl.style.fontSize = 11;
-            bl.style.color = new StyleColor(accent);
-            bl.style.unityFontStyleAndWeight = FontStyle.Bold;
-            bl.pickingMode = PickingMode.Ignore;
-            badge.Add(bl);
-            row.Add(badge);
-            row.Add(slot(c, idx, c.GetSlot(idx), false, false));
-            return row;
         }
     }
 }

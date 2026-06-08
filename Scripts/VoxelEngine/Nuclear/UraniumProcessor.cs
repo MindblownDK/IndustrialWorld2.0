@@ -11,15 +11,11 @@ using UnityEngine;
 using VoxelEngine.Building;
 using VoxelEngine.Items;
 using VoxelEngine.Power;
-using VoxelEngine.Transport;
-using System.Collections.Generic;
 
 namespace VoxelEngine.Nuclear
 {
     [RequireComponent(typeof(PlacedBlock))]
-    [RequireComponent(typeof(PortConfig))]
-    [RequireComponent(typeof(ItemPortRouting))]
-    public class UraniumProcessor : MonoBehaviour, IItemPortHost
+    public class UraniumProcessor : MonoBehaviour
     {
         [Header("Processing")]
         [Tooltip("Seconds to process one batch of uranium ore.")]
@@ -69,34 +65,6 @@ namespace VoxelEngine.Nuclear
             else enrichedOutputC.Resize(4);
             if (wasteOutputC == null) wasteOutputC = new ItemContainer("Waste Output", 4);
             else wasteOutputC.Resize(4);
-        }
-
-        // ── IItemPortHost ───────────────────────────────────────────────────
-        private PortConfig _portConfig;
-        private ItemPortContainer[] _portContainers;
-
-        public PortConfig PortConfig
-        {
-            get
-            {
-                if (_portConfig == null)
-                {
-                    _portConfig = GetComponent<PortConfig>();
-                    if (_portConfig == null) _portConfig = gameObject.AddComponent<PortConfig>();
-                    _portConfig.EnsureAllFaces();
-                }
-                return _portConfig;
-            }
-        }
-
-        public IReadOnlyList<ItemPortContainer> GetPortContainers()
-        {
-            EnsureContainers();
-            _portContainers ??= new ItemPortContainer[3];
-            _portContainers[0] = new ItemPortContainer("Uranium Input",  inputC,          canInput: true,  canOutput: false);
-            _portContainers[1] = new ItemPortContainer("Enriched Output", enrichedOutputC, canInput: false, canOutput: true);
-            _portContainers[2] = new ItemPortContainer("Waste Output",   wasteOutputC,    canInput: false, canOutput: true);
-            return _portContainers;
         }
 
         private void Update()

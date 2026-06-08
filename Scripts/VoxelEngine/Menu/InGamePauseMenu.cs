@@ -11,7 +11,6 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UIElements;
 using VoxelEngine.Settings;
-using VoxelEngine.UI;
 using InputAction = VoxelEngine.Settings.InputAction;
 using Cursor      = UnityEngine.Cursor;
 using T           = VoxelEngine.UI.UITheme;
@@ -33,7 +32,7 @@ namespace VoxelEngine.Menu
         private bool          _savedVis;
 
         private enum Page  { Pause, Settings }
-        private enum STab  { Display, Camera, Audio, Saving, Keybinds }
+        private enum STab  { Display, Camera, Audio, Keybinds }
         private Page _page = Page.Pause;
         private STab _tab  = STab.Camera;
 
@@ -45,7 +44,6 @@ namespace VoxelEngine.Menu
                 _doc.panelSettings = Resources.Load<PanelSettings>("MenuPanelSettings");
             _root = _doc.rootVisualElement;
             _root.style.flexGrow = 1;
-            VoxelEngine.FX.UiAudio.Attach(_root);   // click/hover audio (idempotent)
             HideUI();
         }
 
@@ -173,7 +171,6 @@ namespace VoxelEngine.Menu
             tabs.Add(TabBtn("Display",  STab.Display));
             tabs.Add(TabBtn("Camera",   STab.Camera));
             tabs.Add(TabBtn("Audio",    STab.Audio));
-            tabs.Add(TabBtn("Saving",   STab.Saving));
             tabs.Add(TabBtn("Keybinds", STab.Keybinds));
             panel.Add(tabs);
 
@@ -186,7 +183,6 @@ namespace VoxelEngine.Menu
                 case STab.Display:  DisplayTab(scroll);  break;
                 case STab.Camera:   CameraTab(scroll);   break;
                 case STab.Audio:    AudioTab(scroll);     break;
-                case STab.Saving:   SavingTab(scroll);    break;
                 case STab.Keybinds: KeybindTab(scroll);   break;
             }
 
@@ -200,13 +196,75 @@ namespace VoxelEngine.Menu
         }
 
         // ── Settings Tab Content ───────────────────────────────────
-        // Delegates to the shared SettingsUI builder (same surface as the main
-        // menu) so polish & new options stay in lock-step across both menus.
-        private void DisplayTab(VisualElement p)  => SettingsUI.DisplayTab(p, BuildUI);
-        private void CameraTab(VisualElement p)   => SettingsUI.CameraTab(p, BuildUI);
-        private void AudioTab(VisualElement p)    => SettingsUI.AudioTab(p, BuildUI);
-        private void SavingTab(VisualElement p)   => SettingsUI.SavingTab(p, BuildUI);
-        private void KeybindTab(VisualElement p)  => SettingsUI.KeybindTab(p, this, BuildUI);
+        private void DisplayTab(VisualElement p)
+        {
+            p.Add(SettingRow("View Distance (chunks)"));
+            p.Add(IntSl(2, 16, GameSettings.ViewDistance, v => GameSettings.ViewDistance = v));
+            p.Add(T.Spacer(10));
+            p.Add(SettingRow("VSync"));
+            p.Add(IntSl(0, 2, GameSettings.VSync, v => GameSettings.VSync = v));
+        }
+
+        private void CameraTab(VisualElement p)
+        {
+            p.Add(SettingRow("Field of View"));
+            p.Add(FloatSl(40f, 120f, GameSettings.Fov, v => GameSettings.Fov = v));
+            p.Add(T.Spacer(10));
+            p.Add(SettingRow("Mouse Sensitivity"));
+            p.Add(FloatSl(0.02f, 1.5f, GameSettings.MouseSensitivity, v => GameSettings.MouseSensitivity = v));
+            p.Add(T.Spacer(10));
+            p.Add(SettingRow("Invert Y-Axis"));
+            var toggle = new Toggle { value = GameSettings.InvertY };
+            toggle.style.marginBottom = 4;
+            toggle.RegisterValueChangedCallback(e => GameSettings.InvertY = e.newValue);
+            p.Add(toggle);
+        }
+
+        private void AudioTab(VisualElement p)
+        {
+            float vol = GameSettings.MasterVolume;
+            p.Add(SettingRow($"Master Volume  —  {Mathf.Round(vol * 100f):0}%"));
+            var s = new Slider(0f, 1f) { value = vol, showInputField = true };
+            s.style.marginBottom = 4;
+            s.RegisterValueChangedCallback(e => { GameSettings.MasterVolume = e.newValue; BuildUI(); });
+            p.Add(s);
+        }
+
+        private void KeybindTab(VisualElement p)
+        {
+            foreach (InputAction a in Enum.GetValues(typeof(InputAction)))
+            {
+                var row = new VisualElement();
+                row.style.flexDirection = FlexDirection.Row;
+                row.style.alignItems    = Align.Center;
+                row.style.marginBottom  = 5;
+                row.style.paddingTop    = 4;
+                row.style.paddingBottom = 4;
+                row.style.paddingLeft   = 8;
+                row.style.paddingRight  = 8;
+                row.style.backgroundColor = new StyleColor(T.BgCard);
+                T.Radius(row, 5f);
+
+                var lbl = new Label(a.ToString());
+                lbl.style.color    = new StyleColor(T.TextSecondary);
+                lbl.style.fontSize = 12;
+                lbl.style.flexGrow = 1;
+                lbl.style.minHeight = 24;
+                row.Add(lbl);
+
+                var btn = T.SmallButton(GameSettings.GetKey(a), null, T.AccentTeal);
+                btn.style.minWidth = 120;
+                btn.clickable.clicked += () =>
+                {
+                    btn.text = "Press key…";
+                    btn.style.backgroundColor = new StyleColor(new Color(T.AccentGold.r, T.AccentGold.g, T.AccentGold.b, 0.80f));
+                    var cap = gameObject.AddComponent<KeyRebindCapture>();
+                    cap.onCaptured = code => { GameSettings.SetKey(a, code); BuildUI(); };
+                };
+                row.Add(btn);
+                p.Add(row);
+            }
+        }
 
         // ── Helpers ────────────────────────────────────────────────
         private static VisualElement MakePanel(int w, int h)
@@ -254,6 +312,32 @@ namespace VoxelEngine.Menu
             T.Border(b, 0, Color.clear);
             b.style.marginRight = 5;
             return b;
+        }
+
+        private static Label SettingRow(string text)
+        {
+            var l = new Label(text);
+            l.style.color    = new StyleColor(T.TextSecondary);
+            l.style.fontSize = 12;
+            l.style.minHeight = 20;
+            l.style.marginTop = 2;
+            return l;
+        }
+
+        private static VisualElement IntSl(int min, int max, int v, Action<int> cb)
+        {
+            var s = new SliderInt(min, max) { value = v, showInputField = true };
+            s.style.marginBottom = 4;
+            s.RegisterValueChangedCallback(e => cb(e.newValue));
+            return s;
+        }
+
+        private static VisualElement FloatSl(float min, float max, float v, Action<float> cb)
+        {
+            var s = new Slider(min, max) { value = v, showInputField = true };
+            s.style.marginBottom = 4;
+            s.RegisterValueChangedCallback(e => cb(e.newValue));
+            return s;
         }
 
         private void QuitToMenu()

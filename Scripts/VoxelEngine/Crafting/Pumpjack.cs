@@ -14,21 +14,17 @@
 // Refinery consumes Crude Oil BARRELS, so item pipes / chests / manual
 // shuttling are the only logistics needed in early-mid game.
 
-using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.Building;
 using VoxelEngine.Core;
 using VoxelEngine.Items;
 using VoxelEngine.Materials;
 using VoxelEngine.Power;
-using VoxelEngine.Transport;
 
 namespace VoxelEngine.Crafting
 {
     [RequireComponent(typeof(PlacedBlock))]
-    [RequireComponent(typeof(PortConfig))]
-    [RequireComponent(typeof(ItemPortRouting))]
-    public class Pumpjack : MonoBehaviour, IItemPortHost
+    public class Pumpjack : MonoBehaviour
     {
         [Header("Fuel / Output")]
         [Tooltip("Empty Barrel item consumed each cycle.")]
@@ -73,33 +69,6 @@ namespace VoxelEngine.Crafting
         {
             if (inputC  == null) inputC  = new ItemContainer("Empty Barrels",     1); else inputC.Resize(1);
             if (outputC == null) outputC = new ItemContainer("Crude Oil Barrels", 1); else outputC.Resize(1);
-        }
-
-        // ── IItemPortHost ───────────────────────────────────────────────────
-        private PortConfig _portConfig;
-        private ItemPortContainer[] _portContainers;
-
-        public PortConfig PortConfig
-        {
-            get
-            {
-                if (_portConfig == null)
-                {
-                    _portConfig = GetComponent<PortConfig>();
-                    if (_portConfig == null) _portConfig = gameObject.AddComponent<PortConfig>();
-                    _portConfig.EnsureAllFaces();
-                }
-                return _portConfig;
-            }
-        }
-
-        public IReadOnlyList<ItemPortContainer> GetPortContainers()
-        {
-            EnsureContainers();
-            _portContainers ??= new ItemPortContainer[2];
-            _portContainers[0] = new ItemPortContainer("Empty Barrels",     inputC,  canInput: true,  canOutput: false);
-            _portContainers[1] = new ItemPortContainer("Crude Oil Barrels", outputC, canInput: false, canOutput: true);
-            return _portContainers;
         }
 
         private void Update()
