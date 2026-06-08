@@ -28,29 +28,31 @@ namespace VoxelEngine.Networks
     /// </summary>
     public static class WrenchBlacklist
     {
-        // Stable, order-independent hash for an unordered GameObject pair.
-        // Using GetEntityId keeps the key small and avoids holding strong
-        // references that would survive scene unloads. GetEntityId is the
-        // Unity 6+ replacement for GetInstanceID (deprecated in Unity 6.4) —
-        // same semantics: a unique, stable int per UnityObject.
-        private static readonly HashSet<long> _blocked = new();
+        // Stable, order-independent key for an unordered GameObject pair.
+        // In Unity 6.4+, we use EntityId which is the modern replacement for InstanceID.
+        // We store them as a tuple in a HashSet for maximum efficiency and clarity.
+        private static readonly HashSet<(EntityId A, EntityId B)> _blocked = new();
 
-        private static long PairKey(GameObject a, GameObject b)
+        /// <summary>
+        /// Generates a stable, order-independent key for two GameObjects.
+        /// </summary>
+        private static (EntityId A, EntityId B) PairKey(GameObject a, GameObject b)
         {
-            if (a == null || b == null) return 0L;
-            var idA = a.GetEntityId(); uint ia = (uint)idA;
-            var idB = b.GetEntityId(); uint ib = (uint)idB;
-            uint lo = (ia < ib) ? ia : ib;
-            uint hi = (ia < ib) ? ib : ia;
-            // Pack into a long so the order never matters.
-            return ((long)(uint)lo << 32) | (uint)hi;
+            if (a == null || b == null) return (default, default);
+            
+            EntityId idA = a.GetEntityId();
+            EntityId idB = b.GetEntityId();
+            
+            // Ensure order independence by sorting based on the internal hash/value.
+            // EntityId implements GetHashCode().
+            return idA.GetHashCode() < idB.GetHashCode() ? (idA, idB) : (idB, idA);
         }
 
         /// <summary>True if these two GameObjects have been wrenched apart.</summary>
         public static bool IsBlocked(GameObject a, GameObject b)
         {
-            long key = PairKey(a, b);
-            return key != 0L && _blocked.Contains(key);
+            var key = PairKey(a, b);
+            return !key.A.Equals(default) && _blocked.Contains(key);
         }
 
         /// <summary>True if these two Components' GameObjects are blocked.</summary>
@@ -63,8 +65,8 @@ namespace VoxelEngine.Networks
         /// <summary>Add a pair so future rebuilds skip them.</summary>
         public static void Block(GameObject a, GameObject b)
         {
-            long key = PairKey(a, b);
-            if (key != 0L) _blocked.Add(key);
+            var key = PairKey(a, b);
+            if (!key.A.Equals(default)) _blocked.Add(key);
         }
 
         /// <summary>Add a pair via components.</summary>
@@ -77,8 +79,8 @@ namespace VoxelEngine.Networks
         /// <summary>Remove a pair so future rebuilds reconnect them normally.</summary>
         public static void Unblock(GameObject a, GameObject b)
         {
-            long key = PairKey(a, b);
-            if (key != 0L) _blocked.Remove(key);
+            var key = PairKey(a, b);
+            if (!key.A.Equals(default)) _blocked.Remove(key);
         }
 
         /// <summary>Forget every block. Called on scene unload.</summary>
@@ -93,18 +95,10 @@ namespace VoxelEngine.Networks
         public static void ClearForGameObject(GameObject go)
         {
             if (go == null || _blocked.Count == 0) return;
-            var entityId = go.GetEntityId(); uint id = (uint)entityId;
-            // Walk the set and drop every key whose hi OR lo half matches.
-            // Using ToArray() so we can mutate the underlying set safely.
-            long[] snapshot = new long[_blocked.Count];
-            int i = 0;
-            foreach (var key in _blocked) snapshot[i++] = key;
-            foreach (var key in snapshot)
-            {
-                uint lo = (uint)(key & 0xFFFFFFFF);
-                uint hi = (uint)((key >> 32) & 0xFFFFFFFF);
-                if (lo == (uint)id || hi == (uint)id) _blocked.Remove(key);
-            }
+            EntityId id = go.GetEntityId();
+            
+            // Use RemoveWhere for efficient bulk removal in Unity 6.
+            _blocked.RemoveWhere(pair => pair.A.Equals(id) || pair.B.Equals(id));
         }
 
         /// <summary>How many pairs are currently blocked (for debug UIs).</summary>
