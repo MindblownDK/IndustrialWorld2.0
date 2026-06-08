@@ -23,6 +23,8 @@ using VoxelEngine.Building;
 using VoxelEngine.Items;
 using VoxelEngine.Transport;
 using T = VoxelEngine.UI.UITheme;
+// Disambiguate from UnityEngine.FilterMode (texture filter enum).
+using FilterMode = VoxelEngine.Transport.FilterMode;
 
 namespace VoxelEngine.UI
 {
@@ -55,7 +57,7 @@ namespace VoxelEngine.UI
         /// doesn't destroy itself two seconds later. Cleared as soon as the
         /// dropdown closes.
         /// </summary>
-        public static bool IsAnyDropdownOpen { get; private set; }
+        public static bool IsAnyDropdownOpen { get; set; }
 
         // ────────────────────────────────────────────────────────────
         // PUBLIC ENTRY POINT

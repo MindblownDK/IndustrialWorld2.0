@@ -19,6 +19,8 @@ using UnityEngine.UIElements;
 using VoxelEngine.Items;
 using VoxelEngine.Transport;
 using T = VoxelEngine.UI.UITheme;
+// Disambiguate from UnityEngine.FilterMode (texture filter enum).
+using FilterMode = VoxelEngine.Transport.FilterMode;
 
 namespace VoxelEngine.UI
 {

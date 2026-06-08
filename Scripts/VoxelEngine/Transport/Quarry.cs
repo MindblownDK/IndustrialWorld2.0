@@ -236,9 +236,12 @@ namespace VoxelEngine.Transport
         void TkD(){if(!_dr)return;float dy=AreaMin.y-CurrentDepth-0.5f;var tp=new Vector3(AreaMin.x+_cx+0.5f,dy,AreaMin.z+_cz+0.5f);_dr.transform.position=tp;_dr.transform.Rotate(Vector3.up,220f*Time.deltaTime);if(_bm){_bm.transform.position=tp+Vector3.down*0.35f;_bm.transform.Rotate(Vector3.up,-180f*Time.deltaTime);}}
 
         // ═══ MINING ══════════════════════════════════
-        void MO(){if(CurrentDepth>=MaxDepth){Phase=QuarryPhase.Complete;if(_dr)Destroy(_dr);if(_bm)Destroy(_bm);_dr=_bm=null;return;}EnsureOutput();bool sp=false;for(int i=0;i<_out.Size;i++)if(_out.GetSlot(i).IsEmpty){sp=true;break;}if(!sp){var hs=Physics.OverlapSphere(transform.position,1.6f);foreach(var c in hs){if(c.gameObject==gameObject)continue;var p=c.GetComponent<ItemPipe>();if(p&&p.GetInputCapacity(null)>0){sp=true;break;}}}if(!sp){IsOutputFull=true;return;}IsOutputFull=false;var t=new Vector3Int(AreaMin.x+_cx,AreaMin.y-CurrentDepth,AreaMin.z+_cz);var v=_w.GetVoxelWorld(t);if(v.material==(byte)MaterialId.Bedrock){AD();return;}if(v.density>VoxelConstants.ISO_LEVEL){var def=_mr?.Get(v.material);if(def==null||!def.isMineable||quarryTier>=def.miningTier){_w.SetVoxelWorld(t,Voxel.Empty);if(def?.dropItem&&def.dropAmount>0)OI(def.dropItem,def.dropAmount);}}AD();}
+        void MO(){if(CurrentDepth>=MaxDepth){Phase=QuarryPhase.Complete;if(_dr)Destroy(_dr);if(_bm)Destroy(_bm);_dr=_bm=null;return;}EnsureOutput();bool sp=false;for(int i=0;i<_out.Size;i++)if(_out.GetSlot(i).IsEmpty){sp=true;break;}if(!sp){IsOutputFull=true;return;}IsOutputFull=false;var t=new Vector3Int(AreaMin.x+_cx,AreaMin.y-CurrentDepth,AreaMin.z+_cz);var v=_w.GetVoxelWorld(t);if(v.material==(byte)MaterialId.Bedrock){AD();return;}if(v.density>VoxelConstants.ISO_LEVEL){var def=_mr?.Get(v.material);if(def==null||!def.isMineable||quarryTier>=def.miningTier){_w.SetVoxelWorld(t,Voxel.Empty);if(def?.dropItem&&def.dropAmount>0)OI(def.dropItem,def.dropAmount);}}AD();}
         void AD(){_cx++;if(_cx>=AreaX){_cx=0;_cz++;if(_cz>=AreaZ){_cz=0;CurrentDepth++;}}}
-        void OI(ItemDefinition it,int n){int rem=n;var hs=Physics.OverlapSphere(transform.position,1.6f);foreach(var c in hs){if(c.gameObject==gameObject)continue;var p=c.GetComponent<ItemPipe>();if(!p)continue;int a=p.TryInsert(it,Mathf.Min(p.GetInputCapacity(it),rem));rem-=a;if(rem<=0)return;}if(rem>0){EnsureOutput();_out.Insert(new(it,rem));}}
+        // Mined items go ONLY into the Output container. The shared
+        // ItemPortRouting component then ejects them through configured OUTPUT
+        // faces (same system every machine uses) — no bespoke pipe-push here.
+        void OI(ItemDefinition it,int n){EnsureOutput();_out.Insert(new(it,n));}
         void EnsureOutput(){if(_out==null)_out=new("Output",outputSlots);else _out.Resize(outputSlots);}
         public void EnsureOutputPublic()=>EnsureOutput();
 
