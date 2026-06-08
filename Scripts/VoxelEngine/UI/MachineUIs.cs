@@ -445,50 +445,69 @@ namespace VoxelEngine.UI
             p.Add(BuildHeader("\u26CF", "Quarry Drill", status, sc, T.AccentGold));
             p.Add(T.AccentDivider(sc));
 
-            // Body: left (upgrades) + right (stats/ports/output)
+            // ═══ BODY: LEFT (upgrades + output) | RIGHT (stats + ports) ═══
             var body = new VisualElement();
             body.style.flexDirection = FlexDirection.Row;
             body.pickingMode = PickingMode.Ignore;
 
-            // ═══ LEFT: UPGRADE SLOTS ═══
+            // ═══ LEFT COLUMN: Upgrades -> Output ═══
             var left = new VisualElement();
-            left.style.width = 128;
+            left.style.width = 140;
             left.style.marginRight = 14;
             left.pickingMode = PickingMode.Ignore;
 
-            // "UPGRADES" label
-            var lbl = new Label("UPGRADES");
-            lbl.style.fontSize = 9;
-            lbl.style.color = new StyleColor(T.AccentGold);
-            lbl.style.unityFontStyleAndWeight = FontStyle.Bold;
-            lbl.style.marginBottom = 6;
-            lbl.style.unityTextAlign = TextAnchor.MiddleCenter;
-            lbl.pickingMode = PickingMode.Ignore;
-            left.Add(lbl);
+            // -- UPGRADES section --
+            var upgLbl = new Label("UPGRADES");
+            upgLbl.style.fontSize = 9;
+            upgLbl.style.color = new StyleColor(T.AccentGold);
+            upgLbl.style.unityFontStyleAndWeight = FontStyle.Bold;
+            upgLbl.style.marginBottom = 6;
+            upgLbl.style.unityTextAlign = TextAnchor.MiddleCenter;
+            upgLbl.pickingMode = PickingMode.Ignore;
+            left.Add(upgLbl);
 
-            // 3 upgrade slots with R/S/E icons
             var upgCol = new VisualElement();
             upgCol.style.flexDirection = FlexDirection.Column;
             upgCol.style.alignItems = Align.Center;
+            upgCol.style.marginBottom = 8;
 
-            // Range slot
             var rRow = UpgSlotRow(q.upgradeC, 0, "R", T.AccentGold, slot);
-            rRow.style.marginBottom = 6;
+            rRow.style.marginBottom = 4;
             upgCol.Add(rRow);
 
-            // Speed slot
             var sRow = UpgSlotRow(q.upgradeC, 1, "S", T.AccentTeal, slot);
-            sRow.style.marginBottom = 6;
+            sRow.style.marginBottom = 4;
             upgCol.Add(sRow);
 
-            // Efficiency slot
             var eRow = UpgSlotRow(q.upgradeC, 2, "E", T.AccentPurple, slot);
             upgCol.Add(eRow);
 
             left.Add(upgCol);
+
+            // -- OUTPUT section (under upgrades) --
+            var outLbl = new Label("OUTPUT");
+            outLbl.style.fontSize = 9;
+            outLbl.style.color = new StyleColor(T.AccentCyan);
+            outLbl.style.unityFontStyleAndWeight = FontStyle.Bold;
+            outLbl.style.marginBottom = 6;
+            outLbl.style.unityTextAlign = TextAnchor.MiddleCenter;
+            outLbl.pickingMode = PickingMode.Ignore;
+            left.Add(outLbl);
+
+            var outCol = new VisualElement();
+            outCol.style.flexDirection = FlexDirection.Column;
+            outCol.style.alignItems = Align.Center;
+            for (int i = 0; i < q.Output.Size; i++)
+            {
+                var s = slot(q.Output, i, q.Output.GetSlot(i), false, true);
+                s.style.marginBottom = 3;
+                outCol.Add(s);
+            }
+            left.Add(outCol);
+
             body.Add(left);
 
-            // ═══ RIGHT: Stats + Ports + Output ═══
+            // ═══ RIGHT COLUMN: Stats + Port Config (2-column) ═══
             var right = new VisualElement();
             right.style.flexGrow = 1;
             right.pickingMode = PickingMode.Ignore;
@@ -511,28 +530,96 @@ namespace VoxelEngine.UI
             var (progBar, _) = T.ProgressBar(q.IsMining ? q.MineProgress01 : 0f, T.AccentCyan, 8, true);
             right.Add(progBar);
 
-            // Port Config
+            // ── Port Config in TWO COLUMNS ──
             var portCfg = q.GetComponent<VoxelEngine.Transport.PortConfig>();
             if (portCfg != null)
             {
-                right.Add(T.Spacer(6));
-                right.Add(VoxelEngine.UI.PortConfigHud.Build(portCfg));
+                right.Add(T.Spacer(8));
+                right.Add(T.Subtitle("Ports"));
+
+                // Build port config faces in a 2-column grid
+                // PortConfig has 6 faces: we show them as 3 rows × 2 columns
+                var faces = portCfg.ports;
+                var portGrid = new VisualElement();
+                portGrid.style.flexDirection = FlexDirection.Column;
+                portGrid.style.marginTop = 4;
+                portGrid.pickingMode = PickingMode.Ignore;
+
+                // Row 1: PosX | NegX
+                var row1 = BuildPortRow(faces, 0, 1, portCfg);
+                portGrid.Add(row1);
+
+                // Row 2: PosY | NegY
+                var row2 = BuildPortRow(faces, 2, 3, portCfg);
+                row2.style.marginTop = 4;
+                portGrid.Add(row2);
+
+                // Row 3: PosZ | NegZ
+                var row3 = BuildPortRow(faces, 4, 5, portCfg);
+                row3.style.marginTop = 4;
+                portGrid.Add(row3);
+
+                right.Add(portGrid);
             }
 
-            // Output
-            right.Add(T.Divider());
-            right.Add(T.Subtitle("Output"));
-            right.Add(SortRow(q.Output));
-            var grid = T.SlotGrid();
-            for (int i = 0; i < q.Output.Size; i++)
-                grid.Add(slot(q.Output, i, q.Output.GetSlot(i), false, true));
-            right.Add(grid);
             body.Add(right);
             p.Add(body);
 
             p.Add(T.Spacer(8));
-            p.Add(T.Muted("Drop Quarry Upgrades into the left slots. Connect item pipes to export."));
+            p.Add(T.Muted("Drop upgrades into the left slots. Cycles: Tape -> Frame -> Mining."));
             return p;
+        }
+
+        private static VisualElement BuildPortRow(PortConfig.FacePort[] faces, int idxA, int idxB, PortConfig cfg)
+        {
+            var row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.pickingMode = PickingMode.Ignore;
+
+            row.Add(PortFaceLabel(faces[idxA].face, faces[idxA].direction, faces[idxA].enabled));
+            row.Add(PortFaceLabel(faces[idxB].face, faces[idxB].direction, faces[idxB].enabled));
+            return row;
+        }
+
+        private static VisualElement PortFaceLabel(PortConfig.CubeFace face, PortConfig.PortDirection dir, bool enabled)
+        {
+            var container = new VisualElement();
+            container.style.flexGrow = 1;
+            container.style.paddingTop = 3; container.style.paddingBottom = 3;
+            container.style.paddingLeft = 6; container.style.paddingRight = 6;
+            container.style.marginRight = 4;
+            container.pickingMode = PickingMode.Ignore;
+
+            string faceName = face switch
+            {
+                PortConfig.CubeFace.PosX => "+X", PortConfig.CubeFace.NegX => "-X",
+                PortConfig.CubeFace.PosY => "+Y", PortConfig.CubeFace.NegY => "-Y",
+                PortConfig.CubeFace.PosZ => "+Z", PortConfig.CubeFace.NegZ => "-Z",
+                _ => "?"
+            };
+
+            string dirName = !enabled ? "Off" : dir switch
+            {
+                PortConfig.PortDirection.Input  => "In",
+                PortConfig.PortDirection.Output => "Out",
+                _ => "Off"
+            };
+
+            Color tint = !enabled ? new Color(0.35f, 0.37f, 0.45f) : dir switch
+            {
+                PortConfig.PortDirection.Input  => new Color(0.22f, 0.78f, 0.42f),
+                PortConfig.PortDirection.Output => new Color(0.18f, 0.72f, 0.88f),
+                _ => new Color(0.35f, 0.37f, 0.45f)
+            };
+
+            var lbl = new Label($"{faceName} {dirName}");
+            lbl.style.fontSize = 9;
+            lbl.style.color = new StyleColor(tint);
+            lbl.style.unityFontStyleAndWeight = FontStyle.Bold;
+            lbl.pickingMode = PickingMode.Ignore;
+            container.Add(lbl);
+
+            return container;
         }
 
         private static VisualElement UpgSlotRow(ItemContainer c, int idx, string letter, Color accent, SlotBuilder slot)
@@ -542,10 +629,8 @@ namespace VoxelEngine.UI
             row.style.alignItems = Align.Center;
             row.pickingMode = PickingMode.Ignore;
 
-            // Icon badge
             var badge = new VisualElement();
-            badge.style.width = 22;
-            badge.style.height = 22;
+            badge.style.width = 22; badge.style.height = 22;
             badge.style.backgroundColor = new StyleColor(new Color(accent.r, accent.g, accent.b, 0.18f));
             T.Radius(badge, 5);
             badge.style.alignItems = Align.Center;
@@ -560,13 +645,12 @@ namespace VoxelEngine.UI
             bl.pickingMode = PickingMode.Ignore;
             badge.Add(bl);
             row.Add(badge);
-
-            // The slot
             row.Add(slot(c, idx, c.GetSlot(idx), false, false));
             return row;
         }
 
-        private static VisualElement QBadge(string txt, Color accent)
+        
+
         {
             var b = new VisualElement();
             b.style.paddingTop = 2; b.style.paddingBottom = 2;

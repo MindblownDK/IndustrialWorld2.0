@@ -3433,7 +3433,7 @@ root =>
                     };
                     var q = root.AddComponent<VoxelEngine.Transport.Quarry>();
                     q.defaultSize = 16; q.baseMineInterval = 0.5f; q.quarryTier = 3;
-                    q.forwardOffset = 2f; q.frameBuildInterval = 0.06f;
+                    q.forwardOffset = 2f; q.frameBuildInterval = 0.06f; q.frameTopOffset = 5f; q.frameDepth = 5f;
                     q.frameColor = new Color(0.18f, 0.19f, 0.22f);
                     q.outputSlots = 6;
                     q.EnsureUpgrades();
