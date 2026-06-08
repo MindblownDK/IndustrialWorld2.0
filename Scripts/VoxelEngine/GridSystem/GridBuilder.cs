@@ -1,11 +1,9 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridBuilder.cs
 //
-// Handles placing grid blocks. Ghost preview, snap to existing grids.
-// All input uses Input System (no UnityEngine.Input).
+// Improved GridBuilder with gapless placement and better snapping.
 
 using UnityEngine;
 using VoxelEngine.Items;
-using VoxelEngine.Player;
 using VoxelEngine.Settings;
 using InputAction = VoxelEngine.Settings.InputAction;
 
@@ -57,12 +55,14 @@ namespace VoxelEngine.GridSystem
 
             if (targetGrid != null && targetGrid.gridSize == gbi.gridSize)
             {
+                // Gapless snapping
                 gridPos = targetGrid.WorldToGrid(hit.point + hit.normal * cs * 0.5f);
                 worldPos = targetGrid.GridToWorld(gridPos);
                 if (!targetGrid.CanPlace(gridPos)) { HideGhost(); return; }
             }
             else
             {
+                // Free placement with proper alignment
                 worldPos = new Vector3(
                     Mathf.Round(hit.point.x / cs + hit.normal.x * 0.5f) * cs,
                     Mathf.Round(hit.point.y / cs + hit.normal.y * 0.5f) * cs,
@@ -73,7 +73,6 @@ namespace VoxelEngine.GridSystem
 
             ShowGhost(worldPos, cs);
 
-            // Place on RMB (Build action).
             if (GameSettings.WasPressed(InputAction.Build))
             {
                 PlaceBlock(gbi, targetGrid, gridPos, worldPos);
@@ -98,8 +97,7 @@ namespace VoxelEngine.GridSystem
             }
             else
             {
-                block = GridBlock.CreateBlock<GridBlock>("Block", item.gridSize,
-                    item.iconTint != default ? item.iconTint : new Color(0.5f, 0.5f, 0.55f));
+                block = GridBlock.CreateBlock<GridBlock>("Block", item.gridSize, item.iconTint);
             }
 
             block.blockName = item.displayName;
@@ -124,7 +122,6 @@ namespace VoxelEngine.GridSystem
                 _ghostMat = new Material(shader);
                 _ghostMat.color = ghostColor;
                 if (_ghostMat.HasProperty("_BaseColor")) _ghostMat.SetColor("_BaseColor", ghostColor);
-                if (_ghostMat.HasProperty("_Surface")) _ghostMat.SetFloat("_Surface", 1f);
                 _ghostMat.SetOverrideTag("RenderType", "Transparent");
                 _ghostMat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
                 _ghostMat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
@@ -136,7 +133,7 @@ namespace VoxelEngine.GridSystem
 
             _ghost.SetActive(true);
             _ghost.transform.position = pos;
-            _ghost.transform.localScale = Vector3.one * cellSize * 0.95f;
+            _ghost.transform.localScale = Vector3.one * cellSize * 0.98f; // Tighter fit
         }
 
         private void HideGhost()
@@ -145,3 +142,4 @@ namespace VoxelEngine.GridSystem
         }
     }
 }
+```
