@@ -13,6 +13,7 @@
 // ║  music) and are rate-limited so rapid moves never machine-gun.   ║
 // ╚══════════════════════════════════════════════════════════════════╝
 
+using System.Runtime.CompilerServices;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -28,17 +29,22 @@ namespace VoxelEngine.FX
         // Master enable — UI clicks/hover can be globally toggled if ever desired.
         public static bool Enabled = true;
 
+        // Weak-keyed sets so we never leak VisualElements: entries vanish when the
+        // element is garbage-collected. Replaces the GetProperty/SetProperty API
+        // (which isn't public in this Unity version).
+        private static readonly ConditionalWeakTable<VisualElement, object> _attached = new();
+        private static readonly ConditionalWeakTable<VisualElement, object> _clickable = new();
+
         /// <summary>
         /// Wire click + hover audio onto a panel root. Safe to call repeatedly on
-        /// the same root — it only registers once (tracked via a marker class on
-        /// the element's userData chain is overkill, so we use a name flag).
+        /// the same root — it only registers once (tracked in a weak set).
         /// </summary>
         public static void Attach(VisualElement root)
         {
             if (root == null) return;
-            // Guard against double-registration when the HUD rebuilds: store a flag.
-            if (root.GetProperty(AttachedKey) is bool b && b) return;
-            root.SetProperty(AttachedKey, true);
+            // Guard against double-registration when the HUD rebuilds.
+            if (_attached.TryGetValue(root, out _)) return;
+            _attached.Add(root, BoolBox);
 
             // PointerDown trickles down from the root through every ancestor of the
             // target, so one handler covers the whole tree — including elements
@@ -47,7 +53,8 @@ namespace VoxelEngine.FX
             root.RegisterCallback<PointerOverEvent>(OnPointerOver, TrickleDown.TrickleDown);
         }
 
-        private const string AttachedKey = "iw.uiaudio.attached";
+        // Shared boxed marker stored as the table value (we only care about key presence).
+        private static readonly object BoolBox = new();
 
         private static void OnPointerDown(PointerDownEvent evt)
         {
@@ -92,12 +99,10 @@ namespace VoxelEngine.FX
                 // Our custom code-built "buttons" are plain VisualElements that
                 // registered a ClickEvent and use PickingMode.Position. We tag
                 // those explicitly via MarkClickable() below.
-                if (e.GetProperty(ClickableKey) is bool cb && cb) return true;
+                if (_clickable.TryGetValue(e, out _)) return true;
             }
             return false;
         }
-
-        private const string ClickableKey = "iw.uiaudio.clickable";
 
         /// <summary>
         /// Opt a custom (non-Button) clickable VisualElement into UI audio —
@@ -106,7 +111,7 @@ namespace VoxelEngine.FX
         public static void MarkClickable(VisualElement ve)
         {
             if (ve == null) return;
-            ve.SetProperty(ClickableKey, true);
+            if (!_clickable.TryGetValue(ve, out _)) _clickable.Add(ve, BoolBox);
         }
     }
 }
