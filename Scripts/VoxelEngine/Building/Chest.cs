@@ -50,6 +50,37 @@ namespace VoxelEngine.Building
         private PortConfig _ports;
         private float _pushTimer;
 
+        /// <summary>The chest's port configuration (six configurable faces).</summary>
+        public PortConfig Ports => _ports;
+
+        /// <summary>
+        /// True if the face of this chest pointing toward <paramref name="fromWorldPos"/>
+        /// is an ENABLED port set to Input or Output. Disabled / None faces are
+        /// "not connected" — pipes neither link to nor exchange items through them.
+        /// Used by ItemPipe to decide whether to draw a connecting arm at all.
+        /// </summary>
+        public bool IsFaceConnectable(Vector3 fromWorldPos)
+        {
+            if (_ports == null) return false;
+            // Which face points at the pipe?
+            Vector3 to = fromWorldPos - transform.position;
+            if (to.sqrMagnitude < 1e-4f) return false;
+            Vector3 dir = to.normalized;
+
+            CubeFace best = CubeFace.PosX;
+            float bestDot = -1f;
+            for (int i = 0; i < 6; i++)
+            {
+                var f = (CubeFace)i;
+                float dot = Vector3.Dot(dir, _ports.FaceNormal(f));
+                if (dot > bestDot) { bestDot = dot; best = f; }
+            }
+            if (bestDot < 0.5f) return false;
+
+            return _ports.IsFaceEnabled(best) &&
+                   _ports.GetDirection(best) != PortDirection.None;
+        }
+
         // ── IInventoryInterface ────────────────────────────────────────────
         public ItemContainer GetOutputContainer() => container;
         public ItemContainer GetInputContainer()  => container;

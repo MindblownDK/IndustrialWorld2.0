@@ -49,6 +49,12 @@ namespace VoxelEngine.Transport
         private ItemFlowVisualizer _flow;
         private readonly List<Vector3> _neighbourPosBuf = new(12);
 
+        // Per-tick accumulator of directions the pipe is actively feeding, plus
+        // the item being carried — handed to the flow visualizer as a continuous
+        // stream so the animation is always visible while items move.
+        private readonly List<Vector3> _flowDirs = new(6);
+        private ItemDefinition _flowItem;
+
         // Cache of nearby container endpoints (chests/machines) refreshed each
         // tick — used both to draw connecting arms AND to drive flow direction.
         private readonly List<Vector3> _endpointPositions = new(6);
@@ -76,11 +82,17 @@ namespace VoxelEngine.Transport
 
             // Glass pipes animate the carried stream. Only spawn the visualizer
             // for glass — solid pipes hide the core so pellets would be invisible.
-            if (isGlass)
-            {
-                _flow = GetComponent<ItemFlowVisualizer>();
-                if (_flow == null) _flow = gameObject.AddComponent<ItemFlowVisualizer>();
-            }
+            // Resolved lazily in EnsureFlow() so it works even if `isGlass` is
+            // assigned after Awake (e.g. by a placement script).
+            EnsureFlow();
+        }
+
+        /// <summary>Create/find the flow visualizer once the pipe is known to be glass.</summary>
+        private void EnsureFlow()
+        {
+            if (!isGlass || _flow != null) return;
+            _flow = GetComponent<ItemFlowVisualizer>();
+            if (_flow == null) _flow = gameObject.AddComponent<ItemFlowVisualizer>();
         }
 
         private void OnEnable()  { ItemPipeNetwork.EnsureInstance(); ItemPipeNetwork.Instance?.Register(this); }
@@ -180,10 +192,22 @@ namespace VoxelEngine.Transport
                 if (col.gameObject == gameObject) continue;
                 if (col.GetComponentInParent<ItemPipe>() != null) continue; // pipes already handled
 
-                bool isEndpoint = col.GetComponentInParent<Chest>() != null
-                               || col.GetComponentInParent<IInventoryInterface>() != null
-                               || col.GetComponentInParent<IItemContainer>() != null;
-                if (!isEndpoint) continue;
+                // CHESTS: only connect when the face pointing at us is an ENABLED
+                // Input/Output port. A disabled / None face means NO connection —
+                // the pipe must not draw an arm or exchange items there.
+                var chest = col.GetComponentInParent<Chest>();
+                if (chest != null)
+                {
+                    if (!chest.IsFaceConnectable(transform.position)) continue;
+                }
+                else
+                {
+                    // Other endpoints (machines) connect if they expose an item
+                    // interface or container.
+                    bool isEndpoint = col.GetComponentInParent<IInventoryInterface>() != null
+                                   || col.GetComponentInParent<IItemContainer>() != null;
+                    if (!isEndpoint) continue;
+                }
 
                 Vector3 to = col.bounds.center - transform.position;
                 Vector3 dir = NearestCardinal(to);
@@ -192,6 +216,17 @@ namespace VoxelEngine.Transport
                 if (!_endpointPositions.Contains(endpoint))
                     _endpointPositions.Add(endpoint);
             }
+        }
+
+        /// <summary>
+        /// Force an immediate endpoint rescan + visual rebuild. Called by the
+        /// network when a port config changes so connections update instantly
+        /// instead of waiting for the next 0.5 s poll.
+        /// </summary>
+        public void ForceEndpointRescan()
+        {
+            ScanEndpoints();
+            if (_visuals != null) _visuals.ForceRebuild();
         }
 
         private static Vector3 NearestCardinal(Vector3 v)
@@ -211,13 +246,18 @@ namespace VoxelEngine.Transport
         {
             EnsureBuffer();
 
+            // Reset this tick's flow accumulator. Any successful move appends the
+            // outbound direction; at the end we hand them to the visualizer as a
+            // single continuous stream so the animation reads clearly.
+            _flowDirs.Clear();
+            _flowItem = null;
+
             for (int i = 0; i < _buffer.Size; i++)
             {
                 var stack = _buffer.GetSlot(i);
                 if (stack.IsEmpty) continue;
 
-                // 1) Try to push into any sink (chest/machine) — animate the
-                //    pellet flowing OUT toward that endpoint.
+                // 1) Try to push into any sink (chest/machine).
                 TryPushToSinks(stack);
                 if (stack.IsEmpty || stack.count <= 0)
                 {
@@ -236,12 +276,11 @@ namespace VoxelEngine.Transport
                     int accepted = nb.TryInsert(stack.item, send);
                     if (accepted > 0)
                     {
-                        // Animate: pellet flows from our hub toward this neighbour.
                         Vector3 toDir = (nb.transform.position - transform.position).normalized;
-                        EmitFlow(stack.item, -toDir, toDir);
-                        // Hand the visual to the receiving pipe too so the stream
-                        // appears continuous across segments.
-                        nb.EmitFlow(stack.item, -toDir, toDir);
+                        RecordFlow(stack.item, toDir);
+                        // Feed the receiving pipe an INBOUND stream from our side
+                        // so the animation reads as continuous across segments.
+                        nb.ReceiveFlow(stack.item, -toDir);
                         stack.count -= accepted;
                     }
 
@@ -252,6 +291,10 @@ namespace VoxelEngine.Transport
                     }
                 }
             }
+
+            // Publish the accumulated stream for this tick.
+            if (_flowItem != null && _flowDirs.Count > 0)
+                PublishFlow();
         }
 
         /// <summary>
@@ -275,7 +318,7 @@ namespace VoxelEngine.Transport
                     if (accepted > 0)
                     {
                         Vector3 toDir = (chest.transform.position - transform.position).normalized;
-                        EmitFlow(stack.item, -toDir, toDir);
+                        RecordFlow(stack.item, toDir);
                         stack.count -= accepted;
                         if (stack.IsEmpty || stack.count <= 0) return;
                     }
@@ -291,7 +334,7 @@ namespace VoxelEngine.Transport
                     if (stack.count < before)
                     {
                         Vector3 toDir = (col.bounds.center - transform.position).normalized;
-                        EmitFlow(stack.item, -toDir, toDir);
+                        RecordFlow(stack.item, toDir);
                     }
                     if (stack.IsEmpty || stack.count <= 0) return;
                 }
@@ -307,11 +350,38 @@ namespace VoxelEngine.Transport
             stack.count -= accepted;
         }
 
-        /// <summary>Spawn a flowing-item pellet (glass pipes only).</summary>
-        public void EmitFlow(ItemDefinition item, Vector3 fromDir, Vector3 toDir)
+        /// <summary>Accumulate an outbound flow direction for this tick.</summary>
+        private void RecordFlow(ItemDefinition item, Vector3 worldDir)
         {
-            if (_flow == null) return;
-            _flow.Emit(item, fromDir, toDir, tickInterval);
+            if (item == null || worldDir.sqrMagnitude < 0.0001f) return;
+            _flowItem = item;
+            Vector3 norm = worldDir.normalized;
+            // De-dup near-identical directions.
+            foreach (var d in _flowDirs)
+                if (Vector3.Dot(d, norm) > 0.97f) return;
+            _flowDirs.Add(norm);
         }
+
+        /// <summary>Hand this tick's accumulated stream to the glass visualizer.</summary>
+        private void PublishFlow()
+        {
+            EnsureFlow();
+            if (_flow == null) return;
+            _flow.SetFlow(_flowItem, _flowDirs);
+        }
+
+        /// <summary>
+        /// Called by an upstream pipe so the RECEIVING segment also shows an
+        /// inbound stream (keeps the animation continuous across pipe joints).
+        /// </summary>
+        public void ReceiveFlow(ItemDefinition item, Vector3 worldDir)
+        {
+            EnsureFlow();
+            if (_flow == null || item == null) return;
+            _scratchDir.Clear();
+            _scratchDir.Add(worldDir.normalized);
+            _flow.SetFlow(item, _scratchDir);
+        }
+        private readonly List<Vector3> _scratchDir = new(1);
     }
 }

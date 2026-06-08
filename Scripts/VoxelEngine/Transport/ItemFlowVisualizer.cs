@@ -1,17 +1,18 @@
 // Assets/Scripts/VoxelEngine/Transport/ItemFlowVisualizer.cs
 //
 // ╔══════════════════════════════════════════════════════════════════╗
-// ║   ITEM FLOW VISUALIZER — animated pellets inside glass pipes     ║
+// ║   ITEM FLOW VISUALIZER — continuous pellet stream in glass pipe  ║
 // ║                                                                  ║
-// ║   Driven by ItemPipe. Each time the pipe physically moves an     ║
-// ║   item across a tick, it calls Emit() with the entry + exit      ║
-// ║   directions. A small emissive pellet (tinted to the item) then  ║
-// ║   slides from the entry arm tip → hub → exit arm tip over one    ║
-// ║   tick, selling the "stream flowing through the glass".          ║
+// ║   Driven by ItemPipe. The pipe calls SetFlow() whenever it is    ║
+// ║   actively carrying items, supplying the item + the world-space   ║
+// ║   directions it is currently feeding (one per active endpoint).   ║
+// ║   While flow is "hot" the visualizer animates an evenly-spaced    ║
+// ║   STREAM of small emissive pellets sliding hub → exit along each  ║
+// ║   active direction, looping continuously so it's always visible.  ║
+// ║   When the pipe stops moving items the stream fades out.          ║
 // ║                                                                  ║
-// ║   • Object-pooled — zero per-frame allocation after warm-up.     ║
+// ║   • Object-pooled, zero steady-state allocation.                 ║
 // ║   • Self-contained: no edits to the mesh rebuild pipeline.       ║
-// ║   • Only renders for GLASS pipes (opaque pipes hide the core).   ║
 // ╚══════════════════════════════════════════════════════════════════╝
 
 using System.Collections.Generic;
@@ -23,161 +24,165 @@ namespace VoxelEngine.Transport
     [DisallowMultipleComponent]
     public class ItemFlowVisualizer : MonoBehaviour
     {
-        [Tooltip("Diameter of a flowing pellet relative to the pipe core.")]
-        public float pelletSize = 0.16f;
+        [Tooltip("Diameter of a flowing pellet.")]
+        public float pelletSize = 0.18f;
 
-        [Tooltip("How far down each arm the pellet travels before/after the hub.")]
+        [Tooltip("How far from the hub a pellet travels along each arm.")]
         public float armReach = 0.5f;
 
-        // ── Pooling ─────────────────────────────────────────────────────────
-        private readonly List<Pellet> _active = new();
-        private readonly Stack<Pellet> _pool = new();
+        [Tooltip("Pellets shown simultaneously per active direction.")]
+        public int pelletsPerStream = 3;
+
+        [Tooltip("Seconds for one pellet to travel a full arm.")]
+        public float travelTime = 0.6f;
+
+        [Tooltip("Seconds the stream keeps flowing after the last item moved.")]
+        public float flowLinger = 0.9f;
+
+        // ── Stream state ────────────────────────────────────────────────────
+        // Local-space directions the pipe is currently feeding (one per sink).
+        private readonly List<Vector3> _streams = new(6);
+        private float _hotUntil;          // stream renders while Time.time < this
+        private float _intensity;         // 0..1 eased fade for scale/brightness
+
+        // ── Pellet pool ─────────────────────────────────────────────────────
+        private readonly List<Transform> _pellets = new();
+        private readonly List<MeshRenderer> _renderers = new();
+        private MaterialPropertyBlock _mpb;
         private Transform _root;
         private Material _sharedMat;
         private static Mesh _sphereMesh;
-
-        private class Pellet
-        {
-            public Transform tf;
-            public MeshRenderer renderer;
-            public MaterialPropertyBlock mpb;
-            public Vector3 from;     // local entry point
-            public Vector3 mid;      // local hub point
-            public Vector3 to;       // local exit point
-            public float duration;
-            public float elapsed;
-            public Color color;
-        }
+        private Color _color = new(0.95f, 0.7f, 0.3f);
 
         private void Awake()
         {
             var go = new GameObject("ItemFlow");
             _root = go.transform;
             _root.SetParent(transform, worldPositionStays: false);
+            _mpb = new MaterialPropertyBlock();
             EnsureSphereMesh();
         }
 
         private void OnDisable()
         {
-            // Recycle everything so re-enabling starts clean.
-            for (int i = _active.Count - 1; i >= 0; i--) Recycle(_active[i]);
-            _active.Clear();
+            _streams.Clear();
+            _hotUntil = 0f;
+            _intensity = 0f;
+            SetActivePelletCount(0);
         }
 
         /// <summary>
-        /// Spawn an animated pellet flowing from <paramref name="fromDir"/> (the
-        /// cardinal direction the item entered from, world space) toward
-        /// <paramref name="toDir"/> (where it's heading). Pass Vector3.zero for a
-        /// missing side (e.g. injected at this pipe, or delivered into a sink).
+        /// Tell the visualizer the pipe is actively moving <paramref name="item"/>
+        /// toward the given world-space directions (one per active sink/neighbour).
+        /// Call this every tick the pipe moves something; the stream lingers
+        /// briefly after the last call so brief gaps don't strobe.
         /// </summary>
-        public void Emit(ItemDefinition item, Vector3 fromDir, Vector3 toDir, float duration)
+        public void SetFlow(ItemDefinition item, List<Vector3> worldDirs)
         {
-            if (item == null) return;
-            duration = Mathf.Max(0.08f, duration);
+            if (item == null || worldDirs == null || worldDirs.Count == 0) return;
 
-            var p = _pool.Count > 0 ? _pool.Pop() : CreatePellet();
-
-            // Convert world cardinal directions to local space so the pellet
-            // path follows the pipe even if the pipe is rotated.
-            Vector3 inLocal  = fromDir.sqrMagnitude > 0.01f
-                ? transform.InverseTransformDirection(fromDir).normalized * armReach
-                : Vector3.zero;
-            Vector3 outLocal = toDir.sqrMagnitude > 0.01f
-                ? transform.InverseTransformDirection(toDir).normalized * armReach
-                : Vector3.zero;
-
-            p.from = inLocal;
-            p.mid  = Vector3.zero;
-            p.to   = outLocal;
-            p.duration = duration;
-            p.elapsed  = 0f;
-
-            // Tint to the item: prefer the icon tint, fall back to a warm amber.
             Color c = item.iconTint;
             if (c.maxColorComponent < 0.05f) c = new Color(0.95f, 0.7f, 0.3f);
             c.a = 1f;
-            p.color = c;
+            _color = c;
 
-            p.tf.gameObject.SetActive(true);
-            p.tf.localScale = Vector3.one * pelletSize;
-            p.tf.localPosition = p.from;
-            ApplyColor(p);
+            // Rebuild stream descriptors (cheap — at most 6).
+            _streams.Clear();
+            for (int i = 0; i < worldDirs.Count; i++)
+            {
+                Vector3 d = worldDirs[i];
+                if (d.sqrMagnitude < 0.01f) continue;
+                Vector3 local = transform.InverseTransformDirection(d).normalized;
+                _streams.Add(local);
+            }
 
-            _active.Add(p);
+            _hotUntil = Time.time + flowLinger;
         }
 
         private void Update()
         {
-            if (_active.Count == 0) return;
+            bool hot = Time.time < _hotUntil && _streams.Count > 0;
 
-            for (int i = _active.Count - 1; i >= 0; i--)
+            // Ease intensity toward 1 while hot, toward 0 once cold.
+            float target = hot ? 1f : 0f;
+            _intensity = Mathf.MoveTowards(_intensity, target, Time.deltaTime / 0.25f);
+
+            int need = (_intensity > 0.001f) ? _streams.Count * pelletsPerStream : 0;
+            SetActivePelletCount(need);
+            if (need == 0) return;
+
+            float tt = Mathf.Max(0.1f, travelTime);
+            float globalPhase = (Time.time / tt) % 1f;
+
+            int idx = 0;
+            for (int s = 0; s < _streams.Count; s++)
             {
-                var p = _active[i];
-                p.elapsed += Time.deltaTime;
-                float t = p.elapsed / p.duration;
-
-                if (t >= 1f)
+                Vector3 dir = _streams[s];
+                for (int k = 0; k < pelletsPerStream; k++)
                 {
-                    _active.RemoveAt(i);
-                    Recycle(p);
-                    continue;
+                    // Evenly spaced pellets, all marching outward along the arm,
+                    // looping 0→1 so the stream looks continuous.
+                    float p = (globalPhase + (float)k / pelletsPerStream) % 1f;
+
+                    var tf = _pellets[idx];
+                    // Pellet rides from just inside the hub out to the arm tip.
+                    Vector3 pos = dir * Mathf.Lerp(0.05f, armReach, p);
+                    tf.localPosition = pos;
+
+                    // Fade the head/tail of each pellet's life + global intensity.
+                    float edge = Mathf.Clamp01(Mathf.Min(p, 1f - p) * 5f);
+                    float sc = pelletSize * Mathf.Lerp(0.45f, 1f, edge) * _intensity;
+                    tf.localScale = Vector3.one * sc;
+                    idx++;
                 }
+            }
 
-                // Two-leg path: entry→hub for first half, hub→exit for second.
-                Vector3 pos;
-                if (t < 0.5f)
-                    pos = Vector3.Lerp(p.from, p.mid, t * 2f);
-                else
-                    pos = Vector3.Lerp(p.mid, p.to, (t - 0.5f) * 2f);
+            ApplyColor();
+        }
 
-                p.tf.localPosition = pos;
-
-                // Gentle fade-in / fade-out so pellets don't pop at the ends.
-                float fade = Mathf.Clamp01(Mathf.Min(t, 1f - t) * 6f);
-                p.tf.localScale = Vector3.one * (pelletSize * Mathf.Lerp(0.4f, 1f, fade));
+        // ── Pool management ─────────────────────────────────────────────────
+        private void SetActivePelletCount(int count)
+        {
+            // Grow pool as needed.
+            while (_pellets.Count < count)
+            {
+                var go = new GameObject("Pellet");
+                go.transform.SetParent(_root, worldPositionStays: false);
+                var mf = go.AddComponent<MeshFilter>();
+                mf.sharedMesh = _sphereMesh;
+                var mr = go.AddComponent<MeshRenderer>();
+                mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                mr.receiveShadows = false;
+                mr.sharedMaterial = EnsureSharedMaterial();
+                _pellets.Add(go.transform);
+                _renderers.Add(mr);
+            }
+            // Toggle visibility.
+            for (int i = 0; i < _pellets.Count; i++)
+            {
+                bool on = i < count;
+                if (_pellets[i].gameObject.activeSelf != on)
+                    _pellets[i].gameObject.SetActive(on);
             }
         }
 
-        // ── Pool helpers ────────────────────────────────────────────────────
-        private Pellet CreatePellet()
+        private void ApplyColor()
         {
-            var go = new GameObject("Pellet");
-            go.transform.SetParent(_root, worldPositionStays: false);
-
-            var mf = go.AddComponent<MeshFilter>();
-            mf.sharedMesh = _sphereMesh;
-            var mr = go.AddComponent<MeshRenderer>();
-            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            mr.receiveShadows = false;
-            mr.sharedMaterial = EnsureSharedMaterial();
-
-            return new Pellet
-            {
-                tf = go.transform,
-                renderer = mr,
-                mpb = new MaterialPropertyBlock()
-            };
-        }
-
-        private void Recycle(Pellet p)
-        {
-            if (p?.tf == null) return;
-            p.tf.gameObject.SetActive(false);
-            _pool.Push(p);
-        }
-
-        private void ApplyColor(Pellet p)
-        {
-            p.mpb.SetColor("_BaseColor", p.color);
-            p.mpb.SetColor("_Color", p.color);
-            p.mpb.SetColor("_EmissionColor", p.color * 1.4f);
-            p.renderer.SetPropertyBlock(p.mpb);
+            _mpb.SetColor("_BaseColor", _color);
+            _mpb.SetColor("_Color", _color);
+            _mpb.SetColor("_EmissionColor", _color * Mathf.Lerp(0.6f, 2.2f, _intensity));
+            for (int i = 0; i < _renderers.Count; i++)
+                if (_renderers[i].gameObject.activeSelf)
+                    _renderers[i].SetPropertyBlock(_mpb);
         }
 
         private Material EnsureSharedMaterial()
         {
             if (_sharedMat != null) return _sharedMat;
-            var sh = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+            var sh = Shader.Find("Universal Render Pipeline/Unlit")
+                  ?? Shader.Find("Universal Render Pipeline/Lit")
+                  ?? Shader.Find("Unlit/Color")
+                  ?? Shader.Find("Standard");
             _sharedMat = new Material(sh) { name = "ItemFlowPellet" };
             if (_sharedMat.HasProperty("_Smoothness")) _sharedMat.SetFloat("_Smoothness", 0.2f);
             if (_sharedMat.HasProperty("_Metallic"))   _sharedMat.SetFloat("_Metallic", 0.0f);
@@ -188,10 +193,9 @@ namespace VoxelEngine.Transport
         private static void EnsureSphereMesh()
         {
             if (_sphereMesh != null) return;
-            // Borrow Unity's built-in sphere primitive mesh once, then discard
-            // the temporary GameObject — cheaper than authoring a mesh by hand.
             var temp = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             _sphereMesh = temp.GetComponent<MeshFilter>().sharedMesh;
+            // Strip the collider that CreatePrimitive added before discarding.
             if (Application.isPlaying) Destroy(temp); else DestroyImmediate(temp);
         }
     }
