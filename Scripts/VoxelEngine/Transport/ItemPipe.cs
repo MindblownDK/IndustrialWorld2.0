@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using UnityEngine;
-using VoxelEngine.Building;
 using VoxelEngine.Items;
 using VoxelEngine.Networks;
 
@@ -84,6 +83,10 @@ namespace VoxelEngine.Transport
             if (_visuals == null) _visuals = gameObject.AddComponent<PipeVisualBuilder>();
             _visuals.neighbourPositionsProvider = GetNeighbourPositions;
             _visuals.isGlass = isGlass;
+            // Item pipes carry visible PELLETS, not a fluid medium — keep the
+            // glass tube HOLLOW so the pellets are seen through the clear shell
+            // instead of being hidden behind an opaque inner core.
+            _visuals.hollowGlass = isGlass;
             // Item pipes use the BuildCraft / Thermal-Expansion "sleeve" style —
             // chunky terminal end-blocks at every junction, hazard-band sleeve
             // along the run.
@@ -201,18 +204,18 @@ namespace VoxelEngine.Transport
                 if (col.gameObject == gameObject) continue;
                 if (col.GetComponentInParent<ItemPipe>() != null) continue; // pipes already handled
 
-                // CHESTS: only connect when the face pointing at us is an ENABLED
-                // Input/Output port. A disabled / None face means NO connection —
-                // the pipe must not draw an arm or exchange items there.
-                var chest = col.GetComponentInParent<Chest>();
-                if (chest != null)
+                // PORT HOSTS (chests, furnaces, processors…): only connect when the
+                // face pointing at us is an ENABLED Input/Output port. A disabled /
+                // None face means NO connection — no arm, no item exchange.
+                var routing = col.GetComponentInParent<ItemPortRouting>();
+                if (routing != null)
                 {
-                    if (!chest.IsFaceConnectable(transform.position)) continue;
+                    if (!routing.IsFaceConnectable(transform.position)) continue;
                 }
                 else
                 {
-                    // Other endpoints (machines) connect if they expose an item
-                    // interface or container.
+                    // Legacy endpoints without per-face routing still connect if
+                    // they expose an item interface or container.
                     bool isEndpoint = col.GetComponentInParent<IInventoryInterface>() != null
                                    || col.GetComponentInParent<IItemContainer>() != null;
                     if (!isEndpoint) continue;
@@ -331,20 +334,21 @@ namespace VoxelEngine.Transport
                 if (col.gameObject == gameObject) continue;
                 if (col.GetComponentInParent<ItemPipe>() != null) continue; // skip pipes
 
-                // Chest containers respect their ADVANCED PORT CONFIG: items only
-                // enter through an enabled INPUT face whose filter accepts the item.
-                var chest = col.GetComponentInParent<Chest>();
-                if (chest != null && chest.container != null)
+                // PORT HOSTS respect their ADVANCED PORT CONFIG: items only enter
+                // through an enabled INPUT face whose filter accepts the item, and
+                // route into that face's chosen container.
+                var routing = col.GetComponentInParent<ItemPortRouting>();
+                if (routing != null)
                 {
-                    int accepted = chest.TryAcceptFromPipe(transform.position, stack.item, stack.count);
+                    int accepted = routing.TryAcceptFromPipe(transform.position, stack.item, stack.count);
                     if (accepted > 0)
                     {
-                        Vector3 toDir = (chest.transform.position - transform.position).normalized;
+                        Vector3 toDir = (routing.transform.position - transform.position).normalized;
                         RecordSegment(stack.item, SafeEntry(entryDir, toDir), toDir);
                         stack.count -= accepted;
                         if (stack.IsEmpty || stack.count <= 0) return;
                     }
-                    continue; // chest handled its own insertion rules — don't double-push
+                    continue; // routing handled its own insertion rules — don't double-push
                 }
 
                 // Check any IItemContainer (machines without per-face config)

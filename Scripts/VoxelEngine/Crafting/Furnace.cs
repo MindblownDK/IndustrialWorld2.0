@@ -2,15 +2,19 @@
 using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.Items;
+using VoxelEngine.Transport;
 
 namespace VoxelEngine.Crafting
 {
     /// <summary>
     /// Three-slot smelter:  [Input] + [Fuel]  →  [Output]
     /// Auto-smelts as long as input has a matching SmeltingRecipe and fuel is available.
+    /// Exposes its containers to the shared item-port system via <see cref="IItemPortHost"/>.
     /// </summary>
     [RequireComponent(typeof(CraftingStation))]
-    public class Furnace : MonoBehaviour
+    [RequireComponent(typeof(PortConfig))]
+    [RequireComponent(typeof(ItemPortRouting))]
+    public class Furnace : MonoBehaviour, IItemPortHost
     {
         [Header("Recipes")]
         public List<SmeltingRecipe> knownRecipes = new();
@@ -48,6 +52,34 @@ namespace VoxelEngine.Crafting
             else fuelC.Resize(1);
             if (outputC == null) outputC = new ItemContainer("Output", 1);
             else outputC.Resize(1);
+        }
+
+        // ── IItemPortHost ───────────────────────────────────────────────────
+        private PortConfig _portConfig;
+        private ItemPortContainer[] _portContainers;
+
+        public PortConfig PortConfig
+        {
+            get
+            {
+                if (_portConfig == null)
+                {
+                    _portConfig = GetComponent<PortConfig>();
+                    if (_portConfig == null) _portConfig = gameObject.AddComponent<PortConfig>();
+                    _portConfig.EnsureAllFaces();
+                }
+                return _portConfig;
+            }
+        }
+
+        public IReadOnlyList<ItemPortContainer> GetPortContainers()
+        {
+            EnsureContainers();
+            _portContainers ??= new ItemPortContainer[3];
+            _portContainers[0] = new ItemPortContainer("Input",  inputC,  canInput: true,  canOutput: false);
+            _portContainers[1] = new ItemPortContainer("Fuel",   fuelC,   canInput: true,  canOutput: false);
+            _portContainers[2] = new ItemPortContainer("Output", outputC, canInput: false, canOutput: true);
+            return _portContainers;
         }
 
         // Optional power requirement. If a PowerConsumer is on the same GameObject AND

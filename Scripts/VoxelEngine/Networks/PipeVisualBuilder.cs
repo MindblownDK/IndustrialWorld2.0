@@ -47,6 +47,11 @@ namespace VoxelEngine.Networks
         [Tooltip("Render as translucent glass with a visible inner medium core.")]
         public bool isGlass = false;
 
+        [Tooltip("Glass pipes only: leave the tube HOLLOW (skip the opaque inner " +
+                 "medium core) so external content — e.g. animated item pellets — " +
+                 "is visible THROUGH the transparent shell. Item pipes set this true.")]
+        public bool hollowGlass = false;
+
         [Header("Performance")]
         [Tooltip("Seconds between neighbour-change checks.")]
         public float rebuildInterval = 0.4f;
@@ -249,7 +254,7 @@ namespace VoxelEngine.Networks
                 gridSize > 0 ? gridSize : 1f,
                 style,
                 _shellMat,
-                isGlass ? _innerMat : null,
+                (isGlass && !hollowGlass) ? _innerMat : null,
                 _accentMat);
         }
 

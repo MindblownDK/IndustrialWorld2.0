@@ -231,21 +231,40 @@ namespace VoxelEngine.Persistence
             if (chest != null)
             {
                 var sc = SerializeContainer(chest.container);
-                if (sc != null)
-                {
-                    var snap = chest.CapturePortSnapshot();
-                    if (snap != null && snap.HasData) sc.chestPort = snap;
-                }
+                if (sc != null) AttachPortSnapshot(go, sc);
                 return sc;
             }
 
             var furnace = go.GetComponentInChildren<Furnace>();
-            if (furnace != null) return SerializeMulti(furnace.inputC, furnace.fuelC, furnace.outputC);
+            if (furnace != null)
+            {
+                var sc = SerializeMulti(furnace.inputC, furnace.fuelC, furnace.outputC);
+                AttachPortSnapshot(go, sc);
+                return sc;
+            }
 
             var efurn = go.GetComponentInChildren<ElectricFurnace>();
-            if (efurn != null) return SerializeMulti(efurn.inputC, efurn.outputC, efurn.upgradeC);
+            if (efurn != null)
+            {
+                var sc = SerializeMulti(efurn.inputC, efurn.outputC, efurn.upgradeC);
+                AttachPortSnapshot(go, sc);
+                return sc;
+            }
 
             return null;
+        }
+
+        /// <summary>
+        /// Capture the item-port config (faces + routing + filters) from any
+        /// machine that carries an <see cref="VoxelEngine.Transport.ItemPortRouting"/>.
+        /// </summary>
+        private void AttachPortSnapshot(GameObject go, SavedContainer sc)
+        {
+            if (sc == null) return;
+            var routing = go.GetComponentInChildren<VoxelEngine.Transport.ItemPortRouting>();
+            if (routing == null) return;
+            var snap = routing.CaptureSnapshot();
+            if (snap != null && snap.HasData) sc.chestPort = snap;
         }
 
         private SavedContainer SerializeContainer(ItemContainer c)
@@ -371,9 +390,7 @@ namespace VoxelEngine.Persistence
             if (chest != null)
             {
                 DeserializeInto(chest.container, sc);
-                if (sc.chestPort != null && sc.chestPort.HasData)
-                    chest.ApplyPortSnapshot(sc.chestPort,
-                        id => _itemById.TryGetValue(id, out var def) ? def : null);
+                RestorePortSnapshot(go, sc);
                 return;
             }
 
@@ -382,6 +399,7 @@ namespace VoxelEngine.Persistence
             {
                 furnace.EnsureContainers();
                 DeserializeMulti(sc, furnace.inputC, furnace.fuelC, furnace.outputC);
+                RestorePortSnapshot(go, sc);
                 return;
             }
             var efurn = go.GetComponentInChildren<ElectricFurnace>();
@@ -389,8 +407,19 @@ namespace VoxelEngine.Persistence
             {
                 efurn.EnsureContainers();
                 DeserializeMulti(sc, efurn.inputC, efurn.outputC, efurn.upgradeC);
+                RestorePortSnapshot(go, sc);
                 return;
             }
+        }
+
+        /// <summary>Restore item-port config onto any machine with ItemPortRouting.</summary>
+        private void RestorePortSnapshot(GameObject go, SavedContainer sc)
+        {
+            if (sc == null || sc.chestPort == null || !sc.chestPort.HasData) return;
+            var routing = go.GetComponentInChildren<VoxelEngine.Transport.ItemPortRouting>();
+            if (routing == null) return;
+            routing.ApplySnapshot(sc.chestPort,
+                id => _itemById.TryGetValue(id, out var def) ? def : null);
         }
 
         private void DeserializeInto(ItemContainer c, SavedContainer sc)
@@ -463,7 +492,7 @@ namespace VoxelEngine.Persistence
             public List<int>        containerSizes = new();   // for multi-container blocks
             // Advanced port config for chests (per-face direction + item filters).
             // Null/empty for blocks that don't carry one — fully backward compatible.
-            public VoxelEngine.Building.ChestPortSnapshot chestPort;
+            public VoxelEngine.Transport.ItemPortSnapshot chestPort;
         }
         [Serializable] private class SavedStack
         {

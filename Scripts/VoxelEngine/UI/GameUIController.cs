@@ -48,7 +48,6 @@ namespace VoxelEngine.UI
         public bool IsInventoryOpen => _inventoryOpen;
         private IItemContainer _rightContainer; // chest contents OR furnace etc.
         private VoxelEngine.Building.Chest _openChest; // set when the right container is a Chest (drives Item Ports UI)
-        private bool _chestPortsExpanded; // hide/unhide state for the chest Item-Ports panel (persists across Refresh)
         private Furnace        _openFurnace;
         private ElectricFurnace _openElectric;
         private CraftQueue _activeQueue;
@@ -446,7 +445,6 @@ namespace VoxelEngine.UI
             if (!_inventoryOpen) UIState.PushBlock();
             _rightContainer = c;
             _openChest      = owningChest;
-            _chestPortsExpanded = false;   // start collapsed so big chests stay tidy
             _inventoryOpen  = true;
             _openFurnace    = null;
             _openElectric   = null;
@@ -706,9 +704,9 @@ namespace VoxelEngine.UI
                 else if (_openReactor  != null) _root.Add(MachineUIs.ReactorCorePanel(_openReactor, BuildSlot));
                 else if (_openTurbine  != null) _root.Add(MachineUIs.SteamTurbinePanel(_openTurbine));
                 else if (_openPortReactor != null) _root.Add(MachineUIs.PortableReactorPanel(_openPortReactor, BuildSlot));
-                else if (_openProcessor != null) _root.Add(MachineUIs.UraniumProcessorPanel(_openProcessor, BuildSlot));
-                else if (_openReprocessor != null) _root.Add(MachineUIs.WasteReprocessorPanel(_openReprocessor, BuildSlot));
-                else if (_openElectrolyser != null) _root.Add(MachineUIs.ElectrolyserPanel(_openElectrolyser, BuildSlot));
+                else if (_openProcessor != null) { var mp = MachineUIs.UraniumProcessorPanel(_openProcessor, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openProcessor); }
+                else if (_openReprocessor != null) { var mp = MachineUIs.WasteReprocessorPanel(_openReprocessor, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openReprocessor); }
+                else if (_openElectrolyser != null) { var mp = MachineUIs.ElectrolyserPanel(_openElectrolyser, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openElectrolyser); }
                 else if (_openHydroEngine != null) _root.Add(MachineUIs.HydrogenEnginePanel(_openHydroEngine));
                 else if (_openGasTank != null) _root.Add(MachineUIs.GasTankPanel(_openGasTank));
                 else if (_openStorageTerminal  != null) _root.Add(VoxelEngine.Storage.StorageUI.BuildTerminalPanel(_openStorageTerminal, BuildSlot, inventory));
@@ -1190,48 +1188,71 @@ namespace VoxelEngine.UI
 
             scroll.Add(BuildSortableSlotGrid(c));
 
-            // ── Advanced Item-Port configuration (chests only) ──────────────
-            // Collapsible so large chests aren't visually crowded by the 6-face
-            // grid. State persists across the panel's periodic Refresh().
+            // ── Advanced Item-Port configuration (chests) ───────────────────
+            // Uses the same shared collapsible widget every machine uses.
             if (_openChest != null)
-            {
-                var divider = new VisualElement();
-                divider.style.height = 1;
-                divider.style.marginTop = 12; divider.style.marginBottom = 8;
-                divider.style.backgroundColor = new StyleColor(UITheme.BorderSubtle);
-                scroll.Add(divider);
-
-                // Toggle header — a tactile pill button that shows/hides the grid.
-                var toggle = MakeChestPortsToggle();
-                scroll.Add(toggle);
-
-                if (_chestPortsExpanded)
-                {
-                    var body = VoxelEngine.UI.PortConfigHud.BuildItemPorts(_openChest, onChanged: () => { });
-                    body.style.marginTop = 4;
-                    body.style.width = Length.Percent(100);
-                    scroll.Add(body);
-                }
-            }
+                AppendItemPorts(scroll, _openChest);
         }
 
         /// <summary>Build the show/hide pill that toggles the chest Item-Ports grid.</summary>
-        private VisualElement MakeChestPortsToggle()
+        // Per-machine "Item Ports" expand state, keyed by GameObject instance id,
+        // so each open machine remembers whether its port grid is shown.
+        private readonly System.Collections.Generic.Dictionary<int, bool> _portExpand = new();
+
+        /// <summary>
+        /// Append the shared collapsible Item-Ports widget to a machine panel when
+        /// the machine implements <see cref="VoxelEngine.Transport.IItemPortHost"/>.
+        /// Works for ANY machine (furnace, processor, …) — one call, full feature set.
+        /// </summary>
+        private void AppendItemPorts(VisualElement panel, MonoBehaviour machine)
+        {
+            if (machine == null) return;
+            var host = machine.GetComponent<VoxelEngine.Transport.IItemPortHost>();
+            if (host == null) return;
+            var routing = machine.GetComponent<VoxelEngine.Transport.ItemPortRouting>();
+            if (routing == null) routing = machine.gameObject.AddComponent<VoxelEngine.Transport.ItemPortRouting>();
+
+            int id = machine.gameObject.GetInstanceID();
+            bool open = _portExpand.TryGetValue(id, out var v) && v;
+
+            // Fixed machine panels clip with overflow:Hidden — when the ports grid
+            // is expanded, allow it to extend so the 6-face grid is fully visible.
+            panel.style.overflow = open ? Overflow.Visible : Overflow.Hidden;
+
+            var divider = new VisualElement();
+            divider.style.height = 1;
+            divider.style.marginTop = 12; divider.style.marginBottom = 8;
+            divider.style.backgroundColor = new StyleColor(UITheme.BorderSubtle);
+            panel.Add(divider);
+
+            panel.Add(MakePortsToggle(open, () =>
+            {
+                _portExpand[id] = !open;
+                Refresh();
+            }));
+
+            if (open)
+            {
+                var body = VoxelEngine.UI.PortConfigHud.BuildItemPorts(host, routing, onChanged: () => { });
+                body.style.marginTop = 4;
+                body.style.width = Length.Percent(100);
+                panel.Add(body);
+            }
+        }
+
+        /// <summary>Generic show/hide pill (chevron + CONFIGURE/HIDE) for the item-ports section.</summary>
+        private VisualElement MakePortsToggle(bool open, System.Action onToggle)
         {
             var accent = UITheme.AccentCyan;
-            bool open = _chestPortsExpanded;
-
             var btn = new Button();
             btn.style.flexDirection = FlexDirection.Row;
             btn.style.alignItems = Align.Center;
             btn.style.height = 34;
-            btn.style.marginLeft = 0; btn.style.marginRight = 0;
             btn.style.paddingLeft = 12; btn.style.paddingRight = 12;
             btn.style.backgroundColor = new StyleColor(new Color(accent.r, accent.g, accent.b, open ? 0.22f : 0.12f));
             UITheme.Radius(btn, 8f);
             UITheme.Border(btn, 1, new Color(accent.r, accent.g, accent.b, open ? 0.55f : 0.35f));
 
-            // Chevron rotates to indicate state.
             var chevron = new Label(open ? "▾" : "▸");
             chevron.style.color = new StyleColor(accent);
             chevron.style.fontSize = 13;
@@ -1261,13 +1282,7 @@ namespace VoxelEngine.UI
                 btn.style.backgroundColor = new StyleColor(new Color(accent.r, accent.g, accent.b, open ? 0.30f : 0.20f)));
             btn.RegisterCallback<PointerLeaveEvent>(_ =>
                 btn.style.backgroundColor = new StyleColor(new Color(accent.r, accent.g, accent.b, open ? 0.22f : 0.12f)));
-
-            btn.clicked += () =>
-            {
-                _chestPortsExpanded = !_chestPortsExpanded;
-                Refresh();
-            };
-
+            btn.clicked += () => onToggle?.Invoke();
             return btn;
         }
 
@@ -1406,6 +1421,9 @@ namespace VoxelEngine.UI
             hint.style.fontSize = 10;
             hint.style.whiteSpace = WhiteSpace.Normal;
             panel.Add(hint);
+
+            // Advanced per-face item ports (Input/Fuel/Output routing + filters).
+            AppendItemPorts(panel, f);
         }
 
         // -------- prettier-UI helpers used by furnace + electric furnace --------
@@ -1744,6 +1762,9 @@ namespace VoxelEngine.UI
             hint.style.fontSize = 10;
             hint.style.whiteSpace = WhiteSpace.Normal;
             panel.Add(hint);
+
+            // Advanced per-face ITEM ports (route pipes to Input / Output, with filters).
+            AppendItemPorts(panel, ef);
         }
 
         // ----- RIGHT (crafting bench / assembler) -----

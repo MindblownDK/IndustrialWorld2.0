@@ -333,16 +333,31 @@ namespace VoxelEngine.UI
         /// </summary>
         public static VisualElement BuildItemPorts(Chest chest, Action onChanged = null)
         {
-            if (chest == null) return T.Muted("No chest found.");
-            var config = chest.GetComponent<PortConfig>();
-            if (config == null) return T.Muted("No PortConfig component found.");
+            return BuildItemPorts(chest as IItemPortHost,
+                                  chest != null ? chest.Routing : null, onChanged);
+        }
+
+        /// <summary>
+        /// Build the premium item-port widget for ANY <see cref="IItemPortHost"/>
+        /// (chest, furnace, processor…). Each face cycles None → Input → Output,
+        /// can be ROUTED to a specific internal container via a dropdown, and
+        /// carries a searchable item whitelist (empty = all).
+        /// </summary>
+        public static VisualElement BuildItemPorts(IItemPortHost host,
+                                                   ItemPortRouting routing,
+                                                   Action onChanged = null)
+        {
+            if (host == null || host.PortConfig == null || routing == null)
+                return T.Muted("No item ports on this machine.");
+
+            var config = host.PortConfig;
             config.EnsureAllFaces();
 
             var root = new VisualElement();
             root.style.marginTop = 8;
             root.style.marginBottom = 4;
 
-            // Header + legend (reuse the network widget's chips, item-flavoured).
+            // Header + legend.
             var head = new VisualElement();
             head.style.flexDirection = FlexDirection.Row;
             head.style.alignItems = Align.Center;
@@ -371,7 +386,7 @@ namespace VoxelEngine.UI
                 var parent = oldCard.parent;
                 int idx = parent.IndexOf(oldCard);
                 parent.Remove(oldCard);
-                var fresh = BuildItemFaceCard(chest, config, face,
+                var fresh = BuildItemFaceCard(host, routing, config, face,
                     () => { RebuildCard(face); onChanged?.Invoke(); });
                 parent.Insert(idx, fresh);
                 cardRefs[face] = fresh;
@@ -379,7 +394,7 @@ namespace VoxelEngine.UI
 
             foreach (var (face, _, _) in FACES)
             {
-                var card = BuildItemFaceCard(chest, config, face,
+                var card = BuildItemFaceCard(host, routing, config, face,
                     () => { RebuildCard(face); onChanged?.Invoke(); });
                 cardRefs[face] = card;
                 grid.Add(card);
@@ -387,24 +402,23 @@ namespace VoxelEngine.UI
 
             var hint = T.Muted("Click a face to cycle None → Input → Output.  " +
                                "OUTPUT pushes items into adjacent pipes; INPUT accepts them.  " +
-                               "Add filters to restrict a face to specific items.");
+                               "Pick the container and add item filters per face.");
             hint.style.marginTop = 10;
             root.Add(hint);
 
             return root;
         }
 
-        private static VisualElement BuildItemFaceCard(Chest chest, PortConfig config,
-                                                       CubeFace face, Action inlineChanged)
+        private static VisualElement BuildItemFaceCard(IItemPortHost host, ItemPortRouting routing,
+                                                       PortConfig config, CubeFace face, Action inlineChanged)
         {
             var meta    = GetFaceMeta(face);
             var dir     = config.GetDirection(face);
             var enabled = config.IsFaceEnabled(face);
             var bgTint  = DirectionColor(dir);
 
-            // Enforce a strict 2-column grid: each card is exactly half the row
-            // width and never grows/shrinks. Spacing is done with the INNER box's
-            // margin so the 50% width can never overflow and wrap to one column.
+            // Strict 2-column grid: each card is exactly half the row width and
+            // never grows/shrinks; inner-margin handles the gutter.
             var card = new VisualElement();
             card.style.width = Length.Percent(50);
             card.style.flexBasis = Length.Percent(50);
@@ -472,57 +486,163 @@ namespace VoxelEngine.UI
             };
             inner.Add(pill);
 
-            // Filter strip — only when the face is active.
             if (enabled && dir != PortDirection.None)
-                inner.Add(BuildFilterStrip(chest, face, inlineChanged));
+            {
+                // Container routing dropdown — only when the host has >1 container.
+                var containers = host.GetPortContainers();
+                if (containers != null && containers.Count > 1)
+                    inner.Add(BuildContainerDropdown(routing, containers, face, dir, inlineChanged));
+
+                // Searchable item filter.
+                inner.Add(BuildFilterStrip(routing, face, inlineChanged));
+            }
 
             return card;
         }
 
-        private static VisualElement BuildFilterStrip(Chest chest, CubeFace face, Action inlineChanged)
+        // ── Container routing dropdown ──────────────────────────────
+        private static VisualElement BuildContainerDropdown(ItemPortRouting routing,
+            IReadOnlyList<ItemPortContainer> containers, CubeFace face,
+            PortDirection dir, Action inlineChanged)
         {
-            var wrap = new VisualElement();
-            wrap.style.marginTop = 8;
+            var row = new VisualElement();
+            row.style.marginTop = 8;
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.pickingMode = PickingMode.Ignore;
 
-            var labelRow = new VisualElement();
-            labelRow.style.flexDirection = FlexDirection.Row;
-            labelRow.style.alignItems = Align.Center;
-            labelRow.pickingMode = PickingMode.Ignore;
-            var lbl = new Label(chest.HasFilter(face) ? "FILTER" : "FILTER · ALL");
+            var lbl = new Label("SLOT");
             lbl.style.color = new StyleColor(T.TextMuted);
             lbl.style.fontSize = 9;
             lbl.style.unityFontStyleAndWeight = FontStyle.Bold;
             lbl.style.letterSpacing = 1f;
-            lbl.style.flexGrow = 1;
-            labelRow.Add(lbl);
-            wrap.Add(labelRow);
+            lbl.style.marginRight = 6;
+            row.Add(lbl);
 
-            // Chip flow.
+            // Offer only containers valid for this direction.
+            var choices = new List<string>();
+            var indexMap = new List<int>();
+            for (int i = 0; i < containers.Count; i++)
+            {
+                bool ok = dir == PortDirection.Output ? containers[i].CanOutput : containers[i].CanInput;
+                if (!ok) continue;
+                choices.Add(containers[i].Name);
+                indexMap.Add(i);
+            }
+            if (choices.Count == 0) { row.Add(T.Muted("—")); return row; }
+
+            int curContainer = routing.GetFaceContainer(face);
+            int curChoice = indexMap.IndexOf(curContainer);
+            if (curChoice < 0) { curChoice = 0; routing.SetFaceContainer(face, indexMap[0]); }
+
+            var dd = new DropdownField { choices = choices, index = curChoice };
+            dd.style.flexGrow = 1; dd.style.height = 22; dd.style.fontSize = 11;
+            dd.RegisterCallback<PointerDownEvent>(_ => IsAnyDropdownOpen = true);
+            dd.RegisterCallback<FocusOutEvent>(_ =>
+                dd.schedule.Execute(() => IsAnyDropdownOpen = false).StartingIn(50));
+            dd.RegisterValueChangedCallback(evt =>
+            {
+                int ix = choices.IndexOf(evt.newValue);
+                if (ix >= 0) routing.SetFaceContainer(face, indexMap[ix]);
+                IsAnyDropdownOpen = false;
+                inlineChanged?.Invoke();
+            });
+            row.Add(dd);
+            return row;
+        }
+
+        // ── Searchable item-filter strip (inline) ───────────────────
+        private static VisualElement BuildFilterStrip(ItemPortRouting routing, CubeFace face, Action inlineChanged)
+        {
+            var wrap = new VisualElement();
+            wrap.style.marginTop = 8;
+
+            var lbl = new Label(routing.HasFilter(face) ? "FILTER" : "FILTER · ALL");
+            lbl.style.color = new StyleColor(T.TextMuted);
+            lbl.style.fontSize = 9;
+            lbl.style.unityFontStyleAndWeight = FontStyle.Bold;
+            lbl.style.letterSpacing = 1f;
+            wrap.Add(lbl);
+
+            // Existing filter chips (each with a delete button).
             var chips = new VisualElement();
             chips.style.flexDirection = FlexDirection.Row;
             chips.style.flexWrap = Wrap.Wrap;
             chips.style.marginTop = 4;
             wrap.Add(chips);
 
-            foreach (var item in chest.GetFilter(face))
+            foreach (var item in routing.GetFilter(face))
                 chips.Add(MakeFilterChip(item, () =>
                 {
-                    chest.RemoveFilter(face, item);
+                    routing.RemoveFilter(face, item);
                     inlineChanged?.Invoke();
                 }));
 
-            // "＋ Add" chip launches the picker popup.
-            var addChip = new Button { text = "＋  Add" };
-            addChip.style.height = 22;
-            addChip.style.marginRight = 4; addChip.style.marginBottom = 4;
-            addChip.style.paddingLeft = 8; addChip.style.paddingRight = 8;
-            addChip.style.fontSize = 10;
-            addChip.style.color = new StyleColor(T.TextSecondary);
-            addChip.style.backgroundColor = new StyleColor(new Color(T.AccentCyan.r, T.AccentCyan.g, T.AccentCyan.b, 0.16f));
-            T.Radius(addChip, 7f);
-            T.Border(addChip, 1, new Color(T.AccentCyan.r, T.AccentCyan.g, T.AccentCyan.b, 0.40f));
-            addChip.clicked += () => OpenItemPicker(addChip, chest, face, inlineChanged);
-            chips.Add(addChip);
+            // Inline search field — typing filters a dropdown result list below it.
+            var search = new TextField { value = "" };
+            search.style.marginTop = 4;
+            search.style.height = 22;
+            search.style.fontSize = 11;
+            wrap.Add(search);
+
+            // Watermark (UI Toolkit placeholder isn't reliable across versions).
+            var watermark = new Label("🔍  Search item to add…");
+            watermark.style.position = Position.Absolute;
+            watermark.style.left = 8; watermark.style.top = 26;
+            watermark.style.fontSize = 10;
+            watermark.style.color = new StyleColor(T.TextMuted);
+            watermark.pickingMode = PickingMode.Ignore;
+            wrap.Add(watermark);
+
+            // Results dropdown list (hidden until the player types).
+            var results = new VisualElement();
+            results.style.marginTop = 2;
+            results.style.maxHeight = 156;
+            results.style.display = DisplayStyle.None;
+            results.style.backgroundColor = new StyleColor(T.BgDark);
+            T.Radius(results, 6f);
+            T.Border(results, 1, T.BorderDim);
+            var resultsScroll = new ScrollView(ScrollViewMode.Vertical);
+            resultsScroll.style.maxHeight = 154;
+            results.Add(resultsScroll);
+            wrap.Add(results);
+
+            void Populate(string query)
+            {
+                resultsScroll.Clear();
+                var q = (query ?? "").Trim().ToLowerInvariant();
+                if (q.Length == 0)
+                {
+                    results.style.display = DisplayStyle.None;
+                    watermark.style.display = DisplayStyle.Flex;
+                    return;
+                }
+                watermark.style.display = DisplayStyle.None;
+                EnsureItemCache();
+                var owned = new HashSet<ItemDefinition>(routing.GetFilter(face));
+                int shown = 0;
+                foreach (var item in _allItemsCache)
+                {
+                    if (item == null || owned.Contains(item)) continue;
+                    if (!(item.displayName ?? "").ToLowerInvariant().Contains(q) &&
+                        !(item.itemId ?? "").ToLowerInvariant().Contains(q)) continue;
+                    resultsScroll.Add(MakePickerRow(item, () =>
+                    {
+                        routing.AddFilter(face, item);
+                        inlineChanged?.Invoke();   // rebuilds the card → chip appears, search clears
+                    }));
+                    if (++shown >= 60) break;
+                }
+                if (shown == 0) resultsScroll.Add(T.Muted("No matching items."));
+                results.style.display = DisplayStyle.Flex;
+            }
+
+            search.RegisterValueChangedCallback(evt => Populate(evt.newValue));
+            // Treat the search field like a dropdown so the panel doesn't auto-refresh
+            // and destroy it mid-type.
+            search.RegisterCallback<FocusInEvent>(_ => IsAnyDropdownOpen = true);
+            search.RegisterCallback<FocusOutEvent>(_ =>
+                search.schedule.Execute(() => IsAnyDropdownOpen = false).StartingIn(120));
 
             return wrap;
         }
@@ -576,125 +696,29 @@ namespace VoxelEngine.UI
             return chip;
         }
 
-        // ── Item picker popup ───────────────────────────────────────
-        private static void OpenItemPicker(VisualElement anchor, Chest chest,
-                                           CubeFace face, Action inlineChanged)
-        {
-            var rootPanel = anchor.panel?.visualTree;
-            if (rootPanel == null) return;
-
-            EnsureItemCache();
-
-            // Dim overlay that closes the picker on background click.
-            var overlay = new VisualElement();
-            overlay.style.position = Position.Absolute;
-            overlay.style.left = 0; overlay.style.top = 0;
-            overlay.style.right = 0; overlay.style.bottom = 0;
-            overlay.style.backgroundColor = new StyleColor(new Color(0, 0, 0, 0.45f));
-
-            void Close()
-            {
-                IsAnyDropdownOpen = false;
-                overlay.RemoveFromHierarchy();
-            }
-            overlay.RegisterCallback<PointerDownEvent>(evt =>
-            {
-                if (evt.target == overlay) Close();
-            });
-
-            // Centered card.
-            var picker = new VisualElement();
-            picker.style.position = Position.Absolute;
-            picker.style.left = Length.Percent(50);
-            picker.style.top = Length.Percent(50);
-            picker.style.translate = new Translate(Length.Percent(-50), Length.Percent(-50));
-            picker.style.width = 360;
-            picker.style.maxHeight = 440;
-            picker.style.backgroundColor = new StyleColor(T.BgPanel);
-            picker.style.paddingTop = 14; picker.style.paddingBottom = 14;
-            picker.style.paddingLeft = 14; picker.style.paddingRight = 14;
-            T.Radius(picker, 12f);
-            T.Border(picker, 1, T.BorderBright);
-            overlay.Add(picker);
-
-            var pTitle = T.Subtitle($"Add Item Filter · {GetFaceMeta(face).label}");
-            pTitle.style.marginTop = 0;
-            picker.Add(pTitle);
-
-            var searchLbl = new Label("SEARCH");
-            searchLbl.style.color = new StyleColor(T.TextMuted);
-            searchLbl.style.fontSize = 9;
-            searchLbl.style.unityFontStyleAndWeight = FontStyle.Bold;
-            searchLbl.style.letterSpacing = 1f;
-            searchLbl.style.marginTop = 8;
-            picker.Add(searchLbl);
-
-            var search = new TextField { value = "" };
-            search.style.marginTop = 2; search.style.marginBottom = 8;
-            picker.Add(search);
-
-            var scroll = new ScrollView(ScrollViewMode.Vertical);
-            scroll.style.flexGrow = 1;
-            scroll.style.maxHeight = 320;
-            picker.Add(scroll);
-
-            void Populate(string query)
-            {
-                scroll.Clear();
-                var owned = new HashSet<ItemDefinition>(chest.GetFilter(face));
-                var q = (query ?? "").Trim().ToLowerInvariant();
-                int shown = 0;
-                foreach (var item in _allItemsCache)
-                {
-                    if (item == null) continue;
-                    if (owned.Contains(item)) continue;
-                    if (q.Length > 0 &&
-                        !(item.displayName ?? "").ToLowerInvariant().Contains(q) &&
-                        !(item.itemId ?? "").ToLowerInvariant().Contains(q)) continue;
-
-                    scroll.Add(MakePickerRow(item, () =>
-                    {
-                        chest.AddFilter(face, item);
-                        Close();
-                        inlineChanged?.Invoke();
-                    }));
-                    if (++shown >= 200) break; // guard absurd registries
-                }
-                if (shown == 0)
-                    scroll.Add(T.Muted("No matching items."));
-            }
-
-            search.RegisterValueChangedCallback(evt => Populate(evt.newValue));
-            Populate("");
-
-            IsAnyDropdownOpen = true;
-            rootPanel.Add(overlay);
-            search.schedule.Execute(() => search.Focus()).StartingIn(30);
-        }
-
         private static VisualElement MakePickerRow(ItemDefinition item, Action onPick)
         {
             var row = new Button();
             row.style.flexDirection = FlexDirection.Row;
             row.style.alignItems = Align.Center;
-            row.style.height = 34;
-            row.style.marginBottom = 4;
+            row.style.height = 30;
+            row.style.marginBottom = 2;
             row.style.paddingLeft = 8; row.style.paddingRight = 8;
             row.style.backgroundColor = new StyleColor(T.BgSlot);
-            T.Radius(row, 6f);
+            T.Radius(row, 5f);
             T.Border(row, 1, T.BorderDim);
 
             if (item.icon != null)
             {
                 var img = new Image { sprite = item.icon };
-                img.style.width = 22; img.style.height = 22; img.style.marginRight = 8;
+                img.style.width = 20; img.style.height = 20; img.style.marginRight = 8;
                 img.pickingMode = PickingMode.Ignore;
                 row.Add(img);
             }
             else
             {
                 var box = new VisualElement();
-                box.style.width = 18; box.style.height = 18; box.style.marginRight = 8;
+                box.style.width = 16; box.style.height = 16; box.style.marginRight = 8;
                 box.style.backgroundColor = new StyleColor(item.iconTint);
                 T.Radius(box, 3f);
                 box.pickingMode = PickingMode.Ignore;
@@ -703,7 +727,7 @@ namespace VoxelEngine.UI
 
             var name = new Label(item.displayName);
             name.style.color = new StyleColor(T.TextPrimary);
-            name.style.fontSize = 12; name.style.flexGrow = 1;
+            name.style.fontSize = 11; name.style.flexGrow = 1;
             name.pickingMode = PickingMode.Ignore;
             row.Add(name);
 
