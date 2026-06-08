@@ -1,6 +1,6 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridCockpit.cs
 //
-// Fully functional cockpit with UI integration.
+// Cockpit with grid size switching buttons.
 
 using UnityEngine;
 
@@ -19,10 +19,7 @@ namespace VoxelEngine.GridSystem
             player.enabled = false;
             player.GetComponent<Rigidbody>().isKinematic = true;
 
-            // Open cockpit UI
             GridUIManager.OpenCockpitUI(this);
-
-            Debug.Log("[Cockpit] Player entered cockpit");
         }
 
         public void Exit()
@@ -32,8 +29,19 @@ namespace VoxelEngine.GridSystem
             Pilot.enabled = true;
             Pilot.GetComponent<Rigidbody>().isKinematic = false;
             Pilot = null;
+        }
 
-            Debug.Log("[Cockpit] Player exited cockpit");
+        // Called from cockpit UI buttons
+        public void SwitchToSmallGrid()
+        {
+            if (Grid != null && GridSizeSwitcher.Instance != null)
+                GridSizeSwitcher.Instance.SwitchGrid(Grid, GridSize.Small);
+        }
+
+        public void SwitchToLargeGrid()
+        {
+            if (Grid != null && GridSizeSwitcher.Instance != null)
+                GridSizeSwitcher.Instance.SwitchGrid(Grid, GridSize.Large);
         }
     }
 }
