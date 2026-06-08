@@ -1,6 +1,6 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
---- !u!1 &5233568295638882828
+--- !u!1 &763708396146970979
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -8,10 +8,160 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 7061632893022795158}
-  - component: {fileID: 8665057765977673758}
-  - component: {fileID: 7861861815807464282}
-  - component: {fileID: 2275362965706265411}
+  - component: {fileID: 2166840704467152569}
+  - component: {fileID: 2963539545227759117}
+  - component: {fileID: 4635302427936617130}
+  - component: {fileID: 9114045258389717499}
+  - component: {fileID: 1305026560594013685}
+  m_Layer: 0
+  m_Name: Quarry
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &2166840704467152569
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 763708396146970979}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 3523276316743084680}
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2963539545227759117
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 763708396146970979}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b231df31f45343346a2b14ed69ac7e7a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Power.PowerConsumer
+  connectRadius: 2
+  requireGridAlignedNeighbours: 0
+  gridSize: 1
+  connectionBlockingLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  wattsPerSecond: 500
+--- !u!114 &4635302427936617130
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 763708396146970979}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 04cec34cc4f1e1d47a08090bcd4f29aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.PortConfig
+  ports:
+  - face: 0
+    direction: 2
+    networkType: 0
+    enabled: 1
+  - face: 1
+    direction: 0
+    networkType: 0
+    enabled: 1
+  - face: 2
+    direction: 0
+    networkType: 0
+    enabled: 1
+  - face: 3
+    direction: 0
+    networkType: 0
+    enabled: 1
+  - face: 4
+    direction: 0
+    networkType: 0
+    enabled: 1
+  - face: 5
+    direction: 1
+    networkType: 1
+    enabled: 1
+  portIndicatorSize: 0.4
+  showPortIndicators: 1
+--- !u!114 &9114045258389717499
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 763708396146970979}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1f8b8158c33b76f4ea33ec446a9e15a3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.PlacedBlock
+  Item: {fileID: 0}
+  Hp: 100
+  onGrid: 1
+--- !u!114 &1305026560594013685
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 763708396146970979}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9d25859404e3c1946885f800339d7255, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.Quarry
+  defaultSize: 16
+  forwardOffset: 2
+  baseMineInterval: 0.5
+  minePerTick: 1
+  quarryTier: 3
+  basePowerDraw: 500
+  powerPerPerfUpgrade: 25
+  powerSavePerEffUpgrade: 35
+  frameBuildInterval: 0.06
+  frameHeight: 5
+  frameColor: {r: 0.18, g: 0.19, b: 0.22, a: 1}
+  frameAccentColor: {r: 0.92, g: 0.52, b: 0.08, a: 0.85}
+  tapePreviewDuration: 2.5
+  tapeColor1: {r: 0.95, g: 0.55, b: 0.05, a: 0.75}
+  tapeColor2: {r: 0.92, g: 0.82, b: 0.08, a: 0.75}
+  outputSlots: 6
+  upgradeC:
+    _name: Upgrades
+    _slots:
+    - item: {fileID: 0}
+      count: 0
+      durability: 0
+    - item: {fileID: 0}
+      count: 0
+      durability: 0
+    - item: {fileID: 0}
+      count: 0
+      durability: 0
+    _minSize: 3
+--- !u!1 &3765085780802646587
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 3523276316743084680}
+  - component: {fileID: 3413193006050601806}
+  - component: {fileID: 1912629152509837095}
+  - component: {fileID: 8764438802018446022}
   m_Layer: 0
   m_Name: Mesh
   m_TagString: Untagged
@@ -19,36 +169,36 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &7061632893022795158
+--- !u!4 &3523276316743084680
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5233568295638882828}
+  m_GameObject: {fileID: 3765085780802646587}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 2, y: 2.4, z: 2}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 770651544960014341}
+  m_Father: {fileID: 2166840704467152569}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!33 &8665057765977673758
+--- !u!33 &3413193006050601806
 MeshFilter:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5233568295638882828}
+  m_GameObject: {fileID: 3765085780802646587}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
---- !u!65 &7861861815807464282
+--- !u!65 &1912629152509837095
 BoxCollider:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5233568295638882828}
+  m_GameObject: {fileID: 3765085780802646587}
   m_Material: {fileID: 0}
   m_IncludeLayers:
     serializedVersion: 2
@@ -63,13 +213,13 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 1, y: 1, z: 1}
   m_Center: {x: 0, y: 0, z: 0}
---- !u!23 &2275362965706265411
+--- !u!23 &8764438802018446022
 MeshRenderer:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5233568295638882828}
+  m_GameObject: {fileID: 3765085780802646587}
   m_Enabled: 1
   m_CastShadows: 1
   m_ReceiveShadows: 1
@@ -112,154 +262,3 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
---- !u!1 &8075777238873048823
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 770651544960014341}
-  - component: {fileID: 6477272801083314622}
-  - component: {fileID: 6940408102785763034}
-  - component: {fileID: 884582896353331298}
-  - component: {fileID: 8466408409590484724}
-  m_Layer: 0
-  m_Name: Quarry
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &770651544960014341
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8075777238873048823}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children:
-  - {fileID: 7061632893022795158}
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &6477272801083314622
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8075777238873048823}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b231df31f45343346a2b14ed69ac7e7a, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Power.PowerConsumer
-  connectRadius: 2
-  requireGridAlignedNeighbours: 0
-  gridSize: 1
-  connectionBlockingLayers:
-    serializedVersion: 2
-    m_Bits: 4294967295
-  wattsPerSecond: 500
---- !u!114 &6940408102785763034
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8075777238873048823}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 04cec34cc4f1e1d47a08090bcd4f29aa, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.PortConfig
-  ports:
-  - face: 0
-    direction: 2
-    networkType: 0
-    enabled: 1
-  - face: 1
-    direction: 0
-    networkType: 0
-    enabled: 1
-  - face: 2
-    direction: 0
-    networkType: 0
-    enabled: 1
-  - face: 3
-    direction: 0
-    networkType: 0
-    enabled: 1
-  - face: 4
-    direction: 0
-    networkType: 0
-    enabled: 1
-  - face: 5
-    direction: 1
-    networkType: 1
-    enabled: 1
-  portIndicatorSize: 0.4
-  showPortIndicators: 1
---- !u!114 &884582896353331298
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8075777238873048823}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1f8b8158c33b76f4ea33ec446a9e15a3, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.PlacedBlock
-  Item: {fileID: 0}
-  Hp: 100
-  onGrid: 1
---- !u!114 &8466408409590484724
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8075777238873048823}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9d25859404e3c1946885f800339d7255, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.Quarry
-  defaultSize: 16
-  forwardOffset: 2
-  baseMineInterval: 0.5
-  minePerTick: 1
-  quarryTier: 3
-  basePowerDraw: 500
-  powerPerPerfUpgrade: 25
-  powerSavePerEffUpgrade: 35
-  frameBuildInterval: 0.06
-  frameTopOffset: 5
-  frameDepth: 5
-  frameColor: {r: 0.18, g: 0.19, b: 0.22, a: 1}
-  frameAccentColor: {r: 0.92, g: 0.52, b: 0.08, a: 0.85}
-  tapePreviewDuration: 2.5
-  tapeColor1: {r: 0.95, g: 0.55, b: 0.05, a: 0.75}
-  tapeColor2: {r: 0.92, g: 0.82, b: 0.08, a: 0.75}
-  outputSlots: 6
-  upgradeC:
-    _name: Upgrades
-    _slots:
-    - item: {fileID: 0}
-      count: 0
-      durability: 0
-    - item: {fileID: 0}
-      count: 0
-      durability: 0
-    - item: {fileID: 0}
-      count: 0
-      durability: 0
-    _minSize: 3

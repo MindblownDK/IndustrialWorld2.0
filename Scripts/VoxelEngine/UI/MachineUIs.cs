@@ -549,7 +549,11 @@ namespace VoxelEngine.UI
             if (portCfg != null)
             {
                 right.Add(T.Spacer(8));
-                right.Add(VoxelEngine.UI.PortConfigHud.Build(portCfg));
+                right.Add(VoxelEngine.UI.PortConfigHud.Build(portCfg,
+                    allowedTypes: new[] {
+                        VoxelEngine.Transport.PortNetworkType.Any,
+                        VoxelEngine.Transport.PortNetworkType.Power
+                    }));
             }
 
             body.Add(right);
