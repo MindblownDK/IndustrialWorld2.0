@@ -1173,7 +1173,7 @@ namespace VoxelEngine.UI
             var panel = MakePanel();
             panel.style.position = Position.Absolute;
             panel.style.top = 32; panel.style.bottom = 96;
-            panel.style.right = 32; panel.style.width = 460;
+            panel.style.right = 32; panel.style.width = 520;   // room for the 2-column item-port grid
             root.Add(panel);
 
             panel.Add(MakeTitle(c.Name));
@@ -1181,6 +1181,11 @@ namespace VoxelEngine.UI
             // Scroll so the slot grid + advanced port config both fit on small panels.
             var scroll = new ScrollView(ScrollViewMode.Vertical);
             scroll.style.flexGrow = 1;
+            // Force the scroll CONTENT container to fill the panel width — otherwise
+            // it sizes to content and the 50%-wide port cards collapse into one
+            // column. This is the key to the 2-column item-port grid rendering.
+            scroll.contentContainer.style.width = Length.Percent(100);
+            scroll.contentContainer.style.flexGrow = 1;
             panel.Add(scroll);
 
             scroll.Add(BuildSortableSlotGrid(c));
@@ -1204,6 +1209,7 @@ namespace VoxelEngine.UI
                 {
                     var body = VoxelEngine.UI.PortConfigHud.BuildItemPorts(_openChest, onChanged: () => { });
                     body.style.marginTop = 4;
+                    body.style.width = Length.Percent(100);
                     scroll.Add(body);
                 }
             }

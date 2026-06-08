@@ -360,6 +360,7 @@ namespace VoxelEngine.UI
             var grid = new VisualElement();
             grid.style.flexDirection = FlexDirection.Row;
             grid.style.flexWrap = Wrap.Wrap;
+            grid.style.width = Length.Percent(100);   // fill the panel so 50% cards = 2 columns
             grid.style.marginTop = 8;
             root.Add(grid);
 
@@ -401,21 +402,22 @@ namespace VoxelEngine.UI
             var enabled = config.IsFaceEnabled(face);
             var bgTint  = DirectionColor(dir);
 
-            // Enforce a strict 2-column grid: each card claims exactly half the
-            // row and never grows/shrinks, so it stays 2-up at any panel width
-            // (minWidth kept tiny so it can't wrap down to a single column).
+            // Enforce a strict 2-column grid: each card is exactly half the row
+            // width and never grows/shrinks. Spacing is done with the INNER box's
+            // margin so the 50% width can never overflow and wrap to one column.
             var card = new VisualElement();
+            card.style.width = Length.Percent(50);
             card.style.flexBasis = Length.Percent(50);
             card.style.flexGrow = 0;
             card.style.flexShrink = 0;
-            card.style.minWidth = 120;
+            card.style.minWidth = 0;
             card.style.paddingTop = 6; card.style.paddingBottom = 6;
-            card.style.paddingLeft = 4; card.style.paddingRight = 4;
 
             var inner = new VisualElement();
             inner.style.backgroundColor = new StyleColor(T.BgCard);
+            inner.style.marginLeft = 4; inner.style.marginRight = 4;
             inner.style.paddingTop = 10; inner.style.paddingBottom = 10;
-            inner.style.paddingLeft = 12; inner.style.paddingRight = 12;
+            inner.style.paddingLeft = 10; inner.style.paddingRight = 10;
             T.Radius(inner, 10f);
             T.Border(inner, 1, enabled ? new Color(bgTint.r, bgTint.g, bgTint.b, 0.55f) : T.BorderDim);
             card.Add(inner);

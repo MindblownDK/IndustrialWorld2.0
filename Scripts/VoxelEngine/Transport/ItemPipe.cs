@@ -321,7 +321,11 @@ namespace VoxelEngine.Transport
         /// </summary>
         private void TryPushToSinks(ItemStack stack, Vector3 entryDir)
         {
-            var hits = Physics.OverlapSphere(transform.position, connectRadius);
+            // Use the SHORT endpoint radius (≈ one cell) so items only drop into a
+            // sink that is DIRECTLY adjacent. This forces the stream to hop pipe →
+            // pipe along the run instead of teleporting from the first pipe into a
+            // chest several cells away — so every glass segment animates the flow.
+            var hits = Physics.OverlapSphere(transform.position, endpointConnectRadius);
             foreach (var col in hits)
             {
                 if (col.gameObject == gameObject) continue;
@@ -381,8 +385,12 @@ namespace VoxelEngine.Transport
         {
             if (item == null || toDir.sqrMagnitude < 0.0001f) return;
             _flowItem = item;
-            Vector3 to   = toDir.normalized;
-            Vector3 from = fromDir.sqrMagnitude > 0.0001f ? fromDir.normalized : Vector3.zero;
+            // SNAP to the nearest cardinal axis so a slightly-off endpoint pivot
+            // (e.g. a chest whose origin sits higher than the pipe) can't tilt the
+            // pellet path up/down — items must visibly ride ALONG the tube.
+            Vector3 to   = NearestCardinal(toDir);
+            Vector3 from = fromDir.sqrMagnitude > 0.0001f ? NearestCardinal(fromDir) : Vector3.zero;
+            if (to.sqrMagnitude < 0.0001f) return;
             // De-dup identical segments (same exit + entry).
             foreach (var seg in _flowSegments)
                 if (Vector3.Dot(seg.to, to) > 0.97f &&
