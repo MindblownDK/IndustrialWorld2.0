@@ -21,7 +21,8 @@ namespace VoxelEngine.Settings
         Mine, Build, Pause, ToggleFly,
         Inventory, Interact, BuildToggleGrid, BuildRotate, Research, BuildWheel, Map,
         Hotbar1, Hotbar2, Hotbar3, Hotbar4, Hotbar5,
-        Hotbar6, Hotbar7, Hotbar8, Hotbar9, Hotbar0
+        Hotbar6, Hotbar7, Hotbar8, Hotbar9, Hotbar0,
+        EnterCockpit, ExitCockpit
     }
 
     public static class GameSettings
@@ -48,7 +49,7 @@ namespace VoxelEngine.Settings
 
         // Bump this when default keybinds change to force a one-time migration
         // that fills in missing or invalid bindings on old saves.
-        private const int    CURRENT_VERSION = 8;
+        private const int    CURRENT_VERSION = 9;
 
         // ----- defaults -----
         public const float DEFAULT_FOV       = 75f;
@@ -146,6 +147,8 @@ namespace VoxelEngine.Settings
             InputAction.Hotbar8         => "Digit8",
             InputAction.Hotbar9         => "Digit9",
             InputAction.Hotbar0         => "Digit0",
+            InputAction.EnterCockpit    => "H",
+            InputAction.ExitCockpit     => "F",
             _ => "None"
         };
 

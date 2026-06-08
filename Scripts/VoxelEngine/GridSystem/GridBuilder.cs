@@ -54,12 +54,14 @@ namespace VoxelEngine.GridSystem
             GridEntity targetGrid = hit.collider.GetComponentInParent<GridEntity>();
             Vector3Int gridPos;
             Vector3 worldPos;
+            Quaternion rotation = Quaternion.identity;
             float cs = gbi.gridSize.CellSize();
 
             if (targetGrid != null && targetGrid.gridSize == gbi.gridSize)
             {
                 gridPos = targetGrid.WorldToGrid(hit.point + hit.normal * cs * 0.5f);
                 worldPos = targetGrid.GridToWorld(gridPos);
+                rotation = targetGrid.transform.rotation;
                 if (!targetGrid.CanPlace(gridPos)) { HideGhost(); return; }
             }
             else
@@ -76,7 +78,7 @@ namespace VoxelEngine.GridSystem
                 targetGrid = null;
             }
 
-            ShowGhost(worldPos, cs);
+            ShowGhost(worldPos, cs, rotation);
 
             if (GameSettings.WasPressed(InputAction.Build))
             {
@@ -113,7 +115,7 @@ namespace VoxelEngine.GridSystem
             VoxelEngine.UI.BuildFeedbackHud.ShowBlockPlaced(item.displayName, item, 1);
         }
 
-        private void ShowGhost(Vector3 pos, float cellSize)
+        private void ShowGhost(Vector3 pos, float cellSize, Quaternion rotation)
         {
             if (_ghost == null)
             {
@@ -138,6 +140,7 @@ namespace VoxelEngine.GridSystem
 
             _ghost.SetActive(true);
             _ghost.transform.position = pos;
+            _ghost.transform.rotation = rotation;
             _ghost.transform.localScale = Vector3.one * cellSize * 0.98f;
         }
 

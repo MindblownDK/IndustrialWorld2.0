@@ -188,6 +188,7 @@ namespace VoxelEngine.UI
             RustStyleHud.Tick();
             BuildFeedbackHud.Tick();
             VoxelEngine.Weather.WeatherHud.Tick();
+            InteractionHud.Tick();
             VoxelEngine.GridSystem.GridPilotHud.Tick();
             GrinderHud.Tick();
             BuildCostHud.Tick();
@@ -680,6 +681,7 @@ namespace VoxelEngine.UI
             UpgradePromptHud.EnsureMounted(_root);
             Minimap.EnsureMounted(_root);
             RustStyleHud.EnsureMounted(_root);
+            InteractionHud.EnsureMounted(_root);
             BuildFeedbackHud.EnsureMounted(_root);
             VoxelEngine.Weather.WeatherHud.EnsureMounted(_root);
             VoxelEngine.GridSystem.GridPilotHud.EnsureMounted(_root);

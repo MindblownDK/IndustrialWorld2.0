@@ -3,6 +3,7 @@
 // Cockpit with terminal + grid size switching.
 
 using UnityEngine;
+using VoxelEngine.Settings;
 
 namespace VoxelEngine.GridSystem
 {
@@ -10,6 +11,17 @@ namespace VoxelEngine.GridSystem
     {
         [Header("Cockpit")]
         public Player.PlayerController Pilot { get; private set; }
+
+        private void Update()
+        {
+            if (Pilot != null)
+            {
+                if (GameSettings.WasPressed(InputAction.ExitCockpit))
+                {
+                    Exit();
+                }
+            }
+        }
 
         public void Enter(Player.PlayerController player)
         {

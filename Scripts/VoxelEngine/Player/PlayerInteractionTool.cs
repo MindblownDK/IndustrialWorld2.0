@@ -80,10 +80,39 @@ namespace VoxelEngine.Player
             // but not pressing any button never sees their selection time-out.
             if (_wrench != null) _wrench.Tick();
 
+            var ray = shootCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
+            bool hasHit = Physics.Raycast(ray, out var hit, reach);
+
+            // ── INTERACTION HUD (Context Prompts) ──
+            if (hasHit && !VoxelEngine.UI.UIState.IsBlocking)
+            {
+                var cockpit = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridCockpit>();
+                if (cockpit != null && cockpit.Pilot == null)
+                {
+                    string key = GameSettings.GetKey(InputAction.EnterCockpit);
+                    VoxelEngine.UI.InteractionHud.Show(key, "Enter Cockpit");
+
+                    if (GameSettings.WasPressed(InputAction.EnterCockpit))
+                    {
+                        var pc = GetComponentInParent<VoxelEngine.Player.PlayerController>();
+                        if (pc != null) cockpit.Enter(pc);
+                    }
+                    // Swallow input if we interacted? No, cockpits usually exclusive.
+                    // But we want to hide it if we are looking at something else.
+                }
+                else
+                {
+                    VoxelEngine.UI.InteractionHud.Hide();
+                }
+            }
+            else
+            {
+                VoxelEngine.UI.InteractionHud.Hide();
+            }
+
             if (!mineHeld && !buildHeld && !buildDown) return;
 
-            var ray = shootCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
-            if (!Physics.Raycast(ray, out var hit, reach)) return;
+            if (!hasHit) return;
 
             // ── WRENCH dispatch — short-circuits all other tool behaviour. ──
             //   LMB = connect/select  •  RMB = disconnect  •  Shift modifies both
@@ -280,15 +309,8 @@ namespace VoxelEngine.Player
                 var powerstation = hit.collider.GetComponentInParent<VoxelEngine.Storage.Powerstation>();
                 if (powerstation != null) { UI.GameUIController.Instance?.OpenMachine(powerstation); return; }
 
-                // Grid cockpit — enter ship.
-                var cockpit = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridCockpit>();
-                if (cockpit != null)
-                {
-                    var player = GetComponentInParent<VoxelEngine.Player.PlayerController>();
-                    if (player != null) cockpit.Enter(player);
-                    return;
-                }
-
+                // Grid cockpit — removed old RMB enter logic (now on H).
+                
                 var electric = hit.collider.GetComponentInParent<ElectricFurnace>();
                 if (electric != null) { UI.GameUIController.Instance?.OpenElectricFurnace(electric); return; }
 
