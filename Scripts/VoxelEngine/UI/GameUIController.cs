@@ -47,6 +47,7 @@ namespace VoxelEngine.UI
         private bool _inventoryOpen;
         public bool IsInventoryOpen => _inventoryOpen;
         private IItemContainer _rightContainer; // chest contents OR furnace etc.
+        private VoxelEngine.Building.Chest _openChest; // set when the right container is a Chest (drives Item Ports UI)
         private Furnace        _openFurnace;
         private ElectricFurnace _openElectric;
         private CraftQueue _activeQueue;
@@ -324,7 +325,7 @@ namespace VoxelEngine.UI
             _openPortReactor= null; _openProcessor   = null;
             _openReprocessor= null; _openElectrolyser= null;
             _openHydroEngine= null; _openGasTank     = null;
-            _rightContainer = null;
+            _rightContainer = null; _openChest = null;
             _openStation    = null;
             _activeQueue    = null;
 
@@ -432,10 +433,18 @@ namespace VoxelEngine.UI
             _wirelessTerminalProxy.transform.position = best.transform.position;
             return _wirelessTerminalProxy;
         }
-        public void OpenContainer(IItemContainer c)
+        public void OpenContainer(IItemContainer c) => OpenContainer(c, null);
+
+        /// <summary>
+        /// Open a generic container on the right. When <paramref name="owningChest"/>
+        /// is supplied, the panel also renders the chest's advanced Item-Port
+        /// configuration (per-face direction + item filters).
+        /// </summary>
+        public void OpenContainer(IItemContainer c, VoxelEngine.Building.Chest owningChest)
         {
             if (!_inventoryOpen) UIState.PushBlock();
             _rightContainer = c;
+            _openChest      = owningChest;
             _inventoryOpen  = true;
             _openFurnace    = null;
             _openElectric   = null;
@@ -461,7 +470,7 @@ namespace VoxelEngine.UI
             _openPortReactor= null; _openProcessor   = null;
             _openReprocessor= null; _openElectrolyser= null;
             _openHydroEngine= null; _openGasTank     = null;
-            _rightContainer = null;
+            _rightContainer = null; _openChest = null;
             _openStation    = f.GetComponent<CraftingStation>();
             _inventoryOpen  = true;
             UnwatchAllContainers();
@@ -480,7 +489,7 @@ namespace VoxelEngine.UI
             _openPortReactor= null; _openProcessor   = null;
             _openReprocessor= null; _openElectrolyser= null;
             _openHydroEngine= null; _openGasTank     = null;
-            _rightContainer = null;
+            _rightContainer = null; _openChest = null;
             _openStation    = ef.GetComponent<CraftingStation>();
             _inventoryOpen  = true;
             UnwatchAllContainers();
@@ -498,7 +507,7 @@ namespace VoxelEngine.UI
             _openPortReactor= null; _openProcessor   = null;
             _openReprocessor= null; _openElectrolyser= null;
             _openHydroEngine= null; _openGasTank     = null;
-            _rightContainer = null; _openStation = null;
+            _rightContainer = null; _openChest = null; _openStation = null;
             _inventoryOpen  = true;
             UnwatchAllContainers();
             if (fuel != null) { fuel.EnsureContainers(); WatchContainer(fuel.fuelC); }
@@ -512,7 +521,7 @@ namespace VoxelEngine.UI
             _openQuarry     = quarry;
             _openFurnace    = null; _openElectric = null;
             _openCoalGen    = null;
-            _rightContainer = null; _openStation = null;
+            _rightContainer = null; _openChest = null; _openStation = null;
             _inventoryOpen  = true;
             UnwatchAllContainers();
             if (quarry != null) { quarry.EnsureOutputPublic(); quarry.EnsureUpgrades(); WatchContainer(quarry.Output); WatchContainer(quarry.upgradeC); }
@@ -525,7 +534,7 @@ namespace VoxelEngine.UI
         {
             if (!_inventoryOpen) UIState.PushBlock();
             _openFurnace = null; _openElectric = null; _openCoalGen = null;
-            _rightContainer = null; _openStation = null; _openQuarry = null;
+            _rightContainer = null; _openChest = null; _openStation = null; _openQuarry = null;
             _openReactor = null; _openTurbine = null; _openPortReactor = null;
             _openProcessor = null; _openReprocessor = null; _openElectrolyser = null;
             _openHydroEngine = null; _openGasTank = null;
@@ -586,7 +595,7 @@ namespace VoxelEngine.UI
         {
             if (!_inventoryOpen) UIState.PushBlock();
             _openStation    = st;
-            _rightContainer = null;
+            _rightContainer = null; _openChest = null;
             _openFurnace    = null;
             _openElectric   = null;
             _openCoalGen    = null;
@@ -607,7 +616,7 @@ namespace VoxelEngine.UI
         {
             if (_inventoryOpen) UIState.PopBlock();
             _inventoryOpen  = false;
-            _rightContainer = null;
+            _rightContainer = null; _openChest = null;
             _openFurnace    = null;
             _openElectric   = null;
             _openCoalGen    = null;
@@ -1166,7 +1175,29 @@ namespace VoxelEngine.UI
             root.Add(panel);
 
             panel.Add(MakeTitle(c.Name));
-            panel.Add(BuildSortableSlotGrid(c));
+
+            // Scroll so the slot grid + advanced port config both fit on small panels.
+            var scroll = new ScrollView(ScrollViewMode.Vertical);
+            scroll.style.flexGrow = 1;
+            panel.Add(scroll);
+
+            scroll.Add(BuildSortableSlotGrid(c));
+
+            // ── Advanced Item-Port configuration (chests only) ──────────────
+            if (_openChest != null)
+            {
+                var divider = new VisualElement();
+                divider.style.height = 1;
+                divider.style.marginTop = 12; divider.style.marginBottom = 4;
+                divider.style.backgroundColor = new StyleColor(UITheme.BorderSubtle);
+                scroll.Add(divider);
+
+                scroll.Add(VoxelEngine.UI.PortConfigHud.BuildItemPorts(_openChest, onChanged: () =>
+                {
+                    // Filters/directions don't touch the container, so a light
+                    // refresh keeps the panel in sync without disturbing the picker.
+                }));
+            }
         }
 
         // ----- RIGHT (furnace) -----

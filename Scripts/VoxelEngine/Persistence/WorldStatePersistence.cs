@@ -228,7 +228,16 @@ namespace VoxelEngine.Persistence
         private SavedContainer TryFindContainer(GameObject go)
         {
             var chest = go.GetComponentInChildren<Chest>();
-            if (chest != null) return SerializeContainer(chest.container);
+            if (chest != null)
+            {
+                var sc = SerializeContainer(chest.container);
+                if (sc != null)
+                {
+                    var snap = chest.CapturePortSnapshot();
+                    if (snap != null && snap.HasData) sc.chestPort = snap;
+                }
+                return sc;
+            }
 
             var furnace = go.GetComponentInChildren<Furnace>();
             if (furnace != null) return SerializeMulti(furnace.inputC, furnace.fuelC, furnace.outputC);
@@ -359,7 +368,14 @@ namespace VoxelEngine.Persistence
         private void RestoreContainer(GameObject go, SavedContainer sc)
         {
             var chest = go.GetComponentInChildren<Chest>();
-            if (chest != null) { DeserializeInto(chest.container, sc); return; }
+            if (chest != null)
+            {
+                DeserializeInto(chest.container, sc);
+                if (sc.chestPort != null && sc.chestPort.HasData)
+                    chest.ApplyPortSnapshot(sc.chestPort,
+                        id => _itemById.TryGetValue(id, out var def) ? def : null);
+                return;
+            }
 
             var furnace = go.GetComponentInChildren<Furnace>();
             if (furnace != null)
@@ -445,6 +461,9 @@ namespace VoxelEngine.Persistence
         {
             public List<SavedStack> entries = new();
             public List<int>        containerSizes = new();   // for multi-container blocks
+            // Advanced port config for chests (per-face direction + item filters).
+            // Null/empty for blocks that don't carry one — fully backward compatible.
+            public VoxelEngine.Building.ChestPortSnapshot chestPort;
         }
         [Serializable] private class SavedStack
         {

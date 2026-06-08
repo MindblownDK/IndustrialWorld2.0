@@ -30,7 +30,6 @@ namespace VoxelEngine.Transport
 
         [Header("Frame")]
         public float frameBuildInterval = 0.06f;
-        public float frameHeight = 5f;   // how tall the frame pillars are (model-bottom to model-bottom+5)
         public Color frameColor = new(0.18f, 0.19f, 0.22f);
         public Color frameAccentColor = new(0.92f, 0.52f, 0.08f, 0.85f);
 
@@ -71,7 +70,7 @@ namespace VoxelEngine.Transport
             basePowerDraw + (InstalledRangeLevel + InstalledSpeedLevel) * powerPerPerfUpgrade
                           - InstalledEfficiencyLevel * powerSavePerEffUpgrade);
 
-        private float _mbY, _mtY, _fh;  // model-bottom-Y, model-top-Y, frame-bottom-Y
+        private float _mbY = -999f, _mtY = -999f;
         private ItemContainer _out;
         private float _mt, _fbt, _tt;
         private int _cx, _cz, _ls;
@@ -81,6 +80,7 @@ namespace VoxelEngine.Transport
         private bool _ok;
         private Vector3Int _org;
 
+        // Ghost persists from placement until power is applied
         private GameObject _ghost;
         private GameObject _ta, _dr, _bm;
         private List<GameObject> _fs = new();
@@ -97,27 +97,25 @@ namespace VoxelEngine.Transport
             _pc = GetComponent<PowerConsumer>();
             if (_w == null) { enabled = false; return; }
             _org = _w.WorldToVoxel(transform.position);
+            _mbY = transform.position.y - 1.2f;
+            _mtY = transform.position.y + 1.2f;
             RecomputeArea(); _ls = EffSize; CalculateMaxDepth();
             RegisterUpgradeListener();
-            StartCoroutine(CaptureBounds());
+            StartCoroutine(CaptureModelBounds());
             _ok = true;
-            // Ghost shows from placement until power is applied
+            // Show ghost on placement (before power)
             CreateGhost();
         }
 
-        IEnumerator CaptureBounds()
+        IEnumerator CaptureModelBounds()
         {
             yield return null;
             var col = GetComponentInChildren<BoxCollider>(true);
-            if (col != null) { _mbY = col.bounds.min.y; _mtY = col.bounds.max.y; goto done; }
+            if (col != null) { _mbY = col.bounds.min.y; _mtY = col.bounds.max.y; yield break; }
             var r = GetComponentInChildren<MeshRenderer>(true);
-            if (r != null) { _mbY = r.bounds.min.y; _mtY = r.bounds.max.y; goto done; }
-            var ac = GetComponentInChildren<Collider>(true);
-            if (ac != null) { _mbY = ac.bounds.min.y; _mtY = ac.bounds.max.y; goto done; }
-            _mbY = transform.position.y - 1.2f; _mtY = transform.position.y + 1.2f;
-            done:;
-            _fh = _mbY - 0.3f;  // frame bottom = just below quarry block bottom (some clearance)
-            DestroyGhost(); CreateGhost(); // redraw ghost with correct bounds
+            if (r != null) { _mbY = r.bounds.min.y; _mtY = r.bounds.max.y; yield break; }
+            var anyCol = GetComponentInChildren<Collider>(true);
+            if (anyCol != null) { _mbY = anyCol.bounds.min.y; _mtY = anyCol.bounds.max.y; }
         }
 
         void Update()
@@ -126,12 +124,11 @@ namespace VoxelEngine.Transport
             if (_pc) _pc.wattsPerSecond = EffPowerDraw;
             bool hp = _pc == null || _pc.IsPowered;
 
-            // Kill ghost when powered
+            // Destroy ghost when power comes on (real frame is about to build)
             if (hp && _ghost != null) { DestroyGhost(); }
 
             if (EffSize != _ls) { _ls = EffSize; RecomputeArea(); CalculateMaxDepth();
-                if (Phase == QuarryPhase.Mining) { DA(); _cx=_cz=0; CurrentDepth=0; Phase=QuarryPhase.Idle; }
-                else if (_ghost != null) { DestroyGhost(); CreateGhost(); } }
+                if (Phase == QuarryPhase.Mining) { DA(); _cx=_cz=0; CurrentDepth=0; Phase=QuarryPhase.Idle; } }
 
             switch (Phase)
             {
@@ -156,7 +153,7 @@ namespace VoxelEngine.Transport
         void RU() { InstalledRangeLevel=InstalledSpeedLevel=InstalledEfficiencyLevel=0; if(upgradeC==null)return; for(int i=0;i<upgradeC.Size;i++){var st=upgradeC.GetSlot(i); if(st.IsEmpty||!(st.item is QuarryUpgradeItem u))continue; int a=u.level*st.count; switch(u.upgradeKind){case QuarryUpgradeKind.Range:InstalledRangeLevel=Mathf.Min(MaxRangeLevel,a);break;case QuarryUpgradeKind.Speed:InstalledSpeedLevel=Mathf.Min(MaxSpeedLevel,a);break;case QuarryUpgradeKind.Efficiency:InstalledEfficiencyLevel=Mathf.Min(MaxEfficiencyLevel,a);break;}}}
         public bool TryInstallUpgrade(QuarryUpgradeItem item) { if(item==null)return false; EnsureUpgrades(); return upgradeC.Insert(new(item,1)).IsEmpty; }
 
-        // ═══ PLACEMENT PREVIEW (BuildSystem only — temporary during hold) ═══
+        // ═══ PLACEMENT PREVIEW (BuildSystem) ═══
         static GameObject _pp;
         public static void ShowPlacementPreview(Vector3 wp, Quaternion rot, int sz, float fo)
         {
@@ -169,7 +166,8 @@ namespace VoxelEngine.Transport
             var s=vox+d*(int)fo-p*h; var e=s+d*sz+p*sz;
             var amin=new Vector3Int(Mathf.Min(s.x,e.x),vox.y,Mathf.Min(s.z,e.z));
             var amax=new Vector3Int(Mathf.Max(s.x,e.x)-1,vox.y,Mathf.Max(s.z,e.z)-1);
-            float yTop=vox.y+0.5f, yBot=wp.y-1.2f-0.3f; // bottom edge + clearance
+            float yTop=vox.y+0.5f;           // surface
+            float yBot=wp.y-1.2f;            // model bottom
             Color gc=new(1f,0.8f,0.2f,0.55f);
             var v0=V3(amin.x,yTop,amin.z);var v1=V3(amax.x+1,yTop,amin.z);
             var v2=V3(amax.x+1,yTop,amax.z+1);var v3=V3(amin.x,yTop,amax.z+1);
@@ -189,8 +187,8 @@ namespace VoxelEngine.Transport
         void CreateGhost()
         {
             if (_ghost) Destroy(_ghost); _ghost=new("QuarryGhost");
-            float yTop=_mbY+frameHeight;  // model bottom + 5m = full frame height
-            float yBot=_fh;               // just below quarry block bottom
+            float yTop=_mtY; // model top
+            float yBot=_mbY; // model bottom
             Color gc=new(1f,0.8f,0.2f,0.5f);
             var v0=V3(AreaMin.x,yTop,AreaMin.z);var v1=V3(AreaMax.x+1,yTop,AreaMin.z);
             var v2=V3(AreaMax.x+1,yTop,AreaMax.z+1);var v3=V3(AreaMin.x,yTop,AreaMax.z+1);
@@ -212,12 +210,12 @@ namespace VoxelEngine.Transport
         void TkT(){if(!_ta)return;_tft+=Time.deltaTime;if(_tft>0.15f){_tft=0f;_tfs=!_tfs;float a=_tfs?1f:0.5f;foreach(var mr in _ta.GetComponentsInChildren<MeshRenderer>()){var c=mr.material.color;c.a=a*0.75f;mr.material.color=c;}}}
         void DTp(){if(_ta){Destroy(_ta);_ta=null;}}
 
-        // ═══ 3D FRAME (model-bottom to model-bottom+frameHeight) ═══
+        // ═══ 3D FRAME (model-top to model-bottom = 16×16×2.4) ═══
         void PF()
         {
             _fp.Clear();
-            float yBot=_fh;                       // just below quarry block bottom
-            float yTop=_mbY+frameHeight;          // model bottom + 5m
+            float yTop=_mtY;       // model top (= quarry block top)
+            float yBot=_mbY;       // model bottom (= quarry block bottom)
             var v00=V3(AreaMin.x,0,AreaMin.z);var v10=V3(AreaMax.x+1,0,AreaMin.z);
             var v11=V3(AreaMax.x+1,0,AreaMax.z+1);var v01=V3(AreaMin.x,0,AreaMax.z+1);
             float pH=yTop-yBot+0.3f,pCY=(yTop+yBot)*0.5f;
@@ -227,7 +225,7 @@ namespace VoxelEngine.Transport
             Ac(v00,yTop);Ac(v10,yTop);Ac(v11,yTop);Ac(v01,yTop);
         }
         void Pi(Vector3 p,float cy,float h)=>_fp.Add(new FS{p=new Vector3(p.x,cy,p.z),s=new Vector3(0.16f,h,0.16f),a=false});
-        void Be(Vector3 f,Vector3 t,float y){var m=(f+t)*0.5f;float l=Vector3.Distance(f,t);_fp.Add(new FS{p=new Vector3(m.x,y,m.z),s=Mathf.Abs(f.x-t.x)>0.01f?new Vector3(l,0.12f,0.1f):new Vector3(0.1f,0.12f,l),a=false});}
+        void Be(Vector3 f,Vector3 t,float y){var m=(f+t)*0.5f;float l=Vector3.Distance(f,t);_fp.Add(new FS{p=new Vector3(m.x,y,m.z),s=(Mathf.Abs(f.x-t.x)>0.01f?new Vector3(l,0.12f,0.1f):new Vector3(0.1f,0.12f,l)),a=false});}
         void Ac(Vector3 p,float y)=>_fp.Add(new FS{p=new Vector3(p.x,y,p.z),s=new Vector3(0.22f,0.22f,0.22f),a=true});
         void PS(FS s){var go=GameObject.CreatePrimitive(PrimitiveType.Cube);go.name=s.a?"A":"F";go.transform.position=s.p;go.transform.localScale=s.s;var r=go.GetComponent<MeshRenderer>();if(s.a)r.material=ME(frameAccentColor,0.7f);else{var sh=Shader.Find("Universal Render Pipeline/Lit")??Shader.Find("Standard");var m=new Material(sh){color=frameColor};m.SetColor("_BaseColor",frameColor);m.SetFloat("_Metallic",0.9f);m.SetFloat("_Smoothness",0.45f);r.material=m;}Destroy(go.GetComponent<BoxCollider>());_fs.Add(go);}
 

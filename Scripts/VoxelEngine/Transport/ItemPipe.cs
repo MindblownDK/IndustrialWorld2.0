@@ -182,17 +182,23 @@ namespace VoxelEngine.Transport
             foreach (var col in hits)
             {
                 if (col.gameObject == gameObject) continue;
-                if (col.GetComponent<ItemPipe>() != null) continue; // skip pipes
+                if (col.GetComponentInParent<ItemPipe>() != null) continue; // skip pipes
 
-                // Check Chest containers
-                var chest = col.GetComponent<Chest>();
+                // Chest containers respect their ADVANCED PORT CONFIG: items only
+                // enter through an enabled INPUT face whose filter accepts the item.
+                var chest = col.GetComponentInParent<Chest>();
                 if (chest != null && chest.container != null)
                 {
-                    TryPushIntoContainer(chest.container, stack);
-                    if (stack.IsEmpty || stack.count <= 0) return;
+                    int accepted = chest.TryAcceptFromPipe(transform.position, stack.item, stack.count);
+                    if (accepted > 0)
+                    {
+                        stack.count -= accepted;
+                        if (stack.IsEmpty || stack.count <= 0) return;
+                    }
+                    continue; // chest handled its own insertion rules — don't double-push
                 }
 
-                // Check any IItemContainer
+                // Check any IItemContainer (machines without per-face config)
                 var containers = col.GetComponents<IItemContainer>();
                 foreach (var c in containers)
                 {
