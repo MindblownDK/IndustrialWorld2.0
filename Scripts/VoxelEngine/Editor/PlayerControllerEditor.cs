@@ -12,7 +12,7 @@ namespace VoxelEngine.EditorTools
     /// Reads/writes GameSettings.FlyMode (PlayerPrefs-backed) so the choice persists.
     /// </summary>
     [CustomEditor(typeof(PlayerController))]
-    public class PlayerControllerEditor : Editor
+    public class PlayerControllerEditor : UnityEditor.Editor
     {
         public override void OnInspectorGUI()
         {
