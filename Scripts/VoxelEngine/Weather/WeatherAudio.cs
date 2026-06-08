@@ -38,6 +38,7 @@ namespace VoxelEngine.Weather
         private float _thunderTimer;
         private float _nextThunder;
         private bool _isUnderRoof;
+        private float _indoorBlend;   // smoothed 0 (outside) → 1 (sheltered)
         private float _roofCheckTimer;
         private float _surfaceScanTimer;
         private float _cachedMetalAmount;
@@ -87,40 +88,48 @@ namespace VoxelEngine.Weather
             }
 
             // ── Rain audio ──
+            // We keep a smoothed 0..1 "indoor-ness" so stepping under a roof
+            // CROSSFADES gently between the bright outdoor downpour and the warm,
+            // muffled indoor mix (rain heard dripping outside) — that cozy feeling
+            // of being sheltered while it pours beyond the walls.
+            _indoorBlend = Mathf.MoveTowards(_indoorBlend, _isUnderRoof ? 1f : 0f, Time.deltaTime * 1.6f);
             if (isRain)
             {
-                if (_isUnderRoof)
-                {
-                    // Indoor cozy rain — muffled ambient + enhanced metal patter (rain on roof).
-                    _ambientRain.volume = Mathf.Lerp(_ambientRain.volume, intensity * 0.12f, Time.deltaTime * 3f);
-                    _indoorMuffle.volume = Mathf.Lerp(_indoorMuffle.volume, intensity * 0.45f, Time.deltaTime * 3f);
-                    _metalPatter.volume = Mathf.Lerp(_metalPatter.volume, intensity * 0.55f, Time.deltaTime * 3f);
-                    _woodPatter.volume = Mathf.Lerp(_woodPatter.volume, intensity * 0.15f, Time.deltaTime * 3f);
-                    _groundPatter.volume = Mathf.Lerp(_groundPatter.volume, intensity * 0.05f, Time.deltaTime * 3f);
+                float inside  = _indoorBlend;
+                float outside = 1f - inside;
 
-                    // Lower pitch slightly for indoor dampening.
-                    _ambientRain.pitch = 0.85f;
-                    _indoorMuffle.pitch = 0.9f;
-                }
-                else
+                // Always keep the surface scan warm (it informs the roof patter).
+                _surfaceScanTimer += Time.deltaTime;
+                if (_surfaceScanTimer >= 1.5f)
                 {
-                    // Outdoor — full rain ambiance.
-                    _ambientRain.volume = Mathf.Lerp(_ambientRain.volume, intensity * 0.50f, Time.deltaTime * 3f);
-                    _indoorMuffle.volume = Mathf.Lerp(_indoorMuffle.volume, 0f, Time.deltaTime * 5f);
-                    _groundPatter.volume = Mathf.Lerp(_groundPatter.volume, intensity * 0.35f, Time.deltaTime * 3f);
-                    _ambientRain.pitch = 1f;
-
-                    // Surface patter based on what's nearby.
-                    // Throttled surface scan (expensive OverlapSphere).
-                    _surfaceScanTimer += Time.deltaTime;
-                    if (_surfaceScanTimer >= 1.5f)
-                    {
-                        _surfaceScanTimer = 0f;
-                        ScanSurfaceMaterials();
-                    }
-                    _metalPatter.volume = Mathf.Lerp(_metalPatter.volume, intensity * _cachedMetalAmount * 0.50f, Time.deltaTime * 3f);
-                    _woodPatter.volume = Mathf.Lerp(_woodPatter.volume, intensity * _cachedWoodAmount * 0.30f, Time.deltaTime * 3f);
+                    _surfaceScanTimer = 0f;
+                    ScanSurfaceMaterials();
                 }
+
+                // Outdoor downpour: bright, full-bodied, with splashy ground patter.
+                float outAmbient = intensity * 0.50f * outside;
+                float outGround  = intensity * 0.35f * outside;
+
+                // Indoor cozy mix: muffled low rumble (rain beyond the walls) +
+                // gentle roof patter. The outdoor ambient is heavily attenuated and
+                // pitched down so it reads as "outside, through the walls".
+                float inAmbient  = intensity * 0.14f * inside;       // distant downpour bleed
+                float inMuffle   = intensity * 0.50f * inside;       // warm low-pass body
+                float inRoof     = intensity * (0.30f + 0.35f * _cachedMetalAmount) * inside; // rain on roof
+                float inWoodRoof = intensity * (0.12f + 0.20f * _cachedWoodAmount) * inside;
+
+                // Combine the two regimes (a smooth blend, never a hard switch).
+                _ambientRain.volume  = Mathf.Lerp(_ambientRain.volume,  outAmbient + inAmbient, Time.deltaTime * 3f);
+                _indoorMuffle.volume = Mathf.Lerp(_indoorMuffle.volume, inMuffle,              Time.deltaTime * 3f);
+                _groundPatter.volume = Mathf.Lerp(_groundPatter.volume, outGround,             Time.deltaTime * 3f);
+                _metalPatter.volume  = Mathf.Lerp(_metalPatter.volume,
+                    intensity * _cachedMetalAmount * 0.50f * outside + inRoof, Time.deltaTime * 3f);
+                _woodPatter.volume   = Mathf.Lerp(_woodPatter.volume,
+                    intensity * _cachedWoodAmount * 0.30f * outside + inWoodRoof, Time.deltaTime * 3f);
+
+                // Pitch glides down as we move inside for a warmer, dampened tone.
+                _ambientRain.pitch  = Mathf.Lerp(1f, 0.82f, inside);
+                _indoorMuffle.pitch = Mathf.Lerp(0.95f, 0.88f, inside);
 
                 // Play if not already playing.
                 if (!_ambientRain.isPlaying) _ambientRain.Play();
@@ -273,6 +282,22 @@ namespace VoxelEngine.Weather
                 float t = (float)i / SAMPLE_RATE;
                 float mod = 1f + 0.15f * Mathf.Sin(t * 0.3f) + 0.08f * Mathf.Sin(t * 0.7f);
                 data[i] = pink * mod * 0.5f;
+            }
+
+            // Layer in a dense field of tiny high-frequency droplet ticks so the
+            // bed sounds like countless individual drops rather than flat noise.
+            int ticks = (int)(duration * 900); // ~900 droplets/sec
+            for (int k = 0; k < ticks; k++)
+            {
+                int s = Random.Range(0, samples - 200);
+                float amp = Random.Range(0.015f, 0.06f);
+                float freq = Random.Range(2000f, 6000f);
+                int len = Random.Range(40, 140);
+                for (int j = 0; j < len && s + j < samples; j++)
+                {
+                    float env = Mathf.Exp(-j / (len * 0.3f));
+                    data[s + j] += Mathf.Sin(2f * Mathf.PI * freq * j / SAMPLE_RATE) * env * amp;
+                }
             }
 
             return MakeClip("RainAmbient", data, duration);

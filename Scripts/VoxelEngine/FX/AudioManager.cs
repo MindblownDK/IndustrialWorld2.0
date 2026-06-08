@@ -87,6 +87,61 @@ namespace VoxelEngine.FX
             if (g != null) src.outputAudioMixerGroup = g;
         }
 
+        // ── One-shot SFX playback ──────────────────────────────────────────
+        // A small reusable AudioSource lives on a hidden, persistent object so
+        // any system can fire UI / impact sounds without owning a source.
+        private static AudioSource _oneShot2D;
+
+        private static AudioSource OneShot2D
+        {
+            get
+            {
+                if (_oneShot2D == null)
+                {
+                    var go = new GameObject("~SfxOneShot2D");
+                    Object.DontDestroyOnLoad(go);
+                    _oneShot2D = go.AddComponent<AudioSource>();
+                    _oneShot2D.playOnAwake  = false;
+                    _oneShot2D.spatialBlend = 0f;       // 2D
+                    Route(_oneShot2D, music: false);
+                }
+                return _oneShot2D;
+            }
+        }
+
+        /// <summary>Plays a non-positional one-shot (UI clicks, pickups).</summary>
+        public static void PlayUI(AudioClip clip, float volume = 1f, float pitch = 1f)
+        {
+            if (clip == null) return;
+            var s = OneShot2D;
+            s.pitch = pitch;
+            s.PlayOneShot(clip, volume);
+        }
+
+        /// <summary>
+        /// Plays a positional one-shot at a world point. Spawns a tiny temporary
+        /// AudioSource routed through the SFX bus, then auto-destroys it.
+        /// </summary>
+        public static void PlayAt(AudioClip clip, Vector3 position,
+            float volume = 1f, float pitch = 1f, float maxDistance = 30f)
+        {
+            if (clip == null) return;
+            var go = new GameObject("~Sfx3D");
+            go.transform.position = position;
+            var s = go.AddComponent<AudioSource>();
+            s.clip          = clip;
+            s.volume        = volume;
+            s.pitch         = pitch;
+            s.spatialBlend  = 1f;
+            s.rolloffMode   = AudioRolloffMode.Linear;
+            s.minDistance   = 2f;
+            s.maxDistance   = maxDistance;
+            s.dopplerLevel  = 0f;
+            Route(s, music: false);
+            s.Play();
+            Object.Destroy(go, clip.length / Mathf.Max(0.01f, pitch) + 0.1f);
+        }
+
         // ── Volume application (called by GameSettings.Apply) ───────────────
         /// <summary>
         /// Pushes the three 0..1 volumes into the mixer as decibels. Falls back

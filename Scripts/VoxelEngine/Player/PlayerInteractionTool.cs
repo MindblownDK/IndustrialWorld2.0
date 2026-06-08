@@ -492,6 +492,17 @@ namespace VoxelEngine.Player
                 if (def != null) tint = def.color;
             }
             _feedback?.Trigger(hit.point, hit.normal, tint);
+
+            // Material-aware mining impact SFX (3 pre-baked variants + pitch jitter
+            // so repeated hits never sound identical).
+            if (v.density > 0)
+            {
+                var msfx = VoxelEngine.FX.SfxLibrary.MiningSfxForMaterial(v.material);
+                VoxelEngine.FX.AudioManager.PlayAt(
+                    VoxelEngine.FX.SfxLibrary.GetVariant(msfx, 3),
+                    hit.point, volume: 0.7f,
+                    pitch: UnityEngine.Random.Range(0.92f, 1.08f), maxDistance: 22f);
+            }
             if (!stack.IsEmpty && stack.item is ToolItem) ConsumeDurability(stack);
             _nextHit = Time.time + 1f / Mathf.Max(0.1f, rate);
         }

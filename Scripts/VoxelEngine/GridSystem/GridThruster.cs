@@ -71,7 +71,9 @@ namespace VoxelEngine.GridSystem
             return maxThrustN * fraction;
         }
 
-        private float GetThrustFraction()
+        /// <summary>0..1 fraction of max thrust this engine is producing right now.
+        /// Public so the audio system can drive the thruster roar volume/pitch.</summary>
+        public float GetThrustFraction()
         {
             if (Grid == null) return 0;
             Vector3 input = Grid.ThrustInput;
