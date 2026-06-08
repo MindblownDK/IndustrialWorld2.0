@@ -60,6 +60,15 @@ namespace VoxelEngine.GridSystem
             float fraction = GetThrustFraction();
             if (fraction <= 0.01f) return 0;
 
+            float thrust = maxThrustN * fraction;
+
+            // Atmospheric efficiency (Atmospheric thrusters lose power in thin air / space)
+            if (thrusterType == ThrusterType.Atmospheric && grid != null)
+            {
+                float density = AtmosphereManager.GetAirDensity(grid.transform.position);
+                thrust *= Mathf.Clamp01(density / 1.225f);
+            }
+
             // Consume resources.
             if (thrusterType == ThrusterType.Hydrogen && grid != null)
             {
@@ -68,7 +77,7 @@ namespace VoxelEngine.GridSystem
                 grid.HydrogenStored -= consumed;
             }
 
-            return maxThrustN * fraction;
+            return thrust;
         }
 
         /// <summary>0..1 fraction of max thrust this engine is producing right now.

@@ -69,6 +69,16 @@ namespace VoxelEngine.GridSystem
             UpdateThrust();
             UpdateDampeners();
             UpdateWheels();
+            ApplyGravity();
+        }
+
+        private void ApplyGravity()
+        {
+            if (_rb == null) return;
+
+            float gravityMultiplier = AtmosphereManager.GetGravityMultiplier(transform.position);
+            Vector3 gravityForce = Physics.gravity * gravityMultiplier * _rb.mass;
+            _rb.AddForce(gravityForce, ForceMode.Force);
         }
 
         // ── Block Management ───────────────────────────────────────
