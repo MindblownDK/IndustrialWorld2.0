@@ -85,6 +85,7 @@ namespace VoxelEngine.Menu
         private void BuildUI()
         {
             _root = _doc.rootVisualElement;
+            VoxelEngine.FX.UiAudio.Attach(_root);   // click/hover audio (idempotent)
             _root.Clear();
             _root.style.flexGrow        = 1;
             _root.style.backgroundColor = new StyleColor(T.BgBase);

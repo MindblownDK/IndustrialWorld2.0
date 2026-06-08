@@ -252,6 +252,7 @@ namespace VoxelEngine.UI
                     seg.style.scale = new StyleScale(new Scale(Vector3.one));
                     if (!active) { seg.style.backgroundColor = new StyleColor(segBg); T.Border(seg, 1, T.BorderDim); }
                 });
+                VoxelEngine.FX.UiAudio.MarkClickable(seg);
                 seg.RegisterCallback<ClickEvent>(_ => onSelect?.Invoke(idx));
 
                 row.Add(seg);
@@ -337,6 +338,7 @@ namespace VoxelEngine.UI
             }
             Apply();
 
+            VoxelEngine.FX.UiAudio.MarkClickable(track);
             track.RegisterCallback<ClickEvent>(_ => { state = !state; Apply(); onToggle?.Invoke(state); });
             return track;
         }

@@ -45,6 +45,7 @@ namespace VoxelEngine.Menu
                 _doc.panelSettings = Resources.Load<PanelSettings>("MenuPanelSettings");
             _root = _doc.rootVisualElement;
             _root.style.flexGrow = 1;
+            VoxelEngine.FX.UiAudio.Attach(_root);   // click/hover audio (idempotent)
             HideUI();
         }
 

@@ -147,6 +147,7 @@ namespace VoxelEngine.UI
                 btn.style.scale = new StyleScale(new Scale(Vector3.one));
                 btn.style.backgroundColor = new StyleColor(baseBg);
             });
+            VoxelEngine.FX.UiAudio.MarkClickable(btn);
             btn.RegisterCallback<ClickEvent>(_ =>
             {
                 Visible = !Visible;
@@ -288,6 +289,7 @@ namespace VoxelEngine.UI
                     string cap = c;
                     pill.RegisterCallback<MouseEnterEvent>(_ => { if (!IsCat(panelId, cap)) pill.style.backgroundColor = new StyleColor(T.BgHover); });
                     pill.RegisterCallback<MouseLeaveEvent>(_ => { if (!IsCat(panelId, cap)) pill.style.backgroundColor = new StyleColor(T.BgSlot); });
+                    VoxelEngine.FX.UiAudio.MarkClickable(pill);
                     pill.RegisterCallback<ClickEvent>(_ =>
                     {
                         _category[panelId] = cap;
@@ -462,6 +464,7 @@ namespace VoxelEngine.UI
                 tile.style.scale = new StyleScale(new Scale(Vector3.one));
                 if (!selected) { tile.style.backgroundColor = new StyleColor(T.BgSlot); T.Border(tile, 1, T.BorderDim); }
             });
+            VoxelEngine.FX.UiAudio.MarkClickable(tile);
             tile.RegisterCallback<ClickEvent>(_ => onClick?.Invoke());
 
             return tile;

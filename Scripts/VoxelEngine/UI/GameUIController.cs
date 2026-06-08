@@ -114,6 +114,8 @@ namespace VoxelEngine.UI
             _root = _doc.rootVisualElement;
             _root.style.flexGrow = 1;
             _root.pickingMode = PickingMode.Ignore;
+            // Wire premium click/hover audio for the whole in-game UI in one place.
+            VoxelEngine.FX.UiAudio.Attach(_root);
 
             // Keep input polling even if Unity isn't the foreground app — fixes "game
             // not focused" feeling on some Windows setups where the Editor steals focus.

@@ -51,6 +51,8 @@ namespace VoxelEngine.FX
         // ── UI / feedback ONE-SHOTS ────────────────────────────────
         Place,
         Pickup,
+        UiClick,
+        UiHover,
 
         // ── Ambience LOOPS ─────────────────────────────────────────
         AmbDayBirds,
@@ -156,6 +158,8 @@ namespace VoxelEngine.FX
                 // UI
                 case Sfx.Place:            return OneShot("Place",       0.16f, d => MineImpact(d, 180f, 0.35f, 0.40f));
                 case Sfx.Pickup:           return OneShot("Pickup",      0.18f, Pickup);
+                case Sfx.UiClick:          return OneShot("UiClick",     0.09f, UiClick);
+                case Sfx.UiHover:          return OneShot("UiHover",     0.06f, UiHover);
 
                 // Ambience
                 case Sfx.AmbDayBirds:      return Loop("Birds",     6f, AmbDayBirds);
@@ -479,6 +483,36 @@ namespace VoxelEngine.FX
                 float env = Mathf.Exp(-i / (n * 0.4f));
                 float freq = Mathf.Lerp(600f, 1100f, (float)i / n);
                 d[i] = Mathf.Sin(2f * Mathf.PI * freq * t) * env * 0.5f;
+            }
+        }
+
+        // UI click — crisp, premium two-tone "tick" with a fast decay.
+        private static void UiClick(float[] d)
+        {
+            int n = d.Length;
+            for (int i = 0; i < n; i++)
+            {
+                float t = (float)i / SAMPLE_RATE;
+                float env = Mathf.Exp(-i / (n * 0.18f));
+                // Two stacked sines give a clean, modern "tk".
+                float tone = Mathf.Sin(2f * Mathf.PI * 1500f * t) * 0.5f
+                           + Mathf.Sin(2f * Mathf.PI * 2400f * t) * 0.3f;
+                // Tiny noise transient at the very start for "click" attack.
+                float attack = (i < n * 0.04f) ? Random.Range(-1f, 1f) * 0.4f : 0f;
+                d[i] = (tone + attack) * env * 0.5f;
+            }
+        }
+
+        // UI hover — softer, higher, very subtle blip.
+        private static void UiHover(float[] d)
+        {
+            int n = d.Length;
+            for (int i = 0; i < n; i++)
+            {
+                float t = (float)i / SAMPLE_RATE;
+                float env = Mathf.Exp(-i / (n * 0.16f));
+                float freq = Mathf.Lerp(2200f, 2700f, (float)i / n); // gentle upward chirp
+                d[i] = Mathf.Sin(2f * Mathf.PI * freq * t) * env * 0.28f;
             }
         }
 
