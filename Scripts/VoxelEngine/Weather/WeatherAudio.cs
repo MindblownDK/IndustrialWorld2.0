@@ -243,6 +243,9 @@ namespace VoxelEngine.Weather
             src.volume = vol;
             src.spatialBlend = 0f; // 2D (ambient)
             src.playOnAwake = false;
+            // Route through the SFX bus so the audio settings sliders affect it
+            // (no-op when no AudioMixer asset is present yet).
+            VoxelEngine.FX.AudioManager.Route(src, music: false);
             return src;
         }
 

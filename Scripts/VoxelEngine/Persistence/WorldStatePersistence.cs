@@ -37,7 +37,8 @@ namespace VoxelEngine.Persistence
 
         private bool _loaded;
         private float _saveTimer;
-        private const float AUTOSAVE_SECONDS = 30f;   // background autosave cadence
+        // Background autosave cadence now comes from GameSettings.AutosaveSeconds
+        // (0 = disabled). Players change it live from the Settings → Saving tab.
 
         private void Awake()
         {
@@ -54,8 +55,10 @@ namespace VoxelEngine.Persistence
 
         private void Update()
         {
+            int interval = VoxelEngine.Settings.GameSettings.AutosaveSeconds;
+            if (interval <= 0) { _saveTimer = 0f; return; } // autosave disabled
             _saveTimer += Time.deltaTime;
-            if (_saveTimer >= AUTOSAVE_SECONDS) { _saveTimer = 0f; SaveAll(); }
+            if (_saveTimer >= interval) { _saveTimer = 0f; SaveAll(); }
         }
 
         private void OnApplicationQuit() => SaveAll();

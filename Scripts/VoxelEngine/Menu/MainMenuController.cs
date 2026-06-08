@@ -41,7 +41,7 @@ namespace VoxelEngine.Menu
         private float  _newContinentScale = 0.0015f;
 
         // Settings tabs.
-        private enum STab { Display, Camera, Audio, Keybinds }
+        private enum STab { Display, Camera, Audio, Saving, Keybinds }
         private STab _settingsTab = STab.Display;
 
         // ── Cached fonts (loaded once per scene-load) ──────────────
@@ -347,6 +347,7 @@ namespace VoxelEngine.Menu
             tabs.Add(TabBtn("Display",  STab.Display));
             tabs.Add(TabBtn("Camera",   STab.Camera));
             tabs.Add(TabBtn("Audio",    STab.Audio));
+            tabs.Add(TabBtn("Saving",   STab.Saving));
             tabs.Add(TabBtn("Keybinds", STab.Keybinds));
             panel.Add(tabs);
 
@@ -360,6 +361,7 @@ namespace VoxelEngine.Menu
                 case STab.Display:  DisplayTab(scroll);  break;
                 case STab.Camera:   CameraTab(scroll);   break;
                 case STab.Audio:    AudioTab(scroll);     break;
+                case STab.Saving:   SavingTab(scroll);    break;
                 case STab.Keybinds: KeybindTab(scroll);   break;
             }
 
@@ -378,6 +380,7 @@ namespace VoxelEngine.Menu
         private void DisplayTab(VisualElement p)  => SettingsUI.DisplayTab(p, BuildUI);
         private void CameraTab(VisualElement p)   => SettingsUI.CameraTab(p, BuildUI);
         private void AudioTab(VisualElement p)    => SettingsUI.AudioTab(p, BuildUI);
+        private void SavingTab(VisualElement p)   => SettingsUI.SavingTab(p, BuildUI);
         private void KeybindTab(VisualElement p)  => SettingsUI.KeybindTab(p, this, BuildUI);
 
         // ── Page Actions ───────────────────────────────────────────

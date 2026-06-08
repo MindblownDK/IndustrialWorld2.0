@@ -97,12 +97,49 @@ namespace VoxelEngine.UI
                 GameSettings.InvertY, on => GameSettings.InvertY = on));
         }
 
-        /// <summary>Audio.</summary>
+        /// <summary>Audio — Master / Music / SFX, all on a clean 0–100 scale.</summary>
         public static void AudioTab(VisualElement p, Action rebuild)
         {
-            // Master Volume — now a clean 0–100 scale instead of 0–1.
             p.Add(PercentSliderRow("Master Volume", Mathf.RoundToInt(GameSettings.MasterVolume * 100f),
                 v => GameSettings.MasterVolume = v / 100f));
+            p.Add(T.Spacer(12));
+            p.Add(PercentSliderRow("Music Volume", Mathf.RoundToInt(GameSettings.MusicVolume * 100f),
+                v => GameSettings.MusicVolume = v / 100f));
+            p.Add(T.Spacer(12));
+            p.Add(PercentSliderRow("SFX Volume", Mathf.RoundToInt(GameSettings.SfxVolume * 100f),
+                v => GameSettings.SfxVolume = v / 100f));
+
+            if (!VoxelEngine.FX.AudioManager.HasMixer)
+            {
+                p.Add(T.Spacer(10));
+                p.Add(Hint("Music & SFX channels become independent once the GameAudioMixer " +
+                           "asset is added. Until then, Master controls overall volume."));
+            }
+        }
+
+        /// <summary>Saving — autosave cadence chooser.</summary>
+        public static void SavingTab(VisualElement p, Action rebuild)
+        {
+            p.Add(SectionLabel("Autosave Interval"));
+
+            var labels = new List<string>();
+            int cur = GameSettings.AutosaveSeconds;
+            int curIdx = 0;
+            for (int i = 0; i < GameSettings.AUTOSAVE_CHOICES.Length; i++)
+            {
+                int s = GameSettings.AUTOSAVE_CHOICES[i];
+                labels.Add(s <= 0 ? "Off" : (s < 60 ? $"{s}s" : $"{s / 60}m"));
+                if (s == cur) curIdx = i;
+            }
+
+            p.Add(Segmented(labels, curIdx, i =>
+            {
+                GameSettings.AutosaveSeconds = GameSettings.AUTOSAVE_CHOICES[i];
+                rebuild?.Invoke();
+            }));
+            p.Add(Hint(cur <= 0
+                ? "Autosave is OFF — the world only saves on quit / return to menu. Save often!"
+                : $"The world autosaves in the background every {(cur < 60 ? cur + " seconds" : cur / 60 + " minute(s)")}."));
         }
 
         /// <summary>Keybinds — one rebindable row per action.</summary>
@@ -253,20 +290,38 @@ namespace VoxelEngine.UI
         {
             bool state = value;
 
+            // Geometry (kept as named constants so the knob is always perfectly
+            // centred regardless of future size tweaks).
+            const float TrackW = 52f, TrackH = 28f, Border = 1f;
+            const float Knob   = 22f;
+            // Inner padding so the knob never touches the border. Vertically this
+            // is what centres the knob: gap top == gap bottom.
+            const float Pad    = (TrackH - 2f * Border - Knob) / 2f; // → 2px
+
             var track = new VisualElement();
-            track.style.width  = 52; track.style.height = 28;
+            track.style.width      = TrackW;
+            track.style.height     = TrackH;
             track.style.flexShrink = 0;
-            T.Radius(track, 14);
+            // Use flex layout to vertically centre the knob — no absolute top math.
+            track.style.flexDirection = FlexDirection.Row;
+            track.style.alignItems    = Align.Center;
+            track.style.paddingLeft   = Pad;
+            track.style.paddingRight  = Pad;
+            T.Radius(track, TrackH / 2f);
 
             var knob = new VisualElement();
-            knob.style.position = Position.Absolute;
-            knob.style.top = 3; knob.style.width = 22; knob.style.height = 22;
-            T.Radius(knob, 11);
+            knob.style.width  = Knob;
+            knob.style.height = Knob;
+            T.Radius(knob, Knob / 2f);
             knob.style.backgroundColor = new StyleColor(Color.white);
             knob.pickingMode = PickingMode.Ignore;
-            knob.style.transitionProperty = new List<StylePropertyName> { "left" };
+            // Slide horizontally via translate (the flexbox keeps it centred Y).
+            knob.style.transitionProperty = new List<StylePropertyName> { "translate" };
             knob.style.transitionDuration = new List<TimeValue> { new TimeValue(0.12f, TimeUnit.Second) };
             track.Add(knob);
+
+            // Distance the knob travels between the two states.
+            float travel = TrackW - 2f * Border - 2f * Pad - Knob; // → 24px
 
             void Apply()
             {
@@ -275,8 +330,10 @@ namespace VoxelEngine.UI
                 track.style.backgroundColor = new StyleColor(state
                     ? new Color(on.r, on.g, on.b, 0.40f)
                     : new Color(off.r, off.g, off.b, 0.55f));
-                T.Border(track, 1, state ? new Color(on.r, on.g, on.b, 0.80f) : T.BorderDim);
-                knob.style.left = state ? 27 : 3;
+                T.Border(track, Border, state ? new Color(on.r, on.g, on.b, 0.80f) : T.BorderDim);
+                knob.style.translate = new StyleTranslate(new Translate(
+                    new Length(state ? travel : 0f, LengthUnit.Pixel),
+                    new Length(0f, LengthUnit.Pixel), 0f));
             }
             Apply();
 

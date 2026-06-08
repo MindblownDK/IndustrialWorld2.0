@@ -31,6 +31,9 @@ namespace VoxelEngine.Settings
         private const string K_SENS         = "ve.mouseSens";
         private const string K_INVERT_Y     = "ve.invertY";
         private const string K_VOL          = "ve.masterVolume";
+        private const string K_VOL_MUSIC    = "ve.musicVolume";
+        private const string K_VOL_SFX      = "ve.sfxVolume";
+        private const string K_AUTOSAVE     = "ve.autosaveSeconds";
         private const string K_QUALITY      = "ve.quality";
         private const string K_DISPLAY      = "ve.display";
         private const string K_FULLSCREEN   = "ve.fullscreenMode";
@@ -52,10 +55,15 @@ namespace VoxelEngine.Settings
         public const float DEFAULT_SENS      = 0.15f;
         public const bool  DEFAULT_INVERT_Y  = false;
         public const float DEFAULT_VOLUME    = 1.0f;
+        public const float DEFAULT_MUSIC     = 0.7f;
+        public const float DEFAULT_SFX       = 1.0f;
         public const int   DEFAULT_QUALITY   = -1;
         public const int   DEFAULT_DISPLAY   = 0;
         public const int   DEFAULT_VSYNC     = 1;
         public const int   DEFAULT_VIEWDIST  = 6;
+        public const int   DEFAULT_AUTOSAVE  = 30;   // seconds; 0 = disabled
+        // Discrete autosave choices offered in the UI (seconds). 0 = "Off".
+        public static readonly int[] AUTOSAVE_CHOICES = { 0, 15, 30, 60, 120, 300 };
 
         public static event Action OnChanged;
 
@@ -82,6 +90,12 @@ namespace VoxelEngine.Settings
 
         // ----- Audio -----
         public static float MasterVolume     { get => PlayerPrefs.GetFloat(K_VOL, DEFAULT_VOLUME); set { PlayerPrefs.SetFloat(K_VOL, value); Apply(); } }
+        public static float MusicVolume      { get => PlayerPrefs.GetFloat(K_VOL_MUSIC, DEFAULT_MUSIC); set { PlayerPrefs.SetFloat(K_VOL_MUSIC, value); Apply(); } }
+        public static float SfxVolume        { get => PlayerPrefs.GetFloat(K_VOL_SFX, DEFAULT_SFX); set { PlayerPrefs.SetFloat(K_VOL_SFX, value); Apply(); } }
+
+        // ----- Saving -----
+        /// <summary>Background autosave cadence in seconds. 0 disables autosave.</summary>
+        public static int   AutosaveSeconds  { get => PlayerPrefs.GetInt(K_AUTOSAVE, DEFAULT_AUTOSAVE); set { PlayerPrefs.SetInt(K_AUTOSAVE, value); Notify(); } }
 
         // ----- Streaming -----
         public static int   ViewDistance     { get => PlayerPrefs.GetInt(K_VIEWDIST, DEFAULT_VIEWDIST); set { PlayerPrefs.SetInt(K_VIEWDIST, value); Notify(); } }
@@ -168,7 +182,11 @@ namespace VoxelEngine.Settings
                 QualitySettings.SetQualityLevel(q, applyExpensiveChanges: true);
 
             QualitySettings.vSyncCount = Mathf.Clamp(VSync, 0, 4);
-            AudioListener.volume       = Mathf.Clamp01(MasterVolume);
+
+            // Route all three volumes through the AudioManager (AudioMixer when
+            // present, AudioListener fallback otherwise).
+            VoxelEngine.FX.AudioManager.ApplyVolumes(
+                Mathf.Clamp01(MasterVolume), Mathf.Clamp01(MusicVolume), Mathf.Clamp01(SfxVolume));
 
             int targetDisplay = Mathf.Clamp(DisplayIndex, 0, Mathf.Max(0, Display.displays.Length - 1));
             if (targetDisplay > 0 && targetDisplay < Display.displays.Length && !Display.displays[targetDisplay].active)
@@ -197,6 +215,9 @@ namespace VoxelEngine.Settings
             MouseSensitivity = DEFAULT_SENS;
             InvertY          = DEFAULT_INVERT_Y;
             MasterVolume     = DEFAULT_VOLUME;
+            MusicVolume      = DEFAULT_MUSIC;
+            SfxVolume        = DEFAULT_SFX;
+            AutosaveSeconds  = DEFAULT_AUTOSAVE;
             Quality          = DEFAULT_QUALITY;
             DisplayIndex     = DEFAULT_DISPLAY;
             VSync            = DEFAULT_VSYNC;
