@@ -10,8 +10,9 @@ GameObject:
   m_Component:
   - component: {fileID: 7462752828815606410}
   - component: {fileID: 3324902071998980367}
-  - component: {fileID: 4977148956858933379}
-  - component: {fileID: 9095771588950033587}
+  - component: {fileID: 939065453983552433}
+  - component: {fileID: 8374780011973888111}
+  - component: {fileID: 7611725060961930051}
   m_Layer: 0
   m_Name: Generator_Coal
   m_TagString: Untagged
@@ -55,7 +56,7 @@ MonoBehaviour:
     m_Bits: 4294967295
   wattsPerSecond: 800
   isOn: 0
---- !u!114 &4977148956858933379
+--- !u!114 &939065453983552433
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -94,7 +95,23 @@ MonoBehaviour:
     enabled: 1
   portIndicatorSize: 0.4
   showPortIndicators: 1
---- !u!114 &9095771588950033587
+--- !u!114 &8374780011973888111
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 33722737517157823}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9eacd68ef9a141ae95f225d895db1c7b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.ItemPortRouting
+  pushInterval: 0.5
+  pushPerTick: 8
+  pipeConnectRadius: 1.6
+  distribution: 0
+--- !u!114 &7611725060961930051
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}

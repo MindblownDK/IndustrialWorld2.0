@@ -18,7 +18,6 @@ namespace VoxelEngine.Player
         public float sprintMultiplier = 3f;
 
         private float _yaw, _pitch;
-        private bool  _looking;
         private Camera _cachedCam;
 
         private void Start()
@@ -40,22 +39,16 @@ namespace VoxelEngine.Player
 
         private void Update()
         {
-            // ---------- look toggle (right mouse) ----------
-            if (GetRightMouseDown())
+            // ---------- free FPS look (no button to hold) ----------
+            // Pause look while a menu is open; the cursor is owned by UIState then.
+            if (!VoxelEngine.UI.UIState.IsBlocking)
             {
-                _looking = true;
-                Cursor.lockState = CursorLockMode.Locked;
-                Cursor.visible = false;
-            }
-            if (GetRightMouseUp())
-            {
-                _looking = false;
-                Cursor.lockState = CursorLockMode.None;
-                Cursor.visible = true;
-            }
+                if (Cursor.lockState != CursorLockMode.Locked)
+                {
+                    Cursor.lockState = CursorLockMode.Locked;
+                    Cursor.visible = false;
+                }
 
-            if (_looking)
-            {
                 Vector2 delta = GetMouseDelta();
                 float sens = GameSettings.MouseSensitivity;
                 float invert = GameSettings.InvertY ? -1f : 1f;
@@ -64,6 +57,7 @@ namespace VoxelEngine.Player
                 _pitch = Mathf.Clamp(_pitch, -89f, 89f);
                 transform.rotation = Quaternion.Euler(_pitch, _yaw, 0);
             }
+            else return;
 
             // ---------- movement ----------
             float speed = moveSpeed * (GameSettings.IsHeld(InputAction.Sprint) ? sprintMultiplier : 1f);
@@ -77,23 +71,6 @@ namespace VoxelEngine.Player
             transform.position += dir.normalized * speed * Time.deltaTime;
         }
 
-        // Right mouse always toggles mouse-look — kept independent of rebinds for sanity.
-        private static bool GetRightMouseDown()
-        {
-#if ENABLE_INPUT_SYSTEM
-            return Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame;
-#else
-            return Input.GetMouseButtonDown(1);
-#endif
-        }
-        private static bool GetRightMouseUp()
-        {
-#if ENABLE_INPUT_SYSTEM
-            return Mouse.current != null && Mouse.current.rightButton.wasReleasedThisFrame;
-#else
-            return Input.GetMouseButtonUp(1);
-#endif
-        }
         private static Vector2 GetMouseDelta()
         {
 #if ENABLE_INPUT_SYSTEM

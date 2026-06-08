@@ -47,6 +47,7 @@ namespace VoxelEngine.UI
         private bool _inventoryOpen;
         public bool IsInventoryOpen => _inventoryOpen;
         private IItemContainer _rightContainer; // chest contents OR furnace etc.
+        private VoxelEngine.Building.Chest _openChest; // set when the right container is a Chest (drives Item Ports UI)
         private Furnace        _openFurnace;
         private ElectricFurnace _openElectric;
         private CraftQueue _activeQueue;
@@ -113,6 +114,8 @@ namespace VoxelEngine.UI
             _root = _doc.rootVisualElement;
             _root.style.flexGrow = 1;
             _root.pickingMode = PickingMode.Ignore;
+            // Wire premium click/hover audio for the whole in-game UI in one place.
+            VoxelEngine.FX.UiAudio.Attach(_root);
 
             // Keep input polling even if Unity isn't the foreground app — fixes "game
             // not focused" feeling on some Windows setups where the Editor steals focus.
@@ -315,6 +318,8 @@ namespace VoxelEngine.UI
         public void OpenInventory()
         {
             if (!_inventoryOpen) UIState.PushBlock();
+            // Replay the crafting screen's entrance pop each time the inventory opens.
+            if (!_inventoryOpen) _craftPanelWasVisible = false;
             _inventoryOpen  = true;
             _openFurnace    = null;
             _openElectric   = null;
@@ -324,7 +329,7 @@ namespace VoxelEngine.UI
             _openPortReactor= null; _openProcessor   = null;
             _openReprocessor= null; _openElectrolyser= null;
             _openHydroEngine= null; _openGasTank     = null;
-            _rightContainer = null;
+            _rightContainer = null; _openChest = null;
             _openStation    = null;
             _activeQueue    = null;
 
@@ -432,10 +437,18 @@ namespace VoxelEngine.UI
             _wirelessTerminalProxy.transform.position = best.transform.position;
             return _wirelessTerminalProxy;
         }
-        public void OpenContainer(IItemContainer c)
+        public void OpenContainer(IItemContainer c) => OpenContainer(c, null);
+
+        /// <summary>
+        /// Open a generic container on the right. When <paramref name="owningChest"/>
+        /// is supplied, the panel also renders the chest's advanced Item-Port
+        /// configuration (per-face direction + item filters).
+        /// </summary>
+        public void OpenContainer(IItemContainer c, VoxelEngine.Building.Chest owningChest)
         {
             if (!_inventoryOpen) UIState.PushBlock();
             _rightContainer = c;
+            _openChest      = owningChest;
             _inventoryOpen  = true;
             _openFurnace    = null;
             _openElectric   = null;
@@ -461,7 +474,7 @@ namespace VoxelEngine.UI
             _openPortReactor= null; _openProcessor   = null;
             _openReprocessor= null; _openElectrolyser= null;
             _openHydroEngine= null; _openGasTank     = null;
-            _rightContainer = null;
+            _rightContainer = null; _openChest = null;
             _openStation    = f.GetComponent<CraftingStation>();
             _inventoryOpen  = true;
             UnwatchAllContainers();
@@ -480,7 +493,7 @@ namespace VoxelEngine.UI
             _openPortReactor= null; _openProcessor   = null;
             _openReprocessor= null; _openElectrolyser= null;
             _openHydroEngine= null; _openGasTank     = null;
-            _rightContainer = null;
+            _rightContainer = null; _openChest = null;
             _openStation    = ef.GetComponent<CraftingStation>();
             _inventoryOpen  = true;
             UnwatchAllContainers();
@@ -498,7 +511,7 @@ namespace VoxelEngine.UI
             _openPortReactor= null; _openProcessor   = null;
             _openReprocessor= null; _openElectrolyser= null;
             _openHydroEngine= null; _openGasTank     = null;
-            _rightContainer = null; _openStation = null;
+            _rightContainer = null; _openChest = null; _openStation = null;
             _inventoryOpen  = true;
             UnwatchAllContainers();
             if (fuel != null) { fuel.EnsureContainers(); WatchContainer(fuel.fuelC); }
@@ -512,10 +525,10 @@ namespace VoxelEngine.UI
             _openQuarry     = quarry;
             _openFurnace    = null; _openElectric = null;
             _openCoalGen    = null;
-            _rightContainer = null; _openStation = null;
+            _rightContainer = null; _openChest = null; _openStation = null;
             _inventoryOpen  = true;
             UnwatchAllContainers();
-            if (quarry != null) { quarry.EnsureOutputPublic(); WatchContainer(quarry.Output); }
+            if (quarry != null) { quarry.EnsureOutputPublic(); quarry.EnsureUpgrades(); WatchContainer(quarry.Output); WatchContainer(quarry.upgradeC); }
             UnlockCursor();
             Refresh();
         }
@@ -525,7 +538,7 @@ namespace VoxelEngine.UI
         {
             if (!_inventoryOpen) UIState.PushBlock();
             _openFurnace = null; _openElectric = null; _openCoalGen = null;
-            _rightContainer = null; _openStation = null; _openQuarry = null;
+            _rightContainer = null; _openChest = null; _openStation = null; _openQuarry = null;
             _openReactor = null; _openTurbine = null; _openPortReactor = null;
             _openProcessor = null; _openReprocessor = null; _openElectrolyser = null;
             _openHydroEngine = null; _openGasTank = null;
@@ -586,7 +599,7 @@ namespace VoxelEngine.UI
         {
             if (!_inventoryOpen) UIState.PushBlock();
             _openStation    = st;
-            _rightContainer = null;
+            _rightContainer = null; _openChest = null;
             _openFurnace    = null;
             _openElectric   = null;
             _openCoalGen    = null;
@@ -607,7 +620,7 @@ namespace VoxelEngine.UI
         {
             if (_inventoryOpen) UIState.PopBlock();
             _inventoryOpen  = false;
-            _rightContainer = null;
+            _rightContainer = null; _openChest = null;
             _openFurnace    = null;
             _openElectric   = null;
             _openCoalGen    = null;
@@ -683,21 +696,45 @@ namespace VoxelEngine.UI
                 _root.pickingMode = PickingMode.Position;
                 _root.style.backgroundColor = new StyleColor(new Color(0,0,0,0.55f));
 
-                // Left panel — player inventory + crafting list
+                // Left panel — player inventory + crafting toggle
                 BuildLeftPanel(_root);
+
+                // Center panel — Rust-style crafting screen (toggle-driven,
+                // state persisted). Only when the player toggled it ON and no
+                // workstation/container panel owns the crafting view itself.
+                bool aRightPanelIsOpen =
+                    _rightContainer != null || _openFurnace != null || _openElectric != null ||
+                    _openCoalGen != null || _openQuarry != null || _openReactor != null ||
+                    _openTurbine != null || _openPortReactor != null || _openProcessor != null ||
+                    _openReprocessor != null || _openElectrolyser != null || _openHydroEngine != null ||
+                    _openGasTank != null || _openStorageTerminal != null || _openServerRack != null ||
+                    _openPatternTerminal != null || _openCraftTerminal != null || _openImporter != null ||
+                    _openExporter != null || _openDiskManipulator != null || _openNAS != null ||
+                    _openPowerstation != null;
+                // The station pane (_openStation) renders its OWN crafting list on
+                // the right, so we suppress the center panel only in that case.
+                // For every other right panel (chest / furnace / storage terminal)
+                // we keep crafting available — the panel simply shrinks to sit in
+                // the gap between the inventory and the right panel.
+                if (CraftingScreen.Visible && _openStation == null)
+                {
+                    BuildCenterCrafting(_root, aRightPanelIsOpen);
+                    _craftPanelWasVisible = true;
+                }
+                else _craftPanelWasVisible = false;
 
                 // Right panel — container or station
                 if (_rightContainer != null) BuildRightContainer(_root, _rightContainer);
                 else if (_openFurnace  != null) BuildRightFurnace(_root, _openFurnace);
                 else if (_openElectric != null) BuildRightElectricFurnace(_root, _openElectric);
                 else if (_openCoalGen  != null) BuildRightCoalGenerator(_root, _openCoalGen);
-                else if (_openQuarry   != null) _root.Add(MachineUIs.QuarryPanel(_openQuarry, BuildSlot));
-                else if (_openReactor  != null) _root.Add(MachineUIs.ReactorCorePanel(_openReactor, BuildSlot));
+                else if (_openQuarry   != null) { var mp = MachineUIs.QuarryPanel(_openQuarry, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openQuarry); }
+                else if (_openReactor  != null) { var mp = MachineUIs.ReactorCorePanel(_openReactor, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openReactor); }
                 else if (_openTurbine  != null) _root.Add(MachineUIs.SteamTurbinePanel(_openTurbine));
-                else if (_openPortReactor != null) _root.Add(MachineUIs.PortableReactorPanel(_openPortReactor, BuildSlot));
-                else if (_openProcessor != null) _root.Add(MachineUIs.UraniumProcessorPanel(_openProcessor, BuildSlot));
-                else if (_openReprocessor != null) _root.Add(MachineUIs.WasteReprocessorPanel(_openReprocessor, BuildSlot));
-                else if (_openElectrolyser != null) _root.Add(MachineUIs.ElectrolyserPanel(_openElectrolyser, BuildSlot));
+                else if (_openPortReactor != null) { var mp = MachineUIs.PortableReactorPanel(_openPortReactor, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openPortReactor); }
+                else if (_openProcessor != null) { var mp = MachineUIs.UraniumProcessorPanel(_openProcessor, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openProcessor); }
+                else if (_openReprocessor != null) { var mp = MachineUIs.WasteReprocessorPanel(_openReprocessor, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openReprocessor); }
+                else if (_openElectrolyser != null) { var mp = MachineUIs.ElectrolyserPanel(_openElectrolyser, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openElectrolyser); }
                 else if (_openHydroEngine != null) _root.Add(MachineUIs.HydrogenEnginePanel(_openHydroEngine));
                 else if (_openGasTank != null) _root.Add(MachineUIs.GasTankPanel(_openGasTank));
                 else if (_openStorageTerminal  != null) _root.Add(VoxelEngine.Storage.StorageUI.BuildTerminalPanel(_openStorageTerminal, BuildSlot, inventory));
@@ -800,55 +837,11 @@ namespace VoxelEngine.UI
             // ingredients through. Selection is remembered across sessions.
             BuildWirelessTransmitterSelector(panel);
 
-            // Crafting list — filtered by category + search.
-            panel.Add(Spacer(12));
-            panel.Add(MakeSubtitle("Crafting"));
-
-            // ── Crafting source priority (per user spec) ─────────────
-            //   1) If the player has opened a Storage Terminal (wired OR wireless),
-            //      OR is in the inventory with an active wireless transmitter, we
-            //      treat the storage network as a tier-Assembler crafting station
-            //      AND let crafting pull ingredients from inventory FIRST, then
-            //      from the network.
-            //   2) Otherwise, crafting only uses the inventory and respects normal
-            //      station-tier rules (Crafting Bench / Furnace / Assembler).
-            //
-            // The "storage = highest tier station" behaviour is gated by the
-            // res_storage_crafting research node so it doesn't appear before
-            // the player has earned it.
-            var rmCheck = VoxelEngine.Research.ResearchManager.Instance;
-            bool storageCraftingUnlocked = rmCheck != null
-                && rmCheck.IsUnlocked("res_storage_crafting");
-
-            VoxelEngine.Storage.ServerRack craftRack = null;
-            if (_openStorageTerminal != null && _openStorageTerminal.ConnectedRack != null
-                && _openStorageTerminal.ConnectedRack.IsOnline)
-                craftRack = _openStorageTerminal.ConnectedRack;
-
-            VoxelEngine.Storage.ServerRack passiveWirelessRack = GetActiveWirelessRack();
-            bool wirelessActive = passiveWirelessRack != null && passiveWirelessRack.IsOnline;
-
-            var maxStation = Crafter.MaxAccessibleStation(inventory.transform.position, stationRadius);
-            // Storage-as-station upgrade — Assembler tier.
-            if (storageCraftingUnlocked && (craftRack != null || wirelessActive)
-                && (int)maxStation < (int)Crafting.StationTier.Assembler)
-                maxStation = Crafting.StationTier.Assembler;
-
-            var allRecipes = Crafter.AvailableRecipes(recipeRegistry, maxStation);
-
-            // Wrap the inventory in a NetworkItemSource ONLY when the storage UI is
-            // open / the wireless transmitter selection is active. With no terminal
-            // open and no transmitter, crafting uses inventory only — the user's
-            // explicit rule "craft with the items in inventory first, and only with
-            // network items when the storage terminal is opened or a transmitter is
-            // active".
-            IItemContainer craftSource = inventory.container;
-            var craftRackForSource = craftRack ?? (wirelessActive ? passiveWirelessRack : null);
-            if (craftRackForSource != null)
-                craftSource = new VoxelEngine.Storage.NetworkItemSource(inventory.container, craftRackForSource);
-
-            BuildRecipeBrowser(panel, allRecipes, craftSource, inventory.container,
-                emptyMessage: "No recipes available — craft a Crafting Bench first.", panelId: "inventory");
+            // ── Crafting screen toggle (Rust-style show / hide) ──────
+            // The full crafting surface lives in its own center panel (built in
+            // Refresh()). Here we only render the toggle pill; its open/closed
+            // state persists across sessions via CraftingScreen.Visible.
+            panel.Add(CraftingScreen.ToggleButton(Refresh));
 
             // ── Wireless Storage Network (if unlocked) ──
             var transmitters = VoxelEngine.Storage.WirelessTransmitter.GetAllOnline();
@@ -936,6 +929,106 @@ namespace VoxelEngine.UI
         }
 
         // ----------------------------------------------------------------
+        //  CENTER CRAFTING PANEL — the Rust-style crafting surface.
+        //  Sits between the left inventory and the right container, shown
+        //  only when CraftingScreen.Visible is true. Its open/closed state
+        //  persists across sessions; the player toggles it from the
+        //  inventory header (CraftingScreen.ToggleButton).
+        // ----------------------------------------------------------------
+        private void BuildCenterCrafting(VisualElement root, bool rightPanelOpen)
+        {
+            if (inventory == null) return;
+
+            var (recipes, source, _) = ResolveCraftContext();
+
+            var panel = MakePanel();
+            panel.style.position = Position.Absolute;
+            panel.style.top      = 32;
+            panel.style.bottom   = 96;
+            panel.style.left     = 508;   // just right of the 460-wide inventory panel (left=32)
+            // When a right-side container/machine panel is open it occupies the
+            // far-right ~540px, so we stop short of it; otherwise we stretch to the
+            // screen edge. Either way the layout stays responsive.
+            panel.style.right    = rightPanelOpen ? 568 : 28;
+            panel.style.maxWidth = 760;   // but never absurdly wide on ultrawide displays
+            panel.style.overflow = Overflow.Hidden;
+            root.Add(panel);
+
+            // Subtle entrance pop — only the FIRST time the panel appears (i.e. the
+            // player just toggled it on), NOT on every Refresh() rebuild. Without
+            // this guard the panel would flash on each craft / queue tick.
+            if (!_craftPanelWasVisible)
+            {
+                panel.style.opacity = 0f;
+                panel.style.scale   = new StyleScale(new Scale(new Vector3(0.985f, 0.985f, 1f)));
+                panel.schedule.Execute(() =>
+                {
+                    panel.style.transitionProperty = new System.Collections.Generic.List<StylePropertyName> { "opacity", "scale" };
+                    panel.style.transitionDuration = new System.Collections.Generic.List<TimeValue>
+                        { new TimeValue(0.14f, TimeUnit.Second), new TimeValue(0.14f, TimeUnit.Second) };
+                    panel.style.opacity = 1f;
+                    panel.style.scale   = new StyleScale(new Scale(Vector3.one));
+                }).ExecuteLater(0);
+            }
+
+            CraftingScreen.Populate(
+                panel, recipes, source, inventory.container,
+                resolveQueue: r =>
+                {
+                    if (_activeQueue != null) return _activeQueue;
+                    if (r != null && r.requiredStation != Crafting.StationTier.None)
+                        return FindNearestQueueForTier(r.requiredStation, inventory.transform.position);
+                    return null;
+                },
+                refresh: Refresh,
+                setSearchFocus: v => _searchHasFocus = v,
+                panelId: "inventory");
+        }
+
+        /// <summary>
+        /// Computes the recipe set + ingredient source the inventory-side crafting
+        /// screen should use, honouring storage-network access and station tiers.
+        /// Extracted from the old inline crafting block so both the center panel
+        /// and any future caller can reuse the exact same priority rules.
+        /// </summary>
+        private (System.Collections.Generic.List<Crafting.RecipeDefinition> recipes, IItemContainer source, Crafting.StationTier maxStation) ResolveCraftContext()
+        {
+            // ── Crafting source priority (per user spec) ─────────────
+            //   1) If the player has opened a Storage Terminal (wired OR wireless),
+            //      OR is in the inventory with an active wireless transmitter, we
+            //      treat the storage network as a tier-Assembler crafting station
+            //      AND let crafting pull ingredients from inventory FIRST, then
+            //      from the network. Gated by the res_storage_crafting research node.
+            //   2) Otherwise, crafting only uses the inventory and respects normal
+            //      station-tier rules (Crafting Bench / Furnace / Assembler).
+            var rmCheck = VoxelEngine.Research.ResearchManager.Instance;
+            bool storageCraftingUnlocked = rmCheck != null
+                && rmCheck.IsUnlocked("res_storage_crafting");
+
+            VoxelEngine.Storage.ServerRack craftRack = null;
+            if (_openStorageTerminal != null && _openStorageTerminal.ConnectedRack != null
+                && _openStorageTerminal.ConnectedRack.IsOnline)
+                craftRack = _openStorageTerminal.ConnectedRack;
+
+            VoxelEngine.Storage.ServerRack passiveWirelessRack = GetActiveWirelessRack();
+            bool wirelessActive = passiveWirelessRack != null && passiveWirelessRack.IsOnline;
+
+            var maxStation = Crafter.MaxAccessibleStation(inventory.transform.position, stationRadius);
+            if (storageCraftingUnlocked && (craftRack != null || wirelessActive)
+                && (int)maxStation < (int)Crafting.StationTier.Assembler)
+                maxStation = Crafting.StationTier.Assembler;
+
+            var allRecipes = Crafter.AvailableRecipes(recipeRegistry, maxStation);
+
+            IItemContainer craftSource = inventory.container;
+            var craftRackForSource = craftRack ?? (wirelessActive ? passiveWirelessRack : null);
+            if (craftRackForSource != null)
+                craftSource = new VoxelEngine.Storage.NetworkItemSource(inventory.container, craftRackForSource);
+
+            return (allRecipes, craftSource, maxStation);
+        }
+
+        // ----------------------------------------------------------------
         // Reusable recipe browser: search bar + category tabs + recipe list.
         // Used by the player inventory pane AND the workstation right pane.
         // ----------------------------------------------------------------
@@ -943,6 +1036,9 @@ namespace VoxelEngine.UI
         // Set by the search field. Read by Update() to suppress hotkey/closing handling.
         private bool _searchHasFocus;
         private bool _showWirelessStorage;
+        // True while the center crafting panel is currently mounted — lets us play
+        // the entrance animation only on first appearance, not on every Refresh().
+        private bool _craftPanelWasVisible;
         // Prevents I from re-opening inventory the same frame it closed a machine panel.
         private bool _justClosedThisFrame;
 
@@ -1162,11 +1258,177 @@ namespace VoxelEngine.UI
             var panel = MakePanel();
             panel.style.position = Position.Absolute;
             panel.style.top = 32; panel.style.bottom = 96;
-            panel.style.right = 32; panel.style.width = 460;
+            panel.style.right = 32; panel.style.width = 520;   // room for the 2-column item-port grid
             root.Add(panel);
 
             panel.Add(MakeTitle(c.Name));
-            panel.Add(BuildSortableSlotGrid(c));
+
+            // Scroll so the slot grid + advanced port config both fit on small panels.
+            var scroll = new ScrollView(ScrollViewMode.Vertical);
+            scroll.style.flexGrow = 1;
+            // Force the scroll CONTENT container to fill the panel width — otherwise
+            // it sizes to content and the 50%-wide port cards collapse into one
+            // column. This is the key to the 2-column item-port grid rendering.
+            scroll.contentContainer.style.width = Length.Percent(100);
+            scroll.contentContainer.style.flexGrow = 1;
+            panel.Add(scroll);
+
+            scroll.Add(BuildSortableSlotGrid(c));
+
+            // ── Advanced Item-Port configuration (chests) ───────────────────
+            // Uses the same shared collapsible widget every machine uses.
+            if (_openChest != null)
+                AppendItemPorts(scroll, _openChest);
+        }
+
+
+        /// <summary>
+        /// Append the shared collapsible Item-Ports widget to a machine panel when
+        /// the machine implements <see cref="VoxelEngine.Transport.IItemPortHost"/>.
+        /// Works for ANY machine (furnace, processor, …) — one call, full feature set.
+        /// </summary>
+        private void AppendItemPorts(VisualElement panel, MonoBehaviour machine)
+        {
+            if (machine == null) return;
+            var host = machine.GetComponent<VoxelEngine.Transport.IItemPortHost>();
+            if (host == null) return;
+            var routing = machine.GetComponent<VoxelEngine.Transport.ItemPortRouting>();
+            if (routing == null) routing = machine.gameObject.AddComponent<VoxelEngine.Transport.ItemPortRouting>();
+
+            var divider = new VisualElement();
+            divider.style.height = 1;
+            divider.style.marginTop = 12; divider.style.marginBottom = 8;
+            divider.style.backgroundColor = new StyleColor(UITheme.BorderSubtle);
+            panel.Add(divider);
+
+            // The grid now opens as a full overlay ABOVE the machine UI instead of
+            // being crammed inside the (clipped) panel — keeps every machine tidy.
+            panel.Add(MakePortsToggle(false, () => OpenItemPortsOverlay(host, routing)));
+        }
+
+        /// <summary>
+        /// Open the Item-Ports editor as a centered modal overlay on the root UI,
+        /// with a near-solid dim backdrop, so it never squashes the machine panel
+        /// or overflows the screen. Closes on backdrop click or the X / DONE.
+        /// </summary>
+        private void OpenItemPortsOverlay(VoxelEngine.Transport.IItemPortHost host,
+                                          VoxelEngine.Transport.ItemPortRouting routing)
+        {
+            if (_root == null || host == null || routing == null) return;
+
+            var overlay = new VisualElement();
+            overlay.style.position = Position.Absolute;
+            overlay.style.left = 0; overlay.style.top = 0; overlay.style.right = 0; overlay.style.bottom = 0;
+            overlay.style.alignItems = Align.Center;
+            overlay.style.justifyContent = Justify.Center;
+            // IMPORTANT: the backdrop is CLICK-THROUGH so the player can still click
+            // items in their inventory to add them to the open filter. Only the card
+            // itself captures clicks; closing is via the ✕ / DONE button.
+            overlay.pickingMode = PickingMode.Ignore;
+            // Suspend the periodic Refresh() so the overlay isn't destroyed under us.
+            VoxelEngine.UI.PortConfigHud.IsAnyDropdownOpen = true;
+
+            // A dim layer pinned to the RIGHT side only (over the machine panel),
+            // leaving the left inventory clear & readable for click-to-add.
+            var dim = new VisualElement();
+            dim.style.position = Position.Absolute;
+            dim.style.left = 0; dim.style.top = 0; dim.style.right = 0; dim.style.bottom = 0;
+            dim.style.backgroundColor = new StyleColor(new Color(0.02f, 0.025f, 0.04f, 0.55f));
+            dim.pickingMode = PickingMode.Ignore;
+            overlay.Add(dim);
+
+            void Close()
+            {
+                VoxelEngine.UI.PortConfigHud.IsAnyDropdownOpen = false;
+                overlay.RemoveFromHierarchy();
+            }
+
+            // Card container.
+            var card = MakePanel();
+            card.style.position = Position.Absolute;   // float on the right over the machine UI
+            card.style.right = 24;
+            card.style.top = 24;
+            card.style.width = 560;
+            card.style.maxWidth = Length.Percent(60);
+            card.style.maxHeight = Length.Percent(92);
+            card.style.paddingTop = 18; card.style.paddingBottom = 18;
+            card.style.paddingLeft = 20; card.style.paddingRight = 20;
+            card.pickingMode = PickingMode.Position;    // capture clicks (don't pass through)
+            overlay.Add(card);
+
+            // Header row with close button.
+            var head = new VisualElement();
+            head.style.flexDirection = FlexDirection.Row;
+            head.style.alignItems = Align.Center;
+            head.style.marginBottom = 6;
+            var title = MakeTitle("Item Ports");
+            title.style.flexGrow = 1;
+            head.Add(title);
+            var close = new Button { text = "✕" };
+            close.style.width = 28; close.style.height = 28; close.style.fontSize = 14;
+            close.style.color = new StyleColor(UITheme.TextSecondary);
+            close.style.backgroundColor = new StyleColor(UITheme.BgCard);
+            SetBorderRadius(close, 6);
+            close.clicked += Close;
+            head.Add(close);
+            card.Add(head);
+
+            // Scrollable body so it never overflows the screen.
+            var scroll = new ScrollView(ScrollViewMode.Vertical);
+            scroll.style.flexGrow = 1;
+            scroll.contentContainer.style.width = Length.Percent(100);
+            card.Add(scroll);
+
+            var body = VoxelEngine.UI.PortConfigHud.BuildItemPorts(host, routing, onChanged: () => { });
+            body.style.width = Length.Percent(100);
+            scroll.Add(body);
+
+            _root.Add(overlay);
+        }
+
+        /// <summary>Launcher pill that opens the Item-Ports overlay.</summary>
+        private VisualElement MakePortsToggle(bool _, System.Action onClick)
+        {
+            var accent = UITheme.AccentCyan;
+            var btn = new Button();
+            btn.style.flexDirection = FlexDirection.Row;
+            btn.style.alignItems = Align.Center;
+            btn.style.height = 34;
+            btn.style.paddingLeft = 12; btn.style.paddingRight = 12;
+            btn.style.backgroundColor = new StyleColor(new Color(accent.r, accent.g, accent.b, 0.14f));
+            UITheme.Radius(btn, 8f);
+            UITheme.Border(btn, 1, new Color(accent.r, accent.g, accent.b, 0.40f));
+
+            var icon = new Label("⚙");
+            icon.style.color = new StyleColor(accent);
+            icon.style.fontSize = 14;
+            icon.style.marginRight = 8;
+            icon.pickingMode = PickingMode.Ignore;
+            btn.Add(icon);
+
+            var lbl = new Label("ITEM PORTS");
+            lbl.style.color = new StyleColor(UITheme.TextPrimary);
+            lbl.style.fontSize = 11;
+            lbl.style.unityFontStyleAndWeight = FontStyle.Bold;
+            lbl.style.letterSpacing = 1.2f;
+            lbl.style.flexGrow = 1;
+            lbl.pickingMode = PickingMode.Ignore;
+            btn.Add(lbl);
+
+            var hint = new Label("CONFIGURE  ▸");
+            hint.style.color = new StyleColor(UITheme.TextMuted);
+            hint.style.fontSize = 9;
+            hint.style.unityFontStyleAndWeight = FontStyle.Bold;
+            hint.style.letterSpacing = 1f;
+            hint.pickingMode = PickingMode.Ignore;
+            btn.Add(hint);
+
+            btn.RegisterCallback<PointerEnterEvent>(_e =>
+                btn.style.backgroundColor = new StyleColor(new Color(accent.r, accent.g, accent.b, 0.22f)));
+            btn.RegisterCallback<PointerLeaveEvent>(_e =>
+                btn.style.backgroundColor = new StyleColor(new Color(accent.r, accent.g, accent.b, 0.14f)));
+            btn.clicked += () => onClick?.Invoke();
+            return btn;
         }
 
         // ----- RIGHT (furnace) -----
@@ -1304,6 +1566,9 @@ namespace VoxelEngine.UI
             hint.style.fontSize = 10;
             hint.style.whiteSpace = WhiteSpace.Normal;
             panel.Add(hint);
+
+            // Advanced per-face item ports (Input/Fuel/Output routing + filters).
+            AppendItemPorts(panel, f);
         }
 
         // -------- prettier-UI helpers used by furnace + electric furnace --------
@@ -1471,6 +1736,9 @@ namespace VoxelEngine.UI
             hint.style.fontSize = 11;
             hint.style.whiteSpace = WhiteSpace.Normal;
             panel.Add(hint);
+
+            // Advanced item ports — auto-feed the fuel slot via pipes.
+            AppendItemPorts(panel, f);
         }
 
         // ----- RIGHT (electric furnace) -----
@@ -1642,6 +1910,9 @@ namespace VoxelEngine.UI
             hint.style.fontSize = 10;
             hint.style.whiteSpace = WhiteSpace.Normal;
             panel.Add(hint);
+
+            // Advanced per-face ITEM ports (route pipes to Input / Output, with filters).
+            AppendItemPorts(panel, ef);
         }
 
         // ----- RIGHT (crafting bench / assembler) -----
@@ -1698,7 +1969,13 @@ namespace VoxelEngine.UI
 
             var recipes = Crafter.AvailableRecipes(recipeRegistry, st.tier);
             BuildRecipeBrowser(panel, recipes, inventory.container, inventory.container,
-                emptyMessage: "No recipes available at this station tier.", panelId: "station_" + st.GetEntityId());
+                emptyMessage: "No recipes available at this station tier.",
+                // GetEntityId — Unity 6+ replacement for the now-deprecated
+                // GetInstanceID. Same semantics: a unique, stable int per
+                // UnityObject. (Earlier this call was incorrectly "fixed" to
+                // GetInstanceID, which the Unity 6.4 compiler immediately
+                // flagged as obsolete — reverted to GetEntityId here.)
+                panelId: "station_" + st.GetEntityId());
         }
 
         // ============================================================
@@ -2305,6 +2582,17 @@ namespace VoxelEngine.UI
                     }
                     return;
                 }
+                // If a filter dialog is open and capturing, shift-clicking (or even
+                // plain clicking) an item routes it INTO the filter instead of the
+                // normal quick-transfer / pick-up.
+                if (VoxelEngine.UI.ItemFilterDialog.IsCapturing)
+                {
+                    var capStack = slotRef.container.GetSlot(slotRef.index);
+                    if (!capStack.IsEmpty &&
+                        VoxelEngine.UI.ItemFilterDialog.TryCaptureItem(capStack.item))
+                        return;
+                }
+
                 // Shift+LMB = quick-transfer to the OTHER side (player inventory <-> open container).
                 if (shiftHeld)
                 {
@@ -2470,7 +2758,11 @@ namespace VoxelEngine.UI
                     bool isFuel = item is ResourceItem rg && rg.fuelSeconds > 0f;
                     return isFuel ? _openCoalGen.fuelC : null;
                 }
-                if (_openQuarry != null)         return _openQuarry.Output;
+                if (_openQuarry != null)
+                {
+                    bool isUpgrade = item is QuarryUpgradeItem;
+                    return isUpgrade ? _openQuarry.upgradeC : _openQuarry.Output;
+                }
                 if (_openDiskManipulator != null) return _openDiskManipulator.sourceSlot;
                 if (_openNAS != null)             return _openNAS.diskSlots;
                 if (_openImporter != null)        return _openImporter.upgradeSlots;

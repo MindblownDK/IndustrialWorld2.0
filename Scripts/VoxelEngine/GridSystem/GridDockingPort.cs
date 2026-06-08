@@ -20,10 +20,6 @@ namespace VoxelEngine.GridSystem
         public float dockRange = 2.0f;
         [Tooltip("Auto-export items from ship cargo to connected base.")]
         public bool autoExport = true;
-
-        [Header("Port Config (Filter)")]
-        [Tooltip("Use existing PortConfig system for export/import filters.")]
-        public bool usePortConfigFilter = true;
         [Tooltip("Seconds between export ticks.")]
         public float exportInterval = 1f;
 

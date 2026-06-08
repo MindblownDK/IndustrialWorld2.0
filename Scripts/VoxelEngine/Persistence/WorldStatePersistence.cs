@@ -37,7 +37,8 @@ namespace VoxelEngine.Persistence
 
         private bool _loaded;
         private float _saveTimer;
-        private const float AUTOSAVE_SECONDS = 30f;   // background autosave cadence
+        // Background autosave cadence now comes from GameSettings.AutosaveSeconds
+        // (0 = disabled). Players change it live from the Settings → Saving tab.
 
         private void Awake()
         {
@@ -54,8 +55,10 @@ namespace VoxelEngine.Persistence
 
         private void Update()
         {
+            int interval = VoxelEngine.Settings.GameSettings.AutosaveSeconds;
+            if (interval <= 0) { _saveTimer = 0f; return; } // autosave disabled
             _saveTimer += Time.deltaTime;
-            if (_saveTimer >= AUTOSAVE_SECONDS) { _saveTimer = 0f; SaveAll(); }
+            if (_saveTimer >= interval) { _saveTimer = 0f; SaveAll(); }
         }
 
         private void OnApplicationQuit() => SaveAll();
@@ -187,6 +190,9 @@ namespace VoxelEngine.Persistence
                     cursorX = q.CursorX,
                     cursorZ = q.CursorZ,
                     phase = (int)q.Phase,
+                    rangeLvl = q.InstalledRangeLevel,
+                    speedLvl = q.InstalledSpeedLevel,
+                    effLvl = q.InstalledEfficiencyLevel,
                     outputContainer = SerializeContainer(q.Output)
                 });
             }
@@ -210,7 +216,7 @@ namespace VoxelEngine.Persistence
                 }
                 if (best != null)
                 {
-                    best.RestoreState(sq.currentDepth, sq.cursorX, sq.cursorZ, sq.phase);
+                    best.RestoreState(sq.currentDepth, sq.cursorX, sq.cursorZ, sq.phase, sq.rangeLvl, sq.speedLvl, sq.effLvl);
                     if (sq.outputContainer != null)
                     {
                         best.EnsureOutputPublic();
@@ -225,15 +231,43 @@ namespace VoxelEngine.Persistence
         private SavedContainer TryFindContainer(GameObject go)
         {
             var chest = go.GetComponentInChildren<Chest>();
-            if (chest != null) return SerializeContainer(chest.container);
+            if (chest != null)
+            {
+                var sc = SerializeContainer(chest.container);
+                if (sc != null) AttachPortSnapshot(go, sc);
+                return sc;
+            }
 
             var furnace = go.GetComponentInChildren<Furnace>();
-            if (furnace != null) return SerializeMulti(furnace.inputC, furnace.fuelC, furnace.outputC);
+            if (furnace != null)
+            {
+                var sc = SerializeMulti(furnace.inputC, furnace.fuelC, furnace.outputC);
+                AttachPortSnapshot(go, sc);
+                return sc;
+            }
 
             var efurn = go.GetComponentInChildren<ElectricFurnace>();
-            if (efurn != null) return SerializeMulti(efurn.inputC, efurn.outputC, efurn.upgradeC);
+            if (efurn != null)
+            {
+                var sc = SerializeMulti(efurn.inputC, efurn.outputC, efurn.upgradeC);
+                AttachPortSnapshot(go, sc);
+                return sc;
+            }
 
             return null;
+        }
+
+        /// <summary>
+        /// Capture the item-port config (faces + routing + filters) from any
+        /// machine that carries an <see cref="VoxelEngine.Transport.ItemPortRouting"/>.
+        /// </summary>
+        private void AttachPortSnapshot(GameObject go, SavedContainer sc)
+        {
+            if (sc == null) return;
+            var routing = go.GetComponentInChildren<VoxelEngine.Transport.ItemPortRouting>();
+            if (routing == null) return;
+            var snap = routing.CaptureSnapshot();
+            if (snap != null && snap.HasData) sc.chestPort = snap;
         }
 
         private SavedContainer SerializeContainer(ItemContainer c)
@@ -356,13 +390,19 @@ namespace VoxelEngine.Persistence
         private void RestoreContainer(GameObject go, SavedContainer sc)
         {
             var chest = go.GetComponentInChildren<Chest>();
-            if (chest != null) { DeserializeInto(chest.container, sc); return; }
+            if (chest != null)
+            {
+                DeserializeInto(chest.container, sc);
+                RestorePortSnapshot(go, sc);
+                return;
+            }
 
             var furnace = go.GetComponentInChildren<Furnace>();
             if (furnace != null)
             {
                 furnace.EnsureContainers();
                 DeserializeMulti(sc, furnace.inputC, furnace.fuelC, furnace.outputC);
+                RestorePortSnapshot(go, sc);
                 return;
             }
             var efurn = go.GetComponentInChildren<ElectricFurnace>();
@@ -370,8 +410,19 @@ namespace VoxelEngine.Persistence
             {
                 efurn.EnsureContainers();
                 DeserializeMulti(sc, efurn.inputC, efurn.outputC, efurn.upgradeC);
+                RestorePortSnapshot(go, sc);
                 return;
             }
+        }
+
+        /// <summary>Restore item-port config onto any machine with ItemPortRouting.</summary>
+        private void RestorePortSnapshot(GameObject go, SavedContainer sc)
+        {
+            if (sc == null || sc.chestPort == null || !sc.chestPort.HasData) return;
+            var routing = go.GetComponentInChildren<VoxelEngine.Transport.ItemPortRouting>();
+            if (routing == null) return;
+            routing.ApplySnapshot(sc.chestPort,
+                id => _itemById.TryGetValue(id, out var def) ? def : null);
         }
 
         private void DeserializeInto(ItemContainer c, SavedContainer sc)
@@ -442,6 +493,9 @@ namespace VoxelEngine.Persistence
         {
             public List<SavedStack> entries = new();
             public List<int>        containerSizes = new();   // for multi-container blocks
+            // Advanced port config for chests (per-face direction + item filters).
+            // Null/empty for blocks that don't carry one — fully backward compatible.
+            public VoxelEngine.Transport.ItemPortSnapshot chestPort;
         }
         [Serializable] private class SavedStack
         {
@@ -451,7 +505,7 @@ namespace VoxelEngine.Persistence
         {
             public Vector3 pos; public float rotY;
             public int currentDepth; public int cursorX; public int cursorZ;
-            public int phase; // 0=idle, 1=building, 2=mining, 3=complete
+            public int phase; public int rangeLvl; public int speedLvl; public int effLvl; // upgrade levels
             public SavedContainer outputContainer;
         }
     }

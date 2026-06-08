@@ -233,6 +233,10 @@ namespace VoxelEngine.Building.Tiered
             var pb = go.GetComponent<PlacedTieredBlock>();
             if (pb == null) pb = go.AddComponent<PlacedTieredBlock>();
             pb.Initialize(def, BuildTier.Wood);
+            // Satisfying placement thunk at the build location.
+            VoxelEngine.FX.AudioManager.PlayAt(
+                VoxelEngine.FX.SfxLibrary.Get(VoxelEngine.FX.Sfx.Place), pos,
+                volume: 0.6f, pitch: UnityEngine.Random.Range(0.95f, 1.05f), maxDistance: 20f);
         }
 
         // ============================================================

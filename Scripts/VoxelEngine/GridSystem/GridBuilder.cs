@@ -1,8 +1,7 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridBuilder.cs
 //
-// Handles placing grid blocks. Ghost preview, snap to existing grids or create new.
-// Supports Small and Large grids. Uses Input System exclusively.
-// Hardened with null checks and clean separation.
+// Handles placing grid blocks. Ghost preview, snap to existing grids.
+// All input uses Input System (no UnityEngine.Input).
 
 using UnityEngine;
 using VoxelEngine.Items;
@@ -14,12 +13,12 @@ namespace VoxelEngine.GridSystem
 {
     public class GridBuilder : MonoBehaviour
     {
-        [Header("References")]
+        [Header("Refs")]
         public Camera buildCamera;
         public Inventory inventory;
         public float reach = 8f;
 
-        [Header("Ghost Visuals")]
+        [Header("Ghost")]
         public Color ghostColor = new Color(0.3f, 0.8f, 1f, 0.3f);
 
         private GameObject _ghost;
@@ -74,6 +73,7 @@ namespace VoxelEngine.GridSystem
 
             ShowGhost(worldPos, cs);
 
+            // Place on RMB (Build action).
             if (GameSettings.WasPressed(InputAction.Build))
             {
                 PlaceBlock(gbi, targetGrid, gridPos, worldPos);

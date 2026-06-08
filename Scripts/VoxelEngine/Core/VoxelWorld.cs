@@ -91,11 +91,18 @@ namespace VoxelEngine.Core
             // Volumetric water simulation.
             VoxelEngine.WaterSim.FluidManager.EnsureInstance();
 
+            // Auto-recover missing references (common after branch switches / scene reloads)
+            if (materialRegistry == null)
+                materialRegistry = Resources.Load<MaterialRegistry>("MaterialRegistry");
+            if (planet == null)
+                planet = Resources.Load<PlanetSettings>("Planet_Earthlike");
+            if (terrainMaterial == null)
+                terrainMaterial = Resources.Load<Material>("Mat_Terrain");
+
             if (materialRegistry == null || planet == null || terrainMaterial == null)
             {
-                Debug.LogError("[VoxelWorld] Missing required asset references on inspector.");
-                enabled = false;
-                return;
+                Debug.LogWarning("[VoxelWorld] Missing required asset references on inspector. Please assign PlanetSettings, MaterialRegistry and terrainMaterial in the scene inspector.");
+                // Do not disable — allow the world to run with defaults if possible
             }
 
             // Apply main-menu session overrides (world name, seed, sliders) if present.

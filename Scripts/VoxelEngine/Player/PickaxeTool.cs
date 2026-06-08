@@ -32,6 +32,8 @@ namespace VoxelEngine.Player
         {
             if (world == null) world = VoxelWorld.Instance;
             if (shootCamera == null) shootCamera = Camera.main;
+            // Route tool SFX through the SFX mixer bus (no-op without a mixer asset).
+            if (hitAudio != null) VoxelEngine.FX.AudioManager.Route(hitAudio, music: false);
         }
 
         private void Update()

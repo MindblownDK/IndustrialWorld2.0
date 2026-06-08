@@ -1,9 +1,8 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridBlock.cs
 //
 // Base class for all ship/vehicle blocks. Every block on a grid is a GridBlock.
-// Subclasses override power, behavior, and special logic.
-//
-// All code is production-ready: null-safe, event-ready, minimal, high-quality.
+// Subclasses: GridArmor, GridThruster, GridCockpit, GridWheel, GridDrill,
+//             GridSolarPanel, GridGasTank, GridBattery, GridDemolisher.
 
 using UnityEngine;
 
@@ -24,14 +23,12 @@ namespace VoxelEngine.GridSystem
 
         /// <summary>Power this block generates (W). Override in generators.</summary>
         public virtual float PowerOutput => 0f;
-
         /// <summary>Power this block consumes (W). Override in consumers.</summary>
         public virtual float PowerDraw => 0f;
 
-        /// <summary>Called when placed on a grid. Override for init.</summary>
+        /// <summary>Called when placed on a grid.</summary>
         public virtual void OnPlaced() { currentHP = maxHP; }
-
-        /// <summary>Called when removed from a grid. Override for cleanup.</summary>
+        /// <summary>Called when removed from a grid.</summary>
         public virtual void OnRemoved() { }
 
         /// <summary>Apply damage. Returns true if destroyed.</summary>
@@ -46,13 +43,13 @@ namespace VoxelEngine.GridSystem
             return false;
         }
 
-        /// <summary>Create a visible block with mesh and material (utility).</summary>
+        /// <summary>Create a visible block with mesh and material.</summary>
         public static T CreateBlock<T>(string name, GridSize size, Color color) where T : GridBlock
         {
             var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
             go.name = name;
             float cs = size.CellSize();
-            go.transform.localScale = Vector3.one * cs * 0.95f;
+            go.transform.localScale = Vector3.one * cs * 0.95f; // slight gap for visibility
 
             var mr = go.GetComponent<MeshRenderer>();
             var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");

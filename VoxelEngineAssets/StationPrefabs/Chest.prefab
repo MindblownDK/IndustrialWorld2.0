@@ -9,8 +9,9 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 7044837038505930462}
-  - component: {fileID: 7255004810747722204}
   - component: {fileID: 7582137008903744822}
+  - component: {fileID: 4230300330742674303}
+  - component: {fileID: 7255004810747722204}
   m_Layer: 0
   m_Name: Chest
   m_TagString: Untagged
@@ -34,27 +35,6 @@ Transform:
   - {fileID: 5297033651151673407}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &7255004810747722204
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 94353502155927855}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 63f495c8e0dd9a6408acf54660ab9bde, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.Chest
-  size: 30
-  displayName: Chest
-  pushInterval: 0.5
-  pushPerTick: 8
-  pipeConnectRadius: 1.6
-  container:
-    _name: Container
-    _slots: []
-    _minSize: 1
 --- !u!114 &7582137008903744822
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -94,6 +74,40 @@ MonoBehaviour:
     enabled: 1
   portIndicatorSize: 0.4
   showPortIndicators: 1
+--- !u!114 &4230300330742674303
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 94353502155927855}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9eacd68ef9a141ae95f225d895db1c7b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.ItemPortRouting
+  pushInterval: 0.5
+  pushPerTick: 8
+  pipeConnectRadius: 1.6
+  distribution: 0
+--- !u!114 &7255004810747722204
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 94353502155927855}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 63f495c8e0dd9a6408acf54660ab9bde, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.Chest
+  size: 30
+  displayName: Chest
+  container:
+    _name: Container
+    _slots: []
+    _minSize: 1
 --- !u!1 &1123175698645402282
 GameObject:
   m_ObjectHideFlags: 0

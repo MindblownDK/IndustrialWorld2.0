@@ -75,7 +75,6 @@ namespace VoxelEngine.Player
         private float  _lastGroundedTime;
         private bool   _crouched;
         private bool   _sliding;
-        private bool   _looking;            // mouse-look toggled by RMB
         private float  _smoothedEyeHeight;
 
         // ===== Editor inspector helpers (for the in-inspector toggle button) =====
@@ -151,7 +150,6 @@ namespace VoxelEngine.Player
             // control before the saved position has been restored.
             if (PlayerSpawner.Instance != null && !PlayerSpawner.Instance.ReadyForPlayerControl)
             {
-                _looking = false;
                 _velocity = Vector3.zero;
                 return;
             }
@@ -160,7 +158,6 @@ namespace VoxelEngine.Player
             if (VoxelEngine.UI.UIState.IsBlocking)
             {
                 // Cursor visibility/lock is owned by UIState — we just stop reading mouse.
-                _looking = false;
                 // Still apply gravity so you don't float — but no horizontal input.
                 if (!GameSettings.FlyMode)
                 {
@@ -185,20 +182,14 @@ namespace VoxelEngine.Player
         // ----- shared: mouse look + fly-mode toggle key -----
         private void UpdateLook()
         {
-            // Hold RMB to look. (Same convention as before.)
-            if (GetRightMouseDown())
+            // Standard FPS look: the camera always follows the mouse while playing
+            // (no button to hold). The cursor stays locked & hidden during play and
+            // is only freed by UIState when a menu opens (handled above).
+            if (Cursor.lockState != CursorLockMode.Locked)
             {
-                _looking = true;
                 Cursor.lockState = CursorLockMode.Locked;
                 Cursor.visible = false;
             }
-            if (GetRightMouseUp())
-            {
-                _looking = false;
-                Cursor.lockState = CursorLockMode.None;
-                Cursor.visible = true;
-            }
-            if (!_looking) return;
 
             Vector2 d = GetMouseDelta();
             float sens = GameSettings.MouseSensitivity;
@@ -436,22 +427,8 @@ namespace VoxelEngine.Player
             float y = (GameSettings.IsHeld(InputAction.Forward) ? 1 : 0) - (GameSettings.IsHeld(InputAction.Back) ? 1 : 0);
             return new Vector2(x, y);
         }
-        private static bool GetRightMouseDown()
-        {
-#if ENABLE_INPUT_SYSTEM
-            return Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame;
-#else
-            return Input.GetMouseButtonDown(1);
-#endif
-        }
-        private static bool GetRightMouseUp()
-        {
-#if ENABLE_INPUT_SYSTEM
-            return Mouse.current != null && Mouse.current.rightButton.wasReleasedThisFrame;
-#else
-            return Input.GetMouseButtonUp(1);
-#endif
-        }
+
+
         private static Vector2 GetMouseDelta()
         {
 #if ENABLE_INPUT_SYSTEM

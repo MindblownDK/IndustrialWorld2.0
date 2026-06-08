@@ -20,11 +20,14 @@ using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.Items;
 using VoxelEngine.Power;
+using VoxelEngine.Transport;
 
 namespace VoxelEngine.Crafting
 {
     [RequireComponent(typeof(CraftingStation))]
-    public class OilRefinery : MonoBehaviour
+    [RequireComponent(typeof(PortConfig))]
+    [RequireComponent(typeof(ItemPortRouting))]
+    public class OilRefinery : MonoBehaviour, IItemPortHost
     {
         public const int INPUT_SLOTS   = 2;
         public const int OUTPUT_SLOTS  = 4;
@@ -77,6 +80,33 @@ namespace VoxelEngine.Crafting
             if (inputC   == null) inputC   = new ItemContainer("Inputs",   INPUT_SLOTS);   else inputC.Resize(INPUT_SLOTS);
             if (outputC  == null) outputC  = new ItemContainer("Outputs",  OUTPUT_SLOTS);  else outputC.Resize(OUTPUT_SLOTS);
             if (upgradeC == null) upgradeC = new ItemContainer("Upgrades", UPGRADE_SLOTS); else upgradeC.Resize(UPGRADE_SLOTS);
+        }
+
+        // ── IItemPortHost ───────────────────────────────────────────────────
+        private PortConfig _portConfig;
+        private ItemPortContainer[] _portContainers;
+
+        public PortConfig PortConfig
+        {
+            get
+            {
+                if (_portConfig == null)
+                {
+                    _portConfig = GetComponent<PortConfig>();
+                    if (_portConfig == null) _portConfig = gameObject.AddComponent<PortConfig>();
+                    _portConfig.EnsureAllFaces();
+                }
+                return _portConfig;
+            }
+        }
+
+        public IReadOnlyList<ItemPortContainer> GetPortContainers()
+        {
+            EnsureContainers();
+            _portContainers ??= new ItemPortContainer[2];
+            _portContainers[0] = new ItemPortContainer("Inputs",  inputC,  canInput: true,  canOutput: false);
+            _portContainers[1] = new ItemPortContainer("Outputs", outputC, canInput: false, canOutput: true);
+            return _portContainers;
         }
 
         private void Update()

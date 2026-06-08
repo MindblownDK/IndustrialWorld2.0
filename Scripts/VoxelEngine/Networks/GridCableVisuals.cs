@@ -52,40 +52,71 @@ namespace VoxelEngine.Networks
         {
             if (visualRoot == null) return;
 
-            // ── Premium renderer path ──────────────────────────
-            // Delegate to IndustrialPipeMesh with the WireArm profile so
-            // cables (PowerCable / DataCable) get the same round-shaft,
-            // dome-hub, flange-collar treatment as the new realistic pipes.
-            // Every conduit in the game now shares one premium visual language.
-            var accentMat = MakeAccentVariant(material);
+            // ── Industrial cable visual language ────────────────────
+            // The TIER colour (e.g. orange Copper, grey Iron, gold Gold,
+            // cyan Superconductor) is what the player needs to identify at a
+            // glance. We use it for the WIDE TERMINAL COLLAR at every
+            // junction so each tier reads instantly from across a factory.
+            //
+            // The actual cable SHAFT meanwhile uses a shared "rubber sleeve"
+            // material — a near-black neutral so the bright tier collar
+            // pops against it AND so adjacent cables of different tiers
+            // form visually consistent runs without colour clashing.
+            //
+            // Net result:
+            //   • Shaft       = dark rubber sleeve (every tier)
+            //   • Collar/end  = the wire's tier tint
+            var sleeveMat = SharedSleeveMaterial();
+            var tierMat   = MakeTierAccentVariant(material);
+
             IndustrialPipeMesh.Rebuild(
                 visualRoot,
                 cableWorldPos,
                 neighbourWorldPositions,
                 gridSize,
                 PipeStyle.WireArm,
-                material,
-                /* innerMat */ null,
-                accentMat);
+                /* shellMat  */ sleeveMat,  // dark sleeve = visible cable run
+                /* innerMat  */ null,
+                /* accentMat */ tierMat);   // bright tier-coloured collar
+        }
+
+        // ── Shared neutral sleeve material ──────────────────────────
+        // One instance shared across every cable in the world — this is the
+        // dark rubber jacket the conductors are wrapped in. Cached so we
+        // don't allocate a new material per cable.
+        private static Material _sleeveMatCache;
+        private static Material SharedSleeveMaterial()
+        {
+            if (_sleeveMatCache != null) return _sleeveMatCache;
+            // Near-black charcoal with a hint of warmth — reads as rubber,
+            // not plastic. Low metallic, medium-low smoothness so it stays
+            // matte against the polished tier-metal collars.
+            var rubber = new Color(0.10f, 0.10f, 0.115f, 1f);
+            _sleeveMatCache = IndustrialPipeMesh.CreateMetalMaterial(
+                rubber, "CableSleeve_Shared",
+                metallic: 0.10f, smoothness: 0.35f);
+            return _sleeveMatCache;
         }
 
         /// <summary>
-        /// Build a slightly brighter / more polished variant of the supplied
-        /// material so cable collars catch a little extra light. Cached on the
-        /// owning material via name suffix so we don't allocate every rebuild.
+        /// Build a polished metallic variant of the tier colour for use on
+        /// the terminal collars at every junction. Lifts brightness ~15%
+        /// toward white so the tier reads clearly even on darker tiers
+        /// (Iron, Lead), and uses high metallic + high smoothness so the
+        /// collar looks like a bolted brass / steel clamp.
         /// </summary>
-        private static Material MakeAccentVariant(Material src)
+        private static Material MakeTierAccentVariant(Material src)
         {
-            if (src == null) return null;
+            if (src == null) return SharedSleeveMaterial();
             Color baseTint = src.color;
-            // Lift each channel ~25% toward white; keep alpha 1.
             Color accent = new Color(
-                Mathf.Clamp01(baseTint.r * 0.7f + 0.30f),
-                Mathf.Clamp01(baseTint.g * 0.7f + 0.30f),
-                Mathf.Clamp01(baseTint.b * 0.7f + 0.30f),
+                Mathf.Clamp01(baseTint.r * 0.85f + 0.15f),
+                Mathf.Clamp01(baseTint.g * 0.85f + 0.15f),
+                Mathf.Clamp01(baseTint.b * 0.85f + 0.15f),
                 1f);
-            return IndustrialPipeMesh.CreateMetalMaterial(accent,
-                $"{src.name}_Accent", metallic: 0.95f, smoothness: 0.88f);
+            return IndustrialPipeMesh.CreateMetalMaterial(
+                accent, $"{src.name}_TierCollar",
+                metallic: 0.95f, smoothness: 0.90f);
         }
 
         /// <summary>

@@ -92,6 +92,12 @@ namespace VoxelEngine.Transport
                     if (!b.neighbours.Contains(a)) b.neighbours.Add(a);
                 }
             }
+
+            // Refresh each pipe's endpoint (chest/machine) connections too, so a
+            // port being enabled/disabled reconnects or drops the visual arm and
+            // the functional link immediately on the next dirty rebuild.
+            foreach (var p in _pipes)
+                if (p != null) p.ForceEndpointRescan();
         }
 
         /// <summary>Call after moving/adding a pipe at runtime to force re-link.</summary>
