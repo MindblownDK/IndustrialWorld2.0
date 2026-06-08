@@ -14,7 +14,7 @@ namespace VoxelEngine.GridSystem
         [Header("Item Pipe")]
         public float transferRate = 10f; // items per second
 
-        private ResourceNetwork _network;
+        private ResourceNetwork<float> _network;
 
         public override void OnPlaced()
         {
