@@ -401,11 +401,16 @@ namespace VoxelEngine.UI
             var enabled = config.IsFaceEnabled(face);
             var bgTint  = DirectionColor(dir);
 
+            // Enforce a strict 2-column grid: each card claims exactly half the
+            // row and never grows/shrinks, so it stays 2-up at any panel width
+            // (minWidth kept tiny so it can't wrap down to a single column).
             var card = new VisualElement();
-            card.style.width = Length.Percent(50);
-            card.style.minWidth = 200;
-            card.style.paddingTop = 8; card.style.paddingBottom = 8;
-            card.style.paddingLeft = 8; card.style.paddingRight = 8;
+            card.style.flexBasis = Length.Percent(50);
+            card.style.flexGrow = 0;
+            card.style.flexShrink = 0;
+            card.style.minWidth = 120;
+            card.style.paddingTop = 6; card.style.paddingBottom = 6;
+            card.style.paddingLeft = 4; card.style.paddingRight = 4;
 
             var inner = new VisualElement();
             inner.style.backgroundColor = new StyleColor(T.BgCard);

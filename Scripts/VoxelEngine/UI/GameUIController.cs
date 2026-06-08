@@ -48,6 +48,7 @@ namespace VoxelEngine.UI
         public bool IsInventoryOpen => _inventoryOpen;
         private IItemContainer _rightContainer; // chest contents OR furnace etc.
         private VoxelEngine.Building.Chest _openChest; // set when the right container is a Chest (drives Item Ports UI)
+        private bool _chestPortsExpanded; // hide/unhide state for the chest Item-Ports panel (persists across Refresh)
         private Furnace        _openFurnace;
         private ElectricFurnace _openElectric;
         private CraftQueue _activeQueue;
@@ -445,6 +446,7 @@ namespace VoxelEngine.UI
             if (!_inventoryOpen) UIState.PushBlock();
             _rightContainer = c;
             _openChest      = owningChest;
+            _chestPortsExpanded = false;   // start collapsed so big chests stay tidy
             _inventoryOpen  = true;
             _openFurnace    = null;
             _openElectric   = null;
@@ -1184,20 +1186,83 @@ namespace VoxelEngine.UI
             scroll.Add(BuildSortableSlotGrid(c));
 
             // ── Advanced Item-Port configuration (chests only) ──────────────
+            // Collapsible so large chests aren't visually crowded by the 6-face
+            // grid. State persists across the panel's periodic Refresh().
             if (_openChest != null)
             {
                 var divider = new VisualElement();
                 divider.style.height = 1;
-                divider.style.marginTop = 12; divider.style.marginBottom = 4;
+                divider.style.marginTop = 12; divider.style.marginBottom = 8;
                 divider.style.backgroundColor = new StyleColor(UITheme.BorderSubtle);
                 scroll.Add(divider);
 
-                scroll.Add(VoxelEngine.UI.PortConfigHud.BuildItemPorts(_openChest, onChanged: () =>
+                // Toggle header — a tactile pill button that shows/hides the grid.
+                var toggle = MakeChestPortsToggle();
+                scroll.Add(toggle);
+
+                if (_chestPortsExpanded)
                 {
-                    // Filters/directions don't touch the container, so a light
-                    // refresh keeps the panel in sync without disturbing the picker.
-                }));
+                    var body = VoxelEngine.UI.PortConfigHud.BuildItemPorts(_openChest, onChanged: () => { });
+                    body.style.marginTop = 4;
+                    scroll.Add(body);
+                }
             }
+        }
+
+        /// <summary>Build the show/hide pill that toggles the chest Item-Ports grid.</summary>
+        private VisualElement MakeChestPortsToggle()
+        {
+            var accent = UITheme.AccentCyan;
+            bool open = _chestPortsExpanded;
+
+            var btn = new Button();
+            btn.style.flexDirection = FlexDirection.Row;
+            btn.style.alignItems = Align.Center;
+            btn.style.height = 34;
+            btn.style.marginLeft = 0; btn.style.marginRight = 0;
+            btn.style.paddingLeft = 12; btn.style.paddingRight = 12;
+            btn.style.backgroundColor = new StyleColor(new Color(accent.r, accent.g, accent.b, open ? 0.22f : 0.12f));
+            UITheme.Radius(btn, 8f);
+            UITheme.Border(btn, 1, new Color(accent.r, accent.g, accent.b, open ? 0.55f : 0.35f));
+
+            // Chevron rotates to indicate state.
+            var chevron = new Label(open ? "▾" : "▸");
+            chevron.style.color = new StyleColor(accent);
+            chevron.style.fontSize = 13;
+            chevron.style.unityFontStyleAndWeight = FontStyle.Bold;
+            chevron.style.marginRight = 8;
+            chevron.pickingMode = PickingMode.Ignore;
+            btn.Add(chevron);
+
+            var lbl = new Label("ITEM PORTS");
+            lbl.style.color = new StyleColor(UITheme.TextPrimary);
+            lbl.style.fontSize = 11;
+            lbl.style.unityFontStyleAndWeight = FontStyle.Bold;
+            lbl.style.letterSpacing = 1.2f;
+            lbl.style.flexGrow = 1;
+            lbl.pickingMode = PickingMode.Ignore;
+            btn.Add(lbl);
+
+            var hint = new Label(open ? "HIDE" : "CONFIGURE");
+            hint.style.color = new StyleColor(UITheme.TextMuted);
+            hint.style.fontSize = 9;
+            hint.style.unityFontStyleAndWeight = FontStyle.Bold;
+            hint.style.letterSpacing = 1f;
+            hint.pickingMode = PickingMode.Ignore;
+            btn.Add(hint);
+
+            btn.RegisterCallback<PointerEnterEvent>(_ =>
+                btn.style.backgroundColor = new StyleColor(new Color(accent.r, accent.g, accent.b, open ? 0.30f : 0.20f)));
+            btn.RegisterCallback<PointerLeaveEvent>(_ =>
+                btn.style.backgroundColor = new StyleColor(new Color(accent.r, accent.g, accent.b, open ? 0.22f : 0.12f)));
+
+            btn.clicked += () =>
+            {
+                _chestPortsExpanded = !_chestPortsExpanded;
+                Refresh();
+            };
+
+            return btn;
         }
 
         // ----- RIGHT (furnace) -----
