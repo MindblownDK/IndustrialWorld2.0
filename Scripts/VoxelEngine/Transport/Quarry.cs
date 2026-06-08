@@ -30,8 +30,6 @@ namespace VoxelEngine.Transport
 
         [Header("Frame")]
         public float frameBuildInterval = 0.06f;
-        public float frameTopOffset = 5f;    // how high ABOVE the model top the frame extends
-        public float frameDepth = 5f;         // how far BELOW the model bottom the frame extends
         public Color frameColor = new(0.18f, 0.19f, 0.22f);
         public Color frameAccentColor = new(0.92f, 0.52f, 0.08f, 0.85f);
 
@@ -82,6 +80,8 @@ namespace VoxelEngine.Transport
         private bool _ok;
         private Vector3Int _org;
 
+        // Ghost persists from placement until power is applied
+        private GameObject _ghost;
         private GameObject _ta, _dr, _bm;
         private List<GameObject> _fs = new();
         private int _fi;
@@ -103,6 +103,8 @@ namespace VoxelEngine.Transport
             RegisterUpgradeListener();
             StartCoroutine(CaptureModelBounds());
             _ok = true;
+            // Show ghost on placement (before power)
+            CreateGhost();
         }
 
         IEnumerator CaptureModelBounds()
@@ -121,6 +123,9 @@ namespace VoxelEngine.Transport
             if (!_ok) return;
             if (_pc) _pc.wattsPerSecond = EffPowerDraw;
             bool hp = _pc == null || _pc.IsPowered;
+
+            // Destroy ghost when power comes on (real frame is about to build)
+            if (hp && _ghost != null) { DestroyGhost(); }
 
             if (EffSize != _ls) { _ls = EffSize; RecomputeArea(); CalculateMaxDepth();
                 if (Phase == QuarryPhase.Mining) { DA(); _cx=_cz=0; CurrentDepth=0; Phase=QuarryPhase.Idle; } }
@@ -148,9 +153,9 @@ namespace VoxelEngine.Transport
         void RU() { InstalledRangeLevel=InstalledSpeedLevel=InstalledEfficiencyLevel=0; if(upgradeC==null)return; for(int i=0;i<upgradeC.Size;i++){var st=upgradeC.GetSlot(i); if(st.IsEmpty||!(st.item is QuarryUpgradeItem u))continue; int a=u.level*st.count; switch(u.upgradeKind){case QuarryUpgradeKind.Range:InstalledRangeLevel=Mathf.Min(MaxRangeLevel,a);break;case QuarryUpgradeKind.Speed:InstalledSpeedLevel=Mathf.Min(MaxSpeedLevel,a);break;case QuarryUpgradeKind.Efficiency:InstalledEfficiencyLevel=Mathf.Min(MaxEfficiencyLevel,a);break;}}}
         public bool TryInstallUpgrade(QuarryUpgradeItem item) { if(item==null)return false; EnsureUpgrades(); return upgradeC.Insert(new(item,1)).IsEmpty; }
 
-        // ═══ PLACEMENT PREVIEW (BuildSystem calls this) ════════════
+        // ═══ PLACEMENT PREVIEW (BuildSystem) ═══
         static GameObject _pp;
-        public static void ShowPlacementPreview(Vector3 wp, Quaternion rot, int sz, float fo, float fd, float fto)
+        public static void ShowPlacementPreview(Vector3 wp, Quaternion rot, int sz, float fo)
         {
             HPP(); _pp=new("QPP");
             var vox=VoxelWorld.Instance?.WorldToVoxel(wp)??Vector3Int.zero;
@@ -161,11 +166,11 @@ namespace VoxelEngine.Transport
             var s=vox+d*(int)fo-p*h; var e=s+d*sz+p*sz;
             var amin=new Vector3Int(Mathf.Min(s.x,e.x),vox.y,Mathf.Min(s.z,e.z));
             var amax=new Vector3Int(Mathf.Max(s.x,e.x)-1,vox.y,Mathf.Max(s.z,e.z)-1);
-            float yTop=wp.y+1.2f+fto;   // model top + top offset
-            float yBot=wp.y-1.2f-fd;    // model bottom - frame depth
+            float yTop=vox.y+0.5f;           // surface
+            float yBot=wp.y-1.2f;            // model bottom
             Color gc=new(1f,0.8f,0.2f,0.55f);
-            var v0=V3(amin.x,yTop,amin.z); var v1=V3(amax.x+1,yTop,amin.z);
-            var v2=V3(amax.x+1,yTop,amax.z+1); var v3=V3(amin.x,yTop,amax.z+1);
+            var v0=V3(amin.x,yTop,amin.z);var v1=V3(amax.x+1,yTop,amin.z);
+            var v2=V3(amax.x+1,yTop,amax.z+1);var v3=V3(amin.x,yTop,amax.z+1);
             AL(v0,v1,gc);AL(v1,v2,gc);AL(v2,v3,gc);AL(v3,v0,gc);
             AL(v0,V3(v0.x,yBot,v0.z),gc);AL(v1,V3(v1.x,yBot,v1.z),gc);
             AL(v2,V3(v2.x,yBot,v2.z),gc);AL(v3,V3(v3.x,yBot,v3.z),gc);
@@ -178,6 +183,25 @@ namespace VoxelEngine.Transport
         static void AL(Vector3 a,Vector3 b,Color c){var go=new GameObject("L");go.transform.SetParent(_pp.transform,false);var lr=go.AddComponent<LineRenderer>();lr.positionCount=2;lr.SetPositions(new[]{a,b});lr.startWidth=lr.endWidth=0.06f;lr.startColor=lr.endColor=c;lr.useWorldSpace=true;var sh=Shader.Find("Universal Render Pipeline/Particles/Unlit")??Shader.Find("Sprites/Default");lr.material=new Material(sh){color=c};lr.shadowCastingMode=UnityEngine.Rendering.ShadowCastingMode.Off;}
         static Vector3 V3(float x,float y,float z)=>new(x,y,z);
 
+        // ═══ GHOST (persists on placed quarry until powered) ═══
+        void CreateGhost()
+        {
+            if (_ghost) Destroy(_ghost); _ghost=new("QuarryGhost");
+            float yTop=_mtY; // model top
+            float yBot=_mbY; // model bottom
+            Color gc=new(1f,0.8f,0.2f,0.5f);
+            var v0=V3(AreaMin.x,yTop,AreaMin.z);var v1=V3(AreaMax.x+1,yTop,AreaMin.z);
+            var v2=V3(AreaMax.x+1,yTop,AreaMax.z+1);var v3=V3(AreaMin.x,yTop,AreaMax.z+1);
+            GL(v0,v1,gc);GL(v1,v2,gc);GL(v2,v3,gc);GL(v3,v0,gc);
+            GL(v0,V3(v0.x,yBot,v0.z),gc);GL(v1,V3(v1.x,yBot,v1.z),gc);
+            GL(v2,V3(v2.x,yBot,v2.z),gc);GL(v3,V3(v3.x,yBot,v3.z),gc);
+            var b0=V3(AreaMin.x,yBot,AreaMin.z);var b1=V3(AreaMax.x+1,yBot,AreaMin.z);
+            var b2=V3(AreaMax.x+1,yBot,AreaMax.z+1);var b3=V3(AreaMin.x,yBot,AreaMax.z+1);
+            GL(b0,b1,gc);GL(b1,b2,gc);GL(b2,b3,gc);GL(b3,b0,gc);
+        }
+        void GL(Vector3 a,Vector3 b,Color c){var go=new GameObject("L");go.transform.SetParent(_ghost.transform,false);var lr=go.AddComponent<LineRenderer>();lr.positionCount=2;lr.SetPositions(new[]{a,b});lr.startWidth=lr.endWidth=0.06f;lr.startColor=lr.endColor=c;lr.useWorldSpace=true;var sh=Shader.Find("Universal Render Pipeline/Particles/Unlit")??Shader.Find("Sprites/Default");lr.material=new Material(sh){color=c};lr.shadowCastingMode=UnityEngine.Rendering.ShadowCastingMode.Off;}
+        void DestroyGhost() { if (_ghost) { Destroy(_ghost); _ghost = null; } }
+
         // ═══ TAPE ════════════════════════════════════
         void CTp(){_ta=new("QT");float y=AreaMin.y+0.1f;var v0=V3(AreaMin.x,y,AreaMin.z);var v1=V3(AreaMax.x+1,y,AreaMin.z);var v2=V3(AreaMax.x+1,y,AreaMax.z+1);var v3=V3(AreaMin.x,y,AreaMax.z+1);TE(v0,v1);TE(v1,v2);TE(v2,v3);TE(v3,v0);float ph=2.5f;TP(v0,ph);TP(v1,ph);TP(v2,ph);TP(v3,ph);}
         void TE(Vector3 f,Vector3 t){var d=(t-f).normalized;float l=Vector3.Distance(f,t);int sc=Mathf.CeilToInt(l/0.5f);float sl=l/sc;for(int i=0;i<sc;i++){var p=f+d*(i*sl+sl*0.5f);var g=MK("T",p,_ta.transform);if(Mathf.Abs(d.x)>0.5f)g.transform.localScale=new(sl*0.95f,0.04f,0.08f);else g.transform.localScale=new(0.08f,0.04f,sl*0.95f);g.GetComponent<MeshRenderer>().material=ME((i%2)==0?tapeColor1:tapeColor2,0.6f);}}
@@ -186,12 +210,12 @@ namespace VoxelEngine.Transport
         void TkT(){if(!_ta)return;_tft+=Time.deltaTime;if(_tft>0.15f){_tft=0f;_tfs=!_tfs;float a=_tfs?1f:0.5f;foreach(var mr in _ta.GetComponentsInChildren<MeshRenderer>()){var c=mr.material.color;c.a=a*0.75f;mr.material.color=c;}}}
         void DTp(){if(_ta){Destroy(_ta);_ta=null;}}
 
-        // ═══ 3D FRAME (top = model-top + frameTopOffset, bottom = model-bottom - frameDepth) ═══
+        // ═══ 3D FRAME (model-top to model-bottom = 16×16×2.4) ═══
         void PF()
         {
             _fp.Clear();
-            float yTop=_mtY+frameTopOffset;     // model top + 5m upward
-            float yBot=_mbY-frameDepth;          // model bottom - 5m downward
+            float yTop=_mtY;       // model top (= quarry block top)
+            float yBot=_mbY;       // model bottom (= quarry block bottom)
             var v00=V3(AreaMin.x,0,AreaMin.z);var v10=V3(AreaMax.x+1,0,AreaMin.z);
             var v11=V3(AreaMax.x+1,0,AreaMax.z+1);var v01=V3(AreaMin.x,0,AreaMax.z+1);
             float pH=yTop-yBot+0.3f,pCY=(yTop+yBot)*0.5f;
@@ -216,7 +240,7 @@ namespace VoxelEngine.Transport
         void EnsureOutput(){if(_out==null)_out=new("Output",outputSlots);else _out.Resize(outputSlots);}
         public void EnsureOutputPublic()=>EnsureOutput();
         public void RestoreState(int d,int cx,int cz,int ph,int rl,int sl,int el){CurrentDepth=d;_cx=cx;_cz=cz;Phase=(QuarryPhase)ph;InstalledRangeLevel=rl;InstalledSpeedLevel=sl;InstalledEfficiencyLevel=el;if(Phase==QuarryPhase.Complete){if(_dr)Destroy(_dr);if(_bm)Destroy(_bm);}}
-        void OnDestroy(){DTp();HPP();foreach(var fb in _fs)if(fb)Destroy(fb);_fs.Clear();if(_dr)Destroy(_dr);if(_bm)Destroy(_bm);}
+        void OnDestroy(){DestroyGhost();DTp();HPP();foreach(var fb in _fs)if(fb)Destroy(fb);_fs.Clear();if(_dr)Destroy(_dr);if(_bm)Destroy(_bm);}
         static Material ME(Color c,float es){var s=Shader.Find("Universal Render Pipeline/Lit")??Shader.Find("Standard");var m=new Material(s);m.color=c;m.SetColor("_BaseColor",c);m.SetColor("_EmissionColor",c*es);m.EnableKeyword("_EMISSION");return m;}
     }
 }

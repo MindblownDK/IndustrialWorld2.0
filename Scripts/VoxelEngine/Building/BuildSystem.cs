@@ -116,7 +116,7 @@ namespace VoxelEngine.Building
             if (block.placedPrefab == null) { Quarry.HidePlacementPreview(); return; }
             var q = block.placedPrefab.GetComponent<Quarry>();
             if (q == null) { Quarry.HidePlacementPreview(); return; }
-            Quarry.ShowPlacementPreview(_ghost.transform.position, _ghost.transform.rotation, q.defaultSize, q.forwardOffset, q.frameDepth, q.frameTopOffset);
+            Quarry.ShowPlacementPreview(_ghost.transform.position, _ghost.transform.rotation, q.defaultSize, q.forwardOffset);
         }
 
         private void HideGhost()
