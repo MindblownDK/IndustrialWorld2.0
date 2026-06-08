@@ -83,7 +83,7 @@ namespace VoxelEngine.Editor
         [MenuItem("Voxel Engine/Grid/Spawn All Grid Items (Debug)")]
         public static void SpawnAllGridItems()
         {
-            var inventory = GameObject.FindFirstObjectByType<VoxelEngine.Items.Inventory>();
+            var inventory = GameObject.FindAnyObjectByType<VoxelEngine.Items.Inventory>();
             if (inventory == null)
             {
                 Debug.LogError("No Inventory found on player!");
