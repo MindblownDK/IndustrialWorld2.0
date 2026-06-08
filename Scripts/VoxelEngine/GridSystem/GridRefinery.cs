@@ -1,6 +1,7 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridRefinery.cs
 //
-// Refinery for crude oil → kerosene.
+// Industrial Refinery - Processes Crude Oil into Kerosene and other fuels.
+// Large grid only. Very expensive and heavy.
 
 using UnityEngine;
 
@@ -8,10 +9,10 @@ namespace VoxelEngine.GridSystem
 {
     public class GridRefinery : GridBlock
     {
-        [Header("Refinery")]
-        public float crudeConsumptionRate = 5f;
-        public float keroseneProductionRate = 3f;
-        public float powerDraw = 300f;
+        [Header("Refinery - Liquid Fuel Chain")]
+        public float crudeConsumptionRate = 8f;
+        public float keroseneProductionRate = 5f;
+        public float powerDraw = 850f;
 
         private bool _isProcessing;
 
@@ -20,7 +21,14 @@ namespace VoxelEngine.GridSystem
         private void FixedUpdate()
         {
             if (Grid == null) return;
+
             _isProcessing = Grid.HasPower;
+
+            if (_isProcessing)
+            {
+                // In a full system this would consume CrudeOil from cargo
+                // and produce Kerosene into a LiquidFuelTank or cargo
+            }
         }
     }
 }

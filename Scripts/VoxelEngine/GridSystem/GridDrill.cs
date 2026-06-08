@@ -15,6 +15,8 @@ namespace VoxelEngine.GridSystem
 
         public override float PowerDraw => _isActive ? 450f : 0f;
 
+        public bool IsActive => _isActive;
+
         private bool _isActive;
         private float _drillTimer;
 

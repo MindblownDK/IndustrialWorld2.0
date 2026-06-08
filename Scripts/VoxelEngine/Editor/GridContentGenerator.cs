@@ -73,7 +73,7 @@ namespace VoxelEngine.Editor
 
         private static void GenerateBlockItem<T>(string name, float largeMass, float smallMass, string description) where T : GridBlock
         {
-            string safeName = name.Replace(" ", "_");
+            string safeName = name.Replace(" ", "_").Replace("/", "_");
             string path = $"{BlockItemsPath}/GBlock_{safeName}.asset";
 
             var item = ScriptableObject.CreateInstance<GridBlockItem>();

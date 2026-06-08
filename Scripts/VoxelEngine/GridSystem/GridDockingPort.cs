@@ -13,16 +13,22 @@ namespace VoxelEngine.GridSystem
         public bool usePortConfigFilter = true;
 
         public bool IsDocked { get; private set; }
+        public BaseDock ConnectedBaseDock { get; private set; }
 
         public void Connect(GridDockingPort other)
         {
             IsDocked = true;
-            // Add connection logic
         }
 
         public void Disconnect()
         {
             IsDocked = false;
+            ConnectedBaseDock = null;
+        }
+
+        public void Undock()
+        {
+            Disconnect();
         }
     }
 }
