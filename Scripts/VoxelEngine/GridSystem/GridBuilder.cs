@@ -82,16 +82,17 @@ namespace VoxelEngine.GridSystem
 
             if (GameSettings.WasPressed(InputAction.Build))
             {
-                PlaceBlock(gbi, targetGrid, gridPos, worldPos);
+                PlaceBlock(gbi, targetGrid, gridPos, worldPos, rotation);
                 inventory.container.Remove(gbi, 1);
             }
         }
 
-        private void PlaceBlock(GridBlockItem item, GridEntity grid, Vector3Int gridPos, Vector3 worldPos)
+        private void PlaceBlock(GridBlockItem item, GridEntity grid, Vector3Int gridPos, Vector3 worldPos, Quaternion rotation)
         {
             if (grid == null)
             {
                 grid = GridEntity.Create(worldPos, item.gridSize);
+                grid.transform.rotation = rotation;
                 gridPos = Vector3Int.zero;
             }
 
@@ -99,12 +100,14 @@ namespace VoxelEngine.GridSystem
             if (item.blockPrefab != null)
             {
                 var go = Instantiate(item.blockPrefab);
+                go.transform.rotation = rotation;
                 block = go.GetComponent<GridBlock>();
                 if (block == null) block = go.AddComponent<GridBlock>();
             }
             else
             {
                 block = GridBlock.CreateBlock<GridBlock>("Block", item.gridSize, item.iconTint);
+                block.transform.rotation = rotation;
             }
 
             block.blockName = item.displayName;

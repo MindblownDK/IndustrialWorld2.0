@@ -38,7 +38,7 @@ namespace VoxelEngine.Networks
         /// </summary>
         private static (EntityId A, EntityId B) PairKey(GameObject a, GameObject b)
         {
-            if (a == null || b == null) return (default(EntityId), default(EntityId));
+            if (a == null || b == null) return (default, default);
             
             EntityId idA = a.GetEntityId();
             EntityId idB = b.GetEntityId();
@@ -53,8 +53,14 @@ namespace VoxelEngine.Networks
         {
             var key = PairKey(a, b);
             // In Unity 6.4, EntityId comparisons with 'default' or '0' can be ambiguous.
-            // We use the inequality operator against a fresh default struct to be explicit.
-            return key.A != default(EntityId) && _blocked.Contains(key);
+            // We use the internal bit-level Equals check.
+            return !IsDefault(key.A) && _blocked.Contains(key);
+        }
+
+        private static bool IsDefault(EntityId id)
+        {
+            // Reliable way to check for 'none' without ambiguity in 6.4
+            return id.Equals(default(EntityId));
         }
 
         /// <summary>True if these two Components' GameObjects are blocked.</summary>
@@ -68,7 +74,7 @@ namespace VoxelEngine.Networks
         public static void Block(GameObject a, GameObject b)
         {
             var key = PairKey(a, b);
-            if (key.A != default(EntityId)) _blocked.Add(key);
+            if (!IsDefault(key.A)) _blocked.Add(key);
         }
 
         /// <summary>Add a pair via components.</summary>
@@ -82,7 +88,7 @@ namespace VoxelEngine.Networks
         public static void Unblock(GameObject a, GameObject b)
         {
             var key = PairKey(a, b);
-            if (key.A != default(EntityId)) _blocked.Remove(key);
+            if (!IsDefault(key.A)) _blocked.Remove(key);
         }
 
         /// <summary>Forget every block. Called on scene unload.</summary>
@@ -100,7 +106,6 @@ namespace VoxelEngine.Networks
             EntityId id = go.GetEntityId();
             
             // Use RemoveWhere for efficient bulk removal in Unity 6.
-            // Explicitly comparing EntityId types to avoid ambiguity.
             _blocked.RemoveWhere(pair => pair.A == id || pair.B == id);
         }
 

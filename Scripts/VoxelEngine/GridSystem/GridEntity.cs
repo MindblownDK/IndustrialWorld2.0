@@ -94,7 +94,8 @@ namespace VoxelEngine.GridSystem
             block.transform.SetParent(transform, true);
             float cs = gridSize.CellSize();
             block.transform.localPosition = new Vector3(gridPos.x, gridPos.y, gridPos.z) * cs;
-            block.transform.localRotation = Quaternion.identity;
+            // Removed rotation reset - handled by the caller (GridBuilder)
+            // block.transform.localRotation = Quaternion.identity;
 
             if (block.GetComponent<Collider>() == null)
             {

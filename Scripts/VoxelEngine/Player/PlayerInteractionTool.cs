@@ -28,7 +28,7 @@ namespace VoxelEngine.Player
         public Inventory inventory;
 
         [Header("Tuning")]
-        public float reach = 6f;
+        public float reach = 8f;
         [Tooltip("Bare-hand mining stats — used when no pickaxe is held.")]
         public float handStrength = 25f;
         public float handBrushRadius = 1.0f;

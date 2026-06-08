@@ -96,6 +96,19 @@ namespace VoxelEngine.EditorTools
             if (GUILayout.Button("11. Build Survival + Industrial Logistics Content\n(Farming + Storage + Quarry + Gas + Nuclear)", GUILayout.Height(72)))
                 BuildSurvivalAndLogisticsContent();
 
+            GUILayout.Space(6);
+            EditorGUILayout.HelpBox(
+                "Step 12 builds the Grid System (Ships/Vehicles):\n" +
+                "  • Cockpit (Small/Large)\n" +
+                "  • Thrusters, Gyroscopes\n" +
+                "  • Grid Batteries, Reactors\n" +
+                "  • Landing Gear, Docking Ports\n" +
+                "  • Grid-based Tools (Drills, Grinders)\n" +
+                "Re-runnable. Idempotent. Run AFTER step 10.", MessageType.Info);
+
+            if (GUILayout.Button("12. Build Grid System Content (Ships + Vehicles)", GUILayout.Height(56)))
+                BuildGridSystemContent();
+
             if (GUILayout.Button("9. Open URP / GPU Resident Drawer Checklist", GUILayout.Height(40)))
                 ShowGpuChecklist();
         }
@@ -4114,6 +4127,139 @@ root =>
             var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
             Object.DestroyImmediate(root);
             return prefab;
+        }
+
+        private void BuildGridSystemContent()
+        {
+            const string GRID_ROOT = ASSET_ROOT + "/GridSystem";
+            const string ITEMS     = GRID_ROOT + "/Items";
+            const string PREFABS   = GRID_ROOT + "/Prefabs";
+            const string RECIPES   = GRID_ROOT + "/Recipes";
+            const string NODES     = ASSET_ROOT + "/Research/Nodes";
+
+            foreach (var f in new[] { GRID_ROOT, ITEMS, PREFABS, RECIPES }) EnsureFolder(f);
+
+            // -- Dependencies --
+            string craftItems = ASSET_ROOT + "/Items";
+            string indItems   = ASSET_ROOT + "/Industrial/Items";
+            var steelPlate  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_SteelPlate.asset");
+            var ironPlate   = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_IronPlate.asset");
+            var circuit     = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_Circuit.asset");
+            var advCircuit  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_AdvCircuit.asset");
+            var copperWire  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_CopperWire.asset");
+            var glass       = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_Glass.asset");
+            var sciT2 = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ScienceItem>($"{craftItems}/Item_ScienceT2.asset");
+            var sciT3 = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ScienceItem>($"{craftItems}/Item_ScienceT3.asset");
+
+            if (steelPlate == null || circuit == null)
+            {
+                EditorUtility.DisplayDialog("Voxel Engine", "Run Step 10 (Industrial Content) first.", "OK");
+                return;
+            }
+
+            var registry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeRegistry>($"{ASSET_ROOT}/RecipeRegistry.asset");
+            var tree = AssetDatabase.LoadAssetAtPath<VoxelEngine.Research.ResearchTree>($"{ASSET_ROOT}/Research/ResearchTree.asset");
+
+            // -- Helpers --
+            VoxelEngine.GridSystem.GridBlockItem MakeGItem(string assetName, string display, Color tint, 
+                GameObject prefab, VoxelEngine.GridSystem.GridSize size, float mass, float hp)
+            {
+                string path = $"{ITEMS}/{assetName}.asset";
+                var b = AssetDatabase.LoadAssetAtPath<VoxelEngine.GridSystem.GridBlockItem>(path);
+                if (b == null) { b = ScriptableObject.CreateInstance<VoxelEngine.GridSystem.GridBlockItem>(); AssetDatabase.CreateAsset(b, path); }
+                b.itemId = assetName.ToLower(); b.displayName = display; b.iconTint = tint;
+                b.maxStack = 20; b.gridSize = size; b.blockPrefab = prefab;
+                b.blockMass = mass; b.blockHP = hp; b.category = "Grid Blocks";
+                EditorUtility.SetDirty(b);
+                return b;
+            }
+
+            GameObject MakeGPref<T>(string name, Color color, Vector3 scale, System.Action<T> config = null) where T : VoxelEngine.GridSystem.GridBlock
+            {
+                string path = $"{PREFABS}/{name}.prefab";
+                var root = new GameObject(name);
+                var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                cube.transform.SetParent(root.transform, false);
+                cube.transform.localScale = scale;
+                cube.GetComponent<Renderer>().sharedMaterial = MakeColoredMat(PREFABS, $"Mat_{name}", color);
+                var b = root.AddComponent<T>();
+                config?.Invoke(b);
+                var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
+                Object.DestroyImmediate(root);
+                return prefab;
+            }
+
+            // -- 1) Cockpits --
+            var cockSmallPref = MakeGPref<VoxelEngine.GridSystem.GridCockpit>("Cockpit_Small", new Color(0.2f, 0.4f, 0.8f), new Vector3(0.8f, 0.8f, 1.2f));
+            var cockLargePref = MakeGPref<VoxelEngine.GridSystem.GridCockpit>("Cockpit_Large", new Color(0.2f, 0.4f, 0.8f), new Vector3(2f, 2f, 3f));
+            
+            var itemCockSmall = MakeGItem("GItem_CockpitSmall", "Small Cockpit", Color.white, cockSmallPref, VoxelEngine.GridSystem.GridSize.Small, 200, 500);
+            var itemCockLarge = MakeGItem("GItem_CockpitLarge", "Large Cockpit", Color.white, cockLargePref, VoxelEngine.GridSystem.GridSize.Large, 1500, 2000);
+
+            // -- 2) Thrusters --
+            var thrustSmallPref = MakeGPref<VoxelEngine.GridSystem.GridThruster>("Thruster_Small", new Color(0.1f, 0.1f, 0.1f), new Vector3(0.4f, 0.4f, 0.6f), 
+                t => { t.maxThrust = 10000f; t.powerConsumption = 500f; });
+            var thrustLargePref = MakeGPref<VoxelEngine.GridSystem.GridThruster>("Thruster_Large", new Color(0.1f, 0.1f, 0.1f), new Vector3(1.5f, 1.5f, 2.5f), 
+                t => { t.maxThrust = 150000f; t.powerConsumption = 8000f; });
+
+            var itemThrustSmall = MakeGItem("GItem_ThrusterSmall", "Small Thruster", Color.white, thrustSmallPref, VoxelEngine.GridSystem.GridSize.Small, 50, 200);
+            var itemThrustLarge = MakeGItem("GItem_ThrusterLarge", "Large Thruster", Color.white, thrustLargePref, VoxelEngine.GridSystem.GridSize.Large, 800, 1000);
+
+            // -- 3) Energy --
+            var batSmallPref = MakeGPref<VoxelEngine.GridSystem.GridBattery>("Battery_Small", new Color(0.2f, 0.7f, 0.3f), new Vector3(0.5f, 0.5f, 0.5f), 
+                b => { b.capacity = 1000000f; b.maxOutput = 5000f; });
+            var itemBatSmall = MakeGItem("GItem_BatterySmall", "Small Battery", Color.white, batSmallPref, VoxelEngine.GridSystem.GridSize.Small, 100, 300);
+
+            // -- Recipes --
+            VoxelEngine.Crafting.RecipeDefinition AddGRecipe(string name, string display, VoxelEngine.Items.ItemDefinition output, params (VoxelEngine.Items.ItemDefinition item, int n)[] inputs)
+            {
+                var r = AddRecipe(RECIPES, name, display, output, 1, VoxelEngine.Crafting.StationTier.Assembler, false, inputs);
+                return r;
+            }
+
+            var recCockSmall = AddGRecipe("Recipe_GCockpitSmall", "Small Cockpit", itemCockSmall, (steelPlate, 4), (circuit, 2), (glass, 2));
+            var recThrustSmall = AddGRecipe("Recipe_GThrustSmall", "Small Thruster", itemThrustSmall, (steelPlate, 2), (copperWire, 4));
+            var recBatSmall = AddGRecipe("Recipe_GBatSmall", "Small Battery", itemBatSmall, (ironPlate, 2), (copperWire, 8));
+
+            // -- Research Node --
+            if (tree != null)
+            {
+                var nShip = FindNodeByName(tree, "res_shipbuilding");
+                if (nShip == null)
+                {
+                    nShip = ScriptableObject.CreateInstance<VoxelEngine.Research.ResearchNode>();
+                    nShip.nodeId = "res_shipbuilding";
+                    nShip.displayName = "Shipbuilding";
+                    nShip.description = "Design and construct functional spacecraft. Unlocks Cockpits, Thrusters, and Grid Batteries.";
+                    nShip.category = VoxelEngine.Research.ResearchCategory.Environment;
+                    nShip.subCategory = VoxelEngine.Research.ResearchSubCategory.Building;
+                    nShip.tier = 3; nShip.column = 4;
+                    nShip.iconTint = new Color(0.3f, 0.6f, 0.9f);
+                    nShip.researchSeconds = 60f;
+                    nShip.cost = new[] { 
+                        new VoxelEngine.Research.ResearchNode.ScienceCost { pack = sciT2, count = 20 },
+                        new VoxelEngine.Research.ResearchNode.ScienceCost { pack = sciT3, count = 10 }
+                    };
+                    var nAdvMfg = FindNodeByName(tree, "res_adv_manufacturing");
+                    if (nAdvMfg != null) nShip.prerequisites = new[] { nAdvMfg };
+                    AssetDatabase.CreateAsset(nShip, $"{NODES}/res_shipbuilding.asset");
+                    tree.nodes.Add(nShip);
+                }
+                nShip.unlocksRecipes = new[] { recCockSmall, recThrustSmall, recBatSmall };
+                EditorUtility.SetDirty(nShip);
+                EditorUtility.SetDirty(tree);
+            }
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Grid System", "Grid system content created! New research node: Shipbuilding.", "OK");
+        }
+
+        private static VoxelEngine.Research.ResearchNode FindNodeByName(VoxelEngine.Research.ResearchTree tree, string id)
+        {
+            if (tree == null) return null;
+            foreach (var n in tree.nodes) if (n != null && n.nodeId == id) return n;
+            return null;
         }
 
         private static void EnsureFolders()
