@@ -379,7 +379,8 @@ namespace VoxelEngine.UI
             var grid = new VisualElement();
             grid.style.flexDirection = FlexDirection.Row;
             grid.style.flexWrap = Wrap.Wrap;
-            grid.style.width = Length.Percent(100);   // fill the panel so 50% cards = 2 columns
+            grid.style.alignItems = Align.Stretch;     // equal-height cards per row
+            grid.style.width = Length.Percent(100);    // fill the panel so 50% cards = 2 columns
             grid.style.marginTop = 8;
             root.Add(grid);
 
@@ -481,9 +482,13 @@ namespace VoxelEngine.UI
             card.style.flexShrink = 0;
             card.style.minWidth = 0;
             card.style.paddingTop = 6; card.style.paddingBottom = 6;
+            // Stretch the card to fill its row height so a tall neighbour (e.g. one
+            // with a filter) doesn't leave blank space under a short card.
+            card.style.alignItems = Align.Stretch;
 
             var inner = new VisualElement();
             inner.style.backgroundColor = new StyleColor(T.BgCard);
+            inner.style.flexGrow = 1;                 // fill the card's full height
             inner.style.marginLeft = 4; inner.style.marginRight = 4;
             inner.style.paddingTop = 10; inner.style.paddingBottom = 10;
             inner.style.paddingLeft = 10; inner.style.paddingRight = 10;

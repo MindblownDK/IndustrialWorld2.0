@@ -49,13 +49,22 @@ namespace VoxelEngine.UI
             if (uiRoot == null || routing == null) return;
             var panelRoot = uiRoot.panel?.visualTree ?? uiRoot;
 
-            // ── Dim overlay ────────────────────────────────────────
+            // ── Overlay ────────────────────────────────────────────
+            // Click-through backdrop so the player can still click items in their
+            // inventory to add them. Only the card captures clicks; close via ✕/DONE.
             var overlay = new VisualElement();
             overlay.style.position = Position.Absolute;
             overlay.style.left = 0; overlay.style.top = 0; overlay.style.right = 0; overlay.style.bottom = 0;
-            overlay.style.backgroundColor = new StyleColor(new Color(0, 0, 0, 0.5f));
             overlay.style.alignItems = Align.Center;
             overlay.style.justifyContent = Justify.Center;
+            overlay.pickingMode = PickingMode.Ignore;
+
+            var dim = new VisualElement();
+            dim.style.position = Position.Absolute;
+            dim.style.left = 0; dim.style.top = 0; dim.style.right = 0; dim.style.bottom = 0;
+            dim.style.backgroundColor = new StyleColor(new Color(0, 0, 0, 0.45f));
+            dim.pickingMode = PickingMode.Ignore;
+            overlay.Add(dim);
 
             void Close()
             {
@@ -64,7 +73,6 @@ namespace VoxelEngine.UI
                 overlay.RemoveFromHierarchy();
                 onChanged?.Invoke();
             }
-            overlay.RegisterCallback<PointerDownEvent>(evt => { if (evt.target == overlay) Close(); });
 
             // ── Dialog card ────────────────────────────────────────
             var card = new VisualElement();
@@ -110,39 +118,47 @@ namespace VoxelEngine.UI
             chips.style.marginTop = 10;
             card.Add(chips);
 
-            // ── Results list (shown while searching) ───────────────
+            // ── Search field (labelled above so text never overlaps) ────
+            var searchLbl = new Label("SEARCH TO ADD");
+            searchLbl.style.color = new StyleColor(T.TextMuted);
+            searchLbl.style.fontSize = 9;
+            searchLbl.style.unityFontStyleAndWeight = FontStyle.Bold;
+            searchLbl.style.letterSpacing = 1f;
+            searchLbl.style.marginTop = 12;
+            card.Add(searchLbl);
+
             var search = new TextField { value = "" };
-            search.style.marginTop = 10; search.style.height = 26; search.style.fontSize = 12;
+            search.style.marginTop = 4;
+            search.style.height = 34;               // tall enough so glyphs aren't clipped
+            search.style.fontSize = 13;
+            // The TextField's inner text element needs vertical centering + padding
+            // or ascenders/descenders get cut off on some Unity builds.
+            var inputEl = search.Q(TextField.textInputUssName);
+            if (inputEl != null)
+            {
+                inputEl.style.unityTextAlign = TextAnchor.MiddleLeft;
+                inputEl.style.paddingLeft = 8; inputEl.style.paddingRight = 8;
+                inputEl.style.paddingTop = 0; inputEl.style.paddingBottom = 0;
+            }
             card.Add(search);
 
-            var wm = new Label("🔍  Search items to add…");
-            wm.style.position = Position.Absolute; wm.style.left = 24;
-            wm.style.fontSize = 11; wm.style.color = new StyleColor(T.TextMuted);
-            wm.pickingMode = PickingMode.Ignore;
-            // Position the watermark over the search field after layout.
-            search.RegisterCallback<GeometryChangedEvent>(_ =>
-            {
-                wm.style.top = search.layout.y + 5;
-            });
-            card.Add(wm);
-
             var resultsScroll = new ScrollView(ScrollViewMode.Vertical);
-            resultsScroll.style.marginTop = 4;
+            resultsScroll.style.marginTop = 6;
             resultsScroll.style.maxHeight = 200;
             card.Add(resultsScroll);
 
-            // ── Drop target hint ───────────────────────────────────
+            // ── Inventory-click hint ───────────────────────────────
             var drop = new VisualElement();
             drop.style.marginTop = 10;
-            drop.style.height = 40;
+            drop.style.height = 36;
             drop.style.alignItems = Align.Center;
             drop.style.justifyContent = Justify.Center;
             drop.style.backgroundColor = new StyleColor(new Color(T.AccentCyan.r, T.AccentCyan.g, T.AccentCyan.b, 0.10f));
             T.Radius(drop, 8f);
             T.Border(drop, 1, new Color(T.AccentCyan.r, T.AccentCyan.g, T.AccentCyan.b, 0.4f));
-            var dropLbl = new Label("⤓  Drop an item here  ·  or Shift-click an inventory slot");
+            var dropLbl = new Label("🖱  Click an item in your inventory to add it");
             dropLbl.style.color = new StyleColor(T.TextSecondary);
-            dropLbl.style.fontSize = 10;
+            dropLbl.style.fontSize = 11;
             dropLbl.pickingMode = PickingMode.Ignore;
             drop.Add(dropLbl);
             card.Add(drop);
@@ -153,7 +169,7 @@ namespace VoxelEngine.UI
                 chips.Clear();
                 var items = routing.GetFilter(face);
                 if (items.Count == 0)
-                    chips.Add(T.Muted("No items yet — search, drop, or shift-click to add."));
+                    chips.Add(T.Muted("No items yet — search above or click an inventory item."));
                 foreach (var it in items)
                     chips.Add(MakeChip(it, () => { routing.RemoveFilter(face, it); RebuildChips(); onChanged?.Invoke(); }));
             }
@@ -205,7 +221,7 @@ namespace VoxelEngine.UI
             RebuildChips();
             Populate("");
 
-            // Capture shift-clicks / drops from the inventory while open.
+            // Capture inventory clicks while open (player clicks an item to add it).
             _captureSink = AddItem;
             PortConfigHud.IsAnyDropdownOpen = true;   // suspend the panel auto-refresh
             panelRoot.Add(overlay);

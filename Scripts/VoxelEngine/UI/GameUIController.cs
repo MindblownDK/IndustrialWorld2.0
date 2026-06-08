@@ -1194,10 +1194,6 @@ namespace VoxelEngine.UI
                 AppendItemPorts(scroll, _openChest);
         }
 
-        /// <summary>Build the show/hide pill that toggles the chest Item-Ports grid.</summary>
-        // Per-machine "Item Ports" expand state, keyed by GameObject instance id,
-        // so each open machine remembers whether its port grid is shown.
-        private readonly System.Collections.Generic.Dictionary<int, bool> _portExpand = new();
 
         /// <summary>
         /// Append the shared collapsible Item-Ports widget to a machine panel when
@@ -1212,36 +1208,99 @@ namespace VoxelEngine.UI
             var routing = machine.GetComponent<VoxelEngine.Transport.ItemPortRouting>();
             if (routing == null) routing = machine.gameObject.AddComponent<VoxelEngine.Transport.ItemPortRouting>();
 
-            int id = machine.gameObject.GetInstanceID();
-            bool open = _portExpand.TryGetValue(id, out var v) && v;
-
-            // Fixed machine panels clip with overflow:Hidden — when the ports grid
-            // is expanded, allow it to extend so the 6-face grid is fully visible.
-            panel.style.overflow = open ? Overflow.Visible : Overflow.Hidden;
-
             var divider = new VisualElement();
             divider.style.height = 1;
             divider.style.marginTop = 12; divider.style.marginBottom = 8;
             divider.style.backgroundColor = new StyleColor(UITheme.BorderSubtle);
             panel.Add(divider);
 
-            panel.Add(MakePortsToggle(open, () =>
-            {
-                _portExpand[id] = !open;
-                Refresh();
-            }));
-
-            if (open)
-            {
-                var body = VoxelEngine.UI.PortConfigHud.BuildItemPorts(host, routing, onChanged: () => { });
-                body.style.marginTop = 4;
-                body.style.width = Length.Percent(100);
-                panel.Add(body);
-            }
+            // The grid now opens as a full overlay ABOVE the machine UI instead of
+            // being crammed inside the (clipped) panel — keeps every machine tidy.
+            panel.Add(MakePortsToggle(false, () => OpenItemPortsOverlay(host, routing)));
         }
 
-        /// <summary>Generic show/hide pill (chevron + CONFIGURE/HIDE) for the item-ports section.</summary>
-        private VisualElement MakePortsToggle(bool open, System.Action onToggle)
+        /// <summary>
+        /// Open the Item-Ports editor as a centered modal overlay on the root UI,
+        /// with a near-solid dim backdrop, so it never squashes the machine panel
+        /// or overflows the screen. Closes on backdrop click or the X / DONE.
+        /// </summary>
+        private void OpenItemPortsOverlay(VoxelEngine.Transport.IItemPortHost host,
+                                          VoxelEngine.Transport.ItemPortRouting routing)
+        {
+            if (_root == null || host == null || routing == null) return;
+
+            var overlay = new VisualElement();
+            overlay.style.position = Position.Absolute;
+            overlay.style.left = 0; overlay.style.top = 0; overlay.style.right = 0; overlay.style.bottom = 0;
+            overlay.style.alignItems = Align.Center;
+            overlay.style.justifyContent = Justify.Center;
+            // IMPORTANT: the backdrop is CLICK-THROUGH so the player can still click
+            // items in their inventory to add them to the open filter. Only the card
+            // itself captures clicks; closing is via the ✕ / DONE button.
+            overlay.pickingMode = PickingMode.Ignore;
+            // Suspend the periodic Refresh() so the overlay isn't destroyed under us.
+            VoxelEngine.UI.PortConfigHud.IsAnyDropdownOpen = true;
+
+            // A dim layer pinned to the RIGHT side only (over the machine panel),
+            // leaving the left inventory clear & readable for click-to-add.
+            var dim = new VisualElement();
+            dim.style.position = Position.Absolute;
+            dim.style.left = 0; dim.style.top = 0; dim.style.right = 0; dim.style.bottom = 0;
+            dim.style.backgroundColor = new StyleColor(new Color(0.02f, 0.025f, 0.04f, 0.55f));
+            dim.pickingMode = PickingMode.Ignore;
+            overlay.Add(dim);
+
+            void Close()
+            {
+                VoxelEngine.UI.PortConfigHud.IsAnyDropdownOpen = false;
+                overlay.RemoveFromHierarchy();
+            }
+
+            // Card container.
+            var card = MakePanel();
+            card.style.position = Position.Absolute;   // float on the right over the machine UI
+            card.style.right = 24;
+            card.style.top = 24;
+            card.style.width = 560;
+            card.style.maxWidth = Length.Percent(60);
+            card.style.maxHeight = Length.Percent(92);
+            card.style.paddingTop = 18; card.style.paddingBottom = 18;
+            card.style.paddingLeft = 20; card.style.paddingRight = 20;
+            card.pickingMode = PickingMode.Position;    // capture clicks (don't pass through)
+            overlay.Add(card);
+
+            // Header row with close button.
+            var head = new VisualElement();
+            head.style.flexDirection = FlexDirection.Row;
+            head.style.alignItems = Align.Center;
+            head.style.marginBottom = 6;
+            var title = MakeTitle("Item Ports");
+            title.style.flexGrow = 1;
+            head.Add(title);
+            var close = new Button { text = "✕" };
+            close.style.width = 28; close.style.height = 28; close.style.fontSize = 14;
+            close.style.color = new StyleColor(UITheme.TextSecondary);
+            close.style.backgroundColor = new StyleColor(UITheme.BgCard);
+            SetBorderRadius(close, 6);
+            close.clicked += Close;
+            head.Add(close);
+            card.Add(head);
+
+            // Scrollable body so it never overflows the screen.
+            var scroll = new ScrollView(ScrollViewMode.Vertical);
+            scroll.style.flexGrow = 1;
+            scroll.contentContainer.style.width = Length.Percent(100);
+            card.Add(scroll);
+
+            var body = VoxelEngine.UI.PortConfigHud.BuildItemPorts(host, routing, onChanged: () => { });
+            body.style.width = Length.Percent(100);
+            scroll.Add(body);
+
+            _root.Add(overlay);
+        }
+
+        /// <summary>Launcher pill that opens the Item-Ports overlay.</summary>
+        private VisualElement MakePortsToggle(bool _, System.Action onClick)
         {
             var accent = UITheme.AccentCyan;
             var btn = new Button();
@@ -1249,17 +1308,16 @@ namespace VoxelEngine.UI
             btn.style.alignItems = Align.Center;
             btn.style.height = 34;
             btn.style.paddingLeft = 12; btn.style.paddingRight = 12;
-            btn.style.backgroundColor = new StyleColor(new Color(accent.r, accent.g, accent.b, open ? 0.22f : 0.12f));
+            btn.style.backgroundColor = new StyleColor(new Color(accent.r, accent.g, accent.b, 0.14f));
             UITheme.Radius(btn, 8f);
-            UITheme.Border(btn, 1, new Color(accent.r, accent.g, accent.b, open ? 0.55f : 0.35f));
+            UITheme.Border(btn, 1, new Color(accent.r, accent.g, accent.b, 0.40f));
 
-            var chevron = new Label(open ? "▾" : "▸");
-            chevron.style.color = new StyleColor(accent);
-            chevron.style.fontSize = 13;
-            chevron.style.unityFontStyleAndWeight = FontStyle.Bold;
-            chevron.style.marginRight = 8;
-            chevron.pickingMode = PickingMode.Ignore;
-            btn.Add(chevron);
+            var icon = new Label("⚙");
+            icon.style.color = new StyleColor(accent);
+            icon.style.fontSize = 14;
+            icon.style.marginRight = 8;
+            icon.pickingMode = PickingMode.Ignore;
+            btn.Add(icon);
 
             var lbl = new Label("ITEM PORTS");
             lbl.style.color = new StyleColor(UITheme.TextPrimary);
@@ -1270,7 +1328,7 @@ namespace VoxelEngine.UI
             lbl.pickingMode = PickingMode.Ignore;
             btn.Add(lbl);
 
-            var hint = new Label(open ? "HIDE" : "CONFIGURE");
+            var hint = new Label("CONFIGURE  ▸");
             hint.style.color = new StyleColor(UITheme.TextMuted);
             hint.style.fontSize = 9;
             hint.style.unityFontStyleAndWeight = FontStyle.Bold;
@@ -1278,11 +1336,11 @@ namespace VoxelEngine.UI
             hint.pickingMode = PickingMode.Ignore;
             btn.Add(hint);
 
-            btn.RegisterCallback<PointerEnterEvent>(_ =>
-                btn.style.backgroundColor = new StyleColor(new Color(accent.r, accent.g, accent.b, open ? 0.30f : 0.20f)));
-            btn.RegisterCallback<PointerLeaveEvent>(_ =>
-                btn.style.backgroundColor = new StyleColor(new Color(accent.r, accent.g, accent.b, open ? 0.22f : 0.12f)));
-            btn.clicked += () => onToggle?.Invoke();
+            btn.RegisterCallback<PointerEnterEvent>(_e =>
+                btn.style.backgroundColor = new StyleColor(new Color(accent.r, accent.g, accent.b, 0.22f)));
+            btn.RegisterCallback<PointerLeaveEvent>(_e =>
+                btn.style.backgroundColor = new StyleColor(new Color(accent.r, accent.g, accent.b, 0.14f)));
+            btn.clicked += () => onClick?.Invoke();
             return btn;
         }
 
