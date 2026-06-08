@@ -648,26 +648,5 @@ namespace VoxelEngine.UI
             row.Add(slot(c, idx, c.GetSlot(idx), false, false));
             return row;
         }
-
-        
-
-        {
-            var b = new VisualElement();
-            b.style.paddingTop = 2; b.style.paddingBottom = 2;
-            b.style.paddingLeft = 8; b.style.paddingRight = 8;
-            b.style.marginBottom = 3;
-            b.style.backgroundColor = new StyleColor(new Color(accent.r, accent.g, accent.b, 0.14f));
-            T.Radius(b, 4);
-            b.pickingMode = PickingMode.Ignore;
-            var l = new Label(txt);
-            l.style.fontSize = 9;
-            l.style.color = new StyleColor(accent);
-            l.style.unityFontStyleAndWeight = FontStyle.Bold;
-            l.pickingMode = PickingMode.Ignore;
-            b.Add(l);
-            return b;
-        }
-
-
     }
 }

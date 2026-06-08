@@ -200,9 +200,9 @@ namespace VoxelEngine.Transport
             Be(v00,v10,yBot);Be(v10,v11,yBot);Be(v11,v01,yBot);Be(v01,v00,yBot);
             Ac(v00,yTop);Ac(v10,yTop);Ac(v11,yTop);Ac(v01,yTop);
         }
-        void Pi(Vector3 p,float cy,float h)=>_fp.Add(new(){p=new(p.x,cy,p.z),s=new(0.16f,h,0.16f),a:false});
-        void Be(Vector3 f,Vector3 t,float y){var m=(f+t)*0.5f;float l=Vector3.Distance(f,t);_fp.Add(new(){p=new(m.x,y,m.z),s:Mathf.Abs(f.x-t.x)>0.01f?new(l,0.12f,0.1f):new(0.1f,0.12f,l),a:false});}
-        void Ac(Vector3 p,float y)=>_fp.Add(new(){p=new(p.x,y,p.z),s:new(0.22f,0.22f,0.22f),a:true});
+        void Pi(Vector3 p,float cy,float h)=>_fp.Add(new FS{p=new Vector3(p.x,cy,p.z),s=new Vector3(0.16f,h,0.16f),a=false});
+        void Be(Vector3 f,Vector3 t,float y){var m=(f+t)*0.5f;float l=Vector3.Distance(f,t);_fp.Add(new FS{p=new Vector3(m.x,y,m.z),s=(Mathf.Abs(f.x-t.x)>0.01f?new Vector3(l,0.12f,0.1f):new Vector3(0.1f,0.12f,l)),a=false});}
+        void Ac(Vector3 p,float y)=>_fp.Add(new FS{p=new Vector3(p.x,y,p.z),s=new Vector3(0.22f,0.22f,0.22f),a=true});
         void PS(FS s){var go=GameObject.CreatePrimitive(PrimitiveType.Cube);go.name=s.a?"A":"F";go.transform.position=s.p;go.transform.localScale=s.s;var r=go.GetComponent<MeshRenderer>();if(s.a)r.material=ME(frameAccentColor,0.7f);else{var sh=Shader.Find("Universal Render Pipeline/Lit")??Shader.Find("Standard");var m=new Material(sh){color=frameColor};m.SetColor("_BaseColor",frameColor);m.SetFloat("_Metallic",0.9f);m.SetFloat("_Smoothness",0.45f);r.material=m;}Destroy(go.GetComponent<BoxCollider>());_fs.Add(go);}
 
         // ═══ DRILL ═══════════════════════════════════
