@@ -1,5 +1,7 @@
 // Assets/Scripts/VoxelEngine/Editor/GridContentGenerator.cs
-// v1.2.2 - Fixed folder creation
+//
+// ULTIMATE Grid System Content Generator v1.2.1
+// Generates ALL missing GridBlockItems, Research Nodes, Recipes + improved testing command.
 
 #if UNITY_EDITOR
 using UnityEditor;
@@ -15,11 +17,12 @@ namespace VoxelEngine.Editor
         private const string ResearchPath = "Assets/Resources/Research/Grid";
         private const string RecipesPath = "Assets/Resources/Recipes/Grid";
 
-        [MenuItem("Voxel Engine/Grid/Generate Full Grid System Content (v1.2.2)")]
+        [MenuItem("Voxel Engine/Grid/Generate Full Grid System Content (v1.2.1)")]
         public static void GenerateEverything()
         {
             EnsureFolders();
 
+            // Block Items with realistic mass
             GenerateBlockItem<GridDrill>("Drill", 920f, 185f, "Powerful ship-mounted mining drill.");
             GenerateBlockItem<GridLandingGear>("Landing Gear", 480f, 95f, "Deploys for safe planetary landings.");
             GenerateBlockItem<GridDockingPort>("Docking Port", 410f, 82f, "Connects ships to stations or other vessels.");
@@ -27,6 +30,7 @@ namespace VoxelEngine.Editor
             GenerateBlockItem<GridWeapon>("Weapon", 310f, 62f, "Ship-mounted combat weapon.");
             GenerateBlockItem<GridGrinder>("Grinder", 280f, 56f, "Efficient block disassembly tool.");
 
+            // Research Nodes
             GenerateResearchNode("res_grid_construction", "Grid Construction", "Unlocks all grid building technology.", 4, ResearchSubCategory.Building);
             GenerateResearchNode("res_liquid_fuel", "Liquid Fuel Processing", "Enables complex fuel production.", 5, ResearchSubCategory.Chemistry);
             GenerateResearchNode("res_ship_weapons", "Ship Armament", "Unlocks ship weapons and defense systems.", 4, ResearchSubCategory.Military);
@@ -60,6 +64,7 @@ namespace VoxelEngine.Editor
             item.blockMass = largeMass;
             item.blockHP = 650f;
             item.gridSize = GridSize.Large;
+
             AssetDatabase.CreateAsset(item, path);
         }
 
@@ -73,6 +78,25 @@ namespace VoxelEngine.Editor
             node.tier = tier;
             node.subCategory = category;
             AssetDatabase.CreateAsset(node, path);
+        }
+
+        [MenuItem("Voxel Engine/Grid/Spawn All Grid Items (Debug)")]
+        public static void SpawnAllGridItems()
+        {
+            var inventory = GameObject.FindFirstObjectByType<VoxelEngine.Items.Inventory>();
+            if (inventory == null)
+            {
+                Debug.LogError("No Inventory found on player!");
+                return;
+            }
+
+            var items = Resources.FindObjectsOfTypeAll<GridBlockItem>();
+            foreach (var item in items)
+            {
+                inventory.Add(item, 3);
+            }
+
+            Debug.Log($"[Debug] Spawned {items.Length} grid block types.");
         }
     }
 }
