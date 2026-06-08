@@ -316,6 +316,8 @@ namespace VoxelEngine.UI
         public void OpenInventory()
         {
             if (!_inventoryOpen) UIState.PushBlock();
+            // Replay the crafting screen's entrance pop each time the inventory opens.
+            if (!_inventoryOpen) _craftPanelWasVisible = false;
             _inventoryOpen  = true;
             _openFurnace    = null;
             _openElectric   = null;
@@ -692,8 +694,32 @@ namespace VoxelEngine.UI
                 _root.pickingMode = PickingMode.Position;
                 _root.style.backgroundColor = new StyleColor(new Color(0,0,0,0.55f));
 
-                // Left panel — player inventory + crafting list
+                // Left panel — player inventory + crafting toggle
                 BuildLeftPanel(_root);
+
+                // Center panel — Rust-style crafting screen (toggle-driven,
+                // state persisted). Only when the player toggled it ON and no
+                // workstation/container panel owns the crafting view itself.
+                bool aRightPanelIsOpen =
+                    _rightContainer != null || _openFurnace != null || _openElectric != null ||
+                    _openCoalGen != null || _openQuarry != null || _openReactor != null ||
+                    _openTurbine != null || _openPortReactor != null || _openProcessor != null ||
+                    _openReprocessor != null || _openElectrolyser != null || _openHydroEngine != null ||
+                    _openGasTank != null || _openStorageTerminal != null || _openServerRack != null ||
+                    _openPatternTerminal != null || _openCraftTerminal != null || _openImporter != null ||
+                    _openExporter != null || _openDiskManipulator != null || _openNAS != null ||
+                    _openPowerstation != null;
+                // The station pane (_openStation) renders its OWN crafting list on
+                // the right, so we suppress the center panel only in that case.
+                // For every other right panel (chest / furnace / storage terminal)
+                // we keep crafting available — the panel simply shrinks to sit in
+                // the gap between the inventory and the right panel.
+                if (CraftingScreen.Visible && _openStation == null)
+                {
+                    BuildCenterCrafting(_root, aRightPanelIsOpen);
+                    _craftPanelWasVisible = true;
+                }
+                else _craftPanelWasVisible = false;
 
                 // Right panel — container or station
                 if (_rightContainer != null) BuildRightContainer(_root, _rightContainer);
@@ -809,55 +835,11 @@ namespace VoxelEngine.UI
             // ingredients through. Selection is remembered across sessions.
             BuildWirelessTransmitterSelector(panel);
 
-            // Crafting list — filtered by category + search.
-            panel.Add(Spacer(12));
-            panel.Add(MakeSubtitle("Crafting"));
-
-            // ── Crafting source priority (per user spec) ─────────────
-            //   1) If the player has opened a Storage Terminal (wired OR wireless),
-            //      OR is in the inventory with an active wireless transmitter, we
-            //      treat the storage network as a tier-Assembler crafting station
-            //      AND let crafting pull ingredients from inventory FIRST, then
-            //      from the network.
-            //   2) Otherwise, crafting only uses the inventory and respects normal
-            //      station-tier rules (Crafting Bench / Furnace / Assembler).
-            //
-            // The "storage = highest tier station" behaviour is gated by the
-            // res_storage_crafting research node so it doesn't appear before
-            // the player has earned it.
-            var rmCheck = VoxelEngine.Research.ResearchManager.Instance;
-            bool storageCraftingUnlocked = rmCheck != null
-                && rmCheck.IsUnlocked("res_storage_crafting");
-
-            VoxelEngine.Storage.ServerRack craftRack = null;
-            if (_openStorageTerminal != null && _openStorageTerminal.ConnectedRack != null
-                && _openStorageTerminal.ConnectedRack.IsOnline)
-                craftRack = _openStorageTerminal.ConnectedRack;
-
-            VoxelEngine.Storage.ServerRack passiveWirelessRack = GetActiveWirelessRack();
-            bool wirelessActive = passiveWirelessRack != null && passiveWirelessRack.IsOnline;
-
-            var maxStation = Crafter.MaxAccessibleStation(inventory.transform.position, stationRadius);
-            // Storage-as-station upgrade — Assembler tier.
-            if (storageCraftingUnlocked && (craftRack != null || wirelessActive)
-                && (int)maxStation < (int)Crafting.StationTier.Assembler)
-                maxStation = Crafting.StationTier.Assembler;
-
-            var allRecipes = Crafter.AvailableRecipes(recipeRegistry, maxStation);
-
-            // Wrap the inventory in a NetworkItemSource ONLY when the storage UI is
-            // open / the wireless transmitter selection is active. With no terminal
-            // open and no transmitter, crafting uses inventory only — the user's
-            // explicit rule "craft with the items in inventory first, and only with
-            // network items when the storage terminal is opened or a transmitter is
-            // active".
-            IItemContainer craftSource = inventory.container;
-            var craftRackForSource = craftRack ?? (wirelessActive ? passiveWirelessRack : null);
-            if (craftRackForSource != null)
-                craftSource = new VoxelEngine.Storage.NetworkItemSource(inventory.container, craftRackForSource);
-
-            BuildRecipeBrowser(panel, allRecipes, craftSource, inventory.container,
-                emptyMessage: "No recipes available — craft a Crafting Bench first.", panelId: "inventory");
+            // ── Crafting screen toggle (Rust-style show / hide) ──────
+            // The full crafting surface lives in its own center panel (built in
+            // Refresh()). Here we only render the toggle pill; its open/closed
+            // state persists across sessions via CraftingScreen.Visible.
+            panel.Add(CraftingScreen.ToggleButton(Refresh));
 
             // ── Wireless Storage Network (if unlocked) ──
             var transmitters = VoxelEngine.Storage.WirelessTransmitter.GetAllOnline();
@@ -945,6 +927,106 @@ namespace VoxelEngine.UI
         }
 
         // ----------------------------------------------------------------
+        //  CENTER CRAFTING PANEL — the Rust-style crafting surface.
+        //  Sits between the left inventory and the right container, shown
+        //  only when CraftingScreen.Visible is true. Its open/closed state
+        //  persists across sessions; the player toggles it from the
+        //  inventory header (CraftingScreen.ToggleButton).
+        // ----------------------------------------------------------------
+        private void BuildCenterCrafting(VisualElement root, bool rightPanelOpen)
+        {
+            if (inventory == null) return;
+
+            var (recipes, source, _) = ResolveCraftContext();
+
+            var panel = MakePanel();
+            panel.style.position = Position.Absolute;
+            panel.style.top      = 32;
+            panel.style.bottom   = 96;
+            panel.style.left     = 508;   // just right of the 460-wide inventory panel (left=32)
+            // When a right-side container/machine panel is open it occupies the
+            // far-right ~540px, so we stop short of it; otherwise we stretch to the
+            // screen edge. Either way the layout stays responsive.
+            panel.style.right    = rightPanelOpen ? 568 : 28;
+            panel.style.maxWidth = 760;   // but never absurdly wide on ultrawide displays
+            panel.style.overflow = Overflow.Hidden;
+            root.Add(panel);
+
+            // Subtle entrance pop — only the FIRST time the panel appears (i.e. the
+            // player just toggled it on), NOT on every Refresh() rebuild. Without
+            // this guard the panel would flash on each craft / queue tick.
+            if (!_craftPanelWasVisible)
+            {
+                panel.style.opacity = 0f;
+                panel.style.scale   = new StyleScale(new Scale(new Vector3(0.985f, 0.985f, 1f)));
+                panel.schedule.Execute(() =>
+                {
+                    panel.style.transitionProperty = new System.Collections.Generic.List<StylePropertyName> { "opacity", "scale" };
+                    panel.style.transitionDuration = new System.Collections.Generic.List<TimeValue>
+                        { new TimeValue(0.14f, TimeUnit.Second), new TimeValue(0.14f, TimeUnit.Second) };
+                    panel.style.opacity = 1f;
+                    panel.style.scale   = new StyleScale(new Scale(Vector3.one));
+                }).ExecuteLater(0);
+            }
+
+            CraftingScreen.Populate(
+                panel, recipes, source, inventory.container,
+                resolveQueue: r =>
+                {
+                    if (_activeQueue != null) return _activeQueue;
+                    if (r != null && r.requiredStation != Crafting.StationTier.None)
+                        return FindNearestQueueForTier(r.requiredStation, inventory.transform.position);
+                    return null;
+                },
+                refresh: Refresh,
+                setSearchFocus: v => _searchHasFocus = v,
+                panelId: "inventory");
+        }
+
+        /// <summary>
+        /// Computes the recipe set + ingredient source the inventory-side crafting
+        /// screen should use, honouring storage-network access and station tiers.
+        /// Extracted from the old inline crafting block so both the center panel
+        /// and any future caller can reuse the exact same priority rules.
+        /// </summary>
+        private (System.Collections.Generic.List<Crafting.RecipeDefinition> recipes, IItemContainer source, Crafting.StationTier maxStation) ResolveCraftContext()
+        {
+            // ── Crafting source priority (per user spec) ─────────────
+            //   1) If the player has opened a Storage Terminal (wired OR wireless),
+            //      OR is in the inventory with an active wireless transmitter, we
+            //      treat the storage network as a tier-Assembler crafting station
+            //      AND let crafting pull ingredients from inventory FIRST, then
+            //      from the network. Gated by the res_storage_crafting research node.
+            //   2) Otherwise, crafting only uses the inventory and respects normal
+            //      station-tier rules (Crafting Bench / Furnace / Assembler).
+            var rmCheck = VoxelEngine.Research.ResearchManager.Instance;
+            bool storageCraftingUnlocked = rmCheck != null
+                && rmCheck.IsUnlocked("res_storage_crafting");
+
+            VoxelEngine.Storage.ServerRack craftRack = null;
+            if (_openStorageTerminal != null && _openStorageTerminal.ConnectedRack != null
+                && _openStorageTerminal.ConnectedRack.IsOnline)
+                craftRack = _openStorageTerminal.ConnectedRack;
+
+            VoxelEngine.Storage.ServerRack passiveWirelessRack = GetActiveWirelessRack();
+            bool wirelessActive = passiveWirelessRack != null && passiveWirelessRack.IsOnline;
+
+            var maxStation = Crafter.MaxAccessibleStation(inventory.transform.position, stationRadius);
+            if (storageCraftingUnlocked && (craftRack != null || wirelessActive)
+                && (int)maxStation < (int)Crafting.StationTier.Assembler)
+                maxStation = Crafting.StationTier.Assembler;
+
+            var allRecipes = Crafter.AvailableRecipes(recipeRegistry, maxStation);
+
+            IItemContainer craftSource = inventory.container;
+            var craftRackForSource = craftRack ?? (wirelessActive ? passiveWirelessRack : null);
+            if (craftRackForSource != null)
+                craftSource = new VoxelEngine.Storage.NetworkItemSource(inventory.container, craftRackForSource);
+
+            return (allRecipes, craftSource, maxStation);
+        }
+
+        // ----------------------------------------------------------------
         // Reusable recipe browser: search bar + category tabs + recipe list.
         // Used by the player inventory pane AND the workstation right pane.
         // ----------------------------------------------------------------
@@ -952,6 +1034,9 @@ namespace VoxelEngine.UI
         // Set by the search field. Read by Update() to suppress hotkey/closing handling.
         private bool _searchHasFocus;
         private bool _showWirelessStorage;
+        // True while the center crafting panel is currently mounted — lets us play
+        // the entrance animation only on first appearance, not on every Refresh().
+        private bool _craftPanelWasVisible;
         // Prevents I from re-opening inventory the same frame it closed a machine panel.
         private bool _justClosedThisFrame;
 
