@@ -7,16 +7,17 @@ using UnityEngine;
 
 namespace VoxelEngine.Research
 {
-    [CreateAssetMenu(menuName = "Voxel Engine/Research/Grid System Node")]
+    [CreateAssetMenu(menuName = "Voxel Engine/Research/Grid System Node", fileName = "Research_GridSystem")]
     public class GridSystemResearchNode : ResearchNode
     {
-        public override string DisplayName => "Grid Construction";
-        public override string Description => "Unlocks Small & Large grid building, thrusters, reactors, tanks, weapons, and full ship construction.";
-
-        public override void OnResearched()
+        private void OnEnable()
         {
-            base.OnResearched();
-            Debug.Log("[Research] Grid System unlocked! All grid blocks and ship systems are now available.");
+            displayName = "Grid Construction";
+            description = "Unlocks Small & Large grid building, thrusters (Atmospheric, Hydrogen, Ion, LiquidFuel), reactors, tanks, weapons, grinders, and full ship construction.";
+            category = ResearchCategory.Environment;
+            subCategory = ResearchSubCategory.Building;
+            tier = 4;
+            researchSeconds = 120f;
         }
     }
 }
