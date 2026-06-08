@@ -27,7 +27,11 @@ namespace VoxelEngine.GridSystem
         public virtual float PowerDraw => 0f;
 
         /// <summary>Called when placed on a grid.</summary>
-        public virtual void OnPlaced() { currentHP = maxHP; }
+        public virtual void OnPlaced() 
+        { 
+            currentHP = maxHP; 
+            GridBlockVisuals.ApplyDefaultVisuals(this);
+        }
         /// <summary>Called when removed from a grid.</summary>
         public virtual void OnRemoved() { }
 

@@ -1,6 +1,6 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridCockpit.cs
 //
-// Cockpit with grid size switching buttons.
+// Cockpit with terminal + grid size switching.
 
 using UnityEngine;
 
@@ -19,7 +19,9 @@ namespace VoxelEngine.GridSystem
             player.enabled = false;
             player.GetComponent<Rigidbody>().isKinematic = true;
 
-            GridUIManager.OpenCockpitUI(this);
+            // Open the Grid Terminal
+            if (GridTerminalUI.Instance != null)
+                GridTerminalUI.Instance.Open(Grid);
         }
 
         public void Exit()
@@ -29,19 +31,19 @@ namespace VoxelEngine.GridSystem
             Pilot.enabled = true;
             Pilot.GetComponent<Rigidbody>().isKinematic = false;
             Pilot = null;
+
+            if (GridTerminalUI.Instance != null)
+                GridTerminalUI.Instance.Close();
         }
 
-        // Called from cockpit UI buttons
         public void SwitchToSmallGrid()
         {
-            if (Grid != null && GridSizeSwitcher.Instance != null)
-                GridSizeSwitcher.Instance.SwitchGrid(Grid, GridSize.Small);
+            GridSizeSwitcher.Instance?.SwitchGrid(Grid, GridSize.Small);
         }
 
         public void SwitchToLargeGrid()
         {
-            if (Grid != null && GridSizeSwitcher.Instance != null)
-                GridSizeSwitcher.Instance.SwitchGrid(Grid, GridSize.Large);
+            GridSizeSwitcher.Instance?.SwitchGrid(Grid, GridSize.Large);
         }
     }
 }

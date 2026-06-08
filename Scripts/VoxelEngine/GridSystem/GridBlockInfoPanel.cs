@@ -1,6 +1,6 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridBlockInfoPanel.cs
 //
-// Detail panel showing stats and controls for a selected block.
+// Shows real stats from blocks (power, tanks, etc.)
 
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -13,31 +13,43 @@ namespace VoxelEngine.GridSystem
 
         private Label _nameLabel;
         private Label _statsLabel;
-        private Toggle _powerToggle;
+        private Toggle _enabledToggle;
 
         public GridBlockInfoPanel()
         {
-            _nameLabel = new Label();
-            _statsLabel = new Label();
-            _powerToggle = new Toggle("Enabled");
+            _nameLabel = new Label { style = { fontSize = 20, color = Color.white } };
+            _statsLabel = new Label { style = { color = new Color(0.8f, 0.8f, 0.8f) } };
+            _enabledToggle = new Toggle("Enabled");
 
             Add(_nameLabel);
             Add(_statsLabel);
-            Add(_powerToggle);
+            Add(_enabledToggle);
         }
 
         public void ShowBlock(GridBlock block)
         {
             _nameLabel.text = block.blockName;
-            _statsLabel.text = $"Mass: {block.BlockMass}kg\nHP: {block.currentHP}/{block.maxHP}";
+            string stats = $"Mass: {block.BlockMass} kg\nHP: {block.currentHP}/{block.maxHP}";
 
-            // Example: Show power draw
+            // Real data from specific block types
             if (block is GridH2O2Generator gen)
             {
-                _statsLabel.text += $"\nPower Draw: {gen.powerDraw}W";
+                stats += $"\nPower Draw: {gen.powerDraw} W";
+            }
+            else if (block is GridLiquidFuelTank tank)
+            {
+                stats += $"\nFuel: {tank.fuelStored:0} / {tank.capacity:0}";
+            }
+            else if (block is GridWaterTank water)
+            {
+                stats += $"\nWater: {water.waterStored:0} / {water.capacity:0}";
+            }
+            else if (block is GridRefinery refinery)
+            {
+                stats += $"\nPower Draw: {refinery.powerDraw} W";
             }
 
-            _powerToggle.value = true; // TODO: Bind to actual enabled state
+            _statsLabel.text = stats;
         }
     }
 }

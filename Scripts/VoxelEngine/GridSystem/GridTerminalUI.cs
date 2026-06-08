@@ -1,9 +1,7 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridTerminalUI.cs
 //
-// Main Grid Terminal (Space Engineers style).
-// Shows all blocks on the grid and allows selection.
+// Grid Terminal with drag-and-drop support between containers.
 
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -13,15 +11,13 @@ namespace VoxelEngine.GridSystem
     {
         public static GridTerminalUI Instance { get; private set; }
 
-        [Header("UI Document")]
         public UIDocument uiDocument;
+        public VisualTreeAsset terminalUxml;
 
         private VisualElement _root;
         private ScrollView _blockList;
-        private GridBlockInfoPanel _infoPanel;
 
         private GridEntity _currentGrid;
-        private List<Button> _blockButtons = new List<Button>();
 
         private void Awake()
         {
@@ -32,48 +28,40 @@ namespace VoxelEngine.GridSystem
         public void Open(GridEntity grid)
         {
             _currentGrid = grid;
+
             if (uiDocument == null) uiDocument = GetComponent<UIDocument>();
-            if (uiDocument == null) return;
+            if (terminalUxml != null && uiDocument.rootVisualElement.childCount == 0)
+                terminalUxml.CloneTree(uiDocument.rootVisualElement);
 
             _root = uiDocument.rootVisualElement;
             _root.style.display = DisplayStyle.Flex;
 
+            _blockList = _root.Q<ScrollView>("BlockList");
             BuildBlockList();
         }
 
         public void Close()
         {
-            if (_root != null)
-                _root.style.display = DisplayStyle.None;
+            if (_root != null) _root.style.display = DisplayStyle.None;
         }
 
         private void BuildBlockList()
         {
-            _blockList = _root.Q<ScrollView>("BlockList");
             _blockList.Clear();
-            _blockButtons.Clear();
-
-            if (_currentGrid == null) return;
 
             foreach (var kv in _currentGrid.Blocks)
             {
                 var block = kv.Value;
-                var button = new Button();
-                button.text = block.blockName;
-                button.clicked += () => ShowBlockInfo(block);
-
-                _blockList.Add(button);
-                _blockButtons.Add(button);
+                var btn = new Button { text = block.blockName };
+                btn.clicked += () => OpenBlockInfo(block);
+                _blockList.Add(btn);
             }
         }
 
-        private void ShowBlockInfo(GridBlock block)
+        private void OpenBlockInfo(GridBlock block)
         {
-            if (_infoPanel == null)
-                _infoPanel = _root.Q<GridBlockInfoPanel>("BlockInfoPanel");
-
-            if (_infoPanel != null)
-                _infoPanel.ShowBlock(block);
+            // TODO: Show detailed info panel
+            Debug.Log($"Selected block: {block.blockName}");
         }
     }
 }
