@@ -581,7 +581,7 @@ namespace VoxelEngine.UI
             return row;
         }
 
-        private static VisualElement PortFaceLabel(PortConfig.CubeFace face, PortConfig.PortDirection dir, bool enabled)
+        private static VisualElement PortFaceLabel(CubeFace face, PortDirection dir, bool enabled)
         {
             var container = new VisualElement();
             container.style.flexGrow = 1;
@@ -592,23 +592,23 @@ namespace VoxelEngine.UI
 
             string faceName = face switch
             {
-                PortConfig.CubeFace.PosX => "+X", PortConfig.CubeFace.NegX => "-X",
-                PortConfig.CubeFace.PosY => "+Y", PortConfig.CubeFace.NegY => "-Y",
-                PortConfig.CubeFace.PosZ => "+Z", PortConfig.CubeFace.NegZ => "-Z",
+                CubeFace.PosX => "+X", CubeFace.NegX => "-X",
+                CubeFace.PosY => "+Y", CubeFace.NegY => "-Y",
+                CubeFace.PosZ => "+Z", CubeFace.NegZ => "-Z",
                 _ => "?"
             };
 
             string dirName = !enabled ? "Off" : dir switch
             {
-                PortConfig.PortDirection.Input  => "In",
-                PortConfig.PortDirection.Output => "Out",
+                PortDirection.Input  => "In",
+                PortDirection.Output => "Out",
                 _ => "Off"
             };
 
             Color tint = !enabled ? new Color(0.35f, 0.37f, 0.45f) : dir switch
             {
-                PortConfig.PortDirection.Input  => new Color(0.22f, 0.78f, 0.42f),
-                PortConfig.PortDirection.Output => new Color(0.18f, 0.72f, 0.88f),
+                PortDirection.Input  => new Color(0.22f, 0.78f, 0.42f),
+                PortDirection.Output => new Color(0.18f, 0.72f, 0.88f),
                 _ => new Color(0.35f, 0.37f, 0.45f)
             };
 
