@@ -22,6 +22,17 @@ namespace VoxelEngine.UI
         public static void EnsureMounted(VisualElement uiRoot)
         {
             if (_root == uiRoot && _box != null && _box.parent == uiRoot) return;
+            
+            // If the old box was removed from the hierarchy (e.g. by Clear()),
+            // we need to re-add it without resetting our _isVisible state,
+            // otherwise we'd trigger the entrance animation every frame.
+            if (_box != null && _box.parent == null)
+            {
+                uiRoot.Add(_box);
+                _root = uiRoot;
+                return;
+            }
+
             _root = uiRoot;
             if (_box != null) _box.RemoveFromHierarchy();
 

@@ -24,10 +24,14 @@ namespace VoxelEngine.EditorTools
         private const string PLANET_FOLDER  = ASSET_ROOT + "/Planets";
         private const string BIOME_FOLDER   = ASSET_ROOT + "/Biomes";
 
+        private Vector2 _scrollPos;
+
         [MenuItem("Tools/Voxel Engine/Setup Wizard")]
         public static void Open() => GetWindow<VoxelEngineSetupWindow>("Voxel Engine Setup");
 
         private void OnGUI()
+        {
+            _scrollPos = EditorGUILayout.BeginScrollView(_scrollPos);
         {
             GUILayout.Label("Voxel Engine — Setup Wizard", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(
@@ -111,6 +115,8 @@ namespace VoxelEngine.EditorTools
 
             if (GUILayout.Button("9. Open URP / GPU Resident Drawer Checklist", GUILayout.Height(40)))
                 ShowGpuChecklist();
+            GUILayout.Space(20);
+            EditorGUILayout.EndScrollView();
         }
 
         // ===== Asset creation =====
@@ -4213,8 +4219,10 @@ root =>
             // -- Recipes --
             VoxelEngine.Crafting.RecipeDefinition AddGRecipe(string name, string display, VoxelEngine.Items.ItemDefinition output, params (VoxelEngine.Items.ItemDefinition item, int n)[] inputs)
             {
-                var r = AddRecipe(RECIPES, name, display, output, 1, VoxelEngine.Crafting.StationTier.Assembler, false, inputs);
-                return r;
+                var r = ScriptableObject.CreateInstance<VoxelEngine.Crafting.RecipeDefinition>();
+                r.displayName = display; r.outputItem = output; r.outputCount = 1; r.requiredStation = VoxelEngine.Crafting.StationTier.Assembler; r.craftSeconds = 4f; r.unlockedByDefault = false;
+                r.inputs = new VoxelEngine.Crafting.RecipeIngredient[inputs.Length]; for (int i = 0; i < inputs.Length; i++) r.inputs[i] = new VoxelEngine.Crafting.RecipeIngredient { item = inputs[i].item, count = inputs[i].n };
+                AssetDatabase.CreateAsset(r, $"{RECIPES}/{name}.asset"); if (registry != null && !registry.recipes.Contains(r)) registry.recipes.Add(r); return r;
             }
 
             var recCockSmall = AddGRecipe("Recipe_GCockpitSmall", "Small Cockpit", itemCockSmall, (steelPlate, 4), (circuit, 2), (glass, 2));
