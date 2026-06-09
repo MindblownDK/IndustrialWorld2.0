@@ -45,7 +45,13 @@ namespace VoxelEngine.GridSystem
             }
             else if (block is GridRefinery refinery)
             {
-                stats += $"\nPower Draw: {refinery.powerDraw} W";
+                stats += $"\nPower Draw: {refinery.PowerDraw:0} W";
+                if (refinery.Current != null) stats += $"\nRefining: {refinery.Current.GetDisplayName()} ({refinery.Progress01 * 100f:0}%)";
+            }
+            else if (block is GridChemicalPlant chem)
+            {
+                stats += $"\nPower Draw: {chem.PowerDraw:0} W";
+                if (chem.Current != null) stats += $"\nMixing: {chem.Current.GetDisplayName()} ({chem.Progress01 * 100f:0}%)";
             }
 
             _statsLabel.text = stats;

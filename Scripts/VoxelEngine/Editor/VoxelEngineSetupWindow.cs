@@ -4304,7 +4304,7 @@ root =>
             AddGRecipe("Recipe_GGrinder", "Grinder", itemGrinder, (steelPlate, 5), (circuit, 2));
 
             var refineryPref = MakeGPref<VoxelEngine.GridSystem.GridRefinery>("Refinery_Large", new Color(0.5f, 0.4f, 0.2f), new Vector3(2.5f, 2.5f, 2.5f),
-                r => { r.crudeConsumptionRate = 8f; r.keroseneProductionRate = 5f; r.powerDraw = 850f; });
+                r => { r.baseWattsPerSecond = 850f; });
             var itemRefinery = MakeGItem("GItem_Refinery", "Ship Refinery", Color.white, refineryPref, VoxelEngine.GridSystem.GridSize.Large, 1200, 900);
             AddGRecipe("Recipe_GRefinery", "Ship Refinery", itemRefinery, (steelPlate, 14), (circuit, 8), (copperWire, 10));
 

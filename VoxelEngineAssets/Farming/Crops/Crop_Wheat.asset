@@ -1,0 +1,37 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 36af89c9ea408e444ad8515b212d80b9, type: 3}
+  m_Name: Crop_Wheat
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Farming.CropDefinition
+  cropName: Wheat
+  icon: {fileID: 0}
+  growthTime: 90
+  growthStages: 4
+  requiresWater: 1
+  irrigatedSpeedMultiplier: 2
+  droughtToleranceSec: 30
+  harvestItem: {fileID: 11400000, guid: efb3e6deda4aded42ac65bf3859b4638, type: 2}
+  harvestAmount: 3
+  seedItem: {fileID: 11400000, guid: 1509a4c5e704e59439f7f9cb6dff4eec, type: 2}
+  seedReturnAmount: 2
+  foodValue: 10
+  stageColors:
+  - {r: 0.3, g: 0.5, b: 0.2, a: 1}
+  - {r: 0.5, g: 0.6, b: 0.25, a: 1}
+  - {r: 0.7, g: 0.75, b: 0.3, a: 1}
+  - {r: 0.9, g: 0.85, b: 0.4, a: 1}
+  stageScales:
+  - 0.15
+  - 0.35
+  - 0.65
+  - 1
+  wildPrefab: {fileID: 0}
