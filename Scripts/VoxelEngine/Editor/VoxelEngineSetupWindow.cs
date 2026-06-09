@@ -71,7 +71,7 @@ namespace VoxelEngine.EditorTools
             if (GUILayout.Button("11. Build Survival + Logistics (Farming, Storage, Gas, Nuclear)", GUILayout.Height(50)))
                 BuildSurvivalAndLogisticsContent();
 
-            if (GUILayout.Button("12. Build Grid System Content (Ships, Vehicles)", GUILayout.Height(50)))
+            if (GUILayout.Button("12. Build Grid System Content (All Ship/Vehicle Blocks)", GUILayout.Height(50)))
                 BuildGridSystemContent();
 
             GUILayout.Space(10);
@@ -273,39 +273,110 @@ namespace VoxelEngine.EditorTools
             var registry = AssetDatabase.LoadAssetAtPath<RecipeRegistry>($"{ASSET_ROOT}/RecipeRegistry.asset");
             var tree = AssetDatabase.LoadAssetAtPath<ResearchTree>($"{ASSET_ROOT}/Research/ResearchTree.asset");
 
+            // Local recipe builder — creates an Assembler recipe and registers it.
+            var recipes = new System.Collections.Generic.List<RecipeDefinition>();
+            RecipeDefinition AddGRecipe(string nm, string dsp, ItemDefinition outp, params (ItemDefinition item, int n)[] inps)
+            {
+                if (outp == null) return null;
+                var r = ScriptableObject.CreateInstance<RecipeDefinition>(); r.displayName = dsp; r.outputItem = outp; r.outputCount = 1; r.requiredStation = StationTier.Assembler; r.craftSeconds = 4f; r.unlockedByDefault = false;
+                var valid = new System.Collections.Generic.List<RecipeIngredient>();
+                foreach (var (item, n) in inps) if (item != null) valid.Add(new RecipeIngredient { item = item, count = n });
+                r.inputs = valid.ToArray();
+                AssetDatabase.CreateAsset(r, $"{recipesFolder}/{nm}.asset");
+                if (registry != null && !registry.recipes.Contains(r)) registry.recipes.Add(r);
+                recipes.Add(r); return r;
+            }
+
+            // ── CONTROL & POWER ───────────────────────────────────────────────
             var cockSmallPref = MakeGPref<GridCockpit>(prefabsFolder, "Cockpit_Small", Color.blue, new Vector3(0.8f, 0.8f, 1.2f));
             var itemCockSmall = MakeGItem(itemsFolder, "GItem_CockpitSmall", "Small Cockpit", Color.white, cockSmallPref, GridSize.Small, 200, 500);
+            AddGRecipe("Recipe_GCockpitSmall", "Small Cockpit", itemCockSmall, (steelPlate, 4), (circuit, 2), (glass, 2));
+
+            var cockLargePref = MakeGPref<GridCockpit>(prefabsFolder, "Cockpit_Large", Color.blue, new Vector3(2.0f, 2.0f, 3.0f));
+            var itemCockLarge = MakeGItem(itemsFolder, "GItem_CockpitLarge", "Large Cockpit", Color.white, cockLargePref, GridSize.Large, 350, 700);
+            AddGRecipe("Recipe_GCockpitLarge", "Large Cockpit", itemCockLarge, (steelPlate, 10), (circuit, 6), (glass, 6));
 
             var thrustSmallPref = MakeGPref<GridThruster>(prefabsFolder, "Thruster_Small", Color.black, new Vector3(0.4f, 0.4f, 0.6f), t => { t.maxThrustN = 10000f; t.powerAtMaxThrust = 500f; });
             var itemThrustSmall = MakeGItem(itemsFolder, "GItem_ThrusterSmall", "Small Thruster", Color.white, thrustSmallPref, GridSize.Small, 50, 200);
+            AddGRecipe("Recipe_GThrustSmall", "Small Thruster", itemThrustSmall, (steelPlate, 2), (copperWire, 4));
+
+            var thrustLargePref = MakeGPref<GridThruster>(prefabsFolder, "Thruster_Large", Color.black, new Vector3(1.6f, 1.6f, 2.4f), t => { t.maxThrustN = 120000f; t.powerAtMaxThrust = 6000f; });
+            var itemThrustLarge = MakeGItem(itemsFolder, "GItem_ThrusterLarge", "Large Thruster", Color.white, thrustLargePref, GridSize.Large, 600, 900);
+            AddGRecipe("Recipe_GThrustLarge", "Large Thruster", itemThrustLarge, (steelPlate, 12), (copperWire, 16), (circuit, 2));
 
             var batSmallPref = MakeGPref<GridBattery>(prefabsFolder, "Battery_Small", Color.green, new Vector3(0.5f, 0.5f, 0.5f), b => { b.capacityWh = 1000000f; b.maxDischargeRate = 5000f; });
             var itemBatSmall = MakeGItem(itemsFolder, "GItem_BatterySmall", "Small Battery", Color.white, batSmallPref, GridSize.Small, 100, 300);
+            AddGRecipe("Recipe_GBatSmall", "Small Battery", itemBatSmall, (ironPlate, 2), (copperWire, 8));
 
-            RecipeDefinition AddGRecipe(string nm, string dsp, ItemDefinition outp, params (ItemDefinition item, int n)[] inps)
-            {
-                var r = ScriptableObject.CreateInstance<RecipeDefinition>(); r.displayName = dsp; r.outputItem = outp; r.outputCount = 1; r.requiredStation = StationTier.Assembler; r.craftSeconds = 4f; r.unlockedByDefault = false;
-                r.inputs = new RecipeIngredient[inps.Length]; for (int i = 0; i < inps.Length; i++) r.inputs[i] = new RecipeIngredient { item = inps[i].item, count = inps[i].n };
-                AssetDatabase.CreateAsset(r, $"{recipesFolder}/{nm}.asset"); if (registry != null && !registry.recipes.Contains(r)) registry.recipes.Add(r); return r;
-            }
+            var batLargePref = MakeGPref<GridBattery>(prefabsFolder, "Battery_Large", Color.green, new Vector3(2.0f, 2.0f, 2.0f), b => { b.capacityWh = 25000000f; b.maxDischargeRate = 60000f; });
+            var itemBatLarge = MakeGItem(itemsFolder, "GItem_BatteryLarge", "Large Battery", Color.white, batLargePref, GridSize.Large, 800, 600);
+            AddGRecipe("Recipe_GBatLarge", "Large Battery", itemBatLarge, (ironPlate, 10), (copperWire, 24), (circuit, 4));
 
-            var rec1 = AddGRecipe("Recipe_GCockpitSmall", "Small Cockpit", itemCockSmall, (steelPlate, 4), (circuit, 2), (glass, 2));
-            var rec2 = AddGRecipe("Recipe_GThrustSmall", "Small Thruster", itemThrustSmall, (steelPlate, 2), (copperWire, 4));
-            var rec3 = AddGRecipe("Recipe_GBatSmall", "Small Battery", itemBatSmall, (ironPlate, 2), (copperWire, 8));
+            // ── STRUCTURE ─────────────────────────────────────────────────────
+            var armorSmallPref = MakeGPref<GridArmorBlock>(prefabsFolder, "Armor_Small", new Color(0.35f, 0.35f, 0.4f), new Vector3(0.5f, 0.5f, 0.5f));
+            var itemArmorSmall = MakeGItem(itemsFolder, "GItem_ArmorSmall", "Small Armor Block", Color.white, armorSmallPref, GridSize.Small, 250, 800);
+            AddGRecipe("Recipe_GArmorSmall", "Small Armor Block", itemArmorSmall, (steelPlate, 1));
 
+            var armorLargePref = MakeGPref<GridArmorBlock>(prefabsFolder, "Armor_Large", new Color(0.35f, 0.35f, 0.4f), new Vector3(2.5f, 2.5f, 2.5f));
+            var itemArmorLarge = MakeGItem(itemsFolder, "GItem_ArmorLarge", "Large Armor Block", Color.white, armorLargePref, GridSize.Large, 1500, 2400);
+            AddGRecipe("Recipe_GArmorLarge", "Large Armor Block", itemArmorLarge, (steelPlate, 6));
+
+            // ── TOOLS & WEAPONS ───────────────────────────────────────────────
+            var drillPref = MakeGPref<GridDrill>(prefabsFolder, "Drill_Large", new Color(0.8f, 0.6f, 0.1f), new Vector3(1.5f, 1.5f, 2.0f), d => { d.drillRadius = 2f; d.drillStrength = 120f; d.drillRate = 3f; });
+            var itemDrill = MakeGItem(itemsFolder, "GItem_Drill", "Mining Drill", Color.white, drillPref, GridSize.Large, 920, 650);
+            AddGRecipe("Recipe_GDrill", "Mining Drill", itemDrill, (steelPlate, 8), (circuit, 4), (copperWire, 6));
+
+            var grinderPref = MakeGPref<GridGrinder>(prefabsFolder, "Grinder_Large", new Color(0.6f, 0.2f, 0.2f), new Vector3(1.2f, 1.2f, 1.6f), g => { g.grindRadius = 1.2f; g.grindStrength = 60f; g.grindRate = 5f; });
+            var itemGrinder = MakeGItem(itemsFolder, "GItem_Grinder", "Grinder", Color.white, grinderPref, GridSize.Large, 280, 560);
+            AddGRecipe("Recipe_GGrinder", "Grinder", itemGrinder, (steelPlate, 5), (circuit, 2));
+
+            var weaponPref = MakeGPref<GridWeapon>(prefabsFolder, "Weapon_Large", new Color(0.2f, 0.2f, 0.2f), new Vector3(0.8f, 0.8f, 2.0f), w => { w.damage = 50f; w.fireRate = 4f; w.range = 200f; w.powerPerShot = 80f; });
+            var itemWeapon = MakeGItem(itemsFolder, "GItem_Weapon", "Gatling Weapon", Color.white, weaponPref, GridSize.Large, 310, 620);
+            var recWeapon = AddGRecipe("Recipe_GWeapon", "Gatling Weapon", itemWeapon, (steelPlate, 6), (circuit, 4), (copperWire, 8));
+
+            // ── INDUSTRIAL ────────────────────────────────────────────────────
+            var refineryPref = MakeGPref<GridRefinery>(prefabsFolder, "Refinery_Large", new Color(0.5f, 0.4f, 0.2f), new Vector3(2.5f, 2.5f, 2.5f), r => { r.crudeConsumptionRate = 8f; r.keroseneProductionRate = 5f; r.powerDraw = 850f; });
+            var itemRefinery = MakeGItem(itemsFolder, "GItem_Refinery", "Ship Refinery", Color.white, refineryPref, GridSize.Large, 1200, 900);
+            AddGRecipe("Recipe_GRefinery", "Ship Refinery", itemRefinery, (steelPlate, 14), (circuit, 8), (copperWire, 10));
+
+            // ── RESEARCH WIRING ───────────────────────────────────────────────
+            // Shipbuilding unlocks core flight blocks; Ship Armament gates weapons.
             if (tree != null)
             {
-                var nShip = ScriptableObject.CreateInstance<ResearchNode>();
-                nShip.nodeId = "res_shipbuilding"; nShip.displayName = "Shipbuilding"; nShip.description = "Design spacecraft.";
+                var nShip = FindNodeByName(tree, "res_shipbuilding") ?? ScriptableObject.CreateInstance<ResearchNode>();
+                bool isNew = string.IsNullOrEmpty(nShip.nodeId);
+                nShip.nodeId = "res_shipbuilding"; nShip.displayName = "Shipbuilding"; nShip.description = "Design and construct spacecraft from a full grid block set.";
                 nShip.category = ResearchCategory.Environment; nShip.subCategory = ResearchSubCategory.Building;
                 nShip.tier = 3; nShip.column = 4; nShip.iconTint = Color.cyan; nShip.researchSeconds = 60f;
                 nShip.cost = new[] { new ResearchNode.ScienceCost { pack = sciT2, count = 20 } };
-                nShip.unlocksRecipes = new[] { rec1, rec2, rec3 };
-                AssetDatabase.CreateAsset(nShip, $"{nodesFolder}/res_shipbuilding.asset"); tree.nodes.Add(nShip);
+                // Everything except the weapon unlocks with Shipbuilding.
+                nShip.unlocksRecipes = recipes.FindAll(r => r != null && r != recWeapon).ToArray();
+                if (isNew) { AssetDatabase.CreateAsset(nShip, $"{nodesFolder}/res_shipbuilding.asset"); tree.nodes.Add(nShip); }
+                EditorUtility.SetDirty(nShip);
+
+                if (recWeapon != null)
+                {
+                    var nArm = FindNodeByName(tree, "res_ship_weapons") ?? ScriptableObject.CreateInstance<ResearchNode>();
+                    bool armNew = string.IsNullOrEmpty(nArm.nodeId);
+                    nArm.nodeId = "res_ship_weapons"; nArm.displayName = "Ship Armament"; nArm.description = "Unlocks ship-mounted weapons and defense systems.";
+                    nArm.category = ResearchCategory.Environment; nArm.subCategory = ResearchSubCategory.Military;
+                    nArm.tier = 4; nArm.column = 5; nArm.iconTint = Color.red; nArm.researchSeconds = 90f;
+                    nArm.cost = new[] { new ResearchNode.ScienceCost { pack = sciT2, count = 30 } };
+                    nArm.unlocksRecipes = new[] { recWeapon };
+                    if (armNew) { AssetDatabase.CreateAsset(nArm, $"{nodesFolder}/res_ship_weapons.asset"); tree.nodes.Add(nArm); }
+                    EditorUtility.SetDirty(nArm);
+                }
                 EditorUtility.SetDirty(tree);
             }
+
+            if (registry != null) EditorUtility.SetDirty(registry);
             AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
-            EditorUtility.DisplayDialog("Grid System", "Step 12 Ship Content Created!", "OK");
+            EditorUtility.DisplayDialog("Grid System",
+                $"Step 12 complete — generated {recipes.Count} grid blocks (prefabs + items + recipes) in:\n{gridRoot}\n\n" +
+                "• Cockpit, Thruster, Battery (Small + Large)\n" +
+                "• Armor (Small + Large)\n" +
+                "• Drill, Grinder, Weapon, Refinery (Large)\n\n" +
+                "Recipes added to the RecipeRegistry and gated behind the Shipbuilding / Ship Armament research nodes.", "OK");
         }
 
         // ====================================================================
