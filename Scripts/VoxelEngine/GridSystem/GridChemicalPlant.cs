@@ -30,6 +30,12 @@ namespace VoxelEngine.GridSystem
         public override float PowerDraw =>
             (_current != null) ? baseWattsPerSecond * _current.powerDrawMultiplier : idleWattsPerSecond;
 
+        public override void OnPlaced()
+        {
+            base.OnPlaced();
+            blockName = "Ship Chemical Plant";
+        }
+
         private void FixedUpdate()
         {
             if (Grid == null || !Grid.HasPower) { _progress = 0f; return; }

@@ -4354,13 +4354,11 @@ root =>
             var recReactor = AddGRecipe("Recipe_GPortableReactor", "Portable Reactor", itemReactor, (steelPlate, 16), (advCircuit ?? circuit, 6), (copperWire, 12));
 
             // -- 10) Fluids & Gas --
-            var waterTankPref = MakeGPref<VoxelEngine.GridSystem.GridWaterTank>("WaterTank_Large", new Color(0.2f, 0.45f, 0.8f), new Vector3(1.5f, 1.8f, 1.5f), t => t.capacity = 500f);
-            var itemWaterTank = MakeGItem("GItem_WaterTank", "Water Tank", Color.white, waterTankPref, VoxelEngine.GridSystem.GridSize.Large, 220, 400);
-            AddGRecipe("Recipe_GWaterTank", "Water Tank", itemWaterTank, (steelPlate, 5), (glass, 2));
-
-            var fuelTankPref = MakeGPref<VoxelEngine.GridSystem.GridLiquidFuelTank>("LiquidFuelTank_Large", new Color(0.8f, 0.5f, 0.1f), new Vector3(1.5f, 1.8f, 1.5f), t => t.capacity = 300f);
-            var itemFuelTank = MakeGItem("GItem_LiquidFuelTank", "Liquid Fuel Tank", Color.white, fuelTankPref, VoxelEngine.GridSystem.GridSize.Large, 200, 350);
-            AddGRecipe("Recipe_GLiquidFuelTank", "Liquid Fuel Tank", itemFuelTank, (steelPlate, 5), (copperWire, 2));
+            // Unified Liquid Tank — replaces the old Water Tank + Liquid Fuel Tank.
+            // Liquid type is chosen from the tank's UI (Water / Crude / Refined / Liquid Fuel).
+            var liquidTankPref = MakeGPref<VoxelEngine.GridSystem.GridLiquidTank>("LiquidTank_Large", new Color(0.25f, 0.5f, 0.85f), new Vector3(1.5f, 1.8f, 1.5f), t => { t.capacity = 500f; t.liquidType = VoxelEngine.GridSystem.LiquidType.Water; });
+            var itemLiquidTank = MakeGItem("GItem_LiquidTank", "Liquid Tank", Color.white, liquidTankPref, VoxelEngine.GridSystem.GridSize.Large, 220, 400);
+            AddGRecipe("Recipe_GLiquidTank", "Liquid Tank", itemLiquidTank, (steelPlate, 5), (glass, 2), (copperWire, 2));
 
             var gasTankPref = MakeGPref<VoxelEngine.GridSystem.GridGasTank>("GasTank_Large", new Color(0.55f, 0.7f, 0.85f), new Vector3(1.5f, 1.8f, 1.5f), t => t.capacity = 500f);
             var itemGasTank = MakeGItem("GItem_GasTank", "Gas Tank", Color.white, gasTankPref, VoxelEngine.GridSystem.GridSize.Large, 240, 380);
@@ -4391,8 +4389,8 @@ root =>
                     cp.knownRecipes = new System.Collections.Generic.List<VoxelEngine.Crafting.ProcessingRecipe>();
                     if (procChemistry != null) cp.knownRecipes.Add(procChemistry);
                 });
-            var itemChem = MakeGItem("GItem_ChemicalPlant", "Chemical Plant", Color.white, chemPref, VoxelEngine.GridSystem.GridSize.Large, 1100, 900);
-            AddGRecipe("Recipe_GChemicalPlant", "Chemical Plant", itemChem, (steelPlate, 12), (circuit, 8), (copperWire, 8));
+            var itemChem = MakeGItem("GItem_ChemicalPlant", "Ship Chemical Plant", Color.white, chemPref, VoxelEngine.GridSystem.GridSize.Large, 1100, 900);
+            AddGRecipe("Recipe_GChemicalPlant", "Ship Chemical Plant", itemChem, (steelPlate, 12), (circuit, 8), (copperWire, 8));
 
             // -- Recipe parity: grid Refinery uses the SAME ProcessingRecipe assets
             //    as the stationary Oil Refinery (Refine Crude Oil + Synthesise Plastic).

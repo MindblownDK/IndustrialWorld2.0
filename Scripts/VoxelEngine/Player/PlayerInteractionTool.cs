@@ -289,6 +289,15 @@ namespace VoxelEngine.Player
                 var gasTank = hit.collider.GetComponentInParent<VoxelEngine.Gas.GasTank>();
                 if (gasTank != null) { UI.GameUIController.Instance?.OpenMachine(gasTank); return; }
 
+                // Grid (ship/vehicle) blocks that expose a UI panel. Cockpit is handled
+                // separately via EnterCockpit, so we skip it here.
+                var gridBlock = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
+                if (gridBlock != null && GridBlockHasUI(gridBlock))
+                {
+                    UI.GameUIController.Instance?.OpenMachine(gridBlock);
+                    return;
+                }
+
                 // Storage system.
                 var storageTerminal = hit.collider.GetComponentInParent<VoxelEngine.Storage.StorageTerminal>();
                 if (storageTerminal != null) { UI.GameUIController.Instance?.OpenMachine(storageTerminal); return; }
@@ -615,6 +624,18 @@ namespace VoxelEngine.Player
                 ConsumeDurability(inventory.ActiveStack);
                 _nextHit = Time.time + 0.3f;
             }
+        }
+
+        // Which grid blocks open an interaction panel on the Interact key. Pure
+        // structural blocks (armor, glass, pipes…) and the cockpit are excluded.
+        private static bool GridBlockHasUI(VoxelEngine.GridSystem.GridBlock b)
+        {
+            return b is VoxelEngine.GridSystem.GridLiquidTank
+                || b is VoxelEngine.GridSystem.GridGasTank
+                || b is VoxelEngine.GridSystem.GridH2O2Generator
+                || b is VoxelEngine.GridSystem.GridBattery
+                || b is VoxelEngine.GridSystem.GridCargoContainer
+                || b is VoxelEngine.GridSystem.GridWeapon;
         }
     }
 }

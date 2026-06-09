@@ -162,7 +162,15 @@ MonoBehaviour:
   maxHP: 200
   currentHP: 0
   GridPos: {x: 0, y: 0, z: 0}
-  waterPerSecond: 2
-  hydrogenPerSecond: 1
-  oxygenPerSecond: 0.5
+  waterCapacity: 200
+  waterStored: 0
+  waterPerIce: 20
+  waterPerSecond: 4
+  hydrogenPerSecond: 2
+  oxygenPerSecond: 1
   powerDraw: 150
+  pullInterval: 1.5
+  iceInput:
+    _name: Container
+    _slots: []
+    _minSize: 1

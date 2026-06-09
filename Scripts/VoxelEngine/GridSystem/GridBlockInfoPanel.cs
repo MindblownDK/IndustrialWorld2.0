@@ -33,15 +33,16 @@ namespace VoxelEngine.GridSystem
             // Real data from specific block types
             if (block is GridH2O2Generator gen)
             {
-                stats += $"\nPower Draw: {gen.powerDraw} W";
+                stats += $"\nPower Draw: {gen.CurrentWattage:0} W\nStatus: {gen.Status}";
+                stats += $"\nWater: {gen.waterStored:0} / {gen.waterCapacity:0} L";
             }
-            else if (block is GridLiquidFuelTank tank)
+            else if (block is GridLiquidTank tank)
             {
-                stats += $"\nFuel: {tank.fuelStored:0} / {tank.capacity:0}";
+                stats += $"\n{tank.liquidType.DisplayName()}: {tank.stored:0} / {tank.capacity:0} L";
             }
-            else if (block is GridWaterTank water)
+            else if (block is GridGasTank gasTank)
             {
-                stats += $"\nWater: {water.waterStored:0} / {water.capacity:0}";
+                stats += $"\n{gasTank.gasType}: {gasTank.stored:0} / {gasTank.capacity:0} L";
             }
             else if (block is GridRefinery refinery)
             {

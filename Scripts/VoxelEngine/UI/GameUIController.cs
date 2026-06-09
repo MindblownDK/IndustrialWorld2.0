@@ -61,6 +61,7 @@ namespace VoxelEngine.UI
         private VoxelEngine.Gas.Electrolyser _openElectrolyser;
         private VoxelEngine.Gas.HydrogenEngine _openHydroEngine;
         private VoxelEngine.Gas.GasTank _openGasTank;
+        private VoxelEngine.GridSystem.GridBlock _openGridBlock;
         private VoxelEngine.Storage.StorageTerminal    _openStorageTerminal;
         private VoxelEngine.Storage.ServerRack         _openServerRack;
         private VoxelEngine.Storage.PatternTerminal    _openPatternTerminal;
@@ -329,7 +330,7 @@ namespace VoxelEngine.UI
             _openReactor    = null; _openTurbine     = null;
             _openPortReactor= null; _openProcessor   = null;
             _openReprocessor= null; _openElectrolyser= null;
-            _openHydroEngine= null; _openGasTank     = null;
+            _openHydroEngine= null; _openGasTank     = null; _openGridBlock = null;
             _rightContainer = null; _openChest = null;
             _openStation    = null;
             _activeQueue    = null;
@@ -458,7 +459,7 @@ namespace VoxelEngine.UI
             _openReactor    = null; _openTurbine     = null;
             _openPortReactor= null; _openProcessor   = null;
             _openReprocessor= null; _openElectrolyser= null;
-            _openHydroEngine= null; _openGasTank     = null;
+            _openHydroEngine= null; _openGasTank     = null; _openGridBlock = null;
             _openStation    = null;
             UnwatchAllContainers();
             if (c is ItemContainer ic) WatchContainer(ic);
@@ -474,7 +475,7 @@ namespace VoxelEngine.UI
             _openReactor    = null; _openTurbine     = null;
             _openPortReactor= null; _openProcessor   = null;
             _openReprocessor= null; _openElectrolyser= null;
-            _openHydroEngine= null; _openGasTank     = null;
+            _openHydroEngine= null; _openGasTank     = null; _openGridBlock = null;
             _rightContainer = null; _openChest = null;
             _openStation    = f.GetComponent<CraftingStation>();
             _inventoryOpen  = true;
@@ -493,7 +494,7 @@ namespace VoxelEngine.UI
             _openReactor    = null; _openTurbine     = null;
             _openPortReactor= null; _openProcessor   = null;
             _openReprocessor= null; _openElectrolyser= null;
-            _openHydroEngine= null; _openGasTank     = null;
+            _openHydroEngine= null; _openGasTank     = null; _openGridBlock = null;
             _rightContainer = null; _openChest = null;
             _openStation    = ef.GetComponent<CraftingStation>();
             _inventoryOpen  = true;
@@ -511,7 +512,7 @@ namespace VoxelEngine.UI
             _openReactor    = null; _openTurbine     = null;
             _openPortReactor= null; _openProcessor   = null;
             _openReprocessor= null; _openElectrolyser= null;
-            _openHydroEngine= null; _openGasTank     = null;
+            _openHydroEngine= null; _openGasTank     = null; _openGridBlock = null;
             _rightContainer = null; _openChest = null; _openStation = null;
             _inventoryOpen  = true;
             UnwatchAllContainers();
@@ -542,7 +543,7 @@ namespace VoxelEngine.UI
             _rightContainer = null; _openChest = null; _openStation = null; _openQuarry = null;
             _openReactor = null; _openTurbine = null; _openPortReactor = null;
             _openProcessor = null; _openReprocessor = null; _openElectrolyser = null;
-            _openHydroEngine = null; _openGasTank = null;
+            _openHydroEngine = null; _openGasTank = null; _openGridBlock = null;
             _openStorageTerminal = null; _openServerRack = null;
             _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null;
@@ -569,6 +570,13 @@ namespace VoxelEngine.UI
                     WatchContainer(el.iceInputC); break;
                 case VoxelEngine.Gas.HydrogenEngine he: _openHydroEngine = he; break;
                 case VoxelEngine.Gas.GasTank gt: _openGasTank = gt; break;
+                case VoxelEngine.GridSystem.GridBlock gb:
+                    _openGridBlock = gb;
+                    // Watch the container(s) the block exposes so the panel auto-refreshes.
+                    if (gb is VoxelEngine.GridSystem.GridCargoContainer gcc) { if (gcc.container == null) gcc.OnPlaced(); WatchContainer(gcc.container); }
+                    else if (gb is VoxelEngine.GridSystem.GridH2O2Generator gh2) { if (gh2.iceInput == null) gh2.OnPlaced(); WatchContainer(gh2.iceInput); }
+                    else if (gb is VoxelEngine.GridSystem.GridWeapon gw) { if (gw.ammo == null) gw.OnPlaced(); WatchContainer(gw.ammo); }
+                    break;
                 case VoxelEngine.Storage.StorageTerminal st2: _openStorageTerminal = st2; break;
                 case VoxelEngine.Storage.PatternTerminal pt2: _openPatternTerminal = pt2; break;
                 case VoxelEngine.Storage.CraftingTerminal ct2: _openCraftTerminal = ct2; break;
@@ -608,7 +616,7 @@ namespace VoxelEngine.UI
             _openReactor    = null; _openTurbine     = null;
             _openPortReactor= null; _openProcessor   = null;
             _openReprocessor= null; _openElectrolyser= null;
-            _openHydroEngine= null; _openGasTank     = null;
+            _openHydroEngine= null; _openGasTank     = null; _openGridBlock = null;
             _inventoryOpen  = true;
             // Lazy-create a queue on the station so progress survives panel closure/reopen.
             _activeQueue    = st.GetComponent<CraftQueue>();
@@ -748,6 +756,7 @@ namespace VoxelEngine.UI
                 else if (_openDiskManipulator  != null) _root.Add(VoxelEngine.Storage.StorageUI.BuildDiskManipulatorPanel(_openDiskManipulator, BuildSlot));
                 else if (_openNAS              != null) _root.Add(VoxelEngine.Storage.StorageUI.BuildNASPanel(_openNAS, BuildSlot));
                 else if (_openPowerstation     != null) _root.Add(BuildPowerstationPanel(_openPowerstation));
+                else if (_openGridBlock        != null) _root.Add(VoxelEngine.GridSystem.UI.GridBlockUI.BuildPanel(_openGridBlock, BuildSlot));
                 else if (_openStation  != null) BuildRightStationCrafting(_root, _openStation);
             }
             else
