@@ -154,7 +154,7 @@ namespace VoxelEngine.Menu
             panel.Add(PrimaryBtn("QUIT",      QuitGame,                                    T.AccentRed, LucideIcons.X));
 
             panel.Add(T.Spacer(20));
-            var ver = T.Muted($"Build {Application.version}");
+            var ver = T.Muted($"Build {VoxelEngine.Core.GameVersion.Display}");
             ver.style.unityTextAlign = TextAnchor.MiddleCenter;
             panel.Add(ver);
         }

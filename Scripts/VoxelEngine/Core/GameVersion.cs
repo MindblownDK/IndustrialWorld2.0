@@ -1,26 +1,29 @@
 // Assets/Scripts/VoxelEngine/Core/GameVersion.cs
 //
 // ╔══════════════════════════════════════════════════════════════════╗
-// ║                IndustrialWorld — VERSION CONSTANTS              ║
+// ║                IndustrialWorld — VERSION CONSTANTS                ║
 // ║                                                                  ║
-// ║  Semantic Versioning 2.0.0 (https://semver.org):                ║
+// ║  THE single source of truth for the build's version. Read from   ║
+// ║  any system (console banner, main-menu footer, save files…) so   ║
+// ║  every surface always reports the exact same number.             ║
 // ║                                                                  ║
-// ║      MAJOR . MINOR . PATCH                                      ║
+// ║  Semantic Versioning 2.0.0 (https://semver.org):                 ║
 // ║                                                                  ║
-// ║   • MAJOR — bumped when we ship a breaking change that requires ║
-// ║             players to start a fresh save (new chunk format,    ║
-// ║             new save schema, removed core systems, etc.).       ║
-// ║   • MINOR — bumped when we add a new system or feature that is  ║
-// ║             SAVE-COMPATIBLE with the previous version           ║
-// ║             (a new block type, a new HUD panel, a new tool…).   ║
-// ║   • PATCH — bumped for bug fixes, balance tweaks and visual     ║
-// ║             polish that don't touch save data or systems.       ║
+// ║      MAJOR . MINOR . PATCH                                        ║
 // ║                                                                  ║
-// ║  Pre-release / build metadata is appended with a hyphen, e.g.   ║
-// ║      0.4.0-dev.5   for a fifth in-progress dev build of 0.4.0.  ║
+// ║   • MAJOR — breaking changes that require a fresh save           ║
+// ║             (new chunk format, new save schema, removed core     ║
+// ║             systems). Bumping this means old saves won't load.   ║
+// ║   • MINOR — a new system / feature that IS save-compatible       ║
+// ║             (a new block, a new tool, a new UI panel).           ║
+// ║   • PATCH — bug fixes, balance tweaks, visual polish that don't  ║
+// ║             touch save data or any public API.                   ║
 // ║                                                                  ║
-// ║  Bump the constants here whenever you cut a new commit so the   ║
-// ║  console / main-menu / save files all show the same version.    ║
+// ║  Pre-release / build metadata is appended with a hyphen, e.g.    ║
+// ║      1.4.7-dev   for an in-progress dev build of 1.4.7.          ║
+// ║                                                                  ║
+// ║  ▶ Bump the three constants below whenever you cut a new commit  ║
+// ║    so the console / main-menu / save files all stay in sync.     ║
 // ╚══════════════════════════════════════════════════════════════════╝
 
 using UnityEngine;
@@ -28,24 +31,42 @@ using UnityEngine;
 namespace VoxelEngine.Core
 {
     /// <summary>
-    /// Single source of truth for the build's version string. Read from any
-    /// system that wants to display or persist the version.
+    /// Single source of truth for the build's semantic version. Read this from
+    /// any system that wants to display, log, or persist the version string.
     /// </summary>
     public static class GameVersion
     {
-        public const int    Major = 0;
-        public const int    Minor = 5;
-        public const int    Patch = 0;
+        // ── Bump these when you ship ──────────────────────────────────────
+        public const int    Major = 1;
+        public const int    Minor = 4;
+        public const int    Patch = 7;
 
-        /// <summary>Optional channel suffix — "" for stable releases,
-        /// "dev.N" for in-progress builds, "rc.N" for release candidates.</summary>
+        /// <summary>
+        /// Channel suffix appended after a hyphen. Use "" for a stable release,
+        /// "dev" / "dev.N" for in-progress builds, "rc.N" for release candidates.
+        /// </summary>
         public const string Channel = "dev";
 
-        /// <summary>Human-readable "0.4.0-dev" / "1.0.0" string.</summary>
+        // ── Derived accessors (don't edit) ────────────────────────────────
+
+        /// <summary>Bare "MAJOR.MINOR.PATCH" string, e.g. "1.4.7".</summary>
+        public static string Full => $"{Major}.{Minor}.{Patch}";
+
+        /// <summary>
+        /// Full human-readable version with channel suffix, e.g. "1.4.7-dev"
+        /// (or just "1.4.7" on a stable release).
+        /// </summary>
         public static string Display =>
-            string.IsNullOrEmpty(Channel)
-                ? $"{Major}.{Minor}.{Patch}"
-                : $"{Major}.{Minor}.{Patch}-{Channel}";
+            string.IsNullOrEmpty(Channel) ? Full : $"{Full}-{Channel}";
+
+        /// <summary>UI-friendly version with a leading "v", e.g. "v1.4.7-dev".</summary>
+        public static string DisplayShort => $"v{Display}";
+
+        /// <summary>
+        /// Packed integer (MAJOR*10000 + MINOR*100 + PATCH) for fast, allocation-free
+        /// comparisons — handy when validating save-file compatibility.
+        /// </summary>
+        public static int Numeric => Major * 10000 + Minor * 100 + Patch;
 
         /// <summary>Logged once at startup so the console always shows the build.</summary>
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
