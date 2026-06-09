@@ -4327,6 +4327,11 @@ root =>
             var itemWeapon = MakeGItem("GItem_Weapon", "Gatling Weapon", Color.white, weaponPref, VoxelEngine.GridSystem.GridSize.Large, 310, 620);
             var recWeapon = AddGRecipe("Recipe_GWeapon", "Gatling Weapon", itemWeapon, (steelPlate, 6), (circuit, 4), (copperWire, 8));
 
+            // Ammunition for the Gatling Weapon (itemId contains "ammo" — matched by GridWeapon).
+            var itemAmmo = MakeResource(ITEMS, "Ammo Magazine", new Color(0.75f, 0.6f, 0.15f), 200, VoxelEngine.Items.ResourceCategory.Component, uiCategory: "Grid Blocks");
+            itemAmmo.itemId = "ammo_magazine"; itemAmmo.massPerUnit = 2f; EditorUtility.SetDirty(itemAmmo);
+            var recAmmo = AddGRecipe("Recipe_GAmmo", "Ammo Magazine", itemAmmo, (steelPlate, 1), (copperWire, 2));
+
             // ════════════════════════════════════════════════════════════════
             //  ADDITIONAL GRID BLOCKS — full parity with the GridSystem scripts.
             // ════════════════════════════════════════════════════════════════
@@ -4449,7 +4454,7 @@ root =>
                     tree.nodes.Add(nShip);
                 }
                 // Everything except the weapon unlocks with Shipbuilding.
-                nShip.unlocksRecipes = recipes.FindAll(r => r != null && r != recWeapon).ToArray();
+                nShip.unlocksRecipes = recipes.FindAll(r => r != null && r != recWeapon && r != recAmmo).ToArray();
                 EditorUtility.SetDirty(nShip);
 
                 if (recWeapon != null)
@@ -4471,7 +4476,7 @@ root =>
                         AssetDatabase.CreateAsset(nArm, $"{NODES}/res_ship_weapons.asset");
                         tree.nodes.Add(nArm);
                     }
-                    nArm.unlocksRecipes = new[] { recWeapon };
+                    nArm.unlocksRecipes = recAmmo != null ? new[] { recWeapon, recAmmo } : new[] { recWeapon };
                     EditorUtility.SetDirty(nArm);
                 }
                 EditorUtility.SetDirty(tree);

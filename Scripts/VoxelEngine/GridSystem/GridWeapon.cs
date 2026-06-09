@@ -33,6 +33,8 @@ namespace VoxelEngine.GridSystem
             base.OnPlaced();
             if (ammo == null) ammo = new ItemContainer("Ammo", AMMO_SLOTS);
             else ammo.Resize(AMMO_SLOTS);
+            // Only ammunition may be placed in the ammo slots.
+            ammo.AcceptFilter = (item, wanted) => IsAmmo(item) ? wanted : 0;
         }
 
         private void Update()

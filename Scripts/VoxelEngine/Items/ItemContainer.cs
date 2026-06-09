@@ -22,6 +22,14 @@ namespace VoxelEngine.Items
         public IReadOnlyList<ItemStack> Slots { get { EnsureValid(); return _slots; } }
         public event Action OnChanged;
 
+        /// <summary>Optional gate consulted before accepting items — return how many of
+        /// <c>item</c> may currently be added (e.g. a cargo container caps by mass).
+        /// Null means "no extra limit". Set by the owning block.</summary>
+        [NonSerialized] public Func<ItemDefinition, int, int> AcceptFilter;
+
+        private int Allowed(ItemDefinition item, int wanted)
+            => AcceptFilter == null ? wanted : Mathf.Clamp(AcceptFilter(item, wanted), 0, wanted);
+
         public ItemContainer() { }   // for Unity deserialization
         public ItemContainer(string name, int size)
         {
@@ -89,6 +97,17 @@ namespace VoxelEngine.Items
             start = Mathf.Max(0, start);
             if (end <= start) return stack;
 
+            // Honour an optional accept gate (e.g. cargo mass cap). Anything the
+            // gate refuses is held back and returned to the caller as leftover.
+            int heldBack = 0;
+            if (AcceptFilter != null)
+            {
+                int allow = Allowed(stack.item, stack.count);
+                heldBack = stack.count - allow;
+                if (allow <= 0) return stack;        // nothing fits
+                stack.count = allow;
+            }
+
             // Pass 1: merge into existing partial stacks inside the range.
             if (stack.item.IsStackable)
             {
@@ -117,6 +136,8 @@ namespace VoxelEngine.Items
                 stack.count -= add;
             }
             OnChanged?.Invoke();
+            // Re-add anything the accept gate held back so the caller keeps it.
+            stack.count += heldBack;
             return stack.count > 0 ? stack : null;
         }
 

@@ -40,9 +40,21 @@ namespace VoxelEngine.GridSystem
             if (container == null) container = new ItemContainer("Cargo", slots);
             else container.Resize(slots);
 
+            // Enforce the mass cap on every insert path (drag, quick-transfer, pipes).
+            container.AcceptFilter = MaxAcceptable;
+
             // Register with the grid item network so the master terminal & pipes see us.
             if (Grid != null && GridItemNetwork.Instance != null)
                 GridItemNetwork.Instance.RegisterContainer(Grid, this);
+        }
+
+        /// <summary>How many of <paramref name="item"/> fit before hitting the mass cap.</summary>
+        private int MaxAcceptable(ItemDefinition item, int wanted)
+        {
+            if (item == null || item.massPerUnit <= 0f) return wanted;   // weightless → no cap
+            float free = maxMassKg - CurrentMassKg;
+            if (free <= 0f) return 0;
+            return Mathf.Clamp(Mathf.FloorToInt(free / item.massPerUnit), 0, wanted);
         }
 
         /// <summary>True if adding this stack would stay within the mass cap.</summary>

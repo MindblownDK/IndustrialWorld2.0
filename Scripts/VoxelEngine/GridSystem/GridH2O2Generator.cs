@@ -55,6 +55,8 @@ namespace VoxelEngine.GridSystem
             base.OnPlaced();
             if (iceInput == null) iceInput = new ItemContainer("Ice", ICE_SLOTS);
             else iceInput.Resize(ICE_SLOTS);
+            // Only ice may be placed in the ice slots.
+            iceInput.AcceptFilter = (item, wanted) => IsIce(item) ? wanted : 0;
         }
 
         private void Update()
