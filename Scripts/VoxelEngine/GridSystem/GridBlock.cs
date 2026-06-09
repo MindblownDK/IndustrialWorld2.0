@@ -26,6 +26,14 @@ namespace VoxelEngine.GridSystem
         /// <summary>Power this block consumes (W). Override in consumers.</summary>
         public virtual float PowerDraw => 0f;
 
+        /// <summary>Extra mass (kg) from this block's contents — cargo items, stored
+        /// fluids, ammunition, etc. Override in storage blocks. Added to BlockMass
+        /// when the grid recalculates its total mass.</summary>
+        public virtual float ContentMass => 0f;
+
+        /// <summary>Total mass of this block including its contents.</summary>
+        public float TotalMass => BlockMass + ContentMass;
+
         /// <summary>Called when placed on a grid.</summary>
         public virtual void OnPlaced() 
         { 

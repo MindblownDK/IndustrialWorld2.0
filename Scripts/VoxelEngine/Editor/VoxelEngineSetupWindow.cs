@@ -4319,9 +4319,13 @@ root =>
             // ════════════════════════════════════════════════════════════════
 
             // -- 7) Logistics & Storage --
-            var cargoPref = MakeGPref<VoxelEngine.GridSystem.GridCargoContainer>("Cargo_Large", new Color(0.55f, 0.45f, 0.25f), new Vector3(1.5f, 1.5f, 1.5f), c => c.slots = 24);
-            var itemCargo = MakeGItem("GItem_Cargo", "Cargo Container", Color.white, cargoPref, VoxelEngine.GridSystem.GridSize.Large, 400, 700);
-            AddGRecipe("Recipe_GCargo", "Cargo Container", itemCargo, (steelPlate, 6), (ironPlate, 4));
+            var cargoSmallPref = MakeGPref<VoxelEngine.GridSystem.GridCargoContainer>("Cargo_Small", new Color(0.55f, 0.45f, 0.25f), new Vector3(0.5f, 0.5f, 0.5f), c => { c.slots = 12; c.maxMassKg = 100_000f; });
+            var itemCargoSmall = MakeGItem("GItem_CargoSmall", "Small Cargo Container", Color.white, cargoSmallPref, VoxelEngine.GridSystem.GridSize.Small, 120, 300);
+            AddGRecipe("Recipe_GCargoSmall", "Small Cargo Container", itemCargoSmall, (steelPlate, 2), (ironPlate, 2));
+
+            var cargoLargePref = MakeGPref<VoxelEngine.GridSystem.GridCargoContainer>("Cargo_Large", new Color(0.55f, 0.45f, 0.25f), new Vector3(2.5f, 2.5f, 2.5f), c => { c.slots = 24; c.maxMassKg = 1_000_000f; });
+            var itemCargoLarge = MakeGItem("GItem_CargoLarge", "Large Cargo Container", Color.white, cargoLargePref, VoxelEngine.GridSystem.GridSize.Large, 400, 700);
+            AddGRecipe("Recipe_GCargoLarge", "Large Cargo Container", itemCargoLarge, (steelPlate, 6), (ironPlate, 4));
 
             var pipePref = MakeGPref<VoxelEngine.GridSystem.GridItemPipe>("ItemPipe_Small", new Color(0.7f, 0.7f, 0.75f), new Vector3(0.3f, 0.3f, 0.8f), p => p.transferRate = 10f);
             var itemPipe = MakeGItem("GItem_ItemPipe", "Item Pipe", Color.white, pipePref, VoxelEngine.GridSystem.GridSize.Small, 30, 120);

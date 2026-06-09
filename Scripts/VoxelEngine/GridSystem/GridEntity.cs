@@ -72,6 +72,11 @@ namespace VoxelEngine.GridSystem
             ApplyGravity();
         }
 
+        private void Update()
+        {
+            RefreshContentMass();
+        }
+
         private void ApplyGravity()
         {
             if (_rb == null) return;
@@ -141,11 +146,33 @@ namespace VoxelEngine.GridSystem
             return transform.TransformPoint(new Vector3(gridPos.x, gridPos.y, gridPos.z) * cs);
         }
 
-        private void RecalculateMass()
+        /// <summary>Sum of every block's structural mass + its current content mass
+        /// (cargo items, stored fluids, ammo). Drives the rigidbody mass so a loaded
+        /// ship genuinely flies heavier.</summary>
+        public float TotalMass { get; private set; }
+
+        public void RecalculateMass()
         {
-            float mass = 0;
-            foreach (var kv in _blocks) mass += kv.Value.BlockMass;
+            if (_rb == null) return;
+            float mass = 0f;
+            foreach (var kv in _blocks)
+            {
+                if (kv.Value == null) continue;
+                mass += kv.Value.TotalMass; // BlockMass + ContentMass
+            }
+            TotalMass = mass;
             _rb.mass = Mathf.Max(1f, mass);
+        }
+
+        // Content mass changes constantly (items dragged in/out, fluids filling).
+        // Refresh at a light cadence so the ship's handling reflects its load.
+        private float _massTimer;
+        private void RefreshContentMass()
+        {
+            _massTimer += Time.deltaTime;
+            if (_massTimer < 0.5f) return;
+            _massTimer = 0f;
+            RecalculateMass();
         }
 
         // ── Grid-Wide Power ────────────────────────────────────────
