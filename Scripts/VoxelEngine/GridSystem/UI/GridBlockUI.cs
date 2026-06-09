@@ -29,6 +29,7 @@ namespace VoxelEngine.GridSystem.UI
                 case GridWeapon gw:         return WeaponPanel(gw, slot);
                 case GridRefinery rf:       return ProcessorPanel("⚗ Ship Refinery", rf.Current, rf.Progress01, rf.PowerDraw, rf.knownRecipes, rf.Grid);
                 case GridChemicalPlant cp:  return ProcessorPanel("🧪 Ship Chemical Plant", cp.Current, cp.Progress01, cp.PowerDraw, cp.knownRecipes, cp.Grid);
+                case GridDockingPort dp:    return DockingPortPanel(dp, slot);
                 default:                    return GenericPanel(block);
             }
         }
@@ -275,6 +276,34 @@ namespace VoxelEngine.GridSystem.UI
             if (r.HasFluidOutputs) foreach (var f in r.fluidOutputs) outs.Add($"{f.litres:0}L {f.liquid.DisplayName()}");
             if (r.HasItemOutputs)  foreach (var o in r.outputs) if (o.item != null) outs.Add($"{o.count} {o.item.displayName}");
             return string.Join(" + ", ins) + "  →  " + string.Join(" + ", outs);
+        }
+
+        // ── DOCKING PORT (inventory + I/O filter) ────────────────────────────────
+        private static VisualElement DockingPortPanel(GridDockingPort dp, MachineUIs.SlotBuilder slot)
+        {
+            if (dp.container == null) dp.OnPlaced();
+            var p = T.MachinePanel();
+            p.style.width = 460;
+            var (hdr, _, _, _) = T.HeaderRow("🔗 Docking Port",
+                dp.IsDocked ? "DOCKED" : "FREE",
+                dp.IsDocked ? T.AccentGreen : T.AccentAmber);
+            p.Add(hdr);
+            p.Add(T.AccentDivider(T.AccentGold));
+
+            p.Add(T.StatRow("⚖", "Buffer Mass", MassFormat.Format(dp.ContentMass), T.AccentCyan));
+            p.Add(T.Spacer(4));
+
+            p.Add(GridUIHelpers.SectionTitle("Buffer Inventory"));
+            p.Add(GridUIHelpers.WeightHeader(MassUtil.ContainerMass(dp.container)));
+            var grid = T.SlotGrid(6);
+            for (int i = 0; i < dp.container.Size; i++)
+                grid.Add(slot(dp.container, i, dp.container.GetSlot(i), false, true));
+            p.Add(grid);
+
+            p.Add(T.Spacer(6));
+            p.Add(T.Muted("Configure per-face Input / Output + item filters below."));
+            // The port-config UI (direction + filters) is appended by GameUIController.
+            return p;
         }
 
         // ── FALLBACK ────────────────────────────────────────────────────────────

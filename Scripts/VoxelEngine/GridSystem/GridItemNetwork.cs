@@ -1,6 +1,8 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridItemNetwork.cs
 //
-// Manages connected cargo containers on a grid (for item cables).
+// Tracks every item store on a grid (cargo containers, docking ports, …) so the
+// whole ship behaves as one storage system — the master terminal and item pipes
+// can see and move items across all of them, Space-Engineers style.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -11,31 +13,39 @@ namespace VoxelEngine.GridSystem
     {
         public static GridItemNetwork Instance { get; private set; }
 
-        private Dictionary<GridEntity, List<GridCargoContainer>> _containers 
-            = new Dictionary<GridEntity, List<GridCargoContainer>>();
+        private readonly Dictionary<GridEntity, List<IGridItemStore>> _stores = new();
 
         private void Awake()
         {
-            if (Instance != null && Instance != this) 
-                Destroy(gameObject);
-            else 
-                Instance = this;
+            if (Instance != null && Instance != this) { Destroy(gameObject); return; }
+            Instance = this;
         }
 
-        public void RegisterContainer(GridEntity grid, GridCargoContainer container)
+        // ── Generic store API ──────────────────────────────────────────────────
+        public void RegisterStore(GridEntity grid, IGridItemStore store)
         {
-            if (!_containers.ContainsKey(grid))
-                _containers[grid] = new List<GridCargoContainer>();
-
-            if (!_containers[grid].Contains(container))
-                _containers[grid].Add(container);
+            if (grid == null || store == null) return;
+            if (!_stores.TryGetValue(grid, out var list)) { list = new List<IGridItemStore>(); _stores[grid] = list; }
+            if (!list.Contains(store)) list.Add(store);
         }
+
+        public void UnregisterStore(GridEntity grid, IGridItemStore store)
+        {
+            if (grid != null && _stores.TryGetValue(grid, out var list)) list.Remove(store);
+        }
+
+        public IReadOnlyList<IGridItemStore> GetStores(GridEntity grid)
+            => _stores.TryGetValue(grid, out var list) ? list : System.Array.Empty<IGridItemStore>();
+
+        // ── Backward-compatible cargo helpers ──────────────────────────────────
+        public void RegisterContainer(GridEntity grid, GridCargoContainer container)
+            => RegisterStore(grid, container);
 
         public List<GridCargoContainer> GetConnectedContainers(GridEntity grid)
         {
-            return _containers.TryGetValue(grid, out var list) 
-                ? list 
-                : new List<GridCargoContainer>();
+            var result = new List<GridCargoContainer>();
+            foreach (var s in GetStores(grid)) if (s is GridCargoContainer c) result.Add(c);
+            return result;
         }
     }
 }

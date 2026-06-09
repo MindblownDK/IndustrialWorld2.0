@@ -584,6 +584,7 @@ namespace VoxelEngine.UI
                     if (gb is VoxelEngine.GridSystem.GridCargoContainer gcc) { if (gcc.container == null) gcc.OnPlaced(); WatchContainer(gcc.container); }
                     else if (gb is VoxelEngine.GridSystem.GridH2O2Generator gh2) { if (gh2.iceInput == null) gh2.OnPlaced(); WatchContainer(gh2.iceInput); }
                     else if (gb is VoxelEngine.GridSystem.GridWeapon gw) { if (gw.ammo == null) gw.OnPlaced(); WatchContainer(gw.ammo); }
+                    else if (gb is VoxelEngine.GridSystem.GridDockingPort gdp) { if (gdp.container == null) gdp.OnPlaced(); WatchContainer(gdp.container); }
                     break;
                 case VoxelEngine.Storage.StorageTerminal st2: _openStorageTerminal = st2; break;
                 case VoxelEngine.Storage.PatternTerminal pt2: _openPatternTerminal = pt2; break;
@@ -764,7 +765,7 @@ namespace VoxelEngine.UI
                 else if (_openDiskManipulator  != null) _root.Add(VoxelEngine.Storage.StorageUI.BuildDiskManipulatorPanel(_openDiskManipulator, BuildSlot));
                 else if (_openNAS              != null) _root.Add(VoxelEngine.Storage.StorageUI.BuildNASPanel(_openNAS, BuildSlot));
                 else if (_openPowerstation     != null) _root.Add(BuildPowerstationPanel(_openPowerstation));
-                else if (_openGridBlock        != null) _root.Add(VoxelEngine.GridSystem.UI.GridBlockUI.BuildPanel(_openGridBlock, BuildSlot));
+                else if (_openGridBlock        != null) { var mp = VoxelEngine.GridSystem.UI.GridBlockUI.BuildPanel(_openGridBlock, BuildSlot); _root.Add(mp); if (_openGridBlock is VoxelEngine.Transport.IItemPortHost) AppendItemPorts(mp, _openGridBlock); }
                 else if (_openOilRefinery      != null) { var mp = VoxelEngine.Crafting.ProcessorUI.OilRefineryPanel(_openOilRefinery, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openOilRefinery); }
                 else if (_openChemPlant        != null) { var mp = VoxelEngine.Crafting.ProcessorUI.ChemicalPlantPanel(_openChemPlant, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openChemPlant); }
                 else if (_openStation  != null) BuildRightStationCrafting(_root, _openStation);

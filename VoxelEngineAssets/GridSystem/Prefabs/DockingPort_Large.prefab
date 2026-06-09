@@ -9,6 +9,8 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1708497878901738839}
+  - component: {fileID: 5463530700800106809}
+  - component: {fileID: 3754906689008917478}
   - component: {fileID: 1589371074371827921}
   m_Layer: 0
   m_Name: DockingPort_Large
@@ -33,6 +35,61 @@ Transform:
   - {fileID: 6540860400877966936}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &5463530700800106809
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4192836757918077122}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 04cec34cc4f1e1d47a08090bcd4f29aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.PortConfig
+  ports:
+  - face: 0
+    direction: 2
+    networkType: 0
+    enabled: 1
+  - face: 1
+    direction: 0
+    networkType: 0
+    enabled: 1
+  - face: 2
+    direction: 0
+    networkType: 0
+    enabled: 1
+  - face: 3
+    direction: 0
+    networkType: 0
+    enabled: 1
+  - face: 4
+    direction: 0
+    networkType: 0
+    enabled: 1
+  - face: 5
+    direction: 0
+    networkType: 0
+    enabled: 1
+  portIndicatorSize: 0.4
+  showPortIndicators: 1
+--- !u!114 &3754906689008917478
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4192836757918077122}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9eacd68ef9a141ae95f225d895db1c7b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.ItemPortRouting
+  pushInterval: 0.5
+  pushPerTick: 8
+  pipeConnectRadius: 1.6
+  distribution: 0
 --- !u!114 &1589371074371827921
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -50,8 +107,12 @@ MonoBehaviour:
   maxHP: 200
   currentHP: 0
   GridPos: {x: 0, y: 0, z: 0}
+  slots: 12
   autoExport: 1
-  usePortConfigFilter: 1
+  container:
+    _name: Container
+    _slots: []
+    _minSize: 1
 --- !u!1 &8742761205200680054
 GameObject:
   m_ObjectHideFlags: 0

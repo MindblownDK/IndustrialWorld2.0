@@ -10,7 +10,7 @@ using VoxelEngine.Items;
 
 namespace VoxelEngine.GridSystem
 {
-    public class GridCargoContainer : GridBlock
+    public class GridCargoContainer : GridBlock, IGridItemStore
     {
         [Header("Cargo")]
         [Tooltip("How many visual slots the UI exposes (mass is the real limit).")]
@@ -29,6 +29,10 @@ namespace VoxelEngine.GridSystem
 
         // Stored items add their mass to the ship.
         public override float ContentMass => CurrentMassKg;
+
+        // ── IGridItemStore ──────────────────────────────────────────────────────
+        public ItemContainer ItemStore => container;
+        public string StoreLabel => "Cargo Container";
 
         public override void OnPlaced()
         {

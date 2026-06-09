@@ -4,6 +4,7 @@
 
 using UnityEngine;
 using UnityEngine.UIElements;
+using VoxelEngine.Items;
 
 namespace VoxelEngine.GridSystem
 {

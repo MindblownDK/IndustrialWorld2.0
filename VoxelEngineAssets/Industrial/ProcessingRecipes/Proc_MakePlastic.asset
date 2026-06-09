@@ -15,14 +15,14 @@ MonoBehaviour:
   displayName: Synthesise Plastic
   category: Plastics
   inputs:
-  - item: {fileID: 11400000, guid: 3fa3f2566b1c02546bf3672c2a40f16b, type: 2}
-    count: 1
   - item: {fileID: 11400000, guid: 5beba3cbb57bebf4ea06940ff296e78a, type: 2}
     count: 1
   outputs:
   - item: {fileID: 11400000, guid: 211d2cf6c421ac647b36c0a6f8a32168, type: 2}
     count: 2
-  - item: {fileID: 11400000, guid: 84d464069ef1264449d531ddf58fea27, type: 2}
-    count: 1
+  fluidInputs:
+  - liquid: 2
+    litres: 50
+  fluidOutputs: []
   secondsPerBatch: 14
   powerDrawMultiplier: 1.25

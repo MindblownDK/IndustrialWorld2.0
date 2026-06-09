@@ -14,11 +14,13 @@ MonoBehaviour:
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Crafting.ProcessingRecipe
   displayName: Refine Crude Oil
   category: Refinery
-  inputs:
-  - item: {fileID: 11400000, guid: 114d4089a60a1254fbe14853a6bf199f, type: 2}
-    count: 1
-  outputs:
-  - item: {fileID: 11400000, guid: 3fa3f2566b1c02546bf3672c2a40f16b, type: 2}
-    count: 1
+  inputs: []
+  outputs: []
+  fluidInputs:
+  - liquid: 1
+    litres: 100
+  fluidOutputs:
+  - liquid: 2
+    litres: 80
   secondsPerBatch: 12
   powerDrawMultiplier: 1

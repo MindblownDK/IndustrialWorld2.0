@@ -15,14 +15,16 @@ MonoBehaviour:
   displayName: Synthesise Liquid Fuel
   category: Chemistry
   inputs:
-  - item: {fileID: 11400000, guid: 3fa3f2566b1c02546bf3672c2a40f16b, type: 2}
-    count: 1
   - item: {fileID: 11400000, guid: 211d2cf6c421ac647b36c0a6f8a32168, type: 2}
     count: 1
   outputs:
   - item: {fileID: 11400000, guid: af73c82eb2cf8ff4e97890b5cc416318, type: 2}
     count: 2
-  - item: {fileID: 11400000, guid: 84d464069ef1264449d531ddf58fea27, type: 2}
-    count: 1
+  fluidInputs:
+  - liquid: 2
+    litres: 60
+  fluidOutputs:
+  - liquid: 3
+    litres: 100
   secondsPerBatch: 16
   powerDrawMultiplier: 1.3
