@@ -4283,7 +4283,7 @@ root =>
                 VoxelEngine.GridSystem.GridBlockMeshBuilder.Build(root, style, size, color);
 
                 // Cell-sized box collider on the root so placement + ghost line up exactly.
-                float cs = size.CellSize();
+                float cs = VoxelEngine.GridSystem.GridSizeExt.CellSize(size);
                 var box = root.AddComponent<BoxCollider>();
                 box.size = new Vector3(cs, cs, cs);
 
