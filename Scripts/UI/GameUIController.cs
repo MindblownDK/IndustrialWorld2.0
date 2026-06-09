@@ -597,6 +597,7 @@ namespace VoxelEngine.UI
                     else if (gb is VoxelEngine.GridSystem.GridH2O2Generator gh2) { if (gh2.iceInput == null) gh2.OnPlaced(); WatchContainer(gh2.iceInput); }
                     else if (gb is VoxelEngine.GridSystem.GridWeapon gw) { if (gw.ammo == null) gw.OnPlaced(); WatchContainer(gw.ammo); }
                     else if (gb is VoxelEngine.GridSystem.GridDockingPort gdp) { if (gdp.container == null) gdp.OnPlaced(); WatchContainer(gdp.container); }
+                    else if (gb is VoxelEngine.GridSystem.GridPortableReactor gpr) { if (gpr.fuelC == null) gpr.OnPlaced(); WatchContainer(gpr.fuelC); WatchContainer(gpr.iceC); WatchContainer(gpr.wasteC); }
                     break;
                 case VoxelEngine.Storage.StorageTerminal st2: _openStorageTerminal = st2; break;
                 case VoxelEngine.Storage.PatternTerminal pt2: _openPatternTerminal = pt2; break;
@@ -751,6 +752,25 @@ namespace VoxelEngine.UI
                 _root.pickingMode = PickingMode.Position;
                 _root.style.backgroundColor = new StyleColor(new Color(0,0,0,0.55f));
 
+                // ── MASTER SHIP TERMINAL — full-screen SE-style config screen ──
+                // Rendered on its own (no player inventory panel) so it gets the
+                // whole screen, like the Space Engineers control terminal.
+                if (_openGridTerminal != null)
+                {
+                    var overlay = new VisualElement();
+                    overlay.style.position = Position.Absolute;
+                    overlay.style.left = 0; overlay.style.right = 0;
+                    overlay.style.top = 0;  overlay.style.bottom = 0;
+                    overlay.style.alignItems = Align.Center;
+                    overlay.style.justifyContent = Justify.Center;
+                    overlay.Add(VoxelEngine.GridSystem.UI.GridMasterTerminal.Build(
+                        _openGridTerminal, _terminalTab,
+                        t => { _terminalTab = t; Refresh(); }, BuildSlot,
+                        () => CloseAll()));
+                    _root.Add(overlay);
+                    return; // nothing else competes for the screen
+                }
+
                 // Left panel — player inventory + crafting toggle
                 BuildLeftPanel(_root);
 
@@ -802,7 +822,6 @@ namespace VoxelEngine.UI
                 else if (_openNAS              != null) _root.Add(VoxelEngine.Storage.StorageUI.BuildNASPanel(_openNAS, BuildSlot));
                 else if (_openPowerstation     != null) _root.Add(BuildPowerstationPanel(_openPowerstation));
                 else if (_openGridBlock        != null) { var mp = VoxelEngine.GridSystem.UI.GridBlockUI.BuildPanel(_openGridBlock, BuildSlot); _root.Add(mp); if (_openGridBlock is VoxelEngine.Transport.IItemPortHost) AppendItemPorts(mp, _openGridBlock); }
-                else if (_openGridTerminal     != null) _root.Add(VoxelEngine.GridSystem.UI.GridMasterTerminal.Build(_openGridTerminal, _terminalTab, t => { _terminalTab = t; Refresh(); }, BuildSlot));
                 else if (_openOilRefinery      != null) { var mp = VoxelEngine.Crafting.ProcessorUI.OilRefineryPanel(_openOilRefinery, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openOilRefinery); }
                 else if (_openChemPlant        != null) { var mp = VoxelEngine.Crafting.ProcessorUI.ChemicalPlantPanel(_openChemPlant, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openChemPlant); }
                 else if (_openStation  != null) BuildRightStationCrafting(_root, _openStation);

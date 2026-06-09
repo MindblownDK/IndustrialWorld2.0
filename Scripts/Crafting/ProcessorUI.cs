@@ -26,7 +26,8 @@ namespace VoxelEngine.Crafting
             ItemSlots(p, "Inputs", m.inputC, slot);
             ItemSlots(p, "Outputs", m.outputC, slot);
             UpgradeSlots(p, "Upgrades", m.upgradeC, slot);
-            RecipeBook(p, m.knownRecipes, m.Current);
+            RecipeBook(p, m.knownRecipes, m.Current, m.selectedRecipe,
+                rec => { m.selectedRecipe = rec; VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel(); });
             return p;
         }
 
@@ -38,7 +39,8 @@ namespace VoxelEngine.Crafting
             FluidRow(p, new[] { m.fluidIn, m.fluidOut });
             ItemSlots(p, "Inputs", m.inputC, slot);
             ItemSlots(p, "Outputs", m.outputC, slot);
-            RecipeBook(p, m.knownRecipes, m.Current);
+            RecipeBook(p, m.knownRecipes, m.Current, m.selectedRecipe,
+                rec => { m.selectedRecipe = rec; VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel(); });
             return p;
         }
 
@@ -104,16 +106,46 @@ namespace VoxelEngine.Crafting
             p.Add(grid);
         }
 
-        private static void RecipeBook(VisualElement p, List<ProcessingRecipe> recipes, ProcessingRecipe current)
+        private static void RecipeBook(VisualElement p, List<ProcessingRecipe> recipes,
+            ProcessingRecipe current, ProcessingRecipe selected, System.Action<ProcessingRecipe> onSelect)
         {
             if (recipes == null) return;
-            p.Add(GUI.SectionTitle("Recipes"));
+            p.Add(GUI.SectionTitle("Recipes  (click to select · Auto by default)"));
+
+            // "Auto" option clears the lock.
+            p.Add(RecipeRow("⟳  Auto (first available)", "", selected == null, current != null && selected == null,
+                () => onSelect(null)));
+
             foreach (var r in recipes)
             {
                 if (r == null) continue;
-                p.Add(T.StatRow("•", r.GetDisplayName(), Summary(r),
-                    current == r ? T.AccentGreen : (Color?)null));
+                var captured = r;
+                p.Add(RecipeRow(r.GetDisplayName(), Summary(r), selected == r, current == r,
+                    () => onSelect(captured)));
             }
+        }
+
+        private static VisualElement RecipeRow(string name, string summary, bool selected, bool active, System.Action onClick)
+        {
+            var btn = new Button(onClick);
+            btn.style.flexDirection = FlexDirection.Column;
+            btn.style.alignItems = Align.FlexStart;
+            btn.style.marginBottom = 2; btn.style.paddingTop = 4; btn.style.paddingBottom = 4;
+            btn.style.paddingLeft = 8;
+            btn.style.backgroundColor = new StyleColor(selected
+                ? new Color(0.18f, 0.72f, 0.88f, 0.28f)
+                : new Color(0.12f, 0.14f, 0.18f, 0.95f));
+            var title = new Label((selected ? "◉ " : "○ ") + name);
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            title.style.color = new StyleColor(active ? T.AccentGreen : selected ? T.AccentCyan : new Color(0.85f,0.88f,0.92f));
+            btn.Add(title);
+            if (!string.IsNullOrEmpty(summary))
+            {
+                var sub = new Label(summary);
+                sub.style.fontSize = 10; sub.style.color = new StyleColor(new Color(0.6f,0.64f,0.7f));
+                btn.Add(sub);
+            }
+            return btn;
         }
 
         private static string Summary(ProcessingRecipe r)

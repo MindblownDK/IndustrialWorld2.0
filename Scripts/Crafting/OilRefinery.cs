@@ -166,9 +166,15 @@ namespace VoxelEngine.Crafting
         private ItemContainer[] InArr  => new[] { inputC };
         private ItemContainer[] OutArr => new[] { outputC };
 
+        /// <summary>Player-selected recipe (from the UI). Null = auto-pick the first runnable.</summary>
+        [System.NonSerialized] public ProcessingRecipe selectedRecipe;
+
         private ProcessingRecipe FindRecipe()
         {
             var fluids = Fluids();
+            // If the player locked a recipe, only run that one.
+            if (selectedRecipe != null)
+                return ProcessingExecutor.CanRun(selectedRecipe, InArr, OutArr, fluids) ? selectedRecipe : null;
             for (int r = 0; r < knownRecipes.Count; r++)
             {
                 var rec = knownRecipes[r];

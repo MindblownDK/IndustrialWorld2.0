@@ -644,6 +644,7 @@ namespace VoxelEngine.Player
                 || b is VoxelEngine.GridSystem.GridWeapon
                 || b is VoxelEngine.GridSystem.GridRefinery
                 || b is VoxelEngine.GridSystem.GridChemicalPlant
+                || b is VoxelEngine.GridSystem.GridPortableReactor
                 || b is VoxelEngine.GridSystem.GridDockingPort;
         }
     }

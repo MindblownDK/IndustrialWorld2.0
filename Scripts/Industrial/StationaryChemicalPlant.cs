@@ -112,9 +112,13 @@ namespace VoxelEngine.Industrial
         private ItemContainer[] InArr  => new[] { inputC };
         private ItemContainer[] OutArr => new[] { outputC };
 
+        [System.NonSerialized] public ProcessingRecipe selectedRecipe;
+
         private ProcessingRecipe FindRecipe()
         {
             var fluids = Fluids();
+            if (selectedRecipe != null)
+                return ProcessingExecutor.CanRun(selectedRecipe, InArr, OutArr, fluids) ? selectedRecipe : null;
             for (int i = 0; i < knownRecipes.Count; i++)
             {
                 var r = knownRecipes[i];

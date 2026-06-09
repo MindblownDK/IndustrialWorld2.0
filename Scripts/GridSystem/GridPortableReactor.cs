@@ -40,6 +40,7 @@ namespace VoxelEngine.GridSystem
         private void Update()
         {
             if (fuelC == null) return;
+            if (!Enabled) { IsRunning = false; return; }
             bool hasFuel = leuPelletItem != null && fuelC.CountOf(leuPelletItem) > 0;
             bool hasIce = iceItem != null && iceC.CountOf(iceItem) >= icePerPellet;
 

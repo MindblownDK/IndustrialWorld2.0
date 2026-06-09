@@ -27,8 +27,9 @@ namespace VoxelEngine.GridSystem.UI
                 case GridBattery bat:       return BatteryPanel(bat);
                 case GridCargoContainer cc: return CargoPanel(cc, slot);
                 case GridWeapon gw:         return WeaponPanel(gw, slot);
-                case GridRefinery rf:       return ProcessorPanel("⚗ Ship Refinery", rf.Current, rf.Progress01, rf.PowerDraw, rf.knownRecipes, rf.Grid);
-                case GridChemicalPlant cp:  return ProcessorPanel("🧪 Ship Chemical Plant", cp.Current, cp.Progress01, cp.PowerDraw, cp.knownRecipes, cp.Grid);
+                case GridRefinery rf:       return ProcessorPanel("⚗ Ship Refinery", rf.Current, rf.Progress01, rf.PowerDraw, rf.knownRecipes, rf.Grid, rf.selectedRecipe, r => rf.selectedRecipe = r);
+                case GridChemicalPlant cp:  return ProcessorPanel("🧪 Ship Chemical Plant", cp.Current, cp.Progress01, cp.PowerDraw, cp.knownRecipes, cp.Grid, cp.selectedRecipe, r => cp.selectedRecipe = r);
+                case GridPortableReactor pr: return ReactorPanel(pr, slot);
                 case GridDockingPort dp:    return DockingPortPanel(dp, slot);
                 default:                    return GenericPanel(block);
             }
@@ -229,7 +230,9 @@ namespace VoxelEngine.GridSystem.UI
         private static VisualElement ProcessorPanel(string title,
             VoxelEngine.Crafting.ProcessingRecipe current, float progress01, float powerDraw,
             System.Collections.Generic.List<VoxelEngine.Crafting.ProcessingRecipe> recipes,
-            GridEntity grid)
+            GridEntity grid,
+            VoxelEngine.Crafting.ProcessingRecipe selected,
+            System.Action<VoxelEngine.Crafting.ProcessingRecipe> onSelect)
         {
             var p = T.MachinePanel();
             p.style.width = 460;
@@ -266,16 +269,40 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(tankRow);
             p.Add(T.Spacer(6));
 
-            // Recipe book.
-            p.Add(GridUIHelpers.SectionTitle("Recipes"));
+            // Recipe book — click to lock a recipe, or Auto to let it pick.
+            p.Add(GridUIHelpers.SectionTitle("Recipes  (click to select · Auto by default)"));
+            p.Add(RecipeButton("⟳  Auto (first available)", "", selected == null, current != null && selected == null,
+                () => { onSelect(null); VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel(); }));
             if (recipes != null)
                 foreach (var r in recipes)
                 {
                     if (r == null) continue;
-                    p.Add(T.StatRow("•", r.GetDisplayName(), RecipeSummary(r),
-                        current == r ? T.AccentGreen : (Color?)null));
+                    var captured = r;
+                    p.Add(RecipeButton(r.GetDisplayName(), RecipeSummary(r), selected == r, current == r,
+                        () => { onSelect(captured); VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel(); }));
                 }
             return p;
+        }
+
+        private static VisualElement RecipeButton(string name, string summary, bool selected, bool active, System.Action onClick)
+        {
+            var btn = new Button(onClick);
+            btn.style.flexDirection = FlexDirection.Column;
+            btn.style.alignItems = Align.FlexStart;
+            btn.style.marginBottom = 2; btn.style.paddingTop = 4; btn.style.paddingBottom = 4; btn.style.paddingLeft = 8;
+            btn.style.backgroundColor = new StyleColor(selected
+                ? new Color(0.18f, 0.72f, 0.88f, 0.28f) : new Color(0.12f, 0.14f, 0.18f, 0.95f));
+            var title = new Label((selected ? "◉ " : "○ ") + name);
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            title.style.color = new StyleColor(active ? T.AccentGreen : selected ? T.AccentCyan : new Color(0.85f,0.88f,0.92f));
+            btn.Add(title);
+            if (!string.IsNullOrEmpty(summary))
+            {
+                var sub = new Label(summary);
+                sub.style.fontSize = 10; sub.style.color = new StyleColor(new Color(0.6f,0.64f,0.7f));
+                btn.Add(sub);
+            }
+            return btn;
         }
 
         private static string RecipeSummary(VoxelEngine.Crafting.ProcessingRecipe r)
@@ -287,6 +314,47 @@ namespace VoxelEngine.GridSystem.UI
             if (r.HasFluidOutputs) foreach (var f in r.fluidOutputs) outs.Add($"{f.litres:0}L {f.liquid.DisplayName()}");
             if (r.HasItemOutputs)  foreach (var o in r.outputs) if (o.item != null) outs.Add($"{o.count} {o.item.displayName}");
             return string.Join(" + ", ins) + "  →  " + string.Join(" + ", outs);
+        }
+
+        // ── PORTABLE REACTOR ──────────────────────────────────────────────────────
+        private static VisualElement ReactorPanel(GridPortableReactor r, MachineUIs.SlotBuilder slot)
+        {
+            if (r.fuelC == null) r.OnPlaced();
+            var p = T.MachinePanel();
+            p.style.width = 420;
+            var (hdr, _, _, _) = T.HeaderRow("☢ Portable Reactor",
+                r.IsRunning ? "RUNNING" : "IDLE",
+                r.IsRunning ? T.AccentGreen : T.AccentAmber);
+            p.Add(hdr);
+            p.Add(T.AccentDivider(T.AccentGreen));
+
+            // Fuel-remaining gauge.
+            var gaugeRow = Row();
+            gaugeRow.style.justifyContent = Justify.Center;
+            gaugeRow.Add(T.TankGauge("Fuel", r.FuelRemaining01, new Color(0.3f, 0.85f, 0.4f),
+                $"{r.FuelRemaining01 * 100f:0}%", 64, 100));
+            p.Add(gaugeRow);
+            p.Add(T.Spacer(6));
+
+            p.Add(T.StatRow("🔌", "Power Out", PowerFormat.Watts(r.PowerOutput), T.AccentGreen));
+            p.Add(T.StatRow("🧊", "Ice / pellet", $"{r.icePerPellet}", T.AccentCyan));
+            p.Add(T.Spacer(4));
+
+            p.Add(GridUIHelpers.SectionTitle("LEU Fuel"));
+            var fg = T.SlotGrid(r.fuelC.Size);
+            for (int i = 0; i < r.fuelC.Size; i++) fg.Add(slot(r.fuelC, i, r.fuelC.GetSlot(i), false, true));
+            p.Add(fg);
+
+            p.Add(GridUIHelpers.SectionTitle("Ice Coolant"));
+            var ig = T.SlotGrid(r.iceC.Size);
+            for (int i = 0; i < r.iceC.Size; i++) ig.Add(slot(r.iceC, i, r.iceC.GetSlot(i), false, true));
+            p.Add(ig);
+
+            p.Add(GridUIHelpers.SectionTitle("Nuclear Waste"));
+            var wg = T.SlotGrid(r.wasteC.Size);
+            for (int i = 0; i < r.wasteC.Size; i++) wg.Add(slot(r.wasteC, i, r.wasteC.GetSlot(i), false, true));
+            p.Add(wg);
+            return p;
         }
 
         // ── DOCKING PORT (inventory + I/O filter) ────────────────────────────────

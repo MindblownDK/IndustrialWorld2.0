@@ -37,10 +37,13 @@ namespace VoxelEngine.GridSystem
 
         private void FixedUpdate()
         {
-            if (Grid == null || !Grid.HasPower) { _progress = 0f; return; }
+            if (!Enabled || Grid == null || !Grid.HasPower) { _progress = 0f; return; }
 
             var runner = new GridProcessingContext(Grid);
-            if (_current == null) _current = runner.FindRunnable(knownRecipes);
+            var pool = selectedRecipe != null
+                ? new System.Collections.Generic.List<ProcessingRecipe> { selectedRecipe }
+                : knownRecipes;
+            if (_current == null) _current = runner.FindRunnable(pool);
             if (_current == null) { _progress = 0f; return; }
 
             _progress += Time.fixedDeltaTime;
@@ -51,5 +54,8 @@ namespace VoxelEngine.GridSystem
                 _current = null;                      // re-pick next tick
             }
         }
+
+        /// <summary>Player-selected recipe (from the UI). Null = auto-pick.</summary>
+        [System.NonSerialized] public ProcessingRecipe selectedRecipe;
     }
 }

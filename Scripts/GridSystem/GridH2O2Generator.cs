@@ -71,6 +71,7 @@ namespace VoxelEngine.GridSystem
 
         private void FixedUpdate()
         {
+            if (!Enabled) { Status = "Disabled"; IsProducing = false; CurrentWattage = 0; return; }
             if (Grid == null) { Status = "No Grid"; IsProducing = false; CurrentWattage = 0; return; }
 
             float dt = Time.fixedDeltaTime;

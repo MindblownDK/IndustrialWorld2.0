@@ -30,7 +30,7 @@ namespace VoxelEngine.GridSystem
         {
             get
             {
-                if (Grid == null) return false;
+                if (Grid == null || !Enabled) return false;
                 switch (thrusterType)
                 {
                     case ThrusterType.Atmospheric:

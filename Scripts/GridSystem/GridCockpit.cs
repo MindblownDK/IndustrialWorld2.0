@@ -40,14 +40,20 @@ namespace VoxelEngine.GridSystem
             var rb = player.GetComponent<Rigidbody>();
             if (rb != null) rb.isKinematic = true;
 
-            // Park the player at the cockpit so they visually sit in the seat.
+            // Parent the player to the cockpit so they ride along with the grid as
+            // it moves/rolls/rotates (fixes "ship rolls away, player stays put").
+            _originalParent = player.transform.parent;
+            player.transform.SetParent(transform, worldPositionStays: true);
             player.transform.position = transform.position;
+            player.transform.localRotation = Quaternion.identity;
 
             // Take control of the grid for flight + mark this as the active seat so
             // the "I" key opens the master terminal instead of the player inventory.
             if (Grid != null) Grid.ActiveCockpit = this;
             ActivePilotSeat = this;
         }
+
+        private Transform _originalParent;
 
         /// <summary>Open the Space-Engineers-style master terminal for this grid.</summary>
         public void OpenTerminal()
@@ -58,6 +64,10 @@ namespace VoxelEngine.GridSystem
         public void Exit()
         {
             if (Pilot == null) return;
+
+            // Unparent the player from the grid and drop them beside the cockpit.
+            Pilot.transform.SetParent(_originalParent, worldPositionStays: true);
+            Pilot.transform.position = transform.position + transform.up * 1.2f + transform.right * 1.5f;
 
             Pilot.enabled = true;
             var cc = Pilot.GetComponent<CharacterController>();

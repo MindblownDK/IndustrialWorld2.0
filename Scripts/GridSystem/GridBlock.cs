@@ -21,6 +21,11 @@ namespace VoxelEngine.GridSystem
         public Vector3Int GridPos;
         [System.NonSerialized] public GridEntity Grid;
 
+        /// <summary>Master on/off toggle (set from the ship terminal). Functional
+        /// blocks should respect this — a disabled block draws no power and does
+        /// no work, like toggling a block off in Space Engineers.</summary>
+        public bool Enabled = true;
+
         /// <summary>Power this block generates (W). Override in generators.</summary>
         public virtual float PowerOutput => 0f;
         /// <summary>Power this block consumes (W). Override in consumers.</summary>
