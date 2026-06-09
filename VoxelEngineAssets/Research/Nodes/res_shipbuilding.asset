@@ -1,0 +1,43 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe52eb4685f86c44d967d9cd3e4bd91a, type: 3}
+  m_Name: res_shipbuilding
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Research.ResearchNode
+  nodeId: res_shipbuilding
+  displayName: Shipbuilding
+  description: Design and construct spacecraft from a full grid block set.
+  iconTint: {r: 0, g: 1, b: 1, a: 1}
+  category: 0
+  subCategory: 6
+  tier: 3
+  column: 4
+  prerequisites: []
+  researchSeconds: 60
+  cost:
+  - pack: {fileID: 11400000, guid: e7eec7f45c4b5fb4db5018e3431f77f0, type: 2}
+    count: 20
+  unlocksRecipes:
+  - {fileID: 11400000, guid: 7bb23bcef62850544bb55bad1ec004ec, type: 2}
+  - {fileID: 11400000, guid: 464e8cf462d0a3744829aaaeb3a5d57c, type: 2}
+  - {fileID: 11400000, guid: 7e990b8e0869f5d4fa5b49e1d78ac88d, type: 2}
+  - {fileID: 11400000, guid: 31509ff17b9ea5c4882b9bc8e3cd4d6a, type: 2}
+  - {fileID: 11400000, guid: 04a932e1293e9b44f9ec0e750caf3905, type: 2}
+  - {fileID: 11400000, guid: 0943c8e2d4d7b614c9e8f0614682cfcf, type: 2}
+  - {fileID: 11400000, guid: dce75740d13bc8b4daa9abd6c4f77ff3, type: 2}
+  - {fileID: 11400000, guid: 2493c65523f23644ab4fd51d91ca3a34, type: 2}
+  - {fileID: 11400000, guid: 337eb312b9948294c8069a7977e11df1, type: 2}
+  - {fileID: 11400000, guid: 18474604ec8f6f748af7b325316f11f0, type: 2}
+  - {fileID: 11400000, guid: 55f19808175e42746b05084bb6126758, type: 2}
+  upgradeKind: 0
+  upgradePerRankAmount: 0
+  maxRanks: 1
+  costScalesWithRank: 1
