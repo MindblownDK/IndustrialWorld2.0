@@ -289,6 +289,12 @@ namespace VoxelEngine.Player
                 var gasTank = hit.collider.GetComponentInParent<VoxelEngine.Gas.GasTank>();
                 if (gasTank != null) { UI.GameUIController.Instance?.OpenMachine(gasTank); return; }
 
+                // Industrial fluid processors.
+                var oilRefinery = hit.collider.GetComponentInParent<VoxelEngine.Crafting.OilRefinery>();
+                if (oilRefinery != null) { UI.GameUIController.Instance?.OpenMachine(oilRefinery); return; }
+                var chemPlant = hit.collider.GetComponentInParent<VoxelEngine.Industrial.StationaryChemicalPlant>();
+                if (chemPlant != null) { UI.GameUIController.Instance?.OpenMachine(chemPlant); return; }
+
                 // Grid (ship/vehicle) blocks that expose a UI panel. Cockpit is handled
                 // separately via EnterCockpit, so we skip it here.
                 var gridBlock = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
@@ -635,7 +641,9 @@ namespace VoxelEngine.Player
                 || b is VoxelEngine.GridSystem.GridH2O2Generator
                 || b is VoxelEngine.GridSystem.GridBattery
                 || b is VoxelEngine.GridSystem.GridCargoContainer
-                || b is VoxelEngine.GridSystem.GridWeapon;
+                || b is VoxelEngine.GridSystem.GridWeapon
+                || b is VoxelEngine.GridSystem.GridRefinery
+                || b is VoxelEngine.GridSystem.GridChemicalPlant;
         }
     }
 }

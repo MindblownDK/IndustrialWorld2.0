@@ -39,17 +39,16 @@ namespace VoxelEngine.GridSystem
         {
             if (Grid == null || !Grid.HasPower) { _progress = 0f; return; }
 
-            if (_current == null) _current = ProcessingRecipeRunner.FindRunnable(knownRecipes, Grid);
+            var runner = new GridProcessingContext(Grid);
+            if (_current == null) _current = runner.FindRunnable(knownRecipes);
             if (_current == null) { _progress = 0f; return; }
 
             _progress += Time.fixedDeltaTime;
             if (_progress >= Mathf.Max(0.1f, _current.secondsPerBatch))
             {
-                if (ProcessingRecipeRunner.RunBatch(_current, Grid))
-                    _progress = 0f;
-                else
-                    _progress = _current.secondsPerBatch; // outputs full — pause until space frees up
-                _current = null; // re-pick next tick so a drained input doesn't soft-lock us
+                runner.Run(_current);                 // consumes items + fluids, produces outputs
+                _progress = 0f;
+                _current = null;                      // re-pick next tick
             }
         }
     }

@@ -2530,7 +2530,9 @@ namespace VoxelEngine.EditorTools
             VoxelEngine.Crafting.ProcessingRecipe MakeProc(string assetName, string display, string category,
                 (VoxelEngine.Items.ItemDefinition item, int n)[] inputs,
                 (VoxelEngine.Items.ItemDefinition item, int n)[] outputs,
-                float seconds, float powerMul = 1f)
+                float seconds, float powerMul = 1f,
+                (VoxelEngine.Items.LiquidType liquid, float litres)[] fluidIn = null,
+                (VoxelEngine.Items.LiquidType liquid, float litres)[] fluidOut = null)
             {
                 string path = $"{procRecFolder}/{assetName}.asset";
                 if (AssetDatabase.LoadAssetAtPath<Object>(path) != null) AssetDatabase.DeleteAsset(path);
@@ -2545,35 +2547,46 @@ namespace VoxelEngine.EditorTools
                 r.outputs = new VoxelEngine.Crafting.ProcessingIO[outputs.Length];
                 for (int i = 0; i < outputs.Length; i++)
                     r.outputs[i] = new VoxelEngine.Crafting.ProcessingIO { item = outputs[i].item, count = outputs[i].n };
+                fluidIn  ??= System.Array.Empty<(VoxelEngine.Items.LiquidType, float)>();
+                fluidOut ??= System.Array.Empty<(VoxelEngine.Items.LiquidType, float)>();
+                r.fluidInputs  = new VoxelEngine.Crafting.FluidIO[fluidIn.Length];
+                for (int i = 0; i < fluidIn.Length; i++)
+                    r.fluidInputs[i]  = new VoxelEngine.Crafting.FluidIO { liquid = fluidIn[i].liquid,  litres = fluidIn[i].litres };
+                r.fluidOutputs = new VoxelEngine.Crafting.FluidIO[fluidOut.Length];
+                for (int i = 0; i < fluidOut.Length; i++)
+                    r.fluidOutputs[i] = new VoxelEngine.Crafting.FluidIO { liquid = fluidOut[i].liquid, litres = fluidOut[i].litres };
                 AssetDatabase.CreateAsset(r, path);
                 return r;
             }
 
-            // Crude → Refined: 1 crude barrel → 1 refined barrel.
-            // (Explicit (ItemDefinition) cast on the first tuple element widens the
-            //  inferred array type from ResourceItem to ItemDefinition — C# does NOT
-            //  apply tuple-element variance automatically for arrays.)
-            var procRefine  = MakeProc("Proc_RefineOil", "Refine Crude Oil", "Refinery",
-                new[] { ((VoxelEngine.Items.ItemDefinition)crudeBarrel,   1) },
-                new[] { ((VoxelEngine.Items.ItemDefinition)refinedBarrel, 1) },
-                seconds: 12f, powerMul: 1f);
-            // Refined oil + coal → 2 plastic + recovered empty barrel.
-            var procPlastic = MakeProc("Proc_MakePlastic", "Synthesise Plastic", "Plastics",
-                new[] { ((VoxelEngine.Items.ItemDefinition)refinedBarrel, 1), (coal, 1) },
-                new[] { ((VoxelEngine.Items.ItemDefinition)plastic,       2), (emptyBarrel, 1) },
-                seconds: 14f, powerMul: 1.25f);
+            var noItems = System.Array.Empty<(VoxelEngine.Items.ItemDefinition, int)>();
 
-            // Liquid Fuel — high-energy product synthesised by the Chemical Plant
-            // (refined oil + plastic). Shared by both the stationary and grid plants.
+            // Crude → Refined: 100 L crude oil (liquid) → 80 L refined oil (liquid).
+            var procRefine  = MakeProc("Proc_RefineOil", "Refine Crude Oil", "Refinery",
+                noItems, noItems, seconds: 12f, powerMul: 1f,
+                fluidIn:  new[] { (VoxelEngine.Items.LiquidType.CrudeOil,   100f) },
+                fluidOut: new[] { (VoxelEngine.Items.LiquidType.RefinedOil,  80f) });
+
+            // Refined oil (liquid) + coal → 2 plastic.  (No more barrels.)
+            var procPlastic = MakeProc("Proc_MakePlastic", "Synthesise Plastic", "Plastics",
+                new[] { (coal, 1) },
+                new[] { ((VoxelEngine.Items.ItemDefinition)plastic, 2) },
+                seconds: 14f, powerMul: 1.25f,
+                fluidIn: new[] { (VoxelEngine.Items.LiquidType.RefinedOil, 50f) });
+
+            // Liquid Fuel item — kept as the bottled/transportable product.
             var liquidFuel  = MakeIndustrialResource("Item_LiquidFuel", "Liquid Fuel",
                 "High-performance synthesised fuel. Powers advanced thrusters and engines.",
                 new Color(0.95f, 0.65f, 0.15f), VoxelEngine.Items.ResourceCategory.Component, "Oil", maxStack: 50);
             liquidFuel.fuelSeconds = 180f; EditorUtility.SetDirty(liquidFuel);
 
+            // Chemistry: 60 L refined oil + 1 plastic → 100 L Liquid Fuel (tank) + 2 Liquid Fuel (item).
             var procLiquidFuel = MakeProc("Proc_MakeLiquidFuel", "Synthesise Liquid Fuel", "Chemistry",
-                new[] { ((VoxelEngine.Items.ItemDefinition)refinedBarrel, 1), ((VoxelEngine.Items.ItemDefinition)plastic, 1) },
-                new[] { ((VoxelEngine.Items.ItemDefinition)liquidFuel, 2), (emptyBarrel, 1) },
-                seconds: 16f, powerMul: 1.3f);
+                new[] { ((VoxelEngine.Items.ItemDefinition)plastic, 1) },
+                new[] { ((VoxelEngine.Items.ItemDefinition)liquidFuel, 2) },
+                seconds: 16f, powerMul: 1.3f,
+                fluidIn:  new[] { (VoxelEngine.Items.LiquidType.RefinedOil, 60f) },
+                fluidOut: new[] { (VoxelEngine.Items.LiquidType.LiquidFuel, 100f) });
 
             // Attach those recipes to the OilRefinery prefab.
             AppendOilRefineryRecipes(refineryPrefab, new List<VoxelEngine.Crafting.ProcessingRecipe> { procRefine, procPlastic });
@@ -4356,7 +4369,7 @@ root =>
             // -- 10) Fluids & Gas --
             // Unified Liquid Tank — replaces the old Water Tank + Liquid Fuel Tank.
             // Liquid type is chosen from the tank's UI (Water / Crude / Refined / Liquid Fuel).
-            var liquidTankPref = MakeGPref<VoxelEngine.GridSystem.GridLiquidTank>("LiquidTank_Large", new Color(0.25f, 0.5f, 0.85f), new Vector3(1.5f, 1.8f, 1.5f), t => { t.capacity = 500f; t.liquidType = VoxelEngine.GridSystem.LiquidType.Water; });
+            var liquidTankPref = MakeGPref<VoxelEngine.GridSystem.GridLiquidTank>("LiquidTank_Large", new Color(0.25f, 0.5f, 0.85f), new Vector3(1.5f, 1.8f, 1.5f), t => { t.capacity = 500f; t.liquidType = VoxelEngine.Items.LiquidType.Water; });
             var itemLiquidTank = MakeGItem("GItem_LiquidTank", "Liquid Tank", Color.white, liquidTankPref, VoxelEngine.GridSystem.GridSize.Large, 220, 400);
             AddGRecipe("Recipe_GLiquidTank", "Liquid Tank", itemLiquidTank, (steelPlate, 5), (glass, 2), (copperWire, 2));
 

@@ -1,12 +1,9 @@
 // Assets/Scripts/VoxelEngine/Industrial/StationaryChemicalPlant.cs
 //
 // Stationary Chemical Plant — placeable world machine, the ground-based
-// equivalent of the grid Chemical Plant. Multi-input / multi-output processor
-// driven by ProcessingRecipe assets (category "Chemistry").
-//
-// Built on the same pattern as OilRefinery (CraftingStation + PortConfig +
-// ItemPort routing) so it slots straight into the logistics network and shares
-// the same recipe authoring pipeline.
+// equivalent of the Ship Chemical Plant. Multi-input / multi-output processor
+// driven by ProcessingRecipe assets (category "Chemistry"), supporting both
+// item slots AND fluid tanks via the shared ProcessingExecutor.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -31,6 +28,11 @@ namespace VoxelEngine.Industrial
         [Header("Containers (auto-created)")]
         public ItemContainer inputC;
         public ItemContainer outputC;
+
+        [Header("Fluid Tanks")]
+        public MachineFluidTank fluidIn  = new MachineFluidTank("Fluid In",  2000f, LiquidType.RefinedOil, autoType: true);
+        public MachineFluidTank fluidOut = new MachineFluidTank("Fluid Out", 2000f, LiquidType.LiquidFuel, autoType: true);
+        public IReadOnlyList<MachineFluidTank> FluidTanks => new[] { fluidIn, fluidOut };
 
         [Header("Tuning")]
         public float baseWattsPerSecond = 720f;
@@ -57,6 +59,8 @@ namespace VoxelEngine.Industrial
         {
             if (inputC  == null) inputC  = new ItemContainer("Inputs",  INPUT_SLOTS);  else inputC.Resize(INPUT_SLOTS);
             if (outputC == null) outputC = new ItemContainer("Outputs", OUTPUT_SLOTS); else outputC.Resize(OUTPUT_SLOTS);
+            fluidIn  ??= new MachineFluidTank("Fluid In",  2000f, LiquidType.RefinedOil);
+            fluidOut ??= new MachineFluidTank("Fluid Out", 2000f, LiquidType.LiquidFuel);
         }
 
         // ── IItemPortHost ───────────────────────────────────────────────────
@@ -90,9 +94,7 @@ namespace VoxelEngine.Industrial
         {
             EnsureContainers();
 
-            float wantWatts = (_current != null)
-                ? baseWattsPerSecond * _current.powerDrawMultiplier
-                : idleWattsPerSecond;
+            float wantWatts = (_current != null) ? baseWattsPerSecond * _current.powerDrawMultiplier : idleWattsPerSecond;
             CurrentWattage = wantWatts;
             if (_power != null) _power.wattsPerSecond = wantWatts;
 
@@ -106,51 +108,30 @@ namespace VoxelEngine.Industrial
                 CompleteBatch();
         }
 
+        private IFluidStore Fluids() => new MachineFluidStore(FluidTanks);
+        private ItemContainer[] InArr  => new[] { inputC };
+        private ItemContainer[] OutArr => new[] { outputC };
+
         private ProcessingRecipe FindRecipe()
         {
+            var fluids = Fluids();
             for (int i = 0; i < knownRecipes.Count; i++)
             {
                 var r = knownRecipes[i];
-                if (r == null) continue;
-                if (HasAllInputs(r) && HasOutputSpace(r)) return r;
+                if (r != null && ProcessingExecutor.CanRun(r, InArr, OutArr, fluids)) return r;
             }
             return null;
         }
 
-        private bool HasAllInputs(ProcessingRecipe r)
-        {
-            if (r.inputs == null) return false;
-            foreach (var ing in r.inputs)
-            {
-                if (ing.item == null || ing.count <= 0) continue;
-                if (inputC.CountOf(ing.item) < ing.count) return false;
-            }
-            return true;
-        }
-
-        private bool HasOutputSpace(ProcessingRecipe r)
-        {
-            if (r.outputs == null) return true;
-            foreach (var o in r.outputs)
-            {
-                if (o.item == null || o.count <= 0) continue;
-                if (!outputC.HasSpace(o.item, o.count)) return false;
-            }
-            return true;
-        }
-
         private void CompleteBatch()
         {
-            if (!HasOutputSpace(_current)) { _progress = _current.secondsPerBatch; return; }
-
-            foreach (var ing in _current.inputs)
-                if (ing.item != null && ing.count > 0) inputC.Remove(ing.item, ing.count);
-
-            foreach (var o in _current.outputs)
-                if (o.item != null && o.count > 0) outputC.Insert(new ItemStack { item = o.item, count = o.count });
-
+            if (!ProcessingExecutor.Run(_current, InArr, OutArr, Fluids()))
+            {
+                _progress = Mathf.Max(0.1f, _current.secondsPerBatch);
+                return;
+            }
             _progress = 0f;
-            _current = null;
+            _current = FindRecipe();
         }
     }
 }

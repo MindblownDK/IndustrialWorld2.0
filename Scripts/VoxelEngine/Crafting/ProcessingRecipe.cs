@@ -22,6 +22,14 @@ namespace VoxelEngine.Crafting
         public int            count;
     }
 
+    /// <summary>A fluid ingredient/result: a liquid type + a volume in litres.</summary>
+    [Serializable]
+    public struct FluidIO
+    {
+        public LiquidType liquid;
+        public float      litres;
+    }
+
     [CreateAssetMenu(menuName = "Voxel Engine/Crafting/Processing Recipe", fileName = "Proc_New")]
     public class ProcessingRecipe : ScriptableObject
     {
@@ -30,9 +38,15 @@ namespace VoxelEngine.Crafting
         [Tooltip("Free-form category, e.g. 'Refinery', 'Plastics', 'Chemistry'. Used by machines to filter their recipe list.")]
         public string category = "Refinery";
 
-        [Header("I/O")]
+        [Header("Item I/O")]
         public ProcessingIO[] inputs  = Array.Empty<ProcessingIO>();
         public ProcessingIO[] outputs = Array.Empty<ProcessingIO>();
+
+        [Header("Fluid I/O (litres)")]
+        [Tooltip("Liquids consumed from the machine's input fluid tanks.")]
+        public FluidIO[] fluidInputs  = Array.Empty<FluidIO>();
+        [Tooltip("Liquids produced into the machine's output fluid tanks.")]
+        public FluidIO[] fluidOutputs = Array.Empty<FluidIO>();
 
         [Header("Tuning")]
         [Tooltip("Seconds per batch at 1x speed multiplier.")]
@@ -40,11 +54,17 @@ namespace VoxelEngine.Crafting
         [Tooltip("Extra power draw multiplier applied on top of the machine's base watts.")]
         public float powerDrawMultiplier = 1f;
 
+        public bool HasItemInputs  => inputs  != null && inputs.Length  > 0;
+        public bool HasItemOutputs => outputs != null && outputs.Length > 0;
+        public bool HasFluidInputs  => fluidInputs  != null && fluidInputs.Length  > 0;
+        public bool HasFluidOutputs => fluidOutputs != null && fluidOutputs.Length > 0;
+
         public string GetDisplayName()
         {
             if (!string.IsNullOrEmpty(displayName)) return displayName;
             if (outputs != null && outputs.Length > 0 && outputs[0].item != null)
                 return outputs[0].item.displayName;
+            if (HasFluidOutputs) return fluidOutputs[0].liquid.DisplayName();
             return name;
         }
     }

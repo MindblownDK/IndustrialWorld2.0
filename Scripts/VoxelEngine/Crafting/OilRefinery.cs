@@ -41,6 +41,12 @@ namespace VoxelEngine.Crafting
         public ItemContainer outputC;
         public ItemContainer upgradeC;
 
+        [Header("Fluid Tanks")]
+        [Tooltip("Input fluid tank (e.g. Crude Oil) and output fluid tank (e.g. Refined Oil).")]
+        public MachineFluidTank fluidIn  = new MachineFluidTank("Fluid In",  2000f, LiquidType.CrudeOil,   autoType: true);
+        public MachineFluidTank fluidOut = new MachineFluidTank("Fluid Out", 2000f, LiquidType.RefinedOil, autoType: true);
+        public IReadOnlyList<MachineFluidTank> FluidTanks => new[] { fluidIn, fluidOut };
+
         [Header("Tuning")]
         [Tooltip("Base watts/s drawn while a batch is in progress. Multiplied by recipe.powerDrawMultiplier and efficiency upgrades.")]
         public float baseWattsPerSecond = 400f;
@@ -156,58 +162,29 @@ namespace VoxelEngine.Crafting
         // ============================================================
         //                           RECIPE
         // ============================================================
+        private IFluidStore Fluids() => new MachineFluidStore(FluidTanks);
+        private ItemContainer[] InArr  => new[] { inputC };
+        private ItemContainer[] OutArr => new[] { outputC };
+
         private ProcessingRecipe FindRecipe()
         {
+            var fluids = Fluids();
             for (int r = 0; r < knownRecipes.Count; r++)
             {
                 var rec = knownRecipes[r];
-                if (rec == null) continue;
-                if (!HasAllInputs(rec)) continue;
-                if (!HasOutputSpace(rec)) continue;
-                return rec;
+                if (rec != null && ProcessingExecutor.CanRun(rec, InArr, OutArr, fluids)) return rec;
             }
             return null;
         }
 
-        private bool HasAllInputs(ProcessingRecipe r)
-        {
-            if (r.inputs == null) return false;
-            foreach (var ing in r.inputs)
-            {
-                if (ing.item == null || ing.count <= 0) continue;
-                if (inputC.CountOf(ing.item) < ing.count) return false;
-            }
-            return true;
-        }
-
-        private bool HasOutputSpace(ProcessingRecipe r)
-        {
-            if (r.outputs == null) return true;
-            foreach (var o in r.outputs)
-            {
-                if (o.item == null || o.count <= 0) continue;
-                if (!outputC.HasSpace(o.item, o.count)) return false;
-            }
-            return true;
-        }
-
         private void CompleteBatch()
         {
-            // Re-validate (player could have drained inputs / filled outputs mid-batch).
-            if (!HasOutputSpace(_current))
+            // Run via the shared executor (handles both item + fluid I/O). If output
+            // space vanished mid-batch, pause until it frees up.
+            if (!ProcessingExecutor.Run(_current, InArr, OutArr, Fluids()))
             {
-                _progress = EffectiveBatchTime(_current); // pause; await space
+                _progress = EffectiveBatchTime(_current);
                 return;
-            }
-            foreach (var ing in _current.inputs)
-            {
-                if (ing.item == null || ing.count <= 0) continue;
-                inputC.Remove(ing.item, ing.count);
-            }
-            foreach (var o in _current.outputs)
-            {
-                if (o.item == null || o.count <= 0) continue;
-                outputC.Insert(new ItemStack(o.item, o.count));
             }
             _progress = 0f;
             _current  = FindRecipe();

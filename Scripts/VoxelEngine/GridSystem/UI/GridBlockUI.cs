@@ -27,6 +27,8 @@ namespace VoxelEngine.GridSystem.UI
                 case GridBattery bat:       return BatteryPanel(bat);
                 case GridCargoContainer cc: return CargoPanel(cc, slot);
                 case GridWeapon gw:         return WeaponPanel(gw, slot);
+                case GridRefinery rf:       return ProcessorPanel("⚗ Ship Refinery", rf.Current, rf.Progress01, rf.PowerDraw, rf.knownRecipes, rf.Grid);
+                case GridChemicalPlant cp:  return ProcessorPanel("🧪 Ship Chemical Plant", cp.Current, cp.Progress01, cp.PowerDraw, cp.knownRecipes, cp.Grid);
                 default:                    return GenericPanel(block);
             }
         }
@@ -209,6 +211,70 @@ namespace VoxelEngine.GridSystem.UI
                 grid.Add(slot(gw.ammo, i, gw.ammo.GetSlot(i), false, true));
             p.Add(grid);
             return p;
+        }
+
+        // ── SHIP REFINERY / CHEMICAL PLANT (fluid processors) ────────────────────
+        private static VisualElement ProcessorPanel(string title,
+            VoxelEngine.Crafting.ProcessingRecipe current, float progress01, float powerDraw,
+            System.Collections.Generic.List<VoxelEngine.Crafting.ProcessingRecipe> recipes,
+            GridEntity grid)
+        {
+            var p = T.MachinePanel();
+            p.style.width = 460;
+            bool running = current != null;
+            var (hdr, _, _, _) = T.HeaderRow(title, running ? "PROCESSING" : "IDLE",
+                running ? T.AccentGreen : T.AccentAmber);
+            p.Add(hdr);
+            p.Add(T.AccentDivider(T.AccentCyan));
+
+            p.Add(T.StatRow("⚡", "Power Use", $"{powerDraw:0} W", T.AccentGold));
+            if (running)
+            {
+                p.Add(T.StatRow("⚙", "Recipe", current.GetDisplayName(), T.AccentCyan));
+                var (bar, _) = T.ProgressBar(progress01, T.AccentGreen, 8, true);
+                p.Add(bar);
+            }
+            p.Add(T.Spacer(6));
+
+            // Connected liquid tanks on this grid (where fluids are drawn from / pushed to).
+            p.Add(GridUIHelpers.SectionTitle("Connected Liquid Tanks"));
+            var tankRow = Row(); tankRow.style.flexWrap = Wrap.Wrap;
+            int shown = 0;
+            if (grid != null && GridLiquidNetwork.Instance != null)
+            {
+                foreach (var t in GridLiquidNetwork.Instance.GetTanks(grid))
+                {
+                    if (t == null) continue;
+                    tankRow.Add(T.TankGauge(t.liquidType.DisplayName(), t.Fill01, t.liquidType.Color(),
+                        $"{t.stored:0}/{t.capacity:0} L", 60, 90));
+                    if (++shown >= 6) break;
+                }
+            }
+            if (shown == 0) tankRow.Add(T.Muted("No liquid tanks on this grid. Build Liquid Tanks for fluid recipes."));
+            p.Add(tankRow);
+            p.Add(T.Spacer(6));
+
+            // Recipe book.
+            p.Add(GridUIHelpers.SectionTitle("Recipes"));
+            if (recipes != null)
+                foreach (var r in recipes)
+                {
+                    if (r == null) continue;
+                    p.Add(T.StatRow("•", r.GetDisplayName(), RecipeSummary(r),
+                        current == r ? T.AccentGreen : (Color?)null));
+                }
+            return p;
+        }
+
+        private static string RecipeSummary(VoxelEngine.Crafting.ProcessingRecipe r)
+        {
+            var ins = new System.Collections.Generic.List<string>();
+            if (r.HasFluidInputs) foreach (var f in r.fluidInputs) ins.Add($"{f.litres:0}L {f.liquid.DisplayName()}");
+            if (r.HasItemInputs)  foreach (var i in r.inputs) if (i.item != null) ins.Add($"{i.count} {i.item.displayName}");
+            var outs = new System.Collections.Generic.List<string>();
+            if (r.HasFluidOutputs) foreach (var f in r.fluidOutputs) outs.Add($"{f.litres:0}L {f.liquid.DisplayName()}");
+            if (r.HasItemOutputs)  foreach (var o in r.outputs) if (o.item != null) outs.Add($"{o.count} {o.item.displayName}");
+            return string.Join(" + ", ins) + "  →  " + string.Join(" + ", outs);
         }
 
         // ── FALLBACK ────────────────────────────────────────────────────────────

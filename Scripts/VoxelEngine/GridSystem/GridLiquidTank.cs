@@ -6,6 +6,7 @@
 // adds mass to the ship (litres × density).
 
 using UnityEngine;
+using VoxelEngine.Items;
 
 namespace VoxelEngine.GridSystem
 {

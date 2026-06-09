@@ -5,7 +5,7 @@
 
 using UnityEngine;
 
-namespace VoxelEngine.GridSystem
+namespace VoxelEngine.Items
 {
     public enum LiquidType
     {
