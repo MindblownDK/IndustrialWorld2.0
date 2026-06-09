@@ -62,8 +62,11 @@ namespace VoxelEngine.GridSystem.UI
             {
                 var captured = lt;
                 bool active = tank.liquidType == lt;
-                var btn = T.SmallButton(lt.DisplayName(), () => tank.SetLiquidType(captured),
-                    active ? lt.Color() : (Color?)null);
+                var btn = T.SmallButton(lt.DisplayName(), () =>
+                {
+                    if (tank.SetLiquidType(captured))
+                        VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();   // instant UI update
+                }, active ? lt.Color() : (Color?)null);
                 btn.SetEnabled(tank.stored <= 0.001f || active);
                 typeRow.Add(btn);
             }
@@ -73,7 +76,11 @@ namespace VoxelEngine.GridSystem.UI
 
             p.Add(T.Spacer(8));
             var actions = Row();
-            actions.Add(T.SmallButton("⊘  Drain (void)", () => tank.Drain(), T.AccentRed));
+            actions.Add(T.SmallButton("⊘  Drain (void)", () =>
+            {
+                tank.Drain();
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, T.AccentRed));
             p.Add(actions);
             return p;
         }
@@ -116,7 +123,7 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(gaugeRow);
             p.Add(T.Spacer(6));
 
-            p.Add(T.StatRow("⚡", "Power Use", $"{gen.CurrentWattage:0} W", T.AccentGold));
+            p.Add(T.StatRow("⚡", "Power Use", PowerFormat.Watts(gen.CurrentWattage), T.AccentGold));
             p.Add(T.StatRow("🟦", "H₂ Rate", $"{gen.hydrogenPerSecond:0.#}/s", T.AccentCyan));
             p.Add(T.StatRow("🟩", "O₂ Rate", $"{gen.oxygenPerSecond:0.#}/s", T.AccentGreen));
             p.Add(T.Spacer(4));
@@ -149,17 +156,17 @@ namespace VoxelEngine.GridSystem.UI
             var gaugeRow = Row();
             gaugeRow.style.justifyContent = Justify.Center;
             gaugeRow.Add(T.TankGauge("Charge", bat.Fill01, new Color(0.3f, 0.85f, 0.4f),
-                $"{bat.storedWh:0} / {bat.capacityWh:0} Wh", 70, 120));
+                $"{PowerFormat.WattHours(bat.storedWh)} / {PowerFormat.WattHours(bat.capacityWh)}", 70, 120));
             p.Add(gaugeRow);
             p.Add(T.Spacer(6));
 
             var (fill, _) = T.ProgressBar(bat.Fill01, T.AccentGreen, 8, true);
             p.Add(fill);
             p.Add(T.Spacer(4));
-            p.Add(T.StatRow("⚡", "Max Charge", $"{bat.maxChargeRate:0} W", T.AccentCyan));
-            p.Add(T.StatRow("🔌", "Max Discharge", $"{bat.maxDischargeRate:0} W", T.AccentAmber));
+            p.Add(T.StatRow("⚡", "Max Charge", PowerFormat.Watts(bat.maxChargeRate), T.AccentCyan));
+            p.Add(T.StatRow("🔌", "Max Discharge", PowerFormat.Watts(bat.maxDischargeRate), T.AccentAmber));
             if (bat.Grid != null)
-                p.Add(T.StatRow("⚖", "Grid Balance", $"{bat.Grid.PowerBalance:0} W",
+                p.Add(T.StatRow("⚖", "Grid Balance", PowerFormat.Watts(bat.Grid.PowerBalance),
                     bat.Grid.PowerBalance >= 0 ? T.AccentGreen : T.AccentRed));
             return p;
         }
@@ -206,7 +213,7 @@ namespace VoxelEngine.GridSystem.UI
 
             p.Add(T.StatRow("💥", "Damage", $"{gw.damage:0}", T.AccentAmber));
             p.Add(T.StatRow("🎯", "Range", $"{gw.range:0} m", T.AccentCyan));
-            p.Add(T.StatRow("⚡", "Power/Shot", $"{gw.powerPerShot:0} W", T.AccentGold));
+            p.Add(T.StatRow("⚡", "Power/Shot", PowerFormat.Watts(gw.powerPerShot), T.AccentGold));
             p.Add(T.Spacer(4));
 
             p.Add(GridUIHelpers.SectionTitle("Ammunition"));
@@ -232,7 +239,7 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(hdr);
             p.Add(T.AccentDivider(T.AccentCyan));
 
-            p.Add(T.StatRow("⚡", "Power Use", $"{powerDraw:0} W", T.AccentGold));
+            p.Add(T.StatRow("⚡", "Power Use", PowerFormat.Watts(powerDraw), T.AccentGold));
             if (running)
             {
                 p.Add(T.StatRow("⚙", "Recipe", current.GetDisplayName(), T.AccentCyan));
@@ -319,8 +326,8 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(T.AccentDivider());
             p.Add(T.StatRow("❤", "Integrity", $"{block.currentHP:0} / {block.maxHP:0}", T.AccentGreen));
             p.Add(T.StatRow("⚖", "Mass", MassFormat.Format(block.TotalMass), T.AccentCyan));
-            if (block.PowerDraw > 0)   p.Add(T.StatRow("⚡", "Power Use", $"{block.PowerDraw:0} W", T.AccentGold));
-            if (block.PowerOutput > 0) p.Add(T.StatRow("🔌", "Power Out", $"{block.PowerOutput:0} W", T.AccentGreen));
+            if (block.PowerDraw > 0)   p.Add(T.StatRow("⚡", "Power Use", PowerFormat.Watts(block.PowerDraw), T.AccentGold));
+            if (block.PowerOutput > 0) p.Add(T.StatRow("🔌", "Power Out", PowerFormat.Watts(block.PowerOutput), T.AccentGreen));
             return p;
         }
 

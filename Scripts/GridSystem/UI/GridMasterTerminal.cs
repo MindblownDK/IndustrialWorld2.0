@@ -50,7 +50,7 @@ namespace VoxelEngine.GridSystem.UI
             if (grid != null)
             {
                 col.Add(T.StatRow("⚖", "Mass", MassFormat.Format(grid.TotalMass), T.AccentCyan));
-                col.Add(T.StatRow("⚡", "Power", $"{grid.PowerBalance:0} W",
+                col.Add(T.StatRow("⚡", "Power", PowerFormat.Watts(grid.PowerBalance),
                     grid.PowerBalance >= 0 ? T.AccentGreen : T.AccentRed));
                 col.Add(T.StatRow("🟦", "H₂", $"{grid.HydrogenStored:0} L", T.AccentCyan));
             }

@@ -54,7 +54,7 @@ namespace VoxelEngine.Crafting
             p.Add(hdr);
             p.Add(T.AccentDivider(T.AccentCyan));
 
-            p.Add(T.StatRow("⚡", "Power Use", $"{watts:0} W", T.AccentGold));
+            p.Add(T.StatRow("⚡", "Power Use", PowerFormat.Watts(watts), T.AccentGold));
             if (current != null)
             {
                 p.Add(T.StatRow("⚙", "Recipe", current.GetDisplayName(), T.AccentCyan));

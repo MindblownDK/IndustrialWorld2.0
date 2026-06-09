@@ -202,8 +202,14 @@ namespace VoxelEngine.UI
             // SUSPENDED while a PortConfig dropdown is open — otherwise the
             // dropdown gets destroyed mid-click as the panel rebuilds.
             _machineRefreshAccum += Time.unscaledDeltaTime;
-            if (_machineRefreshAccum >= 1.0f && !PortConfigHud.IsAnyDropdownOpen &&
-                (_openCoalGen != null || _openReactor != null || _openTurbine != null || _openPortReactor != null || _openProcessor != null || _openReprocessor != null || _openElectrolyser != null || _openHydroEngine != null || _openGasTank != null))
+            bool liveMachineOpen =
+                _openCoalGen != null || _openReactor != null || _openTurbine != null ||
+                _openPortReactor != null || _openProcessor != null || _openReprocessor != null ||
+                _openElectrolyser != null || _openHydroEngine != null || _openGasTank != null ||
+                _openOilRefinery != null || _openChemPlant != null ||
+                _openGridBlock != null || _openGridTerminal != null;
+            // 4 Hz so tank fills, wattage, charge %, recipe progress, etc. update smoothly.
+            if (_machineRefreshAccum >= 0.25f && !PortConfigHud.IsAnyDropdownOpen && liveMachineOpen)
             { _machineRefreshAccum = 0f; Refresh(); }
             ResearchHud.Tick();
             TickUpgradePrompt();
@@ -284,7 +290,11 @@ namespace VoxelEngine.UI
                 }
                 else if (!UIState.IsBlocking && !_justClosedThisFrame)
                 {
-                    OpenInventory();
+                    // While piloting a cockpit, "I" opens the master ship terminal
+                    // instead of the player inventory (Space-Engineers style).
+                    var seat = VoxelEngine.GridSystem.GridCockpit.ActivePilotSeat;
+                    if (seat != null && seat.Grid != null) OpenGridTerminal(seat.Grid);
+                    else OpenInventory();
                 }
             }
             // Reset per-frame close guard each frame.

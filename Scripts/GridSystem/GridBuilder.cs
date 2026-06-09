@@ -144,7 +144,8 @@ namespace VoxelEngine.GridSystem
             _ghost.SetActive(true);
             _ghost.transform.position = pos;
             _ghost.transform.rotation = rotation;
-            _ghost.transform.localScale = Vector3.one * cellSize * 0.98f;
+            // Match the real cell footprint exactly (blocks fill their cell now).
+            _ghost.transform.localScale = Vector3.one * cellSize;
         }
 
         private void HideGhost()

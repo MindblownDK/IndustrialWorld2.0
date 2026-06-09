@@ -791,6 +791,36 @@ namespace VoxelEngine.EditorTools
         // ============================================================
         //                STEP 4 helper builders
         // ============================================================
+        // Map a grid-block prefab name to its visual style.
+        private static VoxelEngine.GridSystem.GridBlockMeshBuilder.Style GridStyleFor(string name)
+        {
+            string n = name.ToLower();
+            if (n.Contains("cockpit"))    return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Cockpit;
+            if (n.Contains("thruster"))   return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Thruster;
+            if (n.Contains("battery"))    return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Battery;
+            if (n.Contains("armor"))      return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Armor;
+            if (n.Contains("glass"))      return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Glass;
+            if (n.Contains("cargo"))      return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Cargo;
+            if (n.Contains("liquidtank")) return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.LiquidTank;
+            if (n.Contains("gastank"))    return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.GasTank;
+            if (n.Contains("drill"))      return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Drill;
+            if (n.Contains("grinder"))    return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Grinder;
+            if (n.Contains("weapon"))     return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Weapon;
+            if (n.Contains("docking"))    return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.DockingPort;
+            if (n.Contains("wheel"))      return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Wheel;
+            if (n.Contains("landing"))    return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.LandingGear;
+            if (n.Contains("solar"))      return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.SolarPanel;
+            if (n.Contains("reactor"))    return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Reactor;
+            if (n.Contains("refinery"))   return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Refinery;
+            if (n.Contains("chemical"))   return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.ChemicalPlant;
+            if (n.Contains("h2o2"))       return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.H2O2;
+            if (n.Contains("demolisher")) return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Demolisher;
+            if (n.Contains("itempipe"))   return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.ItemPipe;
+            if (n.Contains("gaspipe"))    return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.GasPipe;
+            if (n.Contains("liquidpipe")) return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.LiquidPipe;
+            return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Generic;
+        }
+
         private static void EnsureFolder(string path)
         {
             if (!AssetDatabase.IsValidFolder(path))
@@ -4239,14 +4269,24 @@ root =>
                 return b;
             }
 
+            // NOTE: the legacy `scale` arg is now ignored — every block model is
+            // authored to fill its cell by GridBlockMeshBuilder (so blocks tile with
+            // no gaps and the ghost/collider always match). Style + size are inferred
+            // from the prefab name (e.g. "Cockpit_Small", "Thruster_Large").
             GameObject MakeGPref<T>(string name, Color color, Vector3 scale, System.Action<T> config = null) where T : VoxelEngine.GridSystem.GridBlock
             {
                 string path = $"{PREFABS}/{name}.prefab";
                 var root = new GameObject(name);
-                var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                cube.transform.SetParent(root.transform, false);
-                cube.transform.localScale = scale;
-                cube.GetComponent<Renderer>().sharedMaterial = MakeColoredMat(PREFABS, $"Mat_{name}", color);
+
+                var size  = name.Contains("Small") ? VoxelEngine.GridSystem.GridSize.Small : VoxelEngine.GridSystem.GridSize.Large;
+                var style = GridStyleFor(name);
+                VoxelEngine.GridSystem.GridBlockMeshBuilder.Build(root, style, size, color);
+
+                // Cell-sized box collider on the root so placement + ghost line up exactly.
+                float cs = size.CellSize();
+                var box = root.AddComponent<BoxCollider>();
+                box.size = new Vector3(cs, cs, cs);
+
                 var b = root.AddComponent<T>();
                 config?.Invoke(b);
                 var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
