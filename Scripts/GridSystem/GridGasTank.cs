@@ -23,15 +23,27 @@ namespace VoxelEngine.GridSystem
         public override void OnPlaced()
         {
             base.OnPlaced();
-            if (Grid != null && gasType == Gas.GasType.Hydrogen)
-                Grid.HydrogenStored += stored;
+            blockName = $"{gasType} Tank";
+            // The tank keeps its own buffer and feeds the grid pool through gas pipes
+            // (see Update) rather than dumping into the pool on placement.
         }
 
         private void Update()
         {
-            // Mirror the grid hydrogen pool for hydrogen tanks so the UI shows live data.
-            if (Grid != null && gasType == Gas.GasType.Hydrogen)
-                stored = Mathf.Min(capacity, Grid.HydrogenStored);
+            if (Grid == null || gasType != Gas.GasType.Hydrogen) return;
+
+            // When gas pipes are present on the grid, the tank feeds the shared
+            // hydrogen pool that thrusters draw from — Space-Engineers auto-supply.
+            bool piped = GridGasNetwork.Instance != null && GridGasNetwork.Instance.HasPipes(Grid);
+            if (piped && stored > 0f)
+            {
+                float feed = Mathf.Min(stored, 50f * Time.deltaTime); // top up the pool
+                stored -= feed;
+                Grid.HydrogenStored += feed;
+            }
+
+            // Keep the displayed value sane (don't exceed capacity).
+            stored = Mathf.Clamp(stored, 0f, capacity);
         }
 
         /// <summary>Draw up to <paramref name="litres"/> of gas. Returns litres drawn.</summary>

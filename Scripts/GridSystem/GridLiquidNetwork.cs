@@ -12,14 +12,27 @@ namespace VoxelEngine.GridSystem
 {
     public class GridLiquidNetwork : MonoBehaviour
     {
-        public static GridLiquidNetwork Instance { get; private set; }
+        private static GridLiquidNetwork _instance;
+        public static GridLiquidNetwork Instance
+        {
+            get
+            {
+                if (_instance == null)
+                {
+                    var go = new GameObject("GridLiquidNetwork");
+                    _instance = go.AddComponent<GridLiquidNetwork>();
+                    DontDestroyOnLoad(go);
+                }
+                return _instance;
+            }
+        }
 
         private readonly Dictionary<GridEntity, List<GridLiquidTank>> _tanks = new();
 
         private void Awake()
         {
-            if (Instance != null && Instance != this) { Destroy(gameObject); return; }
-            Instance = this;
+            if (_instance != null && _instance != this) { Destroy(gameObject); return; }
+            _instance = this;
         }
 
         public void RegisterTank(GridEntity grid, GridLiquidTank tank)

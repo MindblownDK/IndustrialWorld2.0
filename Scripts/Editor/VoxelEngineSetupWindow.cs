@@ -4349,6 +4349,16 @@ root =>
             var itemPipe = MakeGItem("GItem_ItemPipe", "Item Pipe", Color.white, pipePref, VoxelEngine.GridSystem.GridSize.Small, 30, 120);
             AddGRecipe("Recipe_GItemPipe", "Item Pipe", itemPipe, (ironPlate, 1), (copperWire, 1));
 
+            // Gas pipe — distributes hydrogen to thrusters grid-wide.
+            var gasPipePref = MakeGPref<VoxelEngine.GridSystem.GridGasPipe>("GasPipe_Small", new Color(0.4f, 0.7f, 0.9f), new Vector3(0.3f, 0.3f, 0.8f), p => p.throughput = 50f);
+            var gasPipe = MakeGItem("GItem_GasPipe", "Gas Pipe", Color.white, gasPipePref, VoxelEngine.GridSystem.GridSize.Small, 30, 120);
+            AddGRecipe("Recipe_GGasPipe", "Gas Pipe", gasPipe, (ironPlate, 1), (glass, 1));
+
+            // Liquid pipe — connects liquid tanks + machines grid-wide.
+            var liqPipePref = MakeGPref<VoxelEngine.GridSystem.GridLiquidPipe>("LiquidPipe_Small", new Color(0.3f, 0.5f, 0.85f), new Vector3(0.3f, 0.3f, 0.8f), p => p.throughput = 50f);
+            var liqPipe = MakeGItem("GItem_LiquidPipe", "Liquid Pipe", Color.white, liqPipePref, VoxelEngine.GridSystem.GridSize.Small, 30, 120);
+            AddGRecipe("Recipe_GLiquidPipe", "Liquid Pipe", liqPipe, (ironPlate, 1), (copperWire, 1));
+
             var dockPref = MakeGPref<VoxelEngine.GridSystem.GridDockingPort>("DockingPort_Large", new Color(0.6f, 0.6f, 0.2f), new Vector3(1.5f, 0.5f, 1.5f));
             var itemDock = MakeGItem("GItem_DockingPort", "Docking Port", Color.white, dockPref, VoxelEngine.GridSystem.GridSize.Large, 410, 500);
             AddGRecipe("Recipe_GDockingPort", "Docking Port", itemDock, (steelPlate, 5), (circuit, 2), (copperWire, 4));

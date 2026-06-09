@@ -11,14 +11,27 @@ namespace VoxelEngine.GridSystem
 {
     public class GridItemNetwork : MonoBehaviour
     {
-        public static GridItemNetwork Instance { get; private set; }
+        private static GridItemNetwork _instance;
+        public static GridItemNetwork Instance
+        {
+            get
+            {
+                if (_instance == null)
+                {
+                    var go = new GameObject("GridItemNetwork");
+                    _instance = go.AddComponent<GridItemNetwork>();
+                    DontDestroyOnLoad(go);
+                }
+                return _instance;
+            }
+        }
 
         private readonly Dictionary<GridEntity, List<IGridItemStore>> _stores = new();
 
         private void Awake()
         {
-            if (Instance != null && Instance != this) { Destroy(gameObject); return; }
-            Instance = this;
+            if (_instance != null && _instance != this) { Destroy(gameObject); return; }
+            _instance = this;
         }
 
         // ── Generic store API ──────────────────────────────────────────────────

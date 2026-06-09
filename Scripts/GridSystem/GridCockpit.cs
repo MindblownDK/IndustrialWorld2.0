@@ -31,9 +31,14 @@ namespace VoxelEngine.GridSystem
             player.enabled = false;
             player.GetComponent<Rigidbody>().isKinematic = true;
 
-            // Open the Grid Terminal
-            if (GridTerminalUI.Instance != null)
-                GridTerminalUI.Instance.Open(Grid);
+            // Cockpit enters flight control — the master terminal is opened
+            // separately (Interact on the cockpit while seated, or via a terminal block).
+        }
+
+        /// <summary>Open the Space-Engineers-style master terminal for this grid.</summary>
+        public void OpenTerminal()
+        {
+            VoxelEngine.UI.GameUIController.Instance?.OpenGridTerminal(Grid);
         }
 
         public void Exit()
@@ -43,9 +48,6 @@ namespace VoxelEngine.GridSystem
             Pilot.enabled = true;
             Pilot.GetComponent<Rigidbody>().isKinematic = false;
             Pilot = null;
-
-            if (GridTerminalUI.Instance != null)
-                GridTerminalUI.Instance.Close();
         }
 
         public void SwitchToSmallGrid()

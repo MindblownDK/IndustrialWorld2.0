@@ -188,6 +188,10 @@ namespace VoxelEngine.GridSystem.UI
             for (int i = 0; i < cc.container.Size; i++)
                 grid.Add(slot(cc.container, i, cc.container.GetSlot(i), false, true));
             p.Add(grid);
+
+            p.Add(T.Spacer(6));
+            p.Add(T.SmallButton("🛰  Open Ship Terminal",
+                () => VoxelEngine.UI.GameUIController.Instance?.OpenGridTerminal(cc.Grid), T.AccentCyan));
             return p;
         }
 

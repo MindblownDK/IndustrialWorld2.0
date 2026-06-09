@@ -62,6 +62,8 @@ namespace VoxelEngine.UI
         private VoxelEngine.Gas.HydrogenEngine _openHydroEngine;
         private VoxelEngine.Gas.GasTank _openGasTank;
         private VoxelEngine.GridSystem.GridBlock _openGridBlock;
+        private VoxelEngine.GridSystem.GridEntity _openGridTerminal;
+        private int _terminalTab; // -1 = All Storage, >=0 = index into the station list
         private VoxelEngine.Crafting.OilRefinery _openOilRefinery;
         private VoxelEngine.Industrial.StationaryChemicalPlant _openChemPlant;
         private VoxelEngine.Storage.StorageTerminal    _openStorageTerminal;
@@ -332,7 +334,7 @@ namespace VoxelEngine.UI
             _openReactor    = null; _openTurbine     = null;
             _openPortReactor= null; _openProcessor   = null;
             _openReprocessor= null; _openElectrolyser= null;
-            _openHydroEngine= null; _openGasTank     = null; _openGridBlock = null; _openOilRefinery = null; _openChemPlant = null;
+            _openHydroEngine= null; _openGasTank     = null; _openGridBlock = null; _openOilRefinery = null; _openChemPlant = null; _openGridTerminal = null;
             _rightContainer = null; _openChest = null;
             _openStation    = null;
             _activeQueue    = null;
@@ -461,7 +463,7 @@ namespace VoxelEngine.UI
             _openReactor    = null; _openTurbine     = null;
             _openPortReactor= null; _openProcessor   = null;
             _openReprocessor= null; _openElectrolyser= null;
-            _openHydroEngine= null; _openGasTank     = null; _openGridBlock = null; _openOilRefinery = null; _openChemPlant = null;
+            _openHydroEngine= null; _openGasTank     = null; _openGridBlock = null; _openOilRefinery = null; _openChemPlant = null; _openGridTerminal = null;
             _openStation    = null;
             UnwatchAllContainers();
             if (c is ItemContainer ic) WatchContainer(ic);
@@ -477,7 +479,7 @@ namespace VoxelEngine.UI
             _openReactor    = null; _openTurbine     = null;
             _openPortReactor= null; _openProcessor   = null;
             _openReprocessor= null; _openElectrolyser= null;
-            _openHydroEngine= null; _openGasTank     = null; _openGridBlock = null; _openOilRefinery = null; _openChemPlant = null;
+            _openHydroEngine= null; _openGasTank     = null; _openGridBlock = null; _openOilRefinery = null; _openChemPlant = null; _openGridTerminal = null;
             _rightContainer = null; _openChest = null;
             _openStation    = f.GetComponent<CraftingStation>();
             _inventoryOpen  = true;
@@ -496,7 +498,7 @@ namespace VoxelEngine.UI
             _openReactor    = null; _openTurbine     = null;
             _openPortReactor= null; _openProcessor   = null;
             _openReprocessor= null; _openElectrolyser= null;
-            _openHydroEngine= null; _openGasTank     = null; _openGridBlock = null; _openOilRefinery = null; _openChemPlant = null;
+            _openHydroEngine= null; _openGasTank     = null; _openGridBlock = null; _openOilRefinery = null; _openChemPlant = null; _openGridTerminal = null;
             _rightContainer = null; _openChest = null;
             _openStation    = ef.GetComponent<CraftingStation>();
             _inventoryOpen  = true;
@@ -514,7 +516,7 @@ namespace VoxelEngine.UI
             _openReactor    = null; _openTurbine     = null;
             _openPortReactor= null; _openProcessor   = null;
             _openReprocessor= null; _openElectrolyser= null;
-            _openHydroEngine= null; _openGasTank     = null; _openGridBlock = null; _openOilRefinery = null; _openChemPlant = null;
+            _openHydroEngine= null; _openGasTank     = null; _openGridBlock = null; _openOilRefinery = null; _openChemPlant = null; _openGridTerminal = null;
             _rightContainer = null; _openChest = null; _openStation = null;
             _inventoryOpen  = true;
             UnwatchAllContainers();
@@ -545,7 +547,7 @@ namespace VoxelEngine.UI
             _rightContainer = null; _openChest = null; _openStation = null; _openQuarry = null;
             _openReactor = null; _openTurbine = null; _openPortReactor = null;
             _openProcessor = null; _openReprocessor = null; _openElectrolyser = null;
-            _openHydroEngine = null; _openGasTank = null; _openGridBlock = null; _openOilRefinery = null; _openChemPlant = null;
+            _openHydroEngine = null; _openGasTank = null; _openGridBlock = null; _openOilRefinery = null; _openChemPlant = null; _openGridTerminal = null;
             _openStorageTerminal = null; _openServerRack = null;
             _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null;
@@ -613,6 +615,30 @@ namespace VoxelEngine.UI
             Refresh();
         }
 
+        /// <summary>Open the Space-Engineers-style master terminal for a whole grid:
+        /// a tabbed view of every station + an All-Storage tab spanning all containers.</summary>
+        public void OpenGridTerminal(VoxelEngine.GridSystem.GridEntity grid)
+        {
+            if (grid == null) return;
+            if (!_inventoryOpen) UIState.PushBlock();
+            // Clear all other open targets.
+            _openFurnace = null; _openElectric = null; _openCoalGen = null;
+            _rightContainer = null; _openChest = null; _openStation = null; _openQuarry = null;
+            _openReactor = null; _openTurbine = null; _openPortReactor = null;
+            _openProcessor = null; _openReprocessor = null; _openElectrolyser = null;
+            _openHydroEngine = null; _openGasTank = null; _openGridBlock = null;
+            _openOilRefinery = null; _openChemPlant = null;
+            _openStorageTerminal = null; _openServerRack = null;
+            _openPatternTerminal = null; _openCraftTerminal = null;
+            _openImporter = null; _openExporter = null;
+            _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
+            _openGridTerminal = grid; _terminalTab = -1;
+            _inventoryOpen = true;
+            UnwatchAllContainers();
+            UnlockCursor();
+            Refresh();
+        }
+
         public void OpenStation(CraftingStation st)
         {
             if (!_inventoryOpen) UIState.PushBlock();
@@ -625,7 +651,7 @@ namespace VoxelEngine.UI
             _openReactor    = null; _openTurbine     = null;
             _openPortReactor= null; _openProcessor   = null;
             _openReprocessor= null; _openElectrolyser= null;
-            _openHydroEngine= null; _openGasTank     = null; _openGridBlock = null; _openOilRefinery = null; _openChemPlant = null;
+            _openHydroEngine= null; _openGasTank     = null; _openGridBlock = null; _openOilRefinery = null; _openChemPlant = null; _openGridTerminal = null;
             _inventoryOpen  = true;
             // Lazy-create a queue on the station so progress survives panel closure/reopen.
             _activeQueue    = st.GetComponent<CraftQueue>();
@@ -766,6 +792,7 @@ namespace VoxelEngine.UI
                 else if (_openNAS              != null) _root.Add(VoxelEngine.Storage.StorageUI.BuildNASPanel(_openNAS, BuildSlot));
                 else if (_openPowerstation     != null) _root.Add(BuildPowerstationPanel(_openPowerstation));
                 else if (_openGridBlock        != null) { var mp = VoxelEngine.GridSystem.UI.GridBlockUI.BuildPanel(_openGridBlock, BuildSlot); _root.Add(mp); if (_openGridBlock is VoxelEngine.Transport.IItemPortHost) AppendItemPorts(mp, _openGridBlock); }
+                else if (_openGridTerminal     != null) _root.Add(VoxelEngine.GridSystem.UI.GridMasterTerminal.Build(_openGridTerminal, _terminalTab, t => { _terminalTab = t; Refresh(); }, BuildSlot));
                 else if (_openOilRefinery      != null) { var mp = VoxelEngine.Crafting.ProcessorUI.OilRefineryPanel(_openOilRefinery, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openOilRefinery); }
                 else if (_openChemPlant        != null) { var mp = VoxelEngine.Crafting.ProcessorUI.ChemicalPlantPanel(_openChemPlant, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openChemPlant); }
                 else if (_openStation  != null) BuildRightStationCrafting(_root, _openStation);
