@@ -38,7 +38,7 @@ namespace VoxelEngine.EditorTools
                 "1. Create assets — generates materials, items, planet definitions.\n" +
                 "2. Spawn manager — adds VoxelWorld + Player to the active scene.\n" +
                 "3. Build main menu scene (saves browser + new world UI).\n" +
-                "4. Validate URP/GPU Resident Drawer — checks rendering settings.",
+                "Run steps in order — most are idempotent and safe to re-run.",
                 MessageType.Info);
 
             if (GUILayout.Button("1. Create All Assets", GUILayout.Height(40)))
@@ -112,8 +112,6 @@ namespace VoxelEngine.EditorTools
             if (GUILayout.Button("12. Build Grid System Content (All Ship/Vehicle Blocks: Cockpit, Thruster, Battery, Armor, Drill, Grinder, Refinery, Weapon)", GUILayout.Height(56)))
                 BuildGridSystemContent();
 
-            if (GUILayout.Button("9. Open URP / GPU Resident Drawer Checklist", GUILayout.Height(40)))
-                ShowGpuChecklist();
             GUILayout.Space(20);
             EditorGUILayout.EndScrollView();
         }
@@ -2440,6 +2438,23 @@ namespace VoxelEngine.EditorTools
                 Object.DestroyImmediate(root);
             }
 
+            // ─ Stationary Chemical Plant (world equivalent of the grid Chemical Plant) ─
+            string chemPlantPath = $"{prefabsFolder}/StationaryChemicalPlant.prefab";
+            GameObject chemPlantPrefab;
+            {
+                var root = new GameObject("StationaryChemicalPlant");
+                var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                cube.transform.SetParent(root.transform, false);
+                cube.transform.localScale = new Vector3(2.2f, 2.4f, 2.2f);
+                cube.GetComponent<Renderer>().sharedMaterial = MakeColoredMat(prefabsFolder, "Mat_ChemicalPlant", new Color(0.40f, 0.55f, 0.35f));
+                var st = root.AddComponent<VoxelEngine.Crafting.CraftingStation>();
+                st.tier = VoxelEngine.Crafting.StationTier.Assembler;
+                st.displayName = "Chemical Plant";
+                root.AddComponent<VoxelEngine.Industrial.StationaryChemicalPlant>();
+                chemPlantPrefab = PrefabUtility.SaveAsPrefabAsset(root, chemPlantPath);
+                Object.DestroyImmediate(root);
+            }
+
             // ─ Wireless Storage Terminal (uses existing StorageTerminal with isWireless=true) ─
             string wstPath = $"{prefabsFolder}/WirelessStorageTerminal.prefab";
             GameObject wstPrefab;
@@ -2486,6 +2501,8 @@ namespace VoxelEngine.EditorTools
                 "Powered surface extractor. Scans the column below itself for Crude Oil voxels, lifts one barrel per cycle (consumes an Empty Barrel). Place over an oil pool. ~250 W while running.");
             var blockRefinery   = MakeIndustrialBlock("Block_OilRefinery", "Oil Refinery",      new Color(0.30f,0.20f,0.10f), refineryPrefab,
                 "Industrial multi-recipe processor. Crude Oil Barrel → Refined Oil Barrel + Empty Barrel, and Refined Oil + Coal → Plastic Bar + Empty Barrel. 2 input / 4 output / 2 upgrade slots. 400 W base draw.");
+            var blockChemPlant  = MakeIndustrialBlock("Block_ChemicalPlant", "Chemical Plant",  new Color(0.40f,0.55f,0.35f), chemPlantPrefab,
+                "Industrial chemistry processor. Refined Oil + Plastic → Liquid Fuel + Empty Barrel. 3 input / 3 output slots. 720 W base draw. Shares recipes with the grid Chemical Plant.");
             var blockWirelessST = MakeIndustrialBlock("Block_WirelessStorageTerminal", "Wireless Storage Terminal", new Color(0.55f,0.30f,0.85f), wstPrefab,
                 "Access the storage network from up to 60 m away. Requires power and a connected Server Rack. Unlocks with Wireless Access research.");
 
@@ -2546,8 +2563,23 @@ namespace VoxelEngine.EditorTools
                 new[] { ((VoxelEngine.Items.ItemDefinition)plastic,       2), (emptyBarrel, 1) },
                 seconds: 14f, powerMul: 1.25f);
 
+            // Liquid Fuel — high-energy product synthesised by the Chemical Plant
+            // (refined oil + plastic). Shared by both the stationary and grid plants.
+            var liquidFuel  = MakeIndustrialResource("Item_LiquidFuel", "Liquid Fuel",
+                "High-performance synthesised fuel. Powers advanced thrusters and engines.",
+                new Color(0.95f, 0.65f, 0.15f), VoxelEngine.Items.ResourceCategory.Component, "Oil", maxStack: 50);
+            liquidFuel.fuelSeconds = 180f; EditorUtility.SetDirty(liquidFuel);
+
+            var procLiquidFuel = MakeProc("Proc_MakeLiquidFuel", "Synthesise Liquid Fuel", "Chemistry",
+                new[] { ((VoxelEngine.Items.ItemDefinition)refinedBarrel, 1), ((VoxelEngine.Items.ItemDefinition)plastic, 1) },
+                new[] { ((VoxelEngine.Items.ItemDefinition)liquidFuel, 2), (emptyBarrel, 1) },
+                seconds: 16f, powerMul: 1.3f);
+
             // Attach those recipes to the OilRefinery prefab.
             AppendOilRefineryRecipes(refineryPrefab, new List<VoxelEngine.Crafting.ProcessingRecipe> { procRefine, procPlastic });
+
+            // Attach the Chemistry recipe to the Stationary Chemical Plant prefab.
+            AppendChemicalPlantRecipes(chemPlantPrefab, new List<VoxelEngine.Crafting.ProcessingRecipe> { procLiquidFuel });
 
             // ====================================================================
             //  5) NEW CRAFTING RECIPES — registered into the global RecipeRegistry
@@ -2609,6 +2641,7 @@ namespace VoxelEngine.EditorTools
             var recEmptyBarrel = AddRecipe("Recipe_EmptyBarrel", "Empty Barrel",  emptyBarrel,   1, VoxelEngine.Crafting.StationTier.Assembler, unlockedByDefault: false, (steelPlate, 1), (ironPlate, 2));
             var recPumpjack    = AddRecipe("Recipe_Pumpjack",    "Pumpjack",      blockPumpjack, 1, VoxelEngine.Crafting.StationTier.Assembler, unlockedByDefault: false, (steelPlate, 8), (ironGear, 6), (circuitBasic, 2));
             var recRefinery    = AddRecipe("Recipe_OilRefinery", "Oil Refinery",  blockRefinery, 1, VoxelEngine.Crafting.StationTier.Assembler, unlockedByDefault: false, (steelPlate, 12), (ironGear, 8), (circuitBasic, 4), (copperPlate, 4));
+            var recChemPlant   = AddRecipe("Recipe_ChemicalPlant", "Chemical Plant", blockChemPlant, 1, VoxelEngine.Crafting.StationTier.Assembler, unlockedByDefault: false, (steelPlate, 12), (circuitAdv, 4), (copperWire, 8), (glass, 4));
 
             // ── Wireless Storage Terminal (gated by Wireless Access) ──
             var recWST = AddRecipe("Recipe_WirelessStorageTerminal", "Wireless Storage Terminal", blockWirelessST, 1,
@@ -2784,7 +2817,7 @@ namespace VoxelEngine.EditorTools
                 tier: 4, col: 4, sub: VoxelEngine.Research.ResearchSubCategory.Chemistry,
                 tint: new Color(0.50f, 0.30f, 0.10f), seconds: 90f,
                 cost: new[] { (sciT2, 25), (sciT3, 15) },
-                unlocks: new[] { recRefinery },
+                unlocks: new[] { recRefinery, recChemPlant },
                 prereqs: new[] { nOilExtraction, nElectronics });
 
             // T4 — Plastics: enables the plastic processing recipe (already loaded into refinery prefab).
@@ -2999,6 +3032,26 @@ namespace VoxelEngine.EditorTools
                     foreach (var r in recipes)
                         if (r != null && !ref0.knownRecipes.Contains(r))
                             ref0.knownRecipes.Add(r);
+                }
+                PrefabUtility.SaveAsPrefabAsset(contents, path);
+            }
+            finally { PrefabUtility.UnloadPrefabContents(contents); }
+        }
+
+        private static void AppendChemicalPlantRecipes(GameObject prefab, List<VoxelEngine.Crafting.ProcessingRecipe> recipes)
+        {
+            if (prefab == null) return;
+            string path = AssetDatabase.GetAssetPath(prefab);
+            var contents = PrefabUtility.LoadPrefabContents(path);
+            try
+            {
+                var cp = contents.GetComponent<VoxelEngine.Industrial.StationaryChemicalPlant>();
+                if (cp != null)
+                {
+                    if (cp.knownRecipes == null) cp.knownRecipes = new List<VoxelEngine.Crafting.ProcessingRecipe>();
+                    foreach (var r in recipes)
+                        if (r != null && !cp.knownRecipes.Contains(r))
+                            cp.knownRecipes.Add(r);
                 }
                 PrefabUtility.SaveAsPrefabAsset(contents, path);
             }
@@ -3983,6 +4036,14 @@ root =>
             }
 
             // ────────────────────────────────────────────────────────────
+            // Merged content generators (previously separate Tools menu items).
+            // Farming crops/recipes + Nuclear fission content are now produced
+            // as part of Step 11 so a single click builds the full survival tier.
+            // ────────────────────────────────────────────────────────────
+            VoxelEngine.Farming.FarmingSetupGuide.CreateAll();
+            VoxelEngine.Nuclear.NuclearSetupGuide.CreateAll();
+
+            // ────────────────────────────────────────────────────────────
             // Save everything.
             // ────────────────────────────────────────────────────────────
             EditorUtility.SetDirty(tree);
@@ -4015,20 +4076,6 @@ root =>
                 "OK");
         }
 
-        private void ShowGpuChecklist()
-        {
-            EditorUtility.DisplayDialog("GPU Resident Drawer Checklist",
-                "Unity 6 GPU Resident Drawer requires:\n\n" +
-                "✅ Project ▸ Graphics ▸ Render Pipeline = URP (Universal)\n" +
-                "✅ URP Asset ▸ Rendering ▸ GPU Resident Drawer = Instanced Drawing\n" +
-                "✅ URP Asset ▸ Rendering ▸ SRP Batcher = ON\n" +
-                "✅ Universal Renderer Asset ▸ Rendering Path = Forward+\n" +
-                "✅ Project Settings ▸ Graphics ▸ Shader Stripping ▸ BatchRendererGroup Variants = Keep All\n" +
-                "✅ Project Settings ▸ Player ▸ Other Settings ▸ Static Batching = OFF\n\n" +
-                "Each chunk uses MeshFilter + MeshRenderer + the same Material instance, " +
-                "so they will all be batched into a single instanced draw call by GPURD.",
-                "Got it");
-        }
 
 
         // ===== Procedural scatter-prefab helpers =====
@@ -4267,6 +4314,101 @@ root =>
             var itemWeapon = MakeGItem("GItem_Weapon", "Gatling Weapon", Color.white, weaponPref, VoxelEngine.GridSystem.GridSize.Large, 310, 620);
             var recWeapon = AddGRecipe("Recipe_GWeapon", "Gatling Weapon", itemWeapon, (steelPlate, 6), (circuit, 4), (copperWire, 8));
 
+            // ════════════════════════════════════════════════════════════════
+            //  ADDITIONAL GRID BLOCKS — full parity with the GridSystem scripts.
+            // ════════════════════════════════════════════════════════════════
+
+            // -- 7) Logistics & Storage --
+            var cargoPref = MakeGPref<VoxelEngine.GridSystem.GridCargoContainer>("Cargo_Large", new Color(0.55f, 0.45f, 0.25f), new Vector3(1.5f, 1.5f, 1.5f), c => c.slots = 24);
+            var itemCargo = MakeGItem("GItem_Cargo", "Cargo Container", Color.white, cargoPref, VoxelEngine.GridSystem.GridSize.Large, 400, 700);
+            AddGRecipe("Recipe_GCargo", "Cargo Container", itemCargo, (steelPlate, 6), (ironPlate, 4));
+
+            var pipePref = MakeGPref<VoxelEngine.GridSystem.GridItemPipe>("ItemPipe_Small", new Color(0.7f, 0.7f, 0.75f), new Vector3(0.3f, 0.3f, 0.8f), p => p.transferRate = 10f);
+            var itemPipe = MakeGItem("GItem_ItemPipe", "Item Pipe", Color.white, pipePref, VoxelEngine.GridSystem.GridSize.Small, 30, 120);
+            AddGRecipe("Recipe_GItemPipe", "Item Pipe", itemPipe, (ironPlate, 1), (copperWire, 1));
+
+            var dockPref = MakeGPref<VoxelEngine.GridSystem.GridDockingPort>("DockingPort_Large", new Color(0.6f, 0.6f, 0.2f), new Vector3(1.5f, 0.5f, 1.5f));
+            var itemDock = MakeGItem("GItem_DockingPort", "Docking Port", Color.white, dockPref, VoxelEngine.GridSystem.GridSize.Large, 410, 500);
+            AddGRecipe("Recipe_GDockingPort", "Docking Port", itemDock, (steelPlate, 5), (circuit, 2), (copperWire, 4));
+
+            // -- 8) Mobility & Landing --
+            var wheelPref = MakeGPref<VoxelEngine.GridSystem.GridWheel>("Wheel_Large", new Color(0.12f, 0.12f, 0.12f), new Vector3(1.2f, 1.2f, 0.6f), w => { w.driveForce = 15000f; w.steerAngle = 30f; });
+            var itemWheel = MakeGItem("GItem_Wheel", "Wheel", Color.white, wheelPref, VoxelEngine.GridSystem.GridSize.Large, 220, 400);
+            AddGRecipe("Recipe_GWheel", "Wheel", itemWheel, (steelPlate, 3), (copperWire, 2));
+
+            var gearPref = MakeGPref<VoxelEngine.GridSystem.GridLandingGear>("LandingGear_Large", new Color(0.5f, 0.5f, 0.55f), new Vector3(0.8f, 1.0f, 0.8f));
+            var itemGear = MakeGItem("GItem_LandingGear", "Landing Gear", Color.white, gearPref, VoxelEngine.GridSystem.GridSize.Large, 480, 450);
+            AddGRecipe("Recipe_GLandingGear", "Landing Gear", itemGear, (steelPlate, 4), (ironPlate, 2));
+
+            // -- 9) Power generation --
+            var solarPref = MakeGPref<VoxelEngine.GridSystem.GridSolarPanel>("SolarPanel_Large", new Color(0.1f, 0.2f, 0.5f), new Vector3(2.5f, 0.2f, 2.5f), s => s.maxOutput = 400f);
+            var itemSolar = MakeGItem("GItem_SolarPanel", "Solar Panel", Color.white, solarPref, VoxelEngine.GridSystem.GridSize.Large, 350, 250);
+            AddGRecipe("Recipe_GSolarPanel", "Solar Panel", itemSolar, (steelPlate, 4), (circuit, 6), (glass, 6));
+
+            var reactorPref = MakeGPref<VoxelEngine.GridSystem.GridPortableReactor>("PortableReactor_Large", new Color(0.2f, 0.6f, 0.2f), new Vector3(1.8f, 1.8f, 1.8f), r => { r.wattsOutput = 800f; r.pelletBurnTime = 300f; });
+            var itemReactor = MakeGItem("GItem_PortableReactor", "Portable Reactor", Color.white, reactorPref, VoxelEngine.GridSystem.GridSize.Large, 1400, 1100);
+            var recReactor = AddGRecipe("Recipe_GPortableReactor", "Portable Reactor", itemReactor, (steelPlate, 16), (advCircuit ?? circuit, 6), (copperWire, 12));
+
+            // -- 10) Fluids & Gas --
+            var waterTankPref = MakeGPref<VoxelEngine.GridSystem.GridWaterTank>("WaterTank_Large", new Color(0.2f, 0.45f, 0.8f), new Vector3(1.5f, 1.8f, 1.5f), t => t.capacity = 500f);
+            var itemWaterTank = MakeGItem("GItem_WaterTank", "Water Tank", Color.white, waterTankPref, VoxelEngine.GridSystem.GridSize.Large, 220, 400);
+            AddGRecipe("Recipe_GWaterTank", "Water Tank", itemWaterTank, (steelPlate, 5), (glass, 2));
+
+            var fuelTankPref = MakeGPref<VoxelEngine.GridSystem.GridLiquidFuelTank>("LiquidFuelTank_Large", new Color(0.8f, 0.5f, 0.1f), new Vector3(1.5f, 1.8f, 1.5f), t => t.capacity = 300f);
+            var itemFuelTank = MakeGItem("GItem_LiquidFuelTank", "Liquid Fuel Tank", Color.white, fuelTankPref, VoxelEngine.GridSystem.GridSize.Large, 200, 350);
+            AddGRecipe("Recipe_GLiquidFuelTank", "Liquid Fuel Tank", itemFuelTank, (steelPlate, 5), (copperWire, 2));
+
+            var gasTankPref = MakeGPref<VoxelEngine.GridSystem.GridGasTank>("GasTank_Large", new Color(0.55f, 0.7f, 0.85f), new Vector3(1.5f, 1.8f, 1.5f), t => t.capacity = 500f);
+            var itemGasTank = MakeGItem("GItem_GasTank", "Gas Tank", Color.white, gasTankPref, VoxelEngine.GridSystem.GridSize.Large, 240, 380);
+            AddGRecipe("Recipe_GGasTank", "Gas Tank", itemGasTank, (steelPlate, 5), (glass, 2), (copperWire, 2));
+
+            var h2o2Pref = MakeGPref<VoxelEngine.GridSystem.GridH2O2Generator>("H2O2Generator_Large", new Color(0.3f, 0.7f, 0.9f), new Vector3(1.5f, 1.5f, 2.0f));
+            var itemH2O2 = MakeGItem("GItem_H2O2Generator", "H2/O2 Generator", Color.white, h2o2Pref, VoxelEngine.GridSystem.GridSize.Large, 600, 700);
+            AddGRecipe("Recipe_GH2O2Generator", "H2/O2 Generator", itemH2O2, (steelPlate, 8), (circuit, 4), (copperWire, 8));
+
+            // -- 11) Structure / Misc --
+            var glassPref = MakeGPref<VoxelEngine.GridSystem.GridGlassBlock>("Glass_Small", new Color(0.7f, 0.85f, 0.95f, 0.5f), new Vector3(0.5f, 0.5f, 0.5f));
+            var itemGlassBlk = MakeGItem("GItem_GlassBlock", "Glass Block", Color.white, glassPref, VoxelEngine.GridSystem.GridSize.Small, 40, 120);
+            AddGRecipe("Recipe_GGlassBlock", "Glass Block", itemGlassBlk, (glass, 1));
+
+            var demoPref = MakeGPref<VoxelEngine.GridSystem.GridDemolisher>("Demolisher_Large", new Color(0.7f, 0.3f, 0.1f), new Vector3(1.2f, 1.2f, 1.6f), d => { d.damagePerSecond = 50f; d.terrainDPS = 30f; });
+            var itemDemo = MakeGItem("GItem_Demolisher", "Demolisher", Color.white, demoPref, VoxelEngine.GridSystem.GridSize.Large, 320, 560);
+            AddGRecipe("Recipe_GDemolisher", "Demolisher", itemDemo, (steelPlate, 6), (circuit, 3));
+
+            // -- 12) Chemical Plant (grid) — shares Chemistry ProcessingRecipes --
+            string procFolder = ASSET_ROOT + "/Industrial/ProcessingRecipes";
+            var procRefineShared  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.ProcessingRecipe>($"{procFolder}/Proc_RefineOil.asset");
+            var procPlasticShared = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.ProcessingRecipe>($"{procFolder}/Proc_MakePlastic.asset");
+            var procChemistry     = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.ProcessingRecipe>($"{procFolder}/Proc_MakeLiquidFuel.asset");
+
+            var chemPref = MakeGPref<VoxelEngine.GridSystem.GridChemicalPlant>("ChemicalPlant_Large", new Color(0.5f, 0.7f, 0.4f), new Vector3(2.5f, 2.5f, 2.5f),
+                cp =>
+                {
+                    cp.knownRecipes = new System.Collections.Generic.List<VoxelEngine.Crafting.ProcessingRecipe>();
+                    if (procChemistry != null) cp.knownRecipes.Add(procChemistry);
+                });
+            var itemChem = MakeGItem("GItem_ChemicalPlant", "Chemical Plant", Color.white, chemPref, VoxelEngine.GridSystem.GridSize.Large, 1100, 900);
+            AddGRecipe("Recipe_GChemicalPlant", "Chemical Plant", itemChem, (steelPlate, 12), (circuit, 8), (copperWire, 8));
+
+            // -- Recipe parity: grid Refinery uses the SAME ProcessingRecipe assets
+            //    as the stationary Oil Refinery (Refine Crude Oil + Synthesise Plastic).
+            {
+                string refPath = AssetDatabase.GetAssetPath(refineryPref);
+                var refContents = PrefabUtility.LoadPrefabContents(refPath);
+                try
+                {
+                    var gr = refContents.GetComponent<VoxelEngine.GridSystem.GridRefinery>();
+                    if (gr != null)
+                    {
+                        gr.knownRecipes = new System.Collections.Generic.List<VoxelEngine.Crafting.ProcessingRecipe>();
+                        if (procRefineShared  != null) gr.knownRecipes.Add(procRefineShared);
+                        if (procPlasticShared != null) gr.knownRecipes.Add(procPlasticShared);
+                    }
+                    PrefabUtility.SaveAsPrefabAsset(refContents, refPath);
+                }
+                finally { PrefabUtility.UnloadPrefabContents(refContents); }
+            }
+
             // -- Research Nodes --
             if (tree != null)
             {
@@ -4326,7 +4468,11 @@ root =>
             EditorUtility.DisplayDialog("Grid System",
                 $"Step 12 complete — generated {recipes.Count} grid blocks (prefabs + items + recipes) in:\n{GRID_ROOT}\n\n" +
                 "• Cockpit, Thruster, Battery, Armor (Small + Large)\n" +
-                "• Drill, Grinder, Refinery, Weapon (Large)\n\n" +
+                "• Drill, Grinder, Refinery, Weapon, Demolisher (Large)\n" +
+                "• Cargo, Item Pipe, Docking Port, Wheel, Landing Gear\n" +
+                "• Solar Panel, Portable Reactor, Water/Fuel/Gas Tanks, H2/O2 Gen\n" +
+                "• Glass Block, Chemical Plant\n\n" +
+                "Grid Refinery shares the SAME ProcessingRecipes as the Oil Refinery.\n" +
                 "Recipes registered and gated behind Shipbuilding / Ship Armament research.", "OK");
         }
 

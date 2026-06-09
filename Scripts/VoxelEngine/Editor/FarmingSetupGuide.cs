@@ -15,7 +15,8 @@ namespace VoxelEngine.Farming
 {
     public static class FarmingSetupGuide
     {
-        [MenuItem("Tools/Voxel Engine/Create Farming Content")]
+        // Invoked from the Setup Wizard (Step 11). No standalone menu item —
+        // farming content is generated as part of the survival content step.
         public static void CreateAll()
         {
             string basePath = "Assets/VoxelEngineAssets/Farming";

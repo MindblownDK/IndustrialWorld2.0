@@ -1,37 +1,48 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridChemicalPlant.cs
 //
-// Chemical Plant - Mixes Kerosene + Liquid Hydrogen + Liquid Methane
-// into high-performance Liquid Fuel. Large grid only.
+// Chemical Plant (grid block). Large grid only.
+//
+// Mixes intermediate fuels into high-performance Liquid Fuel. Data-driven by
+// ProcessingRecipe assets (category "Chemistry") and shares the cargo-driven
+// runner with GridRefinery, so the grid + stationary chemical plants stay
+// behaviourally identical.
 
+using System.Collections.Generic;
 using UnityEngine;
+using VoxelEngine.Crafting;
 
 namespace VoxelEngine.GridSystem
 {
     public class GridChemicalPlant : GridBlock
     {
-        [Header("Chemical Plant - Fuel Synthesis")]
-        public float powerDraw = 720f;
-        public float mixRate = 3.5f;
+        [Header("Chemical Plant — Fuel Synthesis")]
+        public List<ProcessingRecipe> knownRecipes = new();
 
-        [Header("Input Ratios")]
-        public float keroseneRatio = 0.55f;
-        public float liquidH2Ratio = 0.30f;
-        public float liquidMethaneRatio = 0.15f;
+        public float baseWattsPerSecond = 720f;
+        public float idleWattsPerSecond = 20f;
 
-        private bool _isProducing;
+        private ProcessingRecipe _current;
+        private float _progress;
 
-        public override float PowerDraw => _isProducing ? powerDraw : 0f;
+        public ProcessingRecipe Current => _current;
+        public float Progress01 => _current == null ? 0f : Mathf.Clamp01(_progress / Mathf.Max(0.1f, _current.secondsPerBatch));
+
+        public override float PowerDraw =>
+            (_current != null) ? baseWattsPerSecond * _current.powerDrawMultiplier : idleWattsPerSecond;
 
         private void FixedUpdate()
         {
-            if (Grid == null) return;
+            if (Grid == null || !Grid.HasPower) { _progress = 0f; return; }
 
-            _isProducing = Grid.HasPower;
+            if (_current == null) _current = ProcessingRecipeRunner.FindRunnable(knownRecipes, Grid);
+            if (_current == null) { _progress = 0f; return; }
 
-            if (_isProducing)
+            _progress += Time.fixedDeltaTime;
+            if (_progress >= Mathf.Max(0.1f, _current.secondsPerBatch))
             {
-                // Full implementation would consume from cargo tanks
-                // and output into LiquidFuelTank
+                if (ProcessingRecipeRunner.RunBatch(_current, Grid)) _progress = 0f;
+                else _progress = _current.secondsPerBatch;
+                _current = null;
             }
         }
     }

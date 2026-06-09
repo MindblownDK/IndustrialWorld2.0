@@ -1,33 +1,55 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridRefinery.cs
 //
-// Industrial Refinery - Processes Crude Oil into Kerosene and other fuels.
-// Large grid only. Very expensive and heavy.
+// Industrial Refinery (grid block). Large grid only.
+//
+// Parity with the stationary OilRefinery: it is now data-driven by the SAME
+// ProcessingRecipe assets. Instead of its own input/output slots it draws raw
+// inputs from — and pushes finished outputs into — the GridCargoContainer
+// blocks on its parent GridEntity, so the recipe set is shared 1:1 with the
+// world Oil Refinery.
 
+using System.Collections.Generic;
 using UnityEngine;
+using VoxelEngine.Crafting;
+using VoxelEngine.Items;
 
 namespace VoxelEngine.GridSystem
 {
     public class GridRefinery : GridBlock
     {
-        [Header("Refinery - Liquid Fuel Chain")]
-        public float crudeConsumptionRate = 8f;
-        public float keroseneProductionRate = 5f;
-        public float powerDraw = 850f;
+        [Header("Refinery — Liquid Fuel Chain")]
+        [Tooltip("Same ProcessingRecipe assets the stationary Oil Refinery uses.")]
+        public List<ProcessingRecipe> knownRecipes = new();
 
-        private bool _isProcessing;
+        [Tooltip("Base watts/s drawn while a batch is processing. Multiplied by recipe.powerDrawMultiplier.")]
+        public float baseWattsPerSecond = 850f;
+        [Tooltip("Watts/s drawn while idle (keeps the cracking column hot).")]
+        public float idleWattsPerSecond = 20f;
 
-        public override float PowerDraw => _isProcessing ? powerDraw : 0f;
+        private ProcessingRecipe _current;
+        private float _progress;
+
+        public ProcessingRecipe Current => _current;
+        public float Progress01 => _current == null ? 0f : Mathf.Clamp01(_progress / Mathf.Max(0.1f, _current.secondsPerBatch));
+
+        public override float PowerDraw =>
+            (_current != null) ? baseWattsPerSecond * _current.powerDrawMultiplier : idleWattsPerSecond;
 
         private void FixedUpdate()
         {
-            if (Grid == null) return;
+            if (Grid == null || !Grid.HasPower) { _progress = 0f; return; }
 
-            _isProcessing = Grid.HasPower;
+            if (_current == null) _current = ProcessingRecipeRunner.FindRunnable(knownRecipes, Grid);
+            if (_current == null) { _progress = 0f; return; }
 
-            if (_isProcessing)
+            _progress += Time.fixedDeltaTime;
+            if (_progress >= Mathf.Max(0.1f, _current.secondsPerBatch))
             {
-                // In a full system this would consume CrudeOil from cargo
-                // and produce Kerosene into a LiquidFuelTank or cargo
+                if (ProcessingRecipeRunner.RunBatch(_current, Grid))
+                    _progress = 0f;
+                else
+                    _progress = _current.secondsPerBatch; // outputs full — pause until space frees up
+                _current = null; // re-pick next tick so a drained input doesn't soft-lock us
             }
         }
     }
