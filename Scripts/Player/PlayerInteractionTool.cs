@@ -297,8 +297,12 @@ namespace VoxelEngine.Player
 
                 // Grid (ship/vehicle) blocks that expose a UI panel. Cockpit is handled
                 // separately via EnterCockpit, so we skip it here.
+                // Holding a placeable block? Don't open the UI — let the GridBuilder
+                // place the block instead (so you can build on existing blocks).
+                bool holdingGridBlock = !inventory.ActiveStack.IsEmpty &&
+                                        inventory.ActiveStack.item is VoxelEngine.GridSystem.GridBlockItem;
                 var gridBlock = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
-                if (gridBlock != null && GridBlockHasUI(gridBlock))
+                if (!holdingGridBlock && gridBlock != null && GridBlockHasUI(gridBlock))
                 {
                     UI.GameUIController.Instance?.OpenMachine(gridBlock);
                     return;

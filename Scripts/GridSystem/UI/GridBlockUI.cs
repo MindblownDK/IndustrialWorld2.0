@@ -103,6 +103,25 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(gaugeRow);
             p.Add(T.Spacer(6));
             p.Add(T.StatRow("⚖", "Stored Mass", MassFormat.Format(tank.ContentMass), T.AccentCyan));
+            p.Add(T.Spacer(4));
+
+            // Gas type selector (only while empty), like the liquid tank.
+            p.Add(GridUIHelpers.SectionTitle("Gas Type"));
+            var typeRow = Row(); typeRow.style.flexWrap = Wrap.Wrap;
+            foreach (VoxelEngine.Gas.GasType gt in System.Enum.GetValues(typeof(VoxelEngine.Gas.GasType)))
+            {
+                if (gt == VoxelEngine.Gas.GasType.None) continue;
+                var captured = gt;
+                bool active = tank.gasType == gt;
+                var btn = T.SmallButton(gt.ToString(), () =>
+                {
+                    if (tank.SetGasType(captured)) VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+                }, active ? T.AccentCyan : (Color?)null);
+                btn.SetEnabled(tank.stored <= 0.001f || active);
+                typeRow.Add(btn);
+            }
+            p.Add(typeRow);
+            if (tank.stored > 0.001f) p.Add(T.Muted("Empty the tank to change its gas type."));
             return p;
         }
 
@@ -116,11 +135,15 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(hdr);
             p.Add(T.AccentDivider(T.AccentCyan));
 
-            // Internal water tank visual.
+            // Three tanks: water buffer + H₂ and O₂ outputs.
             var gaugeRow = Row();
-            gaugeRow.style.justifyContent = Justify.Center;
+            gaugeRow.style.justifyContent = Justify.SpaceAround;
             gaugeRow.Add(T.TankGauge("Water", gen.WaterFill01, new Color(0.25f, 0.55f, 0.95f),
-                $"{gen.waterStored:0} / {gen.waterCapacity:0} L", 64, 110));
+                $"{gen.waterStored:0}/{gen.waterCapacity:0} L", 60, 100));
+            gaugeRow.Add(T.TankGauge("H₂", gen.H2Fill01, new Color(0.35f, 0.7f, 0.95f),
+                $"{gen.h2Stored:0}/{gen.h2Capacity:0} L", 60, 100));
+            gaugeRow.Add(T.TankGauge("O₂", gen.O2Fill01, new Color(0.4f, 0.9f, 0.5f),
+                $"{gen.o2Stored:0}/{gen.o2Capacity:0} L", 60, 100));
             p.Add(gaugeRow);
             p.Add(T.Spacer(6));
 
@@ -129,7 +152,17 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(T.StatRow("🟩", "O₂ Rate", $"{gen.oxygenPerSecond:0.#}/s", T.AccentGreen));
             p.Add(T.Spacer(4));
 
-            // 4 ice slots.
+            // Overflow toggle.
+            var ofRow = Row();
+            ofRow.Add(T.SmallButton(gen.voidOverflow ? "⊘ Void Overflow: ON" : "⏸ Void Overflow: OFF",
+                () => { gen.ToggleVoidOverflow(); VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel(); },
+                gen.voidOverflow ? T.AccentRed : T.AccentTeal));
+            p.Add(ofRow);
+            p.Add(T.Muted(gen.voidOverflow ? "Excess gas is vented when a tank is full."
+                                           : "Production pauses when an output tank is full."));
+            p.Add(T.Spacer(4));
+
+            // 4 ice slots (water can also come from a connected Water Liquid Tank).
             p.Add(GridUIHelpers.SectionTitle("Ice Input (auto-pulled from cargo)"));
             if (gen.iceInput != null)
                 p.Add(GridUIHelpers.WeightHeader(MassUtil.ContainerMass(gen.iceInput), "Ice"));

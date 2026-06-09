@@ -23,7 +23,7 @@ namespace VoxelEngine.GridSystem
         public GridSize defaultGridSize = GridSize.Large;   // Player can change this
 
         private GameObject _ghost;
-        private MeshRenderer _ghostRenderer;
+        private GridBlockItem _ghostItem;   // which item the current ghost was built from
         private Material _ghostMat;
 
         private void Start()
@@ -78,7 +78,7 @@ namespace VoxelEngine.GridSystem
                 targetGrid = null;
             }
 
-            ShowGhost(worldPos, cs, rotation);
+            ShowGhost(gbi, worldPos, rotation);
 
             if (GameSettings.WasPressed(InputAction.Build))
             {
@@ -118,34 +118,55 @@ namespace VoxelEngine.GridSystem
             VoxelEngine.UI.BuildFeedbackHud.ShowBlockPlaced(item.displayName, item, 1);
         }
 
-        private void ShowGhost(Vector3 pos, float cellSize, Quaternion rotation)
+        private void ShowGhost(GridBlockItem item, Vector3 pos, Quaternion rotation)
         {
-            if (_ghost == null)
+            // Rebuild the ghost from the held item's prefab so the preview LOOKS like
+            // the real block (correct shape + cell-fitting size), instead of a cube.
+            if (_ghost == null || _ghostItem != item)
             {
-                _ghost = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                _ghost.name = "GridGhost";
-                var col = _ghost.GetComponent<BoxCollider>();
-                if (col != null) Destroy(col);
+                if (_ghost != null) Destroy(_ghost);
+                _ghostItem = item;
 
-                _ghostRenderer = _ghost.GetComponent<MeshRenderer>();
-                var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
-                _ghostMat = new Material(shader);
-                _ghostMat.color = ghostColor;
-                if (_ghostMat.HasProperty("_BaseColor")) _ghostMat.SetColor("_BaseColor", ghostColor);
-                _ghostMat.SetOverrideTag("RenderType", "Transparent");
-                _ghostMat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-                _ghostMat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-                _ghostMat.SetInt("_ZWrite", 0);
-                _ghostMat.renderQueue = 3100;
-                _ghostRenderer.material = _ghostMat;
-                _ghostRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                if (item.blockPrefab != null)
+                {
+                    _ghost = Instantiate(item.blockPrefab);
+                }
+                else
+                {
+                    _ghost = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    _ghost.transform.localScale = Vector3.one * item.gridSize.CellSize();
+                }
+                _ghost.name = "GridGhost";
+
+                // Strip colliders + any block behaviour so the ghost is purely visual.
+                foreach (var c in _ghost.GetComponentsInChildren<Collider>()) Destroy(c);
+                foreach (var b in _ghost.GetComponentsInChildren<GridBlock>()) Destroy(b);
+
+                BuildGhostMaterial();
+                foreach (var r in _ghost.GetComponentsInChildren<MeshRenderer>())
+                {
+                    r.sharedMaterial = _ghostMat;
+                    r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                }
             }
 
             _ghost.SetActive(true);
             _ghost.transform.position = pos;
             _ghost.transform.rotation = rotation;
-            // Match the real cell footprint exactly (blocks fill their cell now).
-            _ghost.transform.localScale = Vector3.one * cellSize;
+        }
+
+        private void BuildGhostMaterial()
+        {
+            if (_ghostMat != null) return;
+            var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+            _ghostMat = new Material(shader) { color = ghostColor };
+            if (_ghostMat.HasProperty("_BaseColor")) _ghostMat.SetColor("_BaseColor", ghostColor);
+            _ghostMat.SetOverrideTag("RenderType", "Transparent");
+            if (_ghostMat.HasProperty("_SrcBlend")) _ghostMat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            if (_ghostMat.HasProperty("_DstBlend")) _ghostMat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            if (_ghostMat.HasProperty("_ZWrite"))  _ghostMat.SetInt("_ZWrite", 0);
+            if (_ghostMat.HasProperty("_Surface")) _ghostMat.SetFloat("_Surface", 1); // URP transparent
+            _ghostMat.renderQueue = 3100;
         }
 
         private void HideGhost()

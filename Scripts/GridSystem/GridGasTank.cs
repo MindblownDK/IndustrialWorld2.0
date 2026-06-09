@@ -20,6 +20,15 @@ namespace VoxelEngine.GridSystem
         // Compressed gas is light but not weightless — ~0.05 kg per stored litre.
         public override float ContentMass => stored * 0.05f;
 
+        /// <summary>Change the stored gas type — only allowed while empty.</summary>
+        public bool SetGasType(Gas.GasType t)
+        {
+            if (stored > 0.001f) return false;
+            gasType = t;
+            blockName = $"{gasType} Tank";
+            return true;
+        }
+
         public override void OnPlaced()
         {
             base.OnPlaced();

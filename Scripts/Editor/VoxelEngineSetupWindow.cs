@@ -4280,7 +4280,21 @@ root =>
 
                 var size  = name.Contains("Small") ? VoxelEngine.GridSystem.GridSize.Small : VoxelEngine.GridSystem.GridSize.Large;
                 var style = GridStyleFor(name);
+
+                // Persist every generated material as an asset so the saved prefab keeps
+                // valid references (otherwise the runtime-only materials are dropped and
+                // the blocks render magenta).
+                EnsureFolder(PREFABS + "/Mats");
+                int matIdx = 0;
+                VoxelEngine.GridSystem.GridBlockMeshBuilder.MaterialPersister = (mat, _) =>
+                {
+                    string mp = $"{PREFABS}/Mats/{name}_{matIdx++}.mat";
+                    if (AssetDatabase.LoadAssetAtPath<Material>(mp) != null) AssetDatabase.DeleteAsset(mp);
+                    AssetDatabase.CreateAsset(mat, mp);
+                    return AssetDatabase.LoadAssetAtPath<Material>(mp);
+                };
                 VoxelEngine.GridSystem.GridBlockMeshBuilder.Build(root, style, size, color);
+                VoxelEngine.GridSystem.GridBlockMeshBuilder.MaterialPersister = null;
 
                 // Cell-sized box collider on the root so placement + ghost line up exactly.
                 float cs = VoxelEngine.GridSystem.GridSizeExt.CellSize(size);

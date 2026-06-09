@@ -22,6 +22,14 @@ namespace VoxelEngine.GridSystem
 
         private static Shader Lit => Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
 
+        /// <summary>Optional hook so editor tooling can persist generated materials as
+        /// assets (otherwise runtime-only materials are lost when a prefab is saved,
+        /// leaving blocks magenta). Args: (material, suggestedName) → returns the
+        /// material to actually use (typically the saved asset). Reset to null at
+        /// runtime so play-mode block creation just uses plain materials.</summary>
+        public static System.Func<Material, string, Material> MaterialPersister;
+        private static int _matCounter;
+
         /// <summary>Attach the styled visual to <paramref name="root"/>, sized to fill one cell.</summary>
         public static void Build(GameObject root, Style style, GridSize size, Color baseColor)
         {
@@ -259,6 +267,10 @@ namespace VoxelEngine.GridSystem
                 m.EnableKeyword("_EMISSION");
                 m.SetColor("_EmissionColor", emissive.Value);
             }
+            // If an editor persister is set, save the material as an asset so the
+            // prefab keeps a valid reference (no more magenta blocks).
+            if (MaterialPersister != null)
+                m = MaterialPersister(m, $"GMat_{_matCounter++}");
             return m;
         }
     }
