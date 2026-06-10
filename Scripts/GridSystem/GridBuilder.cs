@@ -55,25 +55,40 @@ namespace VoxelEngine.GridSystem
             Vector3Int gridPos;
             Vector3 worldPos;
             Quaternion rotation = Quaternion.identity;
-            float cs = gbi.gridSize.CellSize();
+
+            // If we aimed at terrain but a grid of the right size is right next to the
+            // hit point, snap to THAT grid so blocks attach instead of spawning a new
+            // lone grid (which leaves gaps + un-connected cables).
+            if (targetGrid == null || targetGrid.gridSize != gbi.gridSize)
+                targetGrid = FindNearbyGrid(hit.point, gbi.gridSize);
 
             if (targetGrid != null && targetGrid.gridSize == gbi.gridSize)
             {
-                gridPos = targetGrid.WorldToGrid(hit.point + hit.normal * cs * 0.5f);
+                float cs = gbi.gridSize.CellSize();
+                // Nudge a tiny amount along the hit normal into the empty neighbour cell,
+                // then round to the nearest cell. (Small nudge avoids landing back on the
+                // block we hit while not overshooting a whole extra cell.)
+                Vector3 probe = hit.point + hit.normal * (cs * 0.5f);
+                gridPos = targetGrid.WorldToGrid(probe);
+                if (!targetGrid.CanPlace(gridPos))
+                {
+                    // Occupied — step one more cell out along the normal.
+                    gridPos = targetGrid.WorldToGrid(hit.point + hit.normal * (cs * 1.0f));
+                    if (!targetGrid.CanPlace(gridPos)) { HideGhost(); return; }
+                }
                 worldPos = targetGrid.GridToWorld(gridPos);
                 rotation = targetGrid.transform.rotation;
-                if (!targetGrid.CanPlace(gridPos)) { HideGhost(); return; }
             }
             else
             {
-                // New grid - use selected size
-                gbi.gridSize = defaultGridSize;
-                cs = gbi.gridSize.CellSize();
-
+                // Brand-new grid — snap the first block to a clean world-space cell.
+                // IMPORTANT: respect the item's OWN grid size — never mutate the shared
+                // ScriptableObject (that corrupted the asset and caused size mismatches).
+                float cs = gbi.gridSize.CellSize();
                 worldPos = new Vector3(
-                    Mathf.Round(hit.point.x / cs + hit.normal.x * 0.5f) * cs,
-                    Mathf.Round(hit.point.y / cs + hit.normal.y * 0.5f) * cs,
-                    Mathf.Round(hit.point.z / cs + hit.normal.z * 0.5f) * cs);
+                    Mathf.Round(hit.point.x / cs) * cs,
+                    Mathf.Round((hit.point.y + cs * 0.5f) / cs) * cs,
+                    Mathf.Round(hit.point.z / cs) * cs);
                 gridPos = Vector3Int.zero;
                 targetGrid = null;
             }
@@ -116,6 +131,23 @@ namespace VoxelEngine.GridSystem
             grid.AddBlock(gridPos, block);
 
             VoxelEngine.UI.BuildFeedbackHud.ShowBlockPlaced(item.displayName, item, 1);
+        }
+
+        // Find a grid of the given size whose nearest cell is within ~1 cell of the
+        // aim point, so blocks attach to an existing ship even when aiming just past it.
+        private GridEntity FindNearbyGrid(Vector3 worldPoint, GridSize size)
+        {
+            float cs = size.CellSize();
+            GridEntity best = null;
+            float bestDist = cs * 1.5f;   // search radius
+            foreach (var ge in GameObject.FindObjectsByType<GridEntity>(FindObjectsSortMode.None))
+            {
+                if (ge.gridSize != size) continue;
+                var gp = ge.WorldToGrid(worldPoint);
+                float d = Vector3.Distance(worldPoint, ge.GridToWorld(gp));
+                if (d < bestDist) { bestDist = d; best = ge; }
+            }
+            return best;
         }
 
         private void ShowGhost(GridBlockItem item, Vector3 pos, Quaternion rotation)

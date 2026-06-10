@@ -2485,6 +2485,25 @@ namespace VoxelEngine.EditorTools
                 Object.DestroyImmediate(root);
             }
 
+            // ─ Stationary Docking Port (landing pad) — ships lock to it ─
+            string dockPath = $"{prefabsFolder}/StationaryDockingPort.prefab";
+            GameObject stationaryDockPrefab;
+            {
+                var root = new GameObject("StationaryDockingPort");
+                var pad = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                pad.transform.SetParent(root.transform, false);
+                pad.transform.localScale = new Vector3(3f, 0.4f, 3f);
+                pad.GetComponent<Renderer>().sharedMaterial = MakeColoredMat(prefabsFolder, "Mat_DockPad", new Color(0.55f, 0.55f, 0.20f));
+                var ring = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                ring.transform.SetParent(root.transform, false);
+                ring.transform.localScale = new Vector3(1.6f, 0.1f, 1.6f);
+                ring.transform.localPosition = new Vector3(0, 0.25f, 0);
+                ring.GetComponent<Renderer>().sharedMaterial = MakeColoredMat(prefabsFolder, "Mat_DockRing", new Color(0.2f, 0.7f, 0.9f));
+                root.AddComponent<VoxelEngine.GridSystem.BaseDock>();   // auto-adds PlacedBlock
+                stationaryDockPrefab = PrefabUtility.SaveAsPrefabAsset(root, dockPath);
+                Object.DestroyImmediate(root);
+            }
+
             // ─ Wireless Storage Terminal (uses existing StorageTerminal with isWireless=true) ─
             string wstPath = $"{prefabsFolder}/WirelessStorageTerminal.prefab";
             GameObject wstPrefab;
@@ -2533,6 +2552,8 @@ namespace VoxelEngine.EditorTools
                 "Industrial multi-recipe processor. Crude Oil Barrel → Refined Oil Barrel + Empty Barrel, and Refined Oil + Coal → Plastic Bar + Empty Barrel. 2 input / 4 output / 2 upgrade slots. 400 W base draw.");
             var blockChemPlant  = MakeIndustrialBlock("Block_ChemicalPlant", "Chemical Plant",  new Color(0.40f,0.55f,0.35f), chemPlantPrefab,
                 "Industrial chemistry processor. Refined Oil + Plastic → Liquid Fuel + Empty Barrel. 3 input / 3 output slots. 720 W base draw. Shares recipes with the grid Chemical Plant.");
+            var blockDock       = MakeIndustrialBlock("Block_StationaryDockingPort", "Docking Pad", new Color(0.55f,0.55f,0.20f), stationaryDockPrefab,
+                "Base-side landing pad. Ships with a Docking Port magnetically lock to it for cargo transfer.");
             var blockWirelessST = MakeIndustrialBlock("Block_WirelessStorageTerminal", "Wireless Storage Terminal", new Color(0.55f,0.30f,0.85f), wstPrefab,
                 "Access the storage network from up to 60 m away. Requires power and a connected Server Rack. Unlocks with Wireless Access research.");
 
@@ -2685,6 +2706,7 @@ namespace VoxelEngine.EditorTools
             var recPumpjack    = AddRecipe("Recipe_Pumpjack",    "Pumpjack",      blockPumpjack, 1, VoxelEngine.Crafting.StationTier.Assembler, unlockedByDefault: false, (steelPlate, 8), (ironGear, 6), (circuitBasic, 2));
             var recRefinery    = AddRecipe("Recipe_OilRefinery", "Oil Refinery",  blockRefinery, 1, VoxelEngine.Crafting.StationTier.Assembler, unlockedByDefault: false, (steelPlate, 12), (ironGear, 8), (circuitBasic, 4), (copperPlate, 4));
             var recChemPlant   = AddRecipe("Recipe_ChemicalPlant", "Chemical Plant", blockChemPlant, 1, VoxelEngine.Crafting.StationTier.Assembler, unlockedByDefault: false, (steelPlate, 12), (circuitAdv, 4), (copperWire, 8), (glass, 4));
+            var recDock        = AddRecipe("Recipe_StationaryDockingPort", "Docking Pad", blockDock, 1, VoxelEngine.Crafting.StationTier.Assembler, unlockedByDefault: true, (steelPlate, 10), (copperWire, 6));
 
             // ── Wireless Storage Terminal (gated by Wireless Access) ──
             var recWST = AddRecipe("Recipe_WirelessStorageTerminal", "Wireless Storage Terminal", blockWirelessST, 1,

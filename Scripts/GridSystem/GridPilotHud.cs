@@ -71,6 +71,14 @@ namespace VoxelEngine.GridSystem
         {
             if (_container == null) return;
 
+            // Hide the pilot HUD whenever a full UI panel is open (terminal, inventory,
+            // machine) so it doesn't flash/overlap behind it.
+            if (VoxelEngine.UI.UIState.IsBlocking)
+            {
+                _container.style.display = DisplayStyle.None;
+                return;
+            }
+
             // Find active cockpit (cached — only search every 0.5s).
             GridCockpit cockpit = _cachedCockpit;
             if (cockpit == null || cockpit.Pilot == null)

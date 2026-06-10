@@ -31,6 +31,7 @@ namespace VoxelEngine.GridSystem.UI
                 case GridChemicalPlant cp:  return ProcessorPanel("🧪 Ship Chemical Plant", cp.Current, cp.Progress01, cp.PowerDraw, cp.knownRecipes, cp.Grid, cp.selectedRecipe, r => cp.selectedRecipe = r);
                 case GridPortableReactor pr: return ReactorPanel(pr, slot);
                 case GridDockingPort dp:    return DockingPortPanel(dp, slot);
+                case GridLandingGear lg:    return LandingGearPanel(lg);
                 default:                    return GenericPanel(block);
             }
         }
@@ -390,6 +391,33 @@ namespace VoxelEngine.GridSystem.UI
             return p;
         }
 
+        // ── LANDING GEAR ───────────────────────────────────────────────────────────
+        private static VisualElement LandingGearPanel(GridLandingGear lg)
+        {
+            var p = T.MachinePanel();
+            var (hdr, _, _, _) = T.HeaderRow("🦿 Landing Gear",
+                lg.IsLocked ? "LOCKED" : "UNLOCKED",
+                lg.IsLocked ? T.AccentGreen : T.AccentAmber);
+            p.Add(hdr);
+            p.Add(T.AccentDivider(T.AccentGold));
+
+            p.Add(T.StatRow("🔒", "Lock Strength", PowerFormat.Newtons(lg.lockStrength), T.AccentCyan));
+            p.Add(T.Spacer(6));
+            var row = Row();
+            row.Add(T.SmallButton(lg.IsLocked ? "Unlock" : "Lock", () =>
+            {
+                lg.ToggleLock();
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, lg.IsLocked ? T.AccentRed : T.AccentGreen));
+            row.Add(T.SmallButton(lg.autoLock ? "Auto-Lock: ON" : "Auto-Lock: OFF", () =>
+            {
+                lg.autoLock = !lg.autoLock;
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, lg.autoLock ? T.AccentTeal : (Color?)null));
+            p.Add(row);
+            return p;
+        }
+
         // ── DOCKING PORT (inventory + I/O filter) ────────────────────────────────
         private static VisualElement DockingPortPanel(GridDockingPort dp, MachineUIs.SlotBuilder slot)
         {
@@ -403,6 +431,19 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(T.AccentDivider(T.AccentGold));
 
             p.Add(T.StatRow("⚖", "Buffer Mass", MassFormat.Format(dp.ContentMass), T.AccentCyan));
+            p.Add(T.StatRow("🔒", "Lock Strength", PowerFormat.Newtons(dp.lockStrength), T.AccentCyan));
+            var dockRow = Row();
+            dockRow.Add(T.SmallButton(dp.IsDocked ? "Undock" : "Dock", () =>
+            {
+                dp.ToggleDock();
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, dp.IsDocked ? T.AccentRed : T.AccentGreen));
+            dockRow.Add(T.SmallButton(dp.autoDock ? "Auto-Dock: ON" : "Auto-Dock: OFF", () =>
+            {
+                dp.autoDock = !dp.autoDock;
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, dp.autoDock ? T.AccentTeal : (Color?)null));
+            p.Add(dockRow);
             p.Add(T.Spacer(4));
 
             p.Add(GridUIHelpers.SectionTitle("Buffer Inventory"));

@@ -16,6 +16,8 @@ namespace VoxelEngine.Items
     {
         public static string Watts(float w) => Scale(w, "W");
         public static string WattHours(float wh) => Scale(wh, "Wh");
+        /// <summary>Force in newtons: N / kN / MN.</summary>
+        public static string Newtons(float n) => Scale(n, "N");
 
         private static string Scale(float v, string unit)
         {

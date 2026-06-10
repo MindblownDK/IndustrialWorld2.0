@@ -22,14 +22,17 @@ namespace VoxelEngine.GridSystem.UI
         public static VisualElement Build(GridEntity grid, int tab, Action<int> onSelectTab,
             MachineUIs.SlotBuilder slot, Action onClose)
         {
-            // ── Window shell (fixed size, near-opaque) ──
+            // ── Window shell (responsive, opaque) ──
             var win = new VisualElement();
-            win.style.width = 960; win.style.height = 620;
+            win.style.width = new StyleLength(new Length(82, LengthUnit.Percent));
+            win.style.height = new StyleLength(new Length(82, LengthUnit.Percent));
+            win.style.maxWidth = 1100; win.style.maxHeight = 760;
+            win.style.minWidth = 720;  win.style.minHeight = 460;
             win.style.flexDirection = FlexDirection.Column;
             win.style.backgroundColor = new StyleColor(new Color(0.06f, 0.07f, 0.10f, 1f)); // opaque
             T.Border(win, 1, T.BorderDim); T.Radius(win, 8);
-            win.style.paddingTop = 10; win.style.paddingBottom = 10;
-            win.style.paddingLeft = 12; win.style.paddingRight = 12;
+            win.style.paddingTop = 12; win.style.paddingBottom = 12;
+            win.style.paddingLeft = 14; win.style.paddingRight = 14;
 
             // ── Title bar ──
             var title = new VisualElement();
@@ -37,19 +40,35 @@ namespace VoxelEngine.GridSystem.UI
             title.style.alignItems = Align.Center;
             title.style.flexShrink = 0;
             title.style.marginBottom = 6;
-            var t = T.Title("SHIP CONTROL TERMINAL");
+            var t = T.Title("⬡  SHIP CONTROL TERMINAL");
             t.style.flexGrow = 1;
             title.Add(t);
-            if (grid != null)
-            {
-                title.Add(Chip($"⚖ {MassFormat.Format(grid.TotalMass)}", T.AccentCyan));
-                title.Add(Chip($"⚡ {PowerFormat.Watts(grid.PowerBalance)}",
-                    grid.PowerBalance >= 0 ? T.AccentGreen : T.AccentRed));
-            }
             title.Add(T.SmallButton("✕  Close", () => onClose?.Invoke(), T.AccentRed));
             win.Add(title);
 
             var div = T.AccentDivider(T.AccentCyan); div.style.flexShrink = 0; win.Add(div);
+
+            // ── Status strip — rich at-a-glance ship readout (SE-style) ──
+            if (grid != null)
+            {
+                int blockCount = grid.BlockCount;
+                float speed = grid.Body != null ? grid.Body.linearVelocity.magnitude : 0f;
+                var strip = new VisualElement();
+                strip.style.flexDirection = FlexDirection.Row;
+                strip.style.flexWrap = Wrap.Wrap;
+                strip.style.flexShrink = 0;
+                strip.style.marginTop = 6; strip.style.marginBottom = 6;
+                strip.Add(Stat("MASS", MassFormat.Format(grid.TotalMass), T.AccentCyan));
+                strip.Add(Stat("POWER",  PowerFormat.Watts(grid.PowerBalance), grid.PowerBalance >= 0 ? T.AccentGreen : T.AccentRed));
+                strip.Add(Stat("GEN",    PowerFormat.Watts(grid.PowerGenerated), T.AccentGreen));
+                strip.Add(Stat("USE",    PowerFormat.Watts(grid.PowerConsumed), T.AccentAmber));
+                strip.Add(Stat("H₂",     $"{grid.HydrogenStored:0} L", T.AccentCyan));
+                strip.Add(Stat("O₂",     $"{grid.OxygenStored:0} L", T.AccentGreen));
+                strip.Add(Stat("SPEED",  $"{speed:0.0} m/s", T.AccentGold));
+                strip.Add(Stat("BLOCKS", blockCount.ToString(), new Color(0.8f,0.84f,0.9f)));
+                win.Add(strip);
+                var d2 = T.AccentDivider(T.AccentTeal); d2.style.flexShrink = 0; win.Add(d2);
+            }
 
             // ── Body: left list + right content (fills remaining height) ──
             var body = new VisualElement();
@@ -119,7 +138,8 @@ namespace VoxelEngine.GridSystem.UI
         private static VisualElement BuildContent(GridEntity grid, List<GridBlock> blocks, int tab, MachineUIs.SlotBuilder slot)
         {
             var wrap = new ScrollView();
-            wrap.style.flexGrow = 1; wrap.style.minHeight = 0;
+            wrap.style.flexGrow = 1; wrap.style.minHeight = 0; wrap.style.minWidth = 0;
+            wrap.contentContainer.style.flexGrow = 1;
 
             if (tab >= 0 && tab < blocks.Count)
             {
@@ -153,7 +173,8 @@ namespace VoxelEngine.GridSystem.UI
         private static VisualElement AllStoragePanel(GridEntity grid, MachineUIs.SlotBuilder slot)
         {
             var p = T.MachinePanel();
-            p.style.width = 640;
+            p.style.width = StyleKeyword.Auto;
+            p.style.flexGrow = 1;
             var stores = new List<IGridItemStore>();
             float totalKg = 0f;
             if (grid != null && GridItemNetwork.Instance != null)
@@ -196,16 +217,25 @@ namespace VoxelEngine.GridSystem.UI
             || b is GridRefinery || b is GridChemicalPlant
             || b is GridWeapon || b is GridThruster
             || b is GridSolarPanel || b is GridPortableReactor
-            || b is GridDrill || b is GridGrinder || b is GridCockpit;
+            || b is GridDrill || b is GridGrinder || b is GridCockpit
+            || b is GridLandingGear;
 
-        private static VisualElement Chip(string text, Color c)
+        // Compact labeled stat box for the status strip.
+        private static VisualElement Stat(string label, string value, Color c)
         {
-            var l = new Label(text);
+            var box = new VisualElement();
+            box.style.flexDirection = FlexDirection.Column;
+            box.style.marginRight = 16; box.style.minWidth = 70;
+            var l = new Label(label);
+            l.style.fontSize = 8; l.style.letterSpacing = 1f;
             l.style.unityFontStyleAndWeight = FontStyle.Bold;
-            l.style.fontSize = 11;
-            l.style.color = new StyleColor(c);
-            l.style.marginRight = 12;
-            return l;
+            l.style.color = new StyleColor(new Color(0.5f, 0.55f, 0.62f));
+            box.Add(l);
+            var v = new Label(value);
+            v.style.fontSize = 14; v.style.unityFontStyleAndWeight = FontStyle.Bold;
+            v.style.color = new StyleColor(c);
+            box.Add(v);
+            return box;
         }
     }
 }
