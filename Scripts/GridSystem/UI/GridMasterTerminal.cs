@@ -215,7 +215,7 @@ namespace VoxelEngine.GridSystem.UI
         private static bool HasToggle(GridBlock b)
             => b is GridThruster || b is GridRefinery || b is GridChemicalPlant
             || b is GridH2O2Generator || b is GridDrill || b is GridGrinder
-            || b is GridWeapon || b is GridSolarPanel || b is GridPortableReactor;
+            || b is GridWeapon || b is GridSolarPanel || b is GridPortableReactor || b is GridElectricFurnace;
 
         private static bool IsTerminalBlock(GridBlock b)
             => b is GridCargoContainer || b is GridDockingPort
@@ -224,7 +224,7 @@ namespace VoxelEngine.GridSystem.UI
             || b is GridRefinery || b is GridChemicalPlant
             || b is GridWeapon || b is GridThruster
             || b is GridSolarPanel || b is GridPortableReactor
-            || b is GridDrill || b is GridGrinder || b is GridCockpit
+            || b is GridDrill || b is GridGrinder || b is GridCockpit || b is GridElectricFurnace
             || b is GridLandingGear;
 
         private static void SetAllEnabled(GridEntity grid, bool on)

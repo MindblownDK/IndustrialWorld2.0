@@ -41,7 +41,7 @@ namespace VoxelEngine.GridSystem
         {
             if (Grid == null || !Grid.IsControlled || !Grid.HasPower || !Grid.IsSelectedTool(this)) { _isFiring = false; return; }
 
-            _isFiring = Input.GetMouseButton(0) && HasAmmo();
+            _isFiring = GridInput.Mouse0 && HasAmmo();
             if (!_isFiring) return;
 
             _fireTimer += Time.deltaTime;

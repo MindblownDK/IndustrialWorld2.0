@@ -36,21 +36,12 @@ namespace VoxelEngine.GridSystem
             Vector3 thrust = new Vector3(right, up, fwd);
 
             // Rotation — Q/E roll + mouse look (yaw/pitch) via gyroscopes.
-            float roll = (Input.GetKey(KeyCode.Q) ? 1 : 0) - (Input.GetKey(KeyCode.E) ? 1 : 0);
+            float roll = (GridInput.Q ? 1 : 0) - (GridInput.E ? 1 : 0);
 
-            float mouseX = 0f, mouseY = 0f;
-            bool altHeld = false;
-#if ENABLE_INPUT_SYSTEM
-            var m = UnityEngine.InputSystem.Mouse.current;
-            if (m != null) { var d = m.delta.ReadValue(); mouseX = d.x; mouseY = d.y; }
-            var kb = UnityEngine.InputSystem.Keyboard.current;
-            altHeld = kb != null && (kb.leftAltKey.isPressed || kb.rightAltKey.isPressed);
-#else
-            mouseX = Input.GetAxis("Mouse X"); mouseY = Input.GetAxis("Mouse Y");
-            altHeld = Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt);
-#endif
+            Vector2 md = GridInput.MouseDelta;
+            float mouseX = md.x, mouseY = md.y;
 
-            if (altHeld)
+            if (GridInput.Alt)
             {
                 // FREE-LOOK: hold Alt to look around the cockpit without turning the ship.
                 FreeLook(mouseX, mouseY);
@@ -66,12 +57,7 @@ namespace VoxelEngine.GridSystem
             Grid.SetFlightInput(thrust, yaw, pitch, roll);
 
             // Scroll cycles between fire tools (Drill → Weapon 1 → Weapon 2 → …).
-            float scroll;
-#if ENABLE_INPUT_SYSTEM
-            scroll = m != null ? m.scroll.ReadValue().y : 0f;
-#else
-            scroll = Input.mouseScrollDelta.y;
-#endif
+            float scroll = GridInput.Scroll;
             if (Mathf.Abs(scroll) > 0.01f)
             {
                 int n = Grid.GetFireTools().Count;

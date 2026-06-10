@@ -75,6 +75,9 @@ namespace VoxelEngine.Transport
         {
             EnsurePorts();
             if (_ports == null || _host == null) return;
+            // _host is an interface ref — a destroyed Unity object reads as C#-non-null
+            // through it, so verify the underlying Component is still alive.
+            if (_host is UnityEngine.Object hostObj && hostObj == null) return;
             if (!_ports.HasAnyOutput()) return;
 
             _pushTimer += Time.deltaTime;

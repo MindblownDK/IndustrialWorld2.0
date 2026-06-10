@@ -49,7 +49,7 @@ namespace VoxelEngine.GridSystem
                 return;
             }
 
-            _isActive = Input.GetMouseButton(0);
+            _isActive = GridInput.Mouse0;
             if (!_isActive) return;
 
             _drillTimer += Time.deltaTime;

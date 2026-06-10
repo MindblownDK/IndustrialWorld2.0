@@ -158,18 +158,9 @@ namespace VoxelEngine.GridSystem
         // Ctrl+Scroll = yaw (Y), Shift+Scroll = pitch (X), Ctrl+Shift+Scroll = roll (Z).
         private void HandleRotationInput()
         {
-#if ENABLE_INPUT_SYSTEM
-            var kb = UnityEngine.InputSystem.Keyboard.current;
-            var mouse = UnityEngine.InputSystem.Mouse.current;
-            if (kb == null || mouse == null) return;
-            float scroll = mouse.scroll.ReadValue().y;
-            bool ctrl  = kb.leftCtrlKey.isPressed  || kb.rightCtrlKey.isPressed;
-            bool shift = kb.leftShiftKey.isPressed || kb.rightShiftKey.isPressed;
-#else
-            float scroll = Input.mouseScrollDelta.y;
-            bool ctrl  = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
-            bool shift = Input.GetKey(KeyCode.LeftShift)   || Input.GetKey(KeyCode.RightShift);
-#endif
+            float scroll = GridInput.Scroll;
+            bool ctrl  = GridInput.Ctrl;
+            bool shift = GridInput.Shift;
             if (Mathf.Abs(scroll) < 0.01f) return;
             if (!ctrl && !shift) return;   // plain scroll = hotbar, leave it alone
 

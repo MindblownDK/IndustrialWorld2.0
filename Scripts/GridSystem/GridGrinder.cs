@@ -22,7 +22,7 @@ namespace VoxelEngine.GridSystem
         {
             if (Grid == null || !Grid.IsControlled || !Grid.HasPower) { _isActive = false; return; }
 
-            _isActive = Input.GetMouseButton(1);
+            _isActive = GridInput.Mouse1;
 
             if (!_isActive) return;
 

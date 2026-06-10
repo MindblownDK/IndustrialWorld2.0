@@ -33,6 +33,7 @@ namespace VoxelEngine.GridSystem.UI
                 case GridDockingPort dp:    return DockingPortPanel(dp, slot);
                 case GridLandingGear lg:    return LandingGearPanel(lg);
                 case GridDrill dr:          return DrillPanel(dr, slot);
+                case GridElectricFurnace ef: return FurnacePanel(ef, slot);
                 default:                    return GenericPanel(block);
             }
         }
@@ -389,6 +390,39 @@ namespace VoxelEngine.GridSystem.UI
             var wg = T.SlotGrid(r.wasteC.Size);
             for (int i = 0; i < r.wasteC.Size; i++) wg.Add(slot(r.wasteC, i, r.wasteC.GetSlot(i), false, true));
             p.Add(wg);
+            return p;
+        }
+
+        // ── SHIP ELECTRIC FURNACE ───────────────────────────────────────────────────
+        private static VisualElement FurnacePanel(GridElectricFurnace f, MachineUIs.SlotBuilder slot)
+        {
+            if (f.inputC == null) f.OnPlaced();
+            var p = T.MachinePanel();
+            p.style.width = 420;
+            var (hdr, _, _, _) = T.HeaderRow("🔥 Ship Electric Furnace",
+                f.IsSmelting ? "SMELTING" : "IDLE", f.IsSmelting ? T.AccentGreen : T.AccentAmber);
+            p.Add(hdr);
+            p.Add(T.AccentDivider(T.AccentGold));
+
+            p.Add(T.StatRow("⚡", "Power Use", PowerFormat.Watts(f.PowerDraw), T.AccentGold));
+            if (f.IsSmelting) { var (bar,_) = T.ProgressBar(f.Progress01, T.AccentGreen, 8, true); p.Add(bar); }
+            p.Add(T.Spacer(4));
+
+            var apRow = Row();
+            apRow.Add(T.SmallButton(f.autoPull ? "⤵ Auto-Pull: ON" : "⤵ Auto-Pull: OFF",
+                () => { f.ToggleAutoPull(); VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel(); },
+                f.autoPull ? T.AccentGreen : T.BgSlot));
+            p.Add(apRow);
+            p.Add(T.Muted("Auto-smelts smeltable items from ship cargo into ingots."));
+
+            p.Add(GridUIHelpers.SectionTitle("Input"));
+            var ig = T.SlotGrid(f.inputC.Size);
+            for (int i = 0; i < f.inputC.Size; i++) ig.Add(slot(f.inputC, i, f.inputC.GetSlot(i), false, true));
+            p.Add(ig);
+            p.Add(GridUIHelpers.SectionTitle("Output"));
+            var og = T.SlotGrid(f.outputC.Size);
+            for (int i = 0; i < f.outputC.Size; i++) og.Add(slot(f.outputC, i, f.outputC.GetSlot(i), false, true));
+            p.Add(og);
             return p;
         }
 

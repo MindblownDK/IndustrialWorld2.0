@@ -77,6 +77,7 @@ namespace VoxelEngine.GridSystem
 
         private void EnsureRefs()
         {
+            if (this == null) return; // block was destroyed (ground/removed) this frame
             if (_ports == null)
             {
                 _ports = GetComponent<PortConfig>();

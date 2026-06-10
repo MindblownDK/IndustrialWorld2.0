@@ -606,6 +606,7 @@ namespace VoxelEngine.UI
                     else if (gb is VoxelEngine.GridSystem.GridDockingPort gdp) { if (gdp.container == null) gdp.OnPlaced(); WatchContainer(gdp.container); }
                     else if (gb is VoxelEngine.GridSystem.GridPortableReactor gpr) { if (gpr.fuelC == null) gpr.OnPlaced(); WatchContainer(gpr.fuelC); WatchContainer(gpr.iceC); WatchContainer(gpr.wasteC); }
                     else if (gb is VoxelEngine.GridSystem.GridDrill gdr) { if (gdr.buffer == null) gdr.OnPlaced(); WatchContainer(gdr.buffer); }
+                    else if (gb is VoxelEngine.GridSystem.GridElectricFurnace gef) { if (gef.inputC == null) gef.OnPlaced(); WatchContainer(gef.inputC); WatchContainer(gef.outputC); }
                     break;
                 case VoxelEngine.Storage.StorageTerminal st2: _openStorageTerminal = st2; break;
                 case VoxelEngine.Storage.PatternTerminal pt2: _openPatternTerminal = pt2; break;

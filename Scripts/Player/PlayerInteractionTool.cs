@@ -651,7 +651,8 @@ namespace VoxelEngine.Player
                 || b is VoxelEngine.GridSystem.GridPortableReactor
                 || b is VoxelEngine.GridSystem.GridDockingPort
                 || b is VoxelEngine.GridSystem.GridLandingGear
-                || b is VoxelEngine.GridSystem.GridDrill;
+                || b is VoxelEngine.GridSystem.GridDrill
+                || b is VoxelEngine.GridSystem.GridElectricFurnace;
         }
     }
 }

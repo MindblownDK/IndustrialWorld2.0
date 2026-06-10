@@ -832,6 +832,7 @@ namespace VoxelEngine.EditorTools
             if (n.Contains("gyroscope"))  return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Gyroscope;
             if (n.Contains("refinery"))   return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Refinery;
             if (n.Contains("chemical"))   return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.ChemicalPlant;
+            if (n.Contains("furnace"))    return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Refinery;
             if (n.Contains("h2o2"))       return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.H2O2;
             if (n.Contains("demolisher")) return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Demolisher;
             if (n.Contains("itempipe"))   return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.ItemPipe;
@@ -4435,6 +4436,12 @@ root =>
                 g => { g.grindRadius = 1.2f; g.grindStrength = 60f; g.grindRate = 5f; });
             var itemGrinder = MakeGItem("GItem_Grinder", "Grinder", Color.white, grinderPref, VoxelEngine.GridSystem.GridSize.Large, 280, 560);
             AddGRecipe("Recipe_GGrinder", "Grinder", itemGrinder, (steelPlate, 5), (circuit, 2));
+
+            // Ship Electric Furnace — auto-smelts ship cargo into ingots.
+            var furnacePref = MakeGPref<VoxelEngine.GridSystem.GridElectricFurnace>("ElectricFurnace_Large", new Color(0.5f, 0.3f, 0.2f), Vector3.one,
+                f => { f.baseWattsPerSecond = 300f; f.autoPull = true; });
+            var itemFurnace = MakeGItem("GItem_ElectricFurnace", "Ship Electric Furnace", Color.white, furnacePref, VoxelEngine.GridSystem.GridSize.Large, 600, 800);
+            AddGRecipe("Recipe_GElectricFurnace", "Ship Electric Furnace", itemFurnace, (steelPlate, 8), (circuit, 4), (copperWire, 6));
 
             var refineryPref = MakeGPref<VoxelEngine.GridSystem.GridRefinery>("Refinery_Large", new Color(0.5f, 0.4f, 0.2f), new Vector3(2.5f, 2.5f, 2.5f),
                 r => { r.baseWattsPerSecond = 850f; });
