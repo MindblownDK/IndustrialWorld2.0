@@ -36,6 +36,9 @@ namespace VoxelEngine.GridSystem
             _container.pickingMode = PickingMode.Ignore;
             _container.style.display = DisplayStyle.None;
             uiRoot.Add(_container);
+            // Apply correct visibility immediately so a Refresh() rebuild never shows a
+            // 1-frame flash of the HUD before the next Tick hides it.
+            Tick();
 
             var title = T.Subtitle("SHIP CONTROL");
             _container.Add(title);

@@ -17,14 +17,55 @@ namespace VoxelEngine.GridSystem
 
         private void Update()
         {
-            if (Pilot != null)
+            if (Pilot == null) return;
+
+            if (GameSettings.WasPressed(InputAction.ExitCockpit)) { Exit(); return; }
+
+            // Don't fly while a UI panel (terminal/inventory) is open.
+            if (VoxelEngine.UI.UIState.IsBlocking || Grid == null) { Grid?.SetFlightInput(Vector3.zero, 0, 0, 0); return; }
+
+            ReadFlightInput();
+        }
+
+        private void ReadFlightInput()
+        {
+            // Translation — WASD + Space/Ctrl (relative to the cockpit's facing).
+            float fwd   = (Held(InputAction.Forward) ? 1 : 0) - (Held(InputAction.Back) ? 1 : 0);
+            float right = (Held(InputAction.Right) ? 1 : 0)   - (Held(InputAction.Left) ? 1 : 0);
+            float up    = (Held(InputAction.Jump) ? 1 : 0)    - (Held(InputAction.Down) ? 1 : 0);
+            Vector3 thrust = new Vector3(right, up, fwd);
+
+            // Rotation — Q/E roll + mouse look (yaw/pitch) via gyroscopes.
+            float roll = (Input.GetKey(KeyCode.Q) ? 1 : 0) - (Input.GetKey(KeyCode.E) ? 1 : 0);
+
+            float mouseX = 0f, mouseY = 0f;
+#if ENABLE_INPUT_SYSTEM
+            var m = UnityEngine.InputSystem.Mouse.current;
+            if (m != null) { var d = m.delta.ReadValue(); mouseX = d.x; mouseY = d.y; }
+#else
+            mouseX = Input.GetAxis("Mouse X"); mouseY = Input.GetAxis("Mouse Y");
+#endif
+            float sens = 0.06f;
+            float yaw   = Mathf.Clamp(mouseX * sens, -1f, 1f);
+            float pitch = Mathf.Clamp(-mouseY * sens, -1f, 1f);
+
+            Grid.SetFlightInput(thrust, yaw, pitch, roll);
+
+            // Scroll cycles between fire tools (Drill → Weapon 1 → Weapon 2 → …).
+            float scroll;
+#if ENABLE_INPUT_SYSTEM
+            scroll = m != null ? m.scroll.ReadValue().y : 0f;
+#else
+            scroll = Input.mouseScrollDelta.y;
+#endif
+            if (Mathf.Abs(scroll) > 0.01f)
             {
-                if (GameSettings.WasPressed(InputAction.ExitCockpit))
-                {
-                    Exit();
-                }
+                int n = Grid.GetFireTools().Count;
+                if (n > 0) Grid.SelectedToolIndex = ((Grid.SelectedToolIndex + (scroll > 0 ? 1 : -1)) % n + n) % n;
             }
         }
+
+        private static bool Held(InputAction a) => GameSettings.IsHeld(a);
 
         public void Enter(Player.PlayerController player)
         {

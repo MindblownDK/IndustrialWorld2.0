@@ -31,9 +31,12 @@ namespace VoxelEngine.GridSystem
             blockName = "Landing Gear";
         }
 
+        private float _unlockCooldown;
+
         private void FixedUpdate()
         {
             if (!Enabled) { Unlock(); return; }
+            if (_unlockCooldown > 0f) { _unlockCooldown -= Time.fixedDeltaTime; return; }
             if (IsLocked) return;
             if (!autoLock) return;
 
@@ -68,6 +71,8 @@ namespace VoxelEngine.GridSystem
         public void Unlock()
         {
             if (_joint != null) { Destroy(_joint); _joint = null; }
+            // Hold off auto-lock for a moment so a manual unlock doesn't instantly re-lock.
+            _unlockCooldown = 1.5f;
         }
 
         public void ToggleLock()

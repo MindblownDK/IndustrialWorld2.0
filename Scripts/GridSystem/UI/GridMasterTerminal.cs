@@ -20,15 +20,13 @@ namespace VoxelEngine.GridSystem.UI
     {
         /// <param name="tab">-1 = All Storage; otherwise index into the block list.</param>
         public static VisualElement Build(GridEntity grid, int tab, Action<int> onSelectTab,
-            MachineUIs.SlotBuilder slot, Action onClose,
-            VoxelEngine.Items.Inventory playerInv = null, Action onToggleInventory = null)
+            MachineUIs.SlotBuilder slot, Action onClose)
         {
-            // ── Window shell (responsive, opaque) ──
+            // ── Window shell (right-side panel, opaque) ──
             var win = new VisualElement();
-            win.style.width = new StyleLength(new Length(82, LengthUnit.Percent));
-            win.style.height = new StyleLength(new Length(82, LengthUnit.Percent));
-            win.style.maxWidth = 1100; win.style.maxHeight = 760;
-            win.style.minWidth = 720;  win.style.minHeight = 460;
+            win.style.width = 720;
+            win.style.height = new StyleLength(new Length(86, LengthUnit.Percent));
+            win.style.maxHeight = 800; win.style.minHeight = 460;
             win.style.flexDirection = FlexDirection.Column;
             win.style.backgroundColor = new StyleColor(new Color(0.06f, 0.07f, 0.10f, 1f)); // opaque
             T.Border(win, 1, T.BorderDim); T.Radius(win, 8);
@@ -47,8 +45,6 @@ namespace VoxelEngine.GridSystem.UI
             // Toggle ALL functional blocks on/off at once.
             title.Add(T.SmallButton("⏼ All ON", () => SetAllEnabled(grid, true), T.AccentGreen));
             title.Add(T.SmallButton("⭘ All OFF", () => SetAllEnabled(grid, false), T.AccentAmber));
-            if (onToggleInventory != null)
-                title.Add(T.SmallButton(playerInv != null ? "🎒 Hide Inv" : "🎒 Show Inv", () => onToggleInventory(), T.BgSlot));
             title.Add(T.SmallButton("✕  Close", () => onClose?.Invoke(), T.AccentRed));
             win.Add(title);
 
@@ -90,7 +86,6 @@ namespace VoxelEngine.GridSystem.UI
 
             body.Add(BuildBlockList(blocks, tab, onSelectTab));
             body.Add(BuildContent(grid, blocks, tab, slot));
-            if (playerInv != null) body.Add(BuildInventoryPane(playerInv, slot));
             win.Add(body);
             return win;
         }
@@ -144,9 +139,8 @@ namespace VoxelEngine.GridSystem.UI
         // ── RIGHT: content ──────────────────────────────────────────────────────────
         private static VisualElement BuildContent(GridEntity grid, List<GridBlock> blocks, int tab, MachineUIs.SlotBuilder slot)
         {
-            var wrap = new ScrollView();
+            var wrap = new ScrollView(ScrollViewMode.Vertical);
             wrap.style.flexGrow = 1; wrap.style.minHeight = 0; wrap.style.minWidth = 0;
-            wrap.contentContainer.style.flexGrow = 1;
 
             if (tab >= 0 && tab < blocks.Count)
             {
@@ -182,8 +176,7 @@ namespace VoxelEngine.GridSystem.UI
             var p = T.MachinePanel();
             p.style.width = StyleKeyword.Auto;
             p.style.maxWidth = 480;
-            p.style.flexGrow = 1; p.style.flexShrink = 1;
-            p.style.overflow = Overflow.Hidden;
+            p.style.flexShrink = 0;   // let it grow tall so the parent ScrollView scrolls down
             var stores = new List<IGridItemStore>();
             float totalKg = 0f;
             if (grid != null && GridItemNetwork.Instance != null)
@@ -233,33 +226,6 @@ namespace VoxelEngine.GridSystem.UI
             || b is GridSolarPanel || b is GridPortableReactor
             || b is GridDrill || b is GridGrinder || b is GridCockpit
             || b is GridLandingGear;
-
-        // Player inventory pane — lets the pilot transfer items into the ship.
-        private static VisualElement BuildInventoryPane(VoxelEngine.Items.Inventory inv, MachineUIs.SlotBuilder slot)
-        {
-            var col = new VisualElement();
-            col.style.width = 290; col.style.flexShrink = 0; col.style.marginLeft = 10;
-            col.style.backgroundColor = new StyleColor(new Color(0.09f, 0.10f, 0.14f, 1f));
-            T.Border(col, 1, T.BorderDim); T.Radius(col, 6);
-            col.style.paddingTop = 6; col.style.paddingBottom = 6;
-            col.style.paddingLeft = 6; col.style.paddingRight = 6;
-
-            var lbl = new Label("YOUR INVENTORY");
-            lbl.style.fontSize = 10; lbl.style.unityFontStyleAndWeight = FontStyle.Bold;
-            lbl.style.letterSpacing = 1f; lbl.style.color = new StyleColor(T.AccentGold);
-            lbl.style.marginBottom = 4; lbl.style.flexShrink = 0;
-            col.Add(lbl);
-            col.Add(GridUIHelpers.WeightHeader(MassUtil.ContainerMass(inv.container)));
-
-            var sc = new ScrollView(); sc.style.flexGrow = 1; sc.style.minHeight = 0;
-            var g = T.SlotGrid(4);
-            g.style.width = 4 * 60 + 12; g.style.flexShrink = 0;
-            for (int i = 0; i < inv.container.Size; i++)
-                g.Add(slot(inv.container, i, inv.container.GetSlot(i), false, true));
-            sc.Add(g);
-            col.Add(sc);
-            return col;
-        }
 
         private static void SetAllEnabled(GridEntity grid, bool on)
         {

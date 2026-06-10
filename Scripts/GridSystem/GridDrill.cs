@@ -43,7 +43,7 @@ namespace VoxelEngine.GridSystem
             _pushTimer += Time.deltaTime;
             if (_pushTimer >= 0.5f) { _pushTimer = 0f; PushToCargo(); }
 
-            if (!Enabled || Grid == null || !Grid.IsControlled || !Grid.HasPower)
+            if (!Enabled || Grid == null || !Grid.IsControlled || !Grid.HasPower || !Grid.IsSelectedTool(this))
             {
                 _isActive = false;
                 return;

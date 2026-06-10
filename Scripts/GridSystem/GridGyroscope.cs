@@ -13,10 +13,21 @@ namespace VoxelEngine.GridSystem
         [Tooltip("Rotational torque this gyro contributes.")]
         public float torquePower = 80000f;
 
-        [Tooltip("Idle power draw while providing stabilisation.")]
-        public float powerDraw = 50f;
+        [Tooltip("Power drawn while spun up but idle (stabilisation).")]
+        public float idleWatts = 30f;
+        [Tooltip("Extra power drawn while actively rotating the ship.")]
+        public float activeWatts = 120f;
 
-        public override float PowerDraw => Enabled ? powerDraw : 0f;
+        public override float PowerDraw
+        {
+            get
+            {
+                if (!Enabled) return 0f;
+                bool turning = Grid != null &&
+                    (Mathf.Abs(Grid.RotationYaw) + Mathf.Abs(Grid.RotationPitch) + Mathf.Abs(Grid.RotationRoll)) > 0.01f;
+                return turning ? idleWatts + activeWatts : idleWatts;
+            }
+        }
 
         public override void OnPlaced()
         {

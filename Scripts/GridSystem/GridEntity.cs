@@ -50,6 +50,37 @@ namespace VoxelEngine.GridSystem
         public float   RotationRoll { get; set; }
         public bool    DampenersOn { get; set; } = true;
 
+        /// <summary>Index of the currently selected fire-tool (drill/weapon). Cycled in
+        /// the cockpit with the scroll wheel; only the selected tool activates on click.</summary>
+        public int SelectedToolIndex { get; set; }
+
+        /// <summary>All drill/weapon blocks on the grid, in a stable order, for tool cycling.</summary>
+        public System.Collections.Generic.List<GridBlock> GetFireTools()
+        {
+            var list = new System.Collections.Generic.List<GridBlock>();
+            foreach (var kv in _blocks)
+                if (kv.Value is GridDrill || kv.Value is GridWeapon) list.Add(kv.Value);
+            return list;
+        }
+
+        /// <summary>Is the given block the player's currently-selected fire tool?</summary>
+        public bool IsSelectedTool(GridBlock b)
+        {
+            var tools = GetFireTools();
+            if (tools.Count == 0) return false;
+            int idx = ((SelectedToolIndex % tools.Count) + tools.Count) % tools.Count;
+            return tools[idx] == b;
+        }
+
+        /// <summary>Set by the piloting cockpit each frame to drive thrusters + gyros.</summary>
+        public void SetFlightInput(Vector3 thrust, float yaw, float pitch, float roll)
+        {
+            ThrustInput   = thrust;
+            RotationYaw   = yaw;
+            RotationPitch = pitch;
+            RotationRoll  = roll;
+        }
+
         // ── Cockpit ────────────────────────────────────────────────
         public GridCockpit ActiveCockpit { get; set; }
         public bool IsControlled => ActiveCockpit != null && ActiveCockpit.Pilot != null;

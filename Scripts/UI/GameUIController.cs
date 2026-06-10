@@ -64,7 +64,6 @@ namespace VoxelEngine.UI
         private VoxelEngine.GridSystem.GridBlock _openGridBlock;
         private VoxelEngine.GridSystem.GridEntity _openGridTerminal;
         private int _terminalTab; // -1 = All Storage, >=0 = index into the station list
-        private bool _terminalShowInventory = true; // player inventory pane in the terminal
         private VoxelEngine.Crafting.OilRefinery _openOilRefinery;
         private VoxelEngine.Industrial.StationaryChemicalPlant _openChemPlant;
         private VoxelEngine.Storage.StorageTerminal    _openStorageTerminal;
@@ -253,19 +252,24 @@ namespace VoxelEngine.UI
             CheckHotbarKey(InputAction.Hotbar9, 8);
             CheckHotbarKey(InputAction.Hotbar0, 9);
             CheckDropKey();
-            // Hotbar wheel — only when no UI is open and Ctrl is NOT held (Ctrl+wheel rotates build ghost).
-            bool ctrl = false;
+            // Hotbar wheel — only when no UI is open and no modifier is held (Ctrl/Shift
+            // + wheel rotate the grid build ghost, so they must not also cycle the hotbar).
+            bool ctrl = false, shift = false;
 #if ENABLE_INPUT_SYSTEM
-            ctrl = UnityEngine.InputSystem.Keyboard.current != null
-                   && UnityEngine.InputSystem.Keyboard.current.leftCtrlKey.isPressed;
+            var kbWheel = UnityEngine.InputSystem.Keyboard.current;
+            ctrl  = kbWheel != null && (kbWheel.leftCtrlKey.isPressed  || kbWheel.rightCtrlKey.isPressed);
+            shift = kbWheel != null && (kbWheel.leftShiftKey.isPressed || kbWheel.rightShiftKey.isPressed);
             float wheel = UnityEngine.InputSystem.Mouse.current != null
                 ? UnityEngine.InputSystem.Mouse.current.scroll.ReadValue().y : 0f;
 #else
-            ctrl = Input.GetKey(KeyCode.LeftControl);
+            ctrl  = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+            shift = Input.GetKey(KeyCode.LeftShift)   || Input.GetKey(KeyCode.RightShift);
             float wheel = Input.mouseScrollDelta.y;
 #endif
+            // Block hotbar cycling while a grid block is held + a modifier is down (rotation).
+            bool rotatingBlock = VoxelEngine.GridSystem.GridBuilder.HoldingGridBlock && (ctrl || shift);
             // Throttle: at most one slot change per Update, regardless of scroll-unit magnitude.
-            if (!ctrl && !_inventoryOpen && _rightContainer == null && inventory != null && Mathf.Abs(wheel) > 0.01f)
+            if (!ctrl && !shift && !rotatingBlock && !_inventoryOpen && _rightContainer == null && inventory != null && Mathf.Abs(wheel) > 0.01f)
             {
                 int dir = wheel > 0 ? -1 : 1; // wheel up = previous slot, wheel down = next
                 int next = inventory.activeHotbarIndex + dir;
@@ -757,29 +761,24 @@ namespace VoxelEngine.UI
                 _root.pickingMode = PickingMode.Position;
                 _root.style.backgroundColor = new StyleColor(new Color(0,0,0,0.55f));
 
-                // ── MASTER SHIP TERMINAL — full-screen SE-style config screen ──
-                // Rendered on its own (no player inventory panel) so it gets the
-                // whole screen, like the Space Engineers control terminal.
-                if (_openGridTerminal != null)
-                {
-                    var overlay = new VisualElement();
-                    overlay.style.position = Position.Absolute;
-                    overlay.style.left = 0; overlay.style.right = 0;
-                    overlay.style.top = 0;  overlay.style.bottom = 0;
-                    overlay.style.alignItems = Align.Center;
-                    overlay.style.justifyContent = Justify.Center;
-                    overlay.Add(VoxelEngine.GridSystem.UI.GridMasterTerminal.Build(
-                        _openGridTerminal, _terminalTab,
-                        t => { _terminalTab = t; Refresh(); }, BuildSlot,
-                        () => CloseAll(),
-                        _terminalShowInventory ? inventory : null,
-                        () => { _terminalShowInventory = !_terminalShowInventory; Refresh(); }));
-                    _root.Add(overlay);
-                    return; // nothing else competes for the screen
-                }
-
                 // Left panel — player inventory + crafting toggle
                 BuildLeftPanel(_root);
+
+                // ── MASTER SHIP TERMINAL — SE-style config screen on the RIGHT,
+                // with the normal player inventory on the left for item transfer. ──
+                if (_openGridTerminal != null)
+                {
+                    var holder = new VisualElement();
+                    holder.style.position = Position.Absolute;
+                    holder.style.right = 24; holder.style.top = 0; holder.style.bottom = 0;
+                    holder.style.justifyContent = Justify.Center;
+                    holder.Add(VoxelEngine.GridSystem.UI.GridMasterTerminal.Build(
+                        _openGridTerminal, _terminalTab,
+                        t => { _terminalTab = t; Refresh(); }, BuildSlot,
+                        () => CloseAll()));
+                    _root.Add(holder);
+                    return; // terminal owns the right side
+                }
 
                 // Center panel — Rust-style crafting screen (toggle-driven,
                 // state persisted). Only when the player toggled it ON and no

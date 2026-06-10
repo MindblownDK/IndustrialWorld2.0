@@ -62,10 +62,12 @@ namespace VoxelEngine.GridSystem.UI
         {
             if (_box == null) return;
             bool show = GridBuilder.HoldingGridBlock && !VoxelEngine.UI.UIState.IsBlocking;
+            // Set every frame (not just on change) so a hotbar scroll between two grid
+            // blocks can never leave the HUD stuck hidden.
+            _box.style.display = show ? DisplayStyle.Flex : DisplayStyle.None;
             if (show != _visible)
             {
                 _visible = show;
-                _box.style.display = show ? DisplayStyle.Flex : DisplayStyle.None;
                 VoxelEngine.UI.Minimap.SetVisible(!show); // hide minimap while this is up
             }
         }
