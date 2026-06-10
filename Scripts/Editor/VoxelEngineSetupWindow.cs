@@ -672,6 +672,23 @@ namespace VoxelEngine.EditorTools
             var axeWood   = MakeTool(toolsFolder, "Wooden Axe",     VoxelEngine.Items.ToolType.Axe,     tier: 1, dur: 60,  strength: 60f, brushRadius: 1.0f);
             var axeIron   = MakeTool(toolsFolder, "Iron Axe",       VoxelEngine.Items.ToolType.Axe,     tier: 3, dur: 400, strength: 110f, brushRadius: 1.0f);
 
+            // Grinder Tool — hand tool that grinds DOWN grid blocks back into items.
+            string grinderToolPath = $"{toolsFolder}/Tool_Grinder.asset";
+            var grinderTool = AssetDatabase.LoadAssetAtPath<VoxelEngine.GridSystem.GrinderTool>(grinderToolPath);
+            if (grinderTool == null) { grinderTool = ScriptableObject.CreateInstance<VoxelEngine.GridSystem.GrinderTool>(); AssetDatabase.CreateAsset(grinderTool, grinderToolPath); }
+            grinderTool.itemId       = "grinder_tool";
+            grinderTool.displayName  = "Grinder";
+            grinderTool.description  = "Grinds down grid (ship/vehicle) blocks, returning them as items.";
+            grinderTool.maxStack     = 1;
+            grinderTool.toolType     = VoxelEngine.Items.ToolType.Other;
+            grinderTool.miningTier   = 3;
+            grinderTool.maxDurability = 600;
+            grinderTool.iconTint     = new Color(0.85f, 0.55f, 0.15f);
+            grinderTool.category     = "Tools";
+            grinderTool.baseGrindTime = 3f;
+            grinderTool.minGrindTime  = 1.2f;
+            EditorUtility.SetDirty(grinderTool);
+
             // Leveling Tool — a special tool that flattens terrain to a target Y level (custom class).
             string levelToolPath = $"{toolsFolder}/Tool_LevelingTool.asset";
             if (AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(levelToolPath) != null) AssetDatabase.DeleteAsset(levelToolPath);
@@ -749,6 +766,7 @@ namespace VoxelEngine.EditorTools
             // Tier 3 (Assembler)
             registry.recipes.Add(MakeRecipe(recipesFolder, "Recipe_PickIron",      "Iron Pickaxe",       pickIron,     1, VoxelEngine.Crafting.StationTier.Assembler, (ironIngot, 3), (plank, 2)));
             registry.recipes.Add(MakeRecipe(recipesFolder, "Recipe_AxeIron",       "Iron Axe",           axeIron,      1, VoxelEngine.Crafting.StationTier.Assembler, (ironIngot, 3), (plank, 2)));
+            registry.recipes.Add(MakeRecipe(recipesFolder, "Recipe_GrinderTool",   "Grinder",            grinderTool,  1, VoxelEngine.Crafting.StationTier.Assembler, (ironIngot, 4), (plank, 1)));
             registry.recipes.Add(MakeRecipe(recipesFolder, "Recipe_PickSteel",     "Steel Pickaxe",      pickSteel,    1, VoxelEngine.Crafting.StationTier.Assembler, (steelIngot, 3), (plank, 1)));
             registry.recipes.Add(MakeRecipe(recipesFolder, "Recipe_Assembler",     "Assembler",          blockAssembler,1,VoxelEngine.Crafting.StationTier.CraftingBench, (ironIngot, 6), (plank, 4), (stone, 8)));
 

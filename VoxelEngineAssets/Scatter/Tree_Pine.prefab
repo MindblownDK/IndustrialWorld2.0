@@ -279,6 +279,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 6551396770929286620}
+  - component: {fileID: 2563389353550165197}
   m_Layer: 0
   m_Name: Tree_Pine
   m_TagString: Untagged
@@ -305,6 +306,24 @@ Transform:
   - {fileID: 1898044840355443076}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2563389353550165197
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4342679010414196574}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 84e9d4e5bd7be9f43ab30c794f037844, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Trees.Tree
+  maxHp: 80
+  logItem: {fileID: 11400000, guid: 2bf41f52862e713449cf236f0fc98a76, type: 2}
+  minLogs: 2
+  maxLogs: 4
+  preferredTool: 1
+  hp: 0
 --- !u!1 &7848455334414720155
 GameObject:
   m_ObjectHideFlags: 0

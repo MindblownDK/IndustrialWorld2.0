@@ -39,12 +39,26 @@ namespace VoxelEngine.GridSystem
             float roll = (Input.GetKey(KeyCode.Q) ? 1 : 0) - (Input.GetKey(KeyCode.E) ? 1 : 0);
 
             float mouseX = 0f, mouseY = 0f;
+            bool altHeld = false;
 #if ENABLE_INPUT_SYSTEM
             var m = UnityEngine.InputSystem.Mouse.current;
             if (m != null) { var d = m.delta.ReadValue(); mouseX = d.x; mouseY = d.y; }
+            var kb = UnityEngine.InputSystem.Keyboard.current;
+            altHeld = kb != null && (kb.leftAltKey.isPressed || kb.rightAltKey.isPressed);
 #else
             mouseX = Input.GetAxis("Mouse X"); mouseY = Input.GetAxis("Mouse Y");
+            altHeld = Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt);
 #endif
+
+            if (altHeld)
+            {
+                // FREE-LOOK: hold Alt to look around the cockpit without turning the ship.
+                FreeLook(mouseX, mouseY);
+                Grid.SetFlightInput(thrust, 0f, 0f, roll); // no gyro turn while free-looking
+                return;
+            }
+            ResetFreeLook();
+
             float sens = 0.06f;
             float yaw   = Mathf.Clamp(mouseX * sens, -1f, 1f);
             float pitch = Mathf.Clamp(-mouseY * sens, -1f, 1f);
@@ -66,6 +80,32 @@ namespace VoxelEngine.GridSystem
         }
 
         private static bool Held(InputAction a) => GameSettings.IsHeld(a);
+
+        // ── Free-look (hold Alt) ───────────────────────────────────────────────
+        private float _lookYaw, _lookPitch;
+        private bool  _freeLooking;
+
+        private void FreeLook(float mouseX, float mouseY)
+        {
+            var pivot = Pilot != null ? Pilot.cameraPivot : null;
+            if (pivot == null) return;
+
+            float sens = 2.0f;
+            _lookYaw   = Mathf.Clamp(_lookYaw   + mouseX * sens, -120f, 120f);
+            _lookPitch = Mathf.Clamp(_lookPitch - mouseY * sens, -80f, 80f);
+            // Offset the camera relative to the cockpit's facing (player is parented to it).
+            pivot.localRotation = Quaternion.Euler(_lookPitch, _lookYaw, 0f);
+            _freeLooking = true;
+        }
+
+        private void ResetFreeLook()
+        {
+            if (!_freeLooking) return;
+            _freeLooking = false;
+            _lookYaw = 0f; _lookPitch = 0f;
+            var pivot = Pilot != null ? Pilot.cameraPivot : null;
+            if (pivot != null) pivot.localRotation = Quaternion.identity;
+        }
 
         public void Enter(Player.PlayerController player)
         {
