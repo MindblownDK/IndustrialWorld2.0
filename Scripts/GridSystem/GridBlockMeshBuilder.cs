@@ -126,15 +126,17 @@ namespace VoxelEngine.GridSystem
 
         private static void BuildTank(GameObject r, float cs, Material body, Material metal)
         {
-            // Vertical cylinder filling the cell height.
-            Cyl(r, body, V0, cs*0.46f, cs*0.46f);
-            Cyl(r, metal, new Vector3(0, cs*0.47f, 0), cs*0.3f, cs*0.04f);  // top cap
-            Cyl(r, metal, new Vector3(0, -cs*0.47f, 0), cs*0.3f, cs*0.04f); // bottom cap
+            // Cell-filling housing so adjacent tanks touch (no corner gaps), with a
+            // rounded tank body in front for the look.
+            Box(r, metal, V0, One(cs) * 0.98f);
+            Cyl(r, body, V0, cs*0.49f, cs*0.49f);
+            Cyl(r, metal, new Vector3(0, cs*0.49f, 0), cs*0.34f, cs*0.04f);  // top cap
+            Cyl(r, metal, new Vector3(0, -cs*0.49f, 0), cs*0.34f, cs*0.04f); // bottom cap
         }
 
         private static void BuildDrill(GameObject r, float cs, Material body, Material metal)
         {
-            Box(r, body, new Vector3(0, 0, -cs*0.15f), new Vector3(cs*0.9f, cs*0.9f, cs*0.6f));
+            Box(r, body, new Vector3(0, 0, -cs*0.18f), new Vector3(cs*0.98f, cs*0.98f, cs*0.64f)); // cell-filling housing
             // Conical drill head pointing +Z.
             var head = Cyl(r, metal, new Vector3(0, 0, cs*0.35f), cs*0.4f, cs*0.3f);
             head.transform.localRotation = Quaternion.Euler(90, 0, 0);
@@ -144,14 +146,14 @@ namespace VoxelEngine.GridSystem
 
         private static void BuildGrinder(GameObject r, float cs, Material body, Material metal)
         {
-            Box(r, body, new Vector3(0, 0, -cs*0.15f), new Vector3(cs*0.85f, cs*0.85f, cs*0.6f));
+            Box(r, body, new Vector3(0, 0, -cs*0.18f), new Vector3(cs*0.98f, cs*0.98f, cs*0.64f)); // cell-filling housing
             var wheel = Cyl(r, metal, new Vector3(0, 0, cs*0.35f), cs*0.42f, cs*0.12f);
             wheel.transform.localRotation = Quaternion.Euler(0, 0, 90);
         }
 
         private static void BuildWeapon(GameObject r, float cs, Material body, Material metal)
         {
-            Box(r, body, new Vector3(0, 0, -cs*0.2f), new Vector3(cs*0.7f, cs*0.7f, cs*0.5f)); // mount
+            Box(r, body, new Vector3(0, 0, -cs*0.22f), new Vector3(cs*0.98f, cs*0.98f, cs*0.56f)); // cell-filling mount
             // Multi-barrel gatling pointing +Z.
             for (int i = 0; i < 6; i++)
             {
@@ -193,14 +195,14 @@ namespace VoxelEngine.GridSystem
 
         private static void BuildReactor(GameObject r, float cs, Material body, Material metal, Material glow)
         {
-            Box(r, body, V0, One(cs) * 0.9f);
+            Box(r, body, V0, One(cs) * 0.98f);
             Sphere(r, glow, V0, cs*0.55f);          // glowing core
             foreach (var c in Corners(cs*0.42f)) Cyl(r, metal, c, cs*0.06f, cs*0.9f); // cooling rods
         }
 
         private static void BuildIndustrial(GameObject r, float cs, Material body, Material metal, Material glow)
         {
-            Box(r, body, new Vector3(0, -cs*0.1f, 0), new Vector3(cs*0.9f, cs*0.75f, cs*0.9f));
+            Box(r, body, V0, One(cs) * 0.98f);                                            // cell-filling housing
             Cyl(r, metal, new Vector3(cs*0.25f, cs*0.45f, 0.25f*cs), cs*0.14f, cs*0.5f); // chimney/tower
             Cyl(r, metal, new Vector3(-cs*0.25f, cs*0.4f, -0.2f*cs), cs*0.12f, cs*0.4f);
             Box(r, glow, new Vector3(0, 0, cs*0.46f), new Vector3(cs*0.5f, cs*0.1f, cs*0.03f)); // status panel

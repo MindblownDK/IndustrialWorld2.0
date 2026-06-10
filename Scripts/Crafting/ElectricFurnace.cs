@@ -40,6 +40,12 @@ namespace VoxelEngine.Crafting
         /// </summary>
         public bool userEnabled = true;
 
+        [Tooltip("When on, the furnace auto-pulls smeltable items from nearby chests/containers into its input.")]
+        public bool autoPull = false;
+        [Tooltip("Radius (m) to scan for source containers when auto-pull is on.")]
+        public float autoPullRadius = 4f;
+        private float _pullTimer;
+
         // Runtime
         private SmeltingRecipe _current;
         private float _smeltProgress;
@@ -128,6 +134,13 @@ namespace VoxelEngine.Crafting
             // Pause if offline.
             if (!IsOnline) return;
 
+            // Auto-pull smeltable items from nearby containers into the input slot.
+            if (autoPull)
+            {
+                _pullTimer += Time.deltaTime;
+                if (_pullTimer >= 0.5f) { _pullTimer = 0f; AutoPullSmeltables(); }
+            }
+
             // Pick a recipe matching the current input.
             if (_current == null) _current = FindRecipeForInput();
             if (_current == null) { _smeltProgress = 0; return; }
@@ -138,6 +151,46 @@ namespace VoxelEngine.Crafting
         }
 
         private float EffectiveSmeltTime(SmeltingRecipe r) => r.smeltSeconds; // SpeedMultiplier already accelerates progress
+
+        // Pull smeltable items from nearby chests into the input slot (auto-pull mode).
+        private void AutoPullSmeltables()
+        {
+            var slot = inputC.GetSlot(0);
+            // If the input already holds something the furnace can smelt, only top it up.
+            ItemDefinition wanted = !slot.IsEmpty ? slot.item : null;
+
+            var chests = Physics.OverlapSphere(transform.position, autoPullRadius);
+            foreach (var col in chests)
+            {
+                var chest = col.GetComponentInParent<VoxelEngine.Building.Chest>();
+                if (chest == null || chest.container == null) continue;
+
+                for (int i = 0; i < chest.container.Size; i++)
+                {
+                    var s = chest.container.GetSlot(i);
+                    if (s == null || s.IsEmpty || s.item == null) continue;
+                    if (wanted != null && s.item != wanted) continue;
+                    if (!IsSmeltable(s.item)) continue;
+                    if (!inputC.HasSpace(s.item, 1)) return;
+
+                    int take = Mathf.Min(s.count, s.item.maxStack);
+                    int moved = chest.container.Remove(s.item, take);
+                    if (moved > 0)
+                    {
+                        var leftover = inputC.Insert(new ItemStack(s.item, moved));
+                        if (leftover != null && !leftover.IsEmpty) chest.container.Insert(leftover);
+                        return; // one transfer per tick
+                    }
+                }
+            }
+        }
+
+        private bool IsSmeltable(ItemDefinition item)
+        {
+            foreach (var r in knownRecipes)
+                if (r != null && r.input == item) return true;
+            return false;
+        }
 
         // ============================================================
         //                       Upgrades

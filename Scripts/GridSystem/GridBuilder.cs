@@ -56,28 +56,35 @@ namespace VoxelEngine.GridSystem
             Vector3 worldPos;
             Quaternion rotation = Quaternion.identity;
 
-            // If we aimed at terrain but a grid of the right size is right next to the
-            // hit point, snap to THAT grid so blocks attach instead of spawning a new
-            // lone grid (which leaves gaps + un-connected cables).
-            if (targetGrid == null || targetGrid.gridSize != gbi.gridSize)
-                targetGrid = FindNearbyGrid(hit.point, gbi.gridSize);
+            // SIZE RULE: a small block may attach to a large grid (detail building),
+            // but a large block may NOT be placed onto a small grid.
+            bool blockedBySizeRule = targetGrid != null
+                && targetGrid.gridSize == GridSize.Small
+                && gbi.gridSize == GridSize.Large;
+            if (blockedBySizeRule) { HideGhost(); return; }
 
-            if (targetGrid != null && targetGrid.gridSize == gbi.gridSize)
+            // Only attach to a grid of the SAME size (a true sub-grid). Aiming at a
+            // large grid with a small block starts a NEW small grid latched to it.
+            GridEntity attachGrid = (targetGrid != null && targetGrid.gridSize == gbi.gridSize)
+                ? targetGrid : FindNearbyGrid(hit.point, gbi.gridSize);
+
+            if (attachGrid != null)
             {
                 float cs = gbi.gridSize.CellSize();
-                // Nudge a tiny amount along the hit normal into the empty neighbour cell,
-                // then round to the nearest cell. (Small nudge avoids landing back on the
-                // block we hit while not overshooting a whole extra cell.)
                 Vector3 probe = hit.point + hit.normal * (cs * 0.5f);
-                gridPos = targetGrid.WorldToGrid(probe);
-                if (!targetGrid.CanPlace(gridPos))
+                gridPos = attachGrid.WorldToGrid(probe);
+                if (!attachGrid.CanPlace(gridPos))
                 {
-                    // Occupied — step one more cell out along the normal.
-                    gridPos = targetGrid.WorldToGrid(hit.point + hit.normal * (cs * 1.0f));
-                    if (!targetGrid.CanPlace(gridPos)) { HideGhost(); return; }
+                    gridPos = attachGrid.WorldToGrid(hit.point + hit.normal * (cs * 1.0f));
+                    if (!attachGrid.CanPlace(gridPos)) { HideGhost(); return; }
                 }
-                worldPos = targetGrid.GridToWorld(gridPos);
-                rotation = targetGrid.transform.rotation;
+                // CONNECTION RULE: the target cell must touch an existing block, so
+                // you can't latch a block floating near (but not joined to) the grid.
+                if (!attachGrid.HasNeighbor(gridPos)) { HideGhost(); return; }
+
+                targetGrid = attachGrid;
+                worldPos = attachGrid.GridToWorld(gridPos);
+                rotation = attachGrid.transform.rotation;
             }
             else
             {

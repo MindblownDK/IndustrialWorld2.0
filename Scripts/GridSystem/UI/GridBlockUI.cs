@@ -32,6 +32,7 @@ namespace VoxelEngine.GridSystem.UI
                 case GridPortableReactor pr: return ReactorPanel(pr, slot);
                 case GridDockingPort dp:    return DockingPortPanel(dp, slot);
                 case GridLandingGear lg:    return LandingGearPanel(lg);
+                case GridDrill dr:          return DrillPanel(dr, slot);
                 default:                    return GenericPanel(block);
             }
         }
@@ -388,6 +389,26 @@ namespace VoxelEngine.GridSystem.UI
             var wg = T.SlotGrid(r.wasteC.Size);
             for (int i = 0; i < r.wasteC.Size; i++) wg.Add(slot(r.wasteC, i, r.wasteC.GetSlot(i), false, true));
             p.Add(wg);
+            return p;
+        }
+
+        // ── MINING DRILL ────────────────────────────────────────────────────────────
+        private static VisualElement DrillPanel(GridDrill d, MachineUIs.SlotBuilder slot)
+        {
+            if (d.buffer == null) d.OnPlaced();
+            var p = T.MachinePanel();
+            var (hdr, _, _, _) = T.HeaderRow("⛏ Mining Drill",
+                d.IsActive ? "MINING" : "IDLE", d.IsActive ? T.AccentGreen : T.AccentAmber);
+            p.Add(hdr);
+            p.Add(T.AccentDivider(T.AccentGold));
+
+            p.Add(T.StatRow("⚡", "Power Use", PowerFormat.Watts(d.PowerDraw), T.AccentGold));
+            p.Add(T.StatRow("◎", "Radius", $"{d.drillRadius:0.#} m", T.AccentCyan));
+            p.Add(T.Spacer(4));
+            p.Add(GridUIHelpers.SectionTitle("Buffer (auto-pushed to cargo)"));
+            var g = T.SlotGrid(d.buffer.Size);
+            for (int i = 0; i < d.buffer.Size; i++) g.Add(slot(d.buffer, i, d.buffer.GetSlot(i), false, true));
+            p.Add(g);
             return p;
         }
 

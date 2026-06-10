@@ -174,7 +174,8 @@ namespace VoxelEngine.GridSystem.UI
         {
             var p = T.MachinePanel();
             p.style.width = StyleKeyword.Auto;
-            p.style.flexGrow = 1;
+            p.style.maxWidth = 600;
+            p.style.flexGrow = 1; p.style.flexShrink = 1;
             var stores = new List<IGridItemStore>();
             float totalKg = 0f;
             if (grid != null && GridItemNetwork.Instance != null)
@@ -199,6 +200,9 @@ namespace VoxelEngine.GridSystem.UI
                 var c = store.ItemStore;
                 p.Add(GridUIHelpers.SectionTitle($"{store.StoreLabel}  ·  {MassFormat.Format(MassUtil.ContainerMass(c))}"));
                 var g = T.SlotGrid(8);
+                // Constrain width so slots wrap to new ROWS (scroll down), never overflow sideways.
+                g.style.maxWidth = 560;
+                g.style.flexShrink = 1;
                 for (int i = 0; i < c.Size; i++) g.Add(slot(c, i, c.GetSlot(i), false, true));
                 p.Add(g);
             }

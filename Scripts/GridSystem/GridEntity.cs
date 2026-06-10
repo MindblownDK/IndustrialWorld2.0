@@ -89,6 +89,19 @@ namespace VoxelEngine.GridSystem
         // ── Block Management ───────────────────────────────────────
         public bool CanPlace(Vector3Int gridPos) => !_blocks.ContainsKey(gridPos);
 
+        /// <summary>True if any of the 6 face-neighbours of <paramref name="gridPos"/> is occupied
+        /// (so a new block there actually connects to the existing structure).</summary>
+        public bool HasNeighbor(Vector3Int gridPos)
+        {
+            if (_blocks.Count == 0) return true; // first block always "connects"
+            return _blocks.ContainsKey(gridPos + Vector3Int.right)
+                || _blocks.ContainsKey(gridPos + Vector3Int.left)
+                || _blocks.ContainsKey(gridPos + Vector3Int.up)
+                || _blocks.ContainsKey(gridPos + Vector3Int.down)
+                || _blocks.ContainsKey(gridPos + new Vector3Int(0, 0, 1))
+                || _blocks.ContainsKey(gridPos + new Vector3Int(0, 0, -1));
+        }
+
         public void AddBlock(Vector3Int gridPos, GridBlock block)
         {
             if (_blocks.ContainsKey(gridPos)) return;

@@ -598,6 +598,7 @@ namespace VoxelEngine.UI
                     else if (gb is VoxelEngine.GridSystem.GridWeapon gw) { if (gw.ammo == null) gw.OnPlaced(); WatchContainer(gw.ammo); }
                     else if (gb is VoxelEngine.GridSystem.GridDockingPort gdp) { if (gdp.container == null) gdp.OnPlaced(); WatchContainer(gdp.container); }
                     else if (gb is VoxelEngine.GridSystem.GridPortableReactor gpr) { if (gpr.fuelC == null) gpr.OnPlaced(); WatchContainer(gpr.fuelC); WatchContainer(gpr.iceC); WatchContainer(gpr.wasteC); }
+                    else if (gb is VoxelEngine.GridSystem.GridDrill gdr) { if (gdr.buffer == null) gdr.OnPlaced(); WatchContainer(gdr.buffer); }
                     break;
                 case VoxelEngine.Storage.StorageTerminal st2: _openStorageTerminal = st2; break;
                 case VoxelEngine.Storage.PatternTerminal pt2: _openPatternTerminal = pt2; break;
@@ -1858,6 +1859,20 @@ namespace VoxelEngine.UI
             headerRow.Add(wattLbl);
             _liveWattLabel = wattLbl;
             panel.Add(headerRow);
+
+            // Auto-pull toggle: continuously pull smeltable items from nearby chests.
+            {
+                var apRow = new VisualElement();
+                apRow.style.flexDirection = FlexDirection.Row;
+                apRow.style.alignItems = Align.Center;
+                apRow.style.marginBottom = 8;
+                apRow.Add(UITheme.SmallButton(
+                    ef.autoPull ? "⤵  Auto-Pull: ON" : "⤵  Auto-Pull: OFF",
+                    () => { ef.autoPull = !ef.autoPull; Refresh(); },
+                    ef.autoPull ? UITheme.AccentGreen : UITheme.BgSlot));
+                apRow.Add(UITheme.Muted("  Pulls smeltable items from nearby chests."));
+                panel.Add(apRow);
+            }
 
             // ===== Main row: INPUT  ->  [bolt + progress]  ->  4 OUTPUTS =====
             var mainRow = new VisualElement();
