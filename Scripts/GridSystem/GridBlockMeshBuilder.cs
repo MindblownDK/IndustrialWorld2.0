@@ -17,7 +17,7 @@ namespace VoxelEngine.GridSystem
             Armor, Cockpit, Thruster, Battery, Cargo, Drill, Grinder, Refinery,
             Weapon, DockingPort, Wheel, LandingGear, SolarPanel, Reactor,
             LiquidTank, GasTank, H2O2, ChemicalPlant, Glass, Demolisher, ItemPipe,
-            GasPipe, LiquidPipe, Generic
+            GasPipe, LiquidPipe, Gyroscope, Generic
         }
 
         private static Shader Lit => Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
@@ -65,6 +65,7 @@ namespace VoxelEngine.GridSystem
                 case Style.ItemPipe:     BuildPipe(root, cs, metal); break;
                 case Style.GasPipe:      BuildPipe(root, cs, Mat(new Color(0.4f, 0.7f, 0.95f), 0.6f, 0.5f)); break;
                 case Style.LiquidPipe:   BuildPipe(root, cs, Mat(new Color(0.3f, 0.55f, 0.9f), 0.6f, 0.5f)); break;
+                case Style.Gyroscope:    BuildGyroscope(root, cs, body, metal, glow); break;
                 default:                 BuildArmor(root, cs, body, metal); break;
             }
         }
@@ -206,6 +207,16 @@ namespace VoxelEngine.GridSystem
             Cyl(r, metal, new Vector3(cs*0.25f, cs*0.45f, 0.25f*cs), cs*0.14f, cs*0.5f); // chimney/tower
             Cyl(r, metal, new Vector3(-cs*0.25f, cs*0.4f, -0.2f*cs), cs*0.12f, cs*0.4f);
             Box(r, glow, new Vector3(0, 0, cs*0.46f), new Vector3(cs*0.5f, cs*0.1f, cs*0.03f)); // status panel
+        }
+
+        private static void BuildGyroscope(GameObject r, float cs, Material body, Material metal, Material glow)
+        {
+            Box(r, body, V0, One(cs) * 0.96f);                       // housing
+            var ring1 = Cyl(r, metal, V0, cs*0.40f, cs*0.06f);      // gimbal ring
+            ring1.transform.localRotation = Quaternion.Euler(90, 0, 0);
+            var ring2 = Cyl(r, metal, V0, cs*0.34f, cs*0.06f);
+            ring2.transform.localRotation = Quaternion.Euler(0, 0, 90);
+            Sphere(r, glow, V0, cs*0.30f);                          // spinning core
         }
 
         private static void BuildPipe(GameObject r, float cs, Material mat)

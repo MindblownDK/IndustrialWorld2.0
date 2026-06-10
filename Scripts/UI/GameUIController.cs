@@ -64,6 +64,7 @@ namespace VoxelEngine.UI
         private VoxelEngine.GridSystem.GridBlock _openGridBlock;
         private VoxelEngine.GridSystem.GridEntity _openGridTerminal;
         private int _terminalTab; // -1 = All Storage, >=0 = index into the station list
+        private bool _terminalShowInventory = true; // player inventory pane in the terminal
         private VoxelEngine.Crafting.OilRefinery _openOilRefinery;
         private VoxelEngine.Industrial.StationaryChemicalPlant _openChemPlant;
         private VoxelEngine.Storage.StorageTerminal    _openStorageTerminal;
@@ -214,6 +215,7 @@ namespace VoxelEngine.UI
             ResearchHud.Tick();
             TickUpgradePrompt();
             if (inventory != null) Minimap.Tick(inventory.transform.position);
+            VoxelEngine.GridSystem.UI.BlockRotationHud.Tick();
 
             // 4 Hz refresh while ANY craft queue near the player has work — drives recipe-row progress bars.
             if (_inventoryOpen && inventory != null)
@@ -250,6 +252,7 @@ namespace VoxelEngine.UI
             CheckHotbarKey(InputAction.Hotbar8, 7);
             CheckHotbarKey(InputAction.Hotbar9, 8);
             CheckHotbarKey(InputAction.Hotbar0, 9);
+            CheckDropKey();
             // Hotbar wheel — only when no UI is open and Ctrl is NOT held (Ctrl+wheel rotates build ghost).
             bool ctrl = false;
 #if ENABLE_INPUT_SYSTEM
@@ -735,6 +738,7 @@ namespace VoxelEngine.UI
             ResearchHud.EnsureMounted(_root);
             UpgradePromptHud.EnsureMounted(_root);
             Minimap.EnsureMounted(_root);
+            VoxelEngine.GridSystem.UI.BlockRotationHud.EnsureMounted(_root);
             RustStyleHud.EnsureMounted(_root);
             InteractionHud.EnsureMounted(_root);
             BuildFeedbackHud.EnsureMounted(_root);
@@ -767,7 +771,9 @@ namespace VoxelEngine.UI
                     overlay.Add(VoxelEngine.GridSystem.UI.GridMasterTerminal.Build(
                         _openGridTerminal, _terminalTab,
                         t => { _terminalTab = t; Refresh(); }, BuildSlot,
-                        () => CloseAll()));
+                        () => CloseAll(),
+                        _terminalShowInventory ? inventory : null,
+                        () => { _terminalShowInventory = !_terminalShowInventory; Refresh(); }));
                     _root.Add(overlay);
                     return; // nothing else competes for the screen
                 }
@@ -2932,6 +2938,29 @@ namespace VoxelEngine.UI
         }
         private static void SetBorderRadius(VisualElement v, float r) => UITheme.Radius(v, r);
         private static void ZeroBorder(VisualElement v)                => UITheme.Border(v, 0, Color.clear);
+
+        // Press DropItem (default 'O') while hovering ANY slot in an open UI to drop
+        // that slot's stack into the world.
+        private void CheckDropKey()
+        {
+            if (_searchHasFocus || !_inventoryOpen) return;
+            if (!GameSettings.WasPressed(InputAction.DropItem)) return;
+
+#if ENABLE_INPUT_SYSTEM
+            var mouse = UnityEngine.InputSystem.Mouse.current;
+            if (mouse == null) return;
+            Vector2 screenPos = mouse.position.ReadValue();
+#else
+            Vector2 screenPos = Input.mousePosition;
+#endif
+            Vector2 panelPos = RuntimePanelUtils.ScreenToPanel(_root.panel,
+                new Vector2(screenPos.x, Screen.height - screenPos.y));
+            var hovered = FindSlotAt(panelPos);
+            if (hovered == null) return;
+            var stack = hovered.container.GetSlot(hovered.index);
+            if (stack == null || stack.IsEmpty) return;
+            DropItemFromSlot(hovered.container, hovered.index);
+        }
 
         private void CheckHotbarKey(InputAction act, int slotIdx)
         {

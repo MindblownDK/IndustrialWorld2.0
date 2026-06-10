@@ -811,6 +811,7 @@ namespace VoxelEngine.EditorTools
             if (n.Contains("landing"))    return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.LandingGear;
             if (n.Contains("solar"))      return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.SolarPanel;
             if (n.Contains("reactor"))    return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Reactor;
+            if (n.Contains("gyroscope"))  return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Gyroscope;
             if (n.Contains("refinery"))   return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Refinery;
             if (n.Contains("chemical"))   return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.ChemicalPlant;
             if (n.Contains("h2o2"))       return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.H2O2;
@@ -4353,15 +4354,40 @@ root =>
             AddGRecipe("Recipe_GCockpitSmall", "Small Cockpit", itemCockSmall, (steelPlate, 4), (circuit, 2), (glass, 2));
             AddGRecipe("Recipe_GCockpitLarge", "Large Cockpit", itemCockLarge, (steelPlate, 10), (circuit, 6), (glass, 6));
 
-            // -- 2) Thrusters --
-            var thrustSmallPref = MakeGPref<VoxelEngine.GridSystem.GridThruster>("Thruster_Small", new Color(0.1f, 0.1f, 0.1f), new Vector3(0.4f, 0.4f, 0.6f),
-                t => { t.maxThrustN = 10000f; t.powerAtMaxThrust = 500f; });
-            var thrustLargePref = MakeGPref<VoxelEngine.GridSystem.GridThruster>("Thruster_Large", new Color(0.1f, 0.1f, 0.1f), new Vector3(1.5f, 1.5f, 2.5f),
-                t => { t.maxThrustN = 150000f; t.powerAtMaxThrust = 8000f; });
-            var itemThrustSmall = MakeGItem("GItem_ThrusterSmall", "Small Thruster", Color.white, thrustSmallPref, VoxelEngine.GridSystem.GridSize.Small, 50, 200);
-            var itemThrustLarge = MakeGItem("GItem_ThrusterLarge", "Large Thruster", Color.white, thrustLargePref, VoxelEngine.GridSystem.GridSize.Large, 800, 1000);
-            AddGRecipe("Recipe_GThrustSmall", "Small Thruster", itemThrustSmall, (steelPlate, 2), (copperWire, 4));
-            AddGRecipe("Recipe_GThrustLarge", "Large Thruster", itemThrustLarge, (steelPlate, 12), (copperWire, 16), (circuit, 2));
+            // -- 2) Thrusters (Atmospheric / Ion / Hydrogen × Small & Large) --
+            void MakeThruster(string id, string display, VoxelEngine.GridSystem.GridSize sz, Color col,
+                VoxelEngine.GridSystem.ThrusterType type, float thrust, float power, float h2,
+                params (VoxelEngine.Items.ItemDefinition item, int n)[] cost)
+            {
+                var pref = MakeGPref<VoxelEngine.GridSystem.GridThruster>(id, col, Vector3.one,
+                    t => { t.thrusterType = type; t.maxThrustN = thrust; t.powerAtMaxThrust = power; t.hydrogenPerSecond = h2; });
+                float mass = sz == VoxelEngine.GridSystem.GridSize.Small ? 50 : 800;
+                float hp   = sz == VoxelEngine.GridSystem.GridSize.Small ? 200 : 1000;
+                var item = MakeGItem("GItem_" + id, display, Color.white, pref, sz, mass, hp);
+                AddGRecipe("Recipe_G" + id, display, item, cost);
+            }
+            var TAtmo = VoxelEngine.GridSystem.ThrusterType.Atmospheric;
+            var TIon  = VoxelEngine.GridSystem.ThrusterType.Ion;
+            var THyd  = VoxelEngine.GridSystem.ThrusterType.Hydrogen;
+            var SzS = VoxelEngine.GridSystem.GridSize.Small;
+            var SzL = VoxelEngine.GridSystem.GridSize.Large;
+
+            MakeThruster("AtmoThruster_Small", "Small Atmospheric Thruster", SzS, new Color(0.85f,0.45f,0.15f), TAtmo, 12000f, 600f, 0f, (steelPlate, 2), (copperWire, 4));
+            MakeThruster("AtmoThruster_Large", "Large Atmospheric Thruster", SzL, new Color(0.85f,0.45f,0.15f), TAtmo, 160000f, 9000f, 0f, (steelPlate, 12), (copperWire, 16), (circuit, 2));
+            MakeThruster("IonThruster_Small",  "Small Ion Thruster",         SzS, new Color(0.5f,0.3f,0.95f),  TIon,  8000f,  900f, 0f, (steelPlate, 2), (circuit, 3));
+            MakeThruster("IonThruster_Large",  "Large Ion Thruster",         SzL, new Color(0.5f,0.3f,0.95f),  TIon,  120000f,12000f,0f, (steelPlate, 12), (circuit, 8), (copperWire, 8));
+            MakeThruster("HydroThruster_Small","Small Hydrogen Thruster",    SzS, new Color(0.2f,0.55f,0.95f), THyd,  15000f, 0f,   6f, (steelPlate, 2), (copperWire, 4));
+            MakeThruster("HydroThruster_Large","Large Hydrogen Thruster",    SzL, new Color(0.2f,0.55f,0.95f), THyd,  180000f,0f,   40f,(steelPlate, 12), (copperWire, 16), (circuit, 2));
+
+            // Gyroscope — provides rotational control (yaw/pitch/roll).
+            var gyroPref = MakeGPref<VoxelEngine.GridSystem.GridGyroscope>("Gyroscope_Large", new Color(0.7f, 0.7f, 0.75f), Vector3.one,
+                g => { g.torquePower = 80000f; });
+            var itemGyro = MakeGItem("GItem_Gyroscope", "Gyroscope", Color.white, gyroPref, SzL, 300, 500);
+            AddGRecipe("Recipe_GGyroscope", "Gyroscope", itemGyro, (steelPlate, 6), (circuit, 4), (copperWire, 6));
+            var gyroPrefS = MakeGPref<VoxelEngine.GridSystem.GridGyroscope>("Gyroscope_Small", new Color(0.7f, 0.7f, 0.75f), Vector3.one,
+                g => { g.torquePower = 6000f; });
+            var itemGyroS = MakeGItem("GItem_GyroscopeSmall", "Small Gyroscope", Color.white, gyroPrefS, SzS, 30, 150);
+            AddGRecipe("Recipe_GGyroscopeSmall", "Small Gyroscope", itemGyroS, (steelPlate, 1), (circuit, 1), (copperWire, 2));
 
             // -- 3) Energy --
             var batSmallPref = MakeGPref<VoxelEngine.GridSystem.GridBattery>("Battery_Small", new Color(0.2f, 0.7f, 0.3f), new Vector3(0.5f, 0.5f, 0.5f),

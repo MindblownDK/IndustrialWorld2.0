@@ -229,8 +229,12 @@ namespace VoxelEngine.GridSystem
             _rb.AddForce(totalForce, ForceMode.Force);
 
             Vector3 rotInput = new Vector3(RotationPitch, RotationYaw, RotationRoll);
-            float rotPower = 5000f * _rb.mass;
-            _rb.AddTorque(transform.TransformDirection(rotInput) * rotPower * Time.fixedDeltaTime, ForceMode.Force);
+            // Rotational authority comes from installed (enabled) gyroscopes.
+            float gyroTorque = 0f;
+            foreach (var kv in _blocks)
+                if (kv.Value is GridGyroscope gy && gy.Enabled) gyroTorque += gy.torquePower;
+            if (gyroTorque > 0f)
+                _rb.AddTorque(transform.TransformDirection(rotInput) * gyroTorque * Time.fixedDeltaTime, ForceMode.Force);
         }
 
         // ── Inertia Dampeners ──────────────────────────────────────

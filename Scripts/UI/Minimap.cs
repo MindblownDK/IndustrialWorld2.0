@@ -21,6 +21,12 @@ namespace VoxelEngine.UI
         private static VisualElement _markersLayer;
         private static float _lastRender;
 
+        /// <summary>Show/hide the minimap (hidden while the block-rotation HUD is up).</summary>
+        public static void SetVisible(bool visible)
+        {
+            if (_box != null) _box.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
+        }
+
         public static void EnsureMounted(VisualElement uiRoot)
         {
             if (_root == uiRoot && _box != null && _box.parent == uiRoot) return;

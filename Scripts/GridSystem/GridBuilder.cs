@@ -26,6 +26,14 @@ namespace VoxelEngine.GridSystem
         private GridBlockItem _ghostItem;   // which item the current ghost was built from
         private Material _ghostMat;
 
+        // Local-space rotation the player has dialled in for the next block.
+        private Vector3Int _rotSteps; // 90° steps around x,y,z
+
+        /// <summary>True while the player is holding a grid block (build mode). Player
+        /// movement uses this to suppress Ctrl-fly-down so Ctrl+Scroll can rotate
+        /// blocks without the player sinking.</summary>
+        public static bool HoldingGridBlock { get; private set; }
+
         private void Start()
         {
             if (buildCamera == null) buildCamera = Camera.main;
@@ -34,15 +42,19 @@ namespace VoxelEngine.GridSystem
 
         private void Update()
         {
-            if (VoxelEngine.UI.UIState.IsBlocking) { HideGhost(); return; }
-            if (inventory == null) return;
+            if (VoxelEngine.UI.UIState.IsBlocking) { HoldingGridBlock = false; HideGhost(); return; }
+            if (inventory == null) { HoldingGridBlock = false; return; }
 
             var stack = inventory.ActiveStack;
             if (stack.IsEmpty || !(stack.item is GridBlockItem gbi))
             {
+                HoldingGridBlock = false;
                 HideGhost();
                 return;
             }
+
+            HoldingGridBlock = true;
+            HandleRotationInput();
 
             var ray = buildCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
             if (!Physics.Raycast(ray, out var hit, reach))
@@ -100,6 +112,9 @@ namespace VoxelEngine.GridSystem
                 targetGrid = null;
             }
 
+            // Apply the player's dialled-in rotation on top of the grid alignment.
+            rotation *= Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
+
             ShowGhost(gbi, worldPos, rotation);
 
             if (GameSettings.WasPressed(InputAction.Build))
@@ -140,17 +155,45 @@ namespace VoxelEngine.GridSystem
             VoxelEngine.UI.BuildFeedbackHud.ShowBlockPlaced(item.displayName, item, 1);
         }
 
+        // Ctrl+Scroll = yaw (Y), Shift+Scroll = pitch (X), Ctrl+Shift+Scroll = roll (Z).
+        private void HandleRotationInput()
+        {
+#if ENABLE_INPUT_SYSTEM
+            var kb = UnityEngine.InputSystem.Keyboard.current;
+            var mouse = UnityEngine.InputSystem.Mouse.current;
+            if (kb == null || mouse == null) return;
+            float scroll = mouse.scroll.ReadValue().y;
+            bool ctrl  = kb.leftCtrlKey.isPressed  || kb.rightCtrlKey.isPressed;
+            bool shift = kb.leftShiftKey.isPressed || kb.rightShiftKey.isPressed;
+#else
+            float scroll = Input.mouseScrollDelta.y;
+            bool ctrl  = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+            bool shift = Input.GetKey(KeyCode.LeftShift)   || Input.GetKey(KeyCode.RightShift);
+#endif
+            if (Mathf.Abs(scroll) < 0.01f) return;
+            if (!ctrl && !shift) return;   // plain scroll = hotbar, leave it alone
+
+            int dir = scroll > 0 ? 1 : -1;
+            if (ctrl && shift)      _rotSteps.z = (_rotSteps.z + dir + 4) % 4; // roll
+            else if (ctrl)          _rotSteps.y = (_rotSteps.y + dir + 4) % 4; // yaw
+            else if (shift)         _rotSteps.x = (_rotSteps.x + dir + 4) % 4; // pitch
+        }
+
         // Find a grid of the given size whose nearest cell is within ~1 cell of the
         // aim point, so blocks attach to an existing ship even when aiming just past it.
         private GridEntity FindNearbyGrid(Vector3 worldPoint, GridSize size)
         {
             float cs = size.CellSize();
             GridEntity best = null;
-            float bestDist = cs * 1.5f;   // search radius
+            float bestDist = cs * 0.9f;   // must be genuinely close to a real block
             foreach (var ge in GameObject.FindObjectsByType<GridEntity>(FindObjectsSortMode.None))
             {
                 if (ge.gridSize != size) continue;
                 var gp = ge.WorldToGrid(worldPoint);
+                // Only latch if the aimed cell touches an ACTUAL placed block — the
+                // grid's math is infinite, so distance alone isn't enough (that made
+                // every new placement snap to a far grid and never start a new ship).
+                if (!ge.HasNeighbor(gp) && !ge.Blocks.ContainsKey(gp)) continue;
                 float d = Vector3.Distance(worldPoint, ge.GridToWorld(gp));
                 if (d < bestDist) { bestDist = d; best = ge; }
             }

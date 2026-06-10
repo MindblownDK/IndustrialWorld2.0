@@ -398,7 +398,10 @@ namespace VoxelEngine.Player
             Vector2 wish = GetMoveInput();
             Vector3 wishDir = (transform.right * wish.x + transform.forward * wish.y);
             if (GameSettings.IsHeld(InputAction.Up))   wishDir += Vector3.up;
-            if (GameSettings.IsHeld(InputAction.Down)) wishDir -= Vector3.up;
+            // Suppress Ctrl-fly-down while holding a grid block so Ctrl+Scroll rotates
+            // the block instead of sinking the player.
+            if (GameSettings.IsHeld(InputAction.Down) && !VoxelEngine.GridSystem.GridBuilder.HoldingGridBlock)
+                wishDir -= Vector3.up;
 
             float spd = flySpeed * (GameSettings.IsHeld(InputAction.Sprint) ? flySprintMultiplier : 1f);
             Vector3 wishVel = wishDir.normalized * spd;
