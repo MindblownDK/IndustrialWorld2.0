@@ -769,10 +769,11 @@ namespace VoxelEngine.UI
                 // with the normal player inventory on the left for item transfer. ──
                 if (_openGridTerminal != null)
                 {
+                    // Fill the screen to the RIGHT of the player inventory panel.
                     var holder = new VisualElement();
                     holder.style.position = Position.Absolute;
-                    holder.style.right = 24; holder.style.top = 0; holder.style.bottom = 0;
-                    holder.style.justifyContent = Justify.Center;
+                    holder.style.left = 360; holder.style.right = 16;
+                    holder.style.top = 16; holder.style.bottom = 16;
                     holder.Add(VoxelEngine.GridSystem.UI.GridMasterTerminal.Build(
                         _openGridTerminal, _terminalTab,
                         t => { _terminalTab = t; Refresh(); }, BuildSlot,

@@ -86,10 +86,13 @@ namespace VoxelEngine.GridSystem
         {
             if (Grid == null) return 0;
             Vector3 input = Grid.ThrustInput;
-            // Determine which axis this thruster is on based on its forward direction.
+            if (input.sqrMagnitude < 0.0001f) return 0;
+            // This thruster pushes the ship along its +forward; it fires when the
+            // pilot's desired direction has a component along that axis.
             Vector3 localFwd = Grid.transform.InverseTransformDirection(transform.forward);
-            float dot = Vector3.Dot(localFwd, input);
-            return Mathf.Clamp01(dot);
+            float dot = Vector3.Dot(localFwd.normalized, input.normalized);
+            // Full thrust once roughly aligned (generous so ships feel responsive).
+            return Mathf.Clamp01(dot * 1.5f);
         }
 
         // Particle effect for visual thrust.

@@ -242,30 +242,37 @@ namespace VoxelEngine.GridSystem
             if (!IsControlled) return;
 
             Vector3 totalForce = Vector3.zero;
-            Vector3 totalTorque = Vector3.zero;
 
             foreach (var kv in _blocks)
             {
                 if (kv.Value is GridThruster thruster && thruster.IsOperational)
                 {
+                    // Thrusters PUSH along -forward (exhaust out the back), so they
+                    // accelerate the ship along +forward.
                     Vector3 thrustDir = thruster.transform.forward;
                     float power = thruster.GetCurrentThrust(ThrustInput, this);
                     totalForce += thrustDir * power;
-
-                    Vector3 offset = thruster.transform.position - _rb.worldCenterOfMass;
-                    totalTorque += Vector3.Cross(offset, thrustDir * power);
                 }
             }
 
-            _rb.AddForce(totalForce, ForceMode.Force);
+            // Game-feel multiplier so realistic Newton values still move the ship snappily.
+            const float THRUST_GAIN = 3f;
+            _rb.AddForce(totalForce * THRUST_GAIN, ForceMode.Force);
 
             Vector3 rotInput = new Vector3(RotationPitch, RotationYaw, RotationRoll);
             // Rotational authority comes from installed (enabled) gyroscopes.
             float gyroTorque = 0f;
             foreach (var kv in _blocks)
                 if (kv.Value is GridGyroscope gy && gy.Enabled) gyroTorque += gy.torquePower;
-            if (gyroTorque > 0f)
-                _rb.AddTorque(transform.TransformDirection(rotInput) * gyroTorque * Time.fixedDeltaTime, ForceMode.Force);
+            if (gyroTorque > 0f && rotInput.sqrMagnitude > 0.0001f)
+            {
+                // Acceleration mode = mass-independent, so a small ship turns crisply and
+                // a big one needs more gyros. Scale keeps it responsive to mouse input.
+                Vector3 worldTorque = transform.TransformDirection(rotInput) * (gyroTorque * 0.0005f);
+                _rb.AddTorque(worldTorque, ForceMode.Acceleration);
+            }
+            // Angular damping so the ship stops spinning when you let go (SE-style).
+            _rb.angularDamping = 3f;
         }
 
         // ── Inertia Dampeners ──────────────────────────────────────

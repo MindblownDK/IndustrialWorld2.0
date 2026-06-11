@@ -18,15 +18,29 @@ namespace VoxelEngine.GridSystem.UI
 {
     public static class GridMasterTerminal
     {
+        // Remembers scroll offsets per ScrollView key so the 4 Hz live refresh doesn't
+        // jump the list back to the top.
+        private static readonly System.Collections.Generic.Dictionary<string, float> _scrollY = new();
+
+        private static void PersistScroll(ScrollView sv, string key)
+        {
+            sv.RegisterCallback<GeometryChangedEvent>(_ =>
+            {
+                if (_scrollY.TryGetValue(key, out var y))
+                    sv.verticalScroller.value = y;
+            });
+            sv.verticalScroller.valueChanged += v => _scrollY[key] = v;
+        }
+
         /// <param name="tab">-1 = All Storage; otherwise index into the block list.</param>
         public static VisualElement Build(GridEntity grid, int tab, Action<int> onSelectTab,
             MachineUIs.SlotBuilder slot, Action onClose)
         {
-            // ── Window shell (right-side panel, opaque) ──
+            // ── Window shell — fills the holder (right side of the screen) ──
             var win = new VisualElement();
-            win.style.width = 720;
-            win.style.height = new StyleLength(new Length(86, LengthUnit.Percent));
-            win.style.maxHeight = 800; win.style.minHeight = 460;
+            win.style.flexGrow = 1;
+            win.style.width = new StyleLength(new Length(100, LengthUnit.Percent));
+            win.style.height = new StyleLength(new Length(100, LengthUnit.Percent));
             win.style.flexDirection = FlexDirection.Column;
             win.style.backgroundColor = new StyleColor(new Color(0.06f, 0.07f, 0.10f, 1f)); // opaque
             T.Border(win, 1, T.BorderDim); T.Radius(win, 8);
@@ -94,7 +108,7 @@ namespace VoxelEngine.GridSystem.UI
         private static VisualElement BuildBlockList(List<GridBlock> blocks, int tab, Action<int> onSelectTab)
         {
             var col = new VisualElement();
-            col.style.width = 250; col.style.flexShrink = 0;
+            col.style.width = 280; col.style.flexShrink = 0;
             col.style.marginRight = 10;
             col.style.backgroundColor = new StyleColor(new Color(0.09f, 0.10f, 0.14f, 1f));
             T.Border(col, 1, T.BorderDim); T.Radius(col, 6);
@@ -109,6 +123,7 @@ namespace VoxelEngine.GridSystem.UI
 
             var list = new ScrollView();
             list.style.flexGrow = 1; list.style.minHeight = 0;
+            PersistScroll(list, "blocklist");   // keep scroll position across 4 Hz refreshes
 
             list.Add(TabButton("📦  All Storage", tab == -1, () => onSelectTab(-1), null));
             for (int i = 0; i < blocks.Count; i++)
@@ -129,6 +144,9 @@ namespace VoxelEngine.GridSystem.UI
             b.style.unityTextAlign = TextAnchor.MiddleLeft;
             b.style.marginTop = 0; b.style.marginBottom = 2; b.style.marginLeft = 0; b.style.marginRight = 0;
             b.style.paddingLeft = 10; b.style.height = 30; b.style.flexShrink = 0;
+            b.style.whiteSpace = WhiteSpace.NoWrap;
+            b.style.textOverflow = TextOverflow.Ellipsis;
+            b.style.overflow = Overflow.Hidden;
             b.style.backgroundColor = new StyleColor(active
                 ? new Color(0.18f, 0.72f, 0.88f, 0.30f)
                 : new Color(0.13f, 0.15f, 0.20f, 1f));
@@ -141,6 +159,7 @@ namespace VoxelEngine.GridSystem.UI
         {
             var wrap = new ScrollView(ScrollViewMode.Vertical);
             wrap.style.flexGrow = 1; wrap.style.minHeight = 0; wrap.style.minWidth = 0;
+            PersistScroll(wrap, "content_" + tab);   // keep scroll position across refreshes
 
             if (tab >= 0 && tab < blocks.Count)
             {
