@@ -288,6 +288,10 @@ namespace VoxelEngine.Core
             {
                 var k  = _evictList[i];
                 var ch = _chunks[k];
+                // Finish any in-flight jobs touching this chunk's voxel buffer BEFORE the
+                // pool reuses/disposes it — otherwise the running job writes to freed memory.
+                CompleteGenJobFor(ch);
+                CompleteMeshJobFor(ch);
                 if (_storage != null && ch.isModified) _storage.EnqueueSave(ch);
                 _pool.Return(ch);
                 _chunks.Remove(k);
@@ -302,6 +306,12 @@ namespace VoxelEngine.Core
             {
                 var chunk = _genQueue.Dequeue();
                 if (chunk == null || !chunk.go.activeSelf) continue;
+
+                // The new ChunkGenJob WRITES chunk.voxels. Any prior gen job (write) or mesh
+                // job (read) on this same pooled buffer MUST finish first, or the Job System
+                // throws a read/write dependency violation. (Happens on pool reuse / requeue.)
+                CompleteGenJobFor(chunk);
+                CompleteMeshJobFor(chunk);
 
                 // Fast path: load from disk if we've saved this chunk before.
                 if (_storage != null && _storage.TryLoadChunk(chunk.coord, chunk))
@@ -425,6 +435,10 @@ namespace VoxelEngine.Core
             for (int i = 0; i < _pendingMesh.Count; i++)
                 if (_pendingMesh[i].chunk == chunk) return;
 
+            // The SurfaceNetsJob READS chunk.voxels — make sure the ChunkGenJob that WRITES
+            // them has finished first, otherwise the Job System throws a dependency violation.
+            CompleteGenJobFor(chunk);
+
             chunk.isDirty = false;
 
             const int CELLS = (VoxelConstants.CHUNK_SIZE + 1) *
@@ -471,36 +485,8 @@ namespace VoxelEngine.Core
             {
                 var p = _pendingGen[i];
                 if (!p.handle.IsCompleted) continue;
-                p.handle.Complete();
-                p.chunk.isGenerated = true;
-                p.chunk.genCompletedTime = Time.time;
-                p.chunk.isScattered = false; // (re)evaluate scatter once neighbours are ready
-
-                // Stitch borders for seamless meshing.
-                StitchBordersWithNeighbours(p.chunk);
-
-                // Wake fluid sim for chunks that have water (waterLevel > 0).
-                {
-                    bool hw = false;
-                    const int WS = VoxelConstants.CHUNK_SIZE;
-                    for (int wz = 0; wz < WS && !hw; wz++)
-                    for (int wy = 0; wy < WS && !hw; wy++)
-                    for (int wx = 0; wx < WS && !hw; wx++)
-                    {
-                        if (p.chunk.GetVoxelLocal(wx, wy, wz).waterLevel > 0) hw = true;
-                    }
-                    if (hw)
-                    {
-                        WaterSim.FluidManager.Instance?.MarkActive(p.chunk.coord);
-                        WaterSim.WaterMeshBuilder.Schedule(p.chunk);
-                    }
-                }
-
-                if (p.heights.IsCreated)  p.heights.Dispose();
-                if (p.biomeIdx.IsCreated) p.biomeIdx.Dispose();
-
-                _meshQueue.Enqueue(p.chunk);
-                _pendingGen.RemoveAt(i);
+                _pendingGen.RemoveAt(i);   // remove BEFORE finalize so re-entrant completes can't double-process
+                FinalizeGen(p);
             }
 
             for (int i = _pendingMesh.Count - 1; i >= 0; i--)
@@ -611,9 +597,10 @@ namespace VoxelEngine.Core
             int ly = worldVoxel.y - chunkCoord.y * S;
             int lz = worldVoxel.z - chunkCoord.z * S;
 
-            // CRITICAL: complete any in-flight mesh job for this chunk before mutating its
-            // voxels — Burst/Jobs safety system would otherwise throw because the job has
-            // a [ReadOnly] handle on chunk.voxels.
+            // CRITICAL: complete any in-flight GEN job (writes voxels) AND MESH job (reads
+            // voxels) for this chunk before mutating its voxels — the Burst/Jobs safety
+            // system would otherwise throw because a job still holds a handle on chunk.voxels.
+            CompleteGenJobFor(c);
             CompleteMeshJobFor(c);
 
             c.SetVoxelLocal(lx, ly, lz, v);
@@ -661,6 +648,7 @@ namespace VoxelEngine.Core
             var nCoord = chunkCoord + new Vector3Int(dx, dy, dz);
             if (!_chunks.TryGetValue(nCoord, out var n) || !n.isGenerated) return;
 
+            CompleteGenJobFor(n);
             CompleteMeshJobFor(n);
 
             // Compute the neighbour-local coordinates of this same world voxel.
@@ -698,7 +686,10 @@ namespace VoxelEngine.Core
                 if (!_chunks.TryGetValue(c.coord + off, out var n) || !n.isGenerated)
                     continue;
 
-                // Make sure neither side has an in-flight mesh job that'd race with our writes.
+                // Make sure neither side has an in-flight GEN job (writes voxels) or MESH job
+                // (reads voxels) that'd race with the border copy below.
+                CompleteGenJobFor(c);
+                CompleteGenJobFor(n);
                 CompleteMeshJobFor(c);
                 CompleteMeshJobFor(n);
 
@@ -759,6 +750,62 @@ namespace VoxelEngine.Core
         /// dependency safety check.
         /// </summary>
         public void CompleteMeshJobForChunk(Chunk chunk) => CompleteMeshJobFor(chunk);
+
+        /// <summary>Block until the in-flight <c>ChunkGenJob</c> that WRITES this chunk's voxel
+        /// NativeArray completes, then finalize it. Call this before ANY code reads or writes
+        /// <c>chunk.voxels</c> (stitching, meshing, modifying) so we never touch the buffer
+        /// while the generation job is mid-write — that was the source of the Job-System
+        /// "you must call JobHandle.Complete()" / dependency-safety exceptions.</summary>
+        public void CompleteGenJobForChunk(Chunk chunk) => CompleteGenJobFor(chunk);
+
+        private void CompleteGenJobFor(Chunk chunk)
+        {
+            if (chunk == null) return;
+            for (int i = _pendingGen.Count - 1; i >= 0; i--)
+            {
+                if (_pendingGen[i].chunk != chunk) continue;
+                var p = _pendingGen[i];
+                _pendingGen.RemoveAt(i);  // remove first so FinalizeGen's stitch can't recurse onto this entry
+                FinalizeGen(p);
+                return;
+            }
+        }
+
+        // Force-completes an in-flight generation job and applies all its side-effects
+        // (mark generated, stitch borders, wake fluids, dispose temp arrays, queue mesh).
+        // Shared by the per-frame CompleteFinishedJobs poll and the on-demand CompleteGenJobFor.
+        private void FinalizeGen(PendingGen p)
+        {
+            p.handle.Complete();
+            p.chunk.isGenerated = true;
+            p.chunk.genCompletedTime = Time.time;
+            p.chunk.isScattered = false; // (re)evaluate scatter once neighbours are ready
+
+            // Stitch borders for seamless meshing.
+            StitchBordersWithNeighbours(p.chunk);
+
+            // Wake fluid sim for chunks that have water (waterLevel > 0).
+            {
+                bool hw = false;
+                const int WS = VoxelConstants.CHUNK_SIZE;
+                for (int wz = 0; wz < WS && !hw; wz++)
+                for (int wy = 0; wy < WS && !hw; wy++)
+                for (int wx = 0; wx < WS && !hw; wx++)
+                {
+                    if (p.chunk.GetVoxelLocal(wx, wy, wz).waterLevel > 0) hw = true;
+                }
+                if (hw)
+                {
+                    WaterSim.FluidManager.Instance?.MarkActive(p.chunk.coord);
+                    WaterSim.WaterMeshBuilder.Schedule(p.chunk);
+                }
+            }
+
+            if (p.heights.IsCreated)  p.heights.Dispose();
+            if (p.biomeIdx.IsCreated) p.biomeIdx.Dispose();
+
+            if (!_meshQueue.Contains(p.chunk)) _meshQueue.Enqueue(p.chunk);
+        }
 
         // Block until any pending mesh job for 'chunk' completes (and finalize it).
         private void CompleteMeshJobFor(Chunk chunk)

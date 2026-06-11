@@ -245,7 +245,7 @@ namespace VoxelEngine.Menu
                 ? $"{w.sizeBytes / 1024.0:0.0} KB"
                 : $"{w.sizeBytes / (1024.0 * 1024.0):0.00} MB";
             string seed  = w.savedSeed.HasValue ? $"  ·  seed {w.savedSeed.Value}" : "";
-            var meta = T.Muted($"{w.lastWrite:yyyy-MM-dd  HH:mm}  ·  {size}{seed}");
+            var meta = T.Muted($"{w.lastWrite:dd-MM-yyyy  HH:mm}  ·  {size}{seed}");
             meta.style.marginTop = 2;
             info.Add(meta);
             row.Add(info);

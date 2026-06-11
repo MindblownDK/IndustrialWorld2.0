@@ -70,26 +70,66 @@ namespace VoxelEngine.GridSystem
             return (fwd,back,right,left,up,down);
         }
 
-        /// <summary>Index of the currently selected fire-tool (drill/weapon). Cycled in
-        /// the cockpit with the scroll wheel; only the selected tool activates on click.</summary>
+        /// <summary>Tool groups the cockpit can select. Like Space Engineers, every drill on the
+        /// ship acts as ONE "Drill" group and every weapon as ONE "Weapon" group — so the toolbar
+        /// shows a single entry per type and firing it activates ALL blocks of that type at once.</summary>
+        public enum ToolGroup { None = 0, Drill = 1, Weapon = 2 }
+
+        /// <summary>Index of the currently selected tool group. Cycled in the cockpit with the
+        /// scroll wheel; only blocks belonging to the selected group activate on click.</summary>
         public int SelectedToolIndex { get; set; }
 
-        /// <summary>All drill/weapon blocks on the grid, in a stable order, for tool cycling.</summary>
+        /// <summary>LMB = collect mined resources; RMB = "void" mode (faster mining, ore is
+        /// destroyed instead of stored). Set by the cockpit each frame while the Drill group fires.</summary>
+        public bool DrillVoidMode { get; set; }
+
+        /// <summary>The distinct tool GROUPS present on this grid, in a stable order
+        /// (Drill before Weapon). Drives the cockpit toolbar + scroll cycling.</summary>
+        public System.Collections.Generic.List<ToolGroup> GetToolGroups()
+        {
+            bool hasDrill = false, hasWeapon = false;
+            foreach (var kv in _blocks)
+            {
+                if (kv.Value is GridDrill)  hasDrill  = true;
+                else if (kv.Value is GridWeapon) hasWeapon = true;
+            }
+            var list = new System.Collections.Generic.List<ToolGroup>();
+            if (hasDrill)  list.Add(ToolGroup.Drill);
+            if (hasWeapon) list.Add(ToolGroup.Weapon);
+            return list;
+        }
+
+        /// <summary>The currently-selected tool group (None if the ship has no tools).</summary>
+        public ToolGroup SelectedGroup
+        {
+            get
+            {
+                var groups = GetToolGroups();
+                if (groups.Count == 0) return ToolGroup.None;
+                int idx = ((SelectedToolIndex % groups.Count) + groups.Count) % groups.Count;
+                return groups[idx];
+            }
+        }
+
+        /// <summary>Number of distinct tool groups — kept for the cockpit scroll cycle.</summary>
+        public int ToolGroupCount => GetToolGroups().Count;
+
+        /// <summary>Is the given drill/weapon block part of the player's currently-selected group?</summary>
+        public bool IsSelectedTool(GridBlock b)
+        {
+            var g = SelectedGroup;
+            if (g == ToolGroup.Drill)  return b is GridDrill;
+            if (g == ToolGroup.Weapon) return b is GridWeapon;
+            return false;
+        }
+
+        // Backwards-compat shim for older callers (HUD) that asked for the raw tool blocks.
         public System.Collections.Generic.List<GridBlock> GetFireTools()
         {
             var list = new System.Collections.Generic.List<GridBlock>();
             foreach (var kv in _blocks)
                 if (kv.Value is GridDrill || kv.Value is GridWeapon) list.Add(kv.Value);
             return list;
-        }
-
-        /// <summary>Is the given block the player's currently-selected fire tool?</summary>
-        public bool IsSelectedTool(GridBlock b)
-        {
-            var tools = GetFireTools();
-            if (tools.Count == 0) return false;
-            int idx = ((SelectedToolIndex % tools.Count) + tools.Count) % tools.Count;
-            return tools[idx] == b;
         }
 
         /// <summary>Set by the piloting cockpit each frame to drive thrusters + gyros.</summary>

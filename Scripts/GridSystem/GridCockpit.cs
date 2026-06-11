@@ -78,13 +78,16 @@ namespace VoxelEngine.GridSystem
 
             Grid.SetFlightInput(thrust, yaw, pitch, roll);
 
-            // Scroll cycles between fire tools (Drill → Weapon 1 → Weapon 2 → …).
+            // Scroll cycles between TOOL GROUPS (Drill ⇄ Weapon).
             float scroll = GridInput.Scroll;
             if (Mathf.Abs(scroll) > 0.01f)
             {
-                int n = Grid.GetFireTools().Count;
+                int n = Grid.ToolGroupCount;
                 if (n > 0) Grid.SelectedToolIndex = ((Grid.SelectedToolIndex + (scroll > 0 ? 1 : -1)) % n + n) % n;
             }
+
+            // While the Drill group is selected: LMB = mine + collect, RMB = mine + VOID (faster).
+            Grid.DrillVoidMode = GridInput.Mouse1 && !GridInput.Mouse0;
         }
 
         private static bool Held(InputAction a) => GameSettings.IsHeld(a);

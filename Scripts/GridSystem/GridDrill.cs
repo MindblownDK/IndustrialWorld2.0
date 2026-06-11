@@ -22,6 +22,8 @@ namespace VoxelEngine.GridSystem
         public float drillRate = 3f;
         [Tooltip("How far ahead of the drill we reach for terrain (metres).")]
         public float drillReach = 4f;
+        [Tooltip("VOID-mode (RMB) is this many times faster than collect-mode (LMB).")]
+        public float voidSpeedMultiplier = 2.5f;
 
         private VoxelWorld _world;
         private MaterialRegistry _registry;
@@ -57,35 +59,59 @@ namespace VoxelEngine.GridSystem
                 return;
             }
 
-            _isActive = GridInput.Mouse0;
+            // LMB = mine + collect; RMB = mine + VOID (no resources, but faster).
+            bool collect = GridInput.Mouse0;
+            bool voidDig = GridInput.Mouse1 || Grid.DrillVoidMode;
+            _isActive = collect || voidDig;
             if (!_isActive) return;
 
+            // Void mode digs faster.
+            float effectiveRate = voidDig && !collect ? drillRate * Mathf.Max(1f, voidSpeedMultiplier) : drillRate;
             _drillTimer += Time.deltaTime;
-            if (_drillTimer < 1f / drillRate) return;
+            if (_drillTimer < 1f / effectiveRate) return;
             _drillTimer = 0;
 
-            MineForward();
+            MineForward(collect && !voidDig);
         }
 
-        // Carve a sphere of terrain directly in front of the drill and route every mined
-        // item into the internal buffer (which auto-empties into ship cargo).
-        private void MineForward()
+        // Carve a sphere of terrain in front of the drill. When 'collect' is true the mined
+        // ore is routed into the internal buffer (→ ship cargo); otherwise it is voided.
+        private void MineForward(bool collect)
         {
             if (_world == null) _world = VoxelWorld.Instance;
             if (_registry == null) _registry = Object.FindAnyObjectByType<MaterialRegistry>();
             if (_world == null || _registry == null) return;
 
-            // Cast forward from the drill face; if we hit terrain, carve there. Otherwise
-            // carve a point a short way ahead so the drill still bites into surfaces it is
-            // pushed against even without a clean ray hit.
-            Vector3 origin = transform.position;
+            float cs = Grid != null ? Grid.gridSize.CellSize() : 1f;
             Vector3 dir = transform.forward;
-            Vector3 carveAt = origin + dir * (drillReach * 0.5f);
-            if (Physics.Raycast(origin, dir, out var hit, drillReach))
-                carveAt = hit.point - dir * 0.1f;
+            // Start the carve just past the drill's own face so we never try to dig the
+            // block itself, then sweep a couple of sample points outward. This guarantees
+            // the drill bites terrain it is pressed flush against (a single raycast often
+            // started INSIDE the ship's collider and hit nothing, so nothing was mined).
+            Vector3 faceCenter = transform.position + dir * (cs * 0.5f);
+
+            // Refine with a raycast that ignores our own ship (so we carve exactly at the
+            // surface) — but fall back to the face point if the ray misses.
+            Vector3 carveAt = faceCenter + dir * (drillRadius * 0.5f);
+            var hits = Physics.RaycastAll(transform.position, dir, drillReach);
+            float nearest = float.MaxValue;
+            foreach (var h in hits)
+            {
+                // Skip colliders that belong to our own grid (the ship body / blocks).
+                if (h.collider.GetComponentInParent<GridEntity>() == Grid) continue;
+                if (h.distance < nearest) { nearest = h.distance; carveAt = h.point + dir * (drillRadius * 0.4f); }
+            }
 
             var res = VoxelEditor.SubtractCollect(_world, _registry, carveAt, drillRadius, drillStrength);
-            if (!res.changed || res.drops == null) return;
+            if (!res.changed)
+            {
+                // Nothing carved at the refined point — try right at the face as a fallback so
+                // a drill jammed straight into a wall still removes material.
+                res = VoxelEditor.SubtractCollect(_world, _registry, faceCenter, drillRadius, drillStrength);
+                if (!res.changed) return;
+            }
+
+            if (!collect || res.drops == null) return; // void mode: ore is discarded
 
             for (int m = 1; m < res.drops.Length; m++)
             {

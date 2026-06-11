@@ -44,34 +44,47 @@ namespace VoxelEngine.GridSystem.UI
             if (!show) { _lastSig = "\u0000"; return; }
 
             var grid = seat.Grid;
-            var tools = grid.GetFireTools();
-            if (tools.Count == 0) { if (_bar.childCount > 0) _bar.Clear(); _lastSig = "empty"; return; }
-            int sel = ((grid.SelectedToolIndex % tools.Count) + tools.Count) % tools.Count;
+            // GROUPED toolbar: one entry per tool TYPE (all drills = one "Drill" group, all
+            // weapons = one "Weapon" group), Space-Engineers style.
+            var groups = grid.GetToolGroups();
+            if (groups.Count == 0) { if (_bar.childCount > 0) _bar.Clear(); _lastSig = "empty"; return; }
+            int sel = ((grid.SelectedToolIndex % groups.Count) + groups.Count) % groups.Count;
 
             // Build a cheap signature; bail out (no rebuild → no flicker) if nothing changed.
             var sb = new System.Text.StringBuilder();
             sb.Append(sel).Append('|');
-            foreach (var tl in tools) sb.Append(tl is GridDrill ? 'D' : 'W');
+            foreach (var g in groups) sb.Append((int)g);
             string sig = sb.ToString();
             if (sig == _lastSig) return;
             _lastSig = sig;
 
             _bar.Clear();
 
-            for (int i = 0; i < tools.Count; i++)
+            for (int i = 0; i < groups.Count; i++)
             {
                 bool active = i == sel;
                 var slot = new VisualElement();
-                slot.style.width = 120; slot.style.height = 34;
+                slot.style.width = 150; slot.style.height = 40;
                 slot.style.marginLeft = 4; slot.style.marginRight = 4;
+                slot.style.flexDirection = FlexDirection.Column;
                 slot.style.alignItems = Align.Center; slot.style.justifyContent = Justify.Center;
                 slot.style.backgroundColor = new StyleColor(active
                     ? new Color(0.18f, 0.72f, 0.88f, 0.85f) : new Color(0.08f, 0.09f, 0.12f, 0.85f));
                 T.Border(slot, active ? 2 : 1, active ? T.AccentCyan : T.BorderDim); T.Radius(slot, 6);
-                var lbl = new Label(tools[i] is GridDrill ? "⛏ Drill" : "🔫 Weapon");
-                lbl.style.unityFontStyleAndWeight = FontStyle.Bold; lbl.style.fontSize = 12;
+
+                var lbl = new Label(groups[i] == GridEntity.ToolGroup.Drill ? "⛏ Drill" : "🔫 Weapon");
+                lbl.style.unityFontStyleAndWeight = FontStyle.Bold; lbl.style.fontSize = 13;
                 lbl.style.color = new StyleColor(active ? Color.white : new Color(0.7f,0.74f,0.8f));
                 slot.Add(lbl);
+
+                // Show the LMB/RMB hint for the drill group when it's selected.
+                if (active && groups[i] == GridEntity.ToolGroup.Drill)
+                {
+                    var hint = new Label("LMB mine · RMB void");
+                    hint.style.fontSize = 9;
+                    hint.style.color = new StyleColor(new Color(0.92f, 0.96f, 1f, 0.9f));
+                    slot.Add(hint);
+                }
                 _bar.Add(slot);
             }
         }
