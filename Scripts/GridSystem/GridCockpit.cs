@@ -159,6 +159,10 @@ namespace VoxelEngine.GridSystem
             // the "I" key opens the master terminal instead of the player inventory.
             if (Grid != null) Grid.ActiveCockpit = this;
             ActivePilotSeat = this;
+
+            // Rebuild the HUD now so the on-foot hotbar is hidden immediately on entry
+            // (BuildHotbar skips while ActivePilotSeat != null) — the ship toolbar replaces it.
+            VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
         }
 
         private Transform _originalParent;

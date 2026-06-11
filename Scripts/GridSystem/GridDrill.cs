@@ -34,7 +34,9 @@ namespace VoxelEngine.GridSystem
         [Tooltip("Small internal buffer; auto-empties into grid cargo.")]
         public ItemContainer buffer;
 
-        public override float PowerDraw => _isActive ? 450f : 0f;
+        [Tooltip("Watts consumed while actively drilling.")]
+        public float powerDraw = 200f;
+        public override float PowerDraw => _isActive ? powerDraw : 0f;
         public override float ContentMass => buffer != null ? MassUtil.ContainerMass(buffer) : 0f;
         public bool IsActive => _isActive;
 
@@ -91,37 +93,39 @@ namespace VoxelEngine.GridSystem
 
             float cs = Grid != null ? Grid.gridSize.CellSize() : 1f;
             Vector3 dir = transform.forward;
-            // Start the carve just past the drill's own face so we never try to dig the
-            // block itself, then sweep a couple of sample points outward. This guarantees
-            // the drill bites terrain it is pressed flush against (a single raycast often
-            // started INSIDE the ship's collider and hit nothing, so nothing was mined).
-            Vector3 faceCenter = transform.position + dir * (cs * 0.5f);
 
-            // Refine with a raycast that ignores our own ship (so we carve exactly at the
-            // surface) — but fall back to the face point if the ray misses.
-            Vector3 carveAt = faceCenter + dir * (drillRadius * 0.5f);
-            var hits = Physics.RaycastAll(transform.position, dir, drillReach);
-            float nearest = float.MaxValue;
-            foreach (var h in hits)
+            // Find a SOLID voxel near the drill to carve. We scan a line of sample points
+            // stepping outward from the drill face along its forward axis; the first point that
+            // sits in solid terrain is the carve centre. This is orientation-tolerant and works
+            // whether the drill is flush against a wall or a short reach away from it — it no
+            // longer depends on a single raycast that often missed (the previous "mines nothing
+            // even when powered" bug).
+            Vector3 carveAt = Vector3.zero;
+            bool found = false;
+            int steps = Mathf.Max(2, Mathf.CeilToInt(drillReach / (cs * 0.5f)));
+            for (int i = 0; i <= steps && !found; i++)
             {
-                // Skip colliders that belong to our own grid (the ship body / blocks).
-                if (h.collider.GetComponentInParent<GridEntity>() == Grid) continue;
-                if (h.distance < nearest) { nearest = h.distance; carveAt = h.point + dir * (drillRadius * 0.4f); }
+                Vector3 p = transform.position + dir * (cs * 0.4f + i * (cs * 0.5f));
+                var vp = _world.WorldToVoxel(p);
+                var v = _world.GetVoxelWorld(vp);
+                if (v.density > 0)
+                {
+                    var def = _registry.Get(v.material);
+                    if (def == null || def.isMineable) { carveAt = p; found = true; }
+                }
             }
+
+            // Fallback: carve just ahead of the face even if our sample missed solid terrain
+            // (e.g. drill buried inside terrain where every sample is past the surface).
+            if (!found) carveAt = transform.position + dir * (cs * 0.5f);
 
             var res = VoxelEditor.SubtractCollect(_world, _registry, carveAt, drillRadius, drillStrength);
             if (!res.changed)
             {
-                // Nothing carved at the refined point — try right at the face as a fallback so
-                // a drill jammed straight into a wall still removes material.
-                res = VoxelEditor.SubtractCollect(_world, _registry, faceCenter, drillRadius, drillStrength);
-                if (!res.changed)
-                {
-                    if (debugLog) Debug.Log($"[GridDrill] no terrain to carve at {carveAt} / {faceCenter} (fwd={dir})");
-                    return;
-                }
+                if (debugLog) Debug.Log($"[GridDrill] no terrain to carve. pos={transform.position} fwd={dir} carveAt={carveAt} found={found}");
+                return;
             }
-            if (debugLog) Debug.Log($"[GridDrill] carved terrain (collect={collect})");
+            if (debugLog) Debug.Log($"[GridDrill] carved terrain at {carveAt} (collect={collect})");
 
             if (!collect || res.drops == null) return; // void mode: ore is discarded
 

@@ -60,33 +60,56 @@ namespace VoxelEngine.GridSystem.UI
 
             _bar.Clear();
 
+            // One rounded PILL bar holding every tool group, segmented; the active group is
+            // filled cyan. Scroll cycles between them (handled in the cockpit).
+            var pill = new VisualElement();
+            pill.style.flexDirection = FlexDirection.Row;
+            pill.style.alignItems = Align.Center;
+            pill.style.backgroundColor = new StyleColor(new Color(0.06f, 0.07f, 0.10f, 0.92f));
+            pill.style.paddingLeft = 5; pill.style.paddingRight = 5;
+            pill.style.paddingTop = 5; pill.style.paddingBottom = 5;
+            T.Border(pill, 1, T.BorderDim); T.Radius(pill, 22);   // big radius = pill shape
+            pill.pickingMode = PickingMode.Ignore;
+
             for (int i = 0; i < groups.Count; i++)
             {
                 bool active = i == sel;
-                var slot = new VisualElement();
-                slot.style.width = 150; slot.style.height = 40;
-                slot.style.marginLeft = 4; slot.style.marginRight = 4;
-                slot.style.flexDirection = FlexDirection.Column;
-                slot.style.alignItems = Align.Center; slot.style.justifyContent = Justify.Center;
-                slot.style.backgroundColor = new StyleColor(active
-                    ? new Color(0.18f, 0.72f, 0.88f, 0.85f) : new Color(0.08f, 0.09f, 0.12f, 0.85f));
-                T.Border(slot, active ? 2 : 1, active ? T.AccentCyan : T.BorderDim); T.Radius(slot, 6);
+                var seg = new VisualElement();
+                seg.style.flexDirection = FlexDirection.Column;
+                seg.style.alignItems = Align.Center; seg.style.justifyContent = Justify.Center;
+                seg.style.height = 34; seg.style.minWidth = 120;
+                seg.style.paddingLeft = 14; seg.style.paddingRight = 14;
+                seg.style.marginLeft = 2; seg.style.marginRight = 2;
+                seg.style.backgroundColor = new StyleColor(active
+                    ? new Color(0.18f, 0.72f, 0.88f, 0.95f) : new Color(0f, 0f, 0f, 0f));
+                T.Radius(seg, 18);   // each segment is also pill-rounded
 
                 var lbl = new Label(groups[i] == GridEntity.ToolGroup.Drill ? "⛏ Drill" : "🔫 Weapon");
                 lbl.style.unityFontStyleAndWeight = FontStyle.Bold; lbl.style.fontSize = 13;
-                lbl.style.color = new StyleColor(active ? Color.white : new Color(0.7f,0.74f,0.8f));
-                slot.Add(lbl);
+                lbl.style.color = new StyleColor(active ? Color.white : new Color(0.62f, 0.67f, 0.74f));
+                seg.Add(lbl);
 
-                // Show the LMB/RMB hint for the drill group when it's selected.
                 if (active && groups[i] == GridEntity.ToolGroup.Drill)
                 {
                     var hint = new Label("LMB mine · RMB void");
                     hint.style.fontSize = 9;
-                    hint.style.color = new StyleColor(new Color(0.92f, 0.96f, 1f, 0.9f));
-                    slot.Add(hint);
+                    hint.style.color = new StyleColor(new Color(0.95f, 0.98f, 1f, 0.95f));
+                    seg.Add(hint);
                 }
-                _bar.Add(slot);
+                pill.Add(seg);
             }
+
+            // Scroll hint shown to the right of the pill (only when there's more than one group).
+            if (groups.Count > 1)
+            {
+                var scrollHint = new Label("scroll ↕");
+                scrollHint.style.fontSize = 10; scrollHint.style.marginLeft = 8;
+                scrollHint.style.color = new StyleColor(new Color(0.55f, 0.6f, 0.68f));
+                scrollHint.style.unityTextAlign = TextAnchor.MiddleCenter;
+                pill.Add(scrollHint);
+            }
+
+            _bar.Add(pill);
         }
     }
 }

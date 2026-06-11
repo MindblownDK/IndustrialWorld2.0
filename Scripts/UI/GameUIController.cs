@@ -118,6 +118,14 @@ namespace VoxelEngine.UI
                 _doc.panelSettings = Resources.Load<PanelSettings>("MenuPanelSettings");
             _root = _doc.rootVisualElement;
             _root.style.flexGrow = 1;
+            // Pin the root to a DEFINITE full-screen size so absolutely-positioned children
+            // (the ship terminal overlay, modals) resolve their bottom/right insets + 100%
+            // heights correctly. flexGrow alone left the root height "auto" under some
+            // PanelScaler configs, which collapsed the terminal to a single line.
+            _root.style.position = Position.Absolute;
+            _root.style.left = 0; _root.style.top = 0; _root.style.right = 0; _root.style.bottom = 0;
+            _root.style.width = new StyleLength(new Length(100, LengthUnit.Percent));
+            _root.style.height = new StyleLength(new Length(100, LengthUnit.Percent));
             _root.pickingMode = PickingMode.Ignore;
             // Wire premium click/hover audio for the whole in-game UI in one place.
             VoxelEngine.FX.UiAudio.Attach(_root);
@@ -800,6 +808,9 @@ namespace VoxelEngine.UI
                         t => { _terminalTab = t; Refresh(); }, BuildSlot,
                         () => CloseAll());
                     card.style.flexGrow = 1;             // fills the width to the right of the gutter
+                    // Explicit height too (root is now a definite full-screen size) so the
+                    // terminal never collapses to its title bar.
+                    card.style.height = new StyleLength(new Length(96, LengthUnit.Percent));
                     card.style.marginTop = 12; card.style.marginBottom = 12; card.style.marginRight = 12;
                     overlay.Add(card);
 

@@ -282,16 +282,30 @@ namespace VoxelEngine.GridSystem
         // ── Grid-Wide Power ────────────────────────────────────────
         private void UpdatePower()
         {
-            float gen = 0, con = 0, h2Cap = 0;
+            // Sum live GENERATORS (reactors, solar, …) and CONSUMERS first. Batteries are
+            // handled separately below so they fill any deficit — this avoids the per-frame
+            // ordering flicker where a drill turning on would briefly read HasPower=false
+            // (the battery's discharge lagged a frame behind the new load).
+            float gen = 0, con = 0, h2Cap = 0, batteryReserve = 0;
             foreach (var kv in _blocks)
             {
                 var b = kv.Value;
+                if (b is GridBattery bat)
+                {
+                    batteryReserve += bat.AvailableDischargeWatts; // what it COULD supply this frame
+                    continue;
+                }
                 gen += b.PowerOutput;
                 con += b.PowerDraw;
                 if (b is GridGasTank gt && gt.gasType == Gas.GasType.Hydrogen)
                     h2Cap += gt.capacity;
             }
-            PowerGenerated = gen;
+
+            // Batteries top up the generation up to the demand (never beyond what they can give).
+            float deficit = Mathf.Max(0f, con - gen);
+            float fromBatteries = Mathf.Min(deficit, batteryReserve);
+
+            PowerGenerated = gen + fromBatteries;
             PowerConsumed = con;
             HydrogenCapacity = h2Cap;
         }

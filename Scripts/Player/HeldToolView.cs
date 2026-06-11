@@ -208,8 +208,11 @@ namespace VoxelEngine.Player
             var mat = new Material(sh) { color = color };
             if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", color);
             go.GetComponent<Renderer>().sharedMaterial = mat;
-            // Strip collider for safety.
-            var col = go.GetComponent<Collider>(); if (col != null) Object.DestroyImmediate(col);
+            // Strip collider for safety. Use Destroy (NOT DestroyImmediate): the viewmodel is
+            // rebuilt from inside item-pickup, which happens during a physics OnTriggerStay
+            // callback where DestroyImmediate is illegal. Disable it now so it's inert this frame.
+            var col = go.GetComponent<Collider>();
+            if (col != null) { col.enabled = false; Object.Destroy(col); }
             return go;
         }
 
