@@ -39,10 +39,12 @@ namespace VoxelEngine.GridSystem.UI
             // ── Window shell — ABSOLUTELY fills the holder (top/bottom/left/right = 0).
             // Using absolute insets (instead of width/height:100% + flexGrow) guarantees a
             // resolved height so the body + storage grids never collapse to the title bar. ──
+            // The window is a flex child of a FULL-SCREEN overlay row (see GameUIController),
+            // so flexGrow + 100% height makes it fill that definite space — no absolute insets
+            // (which were collapsing under some PanelScaler configs).
             var win = new VisualElement();
-            win.style.position = Position.Absolute;
-            win.style.left = 0; win.style.right = 0;
-            win.style.top = 0; win.style.bottom = 0;
+            win.style.flexGrow = 1;
+            win.style.height = new StyleLength(new Length(100, LengthUnit.Percent));
             win.style.flexDirection = FlexDirection.Column;
             win.style.backgroundColor = new StyleColor(new Color(0.06f, 0.07f, 0.10f, 1f)); // opaque
             T.Border(win, 1, T.BorderDim); T.Radius(win, 8);

@@ -778,16 +778,32 @@ namespace VoxelEngine.UI
                 // (built afterwards) draws ON TOP of it when toggled. ──
                 if (_openGridTerminal != null)
                 {
-                    var holder = new VisualElement();
-                    holder.style.position = Position.Absolute;
-                    // Sit just right of the 460-wide inventory panel; fill the rest of the screen.
-                    holder.style.left = 504; holder.style.right = 12;
-                    holder.style.top = 12; holder.style.bottom = 96; // keep clear of the hotbar row
-                    holder.Add(VoxelEngine.GridSystem.UI.GridMasterTerminal.Build(
+                    // Full-screen overlay (same pattern as the working Item-Ports modal): pin all
+                    // four edges to 0 so it ALWAYS has a definite size, then the terminal card
+                    // grows inside it via flexGrow. This is immune to PanelScaler inset quirks
+                    // that were collapsing the terminal to a single line.
+                    var overlay = new VisualElement();
+                    overlay.style.position = Position.Absolute;
+                    overlay.style.left = 0; overlay.style.top = 0;
+                    overlay.style.right = 0; overlay.style.bottom = 0;
+                    overlay.style.flexDirection = FlexDirection.Row;
+                    overlay.pickingMode = PickingMode.Ignore;
+
+                    // Left gutter reserves room for the inventory panel; the terminal fills the rest.
+                    var gutter = new VisualElement();
+                    gutter.style.width = 492; gutter.style.flexShrink = 0;
+                    gutter.pickingMode = PickingMode.Ignore;
+                    overlay.Add(gutter);
+
+                    var card = VoxelEngine.GridSystem.UI.GridMasterTerminal.Build(
                         _openGridTerminal, _terminalTab,
                         t => { _terminalTab = t; Refresh(); }, BuildSlot,
-                        () => CloseAll()));
-                    _root.Add(holder);
+                        () => CloseAll());
+                    card.style.flexGrow = 1;             // fills the width to the right of the gutter
+                    card.style.marginTop = 12; card.style.marginBottom = 12; card.style.marginRight = 12;
+                    overlay.Add(card);
+
+                    _root.Add(overlay);
                 }
 
                 // Center panel — Rust-style crafting screen (toggle-driven,

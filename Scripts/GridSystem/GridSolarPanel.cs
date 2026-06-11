@@ -19,7 +19,13 @@ namespace VoxelEngine.GridSystem
         private float _currentOutput;
         private float _timer;
 
-        public override float PowerOutput => _currentOutput;
+        public override float PowerOutput => Enabled ? _currentOutput : 0f;
+
+        /// <summary>Current wattage being generated right now (0 when disabled).</summary>
+        public float CurrentOutput => PowerOutput;
+
+        /// <summary>0..1 efficiency = current output ÷ rated max (sunlight × weather).</summary>
+        public float Efficiency01 => maxOutput > 0f ? Mathf.Clamp01(PowerOutput / maxOutput) : 0f;
 
         private void Update()
         {

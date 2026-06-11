@@ -32,6 +32,7 @@ namespace VoxelEngine.GridSystem.UI
                 case GridPortableReactor pr: return ReactorPanel(pr, slot);
                 case GridDockingPort dp:    return DockingPortPanel(dp, slot);
                 case GridLandingGear lg:    return LandingGearPanel(lg);
+                case GridSolarPanel sp:     return SolarPanel(sp);
                 case GridDrill dr:          return DrillPanel(dr, slot);
                 case GridElectricFurnace ef: return FurnacePanel(ef, slot);
                 default:                    return GenericPanel(block);
@@ -470,6 +471,31 @@ namespace VoxelEngine.GridSystem.UI
                 VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
             }, lg.autoLock ? T.AccentTeal : (Color?)null));
             p.Add(row);
+            return p;
+        }
+
+        // ── SOLAR PANEL ──────────────────────────────────────────────────────────
+        private static VisualElement SolarPanel(GridSolarPanel sp)
+        {
+            float eff = sp.Efficiency01;
+            var p = T.MachinePanel();
+            var (hdr, _, _, _) = T.HeaderRow("☀ Solar Panel",
+                sp.CurrentOutput > 1f ? "GENERATING" : "IDLE",
+                sp.CurrentOutput > 1f ? T.AccentGreen : T.AccentAmber);
+            p.Add(hdr);
+            p.Add(T.AccentDivider(T.AccentGold));
+
+            p.Add(T.StatRow("🔌", "Output", PowerFormat.Watts(sp.CurrentOutput), T.AccentGreen));
+            p.Add(T.StatRow("⚡", "Rated Max", PowerFormat.Watts(sp.maxOutput), T.AccentCyan));
+            p.Add(T.StatRow("📈", "Efficiency", $"{eff * 100f:0}%",
+                eff >= 0.66f ? T.AccentGreen : eff >= 0.33f ? T.AccentAmber : T.AccentRed));
+            p.Add(T.Spacer(6));
+
+            // Visual efficiency bar.
+            var (bar, _) = T.ProgressBar(eff,
+                eff >= 0.66f ? T.AccentGreen : eff >= 0.33f ? T.AccentAmber : T.AccentRed, 8, true);
+            p.Add(bar);
+            p.Add(T.Muted("Output scales with sun angle, shadowing and weather."));
             return p;
         }
 

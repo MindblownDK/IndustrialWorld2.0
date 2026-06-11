@@ -25,6 +25,9 @@ namespace VoxelEngine.GridSystem
         [Tooltip("VOID-mode (RMB) is this many times faster than collect-mode (LMB).")]
         public float voidSpeedMultiplier = 2.5f;
 
+        [Tooltip("Log why the drill isn't firing/mining (enable to diagnose).")]
+        public bool debugLog = false;
+
         private VoxelWorld _world;
         private MaterialRegistry _registry;
 
@@ -55,6 +58,10 @@ namespace VoxelEngine.GridSystem
 
             if (!Enabled || Grid == null || !Grid.IsControlled || !Grid.HasPower || !Grid.IsSelectedTool(this))
             {
+                if (debugLog && GridInput.Mouse0)
+                    Debug.Log($"[GridDrill] not firing — Enabled={Enabled} Grid={(Grid!=null)} " +
+                              $"IsControlled={Grid?.IsControlled} HasPower={Grid?.HasPower} " +
+                              $"SelectedTool={(Grid!=null && Grid.IsSelectedTool(this))} (group={Grid?.SelectedGroup})");
                 _isActive = false;
                 return;
             }
@@ -108,8 +115,13 @@ namespace VoxelEngine.GridSystem
                 // Nothing carved at the refined point — try right at the face as a fallback so
                 // a drill jammed straight into a wall still removes material.
                 res = VoxelEditor.SubtractCollect(_world, _registry, faceCenter, drillRadius, drillStrength);
-                if (!res.changed) return;
+                if (!res.changed)
+                {
+                    if (debugLog) Debug.Log($"[GridDrill] no terrain to carve at {carveAt} / {faceCenter} (fwd={dir})");
+                    return;
+                }
             }
+            if (debugLog) Debug.Log($"[GridDrill] carved terrain (collect={collect})");
 
             if (!collect || res.drops == null) return; // void mode: ore is discarded
 
