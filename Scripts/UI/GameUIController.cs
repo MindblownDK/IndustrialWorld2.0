@@ -209,7 +209,12 @@ namespace VoxelEngine.UI
                 _openOilRefinery != null || _openChemPlant != null ||
                 _openGridBlock != null || _openGridTerminal != null;
             // 4 Hz so tank fills, wattage, charge %, recipe progress, etc. update smoothly.
-            if (_machineRefreshAccum >= 0.25f && !PortConfigHud.IsAnyDropdownOpen && liveMachineOpen)
+            // BUT a full rebuild destroys the element the pointer is hovering / about to click,
+            // which caused the terminal buttons to flash and "eat" the first click. So while the
+            // cursor is over an interactive control (Button), defer the destructive refresh until
+            // the pointer moves off it — hover + clicks then work first time.
+            if (_machineRefreshAccum >= 0.25f && !PortConfigHud.IsAnyDropdownOpen && liveMachineOpen
+                && !PointerOverInteractiveUI())
             { _machineRefreshAccum = 0f; Refresh(); }
             ResearchHud.Tick();
             TickUpgradePrompt();
@@ -2657,6 +2662,28 @@ namespace VoxelEngine.UI
         // ============================================================
         //          UPDATE-LOOP DRAG/DROP & HOTKEY-ON-HOVER
         // ============================================================
+        /// <summary>True if the cursor is currently over an interactive UI control (a Button or
+        /// inside a ScrollView). Used to DEFER the destructive 4 Hz panel rebuild so hovering /
+        /// clicking the ship terminal works first time instead of flashing + eating clicks.</summary>
+        private bool PointerOverInteractiveUI()
+        {
+            if (_root?.panel == null) return false;
+#if ENABLE_INPUT_SYSTEM
+            var mouse = UnityEngine.InputSystem.Mouse.current;
+            if (mouse == null) return false;
+            Vector2 sp = mouse.position.ReadValue();
+#else
+            Vector2 sp = Input.mousePosition;
+#endif
+            Vector2 panelPos = RuntimePanelUtils.ScreenToPanel(_root.panel,
+                new Vector2(sp.x, Screen.height - sp.y));
+            var picked = _root.panel.Pick(panelPos);
+            // Walk up the hierarchy: if the hovered element (or an ancestor) is a Button, pause.
+            for (var e = picked; e != null; e = e.parent)
+                if (e is Button) return true;
+            return false;
+        }
+
         private void UpdateDragDrop()
         {
             if (!_inventoryOpen) return;

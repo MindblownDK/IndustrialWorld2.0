@@ -36,11 +36,13 @@ namespace VoxelEngine.GridSystem.UI
         public static VisualElement Build(GridEntity grid, int tab, Action<int> onSelectTab,
             MachineUIs.SlotBuilder slot, Action onClose)
         {
-            // ── Window shell — fills the holder (right side of the screen) ──
+            // ── Window shell — ABSOLUTELY fills the holder (top/bottom/left/right = 0).
+            // Using absolute insets (instead of width/height:100% + flexGrow) guarantees a
+            // resolved height so the body + storage grids never collapse to the title bar. ──
             var win = new VisualElement();
-            win.style.flexGrow = 1;
-            win.style.width = new StyleLength(new Length(100, LengthUnit.Percent));
-            win.style.height = new StyleLength(new Length(100, LengthUnit.Percent));
+            win.style.position = Position.Absolute;
+            win.style.left = 0; win.style.right = 0;
+            win.style.top = 0; win.style.bottom = 0;
             win.style.flexDirection = FlexDirection.Column;
             win.style.backgroundColor = new StyleColor(new Color(0.06f, 0.07f, 0.10f, 1f)); // opaque
             T.Border(win, 1, T.BorderDim); T.Radius(win, 8);
@@ -170,16 +172,19 @@ namespace VoxelEngine.GridSystem.UI
                     bar.style.flexDirection = FlexDirection.Row;
                     bar.style.alignItems = Align.Center;
                     bar.style.marginBottom = 6;
+                    // Toggle button sits immediately to the LEFT of the status text.
+                    var toggleBtn = T.SmallButton(block.Enabled ? "Turn OFF" : "Turn ON", () =>
+                    {
+                        block.Enabled = !block.Enabled;
+                        VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+                    }, block.Enabled ? T.AccentRed : T.AccentGreen);
+                    toggleBtn.style.marginRight = 10;
+                    bar.Add(toggleBtn);
                     var status = new Label(block.Enabled ? "● ONLINE" : "○ OFFLINE");
                     status.style.flexGrow = 1;
                     status.style.unityFontStyleAndWeight = FontStyle.Bold;
                     status.style.color = new StyleColor(block.Enabled ? T.AccentGreen : new Color(0.6f, 0.6f, 0.65f));
                     bar.Add(status);
-                    bar.Add(T.SmallButton(block.Enabled ? "Turn OFF" : "Turn ON", () =>
-                    {
-                        block.Enabled = !block.Enabled;
-                        VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
-                    }, block.Enabled ? T.AccentRed : T.AccentGreen));
                     wrap.Add(bar);
                 }
                 wrap.Add(GridBlockUI.BuildPanel(block, slot));

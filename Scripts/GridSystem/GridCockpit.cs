@@ -54,7 +54,11 @@ namespace VoxelEngine.GridSystem
             Vector3 thrust = new Vector3(right, up, fwd);
 
             // Rotation — Q/E roll + mouse look (yaw/pitch) via gyroscopes.
-            float roll = (GridInput.Q ? 1 : 0) - (GridInput.E ? 1 : 0);
+            // Roll is a steady digital key (full 1.0) while yaw/pitch come from small mouse
+            // deltas, so raw roll felt FAR too aggressive. Scale it down to match the feel
+            // of mouse turning (tunable: lower = gentler roll).
+            const float ROLL_SENS = 0.35f;
+            float roll = ((GridInput.Q ? 1 : 0) - (GridInput.E ? 1 : 0)) * ROLL_SENS;
 
             Vector2 md = GridInput.MouseDelta;
             float mouseX = md.x, mouseY = md.y;
