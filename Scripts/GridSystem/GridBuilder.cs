@@ -181,7 +181,7 @@ namespace VoxelEngine.GridSystem
             float cs = size.CellSize();
             GridEntity best = null;
             float bestDist = cs * 0.9f;   // must be genuinely close to a real block
-            foreach (var ge in GameObject.FindObjectsByType<GridEntity>(FindObjectsSortMode.None))
+            foreach (var ge in GameObject.FindObjectsByType<GridEntity>(FindObjectsInactive.Exclude))
             {
                 if (ge.gridSize != size) continue;
                 var gp = ge.WorldToGrid(worldPoint);

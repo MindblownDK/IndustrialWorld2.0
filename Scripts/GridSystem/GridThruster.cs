@@ -25,6 +25,11 @@ namespace VoxelEngine.GridSystem
         [Tooltip("Hydrogen consumed per second at max thrust. Hydrogen type only.")]
         public float hydrogenPerSecond = 10f;
 
+        /// <summary>World-space direction this thruster PUSHES the ship. The exhaust flame
+        /// (the "particles") exits the block's local -forward, so the reaction force pushes
+        /// the ship along its local +forward.</summary>
+        public Vector3 PushDirection => transform.forward;
+
         /// <summary>Is this thruster operational right now?</summary>
         public bool IsOperational
         {

@@ -256,26 +256,57 @@ namespace VoxelEngine.GridSystem
             HydrogenCapacity = h2Cap;
         }
 
+        // Multiplier on raw thruster Newtons so SI-balanced ships fly responsively.
+        private const float THRUST_GAIN = 1.0f;
+
         // ── Thrust Application ─────────────────────────────────────
+        //
+        // PER-DIRECTION thrust (Space-Engineers style). The pilot's WASD/Space/Ctrl
+        // input is expressed in COCKPIT-LOCAL axes (x=right, y=up, z=forward). For each
+        // requested axis we sum ONLY the thrusters that actually push the ship that way,
+        // then apply real force (N) → the ship moves exactly where the cockpit is facing
+        // and is limited by how many thrusters point that way.
+        //
+        //   A thruster's flame ("particles") comes out its LOCAL -forward, so it PUSHES
+        //   the ship along its LOCAL +forward. We classify each thruster by its push
+        //   direction in the cockpit's frame.
         private void UpdateThrust()
         {
             if (!IsControlled) return;
 
-            // Sum the available thrust (N) from all operational thrusters and push the
-            // ship in the PILOT'S desired direction. This makes WASD intuitive no matter
-            // how thrusters are mounted (each still consumes its own fuel/power).
-            float totalThrustN = 0f;
+            // Cockpit local frame (so "forward" = where the pilot is looking).
+            Transform frame = ActiveCockpit != null ? ActiveCockpit.transform : transform;
+
+            Vector3 input = ThrustInput; // local: x=right, y=up, z=forward
+
+            // Accumulate world-space force from the thrusters that push each requested way.
+            Vector3 worldForce = Vector3.zero;
             foreach (var kv in _blocks)
             {
-                if (kv.Value is GridThruster thruster && thruster.IsOperational)
-                    totalThrustN += thruster.AvailableThrust(ThrustInput, this);
+                if (!(kv.Value is GridThruster thruster) || !thruster.IsOperational) continue;
+
+                // The direction this thruster pushes the ship, in the cockpit's local frame.
+                Vector3 pushLocal = frame.InverseTransformDirection(thruster.PushDirection);
+
+                // Does the pilot want thrust along this thruster's push axis?
+                float want =
+                      pushLocal.x * Mathf.Clamp(input.x, -1f, 1f)
+                    + pushLocal.y * Mathf.Clamp(input.y, -1f, 1f)
+                    + pushLocal.z * Mathf.Clamp(input.z, -1f, 1f);
+
+                if (want <= 0.05f) continue; // this thruster doesn't help the requested move
+
+                // Consume this thruster's fuel/power + get its usable thrust (N), then push
+                // the ship along the thruster's real push direction (so it stays balanced).
+                float thrustN = thruster.AvailableThrust(input, this) * Mathf.Clamp01(want);
+                worldForce += thruster.PushDirection * thrustN;
             }
 
-            if (ThrustInput.sqrMagnitude > 0.0001f && totalThrustN > 0f)
+            if (worldForce.sqrMagnitude > 0.0001f)
             {
-                Vector3 worldDir = transform.TransformDirection(ThrustInput.normalized);
-                // Acceleration-based with a strong gain so realistic-mass ships fly well.
-                _rb.AddForce(worldDir * (totalThrustN / Mathf.Max(1f, _rb.mass)) * 4f, ForceMode.Acceleration);
+                // Real force in Newtons → ForceMode.Force divides by mass, so a heavy or
+                // lightly-thrusted ship genuinely struggles (no more "too much thrust").
+                _rb.AddForce(worldForce * THRUST_GAIN, ForceMode.Force);
             }
 
             Vector3 rotInput = new Vector3(RotationPitch, RotationYaw, RotationRoll);
@@ -285,9 +316,10 @@ namespace VoxelEngine.GridSystem
                 if (kv.Value is GridGyroscope gy && gy.Enabled) gyroTorque += gy.torquePower;
             if (gyroTorque > 0f && rotInput.sqrMagnitude > 0.0001f)
             {
-                // Acceleration mode = mass-independent, so a small ship turns crisply and
-                // a big one needs more gyros. Scale keeps it responsive to mouse input.
-                Vector3 worldTorque = transform.TransformDirection(rotInput) * (gyroTorque * 0.0005f);
+                // Torque applied around the COCKPIT's axes (so pitch/yaw match where the
+                // pilot is looking). Acceleration mode = mass-independent, so a small ship
+                // turns crisply and a big one needs more gyros.
+                Vector3 worldTorque = frame.TransformDirection(rotInput) * (gyroTorque * 0.0005f);
                 _rb.AddTorque(worldTorque, ForceMode.Acceleration);
             }
             // Angular damping so the ship stops spinning when you let go (SE-style).

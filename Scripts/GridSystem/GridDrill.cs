@@ -6,6 +6,9 @@
 
 using UnityEngine;
 using VoxelEngine.Items;
+using VoxelEngine.Core;
+using VoxelEngine.Materials;
+using VoxelEngine.Modification;
 
 namespace VoxelEngine.GridSystem
 {
@@ -17,6 +20,11 @@ namespace VoxelEngine.GridSystem
         public float drillRadius = 2f;
         public float drillStrength = 120f;
         public float drillRate = 3f;
+        [Tooltip("How far ahead of the drill we reach for terrain (metres).")]
+        public float drillReach = 4f;
+
+        private VoxelWorld _world;
+        private MaterialRegistry _registry;
 
         [Tooltip("Small internal buffer; auto-empties into grid cargo.")]
         public ItemContainer buffer;
@@ -56,8 +64,36 @@ namespace VoxelEngine.GridSystem
             if (_drillTimer < 1f / drillRate) return;
             _drillTimer = 0;
 
-            // Mining hook — voxel removal happens elsewhere; mined ore is deposited
-            // into the buffer via CollectOre() so it routes to cargo automatically.
+            MineForward();
+        }
+
+        // Carve a sphere of terrain directly in front of the drill and route every mined
+        // item into the internal buffer (which auto-empties into ship cargo).
+        private void MineForward()
+        {
+            if (_world == null) _world = VoxelWorld.Instance;
+            if (_registry == null) _registry = Object.FindAnyObjectByType<MaterialRegistry>();
+            if (_world == null || _registry == null) return;
+
+            // Cast forward from the drill face; if we hit terrain, carve there. Otherwise
+            // carve a point a short way ahead so the drill still bites into surfaces it is
+            // pushed against even without a clean ray hit.
+            Vector3 origin = transform.position;
+            Vector3 dir = transform.forward;
+            Vector3 carveAt = origin + dir * (drillReach * 0.5f);
+            if (Physics.Raycast(origin, dir, out var hit, drillReach))
+                carveAt = hit.point - dir * 0.1f;
+
+            var res = VoxelEditor.SubtractCollect(_world, _registry, carveAt, drillRadius, drillStrength);
+            if (!res.changed || res.drops == null) return;
+
+            for (int m = 1; m < res.drops.Length; m++)
+            {
+                if (res.drops[m] <= 0) continue;
+                var def = _registry.Get((byte)m);
+                if (def?.dropItem == null) continue;
+                CollectOre(def.dropItem, res.drops[m]);
+            }
         }
 
         /// <summary>Deposit mined material into the buffer (called by the mining system).</summary>

@@ -103,5 +103,15 @@ namespace VoxelEngine.GridSystem
             get => Input.GetKeyDown(KeyCode.Z);
 #endif
         }
+
+        /// <summary>True only on the frame P is pressed (landing-gear lock/unlock toggle).</summary>
+        public static bool PPressed
+        {
+#if ENABLE_INPUT_SYSTEM
+            get => Keyboard.current != null && Keyboard.current.pKey.wasPressedThisFrame;
+#else
+            get => Input.GetKeyDown(KeyCode.P);
+#endif
+        }
     }
 }

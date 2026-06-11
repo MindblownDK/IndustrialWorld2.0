@@ -39,6 +39,9 @@ namespace VoxelEngine.GridSystem
             // Z toggles inertia dampeners (auto-brake to a stop when not thrusting).
             if (GridInput.ZPressed) Grid.DampenersOn = !Grid.DampenersOn;
 
+            // P toggles ALL landing gear on the grid (lock ⇆ unlock).
+            if (GridInput.PPressed) ToggleAllLandingGear();
+
             ReadFlightInput();
         }
 
@@ -81,6 +84,22 @@ namespace VoxelEngine.GridSystem
         }
 
         private static bool Held(InputAction a) => GameSettings.IsHeld(a);
+
+        /// <summary>P key — if ANY landing gear is locked, unlock them all; otherwise lock them all.</summary>
+        private void ToggleAllLandingGear()
+        {
+            if (Grid == null) return;
+            bool anyLocked = false;
+            foreach (var kv in Grid.Blocks)
+                if (kv.Value is GridLandingGear lg && lg.IsLocked) { anyLocked = true; break; }
+
+            foreach (var kv in Grid.Blocks)
+            {
+                if (!(kv.Value is GridLandingGear lg)) continue;
+                if (anyLocked) lg.Unlock();
+                else           lg.TryLock();
+            }
+        }
 
         // ── Free-look (hold Alt) ───────────────────────────────────────────────
         private float _lookYaw, _lookPitch;

@@ -768,6 +768,22 @@ namespace VoxelEngine.UI
                 // Left panel — player inventory + crafting toggle
                 BuildLeftPanel(_root);
 
+                // ── MASTER SHIP TERMINAL — rendered FIRST (lowest z-order) so the
+                // inventory stays on the left and, crucially, the crafting screen
+                // (built afterwards) draws ON TOP of it when toggled. ──
+                if (_openGridTerminal != null)
+                {
+                    var holder = new VisualElement();
+                    holder.style.position = Position.Absolute;
+                    // Sit just right of the 460-wide inventory panel; fill the rest of the screen.
+                    holder.style.left = 504; holder.style.right = 12;
+                    holder.style.top = 12; holder.style.bottom = 96; // keep clear of the hotbar row
+                    holder.Add(VoxelEngine.GridSystem.UI.GridMasterTerminal.Build(
+                        _openGridTerminal, _terminalTab,
+                        t => { _terminalTab = t; Refresh(); }, BuildSlot,
+                        () => CloseAll()));
+                    _root.Add(holder);
+                }
 
                 // Center panel — Rust-style crafting screen (toggle-driven,
                 // state persisted). Only when the player toggled it ON and no
@@ -820,21 +836,6 @@ namespace VoxelEngine.UI
                 else if (_openOilRefinery      != null) { var mp = VoxelEngine.Crafting.ProcessorUI.OilRefineryPanel(_openOilRefinery, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openOilRefinery); }
                 else if (_openChemPlant        != null) { var mp = VoxelEngine.Crafting.ProcessorUI.ChemicalPlantPanel(_openChemPlant, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openChemPlant); }
                 else if (_openStation  != null) BuildRightStationCrafting(_root, _openStation);
-
-                // ── MASTER SHIP TERMINAL — fills the right portion of the screen,
-                // overlaid so the inventory + crafting stay usable on the left. ──
-                if (_openGridTerminal != null)
-                {
-                    var holder = new VisualElement();
-                    holder.style.position = Position.Absolute;
-                    holder.style.left = 480; holder.style.right = 12;
-                    holder.style.top = 12; holder.style.bottom = 12;
-                    holder.Add(VoxelEngine.GridSystem.UI.GridMasterTerminal.Build(
-                        _openGridTerminal, _terminalTab,
-                        t => { _terminalTab = t; Refresh(); }, BuildSlot,
-                        () => CloseAll()));
-                    _root.Add(holder);
-                }
             }
             else
             {
@@ -885,6 +886,10 @@ namespace VoxelEngine.UI
         // ----- HOTBAR -----
         private void BuildHotbar(VisualElement root)
         {
+            // While seated in a cockpit, the player flies the ship — the on-foot hotbar is
+            // replaced by the ShipToolHud (drill/weapon selector), so hide it entirely.
+            if (VoxelEngine.GridSystem.GridCockpit.ActivePilotSeat != null) return;
+
             var bar = new VisualElement();
             bar.style.position = Position.Absolute;
             bar.style.bottom = 12;
@@ -1031,14 +1036,32 @@ namespace VoxelEngine.UI
 
             var panel = MakePanel();
             panel.style.position = Position.Absolute;
-            panel.style.top      = 32;
-            panel.style.bottom   = 96;
-            panel.style.left     = 508;   // just right of the 460-wide inventory panel (left=32)
-            // When a right-side container/machine panel is open it occupies the
-            // far-right ~540px, so we stop short of it; otherwise we stretch to the
-            // screen edge. Either way the layout stays responsive.
-            panel.style.right    = rightPanelOpen ? 568 : 28;
-            panel.style.maxWidth = 760;   // but never absurdly wide on ultrawide displays
+            // When the ship terminal is open the terminal fills the right portion of the
+            // screen, so the crafting screen floats as a CENTERED modal ON TOP of everything
+            // (it is added to the root last → highest z-order). Otherwise it docks in the
+            // usual center column between the inventory and any right-side panel.
+            bool terminalOpen = _openGridTerminal != null;
+            if (terminalOpen)
+            {
+                panel.style.top    = 60;
+                panel.style.bottom = 60;
+                panel.style.left   = new StyleLength(new Length(22, LengthUnit.Percent));
+                panel.style.right  = new StyleLength(new Length(22, LengthUnit.Percent));
+                panel.style.maxWidth = 820;
+                // Strong opaque backing + shadow-ish border so it reads as the topmost layer.
+                panel.style.backgroundColor = new StyleColor(new Color(0.05f, 0.06f, 0.09f, 0.98f));
+            }
+            else
+            {
+                panel.style.top      = 32;
+                panel.style.bottom   = 96;
+                panel.style.left     = 508;   // just right of the 460-wide inventory panel (left=32)
+                // When a right-side container/machine panel is open it occupies the
+                // far-right ~540px, so we stop short of it; otherwise we stretch to the
+                // screen edge. Either way the layout stays responsive.
+                panel.style.right    = rightPanelOpen ? 568 : 28;
+                panel.style.maxWidth = 760;   // but never absurdly wide on ultrawide displays
+            }
             panel.style.overflow = Overflow.Hidden;
             root.Add(panel);
 

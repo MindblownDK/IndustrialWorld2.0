@@ -17,13 +17,27 @@ namespace VoxelEngine.Modification
             public bool changed;
             public ItemDefinition primaryItem;
             public int            primaryAmount;
+            /// <summary>Per-material drop counts (index = material id). Only populated when the
+            /// caller used <see cref="SubtractCollect"/> (autoGrant:false) so it can route the
+            /// drops itself; null otherwise.</summary>
+            public int[]          drops;
         }
 
-        /// <summary>Subtracts a smooth sphere of density at world position. Returns mined item totals.</summary>
+        /// <summary>Subtracts a smooth sphere of density at world position. Returns mined item totals.
+        /// Drops are automatically granted to the local player's inventory.</summary>
         public static EditResult Subtract(VoxelWorld world, MaterialRegistry registry,
                                           Vector3 worldPos, float radius, float strength)
         {
-            return Apply(world, registry, worldPos, radius, strength, subtract:true);
+            return Apply(world, registry, worldPos, radius, strength, subtract:true, autoGrant:true);
+        }
+
+        /// <summary>Subtracts a sphere but does NOT auto-grant drops to the player — the caller
+        /// receives the mined item + amount in the result (used by ship drills that route ore
+        /// into their own buffer / cargo network instead of the player's pockets).</summary>
+        public static EditResult SubtractCollect(VoxelWorld world, MaterialRegistry registry,
+                                                 Vector3 worldPos, float radius, float strength)
+        {
+            return Apply(world, registry, worldPos, radius, strength, subtract:true, autoGrant:false);
         }
 
         /// <summary>Adds material density (e.g. building/filling). 'fillMaterial' is what gets placed.</summary>
@@ -36,7 +50,8 @@ namespace VoxelEngine.Modification
 
         private static EditResult Apply(VoxelWorld world, MaterialRegistry registry,
                                         Vector3 worldPos, float radius, float strength,
-                                        bool subtract, MaterialId fillMaterial = MaterialId.Stone)
+                                        bool subtract, MaterialId fillMaterial = MaterialId.Stone,
+                                        bool autoGrant = true)
         {
             var result = new EditResult();
             if (world == null) return result;
@@ -127,8 +142,8 @@ namespace VoxelEngine.Modification
                     result.primaryAmount = drops[m];
                 }
             }
-            // (Caller is responsible for adding all drops to inventory; we expose totals via ApplyDrops below.)
-            ApplyDrops(registry, drops);
+            if (autoGrant) ApplyDrops(registry, drops);
+            else           result.drops = drops; // hand the full breakdown back to the caller
             return result;
         }
 

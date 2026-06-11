@@ -14,6 +14,9 @@ namespace VoxelEngine.GridSystem.UI
     public static class ShipToolHud
     {
         private static VisualElement _root, _bar;
+        // Cache the last-rendered signature so we only rebuild the toolbar when the tool
+        // set or the selection actually changes — rebuilding every frame caused a flicker.
+        private static string _lastSig = "\u0000";
 
         public static void EnsureMounted(VisualElement uiRoot)
         {
@@ -29,6 +32,7 @@ namespace VoxelEngine.GridSystem.UI
             _bar.style.display = DisplayStyle.None;
             _bar.pickingMode = PickingMode.Ignore;
             uiRoot.Add(_bar);
+            _lastSig = "\u0000"; // force a rebuild on the next Tick after (re)mount
         }
 
         public static void Tick()
@@ -37,13 +41,22 @@ namespace VoxelEngine.GridSystem.UI
             var seat = GridCockpit.ActivePilotSeat;
             bool show = seat != null && seat.Grid != null && !VoxelEngine.UI.UIState.IsBlocking;
             _bar.style.display = show ? DisplayStyle.Flex : DisplayStyle.None;
-            if (!show) return;
+            if (!show) { _lastSig = "\u0000"; return; }
 
-            _bar.Clear();
             var grid = seat.Grid;
             var tools = grid.GetFireTools();
-            if (tools.Count == 0) return;
+            if (tools.Count == 0) { if (_bar.childCount > 0) _bar.Clear(); _lastSig = "empty"; return; }
             int sel = ((grid.SelectedToolIndex % tools.Count) + tools.Count) % tools.Count;
+
+            // Build a cheap signature; bail out (no rebuild → no flicker) if nothing changed.
+            var sb = new System.Text.StringBuilder();
+            sb.Append(sel).Append('|');
+            foreach (var tl in tools) sb.Append(tl is GridDrill ? 'D' : 'W');
+            string sig = sb.ToString();
+            if (sig == _lastSig) return;
+            _lastSig = sig;
+
+            _bar.Clear();
 
             for (int i = 0; i < tools.Count; i++)
             {
