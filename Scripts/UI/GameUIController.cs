@@ -215,6 +215,7 @@ namespace VoxelEngine.UI
             TickUpgradePrompt();
             if (inventory != null) Minimap.Tick(inventory.transform.position);
             VoxelEngine.GridSystem.UI.BlockRotationHud.Tick();
+            VoxelEngine.GridSystem.UI.ShipToolHud.Tick();
 
             // 4 Hz refresh while ANY craft queue near the player has work — drives recipe-row progress bars.
             if (_inventoryOpen && inventory != null)
@@ -268,8 +269,9 @@ namespace VoxelEngine.UI
 #endif
             // Block hotbar cycling while a grid block is held + a modifier is down (rotation).
             bool rotatingBlock = VoxelEngine.GridSystem.GridBuilder.HoldingGridBlock && (ctrl || shift);
+            bool piloting = VoxelEngine.GridSystem.GridCockpit.ActivePilotSeat != null; // cockpit owns scroll (tool cycle)
             // Throttle: at most one slot change per Update, regardless of scroll-unit magnitude.
-            if (!ctrl && !shift && !rotatingBlock && !_inventoryOpen && _rightContainer == null && inventory != null && Mathf.Abs(wheel) > 0.01f)
+            if (!ctrl && !shift && !rotatingBlock && !piloting && !_inventoryOpen && _rightContainer == null && inventory != null && Mathf.Abs(wheel) > 0.01f)
             {
                 int dir = wheel > 0 ? -1 : 1; // wheel up = previous slot, wheel down = next
                 int next = inventory.activeHotbarIndex + dir;
@@ -744,6 +746,7 @@ namespace VoxelEngine.UI
             UpgradePromptHud.EnsureMounted(_root);
             Minimap.EnsureMounted(_root);
             VoxelEngine.GridSystem.UI.BlockRotationHud.EnsureMounted(_root);
+            VoxelEngine.GridSystem.UI.ShipToolHud.EnsureMounted(_root);
             RustStyleHud.EnsureMounted(_root);
             InteractionHud.EnsureMounted(_root);
             BuildFeedbackHud.EnsureMounted(_root);
@@ -765,22 +768,6 @@ namespace VoxelEngine.UI
                 // Left panel — player inventory + crafting toggle
                 BuildLeftPanel(_root);
 
-                // ── MASTER SHIP TERMINAL — SE-style config screen on the RIGHT,
-                // with the normal player inventory on the left for item transfer. ──
-                if (_openGridTerminal != null)
-                {
-                    // Fill the screen to the RIGHT of the player inventory panel.
-                    var holder = new VisualElement();
-                    holder.style.position = Position.Absolute;
-                    holder.style.left = 360; holder.style.right = 16;
-                    holder.style.top = 16; holder.style.bottom = 16;
-                    holder.Add(VoxelEngine.GridSystem.UI.GridMasterTerminal.Build(
-                        _openGridTerminal, _terminalTab,
-                        t => { _terminalTab = t; Refresh(); }, BuildSlot,
-                        () => CloseAll()));
-                    _root.Add(holder);
-                    return; // terminal owns the right side
-                }
 
                 // Center panel — Rust-style crafting screen (toggle-driven,
                 // state persisted). Only when the player toggled it ON and no
@@ -833,6 +820,21 @@ namespace VoxelEngine.UI
                 else if (_openOilRefinery      != null) { var mp = VoxelEngine.Crafting.ProcessorUI.OilRefineryPanel(_openOilRefinery, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openOilRefinery); }
                 else if (_openChemPlant        != null) { var mp = VoxelEngine.Crafting.ProcessorUI.ChemicalPlantPanel(_openChemPlant, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openChemPlant); }
                 else if (_openStation  != null) BuildRightStationCrafting(_root, _openStation);
+
+                // ── MASTER SHIP TERMINAL — fills the right portion of the screen,
+                // overlaid so the inventory + crafting stay usable on the left. ──
+                if (_openGridTerminal != null)
+                {
+                    var holder = new VisualElement();
+                    holder.style.position = Position.Absolute;
+                    holder.style.left = 480; holder.style.right = 12;
+                    holder.style.top = 12; holder.style.bottom = 12;
+                    holder.Add(VoxelEngine.GridSystem.UI.GridMasterTerminal.Build(
+                        _openGridTerminal, _terminalTab,
+                        t => { _terminalTab = t; Refresh(); }, BuildSlot,
+                        () => CloseAll()));
+                    _root.Add(holder);
+                }
             }
             else
             {

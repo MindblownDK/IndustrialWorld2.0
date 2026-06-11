@@ -1,6 +1,6 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
---- !u!1 &369499375124370635
+--- !u!1 &63547809436428684
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -8,9 +8,9 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 4121396651957646316}
-  - component: {fileID: 4217313640078983678}
-  - component: {fileID: 7487275077574974977}
+  - component: {fileID: 599311108993539970}
+  - component: {fileID: 5750385594133615431}
+  - component: {fileID: 2484195262420976879}
   m_Layer: 0
   m_Name: Cylinder
   m_TagString: Untagged
@@ -18,13 +18,13 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &4121396651957646316
+--- !u!4 &599311108993539970
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 369499375124370635}
+  m_GameObject: {fileID: 63547809436428684}
   serializedVersion: 2
   m_LocalRotation: {x: 0.7071068, y: 0, z: 0, w: 0.7071068}
   m_LocalPosition: {x: 0, y: 0, z: -0.31}
@@ -33,21 +33,21 @@ Transform:
   m_Children: []
   m_Father: {fileID: 4362610206850407677}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!33 &4217313640078983678
+--- !u!33 &5750385594133615431
 MeshFilter:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 369499375124370635}
+  m_GameObject: {fileID: 63547809436428684}
   m_Mesh: {fileID: 10206, guid: 0000000000000000e000000000000000, type: 0}
---- !u!23 &7487275077574974977
+--- !u!23 &2484195262420976879
 MeshRenderer:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 369499375124370635}
+  m_GameObject: {fileID: 63547809436428684}
   m_Enabled: 1
   m_CastShadows: 1
   m_ReceiveShadows: 1
@@ -123,7 +123,7 @@ Transform:
   m_Children:
   - {fileID: 4438607817251319115}
   - {fileID: 3580989756898297956}
-  - {fileID: 4121396651957646316}
+  - {fileID: 599311108993539970}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!65 &7772896084546924176
@@ -166,9 +166,9 @@ MonoBehaviour:
   GridPos: {x: 0, y: 0, z: 0}
   Enabled: 1
   thrusterType: 1
-  maxThrustN: 15000
+  maxThrustN: 80000
   powerAtMaxThrust: 0
-  hydrogenPerSecond: 6
+  hydrogenPerSecond: 3
 --- !u!1 &1502944053903801986
 GameObject:
   m_ObjectHideFlags: 0

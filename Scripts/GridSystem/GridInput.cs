@@ -93,5 +93,15 @@ namespace VoxelEngine.GridSystem
             get => Input.GetKey(KeyCode.E);
 #endif
         }
+
+        /// <summary>True only on the frame Z is pressed (dampener toggle).</summary>
+        public static bool ZPressed
+        {
+#if ENABLE_INPUT_SYSTEM
+            get => Keyboard.current != null && Keyboard.current.zKey.wasPressedThisFrame;
+#else
+            get => Input.GetKeyDown(KeyCode.Z);
+#endif
+        }
     }
 }

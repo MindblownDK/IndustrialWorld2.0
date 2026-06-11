@@ -12,6 +12,7 @@ namespace VoxelEngine.GridSystem.UI
     public static class BlockRotationHud
     {
         private static VisualElement _root, _box;
+        private static Label _nameLabel;
         private static bool _visible;
 
         public static void EnsureMounted(VisualElement uiRoot)
@@ -30,6 +31,12 @@ namespace VoxelEngine.GridSystem.UI
             _box.style.paddingLeft = 12; _box.style.paddingRight = 12;
             _box.pickingMode = PickingMode.Ignore;
             _box.style.display = DisplayStyle.None;
+
+            _nameLabel = new Label("");
+            _nameLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _nameLabel.style.fontSize = 13; _nameLabel.style.color = new StyleColor(Color.white);
+            _nameLabel.style.marginBottom = 4;
+            _box.Add(_nameLabel);
 
             var title = new Label("⟲  ROTATE BLOCK");
             title.style.unityFontStyleAndWeight = FontStyle.Bold;
@@ -65,6 +72,7 @@ namespace VoxelEngine.GridSystem.UI
             // Set every frame (not just on change) so a hotbar scroll between two grid
             // blocks can never leave the HUD stuck hidden.
             _box.style.display = show ? DisplayStyle.Flex : DisplayStyle.None;
+            if (show && _nameLabel != null) _nameLabel.text = "🔧 " + GridBuilder.HeldBlockName;
             if (show != _visible)
             {
                 _visible = show;

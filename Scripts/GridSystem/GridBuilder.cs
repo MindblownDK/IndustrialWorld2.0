@@ -34,6 +34,9 @@ namespace VoxelEngine.GridSystem
         /// blocks without the player sinking.</summary>
         public static bool HoldingGridBlock { get; private set; }
 
+        /// <summary>Display name of the grid block currently in hand (for the rotation HUD).</summary>
+        public static string HeldBlockName { get; private set; } = "";
+
         private void Start()
         {
             if (buildCamera == null) buildCamera = Camera.main;
@@ -54,6 +57,7 @@ namespace VoxelEngine.GridSystem
             }
 
             HoldingGridBlock = true;
+            HeldBlockName = gbi.displayName;
             HandleRotationInput();
 
             var ray = buildCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));

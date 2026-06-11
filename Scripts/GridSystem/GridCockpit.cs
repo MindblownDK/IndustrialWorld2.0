@@ -21,8 +21,23 @@ namespace VoxelEngine.GridSystem
 
             if (GameSettings.WasPressed(InputAction.ExitCockpit)) { Exit(); return; }
 
-            // Don't fly while a UI panel (terminal/inventory) is open.
-            if (VoxelEngine.UI.UIState.IsBlocking || Grid == null) { Grid?.SetFlightInput(Vector3.zero, 0, 0, 0); return; }
+            // While a full UI panel (terminal/inventory) is open, release control + cursor.
+            if (VoxelEngine.UI.UIState.IsBlocking || Grid == null)
+            {
+                Grid?.SetFlightInput(Vector3.zero, 0, 0, 0);
+                return;
+            }
+
+            // No blocking UI → we're actively flying: lock the cursor so mouse-look works
+            // (the player controller that normally does this is disabled while seated).
+            if (Cursor.lockState != CursorLockMode.Locked)
+            {
+                Cursor.lockState = CursorLockMode.Locked;
+                Cursor.visible = false;
+            }
+
+            // Z toggles inertia dampeners (auto-brake to a stop when not thrusting).
+            if (GridInput.ZPressed) Grid.DampenersOn = !Grid.DampenersOn;
 
             ReadFlightInput();
         }

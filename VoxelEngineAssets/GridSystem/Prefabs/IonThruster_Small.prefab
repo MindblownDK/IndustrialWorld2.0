@@ -1,6 +1,6 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
---- !u!1 &5032150094519544834
+--- !u!1 &5593483423041950485
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -8,9 +8,9 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 6797959860332813629}
-  - component: {fileID: 4283167292288196517}
-  - component: {fileID: 7925146141803415386}
+  - component: {fileID: 1704786767242878326}
+  - component: {fileID: 215587108447664932}
+  - component: {fileID: 7683913198460266904}
   m_Layer: 0
   m_Name: Cylinder
   m_TagString: Untagged
@@ -18,13 +18,13 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &6797959860332813629
+--- !u!4 &1704786767242878326
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5032150094519544834}
+  m_GameObject: {fileID: 5593483423041950485}
   serializedVersion: 2
   m_LocalRotation: {x: 0.7071068, y: 0, z: 0, w: 0.7071068}
   m_LocalPosition: {x: 0, y: 0, z: -0.225}
@@ -33,21 +33,21 @@ Transform:
   m_Children: []
   m_Father: {fileID: 8760238830902774088}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!33 &4283167292288196517
+--- !u!33 &215587108447664932
 MeshFilter:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5032150094519544834}
+  m_GameObject: {fileID: 5593483423041950485}
   m_Mesh: {fileID: 10206, guid: 0000000000000000e000000000000000, type: 0}
---- !u!23 &7925146141803415386
+--- !u!23 &7683913198460266904
 MeshRenderer:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5032150094519544834}
+  m_GameObject: {fileID: 5593483423041950485}
   m_Enabled: 1
   m_CastShadows: 1
   m_ReceiveShadows: 1
@@ -90,7 +90,7 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
---- !u!1 &5593483423041950485
+--- !u!1 &5694855647559032612
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -98,9 +98,9 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 1704786767242878326}
-  - component: {fileID: 215587108447664932}
-  - component: {fileID: 7683913198460266904}
+  - component: {fileID: 2128489790061116726}
+  - component: {fileID: 6498024462779785612}
+  - component: {fileID: 8593975884447639195}
   m_Layer: 0
   m_Name: Cylinder
   m_TagString: Untagged
@@ -108,13 +108,13 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &1704786767242878326
+--- !u!4 &2128489790061116726
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5593483423041950485}
+  m_GameObject: {fileID: 5694855647559032612}
   serializedVersion: 2
   m_LocalRotation: {x: 0.7071068, y: 0, z: 0, w: 0.7071068}
   m_LocalPosition: {x: 0, y: 0, z: -0.31}
@@ -123,21 +123,21 @@ Transform:
   m_Children: []
   m_Father: {fileID: 8760238830902774088}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!33 &215587108447664932
+--- !u!33 &6498024462779785612
 MeshFilter:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5593483423041950485}
+  m_GameObject: {fileID: 5694855647559032612}
   m_Mesh: {fileID: 10206, guid: 0000000000000000e000000000000000, type: 0}
---- !u!23 &7683913198460266904
+--- !u!23 &8593975884447639195
 MeshRenderer:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5593483423041950485}
+  m_GameObject: {fileID: 5694855647559032612}
   m_Enabled: 1
   m_CastShadows: 1
   m_ReceiveShadows: 1
@@ -302,8 +302,8 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 9069891873499987558}
-  - {fileID: 6797959860332813629}
   - {fileID: 1704786767242878326}
+  - {fileID: 2128489790061116726}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!65 &8704345762604043160
@@ -346,6 +346,6 @@ MonoBehaviour:
   GridPos: {x: 0, y: 0, z: 0}
   Enabled: 1
   thrusterType: 2
-  maxThrustN: 8000
-  powerAtMaxThrust: 900
+  maxThrustN: 45000
+  powerAtMaxThrust: 300
   hydrogenPerSecond: 0

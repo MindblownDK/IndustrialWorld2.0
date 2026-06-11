@@ -55,6 +55,26 @@ namespace VoxelEngine.GridSystem
         }
 
         /// <summary>Calculate current thrust output for the grid's input.</summary>
+        /// <summary>Full thrust (N) this engine provides toward the pilot's desired direction,
+        /// consuming its fuel/power. Direction handling is done by the grid (intuitive WASD).</summary>
+        public float AvailableThrust(Vector3 input, GridEntity grid)
+        {
+            float thrust = maxThrustN;
+
+            if (thrusterType == ThrusterType.Atmospheric && grid != null)
+            {
+                float density = AtmosphereManager.GetAirDensity(grid.transform.position);
+                thrust *= Mathf.Clamp01(density / 1.225f);
+            }
+            if (thrusterType == ThrusterType.Hydrogen && grid != null)
+            {
+                float consumed = hydrogenPerSecond * Time.fixedDeltaTime;
+                if (grid.HydrogenStored < consumed) return 0;
+                grid.HydrogenStored -= consumed;
+            }
+            return thrust;
+        }
+
         public float GetCurrentThrust(Vector3 input, GridEntity grid)
         {
             float fraction = GetThrustFraction();
@@ -84,15 +104,9 @@ namespace VoxelEngine.GridSystem
         /// Public so the audio system can drive the thruster roar volume/pitch.</summary>
         public float GetThrustFraction()
         {
+            // Drives flame FX + audio: lit whenever the ship is being thrust.
             if (Grid == null) return 0;
-            Vector3 input = Grid.ThrustInput;
-            if (input.sqrMagnitude < 0.0001f) return 0;
-            // This thruster pushes the ship along its +forward; it fires when the
-            // pilot's desired direction has a component along that axis.
-            Vector3 localFwd = Grid.transform.InverseTransformDirection(transform.forward);
-            float dot = Vector3.Dot(localFwd.normalized, input.normalized);
-            // Full thrust once roughly aligned (generous so ships feel responsive).
-            return Mathf.Clamp01(dot * 1.5f);
+            return Mathf.Clamp01(Grid.ThrustInput.magnitude);
         }
 
         // Particle effect for visual thrust.

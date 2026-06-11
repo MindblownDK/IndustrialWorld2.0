@@ -4391,12 +4391,13 @@ root =>
             var SzS = VoxelEngine.GridSystem.GridSize.Small;
             var SzL = VoxelEngine.GridSystem.GridSize.Large;
 
-            MakeThruster("AtmoThruster_Small", "Small Atmospheric Thruster", SzS, new Color(0.85f,0.45f,0.15f), TAtmo, 12000f, 600f, 0f, (steelPlate, 2), (copperWire, 4));
-            MakeThruster("AtmoThruster_Large", "Large Atmospheric Thruster", SzL, new Color(0.85f,0.45f,0.15f), TAtmo, 160000f, 9000f, 0f, (steelPlate, 12), (copperWire, 16), (circuit, 2));
-            MakeThruster("IonThruster_Small",  "Small Ion Thruster",         SzS, new Color(0.5f,0.3f,0.95f),  TIon,  8000f,  900f, 0f, (steelPlate, 2), (circuit, 3));
-            MakeThruster("IonThruster_Large",  "Large Ion Thruster",         SzL, new Color(0.5f,0.3f,0.95f),  TIon,  120000f,12000f,0f, (steelPlate, 12), (circuit, 8), (copperWire, 8));
-            MakeThruster("HydroThruster_Small","Small Hydrogen Thruster",    SzS, new Color(0.2f,0.55f,0.95f), THyd,  15000f, 0f,   6f, (steelPlate, 2), (copperWire, 4));
-            MakeThruster("HydroThruster_Large","Large Hydrogen Thruster",    SzL, new Color(0.2f,0.55f,0.95f), THyd,  180000f,0f,   40f,(steelPlate, 12), (copperWire, 16), (circuit, 2));
+            // Higher thrust, lower power draw for better flight feel.
+            MakeThruster("AtmoThruster_Small", "Small Atmospheric Thruster", SzS, new Color(0.85f,0.45f,0.15f), TAtmo, 60000f,  200f, 0f, (steelPlate, 2), (copperWire, 4));
+            MakeThruster("AtmoThruster_Large", "Large Atmospheric Thruster", SzL, new Color(0.85f,0.45f,0.15f), TAtmo, 800000f, 2500f, 0f, (steelPlate, 12), (copperWire, 16), (circuit, 2));
+            MakeThruster("IonThruster_Small",  "Small Ion Thruster",         SzS, new Color(0.5f,0.3f,0.95f),  TIon,  45000f,  300f, 0f, (steelPlate, 2), (circuit, 3));
+            MakeThruster("IonThruster_Large",  "Large Ion Thruster",         SzL, new Color(0.5f,0.3f,0.95f),  TIon,  600000f, 3500f, 0f, (steelPlate, 12), (circuit, 8), (copperWire, 8));
+            MakeThruster("HydroThruster_Small","Small Hydrogen Thruster",    SzS, new Color(0.2f,0.55f,0.95f), THyd,  80000f,  0f,   3f, (steelPlate, 2), (copperWire, 4));
+            MakeThruster("HydroThruster_Large","Large Hydrogen Thruster",    SzL, new Color(0.2f,0.55f,0.95f), THyd,  1000000f,0f,   18f,(steelPlate, 12), (copperWire, 16), (circuit, 2));
 
             // Gyroscope — provides rotational control (yaw/pitch/roll).
             var gyroPref = MakeGPref<VoxelEngine.GridSystem.GridGyroscope>("Gyroscope_Large", new Color(0.7f, 0.7f, 0.75f), Vector3.one,

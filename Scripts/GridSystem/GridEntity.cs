@@ -50,6 +50,26 @@ namespace VoxelEngine.GridSystem
         public float   RotationRoll { get; set; }
         public bool    DampenersOn { get; set; } = true;
 
+        /// <summary>Total max thrust (N) available along each of the 6 local directions —
+        /// Fwd, Back, Right, Left, Up, Down — for the cockpit HUD readout.</summary>
+        public (float fwd, float back, float right, float left, float up, float down) GetThrustByDirection()
+        {
+            float fwd=0,back=0,right=0,left=0,up=0,down=0;
+            foreach (var kv in _blocks)
+            {
+                if (!(kv.Value is GridThruster t)) continue;
+                // Thruster pushes the ship along its local forward.
+                Vector3 d = transform.InverseTransformDirection(t.transform.forward);
+                if (d.z >  0.5f) fwd   += t.maxThrustN;
+                if (d.z < -0.5f) back  += t.maxThrustN;
+                if (d.x >  0.5f) right += t.maxThrustN;
+                if (d.x < -0.5f) left  += t.maxThrustN;
+                if (d.y >  0.5f) up    += t.maxThrustN;
+                if (d.y < -0.5f) down  += t.maxThrustN;
+            }
+            return (fwd,back,right,left,up,down);
+        }
+
         /// <summary>Index of the currently selected fire-tool (drill/weapon). Cycled in
         /// the cockpit with the scroll wheel; only the selected tool activates on click.</summary>
         public int SelectedToolIndex { get; set; }
@@ -241,23 +261,22 @@ namespace VoxelEngine.GridSystem
         {
             if (!IsControlled) return;
 
-            Vector3 totalForce = Vector3.zero;
-
+            // Sum the available thrust (N) from all operational thrusters and push the
+            // ship in the PILOT'S desired direction. This makes WASD intuitive no matter
+            // how thrusters are mounted (each still consumes its own fuel/power).
+            float totalThrustN = 0f;
             foreach (var kv in _blocks)
             {
                 if (kv.Value is GridThruster thruster && thruster.IsOperational)
-                {
-                    // Thrusters PUSH along -forward (exhaust out the back), so they
-                    // accelerate the ship along +forward.
-                    Vector3 thrustDir = thruster.transform.forward;
-                    float power = thruster.GetCurrentThrust(ThrustInput, this);
-                    totalForce += thrustDir * power;
-                }
+                    totalThrustN += thruster.AvailableThrust(ThrustInput, this);
             }
 
-            // Game-feel multiplier so realistic Newton values still move the ship snappily.
-            const float THRUST_GAIN = 3f;
-            _rb.AddForce(totalForce * THRUST_GAIN, ForceMode.Force);
+            if (ThrustInput.sqrMagnitude > 0.0001f && totalThrustN > 0f)
+            {
+                Vector3 worldDir = transform.TransformDirection(ThrustInput.normalized);
+                // Acceleration-based with a strong gain so realistic-mass ships fly well.
+                _rb.AddForce(worldDir * (totalThrustN / Mathf.Max(1f, _rb.mass)) * 4f, ForceMode.Acceleration);
+            }
 
             Vector3 rotInput = new Vector3(RotationPitch, RotationYaw, RotationRoll);
             // Rotational authority comes from installed (enabled) gyroscopes.
@@ -284,8 +303,8 @@ namespace VoxelEngine.GridSystem
             Vector3 vel = _rb.linearVelocity;
             if (vel.sqrMagnitude > 0.1f)
             {
-                Vector3 brake = -vel.normalized * Mathf.Min(vel.magnitude, 5f * Time.fixedDeltaTime);
-                _rb.AddForce(brake * _rb.mass, ForceMode.Force);
+                // Strong braking toward zero velocity (acceleration-based so mass-independent).
+                _rb.AddForce(-vel * 2.5f, ForceMode.Acceleration);
             }
 
             Vector3 angVel = _rb.angularVelocity;

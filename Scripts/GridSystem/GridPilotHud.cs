@@ -15,7 +15,7 @@ namespace VoxelEngine.GridSystem
         private static VisualElement _container;
         private static GridCockpit _cachedCockpit;
         private static float _cockpitSearchTimer;
-        private static Label _speedLabel, _altLabel, _powerLabel, _h2Label, _dampLabel;
+        private static Label _speedLabel, _altLabel, _powerLabel, _h2Label, _dampLabel, _thrustLabel;
         private static VisualElement _powerFill, _h2Fill;
 
         public static void EnsureMounted(VisualElement uiRoot)
@@ -64,6 +64,8 @@ namespace VoxelEngine.GridSystem
 
             _dampLabel = T.StatLabel("Dampeners: ON", T.AccentGreen);
             _container.Add(_dampLabel);
+            _thrustLabel = T.StatLabel("Thrust: 0 N");
+            _container.Add(_thrustLabel);
 
             _container.Add(T.Spacer(6));
             var hint = T.Muted("WASD=Move  Space/Shift=Up/Down\nQ/E=Yaw  Z=Dampeners  F=Exit\nX=Dock/Undock  C=Auto-Export  P=Landing Gear");
@@ -123,8 +125,20 @@ namespace VoxelEngine.GridSystem
             _h2Label.text = $"H₂: {grid.HydrogenStored:0} / {grid.HydrogenCapacity:0}";
             _h2Fill.style.width = new StyleLength(new Length(Mathf.Clamp01(h2Fill) * 100, LengthUnit.Percent));
 
-            _dampLabel.text = $"Dampeners: {(grid.DampenersOn ? "ON" : "OFF")}";
+            _dampLabel.text = $"Dampeners: {(grid.DampenersOn ? "ON" : "OFF")}  (Z)";
             _dampLabel.style.color = new StyleColor(grid.DampenersOn ? T.AccentGreen : T.AccentRed);
+
+            // Thrust readout: total available thrust + thrust-to-weight (how strongly it accelerates).
+            if (_thrustLabel != null)
+            {
+                float totalN = 0f;
+                foreach (var kv in grid.Blocks)
+                    if (kv.Value is GridThruster t && t.IsOperational) totalN += t.maxThrustN;
+                float mass = grid.Body != null ? grid.Body.mass : 1f;
+                float accel = totalN / Mathf.Max(1f, mass);
+                _thrustLabel.text = $"Thrust: {VoxelEngine.Items.PowerFormat.Newtons(totalN)}  ({accel:0.0} m/s²)";
+                _thrustLabel.style.color = new StyleColor(accel >= 9.81f ? T.AccentGreen : T.AccentAmber);
+            }
         }
     }
 }
