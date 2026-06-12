@@ -11,6 +11,14 @@ using T = VoxelEngine.UI.UITheme;
 
 namespace VoxelEngine.GridSystem
 {
+    public static class GridPilotHud
+    {
+        private static VisualElement _root;
+        private static VisualElement _container;
+        private static GridCockpit _cachedCockpit;
+        private static float _cockpitSearchTimer;
+        private static Label _speedLabel, _altLabel, _powerLabel, _h2Label, _dampLabel;
+        private static VisualElement _powerFill, _h2Fill;
         private static float _smoothSpeed, _smoothAlt, _smoothPower;
         private static VisualElement _toolBar;
         private static readonly List<VisualElement> _toolPills = new();
