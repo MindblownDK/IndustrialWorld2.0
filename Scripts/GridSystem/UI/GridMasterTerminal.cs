@@ -189,25 +189,51 @@ namespace VoxelEngine.GridSystem.UI
                     bar.Add(status);
                     wrap.Add(bar);
                 }
-                wrap.Add(GridBlockUI.BuildPanel(block, slot));
+                
+                var panel = GridBlockUI.BuildPanel(block, slot);
+                // Force relative positioning so it works inside the ScrollView
+                panel.style.position = Position.Relative;
+                panel.style.top = StyleKeyword.Auto;
+                panel.style.right = StyleKeyword.Auto;
+                panel.style.bottom = StyleKeyword.Auto;
+                panel.style.width = StyleKeyword.Auto;
+                panel.style.flexGrow = 1;
+
+                wrap.Add(panel);
                 return wrap;
             }
 
-            wrap.Add(AllStoragePanel(grid, slot));
+            var storage = AllStoragePanel(grid, slot);
+            storage.style.position = Position.Relative;
+            storage.style.top = StyleKeyword.Auto;
+            storage.style.right = StyleKeyword.Auto;
+            storage.style.bottom = StyleKeyword.Auto;
+            storage.style.width = StyleKeyword.Auto;
+            storage.style.flexGrow = 1;
+            
+            wrap.Add(storage);
             return wrap;
         }
 
         private static VisualElement AllStoragePanel(GridEntity grid, MachineUIs.SlotBuilder slot)
         {
             var p = T.MachinePanel();
+            // We override these later in BuildContent, but let's set them here too for safety.
             p.style.width = StyleKeyword.Auto;
-            p.style.maxWidth = 480;
-            p.style.flexShrink = 0;   // let it grow tall so the parent ScrollView scrolls down
+            p.style.flexShrink = 0;
+            p.style.paddingBottom = 40; 
+            
             var stores = new List<IGridItemStore>();
             float totalKg = 0f;
             if (grid != null && GridItemNetwork.Instance != null)
                 foreach (var s in GridItemNetwork.Instance.GetStores(grid))
-                    if (s != null && s.ItemStore != null) { stores.Add(s); totalKg += MassUtil.ContainerMass(s.ItemStore); }
+                {
+                    if (s != null && s.ItemStore != null) 
+                    { 
+                        stores.Add(s); 
+                        totalKg += MassUtil.ContainerMass(s.ItemStore); 
+                    }
+                }
 
             var head = new Label("ALL STORAGE");
             head.style.fontSize = 14; head.style.unityFontStyleAndWeight = FontStyle.Bold;

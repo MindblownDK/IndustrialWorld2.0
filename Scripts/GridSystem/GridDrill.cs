@@ -94,18 +94,17 @@ namespace VoxelEngine.GridSystem
             float cs = Grid != null ? Grid.gridSize.CellSize() : 1f;
             Vector3 dir = transform.forward;
 
-            // Find a SOLID voxel near the drill to carve. We scan a line of sample points
-            // stepping outward from the drill face along its forward axis; the first point that
-            // sits in solid terrain is the carve centre. This is orientation-tolerant and works
-            // whether the drill is flush against a wall or a short reach away from it — it no
-            // longer depends on a single raycast that often missed (the previous "mines nothing
-            // even when powered" bug).
+            // Improved detection: scan more points with smaller steps to ensure we don't
+            // skip over thin voxel surfaces.
             Vector3 carveAt = Vector3.zero;
             bool found = false;
-            int steps = Mathf.Max(2, Mathf.CeilToInt(drillReach / (cs * 0.5f)));
+            float stepSize = cs * 0.25f; // finer steps
+            int steps = Mathf.Max(4, Mathf.CeilToInt(drillReach / stepSize));
+            
             for (int i = 0; i <= steps && !found; i++)
             {
-                Vector3 p = transform.position + dir * (cs * 0.4f + i * (cs * 0.5f));
+                // Start slightly inside the drill face and move forward
+                Vector3 p = transform.position + dir * (cs * 0.2f + i * stepSize);
                 var vp = _world.WorldToVoxel(p);
                 var v = _world.GetVoxelWorld(vp);
                 if (v.density > 0)
@@ -115,19 +114,19 @@ namespace VoxelEngine.GridSystem
                 }
             }
 
-            // Fallback: carve just ahead of the face even if our sample missed solid terrain
-            // (e.g. drill buried inside terrain where every sample is past the surface).
-            if (!found) carveAt = transform.position + dir * (cs * 0.5f);
+            // Fallback: carve just ahead of the face if nothing found but we are active.
+            // Increased radius slightly to ensure overlap.
+            if (!found) carveAt = transform.position + dir * (cs * 0.75f);
 
-            var res = VoxelEditor.SubtractCollect(_world, _registry, carveAt, drillRadius, drillStrength);
-            if (!res.changed)
+            float effectiveRadius = drillRadius * 1.2f; // Slight buff to radius for better feel
+            var res = VoxelEditor.SubtractCollect(_world, _registry, carveAt, effectiveRadius, drillStrength);
+            
+            if (debugLog && !res.changed)
             {
-                if (debugLog) Debug.Log($"[GridDrill] no terrain to carve. pos={transform.position} fwd={dir} carveAt={carveAt} found={found}");
-                return;
+                Debug.Log($"[GridDrill] no terrain to carve at {carveAt}. pos={transform.position} fwd={dir} found={found}");
             }
-            if (debugLog) Debug.Log($"[GridDrill] carved terrain at {carveAt} (collect={collect})");
 
-            if (!collect || res.drops == null) return; // void mode: ore is discarded
+            if (!res.changed || !collect || res.drops == null) return;
 
             for (int m = 1; m < res.drops.Length; m++)
             {

@@ -383,20 +383,41 @@ namespace VoxelEngine.GridSystem
         // ── Inertia Dampeners ──────────────────────────────────────
         private void UpdateDampeners()
         {
-            if (!DampenersOn || !IsControlled) return;
-            if (ThrustInput.sqrMagnitude > 0.01f) return;
-
+            if (!DampenersOn) return;
+            
+            // Even if not controlled, we want to maintain position if dampeners are on.
+            // If controlled, we only dampen if the player isn't actively giving thrust.
+            bool isThrusting = IsControlled && ThrustInput.sqrMagnitude > 0.01f;
+            
             Vector3 vel = _rb.linearVelocity;
-            if (vel.sqrMagnitude > 0.1f)
+            if (!isThrusting && vel.sqrMagnitude > 0.01f)
             {
                 // Strong braking toward zero velocity (acceleration-based so mass-independent).
-                _rb.AddForce(-vel * 2.5f, ForceMode.Acceleration);
+                _rb.AddForce(-vel * 3.0f, ForceMode.Acceleration);
+            }
+
+            // Gravity compensation (Hover)
+            // If we are in gravity and dampeners are on, try to counteract gravity.
+            float gravityMultiplier = AtmosphereManager.GetGravityMultiplier(transform.position);
+            if (gravityMultiplier > 0.01f && !isThrusting)
+            {
+                // Calculate required upward acceleration to cancel gravity.
+                // Physics.gravity is usually (0, -9.81, 0).
+                Vector3 gravityAccel = Physics.gravity * gravityMultiplier;
+                
+                // Only compensate if we have enough power/thrust.
+                // For simplicity in this step, we'll apply it as an acceleration, 
+                // but a more robust system would check grid.HasPower.
+                if (HasPower)
+                {
+                    _rb.AddForce(-gravityAccel, ForceMode.Acceleration);
+                }
             }
 
             Vector3 angVel = _rb.angularVelocity;
-            if (angVel.sqrMagnitude > 0.01f)
+            if (!isThrusting && angVel.sqrMagnitude > 0.01f)
             {
-                _rb.angularVelocity = Vector3.Lerp(angVel, Vector3.zero, 3f * Time.fixedDeltaTime);
+                _rb.angularVelocity = Vector3.Lerp(angVel, Vector3.zero, 4f * Time.fixedDeltaTime);
             }
         }
 
