@@ -5,6 +5,8 @@
 
 using UnityEngine;
 using UnityEngine.UIElements;
+using System.Collections.Generic;
+using VoxelEngine.Items;
 using T = VoxelEngine.UI.UITheme;
 
 namespace VoxelEngine.GridSystem
