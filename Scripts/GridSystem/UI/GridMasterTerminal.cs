@@ -36,12 +36,7 @@ namespace VoxelEngine.GridSystem.UI
         public static VisualElement Build(GridEntity grid, int tab, Action<int> onSelectTab,
             MachineUIs.SlotBuilder slot, Action onClose)
         {
-            // ── Window shell — ABSOLUTELY fills the holder (top/bottom/left/right = 0).
-            // Using absolute insets (instead of width/height:100% + flexGrow) guarantees a
-            // resolved height so the body + storage grids never collapse to the title bar. ──
-            // The window is a flex child of a FULL-SCREEN overlay row (see GameUIController),
-            // so flexGrow + 100% height makes it fill that definite space — no absolute insets
-            // (which were collapsing under some PanelScaler configs).
+            // ── Window shell
             var win = new VisualElement();
             win.style.flexGrow = 1;
             win.style.height = new StyleLength(new Length(100, LengthUnit.Percent));
@@ -50,6 +45,11 @@ namespace VoxelEngine.GridSystem.UI
             T.Border(win, 1, T.BorderDim); T.Radius(win, 8);
             win.style.paddingTop = 12; win.style.paddingBottom = 12;
             win.style.paddingLeft = 14; win.style.paddingRight = 14;
+            
+            // Optimization for wide screens: constrain the maximum width and center the terminal.
+            win.style.maxWidth = 1400;
+            win.style.alignSelf = Align.Center;
+            win.style.width = new StyleLength(new Length(100, LengthUnit.Percent));
 
             // ── Title bar ──
             var title = new VisualElement();

@@ -11,23 +11,75 @@ using T = VoxelEngine.UI.UITheme;
 
 namespace VoxelEngine.GridSystem
 {
-    public static class GridPilotHud
-    {
-        private static VisualElement _root;
-        private static VisualElement _container;
-        private static GridCockpit _cachedCockpit;
-        private static float _cockpitSearchTimer;
-        private static Label _speedLabel, _altLabel, _powerLabel, _h2Label, _dampLabel;
-        private static VisualElement _powerFill, _h2Fill;
         private static float _smoothSpeed, _smoothAlt, _smoothPower;
         private static VisualElement _toolBar;
         private static readonly List<VisualElement> _toolPills = new();
+        
+        // Compass
+        private static VisualElement _compassBar;
+        private static Label _compassCenter;
+        private static VisualElement _compassMarkers;
+        private const int COMPASS_WIDTH = 400;
 
         public static void EnsureMounted(VisualElement uiRoot)
         {
             if (_root == uiRoot && _container != null && _container.parent == uiRoot) return;
             _root = uiRoot;
             if (_container != null) _container.RemoveFromHierarchy();
+            if (_compassBar != null) _compassBar.RemoveFromHierarchy();
+
+            // ── Compass Bar (Top Center) ──
+            _compassBar = new VisualElement { name = "GridCompass" };
+            _compassBar.style.position = Position.Absolute;
+            _compassBar.style.top = 24;
+            _compassBar.style.left = new StyleLength(new Length(50, LengthUnit.Percent));
+            _compassBar.style.translate = new StyleTranslate(new Translate(new Length(-50, LengthUnit.Percent), 0));
+            _compassBar.style.width = COMPASS_WIDTH;
+            _compassBar.style.height = 36;
+            _compassBar.style.backgroundColor = new StyleColor(new Color(0.04f, 0.05f, 0.07f, 0.7f));
+            _compassBar.style.overflow = Overflow.Hidden;
+            _compassBar.pickingMode = PickingMode.Ignore;
+            T.Radius(_compassBar, 6);
+            T.Border(_compassBar, 1, new Color(T.AccentCyan.r, T.AccentCyan.g, T.AccentCyan.b, 0.3f));
+            uiRoot.Add(_compassBar);
+
+            _compassMarkers = new VisualElement();
+            _compassMarkers.style.flexDirection = FlexDirection.Row;
+            _compassMarkers.style.width = COMPASS_WIDTH * 2;
+            _compassMarkers.style.height = new StyleLength(new Length(100, LengthUnit.Percent));
+            _compassBar.Add(_compassMarkers);
+
+            // Add compass marks (N, E, S, W, etc)
+            string[] marks = { "N", "15", "30", "45", "60", "75", "E", "105", "120", "135", "150", "165", "S", "195", "210", "225", "240", "255", "W", "285", "300", "315", "330", "345" };
+            for (int i = 0; i < marks.Length * 2; i++)
+            {
+                var mark = new Label(marks[i % marks.Length]);
+                mark.style.position = Position.Absolute;
+                mark.style.width = 40;
+                mark.style.left = i * (COMPASS_WIDTH * 2f / (marks.Length * 2f));
+                mark.style.unityTextAlign = TextAnchor.MiddleCenter;
+                mark.style.fontSize = 10;
+                mark.style.color = new StyleColor(marks[i % marks.Length].Length == 1 ? Color.white : T.TextMuted);
+                mark.style.marginTop = 8;
+                _compassMarkers.Add(mark);
+            }
+
+            var notch = new VisualElement();
+            notch.style.position = Position.Absolute;
+            notch.style.top = 0; notch.style.left = COMPASS_WIDTH / 2f - 1f;
+            notch.style.width = 2; notch.style.height = 8;
+            notch.style.backgroundColor = new StyleColor(T.AccentCyan);
+            _compassBar.Add(notch);
+
+            _compassCenter = new Label("000°");
+            _compassCenter.style.position = Position.Absolute;
+            _compassCenter.style.bottom = 2;
+            _compassCenter.style.width = COMPASS_WIDTH;
+            _compassCenter.style.unityTextAlign = TextAnchor.MiddleCenter;
+            _compassCenter.style.fontSize = 10;
+            _compassCenter.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _compassCenter.style.color = new StyleColor(T.AccentCyan);
+            _compassBar.Add(_compassCenter);
 
             // ── Main Info Container (Bottom Left) ──
             _container = new VisualElement { name = "GridPilotHud" };
@@ -105,6 +157,7 @@ namespace VoxelEngine.GridSystem
             {
                 _container.style.display = DisplayStyle.None;
                 if (_toolBar != null) _toolBar.style.display = DisplayStyle.None;
+                if (_compassBar != null) _compassBar.style.display = DisplayStyle.None;
                 return;
             }
 
@@ -127,14 +180,22 @@ namespace VoxelEngine.GridSystem
             {
                 _container.style.display = DisplayStyle.None;
                 if (_toolBar != null) _toolBar.style.display = DisplayStyle.None;
+                if (_compassBar != null) _compassBar.style.display = DisplayStyle.None;
                 return;
             }
 
             _container.style.display = DisplayStyle.Flex;
             if (_toolBar != null) _toolBar.style.display = DisplayStyle.Flex;
+            if (_compassBar != null) _compassBar.style.display = DisplayStyle.Flex;
             
             var grid = cockpit.Grid;
             float dt = Time.unscaledDeltaTime;
+
+            // Compass Update
+            float yaw = grid.transform.eulerAngles.y;
+            _compassCenter.text = $"{Mathf.RoundToInt(yaw):000}°";
+            float offset = (yaw / 360f) * (COMPASS_WIDTH * 2f);
+            _compassMarkers.style.left = -offset;
 
             // Smooth Updates
             float targetSpeed = grid.Body != null ? grid.Body.linearVelocity.magnitude : 0;

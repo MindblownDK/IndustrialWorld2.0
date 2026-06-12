@@ -4318,14 +4318,26 @@ root =>
             GameObject MakeGPref<T>(string name, Color color, Vector3 scale, System.Action<T> config = null) where T : VoxelEngine.GridSystem.GridBlock
             {
                 string path = $"{PREFABS}/{name}.prefab";
-                var root = new GameObject(name);
+                
+                // If the prefab already exists, load it and update it instead of creating a new GameObject.
+                GameObject root;
+                bool isNew = false;
+                var existingPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                
+                if (existingPrefab != null)
+                {
+                    root = PrefabUtility.LoadPrefabContents(path);
+                }
+                else
+                {
+                    root = new GameObject(name);
+                    isNew = true;
+                }
 
                 var size  = name.Contains("Small") ? VoxelEngine.GridSystem.GridSize.Small : VoxelEngine.GridSystem.GridSize.Large;
                 var style = GridStyleFor(name);
 
-                // Persist every generated material as an asset so the saved prefab keeps
-                // valid references (otherwise the runtime-only materials are dropped and
-                // the blocks render magenta).
+                // Persist every generated material as an asset
                 EnsureFolder(PREFABS + "/Mats");
                 int matIdx = 0;
                 VoxelEngine.GridSystem.GridBlockMeshBuilder.MaterialPersister = (mat, _) =>
@@ -4338,15 +4350,28 @@ root =>
                 VoxelEngine.GridSystem.GridBlockMeshBuilder.Build(root, style, size, color);
                 VoxelEngine.GridSystem.GridBlockMeshBuilder.MaterialPersister = null;
 
-                // Cell-sized box collider on the root so placement + ghost line up exactly.
+                // Ensure components exist
+                var box = root.GetComponent<BoxCollider>();
+                if (box == null) box = root.AddComponent<BoxCollider>();
                 float cs = VoxelEngine.GridSystem.GridSizeExt.CellSize(size);
-                var box = root.AddComponent<BoxCollider>();
                 box.size = new Vector3(cs, cs, cs);
 
-                var b = root.AddComponent<T>();
+                var b = root.GetComponent<T>();
+                if (b == null) b = root.AddComponent<T>();
+                
                 config?.Invoke(b);
-                var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
-                Object.DestroyImmediate(root);
+                
+                GameObject prefab;
+                if (existingPrefab != null)
+                {
+                    prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
+                    PrefabUtility.UnloadPrefabContents(root);
+                }
+                else
+                {
+                    prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
+                    Object.DestroyImmediate(root);
+                }
                 return prefab;
             }
 
