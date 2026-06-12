@@ -13,6 +13,12 @@ namespace VoxelEngine.GridSystem
 {
     public static class GridPilotHud
     {
+        private static VisualElement _root;
+        private static VisualElement _container;
+        private static GridCockpit _cachedCockpit;
+        private static float _cockpitSearchTimer;
+        private static Label _speedLabel, _altLabel, _powerLabel, _h2Label, _dampLabel;
+        private static VisualElement _powerFill, _h2Fill;
         private static float _smoothSpeed, _smoothAlt, _smoothPower;
         private static VisualElement _toolBar;
         private static readonly List<VisualElement> _toolPills = new();
@@ -154,7 +160,7 @@ namespace VoxelEngine.GridSystem
 
             _dampLabel.text = grid.DampenersOn ? "DAMPENERS: ACTIVE" : "DAMPENERS: DISABLED";
             _dampLabel.style.color = new StyleColor(grid.DampenersOn ? T.AccentGreen : T.AccentRed);
-            _dampLabel.style.borderColor = new StyleColor(grid.DampenersOn ? T.AccentGreen : T.AccentRed);
+            T.Border(_dampLabel, 1, grid.DampenersOn ? T.AccentGreen : T.AccentRed);
 
             UpdateToolBar(grid);
         }
@@ -165,7 +171,7 @@ namespace VoxelEngine.GridSystem
             int selectedIdx = grid.SelectedToolIndex;
             if (groups.Count == 0)
             {
-                _toolBar.Clear();
+                if (_toolBar != null) _toolBar.Clear();
                 _toolPills.Clear();
                 return;
             }
@@ -209,7 +215,7 @@ namespace VoxelEngine.GridSystem
                 label.text = group == GridEntity.ToolGroup.Drill ? "⚒ DRILL GROUP" : "⚔ WEAPON GROUP";
                 
                 pill.style.backgroundColor = new StyleColor(isSelected ? new Color(T.AccentCyan.r, T.AccentCyan.g, T.AccentCyan.b, 0.3f) : T.BgCard);
-                pill.style.borderColor = new StyleColor(isSelected ? T.AccentCyan : T.BorderDim);
+                T.Border(pill, 1, isSelected ? T.AccentCyan : T.BorderDim);
                 label.style.color = new StyleColor(isSelected ? Color.white : T.TextSecondary);
                 
                 // Slight scale shift for selected
