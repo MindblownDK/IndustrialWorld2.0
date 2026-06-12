@@ -94,7 +94,16 @@ namespace VoxelEngine.Player
             _shownItem = item;
             if (item == null) return;
 
-            _viewModel = BuildViewmodelFor(item);
+            // Use custom prefab if assigned, otherwise fall back to procedural builder
+            if (item.viewmodelPrefab != null)
+            {
+                _viewModel = Instantiate(item.viewmodelPrefab);
+            }
+            else
+            {
+                _viewModel = BuildViewmodelFor(item);
+            }
+
             _viewModel.transform.SetParent(anchor, false);
             _viewModel.transform.localPosition = Vector3.zero;
             _viewModel.transform.localRotation = Quaternion.identity;
