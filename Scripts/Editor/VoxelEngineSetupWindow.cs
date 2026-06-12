@@ -187,7 +187,14 @@ namespace VoxelEngine.EditorTools
             MakeItem(MaterialId.CrudeOil,  "Crude Oil");
 
             // --- Materials ---
-            var registry = ScriptableObject.CreateInstance<MaterialRegistry>();
+            string registryPath = $"{ASSET_ROOT}/MaterialRegistry.asset";
+            var registry = AssetDatabase.LoadAssetAtPath<MaterialRegistry>(registryPath);
+            if (registry == null)
+            {
+                registry = ScriptableObject.CreateInstance<MaterialRegistry>();
+                AssetDatabase.CreateAsset(registry, registryPath);
+            }
+            registry.definitions.Clear();
 
             VoxelMaterialDefinition Make(MaterialId id, string name, Color color, float hardness,
                                          ItemDefinition drop, bool fluid = false, bool mineable = true)
@@ -197,7 +204,7 @@ namespace VoxelEngine.EditorTools
                 if (def == null)
                 {
                     def = ScriptableObject.CreateInstance<VoxelMaterialDefinition>();
-                    
+                    AssetDatabase.CreateAsset(def, path);
                 }
                 def.id = id;
                 def.displayName = name;
@@ -232,10 +239,17 @@ namespace VoxelEngine.EditorTools
             Make(MaterialId.Uranium,    "Uranium Ore", new Color(0.30f,0.55f,0.20f), 4.0f, itemMap[MaterialId.Uranium]);
             Make(MaterialId.CrudeOil,   "Crude Oil",   new Color(0.05f,0.04f,0.03f), 0.8f, itemMap[MaterialId.CrudeOil], fluid:true);
 
-            AssetDatabase.CreateAsset(registry, $"{ASSET_ROOT}/MaterialRegistry.asset");
+            EditorUtility.SetDirty(registry);
 
             // --- Biomes ---
-            var biomeRegistry = ScriptableObject.CreateInstance<BiomeRegistry>();
+            string biomeRegistryPath = $"{ASSET_ROOT}/BiomeRegistry.asset";
+            var biomeRegistry = AssetDatabase.LoadAssetAtPath<BiomeRegistry>(biomeRegistryPath);
+            if (biomeRegistry == null)
+            {
+                biomeRegistry = ScriptableObject.CreateInstance<BiomeRegistry>();
+                AssetDatabase.CreateAsset(biomeRegistry, biomeRegistryPath);
+            }
+            biomeRegistry.biomes.Clear();
 
             BiomeDefinition MakeBiome(string name, Color dbg,
                 float tMin, float tMax, float hMin, float hMax,
@@ -245,7 +259,13 @@ namespace VoxelEngine.EditorTools
                 MaterialId sub,  int subDepth,
                 bool beach, bool ocean)
             {
-                var b = AssetDatabase.LoadAssetAtPath<BiomeDefinition>(path); if (b == null) { b = ScriptableObject.CreateInstance<BiomeDefinition>(); AssetDatabase.CreateAsset(b, path); }
+                string path = $"{BIOME_FOLDER}/Biome_{name}.asset";
+                var b = AssetDatabase.LoadAssetAtPath<BiomeDefinition>(path);
+                if (b == null)
+                {
+                    b = ScriptableObject.CreateInstance<BiomeDefinition>();
+                    AssetDatabase.CreateAsset(b, path);
+                }
                 b.biomeName = name;
                 b.debugColor = dbg;
                 b.minTemperature = tMin; b.maxTemperature = tMax;
@@ -256,7 +276,7 @@ namespace VoxelEngine.EditorTools
                 b.surfaceMaterial = surf;     b.surfaceDepth = surfDepth;
                 b.subsurfaceMaterial = sub;   b.subsurfaceDepth = subDepth;
                 b.allowBeach = beach;         b.isOceanic = ocean;
-                AssetDatabase.CreateAsset(b, $"{BIOME_FOLDER}/Biome_{name}.asset");
+                EditorUtility.SetDirty(b);
                 biomeRegistry.biomes.Add(b);
                 return b;
             }
@@ -331,22 +351,32 @@ namespace VoxelEngine.EditorTools
             Apply("SnowyPeaks",
                 new BiomeDefinition.ScatterEntry { prefab = snowRockGo,density = 0.05f, minScale = 0.7f, maxScale = 1.8f, minHeight = 0,   maxHeight = 9999 });
 
-            AssetDatabase.CreateAsset(biomeRegistry, $"{ASSET_ROOT}/BiomeRegistry.asset");
+            EditorUtility.SetDirty(biomeRegistry);
 
             // --- Planet ---
-            var planet = ScriptableObject.CreateInstance<PlanetSettings>();
-            planet.seed = Random.Range(1, int.MaxValue);
+            string planetPath = $"{PLANET_FOLDER}/Planet_Earthlike.asset";
+            var planet = AssetDatabase.LoadAssetAtPath<PlanetSettings>(planetPath);
+            if (planet == null)
+            {
+                planet = ScriptableObject.CreateInstance<PlanetSettings>();
+                planet.seed = Random.Range(1, int.MaxValue);
+                AssetDatabase.CreateAsset(planet, planetPath);
+            }
             planet.biomeRegistry = biomeRegistry;
-            AssetDatabase.CreateAsset(planet, $"{PLANET_FOLDER}/Planet_Earthlike.asset");
+            EditorUtility.SetDirty(planet);
 
             // --- Terrain material (URP Lit, vertex-colour driven if URP installed) ---
-            Material terrainMat = null;
-            var litShader = Shader.Find("VoxelEngine/VoxelTerrainURP");
-            if (litShader == null) litShader = Shader.Find("Standard");
-            terrainMat = new Material(litShader) { name = "VoxelTerrain" };
-            // Vertex Colour: URP Lit doesn't use it by default. We'll create a simple shader graph hint.
-            terrainMat.color = Color.white;
-            AssetDatabase.CreateAsset(terrainMat, $"{ASSET_ROOT}/VoxelTerrain.mat");
+            string terrainMatPath = $"{ASSET_ROOT}/VoxelTerrain.mat";
+            Material terrainMat = AssetDatabase.LoadAssetAtPath<Material>(terrainMatPath);
+            if (terrainMat == null)
+            {
+                var litShader = Shader.Find("VoxelEngine/VoxelTerrainURP");
+                if (litShader == null) litShader = Shader.Find("Standard");
+                terrainMat = new Material(litShader) { name = "VoxelTerrain" };
+                terrainMat.color = Color.white;
+                AssetDatabase.CreateAsset(terrainMat, terrainMatPath);
+            }
+            EditorUtility.SetDirty(terrainMat);
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
@@ -702,8 +732,12 @@ namespace VoxelEngine.EditorTools
 
             // Leveling Tool — a special tool that flattens terrain to a target Y level (custom class).
             string levelToolPath = $"{toolsFolder}/Tool_LevelingTool.asset";
-            if (AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(levelToolPath) != null) AssetDatabase.DeleteAsset(levelToolPath);
-            var lvTool = ScriptableObject.CreateInstance<VoxelEngine.Items.LevelingTool>();
+            var lvTool = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.LevelingTool>(levelToolPath);
+            if (lvTool == null)
+            {
+                lvTool = ScriptableObject.CreateInstance<VoxelEngine.Items.LevelingTool>();
+                AssetDatabase.CreateAsset(lvTool, levelToolPath);
+            }
             lvTool.itemId        = "leveling_tool";
             lvTool.displayName   = "Leveling Tool";
             lvTool.description   = "FIRST left-click: anchors the target height (the surface you look at). " +
@@ -718,7 +752,7 @@ namespace VoxelEngine.EditorTools
             lvTool.iconTint      = new Color(0.85f, 0.80f, 0.30f);
             lvTool.maxStack      = 1;
             lvTool.category      = "Tools";
-            AssetDatabase.CreateAsset(lvTool, levelToolPath);
+            EditorUtility.SetDirty(lvTool);
 
             // ----- Station block prefabs (procedural cube placeholders) -----
             var benchPrefab    = MakeStationPrefab(stationsFolder, "CraftingBench", new Color(0.50f,0.34f,0.20f),  VoxelEngine.Crafting.StationTier.CraftingBench, "Crafting Bench");
@@ -875,7 +909,7 @@ namespace VoxelEngine.EditorTools
             item.fuelSeconds = fuelSeconds;
             // UI grouping: default to "Resources" but allow override (e.g. "Power", "Building").
             item.category = uiCategory ?? (cat == VoxelEngine.Items.ResourceCategory.Ingot ? "Ingots" : "Resources");
-            if (!AssetDatabase.Contains(item)) 
+            if (!AssetDatabase.Contains(item)) AssetDatabase.CreateAsset(item, path);
             else EditorUtility.SetDirty(item);
             return item;
         }
@@ -1536,7 +1570,12 @@ namespace VoxelEngine.EditorTools
                                                        string desc, int hp = 200)
             {
                 string path = $"{blocksFolder}/{assetName}.asset";
-                var b = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.BlockItem>(path); if (b == null) { b = ScriptableObject.CreateInstance<VoxelEngine.Items.BlockItem>(); AssetDatabase.CreateAsset(b, path); }
+                var b = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.BlockItem>(path);
+                if (b == null)
+                {
+                    b = ScriptableObject.CreateInstance<VoxelEngine.Items.BlockItem>();
+                    AssetDatabase.CreateAsset(b, path);
+                }
                 b.itemId       = assetName.ToLower();
                 b.displayName  = display;
                 b.description  = desc;
@@ -1549,7 +1588,7 @@ namespace VoxelEngine.EditorTools
                 b.blockHealth  = hp;
                 b.miningTier   = 1;
                 b.category     = "Power";
-                AssetDatabase.CreateAsset(b, path);
+                EditorUtility.SetDirty(b);
                 return b;
             }
             var blockCableCu = MakePowerBlock("Block_Cable_Copper", "Copper Cable", wireCopper.tint, cableCu,
@@ -1829,7 +1868,13 @@ namespace VoxelEngine.EditorTools
             var labPrefab = PrefabUtility.SaveAsPrefabAsset(labRoot, labPath);
             Object.DestroyImmediate(labRoot);
 
-            var blockLab = ScriptableObject.CreateInstance<VoxelEngine.Items.BlockItem>();
+            string labBlockPath = $"{researchFolder}/Block_ResearchLab.asset";
+            var blockLab = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.BlockItem>(labBlockPath);
+            if (blockLab == null)
+            {
+                blockLab = ScriptableObject.CreateInstance<VoxelEngine.Items.BlockItem>();
+                AssetDatabase.CreateAsset(blockLab, labBlockPath);
+            }
             blockLab.itemId       = "block_researchlab";
             blockLab.displayName  = "Research Lab";
             blockLab.description  = "Place to research new technologies. Drop science packs in its slots, then start a research from the Research menu (Y).";
@@ -1840,9 +1885,7 @@ namespace VoxelEngine.EditorTools
             blockLab.blockHealth  = 600;
             blockLab.miningTier   = 1;
             blockLab.category     = "Stations";
-            string labBlockPath = $"{researchFolder}/Block_ResearchLab.asset";
-            if (AssetDatabase.LoadAssetAtPath<Object>(labBlockPath) != null) AssetDatabase.DeleteAsset(labBlockPath);
-            AssetDatabase.CreateAsset(blockLab, labBlockPath);
+            EditorUtility.SetDirty(blockLab);
 
             // ---- 3) Recipes for science packs + lab ----
             var recipeRegistry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeRegistry>($"{ASSET_ROOT}/RecipeRegistry.asset");
@@ -1938,6 +1981,9 @@ namespace VoxelEngine.EditorTools
                 n.unlocksRecipes = unlocks ?? new VoxelEngine.Crafting.RecipeDefinition[0];
                 n.prerequisites = prereqs ?? new VoxelEngine.Research.ResearchNode[0];
                 
+                if (!AssetDatabase.Contains(n)) AssetDatabase.CreateAsset(n, path);
+                else EditorUtility.SetDirty(n);
+
                 return n;
             }
 
@@ -2021,6 +2067,9 @@ namespace VoxelEngine.EditorTools
                 for (int i = 0; i < cost.Length; i++)
                     n.cost[i] = new VoxelEngine.Research.ResearchNode.ScienceCost { pack = cost[i].p, count = cost[i].n };
                 
+                if (!AssetDatabase.Contains(n)) AssetDatabase.CreateAsset(n, path);
+                else EditorUtility.SetDirty(n);
+
                 tree.nodes.Add(n);
                 return n;
             }
@@ -2057,8 +2106,18 @@ namespace VoxelEngine.EditorTools
                 VoxelEngine.Research.PlayerUpgradeKind.UnlockFlight, 1f, 1);
 
             string treePath = $"{researchFolder}/ResearchTree.asset";
-            if (AssetDatabase.LoadAssetAtPath<Object>(treePath) != null) AssetDatabase.DeleteAsset(treePath);
-            AssetDatabase.CreateAsset(tree, treePath);
+            var existingTree = AssetDatabase.LoadAssetAtPath<VoxelEngine.Research.ResearchTree>(treePath);
+            if (existingTree != null)
+            {
+                // Sync the existing tree instead of replacing it
+                existingTree.nodes = tree.nodes;
+                tree = existingTree;
+            }
+            else
+            {
+                AssetDatabase.CreateAsset(tree, treePath);
+            }
+            EditorUtility.SetDirty(tree);
 
             EditorUtility.SetDirty(recipeRegistry);
             AssetDatabase.SaveAssets();
@@ -2124,8 +2183,12 @@ namespace VoxelEngine.EditorTools
 
             // ---- 1) Water Bucket item ----
             string bucketPath = $"{itemsFolder}/Tool_WaterBucket.asset";
-            if (AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(bucketPath) != null) AssetDatabase.DeleteAsset(bucketPath);
-            var bucket = ScriptableObject.CreateInstance<VoxelEngine.Items.WaterBucket>();
+            var bucket = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.WaterBucket>(bucketPath);
+            if (bucket == null)
+            {
+                bucket = ScriptableObject.CreateInstance<VoxelEngine.Items.WaterBucket>();
+                AssetDatabase.CreateAsset(bucket, bucketPath);
+            }
             bucket.itemId       = "water_bucket";
             bucket.displayName  = "Water Bucket";
             bucket.description  = "LMB scoops a water voxel into the bucket. RMB places it elsewhere — and it spreads to fill holes! Use durability to track if it's filled (1 = full, 0 = empty).";
@@ -2134,7 +2197,7 @@ namespace VoxelEngine.EditorTools
             bucket.maxDurability= 1;
             bucket.toolType     = VoxelEngine.Items.ToolType.Other;
             bucket.category     = "Fluids";
-            AssetDatabase.CreateAsset(bucket, bucketPath);
+            EditorUtility.SetDirty(bucket);
 
             // ---- 2) Tank prefab(s) ----
             GameObject MakeTankPrefab(string name, Color color, bool isGlass)
@@ -2239,7 +2302,12 @@ namespace VoxelEngine.EditorTools
             VoxelEngine.Items.BlockItem MakeFluidBlock(string assetName, string display, Color tint, GameObject prefab, string desc, int hp = 200)
             {
                 string path = $"{blocksFolder}/{assetName}.asset";
-                var b = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.BlockItem>(path); if (b == null) { b = ScriptableObject.CreateInstance<VoxelEngine.Items.BlockItem>(); AssetDatabase.CreateAsset(b, path); }
+                var b = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.BlockItem>(path);
+                if (b == null)
+                {
+                    b = ScriptableObject.CreateInstance<VoxelEngine.Items.BlockItem>();
+                    AssetDatabase.CreateAsset(b, path);
+                }
                 b.itemId       = assetName.ToLower();
                 b.displayName  = display;
                 b.description  = desc;
@@ -2249,7 +2317,7 @@ namespace VoxelEngine.EditorTools
                 b.gridSize     = Vector3Int.one;
                 b.blockHealth  = hp; b.miningTier = 1;
                 b.category     = "Fluids";
-                AssetDatabase.CreateAsset(b, path);
+                EditorUtility.SetDirty(b);
                 return b;
             }
             var bTankSolid = MakeFluidBlock("Block_TankSolid", "Water Tank (Solid)", new Color(0.45f,0.45f,0.50f), tankSolid,
@@ -2554,7 +2622,12 @@ namespace VoxelEngine.EditorTools
                 string desc, string uiCategory = "Industrial", int hp = 600)
             {
                 string path = $"{blocksFolder}/{assetName}.asset";
-                var b = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.BlockItem>(path); if (b == null) { b = ScriptableObject.CreateInstance<VoxelEngine.Items.BlockItem>(); AssetDatabase.CreateAsset(b, path); }
+                var b = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.BlockItem>(path);
+                if (b == null)
+                {
+                    b = ScriptableObject.CreateInstance<VoxelEngine.Items.BlockItem>();
+                    AssetDatabase.CreateAsset(b, path);
+                }
                 b.itemId       = assetName.ToLower();
                 b.displayName  = display;
                 b.description  = desc;
@@ -2567,7 +2640,7 @@ namespace VoxelEngine.EditorTools
                 b.blockHealth  = hp;
                 b.miningTier   = 2;
                 b.category     = uiCategory;
-                AssetDatabase.CreateAsset(b, path);
+                EditorUtility.SetDirty(b);
                 return b;
             }
 
@@ -2813,7 +2886,10 @@ namespace VoxelEngine.EditorTools
                 n.prerequisites  = prereqs ?? new VoxelEngine.Research.ResearchNode[0];
                 n.upgradeKind    = VoxelEngine.Research.PlayerUpgradeKind.None;
                 n.maxRanks       = 1;
-                EditorUtility.SetDirty(n);
+                
+                if (!AssetDatabase.Contains(n)) AssetDatabase.CreateAsset(n, path);
+                else EditorUtility.SetDirty(n);
+                
                 if (!tree.nodes.Contains(n)) tree.nodes.Add(n);
                 return n;
             }
@@ -3249,13 +3325,18 @@ namespace VoxelEngine.EditorTools
                 GameObject prefab, string uiCategory, int hp = 200, int miningTier = 1, int maxStack = 50)
             {
                 string path = $"{folder}/{assetName}.asset";
-                var b = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.BlockItem>(path); if (b == null) { b = ScriptableObject.CreateInstance<VoxelEngine.Items.BlockItem>(); AssetDatabase.CreateAsset(b, path); }
+                var b = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.BlockItem>(path);
+                if (b == null)
+                {
+                    b = ScriptableObject.CreateInstance<VoxelEngine.Items.BlockItem>();
+                    AssetDatabase.CreateAsset(b, path);
+                }
                 b.itemId = assetName.ToLower(); b.displayName = display; b.description = desc;
                 b.iconTint = tint; b.maxStack = maxStack; b.massPerUnit = 4f;
                 b.placedPrefab = prefab; b.gridSize = Vector3Int.one;
                 b.allowStacking = false; b.blockHealth = hp; b.miningTier = miningTier;
                 b.category = uiCategory;
-                AssetDatabase.CreateAsset(b, path);
+                EditorUtility.SetDirty(b);
                 return b;
             }
 
@@ -3314,8 +3395,12 @@ namespace VoxelEngine.EditorTools
 
             // ── Tools (Hoe is just a ToolItem with "Other" type) ──
             string hoePath = $"{ITEMS}/Tool_Hoe.asset";
-            if (AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(hoePath) != null) AssetDatabase.DeleteAsset(hoePath);
-            var hoe = ScriptableObject.CreateInstance<VoxelEngine.Items.ToolItem>();
+            var hoe = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ToolItem>(hoePath);
+            if (hoe == null)
+            {
+                hoe = ScriptableObject.CreateInstance<VoxelEngine.Items.ToolItem>();
+                AssetDatabase.CreateAsset(hoe, hoePath);
+            }
             hoe.itemId        = "hoe";
             hoe.displayName   = "Hoe";
             hoe.description   = "Used in conjunction with Tilled Soil blocks. Future: right-click on dirt to till in-place.";
@@ -3328,7 +3413,7 @@ namespace VoxelEngine.EditorTools
             hoe.iconTint      = new Color(0.55f, 0.40f, 0.25f);
             hoe.maxStack      = 1;
             hoe.category      = "Tools";
-            AssetDatabase.CreateAsset(hoe, hoePath);
+            EditorUtility.SetDirty(hoe);
 
             // ── Foods (each crop yields a raw harvest item; cooking yields better food) ──
             var foodWheatRaw = ScriptableObject.CreateInstance<VoxelEngine.Farming.FoodItem>();
@@ -3456,9 +3541,12 @@ namespace VoxelEngine.EditorTools
             //  Required for advanced wiring: data cables, power cables, port config.
             // ════════════════════════════════════════════════════════════
             string wrenchPath = $"{ITEMS}/Tool_Wrench.asset";
-            if (AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(wrenchPath) != null)
-                AssetDatabase.DeleteAsset(wrenchPath);
-            var wrench = ScriptableObject.CreateInstance<VoxelEngine.Networks.WrenchTool>();
+            var wrench = AssetDatabase.LoadAssetAtPath<VoxelEngine.Networks.WrenchTool>(wrenchPath);
+            if (wrench == null)
+            {
+                wrench = ScriptableObject.CreateInstance<VoxelEngine.Networks.WrenchTool>();
+                AssetDatabase.CreateAsset(wrench, wrenchPath);
+            }
             wrench.itemId        = "wrench";
             wrench.displayName   = "Wrench";
             wrench.description   = "Industrial multi-tool for wiring networks together.\n\n" +
@@ -3475,7 +3563,7 @@ namespace VoxelEngine.EditorTools
             wrench.iconTint      = new Color(0.85f, 0.55f, 0.20f);
             wrench.maxStack      = 1;
             wrench.category      = "Tools";
-            AssetDatabase.CreateAsset(wrench, wrenchPath);
+            EditorUtility.SetDirty(wrench);
 
             // Recipe: 2 iron plates + 1 iron gear, crafted at the Crafting Bench.
             AddRecipe(MISC_RECIPES, "Recipe_Wrench", "Wrench", wrench, 1,
