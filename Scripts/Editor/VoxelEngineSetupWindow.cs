@@ -1122,7 +1122,10 @@ namespace VoxelEngine.EditorTools
             var tierMats = new[] { matWood, matStone, matIron, matSteel };
 
             // ---------- Build the 9 families, each with 4 tier prefabs ----------
-            var registry = ScriptableObject.CreateInstance<VoxelEngine.Building.Tiered.TieredBlockRegistry>();
+            string registryPath = $"{tieredFolder}/TieredBlockRegistry.asset";
+            var registry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Building.Tiered.TieredBlockRegistry>(registryPath);
+            if (registry == null) { registry = ScriptableObject.CreateInstance<VoxelEngine.Building.Tiered.TieredBlockRegistry>(); AssetDatabase.CreateAsset(registry, registryPath); }
+            registry.definitions.Clear();
 
             VoxelEngine.Building.Tiered.TieredBlockDefinition MakeFamily(
                 VoxelEngine.Building.Tiered.BuildFamily fam,
@@ -1166,8 +1169,8 @@ namespace VoxelEngine.EditorTools
                     if (tier == VoxelEngine.Building.Tiered.BuildTier.Iron)  def.ironPrefab  = prefab;
                     if (tier == VoxelEngine.Building.Tiered.BuildTier.Steel) def.steelPrefab = prefab;
                 }
-                AssetDatabase.CreateAsset(def, $"{tieredDefs}/TBlock_{display}.asset");
-                registry.definitions.Add(def);
+                EditorUtility.SetDirty(def);
+                if (!registry.definitions.Contains(def)) registry.definitions.Add(def);
                 return def;
             }
 
@@ -1316,21 +1319,23 @@ namespace VoxelEngine.EditorTools
                 Cost((steelIngot, 1))
             );
 
-            AssetDatabase.CreateAsset(registry, $"{tieredFolder}/TieredBlockRegistry.asset");
+            EditorUtility.SetDirty(registry);
+            AssetDatabase.SaveAssets();
 
             // ---------- Build Tokens (one per family) ----------
             VoxelEngine.Building.Tiered.BuildToken MakeToken(
                 VoxelEngine.Building.Tiered.BuildFamily fam, string display, Color tint, string description)
             {
                 string path = $"{tieredTokens}/Token_{display}.asset";
-                var tok = AssetDatabase.LoadAssetAtPath<VoxelEngine.Building.Tiered.BuildToken>(path); if (tok == null) { tok = ScriptableObject.CreateInstance<VoxelEngine.Building.Tiered.BuildToken>(); AssetDatabase.CreateAsset(tok, path); }
+                var tok = AssetDatabase.LoadAssetAtPath<VoxelEngine.Building.Tiered.BuildToken>(path); 
+                if (tok == null) { tok = ScriptableObject.CreateInstance<VoxelEngine.Building.Tiered.BuildToken>(); AssetDatabase.CreateAsset(tok, path); }
                 tok.family      = fam;
                 tok.itemId      = "build_" + display.ToLower();
                 tok.displayName = display + " (Build)";
                 tok.description = description;
                 tok.iconTint    = tint;
                 tok.maxStack    = 99;
-                AssetDatabase.CreateAsset(tok, $"{tieredTokens}/Token_{display}.asset");
+                EditorUtility.SetDirty(tok);
                 return tok;
             }
             var tokFoundation = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Foundation, "Foundation", new Color(0.55f, 0.40f, 0.25f), "The base of every building. Place on flat ground first; everything else snaps to its top and edges. Hold in active hotbar slot to enter build mode. LMB places at Wood tier (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.");
@@ -1344,7 +1349,13 @@ namespace VoxelEngine.EditorTools
             var tokHalfWall   = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.HalfWall,   "HalfWall",   new Color(0.55f, 0.40f, 0.25f), "A half-height wall (waist height). Useful for railings and counters. Hold in active hotbar slot to enter build mode. LMB places at Wood tier (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.");
 
             // ---------- Hammer tool ----------
-            var hammer = ScriptableObject.CreateInstance<VoxelEngine.Building.Tiered.Hammer>();
+            string hammerPath = $"{itemsFolder}/Tool_Hammer.asset";
+            var hammer = AssetDatabase.LoadAssetAtPath<VoxelEngine.Building.Tiered.Hammer>(hammerPath);
+            if (hammer == null)
+            {
+                hammer = ScriptableObject.CreateInstance<VoxelEngine.Building.Tiered.Hammer>();
+                AssetDatabase.CreateAsset(hammer, hammerPath);
+            }
             hammer.itemId        = "hammer";
             hammer.displayName   = "Hammer";
             hammer.toolType      = VoxelEngine.Items.ToolType.Other;
@@ -1357,7 +1368,7 @@ namespace VoxelEngine.EditorTools
             hammer.description   = "Used to upgrade placed buildings to their next tier. " +
                 "Hold in active hotbar slot, look at a placed wood/stone/iron building, then LMB. " +
                 "Each upgrade consumes the cost shown on the block. Wood -> Stone -> Iron -> Steel.";
-            AssetDatabase.CreateAsset(hammer, $"{itemsFolder}/Tool_Hammer.asset");
+            EditorUtility.SetDirty(hammer);
 
             // ---------- Add recipes for all 9 build tokens + the hammer (Crafting Bench tier) ----------
             var recipeRegistry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeRegistry>($"{ASSET_ROOT}/RecipeRegistry.asset");
@@ -2474,7 +2485,11 @@ namespace VoxelEngine.EditorTools
             {
                 string path = $"{itemsFolder}/{assetName}.asset";
                 var r = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>(path);
-                if (r == null) { r = ScriptableObject.CreateInstance<VoxelEngine.Items.ResourceItem>();  }
+                if (r == null)
+                {
+                    r = ScriptableObject.CreateInstance<VoxelEngine.Items.ResourceItem>();
+                    AssetDatabase.CreateAsset(r, path);
+                }
                 r.itemId      = assetName.ToLower();
                 r.displayName = display;
                 r.description = desc;
@@ -2688,7 +2703,8 @@ namespace VoxelEngine.EditorTools
                 (VoxelEngine.Items.LiquidType liquid, float litres)[] fluidOut = null)
             {
                 string path = $"{procRecFolder}/{assetName}.asset";
-                var r = ScriptableObject.CreateInstance<VoxelEngine.Crafting.ProcessingRecipe>();
+                var r = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.ProcessingRecipe>(path);
+                if (r == null) { r = ScriptableObject.CreateInstance<VoxelEngine.Crafting.ProcessingRecipe>(); AssetDatabase.CreateAsset(r, path); }
                 r.displayName = display;
                 r.category    = category;
                 r.secondsPerBatch     = seconds;
