@@ -23,7 +23,7 @@ namespace VoxelEngine.GridSystem.UI
         private static readonly Dictionary<string, float> _scrollY = new();
 
         // Runtime terminal organisation. Save-compatible: no world/save schema changes.
-        private static readonly Dictionary<int, TerminalState> _states = new();
+        private static readonly Dictionary<string, TerminalState> _states = new();
 
         private sealed class TerminalState
         {
@@ -142,7 +142,8 @@ namespace VoxelEngine.GridSystem.UI
 
         private static TerminalState GetState(GridEntity grid)
         {
-            int key = grid != null ? grid.GetEntityId() : 0;
+            // EntityId no longer safely casts to int in Unity 6+, so keep the key as text.
+            string key = grid != null ? grid.GetEntityId().ToString() : "null";
             if (!_states.TryGetValue(key, out var state))
             {
                 state = new TerminalState();

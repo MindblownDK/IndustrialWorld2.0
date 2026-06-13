@@ -830,9 +830,9 @@ namespace VoxelEngine.UI
                     // Right-side desktop-app layout: fixed/readable width, pushed to the
                     // screen's right edge instead of stretching across big monitors.
                     card.style.flexGrow = 0;
-                    card.style.flexShrink = 1;
+                    card.style.flexShrink = 0;
                     card.style.width = 1180;
-                    card.style.maxWidth = new StyleLength(new Length(72, LengthUnit.Percent));
+                    card.style.maxWidth = 1180;
                     card.style.minWidth = 720;
                     // Explicit height too (root is now a definite full-screen size) so the
                     // terminal never collapses to its title bar.

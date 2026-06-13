@@ -187,7 +187,24 @@ namespace VoxelEngine.GridSystem
 
         private bool ShouldDampenerHoldHover()
         {
-            return DampenersOn && !HasManualThrustInput();
+            return DampenersOn && !HasManualThrustInput() && HasHoverAuthority();
+        }
+
+        private bool HasHoverAuthority()
+        {
+            Vector3 gravity = CurrentGravityAcceleration();
+            if (gravity.sqrMagnitude < 0.0001f) return false;
+
+            Vector3 antiGravity = -gravity.normalized;
+            foreach (var kv in _blocks)
+            {
+                if (!(kv.Value is GridThruster thruster)) continue;
+                if (!thruster.Enabled || !thruster.IsOperational) continue;
+                if (Vector3.Dot(thruster.PushDirection.normalized, antiGravity) > 0.35f)
+                    return true;
+            }
+
+            return false;
         }
 
         private void ApplyGravity()
