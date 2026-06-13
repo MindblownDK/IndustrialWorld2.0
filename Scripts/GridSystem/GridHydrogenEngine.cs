@@ -69,11 +69,12 @@ namespace VoxelEngine.GridSystem
         private void RefillInternalTank(float dt)
         {
             if (Grid == null || internalHydrogen >= internalTankCapacity) return;
+            if (GridGasNetwork.Instance == null || !GridGasNetwork.Instance.HasPipes(Grid)) return;
+
             float space = internalTankCapacity - internalHydrogen;
             float want = Mathf.Min(space, refillRate * dt);
-            float take = Mathf.Min(Grid.HydrogenStored, want);
+            float take = GridGasNetwork.Instance.DrawGas(Grid, Gas.GasType.Hydrogen, want);
             if (take <= 0f) return;
-            Grid.HydrogenStored -= take;
             internalHydrogen += take;
         }
     }

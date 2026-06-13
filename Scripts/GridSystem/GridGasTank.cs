@@ -42,20 +42,8 @@ namespace VoxelEngine.GridSystem
 
         private void Update()
         {
-            if (Grid == null || gasType != Gas.GasType.Hydrogen) return;
-            if (mode == GridTankMode.Stockpile) { stored = Mathf.Clamp(stored, 0f, capacity); return; }
-
-            // When gas pipes are present on the grid, the tank feeds the shared
-            // hydrogen pool that thrusters draw from — Space-Engineers auto-supply.
-            bool piped = GridGasNetwork.Instance != null && GridGasNetwork.Instance.HasPipes(Grid);
-            if (piped && stored > 0f)
-            {
-                float feed = Mathf.Min(stored, 50f * Time.deltaTime); // top up the pool
-                stored -= feed;
-                Grid.HydrogenStored += feed;
-            }
-
-            // Keep the displayed value sane (don't exceed capacity).
+            // Tanks are storage. Consumers pull from them through GridGasNetwork; they do
+            // not automatically dump into a magic grid pool anymore.
             stored = Mathf.Clamp(stored, 0f, capacity);
         }
 
@@ -73,13 +61,11 @@ namespace VoxelEngine.GridSystem
         }
 
         /// <summary>Draw up to <paramref name="litres"/> of gas. Returns litres drawn.</summary>
-        public float Draw(float litres)
+        public float Draw(float litres, bool ignoreStockpile = false)
         {
-            if (mode == GridTankMode.Stockpile) return 0f;
+            if (!ignoreStockpile && mode == GridTankMode.Stockpile) return 0f;
             float take = Mathf.Min(stored, Mathf.Max(0f, litres));
             stored -= take;
-            if (Grid != null && gasType == Gas.GasType.Hydrogen)
-                Grid.HydrogenStored = Mathf.Max(0f, Grid.HydrogenStored - take);
             return take;
         }
     }

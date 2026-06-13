@@ -42,7 +42,8 @@ namespace VoxelEngine.GridSystem
                     case ThrusterType.Ion:
                         return Grid.HasPower;
                     case ThrusterType.Hydrogen:
-                        return Grid.HydrogenStored > 0.1f;
+                        return GridGasNetwork.Instance != null
+                            && GridGasNetwork.Instance.AvailableGas(Grid, Gas.GasType.Hydrogen) > 0.1f;
                     default: return false;
                 }
             }
@@ -74,8 +75,10 @@ namespace VoxelEngine.GridSystem
             if (thrusterType == ThrusterType.Hydrogen && grid != null)
             {
                 float consumed = hydrogenPerSecond * Time.fixedDeltaTime;
-                if (grid.HydrogenStored < consumed) return 0;
-                grid.HydrogenStored -= consumed;
+                float drawn = GridGasNetwork.Instance != null
+                    ? GridGasNetwork.Instance.DrawGas(grid, Gas.GasType.Hydrogen, consumed)
+                    : 0f;
+                if (drawn < consumed * 0.5f) return 0;
             }
             return thrust;
         }
@@ -98,8 +101,10 @@ namespace VoxelEngine.GridSystem
             if (thrusterType == ThrusterType.Hydrogen && grid != null)
             {
                 float consumed = hydrogenPerSecond * fraction * Time.fixedDeltaTime;
-                if (grid.HydrogenStored < consumed) return 0;
-                grid.HydrogenStored -= consumed;
+                float drawn = GridGasNetwork.Instance != null
+                    ? GridGasNetwork.Instance.DrawGas(grid, Gas.GasType.Hydrogen, consumed)
+                    : 0f;
+                if (drawn < consumed * 0.5f) return 0;
             }
 
             return thrust;

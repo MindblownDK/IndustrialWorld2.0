@@ -349,7 +349,7 @@ namespace VoxelEngine.GridSystem
             // handled separately below so they fill any deficit — this avoids the per-frame
             // ordering flicker where a drill turning on would briefly read HasPower=false
             // (the battery's discharge lagged a frame behind the new load).
-            float gen = 0, con = 0, h2Cap = 0, batteryReserve = 0;
+            float gen = 0, con = 0, h2Cap = 0, h2Stored = 0, o2Stored = 0, batteryReserve = 0;
             foreach (var kv in _blocks)
             {
                 var b = kv.Value;
@@ -361,8 +361,27 @@ namespace VoxelEngine.GridSystem
                 }
                 gen += b.PowerOutput;
                 con += b.PowerDraw;
-                if (b is GridGasTank gt && gt.gasType == Gas.GasType.Hydrogen)
-                    h2Cap += gt.capacity;
+                if (b is GridGasTank gt)
+                {
+                    if (gt.gasType == Gas.GasType.Hydrogen)
+                    {
+                        h2Cap += gt.capacity;
+                        h2Stored += gt.stored;
+                    }
+                    else if (gt.gasType == Gas.GasType.Oxygen)
+                    {
+                        o2Stored += gt.stored;
+                    }
+                }
+                else if (b is GridHydrogenEngine he)
+                {
+                    h2Stored += he.internalHydrogen;
+                }
+                else if (b is GridH2O2Generator h2o2)
+                {
+                    h2Stored += h2o2.h2Stored;
+                    o2Stored += h2o2.o2Stored;
+                }
             }
 
             // Batteries top up the generation up to the demand (never beyond what they can give).
@@ -372,6 +391,8 @@ namespace VoxelEngine.GridSystem
             PowerGenerated = gen + fromBatteries;
             PowerConsumed = con;
             HydrogenCapacity = h2Cap;
+            HydrogenStored = h2Stored;
+            OxygenStored = o2Stored;
         }
 
         // Multiplier on raw thruster Newtons so SI-balanced ships fly responsively.

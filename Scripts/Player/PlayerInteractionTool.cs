@@ -182,7 +182,14 @@ namespace VoxelEngine.Player
             var heldForPlace = inventory.ActiveStack;
             if (buildDown && !heldForPlace.IsEmpty && heldForPlace.item is BlockItem heldBlock)
             {
-                if (Time.time >= _nextHit && BuildSystem.Instance != null && BuildSystem.Instance.TryPlace(heldBlock, hit, ray.direction))
+                if (Time.time >= _nextHit && TryPlaceStaticPipeOnGrid(heldBlock, hit))
+                {
+                    int taken = inventory.container.Remove(heldBlock, 1);
+                    if (taken == 0) TryNetworkConsume(heldBlock, 1);
+                    VoxelEngine.UI.BuildFeedbackHud.ShowBlockPlaced(heldBlock.displayName, heldBlock, 1);
+                    _nextHit = Time.time + 0.2f;
+                }
+                else if (Time.time >= _nextHit && BuildSystem.Instance != null && BuildSystem.Instance.TryPlace(heldBlock, hit, ray.direction))
                 {
                     // Consume from inventory first; if empty AND the player has
                     // researched "Wireless Build Sync" with an active transmitter,
@@ -357,6 +364,45 @@ namespace VoxelEngine.Player
                     _nextHit = Time.time + 0.2f;
                 }
             }
+        }
+
+        /// <summary>
+        /// Unified pipe QoL: if the player uses a normal world pipe item while aiming at a
+        /// grid, place the matching grid pipe block instead of a static world pipe. This lets
+        /// the same pipe items work both in bases and on ships.
+        /// </summary>
+        private bool TryPlaceStaticPipeOnGrid(BlockItem block, RaycastHit hit)
+        {
+            if (block == null || block.placedPrefab == null) return false;
+            var targetGrid = hit.collider != null ? hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridEntity>() : null;
+            if (targetGrid == null) return false;
+
+            System.Type gridPipeType = null;
+            if (block.placedPrefab.GetComponentInChildren<VoxelEngine.Transport.ItemPipe>(true) != null)
+                gridPipeType = typeof(VoxelEngine.GridSystem.GridItemPipe);
+            else if (block.placedPrefab.GetComponentInChildren<VoxelEngine.Gas.GasPipe>(true) != null)
+                gridPipeType = typeof(VoxelEngine.GridSystem.GridGasPipe);
+            else if (block.placedPrefab.GetComponentInChildren<VoxelEngine.Fluids.WaterPipe>(true) != null)
+                gridPipeType = typeof(VoxelEngine.GridSystem.GridLiquidPipe);
+
+            if (gridPipeType == null) return false;
+
+            float cs = targetGrid.gridSize.CellSize();
+            Vector3Int gridPos = targetGrid.WorldToGrid(hit.point + hit.normal * (cs * 0.55f));
+            if (!targetGrid.CanPlace(gridPos))
+                gridPos = targetGrid.WorldToGrid(hit.point + hit.normal * cs);
+            if (!targetGrid.CanPlace(gridPos) || !targetGrid.HasNeighbor(gridPos)) return false;
+
+            var go = new GameObject(block.displayName);
+            go.transform.rotation = targetGrid.transform.rotation;
+            var gridBlock = (VoxelEngine.GridSystem.GridBlock)go.AddComponent(gridPipeType);
+            gridBlock.blockName = block.displayName;
+            gridBlock.BlockMass = Mathf.Max(block.massPerUnit, 80f);
+            gridBlock.maxHP = Mathf.Max(block.blockHealth, 100f);
+            var collider = go.AddComponent<BoxCollider>();
+            collider.size = Vector3.one * cs;
+            targetGrid.AddBlock(gridPos, gridBlock);
+            return true;
         }
 
         /// <summary>
