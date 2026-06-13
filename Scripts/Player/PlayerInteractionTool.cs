@@ -387,7 +387,7 @@ namespace VoxelEngine.Player
 
             if (gridPipeType == null) return false;
 
-            float cs = targetGrid.gridSize.CellSize();
+            float cs = VoxelEngine.GridSystem.GridSizeExt.CellSize(targetGrid.gridSize);
             Vector3Int gridPos = targetGrid.WorldToGrid(hit.point + hit.normal * (cs * 0.55f));
             if (!targetGrid.CanPlace(gridPos))
                 gridPos = targetGrid.WorldToGrid(hit.point + hit.normal * cs);
