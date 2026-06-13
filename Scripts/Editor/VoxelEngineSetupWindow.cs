@@ -951,6 +951,8 @@ namespace VoxelEngine.EditorTools
             VoxelEngine.Crafting.StationTier station, params (VoxelEngine.Items.ItemDefinition item, int count)[] inputs)
         {
             string path = $"{folder}/{assetName}.asset";
+            var r = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeDefinition>(path);
+            if (r == null) { r = ScriptableObject.CreateInstance<VoxelEngine.Crafting.RecipeDefinition>(); AssetDatabase.CreateAsset(r, path); }
             
             r.displayName = display; r.outputItem = output; r.outputCount = outputCount;
             // Set a default craft time based on station tier; users can override later via the inspector.
@@ -1132,6 +1134,7 @@ namespace VoxelEngine.EditorTools
                 VoxelEngine.Building.Tiered.TierCost upStoneToIron,
                 VoxelEngine.Building.Tiered.TierCost upIronToSteel)
             {
+                string path = $"{tieredDefs}/TBlock_{display}.asset";
                 var def = AssetDatabase.LoadAssetAtPath<VoxelEngine.Building.Tiered.TieredBlockDefinition>(path); if (def == null) { def = ScriptableObject.CreateInstance<VoxelEngine.Building.Tiered.TieredBlockDefinition>(); AssetDatabase.CreateAsset(def, path); }
                 def.family = fam;
                 def.displayName = display;
@@ -1319,6 +1322,7 @@ namespace VoxelEngine.EditorTools
             VoxelEngine.Building.Tiered.BuildToken MakeToken(
                 VoxelEngine.Building.Tiered.BuildFamily fam, string display, Color tint, string description)
             {
+                string path = $"{tieredTokens}/Token_{display}.asset";
                 var tok = AssetDatabase.LoadAssetAtPath<VoxelEngine.Building.Tiered.BuildToken>(path); if (tok == null) { tok = ScriptableObject.CreateInstance<VoxelEngine.Building.Tiered.BuildToken>(); AssetDatabase.CreateAsset(tok, path); }
                 tok.family      = fam;
                 tok.itemId      = "build_" + display.ToLower();
@@ -1622,7 +1626,7 @@ namespace VoxelEngine.EditorTools
                 params (VoxelEngine.Items.ItemDefinition item, int n)[] inputs)
             {
                 string path = $"{recipesFolder}/{assetName}.asset";
-                
+                var r = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeDefinition>(path); if (r == null) { r = ScriptableObject.CreateInstance<VoxelEngine.Crafting.RecipeDefinition>(); AssetDatabase.CreateAsset(r, path); }
                 r.displayName = display;
                 r.outputItem = output;
                 r.outputCount = outputCount;
@@ -1901,7 +1905,7 @@ namespace VoxelEngine.EditorTools
                 params (VoxelEngine.Items.ItemDefinition item, int n)[] inputs)
             {
                 string path = $"{recipesFolder}/{assetName}.asset";
-                
+                var r = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeDefinition>(path); if (r == null) { r = ScriptableObject.CreateInstance<VoxelEngine.Crafting.RecipeDefinition>(); AssetDatabase.CreateAsset(r, path); }
                 r.displayName = display;
                 r.outputItem = output;
                 r.outputCount = outputCount;
@@ -2341,7 +2345,7 @@ namespace VoxelEngine.EditorTools
                 params (VoxelEngine.Items.ItemDefinition item, int n)[] inputs)
             {
                 string path = $"{recipesFolder}/{assetName}.asset";
-                
+                var r = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeDefinition>(path); if (r == null) { r = ScriptableObject.CreateInstance<VoxelEngine.Crafting.RecipeDefinition>(); AssetDatabase.CreateAsset(r, path); }
                 r.displayName = display;
                 r.outputItem = output; r.outputCount = outputCount;
                 r.requiredStation = station;
@@ -2752,7 +2756,7 @@ namespace VoxelEngine.EditorTools
                 params (VoxelEngine.Items.ItemDefinition item, int n)[] inputs)
             {
                 string path = $"{recipesFolder}/{assetName}.asset";
-                
+                var r = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeDefinition>(path); if (r == null) { r = ScriptableObject.CreateInstance<VoxelEngine.Crafting.RecipeDefinition>(); AssetDatabase.CreateAsset(r, path); }
                 r.displayName       = display;
                 r.outputItem        = output;
                 r.outputCount       = outputCount;
@@ -3361,7 +3365,7 @@ namespace VoxelEngine.EditorTools
                 params (VoxelEngine.Items.ItemDefinition item, int n)[] inputs)
             {
                 string path = $"{folder}/{assetName}.asset";
-                
+                var r = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeDefinition>(path); if (r == null) { r = ScriptableObject.CreateInstance<VoxelEngine.Crafting.RecipeDefinition>(); AssetDatabase.CreateAsset(r, path); }
                 r.displayName = display;
                 r.outputItem  = output;
                 r.outputCount = outputCount;
@@ -4408,7 +4412,6 @@ root =>
                 
                 // If the prefab already exists, load it and update it instead of creating a new GameObject.
                 GameObject root;
-                bool isNew = false;
                 var existingPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
                 
                 if (existingPrefab != null)
@@ -4418,7 +4421,6 @@ root =>
                 else
                 {
                     root = new GameObject(name);
-                    isNew = true;
                 }
 
                 var size  = name.Contains("Small") ? VoxelEngine.GridSystem.GridSize.Small : VoxelEngine.GridSystem.GridSize.Large;
