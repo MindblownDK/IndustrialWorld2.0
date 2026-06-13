@@ -163,13 +163,42 @@ namespace VoxelEngine.Player
         }
 
         // ============================================================
-        //          Procedural viewmodel mesh builder (placeholder)
+        //          Procedural viewmodel mesh builder (fallback)
         // ============================================================
         private static GameObject BuildViewmodelFor(ItemDefinition item)
         {
             var root = new GameObject("Held_" + item.name);
-            Color tint = item.iconTint;
+            
+            // 1. If we have an icon but no prefab, use a Quad with the icon sprite
+            if (item.icon != null)
+            {
+                var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                quad.transform.SetParent(root.transform, false);
+                quad.transform.localScale = new Vector3(0.25f, 0.25f, 1f);
+                quad.transform.localRotation = Quaternion.Euler(0, 180, 0); // Face player
+                
+                var renderer = quad.GetComponent<Renderer>();
+                // Use a basic transparent shader
+                var sh = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Transparent");
+                var mat = new Material(sh);
+                if (item.icon.texture != null)
+                {
+                    if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", item.icon.texture);
+                    else if (mat.HasProperty("_MainTex")) mat.SetTexture("_MainTex", item.icon.texture);
+                }
+                
+                // Set transparency
+                if (mat.HasProperty("_Surface")) mat.SetFloat("_Surface", 1); // Transparent in URP
+                mat.renderQueue = 3000;
+                renderer.sharedMaterial = mat;
+                
+                var col = quad.GetComponent<Collider>();
+                if (col != null) { col.enabled = false; Object.Destroy(col); }
+                
+                return root;
+            }
 
+            Color tint = item.iconTint;
             switch (item)
             {
                 case ToolItem tool when tool.toolType == ToolType.Pickaxe:

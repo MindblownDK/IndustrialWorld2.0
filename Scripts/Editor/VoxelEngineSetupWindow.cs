@@ -915,19 +915,26 @@ namespace VoxelEngine.EditorTools
         }
 
         private static VoxelEngine.Items.ToolItem MakeTool(string folder, string display, VoxelEngine.Items.ToolType type,
-            int tier, int dur, float strength, float brushRadius)
+            int tier, int dur, float strength, float brushRadius, GameObject customPrefab = null)
         {
             string id = display.ToLower().Replace(" ", "_");
             string path = $"{folder}/Tool_{display.Replace(" ", "")}.asset";
             var t = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ToolItem>(path);
-            if (t == null) t = ScriptableObject.CreateInstance<VoxelEngine.Items.ToolItem>();
+            if (t == null)
+            {
+                if (AssetDatabase.LoadMainAssetAtPath(path) != null) AssetDatabase.DeleteAsset(path);
+                t = ScriptableObject.CreateInstance<VoxelEngine.Items.ToolItem>();
+                AssetDatabase.CreateAsset(t, path);
+            }
             t.itemId = id; t.displayName = display; t.maxStack = 1;
             t.toolType = type; t.miningTier = tier;
             t.maxDurability = dur; t.strength = strength; t.brushRadius = brushRadius; t.fireRate = 5f;
+            if (customPrefab != null) t.viewmodelPrefab = customPrefab;
+            
             t.iconTint = type == VoxelEngine.Items.ToolType.Pickaxe ? new Color(0.7f,0.7f,0.78f) : new Color(0.6f,0.45f,0.30f);
             t.category = "Tools";
-            if (!AssetDatabase.Contains(t)) AssetDatabase.CreateAsset(t, path);
-            else EditorUtility.SetDirty(t);
+            
+            EditorUtility.SetDirty(t);
             return t;
         }
 
@@ -951,8 +958,7 @@ namespace VoxelEngine.EditorTools
             VoxelEngine.Crafting.StationTier station, params (VoxelEngine.Items.ItemDefinition item, int count)[] inputs)
         {
             string path = $"{folder}/{assetName}.asset";
-            var r = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeDefinition>(path);
-            if (r == null) { r = ScriptableObject.CreateInstance<VoxelEngine.Crafting.RecipeDefinition>(); AssetDatabase.CreateAsset(r, path); }
+            var r = GetOrCreateAsset<VoxelEngine.Crafting.RecipeDefinition>(path);
             
             r.displayName = display; r.outputItem = output; r.outputCount = outputCount;
             // Set a default craft time based on station tier; users can override later via the inspector.
@@ -977,7 +983,7 @@ namespace VoxelEngine.EditorTools
             VoxelEngine.Items.ItemDefinition output, int outputCount, float seconds)
         {
             string path = $"{folder}/{assetName}.asset";
-            var r = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.SmeltingRecipe>(path); if (r == null) { r = ScriptableObject.CreateInstance<VoxelEngine.Crafting.SmeltingRecipe>(); AssetDatabase.CreateAsset(r, path); }
+            var r = GetOrCreateAsset<VoxelEngine.Crafting.SmeltingRecipe>(path);
             r.input = input; r.inputCount = inputCount;
             r.output = output; r.outputCount = outputCount; r.smeltSeconds = seconds;
             
@@ -1138,7 +1144,8 @@ namespace VoxelEngine.EditorTools
                 VoxelEngine.Building.Tiered.TierCost upIronToSteel)
             {
                 string path = $"{tieredDefs}/TBlock_{display}.asset";
-                var def = AssetDatabase.LoadAssetAtPath<VoxelEngine.Building.Tiered.TieredBlockDefinition>(path); if (def == null) { def = ScriptableObject.CreateInstance<VoxelEngine.Building.Tiered.TieredBlockDefinition>(); AssetDatabase.CreateAsset(def, path); }
+                var def = GetOrCreateAsset<VoxelEngine.Building.Tiered.TieredBlockDefinition>(path);
+                
                 def.family = fam;
                 def.displayName = display;
                 def.placeCost     = placeCost;
@@ -1152,17 +1159,21 @@ namespace VoxelEngine.EditorTools
                     string name = $"{display}_{tier}";
                     string prefabPath = $"{tieredPrefabs}/{name}.prefab";
 
-                    // Build root.
-                    var root = new GameObject(name);
-                    meshBuilder(root, tierMats[t]);
-                    socketBuilder(root);
+                    // Robust Prefab Handling: Load existing or create new
+                    var prefab = GetOrCreatePrefab(prefabPath, name, (root) => 
+                    {
+                        // ONLY build procedural mesh if it's a new or empty object
+                        // (Allows users to swap in custom FBXs/meshes manually)
+                        if (root.transform.childCount == 0 && root.GetComponent<MeshFilter>() == null && root.GetComponentInChildren<MeshRenderer>() == null)
+                        {
+                             meshBuilder(root, tierMats[t]);
+                             socketBuilder(root);
+                        }
 
-                    // Add the placed-block component.
-                    root.AddComponent<VoxelEngine.Building.Tiered.PlacedTieredBlock>();
-
-                    // Save as prefab.
-                    var prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
-                    Object.DestroyImmediate(root);
+                        // ALWAYS ensure required components exist
+                        if (!root.TryGetComponent<VoxelEngine.Building.Tiered.PlacedTieredBlock>(out var ptb))
+                            ptb = root.AddComponent<VoxelEngine.Building.Tiered.PlacedTieredBlock>();
+                    });
 
                     if (tier == VoxelEngine.Building.Tiered.BuildTier.Wood)  def.woodPrefab  = prefab;
                     if (tier == VoxelEngine.Building.Tiered.BuildTier.Stone) def.stonePrefab = prefab;
@@ -1327,8 +1338,8 @@ namespace VoxelEngine.EditorTools
                 VoxelEngine.Building.Tiered.BuildFamily fam, string display, Color tint, string description)
             {
                 string path = $"{tieredTokens}/Token_{display}.asset";
-                var tok = AssetDatabase.LoadAssetAtPath<VoxelEngine.Building.Tiered.BuildToken>(path); 
-                if (tok == null) { tok = ScriptableObject.CreateInstance<VoxelEngine.Building.Tiered.BuildToken>(); AssetDatabase.CreateAsset(tok, path); }
+                var tok = GetOrCreateAsset<VoxelEngine.Building.Tiered.BuildToken>(path);
+                
                 tok.family      = fam;
                 tok.itemId      = "build_" + display.ToLower();
                 tok.displayName = display + " (Build)";
@@ -1385,12 +1396,8 @@ namespace VoxelEngine.EditorTools
                 params (VoxelEngine.Items.ItemDefinition item, int n)[] inputs)
             {
                 string path = $"{tieredRecipes}/{assetName}.asset";
-                var r = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeDefinition>(path);
-                if (r == null)
-                {
-                    r = ScriptableObject.CreateInstance<VoxelEngine.Crafting.RecipeDefinition>();
-                    
-                }
+                var r = GetOrCreateAsset<VoxelEngine.Crafting.RecipeDefinition>(path);
+                
                 r.displayName = display;
                 r.outputItem = output;
                 r.outputCount = outputCount;
@@ -1401,7 +1408,8 @@ namespace VoxelEngine.EditorTools
                 for (int i = 0; i < inputs.Length; i++)
                     r.inputs[i] = new VoxelEngine.Crafting.RecipeIngredient { item = inputs[i].item, count = inputs[i].n };
                 
-                recipeRegistry.recipes.Add(r);
+                if (recipeRegistry != null && !recipeRegistry.recipes.Contains(r)) recipeRegistry.recipes.Add(r);
+                EditorUtility.SetDirty(r);
                 return r;
             }
 
@@ -1637,7 +1645,7 @@ namespace VoxelEngine.EditorTools
                 params (VoxelEngine.Items.ItemDefinition item, int n)[] inputs)
             {
                 string path = $"{recipesFolder}/{assetName}.asset";
-                var r = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeDefinition>(path); if (r == null) { r = ScriptableObject.CreateInstance<VoxelEngine.Crafting.RecipeDefinition>(); AssetDatabase.CreateAsset(r, path); }
+                var r = GetOrCreateAsset<VoxelEngine.Crafting.RecipeDefinition>(path);
                 r.displayName = display;
                 r.outputItem = output;
                 r.outputCount = outputCount;
@@ -1916,7 +1924,7 @@ namespace VoxelEngine.EditorTools
                 params (VoxelEngine.Items.ItemDefinition item, int n)[] inputs)
             {
                 string path = $"{recipesFolder}/{assetName}.asset";
-                var r = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeDefinition>(path); if (r == null) { r = ScriptableObject.CreateInstance<VoxelEngine.Crafting.RecipeDefinition>(); AssetDatabase.CreateAsset(r, path); }
+                var r = GetOrCreateAsset<VoxelEngine.Crafting.RecipeDefinition>(path);
                 r.displayName = display;
                 r.outputItem = output;
                 r.outputCount = outputCount;
@@ -2356,7 +2364,7 @@ namespace VoxelEngine.EditorTools
                 params (VoxelEngine.Items.ItemDefinition item, int n)[] inputs)
             {
                 string path = $"{recipesFolder}/{assetName}.asset";
-                var r = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeDefinition>(path); if (r == null) { r = ScriptableObject.CreateInstance<VoxelEngine.Crafting.RecipeDefinition>(); AssetDatabase.CreateAsset(r, path); }
+                var r = GetOrCreateAsset<VoxelEngine.Crafting.RecipeDefinition>(path);
                 r.displayName = display;
                 r.outputItem = output; r.outputCount = outputCount;
                 r.requiredStation = station;
@@ -2484,12 +2492,8 @@ namespace VoxelEngine.EditorTools
                 Color tint, VoxelEngine.Items.ResourceCategory cat, string uiCategory, int maxStack = 999)
             {
                 string path = $"{itemsFolder}/{assetName}.asset";
-                var r = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>(path);
-                if (r == null)
-                {
-                    r = ScriptableObject.CreateInstance<VoxelEngine.Items.ResourceItem>();
-                    AssetDatabase.CreateAsset(r, path);
-                }
+                var r = GetOrCreateAsset<VoxelEngine.Items.ResourceItem>(path);
+                
                 r.itemId      = assetName.ToLower();
                 r.displayName = display;
                 r.description = desc;
@@ -2703,8 +2707,8 @@ namespace VoxelEngine.EditorTools
                 (VoxelEngine.Items.LiquidType liquid, float litres)[] fluidOut = null)
             {
                 string path = $"{procRecFolder}/{assetName}.asset";
-                var r = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.ProcessingRecipe>(path);
-                if (r == null) { r = ScriptableObject.CreateInstance<VoxelEngine.Crafting.ProcessingRecipe>(); AssetDatabase.CreateAsset(r, path); }
+                var r = GetOrCreateAsset<VoxelEngine.Crafting.ProcessingRecipe>(path);
+                
                 r.displayName = display;
                 r.category    = category;
                 r.secondsPerBatch     = seconds;
@@ -2772,7 +2776,7 @@ namespace VoxelEngine.EditorTools
                 params (VoxelEngine.Items.ItemDefinition item, int n)[] inputs)
             {
                 string path = $"{recipesFolder}/{assetName}.asset";
-                var r = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeDefinition>(path); if (r == null) { r = ScriptableObject.CreateInstance<VoxelEngine.Crafting.RecipeDefinition>(); AssetDatabase.CreateAsset(r, path); }
+                var r = GetOrCreateAsset<VoxelEngine.Crafting.RecipeDefinition>(path);
                 r.displayName       = display;
                 r.outputItem        = output;
                 r.outputCount       = outputCount;
@@ -3332,8 +3336,7 @@ namespace VoxelEngine.EditorTools
                 VoxelEngine.Items.ResourceCategory cat, string uiCategory, int maxStack = 999, float fuelSeconds = 0f)
             {
                 string path = $"{folder}/{assetName}.asset";
-                var r = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>(path);
-                if (r == null) { r = ScriptableObject.CreateInstance<VoxelEngine.Items.ResourceItem>();  }
+                var r = GetOrCreateAsset<VoxelEngine.Items.ResourceItem>(path);
                 r.itemId = assetName.ToLower(); r.displayName = display; r.description = desc;
                 r.iconTint = tint; r.maxStack = maxStack; r.massPerUnit = 1f;
                 r.category = uiCategory; r.subcategory = cat; r.fuelSeconds = fuelSeconds;
@@ -3345,14 +3348,15 @@ namespace VoxelEngine.EditorTools
                 GameObject prefab, string uiCategory, int hp = 200, int miningTier = 1, int maxStack = 50)
             {
                 string path = $"{folder}/{assetName}.asset";
-                var b = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.BlockItem>(path);
-                if (b == null)
-                {
-                    b = ScriptableObject.CreateInstance<VoxelEngine.Items.BlockItem>();
-                    AssetDatabase.CreateAsset(b, path);
-                }
+                var b = GetOrCreateAsset<VoxelEngine.Items.BlockItem>(path);
                 b.itemId = assetName.ToLower(); b.displayName = display; b.description = desc;
                 b.iconTint = tint; b.maxStack = maxStack; b.massPerUnit = 4f;
+                b.placedPrefab = prefab; b.gridSize = Vector3Int.one;
+                b.allowStacking = true; b.blockHealth = hp; b.miningTier = miningTier;
+                b.category = uiCategory;
+                EditorUtility.SetDirty(b);
+                return b;
+            }
                 b.placedPrefab = prefab; b.gridSize = Vector3Int.one;
                 b.allowStacking = false; b.blockHealth = hp; b.miningTier = miningTier;
                 b.category = uiCategory;
@@ -3381,7 +3385,7 @@ namespace VoxelEngine.EditorTools
                 params (VoxelEngine.Items.ItemDefinition item, int n)[] inputs)
             {
                 string path = $"{folder}/{assetName}.asset";
-                var r = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeDefinition>(path); if (r == null) { r = ScriptableObject.CreateInstance<VoxelEngine.Crafting.RecipeDefinition>(); AssetDatabase.CreateAsset(r, path); }
+                var r = GetOrCreateAsset<VoxelEngine.Crafting.RecipeDefinition>(path);
                 r.displayName = display;
                 r.outputItem  = output;
                 r.outputCount = outputCount;
@@ -4425,58 +4429,41 @@ root =>
             GameObject MakeGPref<T>(string name, Color color, Vector3 scale, System.Action<T> config = null) where T : VoxelEngine.GridSystem.GridBlock
             {
                 string path = $"{PREFABS}/{name}.prefab";
-                
-                // If the prefab already exists, load it and update it instead of creating a new GameObject.
-                GameObject root;
-                var existingPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
-                
-                if (existingPrefab != null)
-                {
-                    root = PrefabUtility.LoadPrefabContents(path);
-                }
-                else
-                {
-                    root = new GameObject(name);
-                }
-
                 var size  = name.Contains("Small") ? VoxelEngine.GridSystem.GridSize.Small : VoxelEngine.GridSystem.GridSize.Large;
                 var style = GridStyleFor(name);
 
-                // Persist every generated material as an asset
-                EnsureFolder(PREFABS + "/Mats");
-                int matIdx = 0;
-                VoxelEngine.GridSystem.GridBlockMeshBuilder.MaterialPersister = (mat, _) =>
+                var prefab = GetOrCreatePrefab(path, name, (root) => 
                 {
-                    string mp = $"{PREFABS}/Mats/{name}_{matIdx++}.mat";
-                    if (AssetDatabase.LoadAssetAtPath<Material>(mp) != null) AssetDatabase.DeleteAsset(mp);
-                    AssetDatabase.CreateAsset(mat, mp);
-                    return AssetDatabase.LoadAssetAtPath<Material>(mp);
-                };
-                VoxelEngine.GridSystem.GridBlockMeshBuilder.Build(root, style, size, color);
-                VoxelEngine.GridSystem.GridBlockMeshBuilder.MaterialPersister = null;
+                    // Persist every generated material as an asset
+                    EnsureFolder(PREFABS + "/Mats");
+                    int matIdx = 0;
+                    VoxelEngine.GridSystem.GridBlockMeshBuilder.MaterialPersister = (mat, _) =>
+                    {
+                        string mp = $"{PREFABS}/Mats/{name}_{matIdx++}.mat";
+                        if (AssetDatabase.LoadAssetAtPath<Material>(mp) != null) AssetDatabase.DeleteAsset(mp);
+                        AssetDatabase.CreateAsset(mat, mp);
+                        return AssetDatabase.LoadAssetAtPath<Material>(mp);
+                    };
 
-                // Ensure components exist
-                var box = root.GetComponent<BoxCollider>();
-                if (box == null) box = root.AddComponent<BoxCollider>();
-                float cs = VoxelEngine.GridSystem.GridSizeExt.CellSize(size);
-                box.size = new Vector3(cs, cs, cs);
+                    // Only build if it's an empty prefab
+                    if (root.transform.childCount == 0 && root.GetComponent<MeshFilter>() == null)
+                    {
+                        VoxelEngine.GridSystem.GridBlockMeshBuilder.Build(root, style, size, color);
+                    }
+                    VoxelEngine.GridSystem.GridBlockMeshBuilder.MaterialPersister = null;
 
-                var b = root.GetComponent<T>();
-                if (b == null) b = root.AddComponent<T>();
+                    // Ensure components exist
+                    var box = root.GetComponent<BoxCollider>();
+                    if (box == null) box = root.AddComponent<BoxCollider>();
+                    float cs = VoxelEngine.GridSystem.GridSizeExt.CellSize(size);
+                    box.size = new Vector3(cs, cs, cs);
+
+                    var b = root.GetComponent<T>();
+                    if (b == null) b = root.AddComponent<T>();
+                    
+                    config?.Invoke(b);
+                });
                 
-                config?.Invoke(b);
-                
-                GameObject prefab;
-                if (existingPrefab != null)
-                {
-                    prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
-                    PrefabUtility.UnloadPrefabContents(root);
-                }
-                else
-                {
-                    prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
-                    Object.DestroyImmediate(root);
-                }
                 return prefab;
             }
 
@@ -4486,12 +4473,8 @@ root =>
             {
                 if (output == null) return null;
                 string path = $"{RECIPES}/{name}.asset";
-                var r = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeDefinition>(path);
-                if (r == null)
-                {
-                    r = ScriptableObject.CreateInstance<VoxelEngine.Crafting.RecipeDefinition>();
-                    
-                }
+                var r = GetOrCreateAsset<VoxelEngine.Crafting.RecipeDefinition>(path);
+                
                 r.displayName = display; r.outputItem = output; r.outputCount = 1; r.requiredStation = VoxelEngine.Crafting.StationTier.Assembler; r.craftSeconds = 4f; r.unlockedByDefault = false;
                 var valid = new System.Collections.Generic.List<VoxelEngine.Crafting.RecipeIngredient>();
                 foreach (var (item, n) in inputs) if (item != null) valid.Add(new VoxelEngine.Crafting.RecipeIngredient { item = item, count = n });
@@ -4793,6 +4776,40 @@ root =>
             Ensure(ITEM_FOLDER);
             Ensure(PLANET_FOLDER);
             Ensure(BIOME_FOLDER);
+        }
+
+        private static T GetOrCreateAsset<T>(string path) where T : ScriptableObject
+        {
+            var asset = AssetDatabase.LoadAssetAtPath<T>(path);
+            if (asset == null)
+            {
+                if (AssetDatabase.LoadMainAssetAtPath(path) != null) AssetDatabase.DeleteAsset(path);
+                asset = ScriptableObject.CreateInstance<T>();
+                AssetDatabase.CreateAsset(asset, path);
+            }
+            return asset;
+        }
+
+        private static GameObject GetOrCreatePrefab(string path, string name, System.Action<GameObject> onUpdate)
+        {
+            GameObject root;
+            bool isNew = false;
+            if (AssetDatabase.LoadMainAssetAtPath(path) != null)
+            {
+                root = PrefabUtility.LoadPrefabContents(path);
+            }
+            else
+            {
+                root = new GameObject(name);
+                isNew = true;
+            }
+
+            onUpdate?.Invoke(root);
+
+            var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
+            PrefabUtility.UnloadPrefabContents(root);
+            if (isNew) Object.DestroyImmediate(root);
+            return prefab;
         }
     }
 }
