@@ -302,24 +302,15 @@ namespace VoxelEngine.UI
 
             // While the search field has keyboard focus, don't react to hotkey-style keys
             // — the player is typing into the search box.
-            bool typing = _searchHasFocus;
+            bool typing = _searchHasFocus || PortConfigHud.IsAnyDropdownOpen;
 
-            // Toggle inventory — but NOT while pause menu (or any other UI we don't own) is up,
-            // and NOT while typing in the search field.
-            bool weAreOpen = _inventoryOpen || _rightContainer != null;
+            // Toggle inventory / ship terminal — but NOT while typing in a search/name field.
+            bool weAreOpen = _inventoryOpen || _rightContainer != null || _openGridTerminal != null;
             if (!typing && GameSettings.WasPressed(InputAction.Inventory))
             {
-                if (_openGridTerminal != null)
+                if (weAreOpen)
                 {
-                    // The ship terminal owns focus. Pressing I inside it should not close it
-                    // and immediately swap to another panel.
-                    UIState.PauseConsumedFrame = Time.frameCount;
-                    _justClosedThisFrame = false;
-                }
-                else if (weAreOpen)
-                {
-                    // Only do a plain close — pressing I on a machine panel just closes it,
-                    // it does NOT re-open the plain inventory on the same frame.
+                    // I closes the currently open inventory/container/ship terminal.
                     CloseAll();
                     UIState.PauseConsumedFrame = Time.frameCount;
                     _justClosedThisFrame = true;
@@ -332,6 +323,14 @@ namespace VoxelEngine.UI
                     if (seat != null && seat.Grid != null) OpenGridTerminal(seat.Grid);
                     else OpenInventory();
                 }
+            }
+            // Y also closes our UI when it is already open, but must not open research on
+            // that same frame. ResearchUI checks PauseConsumedThisFrame before opening.
+            else if (!typing && GameSettings.WasPressed(InputAction.Research) && weAreOpen)
+            {
+                CloseAll();
+                UIState.PauseConsumedFrame = Time.frameCount;
+                _justClosedThisFrame = true;
             }
             // Reset per-frame close guard each frame.
             else
@@ -724,6 +723,8 @@ namespace VoxelEngine.UI
             _openPortReactor= null; _openProcessor    = null;
             _openReprocessor= null; _openElectrolyser = null;
             _openHydroEngine= null; _openGasTank      = null;
+            _openGridBlock  = null; _openGridTerminal = null;
+            _openOilRefinery = null; _openChemPlant = null;
             _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter   = null; _openExporter     = null;
             _openDiskManipulator = null; _openNAS     = null;
