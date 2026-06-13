@@ -3057,9 +3057,26 @@ namespace VoxelEngine.UI
             {
                 var dest = ResolveGridBlockQuickTransferDestination(kv.Value, item);
                 if (dest == null) continue;
-                if (dest.HasSpace(item, 1)) return dest;
+                if (ContainerHasSpaceFor(dest, item, 1)) return dest;
             }
             return null;
+        }
+
+        private static bool ContainerHasSpaceFor(IItemContainer container, ItemDefinition item, int count)
+        {
+            if (container == null || item == null || count <= 0) return false;
+
+            if (container is ItemContainer itemContainer && itemContainer.AcceptFilter != null
+                && itemContainer.AcceptFilter(item, count) <= 0)
+                return false;
+
+            foreach (var slot in container.Slots)
+            {
+                if (slot == null || slot.IsEmpty) return true;
+                if (slot.item == item && item.IsStackable && slot.count < item.maxStack) return true;
+            }
+
+            return false;
         }
 
         private static bool IsItemId(ItemDefinition item, string id)
