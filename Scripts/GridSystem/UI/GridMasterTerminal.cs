@@ -33,6 +33,7 @@ namespace VoxelEngine.GridSystem.UI
             public string groupNameDraft = "New Group";
             public bool hideOnCreate;
             public bool showHidden;
+            public bool showPowerUsage;
             public int lastSelectedIndex = -1;
         }
 
@@ -112,7 +113,9 @@ namespace VoxelEngine.GridSystem.UI
             win.Add(div);
 
             if (grid != null)
-                win.Add(BuildStatusStrip(grid));
+                win.Add(BuildStatusStrip(grid, state));
+            if (grid != null && state.showPowerUsage)
+                win.Add(BuildPowerUsagePopup(grid, state));
 
             var body = new VisualElement();
             body.style.flexDirection = FlexDirection.Row;
@@ -159,7 +162,7 @@ namespace VoxelEngine.GridSystem.UI
             }
         }
 
-        private static VisualElement BuildStatusStrip(GridEntity grid)
+        private static VisualElement BuildStatusStrip(GridEntity grid, TerminalState state)
         {
             int blockCount = grid.BlockCount;
             float speed = grid.Body != null ? grid.Body.linearVelocity.magnitude : 0f;
@@ -172,12 +175,77 @@ namespace VoxelEngine.GridSystem.UI
             strip.Add(Stat("MASS", MassFormat.Format(grid.TotalMass), T.AccentCyan));
             strip.Add(Stat("POWER", PowerFormat.Watts(grid.PowerBalance), grid.PowerBalance >= 0 ? T.AccentGreen : T.AccentRed));
             strip.Add(Stat("GEN", PowerFormat.Watts(grid.PowerGenerated), T.AccentGreen));
-            strip.Add(Stat("USE", PowerFormat.Watts(grid.PowerConsumed), T.AccentAmber));
+            strip.Add(Stat("USE", PowerFormat.Watts(grid.PowerConsumed), T.AccentAmber, () =>
+            {
+                state.showPowerUsage = true;
+                RefreshTerminal();
+            }));
             strip.Add(Stat("H2", $"{grid.HydrogenStored:0} L", T.AccentCyan));
             strip.Add(Stat("O2", $"{grid.OxygenStored:0} L", T.AccentGreen));
             strip.Add(Stat("SPEED", $"{speed:0.0} m/s", T.AccentGold));
             strip.Add(Stat("BLOCKS", blockCount.ToString(), new Color(0.8f, 0.84f, 0.9f)));
             return strip;
+        }
+
+        private static VisualElement BuildPowerUsagePopup(GridEntity grid, TerminalState state)
+        {
+            var pop = T.Card();
+            pop.style.position = Position.Absolute;
+            pop.style.top = 78;
+            pop.style.right = 24;
+            pop.style.width = 430;
+            pop.style.maxHeight = new StyleLength(new Length(60, LengthUnit.Percent));
+            pop.style.backgroundColor = new StyleColor(new Color(0.045f, 0.05f, 0.075f, 0.98f));
+            pop.style.flexShrink = 0;
+            T.Border(pop, 1, T.AccentAmber);
+
+            var header = new VisualElement();
+            header.style.flexDirection = FlexDirection.Row;
+            header.style.alignItems = Align.Center;
+            var title = T.Subtitle("CURRENT POWER USAGE");
+            title.style.flexGrow = 1;
+            header.Add(title);
+            header.Add(T.SmallButton("Close", () => { state.showPowerUsage = false; RefreshTerminal(); }, T.AccentRed));
+            pop.Add(header);
+            pop.Add(T.AccentDivider(T.AccentAmber));
+
+            var scroll = new ScrollView(ScrollViewMode.Vertical);
+            scroll.style.maxHeight = 360;
+            float total = 0f;
+            if (grid != null)
+            {
+                foreach (var kv in grid.Blocks)
+                {
+                    var block = kv.Value;
+                    if (block == null) continue;
+                    float draw = Mathf.Max(0f, block.PowerDraw);
+                    if (draw <= 0.01f) continue;
+                    total += draw;
+                    var row = new VisualElement();
+                    row.style.flexDirection = FlexDirection.Row;
+                    row.style.marginBottom = 4;
+                    var name = new Label(block.blockName);
+                    name.style.flexGrow = 1;
+                    name.style.color = new StyleColor(T.TextSecondary);
+                    name.style.fontSize = 11;
+                    row.Add(name);
+                    var watts = new Label(PowerFormat.Watts(draw));
+                    watts.style.color = new StyleColor(T.AccentGold);
+                    watts.style.fontSize = 11;
+                    watts.style.unityFontStyleAndWeight = FontStyle.Bold;
+                    row.Add(watts);
+                    scroll.Add(row);
+                }
+            }
+
+            if (total <= 0.01f)
+            {
+                scroll.Add(T.Muted("No blocks are currently drawing power."));
+            }
+            pop.Add(scroll);
+            pop.Add(T.AccentDivider(T.AccentAmber));
+            pop.Add(T.StatRow("", "Total Use", PowerFormat.Watts(total), T.AccentGold));
+            return pop;
         }
 
         private static int GroupTab(int groupIndex) => GroupTabBase - groupIndex;
@@ -381,7 +449,7 @@ namespace VoxelEngine.GridSystem.UI
             button.RegisterCallback<ClickEvent>(evt =>
             {
                 bool shift = evt.shiftKey || GridInput.Shift;
-                bool ctrl = evt.ctrlKey || evt.commandKey || GridInput.Ctrl;
+                bool ctrl = evt.ctrlKey || GridInput.Ctrl;
                 HandleBlockSelection(state, blocks, index, shift, ctrl);
                 onSelectTab(index);
                 evt.StopPropagation();
@@ -604,8 +672,14 @@ namespace VoxelEngine.GridSystem.UI
         private static VisualElement BuildGroupPage(TerminalState state, BlockGroup group)
         {
             var page = T.MachinePanel();
+            page.style.position = Position.Relative;
+            page.style.top = StyleKeyword.Auto;
+            page.style.right = StyleKeyword.Auto;
+            page.style.bottom = StyleKeyword.Auto;
             page.style.width = StyleKeyword.Auto;
             page.style.maxWidth = 860;
+            page.style.flexGrow = 0;
+            page.style.alignSelf = Align.FlexStart;
             page.style.flexShrink = 0;
             page.style.paddingBottom = 40;
 
@@ -717,7 +791,10 @@ namespace VoxelEngine.GridSystem.UI
             if (block is GridGasTank) return "Gas Tanks";
             if (block is GridLiquidTank) return "Liquid Tanks";
             if (block is GridWeapon) return "Weapons";
+            if (block is GridGyroscope) return "Gyroscopes";
+            if (block is GridArmorBlock) return "Armor Blocks";
             if (block is GridLandingGear) return "Landing Gear";
+            if (block is GridWheel) return "Wheels";
             if (block is GridSolarPanel) return "Solar Panels";
             if (block is GridPortableReactor) return "Portable Reactors";
             if (block is GridElectricFurnace) return "Electric Furnaces";
@@ -826,20 +903,9 @@ namespace VoxelEngine.GridSystem.UI
             return entries;
         }
 
-        private static bool HasToggle(GridBlock b)
-            => b is GridThruster || b is GridRefinery || b is GridChemicalPlant
-            || b is GridH2O2Generator || b is GridDrill || b is GridGrinder
-            || b is GridWeapon || b is GridSolarPanel || b is GridPortableReactor || b is GridElectricFurnace;
+        private static bool HasToggle(GridBlock b) => b != null;
 
-        private static bool IsTerminalBlock(GridBlock b)
-            => b is GridCargoContainer || b is GridDockingPort
-            || b is GridLiquidTank || b is GridGasTank
-            || b is GridH2O2Generator || b is GridBattery
-            || b is GridRefinery || b is GridChemicalPlant
-            || b is GridWeapon || b is GridThruster
-            || b is GridSolarPanel || b is GridPortableReactor
-            || b is GridDrill || b is GridGrinder || b is GridCockpit || b is GridElectricFurnace
-            || b is GridLandingGear;
+        private static bool IsTerminalBlock(GridBlock b) => b != null;
 
         private static void SetAllEnabled(GridEntity grid, bool on)
         {
@@ -849,12 +915,19 @@ namespace VoxelEngine.GridSystem.UI
             RefreshTerminal();
         }
 
-        private static VisualElement Stat(string label, string value, Color c)
+        private static VisualElement Stat(string label, string value, Color c, Action onClick = null)
         {
-            var box = new VisualElement();
+            var box = onClick == null ? new VisualElement() : new Button(() => onClick());
             box.style.flexDirection = FlexDirection.Column;
             box.style.marginRight = 16;
             box.style.minWidth = 70;
+            if (onClick != null)
+            {
+                box.style.paddingLeft = 0;
+                box.style.paddingRight = 0;
+                box.style.backgroundColor = new StyleColor(new Color(0, 0, 0, 0));
+                T.Border(box, 0, Color.clear);
+            }
             var l = new Label(label);
             l.style.fontSize = 8;
             l.style.letterSpacing = 1f;

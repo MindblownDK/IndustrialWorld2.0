@@ -75,7 +75,7 @@ namespace VoxelEngine.GridSystem
 
         private bool TryLockInternal()
         {
-            if (IsLocked || Grid == null || Grid.Body == null) return false;
+            if (!Enabled || IsLocked || Grid == null || Grid.Body == null) return false;
 
             float cs = Grid.gridSize.CellSize();
             float reach = cs * 2.5f;

@@ -28,7 +28,7 @@ namespace VoxelEngine.GridSystem
         public float Progress01 => _current == null ? 0f : Mathf.Clamp01(_progress / Mathf.Max(0.1f, _current.secondsPerBatch));
 
         public override float PowerDraw =>
-            (_current != null) ? baseWattsPerSecond * _current.powerDrawMultiplier : idleWattsPerSecond;
+            !Enabled ? 0f : (_current != null) ? baseWattsPerSecond * _current.powerDrawMultiplier : idleWattsPerSecond;
 
         public override void OnPlaced()
         {

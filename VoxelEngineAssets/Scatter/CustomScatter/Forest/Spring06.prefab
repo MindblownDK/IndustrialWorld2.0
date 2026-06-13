@@ -11,6 +11,8 @@ GameObject:
   - component: {fileID: 8306829336014927517}
   - component: {fileID: 8254580246588439877}
   - component: {fileID: 3034525763076215962}
+  - component: {fileID: 5899869927229781467}
+  - component: {fileID: 9029174906778110870}
   m_Layer: 0
   m_Name: Spring06
   m_TagString: Untagged
@@ -88,4 +90,41 @@ MeshRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
+--- !u!114 &5899869927229781467
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4582802595405526183}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 84e9d4e5bd7be9f43ab30c794f037844, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Trees.Tree
+  maxHp: 80
+  logItem: {fileID: 11400000, guid: 2bf41f52862e713449cf236f0fc98a76, type: 2}
+  minLogs: 2
+  maxLogs: 4
+  preferredTool: 1
+  hp: 0
+--- !u!114 &9029174906778110870
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4582802595405526183}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 84e9d4e5bd7be9f43ab30c794f037844, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Trees.Tree
+  maxHp: 80
+  logItem: {fileID: 11400000, guid: 2bf41f52862e713449cf236f0fc98a76, type: 2}
+  minLogs: 2
+  maxLogs: 4
+  preferredTool: 1
+  hp: 0

@@ -10,7 +10,14 @@ namespace VoxelEngine.GridSystem
     public class GridCockpit : GridBlock
     {
         [Header("Cockpit")]
+        [Tooltip("Idle power draw while the cockpit is powered on.")]
+        public float idleWatts = 50f;
+
+        public override float PowerDraw => Enabled ? idleWatts : 0f;
+
         public Player.PlayerController Pilot { get; private set; }
+
+        public bool IsFlightOnline => Enabled && Grid != null && Grid.HasPower;
 
         /// <summary>The cockpit the local player is currently seated in (null if on foot).</summary>
         public static GridCockpit ActivePilotSeat { get; private set; }
@@ -25,6 +32,15 @@ namespace VoxelEngine.GridSystem
             if (VoxelEngine.UI.UIState.IsBlocking || Grid == null)
             {
                 Grid?.SetFlightInput(Vector3.zero, 0, 0, 0);
+                return;
+            }
+
+            // Offline cockpit or unpowered grid: player can still exit/open terminal,
+            // but flight/gyro/tool controls are fully locked out.
+            if (!IsFlightOnline)
+            {
+                Grid.SetFlightInput(Vector3.zero, 0, 0, 0);
+                Grid.DrillVoidMode = false;
                 return;
             }
 
@@ -50,7 +66,9 @@ namespace VoxelEngine.GridSystem
             // Translation — WASD + Space/Ctrl (relative to the cockpit's facing).
             float fwd   = (Held(InputAction.Forward) ? 1 : 0) - (Held(InputAction.Back) ? 1 : 0);
             float right = (Held(InputAction.Right) ? 1 : 0)   - (Held(InputAction.Left) ? 1 : 0);
-            float up    = (Held(InputAction.Jump) ? 1 : 0)    - (Held(InputAction.Down) ? 1 : 0);
+            bool descendHeld = Held(InputAction.Down)
+                               || (GridBuilder.HoldingGridBlock && Held(InputAction.Crouch));
+            float up    = (Held(InputAction.Jump) ? 1 : 0)    - (descendHeld ? 1 : 0);
             Vector3 thrust = new Vector3(right, up, fwd);
 
             // Rotation — Q/E roll + mouse look (yaw/pitch) via gyroscopes.

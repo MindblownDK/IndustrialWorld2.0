@@ -314,6 +314,7 @@ namespace VoxelEngine.GridSystem
             foreach (var kv in _blocks)
             {
                 var b = kv.Value;
+                if (b == null || !b.Enabled) continue;
                 if (b is GridBattery bat)
                 {
                     batteryReserve += bat.AvailableDischargeWatts; // what it COULD supply this frame
@@ -388,16 +389,16 @@ namespace VoxelEngine.GridSystem
             }
 
             Vector3 rotInput = new Vector3(RotationPitch, RotationYaw, RotationRoll);
-            // Rotational authority comes from installed (enabled) gyroscopes.
+            // Rotational authority comes from installed, powered-on gyroscopes.
+            // Bigger/heavier ships turn slower; adding more gyros restores authority.
             float gyroTorque = 0f;
             foreach (var kv in _blocks)
                 if (kv.Value is GridGyroscope gy && gy.Enabled) gyroTorque += gy.torquePower;
             if (gyroTorque > 0f && rotInput.sqrMagnitude > 0.0001f)
             {
-                // Torque applied around the COCKPIT's axes (so pitch/yaw match where the
-                // pilot is looking). Acceleration mode = mass-independent, so a small ship
-                // turns crisply and a big one needs more gyros.
-                Vector3 worldTorque = frame.TransformDirection(rotInput) * (gyroTorque * 0.0005f);
+                Vector3 worldTorque = frame.TransformDirection(rotInput);
+                float massFactor = 10000f / Mathf.Max(10000f, _rb.mass);
+                worldTorque *= gyroTorque * 0.0005f * massFactor;
                 _rb.AddTorque(worldTorque, ForceMode.Acceleration);
             }
             // Angular damping so the ship stops spinning when you let go (SE-style).

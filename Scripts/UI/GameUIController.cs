@@ -2345,6 +2345,14 @@ namespace VoxelEngine.UI
             // Same slot — cancel.
             if (srcC == destC && srcIdx == destIdx) { CancelDrag(); return; }
 
+            // Respect destination/source AcceptFilter gates during direct drag/swap too.
+            // Insert() already honours filters, but SetSlot()-based swaps used to bypass them.
+            if (!CanDirectSet(destC, srcStack) || !CanDirectSet(srcC, dstStack))
+            {
+                CancelDrag();
+                return;
+            }
+
             // Stack merge.
             if (!srcStack.IsEmpty && !dstStack.IsEmpty &&
                 dstStack.item == srcStack.item && srcStack.item.IsStackable)
@@ -2363,6 +2371,14 @@ namespace VoxelEngine.UI
                 srcC.SetSlot(srcIdx, dstStack);
             }
             CancelDrag();
+        }
+
+        private static bool CanDirectSet(IItemContainer container, ItemStack stack)
+        {
+            if (stack == null || stack.IsEmpty || stack.item == null) return true;
+            if (container is ItemContainer itemContainer && itemContainer.AcceptFilter != null)
+                return itemContainer.AcceptFilter(stack.item, stack.count) >= stack.count;
+            return true;
         }
 
         private void CancelDrag()

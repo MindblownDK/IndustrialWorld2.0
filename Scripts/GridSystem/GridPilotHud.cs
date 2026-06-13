@@ -16,7 +16,7 @@ namespace VoxelEngine.GridSystem
         private static VisualElement _container;
         private static GridCockpit _cachedCockpit;
         private static float _cockpitSearchTimer;
-        private static Label _speedLabel, _altLabel, _powerLabel, _h2Label, _dampLabel, _batteryValueLabel;
+        private static Label _speedLabel, _altLabel, _powerLabel, _h2Label, _dampLabel, _batteryValueLabel, _offlineLabel;
         private static VisualElement _powerFill, _h2Fill, _batteryGaugeFill;
         private static float _smoothSpeed, _smoothAlt, _smoothPower;
         private const int LayoutRevision = 6;
@@ -45,9 +45,11 @@ namespace VoxelEngine.GridSystem
             _mountedRevision = LayoutRevision;
             if (_container != null) _container.RemoveFromHierarchy();
             if (_compassBar != null) _compassBar.RemoveFromHierarchy();
+            if (_offlineLabel != null) _offlineLabel.RemoveFromHierarchy();
 
             BuildCompass(uiRoot);
             BuildSystemsPanel(uiRoot);
+            BuildOfflineWarning(uiRoot);
 
             Tick();
         }
@@ -215,6 +217,30 @@ namespace VoxelEngine.GridSystem
             _container.Add(_dampLabel);
         }
 
+        private static void BuildOfflineWarning(VisualElement uiRoot)
+        {
+            _offlineLabel = new Label("POWER OFFLINE");
+            _offlineLabel.style.position = Position.Absolute;
+            _offlineLabel.style.top = new StyleLength(new Length(42, LengthUnit.Percent));
+            _offlineLabel.style.left = new StyleLength(new Length(50, LengthUnit.Percent));
+            _offlineLabel.style.translate = new StyleTranslate(new Translate(new Length(-50, LengthUnit.Percent), 0));
+            _offlineLabel.style.paddingLeft = 22;
+            _offlineLabel.style.paddingRight = 22;
+            _offlineLabel.style.paddingTop = 10;
+            _offlineLabel.style.paddingBottom = 10;
+            _offlineLabel.style.fontSize = 22;
+            _offlineLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _offlineLabel.style.letterSpacing = 2.5f;
+            _offlineLabel.style.color = new StyleColor(T.AccentRed);
+            _offlineLabel.style.backgroundColor = new StyleColor(new Color(0.08f, 0.02f, 0.02f, 0.88f));
+            _offlineLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
+            _offlineLabel.pickingMode = PickingMode.Ignore;
+            T.Radius(_offlineLabel, 10);
+            T.Border(_offlineLabel, 1, T.AccentRed);
+            _offlineLabel.style.display = DisplayStyle.None;
+            uiRoot.Add(_offlineLabel);
+        }
+
         private static VisualElement BuildBatteryGauge()
         {
             var col = new VisualElement();
@@ -283,6 +309,7 @@ namespace VoxelEngine.GridSystem
             {
                 _container.style.display = DisplayStyle.None;
                 if (_compassBar != null) _compassBar.style.display = DisplayStyle.None;
+                if (_offlineLabel != null) _offlineLabel.style.display = DisplayStyle.None;
                 return;
             }
 
@@ -305,6 +332,7 @@ namespace VoxelEngine.GridSystem
             {
                 _container.style.display = DisplayStyle.None;
                 if (_compassBar != null) _compassBar.style.display = DisplayStyle.None;
+                if (_offlineLabel != null) _offlineLabel.style.display = DisplayStyle.None;
                 return;
             }
 
@@ -313,6 +341,9 @@ namespace VoxelEngine.GridSystem
             
             var grid = cockpit.Grid;
             float dt = Time.unscaledDeltaTime;
+            bool powerOffline = !cockpit.Enabled || !grid.HasPower;
+            if (_offlineLabel != null)
+                _offlineLabel.style.display = powerOffline ? DisplayStyle.Flex : DisplayStyle.None;
 
             UpdateCompass(grid.transform.eulerAngles.y);
 

@@ -4479,10 +4479,16 @@ root =>
             }
 
             // -- 1) Cockpits --
-            var cockSmallPref = MakeGPref<VoxelEngine.GridSystem.GridCockpit>("Cockpit_Small", new Color(0.2f, 0.4f, 0.8f), new Vector3(0.8f, 0.8f, 1.2f));
-            var cockLargePref = MakeGPref<VoxelEngine.GridSystem.GridCockpit>("Cockpit_Large", new Color(0.2f, 0.4f, 0.8f), new Vector3(2f, 2f, 3f));
+            var cockSmallPref = MakeGPref<VoxelEngine.GridSystem.GridCockpit>("Cockpit_Small", new Color(0.2f, 0.4f, 0.8f), new Vector3(0.8f, 0.8f, 1.2f),
+                c => { c.idleWatts = 50f; });
+            var cockLargePref = MakeGPref<VoxelEngine.GridSystem.GridCockpit>("Cockpit_Large", new Color(0.2f, 0.4f, 0.8f), new Vector3(2f, 2f, 3f),
+                c => { c.idleWatts = 50f; });
             var itemCockSmall = MakeGItem("GItem_CockpitSmall", "Small Cockpit", Color.white, cockSmallPref, VoxelEngine.GridSystem.GridSize.Small, 200, 500);
+            itemCockSmall.description = "Pilot seat and flight control computer for small grids. Requires 50 W idle power; if the cockpit or grid power is offline, flight controls are disabled.";
+            EditorUtility.SetDirty(itemCockSmall);
             var itemCockLarge = MakeGItem("GItem_CockpitLarge", "Large Cockpit", Color.white, cockLargePref, VoxelEngine.GridSystem.GridSize.Large, 1500, 2000);
+            itemCockLarge.description = "Pilot seat and flight control computer for large ships. Requires 50 W idle power; if the cockpit or grid power is offline, flight controls are disabled.";
+            EditorUtility.SetDirty(itemCockLarge);
             AddGRecipe("Recipe_GCockpitSmall", "Small Cockpit", itemCockSmall, (steelPlate, 4), (circuit, 2), (glass, 2));
             AddGRecipe("Recipe_GCockpitLarge", "Large Cockpit", itemCockLarge, (steelPlate, 10), (circuit, 6), (glass, 6));
 

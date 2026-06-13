@@ -22,14 +22,14 @@ namespace VoxelEngine.GridSystem
         [Tooltip("Set true for front (steerable) wheels.")]
         public bool isSteerable;
 
-        public override float PowerDraw => IsGrounded ? 50f : 0f;
+        public override float PowerDraw => Enabled && IsGrounded ? 50f : 0f;
         public bool IsGrounded { get; private set; }
 
         private float _lastSpringLength;
 
         public void UpdateWheel(GridEntity grid)
         {
-            if (grid == null || grid.Body == null) return;
+            if (!Enabled || grid == null || grid.Body == null) return;
 
             Vector3 wheelDown = -transform.up;
             Vector3 wheelPos = transform.position;

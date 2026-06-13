@@ -25,7 +25,7 @@ namespace VoxelEngine.GridSystem
         public float FuelRemaining01 { get; private set; } = 1f;
         public bool IsRunning { get; private set; }
 
-        public override float PowerOutput => IsRunning ? wattsOutput : 0f;
+        public override float PowerOutput => Enabled && IsRunning ? wattsOutput : 0f;
 
         private float _burnTimer;
 

@@ -35,7 +35,7 @@ namespace VoxelEngine.GridSystem
         public float  Progress01 => _current == null ? 0f : Mathf.Clamp01(_progress / Mathf.Max(0.1f, _current.smeltSeconds));
         public float  CurrentWattage { get; private set; }
 
-        public override float PowerDraw => CurrentWattage;
+        public override float PowerDraw => Enabled ? CurrentWattage : 0f;
         public override float ContentMass =>
             (inputC != null ? MassUtil.ContainerMass(inputC) : 0f) + (outputC != null ? MassUtil.ContainerMass(outputC) : 0f);
 
@@ -62,8 +62,9 @@ namespace VoxelEngine.GridSystem
 
         private void FixedUpdate()
         {
+            if (!Enabled || Grid == null) { CurrentWattage = 0f; _progress = 0f; return; }
             CurrentWattage = idleWattsPerSecond;
-            if (!Enabled || Grid == null || !Grid.HasPower) { _progress = 0f; return; }
+            if (!Grid.HasPower) { _progress = 0f; return; }
 
             if (_current == null) _current = FindRecipe();
             if (_current == null) { _progress = 0f; return; }
