@@ -19,7 +19,7 @@ namespace VoxelEngine.GridSystem
         private static Label _speedLabel, _altLabel, _powerLabel, _h2Label, _dampLabel, _batteryValueLabel;
         private static VisualElement _powerFill, _h2Fill, _batteryGaugeFill;
         private static float _smoothSpeed, _smoothAlt, _smoothPower;
-        private const int LayoutRevision = 4;
+        private const int LayoutRevision = 5;
         private static int _mountedRevision;
         
         // Compass. The strip is three full 360° cycles wide so heading wrap-around never
@@ -68,7 +68,7 @@ namespace VoxelEngine.GridSystem
             _compassBar.style.left = new StyleLength(new Length(50, LengthUnit.Percent));
             _compassBar.style.translate = new StyleTranslate(new Translate(new Length(-50, LengthUnit.Percent), 0));
             _compassBar.style.width = COMPASS_WIDTH;
-            _compassBar.style.height = 46;
+            _compassBar.style.height = 54;
             _compassBar.style.backgroundColor = new StyleColor(new Color(0.04f, 0.05f, 0.07f, 0.78f));
             _compassBar.style.overflow = Overflow.Hidden;
             _compassBar.pickingMode = PickingMode.Ignore;
@@ -96,9 +96,9 @@ namespace VoxelEngine.GridSystem
                 var tick = new VisualElement();
                 tick.style.position = Position.Absolute;
                 tick.style.left = x;
-                tick.style.top = cardinal ? 4 : (medium ? 7 : 10);
+                tick.style.top = cardinal ? 23 : (medium ? 26 : 29);
                 tick.style.width = cardinal ? 2 : 1;
-                tick.style.height = cardinal ? 18 : (medium ? 13 : 8);
+                tick.style.height = cardinal ? 16 : (medium ? 12 : 8);
                 tick.style.backgroundColor = new StyleColor(cardinal
                     ? Color.white
                     : (medium ? new Color(0.62f, 0.70f, 0.78f, 0.82f) : new Color(0.42f, 0.48f, 0.55f, 0.58f)));
@@ -109,7 +109,7 @@ namespace VoxelEngine.GridSystem
                 float labelWidth = cardinal ? 48f : 36f;
                 label.style.position = Position.Absolute;
                 label.style.left = x - labelWidth * 0.5f;
-                label.style.top = 23;
+                label.style.top = 36;
                 label.style.width = labelWidth;
                 label.style.unityTextAlign = TextAnchor.MiddleCenter;
                 label.style.fontSize = cardinal ? 13 : (major ? 10 : 9);
@@ -123,17 +123,18 @@ namespace VoxelEngine.GridSystem
 
             var notch = new VisualElement { name = "GridCompassNotch" };
             notch.style.position = Position.Absolute;
-            notch.style.top = 0;
+            notch.style.top = 21;
             notch.style.left = COMPASS_WIDTH / 2f - 1f;
             notch.style.width = 2;
-            notch.style.height = 18;
+            notch.style.height = 12;
             notch.style.backgroundColor = new StyleColor(T.AccentCyan);
             notch.pickingMode = PickingMode.Ignore;
             _compassBar.Add(notch);
 
             _compassCenter = new Label("000°");
             _compassCenter.style.position = Position.Absolute;
-            _compassCenter.style.bottom = 2;
+            _compassCenter.style.top = 2;
+            _compassCenter.style.bottom = StyleKeyword.Auto;
             _compassCenter.style.left = COMPASS_WIDTH / 2f - 36f;
             _compassCenter.style.width = 72;
             _compassCenter.style.height = 18;

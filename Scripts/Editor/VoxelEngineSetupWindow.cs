@@ -4542,7 +4542,7 @@ root =>
 
             // -- 5) Tools & Industrial (Large) --
             var drillPref = MakeGPref<VoxelEngine.GridSystem.GridDrill>("Drill_Large", new Color(0.8f, 0.6f, 0.1f), new Vector3(1.5f, 1.5f, 2.0f),
-                d => { d.drillRadius = 2.25f; d.drillStrength = 160f; d.drillRate = 4f; d.drillReach = 8f; });
+                d => { d.drillRadius = 1.45f; d.drillStrength = 80f; d.drillRate = 1.25f; d.drillReach = 4.5f; d.voidSpeedMultiplier = 2.25f; });
             var itemDrill = MakeGItem("GItem_Drill", "Mining Drill", Color.white, drillPref, VoxelEngine.GridSystem.GridSize.Large, 920, 650);
             AddGRecipe("Recipe_GDrill", "Mining Drill", itemDrill, (steelPlate, 8), (circuit, 4), (copperWire, 6));
 

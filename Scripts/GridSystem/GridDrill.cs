@@ -17,13 +17,13 @@ namespace VoxelEngine.GridSystem
         public const int BUFFER_SLOTS = 4;
 
         [Header("Drill")]
-        public float drillRadius = 2.25f;
-        public float drillStrength = 160f;
-        public float drillRate = 4f;
+        public float drillRadius = 1.45f;
+        public float drillStrength = 80f;
+        public float drillRate = 1.25f;
         [Tooltip("How far ahead of the drill we reach for terrain (metres).")]
-        public float drillReach = 8f;
+        public float drillReach = 4.5f;
         [Tooltip("VOID-mode (RMB) is this many times faster than collect-mode (LMB).")]
-        public float voidSpeedMultiplier = 2.5f;
+        public float voidSpeedMultiplier = 2.25f;
 
         [Tooltip("Log why the drill isn't firing/mining (enable to diagnose).")]
         public bool debugLog = false;
@@ -74,10 +74,14 @@ namespace VoxelEngine.GridSystem
             _isActive = collect || voidDig;
             if (!_isActive) return;
 
-            // Void mode digs faster.
-            float effectiveRate = voidDig && !collect ? drillRate * Mathf.Max(1f, voidSpeedMultiplier) : drillRate;
+            // LMB collect mode is intentionally slower and shallower-feeling; RMB void mode
+            // can still chew faster for clearing tunnels.
+            float lmbRate = Mathf.Min(drillRate, 1.35f);
+            float effectiveRate = voidDig && !collect
+                ? Mathf.Min(drillRate * Mathf.Max(1f, voidSpeedMultiplier), 3.0f)
+                : lmbRate;
             _drillTimer += Time.deltaTime;
-            if (_drillTimer < 1f / effectiveRate) return;
+            if (_drillTimer < 1f / Mathf.Max(0.1f, effectiveRate)) return;
             _drillTimer = 0;
 
             MineForward(collect && !voidDig);
@@ -91,9 +95,9 @@ namespace VoxelEngine.GridSystem
 
             float cs = Grid != null ? Grid.gridSize.CellSize() : 1f;
             Vector3 dir = transform.forward.normalized;
-            float effectiveRadius = Mathf.Max(0.75f, drillRadius * 1.35f);
-            float effectiveReach = Mathf.Max(drillReach, cs * 3f, 8f);
-            float effectiveStrength = Mathf.Max(drillStrength, 160f);
+            float effectiveRadius = Mathf.Clamp(drillRadius * 1.10f, 0.65f, 1.75f);
+            float effectiveReach = Mathf.Clamp(Mathf.Max(drillReach, cs * 1.15f, effectiveRadius * 1.75f), 2.5f, 5.0f);
+            float effectiveStrength = Mathf.Clamp(drillStrength, 45f, 90f);
 
             bool found = TryFindTerrainSurface(dir, effectiveRadius, effectiveReach, out Vector3 carveAt);
             if (!found)
