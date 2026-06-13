@@ -4,6 +4,7 @@
 
 using UnityEngine;
 using VoxelEngine.Settings;
+using InputAction = VoxelEngine.Settings.InputAction;
 #if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
 #endif
