@@ -1147,7 +1147,7 @@ namespace VoxelEngine.EditorTools
                 {
                     var tier = (VoxelEngine.Building.Tiered.BuildTier)t;
                     string name = $"{display}_{tier}";
-                    string path = $"{tieredPrefabs}/{name}.prefab";
+                    string prefabPath = $"{tieredPrefabs}/{name}.prefab";
 
                     // Build root.
                     var root = new GameObject(name);
@@ -1158,7 +1158,7 @@ namespace VoxelEngine.EditorTools
                     root.AddComponent<VoxelEngine.Building.Tiered.PlacedTieredBlock>();
 
                     // Save as prefab.
-                    var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
+                    var prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
                     Object.DestroyImmediate(root);
 
                     if (tier == VoxelEngine.Building.Tiered.BuildTier.Wood)  def.woodPrefab  = prefab;
