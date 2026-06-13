@@ -4428,7 +4428,8 @@ root =>
 
                 var prefab = GetOrCreatePrefab(path, name, (root) => 
                 {
-                    // Persist every generated material as an asset
+                    // Persist every generated material as an asset so rebuilt prefabs never
+                    // reference transient/missing materials (the usual source of pink blocks).
                     EnsureFolder(PREFABS + "/Mats");
                     int matIdx = 0;
                     VoxelEngine.GridSystem.GridBlockMeshBuilder.MaterialPersister = (mat, _) =>
@@ -4439,23 +4440,54 @@ root =>
                         return AssetDatabase.LoadAssetAtPath<Material>(mp);
                     };
 
-                    // Only build if it's an empty prefab
-                    if (root.transform.childCount == 0 && root.GetComponent<MeshFilter>() == null)
+                    try
                     {
-                        VoxelEngine.GridSystem.GridBlockMeshBuilder.Build(root, style, size, color);
+                        bool needsVisualRebuild = root.transform.childCount == 0 && root.GetComponent<MeshFilter>() == null;
+                        if (!needsVisualRebuild)
+                        {
+                            var renderers = root.GetComponentsInChildren<Renderer>(true);
+                            foreach (var renderer in renderers)
+                            {
+                                string shaderName = renderer != null && renderer.sharedMaterial != null && renderer.sharedMaterial.shader != null
+                                    ? renderer.sharedMaterial.shader.name
+                                    : string.Empty;
+                                if (renderer == null || renderer.sharedMaterial == null || renderer.sharedMaterial.shader == null
+                                    || shaderName.Contains("InternalError") || shaderName.Contains("Error"))
+                                {
+                                    needsVisualRebuild = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (needsVisualRebuild)
+                        {
+                            while (root.transform.childCount > 0)
+                                UnityEngine.Object.DestroyImmediate(root.transform.GetChild(0).gameObject);
+
+                            var mf = root.GetComponent<MeshFilter>();
+                            if (mf != null) UnityEngine.Object.DestroyImmediate(mf);
+                            var mr = root.GetComponent<MeshRenderer>();
+                            if (mr != null) UnityEngine.Object.DestroyImmediate(mr);
+
+                            VoxelEngine.GridSystem.GridBlockMeshBuilder.Build(root, style, size, color);
+                        }
+
+                        // Ensure components exist
+                        var box = root.GetComponent<BoxCollider>();
+                        if (box == null) box = root.AddComponent<BoxCollider>();
+                        float cs = VoxelEngine.GridSystem.GridSizeExt.CellSize(size);
+                        box.size = new Vector3(cs, cs, cs);
+
+                        var b = root.GetComponent<T>();
+                        if (b == null) b = root.AddComponent<T>();
+
+                        config?.Invoke(b);
                     }
-                    VoxelEngine.GridSystem.GridBlockMeshBuilder.MaterialPersister = null;
-
-                    // Ensure components exist
-                    var box = root.GetComponent<BoxCollider>();
-                    if (box == null) box = root.AddComponent<BoxCollider>();
-                    float cs = VoxelEngine.GridSystem.GridSizeExt.CellSize(size);
-                    box.size = new Vector3(cs, cs, cs);
-
-                    var b = root.GetComponent<T>();
-                    if (b == null) b = root.AddComponent<T>();
-                    
-                    config?.Invoke(b);
+                    finally
+                    {
+                        VoxelEngine.GridSystem.GridBlockMeshBuilder.MaterialPersister = null;
+                    }
                 });
                 
                 return prefab;
@@ -4792,24 +4824,43 @@ root =>
 
         private static GameObject GetOrCreatePrefab(string path, string name, System.Action<GameObject> onUpdate)
         {
-            GameObject root;
-            bool isNew = false;
-            if (AssetDatabase.LoadMainAssetAtPath(path) != null)
-            {
-                root = PrefabUtility.LoadPrefabContents(path);
-            }
-            else
-            {
-                root = new GameObject(name);
-                isNew = true;
-            }
+            GameObject root = null;
+            bool loadedPrefabContents = false;
 
-            onUpdate?.Invoke(root);
+            try
+            {
+                if (AssetDatabase.LoadMainAssetAtPath(path) != null)
+                {
+                    try
+                    {
+                        root = PrefabUtility.LoadPrefabContents(path);
+                        loadedPrefabContents = true;
+                    }
+                    catch (System.Exception ex)
+                    {
+                        Debug.LogWarning($"[VoxelEngineSetupWindow] Could not load prefab contents at '{path}'. " +
+                                         $"The asset will be recreated. Unity said: {ex.Message}");
+                        AssetDatabase.DeleteAsset(path);
+                    }
+                }
 
-            var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
-            PrefabUtility.UnloadPrefabContents(root);
-            if (isNew) Object.DestroyImmediate(root);
-            return prefab;
+                if (root == null)
+                    root = new GameObject(name);
+
+                onUpdate?.Invoke(root);
+
+                return PrefabUtility.SaveAsPrefabAsset(root, path);
+            }
+            finally
+            {
+                if (root != null)
+                {
+                    if (loadedPrefabContents)
+                        PrefabUtility.UnloadPrefabContents(root);
+                    else
+                        Object.DestroyImmediate(root);
+                }
+            }
         }
     }
 }
