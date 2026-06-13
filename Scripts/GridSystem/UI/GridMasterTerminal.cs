@@ -808,6 +808,7 @@ namespace VoxelEngine.GridSystem.UI
             if (block is GridLandingGear) return "Landing Gear";
             if (block is GridWheel) return "Wheels";
             if (block is GridSolarPanel) return "Solar Panels";
+            if (block is GridHydrogenEngine) return "Hydrogen Engines";
             if (block is GridPortableReactor) return "Portable Reactors";
             if (block is GridElectricFurnace) return "Electric Furnaces";
             if (block is GridDockingPort) return "Docking Ports";

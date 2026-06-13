@@ -32,7 +32,9 @@ namespace VoxelEngine.GridSystem.UI
                 case GridPortableReactor pr: return ReactorPanel(pr, slot);
                 case GridDockingPort dp:    return DockingPortPanel(dp, slot);
                 case GridLandingGear lg:    return LandingGearPanel(lg);
+                case GridWheel wh:          return WheelPanel(wh);
                 case GridSolarPanel sp:     return SolarPanel(sp);
+                case GridHydrogenEngine he: return HydrogenEnginePanel(he);
                 case GridDrill dr:          return DrillPanel(dr, slot);
                 case GridElectricFurnace ef: return FurnacePanel(ef, slot);
                 default:                    return GenericPanel(block);
@@ -509,6 +511,60 @@ namespace VoxelEngine.GridSystem.UI
             return p;
         }
 
+        // ── WHEEL SUSPENSION ─────────────────────────────────────────────────────
+        private static VisualElement WheelPanel(GridWheel wheel)
+        {
+            var p = T.MachinePanel();
+            var (hdr, _, _, _) = T.HeaderRow($"Wheel Suspension {wheel.wheelSizeCells}x{wheel.wheelSizeCells}",
+                wheel.IsGrounded ? "GROUNDED" : "AIRBORNE",
+                wheel.IsGrounded ? T.AccentGreen : T.AccentAmber);
+            p.Add(hdr);
+            p.Add(T.AccentDivider(T.AccentCyan));
+            p.Add(T.StatRow("", "Power Use", PowerFormat.Watts(wheel.PowerDraw), T.AccentGold));
+            p.Add(T.StatRow("", "Drive Force", PowerFormat.Newtons(wheel.driveForce), T.AccentCyan));
+            p.Add(T.StatRow("", "Spring", PowerFormat.Newtons(wheel.springForce), T.AccentCyan));
+            p.Add(T.StatRow("", "Travel", $"{wheel.suspensionLength:0.00} m", T.TextPrimary));
+            p.Add(T.Spacer(6));
+
+            p.Add(GridUIHelpers.SectionTitle("Suspension Tuning"));
+            p.Add(SliderRow("Strength", wheel.suspensionStrength, 0.05f, 1f,
+                v => { wheel.suspensionStrength = v; }, "0%", "100%"));
+            p.Add(SliderRow("Travel", wheel.suspensionLength, 0.5f, 3.5f,
+                v => { wheel.suspensionLength = v; }, "0.5m", "3.5m"));
+            p.Add(SliderRow("Steer", wheel.steerAngle, 0f, 45f,
+                v => { wheel.steerAngle = v; }, "0°", "45°"));
+            p.Add(T.SmallButton(wheel.isSteerable ? "Steering: ON" : "Steering: OFF", () =>
+            {
+                wheel.isSteerable = !wheel.isSteerable;
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, wheel.isSteerable ? T.AccentGreen : T.BgSlot));
+            return p;
+        }
+
+        private static VisualElement SliderRow(string label, float value, float min, float max,
+            System.Action<float> onChanged, string left, string right)
+        {
+            var box = new VisualElement();
+            box.style.marginBottom = 6;
+            var caption = new Label($"{label}: {value:0.##}");
+            caption.style.color = new StyleColor(T.TextSecondary);
+            caption.style.fontSize = 10;
+            caption.style.unityFontStyleAndWeight = FontStyle.Bold;
+            box.Add(caption);
+            var slider = new Slider(min, max) { value = value };
+            slider.RegisterValueChangedCallback(e =>
+            {
+                onChanged?.Invoke(e.newValue);
+                caption.text = $"{label}: {e.newValue:0.##}";
+            });
+            box.Add(slider);
+            var range = new Label($"{left}  —  {right}");
+            range.style.fontSize = 9;
+            range.style.color = new StyleColor(T.TextMuted);
+            box.Add(range);
+            return box;
+        }
+
         // ── SOLAR PANEL ──────────────────────────────────────────────────────────
         private static VisualElement SolarPanel(GridSolarPanel sp)
         {
@@ -531,6 +587,23 @@ namespace VoxelEngine.GridSystem.UI
                 eff >= 0.66f ? T.AccentGreen : eff >= 0.33f ? T.AccentAmber : T.AccentRed, 8, true);
             p.Add(bar);
             p.Add(T.Muted("Output scales with sun angle, shadowing and weather."));
+            return p;
+        }
+
+        // ── HYDROGEN ENGINE ───────────────────────────────────────────────────────
+        private static VisualElement HydrogenEnginePanel(GridHydrogenEngine he)
+        {
+            var p = T.MachinePanel();
+            var (hdr, _, _, _) = T.HeaderRow("Hydrogen Engine",
+                he.IsRunning ? "RUNNING" : "IDLE",
+                he.IsRunning ? T.AccentGreen : T.AccentAmber);
+            p.Add(hdr);
+            p.Add(T.AccentDivider(T.AccentGreen));
+            p.Add(T.StatRow("", "Output", PowerFormat.Watts(he.PowerOutput), T.AccentGreen));
+            p.Add(T.StatRow("", "Hydrogen Use", $"{he.hydrogenPerSecond:0.#} H2/s", T.AccentCyan));
+            if (he.Grid != null)
+                p.Add(T.StatRow("", "Grid Hydrogen", $"{he.Grid.HydrogenStored:0} L", T.AccentCyan));
+            p.Add(T.Muted("Burns the ship's shared hydrogen pool into grid power. Pair with H2/O2 generators and gas tanks."));
             return p;
         }
 

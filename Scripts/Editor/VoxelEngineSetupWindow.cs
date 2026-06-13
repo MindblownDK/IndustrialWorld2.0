@@ -873,6 +873,7 @@ namespace VoxelEngine.EditorTools
             if (n.Contains("wheel"))      return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Wheel;
             if (n.Contains("landing"))    return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.LandingGear;
             if (n.Contains("solar"))      return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.SolarPanel;
+            if (n.Contains("hydrogenengine")) return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.HydrogenEngine;
             if (n.Contains("reactor"))    return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Reactor;
             if (n.Contains("gyroscope"))  return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Gyroscope;
             if (n.Contains("refinery"))   return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Refinery;
@@ -4403,6 +4404,21 @@ root =>
             var tree = AssetDatabase.LoadAssetAtPath<VoxelEngine.Research.ResearchTree>($"{ASSET_ROOT}/Research/ResearchTree.asset");
 
             // -- Helpers --
+            float RealisticGridMass(string display, VoxelEngine.GridSystem.GridSize size, float authoredMass)
+            {
+                float scale = size == VoxelEngine.GridSystem.GridSize.Small ? 3.5f : 8.0f;
+                float floor = size == VoxelEngine.GridSystem.GridSize.Small ? 180f : 2500f;
+                string n = (display ?? string.Empty).ToLowerInvariant();
+                if (n.Contains("armor")) floor = size == VoxelEngine.GridSystem.GridSize.Small ? 450f : 10000f;
+                else if (n.Contains("cargo")) floor = size == VoxelEngine.GridSystem.GridSize.Small ? 900f : 8500f;
+                else if (n.Contains("cockpit")) floor = size == VoxelEngine.GridSystem.GridSize.Small ? 700f : 12000f;
+                else if (n.Contains("5x5")) floor = 12000f;
+                else if (n.Contains("3x3")) floor = 6500f;
+                else if (n.Contains("2x2")) floor = 3200f;
+                else if (n.Contains("wheel")) floor = 2200f;
+                return Mathf.Max(authoredMass * scale, floor);
+            }
+
             VoxelEngine.GridSystem.GridBlockItem MakeGItem(string assetName, string display, Color tint, 
                 GameObject prefab, VoxelEngine.GridSystem.GridSize size, float mass, float hp)
             {
@@ -4411,7 +4427,7 @@ root =>
                 if (b == null) { b = ScriptableObject.CreateInstance<VoxelEngine.GridSystem.GridBlockItem>(); AssetDatabase.CreateAsset(b, path); }
                 b.itemId = assetName.ToLower(); b.displayName = display; b.iconTint = tint;
                 b.maxStack = 20; b.gridSize = size; b.blockPrefab = prefab;
-                b.blockMass = mass; b.blockHP = hp; b.category = "Grid Blocks";
+                b.blockMass = RealisticGridMass(display, size, mass); b.blockHP = hp; b.category = "Grid Blocks";
                 EditorUtility.SetDirty(b);
                 return b;
             }
@@ -4643,9 +4659,41 @@ root =>
             AddGRecipe("Recipe_GDockingPort", "Docking Port", itemDock, (steelPlate, 5), (circuit, 2), (copperWire, 4));
 
             // -- 8) Mobility & Landing --
-            var wheelPref = MakeGPref<VoxelEngine.GridSystem.GridWheel>("Wheel_Large", new Color(0.12f, 0.12f, 0.12f), new Vector3(1.2f, 1.2f, 0.6f), w => { w.driveForce = 15000f; w.steerAngle = 30f; });
-            var itemWheel = MakeGItem("GItem_Wheel", "Wheel", Color.white, wheelPref, VoxelEngine.GridSystem.GridSize.Large, 220, 400);
-            AddGRecipe("Recipe_GWheel", "Wheel", itemWheel, (steelPlate, 3), (copperWire, 2));
+            void MakeWheel(string id, string display, int cells, float mass, float hp,
+                float drive, float spring, float damping, float travel, float watts,
+                params (VoxelEngine.Items.ItemDefinition item, int n)[] cost)
+            {
+                var pref = MakeGPref<VoxelEngine.GridSystem.GridWheel>(id, new Color(0.12f, 0.12f, 0.12f), Vector3.one,
+                    w =>
+                    {
+                        w.wheelSizeCells = cells;
+                        w.driveForce = drive;
+                        w.springForce = spring;
+                        w.damping = damping;
+                        w.suspensionLength = travel;
+                        w.powerDrawWatts = watts;
+                        w.steerAngle = 30f;
+                        var box = w.GetComponent<BoxCollider>();
+                        if (box != null)
+                        {
+                            float cs = VoxelEngine.GridSystem.GridSizeExt.CellSize(VoxelEngine.GridSystem.GridSize.Large);
+                            box.size = new Vector3(cs * Mathf.Max(1f, cells * 0.65f), cs * Mathf.Max(1.2f, cells * 0.95f), cs * Mathf.Max(1f, cells * 0.65f));
+                            box.center = new Vector3(0f, -cs * cells * 0.22f, 0f);
+                        }
+                    });
+                var item = MakeGItem("GItem_" + id, display, Color.white, pref, VoxelEngine.GridSystem.GridSize.Large, mass, hp);
+                AddGRecipe("Recipe_G" + id, display, item, cost);
+            }
+
+            MakeWheel("Wheel_2x2", "Wheel Suspension 2x2", 2, 1100, 450,
+                45000f, 90000f, 12000f, 1.0f, 150f,
+                (steelPlate, 3), (ironPlate, 2), (copperWire, 2));
+            MakeWheel("Wheel_3x3", "Wheel Suspension 3x3", 3, 2400, 650,
+                75000f, 150000f, 19000f, 1.45f, 300f,
+                (steelPlate, 5), (ironPlate, 4), (copperWire, 4), (ironGear, 2));
+            MakeWheel("Wheel_5x5", "Wheel Suspension 5x5", 5, 6200, 1000,
+                155000f, 300000f, 36000f, 2.35f, 750f,
+                (steelPlate, 10), (ironPlate, 8), (copperWire, 8), (ironGear, 6), (circuit, 1));
 
             var gearPref = MakeGPref<VoxelEngine.GridSystem.GridLandingGear>("LandingGear_Large", new Color(0.5f, 0.5f, 0.55f), new Vector3(0.8f, 1.0f, 0.8f));
             var itemGear = MakeGItem("GItem_LandingGear", "Landing Gear", Color.white, gearPref, VoxelEngine.GridSystem.GridSize.Large, 480, 450);
@@ -4674,6 +4722,11 @@ root =>
             var h2o2Pref = MakeGPref<VoxelEngine.GridSystem.GridH2O2Generator>("H2O2Generator_Large", new Color(0.3f, 0.7f, 0.9f), new Vector3(1.5f, 1.5f, 2.0f));
             var itemH2O2 = MakeGItem("GItem_H2O2Generator", "H2/O2 Generator", Color.white, h2o2Pref, VoxelEngine.GridSystem.GridSize.Large, 600, 700);
             AddGRecipe("Recipe_GH2O2Generator", "H2/O2 Generator", itemH2O2, (steelPlate, 8), (circuit, 4), (copperWire, 8));
+
+            var hydrogenEngineGridPref = MakeGPref<VoxelEngine.GridSystem.GridHydrogenEngine>("HydrogenEngine_Large", new Color(0.20f, 0.85f, 0.35f), new Vector3(1.5f, 1.2f, 1.5f),
+                e => { e.wattsOutput = 12000f; e.hydrogenPerSecond = 6f; e.minHydrogenToRun = 0.25f; });
+            var itemHydrogenEngineGrid = MakeGItem("GItem_HydrogenEngine", "Hydrogen Engine", Color.white, hydrogenEngineGridPref, VoxelEngine.GridSystem.GridSize.Large, 950, 700);
+            AddGRecipe("Recipe_GHydrogenEngine", "Hydrogen Engine", itemHydrogenEngineGrid, (steelPlate, 8), (ironPlate, 4), (circuit, 4), (copperWire, 8));
 
             // -- 11) Structure / Misc --
             var glassPref = MakeGPref<VoxelEngine.GridSystem.GridGlassBlock>("Glass_Small", new Color(0.7f, 0.85f, 0.95f, 0.5f), new Vector3(0.5f, 0.5f, 0.5f));
@@ -4778,8 +4831,8 @@ root =>
                 $"Step 12 complete — generated {recipes.Count} grid blocks (prefabs + items + recipes) in:\n{GRID_ROOT}\n\n" +
                 "• Cockpit, Thruster, Battery, Armor (Small + Large)\n" +
                 "• Drill, Grinder, Refinery, Weapon, Demolisher (Large)\n" +
-                "• Cargo, Item Pipe, Docking Port, Wheel, Landing Gear\n" +
-                "• Solar Panel, Portable Reactor, Water/Fuel/Gas Tanks, H2/O2 Gen\n" +
+                "• Cargo, Item Pipe, Docking Port, 2x2 / 3x3 / 5x5 Wheel Suspensions, Landing Gear\n" +
+                "• Solar Panel, Portable Reactor, Hydrogen Engine, Water/Fuel/Gas Tanks, H2/O2 Gen\n" + 
                 "• Glass Block, Chemical Plant\n\n" +
                 "Grid Refinery shares the SAME ProcessingRecipes as the Oil Refinery.\n" +
                 "Recipes registered and gated behind Shipbuilding / Ship Armament research.", "OK");

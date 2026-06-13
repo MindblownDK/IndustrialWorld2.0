@@ -23,6 +23,10 @@ namespace VoxelEngine.GridSystem
         [Header("Grid")]
         public GridSize gridSize = GridSize.Large;
 
+        [Header("Physics")]
+        [Tooltip("Extra gravity scale for grid physics. Ships are large/heavy objects and need a slightly stronger fall to feel grounded at game scale.")]
+        public float gravityScale = 1.35f;
+
         // ── Block storage ──────────────────────────────────────────
         private readonly Dictionary<Vector3Int, GridBlock> _blocks = new();
         public IReadOnlyDictionary<Vector3Int, GridBlock> Blocks => _blocks;
@@ -153,6 +157,8 @@ namespace VoxelEngine.GridSystem
             // the exact same acceleration and hold a ship perfectly still in hover.
             // Leaving Unity's built-in gravity enabled doubled gravity and made hovering drift down.
             _rb.useGravity = false;
+            _rb.linearDamping = 0f;
+            _rb.angularDamping = 1.5f;
             _rb.interpolation = RigidbodyInterpolation.Interpolate;
             _rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
         }
@@ -177,7 +183,7 @@ namespace VoxelEngine.GridSystem
 
         private Vector3 CurrentGravityAcceleration()
         {
-            return Physics.gravity * AtmosphereManager.GetGravityMultiplier(transform.position);
+            return Physics.gravity * AtmosphereManager.GetGravityMultiplier(transform.position) * Mathf.Max(0f, gravityScale);
         }
 
         private bool HasManualThrustInput()
@@ -303,10 +309,26 @@ namespace VoxelEngine.GridSystem
             foreach (var kv in _blocks)
             {
                 if (kv.Value == null) continue;
-                mass += kv.Value.TotalMass; // BlockMass + ContentMass
+                mass += Mathf.Max(kv.Value.TotalMass, MinimumRuntimeBlockMass(kv.Value));
             }
             TotalMass = mass;
             _rb.mass = Mathf.Max(1f, mass);
+        }
+
+        private float MinimumRuntimeBlockMass(GridBlock block)
+        {
+            if (block == null) return 1f;
+            bool small = gridSize == GridSize.Small;
+            if (block is GridArmorBlock) return small ? 450f : 10000f;
+            if (block is GridCockpit) return small ? 700f : 12000f;
+            if (block is GridCargoContainer) return small ? 900f : 8500f;
+            if (block is GridWheel wheel)
+            {
+                if (wheel.wheelSizeCells >= 5) return 12000f;
+                if (wheel.wheelSizeCells >= 3) return 6500f;
+                return 3200f;
+            }
+            return small ? 180f : 2500f;
         }
 
         // Content mass changes constantly (items dragged in/out, fluids filling).
@@ -467,6 +489,8 @@ namespace VoxelEngine.GridSystem
             var rb = go.AddComponent<Rigidbody>();
             rb.mass = 1f;
             rb.useGravity = false;
+            rb.linearDamping = 0f;
+            rb.angularDamping = 1.5f;
             var entity = go.AddComponent<GridEntity>();
             entity.gridSize = size;
             return entity;

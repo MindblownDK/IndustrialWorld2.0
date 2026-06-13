@@ -16,7 +16,7 @@ namespace VoxelEngine.GridSystem
         {
             Armor, Cockpit, Thruster, Battery, Cargo, Drill, Grinder, Refinery,
             Weapon, DockingPort, Wheel, LandingGear, SolarPanel, Reactor,
-            LiquidTank, GasTank, H2O2, ChemicalPlant, Glass, Demolisher, ItemPipe,
+            LiquidTank, GasTank, H2O2, HydrogenEngine, ChemicalPlant, Glass, Demolisher, ItemPipe,
             GasPipe, LiquidPipe, Gyroscope, Generic
         }
 
@@ -56,6 +56,7 @@ namespace VoxelEngine.GridSystem
                 case Style.DockingPort:  BuildDockingPort(root, cs, body, metal, glow); break;
                 case Style.Wheel:        BuildWheel(root, cs, dark, metal); break;
                 case Style.LandingGear:  BuildLandingGear(root, cs, metal); break;
+                case Style.HydrogenEngine: BuildHydrogenEngine(root, cs, body, metal, glow); break;
                 case Style.SolarPanel:   BuildSolarPanel(root, cs, metal); break;
                 case Style.Reactor:      BuildReactor(root, cs, body, metal, glow); break;
                 case Style.H2O2:
@@ -173,10 +174,64 @@ namespace VoxelEngine.GridSystem
 
         private static void BuildWheel(GameObject r, float cs, Material body, Material metal)
         {
-            var tyre = Cyl(r, body, V0, cs*0.46f, cs*0.28f);
+            int cells = 3;
+            string lowerName = r.name.ToLowerInvariant();
+            if (lowerName.Contains("2x2")) cells = 2;
+            else if (lowerName.Contains("5x5")) cells = 5;
+
+            float radius = cs * cells * 0.5f;
+            float width = cs * Mathf.Lerp(0.34f, 0.56f, Mathf.InverseLerp(2f, 5f, cells));
+            float mountY = cs * 0.38f;
+            float wheelY = -radius * 0.48f;
+
+            // Grid attachment / suspension housing.
+            Box(r, metal, new Vector3(0, mountY, 0), new Vector3(cs * 0.82f, cs * 0.34f, cs * 0.82f));
+            Box(r, metal, new Vector3(0, mountY - cs * 0.34f, 0), new Vector3(cs * 0.18f, cs * 0.70f, cs * 0.18f));
+
+            // Twin visible suspension pistons.
+            var pistonA = Cyl(r, metal, new Vector3(-width * 0.35f, (mountY + wheelY) * 0.5f, 0), cs * 0.055f, Mathf.Abs(mountY - wheelY));
+            pistonA.transform.localRotation = Quaternion.identity;
+            var pistonB = Cyl(r, metal, new Vector3(width * 0.35f, (mountY + wheelY) * 0.5f, 0), cs * 0.055f, Mathf.Abs(mountY - wheelY));
+            pistonB.transform.localRotation = Quaternion.identity;
+
+            // Steering fork / axle.
+            Box(r, metal, new Vector3(0, wheelY + radius * 0.12f, 0), new Vector3(width * 1.45f, cs * 0.12f, cs * 0.16f));
+            Box(r, metal, new Vector3(-width * 0.70f, wheelY, 0), new Vector3(cs * 0.12f, radius * 0.85f, cs * 0.14f));
+            Box(r, metal, new Vector3( width * 0.70f, wheelY, 0), new Vector3(cs * 0.12f, radius * 0.85f, cs * 0.14f));
+
+            // Visual pivot used by GridWheel to steer the tire without rotating the grid root.
+            var pivot = new GameObject("WheelVisualPivot");
+            pivot.transform.SetParent(r.transform, false);
+            pivot.transform.localPosition = new Vector3(0, wheelY, 0);
+
+            // Tyre + hub, cylinder axis along local X for SE-style side wheel.
+            var tyre = Cyl(pivot, body, V0, radius, width);
             tyre.transform.localRotation = Quaternion.Euler(0, 0, 90);
-            var hub = Cyl(r, metal, V0, cs*0.2f, cs*0.32f);
+            var hub = Cyl(pivot, metal, V0, radius * 0.35f, width * 1.12f);
             hub.transform.localRotation = Quaternion.Euler(0, 0, 90);
+
+            // Tread bars around the outer face.
+            for (int i = 0; i < 12; i++)
+            {
+                float a = i / 12f * Mathf.PI * 2f;
+                var tread = Box(pivot, metal,
+                    new Vector3(0, Mathf.Sin(a) * radius * 0.78f, Mathf.Cos(a) * radius * 0.78f),
+                    new Vector3(width * 1.08f, cs * 0.055f, cs * 0.16f));
+                tread.transform.localRotation = Quaternion.Euler(Mathf.Rad2Deg * a, 0, 0);
+            }
+        }
+
+        private static void BuildHydrogenEngine(GameObject r, float cs, Material body, Material metal, Material glow)
+        {
+            Box(r, body, V0, One(cs) * 0.92f);
+            Box(r, metal, new Vector3(0, -cs * 0.26f, cs * 0.42f), new Vector3(cs * 0.68f, cs * 0.22f, cs * 0.12f));
+            Box(r, glow, new Vector3(0, cs * 0.10f, cs * 0.48f), new Vector3(cs * 0.56f, cs * 0.16f, cs * 0.04f));
+            var cellA = Cyl(r, metal, new Vector3(-cs * 0.26f, 0, -cs * 0.10f), cs * 0.13f, cs * 0.70f);
+            cellA.transform.localRotation = Quaternion.Euler(90, 0, 0);
+            var cellB = Cyl(r, metal, new Vector3( cs * 0.26f, 0, -cs * 0.10f), cs * 0.13f, cs * 0.70f);
+            cellB.transform.localRotation = Quaternion.Euler(90, 0, 0);
+            var exhaust = Cyl(r, metal, new Vector3(0, 0, -cs * 0.48f), cs * 0.22f, cs * 0.22f);
+            exhaust.transform.localRotation = Quaternion.Euler(90, 0, 0);
         }
 
         private static void BuildLandingGear(GameObject r, float cs, Material metal)
