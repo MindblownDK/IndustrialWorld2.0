@@ -4459,7 +4459,8 @@ root =>
 
                     try
                     {
-                        bool needsVisualRebuild = root.transform.childCount == 0 && root.GetComponent<MeshFilter>() == null;
+                        bool needsVisualRebuild = name.ToLowerInvariant().Contains("wheel")
+                            || root.transform.childCount == 0 && root.GetComponent<MeshFilter>() == null;
                         if (!needsVisualRebuild)
                         {
                             var renderers = root.GetComponentsInChildren<Renderer>(true);
@@ -4645,15 +4646,21 @@ root =>
             var itemPipe = MakeGItem("GItem_ItemPipe", "Item Pipe", Color.white, pipePref, VoxelEngine.GridSystem.GridSize.Small, 30, 120);
             AddGRecipe("Recipe_GItemPipe", "Item Pipe", itemPipe, (ironPlate, 1), (copperWire, 1));
 
-            // Gas pipe — distributes hydrogen to thrusters grid-wide.
+            // Gas pipes — required for hydrogen/oxygen transfer between tanks, H2/O2 generators and engines.
             var gasPipePref = MakeGPref<VoxelEngine.GridSystem.GridGasPipe>("GasPipe_Small", new Color(0.4f, 0.7f, 0.9f), new Vector3(0.3f, 0.3f, 0.8f), p => p.throughput = 50f);
-            var gasPipe = MakeGItem("GItem_GasPipe", "Gas Pipe", Color.white, gasPipePref, VoxelEngine.GridSystem.GridSize.Small, 30, 120);
-            AddGRecipe("Recipe_GGasPipe", "Gas Pipe", gasPipe, (ironPlate, 1), (glass, 1));
+            var gasPipe = MakeGItem("GItem_GasPipe", "Small Gas Pipe", Color.white, gasPipePref, VoxelEngine.GridSystem.GridSize.Small, 30, 120);
+            AddGRecipe("Recipe_GGasPipe", "Small Gas Pipe", gasPipe, (ironPlate, 1), (glass, 1));
+            var gasPipeLargePref = MakeGPref<VoxelEngine.GridSystem.GridGasPipe>("GasPipe_Large", new Color(0.4f, 0.7f, 0.9f), Vector3.one, p => p.throughput = 250f);
+            var gasPipeLarge = MakeGItem("GItem_GasPipeLarge", "Large Gas Pipe", Color.white, gasPipeLargePref, VoxelEngine.GridSystem.GridSize.Large, 240, 260);
+            AddGRecipe("Recipe_GGasPipeLarge", "Large Gas Pipe", gasPipeLarge, (ironPlate, 2), (glass, 2), (copperWire, 1));
 
-            // Liquid pipe — connects liquid tanks + machines grid-wide.
+            // Liquid pipes — required for liquid transfer between tanks and processors.
             var liqPipePref = MakeGPref<VoxelEngine.GridSystem.GridLiquidPipe>("LiquidPipe_Small", new Color(0.3f, 0.5f, 0.85f), new Vector3(0.3f, 0.3f, 0.8f), p => p.throughput = 50f);
-            var liqPipe = MakeGItem("GItem_LiquidPipe", "Liquid Pipe", Color.white, liqPipePref, VoxelEngine.GridSystem.GridSize.Small, 30, 120);
-            AddGRecipe("Recipe_GLiquidPipe", "Liquid Pipe", liqPipe, (ironPlate, 1), (copperWire, 1));
+            var liqPipe = MakeGItem("GItem_LiquidPipe", "Small Liquid Pipe", Color.white, liqPipePref, VoxelEngine.GridSystem.GridSize.Small, 30, 120);
+            AddGRecipe("Recipe_GLiquidPipe", "Small Liquid Pipe", liqPipe, (ironPlate, 1), (copperWire, 1));
+            var liqPipeLargePref = MakeGPref<VoxelEngine.GridSystem.GridLiquidPipe>("LiquidPipe_Large", new Color(0.3f, 0.5f, 0.85f), Vector3.one, p => p.throughput = 250f);
+            var liqPipeLarge = MakeGItem("GItem_LiquidPipeLarge", "Large Liquid Pipe", Color.white, liqPipeLargePref, VoxelEngine.GridSystem.GridSize.Large, 260, 260);
+            AddGRecipe("Recipe_GLiquidPipeLarge", "Large Liquid Pipe", liqPipeLarge, (steelPlate, 1), (copperWire, 2));
 
             var dockPref = MakeGPref<VoxelEngine.GridSystem.GridDockingPort>("DockingPort_Large", new Color(0.6f, 0.6f, 0.2f), new Vector3(1.5f, 0.5f, 1.5f));
             var itemDock = MakeGItem("GItem_DockingPort", "Docking Port", Color.white, dockPref, VoxelEngine.GridSystem.GridSize.Large, 410, 500);

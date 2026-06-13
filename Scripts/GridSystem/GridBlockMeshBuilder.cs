@@ -180,44 +180,66 @@ namespace VoxelEngine.GridSystem
             else if (lowerName.Contains("5x5")) cells = 5;
 
             float radius = cs * cells * 0.5f;
-            float width = cs * Mathf.Lerp(0.34f, 0.56f, Mathf.InverseLerp(2f, 5f, cells));
-            float mountY = cs * 0.38f;
-            float wheelY = -radius * 0.48f;
+            float width = cs * Mathf.Lerp(0.38f, 0.62f, Mathf.InverseLerp(2f, 5f, cells));
+            float mountY = cs * 0.42f;
+            float wheelY = -radius * 0.45f;
+            var rubber = Mat(new Color(0.025f, 0.026f, 0.030f), 0.25f, 0.28f);
+            var rim = Mat(new Color(0.42f, 0.44f, 0.48f), 0.85f, 0.50f);
+            var piston = Mat(new Color(0.72f, 0.74f, 0.78f), 0.95f, 0.68f);
 
-            // Grid attachment / suspension housing.
-            Box(r, metal, new Vector3(0, mountY, 0), new Vector3(cs * 0.82f, cs * 0.34f, cs * 0.82f));
-            Box(r, metal, new Vector3(0, mountY - cs * 0.34f, 0), new Vector3(cs * 0.18f, cs * 0.70f, cs * 0.18f));
+            // Cell attachment, suspension body and armored shoulders.
+            Box(r, metal, new Vector3(0, mountY, 0), new Vector3(cs * 0.95f, cs * 0.34f, cs * 0.90f));
+            Box(r, body,  new Vector3(0, mountY - cs * 0.27f, 0), new Vector3(cs * 0.56f, cs * 0.45f, cs * 0.56f));
+            Box(r, metal, new Vector3(-width * 0.72f, mountY - cs * 0.20f, 0), new Vector3(cs * 0.16f, cs * 0.42f, cs * 0.62f));
+            Box(r, metal, new Vector3( width * 0.72f, mountY - cs * 0.20f, 0), new Vector3(cs * 0.16f, cs * 0.42f, cs * 0.62f));
 
-            // Twin visible suspension pistons.
-            var pistonA = Cyl(r, metal, new Vector3(-width * 0.35f, (mountY + wheelY) * 0.5f, 0), cs * 0.055f, Mathf.Abs(mountY - wheelY));
+            // Hydraulic suspension pistons and guide rails.
+            float pistonHeight = Mathf.Abs(mountY - wheelY) * 0.82f;
+            var pistonA = Cyl(r, piston, new Vector3(-width * 0.34f, (mountY + wheelY) * 0.5f, -cs * 0.18f), cs * 0.045f, pistonHeight);
             pistonA.transform.localRotation = Quaternion.identity;
-            var pistonB = Cyl(r, metal, new Vector3(width * 0.35f, (mountY + wheelY) * 0.5f, 0), cs * 0.055f, Mathf.Abs(mountY - wheelY));
+            var pistonB = Cyl(r, piston, new Vector3( width * 0.34f, (mountY + wheelY) * 0.5f, -cs * 0.18f), cs * 0.045f, pistonHeight);
             pistonB.transform.localRotation = Quaternion.identity;
+            Box(r, metal, new Vector3(-width * 0.50f, (mountY + wheelY) * 0.5f, cs * 0.18f), new Vector3(cs * 0.09f, pistonHeight, cs * 0.09f));
+            Box(r, metal, new Vector3( width * 0.50f, (mountY + wheelY) * 0.5f, cs * 0.18f), new Vector3(cs * 0.09f, pistonHeight, cs * 0.09f));
 
-            // Steering fork / axle.
-            Box(r, metal, new Vector3(0, wheelY + radius * 0.12f, 0), new Vector3(width * 1.45f, cs * 0.12f, cs * 0.16f));
-            Box(r, metal, new Vector3(-width * 0.70f, wheelY, 0), new Vector3(cs * 0.12f, radius * 0.85f, cs * 0.14f));
-            Box(r, metal, new Vector3( width * 0.70f, wheelY, 0), new Vector3(cs * 0.12f, radius * 0.85f, cs * 0.14f));
+            // Steering fork and axle yoke.
+            Box(r, metal, new Vector3(0, wheelY + radius * 0.18f, 0), new Vector3(width * 1.65f, cs * 0.13f, cs * 0.18f));
+            Box(r, metal, new Vector3(-width * 0.82f, wheelY, 0), new Vector3(cs * 0.13f, radius * 0.90f, cs * 0.16f));
+            Box(r, metal, new Vector3( width * 0.82f, wheelY, 0), new Vector3(cs * 0.13f, radius * 0.90f, cs * 0.16f));
 
-            // Visual pivot used by GridWheel to steer the tire without rotating the grid root.
+            // Steering pivot used by GridWheel. TireSpinPivot spins the tire separately.
             var pivot = new GameObject("WheelVisualPivot");
             pivot.transform.SetParent(r.transform, false);
             pivot.transform.localPosition = new Vector3(0, wheelY, 0);
+            var spin = new GameObject("TireSpinPivot");
+            spin.transform.SetParent(pivot.transform, false);
 
-            // Tyre + hub, cylinder axis along local X for SE-style side wheel.
-            var tyre = Cyl(pivot, body, V0, radius, width);
+            // Tyre, rim side plates, hub and bolts. Cylinder axis along local X.
+            var tyre = Cyl(spin, rubber, V0, radius, width);
             tyre.transform.localRotation = Quaternion.Euler(0, 0, 90);
-            var hub = Cyl(pivot, metal, V0, radius * 0.35f, width * 1.12f);
+            var sideA = Cyl(spin, rim, new Vector3(-width * 0.52f, 0, 0), radius * 0.54f, cs * 0.055f);
+            sideA.transform.localRotation = Quaternion.Euler(0, 0, 90);
+            var sideB = Cyl(spin, rim, new Vector3( width * 0.52f, 0, 0), radius * 0.54f, cs * 0.055f);
+            sideB.transform.localRotation = Quaternion.Euler(0, 0, 90);
+            var hub = Cyl(spin, metal, V0, radius * 0.26f, width * 1.22f);
             hub.transform.localRotation = Quaternion.Euler(0, 0, 90);
 
-            // Tread bars around the outer face.
-            for (int i = 0; i < 12; i++)
+            // Deep tread blocks around the tyre.
+            int treadCount = cells >= 5 ? 24 : cells == 3 ? 18 : 14;
+            for (int i = 0; i < treadCount; i++)
             {
-                float a = i / 12f * Mathf.PI * 2f;
-                var tread = Box(pivot, metal,
-                    new Vector3(0, Mathf.Sin(a) * radius * 0.78f, Mathf.Cos(a) * radius * 0.78f),
-                    new Vector3(width * 1.08f, cs * 0.055f, cs * 0.16f));
+                float a = i / (float)treadCount * Mathf.PI * 2f;
+                var tread = Box(spin, metal,
+                    new Vector3(0, Mathf.Sin(a) * radius * 0.94f, Mathf.Cos(a) * radius * 0.94f),
+                    new Vector3(width * 1.05f, cs * 0.075f, cs * 0.22f));
                 tread.transform.localRotation = Quaternion.Euler(Mathf.Rad2Deg * a, 0, 0);
+            }
+
+            // Rim bolts on the visible side.
+            for (int i = 0; i < 8; i++)
+            {
+                float a = i / 8f * Mathf.PI * 2f;
+                Sphere(spin, metal, new Vector3(width * 0.58f, Mathf.Sin(a) * radius * 0.30f, Mathf.Cos(a) * radius * 0.30f), cs * 0.055f);
             }
         }
 

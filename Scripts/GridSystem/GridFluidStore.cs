@@ -1,8 +1,8 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridFluidStore.cs
 //
-// IFluidStore backed by the GridLiquidTank blocks on a grid, so grid machines
-// (Ship Refinery, Ship Chemical Plant) run the SAME fluid recipes as their
-// stationary counterparts.
+// IFluidStore backed by the GridLiquidTank blocks on a grid. Liquid transfer is
+// enabled only when the grid has liquid pipes, so processors need visible pipe
+// infrastructure instead of magically reaching every tank.
 
 using System.Collections.Generic;
 using VoxelEngine.Crafting;
@@ -18,14 +18,18 @@ namespace VoxelEngine.GridSystem
         private IEnumerable<GridLiquidTank> Tanks()
         {
             if (_grid == null) yield break;
+            if (GridLiquidNetwork.Instance != null && !GridLiquidNetwork.Instance.HasPipes(_grid)) yield break;
+
             // Prefer the registered network; fall back to scanning the grid's blocks.
             if (GridLiquidNetwork.Instance != null)
             {
-                foreach (var t in GridLiquidNetwork.Instance.GetTanks(_grid)) if (t != null) yield return t;
+                foreach (var t in GridLiquidNetwork.Instance.GetTanks(_grid))
+                    if (t != null && t.mode != GridTankMode.Stockpile) yield return t;
             }
             else
             {
-                foreach (var kv in _grid.Blocks) if (kv.Value is GridLiquidTank t) yield return t;
+                foreach (var kv in _grid.Blocks)
+                    if (kv.Value is GridLiquidTank t && t.mode != GridTankMode.Stockpile) yield return t;
             }
         }
 

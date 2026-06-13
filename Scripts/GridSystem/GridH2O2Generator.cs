@@ -110,14 +110,16 @@ namespace VoxelEngine.GridSystem
                 }
             }
 
-            // 3) Feed the grid hydrogen pool from the H2 tank (thrusters consume it).
-            if (h2Stored > 0f)
+            // 3) Feed the grid gas pools only when gas pipes exist. This makes gas
+            // transfer require visible pipe infrastructure instead of magic sharing.
+            bool hasGasPipes = GridGasNetwork.Instance != null && GridGasNetwork.Instance.HasPipes(Grid);
+            if (hasGasPipes && h2Stored > 0f)
             {
                 float feed = Mathf.Min(h2Stored, 30f * dt);
                 h2Stored -= feed;
                 Grid.HydrogenStored += feed;
             }
-            if (o2Stored > 0f)
+            if (hasGasPipes && o2Stored > 0f)
             {
                 float feed = Mathf.Min(o2Stored, 30f * dt);
                 o2Stored -= feed;
@@ -144,7 +146,7 @@ namespace VoxelEngine.GridSystem
         // Draw liquid water from connected Liquid Tanks set to Water.
         private void PullWaterFromTanks(float dt)
         {
-            if (Grid == null || GridLiquidNetwork.Instance == null) return;
+            if (Grid == null || GridLiquidNetwork.Instance == null || !GridLiquidNetwork.Instance.HasPipes(Grid)) return;
             float want = waterPerSecond * 2f * dt;
             foreach (var t in GridLiquidNetwork.Instance.GetTanks(Grid, LiquidType.Water))
             {

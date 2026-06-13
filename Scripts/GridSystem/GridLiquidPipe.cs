@@ -1,9 +1,7 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridLiquidPipe.cs
 //
-// Liquid pipe (grid only). Like the gas pipe, it's a passive connector — the
-// grid's liquid tanks are already pooled entity-wide by GridLiquidNetwork, so a
-// machine (Ship Refinery / Chemical Plant) draws from / fills any connected
-// Liquid Tank automatically. The pipe lets players lay out a visible network.
+// Liquid pipe (grid only). Registers with GridLiquidNetwork so liquid tanks and
+// processors only share fluids when the ship has an authored pipe network.
 
 using UnityEngine;
 
@@ -18,6 +16,15 @@ namespace VoxelEngine.GridSystem
         {
             base.OnPlaced();
             blockName = "Liquid Pipe";
+            if (Grid != null && GridLiquidNetwork.Instance != null)
+                GridLiquidNetwork.Instance.RegisterPipe(Grid, this);
+        }
+
+        public override void OnRemoved()
+        {
+            base.OnRemoved();
+            if (Grid != null && GridLiquidNetwork.Instance != null)
+                GridLiquidNetwork.Instance.UnregisterPipe(Grid, this);
         }
     }
 }

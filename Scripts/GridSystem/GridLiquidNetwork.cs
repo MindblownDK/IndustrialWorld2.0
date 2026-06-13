@@ -1,8 +1,7 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridLiquidNetwork.cs
 //
-// Registry of liquid tanks per grid. Phase 2 only tracks tanks so machines and
-// UIs can find them; the full liquid-pipe transport behaviour arrives in a
-// later phase (grid liquid pipes).
+// Registry of liquid tanks and pipe segments per grid. Grid machines use this
+// network to decide whether fluids may move between tanks and processors.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -28,6 +27,7 @@ namespace VoxelEngine.GridSystem
         }
 
         private readonly Dictionary<GridEntity, List<GridLiquidTank>> _tanks = new();
+        private readonly Dictionary<GridEntity, List<GridLiquidPipe>> _pipes = new();
 
         private void Awake()
         {
@@ -46,6 +46,21 @@ namespace VoxelEngine.GridSystem
         {
             if (grid != null && _tanks.TryGetValue(grid, out var list)) list.Remove(tank);
         }
+
+        public void RegisterPipe(GridEntity grid, GridLiquidPipe pipe)
+        {
+            if (grid == null || pipe == null) return;
+            if (!_pipes.TryGetValue(grid, out var list)) { list = new List<GridLiquidPipe>(); _pipes[grid] = list; }
+            if (!list.Contains(pipe)) list.Add(pipe);
+        }
+
+        public void UnregisterPipe(GridEntity grid, GridLiquidPipe pipe)
+        {
+            if (grid != null && _pipes.TryGetValue(grid, out var list)) list.Remove(pipe);
+        }
+
+        public bool HasPipes(GridEntity grid)
+            => _pipes.TryGetValue(grid, out var list) && list.Count > 0;
 
         public IReadOnlyList<GridLiquidTank> GetTanks(GridEntity grid)
             => _tanks.TryGetValue(grid, out var list) ? list : System.Array.Empty<GridLiquidTank>();
