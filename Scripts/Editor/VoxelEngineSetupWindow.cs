@@ -4459,7 +4459,10 @@ root =>
 
                     try
                     {
-                        bool needsVisualRebuild = name.ToLowerInvariant().Contains("wheel")
+                        string lowerPrefabName = name.ToLowerInvariant();
+                        bool needsVisualRebuild = lowerPrefabName.Contains("wheel")
+                            || lowerPrefabName.Contains("gaspipe")
+                            || lowerPrefabName.Contains("liquidpipe")
                             || root.transform.childCount == 0 && root.GetComponent<MeshFilter>() == null;
                         if (!needsVisualRebuild)
                         {

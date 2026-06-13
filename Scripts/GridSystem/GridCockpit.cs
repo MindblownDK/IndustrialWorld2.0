@@ -23,6 +23,11 @@ namespace VoxelEngine.GridSystem
 
         public bool IsFlightOnline => Enabled && Grid != null && Grid.HasPower;
 
+        private bool _thirdPersonCamera;
+        private bool _hasDefaultCameraPose;
+        private Vector3 _defaultPivotLocalPosition;
+        private Quaternion _defaultPivotLocalRotation;
+
         /// <summary>The cockpit the local player is currently seated in (null if on foot).</summary>
         public static GridCockpit ActivePilotSeat { get; private set; }
 
@@ -55,6 +60,9 @@ namespace VoxelEngine.GridSystem
                 Cursor.lockState = CursorLockMode.Locked;
                 Cursor.visible = false;
             }
+
+            // V toggles cockpit camera: first-person ⇄ exterior chase camera.
+            if (VPressed) ToggleCameraMode();
 
             // Z toggles inertia dampeners (auto-brake to a stop when not thrusting).
             if (GridInput.ZPressed) Grid.DampenersOn = !Grid.DampenersOn;
@@ -133,6 +141,18 @@ namespace VoxelEngine.GridSystem
 #endif
         }
 
+        private static bool VPressed
+        {
+            get
+            {
+#if ENABLE_INPUT_SYSTEM
+                return Keyboard.current != null && Keyboard.current.vKey.wasPressedThisFrame;
+#else
+                return Input.GetKeyDown(KeyCode.V);
+#endif
+            }
+        }
+
         private static bool Held(InputAction a) => GameSettings.IsHeld(a);
 
         /// <summary>P key — if ANY landing gear is locked, unlock them all; otherwise lock them all.</summary>
@@ -173,8 +193,42 @@ namespace VoxelEngine.GridSystem
             if (!_freeLooking) return;
             _freeLooking = false;
             _lookYaw = 0f; _lookPitch = 0f;
+            ApplyCameraMode();
+        }
+
+        private void ToggleCameraMode()
+        {
+            _thirdPersonCamera = !_thirdPersonCamera;
+            _freeLooking = false;
+            _lookYaw = 0f;
+            _lookPitch = 0f;
+            ApplyCameraMode();
+        }
+
+        private void CaptureDefaultCameraPose(Player.PlayerController player)
+        {
+            var pivot = player != null ? player.cameraPivot : null;
+            if (pivot == null || _hasDefaultCameraPose) return;
+            _defaultPivotLocalPosition = pivot.localPosition;
+            _defaultPivotLocalRotation = pivot.localRotation;
+            _hasDefaultCameraPose = true;
+        }
+
+        private void ApplyCameraMode()
+        {
             var pivot = Pilot != null ? Pilot.cameraPivot : null;
-            if (pivot != null) pivot.localRotation = Quaternion.identity;
+            if (pivot == null || !_hasDefaultCameraPose) return;
+
+            if (_thirdPersonCamera)
+            {
+                pivot.localPosition = _defaultPivotLocalPosition + new Vector3(0f, 3.4f, -10.5f);
+                pivot.localRotation = Quaternion.Euler(13f, 0f, 0f);
+            }
+            else
+            {
+                pivot.localPosition = _defaultPivotLocalPosition;
+                pivot.localRotation = _defaultPivotLocalRotation;
+            }
         }
 
         public void Enter(Player.PlayerController player)
@@ -182,6 +236,9 @@ namespace VoxelEngine.GridSystem
             if (Pilot != null) return;
 
             Pilot = player;
+            CaptureDefaultCameraPose(player);
+            _thirdPersonCamera = false;
+            ApplyCameraMode();
             player.enabled = false;
             // The player uses a CharacterController (not a Rigidbody) — disable it
             // so the seated player doesn't collide while piloting. Guard both so a
@@ -219,6 +276,11 @@ namespace VoxelEngine.GridSystem
         public void Exit()
         {
             if (Pilot == null) return;
+
+            // Restore first-person camera before unparenting/leaving the cockpit.
+            _thirdPersonCamera = false;
+            _freeLooking = false;
+            ApplyCameraMode();
 
             // Unparent the player from the grid and drop them beside the cockpit.
             Pilot.transform.SetParent(_originalParent, worldPositionStays: true);

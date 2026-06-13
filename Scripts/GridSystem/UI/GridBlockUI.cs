@@ -601,9 +601,10 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(T.AccentDivider(T.AccentGreen));
             p.Add(T.StatRow("", "Output", PowerFormat.Watts(he.PowerOutput), T.AccentGreen));
             p.Add(T.StatRow("", "Hydrogen Use", $"{he.hydrogenPerSecond:0.#} H2/s", T.AccentCyan));
-            if (he.Grid != null)
-                p.Add(T.StatRow("", "Grid Hydrogen", $"{he.Grid.HydrogenStored:0} L", T.AccentCyan));
-            p.Add(T.Muted("Burns the ship's shared hydrogen pool into grid power. Pair with H2/O2 generators and gas tanks."));
+            p.Add(T.StatRow("", "Internal Tank", $"{he.internalHydrogen:0}/{he.internalTankCapacity:0} L", T.AccentCyan));
+            var (bar, _) = T.ProgressBar(he.Fill01, T.AccentCyan, 8, true);
+            p.Add(bar);
+            p.Add(T.Muted("Buffers hydrogen internally, then burns it into grid power. Feed it through gas pipes from H2/O2 generators and gas tanks."));
             return p;
         }
 

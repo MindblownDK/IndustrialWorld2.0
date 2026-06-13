@@ -59,6 +59,19 @@ namespace VoxelEngine.GridSystem
             stored = Mathf.Clamp(stored, 0f, capacity);
         }
 
+        /// <summary>Add up to capacity. Returns litres accepted. Empty tanks adopt the inserted gas type.</summary>
+        public float Add(VoxelEngine.Gas.GasType type, float litres)
+        {
+            if (type == VoxelEngine.Gas.GasType.None || litres <= 0f) return 0f;
+            if (stored > 0.001f && gasType != type) return 0f;
+            if (stored <= 0.001f) gasType = type;
+            float space = Mathf.Max(0f, capacity - stored);
+            float take = Mathf.Min(space, litres);
+            stored += take;
+            blockName = $"{gasType} Tank";
+            return take;
+        }
+
         /// <summary>Draw up to <paramref name="litres"/> of gas. Returns litres drawn.</summary>
         public float Draw(float litres)
         {

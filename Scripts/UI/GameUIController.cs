@@ -229,7 +229,7 @@ namespace VoxelEngine.UI
             // cursor is over an interactive control (Button), defer the destructive refresh until
             // the pointer moves off it — hover + clicks then work first time.
             if (_machineRefreshAccum >= 0.25f && !PortConfigHud.IsAnyDropdownOpen && liveMachineOpen
-                && !PointerOverInteractiveUI())
+                && !_dragSource.active && !PointerOverInteractiveUI())
             { _machineRefreshAccum = 0f; Refresh(); }
             ResearchHud.Tick();
             TickUpgradePrompt();
@@ -2985,6 +2985,16 @@ namespace VoxelEngine.UI
                     bool isUpgrade = item is QuarryUpgradeItem;
                     return isUpgrade ? _openQuarry.upgradeC : _openQuarry.Output;
                 }
+                if (_openGridBlock != null)
+                {
+                    var gridDest = ResolveGridBlockQuickTransferDestination(_openGridBlock, item);
+                    if (gridDest != null) return gridDest;
+                }
+                if (_openGridTerminal != null)
+                {
+                    var gridDest = FirstGridInventoryDestination(_openGridTerminal, item);
+                    if (gridDest != null) return gridDest;
+                }
                 if (_openDiskManipulator != null) return _openDiskManipulator.sourceSlot;
                 if (_openNAS != null)             return _openNAS.diskSlots;
                 if (_openImporter != null)        return _openImporter.upgradeSlots;
@@ -3012,6 +3022,50 @@ namespace VoxelEngine.UI
             }
             // Source is ANY non-player container: send to the player inventory.
             return inventory.container;
+        }
+
+        private static IItemContainer ResolveGridBlockQuickTransferDestination(VoxelEngine.GridSystem.GridBlock block, ItemDefinition item)
+        {
+            if (block == null || item == null) return null;
+            switch (block)
+            {
+                case VoxelEngine.GridSystem.GridCargoContainer cargo:
+                    return cargo.container;
+                case VoxelEngine.GridSystem.GridDockingPort dock:
+                    return dock.container;
+                case VoxelEngine.GridSystem.GridDrill drill:
+                    return drill.buffer;
+                case VoxelEngine.GridSystem.GridWeapon weapon:
+                    return weapon.ammo;
+                case VoxelEngine.GridSystem.GridH2O2Generator h2:
+                    return IsItemId(item, "ice") ? h2.iceInput : null;
+                case VoxelEngine.GridSystem.GridElectricFurnace furnace:
+                    return furnace.inputC;
+                case VoxelEngine.GridSystem.GridPortableReactor reactor:
+                    if (reactor.leuPelletItem != null && item == reactor.leuPelletItem) return reactor.fuelC;
+                    if (reactor.iceItem != null && item == reactor.iceItem) return reactor.iceC;
+                    return reactor.fuelC;
+                default:
+                    return null;
+            }
+        }
+
+        private static IItemContainer FirstGridInventoryDestination(VoxelEngine.GridSystem.GridEntity grid, ItemDefinition item)
+        {
+            if (grid == null || item == null) return null;
+            foreach (var kv in grid.Blocks)
+            {
+                var dest = ResolveGridBlockQuickTransferDestination(kv.Value, item);
+                if (dest == null) continue;
+                if (dest.HasSpace(item, 1)) return dest;
+            }
+            return null;
+        }
+
+        private static bool IsItemId(ItemDefinition item, string id)
+        {
+            return item != null && item.itemId != null
+                && item.itemId.Equals(id, System.StringComparison.OrdinalIgnoreCase);
         }
         private void SwapHoveredWithHotbar(int hotbarIdx)
         {

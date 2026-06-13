@@ -298,11 +298,37 @@ namespace VoxelEngine.GridSystem
 
         private static void BuildPipe(GameObject r, float cs, Material mat)
         {
-            // Tube along Z spanning the cell so segments connect end-to-end.
-            var tube = Cyl(r, mat, V0, cs*0.22f, cs*0.5f);
+            string lowerName = r.name.ToLowerInvariant();
+            bool gas = lowerName.Contains("gas");
+            bool liquid = lowerName.Contains("liquid");
+            Color accentColor = gas ? new Color(0.95f, 0.78f, 0.22f) : liquid ? new Color(0.20f, 0.65f, 0.95f) : new Color(0.95f, 0.55f, 0.12f);
+            Color darkColor = new Color(0.08f, 0.085f, 0.10f);
+            Color? emissive = null;
+            if (gas) emissive = new Color(0.20f, 0.12f, 0.02f);
+            else if (liquid) emissive = new Color(0.02f, 0.08f, 0.16f);
+            var accent = Mat(accentColor, 0.75f, 0.55f, emissive);
+            var dark = Mat(darkColor, 0.85f, 0.38f);
+
+            float radius = cs * (lowerName.Contains("large") ? 0.17f : 0.18f);
+            float collarRadius = radius * 1.35f;
+            float length = cs * 0.92f;
+
+            // Main tube along Z spanning the cell so segments connect end-to-end.
+            var tube = Cyl(r, mat, V0, radius, length * 0.5f);
             tube.transform.localRotation = Quaternion.Euler(90, 0, 0);
-            Cyl(r, mat, new Vector3(0,0, cs*0.45f), cs*0.27f, cs*0.04f).transform.localRotation = Quaternion.Euler(90,0,0);
-            Cyl(r, mat, new Vector3(0,0,-cs*0.45f), cs*0.27f, cs*0.04f).transform.localRotation = Quaternion.Euler(90,0,0);
+
+            // Dark support spine under the pipe.
+            Box(r, dark, new Vector3(0, -radius * 1.25f, 0), new Vector3(radius * 0.72f, radius * 0.30f, length));
+
+            // End collars and mid clamp bands.
+            Cyl(r, accent, new Vector3(0, 0,  cs * 0.45f), collarRadius, cs * 0.045f).transform.localRotation = Quaternion.Euler(90, 0, 0);
+            Cyl(r, accent, new Vector3(0, 0, -cs * 0.45f), collarRadius, cs * 0.045f).transform.localRotation = Quaternion.Euler(90, 0, 0);
+            Cyl(r, dark,   new Vector3(0, 0,  cs * 0.18f), radius * 1.18f, cs * 0.035f).transform.localRotation = Quaternion.Euler(90, 0, 0);
+            Cyl(r, dark,   new Vector3(0, 0, -cs * 0.18f), radius * 1.18f, cs * 0.035f).transform.localRotation = Quaternion.Euler(90, 0, 0);
+
+            // Small readable flow indicator plates on the top.
+            Box(r, accent, new Vector3(0, radius * 1.18f,  cs * 0.12f), new Vector3(radius * 1.4f, radius * 0.18f, cs * 0.10f));
+            Box(r, accent, new Vector3(0, radius * 1.18f, -cs * 0.12f), new Vector3(radius * 1.4f, radius * 0.18f, cs * 0.10f));
         }
 
         // ── primitive helpers ─────────────────────────────────────────────────────

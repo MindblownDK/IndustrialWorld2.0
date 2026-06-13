@@ -110,20 +110,28 @@ namespace VoxelEngine.GridSystem
                 }
             }
 
-            // 3) Feed the grid gas pools only when gas pipes exist. This makes gas
-            // transfer require visible pipe infrastructure instead of magic sharing.
-            bool hasGasPipes = GridGasNetwork.Instance != null && GridGasNetwork.Instance.HasPipes(Grid);
-            if (hasGasPipes && h2Stored > 0f)
+            // 3) Push gas through gas pipes into matching grid gas tanks. Tanks then feed
+            // the shared grid pool when set to Auto. Oxygen no longer leaks into the ship
+            // pool unless an Oxygen tank actually receives it.
+            if (GridGasNetwork.Instance != null && GridGasNetwork.Instance.HasPipes(Grid))
             {
-                float feed = Mathf.Min(h2Stored, 30f * dt);
-                h2Stored -= feed;
-                Grid.HydrogenStored += feed;
+                PushGasToTanks(VoxelEngine.Gas.GasType.Hydrogen, ref h2Stored, 30f * dt);
+                PushGasToTanks(VoxelEngine.Gas.GasType.Oxygen, ref o2Stored, 30f * dt);
             }
-            if (hasGasPipes && o2Stored > 0f)
+        }
+
+        private void PushGasToTanks(VoxelEngine.Gas.GasType type, ref float storedGas, float maxLitres)
+        {
+            if (Grid == null || storedGas <= 0f || maxLitres <= 0f) return;
+            float remaining = Mathf.Min(storedGas, maxLitres);
+            foreach (var kv in Grid.Blocks)
             {
-                float feed = Mathf.Min(o2Stored, 30f * dt);
-                o2Stored -= feed;
-                Grid.OxygenStored += feed;
+                if (remaining <= 0f) break;
+                if (!(kv.Value is GridGasTank tank) || tank == null) continue;
+                float accepted = tank.Add(type, remaining);
+                if (accepted <= 0f) continue;
+                storedGas -= accepted;
+                remaining -= accepted;
             }
         }
 
