@@ -114,8 +114,6 @@ namespace VoxelEngine.GridSystem.UI
 
             if (grid != null)
                 win.Add(BuildStatusStrip(grid, state));
-            if (grid != null && state.showPowerUsage)
-                win.Add(BuildPowerUsagePopup(grid, state));
 
             var body = new VisualElement();
             body.style.flexDirection = FlexDirection.Row;
@@ -125,6 +123,10 @@ namespace VoxelEngine.GridSystem.UI
             body.Add(BuildBlockList(state, blocks, tab, onSelectTab));
             body.Add(BuildContent(grid, state, blocks, tab, slot));
             win.Add(body);
+
+            if (grid != null && state.showPowerUsage)
+                win.Add(BuildPowerUsagePopup(grid, state));
+
             return win;
         }
 
@@ -302,23 +304,13 @@ namespace VoxelEngine.GridSystem.UI
                 for (int i = 0; i < state.groups.Count; i++)
                 {
                     var group = state.groups[i];
-                    foreach (var b in group.blocks) grouped.Add(b);
+                    if (group.hidden)
+                        foreach (var b in group.blocks) grouped.Add(b);
                     list.Add(GroupRow(state, group, i, tab, onSelectTab));
-
-                    if (!group.hidden || state.showHidden)
-                    {
-                        foreach (var b in group.blocks)
-                        {
-                            int blockIndex = blocks.IndexOf(b);
-                            if (blockIndex < 0) continue;
-                            bool hidden = IsHidden(state, b);
-                            list.Add(BlockRow(state, blocks, blockIndex, tab, onSelectTab, indent: true, hidden));
-                        }
-                    }
                 }
             }
 
-            list.Add(SectionLabel("UNGROUPED BLOCKS"));
+            list.Add(SectionLabel("BLOCKS"));
             for (int i = 0; i < blocks.Count; i++)
             {
                 var b = blocks[i];
@@ -546,7 +538,12 @@ namespace VoxelEngine.GridSystem.UI
                 hidden = state.hideOnCreate
             };
             foreach (var b in state.selected)
-                if (b != null && !group.blocks.Contains(b)) group.blocks.Add(b);
+            {
+                if (b == null || group.blocks.Contains(b)) continue;
+                group.blocks.Add(b);
+                if (group.hidden) state.hiddenBlocks.Add(b);
+                else state.hiddenBlocks.Remove(b);
+            }
             group.blocks.Sort((a, b) => string.CompareOrdinal(a.blockName, b.blockName));
             state.groups.Add(group);
             state.selected.Clear();
@@ -724,9 +721,9 @@ namespace VoxelEngine.GridSystem.UI
                 page.Add(GroupCategoryControls(list));
                 foreach (var b in list)
                 {
-                    var row = new Label("  • " + b.blockName);
+                    var row = new Label($"  • {b.blockName} ({BlockStateLabel(b)})");
                     row.style.fontSize = 10;
-                    row.style.color = new StyleColor(T.TextSecondary);
+                    row.style.color = new StyleColor(b.Enabled ? T.TextSecondary : T.AccentRed);
                     page.Add(row);
                 }
                 page.Add(T.Spacer(6));
@@ -780,6 +777,20 @@ namespace VoxelEngine.GridSystem.UI
                 else if (b is GridGasTank gas) gas.mode = mode;
             }
             RefreshTerminal();
+        }
+
+        private static string BlockStateLabel(GridBlock block)
+        {
+            if (block == null) return "Missing";
+            if (!block.Enabled) return "Offline";
+            if (block is GridBattery battery) return battery.mode.ToString();
+            if (block is GridLiquidTank liquid) return liquid.mode.ToString();
+            if (block is GridGasTank gas) return gas.mode.ToString();
+            if (block is GridLandingGear gear) return gear.IsLocked ? "Locked" : "Unlocked";
+            if (block is GridSolarPanel solar) return PowerFormat.Watts(solar.CurrentOutput);
+            if (block.PowerDraw > 0.01f) return PowerFormat.Watts(block.PowerDraw);
+            if (block.PowerOutput > 0.01f) return PowerFormat.Watts(block.PowerOutput);
+            return "Online";
         }
 
         private static string CategoryName(GridBlock block)

@@ -4,6 +4,9 @@
 
 using UnityEngine;
 using VoxelEngine.Settings;
+#if ENABLE_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+#endif
 
 namespace VoxelEngine.GridSystem
 {
@@ -67,7 +70,7 @@ namespace VoxelEngine.GridSystem
             float fwd   = (Held(InputAction.Forward) ? 1 : 0) - (Held(InputAction.Back) ? 1 : 0);
             float right = (Held(InputAction.Right) ? 1 : 0)   - (Held(InputAction.Left) ? 1 : 0);
             bool descendHeld = Held(InputAction.Down)
-                               || (GridBuilder.HoldingGridBlock && Held(InputAction.Crouch));
+                               || (PilotHoldingGridBlock() && (Held(InputAction.Crouch) || CKeyHeld()));
             float up    = (Held(InputAction.Jump) ? 1 : 0)    - (descendHeld ? 1 : 0);
             Vector3 thrust = new Vector3(right, up, fwd);
 
@@ -106,6 +109,27 @@ namespace VoxelEngine.GridSystem
 
             // While the Drill group is selected: LMB = mine + collect, RMB = mine + VOID (faster).
             Grid.DrillVoidMode = GridInput.Mouse1 && !GridInput.Mouse0;
+        }
+
+        private bool PilotHoldingGridBlock()
+        {
+            if (GridBuilder.HoldingGridBlock) return true;
+            if (Pilot == null) return false;
+
+            var inventory = Pilot.GetComponentInParent<VoxelEngine.Items.Inventory>();
+            if (inventory == null) return false;
+
+            var stack = inventory.ActiveStack;
+            return stack != null && !stack.IsEmpty && stack.item is GridBlockItem;
+        }
+
+        private static bool CKeyHeld()
+        {
+#if ENABLE_INPUT_SYSTEM
+            return Keyboard.current != null && Keyboard.current.cKey.isPressed;
+#else
+            return Input.GetKey(KeyCode.C);
+#endif
         }
 
         private static bool Held(InputAction a) => GameSettings.IsHeld(a);

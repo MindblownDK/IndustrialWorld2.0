@@ -115,7 +115,8 @@ namespace VoxelEngine.Research
         {
             if (GameSettings.WasPressed(InputAction.Research))
             {
-                if (_open) Close(); else Open();
+                if (_open) Close();
+                else if (!VoxelEngine.UI.UIState.IsBlocking) Open();
             }
             if (_open && GameSettings.WasPressed(InputAction.Pause))
             {

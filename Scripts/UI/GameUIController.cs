@@ -309,7 +309,14 @@ namespace VoxelEngine.UI
             bool weAreOpen = _inventoryOpen || _rightContainer != null;
             if (!typing && GameSettings.WasPressed(InputAction.Inventory))
             {
-                if (weAreOpen)
+                if (_openGridTerminal != null)
+                {
+                    // The ship terminal owns focus. Pressing I inside it should not close it
+                    // and immediately swap to another panel.
+                    UIState.PauseConsumedFrame = Time.frameCount;
+                    _justClosedThisFrame = false;
+                }
+                else if (weAreOpen)
                 {
                     // Only do a plain close — pressing I on a machine panel just closes it,
                     // it does NOT re-open the plain inventory on the same frame.

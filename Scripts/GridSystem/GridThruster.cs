@@ -52,7 +52,7 @@ namespace VoxelEngine.GridSystem
         {
             get
             {
-                if (Grid == null || !IsOperational) return 0;
+                if (Grid == null || !Enabled) return 0;
                 if (thrusterType == ThrusterType.Hydrogen) return 0; // hydrogen doesn't use power
                 float input = GetThrustFraction();
                 return powerAtMaxThrust * input;
