@@ -79,6 +79,14 @@ namespace VoxelEngine.GridSystem.UI
             if (tank.stored > 0.001f)
                 p.Add(T.Muted("Drain the tank to change its liquid type."));
 
+            p.Add(T.Spacer(6));
+            var modeRow = Row();
+            modeRow.Add(T.SmallButton("Auto", () => { tank.mode = GridTankMode.Auto; VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel(); },
+                tank.mode == GridTankMode.Auto ? T.AccentGreen : T.BgSlot));
+            modeRow.Add(T.SmallButton("Stockpile", () => { tank.mode = GridTankMode.Stockpile; VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel(); },
+                tank.mode == GridTankMode.Stockpile ? T.AccentAmber : T.BgSlot));
+            p.Add(modeRow);
+
             p.Add(T.Spacer(8));
             var actions = Row();
             actions.Add(T.SmallButton("⊘  Drain (void)", () =>
@@ -126,6 +134,13 @@ namespace VoxelEngine.GridSystem.UI
             }
             p.Add(typeRow);
             if (tank.stored > 0.001f) p.Add(T.Muted("Empty the tank to change its gas type."));
+            p.Add(T.Spacer(6));
+            var modeRow = Row();
+            modeRow.Add(T.SmallButton("Auto", () => { tank.mode = GridTankMode.Auto; VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel(); },
+                tank.mode == GridTankMode.Auto ? T.AccentGreen : T.BgSlot));
+            modeRow.Add(T.SmallButton("Stockpile", () => { tank.mode = GridTankMode.Stockpile; VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel(); },
+                tank.mode == GridTankMode.Stockpile ? T.AccentAmber : T.BgSlot));
+            p.Add(modeRow);
             return p;
         }
 
@@ -203,6 +218,15 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(T.Spacer(4));
             p.Add(T.StatRow("⚡", "Max Charge", PowerFormat.Watts(bat.maxChargeRate), T.AccentCyan));
             p.Add(T.StatRow("🔌", "Max Discharge", PowerFormat.Watts(bat.maxDischargeRate), T.AccentAmber));
+            p.Add(T.Spacer(4));
+            var modeRow = Row();
+            modeRow.Add(T.SmallButton("Auto", () => { bat.mode = GridBatteryMode.Auto; VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel(); },
+                bat.mode == GridBatteryMode.Auto ? T.AccentGreen : T.BgSlot));
+            modeRow.Add(T.SmallButton("Recharge", () => { bat.mode = GridBatteryMode.Recharge; VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel(); },
+                bat.mode == GridBatteryMode.Recharge ? T.AccentCyan : T.BgSlot));
+            modeRow.Add(T.SmallButton("Discharge", () => { bat.mode = GridBatteryMode.Discharge; VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel(); },
+                bat.mode == GridBatteryMode.Discharge ? T.AccentAmber : T.BgSlot));
+            p.Add(modeRow);
             if (bat.Grid != null)
                 p.Add(T.StatRow("⚖", "Grid Balance", PowerFormat.Watts(bat.Grid.PowerBalance),
                     bat.Grid.PowerBalance >= 0 ? T.AccentGreen : T.AccentRed));
@@ -226,6 +250,17 @@ namespace VoxelEngine.GridSystem.UI
             var (fill, _) = T.ProgressBar(cc.Fill01,
                 cc.Fill01 >= 0.99f ? T.AccentRed : T.AccentGold, 8, true);
             p.Add(fill);
+            p.Add(T.Muted($"Cargo mass: {MassFormat.Format(cc.CurrentMassKg)} / {MassFormat.Format(cc.maxMassKg)}"));
+            p.Add(T.Spacer(6));
+
+            p.Add(GridUIHelpers.SectionTitle("Cargo Filter"));
+            var filter = new TextField { value = cc.itemFilter ?? "" };
+            filter.tooltip = "Optional filter. Matches item id, display name, or category. Empty accepts everything.";
+            filter.RegisterValueChangedCallback(e => cc.SetItemFilter(e.newValue));
+            filter.RegisterCallback<FocusInEvent>(_ => PortConfigHud.IsAnyDropdownOpen = true);
+            filter.RegisterCallback<FocusOutEvent>(_ => PortConfigHud.IsAnyDropdownOpen = false);
+            p.Add(filter);
+            p.Add(T.Muted(string.IsNullOrWhiteSpace(cc.itemFilter) ? "Accepting all items." : $"Only accepting matches for: {cc.itemFilter}"));
             p.Add(T.Spacer(6));
 
             p.Add(GridUIHelpers.SectionTitle("Inventory"));

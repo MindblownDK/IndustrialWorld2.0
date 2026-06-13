@@ -1,10 +1,9 @@
 // Assets/Scripts/VoxelEngine/GridSystem/UI/GridMasterTerminal.cs
 //
-// Space-Engineers-style ship CONTROL TERMINAL. A full-screen configuration
-// screen: left column lists every functional block on the grid; clicking one
-// shows its full panel (stats, tanks, power, inventory) on the right plus an
-// on/off toggle. An "All Storage" tab spans every connected container so the
-// player can drag items anywhere across the ship's logistics network.
+// Space-Engineers-style ship CONTROL TERMINAL. A right-side configuration screen:
+// left column lists every functional block on the grid; clicking one shows its
+// full panel (stats, tanks, power, inventory) on the right plus an on/off toggle.
+// Includes runtime block groups, selection, hiding, and all-grid storage.
 
 using System;
 using System.Collections.Generic;
@@ -18,12 +17,12 @@ namespace VoxelEngine.GridSystem.UI
 {
     public static class GridMasterTerminal
     {
-        // Remembers scroll offsets per ScrollView key so the live refresh doesn't
-        // jump the list back to the top.
+        private const int GroupTabBase = -100;
+
+        // Remembers scroll offsets per ScrollView key so live refresh doesn't jump lists.
         private static readonly Dictionary<string, float> _scrollY = new();
 
-        // Runtime terminal organisation. This is deliberately save-compatible: groups and
-        // hidden-list state are UI state only for now, so no world/save schema changes.
+        // Runtime terminal organisation. Save-compatible: no world/save schema changes.
         private static readonly Dictionary<int, TerminalState> _states = new();
 
         private sealed class TerminalState
@@ -44,6 +43,22 @@ namespace VoxelEngine.GridSystem.UI
             public readonly List<GridBlock> blocks = new();
         }
 
+        private readonly struct StorageEntry
+        {
+            public readonly string label;
+            public readonly ItemContainer container;
+            public readonly float currentKg;
+            public readonly float maxKg;
+
+            public StorageEntry(string label, ItemContainer container, float currentKg, float maxKg = -1f)
+            {
+                this.label = label;
+                this.container = container;
+                this.currentKg = currentKg;
+                this.maxKg = maxKg;
+            }
+        }
+
         private static void PersistScroll(ScrollView sv, string key)
         {
             sv.RegisterCallback<GeometryChangedEvent>(_ =>
@@ -54,25 +69,19 @@ namespace VoxelEngine.GridSystem.UI
             sv.verticalScroller.valueChanged += v => _scrollY[key] = v;
         }
 
-        /// <param name="tab">-1 = All Storage; otherwise index into the sorted terminal block list.</param>
+        /// <param name="tab">-1 = All Storage; >=0 = block index; <= GroupTabBase = group page.</param>
         public static VisualElement Build(GridEntity grid, int tab, Action<int> onSelectTab,
             MachineUIs.SlotBuilder slot, Action onClose)
         {
             var state = GetState(grid);
-
-            var blocks = new List<GridBlock>();
-            if (grid != null)
-                foreach (var kv in grid.Blocks)
-                    if (kv.Value != null && IsTerminalBlock(kv.Value)) blocks.Add(kv.Value);
-            blocks.Sort((a, b) => string.CompareOrdinal(a.blockName, b.blockName));
+            var blocks = GetSortedTerminalBlocks(grid);
             CleanState(state, blocks);
 
-            // ── Window shell
             var win = new VisualElement();
             win.style.flexGrow = 1;
             win.style.height = new StyleLength(new Length(100, LengthUnit.Percent));
             win.style.flexDirection = FlexDirection.Column;
-            win.style.backgroundColor = new StyleColor(new Color(0.06f, 0.07f, 0.10f, 1f)); // opaque
+            win.style.backgroundColor = new StyleColor(new Color(0.06f, 0.07f, 0.10f, 1f));
             T.Border(win, 1, T.BorderDim);
             T.Radius(win, 8);
             win.style.paddingTop = 12;
@@ -80,13 +89,11 @@ namespace VoxelEngine.GridSystem.UI
             win.style.paddingLeft = 14;
             win.style.paddingRight = 14;
 
-            // Wide-screen ergonomics: the terminal keeps a readable desktop-app width
-            // instead of stretching everything across 4K/ultrawide monitors.
+            // Right-side terminal. Keeps a readable width on big screens and hugs the right edge.
             win.style.maxWidth = 1280;
-            win.style.alignSelf = Align.Center;
+            win.style.alignSelf = Align.FlexEnd;
             win.style.width = new StyleLength(new Length(100, LengthUnit.Percent));
 
-            // ── Title bar ──
             var title = new VisualElement();
             title.style.flexDirection = FlexDirection.Row;
             title.style.alignItems = Align.Center;
@@ -104,41 +111,28 @@ namespace VoxelEngine.GridSystem.UI
             div.style.flexShrink = 0;
             win.Add(div);
 
-            // ── Status strip — compact at-a-glance ship readout ──
             if (grid != null)
-            {
-                int blockCount = grid.BlockCount;
-                float speed = grid.Body != null ? grid.Body.linearVelocity.magnitude : 0f;
-                var strip = new VisualElement();
-                strip.style.flexDirection = FlexDirection.Row;
-                strip.style.flexWrap = Wrap.Wrap;
-                strip.style.flexShrink = 0;
-                strip.style.marginTop = 6;
-                strip.style.marginBottom = 6;
-                strip.Add(Stat("MASS", MassFormat.Format(grid.TotalMass), T.AccentCyan));
-                strip.Add(Stat("POWER", PowerFormat.Watts(grid.PowerBalance), grid.PowerBalance >= 0 ? T.AccentGreen : T.AccentRed));
-                strip.Add(Stat("GEN", PowerFormat.Watts(grid.PowerGenerated), T.AccentGreen));
-                strip.Add(Stat("USE", PowerFormat.Watts(grid.PowerConsumed), T.AccentAmber));
-                strip.Add(Stat("H2", $"{grid.HydrogenStored:0} L", T.AccentCyan));
-                strip.Add(Stat("O2", $"{grid.OxygenStored:0} L", T.AccentGreen));
-                strip.Add(Stat("SPEED", $"{speed:0.0} m/s", T.AccentGold));
-                strip.Add(Stat("BLOCKS", blockCount.ToString(), new Color(0.8f, 0.84f, 0.9f)));
-                win.Add(strip);
-                var d2 = T.AccentDivider(T.AccentTeal);
-                d2.style.flexShrink = 0;
-                win.Add(d2);
-            }
+                win.Add(BuildStatusStrip(grid));
 
-            // ── Body: left list + right content (fills remaining height) ──
             var body = new VisualElement();
             body.style.flexDirection = FlexDirection.Row;
             body.style.flexGrow = 1;
-            body.style.minHeight = 0; // allow children to scroll instead of overflow
+            body.style.minHeight = 0;
 
-            body.Add(BuildBlockList(grid, state, blocks, tab, onSelectTab));
-            body.Add(BuildContent(grid, blocks, tab, slot));
+            body.Add(BuildBlockList(state, blocks, tab, onSelectTab));
+            body.Add(BuildContent(grid, state, blocks, tab, slot));
             win.Add(body);
             return win;
+        }
+
+        private static List<GridBlock> GetSortedTerminalBlocks(GridEntity grid)
+        {
+            var blocks = new List<GridBlock>();
+            if (grid != null)
+                foreach (var kv in grid.Blocks)
+                    if (kv.Value != null && IsTerminalBlock(kv.Value)) blocks.Add(kv.Value);
+            blocks.Sort((a, b) => string.CompareOrdinal(a.blockName, b.blockName));
+            return blocks;
         }
 
         private static TerminalState GetState(GridEntity grid)
@@ -159,14 +153,39 @@ namespace VoxelEngine.GridSystem.UI
             state.hiddenBlocks.RemoveWhere(b => b == null || !blocks.Contains(b));
             for (int i = state.groups.Count - 1; i >= 0; i--)
             {
-                var g = state.groups[i];
-                g.blocks.RemoveAll(b => b == null || !blocks.Contains(b));
-                if (g.blocks.Count == 0) state.groups.RemoveAt(i);
+                var group = state.groups[i];
+                group.blocks.RemoveAll(b => b == null || !blocks.Contains(b));
+                if (group.blocks.Count == 0) state.groups.RemoveAt(i);
             }
         }
 
+        private static VisualElement BuildStatusStrip(GridEntity grid)
+        {
+            int blockCount = grid.BlockCount;
+            float speed = grid.Body != null ? grid.Body.linearVelocity.magnitude : 0f;
+            var strip = new VisualElement();
+            strip.style.flexDirection = FlexDirection.Row;
+            strip.style.flexWrap = Wrap.Wrap;
+            strip.style.flexShrink = 0;
+            strip.style.marginTop = 6;
+            strip.style.marginBottom = 6;
+            strip.Add(Stat("MASS", MassFormat.Format(grid.TotalMass), T.AccentCyan));
+            strip.Add(Stat("POWER", PowerFormat.Watts(grid.PowerBalance), grid.PowerBalance >= 0 ? T.AccentGreen : T.AccentRed));
+            strip.Add(Stat("GEN", PowerFormat.Watts(grid.PowerGenerated), T.AccentGreen));
+            strip.Add(Stat("USE", PowerFormat.Watts(grid.PowerConsumed), T.AccentAmber));
+            strip.Add(Stat("H2", $"{grid.HydrogenStored:0} L", T.AccentCyan));
+            strip.Add(Stat("O2", $"{grid.OxygenStored:0} L", T.AccentGreen));
+            strip.Add(Stat("SPEED", $"{speed:0.0} m/s", T.AccentGold));
+            strip.Add(Stat("BLOCKS", blockCount.ToString(), new Color(0.8f, 0.84f, 0.9f)));
+            return strip;
+        }
+
+        private static int GroupTab(int groupIndex) => GroupTabBase - groupIndex;
+        private static bool IsGroupTab(int tab) => tab <= GroupTabBase;
+        private static int GroupIndexFromTab(int tab) => GroupTabBase - tab;
+
         // ── LEFT: block list + groups ─────────────────────────────────────────────
-        private static VisualElement BuildBlockList(GridEntity grid, TerminalState state, List<GridBlock> blocks,
+        private static VisualElement BuildBlockList(TerminalState state, List<GridBlock> blocks,
             int tab, Action<int> onSelectTab)
         {
             var col = new VisualElement();
@@ -216,7 +235,7 @@ namespace VoxelEngine.GridSystem.UI
                 {
                     var group = state.groups[i];
                     foreach (var b in group.blocks) grouped.Add(b);
-                    list.Add(GroupRow(state, group));
+                    list.Add(GroupRow(state, group, i, tab, onSelectTab));
 
                     if (!group.hidden || state.showHidden)
                     {
@@ -301,7 +320,8 @@ namespace VoxelEngine.GridSystem.UI
             return label;
         }
 
-        private static VisualElement GroupRow(TerminalState state, BlockGroup group)
+        private static VisualElement GroupRow(TerminalState state, BlockGroup group, int groupIndex,
+            int tab, Action<int> onSelectTab)
         {
             var row = new VisualElement();
             row.style.flexDirection = FlexDirection.Row;
@@ -309,20 +329,24 @@ namespace VoxelEngine.GridSystem.UI
             row.style.marginBottom = 3;
             row.style.paddingTop = 4;
             row.style.paddingBottom = 4;
-            row.style.paddingLeft = 8;
+            row.style.paddingLeft = 6;
             row.style.paddingRight = 6;
             row.style.backgroundColor = new StyleColor(group.hidden
                 ? new Color(0.12f, 0.11f, 0.09f, 1f)
                 : new Color(0.10f, 0.15f, 0.18f, 1f));
             T.Radius(row, 5);
-            T.Border(row, 1, group.hidden ? new Color(T.AccentAmber.r, T.AccentAmber.g, T.AccentAmber.b, 0.35f) : T.BorderDim);
+            T.Border(row, 1, tab == GroupTab(groupIndex)
+                ? T.AccentCyan
+                : group.hidden ? new Color(T.AccentAmber.r, T.AccentAmber.g, T.AccentAmber.b, 0.35f) : T.BorderDim);
 
-            var name = new Label($"{group.name}  ({group.blocks.Count})");
-            name.style.flexGrow = 1;
-            name.style.fontSize = 11;
-            name.style.unityFontStyleAndWeight = FontStyle.Bold;
-            name.style.color = new StyleColor(group.hidden ? T.AccentAmber : T.TextPrimary);
-            row.Add(name);
+            var open = new Button(() => onSelectTab(GroupTab(groupIndex))) { text = $"{group.name} ({group.blocks.Count})" };
+            open.style.flexGrow = 1;
+            open.style.height = 24;
+            open.style.unityTextAlign = TextAnchor.MiddleLeft;
+            open.style.color = new StyleColor(group.hidden ? T.AccentAmber : T.TextPrimary);
+            open.style.backgroundColor = new StyleColor(new Color(0, 0, 0, 0));
+            T.Border(open, 0, Color.clear);
+            row.Add(open);
 
             row.Add(T.SmallButton("Select", () =>
             {
@@ -335,6 +359,11 @@ namespace VoxelEngine.GridSystem.UI
                 group.hidden = !group.hidden;
                 RefreshTerminal();
             }, group.hidden ? T.AccentGreen : T.AccentAmber));
+            row.Add(T.SmallButton("Delete", () =>
+            {
+                state.groups.Remove(group);
+                RefreshTerminal();
+            }, T.AccentRed));
             return row;
         }
 
@@ -348,12 +377,15 @@ namespace VoxelEngine.GridSystem.UI
             string statePrefix = selected ? "[x] " : "[ ] ";
             string onlinePrefix = off ? "OFF  " : "ON   ";
 
-            var button = new Button(() =>
+            var button = new Button { text = statePrefix + onlinePrefix + block.blockName };
+            button.RegisterCallback<ClickEvent>(evt =>
             {
-                HandleBlockSelection(state, blocks, index);
+                bool shift = evt.shiftKey || GridInput.Shift;
+                bool ctrl = evt.ctrlKey || evt.commandKey || GridInput.Ctrl;
+                HandleBlockSelection(state, blocks, index, shift, ctrl);
                 onSelectTab(index);
-            })
-            { text = statePrefix + onlinePrefix + block.blockName };
+                evt.StopPropagation();
+            });
 
             button.style.unityTextAlign = TextAnchor.MiddleLeft;
             button.style.marginTop = 0;
@@ -404,12 +436,9 @@ namespace VoxelEngine.GridSystem.UI
             return b;
         }
 
-        private static void HandleBlockSelection(TerminalState state, List<GridBlock> blocks, int index)
+        private static void HandleBlockSelection(TerminalState state, List<GridBlock> blocks, int index, bool shift, bool ctrl)
         {
             var block = blocks[index];
-            bool shift = GridInput.Shift;
-            bool ctrl = GridInput.Ctrl;
-
             if (shift && state.lastSelectedIndex >= 0)
             {
                 int a = Mathf.Clamp(state.lastSelectedIndex, 0, blocks.Count - 1);
@@ -485,7 +514,8 @@ namespace VoxelEngine.GridSystem.UI
         }
 
         // ── RIGHT: content ────────────────────────────────────────────────────────
-        private static VisualElement BuildContent(GridEntity grid, List<GridBlock> blocks, int tab, MachineUIs.SlotBuilder slot)
+        private static VisualElement BuildContent(GridEntity grid, TerminalState state, List<GridBlock> blocks,
+            int tab, MachineUIs.SlotBuilder slot)
         {
             var wrap = new ScrollView(ScrollViewMode.Vertical);
             wrap.style.flexGrow = 1;
@@ -493,9 +523,21 @@ namespace VoxelEngine.GridSystem.UI
             wrap.style.minWidth = 0;
             PersistScroll(wrap, "content_" + tab);
 
+            if (IsGroupTab(tab))
+            {
+                int groupIndex = GroupIndexFromTab(tab);
+                if (groupIndex >= 0 && groupIndex < state.groups.Count)
+                {
+                    wrap.Add(BuildGroupPage(state, state.groups[groupIndex]));
+                    return wrap;
+                }
+            }
+
             if (tab >= 0 && tab < blocks.Count)
             {
                 var block = blocks[tab];
+                wrap.Add(BuildBlockHeader(block));
+
                 if (HasToggle(block))
                 {
                     var bar = new VisualElement();
@@ -518,31 +560,170 @@ namespace VoxelEngine.GridSystem.UI
                 }
 
                 var panel = GridBlockUI.BuildPanel(block, slot);
-                panel.style.position = Position.Relative;
-                panel.style.top = StyleKeyword.Auto;
-                panel.style.right = StyleKeyword.Auto;
-                panel.style.bottom = StyleKeyword.Auto;
-                panel.style.width = StyleKeyword.Auto;
-                panel.style.maxWidth = 760;
-                panel.style.flexGrow = 0;
-                panel.style.alignSelf = Align.FlexStart;
-
+                NormalizePanelForTerminal(panel, maxWidth: 760);
                 wrap.Add(panel);
                 return wrap;
             }
 
             var storage = AllStoragePanel(grid, slot);
-            storage.style.position = Position.Relative;
-            storage.style.top = StyleKeyword.Auto;
-            storage.style.right = StyleKeyword.Auto;
-            storage.style.bottom = StyleKeyword.Auto;
-            storage.style.width = StyleKeyword.Auto;
-            storage.style.maxWidth = 860;
-            storage.style.flexGrow = 0;
-            storage.style.alignSelf = Align.FlexStart;
-
+            NormalizePanelForTerminal(storage, maxWidth: 860);
             wrap.Add(storage);
             return wrap;
+        }
+
+        private static VisualElement BuildBlockHeader(GridBlock block)
+        {
+            var box = T.Card();
+            box.style.maxWidth = 760;
+            box.style.marginBottom = 8;
+            box.Add(T.Subtitle("BLOCK NAME"));
+            var name = new TextField { value = block.blockName };
+            name.tooltip = "Rename this block in the terminal list and groups.";
+            name.RegisterValueChangedCallback(e =>
+            {
+                block.blockName = string.IsNullOrWhiteSpace(e.newValue) ? block.GetType().Name : e.newValue.Trim();
+            });
+            name.RegisterCallback<FocusInEvent>(_ => PortConfigHud.IsAnyDropdownOpen = true);
+            name.RegisterCallback<FocusOutEvent>(_ => { PortConfigHud.IsAnyDropdownOpen = false; RefreshTerminal(); });
+            box.Add(name);
+            return box;
+        }
+
+        private static void NormalizePanelForTerminal(VisualElement panel, float maxWidth)
+        {
+            panel.style.position = Position.Relative;
+            panel.style.top = StyleKeyword.Auto;
+            panel.style.right = StyleKeyword.Auto;
+            panel.style.bottom = StyleKeyword.Auto;
+            panel.style.width = StyleKeyword.Auto;
+            panel.style.maxWidth = maxWidth;
+            panel.style.flexGrow = 0;
+            panel.style.alignSelf = Align.FlexStart;
+        }
+
+        private static VisualElement BuildGroupPage(TerminalState state, BlockGroup group)
+        {
+            var page = T.MachinePanel();
+            page.style.width = StyleKeyword.Auto;
+            page.style.maxWidth = 860;
+            page.style.flexShrink = 0;
+            page.style.paddingBottom = 40;
+
+            page.Add(T.Subtitle("GROUP"));
+            var name = new TextField { value = group.name };
+            name.tooltip = "Edit this group name.";
+            name.RegisterValueChangedCallback(e => group.name = string.IsNullOrWhiteSpace(e.newValue) ? "Group" : e.newValue.Trim());
+            name.RegisterCallback<FocusInEvent>(_ => PortConfigHud.IsAnyDropdownOpen = true);
+            name.RegisterCallback<FocusOutEvent>(_ => { PortConfigHud.IsAnyDropdownOpen = false; RefreshTerminal(); });
+            page.Add(name);
+            page.Add(T.Spacer(8));
+
+            var groupActions = new VisualElement();
+            groupActions.style.flexDirection = FlexDirection.Row;
+            groupActions.style.flexWrap = Wrap.Wrap;
+            groupActions.Add(T.SmallButton(group.hidden ? "Show Group" : "Hide Group", () =>
+            {
+                group.hidden = !group.hidden;
+                RefreshTerminal();
+            }, group.hidden ? T.AccentGreen : T.AccentAmber));
+            groupActions.Add(T.SmallButton("Delete Group", () =>
+            {
+                state.groups.Remove(group);
+                RefreshTerminal();
+            }, T.AccentRed));
+            page.Add(groupActions);
+            page.Add(T.AccentDivider(T.AccentCyan));
+
+            var byType = new SortedDictionary<string, List<GridBlock>>();
+            foreach (var b in group.blocks)
+            {
+                if (b == null) continue;
+                string key = CategoryName(b);
+                if (!byType.TryGetValue(key, out var list)) { list = new List<GridBlock>(); byType[key] = list; }
+                list.Add(b);
+            }
+
+            foreach (var kv in byType)
+            {
+                var list = kv.Value;
+                page.Add(GridUIHelpers.SectionTitle($"{list.Count} x {kv.Key}"));
+                page.Add(GroupCategoryControls(list));
+                foreach (var b in list)
+                {
+                    var row = new Label("  • " + b.blockName);
+                    row.style.fontSize = 10;
+                    row.style.color = new StyleColor(T.TextSecondary);
+                    page.Add(row);
+                }
+                page.Add(T.Spacer(6));
+            }
+
+            return page;
+        }
+
+        private static VisualElement GroupCategoryControls(List<GridBlock> blocks)
+        {
+            var row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.flexWrap = Wrap.Wrap;
+            if (blocks == null || blocks.Count == 0) return row;
+
+            bool togglable = false;
+            foreach (var b in blocks) if (HasToggle(b)) { togglable = true; break; }
+            if (togglable)
+            {
+                row.Add(T.SmallButton("All ON", () => { foreach (var b in blocks) if (HasToggle(b)) b.Enabled = true; RefreshTerminal(); }, T.AccentGreen));
+                row.Add(T.SmallButton("All OFF", () => { foreach (var b in blocks) if (HasToggle(b)) b.Enabled = false; RefreshTerminal(); }, T.AccentRed));
+            }
+
+            if (blocks[0] is GridBattery)
+            {
+                row.Add(T.SmallButton("Auto", () => SetBatteryMode(blocks, GridBatteryMode.Auto), T.AccentGreen));
+                row.Add(T.SmallButton("Recharge", () => SetBatteryMode(blocks, GridBatteryMode.Recharge), T.AccentCyan));
+                row.Add(T.SmallButton("Discharge", () => SetBatteryMode(blocks, GridBatteryMode.Discharge), T.AccentAmber));
+            }
+            else if (blocks[0] is GridLiquidTank || blocks[0] is GridGasTank)
+            {
+                row.Add(T.SmallButton("Auto", () => SetTankMode(blocks, GridTankMode.Auto), T.AccentGreen));
+                row.Add(T.SmallButton("Stockpile", () => SetTankMode(blocks, GridTankMode.Stockpile), T.AccentAmber));
+            }
+
+            return row;
+        }
+
+        private static void SetBatteryMode(List<GridBlock> blocks, GridBatteryMode mode)
+        {
+            foreach (var b in blocks)
+                if (b is GridBattery battery) battery.mode = mode;
+            RefreshTerminal();
+        }
+
+        private static void SetTankMode(List<GridBlock> blocks, GridTankMode mode)
+        {
+            foreach (var b in blocks)
+            {
+                if (b is GridLiquidTank liquid) liquid.mode = mode;
+                else if (b is GridGasTank gas) gas.mode = mode;
+            }
+            RefreshTerminal();
+        }
+
+        private static string CategoryName(GridBlock block)
+        {
+            if (block is GridBattery) return "Batteries";
+            if (block is GridCargoContainer) return "Cargo Containers";
+            if (block is GridDrill) return "Mining Drills";
+            if (block is GridThruster) return "Thrusters";
+            if (block is GridGasTank) return "Gas Tanks";
+            if (block is GridLiquidTank) return "Liquid Tanks";
+            if (block is GridWeapon) return "Weapons";
+            if (block is GridLandingGear) return "Landing Gear";
+            if (block is GridSolarPanel) return "Solar Panels";
+            if (block is GridPortableReactor) return "Portable Reactors";
+            if (block is GridElectricFurnace) return "Electric Furnaces";
+            if (block is GridDockingPort) return "Docking Ports";
+            if (block is GridCockpit) return "Cockpits";
+            return block.GetType().Name;
         }
 
         private static VisualElement AllStoragePanel(GridEntity grid, MachineUIs.SlotBuilder slot)
@@ -552,17 +733,9 @@ namespace VoxelEngine.GridSystem.UI
             p.style.flexShrink = 0;
             p.style.paddingBottom = 40;
 
-            var stores = new List<IGridItemStore>();
+            var entries = CollectStorageEntries(grid);
             float totalKg = 0f;
-            if (grid != null && GridItemNetwork.Instance != null)
-                foreach (var s in GridItemNetwork.Instance.GetStores(grid))
-                {
-                    if (s != null && s.ItemStore != null)
-                    {
-                        stores.Add(s);
-                        totalKg += MassUtil.ContainerMass(s.ItemStore);
-                    }
-                }
+            foreach (var e in entries) totalKg += e.currentKg;
 
             var head = new Label("ALL STORAGE");
             head.style.fontSize = 14;
@@ -573,16 +746,19 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(GridUIHelpers.WeightHeader(totalKg, "Total"));
             p.Add(T.AccentDivider(T.AccentGold));
 
-            if (stores.Count == 0)
+            if (entries.Count == 0)
             {
-                p.Add(T.Muted("No cargo containers or docking ports on this grid.\nBuild a Cargo Container (+ Item Pipes) to link storage."));
+                p.Add(T.Muted("No item inventories found on this grid."));
                 return p;
             }
 
-            foreach (var store in stores)
+            foreach (var entry in entries)
             {
-                var c = store.ItemStore;
-                p.Add(GridUIHelpers.SectionTitle($"{store.StoreLabel}  ·  {MassFormat.Format(MassUtil.ContainerMass(c))}"));
+                var c = entry.container;
+                string massText = entry.maxKg > 0f
+                    ? $"{MassFormat.Format(entry.currentKg)} / {MassFormat.Format(entry.maxKg)}"
+                    : MassFormat.Format(entry.currentKg);
+                p.Add(GridUIHelpers.SectionTitle($"{entry.label}  ·  {massText}"));
                 var g = T.SlotGrid(7);
                 g.style.width = 7 * 60 + 12;
                 g.style.flexShrink = 0;
@@ -591,6 +767,63 @@ namespace VoxelEngine.GridSystem.UI
                 p.Add(g);
             }
             return p;
+        }
+
+        private static List<StorageEntry> CollectStorageEntries(GridEntity grid)
+        {
+            var entries = new List<StorageEntry>();
+            var seen = new HashSet<ItemContainer>();
+            if (grid == null) return entries;
+
+            void Add(string label, ItemContainer container, float maxKg = -1f)
+            {
+                if (container == null || seen.Contains(container)) return;
+                seen.Add(container);
+                entries.Add(new StorageEntry(label, container, MassUtil.ContainerMass(container), maxKg));
+            }
+
+            foreach (var kv in grid.Blocks)
+            {
+                var b = kv.Value;
+                if (b == null) continue;
+                switch (b)
+                {
+                    case GridCargoContainer cargo:
+                        if (cargo.container == null) cargo.OnPlaced();
+                        Add($"{cargo.blockName} (Cargo)", cargo.container, cargo.maxMassKg);
+                        break;
+                    case GridDockingPort dock:
+                        if (dock.container == null) dock.OnPlaced();
+                        Add($"{dock.blockName} (Dock)", dock.container);
+                        break;
+                    case GridDrill drill:
+                        if (drill.buffer == null) drill.OnPlaced();
+                        Add($"{drill.blockName} (Drill Buffer)", drill.buffer);
+                        break;
+                    case GridWeapon weapon:
+                        if (weapon.ammo == null) weapon.OnPlaced();
+                        Add($"{weapon.blockName} (Ammo)", weapon.ammo);
+                        break;
+                    case GridH2O2Generator h2:
+                        if (h2.iceInput == null) h2.OnPlaced();
+                        Add($"{h2.blockName} (Ice Input)", h2.iceInput);
+                        break;
+                    case GridElectricFurnace furnace:
+                        if (furnace.inputC == null) furnace.OnPlaced();
+                        Add($"{furnace.blockName} (Input)", furnace.inputC);
+                        Add($"{furnace.blockName} (Output)", furnace.outputC);
+                        break;
+                    case GridPortableReactor reactor:
+                        if (reactor.fuelC == null) reactor.OnPlaced();
+                        Add($"{reactor.blockName} (Fuel)", reactor.fuelC);
+                        Add($"{reactor.blockName} (Ice)", reactor.iceC);
+                        Add($"{reactor.blockName} (Waste)", reactor.wasteC);
+                        break;
+                }
+            }
+
+            entries.Sort((a, b) => string.CompareOrdinal(a.label, b.label));
+            return entries;
         }
 
         private static bool HasToggle(GridBlock b)
@@ -616,7 +849,6 @@ namespace VoxelEngine.GridSystem.UI
             RefreshTerminal();
         }
 
-        // Compact labeled stat box for the status strip.
         private static VisualElement Stat(string label, string value, Color c)
         {
             var box = new VisualElement();

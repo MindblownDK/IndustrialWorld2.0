@@ -149,6 +149,7 @@ namespace VoxelEngine.GridSystem
             foreach (var t in GridLiquidNetwork.Instance.GetTanks(Grid, LiquidType.Water))
             {
                 if (want <= 0f) break;
+                if (t == null || t.mode == GridTankMode.Stockpile) continue;
                 float got = t.Remove(want);
                 waterStored = Mathf.Min(waterCapacity, waterStored + got);
                 want -= got;

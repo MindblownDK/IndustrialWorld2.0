@@ -19,6 +19,9 @@ namespace VoxelEngine.GridSystem
         [Tooltip("Maximum cargo mass in kilograms. Small = 100 000 kg, Large = 1 000 000 kg.")]
         public float maxMassKg = 100_000f;
 
+        [Tooltip("Optional item/category filter. Empty accepts everything. Matches item id, display name, or category.")]
+        public string itemFilter = "";
+
         public ItemContainer container;
 
         /// <summary>Current mass (kg) of stored items.</summary>
@@ -32,33 +35,69 @@ namespace VoxelEngine.GridSystem
 
         // ── IGridItemStore ──────────────────────────────────────────────────────
         public ItemContainer ItemStore => container;
-        public string StoreLabel => "Cargo Container";
+        public string StoreLabel => blockName == "Armor Block" ? "Cargo Container" : blockName;
 
         public override void OnPlaced()
         {
             base.OnPlaced();
+            if (blockName == "Armor Block") blockName = "Cargo Container";
             if (container == null) container = new ItemContainer("Cargo", slots);
             else container.Resize(slots);
 
-            // Enforce the mass cap on every insert path (drag, quick-transfer, pipes).
-            container.AcceptFilter = MaxAcceptable;
+            ApplyFilter();
 
             // Register with the grid item network so the master terminal & pipes see us.
             if (Grid != null && GridItemNetwork.Instance != null)
                 GridItemNetwork.Instance.RegisterContainer(Grid, this);
         }
 
-        /// <summary>How many of <paramref name="item"/> fit before hitting the mass cap.</summary>
+        public override void OnRemoved()
+        {
+            base.OnRemoved();
+            if (Grid != null && GridItemNetwork.Instance != null)
+                GridItemNetwork.Instance.UnregisterStore(Grid, this);
+        }
+
+        public void SetItemFilter(string filter)
+        {
+            itemFilter = filter ?? "";
+            ApplyFilter();
+        }
+
+        public void ApplyFilter()
+        {
+            if (container == null) return;
+            container.AcceptFilter = MaxAcceptable;
+        }
+
+        /// <summary>How many of <paramref name="item"/> fit before hitting the mass cap and optional filter.</summary>
         private int MaxAcceptable(ItemDefinition item, int wanted)
         {
-            if (item == null || item.massPerUnit <= 0f) return wanted;   // weightless → no cap
+            if (!MatchesFilter(item)) return 0;
+            if (item == null || item.massPerUnit <= 0f) return wanted; // weightless → no cap
             float free = maxMassKg - CurrentMassKg;
             if (free <= 0f) return 0;
             return Mathf.Clamp(Mathf.FloorToInt(free / item.massPerUnit), 0, wanted);
         }
 
+        private bool MatchesFilter(ItemDefinition item)
+        {
+            if (item == null) return false;
+            string q = (itemFilter ?? "").Trim();
+            if (q.Length == 0) return true;
+            return Contains(item.itemId, q)
+                || Contains(item.displayName, q)
+                || Contains(item.category, q);
+        }
+
+        private static bool Contains(string value, string query)
+        {
+            return !string.IsNullOrEmpty(value)
+                && value.IndexOf(query, System.StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
         /// <summary>True if adding this stack would stay within the mass cap.</summary>
         public bool CanAcceptMass(ItemDefinition item, int count)
-            => CurrentMassKg + MassUtil.StackMass(item, count) <= maxMassKg;
+            => MatchesFilter(item) && CurrentMassKg + MassUtil.StackMass(item, count) <= maxMassKg;
     }
 }

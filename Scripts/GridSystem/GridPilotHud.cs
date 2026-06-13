@@ -19,7 +19,7 @@ namespace VoxelEngine.GridSystem
         private static Label _speedLabel, _altLabel, _powerLabel, _h2Label, _dampLabel, _batteryValueLabel;
         private static VisualElement _powerFill, _h2Fill, _batteryGaugeFill;
         private static float _smoothSpeed, _smoothAlt, _smoothPower;
-        private const int LayoutRevision = 5;
+        private const int LayoutRevision = 6;
         private static int _mountedRevision;
         
         // Compass. The strip is three full 360° cycles wide so heading wrap-around never
@@ -68,7 +68,7 @@ namespace VoxelEngine.GridSystem
             _compassBar.style.left = new StyleLength(new Length(50, LengthUnit.Percent));
             _compassBar.style.translate = new StyleTranslate(new Translate(new Length(-50, LengthUnit.Percent), 0));
             _compassBar.style.width = COMPASS_WIDTH;
-            _compassBar.style.height = 54;
+            _compassBar.style.height = 60;
             _compassBar.style.backgroundColor = new StyleColor(new Color(0.04f, 0.05f, 0.07f, 0.78f));
             _compassBar.style.overflow = Overflow.Hidden;
             _compassBar.pickingMode = PickingMode.Ignore;
@@ -109,7 +109,7 @@ namespace VoxelEngine.GridSystem
                 float labelWidth = cardinal ? 48f : 36f;
                 label.style.position = Position.Absolute;
                 label.style.left = x - labelWidth * 0.5f;
-                label.style.top = 36;
+                label.style.top = 41;
                 label.style.width = labelWidth;
                 label.style.unityTextAlign = TextAnchor.MiddleCenter;
                 label.style.fontSize = cardinal ? 13 : (major ? 10 : 9);

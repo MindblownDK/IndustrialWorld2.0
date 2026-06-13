@@ -80,8 +80,8 @@ namespace VoxelEngine.GridSystem.UI
             pill.style.flexDirection = FlexDirection.Row;
             pill.style.alignItems = Align.Center;
             pill.style.backgroundColor = new StyleColor(new Color(0.06f, 0.07f, 0.10f, 0.92f));
-            pill.style.paddingLeft = 5; pill.style.paddingRight = 5;
-            pill.style.paddingTop = 5; pill.style.paddingBottom = 5;
+            pill.style.paddingLeft = 3; pill.style.paddingRight = 3;
+            pill.style.paddingTop = 3; pill.style.paddingBottom = 3;
             T.Border(pill, 1, T.BorderDim); T.Radius(pill, 22);   // big radius = pill shape
             pill.pickingMode = PickingMode.Ignore;
 
@@ -91,12 +91,12 @@ namespace VoxelEngine.GridSystem.UI
                 var seg = new VisualElement();
                 seg.style.flexDirection = FlexDirection.Column;
                 seg.style.alignItems = Align.Center; seg.style.justifyContent = Justify.Center;
-                seg.style.height = 34; seg.style.minWidth = 120;
-                seg.style.paddingLeft = 14; seg.style.paddingRight = 14;
-                seg.style.marginLeft = 2; seg.style.marginRight = 2;
+                seg.style.height = 40; seg.style.minWidth = 128;
+                seg.style.paddingLeft = 16; seg.style.paddingRight = 16;
+                seg.style.marginLeft = 0; seg.style.marginRight = 0;
                 seg.style.backgroundColor = new StyleColor(active
                     ? new Color(0.18f, 0.72f, 0.88f, 0.95f) : new Color(0f, 0f, 0f, 0f));
-                T.Radius(seg, 18);   // each segment is also pill-rounded
+                T.Radius(seg, 20);   // each segment is also pill-rounded
 
                 var lbl = new Label(groups[i] == GridEntity.ToolGroup.Drill ? "DRILL" : "WEAPON");
                 lbl.style.unityFontStyleAndWeight = FontStyle.Bold; lbl.style.fontSize = 13;

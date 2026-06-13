@@ -78,24 +78,32 @@ namespace VoxelEngine.GridSystem
             if (IsLocked || Grid == null || Grid.Body == null) return false;
 
             float cs = Grid.gridSize.CellSize();
-            float reach = cs * 1.35f;
-            float probeRadius = Mathf.Max(0.05f, cs * 0.14f);
+            float reach = cs * 2.5f;
+            float probeRadius = Mathf.Max(0.08f, cs * 0.22f);
 
-            // First check a contact bubble around the foot pad. This catches the common case
-            // where the gear is already resting on terrain and a ray starts inside the collider.
-            Vector3 footCenter = transform.position - transform.up * (cs * 0.48f);
-            var overlaps = Physics.OverlapSphere(footCenter, cs * 0.38f, ~0, QueryTriggerInteraction.Ignore);
-            for (int i = 0; i < overlaps.Length; i++)
+            // First check generous contact bubbles. This catches the common case where the
+            // gear/root collider is already touching terrain and casts start inside/behind it.
+            Vector3[] contactPoints =
             {
-                if (TryLockToCollider(overlaps[i])) return true;
+                transform.position,
+                transform.position - transform.up * (cs * 0.55f),
+                transform.position + Vector3.down * (cs * 0.55f)
+            };
+            for (int p = 0; p < contactPoints.Length; p++)
+            {
+                var overlaps = Physics.OverlapSphere(contactPoints[p], cs * 0.90f, ~0, QueryTriggerInteraction.Ignore);
+                for (int i = 0; i < overlaps.Length; i++)
+                {
+                    if (TryLockToCollider(overlaps[i])) return true;
+                }
             }
 
-            // Then probe the six local faces. RaycastAll/SphereCastAll lets us skip our own
-            // ship colliders and still lock to the first valid surface behind them.
+            // Probe local faces plus world-down. World-down makes auto-lock reliable even when
+            // the landing gear block was placed with an unexpected rotation.
             Vector3[] dirs =
             {
-                -transform.up, -transform.forward, transform.forward,
-                transform.right, -transform.right, transform.up
+                Vector3.down, -transform.up, -transform.forward, transform.forward,
+                transform.right, -transform.right, transform.up, Vector3.up
             };
 
             for (int d = 0; d < dirs.Length; d++)

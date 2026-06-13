@@ -15,6 +15,9 @@ namespace VoxelEngine.GridSystem
         public float capacity = 500f;
         public float stored;
 
+        [Tooltip("Auto feeds the grid gas pool. Stockpile keeps gas reserved in this tank.")]
+        public GridTankMode mode = GridTankMode.Auto;
+
         public float Fill01 => capacity > 0 ? Mathf.Clamp01(stored / capacity) : 0f;
 
         // Compressed gas is light but not weightless — ~0.05 kg per stored litre.
@@ -40,6 +43,7 @@ namespace VoxelEngine.GridSystem
         private void Update()
         {
             if (Grid == null || gasType != Gas.GasType.Hydrogen) return;
+            if (mode == GridTankMode.Stockpile) { stored = Mathf.Clamp(stored, 0f, capacity); return; }
 
             // When gas pipes are present on the grid, the tank feeds the shared
             // hydrogen pool that thrusters draw from — Space-Engineers auto-supply.
@@ -58,6 +62,7 @@ namespace VoxelEngine.GridSystem
         /// <summary>Draw up to <paramref name="litres"/> of gas. Returns litres drawn.</summary>
         public float Draw(float litres)
         {
+            if (mode == GridTankMode.Stockpile) return 0f;
             float take = Mathf.Min(stored, Mathf.Max(0f, litres));
             stored -= take;
             if (Grid != null && gasType == Gas.GasType.Hydrogen)

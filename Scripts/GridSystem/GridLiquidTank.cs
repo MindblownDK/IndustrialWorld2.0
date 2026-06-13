@@ -10,6 +10,12 @@ using VoxelEngine.Items;
 
 namespace VoxelEngine.GridSystem
 {
+    public enum GridTankMode
+    {
+        Auto,
+        Stockpile
+    }
+
     public class GridLiquidTank : GridBlock
     {
         [Header("Liquid Tank")]
@@ -18,6 +24,9 @@ namespace VoxelEngine.GridSystem
         [Tooltip("Capacity in litres.")]
         public float capacity = 500f;
         public float stored;
+
+        [Tooltip("Auto allows machines to draw from this tank. Stockpile keeps contents reserved.")]
+        public GridTankMode mode = GridTankMode.Auto;
 
         public float Fill01 => capacity > 0 ? Mathf.Clamp01(stored / capacity) : 0f;
 
