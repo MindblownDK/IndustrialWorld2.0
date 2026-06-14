@@ -1,12 +1,21 @@
 // Assets/Scripts/VoxelEngine/WaterSim/WaterMeshBuilder.cs
 //
-// Simple, clean water surface. TOP FACES ONLY — no sides, no shore extensions.
-// Just flat quads at water surface height with smoothed heights.
+// High-fidelity chunk-local liquid surface builder for water + crude oil.
+// Builds one combined mesh with two material submeshes:
+//   submesh 0 = water (clear, animated, foamy)
+//   submesh 1 = crude oil (dark, viscous, slower waves)
+//
+// Compared with the old top-face-only mesh, this adds:
+//   • material-aware water/oil rendering
+//   • smoothed corner heights for less blocky pool surfaces
+//   • vertical side skirts so waterfalls and cut-open pools look continuous
+//   • shore overlap to hide cracks against voxel terrain
 
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 using VoxelEngine.Core;
+using VoxelEngine.Items;
 
 namespace VoxelEngine.WaterSim
 {
@@ -14,7 +23,16 @@ namespace VoxelEngine.WaterSim
     {
         private static readonly Queue<Chunk> _queue = new();
         private static readonly HashSet<Chunk> _queued = new();
-        private static Material _mat;
+        private static Material _waterMat;
+        private static Material _oilMat;
+
+        private struct SurfaceCell
+        {
+            public bool has;
+            public LiquidType liquid;
+            public float h;
+            public int y;
+        }
 
         public static void Schedule(Chunk c)
         {
@@ -23,7 +41,7 @@ namespace VoxelEngine.WaterSim
 
         public static void Pump(int budget)
         {
-            EnsureMat();
+            EnsureMats();
             int done = 0;
             while (done < budget && _queue.Count > 0)
             {
@@ -34,19 +52,51 @@ namespace VoxelEngine.WaterSim
             }
         }
 
-        private static void EnsureMat()
+        private static void EnsureMats()
         {
-            if (_mat != null) return;
+            if (_waterMat != null && _oilMat != null) return;
+
             var sh = Shader.Find("VoxelEngine/VoxelWaterURP")
                   ?? Shader.Find("Universal Render Pipeline/Lit")
                   ?? Shader.Find("Standard");
-            _mat = new Material(sh) { name = "VoxelWater" };
-            // Shader Properties block has all defaults — just set blend mode.
-            _mat.SetOverrideTag("RenderType", "Transparent");
-            _mat.SetInt("_SrcBlend", (int)BlendMode.SrcAlpha);
-            _mat.SetInt("_DstBlend", (int)BlendMode.OneMinusSrcAlpha);
-            _mat.SetInt("_ZWrite", 0);
-            _mat.renderQueue = 3000;
+
+            if (_waterMat == null)
+            {
+                _waterMat = new Material(sh) { name = "VoxelWater_Realistic" };
+                ConfigureTransparent(_waterMat);
+                _waterMat.SetColor("_ShallowColor", new Color(0.12f, 0.58f, 0.86f, 0.68f));
+                _waterMat.SetColor("_DeepColor",    new Color(0.02f, 0.10f, 0.28f, 0.88f));
+                _waterMat.SetColor("_FoamColor",    new Color(0.86f, 0.94f, 1.00f, 0.82f));
+                _waterMat.SetFloat("_WaveAmp", 0.055f);
+                _waterMat.SetFloat("_WaveFreq", 1.35f);
+                _waterMat.SetFloat("_WaveSpeed", 0.72f);
+                _waterMat.SetFloat("_NormalScale", 0.85f);
+                _waterMat.SetFloat("_Gloss", 0.96f);
+            }
+
+            if (_oilMat == null)
+            {
+                _oilMat = new Material(sh) { name = "VoxelCrudeOil_Viscous" };
+                ConfigureTransparent(_oilMat);
+                _oilMat.SetColor("_ShallowColor", new Color(0.10f, 0.075f, 0.045f, 0.86f));
+                _oilMat.SetColor("_DeepColor",    new Color(0.012f, 0.010f, 0.008f, 0.96f));
+                _oilMat.SetColor("_FoamColor",    new Color(0.32f, 0.23f, 0.11f, 0.45f));
+                _oilMat.SetFloat("_WaveAmp", 0.018f);
+                _oilMat.SetFloat("_WaveFreq", 0.85f);
+                _oilMat.SetFloat("_WaveSpeed", 0.22f);
+                _oilMat.SetFloat("_NormalScale", 0.42f);
+                _oilMat.SetFloat("_Gloss", 0.99f);
+                _oilMat.SetFloat("_FoamIntensity", 0.25f);
+            }
+        }
+
+        private static void ConfigureTransparent(Material mat)
+        {
+            mat.SetOverrideTag("RenderType", "Transparent");
+            mat.SetInt("_SrcBlend", (int)BlendMode.SrcAlpha);
+            mat.SetInt("_DstBlend", (int)BlendMode.OneMinusSrcAlpha);
+            mat.SetInt("_ZWrite", 0);
+            mat.renderQueue = 3000;
         }
 
         private static void Build(Chunk c)
@@ -54,9 +104,7 @@ namespace VoxelEngine.WaterSim
             const int S = VoxelConstants.CHUNK_SIZE;
             EnsureGO(c);
 
-            // Find the water surface height in each column.
-            float[,] surfY = new float[S, S];
-            bool[,] hasW = new bool[S, S];
+            var cells = new SurfaceCell[S, S];
             bool any = false;
 
             for (int z = 0; z < S; z++)
@@ -65,10 +113,21 @@ namespace VoxelEngine.WaterSim
                 for (int y = S - 1; y >= 0; y--)
                 {
                     var v = c.GetVoxelLocal(x, y, z);
-                    if (v.waterLevel == 0 || v.IsSolid) continue;
-                    if (y + 1 < S) { var a = c.GetVoxelLocal(x, y + 1, z); if (a.waterLevel > 0 && !a.IsSolid) continue; }
-                    surfY[x, z] = y + v.WaterFill;
-                    hasW[x, z] = true;
+                    if (!FluidMaterialUtility.IsFluid(v)) continue;
+                    if (y + 1 < S)
+                    {
+                        var above = c.GetVoxelLocal(x, y + 1, z);
+                        if (FluidMaterialUtility.IsFluid(above) && FluidMaterialUtility.LiquidFromVoxel(above) == FluidMaterialUtility.LiquidFromVoxel(v))
+                            continue;
+                    }
+
+                    cells[x, z] = new SurfaceCell
+                    {
+                        has = true,
+                        liquid = FluidMaterialUtility.LiquidFromVoxel(v),
+                        h = y + v.WaterFill,
+                        y = y
+                    };
                     any = true;
                     break;
                 }
@@ -76,25 +135,11 @@ namespace VoxelEngine.WaterSim
 
             if (!any) { ClearGO(c); return; }
 
-            // Smooth: average each cell's height with its neighbours.
-            float[,] smooth = new float[S, S];
-            for (int z = 0; z < S; z++)
-            for (int x = 0; x < S; x++)
-            {
-                if (!hasW[x, z]) continue;
-                float sum = surfY[x, z]; int cnt = 1;
-                if (x > 0 && hasW[x-1, z]) { sum += surfY[x-1, z]; cnt++; }
-                if (x < S-1 && hasW[x+1, z]) { sum += surfY[x+1, z]; cnt++; }
-                if (z > 0 && hasW[x, z-1]) { sum += surfY[x, z-1]; cnt++; }
-                if (z < S-1 && hasW[x, z+1]) { sum += surfY[x, z+1]; cnt++; }
-                smooth[x, z] = sum / cnt;
-            }
-
-            // Build simple top-face quads. NO sides, NO shore extensions.
-            var verts = new List<Vector3>(S * S * 4);
-            var tris = new List<int>(S * S * 6);
-            var norms = new List<Vector3>(S * S * 4);
-            var uvs = new List<Vector2>(S * S * 4);
+            var verts = new List<Vector3>(S * S * 8);
+            var norms = new List<Vector3>(S * S * 8);
+            var uvs = new List<Vector2>(S * S * 8);
+            var waterTris = new List<int>(S * S * 6);
+            var oilTris = new List<int>(S * S * 6);
 
             float wX = c.coord.x * S;
             float wZ = c.coord.z * S;
@@ -102,47 +147,126 @@ namespace VoxelEngine.WaterSim
             for (int z = 0; z < S; z++)
             for (int x = 0; x < S; x++)
             {
-                if (!hasW[x, z]) continue;
-                float h = smooth[x, z];
+                var cell = cells[x, z];
+                if (!cell.has) continue;
 
-                // Extend slightly into adjacent solid terrain to connect water to land.
-                float x0 = x, x1 = x + 1, z0 = z, z1 = z + 1;
-                if (x > 0 && !hasW[x-1, z] && c.GetVoxelLocal(x-1, (int)h, z).IsSolid) x0 -= 0.3f;
-                if (x < S-1 && !hasW[x+1, z] && c.GetVoxelLocal(x+1, (int)h, z).IsSolid) x1 += 0.3f;
-                if (z > 0 && !hasW[x, z-1] && c.GetVoxelLocal(x, (int)h, z-1).IsSolid) z0 -= 0.3f;
-                if (z < S-1 && !hasW[x, z+1] && c.GetVoxelLocal(x, (int)h, z+1).IsSolid) z1 += 0.3f;
-
-                int i = verts.Count;
-                verts.Add(new Vector3(x0, h, z0));
-                verts.Add(new Vector3(x1, h, z0));
-                verts.Add(new Vector3(x1, h, z1));
-                verts.Add(new Vector3(x0, h, z1));
-
-                norms.Add(Vector3.up); norms.Add(Vector3.up);
-                norms.Add(Vector3.up); norms.Add(Vector3.up);
-
-                uvs.Add(new Vector2(wX + x, wZ + z));
-                uvs.Add(new Vector2(wX + x + 1, wZ + z));
-                uvs.Add(new Vector2(wX + x + 1, wZ + z + 1));
-                uvs.Add(new Vector2(wX + x, wZ + z + 1));
-
-                tris.Add(i); tris.Add(i + 2); tris.Add(i + 1);
-                tris.Add(i); tris.Add(i + 3); tris.Add(i + 2);
+                var tris = cell.liquid == LiquidType.CrudeOil ? oilTris : waterTris;
+                AddTop(c, cells, x, z, wX, wZ, verts, norms, uvs, tris);
+                AddSides(c, cells, x, z, wX, wZ, verts, norms, uvs, tris);
             }
 
             if (verts.Count == 0) { ClearGO(c); return; }
 
-            if (c.waterMesh == null) c.waterMesh = new Mesh { name = "WaterSurface" };
+            if (c.waterMesh == null) c.waterMesh = new Mesh { name = "LiquidSurface" };
             c.waterMesh.Clear();
             c.waterMesh.indexFormat = verts.Count > 60000 ? IndexFormat.UInt32 : IndexFormat.UInt16;
             c.waterMesh.SetVertices(verts);
-            c.waterMesh.SetTriangles(tris, 0);
             c.waterMesh.SetNormals(norms);
             c.waterMesh.SetUVs(0, uvs);
+            c.waterMesh.subMeshCount = 2;
+            c.waterMesh.SetTriangles(waterTris, 0);
+            c.waterMesh.SetTriangles(oilTris, 1);
             c.waterMesh.RecalculateBounds();
+
             c.waterMeshFilter.sharedMesh = c.waterMesh;
-            c.waterMeshRenderer.sharedMaterial = _mat;
+            c.waterMeshRenderer.sharedMaterials = new[] { _waterMat, _oilMat };
             c.waterMeshGO.SetActive(true);
+        }
+
+        private static void AddTop(Chunk c, SurfaceCell[,] cells, int x, int z, float wX, float wZ,
+            List<Vector3> verts, List<Vector3> norms, List<Vector2> uvs, List<int> tris)
+        {
+            var cell = cells[x, z];
+            float h00 = CornerHeight(cells, x, z, cell.liquid, -1, -1, cell.h);
+            float h10 = CornerHeight(cells, x, z, cell.liquid,  1, -1, cell.h);
+            float h11 = CornerHeight(cells, x, z, cell.liquid,  1,  1, cell.h);
+            float h01 = CornerHeight(cells, x, z, cell.liquid, -1,  1, cell.h);
+
+            float shore = 0.08f;
+            float x0 = x, x1 = x + 1, z0 = z, z1 = z + 1;
+            if (NeighbourIsSolid(c, x - 1, cell.y, z)) x0 -= shore;
+            if (NeighbourIsSolid(c, x + 1, cell.y, z)) x1 += shore;
+            if (NeighbourIsSolid(c, x, cell.y, z - 1)) z0 -= shore;
+            if (NeighbourIsSolid(c, x, cell.y, z + 1)) z1 += shore;
+
+            int i = verts.Count;
+            verts.Add(new Vector3(x0, h00, z0));
+            verts.Add(new Vector3(x1, h10, z0));
+            verts.Add(new Vector3(x1, h11, z1));
+            verts.Add(new Vector3(x0, h01, z1));
+            for (int n = 0; n < 4; n++) norms.Add(Vector3.up);
+            uvs.Add(new Vector2(wX + x0, wZ + z0));
+            uvs.Add(new Vector2(wX + x1, wZ + z0));
+            uvs.Add(new Vector2(wX + x1, wZ + z1));
+            uvs.Add(new Vector2(wX + x0, wZ + z1));
+            tris.Add(i); tris.Add(i + 2); tris.Add(i + 1);
+            tris.Add(i); tris.Add(i + 3); tris.Add(i + 2);
+        }
+
+        private static void AddSides(Chunk c, SurfaceCell[,] cells, int x, int z, float wX, float wZ,
+            List<Vector3> verts, List<Vector3> norms, List<Vector2> uvs, List<int> tris)
+        {
+            var cell = cells[x, z];
+            AddSideIfOpen(cells, x, z, cell,  1,  0, new Vector3(1, 0, 0), wX, wZ, verts, norms, uvs, tris);
+            AddSideIfOpen(cells, x, z, cell, -1,  0, new Vector3(-1, 0, 0), wX, wZ, verts, norms, uvs, tris);
+            AddSideIfOpen(cells, x, z, cell,  0,  1, new Vector3(0, 0, 1), wX, wZ, verts, norms, uvs, tris);
+            AddSideIfOpen(cells, x, z, cell,  0, -1, new Vector3(0, 0, -1), wX, wZ, verts, norms, uvs, tris);
+        }
+
+        private static void AddSideIfOpen(SurfaceCell[,] cells, int x, int z, SurfaceCell cell, int dx, int dz, Vector3 normal,
+            float wX, float wZ, List<Vector3> verts, List<Vector3> norms, List<Vector2> uvs, List<int> tris)
+        {
+            int nx = x + dx, nz = z + dz;
+            bool sameNeighbour = nx >= 0 && nx < VoxelConstants.CHUNK_SIZE && nz >= 0 && nz < VoxelConstants.CHUNK_SIZE
+                              && cells[nx, nz].has && cells[nx, nz].liquid == cell.liquid && cells[nx, nz].h >= cell.y + 0.02f;
+            if (sameNeighbour) return;
+
+            float top = cell.h;
+            float bottom = Mathf.Floor(cell.h);
+            if (top - bottom < 0.08f) bottom = top - 0.35f;
+
+            float x0 = x, x1 = x + 1, z0 = z, z1 = z + 1;
+            Vector3 a, b, c0, d;
+            if (dx > 0) { a = new Vector3(x1, bottom, z0); b = new Vector3(x1, bottom, z1); c0 = new Vector3(x1, top, z1); d = new Vector3(x1, top, z0); }
+            else if (dx < 0) { a = new Vector3(x0, bottom, z1); b = new Vector3(x0, bottom, z0); c0 = new Vector3(x0, top, z0); d = new Vector3(x0, top, z1); }
+            else if (dz > 0) { a = new Vector3(x1, bottom, z1); b = new Vector3(x0, bottom, z1); c0 = new Vector3(x0, top, z1); d = new Vector3(x1, top, z1); }
+            else { a = new Vector3(x0, bottom, z0); b = new Vector3(x1, bottom, z0); c0 = new Vector3(x1, top, z0); d = new Vector3(x0, top, z0); }
+
+            int i = verts.Count;
+            verts.Add(a); verts.Add(b); verts.Add(c0); verts.Add(d);
+            for (int n = 0; n < 4; n++) norms.Add(normal);
+            uvs.Add(new Vector2(wX + a.x, wZ + a.z));
+            uvs.Add(new Vector2(wX + b.x, wZ + b.z));
+            uvs.Add(new Vector2(wX + c0.x, wZ + c0.z));
+            uvs.Add(new Vector2(wX + d.x, wZ + d.z));
+            tris.Add(i); tris.Add(i + 2); tris.Add(i + 1);
+            tris.Add(i); tris.Add(i + 3); tris.Add(i + 2);
+        }
+
+        private static float CornerHeight(SurfaceCell[,] cells, int x, int z, LiquidType liquid, int sx, int sz, float fallback)
+        {
+            float sum = fallback;
+            int cnt = 1;
+            TryAdd(cells, x + sx, z, liquid, ref sum, ref cnt);
+            TryAdd(cells, x, z + sz, liquid, ref sum, ref cnt);
+            TryAdd(cells, x + sx, z + sz, liquid, ref sum, ref cnt);
+            return sum / cnt;
+        }
+
+        private static void TryAdd(SurfaceCell[,] cells, int x, int z, LiquidType liquid, ref float sum, ref int cnt)
+        {
+            if (x < 0 || x >= VoxelConstants.CHUNK_SIZE || z < 0 || z >= VoxelConstants.CHUNK_SIZE) return;
+            var c = cells[x, z];
+            if (!c.has || c.liquid != liquid) return;
+            sum += c.h;
+            cnt++;
+        }
+
+        private static bool NeighbourIsSolid(Chunk c, int x, int y, int z)
+        {
+            if (x < 0 || x >= VoxelConstants.CHUNK_SIZE || z < 0 || z >= VoxelConstants.CHUNK_SIZE || y < 0 || y >= VoxelConstants.CHUNK_SIZE)
+                return false;
+            return c.GetVoxelLocal(x, y, z).IsSolid;
         }
 
         private static void ClearGO(Chunk c)
@@ -157,7 +281,7 @@ namespace VoxelEngine.WaterSim
                 foreach (var col in c.waterMeshGO.GetComponents<Collider>()) Object.Destroy(col);
                 return;
             }
-            c.waterMeshGO = new GameObject("WaterSurface");
+            c.waterMeshGO = new GameObject("LiquidSurface");
             c.waterMeshGO.transform.SetParent(c.go.transform, false);
             c.waterMeshFilter = c.waterMeshGO.AddComponent<MeshFilter>();
             c.waterMeshRenderer = c.waterMeshGO.AddComponent<MeshRenderer>();

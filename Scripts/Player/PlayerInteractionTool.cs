@@ -208,13 +208,19 @@ namespace VoxelEngine.Player
                 var stackRmb = inventory.ActiveStack;
                 if (!stackRmb.IsEmpty && stackRmb.item is WaterBucket && stackRmb.durability > 0)
                 {
-                    // Place water into the fluid sim (the voxel cell stays AIR; water mesh renders it).
+                    // Place the carried liquid into the fluid sim (the voxel cell stays AIR;
+                    // the liquid mesh renders it). Buckets can now carry water or crude oil.
                     var pos = world.WorldToVoxel(hit.point + hit.normal * 0.5f);
                     var existing = world.GetVoxelWorld(pos);
                     if (existing.density <= 0)
                     {
-                        VoxelEngine.Fluids.FluidSimManager.Instance?.PlaceWater(pos, VoxelEngine.Fluids.FluidGrid.MAX_LEVEL);
-                        stackRmb.durability = 0;       // bucket emptied
+                        var carried = stackRmb.payload is VoxelEngine.Items.LiquidType lt ? lt : VoxelEngine.Items.LiquidType.Water;
+                        if (carried == VoxelEngine.Items.LiquidType.CrudeOil)
+                            VoxelEngine.Fluids.FluidSimManager.Instance?.PlaceOil(pos, 255);
+                        else
+                            VoxelEngine.Fluids.FluidSimManager.Instance?.PlaceWater(pos, 255);
+                        stackRmb.durability = 0;
+                        stackRmb.payload = null;
                         inventory.container.RaiseChanged();
                     }
                     return;
@@ -298,6 +304,8 @@ namespace VoxelEngine.Player
                 if (hydroEngine != null) { UI.GameUIController.Instance?.OpenMachine(hydroEngine); return; }
                 var gasTank = hit.collider.GetComponentInParent<VoxelEngine.Gas.GasTank>();
                 if (gasTank != null) { UI.GameUIController.Instance?.OpenMachine(gasTank); return; }
+                var liquidPump = hit.collider.GetComponentInParent<VoxelEngine.Fluids.WaterPump>();
+                if (liquidPump != null) { UI.GameUIController.Instance?.OpenMachine(liquidPump); return; }
 
                 // Industrial fluid processors.
                 var oilRefinery = hit.collider.GetComponentInParent<VoxelEngine.Crafting.OilRefinery>();
@@ -525,30 +533,41 @@ namespace VoxelEngine.Player
                 }
                 var hitPos = world.WorldToVoxel(hit.point - ray.direction.normalized * 0.2f);
                 bool scooped = false;
-                // Try the new fluid sim first (player-placed water + oceans seeded into the sim).
+                VoxelEngine.Items.LiquidType scoopedLiquid = VoxelEngine.Items.LiquidType.Water;
+                // Try the new fluid sim first (player-placed liquids + oceans seeded into the sim).
                 var fsm = VoxelEngine.Fluids.FluidSimManager.Instance;
                 if (fsm != null && fsm.TryDrainWaterAt(hitPos))
                 {
                     scooped = true;
+                    scoopedLiquid = VoxelEngine.Items.LiquidType.Water;
                 }
                 else if (fsm != null && fsm.TryDrainOilAt(hitPos))
                 {
                     scooped = true;
+                    scoopedLiquid = VoxelEngine.Items.LiquidType.CrudeOil;
                 }
                 else
                 {
                     // Fall back: legacy WaterVoxel OR CrudeOil material in the voxel grid.
                     var here = world.GetVoxelWorld(hitPos);
                     if (here.material == (byte)VoxelEngine.Materials.MaterialId.WaterVoxel ||
-                        here.material == (byte)VoxelEngine.Materials.MaterialId.CrudeOil)
+                        here.material == (byte)VoxelEngine.Materials.MaterialId.WaterLiquid)
                     {
                         world.SetVoxelWorld(hitPos, new VoxelEngine.Core.Voxel(-127, (byte)VoxelEngine.Materials.MaterialId.Air));
                         scooped = true;
+                        scoopedLiquid = VoxelEngine.Items.LiquidType.Water;
+                    }
+                    else if (here.material == (byte)VoxelEngine.Materials.MaterialId.CrudeOil)
+                    {
+                        world.SetVoxelWorld(hitPos, new VoxelEngine.Core.Voxel(-127, (byte)VoxelEngine.Materials.MaterialId.Air));
+                        scooped = true;
+                        scoopedLiquid = VoxelEngine.Items.LiquidType.CrudeOil;
                     }
                 }
                 if (scooped)
                 {
                     stack.durability = 1;
+                    stack.payload = scoopedLiquid;
                     inventory.container.RaiseChanged();
                 }
                 _nextHit = Time.time + 0.3f;

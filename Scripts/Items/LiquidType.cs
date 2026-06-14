@@ -40,7 +40,7 @@ namespace VoxelEngine.Items
         public static float DensityKgPerL(this LiquidType t) => t switch
         {
             LiquidType.Water      => 1.0f,
-            LiquidType.CrudeOil   => 0.88f,
+            LiquidType.CrudeOil   => 1.12f, // gameplay: crude oil is heavier and more sluggish than water
             LiquidType.RefinedOil => 0.82f,
             LiquidType.LiquidFuel => 0.78f,
             _                     => 1.0f,

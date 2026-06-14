@@ -67,26 +67,18 @@ namespace VoxelEngine.GridSystem
             if (wheelSizeCells <= 2)
             {
                 suspensionLength = Mathf.Max(suspensionLength, 1.0f);
-                springForce = Mathf.Max(springForce, 120000f);
-                damping = Mathf.Max(damping, 16000f);
-                driveForce = Mathf.Max(driveForce, 220000f);
-                powerDrawWatts = Mathf.Max(powerDrawWatts, 450f);
+                springForce = Mathf.Max(springForce, 90000f);
+                damping = Mathf.Max(damping, 12000f);
+                driveForce = Mathf.Max(driveForce, 45000f);
+                powerDrawWatts = Mathf.Max(powerDrawWatts, 150f);
             }
             else if (wheelSizeCells >= 5)
             {
                 suspensionLength = Mathf.Max(suspensionLength, 2.2f);
-                springForce = Mathf.Max(springForce, 420000f);
-                damping = Mathf.Max(damping, 48000f);
-                driveForce = Mathf.Max(driveForce, 1350000f);
-                powerDrawWatts = Mathf.Max(powerDrawWatts, 1800f);
-            }
-            else
-            {
-                suspensionLength = Mathf.Max(suspensionLength, 1.45f);
-                springForce = Mathf.Max(springForce, 210000f);
-                damping = Mathf.Max(damping, 26000f);
-                driveForce = Mathf.Max(driveForce, 520000f);
-                powerDrawWatts = Mathf.Max(powerDrawWatts, 900f);
+                springForce = Mathf.Max(springForce, 260000f);
+                damping = Mathf.Max(damping, 32000f);
+                driveForce = Mathf.Max(driveForce, 145000f);
+                powerDrawWatts = Mathf.Max(powerDrawWatts, 650f);
             }
         }
 
@@ -110,6 +102,8 @@ namespace VoxelEngine.GridSystem
             Vector3 baseForward = frame != null ? frame.forward : transform.forward;
             Vector3 steeringAxis = frame != null ? frame.up : transform.up;
             float steer = isSteerable ? grid.ThrustInput.x * steerAngle : 0f;
+            Quaternion steerRot = Quaternion.AngleAxis(steer, steeringAxis);
+            Vector3 forward = steerRot * baseForward;
 
             if (TryFindGround(grid, radius, out var hit, out var castDir))
             {
@@ -123,34 +117,27 @@ namespace VoxelEngine.GridSystem
                 force = Mathf.Max(0f, force);
                 grid.Body.AddForceAtPosition(supportDir * force, wheelPos, ForceMode.Force);
 
-                Vector3 axle = transform.right;
-                if (axle.sqrMagnitude < 0.0001f) axle = transform.right;
-                axle.Normalize();
-                Vector3 driveDir = Vector3.Cross(hit.normal, axle).normalized;
-                Vector3 desiredForward = Vector3.ProjectOnPlane(baseForward, hit.normal).normalized;
-                if (driveDir.sqrMagnitude < 0.0001f) driveDir = desiredForward;
-                if (desiredForward.sqrMagnitude > 0.0001f && Vector3.Dot(driveDir, desiredForward) < 0f)
-                    driveDir = -driveDir;
-                if (isSteerable)
-                    driveDir = Quaternion.AngleAxis(steer, hit.normal) * driveDir;
-
-                if (powered && Mathf.Abs(_currentThrottle) > 0.01f && driveDir.sqrMagnitude > 0.0001f)
-                    grid.Body.AddForceAtPosition(driveDir.normalized * _currentThrottle * driveForce, wheelPos, ForceMode.Force);
+                if (powered && Mathf.Abs(_currentThrottle) > 0.01f)
+                {
+                    Vector3 driveDir = Vector3.ProjectOnPlane(forward, hit.normal).normalized;
+                    if (driveDir.sqrMagnitude > 0.0001f)
+                        grid.Body.AddForceAtPosition(driveDir * _currentThrottle * driveForce, wheelPos, ForceMode.Force);
+                }
 
                 Vector3 pointVelocity = grid.Body.GetPointVelocity(wheelPos);
-                Vector3 lateral = Vector3.Project(pointVelocity, axle);
+                Vector3 lateral = Vector3.Project(pointVelocity, transform.right);
                 float friction = Mathf.Clamp(grid.Body.mass * 2.2f, 2500f, 45000f);
                 grid.Body.AddForceAtPosition(-lateral * friction, wheelPos, ForceMode.Force);
 
                 _lastSpringLength = currentLength;
-                UpdateVisuals(steer, grid.Body.GetPointVelocity(wheelPos), driveDir, radius, currentLength);
+                UpdateVisuals(steer, grid.Body.GetPointVelocity(wheelPos), forward, radius, currentLength);
             }
             else
             {
                 IsGrounded = false;
                 _currentThrottle = 0f;
                 _lastSpringLength = suspensionLength;
-                UpdateVisuals(steer, Vector3.zero, baseForward, radius, suspensionLength);
+                UpdateVisuals(steer, Vector3.zero, forward, radius, suspensionLength);
             }
         }
 

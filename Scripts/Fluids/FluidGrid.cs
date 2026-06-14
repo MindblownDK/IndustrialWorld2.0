@@ -7,7 +7,7 @@ namespace VoxelEngine.Fluids
 {
     public class FluidGrid
     {
-        public const byte MAX_LEVEL = 8;
+        public const byte MAX_LEVEL = 255;
         public NativeArray<byte> levels;
         public bool isDirty;
         public bool hasAnyWater;

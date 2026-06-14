@@ -122,7 +122,7 @@ namespace VoxelEngine.Generation
                 {
                     // Water: negative density (invisible to SurfaceNets).
                     // waterLevel=255 so our fluid system renders + simulates it.
-                    material = (byte)MaterialId.Air;
+                    material = (byte)MaterialId.WaterLiquid;
                     densityByte = -1;
                     voxels[index] = new Voxel(densityByte, material, 255);
                     return;

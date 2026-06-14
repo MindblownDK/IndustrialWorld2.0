@@ -107,28 +107,11 @@ namespace VoxelEngine.Generation
 
         private static void PlaceOilFluid(VoxelWorld world, Vector3Int worldVoxel)
         {
-            // We use the existing FluidGrid system but mark oil cells with a special
-            // tag via the OilGrid overlay. For the base system, oil uses the same
-            // PlaceWater path — FluidSimManager handles it.
-            const int S = VoxelConstants.CHUNK_SIZE;
-            var coord = new Vector3Int(
-                Mathf.FloorToInt(worldVoxel.x / (float)S),
-                Mathf.FloorToInt(worldVoxel.y / (float)S),
-                Mathf.FloorToInt(worldVoxel.z / (float)S));
-            if (!world.TryGetChunk(coord, out var ch)) return;
-            if (ch.fluidGrid == null) ch.fluidGrid = new FluidGrid();
-
-            // Also allocate oil tracking grid.
-            if (ch.oilGrid == null) ch.oilGrid = new OilGrid();
-
-            int lx = worldVoxel.x - coord.x * S;
-            int ly = worldVoxel.y - coord.y * S;
-            int lz = worldVoxel.z - coord.z * S;
-
-            ch.fluidGrid.Set(lx, ly, lz, FluidGrid.MAX_LEVEL);
-            ch.oilGrid.Set(lx, ly, lz, true);
-
-            FluidSimManager.Instance?.MarkDirty(coord);
+            // Crude oil now uses the same save-compatible voxel fluid byte as water,
+            // with material=CrudeOil to mark the liquid kind. This makes oil render,
+            // flow and pump through the unified liquid simulation immediately.
+            VoxelEngine.WaterSim.FluidManager.EnsureInstance();
+            VoxelEngine.WaterSim.FluidManager.Instance?.PlaceOil(worldVoxel, 255);
         }
 
         private static int FindSurface(VoxelWorld world, int wx, int wz, int startY)

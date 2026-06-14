@@ -90,6 +90,7 @@ namespace VoxelEngine.Core
             Instance = this;
             // Volumetric water simulation.
             VoxelEngine.WaterSim.FluidManager.EnsureInstance();
+            VoxelEngine.Fluids.FluidSimManager.EnsureInstance();
 
             // Auto-recover missing references (common after branch switches / scene reloads)
             if (materialRegistry == null)
@@ -330,7 +331,7 @@ namespace VoxelEngine.Core
                             var wv2 = chunk.GetVoxelLocal(wx2, wy2, wz2);
                             if (wv2.density > 0 && wv2.material == (byte)Materials.MaterialId.WaterVoxel)
                             {
-                                chunk.SetVoxelLocal(wx2, wy2, wz2, new Voxel(-1, (byte)Materials.MaterialId.Air, 255));
+                                chunk.SetVoxelLocal(wx2, wy2, wz2, new Voxel(-1, (byte)Materials.MaterialId.WaterLiquid, 255));
                                 hw = true;
                             }
                             if (wv2.waterLevel > 0) hw = true;
@@ -780,6 +781,10 @@ namespace VoxelEngine.Core
             p.chunk.isGenerated = true;
             p.chunk.genCompletedTime = Time.time;
             p.chunk.isScattered = false; // (re)evaluate scatter once neighbours are ready
+
+            // Natural crude oil reservoirs: crude-oil ore markers become a surface
+            // seep + vertical funnel + deep pool, filled by the unified liquid sim.
+            VoxelEngine.Generation.OilReservoirDecorator.Decorate(p.chunk, this);
 
             // Stitch borders for seamless meshing.
             StitchBordersWithNeighbours(p.chunk);
