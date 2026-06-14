@@ -32,6 +32,40 @@ namespace VoxelEngine.Core
         public float genCompletedTime;       // Time.time when isGenerated became true
         public Mesh mesh;                   // assigned & owned by this chunk
 
+        /// <summary>
+        /// Surface flow velocity field — one Vector2 per horizontal column (CHUNK_SIZE²).
+        /// Computed each fluid tick from pressure gradients; consumed by the water mesh
+        /// builder and encoded into UV2 so the shader can flow-map normals and foam.
+        /// Null when the chunk has never contained fluid.
+        /// </summary>
+        public Vector2[] flowField;
+
+        /// <summary>Read the flow vector for column (x, z). Returns zero if no flow data.</summary>
+        public Vector2 GetFlow(int x, int z)
+        {
+            if (flowField == null) return Vector2.zero;
+            const int S = VoxelConstants.CHUNK_SIZE;
+            if (x < 0 || x >= S || z < 0 || z >= S) return Vector2.zero;
+            return flowField[x + z * S];
+        }
+
+        /// <summary>Write the flow vector for column (x, z). Allocates the array lazily.</summary>
+        public void SetFlow(int x, int z, Vector2 v)
+        {
+            const int S = VoxelConstants.CHUNK_SIZE;
+            if (flowField == null) flowField = new Vector2[S * S];
+            if (x < 0 || x >= S || z < 0 || z >= S) return;
+            flowField[x + z * S] = v;
+        }
+
+        /// <summary>Ensure the flow field array exists, zeroed.</summary>
+        public void EnsureFlowField()
+        {
+            const int S = VoxelConstants.CHUNK_SIZE;
+            if (flowField == null || flowField.Length != S * S)
+                flowField = new Vector2[S * S];
+        }
+
         public Vector3 WorldOrigin =>
             new Vector3(coord.x, coord.y, coord.z) *
             (VoxelConstants.CHUNK_SIZE * VoxelConstants.VOXEL_SIZE);

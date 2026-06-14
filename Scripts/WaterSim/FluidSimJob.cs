@@ -1,16 +1,20 @@
 // Assets/Scripts/VoxelEngine/WaterSim/FluidSimJob.cs
 //
 // Burst-compiled cellular automata liquid simulation operating directly on voxel
-// data. The volume byte is still named waterLevel for save compatibility, but the
-// voxel material now identifies the liquid type:
-//   • WaterLiquid = fast, clear water
-//   • CrudeOil    = viscous, slower, heavier liquid
+// data. Rebuilt with pressure-driven flow, viscosity differentiation, and clean
+// separation of simulation logic.
+//
+// Liquids:
+//   • Water (WaterLiquid) — fast, low viscosity, high throughput
+//   • Crude Oil (CrudeOil) — viscous, slow fall, slow spread, sinks through water
 //
 // Rules:
-//  1. Gravity moves liquid down first; oil has a lower max transfer per tick.
-//  2. Viscous horizontal equalization only spreads into empty/same-liquid cells.
-//  3. Crude oil sinks through water slowly, keeping liquids separated.
-//  4. Empty fluid voxels are cleaned back to Air so terrain/material queries stay sane.
+//  1. Gravity: liquid falls down; oil capped at 64/tick vs water 255
+//  2. Oil-water swap: heavy oil sinks through lighter water, one cell per tick
+//  3. Pressure equalization: horizontal flow from high to low pressure
+//     Viscosity limits transfer step per tick (oil 10, water 48)
+//  4. Micro-cleanup: tiny floating drops (< 3 level) with air below just fall
+//  5. Clean-up: empty fluid voxels reset to Air so terrain queries stay sane
 
 using Unity.Burst;
 using Unity.Collections;
@@ -33,13 +37,19 @@ namespace VoxelEngine.WaterSim
         private const byte WaterMat = (byte)MaterialId.WaterLiquid;
         private const byte OilMat   = (byte)MaterialId.CrudeOil;
 
+        // Viscosity parameters — oil is much more viscous than water
+        private const int WaterMaxFall        = 255;
+        private const int OilMaxFall          = 64;   // slow — viscous drag
+        private const int WaterHorizontalStep = 48;
+        private const int OilHorizontalStep   = 10;   // very slow horizontal spread
+
         public void Execute()
         {
             int S = chunkSize;
             int SP = chunkSizeP;
             bool any = false;
 
-            // Bottom-to-top lets a falling stream cascade several cells in one job pass.
+            // Bottom-to-top lets a falling stream cascade several cells in one pass.
             for (int y = 0; y < S; y++)
             for (int z = 0; z < S; z++)
             for (int x = 0; x < S; x++)
@@ -48,6 +58,7 @@ namespace VoxelEngine.WaterSim
                 var v = voxels[i];
                 if (v.waterLevel == 0) continue;
 
+                // Solid cells with residual waterLevel — clean up
                 if (v.IsSolid)
                 {
                     v.waterLevel = 0;
@@ -59,91 +70,103 @@ namespace VoxelEngine.WaterSim
 
                 byte liquidMat = NormalizeFluidMaterial(ref v);
                 bool isOil = liquidMat == OilMat;
+                int maxFall = isOil ? OilMaxFall : WaterMaxFall;
+                int hStep   = isOil ? OilHorizontalStep : WaterHorizontalStep;
 
-                // Oil is treated as the heavier liquid for gameplay readability. If oil
-                // rests on water, swap their cells slowly so crude ends up below water.
+                // --- Oil sinks through water (density swap) ---
                 int belowI = Pad(x, y - 1, z, SP);
                 var below = voxels[belowI];
-                if (isOil && IsWater(below) && !below.IsSolid && v.waterLevel > 8)
+                if (isOil && IsWater(below) && !below.IsSolid && v.waterLevel > 6)
                 {
-                    byte oilLevel = v.waterLevel;
+                    byte oilLevel   = v.waterLevel;
                     byte waterLevel = below.waterLevel;
-                    below.material = OilMat;
+                    below.material   = OilMat;
                     below.waterLevel = oilLevel;
-                    v.material = WaterMat;
-                    v.waterLevel = waterLevel;
-                    voxels[belowI] = below;
-                    voxels[i] = v;
+                    v.material       = WaterMat;
+                    v.waterLevel     = waterLevel;
+                    voxels[belowI]   = below;
+                    voxels[i]        = v;
                     any = true;
                     continue;
                 }
 
-                // Rule 1: vertical down-flow into empty/same-liquid cells.
+                // --- Rule 1: gravity — vertical down-flow ---
                 below = voxels[belowI];
                 if (!below.IsSolid && CanShareCell(below, liquidMat))
                 {
                     int space = 255 - below.waterLevel;
                     if (space > 0)
                     {
-                        int maxFall = isOil ? 96 : 255;
                         int transfer = Min3(v.waterLevel, space, maxFall);
                         if (transfer > 0)
                         {
-                            v.waterLevel = (byte)(v.waterLevel - transfer);
+                            v.waterLevel     = (byte)(v.waterLevel - transfer);
                             below.waterLevel = (byte)(below.waterLevel + transfer);
-                            below.material = liquidMat;
+                            below.material   = liquidMat;
                             if (v.waterLevel == 0) v.material = AirMat;
                             voxels[belowI] = below;
-                            voxels[i] = v;
+                            voxels[i]      = v;
                             any = true;
                             if (v.waterLevel == 0) continue;
                         }
                     }
                 }
 
-                // Rule 2: horizontal equalization, but only when supported below.
+                // --- Rule 2: horizontal pressure equalization (only when supported below) ---
                 below = voxels[belowI];
-                bool belowBlocked = below.IsSolid || (CanShareCell(below, liquidMat) && below.waterLevel >= 254) || (!CanShareCell(below, liquidMat) && below.waterLevel > 0);
+                bool belowBlocked = below.IsSolid
+                    || (CanShareCell(below, liquidMat) && below.waterLevel >= 254)
+                    || (!CanShareCell(below, liquidMat) && below.waterLevel > 0);
+
                 if (belowBlocked && v.waterLevel > 1)
                 {
-                    int horizontalStep = isOil ? 16 : 48;
-                    any |= TryFlowHorizontal(i, x + 1, y, z, SP, liquidMat, horizontalStep, ref v);
-                    any |= TryFlowHorizontal(i, x - 1, y, z, SP, liquidMat, horizontalStep, ref v);
-                    any |= TryFlowHorizontal(i, x, y, z + 1, SP, liquidMat, horizontalStep, ref v);
-                    any |= TryFlowHorizontal(i, x, y, z - 1, SP, liquidMat, horizontalStep, ref v);
+                    TryFlowHorizontal(i, x + 1, y, z, SP, liquidMat, hStep, ref v);
+                    TryFlowHorizontal(i, x - 1, y, z, SP, liquidMat, hStep, ref v);
+                    TryFlowHorizontal(i, x, y, z + 1, SP, liquidMat, hStep, ref v);
+                    TryFlowHorizontal(i, x, y, z - 1, SP, liquidMat, hStep, ref v);
                     if (v.waterLevel == 0) v.material = AirMat;
                     voxels[i] = v;
+                }
+
+                // --- Rule 3: micro-cleanup — tiny floating drops just fall ---
+                if (v.waterLevel > 0 && v.waterLevel <= 2 && !below.IsSolid && below.waterLevel == 0)
+                {
+                    below.waterLevel = v.waterLevel;
+                    below.material   = liquidMat;
+                    v.waterLevel     = 0;
+                    v.material       = AirMat;
+                    voxels[belowI] = below;
+                    voxels[i]      = v;
+                    any = true;
                 }
             }
 
             changed[0] = any ? 1 : 0;
         }
 
-        private bool TryFlowHorizontal(int fromI, int nx, int ny, int nz, int sp, byte liquidMat, int maxStep, ref Voxel source)
+        private void TryFlowHorizontal(int fromI, int nx, int ny, int nz, int sp, byte liquidMat, int maxStep, ref Voxel source)
         {
-            if (source.waterLevel <= 1) return false;
+            if (source.waterLevel <= 1) return;
             int ni = Pad(nx, ny, nz, sp);
             var n = voxels[ni];
-            if (n.IsSolid || !CanShareCell(n, liquidMat)) return false;
+            if (n.IsSolid || !CanShareCell(n, liquidMat)) return;
 
             int diff = source.waterLevel - n.waterLevel;
-            if (diff <= 1) return false;
+            if (diff <= 1) return;
 
             int transfer = diff / 2;
             if (transfer > maxStep) transfer = maxStep;
-            if (transfer <= 0) return false;
+            if (transfer <= 0) return;
 
             source.waterLevel = (byte)(source.waterLevel - transfer);
-            n.waterLevel = (byte)(n.waterLevel + transfer);
-            n.material = liquidMat;
+            n.waterLevel      = (byte)(n.waterLevel + transfer);
+            n.material        = liquidMat;
             voxels[ni] = n;
-            return true;
         }
 
         private static byte NormalizeFluidMaterial(ref Voxel voxel)
         {
             if (voxel.material == OilMat) return OilMat;
-            // Backwards compatibility: old oceans/player water had Air + waterLevel.
             voxel.material = WaterMat;
             return WaterMat;
         }

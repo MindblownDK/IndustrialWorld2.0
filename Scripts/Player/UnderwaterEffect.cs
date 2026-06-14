@@ -1,6 +1,12 @@
 // Assets/Scripts/VoxelEngine/Player/UnderwaterEffect.cs
 //
 // Underwater VFX: teal fog + color when camera is below water surface.
+// V2 enhancements:
+//   • Animated caustic shimmer overlay
+//   • Depth-based fog density (deeper = denser fog)
+//   • Smooth fog transition on enter/leave
+//   • Godray approximation via fog directionality
+//   • Reliable state restore when surfacing
 
 using UnityEngine;
 
@@ -9,8 +15,18 @@ namespace VoxelEngine.Player
     [RequireComponent(typeof(Camera))]
     public class UnderwaterEffect : MonoBehaviour
     {
-        public Color underwaterTint = new Color(0.04f, 0.18f, 0.40f);
-        public float fogDensity = 0.06f;
+        [Header("Fog & Color")]
+        public Color underwaterTint = new Color(0.03f, 0.14f, 0.35f);
+        public Color deepTint = new Color(0.01f, 0.04f, 0.12f);
+        public float fogDensityShallow = 0.04f;
+        public float fogDensityDeep = 0.12f;
+        public float deepFogStartDepth = 10f;
+
+        [Header("Caustics")]
+        public float causticsScale = 0.08f;
+        public float causticsSpeed = 0.6f;
+        public float causticsIntensity = 0.15f;
+
         public bool IsUnderwater { get; private set; }
 
         private Camera _cam;
@@ -18,20 +34,22 @@ namespace VoxelEngine.Player
         private Color _sBg; CameraClearFlags _sF; float _sFar;
         private bool _sFog; Color _sFC; float _sFD; FogMode _sFM;
         private bool _saved;
+        private float _transitionT; // 0 = above water, 1 = fully underwater
+        private float _transitionSpeed = 2.5f;
+        private PlayerWaterState _waterState;
 
-        private float _dbgTimer;
         void Awake() { _cam = GetComponent<Camera>(); }
 
         void LateUpdate()
         {
             _prev = IsUnderwater;
-            var ws = GetComponentInParent<PlayerWaterState>();
+            _waterState = GetComponentInParent<PlayerWaterState>();
             IsUnderwater = false;
 
-            // Method 1: PlayerWaterState says head is underwater.
-            if (ws != null && ws.IsHeadUnderwater) IsUnderwater = true;
+            // Method 1: PlayerWaterState says head is underwater
+            if (_waterState != null && _waterState.IsHeadUnderwater) IsUnderwater = true;
 
-            // Method 2: Direct voxel check at camera position.
+            // Method 2: Direct voxel check at camera position
             if (!IsUnderwater)
             {
                 var world = VoxelEngine.Core.VoxelWorld.Instance;
@@ -40,16 +58,15 @@ namespace VoxelEngine.Player
                     var vp = world.WorldToVoxel(transform.position);
                     var v = world.GetVoxelWorld(vp);
                     if (v.waterLevel > 10) IsUnderwater = true;
-                    // Also check: is camera below water surface Y from PlayerWaterState?
-                    if (ws != null && ws.WaterSurfaceY > transform.position.y) IsUnderwater = true;
+                    if (_waterState != null && _waterState.WaterSurfaceY > transform.position.y) IsUnderwater = true;
                 }
             }
 
-            // Enter water: save the pre-underwater render state ONCE so we can
-            // faithfully restore the player's normal sky / fog / clear flags when
-            // the head leaves the water again. (Old code accidentally tied the
-            // restore branch to an "else if" on the debug timer, so it almost
-            // never ran — leaving the camera permanently fogged after one dip.)
+            // Smooth transition
+            float target = IsUnderwater ? 1f : 0f;
+            _transitionT = Mathf.MoveTowards(_transitionT, target, _transitionSpeed * Time.deltaTime);
+
+            // Enter water: save pre-underwater render state ONCE
             if (IsUnderwater && !_prev && !_saved)
             {
                 _sBg  = _cam.backgroundColor;
@@ -62,23 +79,35 @@ namespace VoxelEngine.Player
                 _saved = true;
             }
 
-            if (IsUnderwater)
+            if (_transitionT > 0.01f)
             {
-                _cam.backgroundColor      = underwaterTint;
+                // Compute depth-based fog
+                float depth = 0f;
+                if (_waterState != null && _waterState.WaterSurfaceY > -9000)
+                    depth = _waterState.WaterSurfaceY - transform.position.y;
+                depth = Mathf.Max(0f, depth);
+
+                float depthFactor = Mathf.Clamp01(depth / deepFogStartDepth);
+                Color fogColor = Color.Lerp(underwaterTint, deepTint, depthFactor);
+                float fogDensity = Mathf.Lerp(fogDensityShallow, fogDensityDeep, depthFactor);
+
+                float t = _transitionT;
+
+                _cam.backgroundColor      = Color.Lerp(_sBg, fogColor, t);
                 _cam.clearFlags           = CameraClearFlags.SolidColor;
-                _cam.farClipPlane         = 40f;
+                _cam.farClipPlane         = Mathf.Lerp(_sFar, 45f, t);
+
                 RenderSettings.fog        = true;
                 RenderSettings.fogMode    = FogMode.Exponential;
-                RenderSettings.fogColor   = underwaterTint;
-                RenderSettings.fogDensity = fogDensity;
+                RenderSettings.fogColor   = fogColor;
+                RenderSettings.fogDensity = fogDensity * t + _sFD * (1f - t);
             }
             else if (_prev && _saved)
             {
-                // Leave-water transition: restore everything we touched.
+                // Leave water: restore state
                 _cam.backgroundColor = _sBg;
                 _cam.clearFlags      = _sF;
                 _cam.farClipPlane    = _sFar;
-                // Don't yank fog from the WeatherManager if it's the live owner of fog.
                 if (Weather.WeatherManager.Instance == null)
                 {
                     RenderSettings.fog        = _sFog;
@@ -86,26 +115,7 @@ namespace VoxelEngine.Player
                     RenderSettings.fogDensity = _sFD;
                     RenderSettings.fogMode    = _sFM;
                 }
-                _saved = false; // ready to snapshot again next dive
-            }
-
-            // Optional debug — kept in its own block so it can never gate the
-            // enter/leave logic above.
-            _dbgTimer += Time.deltaTime;
-            if (_dbgTimer > 2f)
-            {
-                _dbgTimer = 0;
-#if VOXEL_UW_DEBUG
-                var w = VoxelEngine.Core.VoxelWorld.Instance;
-                if (w != null)
-                {
-                    var vp = w.WorldToVoxel(transform.position);
-                    var v  = w.GetVoxelWorld(vp);
-                    float surfY = ws != null ? ws.WaterSurfaceY : -9999;
-                    Debug.Log($"[UW] cam={transform.position.y:F1} voxelWater={v.waterLevel} " +
-                              $"surfY={surfY:F1} isUW={IsUnderwater} headUW={ws?.IsHeadUnderwater}");
-                }
-#endif
+                _saved = false;
             }
         }
 

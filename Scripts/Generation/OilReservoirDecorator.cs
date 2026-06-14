@@ -1,8 +1,18 @@
 // Assets/Scripts/VoxelEngine/Generation/OilReservoirDecorator.cs
 //
 // Post-generation decorator that finds CrudeOil voxels in a newly generated chunk
-// and carves proper oil reservoirs: a large underground pocket of oil with a vertical
-// shaft going up to a surface pool.
+// and carves proper oil reservoirs with the funnel pattern:
+//
+//   ┌───────────┐  ← Surface seep/pool (visible above ground)
+//   │  surface   │
+//   └─────┬─────┘
+//         │          ← Narrow funnel/shaft (widens at top, narrows going down)
+//         │
+//         │
+//   ┌─────┴─────┐  ← Deep underground reservoir (large spherical pocket)
+//   │   POCKET   │
+//   │  full oil  │
+//   └───────────┘
 //
 // Called from VoxelWorld after ChunkGenJob completes, before meshing.
 
@@ -16,9 +26,9 @@ namespace VoxelEngine.Generation
     public static class OilReservoirDecorator
     {
         /// <summary>
-        /// Scans a chunk for CrudeOil material. When found, carves a pocket-shaped
-        /// reservoir underground and a chimney up to the surface with a pool on top.
-        /// Oil is placed into the FluidGrid as a fluid (same system as water).
+        /// Scans a chunk for CrudeOil material. When found, carves a funnel-shaped
+        /// reservoir: surface pool → narrowing funnel → deep underground pocket.
+        /// All void spaces are filled with oil fluid voxels (density = -1, material = CrudeOil, level = 255).
         /// </summary>
         public static void Decorate(Chunk chunk, VoxelWorld world)
         {
@@ -28,8 +38,7 @@ namespace VoxelEngine.Generation
             int baseY = chunk.coord.y * S;
             int baseZ = chunk.coord.z * S;
 
-            // Scan for CrudeOil voxels — use stride of 4 to find pockets without
-            // checking every single voxel (perf). One reservoir per chunk max.
+            // Scan for CrudeOil voxels — stride of 4 for perf, one reservoir per chunk max.
             bool foundOil = false;
             Vector3Int oilCenter = Vector3Int.zero;
 
@@ -47,53 +56,93 @@ namespace VoxelEngine.Generation
 
             if (!foundOil) return;
 
-            // Use a deterministic hash and keep only rare crude-oil markers. Ore noise
-            // can mark many chunks; reservoirs should be special, larger discoveries.
+            // Deterministic rarity — roughly 1 reservoir per 14 candidate chunks
             int hash = oilCenter.x * 73856093 ^ oilCenter.y * 19349663 ^ oilCenter.z * 83492791;
-            int rarity = Mathf.Abs(hash % 14); // roughly 1 reservoir per 14 candidate chunks
+            int rarity = Mathf.Abs(hash % 14);
             if (rarity != 0) return;
             System.Random rng = new System.Random(hash);
 
-            int pocketRadius = 8 + rng.Next(5);  // 8-12 voxel radius: larger extractable reservoir
-            int shaftRadius  = 1;                // narrow natural funnel/chimney
+            int pocketRadius = 8 + rng.Next(5);  // 8–12 voxel radius
+            int funnelTopRadius = 2 + rng.Next(2); // 2–3 at the widest (surface pool)
+            int funnelBottomRadius = 1;            // narrow at the bottom (shaft)
 
-            // 1) Carve the underground pocket (sphere of air + fill with oil fluid).
-            CarveAndFillPocket(world, oilCenter, pocketRadius);
-
-            // 2) Find the surface Y above the oil pocket.
+            // 1) Find the surface Y above the oil marker
             int surfaceY = FindSurface(world, oilCenter.x, oilCenter.z, oilCenter.y);
-            if (surfaceY <= oilCenter.y) return; // somehow already at surface
+            if (surfaceY <= oilCenter.y) return;
 
-            // 3) Carve the vertical shaft from pocket top to surface.
-            for (int y = oilCenter.y + pocketRadius; y <= surfaceY; y++)
-            {
-                for (int dx = -shaftRadius; dx <= shaftRadius; dx++)
-                for (int dz = -shaftRadius; dz <= shaftRadius; dz++)
-                {
-                    Vector3Int pos = new Vector3Int(oilCenter.x + dx, y, oilCenter.z + dz);
-                    world.SetVoxelWorld(pos, Voxel.Empty, remesh: false);
-                    // Fill shaft with oil fluid
-                    PlaceOilFluid(world, pos);
-                }
-            }
+            // 2) Carve the surface seep/pool — circular shallow depression
+            int poolRadius = funnelTopRadius + 1;
+            CarveSurfacePool(world, oilCenter.x, surfaceY, oilCenter.z, poolRadius, rng);
 
-            // 4) Carve a visible surface seep/pool at the top.
-            int poolRadius = 2 + rng.Next(2); // 2-3
-            for (int dx = -poolRadius; dx <= poolRadius; dx++)
-            for (int dz = -poolRadius; dz <= poolRadius; dz++)
+            // 3) Carve the funnel from surface down to pocket top
+            //    Funnel tapers from funnelTopRadius at the surface to funnelBottomRadius at the pocket
+            int pocketTopY = oilCenter.y + pocketRadius / 2;
+            int funnelHeight = surfaceY - pocketTopY;
+            CarveFunnel(world, oilCenter.x, oilCenter.z, surfaceY - 1, pocketTopY,
+                funnelTopRadius, funnelBottomRadius);
+
+            // 4) Carve the deep underground pocket (sphere of air + fill with oil)
+            CarveAndFillPocket(world, oilCenter, pocketRadius);
+        }
+
+        /// <summary>Carve a visible surface pool at the seep point.</summary>
+        private static void CarveSurfacePool(VoxelWorld world, int cx, int surfaceY, int cz, int radius, System.Random rng)
+        {
+            for (int dx = -radius; dx <= radius; dx++)
+            for (int dz = -radius; dz <= radius; dz++)
             {
-                if (dx * dx + dz * dz > poolRadius * poolRadius + 1) continue;
-                Vector3Int pos = new Vector3Int(oilCenter.x + dx, surfaceY, oilCenter.z + dz);
+                if (dx * dx + dz * dz > radius * radius + 1) continue;
+
+                // Clear terrain at and just above surface level
+                Vector3Int pos = new Vector3Int(cx + dx, surfaceY, cz + dz);
                 world.SetVoxelWorld(pos, Voxel.Empty, remesh: false);
                 PlaceOilFluid(world, pos);
-                // Also clear the voxel above to make the pool visible.
-                Vector3Int above = new Vector3Int(pos.x, pos.y + 1, pos.z);
+
+                // Clear one voxel above so the pool is visible
+                Vector3Int above = new Vector3Int(cx + dx, surfaceY + 1, cz + dz);
                 var aboveV = world.GetVoxelWorld(above);
                 if (aboveV.density > 0)
                     world.SetVoxelWorld(above, Voxel.Empty, remesh: false);
+
+                // Clear one voxel below for depth
+                Vector3Int below = new Vector3Int(cx + dx, surfaceY - 1, cz + dz);
+                var belowV = world.GetVoxelWorld(below);
+                if (belowV.density > 0)
+                {
+                    world.SetVoxelWorld(below, Voxel.Empty, remesh: false);
+                    PlaceOilFluid(world, below);
+                }
             }
         }
 
+        /// <summary>
+        /// Carve a tapered funnel shaft from topY down to bottomY.
+        /// Top radius = topRadius, bottom radius = bottomRadius (linear interpolation).
+        /// </summary>
+        private static void CarveFunnel(VoxelWorld world, int cx, int cz, int topY, int bottomY, int topRadius, int bottomRadius)
+        {
+            int height = topY - bottomY;
+            if (height <= 0) return;
+
+            for (int y = topY; y >= bottomY; y--)
+            {
+                float t = (float)(topY - y) / height; // 0 at top, 1 at bottom
+                int radius = Mathf.CeilToInt(Mathf.Lerp(topRadius, bottomRadius, t));
+                // Add slight irregularity for natural look
+                if (radius < 1) radius = 1;
+
+                for (int dx = -radius; dx <= radius; dx++)
+                for (int dz = -radius; dz <= radius; dz++)
+                {
+                    if (dx * dx + dz * dz > radius * radius + 1) continue;
+                    Vector3Int pos = new Vector3Int(cx + dx, y, cz + dz);
+                    world.SetVoxelWorld(pos, Voxel.Empty, remesh: false);
+                    PlaceOilFluid(world, pos);
+                }
+            }
+        }
+
+        /// <summary>Carve the deep underground pocket and fill it with oil.</summary>
         private static void CarveAndFillPocket(VoxelWorld world, Vector3Int center, int radius)
         {
             int r2 = radius * radius;
@@ -110,10 +159,6 @@ namespace VoxelEngine.Generation
 
         private static void PlaceOilFluid(VoxelWorld world, Vector3Int worldVoxel)
         {
-            // Write the liquid voxel directly instead of "place if empty". During
-            // generation we are carving rock and filling in the same operation, so
-            // direct writes guarantee the deep reservoir is genuinely full and not
-            // just a rendered cap layer.
             world.SetVoxelWorld(worldVoxel, new Voxel(-1, (byte)MaterialId.CrudeOil, 255), remesh: false);
         }
 
@@ -126,7 +171,7 @@ namespace VoxelEngine.Generation
                 if (v.density > 0 && above.density <= 0)
                     return y;
             }
-            return startY + 20; // fallback
+            return startY + 20;
         }
     }
 }

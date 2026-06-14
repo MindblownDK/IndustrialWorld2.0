@@ -3,6 +3,9 @@
 // Manages simulated voxel liquids across chunks. Only active chunks are processed;
 // chunks go to sleep once water/oil settles. The system is save-compatible with the
 // old waterLevel byte while using voxel material to distinguish Water vs Crude Oil.
+//
+// V2: Integrates FlowFieldManager for pressure-gradient surface flow velocity,
+//     which is consumed by WaterMeshBuilder for KWS2-quality flow-mapped rendering.
 
 using System.Collections.Generic;
 using Unity.Collections;
@@ -239,6 +242,51 @@ namespace VoxelEngine.WaterSim
             var world = VoxelWorld.Instance;
             if (world == null) return LiquidType.Water;
             return FluidMaterialUtility.LiquidFromVoxel(world.GetVoxelWorld(worldVoxel));
+        }
+
+        /// <summary>
+        /// Count connected fluid voxels of the given liquid type starting from a seed voxel.
+        /// Returns (voxelCount, totalLitres, isInfinite) within the given reach radius.
+        /// Used by WaterPump for pool status display.
+        /// </summary>
+        public (int voxels, float litres, bool isInfinite) ScanPool(
+            Vector3Int seed, LiquidType liquid, float reachRadius, int infiniteThreshold, int maxScan)
+        {
+            var world = VoxelWorld.Instance;
+            if (world == null) return (0, 0, false);
+            if (!FluidMaterialUtility.Matches(world.GetVoxelWorld(seed), liquid)) return (0, 0, false);
+
+            var seen = new HashSet<Vector3Int>();
+            var q = new Queue<Vector3Int>();
+            q.Enqueue(seed);
+            seen.Add(seed);
+            float litresPerLevel = 1000f / 255f;
+            int count = 0;
+            float litres = 0f;
+            float r2 = reachRadius * reachRadius * 9f;
+
+            while (q.Count > 0 && count < maxScan)
+            {
+                var p = q.Dequeue();
+                var v = world.GetVoxelWorld(p);
+                if (!FluidMaterialUtility.Matches(v, liquid)) continue;
+                count++;
+                litres += v.waterLevel * litresPerLevel;
+
+                var offsets = new[]{ Vector3Int.right, Vector3Int.left, Vector3Int.forward,
+                                     Vector3Int.back, Vector3Int.up, Vector3Int.down };
+                foreach (var off in offsets)
+                {
+                    var n = p + off;
+                    if (seen.Contains(n)) continue;
+                    if ((n - seed).sqrMagnitude > r2) continue;
+                    seen.Add(n);
+                    q.Enqueue(n);
+                }
+            }
+
+            bool infinite = count >= infiniteThreshold || count >= maxScan;
+            return (count, litres, infinite);
         }
 
         private static bool TryGetChunkAndLocal(VoxelWorld world, Vector3Int worldVoxel, out Vector3Int coord, out Chunk ch, out int lx, out int ly, out int lz)

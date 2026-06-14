@@ -4,6 +4,12 @@
 // internal buffer, then pushes it into connected WaterTanks through the existing
 // world fluid-pipe network. Large pools are treated as infinite sources so ocean
 // pumps keep producing without deleting the sea.
+//
+// V2 enhancements:
+//   • Uses FluidManager.ScanPool for accurate pool volume reporting
+//   • Enhanced UI data: pool voxel count, total litres, infinite/finite status
+//   • Internal tank displayed prominently in pump UI
+//   • Cleaner separation of scan / pump / push phases
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -48,13 +54,21 @@ namespace VoxelEngine.Fluids
         private float _scanTimer;
         private readonly List<Vector3Int> _poolCells = new(1024);
 
+        // ── Public UI accessors ─────────────────────────────────────────────
+
         public bool HasSource => _hasSource;
         public bool SourceInfinite => _sourceInfinite;
         public float SourceLitres => _sourceLitres;
         public int SourceVoxels => _sourceVoxels;
         public float InternalFill01 => internalCapacityLitres > 0 ? Mathf.Clamp01(internalLitres / internalCapacityLitres) : 0f;
         public bool IsPowered => _power == null || _power.IsPowered;
-        public string SourceStatus => !_hasSource ? "No pool detected" : (_sourceInfinite ? "Infinite pool" : $"Finite pool: {_sourceLitres:0} L");
+        public string SourceStatus => !_hasSource ? "No pool detected"
+            : (_sourceInfinite ? "∞ Infinite pool" : $"Finite pool: {_sourceLitres:0} L ({_sourceVoxels} voxels)");
+
+        /// <summary>Pool fill relative to infinite threshold (0..1+). UI progress bar.</summary>
+        public float PoolInfiniteProgress => _sourceVoxels > 0
+            ? Mathf.Clamp01((float)_sourceVoxels / infiniteVoxelThreshold)
+            : 0f;
 
         private void Awake()
         {
@@ -72,6 +86,7 @@ namespace VoxelEngine.Fluids
 
             if (!IsPowered || !_hasSource) { PushToNetwork(Time.deltaTime); return; }
 
+            // Pump from pool into internal buffer
             float space = Mathf.Max(0f, internalCapacityLitres - internalLitres);
             float want = Mathf.Min(space, pumpLps * Time.deltaTime);
             if (want > 0.01f)
@@ -82,6 +97,8 @@ namespace VoxelEngine.Fluids
 
             PushToNetwork(Time.deltaTime);
         }
+
+        // ── Network push ────────────────────────────────────────────────────
 
         private void PushToNetwork(float dt)
         {
@@ -100,6 +117,8 @@ namespace VoxelEngine.Fluids
             }
         }
 
+        // ── Pool scanning ───────────────────────────────────────────────────
+
         public void ScanSource()
         {
             _hasSource = false;
@@ -116,10 +135,24 @@ namespace VoxelEngine.Fluids
             if (!FindSeed(world, origin, out var seed)) return;
 
             _lastSourceVoxel = seed;
-            FloodPool(world, seed);
-            _hasSource = _poolCells.Count > 0;
-            _sourceVoxels = _poolCells.Count;
-            _sourceInfinite = _sourceVoxels >= infiniteVoxelThreshold || _poolCells.Count >= maxPoolScanVoxels;
+
+            // Use FluidManager's pool scanner for accurate results
+            if (FluidManager.Instance != null)
+            {
+                var result = FluidManager.Instance.ScanPool(
+                    seed, liquidType, reach, infiniteVoxelThreshold, maxPoolScanVoxels);
+                _sourceVoxels = result.voxels;
+                _sourceLitres = result.litres;
+                _sourceInfinite = result.isInfinite;
+            }
+            else
+            {
+                // Fallback: manual BFS
+                FloodPool(world, seed);
+                _sourceInfinite = _sourceVoxels >= infiniteVoxelThreshold || _poolCells.Count >= maxPoolScanVoxels;
+            }
+
+            _hasSource = _sourceVoxels > 0;
         }
 
         private bool FindSeed(VoxelWorld world, Vector3Int origin, out Vector3Int seed)
@@ -152,6 +185,7 @@ namespace VoxelEngine.Fluids
                 if (!FluidMaterialUtility.Matches(v, liquidType)) continue;
 
                 _poolCells.Add(p);
+                _sourceVoxels++;
                 _sourceLitres += v.waterLevel * litresPerLevel;
 
                 Enqueue(p + Vector3Int.right);
@@ -171,14 +205,19 @@ namespace VoxelEngine.Fluids
             }
         }
 
+        // ── Finite pool drain ───────────────────────────────────────────────
+
         private float DrainFromFinitePool(float litres)
         {
-            if (_poolCells.Count == 0 || litres <= 0f) return 0f;
+            if (_poolCells.Count == 0 && _sourceVoxels == 0) return 0f;
             FluidManager.EnsureInstance();
             float drained = 0f;
             float litresPerLevel = LitresPerVoxel / 255f;
 
-            // Drain from the highest cells first so finite pools visibly lower.
+            // Re-scan pool cells to get current state, then drain from highest first
+            if (_poolCells.Count == 0) ScanSource();
+            if (_poolCells.Count == 0) return 0f;
+
             _poolCells.Sort((a, b) => b.y.CompareTo(a.y));
             for (int i = 0; i < _poolCells.Count && drained < litres; i++)
             {
