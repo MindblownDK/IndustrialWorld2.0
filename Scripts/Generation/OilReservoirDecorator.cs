@@ -47,12 +47,15 @@ namespace VoxelEngine.Generation
 
             if (!foundOil) return;
 
-            // Use a hash of the position as a deterministic seed for this reservoir.
+            // Use a deterministic hash and keep only rare crude-oil markers. Ore noise
+            // can mark many chunks; reservoirs should be special, larger discoveries.
             int hash = oilCenter.x * 73856093 ^ oilCenter.y * 19349663 ^ oilCenter.z * 83492791;
+            int rarity = Mathf.Abs(hash % 14); // roughly 1 reservoir per 14 candidate chunks
+            if (rarity != 0) return;
             System.Random rng = new System.Random(hash);
 
-            int pocketRadius = 5 + rng.Next(4);  // 5-8 voxel radius: real extractable pool
-            int shaftRadius  = 1;                 // narrow natural funnel/chimney
+            int pocketRadius = 8 + rng.Next(5);  // 8-12 voxel radius: larger extractable reservoir
+            int shaftRadius  = 1;                // narrow natural funnel/chimney
 
             // 1) Carve the underground pocket (sphere of air + fill with oil fluid).
             CarveAndFillPocket(world, oilCenter, pocketRadius);

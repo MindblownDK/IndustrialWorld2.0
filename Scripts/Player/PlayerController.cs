@@ -307,8 +307,8 @@ namespace VoxelEngine.Player
 
             // -- voxel water swim (Minecraft-style) --
             // While submerged: WASD swims in the look direction, Space rises,
-            // Crouch dives. The player floats neutrally near the surface so they
-            // can tread water without sinking AND won't auto-rocket upward.
+            // Crouch dives. With no swim input the player slowly sinks, so water/oil
+            // feels physical instead of freezing the character in place.
             //
             // Old bug: only had gentle upward push + heavy Y-drag, so the player
             // could only sink with no way to swim forward. Now movement.input
@@ -329,30 +329,31 @@ namespace VoxelEngine.Player
                     ? cameraPivot.right
                     : transform.right;
 
+                bool wantsUp = GameSettings.IsHeld(InputAction.Jump);
+                bool wantsDown = GameSettings.IsHeld(InputAction.Crouch) || GameSettings.IsHeld(InputAction.Down);
                 Vector3 swimDir = (camFwd * wish.y + camRight * wish.x);
-                if (GameSettings.IsHeld(InputAction.Jump))   swimDir += Vector3.up;
-                if (GameSettings.IsHeld(InputAction.Crouch)) swimDir += Vector3.down;
-                if (GameSettings.IsHeld(InputAction.Down))   swimDir += Vector3.down;
+                if (wantsUp)   swimDir += Vector3.up;
+                if (wantsDown) swimDir += Vector3.down;
 
-                if (swimDir.sqrMagnitude > 0.001f) swimDir.Normalize();
+                bool hasSwimInput = swimDir.sqrMagnitude > 0.001f;
+                if (hasSwimInput) swimDir.Normalize();
 
                 // ── Swim speed (slower than walking, doubled while sprinting) ─
                 float swimSpeed = walkSpeed * 0.65f;
                 if (sprintHeld) swimSpeed *= 1.4f;
                 Vector3 wishVel = swimDir * swimSpeed;
+                if (!hasSwimInput) wishVel = Vector3.down * 0.85f;
 
                 // Smoothly accelerate toward the wish velocity in all 3 axes.
                 _velocity = Vector3.Lerp(_velocity, wishVel, 1f - Mathf.Exp(-6f * dt));
 
-                // Neutral buoyancy near the surface — small upward nudge when
-                // submerged so a stationary player floats up to chest-level
-                // instead of sinking to the bottom of every pond.
-                if (depth > 0.35f && swimDir.y >= -0.01f)
-                    _velocity.y += 0.6f * dt;
+                // Natural buoyancy: if the player gives horizontal input but no
+                // vertical input, add a small sinking bias instead of hovering frozen.
+                if (hasSwimInput && !wantsUp && !wantsDown)
+                    _velocity.y -= 0.35f * dt;
 
-                // Hard caps so swimming is always controllable. Slight downward
-                // bias so jump-out-of-water has a meaningful effect.
-                _velocity.y = Mathf.Clamp(_velocity.y, -3.5f, 3.0f);
+                // Hard caps so swimming is always controllable.
+                _velocity.y = Mathf.Clamp(_velocity.y, -3.8f, 3.2f);
 
                 // Jump-out: when the player presses Jump and is at/near the
                 // surface AND moving up, give a small boost so they pop out.

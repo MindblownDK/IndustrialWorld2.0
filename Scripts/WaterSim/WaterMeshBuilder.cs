@@ -25,6 +25,7 @@ namespace VoxelEngine.WaterSim
         private static readonly HashSet<Chunk> _queued = new();
         private static Material _waterMat;
         private static Material _oilMat;
+        private static Material _foamMat;
 
         private struct SurfaceCell
         {
@@ -54,7 +55,7 @@ namespace VoxelEngine.WaterSim
 
         private static void EnsureMats()
         {
-            if (_waterMat != null && _oilMat != null) return;
+            if (_waterMat != null && _oilMat != null && _foamMat != null) return;
 
             var sh = Shader.Find("VoxelEngine/VoxelWaterURP")
                   ?? Shader.Find("Universal Render Pipeline/Lit")
@@ -96,6 +97,17 @@ namespace VoxelEngine.WaterSim
                 _oilMat.SetFloat("_FoamIntensity", 0.18f);
                 _oilMat.SetFloat("_DepthFade", 2.0f);
                 _oilMat.SetFloat("_FoamWidth", 0.22f);
+            }
+
+            if (_foamMat == null)
+            {
+                var foamShader = Shader.Find("Universal Render Pipeline/Unlit")
+                              ?? Shader.Find("Unlit/Color")
+                              ?? Shader.Find("Standard");
+                _foamMat = new Material(foamShader) { name = "VoxelShoreWashFoam" };
+                ConfigureTransparent(_foamMat);
+                _foamMat.SetColor("_BaseColor", new Color(0.86f, 0.96f, 1f, 0.44f));
+                _foamMat.SetColor("_Color",     new Color(0.86f, 0.96f, 1f, 0.44f));
             }
         }
 
@@ -149,6 +161,7 @@ namespace VoxelEngine.WaterSim
             var uvs = new List<Vector2>(S * S * 8);
             var waterTris = new List<int>(S * S * 6);
             var oilTris = new List<int>(S * S * 6);
+            var foamTris = new List<int>(S * S * 6);
 
             float wX = c.coord.x * S;
             float wZ = c.coord.z * S;
@@ -161,7 +174,9 @@ namespace VoxelEngine.WaterSim
 
                 var tris = cell.liquid == LiquidType.CrudeOil ? oilTris : waterTris;
                 AddTop(c, cells, x, z, wX, wZ, verts, norms, uvs, tris);
-                AddWaterfallSides(c, cells, x, z, wX, wZ, verts, norms, uvs, tris);
+                AddShoreFoam(c, cell, x, z, wX, wZ, verts, norms, uvs, foamTris);
+                // Vertical side sheets caused visible double-layer slabs at shorelines.
+                // Keep liquid as a clean continuous top surface; foam handles shore contact.
             }
 
             if (verts.Count == 0) { ClearGO(c); return; }
@@ -172,13 +187,14 @@ namespace VoxelEngine.WaterSim
             c.waterMesh.SetVertices(verts);
             c.waterMesh.SetNormals(norms);
             c.waterMesh.SetUVs(0, uvs);
-            c.waterMesh.subMeshCount = 2;
+            c.waterMesh.subMeshCount = 3;
             c.waterMesh.SetTriangles(waterTris, 0);
             c.waterMesh.SetTriangles(oilTris, 1);
+            c.waterMesh.SetTriangles(foamTris, 2);
             c.waterMesh.RecalculateBounds();
 
             c.waterMeshFilter.sharedMesh = c.waterMesh;
-            c.waterMeshRenderer.sharedMaterials = new[] { _waterMat, _oilMat };
+            c.waterMeshRenderer.sharedMaterials = new[] { _waterMat, _oilMat, _foamMat };
             c.waterMeshGO.SetActive(true);
         }
 
@@ -191,16 +207,15 @@ namespace VoxelEngine.WaterSim
             float h11 = CornerHeight(cells, x, z, cell.liquid,  1,  1, cell.h);
             float h01 = CornerHeight(cells, x, z, cell.liquid, -1,  1, cell.h);
 
-            // Real water visually laps onto shore instead of stopping exactly at
-            // the voxel boundary. The generous overlap hides tiny terrain cracks and
-            // creates a beach-wash look like the references.
-            float shore = cell.liquid == LiquidType.CrudeOil ? 0.16f : 0.42f;
-            float seamOverlap = 0.08f;
+            // Keep the actual water body inside its voxel footprint. Shore wash is
+            // rendered by a separate foam skirt so the dark water surface does not
+            // visibly spill over land or create double-layer slabs.
+            float seamOverlap = 0.035f;
             float x0 = x, x1 = x + 1, z0 = z, z1 = z + 1;
-            if (NeighbourIsSolid(c, x - 1, cell.y, z) || x == 0) x0 -= (x == 0 ? seamOverlap : shore);
-            if (NeighbourIsSolid(c, x + 1, cell.y, z) || x == VoxelConstants.CHUNK_SIZE - 1) x1 += (x == VoxelConstants.CHUNK_SIZE - 1 ? seamOverlap : shore);
-            if (NeighbourIsSolid(c, x, cell.y, z - 1) || z == 0) z0 -= (z == 0 ? seamOverlap : shore);
-            if (NeighbourIsSolid(c, x, cell.y, z + 1) || z == VoxelConstants.CHUNK_SIZE - 1) z1 += (z == VoxelConstants.CHUNK_SIZE - 1 ? seamOverlap : shore);
+            if (x == 0) x0 -= seamOverlap;
+            if (x == VoxelConstants.CHUNK_SIZE - 1) x1 += seamOverlap;
+            if (z == 0) z0 -= seamOverlap;
+            if (z == VoxelConstants.CHUNK_SIZE - 1) z1 += seamOverlap;
 
             int i = verts.Count;
             verts.Add(new Vector3(x0, h00, z0));
@@ -212,6 +227,34 @@ namespace VoxelEngine.WaterSim
             uvs.Add(new Vector2(wX + x1, wZ + z0));
             uvs.Add(new Vector2(wX + x1, wZ + z1));
             uvs.Add(new Vector2(wX + x0, wZ + z1));
+            tris.Add(i); tris.Add(i + 2); tris.Add(i + 1);
+            tris.Add(i); tris.Add(i + 3); tris.Add(i + 2);
+        }
+
+        private static void AddShoreFoam(Chunk c, SurfaceCell cell, int x, int z, float wX, float wZ,
+            List<Vector3> verts, List<Vector3> norms, List<Vector2> uvs, List<int> tris)
+        {
+            if (cell.liquid != LiquidType.Water) return;
+            float y = cell.h + 0.035f;
+            const float inner = 0.18f;
+            const float outer = 0.46f;
+
+            if (NeighbourIsSolid(c, x - 1, cell.y, z)) AddFoamQuad(new Vector3(x - outer, y, z),     new Vector3(x + inner, y, z),     new Vector3(x + inner, y, z + 1), new Vector3(x - outer, y, z + 1), wX, wZ, verts, norms, uvs, tris);
+            if (NeighbourIsSolid(c, x + 1, cell.y, z)) AddFoamQuad(new Vector3(x + 1 - inner, y, z), new Vector3(x + 1 + outer, y, z), new Vector3(x + 1 + outer, y, z + 1), new Vector3(x + 1 - inner, y, z + 1), wX, wZ, verts, norms, uvs, tris);
+            if (NeighbourIsSolid(c, x, cell.y, z - 1)) AddFoamQuad(new Vector3(x, y, z - outer),     new Vector3(x + 1, y, z - outer), new Vector3(x + 1, y, z + inner), new Vector3(x, y, z + inner), wX, wZ, verts, norms, uvs, tris);
+            if (NeighbourIsSolid(c, x, cell.y, z + 1)) AddFoamQuad(new Vector3(x, y, z + 1 - inner), new Vector3(x + 1, y, z + 1 - inner), new Vector3(x + 1, y, z + 1 + outer), new Vector3(x, y, z + 1 + outer), wX, wZ, verts, norms, uvs, tris);
+        }
+
+        private static void AddFoamQuad(Vector3 a, Vector3 b, Vector3 c0, Vector3 d, float wX, float wZ,
+            List<Vector3> verts, List<Vector3> norms, List<Vector2> uvs, List<int> tris)
+        {
+            int i = verts.Count;
+            verts.Add(a); verts.Add(b); verts.Add(c0); verts.Add(d);
+            for (int n = 0; n < 4; n++) norms.Add(Vector3.up);
+            uvs.Add(new Vector2(wX + a.x, wZ + a.z));
+            uvs.Add(new Vector2(wX + b.x, wZ + b.z));
+            uvs.Add(new Vector2(wX + c0.x, wZ + c0.z));
+            uvs.Add(new Vector2(wX + d.x, wZ + d.z));
             tris.Add(i); tris.Add(i + 2); tris.Add(i + 1);
             tris.Add(i); tris.Add(i + 3); tris.Add(i + 2);
         }
