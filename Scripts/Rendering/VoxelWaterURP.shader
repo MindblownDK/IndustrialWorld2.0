@@ -30,7 +30,7 @@ Shader "VoxelEngine/VoxelWaterURP"
         _RefractionStrength ("Refraction", Range(0, 0.08)) = 0.026
         _CausticsIntensity  ("Caustics", Range(0, 1)) = 0.18
 
-        [Header(Shore / Foam)]
+        [Header(Shore Foam)]
         _DepthFade     ("Depth Fade Dist", Range(0.1, 20)) = 4.2
         _FoamWidth     ("Foam Line Width", Range(0.01, 5)) = 0.85
         _FoamIntensity ("Foam Intensity", Range(0, 2)) = 1.05
