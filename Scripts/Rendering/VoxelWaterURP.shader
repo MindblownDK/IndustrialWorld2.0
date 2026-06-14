@@ -3,19 +3,18 @@
 // ╔══════════════════════════════════════════════════════════════════════╗
 // ║        IndustrialWorld — KWS2-Quality Water/Oil Shader (URP)      ║
 // ║                                                                    ║
-// ║  Flow-mapped procedural water inspired by KWS2 Dynamic Water.      ║
+// ║  V3: Shoreline curtain support + chunk-boundary foam fix           ║
+// ║                                                                    ║
 // ║  Features:                                                         ║
 // ║    • Flow-mapped normals from UV2 (pressure-gradient flow field)   ║
-// ║    • Multi-octave Gerstner waves with directional variety           ║
+// ║    • Multi-octave Gerstner waves (top surface only)                ║
 // ║    • Fresnel reflections + subsurface scattering                   ║
 // ║    • Dynamic foam from flow speed + shore proximity + wave crests   ║
 // ║    • Scene refraction with depth-based absorption                  ║
 // ║    • Caustic shimmer on shallow surfaces                           ║
 // ║    • Sun glitter + anisotropic highlights                          ║
-// ║    • Separate visual profiles for water and crude oil              ║
-// ║                                                                    ║
-// ║  UV2 channel carries flow velocity:                                ║
-// ║    UV2.xy = flow direction (magnitude = speed)                     ║
+// ║    • Curtain faces: vertical shoreline geometry with face normals   ║
+// ║    • Chunk-boundary safe: no foam at very large depth (skybox)     ║
 // ╚══════════════════════════════════════════════════════════════════════╝
 
 Shader "VoxelEngine/VoxelWaterURP"
@@ -28,7 +27,7 @@ Shader "VoxelEngine/VoxelWaterURP"
         _FoamColor    ("Foam",    Color) = (0.92, 0.96, 1.00, 0.88)
 
         [Header(Ocean Waves)]
-        _WaveAmp   ("Wave Amplitude", Range(0, 1.2)) = 0.28
+        _WaveAmp   ("Wave Amplitude", Range(0, 1.2)) = 0.35
         _WaveFreq  ("Wave Frequency", Range(0.05, 4)) = 0.55
         _WaveSpeed ("Wave Speed", Range(0, 3)) = 0.72
         _WaveChop  ("Wave Chop", Range(0, 1)) = 0.28
@@ -101,7 +100,8 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float3 normWS  : TEXCOORD1;
                 float  fog     : TEXCOORD2;
                 float4 scrPos  : TEXCOORD3;
-                float2 flowUV  : TEXCOORD4; // flow velocity from UV2
+                float2 flowUV  : TEXCOORD4;
+                float  isTop   : TEXCOORD5; // 1.0 = top surface, 0.0 = curtain face
             };
 
             // ── Noise ────────────────────────────────────────────────────────
@@ -138,7 +138,6 @@ Shader "VoxelEngine/VoxelWaterURP"
                 return v;
             }
 
-            // 6-octave FBM for richer detail on flow-mapped normals
             float FBM6(float2 p)
             {
                 float v = 0.0;
@@ -164,15 +163,9 @@ Shader "VoxelEngine/VoxelWaterURP"
             }
 
             // ── Flow-Mapped Normals ────────────────────────────────────────────
-            //
-            // The core KWS2 look: normals scroll in the flow direction instead
-            // of a fixed world-space direction. Two layers are blended with a
-            // half-phase offset to avoid visible seams (Flow Map technique by
-            // Valve / Hennig 2010).
 
             float3 FlowMappedNormal(float2 worldXZ, float2 flowDir, float flowSpeed, float t)
             {
-                // Normalize flow direction (default to gentle drift if still)
                 float2 dir = flowDir;
                 float speed = length(dir);
                 if (speed > 0.001f)
@@ -180,20 +173,16 @@ Shader "VoxelEngine/VoxelWaterURP"
                 else
                     dir = float2(0.04, 0.03);
 
-                // Flow-modulated scroll speed: faster flow = faster normal animation
                 float flowTime = t * (0.35 + speed * 1.5);
 
-                // Two noise layers at different scales, scrolling in flow direction
                 float2 uv1 = worldXZ * 0.09 + dir * flowTime * 0.8;
                 float2 uv2 = worldXZ * 0.17 + dir * flowTime * 0.5 + float2(5.3, 7.1);
                 float2 uv3 = worldXZ * 0.45 - dir * flowTime * 0.3;
 
-                // Height from layered noise
                 float h  = FBM(uv1 * 5.0) * 0.50;
                       h += FBM(uv2 * 8.0) * 0.30;
                       h += FBM(uv3 * 11.0) * 0.20;
 
-                // Finite differences for normal
                 float eps = 0.08;
                 float hx = FBM((uv1 + float2(eps, 0)) * 5.0) * 0.50
                           + FBM((uv2 + float2(eps, 0)) * 8.0) * 0.30
@@ -202,7 +191,6 @@ Shader "VoxelEngine/VoxelWaterURP"
                           + FBM((uv2 + float2(0, eps)) * 8.0) * 0.30
                           + FBM((uv3 + float2(0, eps)) * 11.0) * 0.20;
 
-                // Flow strength modulates the normal distortion
                 float strength = _NormalScale * (1.0 + speed * _FlowNormalStrength * 2.0);
                 float3 n = normalize(float3((h - hx) * strength, 1.0, (h - hz) * strength));
                 return n;
@@ -216,7 +204,10 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float3 posOS = i.posOS.xyz;
                 float3 worldPos = TransformObjectToWorld(posOS);
 
-                if (i.normOS.y > 0.35)
+                // Gerstner wave displacement: only on top-facing surfaces (normOS.y > 0.5).
+                // Curtain/side faces keep their authored positions for clean edges.
+                float isTop = i.normOS.y > 0.5 ? 1.0 : 0.0;
+                if (isTop > 0.5)
                 {
                     float t = _Time.y;
                     float amp = _WaveAmp;
@@ -235,7 +226,8 @@ Shader "VoxelEngine/VoxelWaterURP"
                 o.normWS = TransformObjectToWorldNormal(i.normOS);
                 o.fog    = ComputeFogFactor(o.posCS.z);
                 o.scrPos = ComputeScreenPos(o.posCS);
-                o.flowUV = i.uv2; // flow velocity from mesh builder
+                o.flowUV = i.uv2;
+                o.isTop  = isTop;
                 return o;
             }
 
@@ -246,19 +238,30 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float t = _Time.y;
                 float3 V = normalize(_WorldSpaceCameraPos - i.posWS);
                 float3 geoN = normalize(i.normWS);
-
-                // Flow-mapped normal computation
                 float2 flowDir = i.flowUV;
                 float flowSpeed = length(flowDir);
-                float3 detailN = FlowMappedNormal(i.posWS.xz, flowDir, flowSpeed, t);
+                bool isTopFace = i.isTop > 0.5;
 
-                // For vertical surfaces (waterfall sides), preserve the face normal
-                float3 N = normalize(float3(detailN.x, 1.0, detailN.z));
-                N = normalize(lerp(geoN, N, saturate(abs(geoN.y))));
+                // ── Normals ──────────────────────────────────────────────────────
+                float3 N;
+                if (isTopFace)
+                {
+                    // Top surface: flow-mapped procedural normals
+                    float3 detailN = FlowMappedNormal(i.posWS.xz, flowDir, flowSpeed, t);
+                    N = normalize(float3(detailN.x, 1.0, detailN.z));
+                    N = normalize(lerp(geoN, N, saturate(abs(geoN.y))));
+                }
+                else
+                {
+                    // Curtain face: use geometric normal with subtle distortion
+                    float2 curtainUV = i.posWS.xz * 0.12 + float2(t * 0.05, -t * 0.03);
+                    float curtainRipple = FBM(curtainUV * 6.0) * 0.08;
+                    N = normalize(geoN + float3(curtainRipple, 0, curtainRipple));
+                }
 
                 // ── Depth & Refraction ──────────────────────────────────────────
                 float2 screenUV = i.scrPos.xy / max(i.scrPos.w, 0.0001);
-                float2 refractUV = screenUV + N.xz * _RefractionStrength;
+                float2 refractUV = screenUV + N.xz * _RefractionStrength * (isTopFace ? 1.0 : 0.3);
 
                 float rawDepth = SampleSceneDepth(screenUV);
                 float sceneEyeDepth = LinearEyeDepth(rawDepth, _ZBufferParams);
@@ -266,32 +269,42 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float depthDiff = max(0, sceneEyeDepth - waterEyeDepth);
                 float deep01 = saturate(depthDiff / _DepthFade);
 
-                // Refracted scene color
+                // ── Detect skybox / no-depth ────────────────────────────────────
+                // When the depth buffer reads skybox (very far or rawDepth ≈ 0),
+                // this is NOT a shoreline — it's open water or a chunk boundary.
+                // Suppress shore foam in this case.
+                bool isSkybox = (rawDepth < 0.0001) || (sceneEyeDepth > 500.0);
+
                 float3 refracted = SampleSceneColor(refractUV).rgb;
 
                 // ── Water Color ─────────────────────────────────────────────────
                 float4 waterCol = lerp(_ShallowColor, _DeepColor, deep01);
 
                 // ── Foam ────────────────────────────────────────────────────────
-                // 1. Shoreline foam — appears where water is shallow
-                float shoreFoam = 1.0 - saturate(depthDiff / _FoamWidth);
-                shoreFoam = shoreFoam * shoreFoam * _FoamIntensity;
+                float shoreFoam = 0;
+                if (!isSkybox)
+                {
+                    shoreFoam = 1.0 - saturate(depthDiff / _FoamWidth);
+                    shoreFoam = shoreFoam * shoreFoam * _FoamIntensity;
+                }
 
-                // 2. Wave crest foam — appears on Gerstner wave peaks
-                float crest = saturate((FBM(i.posWS.xz * 0.22 + t * 0.075) - 0.58) * 3.0)
-                            * saturate(_WaveAmp * 2.5);
+                float crest = isTopFace
+                    ? saturate((FBM(i.posWS.xz * 0.22 + t * 0.075) - 0.58) * 3.0) * saturate(_WaveAmp * 2.5)
+                    : 0;
 
-                // 3. Lace/detail foam — high-frequency animated pattern
-                float lace = FBM(i.posWS.xz * 0.85 + float2(t * 0.12, -t * 0.08));
+                float lace = isTopFace
+                    ? FBM(i.posWS.xz * 0.85 + float2(t * 0.12, -t * 0.08))
+                    : 0;
 
-                // 4. Flow foam — appears where water flows fast (KWS2 signature)
-                float flowFoam = saturate(flowSpeed * 3.0 - 0.2) * _FlowFoamStrength;
-                // Animate flow foam in flow direction
-                float2 foamScrollUV = i.posWS.xz + normalize(flowDir + 0.001) * t * 0.3;
-                float foamPattern = FBM(foamScrollUV * 1.5);
-                flowFoam *= saturate(foamPattern * 1.5);
+                float flowFoam = 0;
+                if (isTopFace)
+                {
+                    flowFoam = saturate(flowSpeed * 3.0 - 0.2) * _FlowFoamStrength;
+                    float2 foamScrollUV = i.posWS.xz + normalize(flowDir + 0.001) * t * 0.3;
+                    float foamPattern = FBM(foamScrollUV * 1.5);
+                    flowFoam *= saturate(foamPattern * 1.5);
+                }
 
-                // Combine all foam sources
                 float foam = saturate(shoreFoam + crest * lace * 0.75 + flowFoam);
 
                 // ── Fresnel ─────────────────────────────────────────────────────
@@ -303,44 +316,33 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float3 L = normalize(mainLight.direction);
                 float3 H = normalize(V + L);
 
-                // Specular — broad and tight highlights
                 float specBroad = pow(saturate(dot(N, H)), lerp(80.0, 900.0, _Gloss)) * 0.7;
                 float specTight = pow(saturate(dot(N, H)), 2400.0) * 1.2;
 
-                // Sun glitter — stochastic sparkle on the surface
-                float glitterMask = pow(saturate(FBM6(i.posWS.xz * 2.8 + t * 0.15)), 8.0);
+                float glitterMask = isTopFace ? pow(saturate(FBM6(i.posWS.xz * 2.8 + t * 0.15)), 8.0) : 0;
                 float glitter = pow(saturate(dot(N, H)), 3200.0) * glitterMask * 2.5;
 
-                // ── Subsurface Scattering ───────────────────────────────────────
-                // Light wrapping around the surface for translucent shallow water
+                // ── SSS ──────────────────────────────────────────────────────────
                 float sssWrap = pow(saturate(dot(V, -L)), 3.0) * (1.0 - deep01) * _SSSIntensity;
                 float3 sssColor = mainLight.color.rgb * sssWrap * float3(0.12, 0.75, 0.55);
 
                 // ── Caustics ────────────────────────────────────────────────────
-                float caustic = pow(saturate(FBM(i.posWS.xz * 0.65 + N.xz * 1.8 - t * 0.18)), 3.0)
-                              * _CausticsIntensity * (1.0 - deep01);
+                float caustic = isTopFace
+                    ? pow(saturate(FBM(i.posWS.xz * 0.65 + N.xz * 1.8 - t * 0.18)), 3.0)
+                      * _CausticsIntensity * (1.0 - deep01)
+                    : 0;
 
                 // ── Compose ─────────────────────────────────────────────────────
-                // Refraction weight: visible in shallow water, fades in deep
                 float refractWeight = (1.0 - deep01) * (1.0 - fresnel) * 0.55;
                 float3 col = lerp(waterCol.rgb, refracted, refractWeight);
 
-                // Sky/ambient reflection at grazing angles
                 float3 sky = SampleSH(N) * 0.85 + mainLight.color.rgb * 0.10;
                 col = lerp(col, sky, fresnel * 0.35);
 
-                // Specular highlights
-                float3 specTotal = mainLight.color.rgb * (specBroad + specTight + glitter)
-                                 * saturate(mainLight.distanceAttenuation);
-                col += specTotal;
-
-                // SSS glow
+                col += mainLight.color.rgb * (specBroad + specTight + glitter)
+                     * saturate(mainLight.distanceAttenuation);
                 col += sssColor;
-
-                // Caustic shimmer
                 col += caustic * float3(0.45, 0.95, 1.0);
-
-                // Foam overlay
                 col = lerp(col, _FoamColor.rgb, foam * _FoamColor.a);
 
                 // ── Alpha ───────────────────────────────────────────────────────
@@ -348,12 +350,13 @@ Shader "VoxelEngine/VoxelWaterURP"
                 alpha = lerp(alpha * 0.72, alpha, deep01);
                 alpha = lerp(alpha, min(alpha + 0.18, 0.97), fresnel);
                 alpha = max(alpha, 0.38);
-
-                // Foam makes the surface more opaque
                 alpha = lerp(alpha, min(alpha + foam * 0.4, 0.98), foam);
 
-                // No skybox depth — boost alpha so water plane is always visible
-                if (rawDepth < 0.0001 || sceneEyeDepth > 10000) alpha = max(alpha, 0.62);
+                // Curtain faces should be slightly more opaque to avoid seeing through
+                if (!isTopFace) alpha = max(alpha, 0.55);
+
+                // Skybox behind water: boost alpha so the water plane is always visible
+                if (isSkybox) alpha = max(alpha, 0.62);
 
                 col = MixFog(col, i.fog);
                 return half4(col, alpha);
