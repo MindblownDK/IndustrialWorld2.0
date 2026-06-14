@@ -131,11 +131,17 @@ namespace VoxelEngine.WaterSim
                             continue;
                     }
 
+                    var liquid = FluidMaterialUtility.LiquidFromVoxel(v);
                     cells[x, z] = new SurfaceCell
                     {
                         has = true,
-                        liquid = FluidMaterialUtility.LiquidFromVoxel(v),
-                        h = y + v.WaterFill,
+                        liquid = liquid,
+                        // Visual surface is deliberately flatter than the simulation byte.
+                        // The CA solver may leave tiny level differences between cells;
+                        // rendering those literally creates visible "water layers". Real
+                        // ocean/pool water reads as one continuous sheet, with movement
+                        // coming from the shader waves instead.
+                        h = VisualSurfaceHeight(y, v.waterLevel, liquid),
                         y = y
                     };
                     any = true;
@@ -193,16 +199,17 @@ namespace VoxelEngine.WaterSim
             float h11 = CornerHeight(cells, x, z, cell.liquid,  1,  1, cell.h);
             float h01 = CornerHeight(cells, x, z, cell.liquid, -1,  1, cell.h);
 
-            // Keep the water mostly inside its voxel footprint, with only a tiny
-            // shoreline tuck-under to hide terrain cracks. Big foam/wash geometry was
-            // removed because it rendered as opaque slabs on some URP setups.
-            float shoreTuck = cell.liquid == LiquidType.CrudeOil ? 0.04f : 0.12f;
+            // Shoreline connection: voxel terrain is smooth/rounded while water is a
+            // grid surface, so an exact 0..1 quad leaves visible cracks. Extend only
+            // toward nearby solid terrain, far enough to clip under the shore but not
+            // as far as the failed foam slabs.
+            float shoreTuck = cell.liquid == LiquidType.CrudeOil ? 0.10f : 0.32f;
             float seamOverlap = 0.035f;
             float x0 = x, x1 = x + 1, z0 = z, z1 = z + 1;
-            if (NeighbourIsSolid(c, x - 1, cell.y, z)) x0 -= shoreTuck; else if (x == 0) x0 -= seamOverlap;
-            if (NeighbourIsSolid(c, x + 1, cell.y, z)) x1 += shoreTuck; else if (x == VoxelConstants.CHUNK_SIZE - 1) x1 += seamOverlap;
-            if (NeighbourIsSolid(c, x, cell.y, z - 1)) z0 -= shoreTuck; else if (z == 0) z0 -= seamOverlap;
-            if (NeighbourIsSolid(c, x, cell.y, z + 1)) z1 += shoreTuck; else if (z == VoxelConstants.CHUNK_SIZE - 1) z1 += seamOverlap;
+            if (ShoreSolidNear(c, x - 1, cell.y, z)) x0 -= shoreTuck; else if (x == 0) x0 -= seamOverlap;
+            if (ShoreSolidNear(c, x + 1, cell.y, z)) x1 += shoreTuck; else if (x == VoxelConstants.CHUNK_SIZE - 1) x1 += seamOverlap;
+            if (ShoreSolidNear(c, x, cell.y, z - 1)) z0 -= shoreTuck; else if (z == 0) z0 -= seamOverlap;
+            if (ShoreSolidNear(c, x, cell.y, z + 1)) z1 += shoreTuck; else if (z == VoxelConstants.CHUNK_SIZE - 1) z1 += seamOverlap;
 
             int i = verts.Count;
             verts.Add(new Vector3(x0, h00, z0));
@@ -306,6 +313,14 @@ namespace VoxelEngine.WaterSim
             tris.Add(i); tris.Add(i + 3); tris.Add(i + 2);
         }
 
+        private static float VisualSurfaceHeight(int y, byte level, LiquidType liquid)
+        {
+            // Render filled/near-filled cells as a clean continuous sheet. This hides
+            // byte-level CA stepping while preserving visibly shallow puddles/streams.
+            if (level >= 32) return y + (liquid == LiquidType.CrudeOil ? 0.94f : 0.985f);
+            return y + Mathf.Clamp(level / 255f, 0.08f, 0.985f);
+        }
+
         private static float CornerHeight(SurfaceCell[,] cells, int x, int z, LiquidType liquid, int sx, int sz, float fallback)
         {
             float sum = fallback;
@@ -330,6 +345,22 @@ namespace VoxelEngine.WaterSim
             if (x < 0 || x >= VoxelConstants.CHUNK_SIZE || z < 0 || z >= VoxelConstants.CHUNK_SIZE || y < 0 || y >= VoxelConstants.CHUNK_SIZE)
                 return false;
             return c.GetVoxelLocal(x, y, z).IsSolid;
+        }
+
+        private static bool ShoreSolidNear(Chunk c, int x, int y, int z)
+        {
+            if (x < 0 || x >= VoxelConstants.CHUNK_SIZE || z < 0 || z >= VoxelConstants.CHUNK_SIZE)
+                return false;
+
+            // Smooth voxel terrain can intersect water slightly above/below the exact
+            // water voxel Y. Sample a short vertical range so the water tucks under
+            // sloped beaches and rounded banks instead of leaving air gaps.
+            for (int yy = y + 1; yy >= y - 3; yy--)
+            {
+                if (yy < 0 || yy >= VoxelConstants.CHUNK_SIZE) continue;
+                if (c.GetVoxelLocal(x, yy, z).IsSolid) return true;
+            }
+            return false;
         }
 
         private static void ClearGO(Chunk c)
