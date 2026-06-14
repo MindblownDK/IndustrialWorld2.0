@@ -1,8 +1,9 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridLiquidNetwork.cs
 //
-// Registry of liquid tanks per grid. There is ONE pipe system: the normal/static
+// Registry/topology for grid liquids. There is ONE pipe system: the normal/static
 // WaterPipe component can be placed onto a grid and then counts as that grid's
-// liquid conduit. No separate GridLiquidPipe component is needed.
+// liquid conduit. Liquid transfer is topology-based: a producer/consumer must
+// touch a connected pipe run that reaches a compatible tank.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -26,6 +27,12 @@ namespace VoxelEngine.GridSystem
                 return _instance;
             }
         }
+
+        private static readonly Vector3Int[] Neighbours =
+        {
+            Vector3Int.right, Vector3Int.left, Vector3Int.up, Vector3Int.down,
+            new Vector3Int(0, 0, 1), new Vector3Int(0, 0, -1)
+        };
 
         private readonly Dictionary<GridEntity, List<GridLiquidTank>> _tanks = new();
 
@@ -51,23 +58,107 @@ namespace VoxelEngine.GridSystem
         {
             if (grid == null) return false;
             foreach (var kv in grid.Blocks)
-            {
-                var block = kv.Value;
-                if (block != null && block.GetComponentInChildren<VoxelEngine.Fluids.WaterPipe>(true) != null)
-                    return true;
-            }
+                if (IsLiquidPipe(kv.Value)) return true;
             return false;
         }
 
         public IReadOnlyList<GridLiquidTank> GetTanks(GridEntity grid)
             => _tanks.TryGetValue(grid, out var list) ? list : System.Array.Empty<GridLiquidTank>();
 
-        /// <summary>Tanks on a grid carrying a specific liquid type.</summary>
         public List<GridLiquidTank> GetTanks(GridEntity grid, LiquidType type)
         {
             var result = new List<GridLiquidTank>();
             foreach (var t in GetTanks(grid)) if (t != null && t.liquidType == type) result.Add(t);
             return result;
+        }
+
+        public float AvailableLiquidFor(GridBlock endpoint, LiquidType type)
+        {
+            float total = 0f;
+            foreach (var tank in ConnectedTanks(endpoint, type, requireExistingType: true))
+                total += Mathf.Max(0f, tank.stored);
+            return total;
+        }
+
+        public float SpaceForLiquidFrom(GridBlock endpoint, LiquidType type)
+        {
+            float total = 0f;
+            foreach (var tank in ConnectedTanks(endpoint, type, requireExistingType: false))
+                total += Mathf.Max(0f, tank.capacity - tank.stored);
+            return total;
+        }
+
+        public float DrawLiquidFor(GridBlock endpoint, LiquidType type, float litres)
+        {
+            if (litres <= 0f) return 0f;
+            float drawn = 0f;
+            foreach (var tank in ConnectedTanks(endpoint, type, requireExistingType: true))
+            {
+                if (drawn >= litres) break;
+                drawn += tank.Remove(litres - drawn);
+            }
+            return drawn;
+        }
+
+        public float FillLiquidFrom(GridBlock endpoint, LiquidType type, float litres)
+        {
+            if (litres <= 0f) return 0f;
+            float filled = 0f;
+            foreach (var tank in ConnectedTanks(endpoint, type, requireExistingType: false))
+            {
+                if (filled >= litres) break;
+                if (tank.liquidType != type && tank.stored > 0.001f) continue;
+                if (tank.stored <= 0.001f) tank.liquidType = type;
+                filled += tank.Add(litres - filled);
+            }
+            return filled;
+        }
+
+        private IEnumerable<GridLiquidTank> ConnectedTanks(GridBlock endpoint, LiquidType type, bool requireExistingType)
+        {
+            var grid = endpoint != null ? endpoint.Grid : null;
+            if (grid == null) yield break;
+
+            var visitedPipes = new HashSet<Vector3Int>();
+            var queue = new Queue<Vector3Int>();
+
+            foreach (var dir in Neighbours)
+            {
+                var p = endpoint.GridPos + dir;
+                var pipeBlock = grid.GetBlock(p);
+                if (IsLiquidPipe(pipeBlock)
+                    && !VoxelEngine.Networks.WrenchBlacklist.IsBlocked(endpoint.gameObject, pipeBlock.gameObject)
+                    && visitedPipes.Add(p)) queue.Enqueue(p);
+            }
+
+            while (queue.Count > 0)
+            {
+                var pipePos = queue.Dequeue();
+                var pipeBlock = grid.GetBlock(pipePos);
+                foreach (var dir in Neighbours)
+                {
+                    var pos = pipePos + dir;
+                    var block = grid.GetBlock(pos);
+                    if (IsLiquidPipe(block))
+                    {
+                        if (!VoxelEngine.Networks.WrenchBlacklist.IsBlocked(pipeBlock?.gameObject, block.gameObject)
+                            && visitedPipes.Add(pos)) queue.Enqueue(pos);
+                        continue;
+                    }
+
+                    if (block is GridLiquidTank tank && tank.Enabled && tank.mode != GridTankMode.Stockpile
+                        && !VoxelEngine.Networks.WrenchBlacklist.IsBlocked(pipeBlock?.gameObject, tank.gameObject))
+                    {
+                        bool typeOk = tank.liquidType == type || (!requireExistingType && tank.stored <= 0.001f);
+                        if (typeOk) yield return tank;
+                    }
+                }
+            }
+        }
+
+        private static bool IsLiquidPipe(GridBlock block)
+        {
+            return block != null && block.GetComponentInChildren<VoxelEngine.Fluids.WaterPipe>(true) != null;
         }
     }
 }

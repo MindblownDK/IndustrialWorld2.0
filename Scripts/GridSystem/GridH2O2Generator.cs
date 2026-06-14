@@ -25,14 +25,14 @@ namespace VoxelEngine.GridSystem
         public float o2Stored;
 
         [Header("Rates")]
-        public float waterPerIce = 20f;
-        public float waterPerSecond    = 4f;
-        public float hydrogenPerSecond = 4f;
-        public float oxygenPerSecond   = 2f;
+        public float waterPerIce = 100f;
+        public float waterPerSecond    = 1f;
+        public float hydrogenPerSecond = 1f;
+        public float oxygenPerSecond   = 0.5f;
         public float powerDraw         = 150f;
         public float pullInterval = 1.5f;
         [Tooltip("Seconds between melting one ice into the internal water buffer.")]
-        public float iceMeltInterval = 2.5f;
+        public float iceMeltInterval = 8f;
 
         [Header("Overflow")]
         [Tooltip("If true, gas produced when an output tank is full is vented (lost). If false, production pauses.")]
@@ -75,16 +75,21 @@ namespace VoxelEngine.GridSystem
             if (Grid == null) { Status = "No Grid"; IsProducing = false; CurrentWattage = 0; return; }
 
             float dt = Time.fixedDeltaTime;
+            float effectiveWaterPerIce = Mathf.Max(waterPerIce, 100f);
+            float effectiveWaterPerSecond = Mathf.Min(waterPerSecond, 1f);
+            float effectiveHydrogenPerSecond = Mathf.Min(hydrogenPerSecond, 1f);
+            float effectiveOxygenPerSecond = Mathf.Min(oxygenPerSecond, 0.5f);
+            float effectiveIceMeltInterval = Mathf.Max(iceMeltInterval, 8f);
 
             // 1) Refill the water buffer from pipes first, then slowly melt ice.
             if (waterStored < waterCapacity)
             {
                 PullWaterFromTanks(dt);
                 _iceMeltTimer += dt;
-                if (waterStored <= waterCapacity - waterPerIce && _iceMeltTimer >= Mathf.Max(0.1f, iceMeltInterval))
+                if (waterStored <= waterCapacity - effectiveWaterPerIce && _iceMeltTimer >= effectiveIceMeltInterval)
                 {
                     _iceMeltTimer = 0f;
-                    MeltOneIce();
+                    MeltOneIce(effectiveWaterPerIce);
                 }
             }
 
@@ -106,12 +111,12 @@ namespace VoxelEngine.GridSystem
 
             if (IsProducing)
             {
-                float consume = Mathf.Min(waterStored, waterPerSecond * dt);
+                float consume = Mathf.Min(waterStored, effectiveWaterPerSecond * dt);
                 waterStored -= consume;
-                float frac = waterPerSecond > 0 ? consume / (waterPerSecond * dt) : 1f;
+                float frac = effectiveWaterPerSecond > 0 ? consume / (effectiveWaterPerSecond * dt) : 1f;
 
-                h2Stored += hydrogenPerSecond * dt * frac;
-                o2Stored += oxygenPerSecond   * dt * frac;
+                h2Stored += effectiveHydrogenPerSecond * dt * frac;
+                o2Stored += effectiveOxygenPerSecond   * dt * frac;
                 if (voidOverflow)
                 {
                     if (h2Stored > h2Capacity) h2Stored = h2Capacity;   // vent excess
@@ -131,7 +136,7 @@ namespace VoxelEngine.GridSystem
             }
         }
 
-        private bool MeltOneIce()
+        private bool MeltOneIce(float waterFromIce)
         {
             if (iceInput == null) return false;
             for (int i = 0; i < iceInput.Size; i++)
@@ -140,7 +145,7 @@ namespace VoxelEngine.GridSystem
                 if (s == null || s.IsEmpty || s.item == null || !IsIce(s.item)) continue;
                 if (iceInput.Remove(s.item, 1) > 0)
                 {
-                    waterStored = Mathf.Min(waterCapacity, waterStored + waterPerIce);
+                    waterStored = Mathf.Min(waterCapacity, waterStored + waterFromIce);
                     return true;
                 }
             }
@@ -150,16 +155,11 @@ namespace VoxelEngine.GridSystem
         // Draw liquid water from connected Liquid Tanks set to Water.
         private void PullWaterFromTanks(float dt)
         {
-            if (Grid == null || GridLiquidNetwork.Instance == null || !GridLiquidNetwork.Instance.HasPipes(Grid)) return;
-            float want = waterPerSecond * 2f * dt;
-            foreach (var t in GridLiquidNetwork.Instance.GetTanks(Grid, LiquidType.Water))
-            {
-                if (want <= 0f) break;
-                if (t == null || t.mode == GridTankMode.Stockpile) continue;
-                float got = t.Remove(want);
-                waterStored = Mathf.Min(waterCapacity, waterStored + got);
-                want -= got;
-            }
+            if (Grid == null || GridLiquidNetwork.Instance == null) return;
+            float effectiveWaterPerSecond = Mathf.Min(waterPerSecond, 1f);
+            float want = effectiveWaterPerSecond * 2f * dt;
+            float got = GridLiquidNetwork.Instance.DrawLiquidFor(this, LiquidType.Water, want);
+            waterStored = Mathf.Min(waterCapacity, waterStored + got);
         }
 
         private void AutoPullIce()

@@ -106,6 +106,40 @@ namespace VoxelEngine.Networks
             return null;
         }
 
+        /// <summary>Resolve gas/liquid/item endpoints that a selected conduit may connect to.</summary>
+        private static GameObject ResolveConduitEndpointRoot(Collider c)
+        {
+            if (c == null) return null;
+
+            // Grid endpoints.
+            var gb = c.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
+            if (gb != null)
+            {
+                if (gb.GetComponentInChildren<VoxelEngine.Gas.GasPipe>() != null
+                    || gb.GetComponentInChildren<VoxelEngine.Transport.ItemPipe>() != null
+                    || gb.GetComponentInChildren<VoxelEngine.Fluids.WaterPipe>() != null)
+                    return null; // it is a conduit, already handled
+                return gb.gameObject;
+            }
+
+            // Static endpoints.
+            var gasTank = c.GetComponentInParent<VoxelEngine.Gas.GasTank>();
+            if (gasTank != null) return gasTank.gameObject;
+            var hydroEngine = c.GetComponentInParent<VoxelEngine.Gas.HydrogenEngine>();
+            if (hydroEngine != null) return hydroEngine.gameObject;
+            var electrolyser = c.GetComponentInParent<VoxelEngine.Gas.Electrolyser>();
+            if (electrolyser != null) return electrolyser.gameObject;
+            var waterTank = c.GetComponentInParent<VoxelEngine.Fluids.WaterTank>();
+            if (waterTank != null) return waterTank.gameObject;
+            var fluidNode = c.GetComponentInParent<VoxelEngine.Fluids.FluidNode>();
+            if (fluidNode != null && fluidNode.Kind != VoxelEngine.Fluids.FluidNodeKind.Pipe) return fluidNode.gameObject;
+            var routing = c.GetComponentInParent<ItemPortRouting>();
+            if (routing != null) return routing.gameObject;
+            var itemContainer = c.GetComponentInParent<IItemContainer>();
+            if (itemContainer is Component comp) return comp.gameObject;
+            return null;
+        }
+
         /// <summary>
         /// Force every network manager to re-evaluate topology so wrench-induced
         /// changes are reflected immediately (without waiting for the next dirty tick).
@@ -143,6 +177,19 @@ namespace VoxelEngine.Networks
                     HandleConduitClick(conduit);
                     return;
                 }
+
+                // If a pipe/cable is already selected, a second click on a valid
+                // machine/tank endpoint toggles that specific pipe ↔ endpoint link.
+                if (_selectedConduit != null)
+                {
+                    var endpoint = ResolveConduitEndpointRoot(hit.collider);
+                    if (endpoint != null)
+                    {
+                        ToggleConduitEndpoint(_selectedConduit, endpoint);
+                        return;
+                    }
+                }
+
                 ClearSelection();
                 return;
             }
@@ -246,6 +293,29 @@ namespace VoxelEngine.Networks
                 UI.BuildFeedbackHud.Show("Disconnected",
                     $"{_selectedConduit.name} ↔ {conduit.name}", null, UI.UITheme.AccentOrange);
             }
+            NudgeAllNetworks();
+            ClearSelection();
+        }
+
+        private void ToggleConduitEndpoint(GameObject conduit, GameObject endpoint)
+        {
+            if (conduit == null || endpoint == null) return;
+
+            if (WrenchBlacklist.IsBlocked(conduit, endpoint))
+            {
+                WrenchBlacklist.Unblock(conduit, endpoint);
+                UI.BuildFeedbackHud.Show("Endpoint Reconnected",
+                    $"{conduit.name} ↔ {endpoint.name}", null, UI.UITheme.AccentGreen);
+            }
+            else
+            {
+                WrenchBlacklist.Block(conduit, endpoint);
+                UI.BuildFeedbackHud.Show("Endpoint Disconnected",
+                    $"{conduit.name} ↔ {endpoint.name}", null, UI.UITheme.AccentOrange);
+            }
+
+            var visual = conduit.GetComponentInChildren<PipeVisualBuilder>();
+            if (visual != null) visual.ForceRebuild();
             NudgeAllNetworks();
             ClearSelection();
         }

@@ -40,7 +40,7 @@ namespace VoxelEngine.GridSystem
         {
             if (!Enabled || Grid == null || !Grid.HasPower) { _progress = 0f; return; }
 
-            var runner = new GridProcessingContext(Grid);
+            var runner = new GridProcessingContext(Grid, this);
             var pool = selectedRecipe != null
                 ? new System.Collections.Generic.List<ProcessingRecipe> { selectedRecipe }
                 : knownRecipes;

@@ -59,7 +59,8 @@ namespace VoxelEngine.GridSystem
                 return;
             }
 
-            float want = hydrogenPerSecond * Time.fixedDeltaTime;
+            float effectiveHydrogenPerSecond = Mathf.Min(hydrogenPerSecond, 0.25f);
+            float want = effectiveHydrogenPerSecond * Time.fixedDeltaTime;
             float take = Mathf.Min(internalHydrogen, want);
             internalHydrogen -= take;
             LastHydrogenConsumed = take;
@@ -71,8 +72,9 @@ namespace VoxelEngine.GridSystem
             if (Grid == null || internalHydrogen >= internalTankCapacity) return;
             if (GridGasNetwork.Instance == null || !GridGasNetwork.Instance.HasPipes(Grid)) return;
 
+            float effectiveRefillRate = Mathf.Min(refillRate, 1.25f);
             float space = internalTankCapacity - internalHydrogen;
-            float want = Mathf.Min(space, refillRate * dt);
+            float want = Mathf.Min(space, effectiveRefillRate * dt);
             float take = GridGasNetwork.Instance.DrawGasFor(this, Gas.GasType.Hydrogen, want);
             if (take <= 0f) return;
             internalHydrogen += take;

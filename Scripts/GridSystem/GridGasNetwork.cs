@@ -134,12 +134,16 @@ namespace VoxelEngine.GridSystem
             foreach (var dir in Neighbours)
             {
                 var p = endpoint.GridPos + dir;
-                if (IsGasPipe(grid.GetBlock(p)) && visitedPipes.Add(p)) queue.Enqueue(p);
+                var pipeBlock = grid.GetBlock(p);
+                if (IsGasPipe(pipeBlock)
+                    && !VoxelEngine.Networks.WrenchBlacklist.IsBlocked(endpoint.gameObject, pipeBlock.gameObject)
+                    && visitedPipes.Add(p)) queue.Enqueue(p);
             }
 
             while (queue.Count > 0)
             {
                 var pipePos = queue.Dequeue();
+                var pipeBlock = grid.GetBlock(pipePos);
 
                 foreach (var dir in Neighbours)
                 {
@@ -147,11 +151,13 @@ namespace VoxelEngine.GridSystem
                     var block = grid.GetBlock(pos);
                     if (IsGasPipe(block))
                     {
-                        if (visitedPipes.Add(pos)) queue.Enqueue(pos);
+                        if (!VoxelEngine.Networks.WrenchBlacklist.IsBlocked(pipeBlock?.gameObject, block.gameObject)
+                            && visitedPipes.Add(pos)) queue.Enqueue(pos);
                         continue;
                     }
 
-                    if (block is GridGasTank tank && tank.Enabled)
+                    if (block is GridGasTank tank && tank.Enabled
+                        && !VoxelEngine.Networks.WrenchBlacklist.IsBlocked(pipeBlock?.gameObject, tank.gameObject))
                     {
                         bool typeOk = tank.gasType == type || (!forOutput && tank.stored <= 0.001f);
                         bool stockpileOk = includeStockpile || tank.mode != GridTankMode.Stockpile;

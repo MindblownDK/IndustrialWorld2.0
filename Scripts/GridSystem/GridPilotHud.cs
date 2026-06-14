@@ -411,7 +411,7 @@ namespace VoxelEngine.GridSystem
 
             float heading = Mathf.Repeat(yaw, 360f);
             int headingInt = Mathf.RoundToInt(heading) % 360;
-            _compassCenter.text = $"{headingInt:000}°";
+            _compassCenter.text = $"{headingInt:0}°";
 
             float centerX = (COMPASS_CENTER_DEGREES + heading) * COMPASS_PIXELS_PER_DEGREE;
             _compassMarkers.style.left = (COMPASS_WIDTH * 0.5f) - centerX;
@@ -431,7 +431,7 @@ namespace VoxelEngine.GridSystem
                 case 90: return "E";
                 case 180: return "S";
                 case 270: return "W";
-                default: return heading.ToString("000");
+                default: return heading.ToString("0");
             }
         }
     }

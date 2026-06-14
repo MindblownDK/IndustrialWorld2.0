@@ -14,7 +14,13 @@ namespace VoxelEngine.GridSystem
     public struct GridProcessingContext
     {
         private readonly GridEntity _grid;
-        public GridProcessingContext(GridEntity grid) { _grid = grid; }
+        private readonly GridBlock _endpoint;
+
+        public GridProcessingContext(GridEntity grid, GridBlock endpoint = null)
+        {
+            _grid = grid;
+            _endpoint = endpoint;
+        }
 
         private List<ItemContainer> Cargo()
         {
@@ -33,12 +39,11 @@ namespace VoxelEngine.GridSystem
             return list;
         }
 
-        /// <summary>First recipe whose item + fluid inputs are present and outputs have room.</summary>
         public ProcessingRecipe FindRunnable(List<ProcessingRecipe> recipes)
         {
             if (recipes == null || _grid == null) return null;
             var cargo = Cargo();
-            var fluids = new GridFluidStore(_grid);
+            var fluids = new GridFluidStore(_grid, _endpoint);
             for (int i = 0; i < recipes.Count; i++)
             {
                 var r = recipes[i];
@@ -47,12 +52,11 @@ namespace VoxelEngine.GridSystem
             return null;
         }
 
-        /// <summary>Run a batch: consume items+fluids and produce outputs into cargo+tanks.</summary>
         public bool Run(ProcessingRecipe r)
         {
             if (r == null || _grid == null) return false;
             var cargo = Cargo();
-            var fluids = new GridFluidStore(_grid);
+            var fluids = new GridFluidStore(_grid, _endpoint);
             return ProcessingExecutor.Run(r, cargo, cargo, fluids);
         }
     }
