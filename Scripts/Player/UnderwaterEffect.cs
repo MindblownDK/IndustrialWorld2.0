@@ -1,12 +1,10 @@
 // Assets/Scripts/VoxelEngine/Player/UnderwaterEffect.cs
 //
-// Underwater VFX: teal fog + color when camera is below water surface.
-// V2 enhancements:
-//   • Animated caustic shimmer overlay
-//   • Depth-based fog density (deeper = denser fog)
-//   • Smooth fog transition on enter/leave
-//   • Godray approximation via fog directionality
-//   • Reliable state restore when surfacing
+// Underwater VFX — simplified and robust.
+// • When camera is underwater AND it's raining → apply fog tint
+// • When camera surfaces or rain stops → fully restore original render settings
+// • No gradual transitions that can get stuck — clean snap on/off
+// • State is saved ONCE on first entry and always restored on exit
 
 using UnityEngine;
 
@@ -17,39 +15,40 @@ namespace VoxelEngine.Player
     {
         [Header("Fog & Color")]
         public Color underwaterTint = new Color(0.03f, 0.14f, 0.35f);
-        public Color deepTint = new Color(0.01f, 0.04f, 0.12f);
-        public float fogDensityShallow = 0.04f;
-        public float fogDensityDeep = 0.12f;
-        public float deepFogStartDepth = 10f;
+        public float fogDensity = 0.06f;
 
-        [Header("Caustics")]
-        public float causticsScale = 0.08f;
-        public float causticsSpeed = 0.6f;
-        public float causticsIntensity = 0.15f;
+        [Header("Rain Fog")]
+        [Tooltip("Fog density multiplier based on rain intensity (0 = no extra, 1 = full extra).")]
+        public float rainFogBoost = 0.08f;
 
         public bool IsUnderwater { get; private set; }
 
         private Camera _cam;
-        private bool _prev;
-        private Color _sBg; CameraClearFlags _sF; float _sFar;
-        private bool _sFog; Color _sFC; float _sFD; FogMode _sFM;
+        private bool _applied;
         private bool _saved;
-        private float _transitionT; // 0 = above water, 1 = fully underwater
-        private float _transitionSpeed = 2.5f;
+
+        // Saved pre-underwater state
+        private Color _sBg;
+        private CameraClearFlags _sF;
+        private float _sFar;
+        private bool _sFog;
+        private Color _sFC;
+        private float _sFD;
+        private FogMode _sFM;
+
         private PlayerWaterState _waterState;
 
         void Awake() { _cam = GetComponent<Camera>(); }
 
         void LateUpdate()
         {
-            _prev = IsUnderwater;
             _waterState = GetComponentInParent<PlayerWaterState>();
             IsUnderwater = false;
 
-            // Method 1: PlayerWaterState says head is underwater
+            // Method 1: PlayerWaterState
             if (_waterState != null && _waterState.IsHeadUnderwater) IsUnderwater = true;
 
-            // Method 2: Direct voxel check at camera position
+            // Method 2: Direct voxel check
             if (!IsUnderwater)
             {
                 var world = VoxelEngine.Core.VoxelWorld.Instance;
@@ -62,79 +61,74 @@ namespace VoxelEngine.Player
                 }
             }
 
-            // Smooth transition
-            float target = IsUnderwater ? 1f : 0f;
-            _transitionT = Mathf.MoveTowards(_transitionT, target, _transitionSpeed * Time.deltaTime);
-
-            // Enter water: save pre-underwater render state ONCE
-            if (IsUnderwater && !_prev && !_saved)
+            // Check if it's raining
+            bool isRaining = false;
+            float rainIntensity = 0f;
+            var weather = Weather.WeatherManager.Instance;
+            if (weather != null && weather.IsPrecipitating && !weather.IsSnowBiome)
             {
-                _sBg  = _cam.backgroundColor;
-                _sF   = _cam.clearFlags;
-                _sFar = _cam.farClipPlane;
-                _sFog = RenderSettings.fog;
-                _sFC  = RenderSettings.fogColor;
-                _sFD  = RenderSettings.fogDensity;
-                _sFM  = RenderSettings.fogMode;
-                _saved = true;
+                isRaining = true;
+                rainIntensity = weather.Intensity;
             }
 
-            if (_transitionT > 0.01f)
+            // Only apply fog effect when underwater AND raining
+            bool shouldApplyFog = IsUnderwater && isRaining;
+
+            if (shouldApplyFog)
             {
-                // Compute depth-based fog
-                float depth = 0f;
-                if (_waterState != null && _waterState.WaterSurfaceY > -9000)
-                    depth = _waterState.WaterSurfaceY - transform.position.y;
-                depth = Mathf.Max(0f, depth);
-
-                float depthFactor = Mathf.Clamp01(depth / deepFogStartDepth);
-                Color fogColor = Color.Lerp(underwaterTint, deepTint, depthFactor);
-                float fogDensity = Mathf.Lerp(fogDensityShallow, fogDensityDeep, depthFactor);
-
-                float t = _transitionT;
-
-                _cam.backgroundColor      = Color.Lerp(_sBg, fogColor, t);
-                _cam.clearFlags           = CameraClearFlags.SolidColor;
-                _cam.farClipPlane         = Mathf.Lerp(_sFar, 45f, t);
-
-                RenderSettings.fog        = true;
-                RenderSettings.fogMode    = FogMode.Exponential;
-                RenderSettings.fogColor   = fogColor;
-                RenderSettings.fogDensity = fogDensity * t + _sFD * (1f - t);
-            }
-            else if (_prev && _saved)
-            {
-                // Leave water: restore state
-                _cam.backgroundColor = _sBg;
-                _cam.clearFlags      = _sF;
-                _cam.farClipPlane    = _sFar;
-                if (Weather.WeatherManager.Instance == null)
+                if (!_saved)
                 {
-                    RenderSettings.fog        = _sFog;
-                    RenderSettings.fogColor   = _sFC;
-                    RenderSettings.fogDensity = _sFD;
-                    RenderSettings.fogMode    = _sFM;
+                    // Save original state ONCE before we modify anything
+                    _sBg  = _cam.backgroundColor;
+                    _sF   = _cam.clearFlags;
+                    _sFar = _cam.farClipPlane;
+                    _sFog = RenderSettings.fog;
+                    _sFC  = RenderSettings.fogColor;
+                    _sFD  = RenderSettings.fogDensity;
+                    _sFM  = RenderSettings.fogMode;
+                    _saved = true;
                 }
-                _saved = false;
+
+                float totalFogDensity = fogDensity + rainFogBoost * rainIntensity;
+
+                _cam.backgroundColor  = underwaterTint;
+                _cam.clearFlags       = CameraClearFlags.SolidColor;
+                _cam.farClipPlane     = 40f;
+                RenderSettings.fog    = true;
+                RenderSettings.fogMode    = FogMode.Exponential;
+                RenderSettings.fogColor   = underwaterTint;
+                RenderSettings.fogDensity = totalFogDensity;
+                _applied = true;
             }
+            else if (_applied && _saved)
+            {
+                // Fully restore original state
+                Restore();
+            }
+        }
+
+        private void Restore()
+        {
+            _cam.backgroundColor = _sBg;
+            _cam.clearFlags      = _sF;
+            _cam.farClipPlane    = _sFar;
+
+            // Only restore fog if WeatherManager isn't controlling it
+            if (Weather.WeatherManager.Instance == null)
+            {
+                RenderSettings.fog        = _sFog;
+                RenderSettings.fogColor   = _sFC;
+                RenderSettings.fogDensity = _sFD;
+                RenderSettings.fogMode    = _sFM;
+            }
+
+            _saved   = false;
+            _applied = false;
         }
 
         void OnDisable()
         {
-            if (_saved)
-            {
-                _cam.backgroundColor = _sBg;
-                _cam.clearFlags      = _sF;
-                _cam.farClipPlane    = _sFar;
-                if (Weather.WeatherManager.Instance == null)
-                {
-                    RenderSettings.fog        = _sFog;
-                    RenderSettings.fogColor   = _sFC;
-                    RenderSettings.fogDensity = _sFD;
-                    RenderSettings.fogMode    = _sFM;
-                }
-                _saved = false;
-            }
+            if (_applied && _saved) Restore();
         }
     }
 }

@@ -1,19 +1,17 @@
 // Assets/Scripts/VoxelEngine/WaterSim/WaterMeshBuilder.cs
 //
-// Rebuilt V3: Smooth continuous water surface with shoreline curtain geometry.
+// V4: Smooth continuous water surface — no double layers, no chunk-edge artifacts.
 //
-// Key improvements:
-//   • Pre-smoothed height field (Gaussian blur) — surface looks like a
-//     continuous sheet, not a grid of flat squares
-//   • Shoreline curtain geometry — vertical faces from water surface down to
-//     terrain height at every water/terrain boundary, eliminating the gap
-//   • No foam or shore effects at chunk boundaries — only where water
-//     actually meets solid terrain inside the chunk
-//   • UV2 encodes flow direction + speed for KWS2-quality shader flow mapping
-//
-// Mesh layout:
-//   submesh 0 = water (clear, animated, flow-mapped, foamy)
-//   submesh 1 = crude oil (dark, viscous, slow waves)
+// Core strategy:
+//   • Water is a single thin sheet that overlaps UNDER the terrain mesh.
+//     Since terrain is opaque and rendered first, it covers the overlap.
+//     The water surface visually "touches" the terrain edge seamlessly.
+//   • NO curtain geometry (eliminates double-layer problem).
+//   • NO shore tuck / overlap at chunk boundaries (eliminates chunk-edge foam).
+//   • Gaussian-smoothed height field for a continuous organic surface.
+//   • At terrain contact points INSIDE the chunk, water quads extend well
+//     past the terrain boundary (0.8f+) so the intersection is hidden.
+//   • UV2 encodes flow direction + speed for shader flow mapping.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -125,15 +123,13 @@ namespace VoxelEngine.WaterSim
         }
 
         // ═══════════════════════════════════════════════════════════════════════
-        //  MAIN BUILD
+        //  BUILD
         // ═══════════════════════════════════════════════════════════════════════
 
         private static void Build(Chunk c)
         {
             const int S = VoxelConstants.CHUNK_SIZE;
             EnsureGO(c);
-
-            // Update flow field from current voxel pressure state
             FlowFieldManager.UpdateFlowField(c);
 
             // ── Phase 1: scan for surface cells ─────────────────────────────
@@ -147,6 +143,8 @@ namespace VoxelEngine.WaterSim
                 {
                     var v = c.GetVoxelLocal(x, y, z);
                     if (!FluidMaterialUtility.IsFluid(v)) continue;
+
+                    // Skip cells submerged under same liquid — only render the TOP surface
                     if (y + 1 < S)
                     {
                         var above = c.GetVoxelLocal(x, y + 1, z);
@@ -175,13 +173,13 @@ namespace VoxelEngine.WaterSim
             // ── Phase 2: Gaussian-smooth the height field ───────────────────
             SmoothHeightField(cells, S);
 
-            // ── Phase 3: build mesh ─────────────────────────────────────────
-            var verts  = new List<Vector3>(S * S * 16);
-            var norms  = new List<Vector3>(S * S * 16);
-            var uvs    = new List<Vector2>(S * S * 16);
-            var uv2s   = new List<Vector2>(S * S * 16);
-            var waterTris = new List<int>(S * S * 8);
-            var oilTris   = new List<int>(S * S * 8);
+            // ── Phase 3: build mesh (top surface only — no curtains!) ───────
+            var verts     = new List<Vector3>(S * S * 8);
+            var norms     = new List<Vector3>(S * S * 8);
+            var uvs       = new List<Vector2>(S * S * 8);
+            var uv2s      = new List<Vector2>(S * S * 8);
+            var waterTris = new List<int>(S * S * 6);
+            var oilTris   = new List<int>(S * S * 6);
 
             float wX = c.coord.x * S;
             float wZ = c.coord.z * S;
@@ -194,7 +192,6 @@ namespace VoxelEngine.WaterSim
 
                 var tris = cell.liquid == LiquidType.CrudeOil ? oilTris : waterTris;
                 AddTop(c, cells, x, z, wX, wZ, verts, norms, uvs, uv2s, tris);
-                AddCurtain(c, cells, x, z, wX, wZ, verts, norms, uvs, uv2s, tris);
             }
 
             if (verts.Count == 0) { ClearGO(c); return; }
@@ -222,8 +219,6 @@ namespace VoxelEngine.WaterSim
 
         private static void SmoothHeightField(SurfaceCell[,] cells, int S)
         {
-            // Write smoothed height into cell.smoothH using a 5×5 Gaussian-like kernel.
-            // Only blend between cells of the SAME liquid type.
             var tempH = new float[S, S];
             var tempW = new float[S, S];
 
@@ -242,9 +237,8 @@ namespace VoxelEngine.WaterSim
                     var n = cells[nx, nz];
                     if (!n.has || n.liquid != cell.liquid) continue;
 
-                    // Gaussian-like weight: 1 at center, decaying outward
                     float d2 = dx * dx + dz * dz;
-                    float w = 1f / (1f + d2 * 0.5f);   // sigma ~1.4
+                    float w = 1f / (1f + d2 * 0.5f);
                     sumH += n.h * w;
                     sumW += w;
                 }
@@ -264,7 +258,16 @@ namespace VoxelEngine.WaterSim
         }
 
         // ═══════════════════════════════════════════════════════════════════════
-        //  TOP SURFACE
+        //  TOP SURFACE — the ONLY geometry we build
+        //
+        //  Key insight: we do NOT build curtain/side faces. Instead, the water
+        //  quad aggressively overlaps UNDER the terrain mesh. Since terrain is
+        //  opaque and rendered before transparent water, the terrain covers the
+        //  overlapping portion. The visible edge of the water surface naturally
+        //  meets the terrain edge with no gap.
+        //
+        //  At chunk boundaries, we use a tiny seam overlap only (0.06f) so the
+        //  adjacent chunk's water connects. No terrain tuck at boundaries.
         // ═══════════════════════════════════════════════════════════════════════
 
         private static void AddTop(Chunk c, SurfaceCell[,] cells, int x, int z, float wX, float wZ,
@@ -272,29 +275,29 @@ namespace VoxelEngine.WaterSim
         {
             var cell = cells[x, z];
 
-            // Corner heights from the SMOOTHED field — averages over same-liquid neighbors
+            // Corner heights from the SMOOTHED field
             float h00 = SmoothedCornerHeight(cells, x, z, cell.liquid, -1, -1, cell.smoothH);
             float h10 = SmoothedCornerHeight(cells, x, z, cell.liquid,  1, -1, cell.smoothH);
             float h11 = SmoothedCornerHeight(cells, x, z, cell.liquid,  1,  1, cell.smoothH);
             float h01 = SmoothedCornerHeight(cells, x, z, cell.liquid, -1,  1, cell.smoothH);
 
-            // ── Shore tuck: extend toward SOLID terrain (not chunk edges) ────
-            float shoreTuck = cell.liquid == LiquidType.CrudeOil ? 0.20f : 0.65f;
             float x0 = x, x1 = x + 1, z0 = z, z1 = z + 1;
 
-            // Only tuck toward actual solid terrain INSIDE the chunk.
-            // At chunk boundaries, use a tiny seam overlap only.
-            if (TerrainSolidNear(c, x - 1, cell.y, z)) x0 -= shoreTuck;
-            else if (x == 0) x0 -= 0.06f;  // tiny seam, not a full tuck
+            // ── Terrain overlap (inside chunk only) ─────────────────────────
+            // Where water borders solid terrain, extend the quad well into the
+            // terrain so the intersection is hidden behind the opaque terrain mesh.
+            float terrainTuck = cell.liquid == LiquidType.CrudeOil ? 0.30f : 0.85f;
 
-            if (TerrainSolidNear(c, x + 1, cell.y, z)) x1 += shoreTuck;
-            else if (x == VoxelConstants.CHUNK_SIZE - 1) x1 += 0.06f;
+            if (TerrainSolidNear(c, x - 1, cell.y, z)) x0 -= terrainTuck;
+            if (TerrainSolidNear(c, x + 1, cell.y, z)) x1 += terrainTuck;
+            if (TerrainSolidNear(c, x, cell.y, z - 1)) z0 -= terrainTuck;
+            if (TerrainSolidNear(c, x, cell.y, z + 1)) z1 += terrainTuck;
 
-            if (TerrainSolidNear(c, x, cell.y, z - 1)) z0 -= shoreTuck;
-            else if (z == 0) z0 -= 0.06f;
-
-            if (TerrainSolidNear(c, x, cell.y, z + 1)) z1 += shoreTuck;
-            else if (z == VoxelConstants.CHUNK_SIZE - 1) z1 += 0.06f;
+            // ── Chunk boundary — NO overlap ──────────────────────────────────
+            // The adjacent chunk renders its own water up to the same boundary
+            // from its side, so the surfaces meet exactly. No overlap = no
+            // depth-based foam artifacts at chunk boundaries.
+            // (We intentionally do NOT extend past chunk edges at all.)
 
             Vector2 avgFlow = AverageFlow(cells, x, z, cell.liquid);
 
@@ -315,135 +318,6 @@ namespace VoxelEngine.WaterSim
         }
 
         // ═══════════════════════════════════════════════════════════════════════
-        //  SHORELINE CURTAIN — vertical faces where water meets terrain
-        //
-        //  This is the KEY fix: the water surface is a flat sheet sitting at a
-        //  fixed height, while terrain is a smooth surface-net mesh that slopes.
-        //  At the shoreline there is a visible GAP between the two surfaces.
-        //
-        //  The curtain extends the water geometry DOWN from the water surface
-        //  to the terrain height at the contact point.  This creates a seamless
-        //  visual connection — the water "touches" the terrain.
-        //
-        //  Only added where water borders actual SOLID terrain INSIDE the chunk.
-        //  NEVER at chunk boundaries (adjacent chunk owns its side).
-        // ═══════════════════════════════════════════════════════════════════════
-
-        private static void AddCurtain(Chunk c, SurfaceCell[,] cells, int x, int z, float wX, float wZ,
-            List<Vector3> verts, List<Vector3> norms, List<Vector2> uvs, List<Vector2> uv2s, List<int> tris)
-        {
-            var cell = cells[x, z];
-            const int S = VoxelConstants.CHUNK_SIZE;
-
-            // For each of the 4 cardinal directions, check if terrain is adjacent
-            TryCurtainFace(c, cells, x, z, cell, -1,  0, wX, wZ, verts, norms, uvs, uv2s, tris);
-            TryCurtainFace(c, cells, x, z, cell,  1,  0, wX, wZ, verts, norms, uvs, uv2s, tris);
-            TryCurtainFace(c, cells, x, z, cell,  0, -1, wX, wZ, verts, norms, uvs, uv2s, tris);
-            TryCurtainFace(c, cells, x, z, cell,  0,  1, wX, wZ, verts, norms, uvs, uv2s, tris);
-        }
-
-        private static void TryCurtainFace(Chunk c, SurfaceCell[,] cells, int x, int z, SurfaceCell cell,
-            int dx, int dz, float wX, float wZ,
-            List<Vector3> verts, List<Vector3> norms, List<Vector2> uvs, List<Vector2> uv2s, List<int> tris)
-        {
-            const int S = VoxelConstants.CHUNK_SIZE;
-            int nx = x + dx, nz = z + dz;
-
-            // ── NEVER add curtain at chunk boundaries ──
-            // The adjacent chunk builds its own water surface + curtain.
-            if (nx < 0 || nx >= S || nz < 0 || nz >= S) return;
-
-            var neighbour = cells[nx, nz];
-
-            // If the neighbour is the same liquid, no curtain needed
-            if (neighbour.has && neighbour.liquid == cell.liquid)
-            {
-                // Only add curtain if there's a significant height drop (waterfall)
-                if (cell.smoothH - neighbour.smoothH < 0.85f) return;
-                // Waterfall curtain — handled by AddTop's smoothing + wave shader
-                return;
-            }
-
-            // If neighbour is NOT solid terrain, no curtain (it's air/empty)
-            if (!TerrainSolidNear(c, nx, cell.y, nz)) return;
-
-            // ── We have a water→terrain boundary. Build the curtain. ──
-
-            float topY = cell.smoothH;
-
-            // Sample terrain height at the contact point.
-            // Find the highest solid voxel at (nx, ?, nz) near the water surface.
-            float terrainY = SampleTerrainHeight(c, nx, nz, cell.y);
-
-            // Extend the curtain at least 1.5 voxels below the water surface
-            // to handle sloped terrain that may dip below.
-            float minCurtainDepth = 1.8f;
-            float curtainBottom = Mathf.Min(terrainY, topY - minCurtainDepth);
-
-            // Don't build a curtain shorter than a tiny sliver
-            if (topY - curtainBottom < 0.05f) return;
-
-            // Build the quad.  The curtain extends slightly into the terrain
-            // (shoreTuck overlap) so there's no crack between water and rock.
-            float shoreTuck = cell.liquid == LiquidType.CrudeOil ? 0.12f : 0.35f;
-            float x0 = x, x1 = x + 1, z0 = z, z1 = z + 1;
-
-            Vector3 a, b, c0, d;
-            Vector3 normal;
-
-            if (dx < 0)       { a = new Vector3(x0, curtainBottom, z1); b = new Vector3(x0, curtainBottom, z0); c0 = new Vector3(x0 - shoreTuck, topY, z0); d = new Vector3(x0 - shoreTuck, topY, z1); normal = Vector3.left; }
-            else if (dx > 0)  { a = new Vector3(x1, curtainBottom, z0); b = new Vector3(x1, curtainBottom, z1); c0 = new Vector3(x1 + shoreTuck, topY, z1); d = new Vector3(x1 + shoreTuck, topY, z0); normal = Vector3.right; }
-            else if (dz < 0)  { a = new Vector3(x1, curtainBottom, z0); b = new Vector3(x0, curtainBottom, z0); c0 = new Vector3(x0 - shoreTuck, topY, z0); d = new Vector3(x1 + shoreTuck, topY, z0); normal = Vector3.back; }
-            else              { a = new Vector3(x0, curtainBottom, z1); b = new Vector3(x1, curtainBottom, z1); c0 = new Vector3(x1 + shoreTuck, topY, z1); d = new Vector3(x0 - shoreTuck, topY, z1); normal = Vector3.forward; }
-
-            Vector2 flow = cell.flow;
-
-            int i = verts.Count;
-            verts.Add(a); verts.Add(b); verts.Add(c0); verts.Add(d);
-            // Bottom two vertices have face normal; top two have upward bias
-            // for seamless blending with the surface mesh.
-            norms.Add(normal); norms.Add(normal);
-            norms.Add(Vector3.Slerp(normal, Vector3.up, 0.5f));
-            norms.Add(Vector3.Slerp(normal, Vector3.up, 0.5f));
-
-            uvs.Add(new Vector2(wX + a.x, wZ + a.z));
-            uvs.Add(new Vector2(wX + b.x, wZ + b.z));
-            uvs.Add(new Vector2(wX + c0.x, wZ + c0.z));
-            uvs.Add(new Vector2(wX + d.x, wZ + d.z));
-            for (int n = 0; n < 4; n++) uv2s.Add(flow);
-
-            tris.Add(i); tris.Add(i + 2); tris.Add(i + 1);
-            tris.Add(i); tris.Add(i + 3); tris.Add(i + 2);
-        }
-
-        /// <summary>
-        /// Find the highest solid terrain voxel at (wx, ?, wz) near the water
-        /// surface level.  Used to determine how far down the curtain extends.
-        /// </summary>
-        private static float SampleTerrainHeight(Chunk c, int lx, int lz, int waterY)
-        {
-            // Search a vertical range around the water surface level.
-            // Terrain at the shoreline is usually at or slightly below water level.
-            const int S = VoxelConstants.CHUNK_SIZE;
-
-            for (int dy = 0; dy <= 6; dy++)
-            {
-                // Check below first (most common case: terrain is below water)
-                int yBelow = waterY - dy;
-                if (yBelow >= 0 && yBelow < S && c.GetVoxelLocal(lx, yBelow, lz).IsSolid)
-                    return yBelow + 1f; // terrain surface is ~1 voxel above the solid center
-
-                // Then check above (raised terrain at water line)
-                int yAbove = waterY + dy;
-                if (yAbove >= 0 && yAbove < S && c.GetVoxelLocal(lx, yAbove, lz).IsSolid)
-                    return yAbove + 1f;
-            }
-
-            // Fallback: assume terrain is 1 voxel below water
-            return waterY;
-        }
-
-        // ═══════════════════════════════════════════════════════════════════════
         //  HELPERS
         // ═══════════════════════════════════════════════════════════════════════
 
@@ -454,7 +328,6 @@ namespace VoxelEngine.WaterSim
             TryAddSmoothed(cells, x + sx, z, liquid, ref sum, ref cnt);
             TryAddSmoothed(cells, x, z + sz, liquid, ref sum, ref cnt);
             TryAddSmoothed(cells, x + sx, z + sz, liquid, ref sum, ref cnt);
-            // Wider kernel: also sample 2 cells out for extra smoothing
             TryAddSmoothed(cells, x + sx * 2, z, liquid, ref sum, ref cnt);
             TryAddSmoothed(cells, x, z + sz * 2, liquid, ref sum, ref cnt);
             return sum / cnt;
@@ -500,20 +373,17 @@ namespace VoxelEngine.WaterSim
         }
 
         /// <summary>
-        /// Check if there is solid terrain NEAR a position (wider vertical range).
-        /// Used for shore tuck decisions — only extend water toward actual terrain.
+        /// True if there is solid terrain NEAR a position. Used to decide where
+        /// to tuck the water quad under the terrain.
+        /// Returns FALSE for out-of-bounds (chunk boundaries) so we never
+        /// tuck or foam at chunk edges.
         /// </summary>
         private static bool TerrainSolidNear(Chunk c, int x, int y, int z)
         {
             const int S = VoxelConstants.CHUNK_SIZE;
-
-            // Out of chunk bounds — this is a chunk boundary, NOT terrain.
-            // Return false so we never tuck/foam at chunk edges.
             if (x < 0 || x >= S || z < 0 || z >= S) return false;
 
-            // Generous vertical search: terrain slopes can be well above or
-            // below the exact water voxel Y.
-            for (int yy = y + 2; yy >= y - 5; yy--)
+            for (int yy = y + 3; yy >= y - 5; yy--)
             {
                 if (yy < 0 || yy >= S) continue;
                 if (c.GetVoxelLocal(x, yy, z).IsSolid) return true;
@@ -528,13 +398,6 @@ namespace VoxelEngine.WaterSim
                 if (c.GetVoxelLocal(x, y, z).IsSolid) return true;
             }
             return false;
-        }
-
-        private static bool NeighbourIsSolid(Chunk c, int x, int y, int z)
-        {
-            const int S = VoxelConstants.CHUNK_SIZE;
-            if (x < 0 || x >= S || z < 0 || z >= S || y < 0 || y >= S) return false;
-            return c.GetVoxelLocal(x, y, z).IsSolid;
         }
 
         private static void ClearGO(Chunk c)
