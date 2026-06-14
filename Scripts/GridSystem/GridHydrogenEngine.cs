@@ -73,7 +73,7 @@ namespace VoxelEngine.GridSystem
 
             float space = internalTankCapacity - internalHydrogen;
             float want = Mathf.Min(space, refillRate * dt);
-            float take = GridGasNetwork.Instance.DrawGas(Grid, Gas.GasType.Hydrogen, want);
+            float take = GridGasNetwork.Instance.DrawGasFor(this, Gas.GasType.Hydrogen, want);
             if (take <= 0f) return;
             internalHydrogen += take;
         }

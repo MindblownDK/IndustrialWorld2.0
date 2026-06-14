@@ -404,6 +404,18 @@ namespace VoxelEngine.Player
             if (collider is BoxCollider box) box.size = Vector3.one * cs;
 
             targetGrid.AddBlock(gridPos, gridBlock);
+
+            // The static pipe components registered before the object was parented/moved into
+            // the grid, so force their network/visual graph to rebuild at the final position.
+            var pipeVisual = go.GetComponentInChildren<VoxelEngine.Networks.PipeVisualBuilder>(true);
+            if (pipeVisual != null)
+            {
+                pipeVisual.gridSize = cs;
+                pipeVisual.ForceRebuild();
+            }
+            VoxelEngine.Transport.ItemPipeNetwork.Instance?.SetDirty();
+            VoxelEngine.Gas.GasNetwork.Instance?.SetDirty();
+            VoxelEngine.Fluids.FluidNetworkManager.Instance?.SetDirty();
             return true;
         }
 

@@ -599,11 +599,14 @@ namespace VoxelEngine.GridSystem.UI
                 he.IsRunning ? T.AccentGreen : T.AccentAmber);
             p.Add(hdr);
             p.Add(T.AccentDivider(T.AccentGreen));
+            var gaugeRow = Row();
+            gaugeRow.style.justifyContent = Justify.Center;
+            gaugeRow.Add(T.TankGauge("H2 Buffer", he.Fill01, T.AccentCyan,
+                $"{he.internalHydrogen:0}/{he.internalTankCapacity:0} L", 70, 120));
+            p.Add(gaugeRow);
+            p.Add(T.Spacer(6));
             p.Add(T.StatRow("", "Output", PowerFormat.Watts(he.PowerOutput), T.AccentGreen));
             p.Add(T.StatRow("", "Hydrogen Use", $"{he.hydrogenPerSecond:0.#} H2/s", T.AccentCyan));
-            p.Add(T.StatRow("", "Internal Tank", $"{he.internalHydrogen:0}/{he.internalTankCapacity:0} L", T.AccentCyan));
-            var (bar, _) = T.ProgressBar(he.Fill01, T.AccentCyan, 8, true);
-            p.Add(bar);
             p.Add(T.Muted("Buffers hydrogen internally, then burns it into grid power. Feed it through gas pipes from H2/O2 generators and gas tanks."));
             return p;
         }

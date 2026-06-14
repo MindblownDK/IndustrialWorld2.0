@@ -115,9 +115,9 @@ namespace VoxelEngine.GridSystem
             // pool unless an Oxygen tank actually receives it.
             if (GridGasNetwork.Instance != null && GridGasNetwork.Instance.HasPipes(Grid))
             {
-                float h2Moved = GridGasNetwork.Instance.FillGas(Grid, VoxelEngine.Gas.GasType.Hydrogen, Mathf.Min(h2Stored, 30f * dt));
+                float h2Moved = GridGasNetwork.Instance.FillGasFrom(this, VoxelEngine.Gas.GasType.Hydrogen, Mathf.Min(h2Stored, 30f * dt));
                 h2Stored -= h2Moved;
-                float o2Moved = GridGasNetwork.Instance.FillGas(Grid, VoxelEngine.Gas.GasType.Oxygen, Mathf.Min(o2Stored, 30f * dt));
+                float o2Moved = GridGasNetwork.Instance.FillGasFrom(this, VoxelEngine.Gas.GasType.Oxygen, Mathf.Min(o2Stored, 30f * dt));
                 o2Stored -= o2Moved;
             }
         }
