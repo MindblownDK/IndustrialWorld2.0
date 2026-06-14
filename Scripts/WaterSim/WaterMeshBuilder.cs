@@ -161,7 +161,7 @@ namespace VoxelEngine.WaterSim
 
                 var tris = cell.liquid == LiquidType.CrudeOil ? oilTris : waterTris;
                 AddTop(c, cells, x, z, wX, wZ, verts, norms, uvs, tris);
-                AddSides(c, cells, x, z, wX, wZ, verts, norms, uvs, tris);
+                AddWaterfallSides(c, cells, x, z, wX, wZ, verts, norms, uvs, tris);
             }
 
             if (verts.Count == 0) { ClearGO(c); return; }
@@ -191,12 +191,16 @@ namespace VoxelEngine.WaterSim
             float h11 = CornerHeight(cells, x, z, cell.liquid,  1,  1, cell.h);
             float h01 = CornerHeight(cells, x, z, cell.liquid, -1,  1, cell.h);
 
-            float shore = 0.08f;
+            // Real water visually laps onto shore instead of stopping exactly at
+            // the voxel boundary. The generous overlap hides tiny terrain cracks and
+            // creates a beach-wash look like the references.
+            float shore = cell.liquid == LiquidType.CrudeOil ? 0.16f : 0.42f;
+            float seamOverlap = 0.08f;
             float x0 = x, x1 = x + 1, z0 = z, z1 = z + 1;
-            if (NeighbourIsSolid(c, x - 1, cell.y, z)) x0 -= shore;
-            if (NeighbourIsSolid(c, x + 1, cell.y, z)) x1 += shore;
-            if (NeighbourIsSolid(c, x, cell.y, z - 1)) z0 -= shore;
-            if (NeighbourIsSolid(c, x, cell.y, z + 1)) z1 += shore;
+            if (NeighbourIsSolid(c, x - 1, cell.y, z) || x == 0) x0 -= (x == 0 ? seamOverlap : shore);
+            if (NeighbourIsSolid(c, x + 1, cell.y, z) || x == VoxelConstants.CHUNK_SIZE - 1) x1 += (x == VoxelConstants.CHUNK_SIZE - 1 ? seamOverlap : shore);
+            if (NeighbourIsSolid(c, x, cell.y, z - 1) || z == 0) z0 -= (z == 0 ? seamOverlap : shore);
+            if (NeighbourIsSolid(c, x, cell.y, z + 1) || z == VoxelConstants.CHUNK_SIZE - 1) z1 += (z == VoxelConstants.CHUNK_SIZE - 1 ? seamOverlap : shore);
 
             int i = verts.Count;
             verts.Add(new Vector3(x0, h00, z0));
@@ -212,27 +216,45 @@ namespace VoxelEngine.WaterSim
             tris.Add(i); tris.Add(i + 3); tris.Add(i + 2);
         }
 
-        private static void AddSides(Chunk c, SurfaceCell[,] cells, int x, int z, float wX, float wZ,
+        private static void AddWaterfallSides(Chunk c, SurfaceCell[,] cells, int x, int z, float wX, float wZ,
             List<Vector3> verts, List<Vector3> norms, List<Vector2> uvs, List<int> tris)
         {
             var cell = cells[x, z];
-            AddSideIfOpen(cells, x, z, cell,  1,  0, new Vector3(1, 0, 0), wX, wZ, verts, norms, uvs, tris);
-            AddSideIfOpen(cells, x, z, cell, -1,  0, new Vector3(-1, 0, 0), wX, wZ, verts, norms, uvs, tris);
-            AddSideIfOpen(cells, x, z, cell,  0,  1, new Vector3(0, 0, 1), wX, wZ, verts, norms, uvs, tris);
-            AddSideIfOpen(cells, x, z, cell,  0, -1, new Vector3(0, 0, -1), wX, wZ, verts, norms, uvs, tris);
+            AddWaterfallSideIfNeeded(c, cells, x, z, cell,  1,  0, new Vector3(1, 0, 0), wX, wZ, verts, norms, uvs, tris);
+            AddWaterfallSideIfNeeded(c, cells, x, z, cell, -1,  0, new Vector3(-1, 0, 0), wX, wZ, verts, norms, uvs, tris);
+            AddWaterfallSideIfNeeded(c, cells, x, z, cell,  0,  1, new Vector3(0, 0, 1), wX, wZ, verts, norms, uvs, tris);
+            AddWaterfallSideIfNeeded(c, cells, x, z, cell,  0, -1, new Vector3(0, 0, -1), wX, wZ, verts, norms, uvs, tris);
         }
 
-        private static void AddSideIfOpen(SurfaceCell[,] cells, int x, int z, SurfaceCell cell, int dx, int dz, Vector3 normal,
+        private static void AddWaterfallSideIfNeeded(Chunk c, SurfaceCell[,] cells, int x, int z, SurfaceCell cell, int dx, int dz, Vector3 normal,
             float wX, float wZ, List<Vector3> verts, List<Vector3> norms, List<Vector2> uvs, List<int> tris)
         {
             int nx = x + dx, nz = z + dz;
-            bool sameNeighbour = nx >= 0 && nx < VoxelConstants.CHUNK_SIZE && nz >= 0 && nz < VoxelConstants.CHUNK_SIZE
-                              && cells[nx, nz].has && cells[nx, nz].liquid == cell.liquid && cells[nx, nz].h >= cell.y + 0.02f;
-            if (sameNeighbour) return;
+
+            // Never build vertical sheets at chunk borders. Neighbour chunks build
+            // their own surfaces and a tiny top overlap handles the seam. This removes
+            // the big rectangular "layer" planes visible from the shoreline.
+            if (nx < 0 || nx >= VoxelConstants.CHUNK_SIZE || nz < 0 || nz >= VoxelConstants.CHUNK_SIZE)
+                return;
+
+            var neighbour = cells[nx, nz];
+            if (neighbour.has && neighbour.liquid == cell.liquid)
+            {
+                // Same liquid beside us: only build a side if this is a genuine
+                // waterfall/drop. Small level differences are smoothed by top corners.
+                if (cell.h - neighbour.h < 0.85f) return;
+            }
+            else if (NeighbourIsSolid(c, nx, cell.y, nz))
+            {
+                // Shoreline/rock wall: do not draw a vertical skirt. The surface laps
+                // under/onto terrain instead, which looks far more natural and hides gaps.
+                return;
+            }
 
             float top = cell.h;
-            float bottom = Mathf.Floor(cell.h);
-            if (top - bottom < 0.08f) bottom = top - 0.35f;
+            float bottom = neighbour.has && neighbour.liquid == cell.liquid
+                ? Mathf.Max(neighbour.h, top - 1.25f)
+                : top - 0.75f;
 
             float x0 = x, x1 = x + 1, z0 = z, z1 = z + 1;
             Vector3 a, b, c0, d;
