@@ -1,9 +1,9 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridGasNetwork.cs
 //
-// Per-grid gas distribution. Gas transfer requires visible GridGasPipe
-// segments on the grid; tanks remain storage until a consumer draws from them.
+// Per-grid gas distribution. There is ONE pipe system: the normal/static GasPipe
+// component can be placed onto a grid and then counts as that grid's gas conduit.
+// No separate GridGasPipe component is needed.
 
-using System.Collections.Generic;
 using UnityEngine;
 
 namespace VoxelEngine.GridSystem
@@ -25,28 +25,23 @@ namespace VoxelEngine.GridSystem
             }
         }
 
-        private readonly Dictionary<GridEntity, List<GridGasPipe>> _pipes = new();
-
         private void Awake()
         {
             if (_instance != null && _instance != this) { Destroy(gameObject); return; }
             _instance = this;
         }
 
-        public void RegisterPipe(GridEntity grid, GridGasPipe pipe)
-        {
-            if (grid == null || pipe == null) return;
-            if (!_pipes.TryGetValue(grid, out var list)) { list = new List<GridGasPipe>(); _pipes[grid] = list; }
-            if (!list.Contains(pipe)) list.Add(pipe);
-        }
-
-        public void UnregisterPipe(GridEntity grid, GridGasPipe pipe)
-        {
-            if (grid != null && _pipes.TryGetValue(grid, out var list)) list.Remove(pipe);
-        }
-
         public bool HasPipes(GridEntity grid)
-            => _pipes.TryGetValue(grid, out var list) && list.Count > 0;
+        {
+            if (grid == null) return false;
+            foreach (var kv in grid.Blocks)
+            {
+                var block = kv.Value;
+                if (block != null && block.GetComponentInChildren<VoxelEngine.Gas.GasPipe>(true) != null)
+                    return true;
+            }
+            return false;
+        }
 
         public float AvailableGas(GridEntity grid, Gas.GasType type, bool includeStockpile = false)
         {

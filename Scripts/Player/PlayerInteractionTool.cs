@@ -377,15 +377,11 @@ namespace VoxelEngine.Player
             var targetGrid = hit.collider != null ? hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridEntity>() : null;
             if (targetGrid == null) return false;
 
-            System.Type gridPipeType = null;
-            if (block.placedPrefab.GetComponentInChildren<VoxelEngine.Transport.ItemPipe>(true) != null)
-                gridPipeType = typeof(VoxelEngine.GridSystem.GridItemPipe);
-            else if (block.placedPrefab.GetComponentInChildren<VoxelEngine.Gas.GasPipe>(true) != null)
-                gridPipeType = typeof(VoxelEngine.GridSystem.GridGasPipe);
-            else if (block.placedPrefab.GetComponentInChildren<VoxelEngine.Fluids.WaterPipe>(true) != null)
-                gridPipeType = typeof(VoxelEngine.GridSystem.GridLiquidPipe);
+            bool isUnifiedPipe = block.placedPrefab.GetComponentInChildren<VoxelEngine.Transport.ItemPipe>(true) != null
+                              || block.placedPrefab.GetComponentInChildren<VoxelEngine.Gas.GasPipe>(true) != null
+                              || block.placedPrefab.GetComponentInChildren<VoxelEngine.Fluids.WaterPipe>(true) != null;
 
-            if (gridPipeType == null) return false;
+            if (!isUnifiedPipe) return false;
 
             float cs = VoxelEngine.GridSystem.GridSizeExt.CellSize(targetGrid.gridSize);
             Vector3Int gridPos = targetGrid.WorldToGrid(hit.point + hit.normal * (cs * 0.55f));
@@ -393,14 +389,20 @@ namespace VoxelEngine.Player
                 gridPos = targetGrid.WorldToGrid(hit.point + hit.normal * cs);
             if (!targetGrid.CanPlace(gridPos) || !targetGrid.HasNeighbor(gridPos)) return false;
 
-            var go = new GameObject(block.displayName);
+            var go = Instantiate(block.placedPrefab);
+            go.name = block.displayName;
             go.transform.rotation = targetGrid.transform.rotation;
-            var gridBlock = (VoxelEngine.GridSystem.GridBlock)go.AddComponent(gridPipeType);
+
+            var gridBlock = go.GetComponent<VoxelEngine.GridSystem.GridBlock>();
+            if (gridBlock == null) gridBlock = go.AddComponent<VoxelEngine.GridSystem.GridBlock>();
             gridBlock.blockName = block.displayName;
             gridBlock.BlockMass = Mathf.Max(block.massPerUnit, 80f);
             gridBlock.maxHP = Mathf.Max(block.blockHealth, 100f);
-            var collider = go.AddComponent<BoxCollider>();
-            collider.size = Vector3.one * cs;
+
+            var collider = go.GetComponent<Collider>();
+            if (collider == null) collider = go.AddComponent<BoxCollider>();
+            if (collider is BoxCollider box) box.size = Vector3.one * cs;
+
             targetGrid.AddBlock(gridPos, gridBlock);
             return true;
         }

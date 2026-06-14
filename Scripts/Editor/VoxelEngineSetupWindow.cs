@@ -4404,6 +4404,27 @@ root =>
             var registry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeRegistry>($"{ASSET_ROOT}/RecipeRegistry.asset");
             var tree = AssetDatabase.LoadAssetAtPath<VoxelEngine.Research.ResearchTree>($"{ASSET_ROOT}/Research/ResearchTree.asset");
 
+            // Legacy cleanup: pipes are unified now. Static/world pipe items become grid-attached
+            // when placed on a grid, so Step 12 must not keep separate grid-pipe assets around.
+            string[] legacyGridPipeAssets =
+            {
+                $"{PREFABS}/ItemPipe_Small.prefab", $"{PREFABS}/GasPipe_Small.prefab", $"{PREFABS}/GasPipe_Large.prefab",
+                $"{PREFABS}/LiquidPipe_Small.prefab", $"{PREFABS}/LiquidPipe_Large.prefab",
+                $"{ITEMS}/GItem_ItemPipe.asset", $"{ITEMS}/GItem_GasPipe.asset", $"{ITEMS}/GItem_GasPipeLarge.asset",
+                $"{ITEMS}/GItem_LiquidPipe.asset", $"{ITEMS}/GItem_LiquidPipeLarge.asset",
+                $"{RECIPES}/Recipe_GItemPipe.asset", $"{RECIPES}/Recipe_GGasPipe.asset", $"{RECIPES}/Recipe_GGasPipeLarge.asset",
+                $"{RECIPES}/Recipe_GLiquidPipe.asset", $"{RECIPES}/Recipe_GLiquidPipeLarge.asset"
+            };
+            foreach (var legacyPath in legacyGridPipeAssets)
+                if (AssetDatabase.LoadMainAssetAtPath(legacyPath) != null) AssetDatabase.DeleteAsset(legacyPath);
+            if (registry != null)
+            {
+                registry.recipes.RemoveAll(r => r == null || r.name == "Recipe_GItemPipe" || r.name == "Recipe_GGasPipe" ||
+                                                r.name == "Recipe_GGasPipeLarge" || r.name == "Recipe_GLiquidPipe" ||
+                                                r.name == "Recipe_GLiquidPipeLarge");
+                EditorUtility.SetDirty(registry);
+            }
+
             // -- Helpers --
             float RealisticGridMass(string display, VoxelEngine.GridSystem.GridSize size, float authoredMass)
             {
@@ -4645,25 +4666,9 @@ root =>
             var itemCargoLarge = MakeGItem("GItem_CargoLarge", "Large Cargo Container", Color.white, cargoLargePref, VoxelEngine.GridSystem.GridSize.Large, 400, 700);
             AddGRecipe("Recipe_GCargoLarge", "Large Cargo Container", itemCargoLarge, (steelPlate, 6), (ironPlate, 4));
 
-            var pipePref = MakeGPref<VoxelEngine.GridSystem.GridItemPipe>("ItemPipe_Small", new Color(0.7f, 0.7f, 0.75f), new Vector3(0.3f, 0.3f, 0.8f), p => p.transferRate = 10f);
-            var itemPipe = MakeGItem("GItem_ItemPipe", "Item Pipe", Color.white, pipePref, VoxelEngine.GridSystem.GridSize.Small, 30, 120);
-            AddGRecipe("Recipe_GItemPipe", "Item Pipe", itemPipe, (ironPlate, 1), (copperWire, 1));
-
-            // Gas pipes — required for hydrogen/oxygen transfer between tanks, H2/O2 generators and engines.
-            var gasPipePref = MakeGPref<VoxelEngine.GridSystem.GridGasPipe>("GasPipe_Small", new Color(0.4f, 0.7f, 0.9f), new Vector3(0.3f, 0.3f, 0.8f), p => p.throughput = 50f);
-            var gasPipe = MakeGItem("GItem_GasPipe", "Small Gas Pipe", Color.white, gasPipePref, VoxelEngine.GridSystem.GridSize.Small, 30, 120);
-            AddGRecipe("Recipe_GGasPipe", "Small Gas Pipe", gasPipe, (ironPlate, 1), (glass, 1));
-            var gasPipeLargePref = MakeGPref<VoxelEngine.GridSystem.GridGasPipe>("GasPipe_Large", new Color(0.4f, 0.7f, 0.9f), Vector3.one, p => p.throughput = 250f);
-            var gasPipeLarge = MakeGItem("GItem_GasPipeLarge", "Large Gas Pipe", Color.white, gasPipeLargePref, VoxelEngine.GridSystem.GridSize.Large, 240, 260);
-            AddGRecipe("Recipe_GGasPipeLarge", "Large Gas Pipe", gasPipeLarge, (ironPlate, 2), (glass, 2), (copperWire, 1));
-
-            // Liquid pipes — required for liquid transfer between tanks and processors.
-            var liqPipePref = MakeGPref<VoxelEngine.GridSystem.GridLiquidPipe>("LiquidPipe_Small", new Color(0.3f, 0.5f, 0.85f), new Vector3(0.3f, 0.3f, 0.8f), p => p.throughput = 50f);
-            var liqPipe = MakeGItem("GItem_LiquidPipe", "Small Liquid Pipe", Color.white, liqPipePref, VoxelEngine.GridSystem.GridSize.Small, 30, 120);
-            AddGRecipe("Recipe_GLiquidPipe", "Small Liquid Pipe", liqPipe, (ironPlate, 1), (copperWire, 1));
-            var liqPipeLargePref = MakeGPref<VoxelEngine.GridSystem.GridLiquidPipe>("LiquidPipe_Large", new Color(0.3f, 0.5f, 0.85f), Vector3.one, p => p.throughput = 250f);
-            var liqPipeLarge = MakeGItem("GItem_LiquidPipeLarge", "Large Liquid Pipe", Color.white, liqPipeLargePref, VoxelEngine.GridSystem.GridSize.Large, 260, 260);
-            AddGRecipe("Recipe_GLiquidPipeLarge", "Large Liquid Pipe", liqPipeLarge, (steelPlate, 1), (copperWire, 2));
+            // Pipes are unified now: Step 8/11 world pipe items become grid-attached
+            // automatically when placed on a grid, so Step 12 no longer creates separate
+            // GridItemPipe / GridGasPipe / GridLiquidPipe prefabs or recipes.
 
             var dockPref = MakeGPref<VoxelEngine.GridSystem.GridDockingPort>("DockingPort_Large", new Color(0.6f, 0.6f, 0.2f), new Vector3(1.5f, 0.5f, 1.5f));
             var itemDock = MakeGItem("GItem_DockingPort", "Docking Port", Color.white, dockPref, VoxelEngine.GridSystem.GridSize.Large, 410, 500);
@@ -4842,7 +4847,7 @@ root =>
                 $"Step 12 complete — generated {recipes.Count} grid blocks (prefabs + items + recipes) in:\n{GRID_ROOT}\n\n" +
                 "• Cockpit, Thruster, Battery, Armor (Small + Large)\n" +
                 "• Drill, Grinder, Refinery, Weapon, Demolisher (Large)\n" +
-                "• Cargo, Item Pipe, Docking Port, 2x2 / 3x3 / 5x5 Wheel Suspensions, Landing Gear\n" +
+                "• Cargo, Docking Port, 2x2 / 3x3 / 5x5 Wheel Suspensions, Landing Gear\n" + 
                 "• Solar Panel, Portable Reactor, Hydrogen Engine, Water/Fuel/Gas Tanks, H2/O2 Gen\n" + 
                 "• Glass Block, Chemical Plant\n\n" +
                 "Grid Refinery shares the SAME ProcessingRecipes as the Oil Refinery.\n" +
