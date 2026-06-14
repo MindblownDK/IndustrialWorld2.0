@@ -13,6 +13,13 @@ namespace VoxelEngine.Meshing
     /// Naive Surface Nets — produces smooth iso-surface meshes from signed-density voxels.
     /// Output is written directly into a Mesh.MeshData snapshot for zero-copy upload via
     /// Mesh.ApplyAndDisposeWritableMeshData (the modern Unity 6 path).
+    ///
+    /// V6: Fluid materials (WaterVoxel, WaterLiquid, CrudeOil) are treated as empty
+    ///     for density mask + iso-surface computation so the terrain mesh never generates
+    ///     faces inside fluid volumes. This eliminates the "double water layer" artifact
+    ///     where terrain mesh faces visible through semi-transparent water looked like
+    ///     a second water surface. The water mesh (WaterMeshBuilder) is the sole renderer
+    ///     of all fluid surfaces.
     /// </summary>
     [BurstCompile(FloatPrecision.Standard, FloatMode.Fast)]
     public unsafe struct SurfaceNetsJob : IJob
@@ -39,6 +46,11 @@ namespace VoxelEngine.Meshing
 
         // Pre-allocated vertex attribute descriptors (Burst can't `new` managed arrays).
         [ReadOnly] public NativeArray<VertexAttributeDescriptor> vertexAttributes;
+
+        // Fluid material IDs — these are treated as EMPTY for terrain mesh generation
+        private const byte WaterVoxelMat = 5;  // MaterialId.WaterVoxel  (solid form)
+        private const byte WaterLiquidMat = 6;  // MaterialId.WaterLiquid (sim form)
+        private const byte OilMat         = 18; // MaterialId.CrudeOil
 
         public void Execute()
         {
@@ -69,6 +81,7 @@ namespace VoxelEngine.Meshing
                 int i011 = Idx(cx,     cy + 1, cz + 1);
                 int i111 = Idx(cx + 1, cy + 1, cz + 1);
 
+                // Read actual densities
                 int d000 = voxels[i000].density;
                 int d100 = voxels[i100].density;
                 int d010 = voxels[i010].density;
@@ -78,53 +91,66 @@ namespace VoxelEngine.Meshing
                 int d011 = voxels[i011].density;
                 int d111 = voxels[i111].density;
 
+                // Compute virtual densities: fluid materials are treated as empty (density < 0).
+                // This prevents the terrain mesh from generating faces inside fluid volumes,
+                // eliminating the "double water layer" where terrain faces were visible through
+                // semi-transparent water and appeared as a second water surface.
+                int vd000 = IsFluidMat(voxels[i000].material) ? -1 : d000;
+                int vd100 = IsFluidMat(voxels[i100].material) ? -1 : d100;
+                int vd010 = IsFluidMat(voxels[i010].material) ? -1 : d010;
+                int vd110 = IsFluidMat(voxels[i110].material) ? -1 : d110;
+                int vd001 = IsFluidMat(voxels[i001].material) ? -1 : d001;
+                int vd101 = IsFluidMat(voxels[i101].material) ? -1 : d101;
+                int vd011 = IsFluidMat(voxels[i011].material) ? -1 : d011;
+                int vd111 = IsFluidMat(voxels[i111].material) ? -1 : d111;
+
+                // Mask uses VIRTUAL densities — fluid materials are empty
                 int mask = 0;
-                if (d000 > 0) mask |= 1;
-                if (d100 > 0) mask |= 2;
-                if (d010 > 0) mask |= 4;
-                if (d110 > 0) mask |= 8;
-                if (d001 > 0) mask |= 16;
-                if (d101 > 0) mask |= 32;
-                if (d011 > 0) mask |= 64;
-                if (d111 > 0) mask |= 128;
+                if (vd000 > 0) mask |= 1;
+                if (vd100 > 0) mask |= 2;
+                if (vd010 > 0) mask |= 4;
+                if (vd110 > 0) mask |= 8;
+                if (vd001 > 0) mask |= 16;
+                if (vd101 > 0) mask |= 32;
+                if (vd011 > 0) mask |= 64;
+                if (vd111 > 0) mask |= 128;
 
                 if (mask == 0 || mask == 255) continue;
 
                 float3 sum = float3.zero;
                 int n = 0;
 
-                AddEdge(d000, d100, 0,0,0, 1,0,0, ref sum, ref n);
-                AddEdge(d010, d110, 0,1,0, 1,0,0, ref sum, ref n);
-                AddEdge(d001, d101, 0,0,1, 1,0,0, ref sum, ref n);
-                AddEdge(d011, d111, 0,1,1, 1,0,0, ref sum, ref n);
+                // Edge interpolation uses VIRTUAL densities so the iso-surface
+                // is correctly placed at the terrain-fluid boundary
+                AddEdge(vd000, vd100, 0,0,0, 1,0,0, ref sum, ref n);
+                AddEdge(vd010, vd110, 0,1,0, 1,0,0, ref sum, ref n);
+                AddEdge(vd001, vd101, 0,0,1, 1,0,0, ref sum, ref n);
+                AddEdge(vd011, vd111, 0,1,1, 1,0,0, ref sum, ref n);
 
-                AddEdge(d000, d010, 0,0,0, 0,1,0, ref sum, ref n);
-                AddEdge(d100, d110, 1,0,0, 0,1,0, ref sum, ref n);
-                AddEdge(d001, d011, 0,0,1, 0,1,0, ref sum, ref n);
-                AddEdge(d101, d111, 1,0,1, 0,1,0, ref sum, ref n);
+                AddEdge(vd000, vd010, 0,0,0, 0,1,0, ref sum, ref n);
+                AddEdge(vd100, vd110, 1,0,0, 0,1,0, ref sum, ref n);
+                AddEdge(vd001, vd011, 0,0,1, 0,1,0, ref sum, ref n);
+                AddEdge(vd101, vd111, 1,0,1, 0,1,0, ref sum, ref n);
 
-                AddEdge(d000, d001, 0,0,0, 0,0,1, ref sum, ref n);
-                AddEdge(d100, d101, 1,0,0, 0,0,1, ref sum, ref n);
-                AddEdge(d010, d011, 0,1,0, 0,0,1, ref sum, ref n);
-                AddEdge(d110, d111, 1,1,0, 0,0,1, ref sum, ref n);
+                AddEdge(vd000, vd001, 0,0,0, 0,0,1, ref sum, ref n);
+                AddEdge(vd100, vd101, 1,0,0, 0,0,1, ref sum, ref n);
+                AddEdge(vd010, vd011, 0,1,0, 0,0,1, ref sum, ref n);
+                AddEdge(vd110, vd111, 1,1,0, 0,0,1, ref sum, ref n);
 
                 if (n == 0) continue;
 
-                // dominant material vote — skip fluid materials so the terrain
-                // mesh never gets painted with water/oil colors (that's the water
-                // mesh builder's job). Without this, terrain faces at the shoreline
-                // get a water-colored surface that looks like a "second water layer".
-                const byte WaterMat = 6;  // MaterialId.WaterLiquid
-                const byte OilMat   = 18; // MaterialId.CrudeOil
+                // Dominant material vote — skip ALL fluid materials so the terrain
+                // mesh never gets painted with water/oil colors. Only non-fluid
+                // solid materials (Stone, Sand, etc.) participate in the vote.
                 for (int m = 0; m < 256; m++) matVotes[m] = 0;
-                if ((mask & 1)   != 0) { byte mt = voxels[i000].material; if (mt != WaterMat && mt != OilMat) matVotes[mt]++; }
-                if ((mask & 2)   != 0) { byte mt = voxels[i100].material; if (mt != WaterMat && mt != OilMat) matVotes[mt]++; }
-                if ((mask & 4)   != 0) { byte mt = voxels[i010].material; if (mt != WaterMat && mt != OilMat) matVotes[mt]++; }
-                if ((mask & 8)   != 0) { byte mt = voxels[i110].material; if (mt != WaterMat && mt != OilMat) matVotes[mt]++; }
-                if ((mask & 16)  != 0) { byte mt = voxels[i001].material; if (mt != WaterMat && mt != OilMat) matVotes[mt]++; }
-                if ((mask & 32)  != 0) { byte mt = voxels[i101].material; if (mt != WaterMat && mt != OilMat) matVotes[mt]++; }
-                if ((mask & 64)  != 0) { byte mt = voxels[i011].material; if (mt != WaterMat && mt != OilMat) matVotes[mt]++; }
-                if ((mask & 128) != 0) { byte mt = voxels[i111].material; if (mt != WaterMat && mt != OilMat) matVotes[mt]++; }
+                if ((mask & 1)   != 0) { byte mt = voxels[i000].material; if (!IsFluidMat(mt)) matVotes[mt]++; }
+                if ((mask & 2)   != 0) { byte mt = voxels[i100].material; if (!IsFluidMat(mt)) matVotes[mt]++; }
+                if ((mask & 4)   != 0) { byte mt = voxels[i010].material; if (!IsFluidMat(mt)) matVotes[mt]++; }
+                if ((mask & 8)   != 0) { byte mt = voxels[i110].material; if (!IsFluidMat(mt)) matVotes[mt]++; }
+                if ((mask & 16)  != 0) { byte mt = voxels[i001].material; if (!IsFluidMat(mt)) matVotes[mt]++; }
+                if ((mask & 32)  != 0) { byte mt = voxels[i101].material; if (!IsFluidMat(mt)) matVotes[mt]++; }
+                if ((mask & 64)  != 0) { byte mt = voxels[i011].material; if (!IsFluidMat(mt)) matVotes[mt]++; }
+                if ((mask & 128) != 0) { byte mt = voxels[i111].material; if (!IsFluidMat(mt)) matVotes[mt]++; }
                 int dominantMat = 0, dominantCount = 0;
                 for (int m = 1; m < 256; m++)
                     if (matVotes[m] > dominantCount) { dominantCount = matVotes[m]; dominantMat = m; }
@@ -132,9 +158,10 @@ namespace VoxelEngine.Meshing
                 float3 local = sum / n + new float3(cx - 1, cy - 1, cz - 1);
                 vertexScratch[vertexCount] = local;
 
-                float gx = (d100 + d110 + d101 + d111) - (d000 + d010 + d001 + d011);
-                float gy = (d010 + d110 + d011 + d111) - (d000 + d100 + d001 + d101);
-                float gz = (d001 + d101 + d011 + d111) - (d000 + d100 + d010 + d110);
+                // Gradient uses VIRTUAL densities for correct normals at terrain-fluid boundaries
+                float gx = (vd100 + vd110 + vd101 + vd111) - (vd000 + vd010 + vd001 + vd011);
+                float gy = (vd010 + vd110 + vd011 + vd111) - (vd000 + vd100 + vd001 + vd101);
+                float gz = (vd001 + vd101 + vd011 + vd111) - (vd000 + vd100 + vd010 + vd110);
                 float3 nrm = -math.normalizesafe(new float3(gx, gy, gz), new float3(0, 1, 0));
                 normalScratch[vertexCount] = nrm;
                 colorScratch[vertexCount]  = materialColors[dominantMat];
@@ -146,45 +173,49 @@ namespace VoxelEngine.Meshing
             }
 
             // ---- Pass 2: stitch quads on sign-changing edges ----
+            // Uses VIRTUAL density sign (fluid = empty) for consistent face generation
             for (int z = 1; z < S + 1; z++)
             for (int y = 1; y < S + 1; y++)
             for (int x = 1; x < S + 1; x++)
             {
                 int idx = Idx(x, y, z);
-                int d0  = voxels[idx].density;
+                bool s0 = IsTerrainSolid(voxels[idx]);
 
                 // +X
-                int dX = voxels[Idx(x + 1, y, z)].density;
-                if ((d0 > 0) != (dX > 0))
+                int idxX = Idx(x + 1, y, z);
+                bool sX = IsTerrainSolid(voxels[idxX]);
+                if (s0 != sX)
                 {
                     int v00 = cellVertexIndex[CellId(x, y - 1, z - 1)];
                     int v10 = cellVertexIndex[CellId(x, y,     z - 1)];
                     int v01 = cellVertexIndex[CellId(x, y - 1, z    )];
                     int v11 = cellVertexIndex[CellId(x, y,     z    )];
                     if (v00 >= 0 && v10 >= 0 && v01 >= 0 && v11 >= 0)
-                        EmitQuad(v00, v10, v11, v01, d0 > 0, ref indexCount);
+                        EmitQuad(v00, v10, v11, v01, s0, ref indexCount);
                 }
                 // +Y
-                int dY = voxels[Idx(x, y + 1, z)].density;
-                if ((d0 > 0) != (dY > 0))
+                int idxY = Idx(x, y + 1, z);
+                bool sY = IsTerrainSolid(voxels[idxY]);
+                if (s0 != sY)
                 {
                     int v00 = cellVertexIndex[CellId(x - 1, y, z - 1)];
                     int v10 = cellVertexIndex[CellId(x,     y, z - 1)];
                     int v01 = cellVertexIndex[CellId(x - 1, y, z    )];
                     int v11 = cellVertexIndex[CellId(x,     y, z    )];
                     if (v00 >= 0 && v10 >= 0 && v01 >= 0 && v11 >= 0)
-                        EmitQuad(v00, v01, v11, v10, d0 > 0, ref indexCount);
+                        EmitQuad(v00, v01, v11, v10, s0, ref indexCount);
                 }
                 // +Z
-                int dZ = voxels[Idx(x, y, z + 1)].density;
-                if ((d0 > 0) != (dZ > 0))
+                int idxZ = Idx(x, y, z + 1);
+                bool sZ = IsTerrainSolid(voxels[idxZ]);
+                if (s0 != sZ)
                 {
                     int v00 = cellVertexIndex[CellId(x - 1, y - 1, z)];
                     int v10 = cellVertexIndex[CellId(x,     y - 1, z)];
                     int v01 = cellVertexIndex[CellId(x - 1, y,     z)];
                     int v11 = cellVertexIndex[CellId(x,     y,     z)];
                     if (v00 >= 0 && v10 >= 0 && v01 >= 0 && v11 >= 0)
-                        EmitQuad(v00, v10, v11, v01, d0 > 0, ref indexCount);
+                        EmitQuad(v00, v10, v11, v01, s0, ref indexCount);
                 }
             }
 
@@ -216,6 +247,27 @@ namespace VoxelEngine.Meshing
                 bounds = bounds[0],
                 vertexCount = vertexCount
             }, MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontValidateIndices);
+        }
+
+        /// <summary>
+        /// Returns true if the voxel is solid terrain (not a fluid material).
+        /// Fluid materials (WaterVoxel, WaterLiquid, CrudeOil) are treated as empty
+        /// so the terrain mesh never generates faces inside fluid volumes.
+        /// </summary>
+        private static bool IsTerrainSolid(Voxel v)
+        {
+            return v.density > 0 && !IsFluidMat(v.material);
+        }
+
+        /// <summary>
+        /// Returns true if the material is a fluid that should be excluded from
+        /// terrain mesh generation. WaterVoxel(5) is included because old saves
+        /// may contain solid water blocks that would otherwise generate blue
+        /// terrain faces indistinguishable from the water surface.
+        /// </summary>
+        private static bool IsFluidMat(byte mat)
+        {
+            return mat == WaterVoxelMat || mat == WaterLiquidMat || mat == OilMat;
         }
 
         private static int Idx(int x, int y, int z)

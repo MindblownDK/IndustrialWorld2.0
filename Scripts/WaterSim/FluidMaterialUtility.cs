@@ -12,12 +12,13 @@ namespace VoxelEngine.WaterSim
 {
     public static class FluidMaterialUtility
     {
+        public const byte WaterVoxelMaterial = (byte)MaterialId.WaterVoxel;
         public const byte WaterMaterial = (byte)MaterialId.WaterLiquid;
         public const byte OilMaterial   = (byte)MaterialId.CrudeOil;
         public const byte AirMaterial   = (byte)MaterialId.Air;
 
         public static bool IsFluidMaterial(byte material)
-            => material == WaterMaterial || material == OilMaterial;
+            => material == WaterVoxelMaterial || material == WaterMaterial || material == OilMaterial;
 
         public static bool IsFluid(Voxel voxel)
             => voxel.waterLevel > 0 && !voxel.IsSolid;

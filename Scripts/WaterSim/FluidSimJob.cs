@@ -33,9 +33,10 @@ namespace VoxelEngine.WaterSim
 
         public NativeArray<int> changed; // single-element array, 0 or 1
 
-        private const byte AirMat   = (byte)MaterialId.Air;
-        private const byte WaterMat = (byte)MaterialId.WaterLiquid;
-        private const byte OilMat   = (byte)MaterialId.CrudeOil;
+        private const byte AirMat        = (byte)MaterialId.Air;
+        private const byte WaterMat      = (byte)MaterialId.WaterLiquid;
+        private const byte WaterVoxelMat = (byte)MaterialId.WaterVoxel;
+        private const byte OilMat        = (byte)MaterialId.CrudeOil;
 
         // Viscosity parameters — oil is much more viscous than water
         private const int WaterMaxFall        = 255;
@@ -58,9 +59,25 @@ namespace VoxelEngine.WaterSim
                 var v = voxels[i];
                 if (v.waterLevel == 0) continue;
 
-                // Solid cells with residual waterLevel — clean up
+                // Solid cells with residual waterLevel — convert or clean up.
+                // If the solid block is a fluid material (WaterVoxel from old saves,
+                // or a corrupted WaterLiquid/Oil), convert it to a proper fluid voxel
+                // instead of just clearing the waterLevel (which would leave an invisible
+                // solid block or a blue terrain face).
                 if (v.IsSolid)
                 {
+                    if (IsFluidMat(v.material) && v.waterLevel > 0)
+                    {
+                        // Convert solid fluid block → proper fluid voxel
+                        byte savedLevel = v.waterLevel;
+                        byte savedMat = v.material == OilMat ? OilMat : WaterMat;
+                        v.density = -1;
+                        v.material = savedMat;
+                        v.waterLevel = savedLevel;
+                        voxels[i] = v;
+                        any = true;
+                        continue;
+                    }
                     v.waterLevel = 0;
                     if (IsFluidMat(v.material)) v.material = AirMat;
                     voxels[i] = v;
@@ -181,7 +198,7 @@ namespace VoxelEngine.WaterSim
             return voxel.material != OilMat;
         }
 
-        private static bool IsFluidMat(byte mat) => mat == WaterMat || mat == OilMat;
+        private static bool IsFluidMat(byte mat) => mat == WaterMat || mat == OilMat || mat == WaterVoxelMat;
 
         private static int Min3(int a, int b, int c)
         {
