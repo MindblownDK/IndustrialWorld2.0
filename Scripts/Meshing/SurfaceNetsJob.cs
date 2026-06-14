@@ -110,16 +110,21 @@ namespace VoxelEngine.Meshing
 
                 if (n == 0) continue;
 
-                // dominant material vote
+                // dominant material vote — skip fluid materials so the terrain
+                // mesh never gets painted with water/oil colors (that's the water
+                // mesh builder's job). Without this, terrain faces at the shoreline
+                // get a water-colored surface that looks like a "second water layer".
+                const byte WaterMat = 6;  // MaterialId.WaterLiquid
+                const byte OilMat   = 18; // MaterialId.CrudeOil
                 for (int m = 0; m < 256; m++) matVotes[m] = 0;
-                if ((mask & 1)   != 0) matVotes[voxels[i000].material]++;
-                if ((mask & 2)   != 0) matVotes[voxels[i100].material]++;
-                if ((mask & 4)   != 0) matVotes[voxels[i010].material]++;
-                if ((mask & 8)   != 0) matVotes[voxels[i110].material]++;
-                if ((mask & 16)  != 0) matVotes[voxels[i001].material]++;
-                if ((mask & 32)  != 0) matVotes[voxels[i101].material]++;
-                if ((mask & 64)  != 0) matVotes[voxels[i011].material]++;
-                if ((mask & 128) != 0) matVotes[voxels[i111].material]++;
+                if ((mask & 1)   != 0) { byte mt = voxels[i000].material; if (mt != WaterMat && mt != OilMat) matVotes[mt]++; }
+                if ((mask & 2)   != 0) { byte mt = voxels[i100].material; if (mt != WaterMat && mt != OilMat) matVotes[mt]++; }
+                if ((mask & 4)   != 0) { byte mt = voxels[i010].material; if (mt != WaterMat && mt != OilMat) matVotes[mt]++; }
+                if ((mask & 8)   != 0) { byte mt = voxels[i110].material; if (mt != WaterMat && mt != OilMat) matVotes[mt]++; }
+                if ((mask & 16)  != 0) { byte mt = voxels[i001].material; if (mt != WaterMat && mt != OilMat) matVotes[mt]++; }
+                if ((mask & 32)  != 0) { byte mt = voxels[i101].material; if (mt != WaterMat && mt != OilMat) matVotes[mt]++; }
+                if ((mask & 64)  != 0) { byte mt = voxels[i011].material; if (mt != WaterMat && mt != OilMat) matVotes[mt]++; }
+                if ((mask & 128) != 0) { byte mt = voxels[i111].material; if (mt != WaterMat && mt != OilMat) matVotes[mt]++; }
                 int dominantMat = 0, dominantCount = 0;
                 for (int m = 1; m < 256; m++)
                     if (matVotes[m] > dominantCount) { dominantCount = matVotes[m]; dominantMat = m; }

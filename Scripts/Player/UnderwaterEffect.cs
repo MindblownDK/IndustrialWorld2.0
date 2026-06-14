@@ -1,10 +1,8 @@
 // Assets/Scripts/VoxelEngine/Player/UnderwaterEffect.cs
 //
-// Underwater VFX — simplified and robust.
-// • When camera is underwater AND it's raining → apply fog tint
-// • When camera surfaces or rain stops → fully restore original render settings
-// • No gradual transitions that can get stuck — clean snap on/off
-// • State is saved ONCE on first entry and always restored on exit
+// Underwater VFX — ALWAYS active when camera is below water surface.
+// Rain makes the fog denser/darker. Clean binary on/off with reliable restore.
+// State saved ONCE on entry, always restored on exit. No stuck states.
 
 using UnityEngine;
 
@@ -13,13 +11,16 @@ namespace VoxelEngine.Player
     [RequireComponent(typeof(Camera))]
     public class UnderwaterEffect : MonoBehaviour
     {
-        [Header("Fog & Color")]
+        [Header("Base Underwater Fog")]
         public Color underwaterTint = new Color(0.03f, 0.14f, 0.35f);
-        public float fogDensity = 0.06f;
+        public float baseFogDensity = 0.045f;
+        public float underwaterFarClip = 40f;
 
-        [Header("Rain Fog")]
-        [Tooltip("Fog density multiplier based on rain intensity (0 = no extra, 1 = full extra).")]
-        public float rainFogBoost = 0.08f;
+        [Header("Rain Boost")]
+        [Tooltip("Extra fog density added during heavy rain.")]
+        public float maxRainFogBoost = 0.06f;
+        [Tooltip("Darker tint during heavy rain.")]
+        public Color rainTint = new Color(0.015f, 0.06f, 0.18f);
 
         public bool IsUnderwater { get; private set; }
 
@@ -27,7 +28,6 @@ namespace VoxelEngine.Player
         private bool _applied;
         private bool _saved;
 
-        // Saved pre-underwater state
         private Color _sBg;
         private CameraClearFlags _sF;
         private float _sFar;
@@ -45,10 +45,8 @@ namespace VoxelEngine.Player
             _waterState = GetComponentInParent<PlayerWaterState>();
             IsUnderwater = false;
 
-            // Method 1: PlayerWaterState
             if (_waterState != null && _waterState.IsHeadUnderwater) IsUnderwater = true;
 
-            // Method 2: Direct voxel check
             if (!IsUnderwater)
             {
                 var world = VoxelEngine.Core.VoxelWorld.Instance;
@@ -61,24 +59,11 @@ namespace VoxelEngine.Player
                 }
             }
 
-            // Check if it's raining
-            bool isRaining = false;
-            float rainIntensity = 0f;
-            var weather = Weather.WeatherManager.Instance;
-            if (weather != null && weather.IsPrecipitating && !weather.IsSnowBiome)
+            if (IsUnderwater)
             {
-                isRaining = true;
-                rainIntensity = weather.Intensity;
-            }
-
-            // Only apply fog effect when underwater AND raining
-            bool shouldApplyFog = IsUnderwater && isRaining;
-
-            if (shouldApplyFog)
-            {
+                // Save original state ONCE
                 if (!_saved)
                 {
-                    // Save original state ONCE before we modify anything
                     _sBg  = _cam.backgroundColor;
                     _sF   = _cam.clearFlags;
                     _sFar = _cam.farClipPlane;
@@ -89,20 +74,26 @@ namespace VoxelEngine.Player
                     _saved = true;
                 }
 
-                float totalFogDensity = fogDensity + rainFogBoost * rainIntensity;
+                // Rain intensity boost
+                float rainIntensity = 0f;
+                var weather = Weather.WeatherManager.Instance;
+                if (weather != null && weather.IsPrecipitating && !weather.IsSnowBiome)
+                    rainIntensity = weather.Intensity;
 
-                _cam.backgroundColor  = underwaterTint;
+                float totalDensity = baseFogDensity + maxRainFogBoost * rainIntensity;
+                Color tint = Color.Lerp(underwaterTint, rainTint, rainIntensity * 0.6f);
+
+                _cam.backgroundColor  = tint;
                 _cam.clearFlags       = CameraClearFlags.SolidColor;
-                _cam.farClipPlane     = 40f;
+                _cam.farClipPlane     = underwaterFarClip;
                 RenderSettings.fog    = true;
                 RenderSettings.fogMode    = FogMode.Exponential;
-                RenderSettings.fogColor   = underwaterTint;
-                RenderSettings.fogDensity = totalFogDensity;
+                RenderSettings.fogColor   = tint;
+                RenderSettings.fogDensity = totalDensity;
                 _applied = true;
             }
             else if (_applied && _saved)
             {
-                // Fully restore original state
                 Restore();
             }
         }
@@ -113,7 +104,6 @@ namespace VoxelEngine.Player
             _cam.clearFlags      = _sF;
             _cam.farClipPlane    = _sFar;
 
-            // Only restore fog if WeatherManager isn't controlling it
             if (Weather.WeatherManager.Instance == null)
             {
                 RenderSettings.fog        = _sFog;
@@ -121,7 +111,6 @@ namespace VoxelEngine.Player
                 RenderSettings.fogDensity = _sFD;
                 RenderSettings.fogMode    = _sFM;
             }
-
             _saved   = false;
             _applied = false;
         }
