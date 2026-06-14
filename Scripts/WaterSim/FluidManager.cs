@@ -126,6 +126,9 @@ namespace VoxelEngine.WaterSim
             var world = VoxelWorld.Instance;
             if (world == null || !TryGetChunkAndLocal(world, worldVoxel, out var coord, out var ch, out int lx, out int ly, out int lz)) return;
 
+            world.CompleteGenJobForChunk(ch);
+            world.CompleteMeshJobForChunk(ch);
+
             var v = ch.GetVoxelLocal(lx, ly, lz);
             if (v.IsSolid) return;
 
@@ -144,6 +147,9 @@ namespace VoxelEngine.WaterSim
         {
             var world = VoxelWorld.Instance;
             if (world == null || !TryGetChunkAndLocal(world, worldVoxel, out var coord, out var ch, out int lx, out int ly, out int lz)) return 0;
+
+            world.CompleteGenJobForChunk(ch);
+            world.CompleteMeshJobForChunk(ch);
 
             var v = ch.GetVoxelLocal(lx, ly, lz);
             if (!FluidMaterialUtility.Matches(v, liquid)) return 0;

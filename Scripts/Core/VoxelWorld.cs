@@ -579,6 +579,14 @@ namespace VoxelEngine.Core
                 Mathf.FloorToInt(worldVoxel.y / (float)VoxelConstants.CHUNK_SIZE),
                 Mathf.FloorToInt(worldVoxel.z / (float)VoxelConstants.CHUNK_SIZE));
             if (!_chunks.TryGetValue(chunkCoord, out var c) || !c.isGenerated) return Voxel.Empty;
+
+            // Safety: callers like generation decorators, pumps, swimming, and UI scans
+            // can query a chunk during the same frame its ChunkGenJob completed. Complete
+            // any outstanding jobs before reading the NativeArray to satisfy Unity's job
+            // safety system.
+            CompleteGenJobFor(c);
+            CompleteMeshJobFor(c);
+
             int lx = worldVoxel.x - chunkCoord.x * VoxelConstants.CHUNK_SIZE;
             int ly = worldVoxel.y - chunkCoord.y * VoxelConstants.CHUNK_SIZE;
             int lz = worldVoxel.z - chunkCoord.z * VoxelConstants.CHUNK_SIZE;
