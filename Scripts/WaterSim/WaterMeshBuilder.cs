@@ -67,11 +67,16 @@ namespace VoxelEngine.WaterSim
                 _waterMat.SetColor("_ShallowColor", new Color(0.12f, 0.58f, 0.86f, 0.68f));
                 _waterMat.SetColor("_DeepColor",    new Color(0.02f, 0.10f, 0.28f, 0.88f));
                 _waterMat.SetColor("_FoamColor",    new Color(0.86f, 0.94f, 1.00f, 0.82f));
-                _waterMat.SetFloat("_WaveAmp", 0.055f);
-                _waterMat.SetFloat("_WaveFreq", 1.35f);
-                _waterMat.SetFloat("_WaveSpeed", 0.72f);
-                _waterMat.SetFloat("_NormalScale", 0.85f);
-                _waterMat.SetFloat("_Gloss", 0.96f);
+                _waterMat.SetFloat("_WaveAmp", 0.34f);
+                _waterMat.SetFloat("_WaveFreq", 0.62f);
+                _waterMat.SetFloat("_WaveSpeed", 0.78f);
+                _waterMat.SetFloat("_WaveChop", 0.32f);
+                _waterMat.SetFloat("_NormalScale", 1.25f);
+                _waterMat.SetFloat("_Gloss", 0.98f);
+                _waterMat.SetFloat("_RefractionStrength", 0.026f);
+                _waterMat.SetFloat("_FoamIntensity", 1.05f);
+                _waterMat.SetFloat("_DepthFade", 4.2f);
+                _waterMat.SetFloat("_FoamWidth", 0.85f);
             }
 
             if (_oilMat == null)
@@ -81,12 +86,16 @@ namespace VoxelEngine.WaterSim
                 _oilMat.SetColor("_ShallowColor", new Color(0.10f, 0.075f, 0.045f, 0.86f));
                 _oilMat.SetColor("_DeepColor",    new Color(0.012f, 0.010f, 0.008f, 0.96f));
                 _oilMat.SetColor("_FoamColor",    new Color(0.32f, 0.23f, 0.11f, 0.45f));
-                _oilMat.SetFloat("_WaveAmp", 0.018f);
-                _oilMat.SetFloat("_WaveFreq", 0.85f);
-                _oilMat.SetFloat("_WaveSpeed", 0.22f);
-                _oilMat.SetFloat("_NormalScale", 0.42f);
-                _oilMat.SetFloat("_Gloss", 0.99f);
-                _oilMat.SetFloat("_FoamIntensity", 0.25f);
+                _oilMat.SetFloat("_WaveAmp", 0.055f);
+                _oilMat.SetFloat("_WaveFreq", 0.48f);
+                _oilMat.SetFloat("_WaveSpeed", 0.18f);
+                _oilMat.SetFloat("_WaveChop", 0.08f);
+                _oilMat.SetFloat("_NormalScale", 0.58f);
+                _oilMat.SetFloat("_Gloss", 1.0f);
+                _oilMat.SetFloat("_RefractionStrength", 0.006f);
+                _oilMat.SetFloat("_FoamIntensity", 0.18f);
+                _oilMat.SetFloat("_DepthFade", 2.0f);
+                _oilMat.SetFloat("_FoamWidth", 0.22f);
             }
         }
 
@@ -234,7 +243,9 @@ namespace VoxelEngine.WaterSim
 
             int i = verts.Count;
             verts.Add(a); verts.Add(b); verts.Add(c0); verts.Add(d);
-            for (int n = 0; n < 4; n++) norms.Add(normal);
+            // Bottom side vertices stay stable, top side vertices receive the same
+            // wave displacement as the surface to avoid shoreline/waterfall cracks.
+            norms.Add(normal); norms.Add(normal); norms.Add(Vector3.up); norms.Add(Vector3.up);
             uvs.Add(new Vector2(wX + a.x, wZ + a.z));
             uvs.Add(new Vector2(wX + b.x, wZ + b.z));
             uvs.Add(new Vector2(wX + c0.x, wZ + c0.z));

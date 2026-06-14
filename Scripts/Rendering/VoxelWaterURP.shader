@@ -1,38 +1,39 @@
 // Assets/Scripts/VoxelEngine/Rendering/VoxelWaterURP.shader
 //
-// Beautiful water shader:
-//   - World-space vertex displacement (no chunk seams)
-//   - Scene depth shore fade (smooth alpha transition at coastline)
-//   - Foam line from depth difference
-//   - Fresnel reflection
-//   - Scrolling normal perturbation for shimmer
-//   - Gerstner wave vertex animation
+// IndustrialWorld high-end procedural URP water/oil shader.
+// Inspired by Sea of Thieves style ocean readability and Evan Wallace-style
+// refractive water: layered world-space Gerstner waves, refracted opaque scene
+// color, shoreline foam, sun glitter, Fresnel sky tint and procedural caustic
+// shimmer. No texture assets required.
 
 Shader "VoxelEngine/VoxelWaterURP"
 {
     Properties
     {
         [Header(Colors)]
-        _ShallowColor ("Shallow", Color) = (0.15, 0.55, 0.78, 0.75)
-        _DeepColor    ("Deep",    Color) = (0.03, 0.12, 0.30, 0.90)
-        _FoamColor    ("Foam",    Color) = (0.85, 0.92, 0.97, 0.80)
+        _ShallowColor ("Shallow", Color) = (0.10, 0.78, 0.86, 0.62)
+        _DeepColor    ("Deep",    Color) = (0.015, 0.12, 0.34, 0.90)
+        _FoamColor    ("Foam",    Color) = (0.88, 0.96, 1.00, 0.88)
 
-        [Header(Waves)]
-        _WaveAmp  ("Wave Amplitude", Range(0, 0.15)) = 0.04
-        _WaveFreq ("Wave Frequency", Range(0.3, 4))  = 1.2
-        _WaveSpeed("Wave Speed",     Range(0, 2))    = 0.5
+        [Header(Ocean Waves)]
+        _WaveAmp   ("Wave Amplitude", Range(0, 1.2)) = 0.34
+        _WaveFreq  ("Wave Frequency", Range(0.05, 4)) = 0.62
+        _WaveSpeed ("Wave Speed", Range(0, 3)) = 0.78
+        _WaveChop  ("Wave Chop", Range(0, 1)) = 0.32
 
-        [Header(Surface)]
-        _NormalScale  ("Normal Strength", Range(0, 2))   = 0.6
-        _NormalSpeed1 ("Normal Scroll 1", Vector)        = (0.08, 0.06, 0, 0)
-        _NormalSpeed2 ("Normal Scroll 2", Vector)        = (-0.05, 0.07, 0, 0)
-        _Gloss        ("Gloss",           Range(0, 1))   = 0.94
-        _FresnelPower ("Fresnel Power",   Range(1, 8))   = 3.0
+        [Header(Surface Detail)]
+        _NormalScale        ("Normal Strength", Range(0, 3)) = 1.25
+        _NormalSpeed1       ("Normal Scroll 1", Vector) = (0.055, 0.035, 0, 0)
+        _NormalSpeed2       ("Normal Scroll 2", Vector) = (-0.035, 0.065, 0, 0)
+        _Gloss              ("Gloss", Range(0, 1)) = 0.98
+        _FresnelPower       ("Fresnel Power", Range(1, 8)) = 3.1
+        _RefractionStrength ("Refraction", Range(0, 0.08)) = 0.026
+        _CausticsIntensity  ("Caustics", Range(0, 1)) = 0.18
 
-        [Header(Shore)]
-        _DepthFade    ("Shore Fade Dist",  Range(0.1, 8)) = 0.8
-        _FoamWidth    ("Foam Line Width",  Range(0.01, 2)) = 0.25
-        _FoamIntensity("Foam Intensity",   Range(0, 1))   = 0.6
+        [Header(Shore / Foam)]
+        _DepthFade     ("Depth Fade Dist", Range(0.1, 20)) = 4.2
+        _FoamWidth     ("Foam Line Width", Range(0.01, 5)) = 0.85
+        _FoamIntensity ("Foam Intensity", Range(0, 2)) = 1.05
     }
 
     SubShader
@@ -41,10 +42,11 @@ Shader "VoxelEngine/VoxelWaterURP"
 
         Pass
         {
+            Name "ForwardLiquid"
+            Tags { "LightMode"="UniversalForward" }
             Blend SrcAlpha OneMinusSrcAlpha
             ZWrite Off
             Cull Off
-            Tags { "LightMode"="UniversalForward" }
 
             HLSLPROGRAM
             #pragma vertex vert
@@ -54,13 +56,14 @@ Shader "VoxelEngine/VoxelWaterURP"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareOpaqueTexture.hlsl"
 
             CBUFFER_START(UnityPerMaterial)
                 float4 _ShallowColor, _DeepColor, _FoamColor;
-                float  _WaveAmp, _WaveFreq, _WaveSpeed;
+                float  _WaveAmp, _WaveFreq, _WaveSpeed, _WaveChop;
                 float  _NormalScale;
                 float4 _NormalSpeed1, _NormalSpeed2;
-                float  _Gloss, _FresnelPower;
+                float  _Gloss, _FresnelPower, _RefractionStrength, _CausticsIntensity;
                 float  _DepthFade, _FoamWidth, _FoamIntensity;
             CBUFFER_END
 
@@ -78,134 +81,160 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float3 normWS : TEXCOORD1;
                 float  fog    : TEXCOORD2;
                 float4 scrPos : TEXCOORD3;
+                float2 flowUV : TEXCOORD4;
             };
 
-            // ── Gerstner wave (world-space, no chunk dependency) ──
-
-            float3 GerstnerWave(float2 worldXZ, float2 dir, float amp, float freq, float spd, float t)
+            float Hash21(float2 p)
             {
-                float phase = dot(worldXZ, dir) * freq + t * spd;
-                float s, c;
-                sincos(phase, s, c);
-                return float3(dir.x * amp * c, amp * s, dir.y * amp * c);
+                p = frac(p * float2(123.34, 456.21));
+                p += dot(p, p + 45.32);
+                return frac(p.x * p.y);
             }
 
-            // ── Scrolling procedural normal (replaces texture sampling) ──
-
-            float3 ScrollNormal(float2 worldXZ, float t)
+            float ValueNoise(float2 p)
             {
-                // Two opposing scroll directions for interference pattern.
-                float2 uv1 = worldXZ * 0.15 + _NormalSpeed1.xy * t;
-                float2 uv2 = worldXZ * 0.22 + _NormalSpeed2.xy * t;
+                float2 i = floor(p);
+                float2 f = frac(p);
+                f = f * f * (3.0 - 2.0 * f);
+                float a = Hash21(i);
+                float b = Hash21(i + float2(1, 0));
+                float c = Hash21(i + float2(0, 1));
+                float d = Hash21(i + float2(1, 1));
+                return lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y);
+            }
 
-                // Procedural normal via sin/cos (no texture needed).
-                float3 n1 = float3(
-                    cos(uv1.x * 6.28 + sin(uv1.y * 4.0)) * 0.5,
-                    1.0,
-                    sin(uv1.y * 6.28 + cos(uv1.x * 3.5)) * 0.5);
+            float FBM(float2 p)
+            {
+                float v = 0.0;
+                float a = 0.5;
+                [unroll] for (int i = 0; i < 4; i++)
+                {
+                    v += ValueNoise(p) * a;
+                    p = p * 2.03 + 17.1;
+                    a *= 0.5;
+                }
+                return v;
+            }
 
-                float3 n2 = float3(
-                    cos(uv2.x * 5.1 - sin(uv2.y * 3.2)) * 0.5,
-                    1.0,
-                    sin(uv2.y * 4.8 + cos(uv2.x * 2.7)) * 0.5);
+            float3 Gerstner(float2 xz, float2 dir, float amp, float freq, float speed, float chop, float t)
+            {
+                dir = normalize(dir);
+                float phase = dot(xz, dir) * freq + t * speed;
+                float s, c;
+                sincos(phase, s, c);
+                return float3(dir.x * amp * c * chop, amp * s, dir.y * amp * c * chop);
+            }
 
-                // Blend the two normals.
-                float3 blended = normalize(n1 + n2);
-                blended.xz *= _NormalScale;
-                return normalize(blended);
+            float3 ProceduralNormal(float2 worldXZ, float t)
+            {
+                // Multi-scale ripples: broad swell + tight capillary shimmer.
+                float2 uv1 = worldXZ * 0.090 + _NormalSpeed1.xy * t;
+                float2 uv2 = worldXZ * 0.170 + _NormalSpeed2.xy * t;
+                float2 uv3 = worldXZ * 0.430 + float2(-0.02, 0.025) * t;
+
+                float h  = FBM(uv1 * 5.0) * 0.55;
+                      h += FBM(uv2 * 8.0) * 0.32;
+                      h += FBM(uv3 * 11.0) * 0.13;
+
+                float eps = 0.075;
+                float hx = FBM((uv1 + float2(eps, 0)) * 5.0) * 0.55 + FBM((uv2 + float2(eps, 0)) * 8.0) * 0.32 + FBM((uv3 + float2(eps, 0)) * 11.0) * 0.13;
+                float hz = FBM((uv1 + float2(0, eps)) * 5.0) * 0.55 + FBM((uv2 + float2(0, eps)) * 8.0) * 0.32 + FBM((uv3 + float2(0, eps)) * 11.0) * 0.13;
+
+                float3 n = normalize(float3((h - hx) * _NormalScale, 1.0, (h - hz) * _NormalScale));
+                return n;
             }
 
             V2F vert(A2V i)
             {
                 V2F o = (V2F)0;
                 float3 posOS = i.posOS.xyz;
-
-                // Get world position for wave calculation (absolute, chunk-independent).
                 float3 worldPos = TransformObjectToWorld(posOS);
 
-                // Apply Gerstner waves using WORLD XZ — identical across all chunks.
-                if (i.normOS.y > 0.5)
+                if (i.normOS.y > 0.35)
                 {
                     float t = _Time.y;
-                    float3 w1 = GerstnerWave(worldPos.xz, float2(1.0, 0.3), _WaveAmp, _WaveFreq, _WaveSpeed, t);
-                    float3 w2 = GerstnerWave(worldPos.xz, float2(-0.5, 0.8), _WaveAmp * 0.6, _WaveFreq * 1.5, _WaveSpeed * 1.3, t);
-                    float3 w3 = GerstnerWave(worldPos.xz, float2(0.3, -0.7), _WaveAmp * 0.3, _WaveFreq * 2.2, _WaveSpeed * 0.8, t);
-                    posOS.y += w1.y + w2.y + w3.y;
-                    posOS.xz += (w1.xz + w2.xz + w3.xz) * 0.15;
+                    float amp = _WaveAmp;
+                    float3 w = 0;
+                    w += Gerstner(worldPos.xz, float2( 1.00,  0.23), amp,        _WaveFreq,        _WaveSpeed,        _WaveChop, t);
+                    w += Gerstner(worldPos.xz, float2(-0.42,  0.91), amp * 0.52, _WaveFreq * 1.7,  _WaveSpeed * 1.31, _WaveChop, t);
+                    w += Gerstner(worldPos.xz, float2( 0.18, -0.98), amp * 0.24, _WaveFreq * 3.1,  _WaveSpeed * 0.76, _WaveChop, t);
+                    w += Gerstner(worldPos.xz, float2( 0.72,  0.69), amp * 0.12, _WaveFreq * 5.4,  _WaveSpeed * 1.9,  _WaveChop, t);
+                    // Chunks are authored unscaled/unrotated, so world-space wave offset
+                    // maps directly to object-space and stays seamless across chunks.
+                    posOS += w;
+                    worldPos = TransformObjectToWorld(posOS);
                 }
 
-                o.posWS = TransformObjectToWorld(posOS);
-                o.posCS = TransformWorldToHClip(o.posWS);
+                o.posWS = worldPos;
+                o.posCS = TransformWorldToHClip(worldPos);
                 o.normWS = TransformObjectToWorldNormal(i.normOS);
                 o.fog = ComputeFogFactor(o.posCS.z);
                 o.scrPos = ComputeScreenPos(o.posCS);
+                o.flowUV = i.uv;
                 return o;
             }
 
             half4 frag(V2F i) : SV_Target
             {
+                float t = _Time.y;
                 float3 V = normalize(_WorldSpaceCameraPos - i.posWS);
+                float3 geoN = normalize(i.normWS);
+                float3 detailN = ProceduralNormal(i.posWS.xz, t);
+                float3 N = normalize(float3(detailN.x, 1.0, detailN.z));
+                N = normalize(lerp(geoN, N, saturate(abs(geoN.y))));
 
-                // ── Scrolling normal ──
-                float3 N = ScrollNormal(i.posWS.xz, _Time.y);
-                // Blend with geometry normal.
-                N = normalize(float3(N.x, 1.0, N.z));
-
-                // ── Scene depth for shore fade + foam ──
                 float2 screenUV = i.scrPos.xy / max(i.scrPos.w, 0.0001);
+                float2 refractUV = screenUV + N.xz * _RefractionStrength;
+
                 float rawDepth = SampleSceneDepth(screenUV);
                 float sceneEyeDepth = LinearEyeDepth(rawDepth, _ZBufferParams);
                 float waterEyeDepth = i.scrPos.w;
                 float depthDiff = max(0, sceneEyeDepth - waterEyeDepth);
+                float deep01 = saturate(depthDiff / _DepthFade);
 
-                // Shore alpha fade: transparent at shore, opaque in deep water.
-                float shoreFade = saturate(depthDiff / _DepthFade);
+                // Evan Wallace-like scene refraction. If opaque texture is disabled,
+                // URP returns a harmless fallback and the shader still looks good.
+                float3 refracted = SampleSceneColor(refractUV).rgb;
 
-                // Foam line: bright fringe where water meets terrain.
-                float foam = 1.0 - saturate(depthDiff / _FoamWidth);
-                foam = foam * foam * _FoamIntensity; // sharpen
+                float4 waterCol = lerp(_ShallowColor, _DeepColor, deep01);
 
-                // ── Fresnel ──
+                // Shoreline and breaking crest foam.
+                float shoreFoam = 1.0 - saturate(depthDiff / _FoamWidth);
+                shoreFoam = shoreFoam * shoreFoam * _FoamIntensity;
+                float crest = saturate((FBM(i.posWS.xz * 0.22 + t * 0.075) - 0.62) * 3.0) * saturate(_WaveAmp * 2.0);
+                float lace = FBM(i.posWS.xz * 0.85 + float2(t * 0.12, -t * 0.08));
+                float foam = saturate(shoreFoam + crest * lace * 0.75);
+
                 float NdV = saturate(dot(V, N));
                 float fresnel = pow(1.0 - NdV, _FresnelPower);
 
-                // ── Color composition ──
-                // Depth-based shallow → deep gradient.
-                float4 col = lerp(_ShallowColor, _DeepColor, shoreFade);
-
-                // Mix in foam at shore edges.
-                col.rgb = lerp(col.rgb, _FoamColor.rgb, foam * _FoamColor.a);
-
-                // Fresnel increases opacity and adds sky reflection.
-                col.a = lerp(col.a, min(col.a + 0.20, 0.95), fresnel * 0.5);
-
-                // Shore fade on alpha — gentle transition near beach.
-                col.a *= saturate(shoreFade * 1.5 + 0.4);
-
-                // Minimum opacity.
-                col.a = max(col.a, 0.45);
-
-                // If depth texture is unavailable (rawDepth near 0), use safe fallback.
-                if (rawDepth < 0.0001 || sceneEyeDepth > 10000)
-                    col.a = max(col.a, 0.60);
-
-                // ── Specular ──
                 Light mainLight = GetMainLight();
-                float3 H = normalize(V + mainLight.direction);
-                float spec = pow(saturate(dot(N, H)), _Gloss * 300.0);
-                float sparkle = pow(saturate(dot(N, H)), 1200.0) * 1.5; // sun glints
-                col.rgb += mainLight.color.rgb * (spec * 0.25 + sparkle * 0.10);
+                float3 L = normalize(mainLight.direction);
+                float3 H = normalize(V + L);
+                float spec = pow(saturate(dot(N, H)), lerp(80.0, 900.0, _Gloss)) * 0.85;
+                float glitterMask = pow(saturate(FBM(i.posWS.xz * 2.2 + t * 0.45)), 8.0);
+                float glitter = pow(saturate(dot(N, H)), 1800.0) * glitterMask * 2.2;
 
-                // ── Ambient + sky reflection ──
-                float3 ambient = SampleSH(N);
-                col.rgb += ambient * col.rgb * 0.06;
-                // Fresnel sky reflection.
-                col.rgb = lerp(col.rgb, ambient * 0.8 + mainLight.color.rgb * 0.1, fresnel * 0.15);
+                float caustic = pow(saturate(FBM(i.posWS.xz * 0.65 + N.xz * 1.5 - t * 0.18)), 3.0) * _CausticsIntensity * (1.0 - deep01);
 
-                // ── Fog ──
-                col.rgb = MixFog(col.rgb, i.fog);
+                // Compose: shallow water reveals refracted scene, deep water becomes
+                // saturated blue/green, grazing angles reflect sky/ambient.
+                float refractWeight = (1.0 - deep01) * (1.0 - fresnel) * 0.55;
+                float3 col = lerp(waterCol.rgb, refracted, refractWeight);
+                float3 sky = SampleSH(N) * 0.85 + mainLight.color.rgb * 0.10;
+                col = lerp(col, sky, fresnel * 0.32);
+                col += mainLight.color.rgb * (spec + glitter) * saturate(mainLight.distanceAttenuation);
+                col += caustic * float3(0.45, 0.95, 1.0);
+                col = lerp(col, _FoamColor.rgb, foam * _FoamColor.a);
 
-                return col;
+                float alpha = waterCol.a;
+                alpha = lerp(alpha * 0.72, alpha, deep01);
+                alpha = lerp(alpha, min(alpha + 0.18, 0.97), fresnel);
+                alpha = max(alpha, 0.38);
+                if (rawDepth < 0.0001 || sceneEyeDepth > 10000) alpha = max(alpha, 0.62);
+
+                col = MixFog(col, i.fog);
+                return half4(col, alpha);
             }
             ENDHLSL
         }

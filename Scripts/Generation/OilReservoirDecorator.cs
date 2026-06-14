@@ -51,8 +51,8 @@ namespace VoxelEngine.Generation
             int hash = oilCenter.x * 73856093 ^ oilCenter.y * 19349663 ^ oilCenter.z * 83492791;
             System.Random rng = new System.Random(hash);
 
-            int pocketRadius = 3 + rng.Next(3);  // 3-5 voxel radius
-            int shaftRadius  = 1;                  // 1 voxel wide chimney
+            int pocketRadius = 5 + rng.Next(4);  // 5-8 voxel radius: real extractable pool
+            int shaftRadius  = 1;                 // narrow natural funnel/chimney
 
             // 1) Carve the underground pocket (sphere of air + fill with oil fluid).
             CarveAndFillPocket(world, oilCenter, pocketRadius);
@@ -74,8 +74,8 @@ namespace VoxelEngine.Generation
                 }
             }
 
-            // 4) Carve a small surface pool (3x3 or 5x5) at the top.
-            int poolRadius = 1 + rng.Next(2); // 1-2
+            // 4) Carve a visible surface seep/pool at the top.
+            int poolRadius = 2 + rng.Next(2); // 2-3
             for (int dx = -poolRadius; dx <= poolRadius; dx++)
             for (int dz = -poolRadius; dz <= poolRadius; dz++)
             {
@@ -107,11 +107,11 @@ namespace VoxelEngine.Generation
 
         private static void PlaceOilFluid(VoxelWorld world, Vector3Int worldVoxel)
         {
-            // Crude oil now uses the same save-compatible voxel fluid byte as water,
-            // with material=CrudeOil to mark the liquid kind. This makes oil render,
-            // flow and pump through the unified liquid simulation immediately.
-            VoxelEngine.WaterSim.FluidManager.EnsureInstance();
-            VoxelEngine.WaterSim.FluidManager.Instance?.PlaceOil(worldVoxel, 255);
+            // Write the liquid voxel directly instead of "place if empty". During
+            // generation we are carving rock and filling in the same operation, so
+            // direct writes guarantee the deep reservoir is genuinely full and not
+            // just a rendered cap layer.
+            world.SetVoxelWorld(worldVoxel, new Voxel(-1, (byte)MaterialId.CrudeOil, 255), remesh: false);
         }
 
         private static int FindSurface(VoxelWorld world, int wx, int wz, int startY)

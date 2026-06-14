@@ -27,20 +27,21 @@ namespace VoxelEngine.Player
             var feetVoxel = world.GetVoxelWorld(world.WorldToVoxel(feet));
             var headVoxel = world.GetVoxelWorld(world.WorldToVoxel(head));
 
-            // Find the water surface Y so we can decide swim-vs-wade from real depth,
-            // not just from "any water cell touches my feet". Sampling first lets us
-            // gate buoyancy on actual submersion depth below.
+            // Find the liquid surface Y so we can decide swim-vs-wade from real
+            // depth. Deep oceans can be far more than 10 voxels below the surface,
+            // so the search must be generous; otherwise the player "stops swimming"
+            // and can only jump at depth.
             WaterSurfaceY = SampleWaterSurface(world, feet);
             float submerged = WaterSurfaceY > -9000 ? (WaterSurfaceY - feet.y) : 0f;
+            bool feetInLiquid = feetVoxel.waterLevel > 10 && !feetVoxel.IsSolid;
 
-            // Swim only when the player is genuinely in the water (waist deep or
-            // more). Knee-deep water is just visual; the player still walks normally.
-            // Without this guard buoyancy kicks in on the first puddle and the
-            // player floats across the surface as if it were a solid road.
-            const float SWIM_DEPTH = 0.85f;       // metres of submersion
-            IsSwimming       = feetVoxel.waterLevel > 10 && submerged > SWIM_DEPTH;
-            IsHeadUnderwater = headVoxel.waterLevel > 10;
-            WaterDepth       = IsSwimming ? Mathf.Clamp01(submerged / 1.8f) : 0f;
+            // Swim only when genuinely in liquid. If we are in a deep column but the
+            // top surface is outside the scan range, keep swimming instead of falling
+            // back to jump-only land movement.
+            const float SWIM_DEPTH = 0.85f;
+            IsSwimming       = feetInLiquid && (WaterSurfaceY <= -9000 || submerged > SWIM_DEPTH);
+            IsHeadUnderwater = headVoxel.waterLevel > 10 && !headVoxel.IsSolid;
+            WaterDepth       = IsSwimming ? Mathf.Clamp01(Mathf.Max(submerged, 1.8f) / 1.8f) : 0f;
         }
 
         /// <summary>Find the Y position of the water surface above a world position.</summary>
@@ -48,8 +49,10 @@ namespace VoxelEngine.Player
         {
             Vector3Int vp = world.WorldToVoxel(pos);
 
-            // Search upward from the voxel position to find the top water cell.
-            for (int dy = 0; dy < 10; dy++)
+            // Search upward from the voxel position to find the top liquid cell.
+            // 96m is enough for our current ocean depths while still cheap (one
+            // column sample per frame).
+            for (int dy = 0; dy < 96; dy++)
             {
                 var checkPos = new Vector3Int(vp.x, vp.y + dy, vp.z);
                 var v = world.GetVoxelWorld(checkPos);
@@ -62,8 +65,8 @@ namespace VoxelEngine.Player
                 }
             }
 
-            // Also check downward (player might be above water).
-            for (int dy = 0; dy > -5; dy--)
+            // Also check downward (player might be just above water).
+            for (int dy = 0; dy > -12; dy--)
             {
                 var checkPos = new Vector3Int(vp.x, vp.y + dy, vp.z);
                 var v = world.GetVoxelWorld(checkPos);
