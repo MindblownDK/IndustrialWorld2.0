@@ -130,6 +130,9 @@ namespace VoxelEngine.WaterSim
                         if (FluidMaterialUtility.IsFluid(above) && FluidMaterialUtility.LiquidFromVoxel(above) == FluidMaterialUtility.LiquidFromVoxel(v))
                             continue;
                     }
+                    // Do not render hidden underground water caps under solid terrain;
+                    // those read as a false "second layer" from shoreline/mined-hole angles.
+                    if (HasSolidAbove(c, x, y + 1, z)) break;
 
                     var liquid = FluidMaterialUtility.LiquidFromVoxel(v);
                     cells[x, z] = new SurfaceCell
@@ -340,6 +343,15 @@ namespace VoxelEngine.WaterSim
             cnt++;
         }
 
+        private static bool HasSolidAbove(Chunk c, int x, int startY, int z)
+        {
+            for (int y = startY; y <= VoxelConstants.CHUNK_SIZE; y++)
+            {
+                if (c.GetVoxelLocal(x, y, z).IsSolid) return true;
+            }
+            return false;
+        }
+
         private static bool NeighbourIsSolid(Chunk c, int x, int y, int z)
         {
             if (x < 0 || x >= VoxelConstants.CHUNK_SIZE || z < 0 || z >= VoxelConstants.CHUNK_SIZE || y < 0 || y >= VoxelConstants.CHUNK_SIZE)
@@ -349,7 +361,7 @@ namespace VoxelEngine.WaterSim
 
         private static bool ShoreSolidNear(Chunk c, int x, int y, int z)
         {
-            if (x < 0 || x >= VoxelConstants.CHUNK_SIZE || z < 0 || z >= VoxelConstants.CHUNK_SIZE)
+            if (x < -1 || x > VoxelConstants.CHUNK_SIZE || z < -1 || z > VoxelConstants.CHUNK_SIZE)
                 return false;
 
             // Smooth voxel terrain can intersect water above/below the exact water
@@ -357,7 +369,7 @@ namespace VoxelEngine.WaterSim
             // sloped beaches and rounded banks instead of leaving air gaps.
             for (int yy = y + 2; yy >= y - 5; yy--)
             {
-                if (yy < 0 || yy >= VoxelConstants.CHUNK_SIZE) continue;
+                if (yy < -1 || yy > VoxelConstants.CHUNK_SIZE) continue;
                 if (c.GetVoxelLocal(x, yy, z).IsSolid) return true;
             }
             return false;

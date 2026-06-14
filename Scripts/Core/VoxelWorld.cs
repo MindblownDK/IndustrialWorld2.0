@@ -616,7 +616,16 @@ namespace VoxelEngine.Core
             c.isModified = true;
 
             // Wake fluid sim — if terrain was removed near water, water should flow.
-            WaterSim.FluidManager.Instance?.MarkActive(chunkCoord);
+            // Wake a 3x3x3 chunk neighbourhood because mined holes often sit just
+            // below/next to water in another chunk; otherwise the source chunk may stay asleep.
+            var fm = WaterSim.FluidManager.Instance;
+            if (fm != null)
+            {
+                for (int wz = -1; wz <= 1; wz++)
+                for (int wy = -1; wy <= 1; wy++)
+                for (int wx = -1; wx <= 1; wx++)
+                    fm.MarkActive(chunkCoord + new Vector3Int(wx, wy, wz));
+            }
             WaterSim.WaterMeshBuilder.Schedule(c);
 
             // Mirror the write into the padded border of any neighbour chunks that share

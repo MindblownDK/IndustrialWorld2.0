@@ -72,6 +72,7 @@ namespace VoxelEngine.WaterSim
                     continue;
                 }
 
+                world.CompleteGenJobForChunk(chunk);
                 world.CompleteMeshJobForChunk(chunk);
 
                 var changed = new NativeArray<int>(1, Allocator.TempJob);
@@ -95,6 +96,7 @@ namespace VoxelEngine.WaterSim
 
                 if (didChange)
                 {
+                    FlushPaddingFlowsToNeighbours(world, chunk);
                     _workQueue.Enqueue(coord);
                     chunk.isDirty = true;
                     WakeNeighbour(world, coord + new Vector3Int(1, 0, 0));
@@ -116,6 +118,64 @@ namespace VoxelEngine.WaterSim
         private void WakeNeighbour(VoxelWorld world, Vector3Int coord)
         {
             if (world.TryGetChunk(coord, out var ch) && ch.isGenerated) MarkActive(coord);
+        }
+
+        private void FlushPaddingFlowsToNeighbours(VoxelWorld world, Chunk chunk)
+        {
+            FlushFace(world, chunk, new Vector3Int( 1, 0, 0));
+            FlushFace(world, chunk, new Vector3Int(-1, 0, 0));
+            FlushFace(world, chunk, new Vector3Int( 0, 1, 0));
+            FlushFace(world, chunk, new Vector3Int( 0,-1, 0));
+            FlushFace(world, chunk, new Vector3Int( 0, 0, 1));
+            FlushFace(world, chunk, new Vector3Int( 0, 0,-1));
+        }
+
+        private void FlushFace(VoxelWorld world, Chunk source, Vector3Int dir)
+        {
+            const int S = VoxelConstants.CHUNK_SIZE;
+            var nCoord = source.coord + dir;
+            if (!world.TryGetChunk(nCoord, out var target) || target == null || !target.isGenerated) return;
+            world.CompleteGenJobForChunk(target);
+            world.CompleteMeshJobForChunk(target);
+
+            bool changed = false;
+            int sx = dir.x > 0 ? S : (dir.x < 0 ? -1 : 0);
+            int sy = dir.y > 0 ? S : (dir.y < 0 ? -1 : 0);
+            int sz = dir.z > 0 ? S : (dir.z < 0 ? -1 : 0);
+            int tx = dir.x > 0 ? 0 : (dir.x < 0 ? S - 1 : 0);
+            int ty = dir.y > 0 ? 0 : (dir.y < 0 ? S - 1 : 0);
+            int tz = dir.z > 0 ? 0 : (dir.z < 0 ? S - 1 : 0);
+
+            for (int z = 0; z < S; z++)
+            for (int y = 0; y < S; y++)
+            for (int x = 0; x < S; x++)
+            {
+                int px = dir.x == 0 ? x : sx;
+                int py = dir.y == 0 ? y : sy;
+                int pz = dir.z == 0 ? z : sz;
+                int lx = dir.x == 0 ? x : tx;
+                int ly = dir.y == 0 ? y : ty;
+                int lz = dir.z == 0 ? z : tz;
+
+                var pad = source.GetVoxelLocal(px, py, pz);
+                if (!FluidMaterialUtility.IsFluid(pad)) continue;
+                var dst = target.GetVoxelLocal(lx, ly, lz);
+                if (dst.IsSolid) continue;
+
+                bool same = dst.waterLevel == 0 || FluidMaterialUtility.LiquidFromVoxel(dst) == FluidMaterialUtility.LiquidFromVoxel(pad);
+                if (!same || pad.waterLevel <= dst.waterLevel) continue;
+
+                dst.density = -1;
+                dst.material = pad.material;
+                dst.waterLevel = pad.waterLevel;
+                target.SetVoxelLocal(lx, ly, lz, dst);
+                changed = true;
+            }
+
+            if (!changed) return;
+            target.isModified = true;
+            MarkActive(target.coord);
+            WaterMeshBuilder.Schedule(target);
         }
 
         public void PlaceWater(Vector3Int worldVoxel, byte level = 255) => PlaceLiquid(worldVoxel, LiquidType.Water, level);
