@@ -46,7 +46,10 @@ Shader "VoxelEngine/VoxelWaterURP"
             Tags { "LightMode"="UniversalForward" }
             Blend SrcAlpha OneMinusSrcAlpha
             ZWrite Off
-            Cull Off
+            ZTest LEqual
+            // Back-face rendering made thin water quads look like a second dark
+            // layer from shore/low camera angles. Render only the top face.
+            Cull Back
 
             HLSLPROGRAM
             #pragma vertex vert

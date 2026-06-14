@@ -67,7 +67,7 @@ namespace VoxelEngine.WaterSim
                 _waterMat.SetColor("_ShallowColor", new Color(0.12f, 0.58f, 0.86f, 0.68f));
                 _waterMat.SetColor("_DeepColor",    new Color(0.02f, 0.10f, 0.28f, 0.88f));
                 _waterMat.SetColor("_FoamColor",    new Color(0.86f, 0.94f, 1.00f, 0.82f));
-                _waterMat.SetFloat("_WaveAmp", 0.34f);
+                _waterMat.SetFloat("_WaveAmp", 0.20f);
                 _waterMat.SetFloat("_WaveFreq", 0.62f);
                 _waterMat.SetFloat("_WaveSpeed", 0.78f);
                 _waterMat.SetFloat("_WaveChop", 0.32f);
@@ -203,7 +203,7 @@ namespace VoxelEngine.WaterSim
             // grid surface, so an exact 0..1 quad leaves visible cracks. Extend only
             // toward nearby solid terrain, far enough to clip under the shore but not
             // as far as the failed foam slabs.
-            float shoreTuck = cell.liquid == LiquidType.CrudeOil ? 0.10f : 0.32f;
+            float shoreTuck = cell.liquid == LiquidType.CrudeOil ? 0.16f : 0.58f;
             float seamOverlap = 0.035f;
             float x0 = x, x1 = x + 1, z0 = z, z1 = z + 1;
             if (ShoreSolidNear(c, x - 1, cell.y, z)) x0 -= shoreTuck; else if (x == 0) x0 -= seamOverlap;
@@ -317,7 +317,7 @@ namespace VoxelEngine.WaterSim
         {
             // Render filled/near-filled cells as a clean continuous sheet. This hides
             // byte-level CA stepping while preserving visibly shallow puddles/streams.
-            if (level >= 32) return y + (liquid == LiquidType.CrudeOil ? 0.94f : 0.985f);
+            if (level >= 16) return y + (liquid == LiquidType.CrudeOil ? 0.94f : 0.995f);
             return y + Mathf.Clamp(level / 255f, 0.08f, 0.985f);
         }
 
@@ -352,10 +352,10 @@ namespace VoxelEngine.WaterSim
             if (x < 0 || x >= VoxelConstants.CHUNK_SIZE || z < 0 || z >= VoxelConstants.CHUNK_SIZE)
                 return false;
 
-            // Smooth voxel terrain can intersect water slightly above/below the exact
-            // water voxel Y. Sample a short vertical range so the water tucks under
+            // Smooth voxel terrain can intersect water above/below the exact water
+            // voxel Y. Sample a generous vertical range so the water tucks under
             // sloped beaches and rounded banks instead of leaving air gaps.
-            for (int yy = y + 1; yy >= y - 3; yy--)
+            for (int yy = y + 2; yy >= y - 5; yy--)
             {
                 if (yy < 0 || yy >= VoxelConstants.CHUNK_SIZE) continue;
                 if (c.GetVoxelLocal(x, yy, z).IsSolid) return true;
