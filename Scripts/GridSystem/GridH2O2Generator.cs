@@ -31,6 +31,8 @@ namespace VoxelEngine.GridSystem
         public float oxygenPerSecond   = 2f;
         public float powerDraw         = 150f;
         public float pullInterval = 1.5f;
+        [Tooltip("Seconds between melting one ice into the internal water buffer.")]
+        public float iceMeltInterval = 2.5f;
 
         [Header("Overflow")]
         [Tooltip("If true, gas produced when an output tank is full is vented (lost). If false, production pauses.")]
@@ -51,6 +53,7 @@ namespace VoxelEngine.GridSystem
         public override float PowerDraw => IsProducing ? powerDraw : 0f;
 
         private float _pullTimer;
+        private float _iceMeltTimer;
 
         public override void OnPlaced()
         {
@@ -73,10 +76,16 @@ namespace VoxelEngine.GridSystem
 
             float dt = Time.fixedDeltaTime;
 
-            // 1) Refill the water buffer from ice (melt) or a connected water tank.
+            // 1) Refill the water buffer from pipes first, then slowly melt ice.
             if (waterStored < waterCapacity)
             {
-                if (!MeltOneIce()) PullWaterFromTanks(dt);
+                PullWaterFromTanks(dt);
+                _iceMeltTimer += dt;
+                if (waterStored <= waterCapacity - waterPerIce && _iceMeltTimer >= Mathf.Max(0.1f, iceMeltInterval))
+                {
+                    _iceMeltTimer = 0f;
+                    MeltOneIce();
+                }
             }
 
             bool powered  = Grid.HasPower;

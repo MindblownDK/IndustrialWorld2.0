@@ -15,10 +15,10 @@ namespace VoxelEngine.GridSystem
         public float wattsOutput = 12000f;
 
         [Tooltip("Hydrogen consumed per second while producing power.")]
-        public float hydrogenPerSecond = 6f;
+        public float hydrogenPerSecond = 0.75f;
 
         [Tooltip("Small internal hydrogen buffer in litres.")]
-        public float internalTankCapacity = 75f;
+        public float internalTankCapacity = 250f;
 
         [Tooltip("Current hydrogen in the internal buffer.")]
         public float internalHydrogen;
@@ -27,7 +27,7 @@ namespace VoxelEngine.GridSystem
         public float minHydrogenToRun = 0.25f;
 
         [Tooltip("Maximum hydrogen pulled from the shared gas pool per second.")]
-        public float refillRate = 25f;
+        public float refillRate = 4f;
 
         public bool IsRunning { get; private set; }
         public float LastHydrogenConsumed { get; private set; }

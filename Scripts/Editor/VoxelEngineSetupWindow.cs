@@ -4702,13 +4702,13 @@ root =>
             }
 
             MakeWheel("Wheel_2x2", "Wheel Suspension 2x2", 2, 1100, 450,
-                45000f, 90000f, 12000f, 1.0f, 150f,
+                220000f, 120000f, 16000f, 1.0f, 450f,
                 (steelPlate, 3), (ironPlate, 2), (copperWire, 2));
             MakeWheel("Wheel_3x3", "Wheel Suspension 3x3", 3, 2400, 650,
-                75000f, 150000f, 19000f, 1.45f, 300f,
+                520000f, 210000f, 26000f, 1.45f, 900f,
                 (steelPlate, 5), (ironPlate, 4), (copperWire, 4), (ironGear, 2));
             MakeWheel("Wheel_5x5", "Wheel Suspension 5x5", 5, 6200, 1000,
-                155000f, 300000f, 36000f, 2.35f, 750f,
+                1350000f, 420000f, 48000f, 2.35f, 1800f,
                 (steelPlate, 10), (ironPlate, 8), (copperWire, 8), (ironGear, 6), (circuit, 1));
 
             var gearPref = MakeGPref<VoxelEngine.GridSystem.GridLandingGear>("LandingGear_Large", new Color(0.5f, 0.5f, 0.55f), new Vector3(0.8f, 1.0f, 0.8f));
@@ -4740,7 +4740,7 @@ root =>
             AddGRecipe("Recipe_GH2O2Generator", "H2/O2 Generator", itemH2O2, (steelPlate, 8), (circuit, 4), (copperWire, 8));
 
             var hydrogenEngineGridPref = MakeGPref<VoxelEngine.GridSystem.GridHydrogenEngine>("HydrogenEngine_Large", new Color(0.20f, 0.85f, 0.35f), new Vector3(1.5f, 1.2f, 1.5f),
-                e => { e.wattsOutput = 12000f; e.hydrogenPerSecond = 6f; e.minHydrogenToRun = 0.25f; });
+                e => { e.wattsOutput = 12000f; e.hydrogenPerSecond = 0.75f; e.internalTankCapacity = 250f; e.refillRate = 4f; e.minHydrogenToRun = 0.25f; });
             var itemHydrogenEngineGrid = MakeGItem("GItem_HydrogenEngine", "Hydrogen Engine", Color.white, hydrogenEngineGridPref, VoxelEngine.GridSystem.GridSize.Large, 950, 700);
             AddGRecipe("Recipe_GHydrogenEngine", "Hydrogen Engine", itemHydrogenEngineGrid, (steelPlate, 8), (ironPlate, 4), (circuit, 4), (copperWire, 8));
 

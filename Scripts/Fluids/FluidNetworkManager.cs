@@ -82,9 +82,10 @@ namespace VoxelEngine.Fluids
                         // so multi-voxel machines whose centres sit off-grid still
                         // hook up cleanly to an adjacent pipe.
                         bool bIsPipe = b.Kind == FluidNodeKind.Pipe;
+                        float step = GridStep(n, b);
                         bool ok = (nIsPipe && bIsPipe)
-                            ? VoxelEngine.Networks.PipeAdjacency.IsCardinalNeighbour(pa, pb)
-                            : VoxelEngine.Networks.PipeAdjacency.IsAxisAlignedWithin(pa, pb);
+                            ? VoxelEngine.Networks.PipeAdjacency.IsCardinalNeighbour(pa, pb, step, step * 0.35f)
+                            : VoxelEngine.Networks.PipeAdjacency.IsAxisAlignedWithin(pa, pb, step, 2.5f, step * 0.35f);
                         if (!ok) continue;
 
                         // Wrench blacklist — explicit player disconnect persists.
@@ -109,6 +110,15 @@ namespace VoxelEngine.Fluids
                 }
                 net.Recompute();
             }
+        }
+
+        private static float GridStep(FluidNode a, FluidNode b)
+        {
+            var ga = a != null ? a.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>()?.Grid : null;
+            var gb = b != null ? b.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>()?.Grid : null;
+            if (ga != null && ga == gb)
+                return VoxelEngine.GridSystem.GridSizeExt.CellSize(ga.gridSize);
+            return VoxelEngine.Networks.PipeAdjacency.DefaultGridSize;
         }
 
         public IReadOnlyList<FluidNetwork> Networks => _networks;

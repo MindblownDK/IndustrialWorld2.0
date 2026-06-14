@@ -60,8 +60,10 @@ namespace VoxelEngine.Gas
                 // Distance gate is cheap, do it first.
                 if ((pa - pb).sqrMagnitude > r * r) continue;
 
-                // STRICT cardinal-neighbour gate (mirrors the wire renderer).
-                if (!VoxelEngine.Networks.PipeAdjacency.IsCardinalNeighbour(pa, pb)) continue;
+                // STRICT cardinal-neighbour gate (mirrors the wire renderer). On grids,
+                // pipes are spaced by the grid cell size (2.5m for large grids), not 1m.
+                float step = GridStep(a, b);
+                if (!VoxelEngine.Networks.PipeAdjacency.IsCardinalNeighbour(pa, pb, step, step * 0.35f)) continue;
 
                 // Wrench blacklist — player wrenched these two apart; honour it
                 // until a wrench reconnect or one of them is broken/replaced.
@@ -113,6 +115,15 @@ namespace VoxelEngine.Gas
                 }
             }
             return null;
+        }
+
+        private static float GridStep(GasPipe a, GasPipe b)
+        {
+            var ga = a != null ? a.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>()?.Grid : null;
+            var gb = b != null ? b.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>()?.Grid : null;
+            if (ga != null && ga == gb)
+                return VoxelEngine.GridSystem.GridSizeExt.CellSize(ga.gridSize);
+            return VoxelEngine.Networks.PipeAdjacency.DefaultGridSize;
         }
 
         public void SetDirty() => _dirty = true;

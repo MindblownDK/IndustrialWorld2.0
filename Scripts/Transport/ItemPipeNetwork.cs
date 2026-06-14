@@ -82,8 +82,10 @@ namespace VoxelEngine.Transport
 
                     if (Vector3.SqrMagnitude(pa - pb) > maxDist * maxDist) continue;
 
-                    // STRICT cardinal-neighbour gate.
-                    if (!VoxelEngine.Networks.PipeAdjacency.IsCardinalNeighbour(pa, pb)) continue;
+                    // STRICT cardinal-neighbour gate. On grids, pipes are spaced by the
+                    // grid cell size (2.5m for large grids), not the 1m static build grid.
+                    float step = GridStep(a, b);
+                    if (!VoxelEngine.Networks.PipeAdjacency.IsCardinalNeighbour(pa, pb, step, step * 0.35f)) continue;
 
                     // Wrench blacklist — explicit player disconnect persists.
                     if (VoxelEngine.Networks.WrenchBlacklist.IsBlocked(a, b)) continue;
@@ -98,6 +100,15 @@ namespace VoxelEngine.Transport
             // the functional link immediately on the next dirty rebuild.
             foreach (var p in _pipes)
                 if (p != null) p.ForceEndpointRescan();
+        }
+
+        private static float GridStep(ItemPipe a, ItemPipe b)
+        {
+            var ga = a != null ? a.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>()?.Grid : null;
+            var gb = b != null ? b.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>()?.Grid : null;
+            if (ga != null && ga == gb)
+                return VoxelEngine.GridSystem.GridSizeExt.CellSize(ga.gridSize);
+            return VoxelEngine.Networks.PipeAdjacency.DefaultGridSize;
         }
 
         /// <summary>Call after moving/adding a pipe at runtime to force re-link.</summary>

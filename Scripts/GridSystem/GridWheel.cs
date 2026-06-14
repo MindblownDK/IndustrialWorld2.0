@@ -33,8 +33,8 @@ namespace VoxelEngine.GridSystem
         [Tooltip("Set true for front/steering wheels.")]
         public bool isSteerable = true;
 
-        public override float PowerDraw => Enabled && IsGrounded
-            ? powerDrawWatts * Mathf.Abs(_currentThrottle) * Mathf.Clamp01(suspensionStrength)
+        public override float PowerDraw => Enabled && IsGrounded && Grid != null
+            ? powerDrawWatts * Mathf.Abs(Grid.ThrustInput.z) * Mathf.Clamp01(suspensionStrength)
             : 0f;
         public bool IsGrounded { get; private set; }
 
