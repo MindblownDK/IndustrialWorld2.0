@@ -14,6 +14,7 @@
 
 using System.Collections.Generic;
 using UnityEngine;
+using VoxelEngine.Maritime;
 
 namespace VoxelEngine.GridSystem
 {
@@ -261,6 +262,10 @@ namespace VoxelEngine.GridSystem
 
             RecalculateMass();
             block.OnPlaced();
+
+            // Notify the maritime propulsion graph that the ship changed
+            // (it lazily rebuilds next FixedUpdate — zero per-block work).
+            NotifyMaritimeDirty();
         }
 
         public void RemoveBlock(Vector3Int gridPos)
@@ -271,6 +276,8 @@ namespace VoxelEngine.GridSystem
             Destroy(block.gameObject);
             RecalculateMass();
 
+            NotifyMaritimeDirty();
+
             if (_blocks.Count == 0)
                 Destroy(gameObject);
         }
@@ -279,6 +286,26 @@ namespace VoxelEngine.GridSystem
         {
             _blocks.TryGetValue(gridPos, out var b);
             return b;
+        }
+
+        // ── Maritime propulsion (buoyancy + mechanical network) ───────
+        // Lazily cached; null if the ship has no MaritimePropulsionSystem.
+        private MaritimePropulsionSystem _maritime;
+        /// <summary>The maritime simulation for this ship (null if none attached).</summary>
+        public MaritimePropulsionSystem Maritime
+        {
+            get
+            {
+                if (_maritime == null) _maritime = GetComponent<MaritimePropulsionSystem>();
+                return _maritime;
+            }
+        }
+
+        /// <summary>Tell the maritime graph the block layout changed (cheap if absent).</summary>
+        private void NotifyMaritimeDirty()
+        {
+            if (_maritime == null) _maritime = GetComponent<MaritimePropulsionSystem>();
+            _maritime?.MarkDirty();
         }
 
         public Vector3Int WorldToGrid(Vector3 worldPos)
