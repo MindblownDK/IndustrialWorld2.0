@@ -169,6 +169,15 @@ namespace VoxelEngine.Maritime
             JobHandle buoyHandle = buoyJob.Schedule(_nodes.Length, 32, propHandle);
             buoyHandle.Complete();
 
+            // 4b. Write back computed results (RPM, electricity, submergence) to live blocks
+            //     so generators / UI / audio can read them this frame.
+            for (int i = 0; i < _liveMech.Count; i++)
+            {
+                var (idx, block) = _liveMech[i];
+                if (block == null) continue;
+                block.ApplyResults(_nodes[idx]);
+            }
+
             // 5. Sum forces + torques and apply to the Rigidbody.
             float3 totalForce = float3.zero;
             float3 totalTorque = float3.zero;

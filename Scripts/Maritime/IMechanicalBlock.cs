@@ -40,5 +40,13 @@ namespace VoxelEngine.Maritime
         /// </summary>
         /// <param name="throttle">Pilot throttle 0..1 from the Helm/Cockpit.</param>
         void RefreshMaritimeNode(ref MechanicalNode node, float throttle);
+
+        /// <summary>
+        /// Read back the COMPUTED results from the job pipeline (RPM, electricity
+        /// output, submergence, force …) and cache them on the live block so other
+        /// systems (grid power, audio, UI) can query them. Called every FixedUpdate
+        /// AFTER both jobs have completed.
+        /// </summary>
+        void ApplyResults(in MechanicalNode node);
     }
 }
