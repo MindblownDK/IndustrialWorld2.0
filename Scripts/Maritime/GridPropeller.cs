@@ -64,9 +64,9 @@ namespace VoxelEngine.Maritime
             // Propellers are passive consumers — they don't gate on fuel/throttle.
             node.FuelAvailable01 = Enabled ? 1f : 0f;
             if (!Enabled)
-                node.Flags |= MechanicalFlags.Broken;
+                node.SetFlag(MechanicalFlags.Broken);
             else
-                node.Flags &= (byte)~MechanicalFlags.Broken;
+                node.ClearFlag(MechanicalFlags.Broken);
         }
 
         public override void ApplyResults(in MechanicalNode node)
@@ -124,9 +124,9 @@ namespace VoxelEngine.Maritime
             node.FuelAvailable01 = _activeFraction;
 
             if (!Enabled)
-                node.Flags |= MechanicalFlags.Broken;
+                node.SetFlag(MechanicalFlags.Broken);
             else
-                node.Flags &= (byte)~MechanicalFlags.Broken;
+                node.ClearFlag(MechanicalFlags.Broken);
         }
 
         public override void ApplyResults(in MechanicalNode node)

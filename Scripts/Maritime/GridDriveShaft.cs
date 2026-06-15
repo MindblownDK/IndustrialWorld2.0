@@ -37,9 +37,9 @@ namespace VoxelEngine.Maritime
         {
             // A disabled shaft severs the chain.
             if (!Enabled)
-                node.Flags |= MechanicalFlags.Broken;
+                node.SetFlag(MechanicalFlags.Broken);
             else
-                node.Flags &= (byte)~MechanicalFlags.Broken;
+                node.ClearFlag(MechanicalFlags.Broken);
         }
 
         public override void ApplyResults(in MechanicalNode node)

@@ -118,7 +118,7 @@ namespace VoxelEngine.Maritime
             node.PropellerSize = 1f;
 
             if (tier == EngineTier.Giant)
-                node.Flags |= MechanicalFlags.GiantDiesel;
+                node.SetFlag(MechanicalFlags.GiantDiesel);
         }
 
         public override void RefreshMaritimeNode(ref MechanicalNode node, float throttle)
@@ -130,10 +130,10 @@ namespace VoxelEngine.Maritime
             {
                 node.FuelAvailable01 = 0f;
                 IsRunning = false;
-                node.Flags |= MechanicalFlags.Broken;
+                node.SetFlag(MechanicalFlags.Broken);
                 return;
             }
-            node.Flags &= (byte)~MechanicalFlags.Broken;
+            node.ClearFlag(MechanicalFlags.Broken);
 
             // Consume fuel from the internal buffer.
             float dt = Time.fixedDeltaTime;

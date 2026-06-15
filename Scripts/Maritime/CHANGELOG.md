@@ -84,6 +84,35 @@ Branch: **Dev** · Semantic Versioning 2.0.0
    - Place the grid in water and add a `GridHelm` — press E near it to steer.
 
 ### Next parts (roadmap)
-- **2.18.2** — Hull materials (Untreated Wood, Tar-Coated Plank, Iron Hull, Balsa, Bilge Pump) + waterlogging + cockpit integration.
 - **2.18.3** — Refinery/chemical-plant recipes that produce MGO + Heavy Fuel Oil.
 - **2.18.4** — Setup-Wizard expansion + 4-tier "Maritime Engineering" research tree.
+
+---
+
+## [2.18.2] — Hull Materials, Waterlogging & Cockpit Integration (Part 3 of 5)
+
+**Type:** MINOR — new blocks + batched waterlogging system, save-compatible.
+
+### Added — hull materials + bilge pump (`Scripts/Maritime/`)
+| File | Block(s) | Role |
+|------|----------|------|
+| `GridHullBlock.cs` | `GridHullBlock` (base) | Buoyancy factor, waterproof flag, waterlogging state + `ContentMass`. |
+| | `GridUntreatedWood` | Buoyant (0.85) but SOAKS water (40kg max, 1.5kg/s). Forces progression. |
+| | `GridTarCoatedPlank` | Buoyant (0.9), 100% waterproof. Reliable mid-game hull. |
+| | `GridIronHull` | Zero buoyancy (sinks!), 5x HP. Needs air pockets to float. |
+| | `GridBalsaWood` | Max buoyancy (1.0), ultra-light, fragile (0.4x HP). |
+| `GridBilgePump.cs` | `GridBilgePump` | Drains waterlogged hulls in a radius. Draws power. Batched tick. |
+
+### Added — waterlogging system (in `MaritimePropulsionSystem`)
+- **Batched waterlogging tick** — after the buoyancy job, hull blocks that are submerged + non-waterproof absorb water (increasing `ContentMass` -> heavier ship -> sinks lower -> soaks more). Bilge pumps drain first each tick.
+- Proper `GridHullBlock.buoyancyFactor` now read at graph rebuild (replaces name-based heuristic).
+- `_waterlogHulls` + `_bilgePumps` tracking lists populated at rebuild.
+
+### Added — cockpit maritime integration (in `GridCockpit`)
+- **`DriveMaritime()`** — when seated in a cockpit on a ship with a `MaritimePropulsionSystem`, the cockpit doubles as the helm: **W = throttle up, S = throttle down, mouse-yaw = rudder steer**.
+- **`ZeroMaritime()`** — called on `Exit()` to cut throttle + rudder cleanly.
+
+### Changed
+- **`MaritimePropulsionSystem.cs`** — hull tracking + waterlogging tick + bilge pump batch.
+- **`GridCockpit.cs`** — maritime drive/zero methods + import.
+- **`GameVersion.cs`** — `2.18.1 -> 2.18.2`.

@@ -114,6 +114,13 @@ namespace VoxelEngine.Maritime
         public bool IsGiantDiesel   => (Flags & MechanicalFlags.GiantDiesel) != 0;
         public bool IsStationary    => (Flags & MechanicalFlags.Stationary) != 0;
 
+        /// <summary>Set one or more flag bits. Safe for byte (avoids the
+        /// constant-overflow compile error of inline ~(flag)).</summary>
+        public void SetFlag(byte flag) => Flags |= flag;
+
+        /// <summary>Clear one or more flag bits.</summary>
+        public void ClearFlag(byte flag) => Flags &= (byte)(~flag);
+
         /// <summary>True for blocks that act as a torque source.</summary>
         public bool IsProducer =>
             Type == MechanicalNodeType.Engine ||

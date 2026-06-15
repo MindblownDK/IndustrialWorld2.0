@@ -65,6 +65,12 @@ namespace VoxelEngine.Maritime
         // node array index → live block (for per-frame refresh of dynamic fields)
         private readonly List<(int index, IMechanicalBlock block)> _liveMech = new(64);
 
+        // Hull material blocks that can waterlog (tracked for the batched tick).
+        private readonly List<(int index, GridHullBlock hull)> _waterlogHulls = new(128);
+
+        // Bilge pumps (drain waterlogged hulls, batched tick).
+        private readonly List<GridBilgePump> _bilgePumps = new(8);
+
         // ── Rebuild trigger ───────────────────────────────────────────
         private int _lastBlockCount = -1;
         private bool _forceRebuild = true;
@@ -178,6 +184,10 @@ namespace VoxelEngine.Maritime
                 block.ApplyResults(_nodes[idx]);
             }
 
+            // 4c. Waterlogging tick — hull blocks absorb water while submerged,
+            //     bilge pumps drain it. Batched (not per-block MonoBehaviour).
+            TickWaterlogging();
+
             // 5. Sum forces + torques and apply to the Rigidbody.
             float3 totalForce = float3.zero;
             float3 totalTorque = float3.zero;
@@ -223,6 +233,8 @@ namespace VoxelEngine.Maritime
         {
             DisposeJobData();
             _liveMech.Clear();
+            _waterlogHulls.Clear();
+            _bilgePumps.Clear();
             _nodePositions.Clear();
 
             if (_grid == null || _grid.BlockCount == 0) return;
@@ -234,6 +246,7 @@ namespace VoxelEngine.Maritime
             var mechNodes = new List<MechanicalNode>(total);
             var mechPositions = new List<Vector3Int>(total);
             var hullNodes = new List<MechanicalNode>(total);
+            var hullBlockSources = new List<GridHullBlock>(total);
             var posToMechIndex = new Dictionary<Vector3Int, int>(total);
             // Map from a mechanical node's index (in mechNodes) to the live block.
             var mechBlockByIndex = new List<IMechanicalBlock>(total);
@@ -249,6 +262,10 @@ namespace VoxelEngine.Maritime
 
                 Vector3 worldPos = _grid.GridToWorld(gpos);
                 float3 wp = new(worldPos.x, worldPos.y, worldPos.z);
+
+                // Track bilge pumps wherever they are.
+                if (block is GridBilgePump pump)
+                    _bilgePumps.Add(pump);
 
                 if (block is IMechanicalBlock mech)
                 {
@@ -268,6 +285,7 @@ namespace VoxelEngine.Maritime
                 {
                     // Non-mechanical block → pure buoyancy hull node.
                     hullNodes.Add(HullNode(nodeId, wp, block));
+                    hullBlockSources.Add(block as GridHullBlock);
                 }
                 nodeId++;
             }
@@ -309,6 +327,16 @@ namespace VoxelEngine.Maritime
                 var n = hullNodes[i];
                 n.Id = write;
                 n.ChainIndex = -1;
+
+                // Track hull material blocks for waterlogging + read their actual buoyancy.
+                var hullBlock = hullBlockSources[i];
+                if (hullBlock != null)
+                {
+                    n.BuoyancyFactor = hullBlock.buoyancyFactor;
+                    if (hullBlock.maxWaterlogging > 0f)
+                        _waterlogHulls.Add((write, hullBlock));
+                }
+
                 finalNodes[write] = n;
                 write++;
             }
@@ -374,10 +402,13 @@ namespace VoxelEngine.Maritime
 
         private float DefaultBuoyancyFactor(GridBlock block)
         {
-            // Hull material specifics arrive in Part 3; default to a buoyant mid-value
-            // so unconfigured blocks still float sensibly.
+            // Proper hull material component — use its authored buoyancy factor.
+            if (block is GridHullBlock hull)
+                return hull.buoyancyFactor;
+
+            // Fallback: name-based heuristic for unconfigured blocks.
             string n = (block.blockName ?? string.Empty).ToLowerInvariant();
-            if (n.Contains("iron")) return 0.0f;   // iron hull sinks without air pockets
+            if (n.Contains("iron")) return 0.0f;
             if (n.Contains("balsa") || n.Contains("cork")) return 1.0f;
             if (n.Contains("wood") || n.Contains("plank")) return 0.9f;
             return 0.6f;
@@ -501,9 +532,38 @@ namespace VoxelEngine.Maritime
                     {
                         var node = mechNodes[nb];
                         if (node.IsGiantDiesel)
-                            node.Flags |= MechanicalFlags.TurboBoosted;
+                            node.SetFlag(MechanicalFlags.TurboBoosted);
                         mechNodes[nb] = node;
                     }
+                }
+            }
+        }
+
+        // ══════════════════════════════════════════════════════════════
+        //  WATERLOGGING TICK
+        // ══════════════════════════════════════════════════════════════
+        private void TickWaterlogging()
+        {
+            float dt = Time.fixedDeltaTime;
+
+            // Bilge pumps drain first (so soaked hulls that are also being pumped
+            // get net-zero or net-negative waterlogging this tick).
+            for (int i = 0; i < _bilgePumps.Count; i++)
+            {
+                if (_bilgePumps[i] != null) _bilgePumps[i].TickDrain();
+            }
+
+            // Hull blocks absorb water while submerged (if not waterproof).
+            for (int i = 0; i < _waterlogHulls.Count; i++)
+            {
+                var (idx, hull) = _waterlogHulls[i];
+                if (hull == null) continue;
+
+                float submergence = _nodes[idx].Submergence;
+                if (submergence > 0f && hull.maxWaterlogging > 0f)
+                {
+                    float soak = hull.soakRate * submergence * dt;
+                    hull.WaterloggedMass = Mathf.Min(hull.maxWaterlogging, hull.WaterloggedMass + soak);
                 }
             }
         }

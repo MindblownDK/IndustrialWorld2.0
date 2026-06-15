@@ -61,9 +61,9 @@ namespace VoxelEngine.Maritime
         public override void RefreshMaritimeNode(ref MechanicalNode node, float throttle)
         {
             if (!Enabled)
-                node.Flags |= MechanicalFlags.Broken;
+                node.SetFlag(MechanicalFlags.Broken);
             else
-                node.Flags &= (byte)~MechanicalFlags.Broken;
+                node.ClearFlag(MechanicalFlags.Broken);
 
             // Keep the node in sync if the designer changed the ratio at runtime.
             node.GearRatio = gearRatio;

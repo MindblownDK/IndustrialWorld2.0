@@ -3,6 +3,7 @@
 // Cockpit with terminal + grid size switching.
 
 using UnityEngine;
+using VoxelEngine.Maritime;
 using VoxelEngine.Settings;
 using InputAction = VoxelEngine.Settings.InputAction;
 #if ENABLE_INPUT_SYSTEM
@@ -107,6 +108,11 @@ namespace VoxelEngine.GridSystem
             float pitch = Mathf.Clamp(-mouseY * sens, -1f, 1f);
 
             Grid.SetFlightInput(thrust, yaw, pitch, roll);
+
+            // ── Maritime integration ───────────────────────────────────
+            // If this ship has a MaritimePropulsionSystem, drive its throttle + steer
+            // from the cockpit too (W = throttle, mouse yaw = rudder steer).
+            DriveMaritime(fwd, yaw);
 
             // Scroll cycles between TOOL GROUPS (Drill ⇄ Weapon).
             float scroll = GridInput.Scroll;
@@ -267,6 +273,39 @@ namespace VoxelEngine.GridSystem
 
         private Transform _originalParent;
 
+        // ── Maritime integration ──────────────────────────────────────
+        // When the ship has a MaritimePropulsionSystem, the cockpit doubles as the
+        // helm: W = throttle up, S = throttle down, mouse-yaw = rudder steer.
+        private float _maritimeThrottle;
+
+        private void DriveMaritime(float fwdAxis, float yawAxis)
+        {
+            var maritime = Grid?.Maritime;
+            if (maritime == null) return;
+
+            const float ramp = 1.5f;
+            if (fwdAxis > 0.01f)
+                _maritimeThrottle = Mathf.MoveTowards(_maritimeThrottle, 1f, ramp * Time.deltaTime);
+            else if (fwdAxis < -0.01f)
+                _maritimeThrottle = Mathf.MoveTowards(_maritimeThrottle, 0f, ramp * Time.deltaTime);
+
+            maritime.Throttle = _maritimeThrottle;
+            maritime.Steer = yawAxis;
+            maritime.HelmActive = true;
+        }
+
+        private void ZeroMaritime()
+        {
+            _maritimeThrottle = 0f;
+            var maritime = Grid?.Maritime;
+            if (maritime != null)
+            {
+                maritime.Throttle = 0f;
+                maritime.Steer = 0f;
+                maritime.HelmActive = false;
+            }
+        }
+
         /// <summary>Open the Space-Engineers-style master terminal for this grid.</summary>
         public void OpenTerminal()
         {
@@ -276,6 +315,9 @@ namespace VoxelEngine.GridSystem
         public void Exit()
         {
             if (Pilot == null) return;
+
+            // Release maritime controls (stop engines + rudder).
+            ZeroMaritime();
 
             // Restore first-person camera before unparenting/leaving the cockpit.
             _thirdPersonCamera = false;
