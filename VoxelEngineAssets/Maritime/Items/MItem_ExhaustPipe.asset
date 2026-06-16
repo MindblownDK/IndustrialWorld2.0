@@ -14,7 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.GridSystem.GridBlockItem
   itemId: mitem_exhaustpipe
   displayName: Exhaust Pipe
-  description: 
+  description: Exhaust venting pipe. EVERY engine requires at least one adjacent
+    exhaust pipe or it chokes and produces zero torque. The pipe vents exhaust gas
+    buildup and emits visible smoke particles while engines run. Looks like a pipe
+    with vent holes.
   icon: {fileID: 0}
   iconTint: {r: 0.3, g: 0.28, b: 0.25, a: 1}
   maxStack: 20
@@ -22,6 +25,6 @@ MonoBehaviour:
   category: Maritime
   viewmodelPrefab: {fileID: 0}
   gridSize: 1
-  blockPrefab: {fileID: 3463302671267939266, guid: ec802ccfcbfa4da4999fde217b7bc556, type: 3}
+  blockPrefab: {fileID: 1159909916624666970, guid: ec802ccfcbfa4da4999fde217b7bc556, type: 3}
   blockMass: 2500
   blockHP: 200

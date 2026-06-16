@@ -33,6 +33,14 @@ namespace VoxelEngine.Maritime
 
         /// <summary>Current RPM passing through (written back by ApplyResults).</summary>
         public float CurrentRPM { get; private set; }
+        /// <summary>Input RPM (before gear ratio).</summary>
+        public float InputRPM { get; private set; }
+        /// <summary>Output RPM (after gear ratio, clamped).</summary>
+        public float OutputRPM => CurrentRPM;
+        /// <summary>True when output torque demand exceeds safe limits.</summary>
+        public bool IsOverstressed { get; private set; }
+        /// <summary>0..1 stress level for UI.</summary>
+        public float Stress01 { get; private set; }
 
         public override void OnPlaced()
         {
@@ -72,7 +80,12 @@ namespace VoxelEngine.Maritime
 
         public override void ApplyResults(in MechanicalNode node)
         {
+            InputRPM = node.CurrentRPM * gearRatio; // approximate input (pre-ratio)
             CurrentRPM = node.CurrentRPM;
+            // Stress: if we're near the speed cap, the gearbox is stressed.
+            float speedRatio = maxOutputSpeed > 0f ? CurrentRPM / maxOutputSpeed : 0f;
+            Stress01 = Mathf.Clamp01(speedRatio);
+            IsOverstressed = Stress01 > 0.95f;
         }
     }
 }

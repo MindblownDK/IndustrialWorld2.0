@@ -49,6 +49,16 @@ namespace VoxelEngine.Maritime
         [Tooltip("Litres pulled from grid tanks per second when refilling.")]
         public float liquidRefillRate = 10f;
 
+        [Header("Exhaust Gas")]
+        [Tooltip("Maximum exhaust gas backlog before the engine chokes and stops.")]
+        public float exhaustGasCapacity = 100f;
+        [Tooltip("Exhaust gas produced per second at full throttle.")]
+        public float exhaustGasRate = 8f;
+        [Tooltip("Exhaust gas vented per second through an adjacent Exhaust Pipe.")]
+        public float exhaustVentRate = 12f;
+        [Tooltip("At this fill ratio (0..1) the engine starts losing power from back-pressure.")]
+        [Range(0.5f, 0.99f)] public float exhaustChokeThreshold = 0.8f;
+
         [Header("State (read-only)")]
         /// <summary>Current fuel buffer level (0..capacity).</summary>
         public float FuelBuffer { get; private set; }
@@ -56,22 +66,46 @@ namespace VoxelEngine.Maritime
         /// <summary>0..1 fill ratio of the internal fuel buffer.</summary>
         public float FuelFill01 => fuelBufferCapacity > 0f ? Mathf.Clamp01(FuelBuffer / fuelBufferCapacity) : 0f;
 
+        /// <summary>Current exhaust gas backlog (0..capacity).</summary>
+        public float ExhaustGas { get; private set; }
+
+        /// <summary>0..1 fill ratio of the exhaust gas backlog.</summary>
+        public float ExhaustFill01 => exhaustGasCapacity > 0f ? Mathf.Clamp01(ExhaustGas / exhaustGasCapacity) : 0f;
+
         /// <summary>True while the engine is actively producing torque.</summary>
         public bool IsRunning { get; private set; }
+
+        /// <summary>True if exhaust gas backlog is critically high (engine losing power).</summary>
+        public bool IsChoked => ExhaustFill01 >= exhaustChokeThreshold;
+
+        /// <summary>True if an exhaust pipe is adjacent (otherwise the engine chokes).</summary>
+        public bool HasExhaust { get; private set; }
 
         /// <summary>Current RPM (written back by ApplyResults).</summary>
         public float CurrentRPM { get; private set; }
 
-        /// <summary>True if an exhaust pipe is adjacent (otherwise the engine chokes).</summary>
-        public bool HasExhaust { get; private set; }
+        /// <summary>Current litres/s fuel consumption (for UI).</summary>
+        public float CurrentUsage { get; private set; }
+
+        /// <summary>Current torque output (for UI).</summary>
+        public float CurrentTorque { get; private set; }
+
+        /// <summary>0..1 stress level (torque vs max, with exhaust penalty).</summary>
+        public float Stress01 { get; private set; }
+
+        /// <summary>True when the engine is overstressed (torque demand exceeds safe limits).</summary>
+        public bool IsOverstressed => Stress01 > 0.95f;
 
         public override float ContentMass
         {
             get
             {
+                float m = 0f;
                 if (fuelKind == MaritimeFuelKind.Liquid)
-                    return FuelBuffer * liquidFuel.DensityKgPerL();
-                return 0f; // solid fuel mass already counted in cargo
+                    m += FuelBuffer * liquidFuel.DensityKgPerL();
+                // Exhaust gas adds mass too (compressed gas is heavy).
+                m += ExhaustGas * 0.01f;
+                return m;
             }
         }
 
@@ -123,28 +157,58 @@ namespace VoxelEngine.Maritime
 
         public override void RefreshMaritimeNode(ref MechanicalNode node, float throttle)
         {
-            // Exhaust check — choke the engine if no exhaust pipe is adjacent.
+            float dt = Time.fixedDeltaTime;
+
+            // Exhaust check — need an exhaust pipe adjacent to vent gas.
             HasExhaust = HasAdjacentExhaust();
 
-            if (!Enabled || !HasExhaust)
+            // ── Exhaust gas accumulation ────────────────────────────────
+            // Gas builds up while running; vents through an adjacent exhaust pipe.
+            if (IsRunning)
+            {
+                ExhaustGas = Mathf.Min(exhaustGasCapacity, ExhaustGas + exhaustGasRate * throttle * dt);
+            }
+            if (HasExhaust)
+            {
+                ExhaustGas = Mathf.Max(0f, ExhaustGas - exhaustVentRate * dt);
+            }
+
+            // ── Engine running conditions ───────────────────────────────
+            bool exhaustChoked = ExhaustFill01 >= 0.99f;
+
+            if (!Enabled || !HasExhaust || exhaustChoked)
             {
                 node.FuelAvailable01 = 0f;
                 IsRunning = false;
+                CurrentUsage = 0f;
                 node.SetFlag(MechanicalFlags.Broken);
                 return;
             }
             node.ClearFlag(MechanicalFlags.Broken);
 
             // Consume fuel from the internal buffer.
-            float dt = Time.fixedDeltaTime;
             float consumption = fuelConsumptionRate * throttle * dt;
             FuelBuffer = Mathf.Max(0f, FuelBuffer - consumption);
+            CurrentUsage = fuelConsumptionRate * throttle;
 
             // Refill from grid storage.
             RefillBuffer(dt);
 
+            // Exhaust back-pressure reduces power.
+            float exhaustPenalty = 1f;
+            if (IsChoked)
+            {
+                float overChoke = (ExhaustFill01 - exhaustChokeThreshold) / (1f - exhaustChokeThreshold);
+                exhaustPenalty = 1f - overChoke * 0.7f; // lose up to 70% power near full
+            }
+
             IsRunning = FuelBuffer > 0.01f && throttle > 0.01f;
-            node.FuelAvailable01 = IsRunning ? FuelFill01 * throttle : 0f;
+            float effectiveFuel = IsRunning ? FuelFill01 * throttle * exhaustPenalty : 0f;
+            node.FuelAvailable01 = effectiveFuel;
+
+            // Stress = how hard we're pushing relative to max.
+            CurrentTorque = node.MaxTorque * effectiveFuel;
+            Stress01 = Mathf.Clamp01(effectiveFuel * (1f + ExhaustFill01 * 0.3f));
         }
 
         public override void ApplyResults(in MechanicalNode node)

@@ -784,6 +784,22 @@ namespace VoxelEngine.GridSystem.UI
         {
             if (block == null) return "Missing";
             if (!block.Enabled) return "Offline";
+            if (block is VoxelEngine.Maritime.GridMaritimeEngine eng)
+                return eng.IsRunning ? $"{eng.CurrentRPM:0} RPM" : eng.HasExhaust ? "Idle" : "NO EXHAUST";
+            if (block is VoxelEngine.Maritime.GridMaritimeGenerator gen)
+                return PowerFormat.Watts(gen.GeneratedWatts);
+            if (block is VoxelEngine.Maritime.GridGearbox gb)
+                return gb.IsOverstressed ? "OVERSTRESSED" : $"{gb.OutputRPM:0} RPM";
+            if (block is VoxelEngine.Maritime.GridPropeller prop)
+                return prop.CurrentRPM > 1f ? $"{prop.CurrentRPM:0} RPM" : "Stopped";
+            if (block is VoxelEngine.Maritime.GridElectricalPropeller ep)
+                return ep.CurrentRPM > 1f ? $"{ep.CurrentRPM:0} RPM" : "Stopped";
+            if (block is VoxelEngine.Maritime.GridTurbocharger tc)
+                return tc.IsConnected ? $"{tc.BoostPressure:0.#} bar" : "Disconnected";
+            if (block is VoxelEngine.Maritime.GridBilgePump bp)
+                return bp.IsActive ? "Draining" : "Standby";
+            if (block is VoxelEngine.Maritime.GridHelm helm)
+                return helm.IsActive ? "Manned" : "Unmanned";
             if (block is GridBattery battery) return battery.mode.ToString();
             if (block is GridLiquidTank liquid) return liquid.mode.ToString();
             if (block is GridGasTank gas) return gas.mode.ToString();
@@ -796,6 +812,18 @@ namespace VoxelEngine.GridSystem.UI
 
         private static string CategoryName(GridBlock block)
         {
+            if (block is VoxelEngine.Maritime.GridMaritimeEngine) return "Maritime Engines";
+            if (block is VoxelEngine.Maritime.GridMaritimeGenerator) return "Maritime Generators";
+            if (block is VoxelEngine.Maritime.GridGearbox) return "Gearboxes";
+            if (block is VoxelEngine.Maritime.GridPropeller) return "Propellers";
+            if (block is VoxelEngine.Maritime.GridElectricalPropeller) return "Electric Propellers";
+            if (block is VoxelEngine.Maritime.GridTurbocharger) return "Turbochargers";
+            if (block is VoxelEngine.Maritime.GridWaterwheel) return "Waterwheels";
+            if (block is VoxelEngine.Maritime.GridDriveShaft) return "Drive Shafts";
+            if (block is VoxelEngine.Maritime.GridExhaustPipe) return "Exhaust Pipes";
+            if (block is VoxelEngine.Maritime.GridBilgePump) return "Bilge Pumps";
+            if (block is VoxelEngine.Maritime.GridHelm) return "Helms";
+            if (block is VoxelEngine.Maritime.GridHullBlock) return "Hull Blocks";
             if (block is GridBattery) return "Batteries";
             if (block is GridCargoContainer) return "Cargo Containers";
             if (block is GridDrill) return "Mining Drills";

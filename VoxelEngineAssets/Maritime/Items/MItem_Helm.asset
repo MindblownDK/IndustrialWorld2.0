@@ -14,7 +14,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.GridSystem.GridBlockItem
   itemId: mitem_helm
   displayName: Helm
-  description: 
+  description: Ship's wheel / helm. Walk up and press E to take control. W = throttle
+    up, S = throttle down, A/D = steer left/right. Drives the ship's MaritimePropulsionSystem
+    (engines + rudder). Press E again to release.
   icon: {fileID: 0}
   iconTint: {r: 0.45, g: 0.3, b: 0.15, a: 1}
   maxStack: 20
@@ -22,6 +24,6 @@ MonoBehaviour:
   category: Maritime
   viewmodelPrefab: {fileID: 0}
   gridSize: 1
-  blockPrefab: {fileID: 1978729703975958952, guid: 09a9658623104804b9e96e31fcf8f641, type: 3}
+  blockPrefab: {fileID: 7780354547174770365, guid: 09a9658623104804b9e96e31fcf8f641, type: 3}
   blockMass: 2500
   blockHP: 300

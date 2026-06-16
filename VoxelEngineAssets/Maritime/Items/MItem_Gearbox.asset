@@ -14,7 +14,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.GridSystem.GridBlockItem
   itemId: mitem_gearbox
   displayName: Gearbox
-  description: 
+  description: Industrial gearbox. Trades torque for RPM in all directions. 6 selectable
+    gear ratios (0.5x to 4x). Higher ratio = faster spin but less torque. Speed is
+    hard-clamped to prevent runaway gearing. Place between an engine and a propeller/generator.
   icon: {fileID: 0}
   iconTint: {r: 0.55, g: 0.5, b: 0.4, a: 1}
   maxStack: 20
@@ -22,6 +24,6 @@ MonoBehaviour:
   category: Maritime
   viewmodelPrefab: {fileID: 0}
   gridSize: 1
-  blockPrefab: {fileID: 7779745744308213293, guid: 8a290682a978b7e4587fcd79e94229e3, type: 3}
+  blockPrefab: {fileID: 8334236884836585985, guid: 8a290682a978b7e4587fcd79e94229e3, type: 3}
   blockMass: 3200
   blockHP: 500

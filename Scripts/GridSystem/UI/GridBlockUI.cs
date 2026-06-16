@@ -19,6 +19,10 @@ namespace VoxelEngine.GridSystem.UI
     {
         public static VisualElement BuildPanel(GridBlock block, MachineUIs.SlotBuilder slot)
         {
+            // Maritime blocks have their own UI system.
+            var maritimePanel = VoxelEngine.Maritime.MaritimeBlockUI.BuildPanel(block);
+            if (maritimePanel != null) return maritimePanel;
+
             switch (block)
             {
                 case GridLiquidTank lt:     return LiquidTankPanel(lt);

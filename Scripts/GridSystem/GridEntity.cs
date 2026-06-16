@@ -162,6 +162,11 @@ namespace VoxelEngine.GridSystem
             _rb.angularDamping = 1.5f;
             _rb.interpolation = RigidbodyInterpolation.Interpolate;
             _rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+
+            // Auto-attach the maritime propulsion system so EVERY grid gets buoyancy
+            // + water interaction for free (harmless for ships in space — zero submergence = zero force).
+            if (GetComponent<VoxelEngine.Maritime.MaritimePropulsionSystem>() == null)
+                gameObject.AddComponent<VoxelEngine.Maritime.MaritimePropulsionSystem>();
         }
 
         private void FixedUpdate()

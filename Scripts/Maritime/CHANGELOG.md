@@ -215,3 +215,75 @@ registration) are backfilled.
 
 ### Changed
 - `GameVersion.cs` — `2.18.4 to 2.18.5`.
+
+---
+
+## [2.18.6] — Critical Bug Fixes + Exhaust Gas System + Prefab Visuals (Part 6)
+
+**Type:** PATCH + MINOR features — bug fixes + new exhaust gas mechanic.
+
+### Fixed (critical)
+1. **Nothing floats** — `MaritimePropulsionSystem` is now AUTO-ATTACHED to every `GridEntity` in `Awake()`. Buoyancy works for all ships out of the box.
+2. **Missing scripts on prefabs** — `GetOrCreatePrefab` now calls `StripMissingScripts()` before saving. Uses `GameObjectUtility.RemoveMonoBehavioursWithMissingScript()` to clean up stale/broken script references from previous runs. This is why ALL maritime prefabs failed to save.
+3. **Bad prefab visuals** — maritime blocks now use proper `GridBlockMeshBuilder` styles via `GridStyleFor()` (engines→HydrogenEngine/Reactor, propellers→Thruster, exhaust→GasPipe, helm→Cockpit, hulls→Armor, etc.) instead of `Style.Generic` for everything.
+
+### Added — Exhaust Gas System
+- Engines now accumulate **exhaust gas** while running (0..capacity).
+- If exhaust gas fills to 100%, the engine **stops completely** (choked).
+- Above 80% fill, the engine loses up to 70% power from back-pressure.
+- Exhaust gas vents through adjacent **Exhaust Pipe** blocks at a fixed rate.
+- Exhaust gas adds to the engine's `ContentMass` (compressed gas is heavy).
+
+### Added — Exhaust Smoke VFX
+- `GridExhaustPipe` now emits **smoke particles** when adjacent engines are venting.
+- Giant Diesel → heavy black smoke; Small Engine → light grey sputter.
+- Particles rise, expand, and fade realistically.
+
+### Added — Item Descriptions
+All 18 maritime items now have detailed descriptions including fuel types, dimensions, and usage tips.
+
+### Added — Data fields for Part 7 UIs
+- Engine: `CurrentUsage`, `CurrentTorque`, `Stress01`, `IsOverstressed`, `IsChoked`, `ExhaustFill01`
+- Generator: `BufferCharge`, `BufferFill01`, `bufferCapacityWh` (internal battery buffer)
+- Gearbox: `InputRPM`, `OutputRPM`, `Stress01`, `IsOverstressed`
+- Turbocharger: `BoostPressure` (bar), `TurboRPM`
+
+### Changed
+- `GameVersion.cs` — 2.18.5 to 2.18.6
+
+---
+
+## [2.18.7] — All Maritime Block UIs (Part 7)
+
+**Type:** MINOR — new UI system, save-compatible.
+
+### Added — MaritimeBlockUI.cs (12 industrial-themed panels)
+All panels use the shared `UITheme` design system (dark-steel OS aesthetic
+with amber/cyan accents). Shown both on right-click AND in the ship terminal.
+
+| Block | Panel shows |
+|-------|-------------|
+| **Engine** (Small/Medium/Giant) | Liquid: fuel tank + exhaust gas tank. Solid: burn-rate bar. Usage L/s, torque, speed RPM, stress bar, OVERSTRESSED status. Exhaust gas choke warning. |
+| **Generator** | Power output, rated max, shaft RPM, production bar. Internal battery buffer gauge (Wh). |
+| **Gearbox** | Gear ratio, input/output speed + torque, stress bar, OVERSTRESSED. 6 clickable gear selectors (0.5x-4x). |
+| **Bilge Pump** | Drain rate, radius, power, draining/standby status. |
+| **Propeller** | Speed RPM, submergence %, thrust N, size. Submergence bar. |
+| **Electric Propeller** | Speed RPM, thrust N, power usage W, rated max. |
+| **Turbocharger** | Boost pressure (bar), turbo rotations (RPM), boost multiplier. Pressure bar. Connected/disconnected status. |
+| **Waterwheel** | Speed RPM, submergence, wheel size. Dual-mode description. |
+| **Drive Shaft** | Speed RPM, max safe RPM. |
+| **Exhaust Pipe** | Vent rate, smoke status (venting/idle). |
+| **Helm** | Throttle %, steer value, throttle bar. Manned/unmanned status. |
+| **Hull Block** | Buoyancy %, waterproof, mass, integrity. Waterlogging bar (if applicable). |
+
+### Changed
+- `GridBlockUI.cs` — routes maritime blocks to `MaritimeBlockUI.BuildPanel()`.
+- `GridMasterTerminal.cs` — maritime blocks categorized + live quick-status in terminal list.
+- `GameVersion.cs` — 2.18.6 to 2.18.7.
+
+### Engine UI specifics (per Thomas's request)
+- **Small Engine**: no tank — shows a solid-fuel burn-rate bar instead, with remaining seconds.
+- **Medium/Giant Engine**: fuel tank gauge (shows fuel name + L), exhaust gas tank gauge.
+- **Exhaust gas full** → engine stops. Warning pill shows "EXHAUST BACKING UP".
+- **No exhaust pipe** → engine choked. Warning pill shows "NO EXHAUST PIPE — ENGINE CHOKED".
+- **Stress > 95%** → OVERSTRESSED status pill.

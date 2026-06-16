@@ -897,6 +897,20 @@ namespace VoxelEngine.EditorTools
             if (n.Contains("itempipe"))   return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.ItemPipe;
             if (n.Contains("gaspipe"))    return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.GasPipe;
             if (n.Contains("liquidpipe")) return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.LiquidPipe;
+            // ── Maritime propulsion styles ───────────────────────────────
+            if (n.Contains("engine_giant") || n.Contains("giantdiesel")) return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Reactor;
+            if (n.Contains("engine_medium")) return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.HydrogenEngine;
+            if (n.Contains("engine_small")) return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.HydrogenEngine;
+            if (n.Contains("turbocharger")) return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Gyroscope;
+            if (n.Contains("gearbox")) return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Refinery;
+            if (n.Contains("maritimegenerator")) return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Reactor;
+            if (n.Contains("epropeller") || n.Contains("propeller")) return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Thruster;
+            if (n.Contains("exhaust")) return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.GasPipe;
+            if (n.Contains("driveshaft")) return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.ItemPipe;
+            if (n.Contains("waterwheel")) return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Refinery;
+            if (n.Contains("bilgepump")) return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.ChemicalPlant;
+            if (n.Contains("helm")) return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Cockpit;
+            if (n.Contains("hull_")) return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Armor;
             return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Generic;
         }
 
@@ -4620,6 +4634,7 @@ root =>
             var TIon  = VoxelEngine.GridSystem.ThrusterType.Ion;
             var THyd  = VoxelEngine.GridSystem.ThrusterType.Hydrogen;
             var SzS = VoxelEngine.GridSystem.GridSize.Small;
+
             var SzL = VoxelEngine.GridSystem.GridSize.Large;
 
             // Higher thrust, lower power draw for better flight feel.
@@ -4980,7 +4995,7 @@ root =>
             {
                 string path = $"{PREFABS}/{name}.prefab";
                 var size  = name.Contains("Small") ? VoxelEngine.GridSystem.GridSize.Small : VoxelEngine.GridSystem.GridSize.Large;
-                var style = VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Generic;
+                var style = GridStyleFor(name);
 
                 // Detect whether the prefab already has authored content so we can
                 // skip mesh rebuild + config (preserving any user art/tweaks).
@@ -5053,6 +5068,16 @@ root =>
 
             var SzL = VoxelEngine.GridSystem.GridSize.Large;
             var SzS = VoxelEngine.GridSystem.GridSize.Small;
+
+            // Set description only if empty (idempotent — preserves user edits).
+            void SetDesc(VoxelEngine.Items.ItemDefinition item, string desc)
+            {
+                if (item != null && string.IsNullOrEmpty(item.description))
+                {
+                    item.description = desc;
+                    EditorUtility.SetDirty(item);
+                }
+            }
 
             // ═══════════════════════════════════════════════════════════════
             //  HULL MATERIALS
@@ -5158,6 +5183,27 @@ root =>
                 h => { h.interactionRadius = 3f; });
             var itemHelm = MakeMItem("MItem_Helm", "Helm", new Color(0.45f,0.30f,0.15f), helmPref, SzL, 150, 300);
             AddMRecipe("Recipe_MHelm", "Helm", itemHelm, (plank, 6), (ironIngot, 2), (ironGear, 2));
+
+            // ── Item descriptions (only set if empty — preserves user edits) ──
+            SetDesc(itemUntWood, "Buoyant starter hull. Absorbs water over time while submerged, gradually increasing mass and sinking the ship lower. Research Tar-Coated Plank for waterproof voyages.");
+            SetDesc(itemTar, "100% waterproof hull. Never waterlogs. The reliable mid-game hull material for ocean voyages. Slightly more durable than untreated wood.");
+            SetDesc(itemIronHull, "Zero natural buoyancy - sinks! Extremely heavy but with insane HP (5x). Requires massive internal air-pocket chambers to displace enough water to float. Late-game armored warship hull.");
+            SetDesc(itemBalsa, "Ultra-light, maximally buoyant, but fragile (0.4x HP). Perfect for lifeboats, buoys, outrigger stabilizers, and floatation aids.");
+            SetDesc(itemWheel, "3x3x1 cast-iron waterwheel with oak paddles. DUAL-MODE: Generates torque from water current when stationary, OR produces paddle thrust when driven by a shaft on a moving ship. Place in flowing water.");
+            SetDesc(itemShaft, "Drive shaft that transmits rotational torque from an engine to a propeller, gearbox, or generator. If a shaft is disabled or destroyed, the propulsion chain downstream stops. Chain blocks together engine-first.");
+            SetDesc(itemPropS, "3-blade cast bronze propeller (1x1x1). Low thrust but highly maneuverable. Consumes low shaft torque. Place below the waterline facing the direction you want to push.");
+            SetDesc(itemPropL, "4-blade heavy steel industrial propeller (3x3x1). Extreme thrust capable of moving heavy hulls, but slow spin-up time and high torque demand. Shows visible cavitation bubbles when working hard.");
+            SetDesc(itemExhaust, "Exhaust venting pipe. EVERY engine requires at least one adjacent exhaust pipe or it chokes and produces zero torque. The pipe vents exhaust gas buildup and emits visible smoke particles while engines run. Looks like a pipe with vent holes.");
+            SetDesc(itemEngS, "Small engine (1x2x1). FUEL: Wood Logs / Planks / Coal (solid fuel from cargo). Low torque, high fuel efficiency - perfect for starter paddleboats. Exposed brass pistons, small copper boiler, sputtering smoke. REQUIRES adjacent Exhaust Pipe.");
+            SetDesc(itemEngM, "Medium engine (2x3x2). FUEL: Heavy Fuel Oil (liquid, from refinery). Inline 4-cylinder cast iron block with medium torque and steady RPM. Vibrating belts, oil stains. REQUIRES adjacent Exhaust Pipe. Pair with a Gearbox before a Generator for best efficiency.");
+            SetDesc(itemEngG, "Giant Diesel Engine (4x5x6). FUEL: Marine Gas Oil / MGO (liquid, highest grade from refinery). Colossal torque - the most powerful engine in the game. V24 modular block, massive steel manifolds, rhythmic roaring. Heavy, requires structural support. REQUIRES adjacent Exhaust Pipe. Adjacent Turbocharger boosts torque by 40%.");
+            SetDesc(itemTurbo, "Turbocharger (1x1x1). Boosts any adjacent Giant Diesel Engine torque by 40%. Polished chrome housing with a glowing red center core when under load. Place directly next to a Giant Diesel.");
+            SetDesc(itemGear, "Industrial gearbox. Trades torque for RPM in all directions. 6 selectable gear ratios (0.5x to 4x). Higher ratio = faster spin but less torque. Speed is hard-clamped to prevent runaway gearing. Place between an engine and a propeller/generator.");
+            SetDesc(itemGen, "Maritime generator (2x2x2). Converts shaft torque into electricity. More RPM = more power. Best used after a gearbox (gear up for speed before the generator). Contains a small internal battery buffer. Connect to the ship power grid.");
+            SetDesc(itemEProp, "Electrical propeller (2x2x1). Torpedo-shaped bronze pod with a sleek 3-blade propeller. Driven by electricity from the grid (not shaft torque). Medium thrust with fast spin-up. Heavy armored power conduit.");
+            SetDesc(itemBilge, "Bilge pump. Consumes electricity to drain waterlogged mass from nearby hull blocks within a 4-cell radius. Essential for surviving hull breaches and mega-storms on untreated-wood ships. Heavy, no buoyancy.");
+            SetDesc(itemHelm, "Ship's wheel / helm. Walk up and press E to take control. W = throttle up, S = throttle down, A/D = steer left/right. Drives the ship's MaritimePropulsionSystem (engines + rudder). Press E again to release.");
+
 
             // ═══════════════════════════════════════════════════════════════
             //  RESEARCH TREE — "Maritime Engineering" (4 tiers)
@@ -5312,6 +5358,9 @@ root =>
                     {
                         root = PrefabUtility.LoadPrefabContents(path);
                         loadedPrefabContents = true;
+                        // CRITICAL: strip any missing scripts that would prevent saving.
+                        // This happens when scripts were renamed/moved between runs.
+                        StripMissingScripts(root);
                     }
                     catch (System.Exception ex)
                     {
@@ -5326,6 +5375,9 @@ root =>
 
                 onUpdate?.Invoke(root);
 
+                // Strip again after update in case the lambda introduced stale refs.
+                StripMissingScripts(root);
+
                 return PrefabUtility.SaveAsPrefabAsset(root, path);
             }
             finally
@@ -5337,6 +5389,19 @@ root =>
                     else
                         Object.DestroyImmediate(root);
                 }
+            }
+        }
+
+        /// <summary>Recursively remove all missing-script MonoBehaviours from a GameObject hierarchy.</summary>
+        private static void StripMissingScripts(GameObject root)
+        {
+            if (root == null) return;
+            foreach (var go in root.GetComponentsInChildren<Transform>(true))
+            {
+                if (go == null) continue;
+                int removed = GameObjectUtility.RemoveMonoBehavioursWithMissingScript(go.gameObject);
+                if (removed > 0)
+                    Debug.Log($"[VoxelEngineSetupWindow] Removed {removed} missing script(s) from '{go.gameObject.name}'.");
             }
         }
     }

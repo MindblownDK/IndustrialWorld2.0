@@ -24,6 +24,14 @@ namespace VoxelEngine.Maritime
         [Tooltip("Max electrical output (W). Excess shaft power is clipped.")]
         public float maxWattOutput = 50000f;
 
+        [Header("Internal Battery Buffer")]
+        [Tooltip("Small internal battery that smooths output (Wh).")]
+        public float bufferCapacityWh = 2000f;
+        [Tooltip("Current battery buffer level (Wh).")]
+        public float BufferCharge { get; private set; }
+        /// <summary>0..1 buffer fill for the UI indicator.</summary>
+        public float BufferFill01 => bufferCapacityWh > 0f ? Mathf.Clamp01(BufferCharge / bufferCapacityWh) : 0f;
+
         /// <summary>Live electricity output (W) — set by ApplyResults.</summary>
         public float GeneratedWatts { get; private set; }
         /// <summary>Current shaft RPM.</summary>
@@ -34,7 +42,8 @@ namespace VoxelEngine.Maritime
             get
             {
                 if (!Enabled) return 0f;
-                return Mathf.Min(GeneratedWatts, maxWattOutput);
+                // Output comes from the buffer, which is charged by generation.
+                return Mathf.Min(BufferCharge > 0.1f ? GeneratedWatts : 0f, maxWattOutput);
             }
         }
 
@@ -65,6 +74,12 @@ namespace VoxelEngine.Maritime
         {
             GeneratedWatts = node.ElectricityOutput;
             CurrentRPM = node.CurrentRPM;
+
+            // Charge the internal buffer from generation, drain it from output.
+            float dt = Time.fixedDeltaTime;
+            float charge = GeneratedWatts * dt / 3600f; // W·s → Wh
+            float drain = Mathf.Min(GeneratedWatts, maxWattOutput) * dt / 3600f;
+            BufferCharge = Mathf.Clamp(BufferCharge + charge - drain * 0.5f, 0f, bufferCapacityWh);
         }
     }
 }
