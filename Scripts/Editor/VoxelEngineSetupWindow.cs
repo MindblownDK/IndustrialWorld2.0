@@ -4995,20 +4995,16 @@ root =>
             {
                 string path = $"{PREFABS}/{name}.prefab";
                 var size  = name.Contains("Small") ? VoxelEngine.GridSystem.GridSize.Small : VoxelEngine.GridSystem.GridSize.Large;
-                var style = GridStyleFor(name);
 
-                // Detect whether the prefab already has authored content so we can
-                // skip mesh rebuild + config (preserving any user art/tweaks).
                 bool prefabExists = AssetDatabase.LoadAssetAtPath<GameObject>(path) != null;
 
                 var prefab = GetOrCreatePrefab(path, name, (root) =>
                 {
                     EnsureFolder(PREFABS + "/Mats");
                     int matIdx = 0;
-                    VoxelEngine.GridSystem.GridBlockMeshBuilder.MaterialPersister = (mat, _) =>
+                    VoxelEngine.Maritime.MaritimeMeshBuilder.MaterialPersister = (mat, _) =>
                     {
                         string mp = $"{PREFABS}/Mats/{name}_{matIdx++}.mat";
-                        // Never overwrite an existing material — return it as-is.
                         var existing = AssetDatabase.LoadAssetAtPath<Material>(mp);
                         if (existing != null) return existing;
                         AssetDatabase.CreateAsset(mat, mp);
@@ -5016,16 +5012,33 @@ root =>
                     };
                     try
                     {
-                        // Only build mesh + run config on freshly-created prefabs.
-                        // If the prefab already exists, ONLY ensure the required
-                        // component is present (AddComponent if missing) — never
-                        // overwrite its serialized fields or mesh.
-                        bool isNew = !prefabExists
-                            || (root.transform.childCount == 0 && root.GetComponent<MeshFilter>() == null);
-
-                        if (isNew)
+                        // Determine if we need to rebuild the mesh:
+                        // 1. Prefab is brand-new (no children at all).
+                        // 2. OR the mesh version marker is stale (old mesh builder).
+                        bool needsMesh = root.transform.childCount == 0;
+                        if (!needsMesh)
                         {
-                            VoxelEngine.GridSystem.GridBlockMeshBuilder.Build(root, style, size, color);
+                            // Check for the version marker child.
+                            bool foundMarker = false;
+                            int expectedVersion = VoxelEngine.Maritime.MaritimeMeshBuilder.Version;
+                            foreach (Transform child in root.transform)
+                            {
+                                if (child != null && child.name.StartsWith("__MaritimeMesh_v"))
+                                {
+                                    foundMarker = true;
+                                    if (child.name != $"__MaritimeMesh_v{expectedVersion}")
+                                        needsMesh = true; // version mismatch → rebuild
+                                    break;
+                                }
+                            }
+                            if (!foundMarker) needsMesh = true; // no marker → old builder → rebuild
+                        }
+
+                        bool isNew = !prefabExists;
+
+                        if (needsMesh)
+                        {
+                            VoxelEngine.Maritime.MaritimeMeshBuilder.Build(root, name, size);
                         }
 
                         var box = root.GetComponent<BoxCollider>();
@@ -5033,13 +5046,16 @@ root =>
                         float cs = VoxelEngine.GridSystem.GridSizeExt.CellSize(size);
                         box.size = new Vector3(cs, cs, cs);
 
+                        // ALWAYS ensure the component exists (fixes missing-script bug
+                        // where StripMissingScripts removed a broken reference).
                         var b = root.GetComponent<T>();
                         if (b == null) b = root.AddComponent<T>();
 
-                        // Only apply config (tuning values) to newly-created blocks.
+                        // Only apply config (tuning values) to freshly-created blocks
+                        // (preserves user-tweaked values on existing prefabs).
                         if (isNew) config?.Invoke(b);
                     }
-                    finally { VoxelEngine.GridSystem.GridBlockMeshBuilder.MaterialPersister = null; }
+                    finally { VoxelEngine.Maritime.MaritimeMeshBuilder.MaterialPersister = null; }
                 });
                 return prefab;
             }

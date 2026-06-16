@@ -287,3 +287,53 @@ with amber/cyan accents). Shown both on right-click AND in the ship terminal.
 - **Exhaust gas full** → engine stops. Warning pill shows "EXHAUST BACKING UP".
 - **No exhaust pipe** → engine choked. Warning pill shows "NO EXHAUST PIPE — ENGINE CHOKED".
 - **Stress > 95%** → OVERSTRESSED status pill.
+
+---
+
+## [2.18.8] — Bespoke Maritime Prefab Meshes + Missing-Script Fix (Part 8)
+
+**Type:** PATCH — visual polish + bug fix, no save/API touch.
+
+### Fixed — Missing scripts on hull prefabs
+- **Root cause**: `StripMissingScripts` removed the broken script reference, but the
+  `isNew` guard prevented re-adding the component on existing prefabs.
+- **Fix**: The component `T` is now ALWAYS ensured (`GetComponent → AddComponent if null`)
+  regardless of whether the prefab is new. This guarantees every maritime prefab has
+  its script attached even after a strip.
+
+### Added — MaritimeMeshBuilder.cs (15 bespoke procedural models)
+Every maritime block now has a unique, recognizable mesh built from primitives:
+
+| Block | Visual |
+|-------|--------|
+| **Small Propeller** | Bronze hub + 3 angled blades + cast iron packing gland |
+| **Large Propeller** | Dark steel hub + 4 heavy blades + mounting boss |
+| **Electric Propeller** | Bronze torpedo pod housing + 3 blades |
+| **Small Engine** | Cast iron block + copper boiler + 2 brass pistons + flywheel |
+| **Medium Engine** | Inline-4 cast iron block + 4 cylinders + belt drive + oil sump |
+| **Giant Diesel** | Massive V-block + 6 angled cylinders + steel manifold + fuel pump |
+| **Turbocharger** | Chrome snail housing + glowing red core + inlet/outlet pipes |
+| **Gearbox** | Cast iron housing + large gear with 12 teeth + input/output shafts |
+| **Waterwheel** | Iron rim + 8 oak paddles + steel hub + spokes |
+| **Drive Shaft** | Chrome shaft + steel coupling flanges + universal joint |
+| **Generator** | Dark steel housing + 3 copper coil windings + brass terminals + glow strip |
+| **Exhaust Pipe** | Cast iron vertical pipe + flange + 6 vent holes + top cap |
+| **Bilge Pump** | Dark steel housing + motor with cooling fins + copper outlet + status light |
+| **Helm** | Oak ship's wheel (ring + 8 spokes + brass handles) + pedestal + compass binnacle |
+| **Hull blocks** | Untreated Wood (plank lines), Tar Plank (dark), Iron Hull (rivets), Balsa (light) |
+
+### Changed — MakeMPref
+- Uses `MaritimeMeshBuilder` instead of `GridBlockMeshBuilder` (with `GridStyleFor`).
+- **Version-marker force-rebuild**: each prefab gets a `__MaritimeMesh_vN` marker child.
+  If the marker version doesn't match `MaritimeMeshBuilder.Version`, the mesh is rebuilt.
+  This means re-running Step 13 after a mesh builder update automatically upgrades
+  all prefabs — no manual deletion needed.
+- Materials use the maritime material persister (saves as `MMat_*.mat`).
+
+### Changed
+- `GameVersion.cs` — 2.18.7 to 2.18.8.
+
+### ⚠️ Manual Unity steps
+1. Pull and recompile.
+2. **Re-run Step 13** — the version marker will detect the old meshes and rebuild ALL
+   maritime prefabs with the new bespoke models. No need to delete anything manually.
