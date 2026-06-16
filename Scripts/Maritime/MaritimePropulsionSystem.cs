@@ -293,8 +293,8 @@ namespace VoxelEngine.Maritime
             // ── Build propulsion chains via BFS over mechanical 6-neighbours ──
             var chains = BuildChains(mechNodes, mechPositions, posToMechIndex);
 
-            // ── Turbocharger adjacency: flag Giant Diesel engines that touch a turbo ──
-            ApplyTurbochargers(mechNodes, mechPositions, posToMechIndex);
+            // Note: turbocharger boost is now computed per-engine in RefreshMaritimeNode
+            // (CountTurbos scans for adjacent turbochargers each tick).
 
             // ── Final ordering: chains first (contiguous), then hull nodes ──
             int finalCount = mechNodes.Count + hullNodes.Count;

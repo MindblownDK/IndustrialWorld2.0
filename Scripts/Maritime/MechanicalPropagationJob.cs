@@ -66,7 +66,9 @@ namespace VoxelEngine.Maritime
                 if (!node.IsBroken && node.FuelAvailable01 > 0.0001f)
                 {
                     torque = node.MaxTorque * node.FuelAvailable01;
-                    if (node.IsTurboBoosted) torque *= MechanicalNode.TurboBoost; // ×1.40
+                    // Turbo boost is now applied per-engine in RefreshMaritimeNode
+                    // (via node.MaxTorque = maxTorque * TurboBoostTotal) so it stacks
+                    // correctly with multiple turbos of different sizes.
                     rpm = node.MaxRPM * node.FuelAvailable01 * RpmResponse;
                     haveSource = true;
 

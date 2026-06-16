@@ -374,7 +374,7 @@ namespace VoxelEngine.Maritime
             p.Add(GridUIHelpers.SectionTitle("Boost"));
             p.Add(T.StatRow("📊", "Boost Pressure", $"{tc.BoostPressure:0.##} bar", T.AccentGold));
             p.Add(T.StatRow("🔄", "Turbo Rotations", $"{tc.TurboRPM:0} RPM", T.AccentTeal));
-            p.Add(T.StatRow("⚡", "Boost Multiplier", $"{tc.boostMultiplier:0.00}× torque", T.AccentGreen));
+            p.Add(T.StatRow("⚡", "Boost Multiplier", $"{tc.EffectiveBoost:0.00}× torque ({tc.tier})", T.AccentGreen));
 
             // Pressure bar (0..4 bar range).
             float pressureRatio = Mathf.Clamp01(tc.BoostPressure / 4f);

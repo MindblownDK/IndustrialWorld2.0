@@ -17,11 +17,14 @@ using VoxelEngine.Items;
 
 namespace VoxelEngine.Maritime
 {
-    /// <summary>Engine size tier — drives torque, RPM, fuel type and mass.</summary>
+    /// <summary>Engine size tier — drives torque, RPM, fuel type, mass and turbo slots.</summary>
     public enum EngineTier : byte
     {
+        /// <summary>1×2×1 — burns wood/coal (solid). 1 small turbo slot.</summary>
         Small = 0,
+        /// <summary>2×3×2 — burns Heavy Fuel Oil. 2 turbo slots (small or large).</summary>
         Medium = 1,
+        /// <summary>4×5×6 — burns Marine Gas Oil. 4 turbo slots. Massive.</summary>
         Giant = 2,
     }
 
@@ -96,6 +99,19 @@ namespace VoxelEngine.Maritime
         /// <summary>True when the engine is overstressed (torque demand exceeds safe limits).</summary>
         public bool IsOverstressed => Stress01 > 0.95f;
 
+        /// <summary>Number of turbochargers connected to this engine (for UI).</summary>
+        public int ConnectedTurboCount { get; private set; }
+        /// <summary>Total turbo boost multiplier (1.0 = none, 1.4 = one small, etc.).</summary>
+        public float TurboBoostTotal { get; private set; }
+        /// <summary>Max turbo slots this engine supports.</summary>
+        public int MaxTurboSlots => tier switch
+        {
+            EngineTier.Small  => 1,
+            EngineTier.Medium => 2,
+            EngineTier.Giant  => 4,
+            _ => 0,
+        };
+
         public override float ContentMass
         {
             get
@@ -116,13 +132,13 @@ namespace VoxelEngine.Maritime
             switch (tier)
             {
                 case EngineTier.Small:
-                    blockName = "Small Engine";
+                    blockName = "Crude Engine";
                     fuelKind = MaritimeFuelKind.Solid;
                     fuelBufferCapacity = 60f;
                     fuelConsumptionRate = 1f;
                     break;
                 case EngineTier.Medium:
-                    blockName = "Medium Engine";
+                    blockName = "Heavy Fuel Oil Engine";
                     fuelKind = MaritimeFuelKind.Liquid;
                     liquidFuel = LiquidType.HeavyFuelOil;
                     fuelBufferCapacity = 80f;
@@ -130,7 +146,7 @@ namespace VoxelEngine.Maritime
                     liquidRefillRate = 8f;
                     break;
                 case EngineTier.Giant:
-                    blockName = "Giant Diesel Engine";
+                    blockName = "MGO Engine";
                     fuelKind = MaritimeFuelKind.Liquid;
                     liquidFuel = LiquidType.MarineGasOil;
                     fuelBufferCapacity = 300f;
@@ -204,6 +220,11 @@ namespace VoxelEngine.Maritime
 
             IsRunning = FuelBuffer > 0.01f && throttle > 0.01f;
             float effectiveFuel = IsRunning ? FuelFill01 * throttle * exhaustPenalty : 0f;
+
+            // Count connected turbos and apply stacked boost to the torque.
+            CountTurbos();
+            node.MaxTorque = maxTorque * TurboBoostTotal;
+
             node.FuelAvailable01 = effectiveFuel;
 
             // Stress = how hard we're pushing relative to max.
@@ -214,6 +235,33 @@ namespace VoxelEngine.Maritime
         public override void ApplyResults(in MechanicalNode node)
         {
             CurrentRPM = node.CurrentRPM;
+        }
+
+        /// <summary>Scan 6 neighbours for turbochargers; compute stacked boost.</summary>
+        private void CountTurbos()
+        {
+            ConnectedTurboCount = 0;
+            float boost = 1f;
+
+            if (Grid != null)
+            {
+                var faces = new[]
+                {
+                    new Vector3Int( 1,0,0), new(-1,0,0),
+                    new( 0,1,0), new( 0,-1,0),
+                    new( 0,0,1), new( 0,0,-1),
+                };
+                foreach (var off in faces)
+                {
+                    if (Grid.GetBlock(GridPos + off) is GridTurbocharger tc)
+                    {
+                        ConnectedTurboCount++;
+                        boost += tc.tier == TurboTier.Large ? 0.25f : 0.15f;
+                    }
+                }
+                ConnectedTurboCount = Mathf.Min(ConnectedTurboCount, MaxTurboSlots);
+            }
+            TurboBoostTotal = boost;
         }
 
         // ══════════════════════════════════════════════════════════════

@@ -337,3 +337,48 @@ Every maritime block now has a unique, recognizable mesh built from primitives:
 1. Pull and recompile.
 2. **Re-run Step 13** — the version marker will detect the old meshes and rebuild ALL
    maritime prefabs with the new bespoke models. No need to delete anything manually.
+
+---
+
+## [2.18.9] — Realistic Meshes + Animations + Turbo Tiers + Engine Renames (Part 9)
+
+**Type:** MINOR — new visual system + turbo tiers + engine rebalance.
+
+### Added — MaritimeAnimator.cs
+Lightweight per-block visual driver (the only Update() in the maritime stack).
+Drives named animation pivots created by the mesh builder:
+- **Propellers**: blades spin at CurrentRPM (SpinPivot)
+- **Turbocharger**: compressor wheel spins at TurboRPM (TurboSpin)
+- **Engines**: pistons bob up/down at engine RPM with firing-order phase offset (Piston_N)
+- **Crankshaft**: pulley spins (CrankPulley)
+- **Waterwheel**: paddles rotate (SpinPivot)
+- **Gearbox**: gear rotates at OutputRPM (GearRotor)
+- **Generator**: coil rotor spins (GenRotor)
+- **Helm**: wheel rotates with steer input (HelmWheel)
+
+### Added — Turbocharger Tiers
+- **Small Turbocharger** (1×1×1): +15% boost per unit. 8-blade chrome compressor.
+- **Large Turbocharger** (2×2×2 - MASSIVE): +25% boost per unit. 12-blade compressor, intense red glow.
+- Turbo slots per engine: Crude=1, HFO=2, MGO=4.
+- Boost stacks additively (4 large turbos on MGO = +100% torque = 2× output).
+- Engine self-computes `TurboBoostTotal` in `CountTurbos()` each tick.
+
+### Renamed engines
+| Old | New | Fuel | Max Torque | Turbo Slots |
+|-----|-----|------|-----------|-------------|
+| Small Engine | **Crude Engine** | Wood/Coal (solid) | 8,000 N·m | 1 small |
+| Medium Engine | **Heavy Fuel Oil Engine** | Heavy Fuel Oil | 40,000 N·m | 2 (S or L) |
+| Giant Diesel | **MGO Engine** | Marine Gas Oil | **500,000 N·m** (2.5× buff) | 4 (S or L) |
+
+MGO Engine is now MASSIVE: 500k N·m torque, 12 L/s consumption, expensive recipe (48 steel plate, 24 iron gear, 12 adv circuit, 32 copper wire).
+
+### Upgraded meshes (v3 — auto-rebuilds on Step 13)
+Every mesh rebuilt with more detail and named animation pivots:
+- **MGO Engine**: V12 block with 12 angled cylinders, twin exhaust manifolds, brass fuel rail, cooling fins, injector glow points.
+- **Large Turbo**: 12-blade spinning compressor inside chrome snail housing, red hot-side, oil feed line.
+- **Helm**: 8-spoke oak wheel with brass knobs, pedestal, compass binnacle.
+- All engines now have named `Piston_N` children for animation.
+
+### Changed
+- `GameVersion.cs` — 2.18.8 to 2.18.9.
+- Removed double-counting turbo boost from `MechanicalPropagationJob` (engine self-computes now).

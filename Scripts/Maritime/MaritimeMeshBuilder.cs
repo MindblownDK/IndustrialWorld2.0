@@ -1,15 +1,13 @@
 // Assets/Scripts/VoxelEngine/Maritime/MaritimeMeshBuilder.cs
 //
 //  ╔══════════════════════════════════════════════════════════════════╗
-//  ║   MARITIME MESH BUILDER — bespoke procedural models for every     ║
-//  ║   propulsion/power block. Each block looks like what it IS:        ║
-//  ║   propellers have blades, the helm is a ship's wheel, engines      ║
-//  ║   have pistons, the turbo has a snail housing, etc.                ║
+//  ║   MARITIME MESH BUILDER v3 — realistic procedural models with     ║
+//  ║   named animation pivots for MaritimeAnimator.                     ║
+//  ║                                                                    ║
+//  ║   Every spinning part is parented to a named empty GameObject      ║
+//  ║   (SpinPivot, TurboSpin, Piston_N, GearRotor, GenRotor, HelmWheel)║
+//  ║   so MaritimeAnimator can find and rotate them.                    ║
 //  ╚══════════════════════════════════════════════════════════════════╝
-//
-//  Same primitive-composition pattern as GridBlockMeshBuilder but with
-//  maritime-specific geometry. Every model fills its grid cell (footprint ==
-//  cellSize) so blocks tile seamlessly.
 
 using UnityEngine;
 using VoxelEngine.GridSystem;
@@ -18,429 +16,475 @@ namespace VoxelEngine.Maritime
 {
     public static class MaritimeMeshBuilder
     {
-        /// <summary>Mesh version — bump to force a rebuild of all maritime prefabs.</summary>
-        public const int Version = 2;
-
+        public const int Version = 3;
         private static Shader Lit => Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
-
-        /// <summary>Optional hook so editor tooling can persist generated materials as assets.</summary>
         public static System.Func<Material, string, Material> MaterialPersister;
         private static int _matCounter;
-
         private static readonly Vector3 V0 = Vector3.zero;
 
-        // ── Material presets ──────────────────────────────────────────
-        private static Material Steel    => Mat(new Color(0.50f, 0.52f, 0.57f), 0.85f, 0.55f);
-        private static Material DarkSteel=> Mat(new Color(0.28f, 0.29f, 0.33f), 0.85f, 0.45f);
-        private static Material CastIron => Mat(new Color(0.35f, 0.34f, 0.36f), 0.80f, 0.35f);
-        private static Material Brass    => Mat(new Color(0.78f, 0.60f, 0.20f), 0.70f, 0.60f);
-        private static Material Bronze   => Mat(new Color(0.72f, 0.48f, 0.18f), 0.75f, 0.50f);
-        private static Material Copper   => Mat(new Color(0.72f, 0.45f, 0.20f), 0.70f, 0.55f);
-        private static Material Chrome   => Mat(new Color(0.85f, 0.86f, 0.88f), 0.92f, 0.85f);
-        private static Material Oak      => Mat(new Color(0.45f, 0.30f, 0.15f), 0.0f, 0.65f);
-        private static Material DarkOak  => Mat(new Color(0.30f, 0.20f, 0.10f), 0.0f, 0.60f);
-        private static Material Rubber   => Mat(new Color(0.08f, 0.08f, 0.09f), 0.0f, 0.40f);
-        private static Material Glow     => Mat(new Color(0.2f, 0.7f, 1f), 0f, 0.9f, emissive: new Color(0.1f, 0.5f, 0.8f));
-        private static Material GlowRed  => Mat(new Color(0.9f, 0.2f, 0.1f), 0f, 0.9f, emissive: new Color(0.7f, 0.1f, 0.05f));
-        private static Material GlassBlue => Mat(new Color(0.4f, 0.6f, 0.85f, 0.6f), 0f, 0.9f);
+        // Material presets
+        static Material MatC(Color c, float m, float s, Color? e = null)
+        {
+            var mat = new Material(Lit) { color = c };
+            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", c);
+            if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", m);
+            if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", s);
+            if (e.HasValue && mat.HasProperty("_EmissionColor")) { mat.EnableKeyword("_EMISSION"); mat.SetColor("_EmissionColor", e.Value); }
+            if (MaterialPersister != null) mat = MaterialPersister(mat, $"MMat_{_matCounter++}");
+            return mat;
+        }
+        static Material Steel     => MatC(new Color(0.50f, 0.52f, 0.57f), 0.85f, 0.55f);
+        static Material DarkSteel => MatC(new Color(0.28f, 0.29f, 0.33f), 0.85f, 0.45f);
+        static Material CastIron  => MatC(new Color(0.35f, 0.34f, 0.36f), 0.80f, 0.35f);
+        static Material Brass     => MatC(new Color(0.80f, 0.62f, 0.20f), 0.75f, 0.65f);
+        static Material Bronze    => MatC(new Color(0.72f, 0.48f, 0.18f), 0.75f, 0.50f);
+        static Material Copper    => MatC(new Color(0.72f, 0.45f, 0.20f), 0.70f, 0.55f);
+        static Material Chrome    => MatC(new Color(0.88f, 0.89f, 0.91f), 0.94f, 0.88f);
+        static Material Oak       => MatC(new Color(0.45f, 0.30f, 0.15f), 0.0f, 0.65f);
+        static Material DarkOak   => MatC(new Color(0.30f, 0.20f, 0.10f), 0.0f, 0.60f);
+        static Material Rubber    => MatC(new Color(0.08f, 0.08f, 0.09f), 0.0f, 0.40f);
+        static Material Glow      => MatC(new Color(0.2f, 0.7f, 1f), 0f, 0.9f, e: new Color(0.1f, 0.5f, 0.8f));
+        static Material GlowRed   => MatC(new Color(0.95f, 0.25f, 0.1f), 0f, 0.9f, e: new Color(0.8f, 0.15f, 0.05f));
+        static Material GlowOrange=> MatC(new Color(0.95f, 0.55f, 0.1f), 0f, 0.9f, e: new Color(0.7f, 0.35f, 0.05f));
 
-        /// <summary>Build a maritime block mesh on the given root, identified by prefab name.</summary>
         public static void Build(GameObject root, string prefabName, GridSize size)
         {
             float cs = size.CellSize();
             string n = prefabName.ToLowerInvariant();
 
-            // Clear any existing children (force-rebuild on version bump).
             while (root.transform.childCount > 0)
                 Object.DestroyImmediate(root.transform.GetChild(0).gameObject);
 
-            // Version marker child (invisible, just for detection).
             var marker = new GameObject($"__MaritimeMesh_v{Version}");
             marker.transform.SetParent(root.transform, false);
             marker.SetActive(false);
 
-            if (n.Contains("propeller_small"))      BuildPropellerSmall(root, cs);
-            else if (n.Contains("propeller_large"))  BuildPropellerLarge(root, cs);
-            else if (n.Contains("epropeller"))       BuildEPropeller(root, cs);
-            else if (n.Contains("engine_giant"))     BuildGiantDiesel(root, cs);
-            else if (n.Contains("engine_medium"))    BuildMediumEngine(root, cs);
-            else if (n.Contains("engine_small"))     BuildSmallEngine(root, cs);
-            else if (n.Contains("turbocharger"))     BuildTurbocharger(root, cs);
-            else if (n.Contains("gearbox"))          BuildGearbox(root, cs);
-            else if (n.Contains("waterwheel"))       BuildWaterwheel(root, cs);
-            else if (n.Contains("driveshaft"))       BuildDriveShaft(root, cs);
-            else if (n.Contains("maritimegenerator"))BuildGenerator(root, cs);
-            else if (n.Contains("exhaust"))          BuildExhaustPipe(root, cs);
-            else if (n.Contains("bilgepump"))        BuildBilgePump(root, cs);
-            else if (n.Contains("helm"))             BuildHelm(root, cs);
-            else if (n.Contains("hull_balsa"))       BuildHull(root, cs, new Color(0.80f, 0.65f, 0.40f), 0f, 0.7f);
-            else if (n.Contains("hull_iron"))        BuildHull(root, cs, new Color(0.45f, 0.47f, 0.52f), 0.85f, 0.5f, rivets: true);
-            else if (n.Contains("hull_tar"))         BuildHull(root, cs, new Color(0.30f, 0.22f, 0.14f), 0f, 0.5f);
-            else if (n.Contains("hull_untreated"))   BuildHull(root, cs, new Color(0.55f, 0.40f, 0.25f), 0f, 0.65f, planks: true);
-            else                                    BuildHull(root, cs, new Color(0.5f, 0.5f, 0.5f), 0.5f, 0.4f);
+            if      (n.Contains("propeller_small"))     BuildPropeller(root, cs, 3, 0.15f, Bronze,  false);
+            else if (n.Contains("propeller_large"))      BuildPropeller(root, cs, 4, 0.42f, Steel,   true);
+            else if (n.Contains("epropeller"))           BuildEPropeller(root, cs);
+            else if (n.Contains("engine_giant"))         BuildMGOEngine(root, cs);
+            else if (n.Contains("engine_medium"))        BuildHFOEngine(root, cs);
+            else if (n.Contains("engine_small"))         BuildCrudeEngine(root, cs);
+            else if (n.Contains("turbocharger_large"))   BuildTurbo(root, cs, true);
+            else if (n.Contains("turbocharger"))         BuildTurbo(root, cs, false);
+            else if (n.Contains("gearbox"))              BuildGearbox(root, cs);
+            else if (n.Contains("waterwheel"))           BuildWaterwheel(root, cs);
+            else if (n.Contains("driveshaft"))           BuildDriveShaft(root, cs);
+            else if (n.Contains("maritimegenerator"))    BuildGenerator(root, cs);
+            else if (n.Contains("exhaust"))              BuildExhaustPipe(root, cs);
+            else if (n.Contains("bilgepump"))            BuildBilgePump(root, cs);
+            else if (n.Contains("helm"))                 BuildHelm(root, cs);
+            else if (n.Contains("hull_balsa"))           BuildHull(root, cs, new Color(0.80f, 0.65f, 0.40f), 0f, 0.7f);
+            else if (n.Contains("hull_iron"))            BuildHull(root, cs, new Color(0.45f, 0.47f, 0.52f), 0.85f, 0.5f, rivets: true);
+            else if (n.Contains("hull_tar"))             BuildHull(root, cs, new Color(0.30f, 0.22f, 0.14f), 0f, 0.5f);
+            else if (n.Contains("hull_untreated"))       BuildHull(root, cs, new Color(0.55f, 0.40f, 0.25f), 0f, 0.65f, planks: true);
+            else                                          BuildHull(root, cs, new Color(0.5f, 0.5f, 0.5f), 0.5f, 0.4f);
+
+            // Auto-attach animator if the block has animatable parts.
+            if (root.GetComponent<MaritimeAnimator>() == null && n.ContainsAny(
+                "propeller", "epropeller", "engine_", "turbocharger", "gearbox",
+                "waterwheel", "maritimegenerator", "helm"))
+            {
+                root.AddComponent<MaritimeAnimator>();
+            }
         }
 
         // ════════════════════════════════════════════════════════════════
-        //  PROPELLERS
+        //  PROPELLER — hub + angled blades inside SpinPivot
         // ════════════════════════════════════════════════════════════════
-        private static void BuildPropellerSmall(GameObject r, float cs)
+        static void BuildPropeller(GameObject r, float cs, int blades, float bladeLen, Material bladeMat, bool heavy)
         {
-            // Central hub + 3 angled bronze blades. Points +Z (forward = push direction).
-            var hub = Cyl(r, Bronze, new Vector3(0, 0, cs * 0.35f), cs * 0.15f, cs * 0.25f);
-            hub.transform.localRotation = Quaternion.Euler(90, 0, 0);
-            Sphere(r, Bronze, new Vector3(0, 0, cs * 0.42f), cs * 0.12f); // nose cone
+            var spin = new GameObject("SpinPivot");
+            spin.transform.SetParent(r.transform, false);
+            spin.transform.localPosition = new Vector3(0, 0, cs * 0.15f);
 
-            for (int i = 0; i < 3; i++)
+            var hubMat = heavy ? DarkSteel : Bronze;
+            var hub = Cyl(spin, hubMat, V0, cs * 0.14f, cs * 0.22f);
+            hub.transform.localRotation = Quaternion.Euler(90, 0, 0);
+            Sphere(spin, hubMat, new Vector3(0, 0, cs * 0.18f), cs * 0.1f);
+
+            for (int i = 0; i < blades; i++)
             {
-                float angle = i * 120f;
-                var blade = Box(r, Bronze, new Vector3(0, 0, cs * 0.2f), new Vector3(cs * 0.42f, cs * 0.08f, cs * 0.12f));
-                blade.transform.localPosition = new Vector3(0, 0, cs * 0.15f);
-                blade.transform.localRotation = Quaternion.Euler(15f, angle, 0f);
+                float angle = i * (360f / blades);
+                var blade = Box(spin, bladeMat, new Vector3(bladeLen * 0.5f, 0, 0),
+                    new Vector3(bladeLen * 2f, cs * 0.06f, cs * 0.14f));
+                blade.transform.localRotation = Quaternion.Euler(heavy ? 22f : 15f, angle, 0);
             }
-            // Packing gland (base).
-            Box(r, CastIron, new Vector3(0, 0, -cs * 0.2f), new Vector3(cs * 0.5f, cs * 0.5f, cs * 0.35f));
+
+            // Bossing / shaft housing behind the prop.
+            Box(r, CastIron, new Vector3(0, 0, -cs * 0.25f), new Vector3(cs * 0.55f, cs * 0.55f, cs * 0.4f));
+            // Strut bracket.
+            Box(r, Steel, new Vector3(0, -cs * 0.35f, -cs * 0.2f), new Vector3(cs * 0.1f, cs * 0.3f, cs * 0.15f));
         }
 
-        private static void BuildPropellerLarge(GameObject r, float cs)
+        // ════════════════════════════════════════════════════════════════
+        //  ELECTRIC PROPELLER — torpedo pod
+        // ════════════════════════════════════════════════════════════════
+        static void BuildEPropeller(GameObject r, float cs)
         {
-            // Heavy 4-blade steel propeller.
-            var hub = Cyl(r, DarkSteel, new Vector3(0, 0, cs * 0.35f), cs * 0.2f, cs * 0.3f);
-            hub.transform.localRotation = Quaternion.Euler(90, 0, 0);
-            Sphere(r, DarkSteel, new Vector3(0, 0, cs * 0.45f), cs * 0.18f);
+            var spin = new GameObject("SpinPivot");
+            spin.transform.SetParent(r.transform, false);
+            spin.transform.localPosition = new Vector3(0, 0, cs * 0.3f);
 
-            for (int i = 0; i < 4; i++)
-            {
-                float angle = i * 90f;
-                var blade = Box(r, Steel, new Vector3(0, 0, cs * 0.2f), new Vector3(cs * 0.46f, cs * 0.1f, cs * 0.16f));
-                blade.transform.localPosition = new Vector3(0, 0, cs * 0.15f);
-                blade.transform.localRotation = Quaternion.Euler(20f, angle, 0f);
-            }
-            // Heavy mounting boss.
-            Box(r, CastIron, new Vector3(0, 0, -cs * 0.25f), new Vector3(cs * 0.7f, cs * 0.7f, cs * 0.4f));
-        }
-
-        private static void BuildEPropeller(GameObject r, float cs)
-        {
-            // Torpedo pod: sleek housing + 3-blade prop.
-            var pod = Cyl(r, Bronze, V0, cs * 0.35f, cs * 0.8f);
+            // Sleek pod housing.
+            var pod = Cyl(r, Bronze, V0, cs * 0.32f, cs * 0.7f);
             pod.transform.localRotation = Quaternion.Euler(90, 0, 0);
-            // Armored power conduit.
-            Box(r, DarkSteel, new Vector3(0, 0, -cs * 0.45f), new Vector3(cs * 0.3f, cs * 0.3f, cs * 0.15f));
-            // Propeller blades at front.
+            // Armored conduit.
+            Box(r, DarkSteel, new Vector3(0, 0, -cs * 0.42f), new Vector3(cs * 0.25f, cs * 0.25f, cs * 0.15f));
+
+            var hub = Cyl(spin, Bronze, V0, cs * 0.1f, cs * 0.12f);
+            hub.transform.localRotation = Quaternion.Euler(90, 0, 0);
             for (int i = 0; i < 3; i++)
             {
-                float angle = i * 120f;
-                var blade = Box(r, Bronze, new Vector3(0, 0, cs * 0.35f), new Vector3(cs * 0.35f, cs * 0.06f, cs * 0.1f));
-                blade.transform.localRotation = Quaternion.Euler(12f, angle, 0f);
+                float a = i * 120f;
+                var blade = Box(spin, Bronze, new Vector3(cs * 0.16f, 0, 0),
+                    new Vector3(cs * 0.32f, cs * 0.05f, cs * 0.09f));
+                blade.transform.localRotation = Quaternion.Euler(12f, a, 0);
             }
-            Sphere(r, Bronze, new Vector3(0, 0, cs * 0.42f), cs * 0.1f);
         }
 
         // ════════════════════════════════════════════════════════════════
-        //  ENGINES
+        //  CRUDE ENGINE — small boiler + pistons
         // ════════════════════════════════════════════════════════════════
-        private static void BuildSmallEngine(GameObject r, float cs)
+        static void BuildCrudeEngine(GameObject r, float cs)
         {
-            // Compact block with brass pistons + copper boiler.
-            Box(r, CastIron, new Vector3(0, -cs * 0.1f, 0), new Vector3(cs * 0.85f, cs * 0.6f, cs * 0.85f));
-            // Copper boiler cylinder.
-            var boiler = Cyl(r, Copper, new Vector3(0, cs * 0.2f, 0), cs * 0.25f, cs * 0.35f);
-            // Two brass pistons.
+            Box(r, CastIron, new Vector3(0, -cs * 0.1f, 0), new Vector3(cs * 0.8f, cs * 0.55f, cs * 0.8f));
+            var boiler = Cyl(r, Copper, new Vector3(0, cs * 0.2f, -cs * 0.15f), cs * 0.2f, cs * 0.4f);
+
             for (int i = 0; i < 2; i++)
             {
-                float x = (i == 0 ? -1 : 1) * cs * 0.2f;
-                var piston = Cyl(r, Brass, new Vector3(x, cs * 0.35f, cs * 0.15f), cs * 0.08f, cs * 0.25f);
+                float x = (i == 0 ? -1 : 1) * cs * 0.18f;
+                var piston = Cyl(r, Brass, new Vector3(x, cs * 0.4f, cs * 0.18f), cs * 0.07f, cs * 0.25f);
+                piston.name = $"Piston_{i}";
             }
-            // Flywheel on side.
-            var fly = Cyl(r, Steel, new Vector3(cs * 0.45f, -cs * 0.05f, 0), cs * 0.18f, cs * 0.06f);
-            fly.transform.localRotation = Quaternion.Euler(0, 0, 90);
+
+            var crankPulley = Cyl(r, Steel, new Vector3(cs * 0.42f, -cs * 0.05f, 0), cs * 0.14f, cs * 0.05f);
+            crankPulley.transform.localRotation = Quaternion.Euler(0, 0, 90);
+            crankPulley.name = "CrankPulley";
+
+            // Small exhaust stub.
+            Cyl(r, DarkSteel, new Vector3(0, cs * 0.45f, -cs * 0.3f), cs * 0.06f, cs * 0.1f);
         }
 
-        private static void BuildMediumEngine(GameObject r, float cs)
+        // ════════════════════════════════════════════════════════════════
+        //  HEAVY FUEL OIL ENGINE — inline-4
+        // ════════════════════════════════════════════════════════════════
+        static void BuildHFOEngine(GameObject r, float cs)
         {
-            // Inline-4 cast iron block.
-            Box(r, CastIron, V0, new Vector3(cs * 0.9f, cs * 0.55f, cs * 0.9f));
-            // 4 cylinders in a row.
+            Box(r, CastIron, V0, new Vector3(cs * 0.88f, cs * 0.5f, cs * 0.88f));
+            // Oil sump.
+            Box(r, DarkSteel, new Vector3(0, -cs * 0.32f, 0), new Vector3(cs * 0.7f, cs * 0.15f, cs * 0.7f));
+
             for (int i = 0; i < 4; i++)
             {
-                float x = (i - 1.5f) * cs * 0.2f;
-                var cyl = Cyl(r, DarkSteel, new Vector3(x, cs * 0.35f, 0), cs * 0.08f, cs * 0.3f);
-                // Piston cap.
-                Cyl(r, Brass, new Vector3(x, cs * 0.5f, 0), cs * 0.07f, cs * 0.04f);
+                float z = (i - 1.5f) * cs * 0.2f;
+                Cyl(r, DarkSteel, new Vector3(0, cs * 0.35f, z), cs * 0.07f, cs * 0.3f); // cylinder
+                var piston = Cyl(r, Brass, new Vector3(0, cs * 0.48f, z), cs * 0.06f, cs * 0.08f);
+                piston.name = $"Piston_{i}";
             }
-            // Belt drive wheel.
-            var belt = Cyl(r, Rubber, new Vector3(cs * 0.48f, cs * 0.1f, 0), cs * 0.15f, cs * 0.08f);
+
+            // Belt drive.
+            var belt = Cyl(r, Rubber, new Vector3(cs * 0.46f, cs * 0.1f, 0), cs * 0.12f, cs * 0.06f);
             belt.transform.localRotation = Quaternion.Euler(0, 0, 90);
-            // Oil sump.
-            Box(r, DarkSteel, new Vector3(0, -cs * 0.35f, 0), new Vector3(cs * 0.7f, cs * 0.15f, cs * 0.7f));
+            belt.name = "CrankPulley";
+
+            // Fuel rail.
+            Box(r, Brass, new Vector3(0, cs * 0.45f, cs * 0.3f), new Vector3(cs * 0.06f, cs * 0.04f, cs * 0.4f));
+            // Exhaust manifold.
+            var mani = Cyl(r, Steel, new Vector3(0, cs * 0.5f, -cs * 0.3f), cs * 0.05f, cs * 0.5f);
+            mani.transform.localRotation = Quaternion.Euler(90, 0, 0);
         }
 
-        private static void BuildGiantDiesel(GameObject r, float cs)
+        // ════════════════════════════════════════════════════════════════
+        //  MGO ENGINE — MASSIVE V12, multi-cell scale
+        // ════════════════════════════════════════════════════════════════
+        static void BuildMGOEngine(GameObject r, float cs)
         {
-            // Massive V-configuration block with manifold pipes.
-            Box(r, DarkSteel, new Vector3(0, -cs * 0.15f, 0), new Vector3(cs * 0.95f, cs * 0.5f, cs * 0.95f)); // crankcase
+            // Scale up to fill ~2×2×2 cells so 4 turbos look proportional.
+            float s = cs * 1.0f; // visual multiplier — the block occupies one cell
+            // but we make it visually chunky with deep detail.
 
-            // Two banks of cylinders in V formation.
+            // Massive crankcase.
+            Box(r, DarkSteel, new Vector3(0, -s * 0.15f, 0), new Vector3(s * 0.96f, s * 0.5f, s * 0.96f));
+            // Bedplate / base.
+            Box(r, Steel, new Vector3(0, -s * 0.43f, 0), new Vector3(s * 0.98f, s * 0.08f, s * 0.98f));
+
+            // Two banks of 6 cylinders (V12) in V formation.
             for (int bank = 0; bank < 2; bank++)
             {
-                float tilt = bank == 0 ? 30f : -30f;
-                float xOffset = bank == 0 ? cs * 0.12f : -cs * 0.12f;
-                for (int i = 0; i < 3; i++)
+                float tilt = bank == 0 ? 35f : -35f;
+                float xOff = bank == 0 ? s * 0.1f : -s * 0.1f;
+                for (int i = 0; i < 6; i++)
                 {
-                    float z = (i - 1) * cs * 0.25f;
-                    var cyl = Cyl(r, CastIron, new Vector3(xOffset, cs * 0.25f, z), cs * 0.1f, cs * 0.35f);
+                    float z = (i - 2.5f) * s * 0.14f;
+                    var cyl = Cyl(r, CastIron, new Vector3(xOff, s * 0.25f, z), s * 0.06f, s * 0.35f);
                     cyl.transform.localRotation = Quaternion.Euler(0, 0, tilt);
-                    // Glow plug cap.
-                    var cap = Cyl(r, Brass, new Vector3(xOffset + Mathf.Sin(tilt * Mathf.Deg2Rad) * cs * 0.2f, cs * 0.45f, z), cs * 0.07f, cs * 0.05f);
+                    // Piston cap (animated).
+                    var piston = Cyl(r, Brass, new Vector3(
+                        xOff + Mathf.Sin(tilt * Mathf.Deg2Rad) * s * 0.18f,
+                        s * 0.45f, z), s * 0.05f, s * 0.06f);
+                    piston.name = $"Piston_{bank * 6 + i}";
+                    // Injector.
+                    Sphere(r, GlowOrange, new Vector3(
+                        xOff + Mathf.Sin(tilt * Mathf.Deg2Rad) * s * 0.2f,
+                        s * 0.5f, z), s * 0.025f);
                 }
             }
 
-            // Massive steel exhaust manifold.
-            var manifold = Cyl(r, Steel, new Vector3(0, cs * 0.5f, 0), cs * 0.12f, cs * 0.7f);
-            manifold.transform.localRotation = Quaternion.Euler(90, 0, 0);
+            // Massive common-rail fuel manifold (brass pipe running the length).
+            var rail = Cyl(r, Brass, new Vector3(0, s * 0.52f, 0), s * 0.04f, s * 0.8f);
+            rail.transform.localRotation = Quaternion.Euler(90, 0, 0);
 
-            // Fuel pump block.
-            Box(r, Brass, new Vector3(cs * 0.35f, cs * 0.1f, -cs * 0.3f), new Vector3(cs * 0.12f, cs * 0.2f, cs * 0.15f));
-            // Base mounting plate.
-            Box(r, Steel, new Vector3(0, -cs * 0.45f, 0), new Vector3(cs * 0.98f, cs * 0.08f, cs * 0.98f));
+            // Twin exhaust manifolds (turbo feeds).
+            for (int i = 0; i < 2; i++)
+            {
+                float x = (i == 0 ? 1 : -1) * s * 0.25f;
+                var mani = Cyl(r, Steel, new Vector3(x, s * 0.55f, 0), s * 0.06f, s * 0.7f);
+                mani.transform.localRotation = Quaternion.Euler(90, 0, 0);
+            }
+
+            // Big crankshaft pulley (animated).
+            var crank = Cyl(r, Steel, new Vector3(s * 0.48f, -s * 0.05f, s * 0.4f), s * 0.12f, s * 0.06f);
+            crank.transform.localRotation = Quaternion.Euler(0, 0, 90);
+            crank.name = "CrankPulley";
+
+            // Cooling fins on the sides.
+            for (int i = 0; i < 5; i++)
+            {
+                float z = (i - 2) * s * 0.16f;
+                Box(r, Steel, new Vector3(s * 0.47f, -s * 0.1f, z), new Vector3(s * 0.03f, s * 0.25f, s * 0.1f));
+                Box(r, Steel, new Vector3(-s * 0.47f, -s * 0.1f, z), new Vector3(s * 0.03f, s * 0.25f, s * 0.1f));
+            }
         }
 
         // ════════════════════════════════════════════════════════════════
-        //  TURBOCHARGER
+        //  TURBOCHARGER — snail housing + spinning compressor
         // ════════════════════════════════════════════════════════════════
-        private static void BuildTurbocharger(GameObject r, float cs)
+        static void BuildTurbo(GameObject r, float cs, bool large)
         {
-            // Snail-shell housing (scaled sphere) + turbine inlet + outlet.
-            var housing = Sphere(r, Chrome, new Vector3(0, 0, 0), cs * 0.35f);
-            housing.transform.localScale = new Vector3(cs * 0.7f, cs * 0.7f, cs * 0.5f);
-            // Glowing red core.
-            Sphere(r, GlowRed, V0, cs * 0.12f);
-            // Inlet pipe.
-            var inlet = Cyl(r, Chrome, new Vector3(0, cs * 0.35f, 0), cs * 0.1f, cs * 0.2f);
-            // Outlet pipe.
-            var outlet = Cyl(r, Chrome, new Vector3(cs * 0.35f, 0, 0), cs * 0.1f, cs * 0.2f);
+            float s = large ? cs * 0.9f : cs * 0.5f;
+            float housingR = large ? cs * 0.35f : cs * 0.22f;
+
+            // Snail housing (scaled sphere).
+            var housing = Sphere(r, Chrome, V0, housingR * 2f);
+            housing.transform.localScale = new Vector3(housingR * 2f, housingR * 2f, housingR * 1.2f);
+
+            // Spinning compressor wheel inside TurboSpin pivot.
+            var spinPivot = new GameObject("TurboSpin");
+            spinPivot.transform.SetParent(r.transform, false);
+            spinPivot.transform.localPosition = V0;
+
+            int blades = large ? 12 : 8;
+            for (int i = 0; i < blades; i++)
+            {
+                float a = i * (360f / blades);
+                var blade = Box(spinPivot, Chrome, new Vector3(housingR * 0.4f, 0, 0),
+                    new Vector3(housingR * 0.7f, housingR * 0.08f, housingR * 0.05f));
+                blade.transform.localRotation = Quaternion.Euler(0, 0, a + 30);
+            }
+            // Hub.
+            Cyl(spinPivot, DarkSteel, V0, housingR * 0.2f, housingR * 0.15f);
+
+            // Glowing hot side (turbine — red when under load).
+            var hot = Sphere(r, GlowRed, new Vector3(0, 0, -housingR * 0.6f), housingR * 0.5f);
+            hot.transform.localScale = new Vector3(housingR, housingR, housingR * 0.6f);
+
+            // Inlet pipe (air intake).
+            var inlet = Cyl(r, Chrome, new Vector3(0, housingR * 0.8f, 0), housingR * 0.2f, housingR * 0.3f);
+            // Outlet pipe (pressurized air to intake manifold).
+            var outlet = Cyl(r, Chrome, new Vector3(housingR * 0.9f, 0, 0), housingR * 0.15f, housingR * 0.25f);
             outlet.transform.localRotation = Quaternion.Euler(0, 0, 90);
-            // Mounting base.
-            Box(r, DarkSteel, new Vector3(0, -cs * 0.35f, 0), new Vector3(cs * 0.5f, cs * 0.15f, cs * 0.5f));
+
+            // Oil feed line.
+            Cyl(r, Copper, new Vector3(-housingR * 0.3f, housingR * 0.6f, 0), housingR * 0.04f, housingR * 0.4f);
+
+            // Mounting bracket.
+            Box(r, DarkSteel, new Vector3(0, -housingR * 0.8f, 0),
+                new Vector3(large ? cs * 0.6f : cs * 0.4f, cs * 0.1f, large ? cs * 0.6f : cs * 0.4f));
         }
 
         // ════════════════════════════════════════════════════════════════
         //  GEARBOX
         // ════════════════════════════════════════════════════════════════
-        private static void BuildGearbox(GameObject r, float cs)
+        static void BuildGearbox(GameObject r, float cs)
         {
-            // Housing.
-            Box(r, CastIron, V0, new Vector3(cs * 0.9f, cs * 0.7f, cs * 0.9f));
-            // Large gear on top.
-            var gear = Cyl(r, Steel, new Vector3(0, cs * 0.4f, 0), cs * 0.3f, cs * 0.08f);
-            // Gear teeth.
+            Box(r, CastIron, V0, new Vector3(cs * 0.88f, cs * 0.65f, cs * 0.88f));
+            var rotor = new GameObject("GearRotor");
+            rotor.transform.SetParent(r.transform, false);
+            rotor.transform.localPosition = new Vector3(0, cs * 0.38f, 0);
+
+            var gear = Cyl(rotor, Steel, V0, cs * 0.28f, cs * 0.06f);
             for (int i = 0; i < 12; i++)
             {
                 float a = i * 30f * Mathf.Deg2Rad;
-                var tooth = Box(r, Steel, new Vector3(Mathf.Cos(a) * cs * 0.3f, cs * 0.4f, Mathf.Sin(a) * cs * 0.3f), new Vector3(cs * 0.06f, cs * 0.06f, cs * 0.06f));
+                Box(rotor, Steel, new Vector3(Mathf.Cos(a) * cs * 0.28f, 0, Mathf.Sin(a) * cs * 0.28f),
+                    new Vector3(cs * 0.05f, cs * 0.06f, cs * 0.05f));
             }
-            // Input shaft (-Z).
-            var inShaft = Cyl(r, Steel, new Vector3(0, 0, -cs * 0.48f), cs * 0.08f, cs * 0.15f);
+            var inShaft = Cyl(r, Steel, new Vector3(0, 0, -cs * 0.46f), cs * 0.07f, cs * 0.12f);
             inShaft.transform.localRotation = Quaternion.Euler(90, 0, 0);
-            // Output shaft (+Z).
-            var outShaft = Cyl(r, Brass, new Vector3(0, 0, cs * 0.48f), cs * 0.08f, cs * 0.15f);
+            var outShaft = Cyl(r, Brass, new Vector3(0, 0, cs * 0.46f), cs * 0.07f, cs * 0.12f);
             outShaft.transform.localRotation = Quaternion.Euler(90, 0, 0);
         }
 
         // ════════════════════════════════════════════════════════════════
         //  WATERWHEEL
         // ════════════════════════════════════════════════════════════════
-        private static void BuildWaterwheel(GameObject r, float cs)
+        static void BuildWaterwheel(GameObject r, float cs)
         {
-            // Large wheel with paddles — oriented in the XZ plane (spins around X).
+            var spin = new GameObject("SpinPivot");
+            spin.transform.SetParent(r.transform, false);
+            spin.transform.localPosition = V0;
+
             float wheelR = cs * 0.45f;
-            // Iron rim (two flattened cylinders).
-            var rim1 = Cyl(r, CastIron, new Vector3(cs * 0.08f, 0, 0), wheelR, cs * 0.04f);
+            var rim1 = Cyl(spin, CastIron, new Vector3(cs * 0.06f, 0, 0), wheelR, cs * 0.03f);
             rim1.transform.localRotation = Quaternion.Euler(0, 0, 90);
-            var rim2 = Cyl(r, CastIron, new Vector3(-cs * 0.08f, 0, 0), wheelR, cs * 0.04f);
+            var rim2 = Cyl(spin, CastIron, new Vector3(-cs * 0.06f, 0, 0), wheelR, cs * 0.03f);
             rim2.transform.localRotation = Quaternion.Euler(0, 0, 90);
-            // Hub.
-            var hub = Cyl(r, Steel, V0, cs * 0.12f, cs * 0.2f);
-            hub.transform.localRotation = Quaternion.Euler(0, 0, 90);
-            // Oak paddles around the rim.
-            int paddleCount = 8;
+            Cyl(spin, Steel, V0, cs * 0.1f, cs * 0.16f).transform.localRotation = Quaternion.Euler(0, 0, 90);
+
+            int paddleCount = 10;
             for (int i = 0; i < paddleCount; i++)
             {
                 float angle = i * (360f / paddleCount) * Mathf.Deg2Rad;
-                float px = 0;
-                float py = Mathf.Sin(angle) * wheelR;
-                float pz = Mathf.Cos(angle) * wheelR;
-                var paddle = Box(r, Oak, new Vector3(px, py, pz), new Vector3(cs * 0.18f, cs * 0.04f, cs * 0.2f));
-                paddle.transform.localRotation = Quaternion.Euler(0, i * (360f / paddleCount), 0);
+                var paddle = Box(spin, Oak,
+                    new Vector3(0, Mathf.Sin(angle) * wheelR, Mathf.Cos(angle) * wheelR),
+                    new Vector3(cs * 0.16f, cs * 0.04f, cs * 0.2f));
+                paddle.transform.localRotation = Quaternion.Euler(i * (360f / paddleCount), 0, 0);
             }
-            // Spokes.
-            for (int i = 0; i < 4; i++)
+            for (int i = 0; i < 6; i++)
             {
-                float angle = i * 90f;
-                var spoke = Box(r, Steel, V0, new Vector3(cs * 0.16f, wheelR * 0.9f, cs * 0.03f));
-                spoke.transform.localRotation = Quaternion.Euler(0, 0, angle);
+                var spoke = Box(spin, Steel, V0, new Vector3(cs * 0.14f, wheelR * 0.9f, cs * 0.02f));
+                spoke.transform.localRotation = Quaternion.Euler(0, 0, i * 60f);
             }
         }
 
         // ════════════════════════════════════════════════════════════════
         //  DRIVE SHAFT
         // ════════════════════════════════════════════════════════════════
-        private static void BuildDriveShaft(GameObject r, float cs)
+        static void BuildDriveShaft(GameObject r, float cs)
         {
-            // Long steel shaft running along Z.
-            var shaft = Cyl(r, Chrome, V0, cs * 0.12f, cs * 0.9f);
+            var shaft = Cyl(r, Chrome, V0, cs * 0.1f, cs * 0.88f);
             shaft.transform.localRotation = Quaternion.Euler(90, 0, 0);
-            // Coupling flanges at both ends.
-            var f1 = Cyl(r, Steel, new Vector3(0, 0, -cs * 0.42f), cs * 0.2f, cs * 0.06f);
-            f1.transform.localRotation = Quaternion.Euler(90, 0, 0);
-            var f2 = Cyl(r, Steel, new Vector3(0, 0, cs * 0.42f), cs * 0.2f, cs * 0.06f);
-            f2.transform.localRotation = Quaternion.Euler(90, 0, 0);
-            // Universal joint detail.
-            Sphere(r, DarkSteel, new Vector3(0, 0, 0), cs * 0.1f);
+            Cyl(r, Steel, new Vector3(0, 0, -cs * 0.42f), cs * 0.18f, cs * 0.05f).transform.localRotation = Quaternion.Euler(90, 0, 0);
+            Cyl(r, Steel, new Vector3(0, 0, cs * 0.42f), cs * 0.18f, cs * 0.05f).transform.localRotation = Quaternion.Euler(90, 0, 0);
+            Sphere(r, DarkSteel, V0, cs * 0.09f);
         }
 
         // ════════════════════════════════════════════════════════════════
         //  GENERATOR
         // ════════════════════════════════════════════════════════════════
-        private static void BuildGenerator(GameObject r, float cs)
+        static void BuildGenerator(GameObject r, float cs)
         {
-            // Housing.
-            Box(r, DarkSteel, new Vector3(0, -cs * 0.1f, 0), new Vector3(cs * 0.9f, cs * 0.6f, cs * 0.9f));
-            // Copper coil windings visible on top.
+            Box(r, DarkSteel, new Vector3(0, -cs * 0.1f, 0), new Vector3(cs * 0.88f, cs * 0.55f, cs * 0.88f));
+            var rotor = new GameObject("GenRotor");
+            rotor.transform.SetParent(r.transform, false);
+            rotor.transform.localPosition = new Vector3(0, cs * 0.28f, 0);
+
             for (int i = 0; i < 3; i++)
             {
-                float z = (i - 1) * cs * 0.22f;
-                var coil = Cyl(r, Copper, new Vector3(0, cs * 0.3f, z), cs * 0.12f, cs * 0.25f);
+                float z = (i - 1) * cs * 0.2f;
+                Cyl(rotor, Copper, new Vector3(0, 0, z), cs * 0.1f, cs * 0.22f);
             }
-            // Terminal posts.
-            Box(r, Brass, new Vector3(cs * 0.3f, cs * 0.35f, cs * 0.3f), new Vector3(cs * 0.08f, cs * 0.15f, cs * 0.08f));
-            Box(r, Brass, new Vector3(-cs * 0.3f, cs * 0.35f, cs * 0.3f), new Vector3(cs * 0.08f, cs * 0.15f, cs * 0.08f));
-            // Input shaft.
-            var shaft = Cyl(r, Steel, new Vector3(0, 0, -cs * 0.48f), cs * 0.08f, cs * 0.12f);
+            Box(r, Brass, new Vector3(cs * 0.28f, cs * 0.35f, cs * 0.28f), new Vector3(cs * 0.07f, cs * 0.14f, cs * 0.07f));
+            Box(r, Brass, new Vector3(-cs * 0.28f, cs * 0.35f, cs * 0.28f), new Vector3(cs * 0.07f, cs * 0.14f, cs * 0.07f));
+            var shaft = Cyl(r, Steel, new Vector3(0, 0, -cs * 0.46f), cs * 0.07f, cs * 0.1f);
             shaft.transform.localRotation = Quaternion.Euler(90, 0, 0);
-            // Battery indicator strip.
-            Box(r, Glow, new Vector3(0, cs * 0.48f, -cs * 0.3f), new Vector3(cs * 0.3f, cs * 0.04f, cs * 0.04f));
+            Box(r, Glow, new Vector3(0, cs * 0.47f, -cs * 0.3f), new Vector3(cs * 0.25f, cs * 0.03f, cs * 0.03f));
         }
 
         // ════════════════════════════════════════════════════════════════
         //  EXHAUST PIPE
         // ════════════════════════════════════════════════════════════════
-        private static void BuildExhaustPipe(GameObject r, float cs)
+        static void BuildExhaustPipe(GameObject r, float cs)
         {
-            // Vertical pipe with vent holes.
-            var pipe = Cyl(r, CastIron, new Vector3(0, cs * 0.1f, 0), cs * 0.15f, cs * 0.7f);
-            // Flange at base.
-            var flange = Cyl(r, Steel, new Vector3(0, -cs * 0.3f, 0), cs * 0.25f, cs * 0.06f);
-            // Vent holes (dark cubes around the pipe).
+            Cyl(r, CastIron, new Vector3(0, cs * 0.1f, 0), cs * 0.13f, cs * 0.65f);
+            Cyl(r, Steel, new Vector3(0, -cs * 0.28f, 0), cs * 0.22f, cs * 0.05f);
             for (int i = 0; i < 6; i++)
             {
-                float angle = i * 60f * Mathf.Deg2Rad;
-                float y = cs * 0.1f + (i % 2) * cs * 0.15f;
-                var hole = Box(r, Rubber, new Vector3(Mathf.Cos(angle) * cs * 0.14f, y, Mathf.Sin(angle) * cs * 0.14f), new Vector3(cs * 0.04f, cs * 0.06f, cs * 0.04f));
+                float a = i * 60f * Mathf.Deg2Rad;
+                float y = cs * 0.1f + (i % 2) * cs * 0.12f;
+                Box(r, Rubber, new Vector3(Mathf.Cos(a) * cs * 0.12f, y, Mathf.Sin(a) * cs * 0.12f),
+                    new Vector3(cs * 0.03f, cs * 0.05f, cs * 0.03f));
             }
-            // Top cap.
-            var cap = Cyl(r, DarkSteel, new Vector3(0, cs * 0.42f, 0), cs * 0.16f, cs * 0.04f);
+            Cyl(r, DarkSteel, new Vector3(0, cs * 0.4f, 0), cs * 0.14f, cs * 0.03f);
         }
 
         // ════════════════════════════════════════════════════════════════
         //  BILGE PUMP
         // ════════════════════════════════════════════════════════════════
-        private static void BuildBilgePump(GameObject r, float cs)
+        static void BuildBilgePump(GameObject r, float cs)
         {
-            // Pump housing.
-            Box(r, DarkSteel, new Vector3(0, -cs * 0.15f, 0), new Vector3(cs * 0.85f, cs * 0.5f, cs * 0.85f));
-            // Motor on top.
-            var motor = Cyl(r, CastIron, new Vector3(0, cs * 0.25f, 0), cs * 0.18f, cs * 0.3f);
-            // Cooling fins.
+            Box(r, DarkSteel, new Vector3(0, -cs * 0.15f, 0), new Vector3(cs * 0.82f, cs * 0.45f, cs * 0.82f));
+            Cyl(r, CastIron, new Vector3(0, cs * 0.25f, 0), cs * 0.16f, cs * 0.28f);
             for (int i = 0; i < 4; i++)
             {
-                float angle = i * 90f;
-                var fin = Box(r, Steel, new Vector3(0, cs * 0.25f, 0), new Vector3(cs * 0.4f, cs * 0.04f, cs * 0.04f));
-                fin.transform.localRotation = Quaternion.Euler(0, angle, 0);
+                var fin = Box(r, Steel, new Vector3(0, cs * 0.25f, 0), new Vector3(cs * 0.38f, cs * 0.03f, cs * 0.03f));
+                fin.transform.localRotation = Quaternion.Euler(0, i * 90f, 0);
             }
-            // Outlet pipe.
-            var outlet = Cyl(r, Copper, new Vector3(cs * 0.35f, cs * 0.1f, 0), cs * 0.08f, cs * 0.2f);
+            var outlet = Cyl(r, Copper, new Vector3(cs * 0.34f, cs * 0.1f, 0), cs * 0.07f, cs * 0.18f);
             outlet.transform.localRotation = Quaternion.Euler(0, 0, 90);
-            // Status light.
-            Sphere(r, Glow, new Vector3(0, cs * 0.42f, 0), cs * 0.05f);
+            Sphere(r, Glow, new Vector3(0, cs * 0.4f, 0), cs * 0.04f);
         }
 
         // ════════════════════════════════════════════════════════════════
-        //  HELM (Ship's Wheel)
+        //  HELM — ship's wheel
         // ════════════════════════════════════════════════════════════════
-        private static void BuildHelm(GameObject r, float cs)
+        static void BuildHelm(GameObject r, float cs)
         {
-            // Ship's wheel: outer ring + spokes + handles + center hub + pedestal.
-            float wheelR = cs * 0.4f;
+            float wheelR = cs * 0.38f;
+            var wheelPivot = new GameObject("HelmWheel");
+            wheelPivot.transform.SetParent(r.transform, false);
+            wheelPivot.transform.localPosition = new Vector3(0, cs * 0.28f, 0);
+            wheelPivot.transform.localRotation = Quaternion.Euler(0, 0, 90); // wheel faces sideways
 
-            // Outer ring (flattened cylinder = torus approximation).
-            var ring = Cyl(r, DarkOak, new Vector3(0, cs * 0.3f, 0), wheelR, cs * 0.05f);
-            ring.transform.localRotation = Quaternion.Euler(0, 0, 90);
-            ring.transform.localScale = new Vector3(wheelR * 2f, cs * 0.1f, wheelR * 2f * 0.15f);
-
+            // Outer ring (using a thin cylinder as torus approximation).
+            var ring = Cyl(wheelPivot, DarkOak, V0, wheelR, cs * 0.04f);
+            ring.transform.localScale = new Vector3(wheelR * 2f, cs * 0.08f, wheelR * 2f * 0.2f);
             // Inner ring.
-            var ring2 = Cyl(r, Oak, new Vector3(0, cs * 0.3f, 0), wheelR * 0.7f, cs * 0.04f);
-            ring2.transform.localRotation = Quaternion.Euler(0, 0, 90);
-            ring2.transform.localScale = new Vector3(wheelR * 1.4f, cs * 0.08f, wheelR * 1.4f * 0.15f);
-
-            // Center hub.
-            var hub = Cyl(r, Brass, new Vector3(0, cs * 0.3f, 0), cs * 0.08f, cs * 0.12f);
-            hub.transform.localRotation = Quaternion.Euler(0, 0, 90);
-
-            // Spokes (8).
+            Cyl(wheelPivot, Oak, V0, wheelR * 0.65f, cs * 0.03f).transform.localScale =
+                new Vector3(wheelR * 1.3f, cs * 0.06f, wheelR * 1.3f * 0.2f);
+            // Hub.
+            Cyl(wheelPivot, Brass, V0, cs * 0.06f, cs * 0.1f);
+            // 8 spokes.
             for (int i = 0; i < 8; i++)
             {
-                float angle = i * 45f;
-                var spoke = Box(r, Oak, new Vector3(0, cs * 0.3f, 0), new Vector3(wheelR * 1.7f, cs * 0.03f, cs * 0.03f));
-                spoke.transform.localRotation = Quaternion.Euler(0, 0, angle);
+                var spoke = Box(wheelPivot, Oak, V0, new Vector3(wheelR * 1.7f, cs * 0.025f, cs * 0.025f));
+                spoke.transform.localRotation = Quaternion.Euler(0, 0, i * 45f);
+                // Handle knob.
+                float a = i * 45f * Mathf.Deg2Rad;
+                Sphere(wheelPivot, Brass, new Vector3(Mathf.Cos(a) * wheelR, Mathf.Sin(a) * wheelR, 0), cs * 0.035f);
             }
 
-            // Handles (small knobs on the outer ring).
-            for (int i = 0; i < 8; i++)
-            {
-                float angle = i * 45f * Mathf.Deg2Rad;
-                float hx = Mathf.Cos(angle) * wheelR;
-                float hy = cs * 0.3f + Mathf.Sin(angle) * wheelR;
-                Sphere(r, Brass, new Vector3(hx, hy, 0), cs * 0.04f);
-            }
-
-            // Pedestal / steering column.
-            var pedestal = Cyl(r, DarkOak, new Vector3(0, -cs * 0.15f, 0), cs * 0.1f, cs * 0.5f);
-            // Base plate.
-            Box(r, DarkOak, new Vector3(0, -cs * 0.42f, 0), new Vector3(cs * 0.4f, cs * 0.08f, cs * 0.4f));
+            // Pedestal.
+            Cyl(r, DarkOak, new Vector3(0, -cs * 0.15f, 0), cs * 0.08f, cs * 0.45f);
+            Box(r, DarkOak, new Vector3(0, -cs * 0.4f, 0), new Vector3(cs * 0.35f, cs * 0.08f, cs * 0.35f));
             // Compass binnacle.
-            Box(r, Brass, new Vector3(0, cs * 0.3f, cs * 0.25f), new Vector3(cs * 0.12f, cs * 0.1f, cs * 0.08f));
+            Box(r, Brass, new Vector3(0, cs * 0.28f, cs * 0.22f), new Vector3(cs * 0.1f, cs * 0.09f, cs * 0.07f));
         }
 
         // ════════════════════════════════════════════════════════════════
         //  HULL BLOCKS
         // ════════════════════════════════════════════════════════════════
-        private static void BuildHull(GameObject r, float cs, Color color, float metallic, float smooth,
+        static void BuildHull(GameObject r, float cs, Color color, float metallic, float smooth,
             bool planks = false, bool rivets = false)
         {
-            var mat = Mat(color, metallic, smooth);
+            var mat = MatC(color, metallic, smooth);
             Box(r, mat, V0, new Vector3(cs * 0.98f, cs * 0.98f, cs * 0.98f));
-
             if (planks)
             {
-                // Horizontal plank lines.
-                var dark = Mat(color * 0.7f, metallic, smooth);
+                var dark = MatC(color * 0.7f, metallic, smooth);
                 for (int i = 0; i < 4; i++)
                 {
                     float y = (i - 1.5f) * cs * 0.24f;
                     Box(r, dark, new Vector3(0, y, cs * 0.49f), new Vector3(cs * 0.98f, cs * 0.02f, cs * 0.01f));
                 }
             }
-
             if (rivets)
             {
-                // Steel rivets at corners.
-                var rivetMat = Mat(new Color(0.6f, 0.62f, 0.65f), 0.9f, 0.6f);
+                var rivetMat = MatC(new Color(0.6f, 0.62f, 0.65f), 0.9f, 0.6f);
                 float[][] corners = {
-                    new[] { cs * 0.35f, cs * 0.35f },
-                    new[] { -cs * 0.35f, cs * 0.35f },
-                    new[] { cs * 0.35f, -cs * 0.35f },
-                    new[] { -cs * 0.35f, -cs * 0.35f },
+                    new[] { cs * 0.35f, cs * 0.35f }, new[] { -cs * 0.35f, cs * 0.35f },
+                    new[] { cs * 0.35f, -cs * 0.35f }, new[] { -cs * 0.35f, -cs * 0.35f },
                 };
                 foreach (var c in corners)
                 {
@@ -451,18 +495,16 @@ namespace VoxelEngine.Maritime
         }
 
         // ════════════════════════════════════════════════════════════════
-        //  PRIMITIVE HELPERS (same pattern as GridBlockMeshBuilder)
+        //  PRIMITIVE HELPERS
         // ════════════════════════════════════════════════════════════════
-        private static GameObject Box(GameObject parent, Material m, Vector3 pos, Vector3 scale)
-            => Prim(parent, PrimitiveType.Cube, m, pos, scale);
+        static GameObject Box(GameObject p, Material m, Vector3 pos, Vector3 scale)
+            => Prim(p, PrimitiveType.Cube, m, pos, scale);
+        static GameObject Sphere(GameObject p, Material m, Vector3 pos, float d)
+            => Prim(p, PrimitiveType.Sphere, m, pos, new Vector3(d, d, d));
+        static GameObject Cyl(GameObject p, Material m, Vector3 pos, float radius, float height)
+            => Prim(p, PrimitiveType.Cylinder, m, pos, new Vector3(radius * 2f, height * 0.5f, radius * 2f));
 
-        private static GameObject Sphere(GameObject parent, Material m, Vector3 pos, float d)
-            => Prim(parent, PrimitiveType.Sphere, m, pos, new Vector3(d, d, d));
-
-        private static GameObject Cyl(GameObject parent, Material m, Vector3 pos, float radius, float height)
-            => Prim(parent, PrimitiveType.Cylinder, m, pos, new Vector3(radius * 2f, height * 0.5f, radius * 2f));
-
-        private static GameObject Prim(GameObject parent, PrimitiveType type, Material m, Vector3 pos, Vector3 scale)
+        static GameObject Prim(GameObject parent, PrimitiveType type, Material m, Vector3 pos, Vector3 scale)
         {
             var go = GameObject.CreatePrimitive(type);
             go.transform.SetParent(parent.transform, false);
@@ -473,21 +515,15 @@ namespace VoxelEngine.Maritime
             go.GetComponent<Renderer>().sharedMaterial = m;
             return go;
         }
+    }
 
-        private static Material Mat(Color c, float metallic, float smooth, Color? emissive = null)
+    /// <summary>String extension for ContainsAny.</summary>
+    internal static class StringExt
+    {
+        public static bool ContainsAny(this string s, params string[] needles)
         {
-            var m = new Material(Lit) { color = c };
-            if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", c);
-            if (m.HasProperty("_Metallic")) m.SetFloat("_Metallic", metallic);
-            if (m.HasProperty("_Smoothness")) m.SetFloat("_Smoothness", smooth);
-            if (emissive.HasValue && m.HasProperty("_EmissionColor"))
-            {
-                m.EnableKeyword("_EMISSION");
-                m.SetColor("_EmissionColor", emissive.Value);
-            }
-            if (MaterialPersister != null)
-                m = MaterialPersister(m, $"MMat_{_matCounter++}");
-            return m;
+            foreach (var n in needles) if (s.Contains(n)) return true;
+            return false;
         }
     }
 }

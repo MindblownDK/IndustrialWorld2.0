@@ -5146,29 +5146,35 @@ root =>
             var itemExhaust = MakeMItem("MItem_ExhaustPipe", "Exhaust Pipe", new Color(0.30f,0.28f,0.25f), exhaustPref, SzL, 40, 200);
             AddMRecipe("Recipe_MExhaustPipe", "Exhaust Pipe", itemExhaust, (ironPlate, 2));
 
-            // Small Engine (solid fuel)
+            // Crude Engine (solid fuel)
             var engSPref = MakeMPref<VoxelEngine.Maritime.GridMaritimeEngine>("Engine_Small_Large", new Color(0.50f,0.35f,0.18f), Vector3.one,
                 e => { e.tier = VoxelEngine.Maritime.EngineTier.Small; e.maxTorque = 8000f; e.maxRPM = 1500f; e.fuelKind = VoxelEngine.Maritime.MaritimeFuelKind.Solid; e.fuelBufferCapacity = 60f; e.fuelConsumptionRate = 1f; });
-            var itemEngS = MakeMItem("MItem_EngineSmall", "Small Engine", new Color(0.50f,0.35f,0.18f), engSPref, SzL, 200, 500);
-            AddMRecipe("Recipe_MEngineSmall", "Small Engine", itemEngS, (ironIngot, 6), (ironGear, 4), (copperWire, 4));
+            var itemEngS = MakeMItem("MItem_EngineSmall", "Crude Engine", new Color(0.50f,0.35f,0.18f), engSPref, SzL, 200, 500);
+            AddMRecipe("Recipe_MEngineSmall", "Crude Engine", itemEngS, (ironIngot, 6), (ironGear, 4), (copperWire, 4));
 
-            // Medium Engine (Heavy Fuel Oil)
+            // Heavy Fuel Oil Engine
             var engMPref = MakeMPref<VoxelEngine.Maritime.GridMaritimeEngine>("Engine_Medium_Large", new Color(0.40f,0.38f,0.35f), Vector3.one,
                 e => { e.tier = VoxelEngine.Maritime.EngineTier.Medium; e.maxTorque = 40000f; e.maxRPM = 1800f; e.fuelKind = VoxelEngine.Maritime.MaritimeFuelKind.Liquid; e.liquidFuel = VoxelEngine.Items.LiquidType.HeavyFuelOil; e.fuelBufferCapacity = 80f; e.fuelConsumptionRate = 2f; e.liquidRefillRate = 8f; });
-            var itemEngM = MakeMItem("MItem_EngineMedium", "Medium Engine", new Color(0.40f,0.38f,0.35f), engMPref, SzL, 700, 700);
-            AddMRecipe("Recipe_MEngineMedium", "Medium Engine", itemEngM, (ironPlate, 8), (steelPlate, 4), (ironGear, 6), (circuit, 2));
+            var itemEngM = MakeMItem("MItem_EngineMedium", "Heavy Fuel Oil Engine", new Color(0.40f,0.38f,0.35f), engMPref, SzL, 700, 700);
+            AddMRecipe("Recipe_MEngineMedium", "Heavy Fuel Oil Engine", itemEngM, (ironPlate, 8), (steelPlate, 4), (ironGear, 6), (circuit, 2));
 
-            // Giant Diesel (Marine Gas Oil)
+            // MGO Engine — MASSIVE, expensive, colossal torque
             var engGPref = MakeMPref<VoxelEngine.Maritime.GridMaritimeEngine>("Engine_Giant_Large", new Color(0.25f,0.25f,0.28f), new Vector3(1f,1.2f,1.2f),
-                e => { e.tier = VoxelEngine.Maritime.EngineTier.Giant; e.maxTorque = 200000f; e.maxRPM = 1200f; e.fuelKind = VoxelEngine.Maritime.MaritimeFuelKind.Liquid; e.liquidFuel = VoxelEngine.Items.LiquidType.MarineGasOil; e.fuelBufferCapacity = 300f; e.fuelConsumptionRate = 6f; e.liquidRefillRate = 25f; });
-            var itemEngG = MakeMItem("MItem_EngineGiant", "Giant Diesel Engine", new Color(0.25f,0.25f,0.28f), engGPref, SzL, 2500, 1500);
-            AddMRecipe("Recipe_MEngineGiant", "Giant Diesel Engine", itemEngG, (steelPlate, 24), (ironGear, 12), (advCircuit, 6), (copperWire, 16));
+                e => { e.tier = VoxelEngine.Maritime.EngineTier.Giant; e.maxTorque = 500000f; e.maxRPM = 1200f; e.fuelKind = VoxelEngine.Maritime.MaritimeFuelKind.Liquid; e.liquidFuel = VoxelEngine.Items.LiquidType.MarineGasOil; e.fuelBufferCapacity = 500f; e.fuelConsumptionRate = 12f; e.liquidRefillRate = 40f; });
+            var itemEngG = MakeMItem("MItem_EngineGiant", "MGO Engine", new Color(0.25f,0.25f,0.28f), engGPref, SzL, 5000, 2500);
+            AddMRecipe("Recipe_MEngineGiant", "MGO Engine", itemEngG, (steelPlate, 48), (ironGear, 24), (advCircuit, 12), (copperWire, 32));
 
-            // Turbocharger
-            var turboPref = MakeMPref<VoxelEngine.Maritime.GridTurbocharger>("Turbocharger_Large", new Color(0.85f,0.82f,0.70f), Vector3.one,
-                t => { t.boostMultiplier = 1.40f; });
-            var itemTurbo = MakeMItem("MItem_Turbocharger", "Turbocharger", new Color(0.85f,0.82f,0.70f), turboPref, SzL, 150, 300);
-            AddMRecipe("Recipe_MTurbocharger", "Turbocharger", itemTurbo, (steelPlate, 4), (copperPlate, 4), (advCircuit, 2));
+            // Small Turbocharger (1×1×1)
+            var turboSmallPref = MakeMPref<VoxelEngine.Maritime.GridTurbocharger>("Turbocharger_Small", new Color(0.85f,0.82f,0.70f), Vector3.one,
+                t => { t.tier = VoxelEngine.Maritime.TurboTier.Small; t.boostPerUnit = 0.15f; });
+            var itemTurboSmall = MakeMItem("MItem_TurboSmall", "Small Turbocharger", new Color(0.85f,0.82f,0.70f), turboSmallPref, SzL, 100, 250);
+            AddMRecipe("Recipe_MTurboSmall", "Small Turbocharger", itemTurboSmall, (steelPlate, 3), (copperPlate, 3), (advCircuit, 1));
+
+            // Large Turbocharger (2×2×2) — massive, for MGO engines
+            var turboLargePref = MakeMPref<VoxelEngine.Maritime.GridTurbocharger>("Turbocharger_Large", new Color(0.85f,0.82f,0.70f), Vector3.one * 1.5f,
+                t => { t.tier = VoxelEngine.Maritime.TurboTier.Large; t.boostPerUnit = 0.25f; });
+            var itemTurboLarge = MakeMItem("MItem_TurboLarge", "Large Turbocharger", new Color(0.88f,0.85f,0.72f), turboLargePref, SzL, 500, 500);
+            AddMRecipe("Recipe_MTurboLarge", "Large Turbocharger", itemTurboLarge, (steelPlate, 8), (copperPlate, 6), (advCircuit, 4));
 
             // Gearbox
             var gearPref = MakeMPref<VoxelEngine.Maritime.GridGearbox>("Gearbox_Large", new Color(0.55f,0.50f,0.40f), Vector3.one,
@@ -5210,10 +5216,11 @@ root =>
             SetDesc(itemPropS, "3-blade cast bronze propeller (1x1x1). Low thrust but highly maneuverable. Consumes low shaft torque. Place below the waterline facing the direction you want to push.");
             SetDesc(itemPropL, "4-blade heavy steel industrial propeller (3x3x1). Extreme thrust capable of moving heavy hulls, but slow spin-up time and high torque demand. Shows visible cavitation bubbles when working hard.");
             SetDesc(itemExhaust, "Exhaust venting pipe. EVERY engine requires at least one adjacent exhaust pipe or it chokes and produces zero torque. The pipe vents exhaust gas buildup and emits visible smoke particles while engines run. Looks like a pipe with vent holes.");
-            SetDesc(itemEngS, "Small engine (1x2x1). FUEL: Wood Logs / Planks / Coal (solid fuel from cargo). Low torque, high fuel efficiency - perfect for starter paddleboats. Exposed brass pistons, small copper boiler, sputtering smoke. REQUIRES adjacent Exhaust Pipe.");
-            SetDesc(itemEngM, "Medium engine (2x3x2). FUEL: Heavy Fuel Oil (liquid, from refinery). Inline 4-cylinder cast iron block with medium torque and steady RPM. Vibrating belts, oil stains. REQUIRES adjacent Exhaust Pipe. Pair with a Gearbox before a Generator for best efficiency.");
-            SetDesc(itemEngG, "Giant Diesel Engine (4x5x6). FUEL: Marine Gas Oil / MGO (liquid, highest grade from refinery). Colossal torque - the most powerful engine in the game. V24 modular block, massive steel manifolds, rhythmic roaring. Heavy, requires structural support. REQUIRES adjacent Exhaust Pipe. Adjacent Turbocharger boosts torque by 40%.");
-            SetDesc(itemTurbo, "Turbocharger (1x1x1). Boosts any adjacent Giant Diesel Engine torque by 40%. Polished chrome housing with a glowing red center core when under load. Place directly next to a Giant Diesel.");
+            SetDesc(itemEngS, "Crude Engine (1x2x1). FUEL: Wood Logs / Planks / Coal (solid fuel from cargo). Low torque, high fuel efficiency - perfect for starter paddleboats. Exposed brass pistons, small copper boiler, sputtering smoke. REQUIRES adjacent Exhaust Pipe. Can fit 1 Small Turbocharger.");
+            SetDesc(itemEngM, "Heavy Fuel Oil Engine (2x3x2). FUEL: Heavy Fuel Oil (liquid, from refinery). Inline-4 cast iron block with medium torque and steady RPM. Vibrating belts, oil stains. REQUIRES adjacent Exhaust Pipe. Can fit 2 Small or Large Turbochargers. Pair with a Gearbox before a Generator for best efficiency.");
+            SetDesc(itemEngG, "MGO Engine (MASSIVE). FUEL: Marine Gas Oil / MGO (liquid, highest grade from refinery). Enormous torque - the most powerful engine in the game. V12 block with massive steel manifolds, twin exhaust feeds, rhythmic roaring. Very expensive to craft and run. REQUIRES adjacent Exhaust Pipe. Can fit 4 Small or Large Turbochargers for extreme boost.");
+            SetDesc(itemTurboSmall, "Small Turbocharger (1x1x1). Boosts an adjacent engine by +15% torque each. Chrome snail housing with spinning compressor + glowing red hot side. Place next to any engine. Max 1 on Crude, 2 on HFO, 4 on MGO engines.");
+            SetDesc(itemTurboLarge, "Large Turbocharger (2x2x2 - MASSIVE). Boosts an adjacent engine by +25% torque each. Huge chrome housing with 12-blade compressor + intense red glow under load. For MGO and HFO engines only. Max 2 on HFO, 4 on MGO engines.");
             SetDesc(itemGear, "Industrial gearbox. Trades torque for RPM in all directions. 6 selectable gear ratios (0.5x to 4x). Higher ratio = faster spin but less torque. Speed is hard-clamped to prevent runaway gearing. Place between an engine and a propeller/generator.");
             SetDesc(itemGen, "Maritime generator (2x2x2). Converts shaft torque into electricity. More RPM = more power. Best used after a gearbox (gear up for speed before the generator). Contains a small internal battery buffer. Connect to the ship power grid.");
             SetDesc(itemEProp, "Electrical propeller (2x2x1). Torpedo-shaped bronze pod with a sleek 3-blade propeller. Driven by electricity from the grid (not shaft torque). Medium thrust with fast spin-up. Heavy armored power conduit.");
