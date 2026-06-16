@@ -722,6 +722,11 @@ namespace VoxelEngine.Player
         // structural blocks (armor, glass, pipes…) and the cockpit are excluded.
         private static bool GridBlockHasUI(VoxelEngine.GridSystem.GridBlock b)
         {
+            // Maritime blocks — any MaritimeBlockBase, GridHullBlock, or GridBilgePump.
+            if (b is VoxelEngine.Maritime.MaritimeBlockBase) return true;
+            if (b is VoxelEngine.Maritime.GridHullBlock) return true;
+            if (b is VoxelEngine.Maritime.GridBilgePump) return true;
+
             return b is VoxelEngine.GridSystem.GridLiquidTank
                 || b is VoxelEngine.GridSystem.GridGasTank
                 || b is VoxelEngine.GridSystem.GridH2O2Generator

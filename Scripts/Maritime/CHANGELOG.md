@@ -465,3 +465,36 @@ idempotent again:
 User prefab/material/value edits are preserved across re-runs. The first run
 after this update (mesh v5) will rebuild meshes + fix scripts. After that,
 subsequent runs touch nothing.
+
+---
+
+## [2.18.12] — RequireComponent Fix + Running-State Animations + Right-Click UI
+
+**Type:** PATCH — three bug fixes.
+
+### Fixed — "Can't remove GridMaritimeEngine because MaritimeAnimator depends on it"
+- **Root cause**: `MaritimeAnimator` had `[RequireComponent(typeof(GridBlock))]`.
+  When StripMissingScripts tried to clean a broken GridMaritimeEngine reference
+  on a prefab, Unity blocked it because MaritimeAnimator "depends on" GridBlock
+  (and GridMaritimeEngine IS a GridBlock).
+- **Fix**: Removed `[RequireComponent]` entirely. MaritimeAnimator already
+  null-checks `_block` in Awake + Update.
+
+### Fixed — Animations run unconditionally
+- **Was**: Propellers spun, pistons pumped, turbos whirred even when the block
+  was off / out of fuel / no exhaust.
+- **Now**: Every animator checks the running state before animating:
+  - Engine pistons + crank: only when `IsRunning` (fuel + enabled + exhaust)
+  - Propeller/turbo/gearbox/generator/shaft/waterwheel: only when RPM > 0.5
+  - Helm: always animates (steer input is fine regardless)
+
+### Fixed — Right-click on maritime blocks doesn't open UI
+- **Root cause**: `GridBlockHasUI()` in PlayerInteractionTool didn't include
+  any maritime block types.
+- **Fix**: Added `MaritimeBlockBase`, `GridHullBlock`, and `GridBilgePump`
+  checks. Now right-clicking any maritime block opens its UI panel.
+
+### Note — On/Off toggle
+The ship terminal already supports toggling any block ON/OFF via the
+`Enabled` flag. Maritime blocks respect this in `RefreshMaritimeNode`.
+This was already working — the missing piece was the right-click UI access.

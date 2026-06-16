@@ -28,8 +28,11 @@ namespace VoxelEngine.Maritime
     /// Lightweight per-block visual driver. Attached automatically by the mesh
     /// builder to any block with animatable parts. Finds named pivot children
     /// and rotates them based on the block's live state.
+    /// 
+    /// NOTE: No [RequireComponent] — that blocks StripMissingScripts from
+    /// cleaning broken script refs on prefabs (Unity can't remove a component
+    /// that another component depends on).
     /// </summary>
-    [RequireComponent(typeof(GridBlock))]
     public class MaritimeAnimator : MonoBehaviour
     {
         // Named pivots created by MaritimeMeshBuilder. Null if not present.
@@ -128,35 +131,38 @@ namespace VoxelEngine.Maritime
             float rpm = 0f;
             if (block is GridPropeller p) rpm = p.CurrentRPM;
             else if (block is GridElectricalPropeller ep) rpm = ep.CurrentRPM;
-            SpinZ(_spinPivot, rpm, dt);
+            if (rpm > 0.5f) SpinZ(_spinPivot, rpm, dt);
         }
 
         private void AnimateWaterwheel(GridWaterwheel ww, float dt)
         {
             if (_spinPivot == null) return;
-            SpinX(_spinPivot, ww.CurrentRPM, dt);
+            if (ww.CurrentRPM > 0.5f) SpinX(_spinPivot, ww.CurrentRPM, dt);
         }
 
         private void AnimateGearbox(GridGearbox gb, float dt)
         {
             if (_gearRotor == null) return;
-            SpinY(_gearRotor, gb.OutputRPM, dt);
+            if (gb.OutputRPM > 0.5f) SpinY(_gearRotor, gb.OutputRPM, dt);
         }
 
         private void AnimateGenerator(GridMaritimeGenerator gen, float dt)
         {
             if (_generatorRotor == null) return;
-            SpinY(_generatorRotor, gen.CurrentRPM, dt);
+            if (gen.CurrentRPM > 0.5f) SpinY(_generatorRotor, gen.CurrentRPM, dt);
         }
 
         private void AnimateTurbo(GridTurbocharger tc, float dt)
         {
             if (_turboSpin == null) return;
-            SpinZ(_turboSpin, tc.TurboRPM, dt);
+            if (tc.TurboRPM > 1f) SpinZ(_turboSpin, tc.TurboRPM, dt);
         }
 
         private void AnimateEngine(GridMaritimeEngine eng, float dt)
         {
+            // Only animate when the engine is actually running (fuel + enabled + exhaust).
+            if (!eng.IsRunning) return;
+
             // Pistons bob up/down at engine RPM (firing order simulated via phase offset).
             if (_pistons != null && _pistons.Length > 0)
             {
@@ -185,8 +191,7 @@ namespace VoxelEngine.Maritime
         private void AnimateDriveShaft(GridDriveShaft ds, float dt)
         {
             if (_shaftSpin == null) return;
-            // Spin around the shaft's long axis (Z).
-            SpinZ(_shaftSpin, ds.CurrentRPM, dt);
+            if (ds.CurrentRPM > 0.5f) SpinZ(_shaftSpin, ds.CurrentRPM, dt);
         }
 
         private void AnimateHelm(GridHelm helm, float dt)
