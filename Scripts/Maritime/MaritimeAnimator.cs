@@ -40,6 +40,7 @@ namespace VoxelEngine.Maritime
         private Transform _generatorRotor;  // generator coil rotor
         private Transform _helmWheel;       // helm steering wheel
         private Transform _crankshaft;      // engine crankshaft (visible pulley)
+        private Transform _shaftSpin;       // drive shaft visual spin
 
         private GridBlock _block;
 
@@ -57,6 +58,7 @@ namespace VoxelEngine.Maritime
             _generatorRotor = FindDeep("GenRotor");
             _helmWheel = FindDeep("HelmWheel");
             _crankshaft = FindDeep("CrankPulley");
+            _shaftSpin = FindDeep("ShaftSpin");
 
             // Pistons are named Piston_0, Piston_1, etc.
             var list = new System.Collections.Generic.List<Transform>();
@@ -111,6 +113,9 @@ namespace VoxelEngine.Maritime
                     break;
                 case GridHelm helm:
                     AnimateHelm(helm, dt);
+                    break;
+                case GridDriveShaft ds:
+                    AnimateDriveShaft(ds, dt);
                     break;
             }
         }
@@ -176,6 +181,13 @@ namespace VoxelEngine.Maritime
 
         private float[] _pistonBaseY;
         private bool _pistonBaseCached;
+
+        private void AnimateDriveShaft(GridDriveShaft ds, float dt)
+        {
+            if (_shaftSpin == null) return;
+            // Spin around the shaft's long axis (Z).
+            SpinZ(_shaftSpin, ds.CurrentRPM, dt);
+        }
 
         private void AnimateHelm(GridHelm helm, float dt)
         {

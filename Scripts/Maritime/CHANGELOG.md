@@ -382,3 +382,32 @@ Every mesh rebuilt with more detail and named animation pivots:
 ### Changed
 - `GameVersion.cs` — 2.18.8 to 2.18.9.
 - Removed double-counting turbo boost from `MechanicalPropagationJob` (engine self-computes now).
+
+---
+
+## [2.18.10] — Hull Script Fix + Blade Geometry + Shaft Animation (Part 10)
+
+**Type:** PATCH — bug fixes + visual fixes, no save/API touch.
+
+### Fixed — Hull prefabs missing scripts (CRITICAL)
+- **Root cause**: Hull prefabs created during compile-error runs had broken/unloadable
+  script GUID references that `StripMissingScripts` couldn't fully resolve.
+- **Fix**: Wizard now detects hull prefabs with ANY broken component (`comp == null`)
+  and **force-deletes** them before recreating clean. Runs automatically on Step 13.
+
+### Fixed — Propeller/turbo blades clamped together
+- **Root cause**: All blades were positioned at the same offset from center and rotated
+  around their OWN local origin instead of the hub center — so they overlapped.
+- **Fix**: Each blade now gets its own **pivot GameObject at the hub center**.
+  The pivot rotates by the blade angle → the blade mesh (offset from pivot) fans out radially.
+  Applied to: Small Propeller (3 blades), Large Propeller (4 blades), Electric Propeller (3 blades),
+  Turbocharger compressor (8/12 blades).
+
+### Added — Drive shaft rotation animation
+- Drive shaft now has a `ShaftSpin` pivot with visible U-joint cross.
+- `MaritimeAnimator` spins it at CurrentRPM.
+- Drive shaft added to the animator's auto-attach list.
+
+### Changed
+- `MaritimeMeshBuilder.Version` → 4 (auto-rebuilds all prefabs).
+- `GameVersion.cs` — 2.18.9 to 2.18.10.

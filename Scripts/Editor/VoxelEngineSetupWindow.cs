@@ -5098,6 +5098,19 @@ root =>
             // ═══════════════════════════════════════════════════════════════
             //  HULL MATERIALS
             // ═══════════════════════════════════════════════════════════════
+            // Always force-delete hull prefabs and recreate clean. Hull blocks are
+            // simple (no user-editable data) and have been plagued by broken script
+            // references from the StripMissingScripts double-strip bug.
+            foreach (var hullName in new[] { "Hull_UntreatedWood", "Hull_TarPlank", "Hull_IronHull", "Hull_BalsaWood" })
+            {
+                string hp = $"{PREFABS}/{hullName}.prefab";
+                if (AssetDatabase.LoadAssetAtPath<GameObject>(hp) != null)
+                {
+                    Debug.Log($"[Maritime] Force-rebuilding hull prefab: {hullName}");
+                    AssetDatabase.DeleteAsset(hp);
+                }
+            }
+
             var untWoodPref = MakeMPref<VoxelEngine.Maritime.GridUntreatedWood>("Hull_UntreatedWood", new Color(0.55f,0.40f,0.25f), Vector3.one);
             var itemUntWood = MakeMItem("MItem_UntreatedWood", "Untreated Wood Hull", new Color(0.55f,0.40f,0.25f), untWoodPref, SzL, 80, 200);
             AddMRecipe("Recipe_MUntreatedWood", "Untreated Wood Hull", itemUntWood, (woodLog, 4));
@@ -5398,8 +5411,10 @@ root =>
 
                 onUpdate?.Invoke(root);
 
-                // Strip again after update in case the lambda introduced stale refs.
-                StripMissingScripts(root);
+                // NOTE: Do NOT strip again after update — the second strip was removing
+                // freshly-added components (AddComponent<T>) when there was any transient
+                // script-loading delay, causing hull prefabs to lose their scripts.
+                // The first strip on load is sufficient to clean stale references.
 
                 return PrefabUtility.SaveAsPrefabAsset(root, path);
             }

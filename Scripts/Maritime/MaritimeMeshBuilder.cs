@@ -16,7 +16,7 @@ namespace VoxelEngine.Maritime
 {
     public static class MaritimeMeshBuilder
     {
-        public const int Version = 3;
+        public const int Version = 4;
         private static Shader Lit => Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
         public static System.Func<Material, string, Material> MaterialPersister;
         private static int _matCounter;
@@ -83,7 +83,7 @@ namespace VoxelEngine.Maritime
             // Auto-attach animator if the block has animatable parts.
             if (root.GetComponent<MaritimeAnimator>() == null && n.ContainsAny(
                 "propeller", "epropeller", "engine_", "turbocharger", "gearbox",
-                "waterwheel", "maritimegenerator", "helm"))
+                "waterwheel", "maritimegenerator", "helm", "driveshaft"))
             {
                 root.AddComponent<MaritimeAnimator>();
             }
@@ -103,17 +103,22 @@ namespace VoxelEngine.Maritime
             hub.transform.localRotation = Quaternion.Euler(90, 0, 0);
             Sphere(spin, hubMat, new Vector3(0, 0, cs * 0.18f), cs * 0.1f);
 
+            float pitch = heavy ? 22f : 15f;
             for (int i = 0; i < blades; i++)
             {
                 float angle = i * (360f / blades);
-                var blade = Box(spin, bladeMat, new Vector3(bladeLen * 0.5f, 0, 0),
-                    new Vector3(bladeLen * 2f, cs * 0.06f, cs * 0.14f));
-                blade.transform.localRotation = Quaternion.Euler(heavy ? 22f : 15f, angle, 0);
+                // Per-blade pivot at hub center — fans blades around the hub.
+                var bladePivot = new GameObject($"Blade_{i}");
+                bladePivot.transform.SetParent(spin.transform, false);
+                bladePivot.transform.localRotation = Quaternion.Euler(0, angle, 0);
+                // Blade mesh offset from pivot so it sits at the rim.
+                var blade = Box(bladePivot, bladeMat, new Vector3(bladeLen + cs * 0.1f, 0, 0),
+                    new Vector3(bladeLen * 1.6f, cs * 0.05f, cs * 0.12f));
+                blade.transform.localRotation = Quaternion.Euler(0, 0, pitch);
             }
 
             // Bossing / shaft housing behind the prop.
             Box(r, CastIron, new Vector3(0, 0, -cs * 0.25f), new Vector3(cs * 0.55f, cs * 0.55f, cs * 0.4f));
-            // Strut bracket.
             Box(r, Steel, new Vector3(0, -cs * 0.35f, -cs * 0.2f), new Vector3(cs * 0.1f, cs * 0.3f, cs * 0.15f));
         }
 
@@ -137,9 +142,12 @@ namespace VoxelEngine.Maritime
             for (int i = 0; i < 3; i++)
             {
                 float a = i * 120f;
-                var blade = Box(spin, Bronze, new Vector3(cs * 0.16f, 0, 0),
-                    new Vector3(cs * 0.32f, cs * 0.05f, cs * 0.09f));
-                blade.transform.localRotation = Quaternion.Euler(12f, a, 0);
+                var bladePivot = new GameObject($"Blade_{i}");
+                bladePivot.transform.SetParent(spin.transform, false);
+                bladePivot.transform.localRotation = Quaternion.Euler(0, a, 0);
+                var blade = Box(bladePivot, Bronze, new Vector3(cs * 0.2f, 0, 0),
+                    new Vector3(cs * 0.3f, cs * 0.04f, cs * 0.08f));
+                blade.transform.localRotation = Quaternion.Euler(0, 0, 12f);
             }
         }
 
@@ -278,9 +286,14 @@ namespace VoxelEngine.Maritime
             for (int i = 0; i < blades; i++)
             {
                 float a = i * (360f / blades);
-                var blade = Box(spinPivot, Chrome, new Vector3(housingR * 0.4f, 0, 0),
-                    new Vector3(housingR * 0.7f, housingR * 0.08f, housingR * 0.05f));
-                blade.transform.localRotation = Quaternion.Euler(0, 0, a + 30);
+                // Per-blade pivot at center so blades fan out radially.
+                var bladePivot = new GameObject($"CompBlade_{i}");
+                bladePivot.transform.SetParent(spinPivot.transform, false);
+                bladePivot.transform.localRotation = Quaternion.Euler(0, 0, a);
+                // Curved compressor blade — thin rectangle offset from center.
+                var blade = Box(bladePivot, Chrome, new Vector3(housingR * 0.45f, 0, 0),
+                    new Vector3(housingR * 0.65f, housingR * 0.06f, housingR * 0.15f));
+                blade.transform.localRotation = Quaternion.Euler(0, 35f, 0); // curve angle
             }
             // Hub.
             Cyl(spinPivot, DarkSteel, V0, housingR * 0.2f, housingR * 0.15f);
@@ -363,11 +376,19 @@ namespace VoxelEngine.Maritime
         // ════════════════════════════════════════════════════════════════
         static void BuildDriveShaft(GameObject r, float cs)
         {
-            var shaft = Cyl(r, Chrome, V0, cs * 0.1f, cs * 0.88f);
-            shaft.transform.localRotation = Quaternion.Euler(90, 0, 0);
+            // Static flanges at both ends.
             Cyl(r, Steel, new Vector3(0, 0, -cs * 0.42f), cs * 0.18f, cs * 0.05f).transform.localRotation = Quaternion.Euler(90, 0, 0);
             Cyl(r, Steel, new Vector3(0, 0, cs * 0.42f), cs * 0.18f, cs * 0.05f).transform.localRotation = Quaternion.Euler(90, 0, 0);
-            Sphere(r, DarkSteel, V0, cs * 0.09f);
+
+            // Spinning part: shaft + universal joint inside ShaftSpin pivot.
+            var spin = new GameObject("ShaftSpin");
+            spin.transform.SetParent(r.transform, false);
+            var shaft = Cyl(spin, Chrome, V0, cs * 0.1f, cs * 0.78f);
+            shaft.transform.localRotation = Quaternion.Euler(90, 0, 0);
+            // U-joint cross (visible when spinning).
+            Box(spin, DarkSteel, V0, new Vector3(cs * 0.16f, cs * 0.03f, cs * 0.03f));
+            Box(spin, DarkSteel, V0, new Vector3(cs * 0.03f, cs * 0.03f, cs * 0.16f));
+            Sphere(spin, DarkSteel, V0, cs * 0.06f);
         }
 
         // ════════════════════════════════════════════════════════════════
