@@ -84,8 +84,41 @@ Branch: **Dev** · Semantic Versioning 2.0.0
    - Place the grid in water and add a `GridHelm` — press E near it to steer.
 
 ### Next parts (roadmap)
-- **2.18.3** — Refinery/chemical-plant recipes that produce MGO + Heavy Fuel Oil.
 - **2.18.4** — Setup-Wizard expansion + 4-tier "Maritime Engineering" research tree.
+
+---
+
+## [2.18.3] — MGO + Heavy Fuel Oil Fuel Chain (Part 4 of 5)
+
+**Type:** MINOR — new processing recipes, save-compatible.
+
+### Added — 3 new ProcessingRecipe assets
+| Recipe | Machine | Input | Output | Notes |
+|--------|---------|-------|--------|-------|
+| Proc_RefineHeavyFuelOil | Refinery | 80L Refined Oil | 55L Heavy Fuel Oil | Thick bunker fuel for Medium Engines |
+| Proc_RefineMGO | Refinery | 60L Heavy Fuel Oil | 45L Marine Gas Oil | Clean high-grade distillate for Giant Diesel |
+| Proc_SynthesiseMGO | Chemistry | 50L Refined Oil | 30L Marine Gas Oil | Catalytic-crack shortcut (skips HFO) |
+
+### The complete fuel chain
+```
+Crude Oil (1)
+  -> Refinery -> Refined Oil (2)
+       |-> Refinery -> Heavy Fuel Oil (4)   [fuels Medium Engine]
+       |    -> Refinery -> Marine Gas Oil (5)  [fuels Giant Diesel]
+       -> Chemistry -> Marine Gas Oil (5)  [shortcut / catalytic crack]
+```
+
+### Changed
+- VoxelEngineSetupWindow.cs (Step 10) - 3 new MakeProc calls; stationary Oil Refinery now gets HFO + MGO recipes; stationary Chemical Plant now gets the cracked-MGO recipe.
+- VoxelEngineSetupWindow.cs (Step 12) - grid Refinery loads HFO + MGO recipe assets; grid Chemical Plant loads the cracked-MGO recipe.
+- GameVersion.cs - 2.18.2 to 2.18.3.
+
+### Manual Unity steps (Part 4)
+1. Pull and recompile.
+2. Re-run the Setup Wizard (Tools > Voxel Engine > Setup Wizard):
+   - Click Step 10 (Industrial Content) - creates the new recipe assets + wires them into the stationary refinery and chemical plant.
+   - Click Step 12 (Grid System Content) - wires them into the ship Refinery and Chemical Plant.
+3. After re-running, a refinery on a ship can process: Crude -> Refined -> HFO -> MGO. Set the liquid tanks to the correct type (refinery input = Refined Oil/HFO, output tank = HFO/MGO).
 
 ---
 

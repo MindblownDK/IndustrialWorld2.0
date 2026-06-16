@@ -2761,11 +2761,32 @@ namespace VoxelEngine.EditorTools
                 fluidIn:  new[] { (VoxelEngine.Items.LiquidType.RefinedOil, 60f) },
                 fluidOut: new[] { (VoxelEngine.Items.LiquidType.LiquidFuel, 100f) });
 
+            // ════════════════════════════════════════════════════════════
+            //  MARITIME FUEL CHAIN — Heavy Fuel Oil + Marine Gas Oil
+            // ════════════════════════════════════════════════════════════
+            // Refinery: Refined Oil → Heavy Fuel Oil (thick bunker fuel for Medium Engines).
+            var procHeavyFuel = MakeProc("Proc_RefineHeavyFuelOil", "Distil Heavy Fuel Oil", "Refinery",
+                noItems, noItems, seconds: 14f, powerMul: 1.15f,
+                fluidIn:  new[] { (VoxelEngine.Items.LiquidType.RefinedOil,    80f) },
+                fluidOut: new[] { (VoxelEngine.Items.LiquidType.HeavyFuelOil,  55f) });
+
+            // Refinery: Heavy Fuel Oil → Marine Gas Oil (clean high-grade distillate for Giant Diesel).
+            var procMGO = MakeProc("Proc_RefineMGO", "Distil Marine Gas Oil", "Refinery",
+                noItems, noItems, seconds: 18f, powerMul: 1.3f,
+                fluidIn:  new[] { (VoxelEngine.Items.LiquidType.HeavyFuelOil,   60f) },
+                fluidOut: new[] { (VoxelEngine.Items.LiquidType.MarineGasOil,   45f) });
+
+            // Chemistry: Refined Oil → Marine Gas Oil via catalytic cracking (shortcut, no HFO step).
+            var procSynthMGO = MakeProc("Proc_SynthesiseMGO", "Cracked Marine Gas Oil", "Chemistry",
+                noItems, noItems, seconds: 20f, powerMul: 1.5f,
+                fluidIn:  new[] { (VoxelEngine.Items.LiquidType.RefinedOil,    50f) },
+                fluidOut: new[] { (VoxelEngine.Items.LiquidType.MarineGasOil,  30f) });
+
             // Attach those recipes to the OilRefinery prefab.
-            AppendOilRefineryRecipes(refineryPrefab, new List<VoxelEngine.Crafting.ProcessingRecipe> { procRefine, procPlastic });
+            AppendOilRefineryRecipes(refineryPrefab, new List<VoxelEngine.Crafting.ProcessingRecipe> { procRefine, procPlastic, procHeavyFuel, procMGO });
 
             // Attach the Chemistry recipe to the Stationary Chemical Plant prefab.
-            AppendChemicalPlantRecipes(chemPlantPrefab, new List<VoxelEngine.Crafting.ProcessingRecipe> { procLiquidFuel });
+            AppendChemicalPlantRecipes(chemPlantPrefab, new List<VoxelEngine.Crafting.ProcessingRecipe> { procLiquidFuel, procSynthMGO });
 
             // ====================================================================
             //  5) NEW CRAFTING RECIPES — registered into the global RecipeRegistry
@@ -4758,12 +4779,17 @@ root =>
             var procRefineShared  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.ProcessingRecipe>($"{procFolder}/Proc_RefineOil.asset");
             var procPlasticShared = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.ProcessingRecipe>($"{procFolder}/Proc_MakePlastic.asset");
             var procChemistry     = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.ProcessingRecipe>($"{procFolder}/Proc_MakeLiquidFuel.asset");
+            // Maritime fuel chain recipes (shared with stationary refinery / chem plant).
+            var procHeavyFuelShared = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.ProcessingRecipe>($"{procFolder}/Proc_RefineHeavyFuelOil.asset");
+            var procMGOShared       = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.ProcessingRecipe>($"{procFolder}/Proc_RefineMGO.asset");
+            var procSynthMGOShared  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.ProcessingRecipe>($"{procFolder}/Proc_SynthesiseMGO.asset");
 
             var chemPref = MakeGPref<VoxelEngine.GridSystem.GridChemicalPlant>("ChemicalPlant_Large", new Color(0.5f, 0.7f, 0.4f), new Vector3(2.5f, 2.5f, 2.5f),
                 cp =>
                 {
                     cp.knownRecipes = new System.Collections.Generic.List<VoxelEngine.Crafting.ProcessingRecipe>();
                     if (procChemistry != null) cp.knownRecipes.Add(procChemistry);
+                    if (procSynthMGOShared != null) cp.knownRecipes.Add(procSynthMGOShared);
                 });
             var itemChem = MakeGItem("GItem_ChemicalPlant", "Ship Chemical Plant", Color.white, chemPref, VoxelEngine.GridSystem.GridSize.Large, 1100, 900);
             AddGRecipe("Recipe_GChemicalPlant", "Ship Chemical Plant", itemChem, (steelPlate, 12), (circuit, 8), (copperWire, 8));
@@ -4781,6 +4807,8 @@ root =>
                         gr.knownRecipes = new System.Collections.Generic.List<VoxelEngine.Crafting.ProcessingRecipe>();
                         if (procRefineShared  != null) gr.knownRecipes.Add(procRefineShared);
                         if (procPlasticShared != null) gr.knownRecipes.Add(procPlasticShared);
+                        if (procHeavyFuelShared != null) gr.knownRecipes.Add(procHeavyFuelShared);
+                        if (procMGOShared       != null) gr.knownRecipes.Add(procMGOShared);
                     }
                     PrefabUtility.SaveAsPrefabAsset(refContents, refPath);
                 }
