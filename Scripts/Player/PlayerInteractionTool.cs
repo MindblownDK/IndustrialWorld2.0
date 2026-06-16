@@ -320,6 +320,12 @@ namespace VoxelEngine.Player
                 bool holdingGridBlock = !inventory.ActiveStack.IsEmpty &&
                                         inventory.ActiveStack.item is VoxelEngine.GridSystem.GridBlockItem;
                 var gridBlock = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
+                // Helm: right-click enters the helm (camera mode) instead of opening UI.
+                if (!holdingGridBlock && gridBlock is VoxelEngine.Maritime.GridHelm helm)
+                {
+                    helm.Enter(gameObject.GetComponent<Player.PlayerController>());
+                    return;
+                }
                 if (!holdingGridBlock && gridBlock != null && GridBlockHasUI(gridBlock))
                 {
                     UI.GameUIController.Instance?.OpenMachine(gridBlock);
@@ -722,8 +728,8 @@ namespace VoxelEngine.Player
         // structural blocks (armor, glass, pipes…) and the cockpit are excluded.
         private static bool GridBlockHasUI(VoxelEngine.GridSystem.GridBlock b)
         {
-            // Maritime blocks — any MaritimeBlockBase, GridHullBlock, or GridBilgePump.
-            if (b is VoxelEngine.Maritime.MaritimeBlockBase) return true;
+            // Maritime blocks — any MaritimeBlockBase EXCEPT Helm (Helm enters instead of UI).
+            if (b is VoxelEngine.Maritime.MaritimeBlockBase && b is not VoxelEngine.Maritime.GridHelm) return true;
             if (b is VoxelEngine.Maritime.GridHullBlock) return true;
             if (b is VoxelEngine.Maritime.GridBilgePump) return true;
 

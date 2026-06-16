@@ -498,3 +498,42 @@ subsequent runs touch nothing.
 The ship terminal already supports toggling any block ON/OFF via the
 `Enabled` flag. Maritime blocks respect this in `RefreshMaritimeNode`.
 This was already working — the missing piece was the right-click UI access.
+
+---
+
+## [2.18.13] — Buoyancy Fix + Helm Enter Mode + Engine I/O Cubes
+
+**Type:** MINOR — critical gameplay fix + new features.
+
+### Fixed — Blocks float into the air like balloons (CRITICAL)
+- **Root cause**: Large-grid block volume (15.6 m³) × water density (1025 kg/m³) × gravity
+  produced ~157,000 N buoyancy per block, but minimum block mass is only 2,500 kg
+  (~33,100 N weight). Net force = ~124,000 N upward = 5G acceleration!
+- **Fix**: Buoyancy force is now capped to `weight × (1 + buoyancyFactor × 0.5)`.
+  A fully submerged buoyant block produces at most 1.5× its weight in upward force —
+  enough to rise to the surface but not shoot into the sky.
+
+### Changed — Helm enters instead of opening UI
+- Right-clicking a Helm now calls `Enter()` — sets up a third-person camera above
+  the helm so you can see the wheel sticks + water ahead.
+- **Scroll wheel** = zoom in/out (ship-size-aware default distance).
+- W/S = throttle, A/D = steer, F or right-click = exit.
+- Helm excluded from `GridBlockHasUI()` so it enters instead of opening a panel.
+
+### Added — Engine I/O Port Cubes
+Every engine now has distinct colored cubes showing connections:
+| Port | Color | Location | Purpose |
+|------|-------|----------|---------|
+| Fuel Input | **Blue** (glowing) | -Z face | Fuel/items in |
+| Exhaust Output | **Red** (glowing) | +Y top | Exhaust gas out |
+| Shaft Output | **Gold** (glowing) | +Z face | Rotation out (spinning) |
+
+MGO Engine has dual exhaust outputs + larger ports.
+
+### Added — Propeller Input Cube
+Propellers now have a **gold** shaft input cube on the -Z face showing where
+rotation connects.
+
+### Changed
+- `MaritimeMeshBuilder.Version` → 6 (auto-rebuild).
+- `GameVersion.cs` — 2.18.12 to 2.18.13.

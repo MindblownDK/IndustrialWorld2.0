@@ -16,7 +16,7 @@ namespace VoxelEngine.Maritime
 {
     public static class MaritimeMeshBuilder
     {
-        public const int Version = 5;
+        public const int Version = 8;
         private static Shader Lit => Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
         public static System.Func<Material, string, Material> MaterialPersister;
         private static int _matCounter;
@@ -46,6 +46,10 @@ namespace VoxelEngine.Maritime
         static Material Glow      => MatC(new Color(0.2f, 0.7f, 1f), 0f, 0.9f, e: new Color(0.1f, 0.5f, 0.8f));
         static Material GlowRed   => MatC(new Color(0.95f, 0.25f, 0.1f), 0f, 0.9f, e: new Color(0.8f, 0.15f, 0.05f));
         static Material GlowOrange=> MatC(new Color(0.95f, 0.55f, 0.1f), 0f, 0.9f, e: new Color(0.7f, 0.35f, 0.05f));
+        // I/O port materials (distinct colors for connection cubes).
+        static Material PortFuel   => MatC(new Color(0.15f, 0.45f, 0.95f), 0.3f, 0.6f, e: new Color(0.05f, 0.2f, 0.5f)); // blue = fuel/item input
+        static Material PortExhaust=> MatC(new Color(0.85f, 0.15f, 0.1f), 0.3f, 0.6f, e: new Color(0.5f, 0.05f, 0.03f)); // red = exhaust output
+        static Material PortShaft  => MatC(new Color(0.9f, 0.75f, 0.2f), 0.6f, 0.5f, e: new Color(0.3f, 0.2f, 0.02f));  // gold = shaft output
 
         public static void Build(GameObject root, string prefabName, GridSize size)
         {
@@ -119,6 +123,8 @@ namespace VoxelEngine.Maritime
 
             // Bossing / shaft housing behind the prop.
             Box(r, CastIron, new Vector3(0, 0, -cs * 0.25f), new Vector3(cs * 0.55f, cs * 0.55f, cs * 0.4f));
+            // Shaft input port (gold — where rotation comes in).
+            Port(r, "Port_ShaftInput", PortShaft, new Vector3(0, 0, -cs * 0.42f), new Vector3(cs * 0.12f, cs * 0.12f, cs * 0.04f));
             Box(r, Steel, new Vector3(0, -cs * 0.35f, -cs * 0.2f), new Vector3(cs * 0.1f, cs * 0.3f, cs * 0.15f));
         }
 
@@ -170,8 +176,10 @@ namespace VoxelEngine.Maritime
             crankPulley.transform.localRotation = Quaternion.Euler(0, 0, 90);
             crankPulley.name = "CrankPulley";
 
-            // Small exhaust stub.
-            Cyl(r, DarkSteel, new Vector3(0, cs * 0.45f, -cs * 0.3f), cs * 0.06f, cs * 0.1f);
+            // ── I/O Ports (named, selectable in hierarchy) ────────────
+            Port(r, "Port_FuelInput", PortFuel, new Vector3(0, -cs * 0.1f, -cs * 0.42f), new Vector3(cs * 0.12f, cs * 0.12f, cs * 0.04f));
+            Port(r, "Port_ExhaustOutput", PortExhaust, new Vector3(0, cs * 0.52f, -cs * 0.3f), new Vector3(cs * 0.1f, cs * 0.04f, cs * 0.1f));
+            Port(r, "Port_ShaftOutput", PortShaft, new Vector3(0, 0, cs * 0.42f), new Vector3(cs * 0.12f, cs * 0.12f, cs * 0.08f), PrimitiveType.Cylinder);
         }
 
         // ════════════════════════════════════════════════════════════════
@@ -201,6 +209,11 @@ namespace VoxelEngine.Maritime
             // Exhaust manifold.
             var mani = Cyl(r, Steel, new Vector3(0, cs * 0.5f, -cs * 0.3f), cs * 0.05f, cs * 0.5f);
             mani.transform.localRotation = Quaternion.Euler(90, 0, 0);
+
+            // ── I/O Ports (named, selectable in hierarchy) ────────────
+            Port(r, "Port_FuelInput", PortFuel, new Vector3(0, -cs * 0.1f, -cs * 0.45f), new Vector3(cs * 0.12f, cs * 0.12f, cs * 0.04f));
+            Port(r, "Port_ExhaustOutput", PortExhaust, new Vector3(cs * 0.2f, cs * 0.55f, -cs * 0.2f), new Vector3(cs * 0.1f, cs * 0.04f, cs * 0.1f));
+            Port(r, "Port_ShaftOutput", PortShaft, new Vector3(0, 0, cs * 0.46f), new Vector3(cs * 0.14f, cs * 0.14f, cs * 0.08f), PrimitiveType.Cylinder);
         }
 
         // ════════════════════════════════════════════════════════════════
@@ -263,6 +276,12 @@ namespace VoxelEngine.Maritime
                 Box(r, Steel, new Vector3(s * 0.47f, -s * 0.1f, z), new Vector3(s * 0.03f, s * 0.25f, s * 0.1f));
                 Box(r, Steel, new Vector3(-s * 0.47f, -s * 0.1f, z), new Vector3(s * 0.03f, s * 0.25f, s * 0.1f));
             }
+
+            // ── I/O Ports (named, large for the MGO) ──────────────────
+            Port(r, "Port_FuelInput", PortFuel, new Vector3(0, -s * 0.2f, -s * 0.48f), new Vector3(s * 0.14f, s * 0.14f, s * 0.04f));
+            Port(r, "Port_ExhaustOutput_L", PortExhaust, new Vector3(s * 0.3f, s * 0.55f, -s * 0.25f), new Vector3(s * 0.12f, s * 0.04f, s * 0.12f));
+            Port(r, "Port_ExhaustOutput_R", PortExhaust, new Vector3(-s * 0.3f, s * 0.55f, -s * 0.25f), new Vector3(s * 0.12f, s * 0.04f, s * 0.12f));
+            Port(r, "Port_ShaftOutput", PortShaft, new Vector3(0, 0, s * 0.48f), new Vector3(s * 0.16f, s * 0.16f, s * 0.1f), PrimitiveType.Cylinder);
         }
 
         // ════════════════════════════════════════════════════════════════
@@ -314,6 +333,10 @@ namespace VoxelEngine.Maritime
             // Mounting bracket.
             Box(r, DarkSteel, new Vector3(0, -housingR * 0.8f, 0),
                 new Vector3(large ? cs * 0.6f : cs * 0.4f, cs * 0.1f, large ? cs * 0.6f : cs * 0.4f));
+
+            // ── I/O Port: Boost Output (gold) — snaps to engine input ──
+            Port(r, "Port_BoostOutput", PortShaft, new Vector3(0, -housingR * 0.45f, housingR * 0.5f),
+                new Vector3(cs * 0.12f, cs * 0.12f, cs * 0.04f));
         }
 
         // ════════════════════════════════════════════════════════════════
@@ -369,6 +392,9 @@ namespace VoxelEngine.Maritime
                 var spoke = Box(spin, Steel, V0, new Vector3(cs * 0.14f, wheelR * 0.9f, cs * 0.02f));
                 spoke.transform.localRotation = Quaternion.Euler(0, 0, i * 60f);
             }
+
+            // ── I/O Port: Shaft Input/Output (gold) ──
+            Port(r, "Port_ShaftIO", PortShaft, new Vector3(cs * 0.2f, 0, 0), new Vector3(cs * 0.12f, cs * 0.12f, cs * 0.04f));
         }
 
         // ════════════════════════════════════════════════════════════════
@@ -411,6 +437,9 @@ namespace VoxelEngine.Maritime
             var shaft = Cyl(r, Steel, new Vector3(0, 0, -cs * 0.46f), cs * 0.07f, cs * 0.1f);
             shaft.transform.localRotation = Quaternion.Euler(90, 0, 0);
             Box(r, Glow, new Vector3(0, cs * 0.47f, -cs * 0.3f), new Vector3(cs * 0.25f, cs * 0.03f, cs * 0.03f));
+
+            // ── I/O Port: Shaft Input (gold) — where rotation comes in ──
+            Port(r, "Port_ShaftInput", PortShaft, new Vector3(0, 0, -cs * 0.48f), new Vector3(cs * 0.12f, cs * 0.12f, cs * 0.04f));
         }
 
         // ════════════════════════════════════════════════════════════════
@@ -524,6 +553,21 @@ namespace VoxelEngine.Maritime
             => Prim(p, PrimitiveType.Sphere, m, pos, new Vector3(d, d, d));
         static GameObject Cyl(GameObject p, Material m, Vector3 pos, float radius, float height)
             => Prim(p, PrimitiveType.Cylinder, m, pos, new Vector3(radius * 2f, height * 0.5f, radius * 2f));
+
+
+        /// <summary>Create a named I/O port GameObject with a mesh primitive inside.
+        /// The container is named (e.g. "Port_FuelInput") so you can select it in the
+        /// prefab hierarchy and move it. The child mesh can be swapped cube↔cylinder
+        /// by deleting and re-adding a different primitive in the editor.</summary>
+        static GameObject Port(GameObject parent, string portName, Material m, Vector3 pos, Vector3 scale,
+            PrimitiveType shape = PrimitiveType.Cube)
+        {
+            var container = new GameObject(portName);
+            container.transform.SetParent(parent.transform, false);
+            container.transform.localPosition = pos;
+            Prim(container, shape, m, V0, scale);
+            return container;
+        }
 
         static GameObject Prim(GameObject parent, PrimitiveType type, Material m, Vector3 pos, Vector3 scale)
         {

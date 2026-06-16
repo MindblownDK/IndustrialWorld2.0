@@ -64,11 +64,17 @@ namespace VoxelEngine.Maritime
             float3 force = float3.zero;
             float3 r = node.WorldPosition - GridCenter; // lever arm about CoM
 
-            // ── Buoyancy (Archimedes) ──────────────────────────────────
+            // ── Buoyancy (Archimedes, capped to prevent balloon effect) ──
             if (submergence > 0f && node.Volume > 0f)
             {
                 float vSub = node.Volume * submergence;
                 float fBuoy = WaterDensity * Gravity * vSub * node.BuoyancyFactor * BuoyancyGain;
+                // CAP: buoyancy should never produce more than 1.5x the block's
+                // weight in upward force. Without this, large-grid blocks (15.6 m³
+                // displacement vs 2500 kg min mass) rocket into the sky like balloons.
+                float weight = node.Mass * Gravity;
+                float maxBuoy = weight * (1f + node.BuoyancyFactor * 0.5f);
+                fBuoy = math.min(fBuoy, maxBuoy);
                 force += WorldUp * fBuoy;
             }
 

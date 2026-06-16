@@ -2,24 +2,17 @@
 //
 // Helm (Ship's Wheel) — the dedicated maritime control station.
 //
-//   • Walk up and press E to take the helm.
-//   • W = throttle up (gas pedal), release = idle.
-//   • A / D = steer left / right.
-//   • Mouse-look is free (hold to look around, doesn't turn the ship).
-//   • Press E again to release.
+//   • Right-click to ENTER — a third-person camera positions above the helm
+//     so you can see the wheel sticks and the water ahead.
+//   • W/S = throttle up/down, A/D = steer left/right.
+//   • Scroll wheel = zoom in/out (ship-size-aware default distance).
+//   • Right-click again or press F to EXIT.
 //
-// While active the Helm drives the parent grid's MaritimePropulsionSystem:
-//   system.Throttle  = 0..1
-//   system.Steer     = -1..+1
-//   system.HelmActive = true
-//
-// The Helm does NOT parent the player or move the camera — it's a "control
-// panel" you stand at, keeping the implementation simple and conflict-free
-// with the flight Cockpit. Part 3 will add full cockpit-maritime integration.
+// The Helm drives the parent grid's MaritimePropulsionSystem:
+//   system.Throttle, system.Steer, system.HelmActive
 
 using UnityEngine;
 using VoxelEngine.GridSystem;
-using VoxelEngine.Settings;
 using InputAction = VoxelEngine.Settings.InputAction;
 #if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
@@ -29,28 +22,32 @@ namespace VoxelEngine.Maritime
 {
     public class GridHelm : MaritimeBlockBase
     {
-        public override MechanicalNodeType NodeType => MechanicalNodeType.Hull; // passive — no torque role
+        public override MechanicalNodeType NodeType => MechanicalNodeType.Hull;
 
         [Header("Helm")]
-        [Tooltip("How far the player can be and still interact (metres).")]
         public float interactionRadius = 3f;
-        [Tooltip("How fast the throttle ramps up/down (per second).")]
         public float throttleRampSpeed = 1.5f;
-        [Tooltip("How fast the steering returns to centre when no key is held.")]
         public float steerReturnSpeed = 4f;
 
-        /// <summary>Is a player currently at the helm?</summary>
+        [Header("Camera")]
+        [Tooltip("Minimum camera distance behind the helm (metres).")]
+        public float minCameraDist = 5f;
+        [Tooltip("Maximum camera distance behind the helm (metres).")]
+        public float maxCameraDist = 40f;
+        [Tooltip("How much the camera height scales with ship block count.")]
+        public float shipSizeCameraFactor = 0.15f;
+
         public bool IsActive { get; private set; }
-
-        /// <summary>The player currently at the helm (null if inactive).</summary>
         public Player.PlayerController Pilot { get; private set; }
-
-        /// <summary>Current persistent throttle setting 0..1 (survives key release).</summary>
         public float ThrottleSetting { get; private set; }
 
         private MaritimePropulsionSystem _maritime;
-        private Transform _pilotTransform;
-        private bool _eWasPressed;
+        private float _currentSteer;
+        private float _cameraDist;
+        private Transform _pilotCamPivot;
+        private Vector3 _origPivotPos;
+        private Quaternion _origPivotRot;
+        private bool _camCached;
 
         public override void OnPlaced()
         {
@@ -62,96 +59,53 @@ namespace VoxelEngine.Maritime
         public override void OnRemoved()
         {
             base.OnRemoved();
-            ReleaseHelm();
+            Exit();
         }
 
-        private void Update()
+        /// <summary>Enter the helm — set up the third-person camera + lock controls.</summary>
+        public void Enter(Player.PlayerController player)
         {
-            bool ePressed = EPressedThisFrame;
+            if (IsActive || player == null) return;
 
-            if (!IsActive)
-            {
-                // Look for a nearby player who pressed E.
-                if (ePressed && !_eWasPressed)
-                {
-                    var player = FindNearbyPlayer();
-                    if (player != null) TakeHelm(player);
-                }
-            }
-            else
-            {
-                // Pilot left or disconnected?
-                if (Pilot == null || _pilotTransform == null ||
-                    Vector3.Distance(_pilotTransform.position, transform.position) > interactionRadius * 1.5f)
-                {
-                    ReleaseHelm();
-                }
-                else if (ePressed && !_eWasPressed)
-                {
-                    ReleaseHelm();
-                    return;
-                }
-                else
-                {
-                    ReadHelmInput();
-                }
-            }
-
-            _eWasPressed = ePressed;
-        }
-
-        private void ReadHelmInput()
-        {
-            // ── Throttle (gas-pedal feel) ──────────────────────────────
-            bool fwd = GameSettings.IsHeld(InputAction.Forward);
-            bool back = GameSettings.IsHeld(InputAction.Back);
-
-            float target = fwd ? 1f : (back ? 0f : ThrottleSetting);
-            if (fwd)
-                ThrottleSetting = Mathf.MoveTowards(ThrottleSetting, 1f, throttleRampSpeed * Time.deltaTime);
-            else if (back)
-                ThrottleSetting = Mathf.MoveTowards(ThrottleSetting, 0f, throttleRampSpeed * Time.deltaTime);
-
-            // ── Steering ───────────────────────────────────────────────
-            bool left = GameSettings.IsHeld(InputAction.Left);
-            bool right = GameSettings.IsHeld(InputAction.Right);
-            float steerTarget = (right ? 1f : 0f) - (left ? 1f : 0f);
-            float steer = Mathf.MoveTowards(_currentSteer, steerTarget, steerReturnSpeed * Time.deltaTime);
-
-            _currentSteer = steer;
-
-            // ── Push to the maritime system ────────────────────────────
-            if (_maritime == null && Grid != null) _maritime = Grid.Maritime;
-            if (_maritime != null)
-            {
-                _maritime.Throttle = ThrottleSetting;
-                _maritime.Steer = _currentSteer;
-                _maritime.HelmActive = true;
-            }
-        }
-
-        private float _currentSteer;
-
-        // ── Enter / Exit ──────────────────────────────────────────────
-        private void TakeHelm(Player.PlayerController player)
-        {
             IsActive = true;
             Pilot = player;
-            _pilotTransform = player.transform;
 
-            // Disable the player's movement so they "stand at the wheel".
+            // Disable player movement.
             player.enabled = false;
             var cc = player.GetComponent<CharacterController>();
             if (cc != null) cc.enabled = false;
 
-            // Lock the cursor for steering.
+            // Lock cursor.
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
 
+            // Cache + position the camera pivot.
+            _pilotCamPivot = player.cameraPivot;
+            if (_pilotCamPivot != null && !_camCached)
+            {
+                _origPivotPos = _pilotCamPivot.localPosition;
+                _origPivotRot = _pilotCamPivot.localRotation;
+                _camCached = true;
+            }
+
+            // Compute ship-size-aware camera distance.
+            int blockCount = Grid != null ? Grid.BlockCount : 1;
+            _cameraDist = Mathf.Clamp(blockCount * shipSizeCameraFactor + 8f, minCameraDist, maxCameraDist);
+
+            ApplyCamera();
+
+            // Parent the player to the helm so they ride with the ship.
+            _origParent = player.transform.parent;
+            player.transform.SetParent(transform, true);
+
             if (Grid != null) _maritime = Grid.Maritime;
+            if (Grid != null) Grid.ActiveCockpit = null; // not a flight cockpit
         }
 
-        private void ReleaseHelm()
+        private Transform _origParent;
+
+        /// <summary>Exit the helm — restore camera + player.</summary>
+        public void Exit()
         {
             if (!IsActive) { IsActive = false; return; }
 
@@ -165,9 +119,17 @@ namespace VoxelEngine.Maritime
             ThrottleSetting = 0f;
             _currentSteer = 0f;
 
-            // Re-enable the player.
+            // Restore camera.
+            if (_pilotCamPivot != null && _camCached)
+            {
+                _pilotCamPivot.localPosition = _origPivotPos;
+                _pilotCamPivot.localRotation = _origPivotRot;
+            }
+
+            // Re-enable player.
             if (Pilot != null)
             {
+                Pilot.transform.SetParent(_origParent, true);
                 Pilot.enabled = true;
                 var cc = Pilot.GetComponent<CharacterController>();
                 if (cc != null) cc.enabled = true;
@@ -178,33 +140,88 @@ namespace VoxelEngine.Maritime
 
             IsActive = false;
             Pilot = null;
-            _pilotTransform = null;
+            _pilotCamPivot = null;
         }
 
-        // ── Helpers ───────────────────────────────────────────────────
-        private Player.PlayerController FindNearbyPlayer()
+        private void Update()
         {
-            // Simple distance check — avoids raycast/interaction-system coupling.
-            var players = Object.FindObjectsByType<Player.PlayerController>(FindObjectsInactive.Exclude);
-            float bestDist = interactionRadius;
-            Player.PlayerController best = null;
-            foreach (var p in players)
+            if (!IsActive || Pilot == null)
             {
-                if (p == null) continue;
-                float d = Vector3.Distance(p.transform.position, transform.position);
-                if (d < bestDist) { bestDist = d; best = p; }
+                // Check for enter via proximity (fallback if interaction tool doesn't fire).
+                return;
             }
-            return best;
+
+            // Exit on F or right-click.
+            bool exitPressed = ExitPressed;
+            bool rightClick = GridInput.Mouse1 && !GridInput.Mouse0;
+            if (exitPressed || rightClick)
+            {
+                Exit();
+                return;
+            }
+
+            // ── Read helm input ────────────────────────────────────────
+            float dt = Time.deltaTime;
+
+            // Throttle.
+            float fwd = VoxelEngine.Settings.GameSettings.IsHeld(InputAction.Forward) ? 1 : 0;
+            float back = VoxelEngine.Settings.GameSettings.IsHeld(InputAction.Back) ? 1 : 0;
+            if (fwd > 0)
+                ThrottleSetting = Mathf.MoveTowards(ThrottleSetting, 1f, throttleRampSpeed * dt);
+            else if (back > 0)
+                ThrottleSetting = Mathf.MoveTowards(ThrottleSetting, 0f, throttleRampSpeed * dt);
+
+            // Steer.
+            bool left = VoxelEngine.Settings.GameSettings.IsHeld(InputAction.Left);
+            bool right = VoxelEngine.Settings.GameSettings.IsHeld(InputAction.Right);
+            float steerTarget = (right ? 1f : 0f) - (left ? 1f : 0f);
+            _currentSteer = Mathf.MoveTowards(_currentSteer, steerTarget, steerReturnSpeed * dt);
+
+            // ── Scroll zoom ────────────────────────────────────────────
+            float scroll = GridInput.Scroll;
+            if (Mathf.Abs(scroll) > 0.01f)
+            {
+                _cameraDist = Mathf.Clamp(_cameraDist - scroll * 0.02f, minCameraDist, maxCameraDist);
+                ApplyCamera();
+            }
+
+            // ── Push to maritime system ───────────────────────────────
+            if (_maritime == null && Grid != null) _maritime = Grid.Maritime;
+            if (_maritime != null)
+            {
+                _maritime.Throttle = ThrottleSetting;
+                _maritime.Steer = _currentSteer;
+                _maritime.HelmActive = true;
+            }
         }
 
-        private static bool EPressedThisFrame
+        /// <summary>Position the camera pivot above + behind the helm.</summary>
+        private void ApplyCamera()
+        {
+            if (_pilotCamPivot == null) return;
+
+            float cs = Grid != null ? Grid.gridSize.CellSize() : 2.5f;
+            // Camera sits above the helm, looking forward over the ship.
+            Vector3 helmLocal = transform.localPosition;
+            Vector3 camLocal = new Vector3(
+                helmLocal.x,
+                helmLocal.y + _cameraDist * 0.45f + cs,  // above the wheel sticks
+                helmLocal.z - _cameraDist);               // behind the helm
+
+            _pilotCamPivot.localPosition = camLocal;
+            // Tilt to look forward + down at the water.
+            float pitch = 15f + (_cameraDist / maxCameraDist) * 20f;
+            _pilotCamPivot.localRotation = Quaternion.Euler(pitch, 0f, 0f);
+        }
+
+        private static bool ExitPressed
         {
             get
             {
 #if ENABLE_INPUT_SYSTEM
-                return Keyboard.current != null && Keyboard.current.eKey.wasPressedThisFrame;
+                return Keyboard.current != null && Keyboard.current.fKey.wasPressedThisFrame;
 #else
-                return Input.GetKeyDown(KeyCode.E);
+                return Input.GetKeyDown(KeyCode.F);
 #endif
             }
         }
