@@ -52,6 +52,9 @@ namespace VoxelEngine.EditorTools
                 if (GUILayout.Button("🚀  Spawn All GRID Blocks", GUILayout.Height(38)))
                     SpawnAllGrid();
 
+                if (GUILayout.Button("⚓  Spawn All MARITIME Blocks", GUILayout.Height(38)))
+                    SpawnByCategory("Maritime");
+
                 if (GUILayout.Button("⚡  Spawn All POWER Blocks", GUILayout.Height(34)))
                     SpawnByCategory("Power");
 

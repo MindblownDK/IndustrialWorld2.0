@@ -1,0 +1,41 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe52eb4685f86c44d967d9cd3e4bd91a, type: 3}
+  m_Name: res_maritime_heavy
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Research.ResearchNode
+  nodeId: res_maritime_heavy
+  displayName: Heavy Industrial Maritime
+  description: Steel and steam. Unlocks the Medium Engine, Iron Hull, Bilge Pump,
+    Maritime Generator, and Electrical Propeller.
+  iconTint: {r: 0.2, g: 0.5, b: 0.8, a: 1}
+  category: 0
+  subCategory: 6
+  tier: 3
+  column: 6
+  prerequisites:
+  - {fileID: 11400000, guid: 6b11b9d629eb0cd4198ae312a2170658, type: 2}
+  researchSeconds: 120
+  cost:
+  - pack: {fileID: 11400000, guid: e7eec7f45c4b5fb4db5018e3431f77f0, type: 2}
+    count: 30
+  - pack: {fileID: 11400000, guid: d5b7bf57e47a51c4db099afff757b24d, type: 2}
+    count: 15
+  unlocksRecipes:
+  - {fileID: 11400000, guid: cb9beda584ec5434bb0be439e5b49ce1, type: 2}
+  - {fileID: 11400000, guid: 187715a2d41b5df459fc7ae42133abeb, type: 2}
+  - {fileID: 11400000, guid: 973d5b09da5037f46ada79d4851db164, type: 2}
+  - {fileID: 11400000, guid: 72b597cbe4a4e024aa97367ac61da797, type: 2}
+  - {fileID: 11400000, guid: e54c9637d13a20e429750d7a643ee02a, type: 2}
+  upgradeKind: 0
+  upgradePerRankAmount: 0
+  maxRanks: 1
+  costScalesWithRank: 1

@@ -112,6 +112,19 @@ namespace VoxelEngine.EditorTools
             if (GUILayout.Button("12. Build Grid System Content (All Ship/Vehicle Blocks: Cockpit, Thruster, Battery, Armor, Drill, Grinder, Refinery, Weapon)", GUILayout.Height(56)))
                 BuildGridSystemContent();
 
+            GUILayout.Space(6);
+            EditorGUILayout.HelpBox(
+                "Step 13 builds the MARITIME PROPULSION & MECHANICAL NETWORK:\n" +
+                "  • Hull materials (Untreated Wood, Tar Plank, Iron Hull, Balsa Wood)\n" +
+                "  • Propulsion (Waterwheel, Drive Shaft, Propellers, Engines, Turbo, Gearbox, Generator)\n" +
+                "  • Control (Helm) + Utility (Bilge Pump, Exhaust Pipe)\n" +
+                "  • 4-tier \"Maritime Engineering\" research tree\n" +
+                "  • MaritimeSettings balance asset\n" +
+                "Re-runnable. Idempotent. Run AFTER step 12.", MessageType.Info);
+
+            if (GUILayout.Button("13. Build Maritime Content (Hulls, Engines, Shafts, Propellers, Turbo, Helm + Maritime Research Tree)", GUILayout.Height(56)))
+                BuildMaritimeContent();
+
             GUILayout.Space(20);
             EditorGUILayout.EndScrollView();
         }
@@ -4881,6 +4894,331 @@ root =>
                 "Grid Refinery shares the SAME ProcessingRecipes as the Oil Refinery.\n" +
                 "Recipes registered and gated behind Shipbuilding / Ship Armament research.", "OK");
         }
+
+
+        // ============================================================
+        //  STEP 13 - MARITIME PROPULSION CONTENT
+        //  All maritime blocks (prefabs + items + recipes) + the
+        //  4-tier "Maritime Engineering" research tree.
+        // ============================================================
+        private void BuildMaritimeContent()
+        {
+            const string MAR_ROOT  = ASSET_ROOT + "/Maritime";
+            const string PREFABS   = MAR_ROOT + "/Prefabs";
+            const string ITEMS     = MAR_ROOT + "/Items";
+            const string RECIPES   = MAR_ROOT + "/Recipes";
+            const string NODES     = ASSET_ROOT + "/Research/Nodes";
+
+            foreach (var f in new[] { MAR_ROOT, PREFABS, ITEMS, RECIPES })
+                EnsureFolder(f);
+
+            // -- Dependencies (created by earlier steps) --
+            string craftItems = ASSET_ROOT + "/Items";
+            string indItems   = ASSET_ROOT + "/Industrial/Items";
+            var woodLog     = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{craftItems}/Item_WoodLog.asset");
+            var plank       = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{craftItems}/Item_WoodenPlank.asset");
+            var ironIngot   = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{craftItems}/Item_IronIngot.asset");
+            var copperIngot = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{craftItems}/Item_CopperIngot.asset");
+            var steelIngot  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{craftItems}/Item_SteelIngot.asset");
+            var ironPlate   = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_IronPlate.asset");
+            var steelPlate  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_SteelPlate.asset");
+            var copperPlate = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_CopperPlate.asset");
+            var ironGear    = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_IronGear.asset");
+            var copperWire  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_CopperWire.asset");
+            var circuit     = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_Circuit.asset");
+            var advCircuit  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_AdvCircuit.asset");
+            var glass       = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_Glass.asset");
+            var sciT2 = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ScienceItem>($"{craftItems}/Item_ScienceT2.asset");
+            var sciT3 = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ScienceItem>($"{craftItems}/Item_ScienceT3.asset");
+
+            if (steelPlate == null || circuit == null)
+            {
+                EditorUtility.DisplayDialog("Voxel Engine", "Run Steps 4, 6, 7, 10, 12 first.", "OK");
+                return;
+            }
+
+            var registry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeRegistry>($"{ASSET_ROOT}/RecipeRegistry.asset");
+            var tree = AssetDatabase.LoadAssetAtPath<VoxelEngine.Research.ResearchTree>($"{ASSET_ROOT}/Research/ResearchTree.asset");
+
+            // -- Helpers (mirror Step 12) --
+            float RealMass(string display, VoxelEngine.GridSystem.GridSize size, float authored)
+            {
+                float scale = size == VoxelEngine.GridSystem.GridSize.Small ? 3.5f : 8.0f;
+                float floor = size == VoxelEngine.GridSystem.GridSize.Small ? 180f : 2500f;
+                return Mathf.Max(authored * scale, floor);
+            }
+
+            VoxelEngine.GridSystem.GridBlockItem MakeMItem(string assetName, string display, Color tint,
+                GameObject prefab, VoxelEngine.GridSystem.GridSize size, float mass, float hp)
+            {
+                string path = $"{ITEMS}/{assetName}.asset";
+                var b = AssetDatabase.LoadAssetAtPath<VoxelEngine.GridSystem.GridBlockItem>(path);
+                if (b == null) { b = ScriptableObject.CreateInstance<VoxelEngine.GridSystem.GridBlockItem>(); AssetDatabase.CreateAsset(b, path); }
+                b.itemId = assetName.ToLower(); b.displayName = display; b.iconTint = tint;
+                b.maxStack = 20; b.gridSize = size; b.blockPrefab = prefab;
+                b.blockMass = RealMass(display, size, mass); b.blockHP = hp; b.category = "Maritime";
+                EditorUtility.SetDirty(b);
+                return b;
+            }
+
+            GameObject MakeMPref<T>(string name, Color color, Vector3 scale, System.Action<T> config = null) where T : VoxelEngine.GridSystem.GridBlock
+            {
+                string path = $"{PREFABS}/{name}.prefab";
+                var size  = name.Contains("Small") ? VoxelEngine.GridSystem.GridSize.Small : VoxelEngine.GridSystem.GridSize.Large;
+                var style = VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Generic;
+
+                var prefab = GetOrCreatePrefab(path, name, (root) =>
+                {
+                    EnsureFolder(PREFABS + "/Mats");
+                    int matIdx = 0;
+                    VoxelEngine.GridSystem.GridBlockMeshBuilder.MaterialPersister = (mat, _) =>
+                    {
+                        string mp = $"{PREFABS}/Mats/{name}_{matIdx++}.mat";
+                        if (AssetDatabase.LoadAssetAtPath<Material>(mp) != null) AssetDatabase.DeleteAsset(mp);
+                        AssetDatabase.CreateAsset(mat, mp);
+                        return AssetDatabase.LoadAssetAtPath<Material>(mp);
+                    };
+                    try
+                    {
+                        if (root.transform.childCount == 0 && root.GetComponent<MeshFilter>() == null)
+                        {
+                            VoxelEngine.GridSystem.GridBlockMeshBuilder.Build(root, style, size, color);
+                        }
+                        var box = root.GetComponent<BoxCollider>();
+                        if (box == null) box = root.AddComponent<BoxCollider>();
+                        float cs = VoxelEngine.GridSystem.GridSizeExt.CellSize(size);
+                        box.size = new Vector3(cs, cs, cs);
+                        var b = root.GetComponent<T>();
+                        if (b == null) b = root.AddComponent<T>();
+                        config?.Invoke(b);
+                    }
+                    finally { VoxelEngine.GridSystem.GridBlockMeshBuilder.MaterialPersister = null; }
+                });
+                return prefab;
+            }
+
+            var recipes = new System.Collections.Generic.List<VoxelEngine.Crafting.RecipeDefinition>();
+            VoxelEngine.Crafting.RecipeDefinition AddMRecipe(string name, string display,
+                VoxelEngine.Items.ItemDefinition output, params (VoxelEngine.Items.ItemDefinition item, int n)[] inputs)
+            {
+                if (output == null) return null;
+                string path = $"{RECIPES}/{name}.asset";
+                var r = GetOrCreateAsset<VoxelEngine.Crafting.RecipeDefinition>(path);
+                r.displayName = display; r.outputItem = output; r.outputCount = 1;
+                r.requiredStation = VoxelEngine.Crafting.StationTier.Assembler; r.craftSeconds = 4f; r.unlockedByDefault = false;
+                var valid = new System.Collections.Generic.List<VoxelEngine.Crafting.RecipeIngredient>();
+                foreach (var (item, n) in inputs) if (item != null) valid.Add(new VoxelEngine.Crafting.RecipeIngredient { item = item, count = n });
+                r.inputs = valid.ToArray();
+                EditorUtility.SetDirty(r);
+                if (registry != null && !registry.recipes.Contains(r)) registry.recipes.Add(r);
+                recipes.Add(r); return r;
+            }
+
+            var SzL = VoxelEngine.GridSystem.GridSize.Large;
+            var SzS = VoxelEngine.GridSystem.GridSize.Small;
+
+            // ═══════════════════════════════════════════════════════════════
+            //  HULL MATERIALS
+            // ═══════════════════════════════════════════════════════════════
+            var untWoodPref = MakeMPref<VoxelEngine.Maritime.GridUntreatedWood>("Hull_UntreatedWood", new Color(0.55f,0.40f,0.25f), Vector3.one);
+            var itemUntWood = MakeMItem("MItem_UntreatedWood", "Untreated Wood Hull", new Color(0.55f,0.40f,0.25f), untWoodPref, SzL, 80, 200);
+            AddMRecipe("Recipe_MUntreatedWood", "Untreated Wood Hull", itemUntWood, (woodLog, 4));
+
+            var tarPref = MakeMPref<VoxelEngine.Maritime.GridTarCoatedPlank>("Hull_TarPlank", new Color(0.30f,0.22f,0.14f), Vector3.one);
+            var itemTar = MakeMItem("MItem_TarPlank", "Tar-Coated Plank", new Color(0.30f,0.22f,0.14f), tarPref, SzL, 60, 260);
+            AddMRecipe("Recipe_MTarPlank", "Tar-Coated Plank", itemTar, (plank, 3), (ironIngot, 1));
+
+            var ironHullPref = MakeMPref<VoxelEngine.Maritime.GridIronHull>("Hull_IronHull", new Color(0.45f,0.47f,0.52f), Vector3.one);
+            var itemIronHull = MakeMItem("MItem_IronHull", "Iron Hull", new Color(0.45f,0.47f,0.52f), ironHullPref, SzL, 400, 1000);
+            AddMRecipe("Recipe_MIronHull", "Iron Hull", itemIronHull, (ironPlate, 6), (steelPlate, 2));
+
+            var balsaPref = MakeMPref<VoxelEngine.Maritime.GridBalsaWood>("Hull_BalsaWood", new Color(0.80f,0.65f,0.40f), Vector3.one);
+            var itemBalsa = MakeMItem("MItem_BalsaWood", "Balsa Wood", new Color(0.80f,0.65f,0.40f), balsaPref, SzL, 25, 80);
+            AddMRecipe("Recipe_MBalsaWood", "Balsa Wood", itemBalsa, (woodLog, 2));
+
+            // ═══════════════════════════════════════════════════════════════
+            //  PROPULSION BLOCKS
+            // ═══════════════════════════════════════════════════════════════
+            // Waterwheel
+            var wheelPref = MakeMPref<VoxelEngine.Maritime.GridWaterwheel>("Waterwheel_Large", new Color(0.40f,0.30f,0.18f), Vector3.one,
+                w => { w.wheelSize = 3f; w.maxRPM = 120f; w.flowTorqueCoefficient = 12000f; });
+            var itemWheel = MakeMItem("MItem_Waterwheel", "Waterwheel", new Color(0.40f,0.30f,0.18f), wheelPref, SzL, 300, 600);
+            AddMRecipe("Recipe_MWaterwheel", "Waterwheel", itemWheel, (ironIngot, 4), (woodLog, 8), (ironGear, 2));
+
+            // Drive Shaft
+            var shaftPref = MakeMPref<VoxelEngine.Maritime.GridDriveShaft>("DriveShaft_Large", new Color(0.70f,0.72f,0.75f), Vector3.one,
+                s => { s.maxSafeRPM = 3000f; });
+            var itemShaft = MakeMItem("MItem_DriveShaft", "Drive Shaft", new Color(0.70f,0.72f,0.75f), shaftPref, SzL, 80, 300);
+            AddMRecipe("Recipe_MDriveShaft", "Drive Shaft", itemShaft, (ironPlate, 2), (ironGear, 1));
+
+            // Small Propeller
+            var propSPref = MakeMPref<VoxelEngine.Maritime.GridPropeller>("Propeller_Small_Large", new Color(0.85f,0.65f,0.25f), Vector3.one,
+                p => { p.tier = VoxelEngine.Maritime.PropellerTier.Small; p.propellerSize = 1f; p.maxRPM = 2000f; });
+            var itemPropS = MakeMItem("MItem_PropSmall", "Small Propeller", new Color(0.85f,0.65f,0.25f), propSPref, SzL, 120, 300);
+            AddMRecipe("Recipe_MPropSmall", "Small Propeller", itemPropS, (ironIngot, 3), (copperIngot, 1));
+
+            // Large Propeller
+            var propLPref = MakeMPref<VoxelEngine.Maritime.GridPropeller>("Propeller_Large_Large", new Color(0.65f,0.55f,0.30f), Vector3.one,
+                p => { p.tier = VoxelEngine.Maritime.PropellerTier.Large; p.propellerSize = 3f; p.maxRPM = 1500f; });
+            var itemPropL = MakeMItem("MItem_PropLarge", "Large Propeller", new Color(0.65f,0.55f,0.30f), propLPref, SzL, 800, 800);
+            AddMRecipe("Recipe_MPropLarge", "Large Propeller", itemPropL, (steelPlate, 6), (ironGear, 4), (copperPlate, 2));
+
+            // Exhaust Pipe
+            var exhaustPref = MakeMPref<VoxelEngine.Maritime.GridExhaustPipe>("ExhaustPipe_Large", new Color(0.30f,0.28f,0.25f), Vector3.one);
+            var itemExhaust = MakeMItem("MItem_ExhaustPipe", "Exhaust Pipe", new Color(0.30f,0.28f,0.25f), exhaustPref, SzL, 40, 200);
+            AddMRecipe("Recipe_MExhaustPipe", "Exhaust Pipe", itemExhaust, (ironPlate, 2));
+
+            // Small Engine (solid fuel)
+            var engSPref = MakeMPref<VoxelEngine.Maritime.GridMaritimeEngine>("Engine_Small_Large", new Color(0.50f,0.35f,0.18f), Vector3.one,
+                e => { e.tier = VoxelEngine.Maritime.EngineTier.Small; e.maxTorque = 8000f; e.maxRPM = 1500f; e.fuelKind = VoxelEngine.Maritime.MaritimeFuelKind.Solid; e.fuelBufferCapacity = 60f; e.fuelConsumptionRate = 1f; });
+            var itemEngS = MakeMItem("MItem_EngineSmall", "Small Engine", new Color(0.50f,0.35f,0.18f), engSPref, SzL, 200, 500);
+            AddMRecipe("Recipe_MEngineSmall", "Small Engine", itemEngS, (ironIngot, 6), (ironGear, 4), (copperWire, 4));
+
+            // Medium Engine (Heavy Fuel Oil)
+            var engMPref = MakeMPref<VoxelEngine.Maritime.GridMaritimeEngine>("Engine_Medium_Large", new Color(0.40f,0.38f,0.35f), Vector3.one,
+                e => { e.tier = VoxelEngine.Maritime.EngineTier.Medium; e.maxTorque = 40000f; e.maxRPM = 1800f; e.fuelKind = VoxelEngine.Maritime.MaritimeFuelKind.Liquid; e.liquidFuel = VoxelEngine.Items.LiquidType.HeavyFuelOil; e.fuelBufferCapacity = 80f; e.fuelConsumptionRate = 2f; e.liquidRefillRate = 8f; });
+            var itemEngM = MakeMItem("MItem_EngineMedium", "Medium Engine", new Color(0.40f,0.38f,0.35f), engMPref, SzL, 700, 700);
+            AddMRecipe("Recipe_MEngineMedium", "Medium Engine", itemEngM, (ironPlate, 8), (steelPlate, 4), (ironGear, 6), (circuit, 2));
+
+            // Giant Diesel (Marine Gas Oil)
+            var engGPref = MakeMPref<VoxelEngine.Maritime.GridMaritimeEngine>("Engine_Giant_Large", new Color(0.25f,0.25f,0.28f), new Vector3(1f,1.2f,1.2f),
+                e => { e.tier = VoxelEngine.Maritime.EngineTier.Giant; e.maxTorque = 200000f; e.maxRPM = 1200f; e.fuelKind = VoxelEngine.Maritime.MaritimeFuelKind.Liquid; e.liquidFuel = VoxelEngine.Items.LiquidType.MarineGasOil; e.fuelBufferCapacity = 300f; e.fuelConsumptionRate = 6f; e.liquidRefillRate = 25f; });
+            var itemEngG = MakeMItem("MItem_EngineGiant", "Giant Diesel Engine", new Color(0.25f,0.25f,0.28f), engGPref, SzL, 2500, 1500);
+            AddMRecipe("Recipe_MEngineGiant", "Giant Diesel Engine", itemEngG, (steelPlate, 24), (ironGear, 12), (advCircuit, 6), (copperWire, 16));
+
+            // Turbocharger
+            var turboPref = MakeMPref<VoxelEngine.Maritime.GridTurbocharger>("Turbocharger_Large", new Color(0.85f,0.82f,0.70f), Vector3.one,
+                t => { t.boostMultiplier = 1.40f; });
+            var itemTurbo = MakeMItem("MItem_Turbocharger", "Turbocharger", new Color(0.85f,0.82f,0.70f), turboPref, SzL, 150, 300);
+            AddMRecipe("Recipe_MTurbocharger", "Turbocharger", itemTurbo, (steelPlate, 4), (copperPlate, 4), (advCircuit, 2));
+
+            // Gearbox
+            var gearPref = MakeMPref<VoxelEngine.Maritime.GridGearbox>("Gearbox_Large", new Color(0.55f,0.50f,0.40f), Vector3.one,
+                g => { g.gearRatio = 2f; g.maxOutputSpeed = 2000f; g.selectedGear = 2; });
+            var itemGear = MakeMItem("MItem_Gearbox", "Gearbox", new Color(0.55f,0.50f,0.40f), gearPref, SzL, 400, 500);
+            AddMRecipe("Recipe_MGearbox", "Gearbox", itemGear, (ironPlate, 6), (ironGear, 8), (steelPlate, 2));
+
+            // Maritime Generator
+            var genPref = MakeMPref<VoxelEngine.Maritime.GridMaritimeGenerator>("MaritimeGenerator_Large", new Color(0.30f,0.50f,0.35f), Vector3.one,
+                g => { g.maxRPM = 1800f; g.maxWattOutput = 50000f; });
+            var itemGen = MakeMItem("MItem_MaritimeGenerator", "Maritime Generator", new Color(0.30f,0.50f,0.35f), genPref, SzL, 600, 600);
+            AddMRecipe("Recipe_MMaritimeGenerator", "Maritime Generator", itemGen, (ironPlate, 8), (copperWire, 12), (circuit, 4));
+
+            // Electrical Propeller
+            var ePropPref = MakeMPref<VoxelEngine.Maritime.GridElectricalPropeller>("EPropeller_Large", new Color(0.40f,0.55f,0.65f), Vector3.one,
+                p => { p.propellerSize = 2f; p.maxRPM = 3000f; p.powerDrawWatts = 2000f; });
+            var itemEProp = MakeMItem("MItem_EPropeller", "Electrical Propeller", new Color(0.40f,0.55f,0.65f), ePropPref, SzL, 500, 500);
+            AddMRecipe("Recipe_MEPropeller", "Electrical Propeller", itemEProp, (steelPlate, 6), (copperWire, 8), (circuit, 4), (glass, 2));
+
+            // Bilge Pump
+            var bilgePref = MakeMPref<VoxelEngine.Maritime.GridBilgePump>("BilgePump_Large", new Color(0.20f,0.30f,0.45f), Vector3.one,
+                b => { b.drainRate = 5f; b.drainRadiusCells = 4f; b.powerDrawWatts = 500f; });
+            var itemBilge = MakeMItem("MItem_BilgePump", "Bilge Pump", new Color(0.20f,0.30f,0.45f), bilgePref, SzL, 200, 400);
+            AddMRecipe("Recipe_MBilgePump", "Bilge Pump", itemBilge, (ironPlate, 4), (copperWire, 6), (circuit, 2));
+
+            // Helm
+            var helmPref = MakeMPref<VoxelEngine.Maritime.GridHelm>("Helm_Large", new Color(0.45f,0.30f,0.15f), Vector3.one,
+                h => { h.interactionRadius = 3f; });
+            var itemHelm = MakeMItem("MItem_Helm", "Helm", new Color(0.45f,0.30f,0.15f), helmPref, SzL, 150, 300);
+            AddMRecipe("Recipe_MHelm", "Helm", itemHelm, (plank, 6), (ironIngot, 2), (ironGear, 2));
+
+            // ═══════════════════════════════════════════════════════════════
+            //  RESEARCH TREE — "Maritime Engineering" (4 tiers)
+            // ═══════════════════════════════════════════════════════════════
+            if (tree != null)
+            {
+                // Prereq chain: Shipbuilding must exist (created in Step 12).
+                var nShip = FindNodeByName(tree, "res_shipbuilding");
+
+                VoxelEngine.Research.ResearchNode MakeMaritimeNode(
+                    string id, string display, string desc, int tier, int col,
+                    float seconds, (VoxelEngine.Items.ScienceItem p, int n)[] cost,
+                    VoxelEngine.Crafting.RecipeDefinition[] unlocks,
+                    VoxelEngine.Research.ResearchNode[] prereqs)
+                {
+                    string path = $"{NODES}/{id}.asset";
+                    var n = AssetDatabase.LoadAssetAtPath<VoxelEngine.Research.ResearchNode>(path);
+                    if (n == null) { n = ScriptableObject.CreateInstance<VoxelEngine.Research.ResearchNode>(); AssetDatabase.CreateAsset(n, path); }
+                    n.nodeId = id; n.displayName = display; n.description = desc;
+                    n.category = VoxelEngine.Research.ResearchCategory.Environment;
+                    n.subCategory = VoxelEngine.Research.ResearchSubCategory.Building;
+                    n.tier = tier; n.column = col;
+                    n.iconTint = new Color(0.2f, 0.5f, 0.8f);
+                    n.researchSeconds = seconds;
+                    n.cost = new VoxelEngine.Research.ResearchNode.ScienceCost[cost.Length];
+                    for (int i = 0; i < cost.Length; i++)
+                        n.cost[i] = new VoxelEngine.Research.ResearchNode.ScienceCost { pack = cost[i].p, count = cost[i].n };
+                    n.unlocksRecipes = unlocks ?? new VoxelEngine.Crafting.RecipeDefinition[0];
+                    n.prerequisites = prereqs ?? new VoxelEngine.Research.ResearchNode[0];
+                    n.upgradeKind = VoxelEngine.Research.PlayerUpgradeKind.None;
+                    n.maxRanks = 1;
+                    EditorUtility.SetDirty(n);
+                    if (!tree.nodes.Contains(n)) tree.nodes.Add(n);
+                    return n;
+                }
+
+                // Tier 1: Hydro-Mechanics (Waterwheel, Drive Shaft, Untreated Wood, Small Propeller, Helm)
+                var t1 = MakeMaritimeNode("res_maritime_hydromech", "Hydro-Mechanics",
+                    "Master water power. Unlocks the Waterwheel, Drive Shaft, Untreated Wood hull, Small Propeller, and the Helm.",
+                    1, 6, 40f, new[] { (sciT2, 10) },
+                    recipes.FindAll(r => r != null && (r.name.Contains("Waterwheel") || r.name.Contains("DriveShaft") || r.name.Contains("UntreatedWood") || r.name.Contains("PropSmall") || r.name.Contains("Helm") || r.name.Contains("Exhaust"))).ToArray(),
+                    nShip != null ? new[] { nShip } : null);
+
+                // Tier 2: Steam & Internal Combustion (Small Engine, Exhaust, Tar Plank, Balsa, Gearbox)
+                var t2 = MakeMaritimeNode("res_maritime_combustion", "Steam & Internal Combustion",
+                    "Harness fire. Unlocks the Small Engine, Exhaust Pipe, Tar-Coated Plank, Balsa Wood, and Gearbox.",
+                    2, 6, 80f, new[] { (sciT2, 20), (sciT3, 5) },
+                    recipes.FindAll(r => r != null && (r.name.Contains("EngineSmall") || r.name.Contains("Exhaust") || r.name.Contains("TarPlank") || r.name.Contains("Balsa") || r.name.Contains("Gearbox"))).ToArray(),
+                    new[] { t1 });
+
+                // Tier 3: Heavy Industrial Maritime (Medium Engine, Iron Hull, Bilge Pump, Generator, E-Propeller)
+                var t3 = MakeMaritimeNode("res_maritime_heavy", "Heavy Industrial Maritime",
+                    "Steel and steam. Unlocks the Medium Engine, Iron Hull, Bilge Pump, Maritime Generator, and Electrical Propeller.",
+                    3, 6, 120f, new[] { (sciT2, 30), (sciT3, 15) },
+                    recipes.FindAll(r => r != null && (r.name.Contains("EngineMedium") || r.name.Contains("IronHull") || r.name.Contains("Bilge") || r.name.Contains("Generator") || r.name.Contains("EPropeller"))).ToArray(),
+                    new[] { t2 });
+
+                // Tier 4: MSC Loreto-class Propulsion (Giant Diesel, Turbocharger, Large Propeller)
+                MakeMaritimeNode("res_maritime_loreto", "MSC Loreto-class Propulsion",
+                    "The pinnacle of maritime engineering. Unlocks the Giant Diesel Engine, Turbocharger, and Large Propeller.",
+                    4, 6, 200f, new[] { (sciT3, 40) },
+                    recipes.FindAll(r => r != null && (r.name.Contains("EngineGiant") || r.name.Contains("Turbocharger") || r.name.Contains("PropLarge"))).ToArray(),
+                    new[] { t3 });
+
+                EditorUtility.SetDirty(tree);
+            }
+
+            // -- MaritimeSettings asset --
+            {
+                string settingsPath = $"{MAR_ROOT}/MaritimeSettings.asset";
+                var ms = AssetDatabase.LoadAssetAtPath<VoxelEngine.Maritime.MaritimeSettings>(settingsPath);
+                if (ms == null)
+                {
+                    ms = ScriptableObject.CreateInstance<VoxelEngine.Maritime.MaritimeSettings>();
+                    AssetDatabase.CreateAsset(ms, settingsPath);
+                }
+                EditorUtility.SetDirty(ms);
+            }
+
+            if (registry != null) EditorUtility.SetDirty(registry);
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
+            EditorUtility.DisplayDialog("Voxel Engine - Step 13",
+                $"Maritime content built!\n\n" +
+                $"BLOCKS ({recipes.Count} prefabs + items + recipes):\n" +
+                "  Hull: Untreated Wood, Tar Plank, Iron Hull, Balsa Wood\n" +
+                "  Propulsion: Waterwheel, Drive Shaft, Small/Large Propeller, Exhaust, Small/Medium/Giant Engine, Turbocharger, Gearbox, Generator, E-Propeller, Bilge Pump, Helm\n\n" +
+                "RESEARCH TREE (4-tier Maritime Engineering):\n" +
+                "  T1: Hydro-Mechanics\n" +
+                "  T2: Steam & Internal Combustion\n" +
+                "  T3: Heavy Industrial Maritime\n" +
+                "  T4: MSC Loreto-class Propulsion\n\n" +
+                "MaritimeSettings asset created in Maritime/.\n" +
+                "All recipes gated behind the research tree.",
+                "OK");
+        }
+
 
         private static VoxelEngine.Research.ResearchNode FindNodeByName(VoxelEngine.Research.ResearchTree tree, string id)
         {

@@ -149,3 +149,45 @@ Crude Oil (1)
 - **`MaritimePropulsionSystem.cs`** — hull tracking + waterlogging tick + bilge pump batch.
 - **`GridCockpit.cs`** — maritime drive/zero methods + import.
 - **`GameVersion.cs`** — `2.18.1 -> 2.18.2`.
+
+---
+
+## [2.18.4] — Setup Wizard Expansion + Maritime Research Tree (Part 5 of 5)
+
+**Type:** MINOR — new wizard step + research tree, save-compatible.
+
+### Added — Step 13 in VoxelEngineSetupWindow
+Creates ALL maritime content in one click: prefabs, items, recipes, the 4-tier
+research tree, and the MaritimeSettings balance asset.
+
+**Hull materials:**
+- Untreated Wood Hull, Tar-Coated Plank, Iron Hull, Balsa Wood
+
+**Propulsion blocks:**
+- Waterwheel, Drive Shaft, Small Propeller, Large Propeller, Exhaust Pipe
+- Small Engine (solid fuel), Medium Engine (HFO), Giant Diesel (MGO)
+- Turbocharger, Gearbox, Maritime Generator, Electrical Propeller
+
+**Control + utility:**
+- Helm (ship's wheel), Bilge Pump
+
+### Added — "Maritime Engineering" research tree (4 tiers)
+1. **Tier 1: Hydro-Mechanics** -> Waterwheel, Drive Shaft, Untreated Wood, Small Propeller, Exhaust, Helm
+2. **Tier 2: Steam & Internal Combustion** -> Small Engine, Tar Plank, Balsa, Gearbox
+3. **Tier 3: Heavy Industrial Maritime** -> Medium Engine, Iron Hull, Bilge Pump, Generator, E-Propeller
+4. **Tier 4: MSC Loreto-class Propulsion** -> Giant Diesel, Turbocharger, Large Propeller
+
+### Added — Maritime spawner button
+- DebugSpawnerWindow now has a dedicated "Spawn All MARITIME Blocks" button.
+
+### Changed
+- VoxelEngineSetupWindow.cs - new Step 13 button + BuildMaritimeContent() method
+- DebugSpawnerWindow.cs - maritime category spawner
+- GameVersion.cs - 2.18.3 to 2.18.4
+
+### Manual Unity steps (Part 5)
+1. Pull and recompile.
+2. Run the Setup Wizard (Tools > Voxel Engine > Setup Wizard):
+   - Click Step 13 (Build Maritime Content) AFTER Steps 4, 6, 7, 10, 12.
+3. To test with items: open Tools > Debug (Spawner) > click "Spawn All MARITIME Blocks".
+4. Build a ship in play mode: place hull blocks in water, add an engine+exhaust+shaft+propeller chain, sit in a cockpit or helm, press W to throttle.
