@@ -411,3 +411,57 @@ Every mesh rebuilt with more detail and named animation pivots:
 ### Changed
 - `MaritimeMeshBuilder.Version` → 4 (auto-rebuilds all prefabs).
 - `GameVersion.cs` — 2.18.9 to 2.18.10.
+
+---
+
+## [2.18.11] — Split Multi-Class Files (FINAL missing-script fix) 
+
+**Type:** PATCH — critical structural fix.
+
+### Root Cause FOUND
+Unity's prefab serialization uses `[fileID, GUID]` to reference scripts. The fileID
+is computed from the class name **AND the file it's defined in**. When a MonoBehaviour
+subclass lives in a file whose name doesn't match the class name (e.g. `GridBalsaWood`
+inside `GridHullBlock.cs`), Unity CANNOT resolve the script reference when loading the
+prefab → "The associated script can not be loaded".
+
+### Fix — Split every MonoBehaviour into its own file
+| Old file | Split into |
+|----------|-----------|
+| `GridHullBlock.cs` (5 classes) | `GridHullBlock.cs` (base only) |
+| | `GridUntreatedWood.cs` |
+| | `GridTarCoatedPlank.cs` |
+| | `GridIronHull.cs` |
+| | `GridBalsaWood.cs` |
+| `GridPropeller.cs` (2 classes) | `GridPropeller.cs` (PropellerTier enum + GridPropeller only) |
+| | `GridElectricalPropeller.cs` |
+
+Each class filename now matches its class name exactly.
+
+### Wizard fix — Force-delete ALL maritime prefabs
+Step 13 now force-deletes EVERY prefab in the Maritime/Prefabs folder before
+recreating them, ensuring all script references point to the correct new files.
+
+### Changed
+- `MaritimeMeshBuilder.Version` → 5 (auto-rebuild).
+- `GameVersion.cs` — 2.18.10 to 2.18.11.
+
+---
+
+## [2.18.11b] — Removed force-delete (preserve user edits)
+
+**Type:** PATCH — behavioral fix.
+
+### Fixed
+Now that the root cause (multi-class files) is fixed, the brute-force
+force-delete of ALL maritime prefabs has been REMOVED. Step 13 is now fully
+idempotent again:
+
+  1. StripMissingScripts cleans broken refs on load
+  2. GetComponent<T> + AddComponent if null fixes the script
+  3. Mesh rebuild ONLY when MaritimeMeshBuilder.Version changes
+  4. Config/tuning ONLY applied to brand-new prefabs
+
+User prefab/material/value edits are preserved across re-runs. The first run
+after this update (mesh v5) will rebuild meshes + fix scripts. After that,
+subsequent runs touch nothing.

@@ -5098,18 +5098,13 @@ root =>
             // ═══════════════════════════════════════════════════════════════
             //  HULL MATERIALS
             // ═══════════════════════════════════════════════════════════════
-            // Always force-delete hull prefabs and recreate clean. Hull blocks are
-            // simple (no user-editable data) and have been plagued by broken script
-            // references from the StripMissingScripts double-strip bug.
-            foreach (var hullName in new[] { "Hull_UntreatedWood", "Hull_TarPlank", "Hull_IronHull", "Hull_BalsaWood" })
-            {
-                string hp = $"{PREFABS}/{hullName}.prefab";
-                if (AssetDatabase.LoadAssetAtPath<GameObject>(hp) != null)
-                {
-                    Debug.Log($"[Maritime] Force-rebuilding hull prefab: {hullName}");
-                    AssetDatabase.DeleteAsset(hp);
-                }
-            }
+            // No force-delete! The root cause (multi-class files) is fixed.
+            // MakeMPref now handles everything idempotently:
+            //   1. StripMissingScripts cleans broken refs on load
+            //   2. GetComponent<T> + AddComponent if null fixes the script
+            //   3. Mesh rebuild ONLY happens when MaritimeMeshBuilder.Version changes
+            //   4. Config/tuning ONLY applied to brand-new prefabs
+            // This preserves all user prefab/material/value edits across re-runs.
 
             var untWoodPref = MakeMPref<VoxelEngine.Maritime.GridUntreatedWood>("Hull_UntreatedWood", new Color(0.55f,0.40f,0.25f), Vector3.one);
             var itemUntWood = MakeMItem("MItem_UntreatedWood", "Untreated Wood Hull", new Color(0.55f,0.40f,0.25f), untWoodPref, SzL, 80, 200);
