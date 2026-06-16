@@ -191,3 +191,27 @@ research tree, and the MaritimeSettings balance asset.
    - Click Step 13 (Build Maritime Content) AFTER Steps 4, 6, 7, 10, 12.
 3. To test with items: open Tools > Debug (Spawner) > click "Spawn All MARITIME Blocks".
 4. Build a ship in play mode: place hull blocks in water, add an engine+exhaust+shaft+propeller chain, sit in a cockpit or helm, press W to throttle.
+
+---
+
+## [2.18.5] — Idempotent Setup Wizard (never overwrite user edits)
+
+**Type:** PATCH — behavioral fix to the wizard, no save/API touch.
+
+### Fixed
+All maritime wizard helpers now follow the **"create-only" idempotency rule**:
+if the asset already exists, its fields are NEVER overwritten. Only missing
+essentials (prefab reference on items, component type on prefabs, recipe
+registration) are backfilled.
+
+| Helper | Before | After |
+|--------|--------|-------|
+| `MakeMItem` | Overwrote all fields every re-run | Sets fields only on new items; backfills missing prefab ref + category |
+| `MakeMPref` | Rebuilt mesh + re-ran config every re-run | Builds mesh + config ONLY on new prefabs; existing prefabs get component added-if-missing |
+| `MaterialPersister` | Deleted + recreated existing mats | Returns existing mat as-is |
+| `AddMRecipe` | Overwrote all recipe fields every re-run | Sets fields only on new recipes |
+| `MakeProc` (Step 10) | Overwrote recipe fields every re-run | Early-returns if recipe exists |
+| `MakeMaritimeNode` | Overwrote node fields every re-run | Sets fields only on new nodes |
+
+### Changed
+- `GameVersion.cs` — `2.18.4 to 2.18.5`.

@@ -2721,7 +2721,11 @@ namespace VoxelEngine.EditorTools
                 (VoxelEngine.Items.LiquidType liquid, float litres)[] fluidOut = null)
             {
                 string path = $"{procRecFolder}/{assetName}.asset";
+                bool existed = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.ProcessingRecipe>(path) != null;
                 var r = GetOrCreateAsset<VoxelEngine.Crafting.ProcessingRecipe>(path);
+                
+                // Only populate fields on freshly-created recipes — never overwrite user edits.
+                if (existed) return r;
                 
                 r.displayName = display;
                 r.category    = category;
@@ -4952,11 +4956,22 @@ root =>
                 GameObject prefab, VoxelEngine.GridSystem.GridSize size, float mass, float hp)
             {
                 string path = $"{ITEMS}/{assetName}.asset";
+                bool existed = AssetDatabase.LoadAssetAtPath<VoxelEngine.GridSystem.GridBlockItem>(path) != null;
                 var b = AssetDatabase.LoadAssetAtPath<VoxelEngine.GridSystem.GridBlockItem>(path);
                 if (b == null) { b = ScriptableObject.CreateInstance<VoxelEngine.GridSystem.GridBlockItem>(); AssetDatabase.CreateAsset(b, path); }
-                b.itemId = assetName.ToLower(); b.displayName = display; b.iconTint = tint;
-                b.maxStack = 20; b.gridSize = size; b.blockPrefab = prefab;
-                b.blockMass = RealMass(display, size, mass); b.blockHP = hp; b.category = "Maritime";
+                // Only populate fields on freshly-created items — never overwrite user edits.
+                if (!existed)
+                {
+                    b.itemId = assetName.ToLower(); b.displayName = display; b.iconTint = tint;
+                    b.maxStack = 20; b.gridSize = size; b.blockPrefab = prefab;
+                    b.blockMass = RealMass(display, size, mass); b.blockHP = hp; b.category = "Maritime";
+                }
+                else
+                {
+                    // Light-touch: only backfill missing essentials, never override.
+                    if (b.blockPrefab == null) b.blockPrefab = prefab;
+                    if (string.IsNullOrEmpty(b.category)) b.category = "Maritime";
+                }
                 EditorUtility.SetDirty(b);
                 return b;
             }
@@ -4967,6 +4982,10 @@ root =>
                 var size  = name.Contains("Small") ? VoxelEngine.GridSystem.GridSize.Small : VoxelEngine.GridSystem.GridSize.Large;
                 var style = VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Generic;
 
+                // Detect whether the prefab already has authored content so we can
+                // skip mesh rebuild + config (preserving any user art/tweaks).
+                bool prefabExists = AssetDatabase.LoadAssetAtPath<GameObject>(path) != null;
+
                 var prefab = GetOrCreatePrefab(path, name, (root) =>
                 {
                     EnsureFolder(PREFABS + "/Mats");
@@ -4974,23 +4993,36 @@ root =>
                     VoxelEngine.GridSystem.GridBlockMeshBuilder.MaterialPersister = (mat, _) =>
                     {
                         string mp = $"{PREFABS}/Mats/{name}_{matIdx++}.mat";
-                        if (AssetDatabase.LoadAssetAtPath<Material>(mp) != null) AssetDatabase.DeleteAsset(mp);
+                        // Never overwrite an existing material — return it as-is.
+                        var existing = AssetDatabase.LoadAssetAtPath<Material>(mp);
+                        if (existing != null) return existing;
                         AssetDatabase.CreateAsset(mat, mp);
                         return AssetDatabase.LoadAssetAtPath<Material>(mp);
                     };
                     try
                     {
-                        if (root.transform.childCount == 0 && root.GetComponent<MeshFilter>() == null)
+                        // Only build mesh + run config on freshly-created prefabs.
+                        // If the prefab already exists, ONLY ensure the required
+                        // component is present (AddComponent if missing) — never
+                        // overwrite its serialized fields or mesh.
+                        bool isNew = !prefabExists
+                            || (root.transform.childCount == 0 && root.GetComponent<MeshFilter>() == null);
+
+                        if (isNew)
                         {
                             VoxelEngine.GridSystem.GridBlockMeshBuilder.Build(root, style, size, color);
                         }
+
                         var box = root.GetComponent<BoxCollider>();
                         if (box == null) box = root.AddComponent<BoxCollider>();
                         float cs = VoxelEngine.GridSystem.GridSizeExt.CellSize(size);
                         box.size = new Vector3(cs, cs, cs);
+
                         var b = root.GetComponent<T>();
                         if (b == null) b = root.AddComponent<T>();
-                        config?.Invoke(b);
+
+                        // Only apply config (tuning values) to newly-created blocks.
+                        if (isNew) config?.Invoke(b);
                     }
                     finally { VoxelEngine.GridSystem.GridBlockMeshBuilder.MaterialPersister = null; }
                 });
@@ -5003,12 +5035,17 @@ root =>
             {
                 if (output == null) return null;
                 string path = $"{RECIPES}/{name}.asset";
+                bool existed = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeDefinition>(path) != null;
                 var r = GetOrCreateAsset<VoxelEngine.Crafting.RecipeDefinition>(path);
-                r.displayName = display; r.outputItem = output; r.outputCount = 1;
-                r.requiredStation = VoxelEngine.Crafting.StationTier.Assembler; r.craftSeconds = 4f; r.unlockedByDefault = false;
-                var valid = new System.Collections.Generic.List<VoxelEngine.Crafting.RecipeIngredient>();
-                foreach (var (item, n) in inputs) if (item != null) valid.Add(new VoxelEngine.Crafting.RecipeIngredient { item = item, count = n });
-                r.inputs = valid.ToArray();
+                // Only populate fields on freshly-created recipes — never overwrite user edits.
+                if (!existed)
+                {
+                    r.displayName = display; r.outputItem = output; r.outputCount = 1;
+                    r.requiredStation = VoxelEngine.Crafting.StationTier.Assembler; r.craftSeconds = 4f; r.unlockedByDefault = false;
+                    var valid = new System.Collections.Generic.List<VoxelEngine.Crafting.RecipeIngredient>();
+                    foreach (var (item, n) in inputs) if (item != null) valid.Add(new VoxelEngine.Crafting.RecipeIngredient { item = item, count = n });
+                    r.inputs = valid.ToArray();
+                }
                 EditorUtility.SetDirty(r);
                 if (registry != null && !registry.recipes.Contains(r)) registry.recipes.Add(r);
                 recipes.Add(r); return r;
@@ -5137,21 +5174,26 @@ root =>
                     VoxelEngine.Research.ResearchNode[] prereqs)
                 {
                     string path = $"{NODES}/{id}.asset";
+                    bool existed = AssetDatabase.LoadAssetAtPath<VoxelEngine.Research.ResearchNode>(path) != null;
                     var n = AssetDatabase.LoadAssetAtPath<VoxelEngine.Research.ResearchNode>(path);
                     if (n == null) { n = ScriptableObject.CreateInstance<VoxelEngine.Research.ResearchNode>(); AssetDatabase.CreateAsset(n, path); }
-                    n.nodeId = id; n.displayName = display; n.description = desc;
-                    n.category = VoxelEngine.Research.ResearchCategory.Environment;
-                    n.subCategory = VoxelEngine.Research.ResearchSubCategory.Building;
-                    n.tier = tier; n.column = col;
-                    n.iconTint = new Color(0.2f, 0.5f, 0.8f);
-                    n.researchSeconds = seconds;
-                    n.cost = new VoxelEngine.Research.ResearchNode.ScienceCost[cost.Length];
-                    for (int i = 0; i < cost.Length; i++)
-                        n.cost[i] = new VoxelEngine.Research.ResearchNode.ScienceCost { pack = cost[i].p, count = cost[i].n };
-                    n.unlocksRecipes = unlocks ?? new VoxelEngine.Crafting.RecipeDefinition[0];
-                    n.prerequisites = prereqs ?? new VoxelEngine.Research.ResearchNode[0];
-                    n.upgradeKind = VoxelEngine.Research.PlayerUpgradeKind.None;
-                    n.maxRanks = 1;
+                    // Only populate fields on freshly-created nodes — never overwrite user edits.
+                    if (!existed)
+                    {
+                        n.nodeId = id; n.displayName = display; n.description = desc;
+                        n.category = VoxelEngine.Research.ResearchCategory.Environment;
+                        n.subCategory = VoxelEngine.Research.ResearchSubCategory.Building;
+                        n.tier = tier; n.column = col;
+                        n.iconTint = new Color(0.2f, 0.5f, 0.8f);
+                        n.researchSeconds = seconds;
+                        n.cost = new VoxelEngine.Research.ResearchNode.ScienceCost[cost.Length];
+                        for (int i = 0; i < cost.Length; i++)
+                            n.cost[i] = new VoxelEngine.Research.ResearchNode.ScienceCost { pack = cost[i].p, count = cost[i].n };
+                        n.unlocksRecipes = unlocks ?? new VoxelEngine.Crafting.RecipeDefinition[0];
+                        n.prerequisites = prereqs ?? new VoxelEngine.Research.ResearchNode[0];
+                        n.upgradeKind = VoxelEngine.Research.PlayerUpgradeKind.None;
+                        n.maxRanks = 1;
+                    }
                     EditorUtility.SetDirty(n);
                     if (!tree.nodes.Contains(n)) tree.nodes.Add(n);
                     return n;
