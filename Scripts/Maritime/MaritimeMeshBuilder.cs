@@ -16,7 +16,7 @@ namespace VoxelEngine.Maritime
 {
     public static class MaritimeMeshBuilder
     {
-        public const int Version = 8;
+        public const int Version = 9;
         private static Shader Lit => Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
         public static System.Func<Material, string, Material> MaterialPersister;
         private static int _matCounter;
@@ -50,6 +50,7 @@ namespace VoxelEngine.Maritime
         static Material PortFuel   => MatC(new Color(0.15f, 0.45f, 0.95f), 0.3f, 0.6f, e: new Color(0.05f, 0.2f, 0.5f)); // blue = fuel/item input
         static Material PortExhaust=> MatC(new Color(0.85f, 0.15f, 0.1f), 0.3f, 0.6f, e: new Color(0.5f, 0.05f, 0.03f)); // red = exhaust output
         static Material PortShaft  => MatC(new Color(0.9f, 0.75f, 0.2f), 0.6f, 0.5f, e: new Color(0.3f, 0.2f, 0.02f));  // gold = shaft output
+        static Material PortCoolant=> MatC(new Color(0.20f, 0.85f, 0.75f), 0.3f, 0.6f, e: new Color(0.05f, 0.4f, 0.35f)); // teal = coolant input
 
         public static void Build(GameObject root, string prefabName, GridSize size)
         {
@@ -214,6 +215,7 @@ namespace VoxelEngine.Maritime
             Port(r, "Port_FuelInput", PortFuel, new Vector3(0, -cs * 0.1f, -cs * 0.45f), new Vector3(cs * 0.12f, cs * 0.12f, cs * 0.04f));
             Port(r, "Port_ExhaustOutput", PortExhaust, new Vector3(cs * 0.2f, cs * 0.55f, -cs * 0.2f), new Vector3(cs * 0.1f, cs * 0.04f, cs * 0.1f));
             Port(r, "Port_ShaftOutput", PortShaft, new Vector3(0, 0, cs * 0.46f), new Vector3(cs * 0.14f, cs * 0.14f, cs * 0.08f), PrimitiveType.Cylinder);
+            Port(r, "Port_CoolantInput", PortCoolant, new Vector3(-cs * 0.35f, -cs * 0.1f, -cs * 0.42f), new Vector3(cs * 0.1f, cs * 0.1f, cs * 0.04f));
         }
 
         // ════════════════════════════════════════════════════════════════
@@ -282,6 +284,7 @@ namespace VoxelEngine.Maritime
             Port(r, "Port_ExhaustOutput_L", PortExhaust, new Vector3(s * 0.3f, s * 0.55f, -s * 0.25f), new Vector3(s * 0.12f, s * 0.04f, s * 0.12f));
             Port(r, "Port_ExhaustOutput_R", PortExhaust, new Vector3(-s * 0.3f, s * 0.55f, -s * 0.25f), new Vector3(s * 0.12f, s * 0.04f, s * 0.12f));
             Port(r, "Port_ShaftOutput", PortShaft, new Vector3(0, 0, s * 0.48f), new Vector3(s * 0.16f, s * 0.16f, s * 0.1f), PrimitiveType.Cylinder);
+            Port(r, "Port_CoolantInput", PortCoolant, new Vector3(-s * 0.38f, -s * 0.2f, -s * 0.45f), new Vector3(s * 0.12f, s * 0.12f, s * 0.04f));
         }
 
         // ════════════════════════════════════════════════════════════════

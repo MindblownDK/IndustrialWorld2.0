@@ -2813,11 +2813,17 @@ namespace VoxelEngine.EditorTools
                 fluidIn:  new[] { (VoxelEngine.Items.LiquidType.RefinedOil,    50f) },
                 fluidOut: new[] { (VoxelEngine.Items.LiquidType.MarineGasOil,  30f) });
 
+            // Marine Engine Coolant — synthesised in the chemical plant.
+            var procCoolant = MakeProc("Proc_MarineCoolant", "Synthesise Marine Engine Coolant", "Chemistry",
+                noItems, noItems, seconds: 10f, powerMul: 1.2f,
+                fluidIn:  new[] { (VoxelEngine.Items.LiquidType.Water,         100f) },
+                fluidOut: new[] { (VoxelEngine.Items.LiquidType.MarineEngineCoolant, 60f) });
+
             // Attach those recipes to the OilRefinery prefab.
             AppendOilRefineryRecipes(refineryPrefab, new List<VoxelEngine.Crafting.ProcessingRecipe> { procRefine, procPlastic, procHeavyFuel, procMGO });
 
             // Attach the Chemistry recipe to the Stationary Chemical Plant prefab.
-            AppendChemicalPlantRecipes(chemPlantPrefab, new List<VoxelEngine.Crafting.ProcessingRecipe> { procLiquidFuel, procSynthMGO });
+            AppendChemicalPlantRecipes(chemPlantPrefab, new List<VoxelEngine.Crafting.ProcessingRecipe> { procLiquidFuel, procSynthMGO, procCoolant });
 
             // ====================================================================
             //  5) NEW CRAFTING RECIPES — registered into the global RecipeRegistry
@@ -4815,6 +4821,7 @@ root =>
             var procHeavyFuelShared = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.ProcessingRecipe>($"{procFolder}/Proc_RefineHeavyFuelOil.asset");
             var procMGOShared       = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.ProcessingRecipe>($"{procFolder}/Proc_RefineMGO.asset");
             var procSynthMGOShared  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.ProcessingRecipe>($"{procFolder}/Proc_SynthesiseMGO.asset");
+            var procCoolantShared   = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.ProcessingRecipe>($"{procFolder}/Proc_MarineCoolant.asset");
 
             var chemPref = MakeGPref<VoxelEngine.GridSystem.GridChemicalPlant>("ChemicalPlant_Large", new Color(0.5f, 0.7f, 0.4f), new Vector3(2.5f, 2.5f, 2.5f),
                 cp =>
@@ -4822,6 +4829,7 @@ root =>
                     cp.knownRecipes = new System.Collections.Generic.List<VoxelEngine.Crafting.ProcessingRecipe>();
                     if (procChemistry != null) cp.knownRecipes.Add(procChemistry);
                     if (procSynthMGOShared != null) cp.knownRecipes.Add(procSynthMGOShared);
+                    if (procCoolantShared != null) cp.knownRecipes.Add(procCoolantShared);
                 });
             var itemChem = MakeGItem("GItem_ChemicalPlant", "Ship Chemical Plant", Color.white, chemPref, VoxelEngine.GridSystem.GridSize.Large, 1100, 900);
             AddGRecipe("Recipe_GChemicalPlant", "Ship Chemical Plant", itemChem, (steelPlate, 12), (circuit, 8), (copperWire, 8));
@@ -5207,6 +5215,12 @@ root =>
                 b => { b.drainRate = 5f; b.drainRadiusCells = 4f; b.powerDrawWatts = 500f; });
             var itemBilge = MakeMItem("MItem_BilgePump", "Bilge Pump", new Color(0.20f,0.30f,0.45f), bilgePref, SzL, 200, 400);
             AddMRecipe("Recipe_MBilgePump", "Bilge Pump", itemBilge, (ironPlate, 4), (copperWire, 6), (circuit, 2));
+
+            // Marine Water Pump
+            var pumpPref = MakeMPref<VoxelEngine.Maritime.GridMarineWaterPump>("MarineWaterPump_Large", new Color(0.15f, 0.35f, 0.55f), Vector3.one,
+                p => { p.pumpRate = 50f; p.bufferCapacity = 100f; p.powerDrawWatts = 200f; p.suctionDepth = 3f; });
+            var itemPump = MakeMItem("MItem_MarineWaterPump", "Marine Water Pump", new Color(0.15f, 0.35f, 0.55f), pumpPref, SzL, 150, 350);
+            AddMRecipe("Recipe_MMarineWaterPump", "Marine Water Pump", itemPump, (ironPlate, 4), (copperWire, 4), (ironGear, 2));
 
             // Helm
             var helmPref = MakeMPref<VoxelEngine.Maritime.GridHelm>("Helm_Large", new Color(0.45f,0.30f,0.15f), Vector3.one,

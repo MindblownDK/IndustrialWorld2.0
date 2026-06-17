@@ -732,6 +732,7 @@ namespace VoxelEngine.Player
             if (b is VoxelEngine.Maritime.MaritimeBlockBase && b is not VoxelEngine.Maritime.GridHelm) return true;
             if (b is VoxelEngine.Maritime.GridHullBlock) return true;
             if (b is VoxelEngine.Maritime.GridBilgePump) return true;
+            if (b is VoxelEngine.Maritime.GridMarineWaterPump) return true;
 
             return b is VoxelEngine.GridSystem.GridLiquidTank
                 || b is VoxelEngine.GridSystem.GridGasTank

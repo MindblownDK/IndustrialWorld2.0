@@ -62,6 +62,22 @@ namespace VoxelEngine.Maritime
         [Tooltip("At this fill ratio (0..1) the engine starts losing power from back-pressure.")]
         [Range(0.5f, 0.99f)] public float exhaustChokeThreshold = 0.8f;
 
+        [Header("Coolant")]
+        [Tooltip("Internal coolant buffer capacity (litres).")]
+        public float coolantCapacity = 50f;
+        [Tooltip("Coolant consumed per second at full throttle (L/s).")]
+        public float coolantConsumptionRate = 0.5f;
+        [Tooltip("Coolant pulled from grid tanks per second when refilling.")]
+        public float coolantRefillRate = 5f;
+        [Tooltip("Current coolant buffer level (L).")]
+        public float CoolantBuffer { get; private set; }
+        /// <summary>0..1 coolant fill ratio.</summary>
+        public float CoolantFill01 => coolantCapacity > 0f ? Mathf.Clamp01(CoolantBuffer / coolantCapacity) : 0f;
+        /// <summary>True if using Marine Engine Coolant (vs plain water).</summary>
+        public bool UsingPremiumCoolant { get; private set; }
+        /// <summary>True if the engine has coolant available.</summary>
+        public bool HasCoolant => CoolantBuffer > 0.01f;
+
         [Header("State (read-only)")]
         /// <summary>Current fuel buffer level (0..capacity).</summary>
         public float FuelBuffer { get; private set; }
@@ -192,7 +208,10 @@ namespace VoxelEngine.Maritime
             // ── Engine running conditions ───────────────────────────────
             bool exhaustChoked = ExhaustFill01 >= 0.99f;
 
-            if (!Enabled || !HasExhaust || exhaustChoked)
+            // Coolant: HFO and MGO engines REQUIRE coolant to run.
+            bool needsCoolant = tier == EngineTier.Medium || tier == EngineTier.Giant;
+
+            if (!Enabled || !HasExhaust || exhaustChoked || (needsCoolant && !HasCoolant))
             {
                 node.FuelAvailable01 = 0f;
                 IsRunning = false;
@@ -202,10 +221,19 @@ namespace VoxelEngine.Maritime
             }
             node.ClearFlag(MechanicalFlags.Broken);
 
+            // Consume coolant (if needed).
+            if (needsCoolant && IsRunning)
+            {
+                CoolantBuffer = Mathf.Max(0f, CoolantBuffer - coolantConsumptionRate * throttle * dt);
+                RefillCoolant(dt);
+            }
+
             // Consume fuel from the internal buffer.
-            float consumption = fuelConsumptionRate * throttle * dt;
+            // Marine Engine Coolant reduces fuel consumption by 33%.
+            float fuelMultiplier = UsingPremiumCoolant ? 0.67f : 1f;
+            float consumption = fuelConsumptionRate * throttle * fuelMultiplier * dt;
             FuelBuffer = Mathf.Max(0f, FuelBuffer - consumption);
-            CurrentUsage = fuelConsumptionRate * throttle;
+            CurrentUsage = fuelConsumptionRate * throttle * fuelMultiplier;
 
             // Refill from grid storage.
             RefillBuffer(dt);
@@ -288,6 +316,31 @@ namespace VoxelEngine.Maritime
                 float want = Mathf.Min(space, liquidRefillRate * dt);
                 float drawn = DrawLiquidFuel(liquidFuel, want);
                 FuelBuffer += drawn;
+            }
+        }
+
+        /// <summary>Refill coolant from grid tanks. Prefers Marine Engine Coolant, falls back to Water.</summary>
+        private void RefillCoolant(float dt)
+        {
+            float space = coolantCapacity - CoolantBuffer;
+            if (space < 0.01f) return;
+
+            // Try Marine Engine Coolant first (premium — gives -33% fuel).
+            float want = Mathf.Min(space, coolantRefillRate * dt);
+            float drawn = DrawLiquidFuel(LiquidType.MarineEngineCoolant, want);
+            if (drawn > 0.01f)
+            {
+                CoolantBuffer += drawn;
+                UsingPremiumCoolant = true;
+                return;
+            }
+
+            // Fall back to plain water (no bonus, but keeps the engine alive).
+            drawn = DrawLiquidFuel(LiquidType.Water, want);
+            if (drawn > 0.01f)
+            {
+                CoolantBuffer += drawn;
+                UsingPremiumCoolant = false;
             }
         }
     }

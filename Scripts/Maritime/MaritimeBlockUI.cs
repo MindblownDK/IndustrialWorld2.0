@@ -43,6 +43,7 @@ namespace VoxelEngine.Maritime
                 GridMaritimeGenerator gen   => GeneratorPanel(gen),
                 GridGearbox gb              => GearboxPanel(gb),
                 GridBilgePump bp            => BilgePumpPanel(bp),
+                GridMarineWaterPump mwp     => MarineWaterPumpPanel(mwp),
                 GridPropeller prop          => PropellerPanel(prop),
                 GridElectricalPropeller ep  => EPropellerPanel(ep),
                 GridTurbocharger tc         => TurbochargerPanel(tc),
@@ -96,6 +97,13 @@ namespace VoxelEngine.Maritime
                 gaugeRow.Add(T.TankGauge("EXHAUST", eng.ExhaustFill01,
                     eng.ExhaustFill01 >= 0.8f ? T.AccentRed : new Color(0.4f, 0.35f, 0.3f),
                     $"{eng.ExhaustGas:0} / {eng.exhaustGasCapacity:0}", 70, 120));
+                // Coolant tank (only for HFO + MGO engines).
+                if (eng.tier != EngineTier.Small)
+                {
+                    Color coolantColor = eng.UsingPremiumCoolant ? new Color(0.20f, 0.85f, 0.75f) : new Color(0.25f, 0.55f, 0.95f);
+                    gaugeRow.Add(T.TankGauge("COOLANT", eng.CoolantFill01, coolantColor,
+                        $"{eng.CoolantBuffer:0} / {eng.coolantCapacity:0} L", 70, 120));
+                }
                 p.Add(gaugeRow);
             }
             else
@@ -296,6 +304,38 @@ namespace VoxelEngine.Maritime
         // ════════════════════════════════════════════════════════════════
         //  PROPELLER — speed, torque, thrust
         // ════════════════════════════════════════════════════════════════
+        // ════════════════════════════════════════════════════════════════
+        //  MARINE WATER PUMP
+        // ════════════════════════════════════════════════════════════════
+        private static VisualElement MarineWaterPumpPanel(GridMarineWaterPump mwp)
+        {
+            var p = T.MachinePanel();
+
+            string status = !mwp.IsSubmerged ? "⚠ NOT SUBMERGED" : mwp.IsPumping ? "● PUMPING" : "○ IDLE";
+            Color statusColor = !mwp.IsSubmerged ? T.AccentRed : mwp.IsPumping ? T.AccentGreen : T.AccentDim;
+
+            var (hdr, _, _, _) = T.HeaderRow("🌊 Marine Water Pump", status, statusColor);
+            p.Add(hdr);
+            p.Add(T.AccentDivider(T.AccentBlue));
+
+            var gaugeRow = Row();
+            gaugeRow.style.justifyContent = Justify.Center;
+            gaugeRow.Add(T.TankGauge("WATER", mwp.Fill01, new Color(0.25f, 0.55f, 0.95f),
+                $"{mwp.Buffer:0} / {mwp.bufferCapacity:0} L", 70, 120));
+            p.Add(gaugeRow);
+            p.Add(T.Spacer(6));
+
+            p.Add(T.StatRow("🚿", "Pump Rate", $"{mwp.pumpRate:0} L/s", T.AccentCyan));
+            p.Add(T.StatRow("📏", "Suction Depth", $"{mwp.suctionDepth:0.#} m", T.AccentTeal));
+            p.Add(T.StatRow("⚡", "Power Use", PowerFormat.Watts(mwp.PowerDraw), T.AccentGold));
+            p.Add(T.StatRow("🌊", "Submerged", mwp.IsSubmerged ? "Yes — pumping from ocean" : "No — must be below waterline", T.TextSecondary));
+
+            p.Add(T.Spacer(6));
+            p.Add(T.Muted("Sucks water from the ocean and pushes it into connected Water tanks. " +
+                          "Place below the waterline. Used for engine coolant supply."));
+            return p;
+        }
+
         private static VisualElement PropellerPanel(GridPropeller prop)
         {
             var p = T.MachinePanel();
