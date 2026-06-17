@@ -53,7 +53,7 @@ namespace VoxelEngine.EditorTools
                     SpawnAllGrid();
 
                 if (GUILayout.Button("⚓  Spawn All MARITIME Blocks", GUILayout.Height(38)))
-                    SpawnByCategory("Maritime");
+                    SpawnAllMaritime();
 
                 if (GUILayout.Button("⚡  Spawn All POWER Blocks", GUILayout.Height(34)))
                     SpawnByCategory("Power");
@@ -116,6 +116,14 @@ namespace VoxelEngine.EditorTools
 
         private void SpawnAllGrid()
             => Give(Resources.FindObjectsOfTypeAll<GridBlockItem>().Where(i => i != null), "GRID");
+
+        // Maritime blocks are GridBlockItems with category "Maritime".
+        // We search GridBlockItem (not ItemDefinition) because they may not be
+        // loaded in memory via Resources.FindObjectsOfTypeAll<ItemDefinition>.
+        private void SpawnAllMaritime()
+            => Give(Resources.FindObjectsOfTypeAll<GridBlockItem>()
+                    .Where(i => i != null && string.Equals(i.category, "Maritime", System.StringComparison.OrdinalIgnoreCase)),
+                    "MARITIME");
 
         private void SpawnByCategory(string category)
             => Give(AllItems().Where(i => string.Equals(i.category, category, System.StringComparison.OrdinalIgnoreCase)), category);

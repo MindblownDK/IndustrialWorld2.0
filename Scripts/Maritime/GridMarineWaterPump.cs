@@ -48,9 +48,15 @@ namespace VoxelEngine.Maritime
 
         public override void RefreshMaritimeNode(ref MechanicalNode node, float throttle)
         {
-            // Check if the pump is submerged (water below it).
+            UpdateSubmerged();
+        }
+
+        /// <summary>Check if the pump is touching water (bottom of block at/below water surface).</summary>
+        private void UpdateSubmerged()
+        {
             float waterHeight = WaterProbeSystem.GetSurfaceHeight(transform.position.x, transform.position.z);
-            IsSubmerged = transform.position.y - suctionDepth < waterHeight;
+            float pumpBottom = transform.position.y - 0.5f; // bottom of the block
+            IsSubmerged = pumpBottom <= waterHeight;
         }
 
         private void FixedUpdate()
@@ -63,7 +69,10 @@ namespace VoxelEngine.Maritime
 
             float dt = Time.fixedDeltaTime;
 
-            // Suck water from the ocean if submerged + buffer has space.
+            // Re-check submergence each tick (water level can change).
+            UpdateSubmerged();
+
+            // Suck water from the ocean — pump must be touching the water.
             if (IsSubmerged && Buffer < bufferCapacity - 0.1f)
             {
                 Buffer = Mathf.Min(bufferCapacity, Buffer + pumpRate * dt);

@@ -5247,7 +5247,8 @@ root =>
             SetDesc(itemGen, "Maritime generator (2x2x2). Converts shaft torque into electricity. More RPM = more power. Best used after a gearbox (gear up for speed before the generator). Contains a small internal battery buffer. Connect to the ship power grid.");
             SetDesc(itemEProp, "Electrical propeller (2x2x1). Torpedo-shaped bronze pod with a sleek 3-blade propeller. Driven by electricity from the grid (not shaft torque). Medium thrust with fast spin-up. Heavy armored power conduit.");
             SetDesc(itemBilge, "Bilge pump. Consumes electricity to drain waterlogged mass from nearby hull blocks within a 4-cell radius. Essential for surviving hull breaches and mega-storms on untreated-wood ships. Heavy, no buoyancy.");
-            SetDesc(itemHelm, "Ship's wheel / helm. Walk up and press E to take control. W = throttle up, S = throttle down, A/D = steer left/right. Drives the ship's MaritimePropulsionSystem (engines + rudder). Press E again to release.");
+            SetDesc(itemPump, "Marine Water Pump. Must be placed at or below the waterline to operate. Sucks seawater into an internal buffer, then pushes it into connected Water tanks. Used to supply engine coolant (Water) for HFO and MGO engines. Draws power from the grid.");
+            SetDesc(itemHelm, "Ship's wheel / helm. Right-click to enter a third-person camera view above the helm. W = throttle up, S = throttle down, A/D = steer left/right. Scroll wheel = zoom in/out. Press F or right-click again to release. Drives the ship's MaritimePropulsionSystem (engines + rudder).");
 
 
             // ═══════════════════════════════════════════════════════════════
