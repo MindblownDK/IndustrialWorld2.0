@@ -4985,13 +4985,17 @@ root =>
                 // Only populate fields on freshly-created items — never overwrite user edits.
                 if (!existed)
                 {
-                    b.itemId = assetName.ToLower(); b.displayName = display; b.iconTint = tint;
+                    // Derive a clean itemId from the display name: "Heavy Fuel Oil Engine" → "heavy_fuel_oil_engine"
+                    b.itemId = display.ToLowerInvariant().Replace(" ", "_").Replace("/", "_").Replace("(", "").Replace(")", "");
+                    b.displayName = display; b.iconTint = tint;
                     b.maxStack = 20; b.gridSize = size; b.blockPrefab = prefab;
                     b.blockMass = RealMass(display, size, mass); b.blockHP = hp; b.category = "Maritime";
                 }
                 else
                 {
-                    // Light-touch: only backfill missing essentials, never override.
+                    // Light-touch: fix itemId if it's still the old "mitem_" style, but preserve everything else.
+                    if (!string.IsNullOrEmpty(b.itemId) && b.itemId.StartsWith("mitem_"))
+                        b.itemId = display.ToLowerInvariant().Replace(" ", "_").Replace("/", "_").Replace("(", "").Replace(")", "");
                     if (b.blockPrefab == null) b.blockPrefab = prefab;
                     if (string.IsNullOrEmpty(b.category)) b.category = "Maritime";
                 }
@@ -5222,6 +5226,12 @@ root =>
             var itemPump = MakeMItem("MItem_MarineWaterPump", "Marine Water Pump", new Color(0.15f, 0.35f, 0.55f), pumpPref, SzL, 150, 350);
             AddMRecipe("Recipe_MMarineWaterPump", "Marine Water Pump", itemPump, (ironPlate, 4), (copperWire, 4), (ironGear, 2));
 
+            // Ship Control Console (modern alternative to Helm)
+            var consolePref = MakeMPref<VoxelEngine.Maritime.GridShipConsole>("ShipConsole_Large", new Color(0.15f, 0.18f, 0.22f), Vector3.one,
+                c => { c.interactionRadius = 3f; });
+            var itemConsole = MakeMItem("MItem_ShipConsole", "Ship Control Console", new Color(0.15f, 0.18f, 0.22f), consolePref, SzL, 200, 350);
+            AddMRecipe("Recipe_MShipConsole", "Ship Control Console", itemConsole, (steelPlate, 6), (circuit, 4), (glass, 2), (copperWire, 4));
+
             // Helm
             var helmPref = MakeMPref<VoxelEngine.Maritime.GridHelm>("Helm_Large", new Color(0.45f,0.30f,0.15f), Vector3.one,
                 h => { h.interactionRadius = 3f; });
@@ -5248,6 +5258,7 @@ root =>
             SetDesc(itemEProp, "Electrical propeller (2x2x1). Torpedo-shaped bronze pod with a sleek 3-blade propeller. Driven by electricity from the grid (not shaft torque). Medium thrust with fast spin-up. Heavy armored power conduit.");
             SetDesc(itemBilge, "Bilge pump. Consumes electricity to drain waterlogged mass from nearby hull blocks within a 4-cell radius. Essential for surviving hull breaches and mega-storms on untreated-wood ships. Heavy, no buoyancy.");
             SetDesc(itemPump, "Marine Water Pump. Must be placed at or below the waterline to operate. Sucks seawater into an internal buffer, then pushes it into connected Water tanks. Used to supply engine coolant (Water) for HFO and MGO engines. Draws power from the grid.");
+            SetDesc(itemConsole, "Ship Control Console — a modern bridge station with twin throttle levers, radar display, and a compact steering wheel. Right-click to enter. W/S = throttle, A/D = steer, scroll = zoom, F or right-click = exit. Functions identically to the Helm but with a sleek industrial aesthetic. Tier 3+");
             SetDesc(itemHelm, "Ship's wheel / helm. Right-click to enter a third-person camera view above the helm. W = throttle up, S = throttle down, A/D = steer left/right. Scroll wheel = zoom in/out. Press F or right-click again to release. Drives the ship's MaritimePropulsionSystem (engines + rudder).");
 
 

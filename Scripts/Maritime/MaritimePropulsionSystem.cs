@@ -396,8 +396,19 @@ namespace VoxelEngine.Maritime
 
         private float BlockVolume(GridBlock block)
         {
-            // A full grid cell displaces one cell volume. Heavy/solid blocks displace more.
-            return Mathf.Max(0.25f, _cellSize * _cellSize * _cellSize);
+            // Volume is tuned so buoyancy force matches the block's RUNTIME mass
+            // (which includes the grid mass-scale from RecalculateMass).
+            // F_buoy = ρ_water × g × V × buoyancyFactor
+            // At buoyancyFactor=1.0, a fully submerged block should produce exactly
+            // its weight in upward force (neutral buoyancy at the surface).
+            // So V_runtime = mass / (ρ_water × buoyancyFactor) — but we don't know
+            // the factor here. Instead, we use: V = mass / ρ_water, and the job's
+            // buoyancyFactor scales it. This makes 1.0 float at the surface, 0 sink.
+            float runtimeMass = _grid != null && _rb != null
+                ? Mathf.Max(1f, _rb.mass / Mathf.Max(1, _grid.BlockCount)) // per-block mass
+                : Mathf.Max(1f, block.TotalMass);
+            float waterDensity = settings != null ? settings.waterDensity : 1025f;
+            return runtimeMass / waterDensity;
         }
 
         private float DefaultBuoyancyFactor(GridBlock block)

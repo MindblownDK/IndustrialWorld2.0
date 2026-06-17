@@ -320,10 +320,17 @@ namespace VoxelEngine.Player
                 bool holdingGridBlock = !inventory.ActiveStack.IsEmpty &&
                                         inventory.ActiveStack.item is VoxelEngine.GridSystem.GridBlockItem;
                 var gridBlock = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
-                // Helm: right-click enters the helm (camera mode) instead of opening UI.
+                // Helm / Ship Console: right-click enters the control seat.
                 if (!holdingGridBlock && gridBlock is VoxelEngine.Maritime.GridHelm helm)
                 {
-                    helm.Enter(gameObject.GetComponent<Player.PlayerController>());
+                    var pc = GetComponentInParent<VoxelEngine.Player.PlayerController>();
+                    if (pc != null) helm.Enter(pc);
+                    return;
+                }
+                if (!holdingGridBlock && gridBlock is VoxelEngine.Maritime.GridShipConsole console)
+                {
+                    var pc = GetComponentInParent<VoxelEngine.Player.PlayerController>();
+                    if (pc != null) console.Enter(pc);
                     return;
                 }
                 if (!holdingGridBlock && gridBlock != null && GridBlockHasUI(gridBlock))
@@ -729,7 +736,9 @@ namespace VoxelEngine.Player
         private static bool GridBlockHasUI(VoxelEngine.GridSystem.GridBlock b)
         {
             // Maritime blocks — any MaritimeBlockBase EXCEPT Helm (Helm enters instead of UI).
-            if (b is VoxelEngine.Maritime.MaritimeBlockBase && b is not VoxelEngine.Maritime.GridHelm) return true;
+            if (b is VoxelEngine.Maritime.MaritimeBlockBase
+                && b is not VoxelEngine.Maritime.GridHelm
+                && b is not VoxelEngine.Maritime.GridShipConsole) return true;
             if (b is VoxelEngine.Maritime.GridHullBlock) return true;
             if (b is VoxelEngine.Maritime.GridBilgePump) return true;
             if (b is VoxelEngine.Maritime.GridMarineWaterPump) return true;

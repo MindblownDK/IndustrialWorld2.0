@@ -16,7 +16,7 @@ namespace VoxelEngine.Maritime
 {
     public static class MaritimeMeshBuilder
     {
-        public const int Version = 9;
+        public const int Version = 11;
         private static Shader Lit => Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
         public static System.Func<Material, string, Material> MaterialPersister;
         private static int _matCounter;
@@ -77,7 +77,9 @@ namespace VoxelEngine.Maritime
             else if (n.Contains("driveshaft"))           BuildDriveShaft(root, cs);
             else if (n.Contains("maritimegenerator"))    BuildGenerator(root, cs);
             else if (n.Contains("exhaust"))              BuildExhaustPipe(root, cs);
+            else if (n.Contains("marinewaterpump"))  BuildMarineWaterPump(root, cs);
             else if (n.Contains("bilgepump"))            BuildBilgePump(root, cs);
+            else if (n.Contains("shipconsole"))           BuildShipConsole(root, cs);
             else if (n.Contains("helm"))                 BuildHelm(root, cs);
             else if (n.Contains("hull_balsa"))           BuildHull(root, cs, new Color(0.80f, 0.65f, 0.40f), 0f, 0.7f);
             else if (n.Contains("hull_iron"))            BuildHull(root, cs, new Color(0.45f, 0.47f, 0.52f), 0.85f, 0.5f, rivets: true);
@@ -465,6 +467,65 @@ namespace VoxelEngine.Maritime
         // ════════════════════════════════════════════════════════════════
         //  BILGE PUMP
         // ════════════════════════════════════════════════════════════════
+        // ════════════════════════════════════════════════════════════════
+        //  MARINE WATER PUMP — industrial centrifugal pump with intake + outlet
+        // ════════════════════════════════════════════════════════════════
+        static void BuildMarineWaterPump(GameObject r, float cs)
+        {
+            // Base mounting plate.
+            Box(r, DarkSteel, new Vector3(0, -cs * 0.4f, 0), new Vector3(cs * 0.85f, cs * 0.1f, cs * 0.85f));
+
+            // Main pump housing — volute (snail-shell shape using a scaled sphere).
+            var volute = Sphere(r, CastIron, new Vector3(0, -cs * 0.1f, 0), cs * 0.35f);
+            volute.transform.localScale = new Vector3(cs * 0.7f, cs * 0.5f, cs * 0.7f);
+
+            // Motor on top — cylindrical electric motor housing.
+            var motor = Cyl(r, Steel, new Vector3(0, cs * 0.15f, 0), cs * 0.22f, cs * 0.4f);
+            // Motor cooling fins.
+            for (int i = 0; i < 8; i++)
+            {
+                float a = i * 45f * Mathf.Deg2Rad;
+                var fin = Box(r, Steel, new Vector3(Mathf.Cos(a) * cs * 0.22f, cs * 0.15f, Mathf.Sin(a) * cs * 0.22f),
+                    new Vector3(cs * 0.04f, cs * 0.3f, cs * 0.1f));
+                fin.transform.localRotation = Quaternion.Euler(0, i * 45f + 90, 0);
+            }
+
+            // Motor cap with junction box.
+            Cyl(r, DarkSteel, new Vector3(0, cs * 0.36f, 0), cs * 0.18f, cs * 0.06f);
+            Box(r, DarkSteel, new Vector3(cs * 0.12f, cs * 0.42f, 0), new Vector3(cs * 0.12f, cs * 0.08f, cs * 0.1f));
+
+            // Impeller housing cover (brass disc on the front face).
+            var cover = Cyl(r, Brass, new Vector3(0, -cs * 0.1f, cs * 0.3f), cs * 0.18f, cs * 0.04f);
+
+            // ── Suction intake port (blue, at bottom — connects to water below) ──
+            // Vertical pipe going down from the volute — this is what touches the water.
+            var intake = Cyl(r, PortFuel, new Vector3(0, -cs * 0.35f, cs * 0.15f), cs * 0.1f, cs * 0.2f);
+            Port(r, "Port_WaterIntake", PortFuel, new Vector3(0, -cs * 0.48f, cs * 0.15f),
+                new Vector3(cs * 0.14f, cs * 0.04f, cs * 0.14f));
+
+            // ── Discharge outlet port (blue, on the side — connects to tanks) ──
+            var outlet = Cyl(r, PortFuel, new Vector3(cs * 0.35f, -cs * 0.1f, 0), cs * 0.08f, cs * 0.15f);
+            outlet.transform.localRotation = Quaternion.Euler(0, 0, 90);
+            Port(r, "Port_WaterOutlet", PortFuel, new Vector3(cs * 0.45f, -cs * 0.1f, 0),
+                new Vector3(cs * 0.04f, cs * 0.12f, cs * 0.12f));
+
+            // Pressure gauge (small brass dial on top of volute).
+            Sphere(r, Brass, new Vector3(-cs * 0.15f, cs * 0.05f, cs * 0.25f), cs * 0.06f);
+            // Status indicator LED.
+            Sphere(r, Glow, new Vector3(cs * 0.15f, cs * 0.05f, cs * 0.25f), cs * 0.04f);
+
+            // Bolts on the base plate corners.
+            var boltMat = Chrome;
+            float[][] bolts = {
+                new[] { cs * 0.3f, cs * 0.3f }, new[] { -cs * 0.3f, cs * 0.3f },
+                new[] { cs * 0.3f, -cs * 0.3f }, new[] { -cs * 0.3f, -cs * 0.3f },
+            };
+            foreach (var b in bolts)
+            {
+                Sphere(r, boltMat, new Vector3(b[0], -cs * 0.34f, b[1]), cs * 0.03f);
+            }
+        }
+
         static void BuildBilgePump(GameObject r, float cs)
         {
             Box(r, DarkSteel, new Vector3(0, -cs * 0.15f, 0), new Vector3(cs * 0.82f, cs * 0.45f, cs * 0.82f));
@@ -482,6 +543,53 @@ namespace VoxelEngine.Maritime
         // ════════════════════════════════════════════════════════════════
         //  HELM — ship's wheel
         // ════════════════════════════════════════════════════════════════
+        // ════════════════════════════════════════════════════════════════
+        //  SHIP CONTROL CONSOLE — modern bridge console with throttle levers
+        // ════════════════════════════════════════════════════════════════
+        static void BuildShipConsole(GameObject r, float cs)
+        {
+            // Console base (angled dashboard).
+            Box(r, DarkSteel, new Vector3(0, -cs * 0.3f, 0), new Vector3(cs * 0.8f, cs * 0.15f, cs * 0.5f));
+            // Slanted console top.
+            var top = Box(r, Steel, new Vector3(0, -cs * 0.05f, cs * 0.05f), new Vector3(cs * 0.75f, cs * 0.06f, cs * 0.4f));
+            top.transform.localRotation = Quaternion.Euler(25f, 0, 0);
+
+            // Radar screen (glowing blue).
+            Box(r, Glow, new Vector3(-cs * 0.15f, cs * 0.1f, cs * 0.12f), new Vector3(cs * 0.2f, cs * 0.15f, cs * 0.02f));
+            // Status displays.
+            Box(r, Glow, new Vector3(cs * 0.15f, cs * 0.08f, cs * 0.1f), new Vector3(cs * 0.12f, cs * 0.08f, cs * 0.02f));
+            Box(r, GlowRed, new Vector3(cs * 0.22f, cs * 0.08f, cs * 0.1f), new Vector3(cs * 0.04f, cs * 0.08f, cs * 0.02f));
+
+            // Twin throttle levers (brass).
+            for (int i = 0; i < 2; i++)
+            {
+                float x = (i == 0 ? -1 : 1) * cs * 0.08f;
+                var leverBase = Cyl(r, Brass, new Vector3(x, -cs * 0.05f, cs * 0.2f), cs * 0.03f, cs * 0.04f);
+                var lever = Box(r, Brass, new Vector3(x, cs * 0.1f, cs * 0.2f), new Vector3(cs * 0.03f, cs * 0.25f, cs * 0.03f));
+                lever.transform.localRotation = Quaternion.Euler(20f, 0, 0);
+                Sphere(r, Brass, new Vector3(x, cs * 0.22f, cs * 0.24f), cs * 0.035f); // knob
+            }
+
+            // Steering wheel (small, modern — unlike the big wooden helm).
+            var wheelPivot = new GameObject("HelmWheel");
+            wheelPivot.transform.SetParent(r.transform, false);
+            wheelPivot.transform.localPosition = new Vector3(0, cs * 0.05f, cs * 0.18f);
+            wheelPivot.transform.localRotation = Quaternion.Euler(0, 0, 90);
+            Cyl(wheelPivot, DarkSteel, V0, cs * 0.15f, cs * 0.02f).transform.localScale =
+                new Vector3(cs * 0.3f, cs * 0.04f, cs * 0.3f * 0.15f);
+            for (int i = 0; i < 3; i++)
+            {
+                var spoke = Box(wheelPivot, DarkSteel, V0, new Vector3(cs * 0.28f, cs * 0.02f, cs * 0.02f));
+                spoke.transform.localRotation = Quaternion.Euler(0, 0, i * 60f);
+            }
+            Cyl(wheelPivot, Brass, V0, cs * 0.03f, cs * 0.05f); // hub
+
+            // Captain's chair (behind the console).
+            var chairPost = Cyl(r, DarkSteel, new Vector3(0, -cs * 0.15f, -cs * 0.3f), cs * 0.04f, cs * 0.35f);
+            Box(r, DarkSteel, new Vector3(0, cs * 0.15f, -cs * 0.32f), new Vector3(cs * 0.25f, cs * 0.3f, cs * 0.04f)); // backrest
+            Box(r, DarkSteel, new Vector3(0, -cs * 0.05f, -cs * 0.3f), new Vector3(cs * 0.25f, cs * 0.04f, cs * 0.25f)); // seat
+        }
+
         static void BuildHelm(GameObject r, float cs)
         {
             float wheelR = cs * 0.38f;
