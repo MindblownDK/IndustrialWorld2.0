@@ -889,6 +889,8 @@ namespace VoxelEngine.EditorTools
             if (n.Contains("hydrogenengine")) return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.HydrogenEngine;
             if (n.Contains("reactor"))    return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Reactor;
             if (n.Contains("gyroscope"))  return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Gyroscope;
+            if (n.Contains("beacon"))     return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Beacon;
+            if (n.Contains("oredetector"))return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.OreDetector;
             if (n.Contains("refinery"))   return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Refinery;
             if (n.Contains("chemical"))   return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.ChemicalPlant;
             if (n.Contains("furnace"))    return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Refinery;
@@ -4812,6 +4814,53 @@ root =>
             var itemDemo = MakeGItem("GItem_Demolisher", "Demolisher", Color.white, demoPref, VoxelEngine.GridSystem.GridSize.Large, 320, 560);
             AddGRecipe("Recipe_GDemolisher", "Demolisher", itemDemo, (steelPlate, 6), (circuit, 3));
 
+            // ── 13) Beacon + Ore Detector (utility blocks) ──────────────
+            var beaconPref = MakeGPref<VoxelEngine.GridSystem.GridBeacon>("Beacon_Large", new Color(0.3f, 0.8f, 1f), new Vector3(0.5f, 1f, 0.5f),
+                b => { b.powerDrawWatts = 10f; b.beamHeight = 200f; b.rotationSpeed = 90f; });
+            var itemBeacon = MakeGItem("GItem_Beacon", "Beacon", new Color(0.3f, 0.8f, 1f), beaconPref, VoxelEngine.GridSystem.GridSize.Large, 80, 150);
+            AddGRecipe("Recipe_GBeacon", "Beacon", itemBeacon, (ironPlate, 2), (copperWire, 2), (glass, 1));
+            if (string.IsNullOrEmpty(itemBeacon.description)) { itemBeacon.description = "Projects a visible vertical light beam into the sky that can be seen from far away. Toggle on/off via the ship terminal. Draws only 10W. Perfect for marking bases, waypoints, or fleet rendezvous points."; EditorUtility.SetDirty(itemBeacon); }
+
+            var oreDetPref = MakeGPref<VoxelEngine.GridSystem.GridOreDetector>("OreDetector_Large", new Color(0.5f, 0.55f, 0.6f), new Vector3(1f, 1.2f, 1f),
+                d => { d.powerDrawWatts = 100f; d.scanRadius = 16f; d.maxScanDepth = 30f; d.scanInterval = 2f; });
+            var itemOreDet = MakeGItem("GItem_OreDetector", "Ore Detector", new Color(0.5f, 0.55f, 0.6f), oreDetPref, VoxelEngine.GridSystem.GridSize.Large, 200, 400);
+            AddGRecipe("Recipe_GOreDetector", "Ore Detector", itemOreDet, (ironPlate, 6), (circuit, 4), (copperWire, 8), (advCircuit, 2));
+            if (string.IsNullOrEmpty(itemOreDet.description)) { itemOreDet.description = "Scans the terrain below for ore deposits. Reports detected ore types, depths, and deposit sizes. The rotating parabolic dish sweeps continuously while powered (~100W). Range: 16 blocks radius, 30 blocks deep."; EditorUtility.SetDirty(itemOreDet); }
+
+            // ── Stationary Radar Beacon (world block) ───────────────────
+            string radarPrefabPath = ASSET_ROOT + "/GridSystem/Prefabs/StationaryRadarBeacon.prefab";
+            EnsureFolder(ASSET_ROOT + "/GridSystem/Prefabs");
+            var radarRoot = new GameObject("StationaryRadarBeacon");
+            var radarCol = radarRoot.AddComponent<BoxCollider>();
+            radarCol.size = new Vector3(2f, 8f, 2f);
+            radarCol.center = new Vector3(0, 3f, 0);
+            var radarComp = radarRoot.AddComponent<VoxelEngine.GridSystem.StationaryRadarBeacon>();
+            radarComp.beamHeight = 150f;
+            radarComp.dishRotationSpeed = 45f;
+            var radarPrefab = PrefabUtility.SaveAsPrefabAsset(radarRoot, radarPrefabPath);
+            Object.DestroyImmediate(radarRoot);
+
+            var radarItem = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.BlockItem>(ASSET_ROOT + "/GridSystem/Items/Block_StationaryRadarBeacon.asset");
+            if (radarItem == null)
+            {
+                radarItem = ScriptableObject.CreateInstance<VoxelEngine.Items.BlockItem>();
+                AssetDatabase.CreateAsset(radarItem, ASSET_ROOT + "/GridSystem/Items/Block_StationaryRadarBeacon.asset");
+            }
+            if (string.IsNullOrEmpty(radarItem.itemId) || radarItem.itemId.StartsWith("block_"))
+            {
+                radarItem.itemId = "stationary_radar_beacon";
+                radarItem.displayName = "Stationary Radar Beacon";
+                radarItem.iconTint = new Color(0.3f, 0.85f, 1f);
+                radarItem.maxStack = 10; radarItem.massPerUnit = 8f;
+                radarItem.placedPrefab = radarPrefab; radarItem.gridSize = Vector3Int.one;
+                radarItem.allowStacking = false; radarItem.blockHealth = 400; radarItem.miningTier = 1;
+                radarItem.category = "Grid Blocks";
+                radarItem.description = "A tall radar tower with a rotating dish and beacon beam. Visible from far away. Place on land to mark your base. Toggle on/off, draws 10W. Looks like a coastal radar station.";
+            }
+            EditorUtility.SetDirty(radarItem);
+
+            var recRadar = AddGRecipe("Recipe_GStationaryRadarBeacon", "Stationary Radar Beacon", radarItem, (steelPlate, 8), (circuit, 4), (copperWire, 6), (glass, 4));
+
             // -- 12) Chemical Plant (grid) — shares Chemistry ProcessingRecipes --
             string procFolder = ASSET_ROOT + "/Industrial/ProcessingRecipes";
             var procRefineShared  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.ProcessingRecipe>($"{procFolder}/Proc_RefineOil.asset");
@@ -4882,6 +4931,28 @@ root =>
                 // Everything except the weapon unlocks with Shipbuilding.
                 nShip.unlocksRecipes = recipes.FindAll(r => r != null && r != recWeapon && r != recAmmo).ToArray();
                 EditorUtility.SetDirty(nShip);
+
+                // Utility blocks: Beacon + Ore Detector (gated after Shipbuilding).
+                var nUtil = FindNodeByName(tree, "res_grid_utilities");
+                if (nUtil == null)
+                {
+                    nUtil = ScriptableObject.CreateInstance<VoxelEngine.Research.ResearchNode>();
+                    nUtil.nodeId = "res_grid_utilities";
+                    nUtil.displayName = "Grid Utilities";
+                    nUtil.description = "Navigation and surveying equipment. Unlocks the Beacon (visible sky beam) and the Ore Detector (scans for underground deposits).";
+                    nUtil.category = VoxelEngine.Research.ResearchCategory.Environment;
+                    nUtil.subCategory = VoxelEngine.Research.ResearchSubCategory.Logistics;
+                    nUtil.tier = 3; nUtil.column = 7;
+                    nUtil.iconTint = new Color(0.3f, 0.8f, 1f);
+                    nUtil.researchSeconds = 50f;
+                    nUtil.cost = new[] { new VoxelEngine.Research.ResearchNode.ScienceCost { pack = sciT2, count = 15 } };
+                    nUtil.prerequisites = new[] { nShip };
+                    AssetDatabase.CreateAsset(nUtil, $"{NODES}/res_grid_utilities.asset");
+                    tree.nodes.Add(nUtil);
+                }
+                nUtil.unlocksRecipes = recipes.FindAll(r => r != null && (r.name.Contains("Beacon") || r.name.Contains("OreDetector") || r.name.Contains("Radar"))).ToArray();
+                EditorUtility.SetDirty(nUtil);
+                EditorUtility.SetDirty(tree);
 
                 if (recWeapon != null)
                 {

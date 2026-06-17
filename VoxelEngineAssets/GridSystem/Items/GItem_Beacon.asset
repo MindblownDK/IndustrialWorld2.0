@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e230da79876505a41b25678102c74c13, type: 3}
+  m_Name: GItem_Beacon
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.GridSystem.GridBlockItem
+  itemId: gitem_beacon
+  displayName: Beacon
+  description: Projects a visible vertical light beam into the sky that can be seen
+    from far away. Toggle on/off via the ship terminal. Draws only 10W. Perfect for
+    marking bases, waypoints, or fleet rendezvous points.
+  icon: {fileID: 0}
+  iconTint: {r: 0.3, g: 0.8, b: 1, a: 1}
+  maxStack: 20
+  massPerUnit: 1
+  category: Grid Blocks
+  viewmodelPrefab: {fileID: 0}
+  gridSize: 1
+  blockPrefab: {fileID: 3835408218574113645, guid: 87a007d500c6f154bab30d1940858fa9, type: 3}
+  blockMass: 2500
+  blockHP: 150

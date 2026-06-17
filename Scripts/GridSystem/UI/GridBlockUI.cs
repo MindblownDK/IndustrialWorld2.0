@@ -41,6 +41,8 @@ namespace VoxelEngine.GridSystem.UI
                 case GridHydrogenEngine he: return HydrogenEnginePanel(he);
                 case GridDrill dr:          return DrillPanel(dr, slot);
                 case GridElectricFurnace ef: return FurnacePanel(ef, slot);
+                case GridBeacon bc:         return BeaconPanel(bc);
+                case GridOreDetector od:    return OreDetectorPanel(od);
                 default:                    return GenericPanel(block);
             }
         }
@@ -657,6 +659,60 @@ namespace VoxelEngine.GridSystem.UI
         }
 
         // ── FALLBACK ────────────────────────────────────────────────────────────
+        // ── BEACON ──────────────────────────────────────────────────────────
+        private static VisualElement BeaconPanel(GridBeacon bc)
+        {
+            var p = T.MachinePanel();
+            var (hdr, _, _, _) = T.HeaderRow("📡 Beacon", bc.IsActive ? "● ACTIVE" : "○ OFF",
+                bc.IsActive ? T.AccentCyan : T.AccentDim);
+            p.Add(hdr);
+            p.Add(T.AccentDivider(T.AccentCyan));
+            p.Add(T.StatRow("💡", "Power Use", PowerFormat.Watts(bc.PowerDraw), T.AccentGold));
+            p.Add(T.StatRow("📊", "Beam Height", $"{bc.beamHeight:0} m", T.AccentCyan));
+            p.Add(T.StatRow("🔄", "Rotation", $"{bc.rotationSpeed:0}°/s", T.AccentTeal));
+            p.Add(T.Spacer(6));
+            p.Add(T.SmallButton(bc.IsActive ? "Turn OFF" : "Turn ON", () =>
+            {
+                bc.Enabled = !bc.Enabled;
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, bc.Enabled ? T.AccentRed : T.AccentGreen));
+            p.Add(T.Spacer(4));
+            p.Add(T.Muted("Projects a visible vertical light beam into the sky. Visible from far away for navigation."));
+            return p;
+        }
+
+        // ── ORE DETECTOR ───────────────────────────────────────────────────
+        private static VisualElement OreDetectorPanel(GridOreDetector od)
+        {
+            var p = T.MachinePanel();
+            var (hdr, _, _, _) = T.HeaderRow("🔍 Ore Detector", od.IsScanning ? "● SCANNING" : "○ OFFLINE",
+                od.IsScanning ? T.AccentGreen : T.AccentDim);
+            p.Add(hdr);
+            p.Add(T.AccentDivider(T.AccentGreen));
+            p.Add(T.StatRow("⚡", "Power Use", PowerFormat.Watts(od.PowerDraw), T.AccentGold));
+            p.Add(T.StatRow("📏", "Scan Radius", $"{od.scanRadius:0} blocks", T.AccentCyan));
+            p.Add(T.StatRow("⬇", "Scan Depth", $"{od.maxScanDepth:0} blocks", T.AccentTeal));
+            p.Add(T.Spacer(6));
+
+            p.Add(GridUIHelpers.SectionTitle($"Detected Deposits ({od.DetectedOres.Count})"));
+            if (od.DetectedOres.Count == 0)
+            {
+                p.Add(T.Muted("No ore deposits detected within range."));
+            }
+            else
+            {
+                foreach (var ore in od.DetectedOres)
+                {
+                    var color = GridOreDetector.OreDisplayColor(ore.material);
+                    p.Add(T.StatRow("◈", GridOreDetector.OreDisplayName(ore.material),
+                        $"{ore.count} blocks @ {ore.depth:0}m deep", color));
+                }
+            }
+            p.Add(T.Spacer(4));
+            p.Add(T.Muted("Scans the terrain below for ore deposits. Updates every 2 seconds."));
+            return p;
+        }
+
         private static VisualElement GenericPanel(GridBlock block)
         {
             var p = T.MachinePanel();

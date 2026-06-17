@@ -805,6 +805,8 @@ namespace VoxelEngine.GridSystem.UI
             if (block is GridGasTank gas) return gas.mode.ToString();
             if (block is GridLandingGear gear) return gear.IsLocked ? "Locked" : "Unlocked";
             if (block is GridSolarPanel solar) return PowerFormat.Watts(solar.CurrentOutput);
+            if (block is GridBeacon beacon) return beacon.IsActive ? "Active" : "Off";
+            if (block is GridOreDetector detector) return $"{detector.DetectedOres.Count} ores";
             if (block.PowerDraw > 0.01f) return PowerFormat.Watts(block.PowerDraw);
             if (block.PowerOutput > 0.01f) return PowerFormat.Watts(block.PowerOutput);
             return "Online";
@@ -841,6 +843,8 @@ namespace VoxelEngine.GridSystem.UI
             if (block is GridElectricFurnace) return "Electric Furnaces";
             if (block is GridDockingPort) return "Docking Ports";
             if (block is GridCockpit) return "Cockpits";
+            if (block is GridBeacon) return "Beacons";
+            if (block is GridOreDetector) return "Ore Detectors";
             return block.GetType().Name;
         }
 

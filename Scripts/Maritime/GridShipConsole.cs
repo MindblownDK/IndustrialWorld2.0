@@ -7,6 +7,9 @@
 using UnityEngine;
 using VoxelEngine.GridSystem;
 using InputAction = VoxelEngine.Settings.InputAction;
+#if ENABLE_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+#endif
 
 namespace VoxelEngine.Maritime
 {

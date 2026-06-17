@@ -17,7 +17,7 @@ namespace VoxelEngine.GridSystem
             Armor, Cockpit, Thruster, Battery, Cargo, Drill, Grinder, Refinery,
             Weapon, DockingPort, Wheel, LandingGear, SolarPanel, Reactor,
             LiquidTank, GasTank, H2O2, HydrogenEngine, ChemicalPlant, Glass, Demolisher, ItemPipe,
-            GasPipe, LiquidPipe, Gyroscope, Generic
+            GasPipe, LiquidPipe, Gyroscope, Beacon, OreDetector, Generic
         }
 
         private static Shader Lit => Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
@@ -67,6 +67,8 @@ namespace VoxelEngine.GridSystem
                 case Style.GasPipe:      BuildPipe(root, cs, Mat(new Color(0.4f, 0.7f, 0.95f), 0.6f, 0.5f)); break;
                 case Style.LiquidPipe:   BuildPipe(root, cs, Mat(new Color(0.3f, 0.55f, 0.9f), 0.6f, 0.5f)); break;
                 case Style.Gyroscope:    BuildGyroscope(root, cs, body, metal, glow); break;
+                case Style.Beacon:      BuildBeacon(root, cs, body, metal, glow); break;
+                case Style.OreDetector: BuildOreDetector(root, cs, body, metal, glow); break;
                 default:                 BuildArmor(root, cs, body, metal); break;
             }
         }
@@ -329,6 +331,50 @@ namespace VoxelEngine.GridSystem
             // Small readable flow indicator plates on the top.
             Box(r, accent, new Vector3(0, radius * 1.18f,  cs * 0.12f), new Vector3(radius * 1.4f, radius * 0.18f, cs * 0.10f));
             Box(r, accent, new Vector3(0, radius * 1.18f, -cs * 0.12f), new Vector3(radius * 1.4f, radius * 0.18f, cs * 0.10f));
+        }
+
+        // ── BEACON ──────────────────────────────────────────────────────────────
+        private static void BuildBeacon(GameObject r, float cs, Material body, Material metal, Material glow)
+        {
+            // Base mounting plate.
+            Box(r, metal, new Vector3(0, -cs * 0.4f, 0), new Vector3(cs * 0.6f, cs * 0.08f, cs * 0.6f));
+            // Antenna mast.
+            var mast = Cyl(r, metal, new Vector3(0, 0, 0), cs * 0.04f, cs * 0.8f);
+            mast.transform.localRotation = Quaternion.Euler(0, 0, 0);
+            // Beacon lamp housing (rotating).
+            var lamp = Cyl(r, body, new Vector3(0, cs * 0.35f, 0), cs * 0.08f, cs * 0.06f);
+            // Lens (glowing).
+            Sphere(r, glow, new Vector3(0, cs * 0.38f, cs * 0.06f), cs * 0.05f);
+            // Antenna tip.
+            Sphere(r, metal, new Vector3(0, cs * 0.45f, 0), cs * 0.03f);
+            // Guy wire anchors.
+            for (int i = 0; i < 3; i++)
+            {
+                float a = i * 120f * Mathf.Deg2Rad;
+                Box(r, metal, new Vector3(Mathf.Cos(a) * cs * 0.25f, -cs * 0.3f, Mathf.Sin(a) * cs * 0.25f),
+                    new Vector3(cs * 0.03f, cs * 0.15f, cs * 0.03f));
+            }
+        }
+
+        // ── ORE DETECTOR ────────────────────────────────────────────────────────
+        private static void BuildOreDetector(GameObject r, float cs, Material body, Material metal, Material glow)
+        {
+            // Base housing.
+            Box(r, body, new Vector3(0, -cs * 0.2f, 0), new Vector3(cs * 0.8f, cs * 0.35f, cs * 0.8f));
+            // Mounting post.
+            var post = Cyl(r, metal, new Vector3(0, cs * 0.05f, 0), cs * 0.06f, cs * 0.25f);
+            // Parabolic dish (flattened hemisphere — rotates).
+            var dishPivot = new GameObject("DetectorDish");
+            dishPivot.transform.SetParent(r.transform, false);
+            dishPivot.transform.localPosition = new Vector3(0, cs * 0.25f, 0);
+            var dish = Sphere(dishPivot, metal, V0, cs * 0.25f);
+            dish.transform.localScale = new Vector3(cs * 0.5f, cs * 0.15f, cs * 0.5f);
+            // Sensor node (glowing).
+            Sphere(dishPivot, glow, new Vector3(0, cs * 0.1f, 0), cs * 0.05f);
+            // Support arm.
+            Cyl(dishPivot, metal, new Vector3(0, 0, cs * 0.12f), cs * 0.03f, cs * 0.2f).transform.localRotation = Quaternion.Euler(30, 0, 0);
+            // Status indicator.
+            Sphere(r, glow, new Vector3(cs * 0.3f, -cs * 0.15f, cs * 0.3f), cs * 0.03f);
         }
 
         // ── primitive helpers ─────────────────────────────────────────────────────
