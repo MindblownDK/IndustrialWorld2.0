@@ -317,8 +317,7 @@ namespace VoxelEngine.Player
                 // separately via EnterCockpit, so we skip it here.
                 // Holding a placeable block? Don't open the UI — let the GridBuilder
                 // place the block instead (so you can build on existing blocks).
-                bool holdingGridBlock = !inventory.ActiveStack.IsEmpty &&
-                                        inventory.ActiveStack.item is VoxelEngine.GridSystem.GridBlockItem;
+                bool holdingGridBlock = IsHoldingGridBlock();
                 var gridBlock = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
                 // Helm / Ship Console: right-click enters the control seat.
                 if (!holdingGridBlock && gridBlock is VoxelEngine.Maritime.GridHelm helm)
@@ -385,6 +384,14 @@ namespace VoxelEngine.Player
                     _nextHit = Time.time + 0.2f;
                 }
             }
+        }
+
+
+        private bool IsHoldingGridBlock()
+        {
+            if (inventory == null) return false;
+            var stack = inventory.ActiveStack;
+            return !stack.IsEmpty && stack.item is VoxelEngine.GridSystem.GridBlockItem;
         }
 
         /// <summary>

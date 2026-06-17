@@ -4,6 +4,33 @@ Branch: **Dev** · Semantic Versioning 2.0.0
 
 ---
 
+## [2.18.20] — Turbo Attachment-Point Placement + Compile Fix
+
+**Type:** PATCH — compile fix, placement hardening, and visual clarity; save-compatible.
+
+### Fixed
+- **`PlayerInteractionTool.cs`** — moved grid-block-in-hand detection into `IsHoldingGridBlock()` so UI suppression no longer depends on a fragile local variable scope.
+
+### Changed
+- **Turbocharger placement** is now valid only when the target grid cell is one of an engine's named turbo attachment slots.
+- **Turbo boost counting** now scans only those attachment slots, so off-slot adjacent turbos no longer grant torque.
+- **Large turbo compatibility** is restricted to HFO/MGO engines; small turbos remain valid for Crude/HFO/MGO engine slots.
+
+### Added
+- **Engine turbo slot markers** named exactly `Turbo attachment point 0`, `Turbo attachment point 1`, etc.
+  - Crude Engine: 1 marker.
+  - Heavy Fuel Oil Engine: 2 markers.
+  - MGO Engine: 4 markers.
+- **`MaritimeMeshBuilder.Version` → 12** so re-running the Maritime setup rebuilds engine prefabs with cyan attachment cubes.
+
+### Manual Unity steps
+1. Pull/reload the project and let Unity recompile.
+2. Open **Voxel Engine Setup** and run **Step 13 / Build Maritime Content** once to rebuild the maritime prefabs from mesh version 12.
+3. Place a Crude/HFO/MGO engine and confirm the cyan cubes appear as `Turbo attachment point N` children in the hierarchy.
+4. Hold a turbocharger and aim at an attachment cube/face; the ghost should appear only on valid engine slots.
+
+---
+
 ## [2.18.0] — Maritime Propulsion Core Engine (Part 1 of 5)
 
 **Type:** MINOR — new system, save-compatible (adds new scripts + a component; no save/chunk schema change).

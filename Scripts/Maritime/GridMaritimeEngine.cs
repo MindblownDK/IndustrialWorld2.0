@@ -10,9 +10,10 @@
 // into an internal buffer. FuelAvailable01 = buffer fill × throttle.
 //
 // REQUIRES an adjacent Exhaust Pipe — without one the engine chokes and
-// produces zero torque. A Giant Diesel adjacent to a Turbocharger gets ×1.40.
+// produces zero torque. Turbochargers only boost when mounted on named engine attachment points.
 
 using UnityEngine;
+using VoxelEngine.GridSystem;
 using VoxelEngine.Items;
 
 namespace VoxelEngine.Maritime
@@ -30,6 +31,9 @@ namespace VoxelEngine.Maritime
 
     public class GridMaritimeEngine : MaritimeBlockBase
     {
+        private const string TurboAttachmentNamePrefix = "Turbo attachment point ";
+        private static Material _turboAttachmentMaterial;
+
         public override MechanicalNodeType NodeType => MechanicalNodeType.Engine;
 
         [Header("Engine Tier")]
@@ -171,6 +175,146 @@ namespace VoxelEngine.Maritime
                     break;
             }
             FuelBuffer = Mathf.Min(FuelBuffer, fuelBufferCapacity);
+            EnsureTurboAttachmentMarkers();
+        }
+
+        /// <summary>Returns true when the supplied grid cell is one of this engine's named turbo slots.</summary>
+        public bool CanAttachTurboAt(Vector3Int turboGridPosition, TurboTier turboTier)
+        {
+            return IsTurboTierCompatible(tier, turboTier) && TryGetTurboAttachmentIndex(turboGridPosition, out _);
+        }
+
+        /// <summary>Finds the attachment-slot index occupied by <paramref name="turboGridPosition"/>.</summary>
+        public bool TryGetTurboAttachmentIndex(Vector3Int turboGridPosition, out int index)
+        {
+            int slotCount = MaxTurboSlots;
+            for (int i = 0; i < slotCount; i++)
+            {
+                if (GridPos + TransformLocalSlotOffsetToGrid(GetTurboAttachmentLocalOffset(i)) == turboGridPosition)
+                {
+                    index = i;
+                    return true;
+                }
+            }
+
+            index = -1;
+            return false;
+        }
+
+        /// <summary>Small turbos fit every engine tier; large turbos start at HFO/MGO engines.</summary>
+        public static bool IsTurboTierCompatible(EngineTier engineTier, TurboTier turboTier)
+        {
+            return turboTier != TurboTier.Large || engineTier != EngineTier.Small;
+        }
+
+        private Vector3Int GetTurboAttachmentLocalOffset(int slotIndex)
+        {
+            switch (tier)
+            {
+                case EngineTier.Small:
+                    return Vector3Int.right;
+                case EngineTier.Medium:
+                    return slotIndex == 0 ? Vector3Int.right : Vector3Int.left;
+                case EngineTier.Giant:
+                    switch (slotIndex)
+                    {
+                        case 0: return Vector3Int.right;
+                        case 1: return Vector3Int.left;
+                        case 2: return Vector3Int.up;
+                        default: return new Vector3Int(0, 0, -1);
+                    }
+                default:
+                    return Vector3Int.right;
+            }
+        }
+
+        private Vector3Int TransformLocalSlotOffsetToGrid(Vector3Int localOffset)
+        {
+            if (Grid == null) return localOffset;
+
+            Vector3 worldDirection = transform.TransformDirection(new Vector3(localOffset.x, localOffset.y, localOffset.z));
+            Vector3 gridDirection = Grid.transform.InverseTransformDirection(worldDirection);
+            return SnapToGridCardinal(gridDirection);
+        }
+
+        private static Vector3Int SnapToGridCardinal(Vector3 direction)
+        {
+            direction = direction.sqrMagnitude > 0.0001f ? direction.normalized : Vector3.right;
+            float ax = Mathf.Abs(direction.x);
+            float ay = Mathf.Abs(direction.y);
+            float az = Mathf.Abs(direction.z);
+
+            if (ax >= ay && ax >= az) return direction.x >= 0f ? Vector3Int.right : Vector3Int.left;
+            if (ay >= ax && ay >= az) return direction.y >= 0f ? Vector3Int.up : Vector3Int.down;
+            return direction.z >= 0f ? new Vector3Int(0, 0, 1) : new Vector3Int(0, 0, -1);
+        }
+
+        private void EnsureTurboAttachmentMarkers()
+        {
+            int slotCount = MaxTurboSlots;
+            float cs = Grid != null ? Grid.gridSize.CellSize() : VoxelEngine.GridSystem.GridSize.Large.CellSize();
+
+            for (int i = 0; i < slotCount; i++)
+            {
+                string markerName = $"{TurboAttachmentNamePrefix}{i}";
+                Transform existing = transform.Find(markerName);
+                if (existing != null)
+                {
+                    existing.localPosition = GetTurboAttachmentMarkerPosition(GetTurboAttachmentLocalOffset(i), cs);
+                    existing.localRotation = Quaternion.identity;
+                    if (existing.childCount > 0)
+                    {
+                        existing.localScale = Vector3.one;
+                        for (int childIndex = 0; childIndex < existing.childCount; childIndex++)
+                            existing.GetChild(childIndex).localScale = Vector3.one * cs * 0.14f;
+                    }
+                    else
+                    {
+                        existing.localScale = Vector3.one * cs * 0.14f;
+                    }
+                    continue;
+                }
+
+                var marker = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                marker.name = markerName;
+                marker.transform.SetParent(transform, false);
+                marker.transform.localPosition = GetTurboAttachmentMarkerPosition(GetTurboAttachmentLocalOffset(i), cs);
+                marker.transform.localRotation = Quaternion.identity;
+                marker.transform.localScale = Vector3.one * cs * 0.14f;
+
+                var collider = marker.GetComponent<Collider>();
+                if (collider != null) Destroy(collider);
+
+                var renderer = marker.GetComponent<Renderer>();
+                if (renderer != null) renderer.sharedMaterial = GetTurboAttachmentMaterial();
+            }
+        }
+
+        private static Vector3 GetTurboAttachmentMarkerPosition(Vector3Int localOffset, float cellSize)
+        {
+            return new Vector3(localOffset.x, localOffset.y, localOffset.z) * (cellSize * 0.52f);
+        }
+
+        private static Material GetTurboAttachmentMaterial()
+        {
+            if (_turboAttachmentMaterial != null) return _turboAttachmentMaterial;
+
+            var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+            _turboAttachmentMaterial = new Material(shader)
+            {
+                name = "Turbo Attachment Point",
+                color = new Color(0.10f, 0.85f, 1.00f, 1f)
+            };
+            if (_turboAttachmentMaterial.HasProperty("_BaseColor"))
+                _turboAttachmentMaterial.SetColor("_BaseColor", new Color(0.10f, 0.85f, 1.00f, 1f));
+            if (_turboAttachmentMaterial.HasProperty("_EmissionColor"))
+            {
+                _turboAttachmentMaterial.EnableKeyword("_EMISSION");
+                _turboAttachmentMaterial.SetColor("_EmissionColor", new Color(0.02f, 0.35f, 0.50f, 1f));
+            }
+            if (_turboAttachmentMaterial.HasProperty("_Metallic")) _turboAttachmentMaterial.SetFloat("_Metallic", 0.25f);
+            if (_turboAttachmentMaterial.HasProperty("_Smoothness")) _turboAttachmentMaterial.SetFloat("_Smoothness", 0.85f);
+            return _turboAttachmentMaterial;
         }
 
         // ══════════════════════════════════════════════════════════════
@@ -265,7 +409,7 @@ namespace VoxelEngine.Maritime
             CurrentRPM = node.CurrentRPM;
         }
 
-        /// <summary>Scan 6 neighbours for turbochargers; compute stacked boost.</summary>
+        /// <summary>Scan only named turbo attachment slots and compute stacked boost.</summary>
         private void CountTurbos()
         {
             ConnectedTurboCount = 0;
@@ -273,22 +417,18 @@ namespace VoxelEngine.Maritime
 
             if (Grid != null)
             {
-                var faces = new[]
+                int slotCount = MaxTurboSlots;
+                for (int i = 0; i < slotCount; i++)
                 {
-                    new Vector3Int( 1,0,0), new(-1,0,0),
-                    new( 0,1,0), new( 0,-1,0),
-                    new( 0,0,1), new( 0,0,-1),
-                };
-                foreach (var off in faces)
-                {
-                    if (Grid.GetBlock(GridPos + off) is GridTurbocharger tc)
+                    Vector3Int turboPos = GridPos + TransformLocalSlotOffsetToGrid(GetTurboAttachmentLocalOffset(i));
+                    if (Grid.GetBlock(turboPos) is GridTurbocharger tc && IsTurboTierCompatible(tier, tc.tier))
                     {
                         ConnectedTurboCount++;
                         boost += tc.tier == TurboTier.Large ? 0.25f : 0.15f;
                     }
                 }
-                ConnectedTurboCount = Mathf.Min(ConnectedTurboCount, MaxTurboSlots);
             }
+
             TurboBoostTotal = boost;
         }
 

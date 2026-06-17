@@ -116,20 +116,28 @@ namespace VoxelEngine.GridSystem
                 targetGrid = null;
             }
 
+            if (IsTurbochargerItem(gbi, out var turboTier) && !HasValidTurboAttachment(targetGrid, gridPos, turboTier))
+            {
+                HideGhost();
+                return;
+            }
+
             // Apply the player's dialled-in rotation on top of the grid alignment.
             rotation *= Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
 
             ShowGhost(gbi, worldPos, rotation);
 
-            if (GameSettings.WasPressed(InputAction.Build))
+            if (GameSettings.WasPressed(InputAction.Build) && TryPlaceBlock(gbi, targetGrid, gridPos, worldPos, rotation))
             {
-                PlaceBlock(gbi, targetGrid, gridPos, worldPos, rotation);
                 inventory.container.Remove(gbi, 1);
             }
         }
 
-        private void PlaceBlock(GridBlockItem item, GridEntity grid, Vector3Int gridPos, Vector3 worldPos, Quaternion rotation)
+        private bool TryPlaceBlock(GridBlockItem item, GridEntity grid, Vector3Int gridPos, Vector3 worldPos, Quaternion rotation)
         {
+            if (IsTurbochargerItem(item, out var turboTier) && !HasValidTurboAttachment(grid, gridPos, turboTier))
+                return false;
+
             if (grid == null)
             {
                 grid = GridEntity.Create(worldPos, item.gridSize);
@@ -157,6 +165,49 @@ namespace VoxelEngine.GridSystem
             grid.AddBlock(gridPos, block);
 
             VoxelEngine.UI.BuildFeedbackHud.ShowBlockPlaced(item.displayName, item, 1);
+            return true;
+        }
+
+        private bool IsTurbochargerItem(GridBlockItem item, out VoxelEngine.Maritime.TurboTier tier)
+        {
+            tier = VoxelEngine.Maritime.TurboTier.Small;
+            if (item == null) return false;
+
+            if (item.blockPrefab != null)
+            {
+                var turbo = item.blockPrefab.GetComponent<VoxelEngine.Maritime.GridTurbocharger>();
+                if (turbo == null) turbo = item.blockPrefab.GetComponentInChildren<VoxelEngine.Maritime.GridTurbocharger>(true);
+                if (turbo != null)
+                {
+                    tier = turbo.tier;
+                    return true;
+                }
+            }
+
+            string id = (item.itemId ?? string.Empty).ToLowerInvariant();
+            string display = (item.displayName ?? string.Empty).ToLowerInvariant();
+            if (!id.Contains("turbocharger") && !display.Contains("turbocharger")) return false;
+
+            tier = id.Contains("large") || display.Contains("large")
+                ? VoxelEngine.Maritime.TurboTier.Large
+                : VoxelEngine.Maritime.TurboTier.Small;
+            return true;
+        }
+
+        private bool HasValidTurboAttachment(GridEntity grid, Vector3Int gridPos, VoxelEngine.Maritime.TurboTier turboTier)
+        {
+            if (grid == null || !grid.CanPlace(gridPos)) return false;
+
+            foreach (var kv in grid.Blocks)
+            {
+                if (kv.Value is VoxelEngine.Maritime.GridMaritimeEngine engine &&
+                    engine.CanAttachTurboAt(gridPos, turboTier))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         // Ctrl+Scroll = yaw (Y), Shift+Scroll = pitch (X), Ctrl+Shift+Scroll = roll (Z).

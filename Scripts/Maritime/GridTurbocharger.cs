@@ -2,14 +2,13 @@
 //
 //  Turbocharger — boosts adjacent engines. Two tiers:
 //
-//    Small (1×1×1) — boosts Small/Heavy-Fuel engines. Can fit 1 on a Crude Engine,
-//                    2 on a Heavy Fuel Oil Engine.
-//    Large (2×2×2) — boosts MGO/Giant engines. Can fit 4 on an MGO Engine,
+//    Small (1×1×1) — fits named turbo attachment points. Can fit 1 on a Crude Engine,
+//                    2 on a Heavy Fuel Oil Engine and 4 on an MGO Engine.
+//    Large (2×2×2) — fits HFO/MGO attachment points. Can fit 4 on an MGO Engine,
 //                    2 on a Heavy Fuel Oil Engine.
 //
-//  The actual ×boost multiplication happens inside MechanicalPropagationJob.
-//  This block's job is to EXIST next to an engine — the graph rebuild detects
-//  adjacency and sets the TurboBoosted flag. Each turbo stacks additively.
+//  Boost is granted only when the turbo occupies a named engine attachment slot.
+//  Free-grid adjacency does not count, so turbos must be deliberately mounted.
 
 using UnityEngine;
 
@@ -18,9 +17,9 @@ namespace VoxelEngine.Maritime
     /// <summary>Turbocharger size tier.</summary>
     public enum TurboTier : byte
     {
-        /// <summary>1×1×1 — for small/medium engines. Boost ×1.15 each.</summary>
+        /// <summary>1×1×1 — fits any engine attachment point. Boost ×1.15 each.</summary>
         Small = 0,
-        /// <summary>2×2×2 — for MGO/Giant engines. Boost ×1.25 each.</summary>
+        /// <summary>2×2×2 — for HFO/MGO attachment points. Boost ×1.25 each.</summary>
         Large = 1,
     }
 
@@ -65,32 +64,19 @@ namespace VoxelEngine.Maritime
 
         public override void RefreshMaritimeNode(ref MechanicalNode node, float throttle)
         {
-            IsConnected = HasAdjacentEngine();
+            GridMaritimeEngine attachedEngine = FindAttachedEngine();
+            IsConnected = attachedEngine != null;
 
-            if (IsConnected && Grid != null)
+            if (IsConnected)
             {
-                float maxEngineRPM = 0f;
-                ConnectedTurboCount = 0;
-                var faces = new[]
-                {
-                    new Vector3Int( 1,0,0), new(-1,0,0),
-                    new( 0,1,0), new( 0,-1,0),
-                    new( 0,0,1), new( 0,0,-1),
-                };
-                foreach (var off in faces)
-                {
-                    var nb = Grid.GetBlock(GridPos + off);
-                    if (nb is GridMaritimeEngine eng && eng.IsRunning)
-                    {
-                        maxEngineRPM = Mathf.Max(maxEngineRPM, eng.CurrentRPM);
-                        ConnectedTurboCount++;
-                    }
-                }
+                ConnectedTurboCount = attachedEngine.ConnectedTurboCount;
+                float engineRPM = attachedEngine.IsRunning ? attachedEngine.CurrentRPM : 0f;
+
                 // Turbo spins much faster than the engine (typical ratio ~20:1).
-                TurboRPM = maxEngineRPM * 20f * EffectiveBoost;
+                TurboRPM = engineRPM * 20f * EffectiveBoost;
                 // Boost pressure scales with engine RPM.
                 BoostPressure = Mathf.Lerp(0f, tier == TurboTier.Large ? 5.5f : 3.5f,
-                    Mathf.Clamp01(maxEngineRPM / 1200f)) * EffectiveBoost;
+                    Mathf.Clamp01(engineRPM / 1200f)) * EffectiveBoost;
             }
             else
             {
@@ -100,21 +86,25 @@ namespace VoxelEngine.Maritime
             }
         }
 
-        private bool HasAdjacentEngine()
+        /// <summary>Find the engine whose named turbo attachment point this block occupies.</summary>
+        private GridMaritimeEngine FindAttachedEngine()
         {
-            if (Grid == null) return false;
+            if (Grid == null) return null;
+
             var faces = new[]
             {
                 new Vector3Int( 1,0,0), new(-1,0,0),
                 new( 0,1,0), new( 0,-1,0),
                 new( 0,0,1), new( 0,0,-1),
             };
+
             foreach (var off in faces)
             {
-                var nb = Grid.GetBlock(GridPos + off);
-                if (nb is GridMaritimeEngine) return true;
+                if (Grid.GetBlock(GridPos + off) is GridMaritimeEngine eng && eng.CanAttachTurboAt(GridPos, tier))
+                    return eng;
             }
-            return false;
+
+            return null;
         }
     }
 }
