@@ -4,6 +4,32 @@ Branch: **Dev** · Semantic Versioning 2.0.0
 
 ---
 
+## [2.19.0] — Cockpit-Style Helm & Ship Console Control Seats
+
+**Type:** MINOR — save-compatible control-seat feature and interaction fix.
+
+### Fixed
+- **Helm / Ship Console right-click entry bounce** — right-click no longer instantly exits the seat on the same input frame.
+- Helm and Ship Console now use the same configured **Exit Cockpit** input as `GridCockpit` instead of hardcoded/right-click exit behavior.
+
+### Added
+- **Cockpit-style auxiliary control seat registry** in `GridCockpit` so Helm and Ship Console count as active pilot seats for input blocking, hotbar hiding, and grid terminal routing.
+- **External control frame support** in `GridEntity` so non-cockpit seats can drive ship movement using their own transform as the control frame.
+- **Ship Console space-flight controls**: WASD/Jump/Down thrust, mouse yaw/pitch, Q/E roll, Z dampeners, P landing gear, scroll tool groups, LMB/RMB drill/weapon flow.
+
+### Changed
+- **Helm** keeps dedicated water-ship behavior: W/S throttle, A/D steer, scroll zoom, but now seats/restores the player/camera like a cockpit and clears stale space-flight input.
+- **Ship Console** can now fly spaceships and still feeds maritime throttle/rudder when a `MaritimePropulsionSystem` is present.
+- On-foot interaction and hotbar scrolling are suppressed while seated in a cockpit, helm, or ship console.
+
+### Manual Unity steps
+1. Pull/reload and let Unity compile.
+2. Test right-click entry on both **Helm** and **Ship Control Console**.
+3. Press your configured **Exit Cockpit** key to leave the seat.
+4. For Ship Console spaceship testing, ensure the grid has thrusters/gyros and use WASD + mouse like a normal cockpit.
+
+---
+
 ## [2.18.20] — Turbo Attachment-Point Placement + Compile Fix
 
 **Type:** PATCH — compile fix, placement hardening, and visual clarity; save-compatible.

@@ -6,7 +6,7 @@
 //     so you can see the wheel sticks and the water ahead.
 //   • W/S = throttle up/down, A/D = steer left/right.
 //   • Scroll wheel = zoom in/out (ship-size-aware default distance).
-//   • Right-click again or press F to EXIT.
+//   • Press the cockpit exit key to EXIT (same flow as GridCockpit).
 //
 // The Helm drives the parent grid's MaritimePropulsionSystem:
 //   system.Throttle, system.Steer, system.HelmActive
@@ -70,16 +70,16 @@ namespace VoxelEngine.Maritime
             IsActive = true;
             Pilot = player;
 
-            // Disable player movement.
+            // Disable player movement exactly like a cockpit seat.
             player.enabled = false;
             var cc = player.GetComponent<CharacterController>();
             if (cc != null) cc.enabled = false;
+            var rb = player.GetComponent<Rigidbody>();
+            if (rb != null) rb.isKinematic = true;
 
-            // Lock cursor.
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
 
-            // Cache + position the camera pivot.
             _pilotCamPivot = player.cameraPivot;
             if (_pilotCamPivot != null && !_camCached)
             {
@@ -88,18 +88,25 @@ namespace VoxelEngine.Maritime
                 _camCached = true;
             }
 
-            // Compute ship-size-aware camera distance.
             int blockCount = Grid != null ? Grid.BlockCount : 1;
             _cameraDist = Mathf.Clamp(blockCount * shipSizeCameraFactor + 8f, minCameraDist, maxCameraDist);
 
+            // Parent/seat the player before applying local camera offsets.
+            _origParent = player.transform.parent;
+            player.transform.SetParent(transform, worldPositionStays: true);
+            player.transform.position = transform.position;
+            player.transform.localRotation = Quaternion.identity;
+
             ApplyCamera();
 
-            // Parent the player to the helm so they ride with the ship.
-            _origParent = player.transform.parent;
-            player.transform.SetParent(transform, true);
+            if (Grid != null)
+            {
+                _maritime = Grid.Maritime;
+                Grid.SetFlightInput(Vector3.zero, 0f, 0f, 0f);
+                Grid.DrillVoidMode = false;
+            }
 
-            if (Grid != null) _maritime = Grid.Maritime;
-            if (Grid != null) Grid.ActiveCockpit = null; // not a flight cockpit
+            GridCockpit.RegisterAuxiliarySeat(this, player);
         }
 
         private Transform _origParent;
@@ -130,13 +137,23 @@ namespace VoxelEngine.Maritime
             if (Pilot != null)
             {
                 Pilot.transform.SetParent(_origParent, true);
+                Pilot.transform.position = transform.position + transform.up * 1.2f + transform.right * 1.5f;
                 Pilot.enabled = true;
                 var cc = Pilot.GetComponent<CharacterController>();
                 if (cc != null) cc.enabled = true;
+                var rb = Pilot.GetComponent<Rigidbody>();
+                if (rb != null) rb.isKinematic = false;
             }
 
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
+
+            if (Grid != null)
+            {
+                Grid.SetFlightInput(Vector3.zero, 0f, 0f, 0f);
+                Grid.DrillVoidMode = false;
+            }
+            GridCockpit.UnregisterAuxiliarySeat(this);
 
             IsActive = false;
             Pilot = null;
@@ -151,14 +168,26 @@ namespace VoxelEngine.Maritime
                 return;
             }
 
-            // Exit on F or right-click.
-            bool exitPressed = ExitPressed;
-            bool rightClick = GridInput.Mouse1 && !GridInput.Mouse0;
-            if (exitPressed || rightClick)
+            if (ExitPressed)
             {
                 Exit();
                 return;
             }
+
+            if (VoxelEngine.UI.UIState.IsBlocking)
+            {
+                Grid?.SetFlightInput(Vector3.zero, 0f, 0f, 0f);
+                return;
+            }
+
+            if (Cursor.lockState != CursorLockMode.Locked)
+            {
+                Cursor.lockState = CursorLockMode.Locked;
+                Cursor.visible = false;
+            }
+
+            // Helm never drives space-flight thrusters directly; clear any stale flight input.
+            Grid?.SetFlightInput(Vector3.zero, 0f, 0f, 0f);
 
             // ── Read helm input ────────────────────────────────────────
             float dt = Time.deltaTime;
@@ -201,29 +230,13 @@ namespace VoxelEngine.Maritime
             if (_pilotCamPivot == null) return;
 
             float cs = Grid != null ? Grid.gridSize.CellSize() : 2.5f;
-            // Camera sits above the helm, looking forward over the ship.
-            Vector3 helmLocal = transform.localPosition;
-            Vector3 camLocal = new Vector3(
-                helmLocal.x,
-                helmLocal.y + _cameraDist * 0.45f + cs,  // above the wheel sticks
-                helmLocal.z - _cameraDist);               // behind the helm
-
-            _pilotCamPivot.localPosition = camLocal;
+            // Player is parented to the helm, so this is a clean cockpit-style local camera.
+            _pilotCamPivot.localPosition = new Vector3(0f, _cameraDist * 0.45f + cs, -_cameraDist);
             // Tilt to look forward + down at the water.
             float pitch = 15f + (_cameraDist / maxCameraDist) * 20f;
             _pilotCamPivot.localRotation = Quaternion.Euler(pitch, 0f, 0f);
         }
 
-        private static bool ExitPressed
-        {
-            get
-            {
-#if ENABLE_INPUT_SYSTEM
-                return Keyboard.current != null && Keyboard.current.fKey.wasPressedThisFrame;
-#else
-                return Input.GetKeyDown(KeyCode.F);
-#endif
-            }
-        }
+        private static bool ExitPressed => VoxelEngine.Settings.GameSettings.WasPressed(InputAction.ExitCockpit);
     }
 }

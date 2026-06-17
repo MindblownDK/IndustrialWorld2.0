@@ -66,7 +66,7 @@ namespace VoxelEngine.Player
             if (VoxelEngine.UI.UIState.IsBlocking) return;   // suppress mining/build while menus open
             // While piloting a ship, the cockpit owns left-click (drill/weapon) — don't
             // let the on-foot tool mine/break the world.
-            if (VoxelEngine.GridSystem.GridCockpit.ActivePilotSeat != null) return;
+            if (VoxelEngine.GridSystem.GridCockpit.AnyPilotSeatActive) return;
             IsGrinding = false; // reset each frame — HandleGrind sets it true when active
             if (world      == null) world      = VoxelWorld.Instance;
             if (inventory  == null) inventory  = GetComponentInParent<Inventory>();

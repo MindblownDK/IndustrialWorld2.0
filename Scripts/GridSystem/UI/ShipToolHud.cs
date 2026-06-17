@@ -52,12 +52,10 @@ namespace VoxelEngine.GridSystem.UI
         public static void Tick()
         {
             if (_bar == null) return;
-            var seat = GridCockpit.ActivePilotSeat;
-            bool show = seat != null && seat.Grid != null && !VoxelEngine.UI.UIState.IsBlocking;
+            var grid = GridCockpit.ActiveControlGrid;
+            bool show = grid != null && GridCockpit.AnyPilotSeatActive && !VoxelEngine.UI.UIState.IsBlocking;
             _bar.style.display = show ? DisplayStyle.Flex : DisplayStyle.None;
             if (!show) { _lastSig = "\u0000"; return; }
-
-            var grid = seat.Grid;
             // GROUPED toolbar: one entry per tool TYPE (all drills = one "Drill" group, all
             // weapons = one "Weapon" group), Space-Engineers style.
             var groups = grid.GetToolGroups();

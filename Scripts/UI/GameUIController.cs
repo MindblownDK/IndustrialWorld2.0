@@ -290,7 +290,7 @@ namespace VoxelEngine.UI
 #endif
             // Block hotbar cycling while a grid block is held + a modifier is down (rotation).
             bool rotatingBlock = VoxelEngine.GridSystem.GridBuilder.HoldingGridBlock && (ctrl || shift);
-            bool piloting = VoxelEngine.GridSystem.GridCockpit.ActivePilotSeat != null; // cockpit owns scroll (tool cycle)
+            bool piloting = VoxelEngine.GridSystem.GridCockpit.AnyPilotSeatActive; // control seats own scroll
             // Throttle: at most one slot change per Update, regardless of scroll-unit magnitude.
             if (!ctrl && !shift && !rotatingBlock && !piloting && !_inventoryOpen && _rightContainer == null && inventory != null && Mathf.Abs(wheel) > 0.01f)
             {
@@ -320,8 +320,8 @@ namespace VoxelEngine.UI
                 {
                     // While piloting a cockpit, "I" opens the master ship terminal
                     // instead of the player inventory (Space-Engineers style).
-                    var seat = VoxelEngine.GridSystem.GridCockpit.ActivePilotSeat;
-                    if (seat != null && seat.Grid != null) OpenGridTerminal(seat.Grid);
+                    var controlledGrid = VoxelEngine.GridSystem.GridCockpit.ActiveControlGrid;
+                    if (controlledGrid != null) OpenGridTerminal(controlledGrid);
                     else OpenInventory();
                 }
             }
@@ -950,7 +950,7 @@ namespace VoxelEngine.UI
         {
             // While seated in a cockpit, the player flies the ship — the on-foot hotbar is
             // replaced by the ShipToolHud (drill/weapon selector), so hide it entirely.
-            if (VoxelEngine.GridSystem.GridCockpit.ActivePilotSeat != null) return;
+            if (VoxelEngine.GridSystem.GridCockpit.AnyPilotSeatActive) return;
 
             var bar = new VisualElement();
             bar.style.position = Position.Absolute;

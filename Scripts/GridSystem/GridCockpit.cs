@@ -32,6 +32,34 @@ namespace VoxelEngine.GridSystem
         /// <summary>The cockpit the local player is currently seated in (null if on foot).</summary>
         public static GridCockpit ActivePilotSeat { get; private set; }
 
+        /// <summary>Any cockpit-like control seat currently occupied by the local player.</summary>
+        public static GridBlock ActiveControlSeat { get; private set; }
+
+        /// <summary>The player currently seated in any cockpit-like control seat.</summary>
+        public static Player.PlayerController ActiveControlPilot { get; private set; }
+
+        /// <summary>The grid currently controlled by any cockpit-like control seat.</summary>
+        public static GridEntity ActiveControlGrid => ActiveControlSeat != null ? ActiveControlSeat.Grid : null;
+
+        /// <summary>True while the local player is seated in a cockpit, helm, or ship console.</summary>
+        public static bool AnyPilotSeatActive => ActiveControlSeat != null && ActiveControlPilot != null;
+
+        public static void RegisterAuxiliarySeat(GridBlock seat, Player.PlayerController pilot)
+        {
+            if (seat == null || pilot == null) return;
+            ActiveControlSeat = seat;
+            ActiveControlPilot = pilot;
+            VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+        }
+
+        public static void UnregisterAuxiliarySeat(GridBlock seat)
+        {
+            if (seat == null || ActiveControlSeat != seat) return;
+            ActiveControlSeat = ActivePilotSeat;
+            ActiveControlPilot = ActivePilotSeat != null ? ActivePilotSeat.Pilot : null;
+            VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+        }
+
         private void Update()
         {
             if (Pilot == null) return;
@@ -265,6 +293,8 @@ namespace VoxelEngine.GridSystem
             // the "I" key opens the master terminal instead of the player inventory.
             if (Grid != null) Grid.ActiveCockpit = this;
             ActivePilotSeat = this;
+            ActiveControlSeat = this;
+            ActiveControlPilot = player;
 
             // Rebuild the HUD now so the on-foot hotbar is hidden immediately on entry
             // (BuildHotbar skips while ActivePilotSeat != null) — the ship toolbar replaces it.
@@ -336,6 +366,11 @@ namespace VoxelEngine.GridSystem
             Pilot = null;
             if (Grid != null && Grid.ActiveCockpit == this) Grid.ActiveCockpit = null;
             if (ActivePilotSeat == this) ActivePilotSeat = null;
+            if (ActiveControlSeat == this)
+            {
+                ActiveControlSeat = null;
+                ActiveControlPilot = null;
+            }
             VoxelEngine.UI.GameUIController.Instance?.CloseAll();
         }
 

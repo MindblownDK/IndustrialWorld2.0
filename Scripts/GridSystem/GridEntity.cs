@@ -146,9 +146,31 @@ namespace VoxelEngine.GridSystem
             RotationRoll  = roll;
         }
 
-        // ── Cockpit ────────────────────────────────────────────────
+        // ── Control Seats ──────────────────────────────────────────
         public GridCockpit ActiveCockpit { get; set; }
-        public bool IsControlled => ActiveCockpit != null && ActiveCockpit.Pilot != null;
+        public Transform ActiveControlFrame { get; private set; }
+        public Player.PlayerController ActiveControlPilot { get; private set; }
+        public bool IsControlled => (ActiveCockpit != null && ActiveCockpit.Pilot != null)
+                                 || (ActiveControlFrame != null && ActiveControlPilot != null);
+
+        public void BeginExternalControl(Transform controlFrame, Player.PlayerController pilot)
+        {
+            ActiveControlFrame = controlFrame != null ? controlFrame : transform;
+            ActiveControlPilot = pilot;
+        }
+
+        public void EndExternalControl(Transform controlFrame)
+        {
+            if (controlFrame != null && ActiveControlFrame != controlFrame) return;
+            ActiveControlFrame = null;
+            ActiveControlPilot = null;
+            SetFlightInput(Vector3.zero, 0f, 0f, 0f);
+            DrillVoidMode = false;
+        }
+
+        private Transform CurrentControlFrame => ActiveControlFrame != null
+            ? ActiveControlFrame
+            : (ActiveCockpit != null ? ActiveCockpit.transform : transform);
 
         // ── Lifecycle ──────────────────────────────────────────────
         private void Awake()
@@ -445,8 +467,8 @@ namespace VoxelEngine.GridSystem
         {
             if (!IsControlled) return;
 
-            // Cockpit local frame (so "forward" = where the pilot is looking).
-            Transform frame = ActiveCockpit != null ? ActiveCockpit.transform : transform;
+            // Control-seat local frame (so "forward" = where the pilot is looking).
+            Transform frame = CurrentControlFrame;
 
             Vector3 input = ThrustInput; // local: x=right, y=up, z=forward
 
