@@ -1541,6 +1541,7 @@ namespace VoxelEngine.EditorTools
             var stone       = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{ITEM_FOLDER}/Item_Stone.asset");
             var coal        = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{ITEM_FOLDER}/Item_Coal.asset");
             var goldOre     = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{ITEM_FOLDER}/Item_Gold.asset");
+            var lithium     = EnsureLithiumResource();
             if (copperIngot == null || ironIngot == null || steelIngot == null)
             {
                 EditorUtility.DisplayDialog("Voxel Engine",
@@ -1704,7 +1705,7 @@ namespace VoxelEngine.EditorTools
             AddRecipe("Recipe_Generator", "Coal Generator", blockGen, 1,
                 VoxelEngine.Crafting.StationTier.CraftingBench, (ironIngot, 4), (stone, 4));
             AddRecipe("Recipe_Battery",   "Battery",        blockBat, 1,
-                VoxelEngine.Crafting.StationTier.Assembler,    (copperIngot, 4), (ironIngot, 2));
+                VoxelEngine.Crafting.StationTier.Assembler,    (copperIngot, 4), (ironIngot, 2), (lithium, 2));
             AddRecipe("Recipe_Light",     "Power Light",    blockLight, 1,
                 VoxelEngine.Crafting.StationTier.CraftingBench, (copperIngot, 1));
 
@@ -2901,7 +2902,7 @@ namespace VoxelEngine.EditorTools
             // matching the helper's param signature. (C# does not apply tuple
             // covariance inside array literals.)
             RewireExistingRecipe("Recipe_Generator",      new[] { ((VoxelEngine.Items.ItemDefinition)ironPlate, 4), (ironGear, 2), (stone, 4) });
-            RewireExistingRecipe("Recipe_Battery",        new[] { ((VoxelEngine.Items.ItemDefinition)ironPlate, 2), (copperWire, 6), (copperPlate, 2) });
+            RewireExistingRecipe("Recipe_Battery",        new[] { ((VoxelEngine.Items.ItemDefinition)ironPlate, 2), (copperWire, 6), (copperPlate, 2), (EnsureLithiumResource(), 2) });
             RewireExistingRecipe("Recipe_Cable_Copper",   new[] { ((VoxelEngine.Items.ItemDefinition)copperIngot, 1) });   // unchanged: 1 ingot → 4 cables
             RewireExistingRecipe("Recipe_Cable_Iron",     new[] { ((VoxelEngine.Items.ItemDefinition)ironPlate,   1) });   // now uses plates instead of ingots
             RewireExistingRecipe("Recipe_Cable_Gold",     new[] { (goldOreOrFallback(goldOre, ironIngot), 1), ((VoxelEngine.Items.ItemDefinition)copperWire, 2) });
@@ -4452,6 +4453,7 @@ root =>
             var advCircuit  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_AdvCircuit.asset");
             var copperWire  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_CopperWire.asset");
             var glass       = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_Glass.asset");
+            var lithium     = EnsureLithiumResource();
             var sciT2 = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ScienceItem>($"{craftItems}/Item_ScienceT2.asset");
             var sciT3 = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ScienceItem>($"{craftItems}/Item_ScienceT3.asset");
 
@@ -4668,10 +4670,14 @@ root =>
                 b => { b.capacityWh = 1000000f; b.maxDischargeRate = 5000f; });
             var batLargePref = MakeGPref<VoxelEngine.GridSystem.GridBattery>("Battery_Large", new Color(0.2f, 0.7f, 0.3f), new Vector3(2f, 2f, 2f),
                 b => { b.capacityWh = 25000000f; b.maxDischargeRate = 60000f; });
+            var batGiantPref = MakeGPref<VoxelEngine.GridSystem.GridBattery>("Battery_Giant_Large", new Color(0.12f, 0.85f, 0.55f), new Vector3(2.5f, 2.5f, 2.5f),
+                b => { b.capacityWh = 150000000f; b.maxChargeRate = 250000f; b.maxDischargeRate = 350000f; });
             var itemBatSmall = MakeGItem("GItem_BatterySmall", "Small Battery", Color.white, batSmallPref, VoxelEngine.GridSystem.GridSize.Small, 100, 300);
             var itemBatLarge = MakeGItem("GItem_BatteryLarge", "Large Battery", Color.white, batLargePref, VoxelEngine.GridSystem.GridSize.Large, 800, 600);
-            AddGRecipe("Recipe_GBatSmall", "Small Battery", itemBatSmall, (ironPlate, 2), (copperWire, 8));
-            AddGRecipe("Recipe_GBatLarge", "Large Battery", itemBatLarge, (ironPlate, 10), (copperWire, 24), (circuit, 4));
+            var itemBatGiant = MakeGItem("GItem_BatteryGiant", "Giant Battery Pack", new Color(0.12f,0.85f,0.55f), batGiantPref, VoxelEngine.GridSystem.GridSize.Large, 2600, 1400);
+            AddGRecipe("Recipe_GBatSmall", "Small Battery", itemBatSmall, (ironPlate, 2), (copperWire, 8), (lithium, 1));
+            AddGRecipe("Recipe_GBatLarge", "Large Battery", itemBatLarge, (ironPlate, 10), (copperWire, 24), (circuit, 4), (lithium, 6));
+            AddGRecipe("Recipe_GBatGiant", "Giant Battery Pack", itemBatGiant, (steelPlate, 24), (copperWire, 64), (advCircuit, 8), (lithium, 24));
 
             // -- 4) Structure (Armor) --
             var armorSmallPref = MakeGPref<VoxelEngine.GridSystem.GridArmorBlock>("Armor_Small", new Color(0.35f, 0.35f, 0.4f), new Vector3(0.5f, 0.5f, 0.5f));
@@ -4984,7 +4990,7 @@ root =>
             AssetDatabase.Refresh();
             EditorUtility.DisplayDialog("Grid System",
                 $"Step 12 complete — generated {recipes.Count} grid blocks (prefabs + items + recipes) in:\n{GRID_ROOT}\n\n" +
-                "• Cockpit, Thruster, Battery, Armor (Small + Large)\n" +
+                "• Cockpit, Thruster, Battery (Small + Large + Giant), Armor\n" +
                 "• Drill, Grinder, Refinery, Weapon, Demolisher (Large)\n" +
                 "• Cargo, Docking Port, 2x2 / 3x3 / 5x5 Wheel Suspensions, Landing Gear\n" + 
                 "• Solar Panel, Portable Reactor, Hydrogen Engine, Water/Fuel/Gas Tanks, H2/O2 Gen\n" + 
@@ -5026,6 +5032,7 @@ root =>
             var circuit     = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_Circuit.asset");
             var advCircuit  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_AdvCircuit.asset");
             var glass       = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_Glass.asset");
+            var lithium     = EnsureLithiumResource();
             var sciT2 = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ScienceItem>($"{craftItems}/Item_ScienceT2.asset");
             var sciT3 = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ScienceItem>($"{craftItems}/Item_ScienceT3.asset");
 
@@ -5496,6 +5503,26 @@ root =>
             Ensure(ITEM_FOLDER);
             Ensure(PLANET_FOLDER);
             Ensure(BIOME_FOLDER);
+        }
+
+        private static VoxelEngine.Items.ResourceItem EnsureLithiumResource()
+        {
+            string folder = ASSET_ROOT + "/Industrial/Items";
+            EnsureFolder(ASSET_ROOT + "/Industrial");
+            EnsureFolder(folder);
+
+            var lithium = GetOrCreateAsset<VoxelEngine.Items.ResourceItem>($"{folder}/Item_Lithium.asset");
+            lithium.itemId = "lithium";
+            lithium.displayName = "Lithium";
+            lithium.description = "Light reactive metal used for high-density batteries and advanced power storage.";
+            lithium.iconTint = new Color(0.78f, 0.92f, 1.00f);
+            lithium.maxStack = 999;
+            lithium.massPerUnit = 0.4f;
+            lithium.category = "Power";
+            lithium.subcategory = VoxelEngine.Items.ResourceCategory.Component;
+            lithium.fuelSeconds = 0f;
+            EditorUtility.SetDirty(lithium);
+            return lithium;
         }
 
         private static T GetOrCreateAsset<T>(string path) where T : ScriptableObject

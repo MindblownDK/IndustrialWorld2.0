@@ -55,36 +55,49 @@ namespace VoxelEngine.Maritime
 
             int end = chain.StartIndex + chain.Length;
 
-            // ── Determine / compute the live torque source ───────────────
+            // ── Determine / compute all live torque sources ─────────────
+            // Any engine/waterwheel in the connected mechanical component can feed
+            // the shared shaft bus. This lets players join multiple engines into one
+            // Rotation Transfer / Encased Chain Drive and have their torque combine,
+            // regardless of which side they used as the physical input.
             float torque = 0f;
-            float rpm = 0f;
+            float rpmWeighted = 0f;
+            float rpmMax = 0f;
             bool haveSource = false;
 
-            if (chain.SourceIndex >= 0 && chain.SourceIndex < Nodes.Length)
+            for (int i = chain.StartIndex; i < end; i++)
             {
-                var node = Nodes[chain.SourceIndex];
-                if (!node.IsBroken && node.FuelAvailable01 > 0.0001f)
+                var node = Nodes[i];
+                node.ElectricityOutput = 0f;
+                node.ElectricityDemand = 0f;
+
+                bool producer = node.Type == MechanicalNodeType.Engine || node.Type == MechanicalNodeType.Waterwheel;
+                if (!producer || node.IsBroken || node.FuelAvailable01 <= 0.0001f)
                 {
-                    torque = node.MaxTorque * node.FuelAvailable01;
-                    // Turbo boost is now applied per-engine in RefreshMaritimeNode
-                    // (via node.MaxTorque = maxTorque * TurboBoostTotal) so it stacks
-                    // correctly with multiple turbos of different sizes.
-                    rpm = node.MaxRPM * node.FuelAvailable01 * RpmResponse;
-                    haveSource = true;
-
-                    // Waterwheel-as-source: derive torque/rpm from water flow instead.
-                    if (node.Type == MechanicalNodeType.Waterwheel)
-                    {
-                        float flowSpeed = math.length(node.WaterFlowVelocity);
-                        torque = WheelFlowTorque * flowSpeed * node.FuelAvailable01;
-                        // A wheel in current spins proportionally.
-                        rpm = node.MaxRPM * math.saturate(flowSpeed * 0.5f);
-                    }
-
-                    node.CurrentRPM = rpm;
-                    Nodes[chain.SourceIndex] = node;
+                    Nodes[i] = node;
+                    continue;
                 }
+
+                float sourceTorque = node.MaxTorque * node.FuelAvailable01;
+                float sourceRpm = node.MaxRPM * node.FuelAvailable01 * RpmResponse;
+
+                if (node.Type == MechanicalNodeType.Waterwheel)
+                {
+                    float flowSpeed = math.length(node.WaterFlowVelocity);
+                    sourceTorque = WheelFlowTorque * flowSpeed * node.FuelAvailable01;
+                    sourceRpm = node.MaxRPM * math.saturate(flowSpeed * 0.5f);
+                }
+
+                node.CurrentRPM = sourceRpm;
+                Nodes[i] = node;
+
+                torque += sourceTorque;
+                rpmWeighted += sourceRpm * math.max(0.0001f, sourceTorque);
+                rpmMax = math.max(rpmMax, sourceRpm);
+                haveSource = true;
             }
+
+            float rpm = torque > 0.0001f ? rpmWeighted / torque : rpmMax;
 
             // If there's no live source the whole chain is idle — zero every node's RPM.
             if (!haveSource)
@@ -94,6 +107,7 @@ namespace VoxelEngine.Maritime
                     var n = Nodes[i];
                     n.CurrentRPM = 0f;
                     n.ElectricityOutput = 0f;
+                    n.ElectricityDemand = 0f;
                     Nodes[i] = n;
                 }
                 return;
@@ -102,9 +116,8 @@ namespace VoxelEngine.Maritime
             // ── Propagate torque + RPM through the rest of the chain ──────
             for (int i = chain.StartIndex; i < end; i++)
             {
-                if (i == chain.SourceIndex) continue;
-
                 var node = Nodes[i];
+                if (node.Type == MechanicalNodeType.Engine) continue;
 
                 switch (node.Type)
                 {

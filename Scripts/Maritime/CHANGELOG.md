@@ -4,6 +4,31 @@ Branch: **Dev** · Semantic Versioning 2.0.0
 
 ---
 
+## [2.21.0] — Configurable Shipping I/O, Multi-Engine Torque Bus & Lithium Batteries
+
+**Type:** MINOR — save-compatible logistics, mechanical-network, resource, and battery content update.
+
+### Added
+- **Shipping Container configurable item ports**: implements the same `IItemPortHost + PortConfig + ItemPortRouting` flow as chests, with one `Storage` container that can input and output through customizable faces and filters.
+- **Multi-source mechanical torque bus**: each connected mechanical chain now aggregates every live engine/waterwheel source in the chain, so multiple engines feeding Rotation Transfers / Encased Chain Drives combine torque no matter which side the player used as input.
+- **Lithium resource** (`Item_Lithium.asset`) for high-density power storage.
+- **Giant Battery Pack** grid block generation in Step 12 with large capacity/discharge and lithium-heavy recipe.
+
+### Changed
+- Stationary **Battery** recipe now requires Lithium.
+- Grid **Small Battery** and **Large Battery** recipes now require Lithium.
+- Step 12 battery content now generates Small, Large, and Giant Battery Pack variants.
+- Mechanical propagation no longer depends on a single chosen source node; producer torque is combined chain-wide before consumers receive RPM.
+
+### Manual Unity steps
+1. Pull/reload and let Unity compile.
+2. Run **Step 12 / Build Grid System Content** to generate/update the Giant Battery Pack and lithium battery recipes.
+3. Run **Step 13 / Build Maritime Content** if you want the Shipping Container prefab regenerated with chest-style port components.
+4. Open a Shipping Container UI and confirm the item-port configuration widget appears below the inventory panel.
+5. Build two engines into the same shaft/transfer/chain-drive network and verify connected propellers/generators receive combined power.
+
+---
+
 ## [2.20.0] — Maritime Camera Polish, Buoyancy Reserve & Chain-Drive Logistics
 
 **Type:** MINOR — save-compatible blocks, prefab markers, control-seat camera features, and physics tuning.
