@@ -5205,6 +5205,11 @@ root =>
             var itemBalsa = MakeMItem("MItem_BalsaWood", "Balsa Wood", new Color(0.80f,0.65f,0.40f), balsaPref, SzL, 25, 80);
             AddMRecipe("Recipe_MBalsaWood", "Balsa Wood", itemBalsa, (woodLog, 2));
 
+            var shipContainerPref = MakeMPref<VoxelEngine.Maritime.GridShippingContainer>("ShippingContainer_Large", new Color(0.08f,0.22f,0.38f), Vector3.one,
+                c => { c.slots = 60; c.maxMassKg = 5_000_000f; c.largeContainerMultiplier = 5f; });
+            var itemShipContainer = MakeMItem("MItem_ShippingContainer", "Shipping Container", new Color(0.08f,0.22f,0.38f), shipContainerPref, SzL, 1800, 1200);
+            AddMRecipe("Recipe_MShippingContainer", "Shipping Container", itemShipContainer, (steelPlate, 16), (ironPlate, 12), (circuit, 2));
+
             // ═══════════════════════════════════════════════════════════════
             //  PROPULSION BLOCKS
             // ═══════════════════════════════════════════════════════════════
@@ -5219,6 +5224,18 @@ root =>
                 s => { s.maxSafeRPM = 3000f; });
             var itemShaft = MakeMItem("MItem_DriveShaft", "Drive Shaft", new Color(0.70f,0.72f,0.75f), shaftPref, SzL, 80, 300);
             AddMRecipe("Recipe_MDriveShaft", "Drive Shaft", itemShaft, (ironPlate, 2), (ironGear, 1));
+
+            // Rotation Transfer
+            var rotTransferPref = MakeMPref<VoxelEngine.Maritime.GridRotationTransfer>("RotationTransfer_Large", new Color(0.62f,0.58f,0.46f), Vector3.one,
+                r => { r.route = VoxelEngine.Maritime.RotationTransferRoute.Up; r.maxSafeRPM = 3200f; });
+            var itemRotTransfer = MakeMItem("MItem_RotationTransfer", "Rotation Transfer", new Color(0.62f,0.58f,0.46f), rotTransferPref, SzL, 140, 360);
+            AddMRecipe("Recipe_MRotationTransfer", "Rotation Transfer", itemRotTransfer, (ironPlate, 3), (ironGear, 2));
+
+            // Encased Chain Drive
+            var chainDrivePref = MakeMPref<VoxelEngine.Maritime.GridEncasedChainDrive>("EncasedChainDrive_Large", new Color(0.32f,0.34f,0.36f), Vector3.one,
+                c => { c.maxSafeRPM = 2600f; });
+            var itemChainDrive = MakeMItem("MItem_EncasedChainDrive", "Encased Chain Drive", new Color(0.32f,0.34f,0.36f), chainDrivePref, SzL, 180, 420);
+            AddMRecipe("Recipe_MEncasedChainDrive", "Encased Chain Drive", itemChainDrive, (ironPlate, 4), (ironGear, 3), (steelPlate, 1));
 
             // Small Propeller
             var propSPref = MakeMPref<VoxelEngine.Maritime.GridPropeller>("Propeller_Small_Large", new Color(0.85f,0.65f,0.25f), Vector3.one,
@@ -5316,8 +5333,11 @@ root =>
             SetDesc(itemBalsa, "Ultra-light, maximally buoyant, but fragile (0.4x HP). Perfect for lifeboats, buoys, outrigger stabilizers, and floatation aids.");
             SetDesc(itemWheel, "3x3x1 cast-iron waterwheel with oak paddles. DUAL-MODE: Generates torque from water current when stationary, OR produces paddle thrust when driven by a shaft on a moving ship. Place in flowing water.");
             SetDesc(itemShaft, "Drive shaft that transmits rotational torque from an engine to a propeller, gearbox, or generator. If a shaft is disabled or destroyed, the propulsion chain downstream stops. Chain blocks together engine-first.");
-            SetDesc(itemPropS, "3-blade cast bronze propeller (1x1x1). Low thrust but highly maneuverable. Consumes low shaft torque. Place below the waterline facing the direction you want to push.");
-            SetDesc(itemPropL, "4-blade heavy steel industrial propeller (3x3x1). Extreme thrust capable of moving heavy hulls, but slow spin-up time and high torque demand. Shows visible cavitation bubbles when working hard.");
+            SetDesc(itemRotTransfer, "Rotation Transfer casing. Carries shaft RPM like a drive shaft while visually routing rotation straight, up, or down. Rotate the block while placing to turn the route left/right.");
+            SetDesc(itemChainDrive, "Encased Chain Drive. Protected shaft segment with propeller mount points. Use it as the rugged chain casing that shaft-driven propellers bolt onto.");
+            SetDesc(itemShipContainer, "Maritime shipping container storage. Styled like a real intermodal container and carries 5x the mass of a Large Cargo Container.");
+            SetDesc(itemPropS, "3-blade cast bronze propeller (1x1x1). Low thrust but highly maneuverable. Consumes low shaft torque through its movable Rotation input point 0 cube. Place below the waterline facing the direction you want to push.");
+            SetDesc(itemPropL, "4-blade heavy steel industrial propeller (3x3x1). Extreme thrust with a movable Rotation input point 0 cube for shaft/chain-drive alignment. Shows visible cavitation bubbles when working hard.");
             SetDesc(itemExhaust, "Exhaust venting pipe. EVERY engine requires at least one adjacent exhaust pipe or it chokes and produces zero torque. The pipe vents exhaust gas buildup and emits visible smoke particles while engines run. Looks like a pipe with vent holes.");
             SetDesc(itemEngS, "Crude Engine (1x2x1). FUEL: Wood Logs / Planks / Coal (solid fuel from cargo). Low torque, high fuel efficiency - perfect for starter paddleboats. Exposed brass pistons, small copper boiler, sputtering smoke. REQUIRES adjacent Exhaust Pipe. Can fit 1 Small Turbocharger.");
             SetDesc(itemEngM, "Heavy Fuel Oil Engine (2x3x2). FUEL: Heavy Fuel Oil (liquid, from refinery). Inline-4 cast iron block with medium torque and steady RPM. Vibrating belts, oil stains. REQUIRES adjacent Exhaust Pipe. Can fit 2 Small or Large Turbochargers. Pair with a Gearbox before a Generator for best efficiency.");
@@ -5329,8 +5349,8 @@ root =>
             SetDesc(itemEProp, "Electrical propeller (2x2x1). Torpedo-shaped bronze pod with a sleek 3-blade propeller. Driven by electricity from the grid (not shaft torque). Medium thrust with fast spin-up. Heavy armored power conduit.");
             SetDesc(itemBilge, "Bilge pump. Consumes electricity to drain waterlogged mass from nearby hull blocks within a 4-cell radius. Essential for surviving hull breaches and mega-storms on untreated-wood ships. Heavy, no buoyancy.");
             SetDesc(itemPump, "Marine Water Pump. Must be placed at or below the waterline to operate. Sucks seawater into an internal buffer, then pushes it into connected Water tanks. Used to supply engine coolant (Water) for HFO and MGO engines. Draws power from the grid.");
-            SetDesc(itemConsole, "Ship Control Console — a modern bridge station with twin throttle levers, radar display, and a compact steering wheel. Right-click to enter. W/S = throttle, A/D = steer, scroll = zoom, F or right-click = exit. Functions identically to the Helm but with a sleek industrial aesthetic. Tier 3+");
-            SetDesc(itemHelm, "Ship's wheel / helm. Right-click to enter a third-person camera view above the helm. W = throttle up, S = throttle down, A/D = steer left/right. Scroll wheel = zoom in/out. Press F or right-click again to release. Drives the ship's MaritimePropulsionSystem (engines + rudder).");
+            SetDesc(itemConsole, "Ship Control Console — a modern bridge station with twin throttle levers, radar display, and a compact steering wheel. Right-click to enter. Behaves like a cockpit for spaceships and also drives maritime throttle/rudder. V toggles camera, Alt freelook, Exit Cockpit leaves. Tier 3+");
+            SetDesc(itemHelm, "Ship's wheel / helm. Right-click to enter a third-person camera view above the helm. W = throttle up, S = throttle down, A/D = steer left/right. V toggles camera, Alt freelook, Exit Cockpit leaves. Drives the ship's MaritimePropulsionSystem (engines + rudder).");
 
 
             // ═══════════════════════════════════════════════════════════════
@@ -5368,16 +5388,30 @@ root =>
                         n.upgradeKind = VoxelEngine.Research.PlayerUpgradeKind.None;
                         n.maxRanks = 1;
                     }
+                    else if (unlocks != null && unlocks.Length > 0)
+                    {
+                        var merged = new List<VoxelEngine.Crafting.RecipeDefinition>();
+                        if (n.unlocksRecipes != null)
+                        {
+                            for (int i = 0; i < n.unlocksRecipes.Length; i++)
+                                if (n.unlocksRecipes[i] != null && !merged.Contains(n.unlocksRecipes[i]))
+                                    merged.Add(n.unlocksRecipes[i]);
+                        }
+                        for (int i = 0; i < unlocks.Length; i++)
+                            if (unlocks[i] != null && !merged.Contains(unlocks[i]))
+                                merged.Add(unlocks[i]);
+                        n.unlocksRecipes = merged.ToArray();
+                    }
                     EditorUtility.SetDirty(n);
                     if (!tree.nodes.Contains(n)) tree.nodes.Add(n);
                     return n;
                 }
 
-                // Tier 1: Hydro-Mechanics (Waterwheel, Drive Shaft, Untreated Wood, Small Propeller, Helm)
+                // Tier 1: Hydro-Mechanics (Waterwheel, shafts/transfers, Untreated Wood, Small Propeller, Helm)
                 var t1 = MakeMaritimeNode("res_maritime_hydromech", "Hydro-Mechanics",
-                    "Master water power. Unlocks the Waterwheel, Drive Shaft, Untreated Wood hull, Small Propeller, and the Helm.",
+                    "Master water power. Unlocks the Waterwheel, Drive Shaft, Rotation Transfer, Encased Chain Drive, Untreated Wood hull, Small Propeller, and the Helm.",
                     1, 6, 40f, new[] { (sciT2, 10) },
-                    recipes.FindAll(r => r != null && (r.name.Contains("Waterwheel") || r.name.Contains("DriveShaft") || r.name.Contains("UntreatedWood") || r.name.Contains("PropSmall") || r.name.Contains("Helm") || r.name.Contains("Exhaust"))).ToArray(),
+                    recipes.FindAll(r => r != null && (r.name.Contains("Waterwheel") || r.name.Contains("DriveShaft") || r.name.Contains("RotationTransfer") || r.name.Contains("EncasedChainDrive") || r.name.Contains("UntreatedWood") || r.name.Contains("PropSmall") || r.name.Contains("Helm") || r.name.Contains("Exhaust"))).ToArray(),
                     nShip != null ? new[] { nShip } : null);
 
                 // Tier 2: Steam & Internal Combustion (Small Engine, Exhaust, Tar Plank, Balsa, Gearbox)
@@ -5387,11 +5421,11 @@ root =>
                     recipes.FindAll(r => r != null && (r.name.Contains("EngineSmall") || r.name.Contains("Exhaust") || r.name.Contains("TarPlank") || r.name.Contains("Balsa") || r.name.Contains("Gearbox"))).ToArray(),
                     new[] { t1 });
 
-                // Tier 3: Heavy Industrial Maritime (Medium Engine, Iron Hull, Bilge Pump, Generator, E-Propeller)
+                // Tier 3: Heavy Industrial Maritime (Medium Engine, Iron Hull, Shipping Container, Bilge Pump, Generator, E-Propeller)
                 var t3 = MakeMaritimeNode("res_maritime_heavy", "Heavy Industrial Maritime",
-                    "Steel and steam. Unlocks the Medium Engine, Iron Hull, Bilge Pump, Maritime Generator, and Electrical Propeller.",
+                    "Steel and steam. Unlocks the Medium Engine, Iron Hull, Shipping Container, Bilge Pump, Maritime Generator, and Electrical Propeller.",
                     3, 6, 120f, new[] { (sciT2, 30), (sciT3, 15) },
-                    recipes.FindAll(r => r != null && (r.name.Contains("EngineMedium") || r.name.Contains("IronHull") || r.name.Contains("Bilge") || r.name.Contains("Generator") || r.name.Contains("EPropeller"))).ToArray(),
+                    recipes.FindAll(r => r != null && (r.name.Contains("EngineMedium") || r.name.Contains("IronHull") || r.name.Contains("ShippingContainer") || r.name.Contains("Bilge") || r.name.Contains("Generator") || r.name.Contains("EPropeller"))).ToArray(),
                     new[] { t2 });
 
                 // Tier 4: MSC Loreto-class Propulsion (Giant Diesel, Turbocharger, Large Propeller)
@@ -5413,6 +5447,8 @@ root =>
                     ms = ScriptableObject.CreateInstance<VoxelEngine.Maritime.MaritimeSettings>();
                     AssetDatabase.CreateAsset(ms, settingsPath);
                 }
+                ms.buoyancyGain = Mathf.Max(ms.buoyancyGain, 1.25f);
+                ms.buoyancyReserve = Mathf.Max(ms.buoyancyReserve, 2.0f);
                 EditorUtility.SetDirty(ms);
             }
 
@@ -5424,7 +5460,8 @@ root =>
                 $"Maritime content built!\n\n" +
                 $"BLOCKS ({recipes.Count} prefabs + items + recipes):\n" +
                 "  Hull: Untreated Wood, Tar Plank, Iron Hull, Balsa Wood\n" +
-                "  Propulsion: Waterwheel, Drive Shaft, Small/Large Propeller, Exhaust, Small/Medium/Giant Engine, Turbocharger, Gearbox, Generator, E-Propeller, Bilge Pump, Helm\n\n" +
+                "  Propulsion: Waterwheel, Drive Shaft, Rotation Transfer, Encased Chain Drive, Small/Large Propeller, Exhaust, Small/Medium/Giant Engine, Turbocharger, Gearbox, Generator, E-Propeller, Bilge Pump, Helm\n" +
+                "  Storage: Shipping Container (5x Large Cargo capacity)\n\n" +
                 "RESEARCH TREE (4-tier Maritime Engineering):\n" +
                 "  T1: Hydro-Mechanics\n" +
                 "  T2: Steam & Internal Combustion\n" +

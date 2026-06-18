@@ -15,7 +15,9 @@ namespace VoxelEngine.Maritime
         [Tooltip("Water density (kg/m³). Drives Archimedes displacement force. Sea water ≈ 1025.")]
         public float waterDensity = 1025f;
         [Tooltip("Global multiplier on buoyancy force so ships feel responsive at game scale.")]
-        public float buoyancyGain = 1.0f;
+        public float buoyancyGain = 1.25f;
+        [Tooltip("Extra displacement reserve per block. 2 means a buoyancyFactor=1 block floats around half-submerged instead of only at full submergence.")]
+        public float buoyancyReserve = 2.0f;
         [Tooltip("Downward drag applied to blocks moving through water (hull resistance).")]
         public float waterDrag = 0.6f;
         [Tooltip("Upward stabilisation gain — gently pushes submerged hulls toward equilibrium.")]

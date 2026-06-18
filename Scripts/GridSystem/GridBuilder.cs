@@ -116,14 +116,22 @@ namespace VoxelEngine.GridSystem
                 targetGrid = null;
             }
 
-            if (IsTurbochargerItem(gbi, out var turboTier) && !HasValidTurboAttachment(targetGrid, gridPos, turboTier))
+            bool placingTurbo = IsTurbochargerItem(gbi, out var turboTier);
+            if (placingTurbo)
             {
-                HideGhost();
-                return;
-            }
+                if (!TryFindTurboAttachment(targetGrid, gridPos, turboTier, out var engine))
+                {
+                    HideGhost();
+                    return;
+                }
 
-            // Apply the player's dialled-in rotation on top of the grid alignment.
-            rotation *= Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
+                rotation = GetTurboAttachmentRotation(targetGrid, gridPos, engine);
+            }
+            else
+            {
+                // Apply the player's dialled-in rotation on top of the grid alignment.
+                rotation *= Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
+            }
 
             ShowGhost(gbi, worldPos, rotation);
 
@@ -135,8 +143,12 @@ namespace VoxelEngine.GridSystem
 
         private bool TryPlaceBlock(GridBlockItem item, GridEntity grid, Vector3Int gridPos, Vector3 worldPos, Quaternion rotation)
         {
-            if (IsTurbochargerItem(item, out var turboTier) && !HasValidTurboAttachment(grid, gridPos, turboTier))
-                return false;
+            if (IsTurbochargerItem(item, out var turboTier))
+            {
+                if (!TryFindTurboAttachment(grid, gridPos, turboTier, out var engine))
+                    return false;
+                rotation = GetTurboAttachmentRotation(grid, gridPos, engine);
+            }
 
             if (grid == null)
             {
@@ -194,20 +206,50 @@ namespace VoxelEngine.GridSystem
             return true;
         }
 
-        private bool HasValidTurboAttachment(GridEntity grid, Vector3Int gridPos, VoxelEngine.Maritime.TurboTier turboTier)
+        private bool TryFindTurboAttachment(GridEntity grid, Vector3Int gridPos,
+            VoxelEngine.Maritime.TurboTier turboTier, out VoxelEngine.Maritime.GridMaritimeEngine engine)
         {
+            engine = null;
             if (grid == null || !grid.CanPlace(gridPos)) return false;
 
             foreach (var kv in grid.Blocks)
             {
-                if (kv.Value is VoxelEngine.Maritime.GridMaritimeEngine engine &&
-                    engine.CanAttachTurboAt(gridPos, turboTier))
+                if (kv.Value is VoxelEngine.Maritime.GridMaritimeEngine candidate &&
+                    candidate.CanAttachTurboAt(gridPos, turboTier))
                 {
+                    engine = candidate;
                     return true;
                 }
             }
 
             return false;
+        }
+
+        private Quaternion GetTurboAttachmentRotation(GridEntity grid, Vector3Int turboGridPos,
+            VoxelEngine.Maritime.GridMaritimeEngine engine)
+        {
+            if (grid == null || engine == null) return Quaternion.identity;
+
+            Vector3 engineWorld = grid.GridToWorld(engine.GridPos);
+            Vector3 turboWorld = grid.GridToWorld(turboGridPos);
+            Vector3 outward = turboWorld - engineWorld;
+            if (outward.sqrMagnitude < 0.0001f)
+                outward = grid.transform.TransformDirection(new Vector3(
+                    turboGridPos.x - engine.GridPos.x,
+                    turboGridPos.y - engine.GridPos.y,
+                    turboGridPos.z - engine.GridPos.z));
+            outward = outward.sqrMagnitude > 0.0001f ? outward.normalized : grid.transform.up;
+
+            Vector3 forward = Vector3.ProjectOnPlane(engine.transform.forward, outward);
+            if (forward.sqrMagnitude < 0.0001f)
+                forward = Vector3.ProjectOnPlane(grid.transform.forward, outward);
+            if (forward.sqrMagnitude < 0.0001f)
+                forward = Vector3.Cross(outward, grid.transform.right);
+            forward = forward.sqrMagnitude > 0.0001f ? forward.normalized : Vector3.forward;
+
+            // Turbo local +Y points away from the engine, so its local bottom (-Y)
+            // is always pressed against the engine's attachment cube.
+            return Quaternion.LookRotation(forward, outward);
         }
 
         // Ctrl+Scroll = yaw (Y), Shift+Scroll = pitch (X), Ctrl+Shift+Scroll = roll (Z).

@@ -396,19 +396,16 @@ namespace VoxelEngine.Maritime
 
         private float BlockVolume(GridBlock block)
         {
-            // Volume is tuned so buoyancy force matches the block's RUNTIME mass
-            // (which includes the grid mass-scale from RecalculateMass).
-            // F_buoy = ρ_water × g × V × buoyancyFactor
-            // At buoyancyFactor=1.0, a fully submerged block should produce exactly
-            // its weight in upward force (neutral buoyancy at the surface).
-            // So V_runtime = mass / (ρ_water × buoyancyFactor) — but we don't know
-            // the factor here. Instead, we use: V = mass / ρ_water, and the job's
-            // buoyancyFactor scales it. This makes 1.0 float at the surface, 0 sink.
+            // Volume is tuned from runtime mass, then multiplied by a displacement reserve.
+            // Without reserve, buoyancyFactor=1 only becomes weight-neutral when the
+            // block is fully submerged. Real ship blocks need spare enclosed volume, so
+            // buoyant hulls should float visibly higher in the water.
             float runtimeMass = _grid != null && _rb != null
                 ? Mathf.Max(1f, _rb.mass / Mathf.Max(1, _grid.BlockCount)) // per-block mass
                 : Mathf.Max(1f, block.TotalMass);
             float waterDensity = settings != null ? settings.waterDensity : 1025f;
-            return runtimeMass / waterDensity;
+            float reserve = settings != null ? Mathf.Max(1f, settings.buoyancyReserve) : 2.0f;
+            return runtimeMass / waterDensity * reserve;
         }
 
         private float DefaultBuoyancyFactor(GridBlock block)

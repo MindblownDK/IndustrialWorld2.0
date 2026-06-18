@@ -39,6 +39,10 @@ namespace VoxelEngine.Maritime
         private Vector3 _origPivotPos;
         private Quaternion _origPivotRot;
         private bool _camCached;
+        private bool _thirdPersonCamera = true;
+        private float _lookYaw;
+        private float _lookPitch;
+        private bool _freeLooking;
         private Transform _origParent;
 
         public override void OnPlaced()
@@ -80,13 +84,17 @@ namespace VoxelEngine.Maritime
 
             int blockCount = Grid != null ? Grid.BlockCount : 1;
             _cameraDist = Mathf.Clamp(blockCount * shipSizeCameraFactor + 8f, minCameraDist, maxCameraDist);
+            _thirdPersonCamera = true;
+            _freeLooking = false;
+            _lookYaw = 0f;
+            _lookPitch = 0f;
 
             _origParent = player.transform.parent;
             player.transform.SetParent(transform, worldPositionStays: true);
             player.transform.position = transform.position;
             player.transform.localRotation = Quaternion.identity;
 
-            ApplyCamera();
+            ApplyCameraMode();
 
             if (Grid != null)
             {
@@ -111,6 +119,10 @@ namespace VoxelEngine.Maritime
             }
             ThrottleSetting = 0f;
             _currentSteer = 0f;
+            _thirdPersonCamera = false;
+            _freeLooking = false;
+            _lookYaw = 0f;
+            _lookPitch = 0f;
 
             if (Grid != null)
             {
@@ -173,6 +185,7 @@ namespace VoxelEngine.Maritime
                 return;
             }
 
+            if (VPressed) ToggleCameraMode();
             if (GridInput.ZPressed) Grid.DampenersOn = !Grid.DampenersOn;
             if (GridInput.PPressed) ToggleAllLandingGear();
 
@@ -190,12 +203,23 @@ namespace VoxelEngine.Maritime
             float roll = ((GridInput.Q ? 1f : 0f) - (GridInput.E ? 1f : 0f)) * ROLL_SENS;
 
             Vector2 md = GridInput.MouseDelta;
-            const float mouseSensitivity = 0.06f;
-            float yaw = Mathf.Clamp(md.x * mouseSensitivity, -1f, 1f);
-            float pitch = Mathf.Clamp(-md.y * mouseSensitivity, -1f, 1f);
 
-            Grid.SetFlightInput(thrust, yaw, pitch, roll);
-            DriveMaritime(fwd, yaw);
+            if (GridInput.Alt)
+            {
+                FreeLook(md);
+                Grid.SetFlightInput(thrust, 0f, 0f, roll);
+                DriveMaritime(fwd, 0f);
+            }
+            else
+            {
+                ResetFreeLook();
+                const float mouseSensitivity = 0.06f;
+                float yaw = Mathf.Clamp(md.x * mouseSensitivity, -1f, 1f);
+                float pitch = Mathf.Clamp(-md.y * mouseSensitivity, -1f, 1f);
+
+                Grid.SetFlightInput(thrust, yaw, pitch, roll);
+                DriveMaritime(fwd, yaw);
+            }
 
             float scroll = GridInput.Scroll;
             if (Mathf.Abs(scroll) > 0.01f)
@@ -239,13 +263,75 @@ namespace VoxelEngine.Maritime
             }
         }
 
-        private void ApplyCamera()
+        private void ApplyCameraMode()
         {
             if (_pilotCamPivot == null) return;
-            float cs = Grid != null ? Grid.gridSize.CellSize() : 2.5f;
-            _pilotCamPivot.localPosition = new Vector3(0f, _cameraDist * 0.45f + cs, -_cameraDist);
-            float pitch = 15f + (_cameraDist / maxCameraDist) * 20f;
-            _pilotCamPivot.localRotation = Quaternion.Euler(pitch, 0f, 0f);
+
+            if (_thirdPersonCamera)
+            {
+                float cs = Grid != null ? Grid.gridSize.CellSize() : 2.5f;
+                _pilotCamPivot.localPosition = new Vector3(0f, _cameraDist * 0.45f + cs, -_cameraDist);
+                float pitch = 15f + (_cameraDist / maxCameraDist) * 20f;
+                _pilotCamPivot.localRotation = Quaternion.Euler(pitch, 0f, 0f);
+            }
+            else if (_camCached)
+            {
+                _pilotCamPivot.localPosition = _origPivotPos;
+                _pilotCamPivot.localRotation = _origPivotRot;
+            }
+        }
+
+        private void ToggleCameraMode()
+        {
+            _thirdPersonCamera = !_thirdPersonCamera;
+            _freeLooking = false;
+            _lookYaw = 0f;
+            _lookPitch = 0f;
+            ApplyCameraMode();
+        }
+
+        private void FreeLook(Vector2 mouseDelta)
+        {
+            if (_pilotCamPivot == null) return;
+
+            const float sensitivity = 2.0f;
+            _lookYaw = Mathf.Clamp(_lookYaw + mouseDelta.x * sensitivity, -140f, 140f);
+            _lookPitch = Mathf.Clamp(_lookPitch - mouseDelta.y * sensitivity, -80f, 80f);
+            _freeLooking = true;
+
+            if (_thirdPersonCamera)
+            {
+                float basePitch = 15f + (_cameraDist / maxCameraDist) * 20f;
+                _pilotCamPivot.localRotation = Quaternion.Euler(
+                    Mathf.Clamp(basePitch + _lookPitch, -20f, 85f),
+                    _lookYaw,
+                    0f);
+            }
+            else
+            {
+                _pilotCamPivot.localRotation = _origPivotRot * Quaternion.Euler(_lookPitch, _lookYaw, 0f);
+            }
+        }
+
+        private void ResetFreeLook()
+        {
+            if (!_freeLooking) return;
+            _freeLooking = false;
+            _lookYaw = 0f;
+            _lookPitch = 0f;
+            ApplyCameraMode();
+        }
+
+        private static bool VPressed
+        {
+            get
+            {
+#if ENABLE_INPUT_SYSTEM
+                return Keyboard.current != null && Keyboard.current.vKey.wasPressedThisFrame;
+#else
+                return Input.GetKeyDown(KeyCode.V);
+#endif
+            }
         }
 
         private static bool Held(InputAction action) => VoxelEngine.Settings.GameSettings.IsHeld(action);

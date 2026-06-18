@@ -16,7 +16,7 @@ namespace VoxelEngine.Maritime
 {
     public static class MaritimeMeshBuilder
     {
-        public const int Version = 12;
+        public const int Version = 13;
         private static Shader Lit => Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
         public static System.Func<Material, string, Material> MaterialPersister;
         private static int _matCounter;
@@ -73,6 +73,9 @@ namespace VoxelEngine.Maritime
             else if (n.Contains("engine_small"))         BuildCrudeEngine(root, cs);
             else if (n.Contains("turbocharger_large"))   BuildTurbo(root, cs, true);
             else if (n.Contains("turbocharger"))         BuildTurbo(root, cs, false);
+            else if (n.Contains("rotationtransfer"))     BuildRotationTransfer(root, cs);
+            else if (n.Contains("encasedchaindrive"))    BuildEncasedChainDrive(root, cs);
+            else if (n.Contains("shippingcontainer"))    BuildShippingContainer(root, cs);
             else if (n.Contains("gearbox"))              BuildGearbox(root, cs);
             else if (n.Contains("waterwheel"))           BuildWaterwheel(root, cs);
             else if (n.Contains("driveshaft"))           BuildDriveShaft(root, cs);
@@ -91,7 +94,8 @@ namespace VoxelEngine.Maritime
             // Auto-attach animator if the block has animatable parts.
             if (root.GetComponent<MaritimeAnimator>() == null && n.ContainsAny(
                 "propeller", "epropeller", "engine_", "turbocharger", "gearbox",
-                "waterwheel", "maritimegenerator", "helm", "driveshaft"))
+                "waterwheel", "maritimegenerator", "helm", "driveshaft",
+                "rotationtransfer", "encasedchaindrive"))
             {
                 root.AddComponent<MaritimeAnimator>();
             }
@@ -129,6 +133,7 @@ namespace VoxelEngine.Maritime
             Box(r, CastIron, new Vector3(0, 0, -cs * 0.25f), new Vector3(cs * 0.55f, cs * 0.55f, cs * 0.4f));
             // Shaft input port (gold — where rotation comes in).
             Port(r, "Port_ShaftInput", PortShaft, new Vector3(0, 0, -cs * 0.42f), new Vector3(cs * 0.12f, cs * 0.12f, cs * 0.04f));
+            Port(r, "Rotation input point 0", PortShaft, new Vector3(0, 0, -cs * 0.50f), new Vector3(cs * 0.16f, cs * 0.16f, cs * 0.06f));
             Box(r, Steel, new Vector3(0, -cs * 0.35f, -cs * 0.2f), new Vector3(cs * 0.1f, cs * 0.3f, cs * 0.15f));
         }
 
@@ -350,6 +355,80 @@ namespace VoxelEngine.Maritime
             // ── I/O Port: Boost Output (gold) — snaps to engine input ──
             Port(r, "Port_BoostOutput", PortShaft, new Vector3(0, -housingR * 0.45f, housingR * 0.5f),
                 new Vector3(cs * 0.12f, cs * 0.12f, cs * 0.04f));
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        //  ROTATION TRANSFER — straight/up/down visual transfer casing
+        // ════════════════════════════════════════════════════════════════
+        static void BuildRotationTransfer(GameObject r, float cs)
+        {
+            Box(r, DarkSteel, V0, new Vector3(cs * 0.86f, cs * 0.50f, cs * 0.86f));
+            Box(r, Steel, new Vector3(0, 0, -cs * 0.22f), new Vector3(cs * 0.34f, cs * 0.34f, cs * 0.48f));
+            Box(r, Steel, new Vector3(0, cs * 0.22f, 0), new Vector3(cs * 0.34f, cs * 0.48f, cs * 0.34f));
+            var bevel = Cyl(r, Brass, V0, cs * 0.18f, cs * 0.16f);
+            bevel.name = "GearRotor";
+            bevel.transform.localRotation = Quaternion.Euler(45f, 0f, 0f);
+
+            Port(r, "Port_RotationInput", PortShaft, new Vector3(0, 0, -cs * 0.48f), new Vector3(cs * 0.13f, cs * 0.13f, cs * 0.05f));
+            Port(r, "Port_RotationOutput_Straight", PortShaft, new Vector3(0, 0, cs * 0.48f), new Vector3(cs * 0.13f, cs * 0.13f, cs * 0.05f));
+            Port(r, "Port_RotationOutput_Up", PortShaft, new Vector3(0, cs * 0.48f, 0), new Vector3(cs * 0.13f, cs * 0.05f, cs * 0.13f));
+            Port(r, "Port_RotationOutput_Down", PortShaft, new Vector3(0, -cs * 0.48f, 0), new Vector3(cs * 0.13f, cs * 0.05f, cs * 0.13f));
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        //  ENCASED CHAIN DRIVE — protected shaft + propeller mounts
+        // ════════════════════════════════════════════════════════════════
+        static void BuildEncasedChainDrive(GameObject r, float cs)
+        {
+            Box(r, DarkSteel, V0, new Vector3(cs * 0.92f, cs * 0.42f, cs * 0.52f));
+            Box(r, Steel, new Vector3(0, cs * 0.02f, 0), new Vector3(cs * 0.82f, cs * 0.28f, cs * 0.34f));
+
+            for (int i = 0; i < 6; i++)
+            {
+                float x = (i - 2.5f) * cs * 0.13f;
+                Box(r, Brass, new Vector3(x, cs * 0.22f, 0), new Vector3(cs * 0.07f, cs * 0.04f, cs * 0.28f));
+                Box(r, Brass, new Vector3(x, -cs * 0.18f, 0), new Vector3(cs * 0.07f, cs * 0.04f, cs * 0.28f));
+            }
+
+            var rotor = new GameObject("ChainRotor");
+            rotor.transform.SetParent(r.transform, false);
+            rotor.transform.localPosition = V0;
+            var sprocketA = Cyl(rotor, Brass, new Vector3(-cs * 0.32f, 0, 0), cs * 0.13f, cs * 0.08f);
+            sprocketA.transform.localRotation = Quaternion.Euler(0, 0, 90);
+            var sprocketB = Cyl(rotor, Brass, new Vector3(cs * 0.32f, 0, 0), cs * 0.13f, cs * 0.08f);
+            sprocketB.transform.localRotation = Quaternion.Euler(0, 0, 90);
+
+            Port(r, "Port_RotationInput", PortShaft, new Vector3(-cs * 0.48f, 0, 0), new Vector3(cs * 0.05f, cs * 0.13f, cs * 0.13f));
+            Port(r, "Port_RotationOutput", PortShaft, new Vector3(cs * 0.48f, 0, 0), new Vector3(cs * 0.05f, cs * 0.13f, cs * 0.13f));
+            Port(r, "Propeller mount point 0", PortTurbo, new Vector3(0, 0, cs * 0.31f), new Vector3(cs * 0.16f, cs * 0.16f, cs * 0.05f));
+            Port(r, "Propeller mount point 1", PortTurbo, new Vector3(0, 0, -cs * 0.31f), new Vector3(cs * 0.16f, cs * 0.16f, cs * 0.05f));
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        //  SHIPPING CONTAINER — real-world ribbed intermodal cargo block
+        // ════════════════════════════════════════════════════════════════
+        static void BuildShippingContainer(GameObject r, float cs)
+        {
+            var containerBlue = MatC(new Color(0.08f, 0.22f, 0.38f), 0.65f, 0.45f);
+            var edgeYellow = MatC(new Color(0.95f, 0.72f, 0.18f), 0.55f, 0.50f, e: new Color(0.20f, 0.12f, 0.02f));
+
+            Box(r, containerBlue, V0, new Vector3(cs * 0.96f, cs * 0.62f, cs * 0.96f));
+            for (int i = 0; i < 7; i++)
+            {
+                float x = (i - 3) * cs * 0.13f;
+                Box(r, DarkSteel, new Vector3(x, 0, cs * 0.49f), new Vector3(cs * 0.025f, cs * 0.58f, cs * 0.025f));
+                Box(r, DarkSteel, new Vector3(x, 0, -cs * 0.49f), new Vector3(cs * 0.025f, cs * 0.58f, cs * 0.025f));
+            }
+            for (int i = 0; i < 4; i++)
+            {
+                float x = (i < 2 ? -1 : 1) * cs * 0.49f;
+                float y = (i % 2 == 0 ? -1 : 1) * cs * 0.32f;
+                Box(r, edgeYellow, new Vector3(x, y, cs * 0.49f), new Vector3(cs * 0.07f, cs * 0.07f, cs * 0.07f));
+                Box(r, edgeYellow, new Vector3(x, y, -cs * 0.49f), new Vector3(cs * 0.07f, cs * 0.07f, cs * 0.07f));
+            }
+            Box(r, DarkSteel, new Vector3(0, 0, cs * 0.505f), new Vector3(cs * 0.78f, cs * 0.03f, cs * 0.02f));
+            Box(r, DarkSteel, new Vector3(0, 0, -cs * 0.505f), new Vector3(cs * 0.78f, cs * 0.03f, cs * 0.02f));
+            Port(r, "Port_ItemAccess", PortFuel, new Vector3(0, cs * 0.34f, cs * 0.48f), new Vector3(cs * 0.16f, cs * 0.05f, cs * 0.08f));
         }
 
         // ════════════════════════════════════════════════════════════════

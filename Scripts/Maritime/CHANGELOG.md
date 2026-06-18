@@ -4,6 +4,34 @@ Branch: **Dev** · Semantic Versioning 2.0.0
 
 ---
 
+## [2.20.0] — Maritime Camera Polish, Buoyancy Reserve & Chain-Drive Logistics
+
+**Type:** MINOR — save-compatible blocks, prefab markers, control-seat camera features, and physics tuning.
+
+### Added
+- **Helm + Ship Console camera controls**: `V` toggles first/third person and `Alt` enables free pivot/look around the active control seat.
+- **Auto-oriented turbo placement**: turbochargers now rotate themselves so their local bottom sits against the engine turbo attachment point.
+- **Buoyancy reserve tuning** via `MaritimeSettings.buoyancyReserve` so ship blocks displace more water and float higher.
+- **Rotation Transfer** block: shaft-compatible transfer casing for straight/up/down routing; rotating the block turns the route left/right.
+- **Encased Chain Drive** block: protected shaft segment with visible chain casing and named propeller mount points.
+- **Shipping Container** maritime storage block: real-life container visual, 60 slots, and 5x Large Cargo Container mass capacity.
+- **Propeller input cube** named `Rotation input point 0` on both shaft-driven propeller prefabs.
+
+### Changed
+- **`MaritimeMeshBuilder.Version` → 13** to rebuild propellers, chain-drive blocks, transfer blocks, and shipping containers.
+- Existing Maritime Settings assets are upgraded by Step 13 to at least `buoyancyGain = 1.25` and `buoyancyReserve = 2.0`.
+- Existing maritime research nodes now merge newly generated recipe unlocks instead of only populating unlocks on brand-new nodes.
+
+### Manual Unity steps
+1. Pull/reload and let Unity compile.
+2. Open **Tools → Voxel Engine → Setup Wizard**.
+3. Run **Step 13 / Build Maritime Content** to generate the new blocks, update research unlocks, rebuild mesh version 13 prefabs, and bump buoyancy settings.
+4. Test Helm and Ship Console: press `V` to toggle camera and hold `Alt` to free-look/pivot.
+5. Test turbo placement: hold a turbo and place it on a valid engine turbo attachment point; it should auto-orient with its bottom against the marker.
+6. Test watercraft buoyancy after Step 13; existing MaritimeSettings assets should now have stronger displacement reserve.
+
+---
+
 ## [2.19.0] — Cockpit-Style Helm & Ship Console Control Seats
 
 **Type:** MINOR — save-compatible control-seat feature and interaction fix.
