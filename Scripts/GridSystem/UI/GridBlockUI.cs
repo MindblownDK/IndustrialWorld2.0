@@ -247,7 +247,8 @@ namespace VoxelEngine.GridSystem.UI
             if (cc.container == null) cc.OnPlaced();
             var p = T.MachinePanel();
             p.style.width = 460;
-            var (hdr, _, _, _) = T.HeaderRow("📦 Cargo Container",
+            var title = string.IsNullOrWhiteSpace(cc.blockName) || cc.blockName == "Armor Block" ? "Cargo Container" : cc.blockName;
+            var (hdr, _, _, _) = T.HeaderRow($"📦 {title}",
                 cc.Fill01 >= 0.99f ? "FULL" : "OK",
                 cc.Fill01 >= 0.99f ? T.AccentRed : T.AccentGreen);
             p.Add(hdr);
@@ -272,10 +273,15 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(T.Spacer(6));
 
             p.Add(GridUIHelpers.SectionTitle("Inventory"));
+            var invScroll = new ScrollView(ScrollViewMode.Vertical);
+            invScroll.style.maxHeight = 360;
+            invScroll.style.flexShrink = 1;
+            invScroll.contentContainer.style.width = Length.Percent(100);
             var grid = T.SlotGrid(6);
             for (int i = 0; i < cc.container.Size; i++)
                 grid.Add(slot(cc.container, i, cc.container.GetSlot(i), false, true));
-            p.Add(grid);
+            invScroll.Add(grid);
+            p.Add(invScroll);
 
             p.Add(T.Spacer(6));
             p.Add(T.SmallButton("🛰  Open Ship Terminal",

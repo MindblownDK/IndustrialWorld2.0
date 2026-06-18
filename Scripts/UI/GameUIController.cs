@@ -44,6 +44,7 @@ namespace VoxelEngine.UI
         // UI state
         private UIDocument _doc;
         private VisualElement _root;
+        private VisualElement _itemPortsOverlay;
         private bool _inventoryOpen;
         public bool IsInventoryOpen => _inventoryOpen;
         private IItemContainer _rightContainer; // chest contents OR furnace etc.
@@ -1488,8 +1489,9 @@ namespace VoxelEngine.UI
                                           VoxelEngine.Transport.ItemPortRouting routing)
         {
             if (_root == null || host == null || routing == null) return;
+            if (_itemPortsOverlay != null && _itemPortsOverlay.parent != null) return;
 
-            var overlay = new VisualElement();
+            var overlay = new VisualElement { name = "ItemPortsOverlay" };
             overlay.style.position = Position.Absolute;
             overlay.style.left = 0; overlay.style.top = 0; overlay.style.right = 0; overlay.style.bottom = 0;
             overlay.style.alignItems = Align.Center;
@@ -1514,6 +1516,7 @@ namespace VoxelEngine.UI
             {
                 VoxelEngine.UI.PortConfigHud.IsAnyDropdownOpen = false;
                 overlay.RemoveFromHierarchy();
+                if (_itemPortsOverlay == overlay) _itemPortsOverlay = null;
             }
 
             // Card container.
@@ -1556,6 +1559,7 @@ namespace VoxelEngine.UI
             body.style.width = Length.Percent(100);
             scroll.Add(body);
 
+            _itemPortsOverlay = overlay;
             _root.Add(overlay);
         }
 
@@ -1563,7 +1567,9 @@ namespace VoxelEngine.UI
         private VisualElement MakePortsToggle(bool _, System.Action onClick)
         {
             var accent = UITheme.AccentCyan;
+            bool overlayOpen = _itemPortsOverlay != null && _itemPortsOverlay.parent != null;
             var btn = new Button();
+            btn.SetEnabled(!overlayOpen);
             btn.style.flexDirection = FlexDirection.Row;
             btn.style.alignItems = Align.Center;
             btn.style.height = 34;
@@ -1600,7 +1606,11 @@ namespace VoxelEngine.UI
                 btn.style.backgroundColor = new StyleColor(new Color(accent.r, accent.g, accent.b, 0.22f)));
             btn.RegisterCallback<PointerLeaveEvent>(_e =>
                 btn.style.backgroundColor = new StyleColor(new Color(accent.r, accent.g, accent.b, 0.14f)));
-            btn.clicked += () => onClick?.Invoke();
+            btn.clicked += () =>
+            {
+                if (_itemPortsOverlay != null && _itemPortsOverlay.parent != null) return;
+                onClick?.Invoke();
+            };
             return btn;
         }
 

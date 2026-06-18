@@ -27,8 +27,10 @@ namespace VoxelEngine.Maritime
 {
     public static class WaterProbeSystem
     {
-        /// <summary>World-space Y of a flat fallback sea level when no voxel water exists.</summary>
+        /// <summary>World-space Y of the intended ocean datum.</summary>
         public const float SeaLevel = 0f;
+        /// <summary>Sentinel height used when a column contains no water, preventing dry-land buoyancy.</summary>
+        public const float NoWaterHeight = -1000000f;
 
         private const int CHUNK_SIZE = VoxelConstants.CHUNK_SIZE;
         private const float VOXEL_SIZE = VoxelConstants.VOXEL_SIZE;
@@ -92,7 +94,7 @@ namespace VoxelEngine.Maritime
         /// </summary>
         private static float ComputeColumnHeight(VoxelWorld world, int ix, int iz)
         {
-            if (world == null) return SeaLevel;
+            if (world == null) return NoWaterHeight;
 
             const int ceilingVoxels = 96;
             const int floorVoxels = 96;
@@ -109,7 +111,7 @@ namespace VoxelEngine.Maritime
                     return voxelTopY - VOXEL_SIZE * (1f - fill);        // adjust down by unfilled portion
                 }
             }
-            return SeaLevel;
+            return NoWaterHeight;
         }
 
         /// <summary>

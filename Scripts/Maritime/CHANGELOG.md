@@ -4,6 +4,32 @@ Branch: **Dev** · Semantic Versioning 2.0.0
 
 ---
 
+## [2.21.1] — Item-Port Overlay Guard, Cargo Scrolling & Dry-Land Buoyancy Fix
+
+**Type:** PATCH — UI hardening, recipe access, and buoyancy correction; save-compatible.
+
+### Fixed
+- **Item Port overlay stacking**: opening Item Ports now stores a single active overlay reference and ignores further button presses until it is closed.
+- **Shipping Container / large cargo overflow**: cargo inventory grids now sit inside a scroll view, so high-slot containers no longer spill out of the panel.
+- **Dry-land buoyancy**: water probes now return a no-water sentinel when a column contains no fluid voxel, preventing hulls from continuing to float after leaving water.
+
+### Changed
+- Maritime buoyancy defaults retuned to `buoyancyGain = 1.0` and `buoyancyReserve = 1.6` for stronger-but-controlled flotation.
+- Step 13 clamps existing Maritime Settings into a safer buoyancy range instead of pushing them into sky-launch values.
+
+### Added
+- Craftable **Lithium** recipe so lithium-gated batteries are actually craftable after Step 6/Power Content.
+
+### Manual Unity steps
+1. Pull/reload and let Unity compile.
+2. Run **Step 6 / Build Power Content** to register the Lithium recipe if needed.
+3. Run **Step 13 / Build Maritime Content** to clamp MaritimeSettings to the safer buoyancy range.
+4. Test Item Ports by pressing the button repeatedly while the overlay is open — only one overlay should exist.
+5. Open a Shipping Container and scroll its inventory list.
+6. Drive/fly a hull out of water and confirm buoyancy stops once the blocks are no longer in water.
+
+---
+
 ## [2.21.0] — Configurable Shipping I/O, Multi-Engine Torque Bus & Lithium Batteries
 
 **Type:** MINOR — save-compatible logistics, mechanical-network, resource, and battery content update.

@@ -10,18 +10,20 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e6e37d290c6cb84409b3993312f66bca, type: 3}
-  m_Name: Recipe_GBatSmall
+  m_Name: Recipe_GBatGiant
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Crafting.RecipeDefinition
-  displayName: Small Battery
+  displayName: Giant Battery Pack
   icon: {fileID: 0}
   inputs:
-  - item: {fileID: 11400000, guid: 97f4ffb97f4311a48a90550a0e841dd2, type: 2}
-    count: 2
+  - item: {fileID: 11400000, guid: 8334f06ff41bbf844ae609a105d7dda9, type: 2}
+    count: 24
   - item: {fileID: 11400000, guid: 9839b36c887a99d4b80802a55e83472b, type: 2}
+    count: 64
+  - item: {fileID: 11400000, guid: 336b33bc040295447ab403e0542f3faf, type: 2}
     count: 8
   - item: {fileID: 11400000, guid: 0f1419ed5858dcd4dbb62ad1a3790917, type: 2}
-    count: 1
-  outputItem: {fileID: 11400000, guid: c66b95c6d833f7f42b137a209edd2d9f, type: 2}
+    count: 24
+  outputItem: {fileID: 11400000, guid: 2b944f59927c5a848b3cb5cb6852d987, type: 2}
   outputCount: 1
   requiredStation: 3
   craftSeconds: 4

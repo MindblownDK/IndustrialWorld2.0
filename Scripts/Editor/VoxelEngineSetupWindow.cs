@@ -1701,6 +1701,10 @@ namespace VoxelEngine.EditorTools
             AddRecipe("Recipe_Cable_Super",  "Superconductor Cable", blockCableSc, 4,
                 VoxelEngine.Crafting.StationTier.Assembler,    (steelIngot, 1), (goldOre != null ? goldOre : ironIngot, 1));
 
+            // Resource refinement for battery chemistry.
+            AddRecipe("Recipe_Lithium", "Lithium", lithium, 1,
+                VoxelEngine.Crafting.StationTier.Assembler,    (stone, 6), (coal != null ? coal : stone, 1));
+
             // Devices.
             AddRecipe("Recipe_Generator", "Coal Generator", blockGen, 1,
                 VoxelEngine.Crafting.StationTier.CraftingBench, (ironIngot, 4), (stone, 4));
@@ -5454,8 +5458,8 @@ root =>
                     ms = ScriptableObject.CreateInstance<VoxelEngine.Maritime.MaritimeSettings>();
                     AssetDatabase.CreateAsset(ms, settingsPath);
                 }
-                ms.buoyancyGain = Mathf.Max(ms.buoyancyGain, 1.25f);
-                ms.buoyancyReserve = Mathf.Max(ms.buoyancyReserve, 2.0f);
+                ms.buoyancyGain = Mathf.Clamp(ms.buoyancyGain <= 0f ? 1.0f : ms.buoyancyGain, 0.85f, 1.15f);
+                ms.buoyancyReserve = Mathf.Clamp(ms.buoyancyReserve <= 0f ? 1.6f : ms.buoyancyReserve, 1.35f, 1.75f);
                 EditorUtility.SetDirty(ms);
             }
 
