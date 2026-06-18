@@ -29,6 +29,7 @@ namespace VoxelEngine.Materials
         Wood       = 19,
 
         Bedrock    = 20,
+        Lithium    = 21,
 
         // === Add custom materials below this line ===
     }
