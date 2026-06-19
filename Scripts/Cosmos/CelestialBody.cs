@@ -50,11 +50,10 @@ namespace VoxelEngine.Cosmos
             float radiusM = Mathf.Max(50f, settings.radiusKm * 1000f);
             genParams.seed                = settings.seed;
             genParams.radiusWorld         = radiusM;
-            // Terrain height vs sea level: mean terrain should be ABOVE sea level so there's
-            // actual LAND (not beach/ocean everywhere). In the flat world baseHeight=100 and
-            // seaLevel=96 (4m of land above water). We mirror that: baseHeight = waterLevel + a
-            // terrain buffer so the mean surface sits above the sea.
-            genParams.baseHeight          = settings.waterLevel + 12f;   // mean terrain 12m above water
+            // Terrain height vs sea level: mean terrain should be SLIGHTLY above sea level so
+            // we get a good mix of land (~60%) and ocean (~40%). Too high (+12) = no water;
+            // too low (0) = all beach. +4m gives realistic continents with visible oceans.
+            genParams.baseHeight          = settings.waterLevel + 4f;
             genParams.seaRadius           = radiusM + settings.waterLevel;
             // Continent wavelength ≈ planet circumference / ~6 continents.
             float circumference           = Mathf.PI * 2f * radiusM;
@@ -200,6 +199,10 @@ namespace VoxelEngine.Cosmos
                 data.surfaceMat = (byte)Materials.MaterialId.Grass;
                 data.subsurfaceMat = (byte)Materials.MaterialId.Clay;
                 data.priority = 3;  // boost so Forest wins in humid temperate zones (over Plains)
+                // WIDEN the climate window so Forest actually spawns. The authored asset has
+                // T[0.3-0.65] H[0.55-0.95] which is too narrow. Widen to cover temperate-tropical.
+                data.tempRange = new Unity.Mathematics.float2(0.2f, 0.85f);
+                data.humidRange = new Unity.Mathematics.float2(0.4f, 1.0f);
             }
             else if (n.Contains("plains") || n.Contains("steppe") || n.Contains("grass"))
             {
