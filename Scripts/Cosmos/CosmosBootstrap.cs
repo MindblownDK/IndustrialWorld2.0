@@ -82,11 +82,13 @@ namespace VoxelEngine.Cosmos
             }
             var body = _bodyGO.AddComponent<CelestialBody>();
             body.settings = planetTemplate.body;
-            // Apply this world's per-planet seed (index 0 = home planet) if present.
+            // Apply this world's per-planet seed. Use the SPAWN PLANET INDEX (player-chosen)
+            // so the player spawns on the planet they selected in the menu.
             var session = VoxelEngine.Menu.WorldSession.Instance;
             int seed = body.settings.seed;
+            int spawnIdx = session != null ? Mathf.Clamp(session.spawnPlanetIndex, 0, 99) : 0;
             if (session != null && session.seedState != null)
-                seed = session.seedState.GetSeed(0, seed);
+                seed = session.seedState.GetSeed(spawnIdx, seed);
             body.settings.seed = seed;
             body.settings.radiusKm = testRadiusKm;
             body.ApplySettings();
@@ -118,6 +120,10 @@ namespace VoxelEngine.Cosmos
             EnsureCosmicRegistry();
             var spaceGO = new GameObject("SpaceRenderer");
             spaceGO.AddComponent<SpaceBodyRenderer>();
+
+            // ── Live quality preset applier (Phase 7) ──
+            var qpaGO = new GameObject("QualityPresetApplier");
+            qpaGO.AddComponent<QualityPresetApplier>();
 
             // ── Sun directional light + day/night cycle (Phase 5) ──
             var sunLightGO = new GameObject("SunLightController");

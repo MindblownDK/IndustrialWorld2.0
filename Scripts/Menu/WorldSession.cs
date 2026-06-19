@@ -39,6 +39,9 @@ namespace VoxelEngine.Menu
         /// <summary>Per-planet seed table (one editable, randomized-by-default seed per planet).</summary>
         public SystemSeedState seedState;
 
+        /// <summary>Index of the planet to spawn on (0 = first planet in the system).</summary>
+        public int spawnPlanetIndex = 0;
+
         public string CosmosSidecarPath =>
             Path.Combine(WorldsRoot, worldName, "cosmos.json");
 
@@ -200,6 +203,7 @@ namespace VoxelEngine.Menu
                 {
                     chosenSystemName = chosenSystemName ?? "",
                     seedState        = seedState,
+                    spawnPlanetIndex = spawnPlanetIndex,
                 };
                 File.WriteAllText(CosmosSidecarPath, JsonUtility.ToJson(payload, true));
             }
@@ -216,6 +220,7 @@ namespace VoxelEngine.Menu
                 if (data == null) return false;
                 chosenSystemName = data.chosenSystemName ?? "";
                 seedState        = data.seedState;
+                spawnPlanetIndex = data.spawnPlanetIndex;
                 return seedState != null;
             }
             catch (System.Exception ex) { Debug.LogWarning("[WorldSession] LoadCosmosSidecar: " + ex.Message); return false; }
@@ -226,6 +231,7 @@ namespace VoxelEngine.Menu
         {
             public string chosenSystemName;
             public SystemSeedState seedState;
+            public int spawnPlanetIndex;
         }
 
         // ---- tiny JSON helpers (no Newtonsoft dep) ----

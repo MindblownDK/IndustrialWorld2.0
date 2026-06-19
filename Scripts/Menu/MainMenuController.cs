@@ -47,6 +47,7 @@ namespace VoxelEngine.Menu
         // Per-planet editable seeds aligned with the selected system's planet order.
         private List<string> _planetNames = new List<string>();
         private List<int>    _planetSeeds = new List<int>();
+        private int _selectedSpawnPlanet = 0;  // which planet the player will spawn on
 
         // Settings tabs.
         private enum STab { Display, Camera, Audio, Saving, Keybinds }
@@ -500,6 +501,7 @@ namespace VoxelEngine.Menu
             }
             _session.chosenSystemName = state.systemName;
             _session.seedState        = state;
+            _session.spawnPlanetIndex = _selectedSpawnPlanet;
         }
 
         /// <summary>
@@ -531,6 +533,7 @@ namespace VoxelEngine.Menu
                     _planetNames.Add(ps.planetName);
                     _planetSeeds.Add(ps.seed);
                 }
+                _selectedSpawnPlanet = Mathf.Clamp(_session.spawnPlanetIndex, 0, Mathf.Max(0, _planetNames.Count - 1));
             }
             else
             {
@@ -637,6 +640,47 @@ namespace VoxelEngine.Menu
                 row.Add(dice);
 
                 box.Add(row);
+            }
+
+            // ── Spawn planet picker ──
+            var spawnHdr = T.Muted("SPAWN PLANET");
+            spawnHdr.style.unityFontStyleAndWeight = FontStyle.Bold;
+            spawnHdr.style.marginTop = 10;
+            spawnHdr.style.marginBottom = 6;
+            box.Add(spawnHdr);
+
+            if (_planetNames.Count > 1)
+            {
+                var spawnRow = new VisualElement();
+                spawnRow.style.flexDirection = FlexDirection.Row;
+                spawnRow.style.flexWrap = Wrap.Wrap;
+                spawnRow.style.marginBottom = 8;
+                for (int i = 0; i < _planetNames.Count; i++)
+                {
+                    int captured = i;
+                    bool spawnActive = i == _selectedSpawnPlanet;
+                    var pb = new Button(() => { _selectedSpawnPlanet = captured; BuildUI(); })
+                        { text = _planetNames[i] };
+                    pb.style.minHeight = 28;
+                    pb.style.minWidth = 70;
+                    pb.style.marginRight = 5;
+                    pb.style.marginBottom = 4;
+                    pb.style.fontSize = 10;
+                    pb.style.unityFontStyleAndWeight = FontStyle.Bold;
+                    pb.style.color = Color.white;
+                    pb.style.backgroundColor = new StyleColor(spawnActive
+                        ? new Color(T.AccentTeal.r, T.AccentTeal.g, T.AccentTeal.b, 0.85f)
+                        : new Color(T.BgSlot.r, T.BgSlot.g, T.BgSlot.b, 0.85f));
+                    T.Radius(pb, T.ButtonRadius);
+                    T.Border(pb, 0, Color.clear);
+                    spawnRow.Add(pb);
+                }
+                box.Add(spawnRow);
+            }
+            else
+            {
+                var onlyOne = T.Muted("Only one planet in this system.");
+                box.Add(onlyOne);
             }
 
             // "Randomize all planets" button.
