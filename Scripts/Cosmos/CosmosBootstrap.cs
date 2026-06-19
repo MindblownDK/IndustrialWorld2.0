@@ -96,6 +96,19 @@ namespace VoxelEngine.Cosmos
             // ── SphereWorld streamer ── (fields set BEFORE Awake thanks to inactive GO)
             var world = _bodyGO.AddComponent<SphereWorld>();
             world.body = body;
+            // Override the terrain material with the enhanced shader (procedural detail +
+            // slope shading). Falls back to the resolved material if the shader is missing.
+            var enhancedShader = Shader.Find("VoxelEngine/VoxelTerrainEnhanced");
+            if (enhancedShader != null && terrainMaterial != null)
+            {
+                var enhancedMat = new Material(enhancedShader);
+                enhancedMat.name = "Mat_Terrain_Enhanced";
+                // Carry over the base colour from the original material.
+                if (terrainMaterial.HasProperty("_BaseColor"))
+                    enhancedMat.SetColor("_BaseColor", terrainMaterial.GetColor("_BaseColor"));
+                enhancedMat.CopyPropertiesFromMaterial(terrainMaterial);
+                terrainMaterial = enhancedMat;
+            }
             world.materialRegistry = materialRegistry;
             world.terrainMaterial = terrainMaterial;
             world.viewer = viewer;

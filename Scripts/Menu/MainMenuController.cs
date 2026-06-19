@@ -330,25 +330,6 @@ namespace VoxelEngine.Menu
 
             // ── Cosmos: solar-system picker + per-planet custom seeds ──
             scroll.Add(BuildCosmosSection());
-            scroll.Add(T.Spacer(16));
-
-            // ── Legacy flat-world sliders (transitional — replaced by the planet
-            //    picker in Phase 7 once spherical worlds go live). ──
-            var legacyHdr = T.Muted("FLAT-WORLD PARAMETERS (legacy)");
-            legacyHdr.style.unityFontStyleAndWeight = FontStyle.Bold;
-            legacyHdr.style.marginBottom = 4;
-            scroll.Add(legacyHdr);
-
-            scroll.Add(FormLabel($"Sea Level  —  {_newSeaLevel} voxels"));
-            scroll.Add(BuildIntSlider(40, 200, _newSeaLevel, v => { _newSeaLevel = v; BuildUI(); }));
-            scroll.Add(T.Spacer(10));
-
-            scroll.Add(FormLabel($"Base Height  —  {_newBaseHeight} voxels"));
-            scroll.Add(BuildIntSlider(60, 220, _newBaseHeight, v => { _newBaseHeight = v; BuildUI(); }));
-            scroll.Add(T.Spacer(10));
-
-            scroll.Add(FormLabel($"Continent Scale  —  {_newContinentScale:0.0000} (lower = larger)"));
-            scroll.Add(BuildFloatSlider(0.0005f, 0.005f, _newContinentScale, v => { _newContinentScale = v; BuildUI(); }));
             scroll.Add(T.Spacer(20));
 
             panel.Add(T.Spacer(8));

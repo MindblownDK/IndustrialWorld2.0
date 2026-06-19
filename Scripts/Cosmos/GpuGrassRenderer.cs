@@ -84,12 +84,12 @@ namespace VoxelEngine.Cosmos
                 _built = true;
             }
 
-            // Push the current wind vector to the material so the shader can animate the blades.
+            // Push the current wind vector to the grass shader (VoxelGrass.shader uses _WindDir).
             var wind = WindField.Instance;
             if (wind != null && grassMaterial != null)
             {
                 grassMaterial.SetVector("_WindDir", wind.Direction);
-                grassMaterial.SetFloat("_WindStrength", wind.strength);
+                grassMaterial.SetFloat("_WindStrength", Mathf.Clamp01(wind.strength * 0.4f));
             }
 
             // Draw all blades in one GPU draw call.
@@ -226,17 +226,13 @@ namespace VoxelEngine.Cosmos
 
         private static Material CreateDefaultGrassMaterial()
         {
-            // URP/Unlit with GPU instancing + vertex-color. The wind animation can be done in a
-            // custom shader later; for now this renders solid green blades that the GPU draws in
-            // one call.
-            var shader = Shader.Find("Universal Render Pipeline/Unlit")
-                       ?? Shader.Find("Unlit/Color")
+            // Use the custom wind-animated grass shader (procedural, GPU-instanced).
+            var shader = Shader.Find("VoxelEngine/VoxelGrass")
+                       ?? Shader.Find("Universal Render Pipeline/Unlit")
                        ?? Shader.Find("Standard");
             var mat = new Material(shader);
             mat.name = "Mat_Grass_Runtime";
             mat.enableInstancing = true;
-            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", new Color(0.32f, 0.52f, 0.18f, 1f));
-            if (mat.HasProperty("_Color"))     mat.SetColor("_Color", new Color(0.32f, 0.52f, 0.18f, 1f));
             return mat;
         }
     }
