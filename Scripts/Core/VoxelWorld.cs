@@ -21,7 +21,7 @@ namespace VoxelEngine.Core
     /// using the modern Mesh.AllocateWritableMeshData / ApplyAndDisposeWritableMeshData path.
     /// </summary>
     [DisallowMultipleComponent]
-    public class VoxelWorld : MonoBehaviour
+    public class VoxelWorld : MonoBehaviour, VoxelEngine.Cosmos.IChunkScatterWorld
     {
         // ---- Inspector ----
         [Header("Assets")]
@@ -45,6 +45,9 @@ namespace VoxelEngine.Core
 
         // ---- Singleton-ish access (handy for modification system) ----
         public static VoxelWorld Instance { get; private set; }
+
+        /// <summary>Voxel sea level (IChunkScatterWorld contract; also used by scatter).</summary>
+        public int SeaLevel => planet != null ? planet.seaLevel : 96;
 
         // ---- Runtime ----
         private readonly Dictionary<Vector3Int, Chunk> _chunks    = new();

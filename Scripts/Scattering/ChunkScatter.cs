@@ -3,6 +3,7 @@ using Unity.Mathematics;
 using UnityEngine;
 using VoxelEngine.Biomes;
 using VoxelEngine.Core;
+using VoxelEngine.Cosmos;
 using VoxelEngine.Materials;
 
 namespace VoxelEngine.Scattering
@@ -14,7 +15,7 @@ namespace VoxelEngine.Scattering
     /// </summary>
     public static class ChunkScatter
     {
-        public static void Populate(VoxelWorld world, Chunk chunk, BiomeRegistry registry, int seed)
+        public static void Populate(IChunkScatterWorld world, Chunk chunk, BiomeRegistry registry, int seed)
         {
             if (registry == null || registry.biomes == null || registry.biomes.Count == 0) return;
             if (chunk?.go == null) return;
@@ -79,6 +80,7 @@ namespace VoxelEngine.Scattering
                 if (HasFluidAbove(chunk, world, x, topY, z))
                     continue; // underwater — don't place trees here!
 
+
                 // 5) Skip stone (looks weird with trees on bare stone).
                 if (topMat == (byte)MaterialId.Stone) continue;
 
@@ -87,7 +89,7 @@ namespace VoxelEngine.Scattering
                 int worldZ = chunk.coord.z * S + z;
 
                 // 6) Skip if below or at sea level (catches near-shore positions).
-                if (world.planet != null && worldY <= world.planet.seaLevel)
+                if (worldY <= world.SeaLevel)
                     continue;
 
                 float2 climate = BiomePicker.SampleClimate(seed, worldX, worldZ);
@@ -132,7 +134,7 @@ namespace VoxelEngine.Scattering
         /// Check if there's fluid (water) at or above a local voxel position.
         /// This catches cells where OceanSeeder converted WaterVoxel to Air+FluidGrid.
         /// </summary>
-        private static bool HasFluidAbove(Chunk chunk, VoxelWorld world, int lx, int ly, int lz)
+        private static bool HasFluidAbove(Chunk chunk, IChunkScatterWorld world, int lx, int ly, int lz)
         {
             const int S = VoxelConstants.CHUNK_SIZE;
 

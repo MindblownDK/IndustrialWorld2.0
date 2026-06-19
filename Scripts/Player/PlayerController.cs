@@ -11,6 +11,7 @@
 
 using UnityEngine;
 using VoxelEngine.Settings;
+using VoxelEngine.Cosmos;
 using InputAction = VoxelEngine.Settings.InputAction;
 #if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
@@ -161,11 +162,13 @@ namespace VoxelEngine.Player
                 // Still apply gravity so you don't float — but no horizontal input.
                 if (!GameSettings.FlyMode)
                 {
-                    _velocity.x = Mathf.MoveTowards(_velocity.x, 0, 30f * Time.deltaTime);
-                    _velocity.z = Mathf.MoveTowards(_velocity.z, 0, 30f * Time.deltaTime);
-                    _velocity.y += gravity * Time.deltaTime;
+                    Vector3 upM = UpVec;
+                    Vector3 horiz = Vector3.ProjectOnPlane(_velocity, upM);
+                    horiz = Vector3.MoveTowards(horiz, Vector3.zero, 30f * Time.deltaTime);
+                    _velocity += GravVec * Time.deltaTime;
+                    _velocity = horiz + Vector3.Project(_velocity, upM);
                     _cc.Move(_velocity * Time.deltaTime);
-                    if (_cc.isGrounded) _velocity.y = -2f;
+                    if (_cc.isGrounded) _velocity = horiz + upM * (-2f);
                 }
                 return;
             }
@@ -198,7 +201,9 @@ namespace VoxelEngine.Player
             _pitch -= d.y * sens * invert;
             _pitch = Mathf.Clamp(_pitch, -89f, 89f);
 
-            transform.rotation       = Quaternion.Euler(0, _yaw, 0);
+            // Radial reorientation: yaw stays, but the body's local +Y aligns to the
+            // active gravity "up" (world-up on flat worlds → identity rotation, unchanged).
+            transform.rotation       = Quaternion.FromToRotation(Vector3.up, UpVec) * Quaternion.Euler(0, _yaw, 0);
             cameraPivot.localRotation= Quaternion.Euler(_pitch, 0, 0);
         }
 
@@ -224,6 +229,7 @@ namespace VoxelEngine.Player
         private void WalkUpdate()
         {
             float dt = Time.deltaTime;
+            Vector3 up = UpVec;   // world-up on flat worlds; radial surface normal on spheres
 
             // -- ground check --
             _grounded = _cc.isGrounded;
@@ -258,7 +264,8 @@ namespace VoxelEngine.Player
             }
 
             float targetSpeed = walkSpeed * speedMul;
-            Vector3 horiz = new Vector3(_velocity.x, 0, _velocity.z);
+            // Horizontal velocity lives on the local ground plane (perp to `up`).
+            Vector3 horiz = Vector3.ProjectOnPlane(_velocity, up);
 
             if (_sliding)
             {
@@ -284,8 +291,8 @@ namespace VoxelEngine.Player
                 }
             }
 
-            _velocity.x = horiz.x;
-            _velocity.z = horiz.z;
+            // Write horizontal back, preserving the vertical (along-up) component.
+            _velocity = horiz + Vector3.Project(_velocity, up);
 
             // -- jump (allowed while sliding, like Satisfactory) --
             // Plain crouch with no slide = no jump (you'd just bonk your head).
@@ -293,7 +300,8 @@ namespace VoxelEngine.Player
             if (GameSettings.WasPressed(InputAction.Jump) && jumpAllowed
                 && (PlayerStats.Instance == null || PlayerStats.Instance.TrySpendStamina(PlayerStats.Instance.staminaJumpCost)))
             {
-                _velocity.y = Mathf.Sqrt(-2f * gravity * jumpHeight);
+                float gravMag = GravVec.magnitude;
+                _velocity = Vector3.ProjectOnPlane(_velocity, up) + up * Mathf.Sqrt(2f * gravMag * jumpHeight);
                 _lastGroundedTime = -999f; // consume coyote
 
                 // Slide-jump: keep horizontal momentum, end the slide. Pop up to standing height
@@ -362,8 +370,11 @@ namespace VoxelEngine.Player
             }
             else
             {
-                if (_grounded && _velocity.y < 0) _velocity.y = -2f;
-                else _velocity.y += gravity * dt;
+                // Radial gravity: apply along `up`; small downward stick when grounded.
+                if (_grounded && VerticalSpeed(up) < 0f)
+                    _velocity = Vector3.ProjectOnPlane(_velocity, up) + up * (-2f);
+                else
+                    _velocity += GravVec * dt;
             }
 
             // -- move --
@@ -441,5 +452,19 @@ namespace VoxelEngine.Player
             return new Vector2(Input.GetAxisRaw("Mouse X") * 10f, Input.GetAxisRaw("Mouse Y") * 10f);
 #endif
         }
+
+        // ── Radial-gravity helpers ──────────────────────────────────
+        // When no spherical body is active, GravityProvider reports world-up, so every
+        // expression below reduces EXACTLY to the original flat-world math (up == +Y).
+        // When a CelestialBody is active, "up" becomes the radial surface normal and the
+        // player reorients to stand upright on the sphere — gravity, jump and horizontal
+        // movement all operate on the local ground plane (perpendicular to `up`).
+        private Vector3 UpVec => GravityProvider.GetUp(transform.position);
+        private Vector3 GravVec => GravityProvider.IsRadial
+            ? GravityProvider.GetGravity(transform.position)
+            : (Vector3.up * gravity);   // gravity is negative → Vector3.up * gravity points down
+
+        /// <summary>The vertical (along-up) component of velocity, as a signed scalar.</summary>
+        private float VerticalSpeed(Vector3 up) => Vector3.Dot(_velocity, up);
     }
 }

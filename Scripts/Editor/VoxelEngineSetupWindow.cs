@@ -5177,7 +5177,6 @@ root =>
             }
 
             var SzL = VoxelEngine.GridSystem.GridSize.Large;
-            var SzS = VoxelEngine.GridSystem.GridSize.Small;
 
             // Set description only if empty (idempotent — preserves user edits).
             void SetDesc(VoxelEngine.Items.ItemDefinition item, string desc)
