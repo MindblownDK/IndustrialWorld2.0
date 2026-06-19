@@ -74,6 +74,9 @@ namespace VoxelEngine.Cosmos
         [Tooltip("Spawn trees/rocks from biome scatter lists.")]
         public bool enableScatter = true;
 
+        [Tooltip("Biome registry for terrain biomes + scatter. If null, a single default biome is used.")]
+        public BiomeRegistry biomeRegistry;
+
         [Header("Persistence")]
         public string worldName = "DefaultSphereWorld";
         public bool enablePersistence = true;
@@ -175,7 +178,7 @@ namespace VoxelEngine.Cosmos
             _ores = new NativeArray<OreLayer>(oreArr.Length, Allocator.Persistent);
             for (int i = 0; i < oreArr.Length; i++) _ores[i] = oreArr[i];
 
-            var biomeArr = body.BuildBiomeData(null);
+            var biomeArr = body.BuildBiomeData(biomeRegistry);
             _biomes = new NativeArray<BiomeData>(biomeArr.Length, Allocator.Persistent);
             for (int i = 0; i < biomeArr.Length; i++) _biomes[i] = biomeArr[i];
 
@@ -208,6 +211,10 @@ namespace VoxelEngine.Cosmos
             if (Instance == this) Instance = null;
         }
 
+        private float _diagTimer;
+        private int   _diagGenerated;
+        private int   _diagMeshed;
+
         private void Update()
         {
             if (viewer == null || body == null) return;
@@ -216,6 +223,28 @@ namespace VoxelEngine.Cosmos
             DispatchMeshingJobs();
             CompleteFinishedJobs();
             ProcessDeferredScatter();
+
+            // Periodic diagnostic: log chunk status every 2 seconds so we can confirm terrain is
+            // generating + meshing. Remove or gate behind a debug flag once validated.
+            _diagTimer += Time.deltaTime;
+            if (_diagTimer > 2f)
+            {
+                _diagTimer = 0f;
+                int gen = 0, meshed = 0;
+                foreach (var kv in _chunks)
+                {
+                    if (kv.Value.isGenerated) gen++;
+                    if (kv.Value.meshFilter != null && kv.Value.meshFilter.sharedMesh != null &&
+                        kv.Value.meshFilter.sharedMesh.vertexCount > 0) meshed++;
+                }
+                if (gen != _diagGenerated || meshed != _diagMeshed)
+                {
+                    _diagGenerated = gen;
+                    _diagMeshed = meshed;
+                    Debug.Log($"[SphereWorld] Chunks: {_chunks.Count} active, {gen} generated, {meshed} meshed (non-empty). " +
+                              $"Gen queue: {_genQueue.Count}, Mesh queue: {_meshQueue.Count}");
+                }
+            }
         }
 
         // ---- Streaming (body-relative cartesian) ----

@@ -965,7 +965,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1436353756}
-  - component: {fileID: 1436353755}
+  - component: {fileID: 1436353757}
   m_Layer: 0
   m_Name: CosmosBootstrap controller
   m_TagString: Untagged
@@ -973,26 +973,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1436353755
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1436353754}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 32ae5735241cc3842a03cfc3c1c5b643, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Cosmos.CosmosBootstrap
-  planetTemplate: {fileID: 11400000, guid: 3f6a10cf39b02d6428195ba91a180d18, type: 2}
-  bodyOrigin: {x: 4000, y: 800, z: 4000}
-  viewer: {fileID: 439090091}
-  biomeRegistry: {fileID: 11400000, guid: 784ae9a245f82264f8a66afd55c7b511, type: 2}
-  materialRegistry: {fileID: 11400000, guid: 89cc31071789f224f91b397442105307, type: 2}
-  terrainMaterial: {fileID: 2100000, guid: 035b6cf660595ab498e4ef7e242cd598, type: 2}
-  testRadiusKm: 0.5
-  viewDistance: 5
 --- !u!4 &1436353756
 Transform:
   m_ObjectHideFlags: 0
@@ -1008,6 +988,26 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1436353757
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1436353754}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6da9094bd89e2d14589a99779e0a2a46, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Cosmos.CosmosBootstrap
+  planetTemplate: {fileID: 0}
+  bodyOrigin: {x: 4000, y: 800, z: 4000}
+  viewer: {fileID: 0}
+  biomeRegistry: {fileID: 0}
+  materialRegistry: {fileID: 0}
+  terrainMaterial: {fileID: 0}
+  testRadiusKm: 0.5
+  viewDistance: 5
 --- !u!1 &1456742218
 GameObject:
   m_ObjectHideFlags: 0

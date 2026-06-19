@@ -93,6 +93,7 @@ namespace VoxelEngine.Cosmos
             world.viewer = viewer;
             world.viewDistance = viewDistance;
             world.enableScatter = false; // Phase 2.1 re-enables scatter once the sphere is sole world.
+            world.biomeRegistry = biomeRegistry;
             world.worldName = session != null ? session.worldName + "_sphere" : "SphereTest";
 
             // ── Far LOD (space view), as a CHILD of the body ──
@@ -102,14 +103,9 @@ namespace VoxelEngine.Cosmos
             var lod = lodGO.AddComponent<PlanetLodImpostor>();
             lod.viewer = viewer;
             lod.biomeRegistry = biomeRegistry;
-            var lodMr = lodGO.GetComponent<MeshRenderer>();
-            if (lodMr != null)
-            {
-                // Reuse the SAME terrain material the chunks use (proven to render vertex colours).
-                // This is the fix for the "purple LOD" — creating a fresh Material from a shader
-                // name can yield magenta if the shader isn't found or doesn't enable vertex colours.
-                lodMr.sharedMaterial = terrainMaterial;
-            }
+            // The LOD creates its OWN material internally (URP/Unlit with vertex-colour + alpha
+            // support). We deliberately do NOT assign VoxelTerrain here — VoxelTerrain is a custom
+            // Shader Graph that doesn't support alpha fade and renders purple at planet scale.
 
             // Activate radial gravity for the whole game + wind personality.
             GravityProvider.ActiveBody = body;
