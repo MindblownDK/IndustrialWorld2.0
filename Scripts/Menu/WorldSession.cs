@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
+using VoxelEngine.Cosmos;
 
 namespace VoxelEngine.Menu
 {
@@ -31,6 +32,15 @@ namespace VoxelEngine.Menu
         public int   newSeaLevel       = 96;
         public int   newBaseHeight     = 100;
         public float newContinentScale = 0.0015f;
+
+        // ── Cosmos (per-planet seeds + chosen solar system) ────────
+        /// <summary>Name of the solar-system template the player selected at world creation.</summary>
+        public string chosenSystemName = "";
+        /// <summary>Per-planet seed table (one editable, randomized-by-default seed per planet).</summary>
+        public SystemSeedState seedState;
+
+        public string CosmosSidecarPath =>
+            Path.Combine(WorldsRoot, worldName, "cosmos.json");
 
         public string WorldsRoot =>
             Path.Combine(Application.persistentDataPath, "VoxelWorlds");
@@ -153,6 +163,69 @@ namespace VoxelEngine.Menu
         {
             string folder = Path.Combine(WorldsRoot, name);
             if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true);
+        }
+
+        /// <summary>
+        /// Duplicate an existing world's FOLDER to a new name (a true save clone). Chunk saves
+        /// and sidecars are copied byte-for-byte so the clone boots identically. Returns the
+        /// clone's folder path, or null if the source didn't exist / name was taken.
+        /// </summary>
+        public string CloneWorld(string sourceName, string cloneName)
+        {
+            if (string.IsNullOrWhiteSpace(sourceName) || string.IsNullOrWhiteSpace(cloneName)) return null;
+            string src = Path.Combine(WorldsRoot, sourceName);
+            string dst = Path.Combine(WorldsRoot, cloneName);
+            if (!Directory.Exists(src)) return null;
+            if (Directory.Exists(dst)) return null;
+
+            Directory.CreateDirectory(dst);
+            // Deep-copy every file (subfolders not currently used by the save format).
+            foreach (var f in Directory.GetFiles(src, "*", SearchOption.TopDirectoryOnly))
+            {
+                string dstFile = Path.Combine(dst, Path.GetFileName(f));
+                File.Copy(f, dstFile, overwrite: false);
+            }
+            return dst;
+        }
+
+        // ── Cosmos sidecar (per-planet seeds + chosen system) ──────
+        /// <summary>Persist the per-planet seed table + chosen system name to cosmos.json.</summary>
+        public void SaveCosmosSidecar()
+        {
+            try
+            {
+                string folder = Path.Combine(WorldsRoot, worldName);
+                Directory.CreateDirectory(folder);
+                var payload = new CosmosSidecar
+                {
+                    chosenSystemName = chosenSystemName ?? "",
+                    seedState        = seedState,
+                };
+                File.WriteAllText(CosmosSidecarPath, JsonUtility.ToJson(payload, true));
+            }
+            catch (System.Exception ex) { Debug.LogWarning("[WorldSession] SaveCosmosSidecar: " + ex.Message); }
+        }
+
+        /// <summary>Load the per-planet seed table + chosen system name for the current world.</summary>
+        public bool LoadCosmosSidecar()
+        {
+            try
+            {
+                if (!File.Exists(CosmosSidecarPath)) return false;
+                var data = JsonUtility.FromJson<CosmosSidecar>(File.ReadAllText(CosmosSidecarPath));
+                if (data == null) return false;
+                chosenSystemName = data.chosenSystemName ?? "";
+                seedState        = data.seedState;
+                return seedState != null;
+            }
+            catch (System.Exception ex) { Debug.LogWarning("[WorldSession] LoadCosmosSidecar: " + ex.Message); return false; }
+        }
+
+        [System.Serializable]
+        private class CosmosSidecar
+        {
+            public string chosenSystemName;
+            public SystemSeedState seedState;
         }
 
         // ---- tiny JSON helpers (no Newtonsoft dep) ----

@@ -58,12 +58,49 @@ namespace VoxelEngine.EditorTools
             sys.maxPlanetSeparationKm = 10000f;
             sys.quasar = new QuasarSettings { enabled = true, brightness = 1.4f };
 
+            // Auto-attach the Earth planet if it exists, so a fresh system is immediately playable.
+            var earth = AssetDatabase.LoadAssetAtPath<PlanetTemplate>(PlanetsDir + "/Planet_Earth.asset");
+            if (earth != null)
+            {
+                sys.planets = new PlanetTemplate[] { earth };
+            }
+
             EditorUtility.SetDirty(sys);
+
+            // Ensure the runtime library (Resources) knows about this system so the main-menu
+            // system picker can list it.
+            EnsureLibraryRegistered(sys);
+
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
             Selection.activeObject = sys;
             Debug.Log("[Cosmos] Sol system template created at " + path +
-                      ". Assign your Planet_Earth to its 'planets' list to embed it.");
+                      " (Earth auto-attached if present, CosmosTemplateLibrary updated).");
+        }
+
+        /// <summary>
+        /// Make sure Resources/CosmosTemplateLibrary.asset exists and contains the given system,
+        /// so the main-menu New World page can offer it in the solar-system picker.
+        /// </summary>
+        private static void EnsureLibraryRegistered(SolarSystemTemplate system)
+        {
+            if (system == null) return;
+            const string libDir  = "Assets/Resources";
+            const string libPath = libDir + "/CosmosTemplateLibrary.asset";
+            EnsureFolder(libDir);
+
+            var library = AssetDatabase.LoadAssetAtPath<CosmosTemplateLibrary>(libPath);
+            if (library == null)
+            {
+                library = ScriptableObject.CreateInstance<CosmosTemplateLibrary>();
+                AssetDatabase.CreateAsset(library, libPath);
+            }
+
+            if (library.systems == null) library.systems = new System.Collections.Generic.List<SolarSystemTemplate>();
+            if (!library.systems.Contains(system))
+                library.systems.Add(system);
+
+            EditorUtility.SetDirty(library);
         }
 
         private static void EnsureFolder(string assetPath)

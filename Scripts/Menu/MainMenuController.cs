@@ -12,6 +12,7 @@ using System.IO;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UIElements;
+using VoxelEngine.Cosmos;
 using VoxelEngine.Settings;
 using VoxelEngine.UI;
 using T = VoxelEngine.UI.UITheme;
@@ -39,6 +40,13 @@ namespace VoxelEngine.Menu
         private int    _newSeaLevel       = 96;
         private int    _newBaseHeight     = 100;
         private float  _newContinentScale = 0.0015f;
+
+        // ── Cosmos: solar-system picker + per-planet editable seeds ──
+        private List<SolarSystemTemplate> _systemChoices;
+        private int   _selectedSystemIndex = 0;
+        // Per-planet editable seeds aligned with the selected system's planet order.
+        private List<string> _planetNames = new List<string>();
+        private List<int>    _planetSeeds = new List<int>();
 
         // Settings tabs.
         private enum STab { Display, Camera, Audio, Saving, Keybinds }
@@ -256,6 +264,11 @@ namespace VoxelEngine.Menu
             playBtn.style.marginRight = 6;
             row.Add(playBtn);
 
+            var cloneBtn = BuildIconSmallButton(LucideIcons.Globe, "CLONE",
+                () => CloneWorldAction(w.name), T.AccentTeal);
+            cloneBtn.style.marginRight = 6;
+            row.Add(cloneBtn);
+
             var delBtn = BuildIconSmallButton(LucideIcons.Trash, "DELETE",
                 () => { _session.DeleteWorld(w.name); BuildUI(); }, T.AccentRed);
             row.Add(delBtn);
@@ -312,7 +325,18 @@ namespace VoxelEngine.Menu
             rndBtn.style.marginLeft = 8;
             seedRow.Add(rndBtn);
             scroll.Add(seedRow);
-            scroll.Add(T.Spacer(12));
+            scroll.Add(T.Spacer(16));
+
+            // ── Cosmos: solar-system picker + per-planet custom seeds ──
+            scroll.Add(BuildCosmosSection());
+            scroll.Add(T.Spacer(16));
+
+            // ── Legacy flat-world sliders (transitional — replaced by the planet
+            //    picker in Phase 7 once spherical worlds go live). ──
+            var legacyHdr = T.Muted("FLAT-WORLD PARAMETERS (legacy)");
+            legacyHdr.style.unityFontStyleAndWeight = FontStyle.Bold;
+            legacyHdr.style.marginBottom = 4;
+            scroll.Add(legacyHdr);
 
             scroll.Add(FormLabel($"Sea Level  —  {_newSeaLevel} voxels"));
             scroll.Add(BuildIntSlider(40, 200, _newSeaLevel, v => { _newSeaLevel = v; BuildUI(); }));
@@ -389,6 +413,9 @@ namespace VoxelEngine.Menu
         {
             _session.worldName  = worldName;
             _session.isNewWorld = false;
+            // Restore this world's per-planet seeds / chosen system into the session so the
+            // game-scene bootstrap can apply them to the celestial bodies.
+            _session.LoadCosmosSidecar();
             try { SceneManager.LoadScene(gameSceneName); }
             catch (Exception ex) { Debug.LogError("[MainMenu] Could not load scene: " + ex.Message); }
         }
@@ -402,8 +429,227 @@ namespace VoxelEngine.Menu
             _session.newBaseHeight     = _newBaseHeight;
             _session.newContinentScale = _newContinentScale;
             _session.isNewWorld        = true;
+
+            // Persist the cosmos choice (system + per-planet seeds) so the same seeds
+            // regenerate the identical world on every subsequent load.
+            ApplyCosmosSelectionToSession();
+            _session.SaveCosmosSidecar();
+
             try { SceneManager.LoadScene(gameSceneName); }
             catch (Exception ex) { Debug.LogError("[MainMenu] Could not load scene: " + ex.Message); }
+        }
+
+        // ── Cosmos helpers ────────────────────────────────────────
+        /// <summary>Populate the cached list of available solar systems (once per menu session).</summary>
+        private void EnsureSystemChoicesLoaded()
+        {
+            if (_systemChoices != null) return;
+            _systemChoices = new List<SolarSystemTemplate>();
+            var library = CosmosTemplateLibrary.Load();
+            if (library != null && library.systems != null)
+            {
+                foreach (var s in library.systems)
+                    if (s != null) _systemChoices.Add(s);
+            }
+            // No library yet → seed an empty synthetic entry so the UI still renders.
+            if (_systemChoices.Count == 0)
+                _systemChoices.Add(null);
+
+            RebuildPlanetSeedsForSystem(_selectedSystemIndex);
+        }
+
+        /// <summary>(Re)build the per-planet editable seed list for the selected system.</summary>
+        private void RebuildPlanetSeedsForSystem(int systemIndex)
+        {
+            _planetNames.Clear();
+            _planetSeeds.Clear();
+
+            var sys = (systemIndex >= 0 && systemIndex < _systemChoices.Count) ? _systemChoices[systemIndex] : null;
+            if (sys == null || sys.planets == null || sys.planets.Length == 0)
+            {
+                _planetNames.Add("Earth");
+                _planetSeeds.Add(SystemSeedState.RandomSeed());
+                return;
+            }
+            for (int i = 0; i < sys.planets.Length; i++)
+            {
+                var p = sys.planets[i];
+                _planetNames.Add(p != null && p.body != null ? p.body.bodyName : ("Planet " + (i + 1)));
+                _planetSeeds.Add(SystemSeedState.RandomSeed());
+            }
+        }
+
+        /// <summary>
+        /// Push the menu's cosmos selection into the session as a SystemSeedState (the structure
+        /// the world bootstrap consumes). Seeds are the player-edited values, never re-randomised.
+        /// </summary>
+        private void ApplyCosmosSelectionToSession()
+        {
+            EnsureSystemChoicesLoaded();
+            var sys = (_selectedSystemIndex >= 0 && _selectedSystemIndex < _systemChoices.Count)
+                        ? _systemChoices[_selectedSystemIndex] : null;
+
+            var state = new SystemSeedState { systemName = sys != null ? sys.systemName : "Unknown" };
+            for (int i = 0; i < _planetNames.Count; i++)
+            {
+                state.planets.Add(new SystemSeedState.PlanetSeed
+                {
+                    planetName = _planetNames[i],
+                    seed       = _planetSeeds[i],
+                });
+            }
+            _session.chosenSystemName = state.systemName;
+            _session.seedState        = state;
+        }
+
+        /// <summary>
+        /// CLONE action: pre-fill the New World page from an existing world's cosmos sidecar
+        /// (same system + same per-planet seeds, fully editable) and a " (copy)" name.
+        /// </summary>
+        private void CloneWorldAction(string sourceName)
+        {
+            EnsureSystemChoicesLoaded();
+            _newName = SanitizeName(sourceName + " copy");
+
+            // Try to carry the source world's cosmos state into the editor fields.
+            var sysBackup = _session.chosenSystemName;
+            var stateBackup = _session.seedState;
+            _session.worldName = sourceName;
+            bool loaded = _session.LoadCosmosSidecar();
+            if (loaded && _session.seedState != null && _session.seedState.planets != null)
+            {
+                // Align the selected system dropdown to the source's system name.
+                _selectedSystemIndex = 0;
+                for (int i = 0; i < _systemChoices.Count; i++)
+                    if (_systemChoices[i] != null && _systemChoices[i].systemName == _session.chosenSystemName)
+                    { _selectedSystemIndex = i; break; }
+
+                _planetNames.Clear();
+                _planetSeeds.Clear();
+                foreach (var ps in _session.seedState.planets)
+                {
+                    _planetNames.Add(ps.planetName);
+                    _planetSeeds.Add(ps.seed);
+                }
+            }
+            else
+            {
+                RebuildPlanetSeedsForSystem(_selectedSystemIndex);
+            }
+            // Restore session fields we temporarily borrowed (the clone isn't the source).
+            _session.chosenSystemName = sysBackup;
+            _session.seedState        = stateBackup;
+
+            _page = Page.NewWorld;
+            BuildUI();
+        }
+
+        /// <summary>Builds the solar-system picker + per-planet seed editor block.</summary>
+        private VisualElement BuildCosmosSection()
+        {
+            EnsureSystemChoicesLoaded();
+
+            var box = new VisualElement();
+            box.style.backgroundColor = new StyleColor(T.BgCard);
+            T.Radius(box, T.CardRadius);
+            T.Border(box, 1, T.BorderDim);
+            box.style.paddingTop = 10; box.style.paddingBottom = 10;
+            box.style.paddingLeft = 12; box.style.paddingRight = 12;
+
+            var hdr = new Label("SOLAR SYSTEM");
+            hdr.style.color = new StyleColor(T.TextPrimary);
+            hdr.style.unityFontStyleAndWeight = FontStyle.Bold;
+            hdr.style.fontSize = 11;
+            hdr.style.letterSpacing = 1f;
+            hdr.style.marginBottom = 8;
+            box.Add(hdr);
+
+            // System picker — horizontal button row (on-brand, no version risk).
+            var sysRow = new VisualElement();
+            sysRow.style.flexDirection = FlexDirection.Row;
+            sysRow.style.flexWrap = Wrap.Wrap;
+            sysRow.style.marginBottom = 10;
+            for (int i = 0; i < _systemChoices.Count; i++)
+            {
+                var sys = _systemChoices[i];
+                string label = sys != null ? sys.systemName : "(none)";
+                int captured = i;
+                bool active = i == _selectedSystemIndex;
+                var b = new Button(() =>
+                {
+                    if (_selectedSystemIndex == captured) return;
+                    _selectedSystemIndex = captured;
+                    RebuildPlanetSeedsForSystem(captured);
+                    BuildUI();
+                }) { text = label };
+                b.style.minHeight = 28;
+                b.style.minWidth = 80;
+                b.style.marginRight = 5;
+                b.style.marginBottom = 4;
+                b.style.fontSize = 10;
+                b.style.unityFontStyleAndWeight = FontStyle.Bold;
+                b.style.color = Color.white;
+                b.style.backgroundColor = new StyleColor(active
+                    ? new Color(T.AccentCyan.r, T.AccentCyan.g, T.AccentCyan.b, 0.85f)
+                    : new Color(T.BgSlot.r, T.BgSlot.g, T.BgSlot.b, 0.85f));
+                T.Radius(b, T.ButtonRadius);
+                T.Border(b, 0, Color.clear);
+                sysRow.Add(b);
+            }
+            box.Add(sysRow);
+
+            // Per-planet seed editor.
+            var plHdr = T.Muted("PER-PLANET SEEDS");
+            plHdr.style.unityFontStyleAndWeight = FontStyle.Bold;
+            plHdr.style.marginBottom = 6;
+            box.Add(plHdr);
+
+            for (int i = 0; i < _planetNames.Count; i++)
+            {
+                int captured = i;
+                var row = new VisualElement();
+                row.style.flexDirection = FlexDirection.Row;
+                row.style.alignItems = Align.Center;
+                row.style.marginBottom = 6;
+
+                var name = new Label(_planetNames[i]);
+                name.style.color = new StyleColor(T.TextSecondary);
+                name.style.fontSize = 11;
+                name.style.minWidth = 90;
+                name.pickingMode = PickingMode.Ignore;
+                row.Add(name);
+
+                var field = new TextField { value = _planetSeeds[i].ToString() };
+                StyleField(field);
+                field.style.flexGrow = 1;
+                field.RegisterValueChangedCallback(e =>
+                {
+                    if (int.TryParse(e.newValue, out var parsed)) _planetSeeds[captured] = parsed;
+                });
+                row.Add(field);
+
+                var dice = BuildIconSmallButton(LucideIcons.Dice5, "", () =>
+                {
+                    _planetSeeds[captured] = SystemSeedState.RandomSeed();
+                    field.SetValueWithoutNotify(_planetSeeds[captured].ToString());
+                }, T.AccentTeal);
+                dice.style.marginLeft = 6;
+                row.Add(dice);
+
+                box.Add(row);
+            }
+
+            // "Randomize all planets" button.
+            var allBtn = BuildIconSmallButton(LucideIcons.Dice5, "RANDOMIZE ALL", () =>
+            {
+                for (int i = 0; i < _planetSeeds.Count; i++) _planetSeeds[i] = SystemSeedState.RandomSeed();
+                BuildUI();
+            }, T.AccentCyan);
+            allBtn.style.marginTop = 4;
+            allBtn.style.alignSelf = Align.FlexEnd;
+            box.Add(allBtn);
+
+            return box;
         }
 
         private void QuitGame()
