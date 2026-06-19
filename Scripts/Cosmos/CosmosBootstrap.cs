@@ -109,6 +109,27 @@ namespace VoxelEngine.Cosmos
             // support). We deliberately do NOT assign VoxelTerrain here — VoxelTerrain is a custom
             // Shader Graph that doesn't support alpha fade and renders purple at planet scale.
 
+            // ── GPU grass renderer (Phase 4) ──
+            var grassGO = new GameObject("GrassRenderer");
+            grassGO.transform.SetParent(_bodyGO.transform, false);
+            var grass = grassGO.AddComponent<GpuGrassRenderer>();
+            grass.body = body;
+            grass.viewer = viewer;
+
+            // ── Waterfall system (Phase 4) ──
+            var waterfallGO = new GameObject("Waterfalls");
+            waterfallGO.transform.SetParent(_bodyGO.transform, false);
+            var waterfalls = waterfallGO.AddComponent<WaterfallSystem>();
+            waterfalls.body = body;
+            waterfalls.viewer = viewer;
+
+            // Apply the current graphics preset to the visual systems.
+            world.viewDistance = GraphicsPreset.ViewDistance;
+            grass.qualityDensityMul = new float[] { 0f, GraphicsPreset.GrassDensityMul * 0.5f, GraphicsPreset.GrassDensityMul, GraphicsPreset.GrassDensityMul * 1.5f };
+            if (lod != null) lod.resolution = GraphicsPreset.LodResolution;
+            waterfalls.scanRange = GraphicsPreset.WaterfallRange;
+            world.maxJobsPerFrame = GraphicsPreset.JobsPerFrame;
+
             // Activate radial gravity for the whole game + wind personality.
             GravityProvider.ActiveBody = body;
             // Route mining/building tools to THIS world (not the flat VoxelWorld).
