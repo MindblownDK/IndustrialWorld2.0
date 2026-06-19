@@ -163,7 +163,7 @@ namespace VoxelEngine.Farming
             }
 
             // Check for water in the fluid sim nearby.
-            var world = VoxelEngine.Core.VoxelWorld.Instance;
+            var world = VoxelEngine.Core.ActiveWorld.Current;
             if (world == null) return;
             var pos = world.WorldToVoxel(transform.position);
             // Check the 4 adjacent horizontal voxels for water.

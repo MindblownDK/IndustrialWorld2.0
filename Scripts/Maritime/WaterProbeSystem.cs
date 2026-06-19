@@ -57,7 +57,7 @@ namespace VoxelEngine.Maritime
             int frame = Time.frameCount;
             if (frame != _cachedFrame) { _columnCache.Clear(); _cachedFrame = frame; }
 
-            var world = VoxelWorld.Instance;
+            var world = VoxelEngine.Core.ActiveWorld.Current;
 
             for (int i = 0; i < n; i++)
             {
@@ -71,10 +71,10 @@ namespace VoxelEngine.Maritime
         {
             int frame = Time.frameCount;
             if (frame != _cachedFrame) { _columnCache.Clear(); _cachedFrame = frame; }
-            return SampleColumn(VoxelWorld.Instance, worldX, worldZ);
+            return SampleColumn(VoxelEngine.Core.ActiveWorld.Current, worldX, worldZ);
         }
 
-        private static float SampleColumn(VoxelWorld world, float wx, float wz)
+        private static float SampleColumn(VoxelEngine.Core.IVoxelWorld world, float wx, float wz)
         {
             // Cache key: quantise to whole voxels in XZ.
             int ix = Mathf.RoundToInt(wx / VOXEL_SIZE);
@@ -92,7 +92,7 @@ namespace VoxelEngine.Maritime
         /// Scan a vertical voxel column for the topmost fluid voxel and return
         /// its world-space surface Y (voxel top + fractional water level).
         /// </summary>
-        private static float ComputeColumnHeight(VoxelWorld world, int ix, int iz)
+        private static float ComputeColumnHeight(VoxelEngine.Core.IVoxelWorld world, int ix, int iz)
         {
             if (world == null) return NoWaterHeight;
 
@@ -121,7 +121,7 @@ namespace VoxelEngine.Maritime
         /// </summary>
         public static float3 GetWaterFlow(float3 worldPos)
         {
-            var world = VoxelWorld.Instance;
+            var world = VoxelEngine.Core.ActiveWorld.Current;
             if (world != null)
             {
                 int vx = Mathf.RoundToInt(worldPos.x / VOXEL_SIZE);

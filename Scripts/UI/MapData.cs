@@ -80,7 +80,7 @@ namespace VoxelEngine.UI
         /// <summary>Synchronous render — full texture in one call. Suited for SMALL minimap textures.</summary>
         public static void RenderMap(Texture2D tex, Vector3 centerWorld, int radius, int texSize)
         {
-            var world = VoxelWorld.Instance;
+            var world = VoxelEngine.Core.ActiveWorld.Current;
             if (world == null) return;
             var pixels = tex.GetPixels32();
             int cx = Mathf.FloorToInt(centerWorld.x);
@@ -104,7 +104,7 @@ namespace VoxelEngine.UI
         /// <summary>Coroutine-friendly time-sliced render. Yields after every `rowsPerYield` rows.</summary>
         public static IEnumerator RenderMapAsync(Texture2D tex, Vector3 centerWorld, int radius, int texSize, int rowsPerYield = 16)
         {
-            var world = VoxelWorld.Instance;
+            var world = VoxelEngine.Core.ActiveWorld.Current;
             if (world == null) yield break;
             var pixels = tex.GetPixels32();
             int cx = Mathf.FloorToInt(centerWorld.x);
@@ -126,9 +126,9 @@ namespace VoxelEngine.UI
             tex.Apply(false);
         }
 
-        public static Color32 SampleColumn(VoxelWorld world, int wx, int wz) => SampleColumnColor(world, wx, wz);
+        public static Color32 SampleColumn(VoxelEngine.Core.IVoxelWorld world, int wx, int wz) => SampleColumnColor(world, wx, wz);
 
-        public static Color32 SampleColumnColor(VoxelWorld world, int wx, int wz)
+        public static Color32 SampleColumnColor(VoxelEngine.Core.IVoxelWorld world, int wx, int wz)
         {
             // Walk DOWN from the world ceiling. Most surface columns hit a solid in <10 reads.
             // Cap the scan at WORLD_HEIGHT to avoid runaway costs.

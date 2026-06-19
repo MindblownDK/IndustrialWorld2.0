@@ -49,6 +49,13 @@ namespace VoxelEngine.Core
         /// <summary>Voxel sea level (IChunkScatterWorld contract; also used by scatter).</summary>
         public int SeaLevel => planet != null ? planet.seaLevel : 96;
 
+        // ── IVoxelWorld explicit properties ──
+        // Delegate to the existing inspector-assigned fields so the flat world satisfies the
+        // interface without any behavior change.
+        MaterialRegistry IVoxelWorld.MaterialRegistry => materialRegistry;
+        Transform IVoxelWorld.Viewer => viewer;
+        int IVoxelWorld.SeaLevel => SeaLevel;
+
         // ---- Runtime ----
         private readonly Dictionary<Vector3Int, Chunk> _chunks    = new();
         private readonly Queue<Chunk>                  _genQueue  = new();

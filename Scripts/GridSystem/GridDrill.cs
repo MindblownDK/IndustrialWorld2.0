@@ -28,7 +28,7 @@ namespace VoxelEngine.GridSystem
         [Tooltip("Log why the drill isn't firing/mining (enable to diagnose).")]
         public bool debugLog = false;
 
-        private VoxelWorld _world;
+        private VoxelEngine.Core.IVoxelWorld _world;
         private MaterialRegistry _registry;
 
         [Tooltip("Small internal buffer; auto-empties into grid cargo.")]
@@ -129,7 +129,7 @@ namespace VoxelEngine.GridSystem
 
         private bool ResolveVoxelReferences()
         {
-            if (_world == null) _world = VoxelWorld.Instance != null ? VoxelWorld.Instance : Object.FindAnyObjectByType<VoxelWorld>();
+            if (_world == null) _world = VoxelEngine.Core.ActiveWorld.Current != null ? VoxelEngine.Core.ActiveWorld.Current : Object.FindAnyObjectByType<VoxelEngine.Core.VoxelWorld>();
             if (_registry == null && _world != null) _registry = _world.materialRegistry;
             if (_registry == null) _registry = Resources.Load<MaterialRegistry>("MaterialRegistry");
             if (_registry == null)

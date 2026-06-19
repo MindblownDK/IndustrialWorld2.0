@@ -223,7 +223,7 @@ namespace VoxelEngine.Weather
             }
 
             // Check 2: Are we underground in a cave? Check if there's solid terrain above.
-            var world = VoxelEngine.Core.VoxelWorld.Instance;
+            var world = VoxelEngine.Core.ActiveWorld.Current;
             if (world != null)
             {
                 var pos = world.WorldToVoxel(transform.position);

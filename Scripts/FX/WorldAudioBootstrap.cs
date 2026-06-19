@@ -32,7 +32,7 @@ namespace VoxelEngine.FX
         {
             // Only run where there's an actual voxel world (the gameplay scene).
             // The main menu has no VoxelWorld, so we skip it to stay silent there.
-            if (Core.VoxelWorld.Instance == null && Object.FindAnyObjectByType<Core.VoxelWorld>() == null)
+            if (Core.ActiveWorld.Current == null)
                 return;
             if (_instance != null) return;
 

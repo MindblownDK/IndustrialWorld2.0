@@ -65,7 +65,7 @@ namespace VoxelEngine.UI
 
         private void Start()
         {
-            _player = VoxelWorld.Instance?.viewer;
+            _player = VoxelEngine.Core.ActiveWorld.Current?.Viewer;
             MapData.Load();
         }
 
@@ -310,7 +310,7 @@ namespace VoxelEngine.UI
 
         private void RenderSync()
         {
-            var world = VoxelWorld.Instance;
+            var world = VoxelEngine.Core.ActiveWorld.Current;
             if (world == null) return;
             int r = Mathf.RoundToInt(BASE_RADIUS * _zoom);
             MapData.RenderMap(_tex, new Vector3(_mapCenter.x, 0, _mapCenter.y), r, TEX_SIZE);
@@ -326,7 +326,7 @@ namespace VoxelEngine.UI
 
         private IEnumerator RenderAsync()
         {
-            var world = VoxelWorld.Instance;
+            var world = VoxelEngine.Core.ActiveWorld.Current;
             if (world == null) yield break;
 
             var pixels = _tex.GetPixels32();

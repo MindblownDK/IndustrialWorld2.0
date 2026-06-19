@@ -122,7 +122,7 @@ namespace VoxelEngine.FX
 
             // ── Underground detection: solid terrain stacked above the player. ──
             bool under = false;
-            var world = VoxelWorld.Instance;
+            var world = VoxelEngine.Core.ActiveWorld.Current;
             if (world != null)
             {
                 var vpos = world.WorldToVoxel(p);

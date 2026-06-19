@@ -87,6 +87,11 @@ namespace VoxelEngine.Cosmos
         /// <summary>Sea level in body-local voxel space (for scatter placement).</summary>
         public int SeaLevel => body != null ? Mathf.RoundToInt(body.genParams.seaRadius / VoxelConstants.VOXEL_SIZE) : 96;
 
+        // ── IVoxelWorld explicit properties ──
+        VoxelEngine.Materials.MaterialRegistry VoxelEngine.Core.IVoxelWorld.MaterialRegistry => materialRegistry;
+        Transform VoxelEngine.Core.IVoxelWorld.Viewer => viewer;
+        int VoxelEngine.Core.IVoxelWorld.SeaLevel => SeaLevel;
+
         // ---- Runtime ----
         private readonly Dictionary<Vector3Int, Chunk> _chunks = new();
         private readonly Queue<Chunk> _genQueue = new();

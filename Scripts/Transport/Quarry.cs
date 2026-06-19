@@ -76,7 +76,7 @@ namespace VoxelEngine.Transport
         private ItemContainer _out;
         private float _mt, _fbt, _tt;
         private int _cx, _cz, _ls;
-        private VoxelWorld _w;
+        private VoxelEngine.Core.IVoxelWorld _w;
         private MaterialRegistry _mr;
         private PowerConsumer _pc;
         private bool _ok;
@@ -95,7 +95,7 @@ namespace VoxelEngine.Transport
         void Awake() { EnsureOutput(); EnsureUpgrades(); }
         void Start()
         {
-            _w = VoxelWorld.Instance; _mr = _w?.materialRegistry;
+            _w = VoxelEngine.Core.ActiveWorld.Current; _mr = _w?.MaterialRegistry;
             _pc = GetComponent<PowerConsumer>();
             if (_w == null) { enabled = false; return; }
             _org = _w.WorldToVoxel(transform.position);
@@ -160,7 +160,7 @@ namespace VoxelEngine.Transport
         public static void ShowPlacementPreview(Vector3 wp, Quaternion rot, int sz, float fo)
         {
             HPP(); _pp=new("QPP");
-            var vox=VoxelWorld.Instance?.WorldToVoxel(wp)??Vector3Int.zero;
+            var vox=VoxelEngine.Core.ActiveWorld.Current?.WorldToVoxel(wp)??Vector3Int.zero;
             var f=rot*Vector3.forward; float ax=Mathf.Abs(f.x),az=Mathf.Abs(f.z);
             var d=ax>=az?new Vector3Int(Mathf.RoundToInt(Mathf.Sign(f.x)),0,0):new(0,0,Mathf.RoundToInt(Mathf.Sign(f.z)));
             if(d==default)d=new(1,0,0);

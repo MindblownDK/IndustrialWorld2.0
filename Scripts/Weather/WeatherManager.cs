@@ -117,7 +117,7 @@ namespace VoxelEngine.Weather
 
         private void CheckBiome()
         {
-            var world = VoxelWorld.Instance;
+            var world = VoxelEngine.Core.ActiveWorld.Current;
             if (world == null || world.viewer == null) return;
             var pos = world.viewer.position;
             int wx = Mathf.FloorToInt(pos.x);

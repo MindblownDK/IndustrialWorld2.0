@@ -49,7 +49,7 @@ namespace VoxelEngine.Player
 
             if (!IsUnderwater)
             {
-                var world = VoxelEngine.Core.VoxelWorld.Instance;
+                var world = VoxelEngine.Core.ActiveWorld.Current;
                 if (world != null)
                 {
                     var vp = world.WorldToVoxel(transform.position);

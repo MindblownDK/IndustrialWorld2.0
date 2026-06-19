@@ -25,7 +25,7 @@ namespace VoxelEngine.FX
         private static void AutoSpawn()
         {
             // Only in the gameplay world (the main menu has its own vibe / silence).
-            if (Core.VoxelWorld.Instance == null && Object.FindAnyObjectByType<Core.VoxelWorld>() == null)
+            if (Core.ActiveWorld.Current == null)
                 return;
             if (_instance != null) return;
 

@@ -65,10 +65,22 @@ namespace VoxelEngine.Player
             }
             else
             {
-                // Fresh world — move the player ABOVE the search area first so chunks load.
-                // The actual ground-finding happens after chunks stream in.
-                target = new Vector3(0, 250, 0);
-                Debug.Log("[PlayerSpawner] Fresh world — placing player above origin to trigger chunk streaming.");
+                // Fresh world. If a sphere body is active, spawn on its surface; else flat origin.
+                var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
+                if (body != null)
+                {
+                    // Spawn above the body's "north pole" (body-local +Y) so the player starts
+                    // standing upright on the planet surface.
+                    Vector3 surfDir = body.transform.up;
+                    target = body.transform.position + surfDir * (body.SurfaceRadius + 200f);
+                    Debug.Log("[PlayerSpawner] Fresh SPHERE world — spawning on " + body.DisplayName +
+                              " surface above north pole.");
+                }
+                else
+                {
+                    target = new Vector3(0, 250, 0);
+                    Debug.Log("[PlayerSpawner] Fresh world — placing player above origin to trigger chunk streaming.");
+                }
             }
 
             // Park the CharacterController-disabled player at the (X,Z) of target with a HIGH Y.
@@ -99,10 +111,25 @@ namespace VoxelEngine.Player
             bool snapped = false;
             while (!snapped && Time.time - groundT0 < 5f)
             {
-                Vector3 from = new Vector3(target.x, target.y + 100f, target.z);
-                if (Physics.Raycast(from, Vector3.down, out var hit, 300f, ~0, QueryTriggerInteraction.Ignore))
+                // On a sphere, raycast RADIAL-DOWN (toward the body core) instead of world-down.
+                var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
+                Vector3 from, dir, lift;
+                if (body != null)
                 {
-                    SetPosition(hit.point + Vector3.up * 1.0f);
+                    Vector3 bup = body.UpAt(transform.position);
+                    from = transform.position + bup * 100f;
+                    dir  = -bup;
+                    lift = bup;
+                }
+                else
+                {
+                    from = new Vector3(target.x, target.y + 100f, target.z);
+                    dir  = Vector3.down;
+                    lift = Vector3.up;
+                }
+                if (Physics.Raycast(from, dir, out var hit, 300f, ~0, QueryTriggerInteraction.Ignore))
+                {
+                    SetPosition(hit.point + lift * 1.0f);
                     snapped = true;
                     break;
                 }
@@ -183,20 +210,23 @@ namespace VoxelEngine.Player
 
         private IEnumerator WaitForChunkAt(Vector3Int worldVoxel, float timeoutSec)
         {
-            var world = VoxelWorld.Instance;
+            var world = VoxelEngine.Core.ActiveWorld.Current;
             if (world == null) yield break;
 
             int cs = VoxelConstants.CHUNK_SIZE;
-            // Check all Y-stacks at this XZ column — any meshed chunk in that column is enough.
             int cx = Mathf.FloorToInt(worldVoxel.x / (float)cs);
             int cz = Mathf.FloorToInt(worldVoxel.z / (float)cs);
+            // On a sphere, chunks exist at any Y. Search a window around the voxel's chunk-Y.
+            int cyCenter = Mathf.FloorToInt(worldVoxel.y / (float)cs);
 
             float t0 = Time.time;
             while (Time.time - t0 < timeoutSec)
             {
                 bool anyMeshed = false;
-                for (int cy = 0; cy < VoxelConstants.WORLD_HEIGHT_CHUNKS; cy++)
+                // Search ±4 chunks vertically (covers the surface ±128 voxels).
+                for (int dy = -4; dy <= 4; dy++)
                 {
+                    int cy = cyCenter + dy;
                     if (world.TryGetChunk(new Vector3Int(cx, cy, cz), out var c)
                         && c != null && c.isGenerated
                         && c.meshCollider != null && c.meshCollider.sharedMesh != null)
@@ -232,9 +262,9 @@ namespace VoxelEngine.Player
         /// </summary>
         private Vector3 FindFreshSpawnNearby(Vector3 origin)
         {
-            var world = VoxelWorld.Instance;
+            var world = VoxelEngine.Core.ActiveWorld.Current;
             if (world == null) return origin;
-            int seaLevel = world.planet != null ? world.planet.seaLevel : 96;
+            int seaLevel = world.SeaLevel;
 
             int ox = Mathf.FloorToInt(origin.x);
             int oz = Mathf.FloorToInt(origin.z);

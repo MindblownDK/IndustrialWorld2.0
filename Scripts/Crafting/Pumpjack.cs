@@ -136,7 +136,7 @@ namespace VoxelEngine.Crafting
         private bool FindOilVoxel(out Vector3Int worldPos)
         {
             worldPos = default;
-            var world = VoxelWorld.Instance;
+            var world = VoxelEngine.Core.ActiveWorld.Current;
             if (world == null) return false;
 
             Vector3Int origin = Vector3Int.FloorToInt(transform.position);
@@ -160,7 +160,7 @@ namespace VoxelEngine.Crafting
             if (!FindOilVoxel(out var oilPos)) return;
 
             // Replace the voxel with air so the reservoir actually depletes.
-            var world = VoxelWorld.Instance;
+            var world = VoxelEngine.Core.ActiveWorld.Current;
             if (world != null)
             {
                 try

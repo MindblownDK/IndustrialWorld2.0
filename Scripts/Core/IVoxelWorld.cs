@@ -1,15 +1,16 @@
 // Assets/Scripts/VoxelEngine/Core/IVoxelWorld.cs
 //
 // Shared interface for anything that owns a voxel terrain the player can mine/build on.
-// Implemented by both the flat VoxelWorld AND the spherical SphereWorld. The mining tools
-// (PickaxeTool, PlayerInteractionTool) target ActiveWorld.Current, so they automatically mine
-// whichever world the player is currently standing in.
+// Implemented by both the flat VoxelWorld AND the spherical SphereWorld. Systems that need to
+// read/write terrain (pumps, drills, farms, map, weather, audio) target ActiveWorld.Current,
+// so they work on whichever world the player is currently in.
 using UnityEngine;
+using VoxelEngine.Materials;
 
 namespace VoxelEngine.Core
 {
     /// <summary>
-    /// Minimal voxel-world contract: read/write individual voxels + look up chunks.
+    /// Voxel-world contract: read/write voxels, look up chunks, remesh, plus shared assets.
     /// Both the flat VoxelWorld and the spherical SphereWorld implement this.
     /// </summary>
     public interface IVoxelWorld
@@ -21,12 +22,19 @@ namespace VoxelEngine.Core
         Vector3Int WorldToChunk(Vector3 worldPos);
         /// <summary>Force a chunk to rebuild its mesh (used by editing tools after voxel writes).</summary>
         void ScheduleMeshJob(Chunk chunk);
+
+        /// <summary>Material registry (colors, hardness, mining tier) for this world.</summary>
+        MaterialRegistry MaterialRegistry { get; }
+        /// <summary>Transform the world streams around (usually the player).</summary>
+        Transform Viewer { get; }
+        /// <summary>Voxel-space sea level (water fills below this).</summary>
+        int SeaLevel { get; }
     }
 
     /// <summary>
     /// Static pointer to the world the player is currently interacting with. Set by the scene
     /// bootstrap (flat world sets VoxelWorld.Instance; CosmosBootstrap sets the SphereWorld).
-    /// Mining/building tools read Current to target whichever world the player is in.
+    /// Systems read Current to target whichever world the player is in.
     /// </summary>
     public static class ActiveWorld
     {

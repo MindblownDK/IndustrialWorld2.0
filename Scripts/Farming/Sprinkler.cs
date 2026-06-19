@@ -86,7 +86,7 @@ namespace VoxelEngine.Farming
             }
 
             // Also accept water in the voxel world nearby.
-            var world = VoxelEngine.Core.VoxelWorld.Instance;
+            var world = VoxelEngine.Core.ActiveWorld.Current;
             if (world != null)
             {
                 var pos = world.WorldToVoxel(transform.position);

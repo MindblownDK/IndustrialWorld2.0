@@ -78,7 +78,7 @@ namespace VoxelEngine.GridSystem
         private void ScanForOres()
         {
             DetectedOres.Clear();
-            var world = VoxelWorld.Instance;
+            var world = VoxelEngine.Core.ActiveWorld.Current;
             if (world == null) return;
 
             Vector3Int origin = world.WorldToVoxel(transform.position);

@@ -127,7 +127,7 @@ namespace VoxelEngine.Fluids
             _sourceVoxels = 0;
             _poolCells.Clear();
 
-            var world = VoxelWorld.Instance;
+            var world = VoxelEngine.Core.ActiveWorld.Current;
             if (world == null) return;
             FluidManager.EnsureInstance();
 
@@ -155,7 +155,7 @@ namespace VoxelEngine.Fluids
             _hasSource = _sourceVoxels > 0;
         }
 
-        private bool FindSeed(VoxelWorld world, Vector3Int origin, out Vector3Int seed)
+        private bool FindSeed(VoxelEngine.Core.IVoxelWorld world, Vector3Int origin, out Vector3Int seed)
         {
             int r = Mathf.CeilToInt(reach);
             for (int dy = 0; dy >= -r; dy--)
@@ -170,7 +170,7 @@ namespace VoxelEngine.Fluids
             return false;
         }
 
-        private void FloodPool(VoxelWorld world, Vector3Int seed)
+        private void FloodPool(VoxelEngine.Core.IVoxelWorld world, Vector3Int seed)
         {
             var seen = new HashSet<Vector3Int>();
             var q = new Queue<Vector3Int>();

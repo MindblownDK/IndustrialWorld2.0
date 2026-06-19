@@ -17,7 +17,7 @@ namespace VoxelEngine.Player
 
         private void Update()
         {
-            var world = VoxelWorld.Instance;
+            var world = VoxelEngine.Core.ActiveWorld.Current;
             if (world == null) { IsSwimming = false; WaterDepth = 0; IsHeadUnderwater = false; return; }
 
             Vector3 feet = transform.position;
@@ -45,7 +45,7 @@ namespace VoxelEngine.Player
         }
 
         /// <summary>Find the Y position of the water surface above a world position.</summary>
-        private float SampleWaterSurface(VoxelWorld world, Vector3 pos)
+        private float SampleWaterSurface(VoxelEngine.Core.IVoxelWorld world, Vector3 pos)
         {
             Vector3Int vp = world.WorldToVoxel(pos);
 

@@ -53,7 +53,7 @@ namespace VoxelEngine.GridSystem
             }
 
             // Damage terrain.
-            var world = VoxelEngine.Core.VoxelWorld.Instance;
+            var world = VoxelEngine.Core.ActiveWorld.Current;
             if (world != null)
             {
                 var point = collision.GetContact(0).point;
