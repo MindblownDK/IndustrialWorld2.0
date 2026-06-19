@@ -182,7 +182,6 @@ namespace VoxelEngine.Scattering
             }
             return best;
         }
-    }
 
         /// <summary>
         /// 3D direction-based climate sampling (mirrors SphereDensity.SampleClimate so scatter
@@ -192,8 +191,8 @@ namespace VoxelEngine.Scattering
         private static float2 SphereClimateSample(int seed, float3 dir)
         {
             float3 p = dir;
-            float tNoise = noise.snoise(p * 1.7f + (seed * 0.073f + 47.3f)) * 0.5f + 0.5f;
-            float hNoise = noise.snoise(p * 2.1f + (seed * 0.149f + 91.7f)) * 0.5f + 0.5f;
+            float tNoise = noise.snoise(p * 1.7f + (seed * 0.073f + 55.3f)) * 0.5f + 0.5f;
+            float hNoise = noise.snoise(p * 2.1f + (seed * 0.149f + 99.7f)) * 0.5f + 0.5f;
             float lat = math.abs(dir.y);
             float tLat = math.saturate(1f - lat * 1.25f);
             float hLat = math.cos(lat * 3.0f) * 0.3f + 0.55f;
@@ -201,5 +200,5 @@ namespace VoxelEngine.Scattering
             float h = math.lerp(hNoise, math.saturate(hLat), 0.385f);
             return new float2(t, h);
         }
-
+    }
 }

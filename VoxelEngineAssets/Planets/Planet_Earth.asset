@@ -9,7 +9,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 406a0c50efed4fb4589e608eab288046, type: 3}
+  m_Script: {fileID: 11500000, guid: cd78c792bd3bc6e469e57223d1172a8f, type: 3}
   m_Name: Planet_Earth
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Cosmos.PlanetTemplate
   body:
@@ -129,8 +129,9 @@ MonoBehaviour:
       minDepth: 0
       maxDepth: 12
       abundance: 1
-  solarSystem: {fileID: 0}
+  solarSystem: {fileID: 11400000, guid: 9bb2dbc7a9af8df42b2c57567cac00f6, type: 2}
   orbitalDistanceKm: {x: 2500, y: 4000}
   orbitSpeed: 0.6
   orbitPhaseDegrees: 0
-  moons: []
+  moons:
+  - {fileID: 11400000, guid: 286e59071e905b147982eb3d057c6cc9, type: 2}
