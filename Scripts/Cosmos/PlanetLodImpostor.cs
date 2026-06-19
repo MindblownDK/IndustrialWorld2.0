@@ -181,14 +181,23 @@ namespace VoxelEngine.Cosmos
                 SphereDensity.EvaluateColumn(prm, _biomes, d3, out float surfaceR, out int biomeI);
                 float alt = surfaceR - prm.MeanSurfaceRadius;
                 verts[i] = dir * (prm.MeanSurfaceRadius + alt);
-                colors[i] = ColorFor(alt);
+                float latitude = Mathf.Abs(dir.y);
+                colors[i] = ColorFor(alt, latitude);
             }
 
             return (verts.ToArray(), tris.ToArray(), colors);
         }
 
-        private static Color ColorFor(float altMetres)
+        /// <summary>
+        /// Surface colour for the LOD sphere based on altitude + latitude.
+        /// Phase 3: latitude factor adds polar ice caps (white near poles) so the LOD matches
+        /// the real terrain's snow caps.
+        /// </summary>
+        private static Color ColorFor(float altMetres, float latitude)
         {
+            // Polar ice: near the poles, everything is white (ice/snow).
+            if (latitude > 0.82f) return new Color(0.92f, 0.95f, 0.98f, 1f);
+
             if (altMetres < 0f)
             {
                 float depth = Mathf.Clamp01(-altMetres / 40f);
@@ -196,8 +205,17 @@ namespace VoxelEngine.Cosmos
             }
             if (altMetres < 2f) return new Color(0.80f, 0.74f, 0.52f, 1f);
             float h = Mathf.Clamp01(altMetres / 60f);
-            Color land = Color.Lerp(new Color(0.30f, 0.55f, 0.25f, 1f), new Color(0.50f, 0.40f, 0.28f, 1f), h);
-            if (h > 0.75f) land = Color.Lerp(land, Color.white, (h - 0.75f) / 0.25f);
+            // Equatorial = lush green; higher latitudes = browner/cooler.
+            float greenness = Mathf.Clamp01(1f - latitude * 1.2f);
+            Color lush = new Color(0.26f, 0.55f, 0.22f, 1f);
+            Color dry  = new Color(0.50f, 0.45f, 0.28f, 1f);
+            Color lowland = Color.Lerp(dry, lush, greenness);
+            Color highland = new Color(0.50f, 0.40f, 0.28f, 1f);
+            Color land = Color.Lerp(lowland, highland, h);
+            // Snow caps on high peaks.
+            if (h > 0.7f) land = Color.Lerp(land, Color.white, (h - 0.7f) / 0.3f);
+            // Sub-polar regions get partial snow.
+            if (latitude > 0.65f) land = Color.Lerp(land, new Color(0.85f, 0.88f, 0.92f, 1f), (latitude - 0.65f) / 0.17f);
             return land;
         }
 

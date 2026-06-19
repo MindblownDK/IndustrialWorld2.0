@@ -8,8 +8,9 @@
 // seamlessly across the six cube faces with no seams (snoise is continuous on the sphere
 // because we feed it the true normalised direction).
 //
-// Phase 1: pure, Burst-compatible, unit-testable. The Phase-2 face streamer calls
-// <see cref="EvaluateColumn"/> + <see cref="EvaluateVoxel"/> from its chunk-generation job.
+// Phase 3: LATITUDE-BASED CLIMATE (equator hot, poles cold → Earth-like biome distribution +
+// polar ice caps), SLOPE-BASED ROCK (steep faces = stone, not grass-on-cliffs), and SNOW LINE
+// (high altitude + cold = snow). These three make the planet read as Earth.
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Mathematics;
@@ -29,15 +30,33 @@ namespace VoxelEngine.Cosmos
         private const float TempOffset  = 47.3f;
         private const float HumidOffset = 91.7f;
 
+        // Latitude blend: how strongly the equator/pole gradient dominates over noise.
+        // 0 = pure noise (random climate), 1 = pure latitude (perfect bands). 0.65 = mostly
+        // latitude with regional noise variation — looks like Earth.
+        private const float LatitudeBlend = 0.65f;
+
         /// <summary>
         /// Sample the planet's climate field at a surface direction.
-        /// Returns temperature &amp; humidity in 0..1 — the two axes biome selection keys on.
+        /// Returns temperature &amp; humidity in 0..1.
+        ///
+        /// Phase 3: temperature now blends a LATITUDE factor (equator = hot, poles = cold) with
+        /// regional noise, so biomes form Earth-like climate zones: tropical near the equator,
+        /// temperate mid-latitudes, tundra/ice near the poles. This is what makes the planet
+        /// read as Earth rather than a random noise ball.
         /// </summary>
         public static float2 SampleClimate(int seed, in float3 dir)
         {
             float3 p = dir * 1f;
-            float t = noise.snoise(p * TempScale   + (seed * 0.073f + TempOffset))  * 0.5f + 0.5f;
-            float h = noise.snoise(p * HumidScale  + (seed * 0.149f + HumidOffset)) * 0.5f + 0.5f;
+            float tNoise = noise.snoise(p * TempScale   + (seed * 0.073f + TempOffset))  * 0.5f + 0.5f;
+            float h      = noise.snoise(p * HumidScale  + (seed * 0.149f + HumidOffset)) * 0.5f + 0.5f;
+
+            // Latitude: |dir.y| = 0 at equator (hot), 1 at poles (cold). Convert to 0..1 temperature.
+            float lat = math.abs(dir.y);                          // 0 = equator, 1 = pole
+            float tLat = math.saturate(1f - lat * 1.25f);         // equator ~1, poles ~0
+
+            // Blend latitude climate with regional noise.
+            float t = math.lerp(tNoise, tLat, LatitudeBlend);
+
             return new float2(t, h);
         }
 
@@ -48,13 +67,41 @@ namespace VoxelEngine.Cosmos
         /// </summary>
         public static float LandMask(int seed, in float3 dir, float continentScaleDir)
         {
-            // Two taps at different frequencies, combined so continents have lobes and bays.
             float3 p = dir + seed * 0.0031f;
             float coarse = noise.snoise(p * continentScaleDir)             * 0.5f + 0.5f;
             float shape  = noise.snoise(p * continentScaleDir * 2.3f + 13f) * 0.5f + 0.5f;
             float land   = coarse * 0.72f + shape * 0.28f;
-            // Steepen the coast so shelves are narrow (realistic) but interiors are vast.
             return math.saturate(math.smoothstep(0.34f, 0.62f, land));
+        }
+
+        /// <summary>
+        /// Estimate the local terrain slope (0 = flat, 1 = vertical cliff) by comparing the
+        /// surface radius at `dir` vs a small angular offset. Used to apply ROCK on steep faces
+        /// (no grass growing on cliffs) — a key realism detail.
+        /// </summary>
+        public static float EstimateSlope(
+            in SphereGenParams prm,
+            in NativeArray<BiomeData> biomes,
+            in float3 dir)
+        {
+            // Sample the surface height at dir and at two perpendicular offsets.
+            EvaluateColumn(prm, biomes, dir, out float h0, out _);
+
+            // Build two perpendicular tangent directions on the sphere.
+            float3 refVec = math.abs(dir.y) < 0.9f ? new float3(0, 1, 0) : new float3(1, 0, 0);
+            float3 tangent1 = math.normalizesafe(math.cross(dir, refVec), new float3(1, 0, 0));
+            float3 tangent2 = math.normalizesafe(math.cross(dir, tangent1), new float3(0, 0, 1));
+
+            // Small angular offset (~1° in direction space).
+            float3 d1 = math.normalizesafe(dir + tangent1 * 0.02f, dir);
+            float3 d2 = math.normalizesafe(dir + tangent2 * 0.02f, dir);
+
+            EvaluateColumn(prm, biomes, d1, out float h1, out _);
+            EvaluateColumn(prm, biomes, d2, out float h2, out _);
+
+            // Height difference → slope estimate. Large diff = steep.
+            float dh = (math.abs(h1 - h0) + math.abs(h2 - h0)) * 0.5f;
+            return math.saturate(dh / 8f);  // 8m height change over ~1° ≈ steep
         }
 
         /// <summary>
@@ -111,7 +158,6 @@ namespace VoxelEngine.Cosmos
                 float detail;
                 if (b.ridgedness > 0.01f)
                 {
-                    // Ridged: sharp peaks (mountains).
                     float n = 1f - math.abs(noise.snoise(dir * b.heightFrequency + i * 5.1f));
                     detail = math.lerp(noise.snoise(dir * b.heightFrequency + i * 5.1f), n * n, b.ridgedness);
                 }
@@ -131,9 +177,8 @@ namespace VoxelEngine.Cosmos
 
             float blended = weightSum > 0f ? heightSum / weightSum : 0f;
 
-            // Coast transition: continental shelf slopes from ocean floor up to land.
             float coastPull  = math.smoothstep(0f, 0.45f, landMask);
-            float oceanFloor = -25f; // metres below mean surface
+            float oceanFloor = -25f;
             float terrainOffset = math.lerp(oceanFloor, blended, coastPull);
 
             surfaceRadius = prm.MeanSurfaceRadius + terrainOffset;
@@ -141,8 +186,7 @@ namespace VoxelEngine.Cosmos
 
         /// <summary>
         /// Full per-voxel evaluation. Returns the voxel (density byte + material + water level)
-        /// for a body-relative cartesian position. This is what the Phase-2 chunk job calls per
-        /// voxel; kept here so it's testable in isolation and shared with the authoring preview.
+        /// for a body-relative cartesian position.
         /// </summary>
         public static Voxel EvaluateVoxel(
             in SphereGenParams prm,
@@ -156,16 +200,15 @@ namespace VoxelEngine.Cosmos
             EvaluateColumn(prm, biomes, dir, out float surfaceRadius, out int biomeI);
             var biome = biomes[biomeI];
 
-            // Solid if we are below the terrain surface radius.
             float density = surfaceRadius - radius;
 
-            // Bedrock core: deepest shell is unbreakable.
             float coreRadius = prm.radiusWorld * 0.55f;
             if (radius <= coreRadius)
                 return new Voxel(127, (byte)MaterialId.Bedrock, 0);
 
-            // Caves: 3D noise in cartesian space, only in reasonably deep, non-oanic rock.
             int depth = (int)math.round(surfaceRadius - radius);
+
+            // Caves.
             if (depth > 6 && radius > coreRadius + 6f && surfaceRadius > prm.seaRadius - 1f)
             {
                 float cave = noise.snoise(worldPos * 0.045f) * 0.5f + 0.5f;
@@ -178,10 +221,15 @@ namespace VoxelEngine.Cosmos
             {
                 byte material = (byte)MaterialId.Stone;
 
-                // Beach band around sea level.
+                // ── Surface material selection (Phase 3: slope + snow + beach) ──
+                float altitudeAboveSea = surfaceRadius - prm.seaRadius;  // metres above sea level
+                float2 climate = SampleClimate(prm.seed, dir);
+                bool atSurface = depth < biome.surfaceDepth;
+
                 if (biome.allowBeach == 1 &&
                     radius >= prm.seaRadius - 1.5f && radius <= prm.seaRadius + 2.5f && depth < 4)
                 {
+                    // Beach band: sand at coastlines.
                     material = (byte)MaterialId.Sand;
                 }
                 else if (depth < biome.surfaceDepth)
@@ -193,10 +241,34 @@ namespace VoxelEngine.Cosmos
                     material = biome.subsurfaceMat;
                 }
 
-                // Snow caps: cold high-altitude surfaces become ice (temperature-driven, set per body).
-                // (Snow line tuned in Phase 3; here a placeholder altitude gate.)
+                // ── SNOW LINE: high altitude + cold climate = snow/ice surface ──
+                // Realistic snow caps on mountains and polar regions.
+                if (atSurface && altitudeAboveSea > 20f && climate.x < 0.3f)
+                {
+                    material = (byte)MaterialId.Ice;
+                }
+                // Polar ice: very cold regions near poles get ice even at low altitude.
+                else if (atSurface && climate.x < 0.12f)
+                {
+                    material = (byte)MaterialId.Ice;
+                }
 
-                // Ore veins: clustered pockets via Worley. Deeper-than-surface only.
+                // ── SLOPE-BASED ROCK: steep terrain = stone, no grass on cliffs ──
+                // Estimate slope by comparing surface radius to a slightly offset direction.
+                // This is the key realism detail: mountainsides are rock, not grass-covered.
+                if (depth < biome.surfaceDepth + biome.subsurfaceDepth && altitudeAboveSea > 5f)
+                {
+                    // Cheap slope estimate: sample height noise at an offset.
+                    float3 refVec = math.abs(dir.y) < 0.9f ? new float3(0, 1, 0) : new float3(1, 0, 0);
+                    float3 tangent = math.normalizesafe(math.cross(dir, refVec), new float3(1, 0, 0));
+                    float3 dirOff = math.normalizesafe(dir + tangent * 0.03f, dir);
+                    EvaluateColumn(prm, biomes, dirOff, out float surfaceOff, out _);
+                    float heightDiff = math.abs(surfaceOff - surfaceRadius);
+                    if (heightDiff > 3f)
+                        material = (byte)MaterialId.Stone;  // steep = rock
+                }
+
+                // ── Ore veins ──
                 if (depth >= biome.surfaceDepth + 1)
                 {
                     for (int i = 0; i < ores.Length; i++)
@@ -218,10 +290,8 @@ namespace VoxelEngine.Cosmos
             }
             else
             {
-                // Below sea level and above terrain => water column.
                 if (radius <= prm.seaRadius)
                     return new Voxel(-1, (byte)MaterialId.WaterLiquid, 255);
-
                 return new Voxel((sbyte)math.clamp(density, -127f, -1f), (byte)MaterialId.Air, 0);
             }
         }

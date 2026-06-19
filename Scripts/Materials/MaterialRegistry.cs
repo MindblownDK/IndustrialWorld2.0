@@ -71,6 +71,7 @@ namespace VoxelEngine.Materials
                 case MaterialId.Platinum:    return new Color(0.80f, 0.82f, 0.85f, 1f);
                 case MaterialId.Uranium:     return new Color(0.46f, 0.70f, 0.30f, 1f);
                 case MaterialId.Lithium:     return new Color(0.76f, 0.79f, 0.86f, 1f);
+                case MaterialId.Grass:       return new Color(0.38f, 0.55f, 0.22f, 1f);   // natural green
                 case MaterialId.CrudeOil:    return new Color(0.05f, 0.04f, 0.03f, 1f);
                 case MaterialId.Wood:        return new Color(0.40f, 0.28f, 0.18f, 1f);
                 case MaterialId.Bedrock:     return new Color(0.20f, 0.20f, 0.22f, 1f);

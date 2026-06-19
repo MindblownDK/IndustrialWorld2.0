@@ -30,6 +30,7 @@ namespace VoxelEngine.Materials
 
         Bedrock    = 20,
         Lithium    = 21,
+        Grass      = 22,   // green surface grass (Plains/Forest top layer)
 
         // === Add custom materials below this line ===
     }

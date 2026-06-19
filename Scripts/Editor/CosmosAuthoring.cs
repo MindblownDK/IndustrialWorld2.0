@@ -39,6 +39,74 @@ namespace VoxelEngine.EditorTools
                       " (gravity 1g, oxygen, grass, full ore catalogue incl. Lithium).");
         }
 
+        /// <summary>
+        /// Phase 3: update biome surface materials to use proper GRASS (green) instead of Clay
+        /// (brown) for grass-like biomes. This is the key fix for "incredibly ugly" terrain —
+        /// Plains/Forest were using Clay (brown dirt) as their surface, making the world look
+        /// barren. Now they use Grass (natural green). Also ensures Desert = Sand, etc.
+        /// </summary>
+        [MenuItem("Tools/Voxel Engine/Normalize Biome Surface Materials (Grass)")]
+        public static void NormalizeBiomeSurfaces()
+        {
+            // Find all biome assets in the project.
+            string[] guids = AssetDatabase.FindAssets("t:BiomeDefinition");
+            if (guids.Length == 0)
+            {
+                Debug.LogWarning("[Cosmos] No BiomeDefinition assets found.");
+                return;
+            }
+            int fixedCount = 0;
+            foreach (string guid in guids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                var biome = AssetDatabase.LoadAssetAtPath<VoxelEngine.Biomes.BiomeDefinition>(path);
+                if (biome == null) continue;
+
+                bool changed = false;
+                string name = biome.biomeName.ToLowerInvariant();
+
+                // Grass biomes (Plains, Forest, Steppes, Tundra grass) → Grass material.
+                if (name.Contains("plains") || name.Contains("forest") || name.Contains("steppe"))
+                {
+                    if (biome.surfaceMaterial != VoxelEngine.Materials.MaterialId.Grass)
+                    {
+                        biome.surfaceMaterial = VoxelEngine.Materials.MaterialId.Grass;
+                        changed = true;
+                    }
+                }
+                // Desert/Wasteland → Sand surface.
+                if (name.Contains("desert") || name.Contains("wasteland"))
+                {
+                    if (biome.surfaceMaterial != VoxelEngine.Materials.MaterialId.Sand)
+                    {
+                        biome.surfaceMaterial = VoxelEngine.Materials.MaterialId.Sand;
+                        biome.subsurfaceMaterial = VoxelEngine.Materials.MaterialId.Sand;
+                        changed = true;
+                    }
+                }
+                // Tundra → keep Clay (frozen dirt look) but make it lighter.
+                // Beach → Sand (should already be).
+                // Mountains → Stone (should already be).
+                // SnowyPeaks → Ice (should already be).
+
+                if (changed)
+                {
+                    EditorUtility.SetDirty(biome);
+                    fixedCount++;
+                    Debug.Log("[Cosmos] " + biome.biomeName + ": surface -> " + biome.surfaceMaterial);
+                }
+            }
+            if (fixedCount > 0)
+            {
+                AssetDatabase.SaveAssets();
+                Debug.Log("[Cosmos] Updated " + fixedCount + " biome(s) to use proper surface materials (Grass for plains/forest, Sand for desert).");
+            }
+            else
+            {
+                Debug.Log("[Cosmos] All biome surfaces already correct.");
+            }
+        }
+
         [MenuItem("Tools/Voxel Engine/Create Solar System (Sol)")]
         public static void AuthorSolSystem()
         {
