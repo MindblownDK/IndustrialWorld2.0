@@ -11,6 +11,7 @@
 
 using System.Collections;
 using UnityEngine;
+using Unity.Mathematics;
 using VoxelEngine.Core;
 
 namespace VoxelEngine.Player
@@ -71,11 +72,15 @@ namespace VoxelEngine.Player
                 {
                     // Spawn above the body's "north pole" (body-local +Y) so the player starts
                     // standing upright on the planet surface.
-                    // Spawn just above the surface (within streaming range — not 200m up).
-                    // Surface is at body.SurfaceRadius; we add a small buffer so the player
-                    // starts slightly above ground and the surface chunks are immediately in range.
-                    Vector3 surfDir = body.transform.up;
-                    target = body.transform.position + surfDir * (body.SurfaceRadius + 20f);
+                    // Spawn at a TEMPERATE latitude (~30° from equator), NOT the freezing pole.
+                    // The pole is the coldest point (latitude climate) → only ice/tundra.
+                    // 30° gives a nice grassy/forest biome. Also spawn closer (8m above surface)
+                    // so chunks load fast and the player doesn't fall while waiting.
+                    Vector3 equator = new Vector3(1f, 0f, 0f);
+                    // Rotate 30° from equator toward the pole to get a temperate climate.
+                    Vector3 surfDir = math.normalizesafe(
+                        equator + body.transform.up * 0.55f, body.transform.up);
+                    target = body.transform.position + surfDir * (body.SurfaceRadius + 8f);
                     Debug.Log("[PlayerSpawner] Fresh SPHERE world — spawning on " + body.DisplayName +
                               " surface above north pole.");
                 }

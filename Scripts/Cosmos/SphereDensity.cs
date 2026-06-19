@@ -33,7 +33,7 @@ namespace VoxelEngine.Cosmos
         // Latitude blend: how strongly the equator/pole gradient dominates over noise.
         // 0 = pure noise (random climate), 1 = pure latitude (perfect bands). 0.65 = mostly
         // latitude with regional noise variation — looks like Earth.
-        private const float LatitudeBlend = 0.65f;
+        private const float LatitudeBlend = 0.55f;
 
         /// <summary>
         /// Sample the planet's climate field at a surface direction.
@@ -243,19 +243,20 @@ namespace VoxelEngine.Cosmos
 
                 // ── SNOW LINE: high altitude + cold climate = snow/ice surface ──
                 // Realistic snow caps on mountains and polar regions.
-                if (atSurface && altitudeAboveSea > 20f && climate.x < 0.3f)
+                if (atSurface && altitudeAboveSea > 35f && climate.x < 0.25f)
                 {
                     material = (byte)MaterialId.Ice;
                 }
                 // Polar ice: very cold regions near poles get ice even at low altitude.
-                else if (atSurface && climate.x < 0.12f)
+                else if (atSurface && climate.x < 0.1f)
                 {
                     material = (byte)MaterialId.Ice;
                 }
 
                 // ── SLOPE-BASED ROCK: steep terrain = stone, no grass on cliffs ──
-                // Estimate slope by comparing surface radius to a slightly offset direction.
-                // This is the key realism detail: mountainsides are rock, not grass-covered.
+                // Only apply on genuinely steep slopes (large height difference over a small
+                // angular step). Threshold tuned high (8m) so gentle hills keep their grass —
+                // only cliffs and mountain faces become rock.
                 if (depth < biome.surfaceDepth + biome.subsurfaceDepth && altitudeAboveSea > 5f)
                 {
                     // Cheap slope estimate: sample height noise at an offset.
@@ -264,8 +265,8 @@ namespace VoxelEngine.Cosmos
                     float3 dirOff = math.normalizesafe(dir + tangent * 0.03f, dir);
                     EvaluateColumn(prm, biomes, dirOff, out float surfaceOff, out _);
                     float heightDiff = math.abs(surfaceOff - surfaceRadius);
-                    if (heightDiff > 3f)
-                        material = (byte)MaterialId.Stone;  // steep = rock
+                    if (heightDiff > 8f)   // only genuine cliffs/mountain faces → rock
+                        material = (byte)MaterialId.Stone;
                 }
 
                 // ── Ore veins ──

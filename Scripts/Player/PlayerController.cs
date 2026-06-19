@@ -428,13 +428,14 @@ namespace VoxelEngine.Player
             }
 
             // -- move --
-            // Anti-stick on spheres: when grounded under radial gravity, add a TINY lift along
-            // the local up so the capsule clears terrain micro-bumps and can slide freely. Without
-            // this the capsule embeds into the curved terrain and the CharacterController blocks
-            // all horizontal movement → the "I can stand but can't walk" bug.
+            // Anti-stick on spheres: when grounded under radial gravity, add a small lift along
+            // the local up so the capsule clears terrain micro-bumps and can slide freely. The
+            // CharacterController's collision resolution can leave the capsule slightly embedded
+            // in the curved terrain, which blocks all horizontal movement. 0.015m per frame is
+            // enough to lift clear without visibly floating.
             Vector3 moveVec = _velocity * dt;
             if (_grounded && GravityProvider.IsRadial)
-                moveVec += up * 0.002f;
+                moveVec += up * 0.015f;
             _cc.Move(moveVec);
         }
 
