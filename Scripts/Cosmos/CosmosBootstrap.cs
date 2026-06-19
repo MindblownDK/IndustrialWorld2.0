@@ -117,6 +117,10 @@ namespace VoxelEngine.Cosmos
             waterGO.transform.localPosition = Vector3.zero;
             waterGO.AddComponent<SphereWaterShell>();
 
+            // ── Distant planet renderer (like Space Engineers — see other planets in the sky) ──
+            var spaceGO = new GameObject("SpaceRenderer");
+            spaceGO.AddComponent<SpaceBodyRenderer>();
+
             // ── GPU grass renderer (Phase 4) ──
             var grassGO = new GameObject("GrassRenderer");
             grassGO.transform.SetParent(_bodyGO.transform, false);

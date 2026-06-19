@@ -167,18 +167,13 @@ namespace VoxelEngine.Cosmos
                         rng.NextFloat(-0.5f, 0.5f));
                     float3 bladePos = worldPos + jitter;
 
-                    // Orient blade to the radial up (so grass stands upright on the sphere).
-                    // Build a random direction in the TANGENT PLANE (perpendicular to radialUp),
-                    // not world-horizontal. World-horizontal breaks near the equator where radialUp
-                    // is nearly horizontal itself (LookRotation becomes undefined).
-                    float3 tangentForward = math.normalizesafe(
-                        math.cross(radialUp, new float3(0.31f, 0.47f, 0.83f)), new float3(1, 0, 0));
-                    // Randomize rotation around radialUp for natural variation.
-                    float angle = rng.NextFloat(0f, math.PI * 2f);
-                    tangentForward = math.normalizesafe(
-                        tangentForward * math.cos(angle) +
-                        math.cross(radialUp, tangentForward) * math.sin(angle), tangentForward);
-                    quaternion rot = quaternion.LookRotation(tangentForward, radialUp);
+                    // Orient blade: rotate the mesh's local UP (Vector3.up) to align with radialUp.
+                    // FromToRotation is the foolproof "stand this upright along this direction"
+                    // method — it ALWAYS produces a valid rotation, unlike LookRotation which
+                    // breaks when forward and up are nearly parallel.
+                    Quaternion rot = Quaternion.FromToRotation(Vector3.up, (Vector3)radialUp);
+                    // Add random yaw around radialUp for natural variation.
+                    rot = Quaternion.AngleAxis(rng.NextFloat(0f, 360f), (Vector3)radialUp) * rot;
                     float h = bladeHeight * (1f + rng.NextFloat(-heightVariance, heightVariance));
                     float3 scale = new float3(bladeWidth, h, 1f);
 
