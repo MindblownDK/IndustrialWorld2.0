@@ -84,6 +84,10 @@ namespace VoxelEngine.Cosmos
                  "design target used by LOD/streaming budgets.")]
         public float radiusKm = 8f;
 
+        [Tooltip("Custom colour used to render this body from far away (in the sky / space view). " +
+                 "If clear, the renderer infers a colour from climate settings.")]
+        public Color displayColor = new Color(0f, 0f, 0f, 0f);  // alpha 0 = auto
+
         // ── Biomes ────────────────────────────────────────────────
         [Header("Biomes")]
         [Tooltip("Whitelist of biomes that may generate on this body. Empty = use registry defaults.")]

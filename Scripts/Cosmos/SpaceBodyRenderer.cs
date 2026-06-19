@@ -68,7 +68,11 @@ namespace VoxelEngine.Cosmos
                 var sun = registry.Sun;
                 float intensity = sun.settings != null ? sun.settings.intensity : 1f;
                 Color glow = sun.settings != null ? sun.settings.glowColor : new Color(1f, 0.9f, 0.7f);
-                PositionBody(_sunVisuals[0], Vector3.zero, sunVisualScale * intensity, glow, emissive: true);
+                // Position the sun FAR from the viewer in a fixed sky direction (not at world
+                // origin — that overlapped the planet). Use a large visual distance.
+                Vector3 sunDir = new Vector3(0.4f, 0.7f, 0.6f).normalized;
+                Vector3 sunPos = GetViewerPosition() + sunDir * visualRange * 1.5f;
+                PositionBody(_sunVisuals[0], sunPos, sunVisualScale * intensity, glow, emissive: true);
             }
 
             // Render planets + moons.
@@ -126,11 +130,22 @@ namespace VoxelEngine.Cosmos
         private static Color GetBodyColor(BodyInstance b)
         {
             if (b.settings == null) return Color.gray;
-            // Earth-like → blue-green. Desert → sandy. Ice → white. Moon → grey.
+            // Custom display colour wins if set (alpha > 0 means user-chosen).
+            if (b.settings.displayColor.a > 0.01f) return b.settings.displayColor;
+            // Otherwise infer from climate.
             if (!b.settings.HasOxygen) return new Color(0.5f, 0.5f, 0.55f);  // moon/airless grey
             if (b.settings.temperature < -5f) return new Color(0.8f, 0.85f, 0.9f);  // ice world
             if (b.settings.temperature > 30f) return new Color(0.8f, 0.65f, 0.4f);  // desert
             return new Color(0.2f, 0.4f, 0.6f);  // earth-like blue
+        }
+
+
+        private Vector3 GetViewerPosition()
+        {
+            var pc = UnityEngine.Object.FindAnyObjectByType<VoxelEngine.Player.PlayerController>();
+            if (pc != null) return pc.transform.position;
+            var cam = Camera.main;
+            return cam != null ? cam.transform.position : transform.position;
         }
 
         private void EnsureCount(List<BodyVisual> list, int count, string namePrefix)

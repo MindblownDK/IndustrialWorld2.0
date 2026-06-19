@@ -43,7 +43,7 @@ namespace VoxelEngine.Cosmos
         public bool IsReady { get; private set; }
 
         // Orbit dynamics: inner bodies orbit faster (loosely Keplerian).
-        private const float BaseAngularRate = 0.02f;
+        private const float BaseAngularRate = 0.005f;
         private const float MinMoonGapKm = 40f;
 
         // ── Lifecycle ─────────────────────────────────────────────
@@ -138,7 +138,7 @@ namespace VoxelEngine.Cosmos
                         parentBody      = planet,
                         orbitRadiusKm   = moonRadius,
                         orbitAngle      = phase,
-                        orbitAngularSpd = Mathf.Max(0.1f, mt.orbitSpeed) * BaseAngularRate / Mathf.Sqrt(Mathf.Max(1f, moonRadius)) * 4f,
+                        orbitAngularSpd = Mathf.Max(0.1f, mt.orbitSpeed) * BaseAngularRate / Mathf.Sqrt(Mathf.Max(1f, moonRadius)),
                         inclination     = rng.NextFloat(-0.25f, 0.25f),
                         phaseAxis       = RandomUnitAxis(ref rng),
                     };
