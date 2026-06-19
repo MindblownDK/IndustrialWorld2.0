@@ -116,12 +116,12 @@ namespace VoxelEngine.Core
             // Auto-recover missing references (common after branch switches / scene reloads)
             if (materialRegistry == null)
                 materialRegistry = Resources.Load<MaterialRegistry>("MaterialRegistry");
-            if (planet == null)
+            if (flatBiomeRegistry == null)
                 // PlanetSettings no longer loaded — flat world uses inline fields.
             if (terrainMaterial == null)
                 terrainMaterial = Resources.Load<Material>("Mat_Terrain");
 
-            if (materialRegistry == null || planet == null || terrainMaterial == null)
+            if (materialRegistry == null || terrainMaterial == null)
             {
                 Debug.LogWarning("[VoxelWorld] Missing required asset references. Assign MaterialRegistry and terrainMaterial in the inspector.");
                 // Do not disable — allow the world to run with defaults if possible
@@ -134,9 +134,9 @@ namespace VoxelEngine.Core
             {
                 worldName       = session.worldName;
                 flatSeed           = session.seed;
-                flatSeaLevel       = session.newSeaLevel;
-                flatBaseHeight     = session.newBaseHeight;
-                flatContinentScale = session.newContinentScale;
+                flatSeaLevel       = 96;
+                flatBaseHeight     = 100;
+                flatContinentScale = 0.0015f;
             }
 
             materialRegistry.Build();
@@ -560,7 +560,7 @@ namespace VoxelEngine.Core
 
         private void ProcessDeferredScatter()
         {
-            if (!enableScatter || planet == null || flatBiomeRegistry == null) return;
+            if (!enableScatter || flatBiomeRegistry == null) return;
 
             foreach (var kv in _chunks)
             {
@@ -580,7 +580,7 @@ namespace VoxelEngine.Core
                         continue;             // above-chunk still generating
                 }
 
-                ChunkScatter.Populate(this, c, flatBiomeRegistry, planet.seed);
+                ChunkScatter.Populate(this, c, flatBiomeRegistry, flatSeed);
                 c.isScattered = true;
             }
         }
