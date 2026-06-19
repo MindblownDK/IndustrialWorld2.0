@@ -184,7 +184,6 @@ namespace VoxelEngine.Cosmos
                 float latitude = Mathf.Abs(dir.y);
                 Color baseCol = ColorFor(alt, latitude);
                 // Apply the body's custom display colour as a tint if set.
-                var body = GetComponentInParent<CelestialBody>();
                 if (body != null && body.settings != null && body.settings.displayColor.a > 0.01f)
                     baseCol = Color.Lerp(baseCol, body.settings.displayColor, 0.4f);
                 colors[i] = baseCol;
