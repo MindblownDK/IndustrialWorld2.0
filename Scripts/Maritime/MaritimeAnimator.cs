@@ -75,7 +75,6 @@ namespace VoxelEngine.Maritime
             _pistonBaseY = new float[_pistons.Length];
             for (int i = 0; i < _pistons.Length; i++)
                 _pistonBaseY[i] = _pistons[i].localPosition.y;
-            _pistonBaseCached = true;
         }
 
         private Transform FindDeep(string name)
@@ -186,7 +185,6 @@ namespace VoxelEngine.Maritime
         }
 
         private float[] _pistonBaseY;
-        private bool _pistonBaseCached;
 
         private void AnimateDriveShaft(GridDriveShaft ds, float dt)
         {

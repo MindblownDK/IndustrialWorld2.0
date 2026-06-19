@@ -130,7 +130,7 @@ namespace VoxelEngine.GridSystem
         private bool ResolveVoxelReferences()
         {
             if (_world == null) _world = VoxelEngine.Core.ActiveWorld.Current != null ? VoxelEngine.Core.ActiveWorld.Current : Object.FindAnyObjectByType<VoxelEngine.Core.VoxelWorld>();
-            if (_registry == null && _world != null) _registry = _world.materialRegistry;
+            if (_registry == null && _world != null) _registry = _world.MaterialRegistry;
             if (_registry == null) _registry = Resources.Load<MaterialRegistry>("MaterialRegistry");
             if (_registry == null)
             {

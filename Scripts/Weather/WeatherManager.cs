@@ -118,14 +118,14 @@ namespace VoxelEngine.Weather
         private void CheckBiome()
         {
             var world = VoxelEngine.Core.ActiveWorld.Current;
-            if (world == null || world.viewer == null) return;
-            var pos = world.viewer.position;
+            if (world == null || world.Viewer == null) return;
+            var pos = world.Viewer.position;
             int wx = Mathf.FloorToInt(pos.x);
             int wz = Mathf.FloorToInt(pos.z);
 
             // Sample temperature from biome noise.
             var climate = BiomePicker.SampleClimate(
-                world.planet != null ? world.planet.seed : 0, wx, wz);
+                world.Seed, wx, wz);
             IsSnowBiome = climate.x < 0.25f; // cold biomes
         }
 

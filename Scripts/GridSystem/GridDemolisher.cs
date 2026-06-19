@@ -58,7 +58,7 @@ namespace VoxelEngine.GridSystem
             {
                 var point = collision.GetContact(0).point;
                 VoxelEngine.Modification.VoxelEditor.Subtract(
-                    world, world.materialRegistry, point, 0.8f, terrainDPS * Time.deltaTime);
+                    world, world.MaterialRegistry, point, 0.8f, terrainDPS * Time.deltaTime);
             }
         }
 

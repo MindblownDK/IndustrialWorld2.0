@@ -55,6 +55,7 @@ namespace VoxelEngine.Core
         MaterialRegistry IVoxelWorld.MaterialRegistry => materialRegistry;
         Transform IVoxelWorld.Viewer => viewer;
         int IVoxelWorld.SeaLevel => SeaLevel;
+        int IVoxelWorld.Seed => planet != null ? planet.seed : 0;
 
         // ---- Runtime ----
         private readonly Dictionary<Vector3Int, Chunk> _chunks    = new();

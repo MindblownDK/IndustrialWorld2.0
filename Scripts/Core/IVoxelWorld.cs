@@ -29,6 +29,8 @@ namespace VoxelEngine.Core
         Transform Viewer { get; }
         /// <summary>Voxel-space sea level (water fills below this).</summary>
         int SeaLevel { get; }
+        /// <summary>World generation seed (for deterministic biome/climate sampling).</summary>
+        int Seed { get; }
     }
 
     /// <summary>

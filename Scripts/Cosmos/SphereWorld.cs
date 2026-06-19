@@ -91,6 +91,7 @@ namespace VoxelEngine.Cosmos
         VoxelEngine.Materials.MaterialRegistry VoxelEngine.Core.IVoxelWorld.MaterialRegistry => materialRegistry;
         Transform VoxelEngine.Core.IVoxelWorld.Viewer => viewer;
         int VoxelEngine.Core.IVoxelWorld.SeaLevel => SeaLevel;
+        int VoxelEngine.Core.IVoxelWorld.Seed => body != null ? body.genParams.seed : 0;
 
         // ---- Runtime ----
         private readonly Dictionary<Vector3Int, Chunk> _chunks = new();
