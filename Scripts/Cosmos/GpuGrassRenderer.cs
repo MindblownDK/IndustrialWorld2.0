@@ -3,7 +3,7 @@
 // GPU-instanced grass renderer for spherical voxel worlds.
 //
 // Renders THOUSANDS of grass blades around the viewer in a SINGLE draw call via
-// Graphics.RenderMeshPrimitives (the Unity 6 GPU-instancing API). Each blade is placed on the
+// Graphics.RenderMeshInstanced (the Unity 6 GPU-instancing API that accepts per-instance matrices). Each blade is placed on the
 // terrain surface by sampling the active world's voxels, oriented to the radial surface normal,
 // and animated by the global WindField (so the whole field flows like real grass in the wind).
 //
@@ -94,7 +94,7 @@ namespace VoxelEngine.Cosmos
 
             // Draw all blades in one GPU draw call.
             if (_instanceCount > 0 && _matrices.IsCreated)
-                Graphics.RenderMeshPrimitives(_renderParams, grassBladeMesh, 0, _instanceCount, _matrices);
+                Graphics.RenderMeshInstanced(_renderParams, grassBladeMesh, 0, _matrices);
         }
 
         // ── Field rebuild ──

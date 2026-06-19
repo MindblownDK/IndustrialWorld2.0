@@ -75,7 +75,7 @@ namespace VoxelEngine.Cosmos
                 waterfallMaterial.SetFloat("_ScrollOffset", Time.time * 0.8f);
 
             if (_instanceCount > 0 && _matrices.IsCreated)
-                Graphics.RenderMeshPrimitives(_renderParams, waterfallMesh, 0, _instanceCount, _matrices);
+                Graphics.RenderMeshInstanced(_renderParams, waterfallMesh, 0, _matrices);
         }
 
         // ── Detection ──
@@ -86,7 +86,7 @@ namespace VoxelEngine.Cosmos
 
             Vector3 viewerLocal = body.transform.InverseTransformPoint(viewer.position);
             int range = Mathf.CeilToInt(scanRange);
-            var candidates = new List<Matrix2x4>(64);
+            var candidates = new List<Matrix4x4>(64);
             var seen = new HashSet<Vector3Int>();
 
             int3 vl = new int3(
@@ -119,13 +119,12 @@ namespace VoxelEngine.Cosmos
 
                 // Sample a few voxels downward (along -radialUp) to measure the drop.
                 int drop = 0;
-                bool hitsTerrain = false;
                 for (int d = 1; d <= 40; d++)
                 {
                     float3 samplePos = worldPos - radialUp * d;
                     Vector3Int sv = world.WorldToVoxel((Vector3)samplePos);
                     var sv_ = world.GetVoxelWorld(sv);
-                    if (sv_.density > 0) { hitsTerrain = true; break; }
+                    if (sv_.density > 0) break;  // hit terrain — stop counting the drop
                     drop++;
                 }
 
@@ -141,7 +140,7 @@ namespace VoxelEngine.Cosmos
                 float3 center = (fallStart + fallEnd) * 0.5f;
                 quaternion rot = quaternion.LookRotation(radialUp, new float3(0, 1, 0));
                 float3 scale = new float3(bladeWidth, drop, 1f);
-                candidates.Add(new Matrix2x4 { m = Matrix4x4.TRS(center, rot, scale) });
+                candidates.Add(Matrix4x4.TRS(center, rot, scale));
 
                 if (candidates.Count > 200) goto done;
             }
@@ -150,11 +149,9 @@ namespace VoxelEngine.Cosmos
             if (_matrices.IsCreated) _matrices.Dispose();
             _instanceCount = candidates.Count;
             if (_instanceCount == 0) return;
-            _matrices = new NativeArray<Matrix2x4>(_instanceCount, Allocator.Persistent);
-            for (int i = 0; i < _instanceCount; i++) _matrices[i] = candidates[i].m;
+            _matrices = new NativeArray<Matrix4x4>(_instanceCount, Allocator.Persistent);
+            for (int i = 0; i < _instanceCount; i++) _matrices[i] = candidates[i];
         }
-
-        private struct Matrix2x4 { public Matrix4x4 m; }
 
         // ── Default assets ──
         private static Mesh CreateDefaultWaterfallMesh()
