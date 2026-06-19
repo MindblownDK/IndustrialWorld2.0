@@ -60,7 +60,7 @@ namespace VoxelEngine.Cosmos
             if (terrainMaterial == null)  terrainMaterial  = Resources.Load<Material>("Mat_Terrain");
             if (viewer == null)
             {
-                var pc = FindObjectOfType<VoxelEngine.Player.PlayerController>();
+                var pc = FindAnyObjectByType<VoxelEngine.Player.PlayerController>();
                 if (pc != null) viewer = pc.transform;
             }
 
@@ -113,7 +113,7 @@ namespace VoxelEngine.Cosmos
             GravityProvider.ActiveBody = body;
 
             // Drop the wind personality from the body.
-            var wind = FindObjectOfType<WindField>();
+            var wind = FindAnyObjectByType<WindField>();
             if (wind != null) wind.ApplyBody(body.settings);
 
             Debug.Log($"[CosmosBootstrap] Spawned '{body.DisplayName}' at {bodyOrigin}, " +
@@ -122,7 +122,7 @@ namespace VoxelEngine.Cosmos
 
         private void EnsureGravityProvider()
         {
-            if (FindObjectOfType<GravityProvider>() == null)
+            if (FindAnyObjectByType<GravityProvider>() == null)
             {
                 var gpGO = new GameObject("GravityProvider");
                 gpGO.AddComponent<GravityProvider>();

@@ -33,6 +33,9 @@ namespace VoxelEngine.Cosmos
         /// <summary>Surface gravity in m/s² (Earth ≈ 9.81).</summary>
         public float SurfaceGravity { get; private set; } = 9.81f;
 
+        /// <summary>Display name of this body (from its settings).</summary>
+        public string DisplayName => settings != null ? settings.bodyName : "Body";
+
         private void Awake()
         {
             ApplySettings();
