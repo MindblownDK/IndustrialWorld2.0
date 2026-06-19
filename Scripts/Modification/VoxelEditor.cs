@@ -25,7 +25,7 @@ namespace VoxelEngine.Modification
 
         /// <summary>Subtracts a smooth sphere of density at world position. Returns mined item totals.
         /// Drops are automatically granted to the local player's inventory.</summary>
-        public static EditResult Subtract(VoxelWorld world, MaterialRegistry registry,
+        public static EditResult Subtract(IVoxelWorld world, MaterialRegistry registry,
                                           Vector3 worldPos, float radius, float strength)
         {
             return Apply(world, registry, worldPos, radius, strength, subtract:true, autoGrant:true);
@@ -34,21 +34,21 @@ namespace VoxelEngine.Modification
         /// <summary>Subtracts a sphere but does NOT auto-grant drops to the player — the caller
         /// receives the mined item + amount in the result (used by ship drills that route ore
         /// into their own buffer / cargo network instead of the player's pockets).</summary>
-        public static EditResult SubtractCollect(VoxelWorld world, MaterialRegistry registry,
+        public static EditResult SubtractCollect(IVoxelWorld world, MaterialRegistry registry,
                                                  Vector3 worldPos, float radius, float strength)
         {
             return Apply(world, registry, worldPos, radius, strength, subtract:true, autoGrant:false);
         }
 
         /// <summary>Adds material density (e.g. building/filling). 'fillMaterial' is what gets placed.</summary>
-        public static EditResult Add(VoxelWorld world, MaterialRegistry registry,
+        public static EditResult Add(IVoxelWorld world, MaterialRegistry registry,
                                      Vector3 worldPos, float radius, float strength,
                                      MaterialId fillMaterial)
         {
             return Apply(world, registry, worldPos, radius, strength, subtract:false, fillMaterial);
         }
 
-        private static EditResult Apply(VoxelWorld world, MaterialRegistry registry,
+        private static EditResult Apply(IVoxelWorld world, MaterialRegistry registry,
                                         Vector3 worldPos, float radius, float strength,
                                         bool subtract, MaterialId fillMaterial = MaterialId.Stone,
                                         bool autoGrant = true)

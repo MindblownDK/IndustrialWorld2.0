@@ -58,7 +58,7 @@ namespace VoxelEngine.Cosmos
     /// assign the active <see cref="CelestialBody"/> (typically the body this streamer belongs to).
     /// </summary>
     [DisallowMultipleComponent]
-    public class SphereWorld : MonoBehaviour, IChunkScatterWorld
+    public class SphereWorld : MonoBehaviour, IChunkScatterWorld, VoxelEngine.Core.IVoxelWorld
     {
         // ---- Inspector ----
         [Header("Body & Assets")]

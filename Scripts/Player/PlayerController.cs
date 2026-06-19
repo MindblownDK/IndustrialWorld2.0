@@ -89,6 +89,11 @@ namespace VoxelEngine.Player
             _cc = GetComponent<CharacterController>();
             _cc.height = standHeight;
             _cc.center = new Vector3(0, standHeight * 0.5f, 0);
+            // On spherical bodies the terrain has hills/mountains in every direction. The default
+            // slopeLimit (45°) blocks the player from walking up slopes → "stuck". Raise it so the
+            // player can traverse any natural terrain angle on a planet surface.
+            _cc.slopeLimit = 85f;
+            _cc.stepOffset = 0.6f;
             // Ensure water state tracker exists for swimming detection.
             if (GetComponent<PlayerWaterState>() == null) gameObject.AddComponent<PlayerWaterState>();
             _smoothedEyeHeight = standEyeHeight;
@@ -270,7 +275,12 @@ namespace VoxelEngine.Player
 
             // -- input direction --
             Vector2 wish = GetMoveInput();
-            Vector3 wishDir = (transform.right * wish.x + transform.forward * wish.y).normalized;
+            // Build wish direction from local axes, then PROJECT onto the tangent plane
+            // (perpendicular to radial up). Without this, transform.forward on a tilted player
+            // has a small radial component that pushes the capsule INTO the terrain → "stuck".
+            Vector3 wishDir = transform.right * wish.x + transform.forward * wish.y;
+            wishDir = Vector3.ProjectOnPlane(wishDir, up);
+            if (wishDir.sqrMagnitude > 0.001f) wishDir = wishDir.normalized;
 
             // -- crouch / slide state machine --
             bool crouchHeld = GameSettings.IsHeld(InputAction.Crouch);
@@ -410,7 +420,14 @@ namespace VoxelEngine.Player
             }
 
             // -- move --
-            _cc.Move(_velocity * dt);
+            // Anti-stick on spheres: when grounded under radial gravity, add a TINY lift along
+            // the local up so the capsule clears terrain micro-bumps and can slide freely. Without
+            // this the capsule embeds into the curved terrain and the CharacterController blocks
+            // all horizontal movement → the "I can stand but can't walk" bug.
+            Vector3 moveVec = _velocity * dt;
+            if (_grounded && GravityProvider.IsRadial)
+                moveVec += up * 0.002f;
+            _cc.Move(moveVec);
         }
 
         private void UpdateCrouchSlide(bool crouchHeld, bool sprintHeld)

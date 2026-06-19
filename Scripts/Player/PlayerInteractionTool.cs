@@ -23,7 +23,7 @@ namespace VoxelEngine.Player
     {
         [Header("Refs")]
         public Camera shootCamera;
-        public VoxelWorld world;
+        public VoxelEngine.Core.IVoxelWorld world;
         public MaterialRegistry registry;
         public Inventory inventory;
 
@@ -43,7 +43,7 @@ namespace VoxelEngine.Player
 
         private void Awake()
         {
-            if (world      == null) world      = VoxelWorld.Instance;
+            if (world      == null) world      = VoxelEngine.Core.ActiveWorld.Current;
             if (shootCamera== null) shootCamera= Camera.main;
             if (inventory  == null) inventory  = GetComponentInParent<Inventory>();
             if (registry   == null) registry   = Object.FindAnyObjectByType<MaterialRegistry>();
@@ -68,7 +68,7 @@ namespace VoxelEngine.Player
             // let the on-foot tool mine/break the world.
             if (VoxelEngine.GridSystem.GridCockpit.AnyPilotSeatActive) return;
             IsGrinding = false; // reset each frame — HandleGrind sets it true when active
-            if (world      == null) world      = VoxelWorld.Instance;
+            if (world      == null) world      = VoxelEngine.Core.ActiveWorld.Current;
             if (inventory  == null) inventory  = GetComponentInParent<Inventory>();
             if (registry   == null) registry   = Object.FindAnyObjectByType<MaterialRegistry>();
             if (world == null || shootCamera == null || inventory == null) return;

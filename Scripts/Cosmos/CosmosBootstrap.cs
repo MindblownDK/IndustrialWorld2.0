@@ -111,6 +111,8 @@ namespace VoxelEngine.Cosmos
 
             // Activate radial gravity for the whole game + wind personality.
             GravityProvider.ActiveBody = body;
+            // Route mining/building tools to THIS world (not the flat VoxelWorld).
+            VoxelEngine.Core.ActiveWorld.Current = world;
 
             // ── Activate LAST: now every Awake/OnEnable sees a fully-wired component graph. ──
             _bodyGO.SetActive(true);

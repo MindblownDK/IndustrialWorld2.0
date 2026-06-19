@@ -21,7 +21,7 @@ namespace VoxelEngine.Core
     /// using the modern Mesh.AllocateWritableMeshData / ApplyAndDisposeWritableMeshData path.
     /// </summary>
     [DisallowMultipleComponent]
-    public class VoxelWorld : MonoBehaviour, VoxelEngine.Cosmos.IChunkScatterWorld
+    public class VoxelWorld : MonoBehaviour, VoxelEngine.Cosmos.IChunkScatterWorld, IVoxelWorld
     {
         // ---- Inspector ----
         [Header("Assets")]

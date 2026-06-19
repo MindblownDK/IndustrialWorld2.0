@@ -11,7 +11,7 @@ namespace VoxelEngine.Player
     public class PickaxeTool : MonoBehaviour
     {
         [Header("References")]
-        public VoxelWorld world;
+        public VoxelEngine.Core.IVoxelWorld world;
         public MaterialRegistry registry;
         public Camera shootCamera;
 
@@ -30,7 +30,7 @@ namespace VoxelEngine.Player
 
         private void Awake()
         {
-            if (world == null) world = VoxelWorld.Instance;
+            if (world == null) world = VoxelEngine.Core.ActiveWorld.Current;
             if (shootCamera == null) shootCamera = Camera.main;
             // Route tool SFX through the SFX mixer bus (no-op without a mixer asset).
             if (hitAudio != null) VoxelEngine.FX.AudioManager.Route(hitAudio, music: false);
@@ -38,7 +38,7 @@ namespace VoxelEngine.Player
 
         private void Update()
         {
-            if (world == null) world = VoxelWorld.Instance;
+            if (world == null) world = VoxelEngine.Core.ActiveWorld.Current;
             if (world == null || shootCamera == null) return;
 
             bool mine  = GameSettings.IsHeld(InputAction.Mine);
