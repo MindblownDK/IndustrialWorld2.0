@@ -302,7 +302,13 @@ namespace VoxelEngine.Cosmos
             else
             {
                 if (radius <= prm.seaRadius)
-                    return new Voxel(-1, (byte)MaterialId.WaterLiquid, 255);
+                {
+                    // Water: render as SOLID in the terrain mesh (density=5) so it follows the
+                    // sphere curvature. The flat-world WaterMeshBuilder creates horizontal planes
+                    // which break on a sphere (floating discs, vertical walls). Making water a
+                    // solid colored voxel lets SurfaceNetsJob mesh it correctly on ANY surface.
+                    return new Voxel(5, (byte)MaterialId.WaterLiquid, 0);
+                }
                 return new Voxel((sbyte)math.clamp(density, -127f, -1f), (byte)MaterialId.Air, 0);
             }
         }

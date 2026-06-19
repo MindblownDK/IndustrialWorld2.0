@@ -180,7 +180,11 @@ namespace VoxelEngine.Cosmos
 
                 SphereDensity.EvaluateColumn(prm, _biomes, d3, out float surfaceR, out int biomeI);
                 float alt = surfaceR - prm.MeanSurfaceRadius;
-                verts[i] = dir * (prm.MeanSurfaceRadius + alt);
+                // Offset slightly OUTWARD so the LOD doesn't z-fight with voxel terrain
+                // (they'd be at the same depth and flicker). A small outward push puts the LOD
+                // just above the real terrain, like a backdrop sphere.
+                float maxAlt = prm.radiusWorld * 0.15f; // accounts for mountains
+                verts[i] = dir * (prm.MeanSurfaceRadius + alt + maxAlt + 5f);
                 float latitude = Mathf.Abs(dir.y);
                 Color baseCol = ColorFor(alt, latitude);
                 // Apply the body's custom display colour as a tint if set.
@@ -235,7 +239,7 @@ namespace VoxelEngine.Cosmos
                 float surfaceFadeStart = r * 0.15f;
                 float surfaceFadeEnd = r * 0.02f;
                 if (alt < surfaceFadeStart)
-                    a = Mathf.Lerp(0.15f, 1f, Mathf.Clamp01((alt - surfaceFadeEnd) / Mathf.Max(0.001f, surfaceFadeStart - surfaceFadeEnd)));
+                    a = Mathf.Lerp(0.6f, 1f, Mathf.Clamp01((alt - surfaceFadeEnd) / Mathf.Max(0.001f, surfaceFadeStart - surfaceFadeEnd)));
             }
             if (_lodMaterial.HasProperty("_BaseColor"))
             {

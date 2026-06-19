@@ -58,7 +58,7 @@ namespace VoxelEngine.Materials
                 case MaterialId.Clay:        return new Color(0.50f, 0.40f, 0.30f, 1f);
                 case MaterialId.Ice:         return new Color(0.80f, 0.90f, 1.00f, 1f);
                 case MaterialId.WaterVoxel:
-                case MaterialId.WaterLiquid: return new Color(0.12f, 0.38f, 0.60f, 0.85f);
+                case MaterialId.WaterLiquid: return new Color(0.10f, 0.35f, 0.65f, 1f);  // solid blue (renders in terrain mesh)
                 case MaterialId.Iron:        return new Color(0.56f, 0.46f, 0.41f, 1f);
                 case MaterialId.Copper:      return new Color(0.72f, 0.46f, 0.31f, 1f);
                 case MaterialId.Coal:        return new Color(0.14f, 0.14f, 0.16f, 1f);

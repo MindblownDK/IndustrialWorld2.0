@@ -227,9 +227,8 @@ namespace VoxelEngine.Cosmos
             DispatchGenerationJobs();
             DispatchMeshingJobs();
             CompleteFinishedJobs();
-            // Pump the water mesh builder — the flat VoxelWorld did this in its Update, but since
-            // it's disabled, the sphere must pump it or water meshes never get built (invisible water).
-            WaterSim.WaterMeshBuilder.Pump(maxJobsPerFrame);
+            // WaterMeshBuilder.Pump DISABLED — the flat-world water builder creates horizontal
+            // planes that break on a sphere (floating discs). Water renders as solid voxels instead.
             ProcessDeferredScatter();
 
             // ── Comprehensive diagnostics (every 3 seconds) ──
@@ -518,8 +517,7 @@ namespace VoxelEngine.Cosmos
                 if (p.chunk.GetVoxelLocal(wx, wy, wz).waterLevel > 0) hw = true;
             if (hw)
             {
-                VoxelEngine.WaterSim.FluidManager.Instance?.MarkActive(p.chunk.coord);
-                VoxelEngine.WaterSim.WaterMeshBuilder.Schedule(p.chunk);
+                // Water is solid in the terrain mesh — no separate fluid mesh needed.
             }
 
             if (!_meshQueue.Contains(p.chunk)) _meshQueue.Enqueue(p.chunk);
@@ -719,10 +717,7 @@ namespace VoxelEngine.Cosmos
             c.SetVoxelLocal(lx, ly, lz, v);
             c.isModified = true;
 
-            // Wake fluid sim (the sphere owns it now that the flat world is disabled).
-            VoxelEngine.WaterSim.FluidManager.Instance?.MarkActive(chunkCoord);
-            VoxelEngine.WaterSim.WaterMeshBuilder.Schedule(c);
-
+            // Water is solid in the terrain mesh — no fluid sim wake needed.
             if (!remesh) return;
             EnqueueRemesh(c);
             if (lx == 0)     EnqueueRemeshNeighbour(chunkCoord + new Vector3Int(-1, 0, 0));
