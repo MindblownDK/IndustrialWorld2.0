@@ -92,7 +92,7 @@ namespace VoxelEngine.Cosmos
             world.terrainMaterial = terrainMaterial;
             world.viewer = viewer;
             world.viewDistance = viewDistance;
-            world.enableScatter = true;
+            world.enableScatter = false; // Phase 2.1 re-enables scatter once the sphere is sole world.
             world.worldName = session != null ? session.worldName + "_sphere" : "SphereTest";
 
             // ── Far LOD (space view), as a CHILD of the body ──
@@ -103,11 +103,12 @@ namespace VoxelEngine.Cosmos
             lod.viewer = viewer;
             lod.biomeRegistry = biomeRegistry;
             var lodMr = lodGO.GetComponent<MeshRenderer>();
-            if (lodMr != null && lodMr.sharedMaterial == null)
+            if (lodMr != null)
             {
-                var mat = new Material(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"));
-                mat.name = "Mat_PlanetLOD";
-                lodMr.sharedMaterial = mat;
+                // Reuse the SAME terrain material the chunks use (proven to render vertex colours).
+                // This is the fix for the "purple LOD" — creating a fresh Material from a shader
+                // name can yield magenta if the shader isn't found or doesn't enable vertex colours.
+                lodMr.sharedMaterial = terrainMaterial;
             }
 
             // Activate radial gravity for the whole game + wind personality.
@@ -164,10 +165,21 @@ namespace VoxelEngine.Cosmos
         {
             if (materialRegistry == null) materialRegistry = Resources.Load<MaterialRegistry>("MaterialRegistry");
             if (terrainMaterial == null)  terrainMaterial  = Resources.Load<Material>("Mat_Terrain");
+
+            // Pull the EXACT working material + registry from the flat VoxelWorld (inspector-
+            // assigned, guaranteed correct). This is a RUNTIME API — no #if UNITY_EDITOR guard —
+            // so it works in builds too. This is the key fix for the "purple planet" (magenta =
+            // missing shader): we reuse the flat world's proven vertex-colour URP material.
+            if (materialRegistry == null || terrainMaterial == null)
+            {
+                var flat = FindAnyObjectByType<VoxelEngine.Core.VoxelWorld>();
+                if (flat != null)
+                {
+                    if (materialRegistry == null) materialRegistry = flat.materialRegistry;
+                    if (terrainMaterial  == null) terrainMaterial  = flat.terrainMaterial;
+                }
+            }
 #if UNITY_EDITOR
-            var flat = FindAnyObjectByType<VoxelEngine.Core.VoxelWorld>();
-            if (materialRegistry == null && flat != null) materialRegistry = flat.materialRegistry;
-            if (terrainMaterial  == null && flat != null) terrainMaterial  = flat.terrainMaterial;
             if (materialRegistry == null)
                 materialRegistry = UnityEditor.AssetDatabase.LoadAssetAtPath<MaterialRegistry>("Assets/VoxelEngineAssets/MaterialRegistry.asset");
             if (terrainMaterial == null)

@@ -36,7 +36,8 @@ using VoxelEngine.Meshing;
 using VoxelEngine.Persistence;
 using VoxelEngine.Pooling;
 using VoxelEngine.Scattering;
-using VoxelEngine.WaterSim;
+// (VoxelEngine.WaterSim intentionally NOT imported — fluids are deferred to Phase 2.1 to avoid
+//  cross-contaminating the flat VoxelWorld's shared FluidManager singleton.)
 
 namespace VoxelEngine.Cosmos
 {
@@ -120,9 +121,11 @@ namespace VoxelEngine.Cosmos
             if (Instance != null && Instance != this) { Destroy(this); return; }
             Instance = this;
 
-            // Ensure the unified fluid sim exists (harmless if the flat VoxelWorld already did this).
-            VoxelEngine.WaterSim.FluidManager.EnsureInstance();
-            VoxelEngine.Fluids.FluidSimManager.EnsureInstance();
+            // NOTE: we deliberately do NOT call FluidManager.EnsureInstance() / FluidSimManager
+            // here. Those are GLOBAL singletons owned by the flat VoxelWorld; if the sphere also
+            // feeds them, sphere chunks (keyed by the same Vector3Int coord space) cross-contaminate
+            // the flat world's fluid sim and trigger job-safety violations. Fluids/water rendering
+            // for the sphere arrive in Phase 2.1 when the sphere becomes the sole world.
 
             if (materialRegistry == null) materialRegistry = Resources.Load<MaterialRegistry>("MaterialRegistry");
             // Robust fallback: if no MaterialRegistry is resolvable, create an empty one so the
@@ -376,19 +379,42 @@ namespace VoxelEngine.Cosmos
             _pendingMesh.Add(pending);
         }
 
+        // Reusable buffers so CompleteFinishedJobs can collect-then-process without re-entrant
+        // list mutation (FinalizeGen -> StitchBorders -> CompleteGenJobFor re-enters and would
+        // otherwise shrink _pendingGen faster than the backward loop's index decrements -> OOR).
+        private readonly List<PendingGen>  _completedGen  = new();
+        private readonly List<PendingMesh> _completedMesh = new();
+
         private void CompleteFinishedJobs()
         {
+            // Phase 1: collect ALL completed gen jobs into a buffer and remove them BEFORE
+            // finalizing any. This guarantees the backward scan never reads an index that a
+            // re-entrant FinalizeGen has already removed.
+            _completedGen.Clear();
             for (int i = _pendingGen.Count - 1; i >= 0; i--)
             {
-                var p = _pendingGen[i];
-                if (!p.handle.IsCompleted) continue;
-                _pendingGen.RemoveAt(i);
-                FinalizeGen(p);
+                if (_pendingGen[i].handle.IsCompleted)
+                {
+                    _completedGen.Add(_pendingGen[i]);
+                    _pendingGen.RemoveAt(i);
+                }
             }
+            // Phase 2: finalize each. Re-entrant CompleteGenJobFor on neighbours is now safe.
+            foreach (var p in _completedGen) FinalizeGen(p);
+            _completedGen.Clear();
+
+            // Same pattern for mesh jobs (no re-entrancy expected, but consistent + safe).
+            _completedMesh.Clear();
             for (int i = _pendingMesh.Count - 1; i >= 0; i--)
             {
-                var p = _pendingMesh[i];
-                if (!p.handle.IsCompleted) continue;
+                if (_pendingMesh[i].handle.IsCompleted)
+                {
+                    _completedMesh.Add(_pendingMesh[i]);
+                    _pendingMesh.RemoveAt(i);
+                }
+            }
+            foreach (var p in _completedMesh)
+            {
                 p.handle.Complete();
                 var mesh = p.chunk.mesh; mesh.Clear();
                 Mesh.ApplyAndDisposeWritableMeshData(p.meshDataArray, mesh,
@@ -398,8 +424,8 @@ namespace VoxelEngine.Cosmos
                 if (generateColliders && p.counts[1] > 0) p.chunk.meshCollider.sharedMesh = mesh;
                 else if (p.counts[1] == 0) p.chunk.meshCollider.sharedMesh = null;
                 DisposePendingMesh(p, complete: false);
-                _pendingMesh.RemoveAt(i);
             }
+            _completedMesh.Clear();
         }
 
         private void FinalizeGen(PendingGen p)
@@ -410,14 +436,10 @@ namespace VoxelEngine.Cosmos
             p.chunk.isScattered = false;
             StitchBordersWithNeighbours(p.chunk);
 
-            // Wake fluid sim for chunks containing water.
-            bool hw = false;
-            const int WS = VoxelConstants.CHUNK_SIZE;
-            for (int wz = 0; wz < WS && !hw; wz++)
-            for (int wy = 0; wy < WS && !hw; wy++)
-            for (int wx = 0; wx < WS && !hw; wx++)
-                if (p.chunk.GetVoxelLocal(wx, wy, wz).waterLevel > 0) hw = true;
-            if (hw) { WaterSim.FluidManager.Instance?.MarkActive(p.chunk.coord); WaterSim.WaterMeshBuilder.Schedule(p.chunk); }
+            // Fluids/water rendering are deferred to Phase 2.1 (they require a world-exclusive
+            // FluidManager — sharing it with the flat VoxelWorld cross-contaminates both worlds).
+            // Water voxels are still GENERATED (SphereChunkGenJob fills WaterLiquid); they simply
+            // aren't simulated/rendered as fluid surfaces yet. The terrain mesh renders fine.
 
             if (!_meshQueue.Contains(p.chunk)) _meshQueue.Enqueue(p.chunk);
         }
@@ -597,9 +619,7 @@ namespace VoxelEngine.Cosmos
             c.SetVoxelLocal(lx, ly, lz, v);
             c.isModified = true;
 
-            WaterSim.FluidManager.Instance?.MarkActive(chunkCoord);
-            WaterSim.WaterMeshBuilder.Schedule(c);
-
+            // (Fluid wake deferred to Phase 2.1 — see note in FinalizeGen.)
             if (!remesh) return;
             EnqueueRemesh(c);
             if (lx == 0)     EnqueueRemeshNeighbour(chunkCoord + new Vector3Int(-1, 0, 0));
