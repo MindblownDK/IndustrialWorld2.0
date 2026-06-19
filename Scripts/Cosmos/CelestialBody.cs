@@ -136,7 +136,14 @@ namespace VoxelEngine.Cosmos
                 // Exclude biomes whose temperature window is incompatible with the body's climate.
                 if (temperature < -5f && def.minTemperature > 0.55f) continue;   // cold body, hot biome
                 if (temperature > 35f && def.maxTemperature < 0.45f) continue;   // hot body, cold biome
-                list.Add(BiomeData.FromDefinition(def));
+                var data = BiomeData.FromDefinition(def);
+                // PHASE 3: Runtime surface-material remap for realism. Biome assets were authored
+                // with Clay (brown, id=3) as their grass-equivalent — that makes the terrain look
+                // barren/ugly. Here we remap based on biome IDENTITY (name) so grass biomes ALWAYS
+                // get green Grass, regardless of what the asset says. No dependency on the
+                // normalize tool.
+                RemapSurfaceForRealism(ref data, def.biomeName);
+                list.Add(data);
             }
             if (list.Count == 0)
             {
@@ -147,16 +154,73 @@ namespace VoxelEngine.Cosmos
                     humidRange = new Unity.Mathematics.float2(0, 1),
                     priority = 0,
                     heightOffset = 0, heightAmplitude = 12, heightFrequency = 0.02f, ridgedness = 0,
-                    surfaceMat = (byte)Materials.MaterialId.Clay, surfaceDepth = 1,
+                    surfaceMat = (byte)Materials.MaterialId.Grass, surfaceDepth = 1,
                     subsurfaceMat = (byte)Materials.MaterialId.Clay, subsurfaceDepth = 4,
                     allowBeach = 1, isOceanic = 0,
                 });
             }
-            return list.ToArray();
+            var result = list.ToArray();
+            // Diagnostic: log what biomes + surface materials this body will use.
+            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+            sb.Append("[CelestialBody] Biomes for '");
+            sb.Append(DisplayName);
+            sb.Append("' (");
+            sb.Append(result.Length);
+            sb.Append("): ");
+            for (int i = 0; i < result.Length; i++)
+            {
+                if (i > 0) sb.Append(", ");
+                sb.Append(result[i].surfaceMat);
+                sb.Append("(mat)");
+            }
+            Debug.Log(sb.ToString());
+            return result;
         }
 
         /// <summary>Prebuilt ore layers for this body (common + rare + specials).</summary>
         public OreLayer[] BuildOreLayers()
             => settings != null ? settings.BuildOreLayers().ToArray() : System.Array.Empty<OreLayer>();
+
+        /// <summary>
+        /// Phase 3: remap biome surface materials by IDENTITY so the planet looks realistic.
+        /// Grass biomes (Plains/Forest/Steppes) get green Grass, Desert gets Sand, Tundra gets
+        /// Clay (frozen dirt). Runs at BUILD TIME so it works regardless of what the .asset says.
+        /// </summary>
+        private static void RemapSurfaceForRealism(ref BiomeData data, string biomeName)
+        {
+            if (string.IsNullOrEmpty(biomeName)) return;
+            string n = biomeName.ToLowerInvariant();
+
+            if (n.Contains("plains") || n.Contains("forest") || n.Contains("steppe") || n.Contains("meadow") || n.Contains("grass"))
+            {
+                data.surfaceMat = (byte)Materials.MaterialId.Grass;
+                data.subsurfaceMat = (byte)Materials.MaterialId.Clay;
+            }
+            else if (n.Contains("desert") || n.Contains("wasteland") || n.Contains("dune"))
+            {
+                data.surfaceMat = (byte)Materials.MaterialId.Sand;
+                data.subsurfaceMat = (byte)Materials.MaterialId.Sand;
+            }
+            else if (n.Contains("tundra") || n.Contains("taiga"))
+            {
+                data.surfaceMat = (byte)Materials.MaterialId.Clay;
+                data.subsurfaceMat = (byte)Materials.MaterialId.Clay;
+            }
+            else if (n.Contains("mountain") || n.Contains("peak"))
+            {
+                data.surfaceMat = (byte)Materials.MaterialId.Stone;
+                data.subsurfaceMat = (byte)Materials.MaterialId.Stone;
+            }
+            else if (n.Contains("snow") || n.Contains("ice"))
+            {
+                data.surfaceMat = (byte)Materials.MaterialId.Ice;
+                data.subsurfaceMat = (byte)Materials.MaterialId.Stone;
+            }
+            else if (n.Contains("beach") || n.Contains("ocean") || n.Contains("sea") || n.Contains("coast"))
+            {
+                data.surfaceMat = (byte)Materials.MaterialId.Sand;
+                data.subsurfaceMat = (byte)Materials.MaterialId.Sand;
+            }
+        }
     }
 }
