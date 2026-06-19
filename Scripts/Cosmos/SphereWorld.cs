@@ -300,7 +300,7 @@ namespace VoxelEngine.Cosmos
                 if (_storage != null && _storage.TryLoadChunk(chunk.coord, chunk))
                 {
                     chunk.isGenerated = true; chunk.isModified = false; chunk.isScattered = false;
-                    StitchBordersWithNeighbours(chunk);
+                    // No stitching — save data includes the full padded array.
                     _meshQueue.Enqueue(chunk);
                     continue;
                 }
@@ -442,12 +442,15 @@ namespace VoxelEngine.Cosmos
             p.chunk.isGenerated = true;
             p.chunk.genCompletedTime = Time.time;
             p.chunk.isScattered = false;
-            StitchBordersWithNeighbours(p.chunk);
 
-            // Fluids/water rendering are deferred to Phase 2.1 (they require a world-exclusive
-            // FluidManager — sharing it with the flat VoxelWorld cross-contaminates both worlds).
-            // Water voxels are still GENERATED (SphereChunkGenJob fills WaterLiquid); they simply
-            // aren't simulated/rendered as fluid surfaces yet. The terrain mesh renders fine.
+            // NO StitchBordersWithNeighbours here. The SphereChunkGenJob fills the ENTIRE padded
+            // voxel array (including the +1 border on all 6 sides) by evaluating the continuous
+            // density field at each voxel's true world position. Since density is a pure function
+            // of position, every border voxel is already correct — stitching would be redundant.
+            // (The flat VoxelWorld stitched because SetVoxelWorld edits needed to mirror into
+            //  neighbours; that's a Phase 2.1 task for the sphere, handled separately.)
+            // Removing the stitch call also eliminates the re-entrancy crash:
+            //   FinalizeGen → StitchBorders → CompleteGenJobFor(neighbour) → FinalizeGen → ...
 
             if (!_meshQueue.Contains(p.chunk)) _meshQueue.Enqueue(p.chunk);
         }
@@ -488,7 +491,16 @@ namespace VoxelEngine.Cosmos
             return Resources.Load<BiomeRegistry>("BiomeRegistry");
         }
 
-        // ---- Border stitching (identical logic to VoxelWorld — cartesian grid) ----
+        /// <summary>True if this chunk still has an in-flight SphereChunkGenJob writing its voxels.</summary>
+        private bool IsGenJobPending(Chunk chunk)
+        {
+            if (chunk == null) return false;
+            for (int i = 0; i < _pendingGen.Count; i++)
+                if (_pendingGen[i].chunk == chunk) return true;
+            return false;
+        }
+
+        // ---- Border stitching (used only for player edits in Phase 2.1; gen fills borders) ----
         private void StitchBordersWithNeighbours(Chunk c)
         {
             const int S = VoxelConstants.CHUNK_SIZE;
@@ -502,10 +514,11 @@ namespace VoxelEngine.Cosmos
                 if (axis == 0) off.x = sign; else if (axis == 1) off.y = sign; else off.z = sign;
                 if (!_chunks.TryGetValue(c.coord + off, out var n) || !n.isGenerated) continue;
 
-                // CRITICAL: complete BOTH the gen (writes voxels) AND mesh (reads voxels)
-                // jobs on each side before touching either voxel buffer — otherwise the
-                // Job System throws a read/write dependency violation. (Matches VoxelWorld.)
-                CompleteGenJobFor(c); CompleteGenJobFor(n);
+                // NON-REENTRANT border sync (Phase 2.1 — player edits). Skip neighbours whose
+                // gen job is still pending; they will sync their own borders when they finalize.
+                // Force-completing them here would re-enter FinalizeGen -> StitchBorders -> crash.
+                if (IsGenJobPending(n)) continue;
+                // Complete any mesh jobs that READ these voxels before we WRITE the border.
                 CompleteMeshJobFor(c); CompleteMeshJobFor(n);
                 if (axis == 0)
                 {
@@ -544,7 +557,14 @@ namespace VoxelEngine.Cosmos
                 if (_pendingGen[i].chunk != chunk) continue;
                 var p = _pendingGen[i];
                 _pendingGen.RemoveAt(i);
-                FinalizeGen(p);
+                // Non-recursive: just complete + mark. Do NOT call FinalizeGen (which would
+                // re-enter StitchBorders → CompleteGenJobFor → crash). The gen job already filled
+                // the padded borders correctly, so the chunk is immediately safe to mesh/read.
+                p.handle.Complete();
+                p.chunk.isGenerated = true;
+                p.chunk.genCompletedTime = Time.time;
+                p.chunk.isScattered = false;
+                if (!_meshQueue.Contains(p.chunk)) _meshQueue.Enqueue(p.chunk);
                 return;
             }
         }
