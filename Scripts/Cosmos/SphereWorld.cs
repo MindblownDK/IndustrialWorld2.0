@@ -36,8 +36,7 @@ using VoxelEngine.Meshing;
 using VoxelEngine.Persistence;
 using VoxelEngine.Pooling;
 using VoxelEngine.Scattering;
-// (VoxelEngine.WaterSim intentionally NOT imported — fluids are deferred to Phase 2.1 to avoid
-//  cross-contaminating the flat VoxelWorld's shared FluidManager singleton.)
+using VoxelEngine.WaterSim;
 
 namespace VoxelEngine.Cosmos
 {
@@ -130,11 +129,11 @@ namespace VoxelEngine.Cosmos
             if (Instance != null && Instance != this) { Destroy(this); return; }
             Instance = this;
 
-            // NOTE: we deliberately do NOT call FluidManager.EnsureInstance() / FluidSimManager
-            // here. Those are GLOBAL singletons owned by the flat VoxelWorld; if the sphere also
-            // feeds them, sphere chunks (keyed by the same Vector3Int coord space) cross-contaminate
-            // the flat world's fluid sim and trigger job-safety violations. Fluids/water rendering
-            // for the sphere arrive in Phase 2.1 when the sphere becomes the sole world.
+            // Ensure the fluid sim exists. The flat VoxelWorld is disabled by CosmosBootstrap
+            // when the sphere is active, so there's no cross-contamination — the sphere owns the
+            // FluidManager exclusively now.
+            VoxelEngine.WaterSim.FluidManager.EnsureInstance();
+            VoxelEngine.Fluids.FluidSimManager.EnsureInstance();
 
             if (materialRegistry == null) materialRegistry = Resources.Load<MaterialRegistry>("MaterialRegistry");
             // Robust fallback: if no MaterialRegistry is resolvable, create an empty one so the
@@ -487,6 +486,19 @@ namespace VoxelEngine.Cosmos
             // Removing the stitch call also eliminates the re-entrancy crash:
             //   FinalizeGen → StitchBorders → CompleteGenJobFor(neighbour) → FinalizeGen → ...
 
+            // Wake fluid sim for chunks containing water.
+            bool hw = false;
+            const int WS = VoxelConstants.CHUNK_SIZE;
+            for (int wz = 0; wz < WS && !hw; wz++)
+            for (int wy = 0; wy < WS && !hw; wy++)
+            for (int wx = 0; wx < WS && !hw; wx++)
+                if (p.chunk.GetVoxelLocal(wx, wy, wz).waterLevel > 0) hw = true;
+            if (hw)
+            {
+                VoxelEngine.WaterSim.FluidManager.Instance?.MarkActive(p.chunk.coord);
+                VoxelEngine.WaterSim.WaterMeshBuilder.Schedule(p.chunk);
+            }
+
             if (!_meshQueue.Contains(p.chunk)) _meshQueue.Enqueue(p.chunk);
         }
 
@@ -682,7 +694,10 @@ namespace VoxelEngine.Cosmos
             c.SetVoxelLocal(lx, ly, lz, v);
             c.isModified = true;
 
-            // (Fluid wake deferred to Phase 2.1 — see note in FinalizeGen.)
+            // Wake fluid sim (the sphere owns it now that the flat world is disabled).
+            VoxelEngine.WaterSim.FluidManager.Instance?.MarkActive(chunkCoord);
+            VoxelEngine.WaterSim.WaterMeshBuilder.Schedule(c);
+
             if (!remesh) return;
             EnqueueRemesh(c);
             if (lx == 0)     EnqueueRemeshNeighbour(chunkCoord + new Vector3Int(-1, 0, 0));

@@ -71,8 +71,11 @@ namespace VoxelEngine.Player
                 {
                     // Spawn above the body's "north pole" (body-local +Y) so the player starts
                     // standing upright on the planet surface.
+                    // Spawn just above the surface (within streaming range — not 200m up).
+                    // Surface is at body.SurfaceRadius; we add a small buffer so the player
+                    // starts slightly above ground and the surface chunks are immediately in range.
                     Vector3 surfDir = body.transform.up;
-                    target = body.transform.position + surfDir * (body.SurfaceRadius + 200f);
+                    target = body.transform.position + surfDir * (body.SurfaceRadius + 20f);
                     Debug.Log("[PlayerSpawner] Fresh SPHERE world — spawning on " + body.DisplayName +
                               " surface above north pole.");
                 }
@@ -86,7 +89,13 @@ namespace VoxelEngine.Player
             // Park the CharacterController-disabled player at the (X,Z) of target with a HIGH Y.
             // This forces VoxelWorld's streamer to start loading chunks around the spawn site.
             DisableController();
-            SetPosition(new Vector3(target.x, Mathf.Max(target.y, 250f), target.z));
+            // On a sphere, DON'T force Y to 250 — that would park the player far above the
+            // body's surface (which could be at Y=700+). Use the target Y directly so chunks
+            // around the surface start streaming immediately.
+            float parkY = VoxelEngine.Cosmos.GravityProvider.ActiveBody != null
+                          ? target.y
+                          : Mathf.Max(target.y, 250f);
+            SetPosition(new Vector3(target.x, parkY, target.z));
 
             // Now wait for the chunk column at (target.x, target.z) to be generated AND meshed.
             yield return WaitForChunkAt(VoxelCoordOf(target), maxWaitSeconds);

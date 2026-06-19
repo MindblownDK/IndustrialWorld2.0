@@ -94,7 +94,7 @@ namespace VoxelEngine.Cosmos
             world.terrainMaterial = terrainMaterial;
             world.viewer = viewer;
             world.viewDistance = viewDistance;
-            world.enableScatter = false; // Phase 2.1 re-enables scatter once the sphere is sole world.
+            world.enableScatter = true;  // Safe now — flat world is disabled, sphere is sole world.
             world.biomeRegistry = biomeRegistry;
             world.worldName = session != null ? session.worldName + "_sphere" : "SphereTest";
 
@@ -113,6 +113,18 @@ namespace VoxelEngine.Cosmos
             GravityProvider.ActiveBody = body;
             // Route mining/building tools to THIS world (not the flat VoxelWorld).
             VoxelEngine.Core.ActiveWorld.Current = world;
+
+            // CRITICAL: disable the flat VoxelWorld so ONLY the sphere streams chunks + uses the
+            // shared FluidManager/WaterMeshBuilder. Running BOTH worlds simultaneously causes them
+            // to fight over the same singletons and generate chunks at each other's positions →
+            // job-safety violations + scatter crashes. We disable the component (not destroy it)
+            // so its inspector-assigned assets stay available for the sphere to borrow.
+            var flatWorld = FindAnyObjectByType<VoxelEngine.Core.VoxelWorld>();
+            if (flatWorld != null && flatWorld != this)
+            {
+                flatWorld.enabled = false;
+                Debug.Log("[CosmosBootstrap] Flat VoxelWorld disabled — sphere is now the sole world.");
+            }
 
             // ── Activate LAST: now every Awake/OnEnable sees a fully-wired component graph. ──
             _bodyGO.SetActive(true);
