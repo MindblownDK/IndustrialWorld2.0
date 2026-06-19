@@ -92,7 +92,11 @@ namespace VoxelEngine.Scattering
                 if (worldY <= world.SeaLevel)
                     continue;
 
-                float2 climate = BiomePicker.SampleClimate(seed, worldX, worldZ);
+                // Climate sampling: use the world position as a 3D direction (sphere-correct).
+                // The flat-world BiomePicker.SampleClimate uses 2D snoise; on a sphere we need
+                // 3D direction sampling so trees spawn in the RIGHT biome (not random).
+                float3 dir = math.normalizesafe(new float3(worldX, worldY, worldZ), new float3(0, 1, 0));
+                float2 climate = SphereClimateSample(seed, dir);
                 BiomeDefinition biome = PickBiome(registry, climate);
                 if (biome == null || biome.scatter == null || biome.scatter.Length == 0) continue;
 
@@ -179,4 +183,23 @@ namespace VoxelEngine.Scattering
             return best;
         }
     }
+
+        /// <summary>
+        /// 3D direction-based climate sampling (mirrors SphereDensity.SampleClimate so scatter
+        /// picks the same biome the terrain generator used). Uses latitude-based temperature
+        /// + noise blend so scatter matches the real biome distribution.
+        /// </summary>
+        private static float2 SphereClimateSample(int seed, float3 dir)
+        {
+            float3 p = dir;
+            float tNoise = noise.snoise(p * 1.7f + (seed * 0.073f + 47.3f)) * 0.5f + 0.5f;
+            float hNoise = noise.snoise(p * 2.1f + (seed * 0.149f + 91.7f)) * 0.5f + 0.5f;
+            float lat = math.abs(dir.y);
+            float tLat = math.saturate(1f - lat * 1.25f);
+            float hLat = math.cos(lat * 3.0f) * 0.3f + 0.55f;
+            float t = math.lerp(tNoise, tLat, 0.55f);
+            float h = math.lerp(hNoise, math.saturate(hLat), 0.385f);
+            return new float2(t, h);
+        }
+
 }

@@ -164,7 +164,7 @@ namespace VoxelEngine.Meshing
                 float gz = (vd001 + vd101 + vd011 + vd111) - (vd000 + vd100 + vd010 + vd110);
                 float3 nrm = -math.normalizesafe(new float3(gx, gy, gz), new float3(0, 1, 0));
                 normalScratch[vertexCount] = nrm;
-                colorScratch[vertexCount]  = materialColors[dominantMat];
+                colorScratch[vertexCount]  = ApplyTerrainShading(materialColors[dominantMat], local, nrm, cx, cy, cz);
 
                 cellVertexIndex[CellId(cx, cy, cz)] = vertexCount;
                 bbMin = math.min(bbMin, local);
@@ -280,6 +280,62 @@ namespace VoxelEngine.Meshing
         {
             const int SP1 = VoxelConstants.CHUNK_SIZE + 1;
             return x + y * SP1 + z * SP1 * SP1;
+        }
+
+        /// <summary>
+        /// Phase 4: terrain shading. Adds three realism layers to the flat material color:
+        ///   1. VERTEX AO — darken vertices in concave pockets (surrounded by solid) for depth.
+        ///   2. NOISE VARIATION — subtle per-vertex color jitter so surfaces aren't flat solid.
+        ///   3. SLOPE DARKENING — steep faces slightly darker than flat (enhances relief).
+        /// All done with cheap math — no texture sampling, works on any pipeline.
+        /// </summary>
+        private Color32 ApplyTerrainShading(Color32 baseColor, float3 localPos, float3 normal, int cx, int cy, int cz)
+        {
+            float r = baseColor.r / 255f;
+            float g = baseColor.g / 255f;
+            float b = baseColor.b / 255f;
+
+            // 1. Noise variation: hash the vertex position for a stable per-vertex jitter.
+            // Adds organic speckle so terrain doesn't look like a flat painted surface.
+            float h = noise.snoise(localPos * 0.7f) * 0.5f + 0.5f;  // 0..1
+            float jitter = (h - 0.5f) * 0.12f;  // ±6% brightness
+            r = math.saturate(r + jitter);
+            g = math.saturate(g + jitter);
+            b = math.saturate(b + jitter);
+
+            // 2. Slope darkening: flat terrain (normal pointing up) is brighter; steep = darker.
+            // This makes hills and mountains read as 3D even without textures.
+            float upDot = math.abs(normal.y);  // 1 = flat, 0 = vertical
+            float slopeShade = math.lerp(0.75f, 1.0f, math.saturate(upDot));
+            r *= slopeShade;
+            g *= slopeShade;
+            b *= slopeShade;
+
+            // 3. Vertex AO: estimate occlusion by sampling neighbor cell densities.
+            // Vertices surrounded by more solid voxels = more occluded = darker.
+            int solidCount = 0;
+            int checked_ = 0;
+            for (int dz = -1; dz <= 1; dz++)
+            for (int dy = -1; dy <= 1; dy++)
+            for (int dx = -1; dx <= 1; dx++)
+            {
+                if (dx == 0 && dy == 0 && dz == 0) continue;
+                int nx = cx + dx, ny = cy + dy, nz = cz + dz;
+                if (nx < 0 || ny < 0 || nz < 0 || nx > VoxelConstants.CHUNK_SIZE || ny > VoxelConstants.CHUNK_SIZE || nz > VoxelConstants.CHUNK_SIZE) continue;
+                var nv = voxels[Idx(nx, ny, nz)];
+                if (IsTerrainSolid(nv)) solidCount++;
+                checked_++;
+            }
+            float ao = checked_ > 0 ? math.lerp(1.0f, 0.65f, (float)solidCount / checked_) : 1f;
+            r *= ao;
+            g *= ao;
+            b *= ao;
+
+            return new Color32(
+                (byte)math.clamp(r * 255f, 0, 255),
+                (byte)math.clamp(g * 255f, 0, 255),
+                (byte)math.clamp(b * 255f, 0, 255),
+                baseColor.a);
         }
 
         private void AddEdge(int da, int db,

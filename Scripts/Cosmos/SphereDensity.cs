@@ -48,14 +48,23 @@ namespace VoxelEngine.Cosmos
         {
             float3 p = dir * 1f;
             float tNoise = noise.snoise(p * TempScale   + (seed * 0.073f + TempOffset))  * 0.5f + 0.5f;
-            float h      = noise.snoise(p * HumidScale  + (seed * 0.149f + HumidOffset)) * 0.5f + 0.5f;
+            float hNoise = noise.snoise(p * HumidScale  + (seed * 0.149f + HumidOffset)) * 0.5f + 0.5f;
 
-            // Latitude: |dir.y| = 0 at equator (hot), 1 at poles (cold). Convert to 0..1 temperature.
+            // Latitude: |dir.y| = 0 at equator (hot), 1 at poles (cold).
             float lat = math.abs(dir.y);                          // 0 = equator, 1 = pole
             float tLat = math.saturate(1f - lat * 1.25f);         // equator ~1, poles ~0
 
+            // Humidity latitude pattern (like Earth):
+            //   equator (lat 0)   = wet (tropical rainforest)
+            //   ~30° (lat 0.5)    = dry (desert belts)
+            //   ~50° (lat 0.75)   = moderate-wet (temperate forest)
+            //   poles (lat 1)     = dry (tundra)
+            float hLat = math.cos(lat * 3.0f) * 0.3f + 0.55f;     // oscillating: wet-dry-wet-dry
+            hLat = math.saturate(hLat);
+
             // Blend latitude climate with regional noise.
             float t = math.lerp(tNoise, tLat, LatitudeBlend);
+            float h = math.lerp(hNoise, hLat, LatitudeBlend * 0.7f);
 
             return new float2(t, h);
         }

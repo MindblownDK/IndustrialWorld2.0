@@ -523,7 +523,7 @@ namespace VoxelEngine.WaterSim
         /// </summary>
         private static bool IsTerrainInAdjacentChunk(Chunk c, int dx, int dy, int dz)
         {
-            var world = VoxelWorld.Instance;
+            var world = VoxelEngine.Core.ActiveWorld.Current;
             if (world == null) return false;
 
             const int S = VoxelConstants.CHUNK_SIZE;

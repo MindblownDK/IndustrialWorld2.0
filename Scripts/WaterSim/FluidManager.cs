@@ -58,7 +58,7 @@ namespace VoxelEngine.WaterSim
             if (_timer < interval) return;
             _timer -= interval;
 
-            var world = VoxelWorld.Instance;
+            var world = VoxelEngine.Core.ActiveWorld.Current;
             if (world == null) return;
 
             int budget = maxChunksPerTick;
@@ -118,12 +118,12 @@ namespace VoxelEngine.WaterSim
             foreach (var c in toRemove) _activeChunks.Remove(c);
         }
 
-        private void WakeNeighbour(VoxelWorld world, Vector3Int coord)
+        private void WakeNeighbour(VoxelEngine.Core.IVoxelWorld world, Vector3Int coord)
         {
             if (world.TryGetChunk(coord, out var ch) && ch.isGenerated) MarkActive(coord);
         }
 
-        private void FlushPaddingFlowsToNeighbours(VoxelWorld world, Chunk chunk)
+        private void FlushPaddingFlowsToNeighbours(VoxelEngine.Core.IVoxelWorld world, Chunk chunk)
         {
             FlushFace(world, chunk, new Vector3Int( 1, 0, 0));
             FlushFace(world, chunk, new Vector3Int(-1, 0, 0));
@@ -133,7 +133,7 @@ namespace VoxelEngine.WaterSim
             FlushFace(world, chunk, new Vector3Int( 0, 0,-1));
         }
 
-        private void FlushFace(VoxelWorld world, Chunk source, Vector3Int dir)
+        private void FlushFace(VoxelEngine.Core.IVoxelWorld world, Chunk source, Vector3Int dir)
         {
             const int S = VoxelConstants.CHUNK_SIZE;
             var nCoord = source.coord + dir;
@@ -186,7 +186,7 @@ namespace VoxelEngine.WaterSim
 
         public void PlaceLiquid(Vector3Int worldVoxel, LiquidType liquid, byte level = 255)
         {
-            var world = VoxelWorld.Instance;
+            var world = VoxelEngine.Core.ActiveWorld.Current;
             if (world == null || !TryGetChunkAndLocal(world, worldVoxel, out var coord, out var ch, out int lx, out int ly, out int lz)) return;
 
             world.CompleteGenJobForChunk(ch);
@@ -208,7 +208,7 @@ namespace VoxelEngine.WaterSim
         /// <summary>Drain up to maxLevel fluid units from one voxel. Returns drained byte-volume.</summary>
         public byte DrainLiquid(Vector3Int worldVoxel, LiquidType liquid, byte maxLevel = 255)
         {
-            var world = VoxelWorld.Instance;
+            var world = VoxelEngine.Core.ActiveWorld.Current;
             if (world == null || !TryGetChunkAndLocal(world, worldVoxel, out var coord, out var ch, out int lx, out int ly, out int lz)) return 0;
 
             world.CompleteGenJobForChunk(ch);
@@ -231,7 +231,7 @@ namespace VoxelEngine.WaterSim
 
         public byte GetLiquidLevel(Vector3Int worldVoxel, LiquidType liquid)
         {
-            var world = VoxelWorld.Instance;
+            var world = VoxelEngine.Core.ActiveWorld.Current;
             if (world == null) return 0;
             var v = world.GetVoxelWorld(worldVoxel);
             return FluidMaterialUtility.Matches(v, liquid) ? v.waterLevel : (byte)0;
@@ -239,7 +239,7 @@ namespace VoxelEngine.WaterSim
 
         public LiquidType GetLiquidType(Vector3Int worldVoxel)
         {
-            var world = VoxelWorld.Instance;
+            var world = VoxelEngine.Core.ActiveWorld.Current;
             if (world == null) return LiquidType.Water;
             return FluidMaterialUtility.LiquidFromVoxel(world.GetVoxelWorld(worldVoxel));
         }
@@ -252,7 +252,7 @@ namespace VoxelEngine.WaterSim
         public (int voxels, float litres, bool isInfinite) ScanPool(
             Vector3Int seed, LiquidType liquid, float reachRadius, int infiniteThreshold, int maxScan)
         {
-            var world = VoxelWorld.Instance;
+            var world = VoxelEngine.Core.ActiveWorld.Current;
             if (world == null) return (0, 0, false);
             if (!FluidMaterialUtility.Matches(world.GetVoxelWorld(seed), liquid)) return (0, 0, false);
 
@@ -289,7 +289,7 @@ namespace VoxelEngine.WaterSim
             return (count, litres, infinite);
         }
 
-        private static bool TryGetChunkAndLocal(VoxelWorld world, Vector3Int worldVoxel, out Vector3Int coord, out Chunk ch, out int lx, out int ly, out int lz)
+        private static bool TryGetChunkAndLocal(VoxelEngine.Core.IVoxelWorld world, Vector3Int worldVoxel, out Vector3Int coord, out Chunk ch, out int lx, out int ly, out int lz)
         {
             const int S = VoxelConstants.CHUNK_SIZE;
             coord = new Vector3Int(

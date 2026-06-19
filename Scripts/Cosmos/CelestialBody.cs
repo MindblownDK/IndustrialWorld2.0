@@ -195,10 +195,17 @@ namespace VoxelEngine.Cosmos
             if (string.IsNullOrEmpty(biomeName)) return;
             string n = biomeName.ToLowerInvariant();
 
-            if (n.Contains("plains") || n.Contains("forest") || n.Contains("steppe") || n.Contains("meadow") || n.Contains("grass"))
+            if (n.Contains("forest") || n.Contains("meadow"))
             {
                 data.surfaceMat = (byte)Materials.MaterialId.Grass;
                 data.subsurfaceMat = (byte)Materials.MaterialId.Clay;
+                data.priority = 3;  // boost so Forest wins in humid temperate zones (over Plains)
+            }
+            else if (n.Contains("plains") || n.Contains("steppe") || n.Contains("grass"))
+            {
+                data.surfaceMat = (byte)Materials.MaterialId.Grass;
+                data.subsurfaceMat = (byte)Materials.MaterialId.Clay;
+                data.priority = 1;
             }
             else if (n.Contains("desert") || n.Contains("wasteland") || n.Contains("dune"))
             {

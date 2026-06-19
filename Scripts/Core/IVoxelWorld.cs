@@ -22,6 +22,10 @@ namespace VoxelEngine.Core
         Vector3Int WorldToChunk(Vector3 worldPos);
         /// <summary>Force a chunk to rebuild its mesh (used by editing tools after voxel writes).</summary>
         void ScheduleMeshJob(Chunk chunk);
+        /// <summary>Complete any in-flight gen job for this chunk (fluid sim safety).</summary>
+        void CompleteGenJobForChunk(Chunk chunk);
+        /// <summary>Complete any in-flight mesh job for this chunk (fluid sim safety).</summary>
+        void CompleteMeshJobForChunk(Chunk chunk);
 
         /// <summary>Material registry (colors, hardness, mining tier) for this world.</summary>
         MaterialRegistry MaterialRegistry { get; }
