@@ -71,6 +71,9 @@ namespace VoxelEngine.Player
         // ===== runtime state =====
         private CharacterController _cc;
         private float _yaw, _pitch;
+        // Full orientation quaternion used ONLY in fly mode (6DOF: yaw/pitch/roll accumulate).
+        // Walk mode ignores this and uses (_yaw, radial-up) as before.
+        private Quaternion _flyRotation = Quaternion.identity;
         private Vector3 _velocity;          // includes Y in walk mode; in fly mode XYZ
         private bool   _grounded;
         private float  _lastGroundedTime;
@@ -197,6 +200,28 @@ namespace VoxelEngine.Player
             Vector2 d = GetMouseDelta();
             float sens = GameSettings.MouseSensitivity;
             float invert = GameSettings.InvertY ? -1f : 1f;
+
+            if (GameSettings.FlyMode)
+            {
+                // ── 6DOF flight look (Space-Engineers style) ──────────────
+                // Mouse X = yaw about LOCAL up, Mouse Y = pitch about LOCAL right.
+                float yaw   = d.x * sens;
+                float pitch = -d.y * sens * invert;
+                // Q / E = roll about LOCAL forward (the classic jetpack roll).
+                float roll  = 0f;
+                if (GameSettings.IsHeld(InputAction.RollLeft))  roll += 1f;
+                if (GameSettings.IsHeld(InputAction.RollRight)) roll -= 1f;
+                roll *= sens * 1.5f; // a touch snappier than look so it feels deliberate
+                // Apply around LOCAL axes of the current orientation → no gimbal weirdness.
+                _flyRotation = _flyRotation * Quaternion.Euler(pitch, yaw, roll);
+                transform.rotation        = _flyRotation;
+                // Body now carries the full orientation (pitch + roll too), so the camera pivot
+                // stays at identity — no double-applying of pitch.
+                cameraPivot.localRotation = Quaternion.identity;
+                return;
+            }
+
+            // ── Walk-mode look (unchanged): yaw + radial reorientation, camera pitch ──
             _yaw   += d.x * sens;
             _pitch -= d.y * sens * invert;
             _pitch = Mathf.Clamp(_pitch, -89f, 89f);
@@ -217,7 +242,14 @@ namespace VoxelEngine.Player
                                || PlayerStats.Instance.HasFlightUnlocked
                                || Application.isEditor;
                 if (allowed)
+                {
+                    bool turningOn = !GameSettings.FlyMode;
                     GameSettings.FlyMode = !GameSettings.FlyMode;
+                    if (turningOn)
+                        _flyRotation = transform.rotation;           // start 6DOF from current pose (no snap)
+                    else
+                        _yaw = transform.rotation.eulerAngles.y;     // carry heading back into walk mode
+                }
                 else
                     Debug.Log("[Player] Flight is locked. Research it in the Research menu (Y).");
             }
@@ -408,17 +440,22 @@ namespace VoxelEngine.Player
         {
             float dt = Time.deltaTime;
             Vector2 wish = GetMoveInput();
-            Vector3 wishDir = (transform.right * wish.x + transform.forward * wish.y);
-            if (GameSettings.IsHeld(InputAction.Up))   wishDir += Vector3.up;
+
+            // 6DOF movement relative to the body's full orientation (includes pitch + roll).
+            //   WASD   = forward/left/back/right
+            //   Space  = up, LeftCtrl = down  (relative to where you're looking/rolled)
+            //   Q / E  = roll  (handled in the fly-look branch)
+            Vector3 wishDir = transform.right * wish.x + transform.forward * wish.y;
+            if (GameSettings.IsHeld(InputAction.Up)) wishDir += transform.up;
             // Suppress Ctrl-fly-down while holding a grid block so Ctrl+Scroll rotates
             // the block instead of sinking the player.
             if (GameSettings.IsHeld(InputAction.Down) && !VoxelEngine.GridSystem.GridBuilder.HoldingGridBlock)
-                wishDir -= Vector3.up;
+                wishDir -= transform.up;
 
             float spd = flySpeed * (GameSettings.IsHeld(InputAction.Sprint) ? flySprintMultiplier : 1f);
-            Vector3 wishVel = wishDir.normalized * spd;
+            Vector3 wishVel = wishDir.sqrMagnitude > 0.0001f ? wishDir.normalized * spd : Vector3.zero;
 
-            // Smooth (no gravity in fly mode).
+            // Inertial-dampener feel: smooth toward target, no gravity in fly mode.
             _velocity = Vector3.Lerp(_velocity, wishVel, 1f - Mathf.Exp(-12f * dt));
             _cc.Move(_velocity * dt);
         }

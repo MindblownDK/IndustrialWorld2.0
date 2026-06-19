@@ -19,6 +19,7 @@ namespace VoxelEngine.Settings
         Forward, Back, Left, Right, Up, Down,
         Sprint, Crouch, Jump,
         Mine, Build, Pause, ToggleFly,
+        RollLeft, RollRight,   // 6DOF flight roll (Q / E) — Space-Engineers style
         Inventory, Interact, BuildToggleGrid, BuildRotate, Research, BuildWheel, Map, DropItem,
         Hotbar1, Hotbar2, Hotbar3, Hotbar4, Hotbar5,
         Hotbar6, Hotbar7, Hotbar8, Hotbar9, Hotbar0,
@@ -49,7 +50,7 @@ namespace VoxelEngine.Settings
 
         // Bump this when default keybinds change to force a one-time migration
         // that fills in missing or invalid bindings on old saves.
-        private const int    CURRENT_VERSION = 9;
+        private const int    CURRENT_VERSION = 10;
 
         // ----- defaults -----
         public const float DEFAULT_FOV       = 75f;
@@ -130,6 +131,8 @@ namespace VoxelEngine.Settings
             InputAction.Build           => "Mouse1",
             InputAction.Pause           => "Escape",
             InputAction.ToggleFly       => "F",
+            InputAction.RollLeft        => "Q",
+            InputAction.RollRight       => "E",
             InputAction.Inventory       => "I",
             InputAction.Interact        => "E",
             InputAction.BuildToggleGrid => "G",

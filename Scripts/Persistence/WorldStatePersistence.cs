@@ -122,7 +122,10 @@ namespace VoxelEngine.Persistence
 
         private string WorldStatePath()
         {
-            string folder = Path.Combine(Application.persistentDataPath, "VoxelWorlds", Menu.WorldSession.Instance.worldName);
+            var session = Menu.WorldSession.Instance;
+            string worldName = !string.IsNullOrEmpty(session != null ? session.worldName : null)
+                ? session.worldName : "DefaultWorld";
+            string folder = Path.Combine(Application.persistentDataPath, "VoxelWorlds", worldName);
             Directory.CreateDirectory(folder);
             return Path.Combine(folder, "world_state.json");
         }

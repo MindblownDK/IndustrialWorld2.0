@@ -125,7 +125,21 @@ namespace VoxelEngine.Cosmos
             VoxelEngine.Fluids.FluidSimManager.EnsureInstance();
 
             if (materialRegistry == null) materialRegistry = Resources.Load<MaterialRegistry>("MaterialRegistry");
+            // Robust fallback: if no MaterialRegistry is resolvable, create an empty one so the
+            // world still renders (GetColor falls back to MaterialRegistry.DefaultColor).
+            if (materialRegistry == null)
+            {
+                Debug.LogWarning("[SphereWorld] No MaterialRegistry found — creating an empty fallback " +
+                                 "(colors use built-in defaults). Assign a MaterialRegistry for full fidelity.");
+                materialRegistry = ScriptableObject.CreateInstance<MaterialRegistry>();
+            }
             if (terrainMaterial == null)  terrainMaterial  = Resources.Load<Material>("Mat_Terrain");
+            if (terrainMaterial == null)
+            {
+                Debug.LogWarning("[SphereWorld] No terrain material found — creating a URP-Lit fallback.");
+                terrainMaterial = new Material(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"));
+                terrainMaterial.name = "Mat_Terrain_Fallback";
+            }
 
             // Recover the body if not assigned (search this GameObject + siblings).
             if (body == null) body = GetComponent<CelestialBody>();

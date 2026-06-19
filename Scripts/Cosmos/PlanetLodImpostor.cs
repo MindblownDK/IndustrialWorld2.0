@@ -60,7 +60,7 @@ namespace VoxelEngine.Cosmos
 
         private void Update()
         {
-            var body = GetComponent<CelestialBody>();
+            var body = GetComponentInParent<CelestialBody>();
             if (body == null) return;
 
             if (_biomes.IsCreated && (_lastResolution != resolution || _lastSeed != body.genParams.seed))
@@ -79,7 +79,7 @@ namespace VoxelEngine.Cosmos
 
         private void Rebuild()
         {
-            var body = GetComponent<CelestialBody>();
+            var body = GetComponentInParent<CelestialBody>();
             if (body == null) return;
             body.ApplySettings();
 

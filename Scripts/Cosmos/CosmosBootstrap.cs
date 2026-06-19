@@ -4,10 +4,11 @@
 // seed table. Add ONE GameObject with this component to the Game scene to get a live, minable,
 // radial-gravity planet you can fly to and walk on.
 //
-// Design choice for Phase 2: this builds the sphere at a configurable test position and does
-// NOT disable the existing flat VoxelWorld — so the proven flat game keeps running while you
-// validate the sphere (fly over to it; gravity reorients you onto its surface; the LOD sphere
-// shows the same continents from far away). Phase 2.1 promotes the sphere to the primary spawn.
+// CRITICAL INIT ORDER: Unity calls Awake()/OnEnable() the moment you AddComponent on an ACTIVE
+// GameObject — BEFORE the caller can assign any public field. That caused NPEs in SphereWorld
+// (materialRegistry null) and PlanetLodImpostor (body null). We defeat this by creating the
+// body hierarchy INACTIVE, wiring every field, then activating it last so Awake sees a fully
+// configured component graph.
 using UnityEngine;
 using VoxelEngine.Biomes;
 using VoxelEngine.Materials;
@@ -18,9 +19,9 @@ namespace VoxelEngine.Cosmos
     {
         [Tooltip("Planet template to spawn. LEAVE EMPTY to auto-use a built-in Earth body " +
                  "(gravity 1g, oxygen, grass, full ore catalogue). To customise, run " +
-                 "Tools ▸ Voxel Engine ▸ Author Earth Planet Template, which creates the correct " +
-                 "PlanetTemplate asset. NOTE: the old Planet_Earthlike.asset is a DIFFERENT type " +
-                 "(flat-world PlanetSettings) and won't fit this slot.")]
+                 "Tools ▸ Voxel Engine ▸ Author Earth Planet Template. NOTE: the old " +
+                 "Planet_Earthlike.asset is a DIFFERENT type (flat-world PlanetSettings) and " +
+                 "won't fit this slot.")]
         public PlanetTemplate planetTemplate;
 
         [Tooltip("Where to place the body's core in world space.")]
@@ -32,10 +33,10 @@ namespace VoxelEngine.Cosmos
         [Tooltip("Optional biome registry for accurate biomes + scatter.")]
         public BiomeRegistry biomeRegistry;
 
-        [Tooltip("Material registry (auto-loaded from Resources if null).")]
+        [Tooltip("Material registry (auto-resolved if null).")]
         public MaterialRegistry materialRegistry;
 
-        [Tooltip("Terrain material (auto-loaded from Resources if null).")]
+        [Tooltip("Terrain material (auto-resolved if null).")]
         public Material terrainMaterial;
 
         [Header("Tuning (overrides template for fast iteration)")]
@@ -46,13 +47,8 @@ namespace VoxelEngine.Cosmos
 
         private void Awake()
         {
-            // Resolve template. Priority: inspector-assigned → Resources → Editor asset →
-            // an in-memory default. The in-memory default is the KEY fix: it means you never
-            // have to hand-author an asset just to test the sphere — add the component and play.
             ResolvePlanetTemplate();
-
-            if (materialRegistry == null) materialRegistry = Resources.Load<MaterialRegistry>("MaterialRegistry");
-            if (terrainMaterial == null)  terrainMaterial  = Resources.Load<Material>("Mat_Terrain");
+            ResolveAssets();
             if (viewer == null)
             {
                 var pc = FindAnyObjectByType<VoxelEngine.Player.PlayerController>();
@@ -61,15 +57,18 @@ namespace VoxelEngine.Cosmos
 
             EnsureGravityProvider();
 
-            // Build the body GameObject.
-            _bodyGO = new GameObject("CelestialBody_" + (planetTemplate.body != null ? planetTemplate.body.bodyName : "Planet"));
+            // Build the body GameObject INACTIVE so we can configure components before their
+            // Awake/OnEnable fire (the fix for the SphereWorld / PlanetLodImpostor NPEs).
+            _bodyGO = new GameObject("CelestialBody_" +
+                (planetTemplate.body != null ? planetTemplate.body.bodyName : "Planet"));
             _bodyGO.transform.SetParent(transform, false);
             _bodyGO.transform.position = bodyOrigin;
+            _bodyGO.SetActive(false);
 
+            // ── CelestialBody ──
             var body = _bodyGO.AddComponent<CelestialBody>();
             body.settings = planetTemplate.body;
-
-            // Apply this world's per-planet seed (index 0 = the home planet) if present.
+            // Apply this world's per-planet seed (index 0 = home planet) if present.
             var session = VoxelEngine.Menu.WorldSession.Instance;
             int seed = body.settings.seed;
             if (session != null && session.seedState != null)
@@ -78,7 +77,7 @@ namespace VoxelEngine.Cosmos
             body.settings.radiusKm = testRadiusKm;
             body.ApplySettings();
 
-            // Sphere world streamer.
+            // ── SphereWorld streamer ── (fields set BEFORE Awake thanks to inactive GO)
             var world = _bodyGO.AddComponent<SphereWorld>();
             world.body = body;
             world.materialRegistry = materialRegistry;
@@ -88,14 +87,13 @@ namespace VoxelEngine.Cosmos
             world.enableScatter = true;
             world.worldName = session != null ? session.worldName + "_sphere" : "SphereTest";
 
-            // Far LOD (space view).
+            // ── Far LOD (space view), as a CHILD of the body ──
             var lodGO = new GameObject("LOD");
             lodGO.transform.SetParent(_bodyGO.transform, false);
             lodGO.transform.localPosition = Vector3.zero;
             var lod = lodGO.AddComponent<PlanetLodImpostor>();
             lod.viewer = viewer;
             lod.biomeRegistry = biomeRegistry;
-            // Give the LOD a distinct bright material if none assigned (vertex-colour driven).
             var lodMr = lodGO.GetComponent<MeshRenderer>();
             if (lodMr != null && lodMr.sharedMaterial == null)
             {
@@ -104,10 +102,12 @@ namespace VoxelEngine.Cosmos
                 lodMr.sharedMaterial = mat;
             }
 
-            // Activate radial gravity for the whole game.
+            // Activate radial gravity for the whole game + wind personality.
             GravityProvider.ActiveBody = body;
 
-            // Drop the wind personality from the body.
+            // ── Activate LAST: now every Awake/OnEnable sees a fully-wired component graph. ──
+            _bodyGO.SetActive(true);
+
             var wind = FindAnyObjectByType<WindField>();
             if (wind != null) wind.ApplyBody(body.settings);
 
@@ -125,13 +125,9 @@ namespace VoxelEngine.Cosmos
         }
 
         /// <summary>
-        /// Resolve the planet template by priority: inspector-assigned → Resources asset →
-        /// Editor asset → in-memory default. The in-memory default is the no-setup fallback so
-        /// the sphere is playable immediately WITHOUT any asset authoring.
-        ///
-        /// IMPORTANT: the old "Planet_Earthlike.asset" is a PlanetSettings (flat-world class),
-        /// NOT a PlanetTemplate — so it will not drag into this slot. That's expected. Either
-        /// leave the slot empty (uses the in-memory Earth default) or run the authoring tool.
+        /// Resolve the planet template by priority: inspector → Resources → Editor asset →
+        /// in-memory default. The in-memory default is the no-setup fallback so the sphere is
+        /// playable immediately WITHOUT any asset authoring.
         /// </summary>
         private void ResolvePlanetTemplate()
         {
@@ -145,13 +141,30 @@ namespace VoxelEngine.Cosmos
 #endif
             if (planetTemplate == null)
             {
-                // No PlanetTemplate asset anywhere → synthesize a full Earth-like body in memory.
-                // Works at runtime, zero asset files required.
                 planetTemplate = CreateDefaultEarthTemplate();
                 Debug.Log("[CosmosBootstrap] No PlanetTemplate asset found — using an in-memory " +
-                          "Earth default (gravity 1g, oxygen, grass, full ore catalogue incl. Lithium). " +
-                          "To customise, run Tools ▸ Voxel Engine ▸ Author Earth Planet Template.");
+                          "Earth default (gravity 1g, oxygen, grass, full ore catalogue). " +
+                          "To customise: Tools ▸ Voxel Engine ▸ Author Earth Planet Template.");
             }
+        }
+
+        /// <summary>
+        /// Resolve materialRegistry + terrainMaterial. Priority: inspector → scene's flat
+        /// VoxelWorld (which has them assigned) → Resources → Editor asset path. Never null.
+        /// </summary>
+        private void ResolveAssets()
+        {
+            if (materialRegistry == null) materialRegistry = Resources.Load<MaterialRegistry>("MaterialRegistry");
+            if (terrainMaterial == null)  terrainMaterial  = Resources.Load<Material>("Mat_Terrain");
+#if UNITY_EDITOR
+            var flat = FindAnyObjectByType<VoxelEngine.Core.VoxelWorld>();
+            if (materialRegistry == null && flat != null) materialRegistry = flat.materialRegistry;
+            if (terrainMaterial  == null && flat != null) terrainMaterial  = flat.terrainMaterial;
+            if (materialRegistry == null)
+                materialRegistry = UnityEditor.AssetDatabase.LoadAssetAtPath<MaterialRegistry>("Assets/VoxelEngineAssets/MaterialRegistry.asset");
+            if (terrainMaterial == null)
+                terrainMaterial  = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>("Assets/VoxelEngineAssets/Materials/Mat_Terrain.mat");
+#endif
         }
 
         /// <summary>Build a complete, ready-to-play Earth PlanetTemplate in memory.</summary>
@@ -167,7 +180,8 @@ namespace VoxelEngine.Cosmos
 
         private void OnDestroy()
         {
-            if (GravityProvider.ActiveBody != null && GravityProvider.ActiveBody == (_bodyGO != null ? _bodyGO.GetComponent<CelestialBody>() : null))
+            if (GravityProvider.ActiveBody != null &&
+                GravityProvider.ActiveBody == (_bodyGO != null ? _bodyGO.GetComponent<CelestialBody>() : null))
                 GravityProvider.ActiveBody = null;
         }
     }
