@@ -269,7 +269,15 @@ namespace VoxelEngine.Player
             Vector3 up = UpVec;   // world-up on flat worlds; radial surface normal on spheres
 
             // -- ground check --
-            _grounded = _cc.isGrounded;
+            // CRITICAL for spheres: CharacterController.isGrounded checks ground using WORLD-DOWN,
+            // which only hits the sphere's surface near the "top" pole. Everywhere else it reports
+            // not-grounded → the player slips toward the bottom pole (world-downhill). When radial
+            // gravity is active we override the ground check with a RADIAL-DOWN raycast so the
+            // player sticks to the surface anywhere on the planet.
+            if (GravityProvider.IsRadial)
+                _grounded = CheckRadialGround(up);
+            else
+                _grounded = _cc.isGrounded;
             if (_grounded) _lastGroundedTime = Time.time;
             bool canCoyote = (Time.time - _lastGroundedTime) <= coyoteTime;
 
@@ -520,5 +528,22 @@ namespace VoxelEngine.Player
 
         /// <summary>The vertical (along-up) component of velocity, as a signed scalar.</summary>
         private float VerticalSpeed(Vector3 up) => Vector3.Dot(_velocity, up);
+
+        /// <summary>
+        /// Radial ground check for spherical bodies. Casts a ray RADIAL-DOWN (along -up) from the
+        /// player's base; if it hits terrain within a small distance, the player is grounded.
+        /// This replaces CharacterController.isGrounded (which only works world-down) so the
+        /// player can walk on ANY part of a planet — top, side, or bottom — without sliding off.
+        /// </summary>
+        private bool CheckRadialGround(Vector3 up)
+        {
+            if (_cc == null) return false;
+            // Start the ray slightly above the capsule base (along up) to avoid self-collision.
+            Vector3 origin = transform.position + up * 0.05f;
+            float halfHeight = _cc.height * 0.5f;
+            // A little extra so we register ground even when floating a hair above it.
+            float checkDist = halfHeight + 0.25f;
+            return Physics.Raycast(origin, -up, checkDist);
+        }
     }
 }

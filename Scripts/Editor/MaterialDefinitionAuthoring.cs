@@ -76,6 +76,53 @@ namespace VoxelEngine.EditorTools
             Selection.activeObject = registry;
         }
 
+        /// <summary>
+        /// Fixes EXISTING material definitions so soft surface blocks (Clay, Sand, Ice, Coal) are
+        /// hand-mineable (tier 0). The create-tool above is idempotent and skips existing defs, so
+        /// if your Clay/Sand were created at tier 1, bare hands could not mine them. This re-applies
+        /// the soft-block tier to any existing definitions of those materials.
+        /// </summary>
+        [MenuItem("Tools/Voxel Engine/Normalize Soft Material Tiers (Hand-Mineable)")]
+        public static void NormalizeSoftTiers()
+        {
+            var registry = AssetDatabase.LoadAssetAtPath<MaterialRegistry>(RegistryPath);
+            if (registry == null)
+            {
+                Debug.LogError("[Materials] MaterialRegistry.asset not found at " + RegistryPath);
+                return;
+            }
+            registry.Build();
+            int fixedCount = 0;
+            var soft = new[]
+            {
+                MaterialId.Clay, MaterialId.Sand, MaterialId.Ice, MaterialId.Coal,
+            };
+            foreach (var id in soft)
+            {
+                var def = registry.Get(id);
+                if (def == null) continue;
+                if (def.miningTier != 0)
+                {
+                    def.miningTier = 0;
+                    EditorUtility.SetDirty(def);
+                    fixedCount++;
+                    Debug.Log("[Materials] " + id + ": miningTier -> 0 (hand-mineable).");
+                }
+            }
+            if (fixedCount > 0)
+            {
+                EditorUtility.SetDirty(registry);
+                AssetDatabase.SaveAssets();
+                Debug.Log("[Materials] Normalized " + fixedCount + " soft material(s) to tier 0. " +
+                          "You can now dig Clay/Sand/Ice/Coal with bare hands.");
+            }
+            else
+            {
+                Debug.Log("[Materials] All soft materials are already tier 0. Nothing to fix.");
+            }
+            Selection.activeObject = registry;
+        }
+
         private static float DefaultHardness(MaterialId id)
         {
             switch (id)
@@ -96,6 +143,13 @@ namespace VoxelEngine.EditorTools
         {
             switch (id)
             {
+                // Soft, hand-mineable surface materials (dirt/sand/clay equivalents). Bare hands
+                // (tier 0) can dig these — standard for every voxel game.
+                case MaterialId.Clay:     return 0;
+                case MaterialId.Sand:     return 0;
+                case MaterialId.Ice:      return 0;
+                case MaterialId.Coal:     return 0;
+                // Ores — require progressively better tools.
                 case MaterialId.Uranium:  return 4;
                 case MaterialId.Platinum: return 4;
                 case MaterialId.Gold:     return 3;
@@ -103,7 +157,7 @@ namespace VoxelEngine.EditorTools
                 case MaterialId.Cobalt:   return 2;
                 case MaterialId.Nickel:   return 2;
                 case MaterialId.Lithium:  return 2;
-                default:                  return 1;
+                default:                  return 1;   // Stone, etc. — needs at least a wood pickaxe
             }
         }
 
