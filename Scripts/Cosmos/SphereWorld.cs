@@ -247,8 +247,11 @@ namespace VoxelEngine.Cosmos
             {
                 var c = _loadCandidates[i].coord;
                 var chunk = _pool.Rent(c);
-                // Override the chunk's LOCAL position (pool set it to coord*chunkSize already,
-                // but that uses WorldOrigin which is correct for body-parented chunks). Keep it.
+                // Chunks are parented to the BODY, so we must place them in BODY-LOCAL space.
+                // The pool sets transform.position (world) to WorldOrigin (a local-coord value),
+                // which is only correct when the parent is at the origin — it breaks for a body
+                // positioned elsewhere. Correct it to localPosition = WorldOrigin.
+                chunk.go.transform.localPosition = chunk.WorldOrigin;
                 _chunks.Add(c, chunk);
                 _genQueue.Enqueue(chunk);
             }
@@ -469,7 +472,11 @@ namespace VoxelEngine.Cosmos
                 if (axis == 0) off.x = sign; else if (axis == 1) off.y = sign; else off.z = sign;
                 if (!_chunks.TryGetValue(c.coord + off, out var n) || !n.isGenerated) continue;
 
+                // CRITICAL: complete BOTH the gen (writes voxels) AND mesh (reads voxels)
+                // jobs on each side before touching either voxel buffer — otherwise the
+                // Job System throws a read/write dependency violation. (Matches VoxelWorld.)
                 CompleteGenJobFor(c); CompleteGenJobFor(n);
+                CompleteMeshJobFor(c); CompleteMeshJobFor(n);
                 if (axis == 0)
                 {
                     int fCx = sign > 0 ? S - 1 : 0, pCx = sign > 0 ? S : -1;

@@ -110,23 +110,32 @@ namespace VoxelEngine.Cosmos
         /// </summary>
         public BiomeData[] BuildBiomeData(BiomeRegistry fallbackRegistry)
         {
-            var src = settings.allowedBiomes;
-            if (src == null || src.Length == 0)
+            // Null-safe: if settings isn't configured yet (e.g. LOD OnEnable firing during
+            // bootstrap before the body is fully wired), return a sensible single-biome default
+            // instead of throwing.
+            BiomeDefinition[] src;
+            if (settings == null || settings.allowedBiomes == null || settings.allowedBiomes.Length == 0)
             {
-                src = fallbackRegistry != null ? fallbackRegistry.biomes.ToArray()
-                                               : System.Array.Empty<BiomeDefinition>();
+                src = fallbackRegistry != null && fallbackRegistry.biomes != null
+                        ? fallbackRegistry.biomes.ToArray()
+                        : System.Array.Empty<BiomeDefinition>();
+            }
+            else
+            {
+                src = settings.allowedBiomes;
             }
 
             // Body temperature → climate-space 0..1 (map -40..40 °C onto 0.1..0.9).
             // (Reserved for future snow-line / biome weighting; currently the coarse gates below.)
 
             var list = new System.Collections.Generic.List<BiomeData>(src.Length);
+            float temperature = settings != null ? settings.temperature : 15f;
             foreach (var def in src)
             {
                 if (def == null) continue;
                 // Exclude biomes whose temperature window is incompatible with the body's climate.
-                if (settings.temperature < -5f && def.minTemperature > 0.55f) continue;   // cold body, hot biome
-                if (settings.temperature > 35f && def.maxTemperature < 0.45f) continue;   // hot body, cold biome
+                if (temperature < -5f && def.minTemperature > 0.55f) continue;   // cold body, hot biome
+                if (temperature > 35f && def.maxTemperature < 0.45f) continue;   // hot body, cold biome
                 list.Add(BiomeData.FromDefinition(def));
             }
             if (list.Count == 0)

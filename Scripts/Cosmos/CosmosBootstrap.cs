@@ -66,6 +66,14 @@ namespace VoxelEngine.Cosmos
             _bodyGO.SetActive(false);
 
             // ── CelestialBody ──
+            // Guarantee a non-null body: a PlanetTemplate created via the menu but never filled
+            // in has body == null. Fall back to a full Earth-like body so the planet always generates.
+            if (planetTemplate.body == null)
+            {
+                Debug.LogWarning("[CosmosBootstrap] PlanetTemplate.body is null — using a built-in " +
+                                 "Earth body. Open the PlanetTemplate asset and author its Body settings.");
+                planetTemplate.body = BodySettings.CreateEarthlike();
+            }
             var body = _bodyGO.AddComponent<CelestialBody>();
             body.settings = planetTemplate.body;
             // Apply this world's per-planet seed (index 0 = home planet) if present.

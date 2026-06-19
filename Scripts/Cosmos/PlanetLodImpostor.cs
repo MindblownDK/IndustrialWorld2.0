@@ -61,10 +61,13 @@ namespace VoxelEngine.Cosmos
         private void Update()
         {
             var body = GetComponentInParent<CelestialBody>();
-            if (body == null) return;
+            if (body == null || body.settings == null) return;
 
-            if (_biomes.IsCreated && (_lastResolution != resolution || _lastSeed != body.genParams.seed))
-                Rebuild();
+            // Rebuild if: never built yet, OR resolution/seed changed.
+            bool needRebuild = !_biomes.IsCreated ||
+                               _lastResolution != resolution ||
+                               _lastSeed != body.genParams.seed;
+            if (needRebuild) Rebuild();
 
             UpdateFade(body);
         }
@@ -80,7 +83,9 @@ namespace VoxelEngine.Cosmos
         private void Rebuild()
         {
             var body = GetComponentInParent<CelestialBody>();
-            if (body == null) return;
+            // Skip gracefully if the body isn't configured yet (can happen during bootstrap
+            // activation or in edit mode). Update() will rebuild once it becomes ready.
+            if (body == null || body.settings == null) return;
             body.ApplySettings();
 
             BiomeData[] biomeArr = body.BuildBiomeData(biomeRegistry);
