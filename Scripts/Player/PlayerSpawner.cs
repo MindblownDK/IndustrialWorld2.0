@@ -92,7 +92,11 @@ namespace VoxelEngine.Player
             yield return WaitForChunkAt(VoxelCoordOf(target), maxWaitSeconds);
 
             // For fresh worlds, NOW find the actual top-of-ground position.
-            if (!hasSavedPos && !(session != null && session.hasBedSpawn))
+            // Skip on spheres — FindFreshSpawnNearby scans in world-space voxel coords which
+            // is wrong for a body-offset sphere, and the radial raycast below handles ground
+            // detection on planets anyway.
+            bool isSphere = VoxelEngine.Cosmos.GravityProvider.ActiveBody != null;
+            if (!hasSavedPos && !(session != null && session.hasBedSpawn) && !isSphere)
             {
                 Vector3 ground = FindFreshSpawnNearby(target);
                 target = ground;
@@ -213,11 +217,12 @@ namespace VoxelEngine.Player
             var world = VoxelEngine.Core.ActiveWorld.Current;
             if (world == null) yield break;
 
-            int cs = VoxelConstants.CHUNK_SIZE;
-            int cx = Mathf.FloorToInt(worldVoxel.x / (float)cs);
-            int cz = Mathf.FloorToInt(worldVoxel.z / (float)cs);
-            // On a sphere, chunks exist at any Y. Search a window around the voxel's chunk-Y.
-            int cyCenter = Mathf.FloorToInt(worldVoxel.y / (float)cs);
+            // CRITICAL: convert the world-space voxel position to chunk coords via the WORLD's
+            // own WorldToChunk method. On a flat world this is just position/chunkSize, but on a
+            // SPHERE the body is offset/rotated, so the chunk dictionary uses BODY-LOCAL coords.
+            // Computing chunk coords from raw world voxel position gives wrong keys → timeout.
+            Vector3 worldPos = new Vector3(worldVoxel.x, worldVoxel.y, worldVoxel.z);
+            Vector3Int centerChunk = world.WorldToChunk(worldPos);
 
             float t0 = Time.time;
             while (Time.time - t0 < timeoutSec)
@@ -226,8 +231,8 @@ namespace VoxelEngine.Player
                 // Search ±4 chunks vertically (covers the surface ±128 voxels).
                 for (int dy = -4; dy <= 4; dy++)
                 {
-                    int cy = cyCenter + dy;
-                    if (world.TryGetChunk(new Vector3Int(cx, cy, cz), out var c)
+                    var checkCoord = new Vector3Int(centerChunk.x, centerChunk.y + dy, centerChunk.z);
+                    if (world.TryGetChunk(checkCoord, out var c)
                         && c != null && c.isGenerated
                         && c.meshCollider != null && c.meshCollider.sharedMesh != null)
                     {
@@ -237,7 +242,7 @@ namespace VoxelEngine.Player
                 if (anyMeshed) yield break;
                 yield return null;
             }
-            Debug.LogWarning($"[PlayerSpawner] Timed out waiting for chunks at column ({cx}, ?, {cz}).");
+            Debug.LogWarning($"[PlayerSpawner] Timed out waiting for chunks at {centerChunk}.");
         }
 
         private void DisableController() { if (_cc != null) _cc.enabled = false; }

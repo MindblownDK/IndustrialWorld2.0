@@ -101,6 +101,8 @@ namespace VoxelEngine.EditorTools
                 library.systems.Add(system);
 
             EditorUtility.SetDirty(library);
+            // Invalidate the runtime cache so the next Load() picks up the updated asset.
+            CosmosTemplateLibrary.InvalidateCache();
         }
 
         private static void EnsureFolder(string assetPath)
