@@ -25,7 +25,17 @@ namespace VoxelEngine.Core
     {
         // ---- Inspector ----
         [Header("Assets")]
-        public PlanetSettings    planet;
+        // Flat-world config (replaces the deprecated PlanetSettings class).
+        // These are set from the inspector or WorldSession on load.
+        [Header("Flat World Config (legacy — sphere uses CelestialBody instead)")]
+        public int   flatSeed           = 1337;
+        public int   flatSeaLevel       = 96;
+        public int   flatBaseHeight     = 100;
+        public float flatContinentScale = 0.0015f;
+        public int   flatCrustDepth     = 40;
+        public BiomeRegistry flatBiomeRegistry;
+
+        // Backward-compat property used by IVoxelWorld + scatter.
         public MaterialRegistry  materialRegistry;
         public Material          terrainMaterial;     // URP Lit, vertex-colour driven
 
@@ -47,7 +57,7 @@ namespace VoxelEngine.Core
         public static VoxelWorld Instance { get; private set; }
 
         /// <summary>Voxel sea level (IChunkScatterWorld contract; also used by scatter).</summary>
-        public int SeaLevel => planet != null ? planet.seaLevel : 96;
+        public int SeaLevel => flatSeaLevel;
 
         // ── IVoxelWorld explicit properties ──
         // Delegate to the existing inspector-assigned fields so the flat world satisfies the
@@ -55,7 +65,7 @@ namespace VoxelEngine.Core
         MaterialRegistry IVoxelWorld.MaterialRegistry => materialRegistry;
         Transform IVoxelWorld.Viewer => viewer;
         int IVoxelWorld.SeaLevel => SeaLevel;
-        int IVoxelWorld.Seed => planet != null ? planet.seed : 0;
+        int IVoxelWorld.Seed => flatSeed;
 
         // ---- Runtime ----
         private readonly Dictionary<Vector3Int, Chunk> _chunks    = new();
@@ -107,13 +117,13 @@ namespace VoxelEngine.Core
             if (materialRegistry == null)
                 materialRegistry = Resources.Load<MaterialRegistry>("MaterialRegistry");
             if (planet == null)
-                planet = Resources.Load<PlanetSettings>("Planet_Earthlike");
+                // PlanetSettings no longer loaded — flat world uses inline fields.
             if (terrainMaterial == null)
                 terrainMaterial = Resources.Load<Material>("Mat_Terrain");
 
             if (materialRegistry == null || planet == null || terrainMaterial == null)
             {
-                Debug.LogWarning("[VoxelWorld] Missing required asset references on inspector. Please assign PlanetSettings, MaterialRegistry and terrainMaterial in the scene inspector.");
+                Debug.LogWarning("[VoxelWorld] Missing required asset references. Assign MaterialRegistry and terrainMaterial in the inspector.");
                 // Do not disable — allow the world to run with defaults if possible
             }
 
@@ -123,10 +133,10 @@ namespace VoxelEngine.Core
             if (session != null)
             {
                 worldName       = session.worldName;
-                planet.seed     = session.seed;
-                planet.seaLevel = session.newSeaLevel;
-                planet.baseHeight = session.newBaseHeight;
-                planet.continentScale = session.newContinentScale;
+                flatSeed           = session.seed;
+                flatSeaLevel       = session.newSeaLevel;
+                flatBaseHeight     = session.newBaseHeight;
+                flatContinentScale = session.newContinentScale;
             }
 
             materialRegistry.Build();
@@ -137,18 +147,28 @@ namespace VoxelEngine.Core
 
             var oreList = new List<OreLayer>
             {
-                planet.iron, planet.copper, planet.coal, planet.nickel, planet.silicon,
-                planet.cobalt, planet.magnesium, planet.silver, planet.gold, planet.platinum,
-                planet.uranium, planet.crudeOil, planet.ice
+                new OreLayer { material = MaterialId.Iron,     scale = 0.06f, threshold = 0.45f, minDepth = 4,   maxDepth = 80 },
+                new OreLayer { material = MaterialId.Copper,   scale = 0.07f, threshold = 0.55f, minDepth = 6,   maxDepth = 70 },
+                new OreLayer { material = MaterialId.Coal,     scale = 0.05f, threshold = 0.50f, minDepth = 4,   maxDepth = 60 },
+                new OreLayer { material = MaterialId.Nickel,   scale = 0.08f, threshold = 0.60f, minDepth = 20,  maxDepth = 120 },
+                new OreLayer { material = MaterialId.Silicon,  scale = 0.06f, threshold = 0.55f, minDepth = 4,   maxDepth = 90 },
+                new OreLayer { material = MaterialId.Cobalt,   scale = 0.09f, threshold = 0.65f, minDepth = 30,  maxDepth = 140 },
+                new OreLayer { material = MaterialId.Magnesium,scale = 0.08f, threshold = 0.62f, minDepth = 15,  maxDepth = 110 },
+                new OreLayer { material = MaterialId.Silver,   scale = 0.10f, threshold = 0.72f, minDepth = 60,  maxDepth = 200 },
+                new OreLayer { material = MaterialId.Gold,     scale = 0.11f, threshold = 0.78f, minDepth = 80,  maxDepth = 220 },
+                new OreLayer { material = MaterialId.Platinum, scale = 0.12f, threshold = 0.80f, minDepth = 100, maxDepth = 240 },
+                new OreLayer { material = MaterialId.Uranium,  scale = 0.13f, threshold = 0.82f, minDepth = 120, maxDepth = 250 },
+                new OreLayer { material = MaterialId.CrudeOil, scale = 0.04f, threshold = 0.70f, minDepth = 25,  maxDepth = 90 },
+                new OreLayer { material = MaterialId.Ice,      scale = 0.05f, threshold = 0.65f, minDepth = 0,   maxDepth = 12 }
             };
             _oreLayers = new NativeArray<OreLayer>(oreList.Count, Allocator.Persistent);
             for (int i = 0; i < oreList.Count; i++) _oreLayers[i] = oreList[i];
 
             // Pack biomes into Burst-friendly POD array.
-            int biomeCount = (planet.biomeRegistry != null) ? planet.biomeRegistry.biomes.Count : 0;
+            int biomeCount = (flatBiomeRegistry != null) ? flatBiomeRegistry.biomes.Count : 0;
             if (biomeCount == 0)
             {
-                Debug.LogWarning("[VoxelWorld] PlanetSettings.biomeRegistry is empty — falling back to a single Plains biome.");
+                Debug.LogWarning("[VoxelWorld] flatBiomeRegistry is empty — falling back to a single Plains biome.");
                 _biomes = new NativeArray<BiomeData>(1, Allocator.Persistent);
                 _biomes[0] = new BiomeData
                 {
@@ -166,7 +186,7 @@ namespace VoxelEngine.Core
                 _biomes = new NativeArray<BiomeData>(biomeCount, Allocator.Persistent);
                 for (int i = 0; i < biomeCount; i++)
                 {
-                    var def = planet.biomeRegistry.biomes[i];
+                    var def = flatBiomeRegistry.biomes[i];
                     _biomes[i] = def != null ? BiomeData.FromDefinition(def) : default;
                 }
             }
@@ -366,10 +386,10 @@ namespace VoxelEngine.Core
                 var heightJob = new ChunkHeightJob
                 {
                     chunkOriginVoxels = new int3(origX, origY, origZ),
-                    seed              = planet.seed,
-                    seaLevel          = planet.seaLevel,
-                    baseHeight        = planet.baseHeight,
-                    continentScale    = planet.continentScale,
+                    seed              = flatSeed,
+                    seaLevel          = flatSeaLevel,
+                    baseHeight        = flatBaseHeight,
+                    continentScale    = flatContinentScale,
                     biomes            = _biomes,
                     heights           = heights,
                     biomeIdx          = biomeIds
@@ -380,11 +400,11 @@ namespace VoxelEngine.Core
                 var job = new ChunkGenJob
                 {
                     chunkOriginVoxels = new int3(origX, origY, origZ),
-                    seed              = planet.seed,
-                    seaLevel          = planet.seaLevel,
-                    baseHeight        = planet.baseHeight,
-                    continentScale    = planet.continentScale,
-                    crustDepth        = planet.crustDepth,
+                    seed              = flatSeed,
+                    seaLevel          = flatSeaLevel,
+                    baseHeight        = flatBaseHeight,
+                    continentScale    = flatContinentScale,
+                    crustDepth        = flatCrustDepth,
                     biomes            = _biomes,
                     ores              = _oreLayers,
                     heights           = heights,
@@ -540,7 +560,7 @@ namespace VoxelEngine.Core
 
         private void ProcessDeferredScatter()
         {
-            if (!enableScatter || planet == null || planet.biomeRegistry == null) return;
+            if (!enableScatter || planet == null || flatBiomeRegistry == null) return;
 
             foreach (var kv in _chunks)
             {
@@ -560,7 +580,7 @@ namespace VoxelEngine.Core
                         continue;             // above-chunk still generating
                 }
 
-                ChunkScatter.Populate(this, c, planet.biomeRegistry, planet.seed);
+                ChunkScatter.Populate(this, c, flatBiomeRegistry, planet.seed);
                 c.isScattered = true;
             }
         }

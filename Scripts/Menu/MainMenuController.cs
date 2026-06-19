@@ -37,9 +37,6 @@ namespace VoxelEngine.Menu
         // New-world form values.
         private string _newName           = "MyWorld";
         private int    _newSeed           = 0;
-        private int    _newSeaLevel       = 96;
-        private int    _newBaseHeight     = 100;
-        private float  _newContinentScale = 0.0015f;
 
         // ── Cosmos: solar-system picker + per-planet editable seeds ──
         private List<SolarSystemTemplate> _systemChoices;
@@ -407,9 +404,6 @@ namespace VoxelEngine.Menu
             if (string.IsNullOrWhiteSpace(_newName)) _newName = "MyWorld";
             _session.worldName         = _newName;
             _session.seed              = _newSeed;
-            _session.newSeaLevel       = _newSeaLevel;
-            _session.newBaseHeight     = _newBaseHeight;
-            _session.newContinentScale = _newContinentScale;
             _session.isNewWorld        = true;
 
             // Persist the cosmos choice (system + per-planet seeds) so the same seeds

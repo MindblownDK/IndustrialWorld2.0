@@ -28,10 +28,7 @@ namespace VoxelEngine.Menu
         public Vector3 GetActiveSpawn() => hasBedSpawn ? bedSpawnPoint : worldSpawnPoint;
         public bool   isNewWorld = false;
 
-        // Optional overrides for new worlds (applied to PlanetSettings on first load).
-        public int   newSeaLevel       = 96;
-        public int   newBaseHeight     = 100;
-        public float newContinentScale = 0.0015f;
+        // (Legacy flat-world override fields removed — the sphere uses BodySettings.)
 
         // ── Cosmos (per-planet seeds + chosen solar system) ────────
         /// <summary>Name of the solar-system template the player selected at world creation.</summary>
@@ -136,16 +133,15 @@ namespace VoxelEngine.Menu
             Directory.CreateDirectory(folder);
             string path = Path.Combine(folder, "world.json");
             File.WriteAllText(path,
-                $"{{\"seed\":{seed},\"seaLevel\":{newSeaLevel},\"baseHeight\":{newBaseHeight}," +
-                $"\"continentScale\":{newContinentScale.ToString(System.Globalization.CultureInfo.InvariantCulture)}}}");
+                $"{{\"seed\":{seed}}}");
         }
 
         public bool TryReadSidecar(out int seedOut, out int seaLevelOut, out int baseHeightOut, out float continentScaleOut)
         {
             seedOut = seed;
-            seaLevelOut = newSeaLevel;
-            baseHeightOut = newBaseHeight;
-            continentScaleOut = newContinentScale;
+            seaLevelOut = 96;
+            baseHeightOut = 100;
+            continentScaleOut = 0.0015f;
 
             string path = Path.Combine(WorldsRoot, worldName, "world.json");
             if (!File.Exists(path)) return false;
@@ -154,9 +150,9 @@ namespace VoxelEngine.Menu
             {
                 var txt = File.ReadAllText(path);
                 seedOut          = ParseInt(txt, "seed", seed);
-                seaLevelOut      = ParseInt(txt, "seaLevel", newSeaLevel);
-                baseHeightOut    = ParseInt(txt, "baseHeight", newBaseHeight);
-                continentScaleOut= ParseFloat(txt, "continentScale", newContinentScale);
+                seaLevelOut      = ParseInt(txt, "seaLevel", 96);
+                baseHeightOut    = ParseInt(txt, "baseHeight", 100);
+                continentScaleOut= ParseFloat(txt, "continentScale", 0.0015f);
                 return true;
             }
             catch { return false; }

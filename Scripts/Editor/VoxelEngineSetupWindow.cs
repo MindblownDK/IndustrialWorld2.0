@@ -368,11 +368,11 @@ namespace VoxelEngine.EditorTools
 
             // --- Planet ---
             string planetPath = $"{PLANET_FOLDER}/Planet_Earthlike.asset";
-            var planet = AssetDatabase.LoadAssetAtPath<PlanetSettings>(planetPath);
+            // PlanetSettings is deprecated — flat world uses inline fields now.
             if (planet == null)
             {
-                planet = ScriptableObject.CreateInstance<PlanetSettings>();
-                planet.seed = Random.Range(1, int.MaxValue);
+                // (skipped — PlanetSettings removed)
+
                 AssetDatabase.CreateAsset(planet, planetPath);
             }
             planet.biomeRegistry = biomeRegistry;
@@ -405,9 +405,8 @@ namespace VoxelEngine.EditorTools
         private void SpawnManagerAndPlayer()
         {
             var registry = AssetDatabase.LoadAssetAtPath<MaterialRegistry>($"{ASSET_ROOT}/MaterialRegistry.asset");
-            var planet   = AssetDatabase.LoadAssetAtPath<PlanetSettings>($"{PLANET_FOLDER}/Planet_Earthlike.asset");
             var mat      = AssetDatabase.LoadAssetAtPath<Material>($"{ASSET_ROOT}/VoxelTerrain.mat");
-            if (registry == null || planet == null || mat == null)
+            if (registry == null || mat == null)
             {
                 EditorUtility.DisplayDialog("Voxel Engine",
                     "Run Step 1 first to create assets.", "OK");
@@ -418,13 +417,13 @@ namespace VoxelEngine.EditorTools
             var managerGo = new GameObject("VoxelWorld_Manager");
             var world = managerGo.AddComponent<VoxelEngine.Core.VoxelWorld>();
             world.materialRegistry = registry;
-            world.planet           = planet;
+            // Flat world uses inline fields now (flatSeed, flatSeaLevel, etc.)
             world.terrainMaterial  = mat;
 
             // ----- Player -----
             // Spawn well above the surface so the player drops onto terrain instead of clipping into it.
             var playerGo = new GameObject("Player");
-            playerGo.transform.position = new Vector3(0, planet.baseHeight + 50, 0);
+            playerGo.transform.position = new Vector3(0, 150, 0); // flat world spawn height
 
             // CharacterController for collisions with the voxel mesh.
             var ccp = playerGo.AddComponent<CharacterController>();
