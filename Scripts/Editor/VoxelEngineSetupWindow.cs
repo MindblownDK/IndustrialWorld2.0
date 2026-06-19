@@ -367,16 +367,8 @@ namespace VoxelEngine.EditorTools
             EditorUtility.SetDirty(biomeRegistry);
 
             // --- Planet ---
-            string planetPath = $"{PLANET_FOLDER}/Planet_Earthlike.asset";
             // PlanetSettings is deprecated — flat world uses inline fields now.
-            if (planet == null)
-            {
-                // (skipped — PlanetSettings removed)
-
-                AssetDatabase.CreateAsset(planet, planetPath);
-            }
-            planet.biomeRegistry = biomeRegistry;
-            EditorUtility.SetDirty(planet);
+            // (Planet asset creation removed.)
 
             // --- Terrain material (URP Lit, vertex-colour driven if URP installed) ---
             string terrainMatPath = $"{ASSET_ROOT}/VoxelTerrain.mat";

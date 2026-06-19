@@ -997,7 +997,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 1436353754}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 37fbf8a3d9dc0864b85690a6c48ba5bd, type: 3}
+  m_Script: {fileID: 11500000, guid: 681dac8a7fd2f4e4f905c2a104599edc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Cosmos.CosmosBootstrap
   planetTemplate: {fileID: 0}
@@ -1070,7 +1070,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9db121b4ed98abc4598590032901f142, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Core.VoxelWorld
-  planet: {fileID: 11400000, guid: cd70b49c53fcf4942b2fc602d09469cf, type: 2}
+  flatSeed: 1337
+  flatSeaLevel: 96
+  flatBaseHeight: 100
+  flatContinentScale: 0.0015
+  flatCrustDepth: 40
+  flatBiomeRegistry: {fileID: 0}
   materialRegistry: {fileID: 11400000, guid: 89cc31071789f224f91b397442105307, type: 2}
   terrainMaterial: {fileID: 2100000, guid: 035b6cf660595ab498e4ef7e242cd598, type: 2}
   viewer: {fileID: 439090091}
