@@ -232,39 +232,47 @@ namespace VoxelEngine.Cosmos
             int loadR2 = r * r;
             int evictR2 = (r + 3) * (r + 3); // hysteresis to avoid load/unload flicker
 
+            // FULL 3D streaming (not the flat-world column model).
+            // A sphere is centred on the body's origin, so its surface exists at ALL heights —
+            // positive AND negative y. The flat loader (y in [0, WORLD_HEIGHT)) only ever pulls
+            // the bottom slab near the core (solid bedrock → no visible surface mesh) and evicts
+            // everything as the viewer approaches → the "chunks vanish when I get close" bug.
+            // Instead we stream a 3D BALL of chunks around the viewer in every axis.
             _loadCandidates.Clear();
-            for (int z = -r; z <= r; z++)
-            for (int x = -r; x <= r; x++)
+            for (int dz = -r; dz <= r; dz++)
+            for (int dy = -r; dy <= r; dy++)
+            for (int dx = -r; dx <= r; dx++)
             {
-                int d2 = x * x + z * z;
+                int d2 = dx * dx + dy * dy + dz * dz;
                 if (d2 > loadR2) continue;
-                for (int y = 0; y < VoxelConstants.WORLD_HEIGHT_CHUNKS; y++)
-                {
-                    var c = new Vector3Int(center.x + x, y, center.z + z);
-                    if (_chunks.ContainsKey(c)) continue;
-                    _loadCandidates.Add((c, d2 + y * y));
-                }
+                var c = new Vector3Int(center.x + dx, center.y + dy, center.z + dz);
+                if (_chunks.ContainsKey(c)) continue;
+                _loadCandidates.Add((c, d2));
             }
             _loadCandidates.Sort((a, b) => a.distSq.CompareTo(b.distSq));
-            for (int i = 0; i < _loadCandidates.Count; i++)
+            // Cap how many NEW chunks we admit per frame so a fast approach (or teleport)
+            // doesn't enqueue hundreds at once and cause a single-frame hitch. The gen/mesh
+            // budgets (maxJobsPerFrame) throttle the actual work; this throttles allocation.
+            int spawned = 0;
+            for (int i = 0; i < _loadCandidates.Count && spawned < maxJobsPerFrame * 2; i++)
             {
                 var c = _loadCandidates[i].coord;
                 var chunk = _pool.Rent(c);
-                // Chunks are parented to the BODY, so we must place them in BODY-LOCAL space.
-                // The pool sets transform.position (world) to WorldOrigin (a local-coord value),
-                // which is only correct when the parent is at the origin — it breaks for a body
-                // positioned elsewhere. Correct it to localPosition = WorldOrigin.
+                // Chunks are parented to the BODY, so place them in BODY-LOCAL space.
                 chunk.go.transform.localPosition = chunk.WorldOrigin;
                 _chunks.Add(c, chunk);
                 _genQueue.Enqueue(chunk);
+                spawned++;
             }
 
+            // Evict chunks outside the 3D ball (including the vertical axis).
             _evictList.Clear();
             foreach (var kv in _chunks)
             {
                 int dx = kv.Key.x - center.x;
+                int dy = kv.Key.y - center.y;
                 int dz = kv.Key.z - center.z;
-                if (dx * dx + dz * dz > evictR2) _evictList.Add(kv.Key);
+                if (dx * dx + dy * dy + dz * dz > evictR2) _evictList.Add(kv.Key);
             }
             for (int i = 0; i < _evictList.Count; i++)
             {
@@ -456,12 +464,12 @@ namespace VoxelEngine.Cosmos
                 var c = kv.Value;
                 if (!c.isGenerated || c.isScattered) continue;
                 if (c.meshFilter == null || c.meshFilter.sharedMesh == null) continue;
-                bool topmost = c.coord.y >= VoxelConstants.WORLD_HEIGHT_CHUNKS - 1;
-                if (!topmost)
-                {
-                    if (!_chunks.TryGetValue(c.coord + new Vector3Int(0, 1, 0), out var above) || !above.isGenerated)
-                        continue;
-                }
+                // On a sphere there's no fixed "topmost" layer (the flat world used
+                // WORLD_HEIGHT_CHUNKS). Allow scatter when the chunk directly above in the load
+                // set is generated OR simply absent. (True radial-outward scatter direction is
+                // a Phase 2.1 polish task; this keeps scatter safe to re-enable.)
+                if (_chunks.TryGetValue(c.coord + new Vector3Int(0, 1, 0), out var above) && !above.isGenerated)
+                    continue;
                 ChunkScatter.Populate(this, c, _biomeRegistry, body.genParams.seed);
                 c.isScattered = true;
             }
