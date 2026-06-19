@@ -16,7 +16,11 @@ namespace VoxelEngine.Cosmos
 {
     public class CosmosBootstrap : MonoBehaviour
     {
-        [Tooltip("Planet template to spawn. If null, loads Planet_Earth from the project.")]
+        [Tooltip("Planet template to spawn. LEAVE EMPTY to auto-use a built-in Earth body " +
+                 "(gravity 1g, oxygen, grass, full ore catalogue). To customise, run " +
+                 "Tools ▸ Voxel Engine ▸ Author Earth Planet Template, which creates the correct " +
+                 "PlanetTemplate asset. NOTE: the old Planet_Earthlike.asset is a DIFFERENT type " +
+                 "(flat-world PlanetSettings) and won't fit this slot.")]
         public PlanetTemplate planetTemplate;
 
         [Tooltip("Where to place the body's core in world space.")]
@@ -42,20 +46,11 @@ namespace VoxelEngine.Cosmos
 
         private void Awake()
         {
-            // Resolve template.
-            if (planetTemplate == null)
-                planetTemplate = Resources.Load<PlanetTemplate>("Planet_Earth");
-#if UNITY_EDITOR
-            if (planetTemplate == null)
-                planetTemplate = UnityEditor.AssetDatabase.LoadAssetAtPath<PlanetTemplate>(
-                    "Assets/VoxelEngineAssets/Planets/Planet_Earth.asset");
-#endif
-            if (planetTemplate == null)
-            {
-                Debug.LogError("[CosmosBootstrap] No PlanetTemplate assigned and Planet_Earth not found. " +
-                               "Run Tools ▸ Voxel Engine ▸ Author Earth Planet Template, then assign it here.");
-                return;
-            }
+            // Resolve template. Priority: inspector-assigned → Resources → Editor asset →
+            // an in-memory default. The in-memory default is the KEY fix: it means you never
+            // have to hand-author an asset just to test the sphere — add the component and play.
+            ResolvePlanetTemplate();
+
             if (materialRegistry == null) materialRegistry = Resources.Load<MaterialRegistry>("MaterialRegistry");
             if (terrainMaterial == null)  terrainMaterial  = Resources.Load<Material>("Mat_Terrain");
             if (viewer == null)
@@ -127,6 +122,47 @@ namespace VoxelEngine.Cosmos
                 var gpGO = new GameObject("GravityProvider");
                 gpGO.AddComponent<GravityProvider>();
             }
+        }
+
+        /// <summary>
+        /// Resolve the planet template by priority: inspector-assigned → Resources asset →
+        /// Editor asset → in-memory default. The in-memory default is the no-setup fallback so
+        /// the sphere is playable immediately WITHOUT any asset authoring.
+        ///
+        /// IMPORTANT: the old "Planet_Earthlike.asset" is a PlanetSettings (flat-world class),
+        /// NOT a PlanetTemplate — so it will not drag into this slot. That's expected. Either
+        /// leave the slot empty (uses the in-memory Earth default) or run the authoring tool.
+        /// </summary>
+        private void ResolvePlanetTemplate()
+        {
+            if (planetTemplate != null) return;
+
+            planetTemplate = Resources.Load<PlanetTemplate>("Planet_Earth");
+#if UNITY_EDITOR
+            if (planetTemplate == null)
+                planetTemplate = UnityEditor.AssetDatabase.LoadAssetAtPath<PlanetTemplate>(
+                    "Assets/VoxelEngineAssets/Planets/Planet_Earth.asset");
+#endif
+            if (planetTemplate == null)
+            {
+                // No PlanetTemplate asset anywhere → synthesize a full Earth-like body in memory.
+                // Works at runtime, zero asset files required.
+                planetTemplate = CreateDefaultEarthTemplate();
+                Debug.Log("[CosmosBootstrap] No PlanetTemplate asset found — using an in-memory " +
+                          "Earth default (gravity 1g, oxygen, grass, full ore catalogue incl. Lithium). " +
+                          "To customise, run Tools ▸ Voxel Engine ▸ Author Earth Planet Template.");
+            }
+        }
+
+        /// <summary>Build a complete, ready-to-play Earth PlanetTemplate in memory.</summary>
+        private static PlanetTemplate CreateDefaultEarthTemplate()
+        {
+            var t = ScriptableObject.CreateInstance<PlanetTemplate>();
+            t.name = "Planet_Earth_Runtime";
+            t.body = BodySettings.CreateEarthlike();
+            t.orbitalDistanceKm = new Vector2(2500f, 4000f);
+            t.orbitSpeed = 0.6f;
+            return t;
         }
 
         private void OnDestroy()

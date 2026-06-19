@@ -956,6 +956,58 @@ MonoBehaviour:
   m_PivotReferenceSize: 0
   m_Pivot: 0
   m_WorldSpaceCollider: {fileID: 0}
+--- !u!1 &1436353754
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1436353756}
+  - component: {fileID: 1436353755}
+  m_Layer: 0
+  m_Name: CosmosBootstrap controller
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1436353755
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1436353754}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 64c7ded0414c0eb4a877ff495d5d1dd7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Cosmos.CosmosBootstrap
+  planetTemplate: {fileID: 11400000, guid: 3f6a10cf39b02d6428195ba91a180d18, type: 2}
+  bodyOrigin: {x: 4000, y: 800, z: 4000}
+  viewer: {fileID: 439090091}
+  biomeRegistry: {fileID: 11400000, guid: 784ae9a245f82264f8a66afd55c7b511, type: 2}
+  materialRegistry: {fileID: 11400000, guid: 89cc31071789f224f91b397442105307, type: 2}
+  terrainMaterial: {fileID: 2100000, guid: 035b6cf660595ab498e4ef7e242cd598, type: 2}
+  testRadiusKm: 0.5
+  viewDistance: 8
+--- !u!4 &1436353756
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1436353754}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -2.56962, y: -1.93306, z: 0.49741}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1456742218
 GameObject:
   m_ObjectHideFlags: 0
@@ -1282,8 +1334,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4aee15651a3cb9947a09a35bd118f56b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Player.WaterLensEffect
-  dryTime: 3
-  maxOpacity: 0.35
 --- !u!114 &1844107487
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1340,9 +1390,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 527353824af3b5b40a843ba07cd53aa2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Player.WaterLensEffect
-  maxRainFogDensity: 0.025
-  rainFogColor: {r: 0.28, g: 0.3, b: 0.34, a: 1}
-  transitionSpeed: 1.5
 --- !u!1 &1845704374
 GameObject:
   m_ObjectHideFlags: 0
@@ -1447,3 +1494,4 @@ SceneRoots:
   - {fileID: 1971353576}
   - {fileID: 177553674}
   - {fileID: 595644111}
+  - {fileID: 1436353756}
