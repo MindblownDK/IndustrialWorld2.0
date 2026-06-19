@@ -24,8 +24,10 @@ namespace VoxelEngine.Cosmos
                  "won't fit this slot.")]
         public PlanetTemplate planetTemplate;
 
-        [Tooltip("Where to place the body's core in world space.")]
-        public Vector3 bodyOrigin = new Vector3(4000f, 800f, 4000f);
+        [Tooltip("Where to place the body's core in world space. Keep it within the camera's far " +
+                 "clip plane so it's visible/reachable. (0,700,400) puts it high above the flat " +
+                 "terrain ceiling (~256m) and in front of the spawn — look up and fly to it.)")]
+        public Vector3 bodyOrigin = new Vector3(0f, 700f, 400f);
 
         [Tooltip("Player/camera transform that the sphere streams around and gravity follows.")]
         public Transform viewer;
@@ -116,8 +118,38 @@ namespace VoxelEngine.Cosmos
             var wind = FindAnyObjectByType<WindField>();
             if (wind != null) wind.ApplyBody(body.settings);
 
+            // Ensure the main camera can actually SEE the body. Default far-clip planes (~1000m)
+            // cull a planet placed thousands of units away — that's the "planet is invisible" bug.
+            // We raise the far clip to comfortably cover bodyOrigin + planet radius + margin.
+            EnsureCameraFarClip();
+
             Debug.Log($"[CosmosBootstrap] Spawned '{body.DisplayName}' at {bodyOrigin}, " +
-                      $"seed {seed}, radius {testRadiusKm} km, radial gravity ACTIVE. Fly to it!");
+                      $"seed {seed}, radius {testRadiusKm} km, radial gravity ACTIVE. " +
+                      $"Camera far clip raised — look up toward the body and fly to it!");
+        }
+
+        /// <summary>
+        /// Raise the main camera's far clip plane so the (possibly distant) planet is rendered.
+        /// Computes the distance from the camera to the far edge of the body + margin, and only
+        /// ever INCREASES the far clip (never shrinks it below its existing value).
+        /// </summary>
+        private void EnsureCameraFarClip()
+        {
+            var cam = Camera.main;
+            if (cam == null)
+            {
+                // Camera.main can be null right after scene load; fall back to any camera.
+                cam = FindAnyObjectByType<Camera>();
+            }
+            if (cam == null) return;
+            float bodyRadiusM = testRadiusKm * 1000f;
+            // Distance from camera to the far side of the body, plus a generous margin.
+            float needed = Vector3.Distance(cam.transform.position, bodyOrigin) + bodyRadiusM * 2f + 5000f;
+            if (cam.farClipPlane < needed)
+            {
+                cam.farClipPlane = needed;
+                Debug.Log($"[CosmosBootstrap] Camera far clip plane raised to {needed:0} so the body is visible.");
+            }
         }
 
         private void EnsureGravityProvider()

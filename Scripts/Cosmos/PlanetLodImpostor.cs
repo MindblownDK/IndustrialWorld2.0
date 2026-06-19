@@ -122,7 +122,9 @@ namespace VoxelEngine.Cosmos
             // For Unlit/Color: enable alpha.
             _lodMaterial.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
             _lodMaterial.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-            _lodMaterial.SetInt("_ZWrite", 0);
+            // ZWrite ON so the opaque far-view sphere renders into the depth buffer and is
+            // actually VISIBLE (ZWrite=0 made it sort behind opaque geometry → invisible).
+            _lodMaterial.SetInt("_ZWrite", 1);
 
             if (meshRenderer != null) meshRenderer.sharedMaterial = _lodMaterial;
         }
