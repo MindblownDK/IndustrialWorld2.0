@@ -119,6 +119,24 @@ namespace VoxelEngine.Cosmos
             var spaceGO = new GameObject("SpaceRenderer");
             spaceGO.AddComponent<SpaceBodyRenderer>();
 
+            // ── Sun directional light + day/night cycle (Phase 5) ──
+            var sunLightGO = new GameObject("SunLightController");
+            sunLightGO.AddComponent<SunLightController>();
+
+            // ── Background quasar (Phase 5) ──
+            var quasarGO = new GameObject("Quasar");
+            var quasar = quasarGO.AddComponent<QuasarRenderer>();
+            // Use the system template's quasar settings if available.
+            if (solarSystemTemplate != null)
+                quasar.settings = solarSystemTemplate.quasar;
+
+            // ── Asteroid field (Phase 5) ──
+            var asteroidGO = new GameObject("AsteroidField");
+            var asteroids = asteroidGO.AddComponent<AsteroidFieldRenderer>();
+            // Use the system template's asteroid field settings if available.
+            if (solarSystemTemplate != null && solarSystemTemplate.asteroidFields != null && solarSystemTemplate.asteroidFields.Length > 0)
+                asteroids.settings = solarSystemTemplate.asteroidFields[0].settings;
+
             // ── GPU grass renderer (Phase 4) ──
             var grassGO = new GameObject("GrassRenderer");
             grassGO.transform.SetParent(_bodyGO.transform, false);
