@@ -527,10 +527,12 @@ namespace VoxelEngine.Cosmos
 
         private BiomeRegistry ResolveBiomeRegistry()
         {
-            // Prefer the planet template's biome registry; else search Resources.
+            // Priority: the inspector-assigned biomeRegistry field (wired by CosmosBootstrap),
+            // then the body's allowedBiomes whitelist, then Resources fallback.
+            if (biomeRegistry != null && biomeRegistry.biomes != null && biomeRegistry.biomes.Count > 0)
+                return biomeRegistry;
             if (body.settings != null && body.settings.allowedBiomes != null && body.settings.allowedBiomes.Length > 0)
             {
-                // Build a transient registry from the whitelisted biomes so ChunkScatter works.
                 var reg = ScriptableObject.CreateInstance<BiomeRegistry>();
                 reg.biomes = new List<BiomeDefinition>(body.settings.allowedBiomes);
                 return reg;

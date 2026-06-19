@@ -109,6 +109,14 @@ namespace VoxelEngine.Cosmos
             // support). We deliberately do NOT assign VoxelTerrain here — VoxelTerrain is a custom
             // Shader Graph that doesn't support alpha fade and renders purple at planet scale.
 
+            // ── Spherical water shell (Phase 4) ──
+            // A transparent sphere at sea radius — oceans fill naturally where terrain dips below
+            // sea level. One draw call, always correct, no per-chunk dependency.
+            var waterGO = new GameObject("WaterShell");
+            waterGO.transform.SetParent(_bodyGO.transform, false);
+            waterGO.transform.localPosition = Vector3.zero;
+            waterGO.AddComponent<SphereWaterShell>();
+
             // ── GPU grass renderer (Phase 4) ──
             var grassGO = new GameObject("GrassRenderer");
             grassGO.transform.SetParent(_bodyGO.transform, false);

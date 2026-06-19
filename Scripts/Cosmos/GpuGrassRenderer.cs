@@ -168,8 +168,17 @@ namespace VoxelEngine.Cosmos
                     float3 bladePos = worldPos + jitter;
 
                     // Orient blade to the radial up (so grass stands upright on the sphere).
-                    quaternion rot = quaternion.LookRotation(
-                        new float3(rng.NextFloat(-1f, 1f), 0, rng.NextFloat(-1f, 1f)), radialUp);
+                    // Build a random direction in the TANGENT PLANE (perpendicular to radialUp),
+                    // not world-horizontal. World-horizontal breaks near the equator where radialUp
+                    // is nearly horizontal itself (LookRotation becomes undefined).
+                    float3 tangentForward = math.normalizesafe(
+                        math.cross(radialUp, new float3(0.31f, 0.47f, 0.83f)), new float3(1, 0, 0));
+                    // Randomize rotation around radialUp for natural variation.
+                    float angle = rng.NextFloat(0f, math.PI * 2f);
+                    tangentForward = math.normalizesafe(
+                        tangentForward * math.cos(angle) +
+                        math.cross(radialUp, tangentForward) * math.sin(angle), tangentForward);
+                    quaternion rot = quaternion.LookRotation(tangentForward, radialUp);
                     float h = bladeHeight * (1f + rng.NextFloat(-heightVariance, heightVariance));
                     float3 scale = new float3(bladeWidth, h, 1f);
 
