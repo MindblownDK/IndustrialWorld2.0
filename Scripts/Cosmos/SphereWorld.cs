@@ -227,6 +227,9 @@ namespace VoxelEngine.Cosmos
             DispatchGenerationJobs();
             DispatchMeshingJobs();
             CompleteFinishedJobs();
+            // Pump the water mesh builder — the flat VoxelWorld did this in its Update, but since
+            // it's disabled, the sphere must pump it or water meshes never get built (invisible water).
+            WaterSim.WaterMeshBuilder.Pump(maxJobsPerFrame);
             ProcessDeferredScatter();
 
             // Periodic diagnostic: log chunk status every 2 seconds so we can confirm terrain is

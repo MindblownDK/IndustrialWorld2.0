@@ -109,15 +109,9 @@ namespace VoxelEngine.Cosmos
             // support). We deliberately do NOT assign VoxelTerrain here — VoxelTerrain is a custom
             // Shader Graph that doesn't support alpha fade and renders purple at planet scale.
 
-            // ── Spherical water shell (Phase 4) ──
-            // A transparent sphere at sea radius — oceans fill naturally where terrain dips below
-            // sea level. One draw call, always correct, no per-chunk dependency.
-            var waterGO = new GameObject("WaterShell");
-            waterGO.transform.SetParent(_bodyGO.transform, false);
-            waterGO.transform.localPosition = Vector3.zero;
-            waterGO.AddComponent<SphereWaterShell>();
-
             // ── Distant planet renderer (like Space Engineers — see other planets in the sky) ──
+            // Needs a CosmicRegistry in the scene to know where the other bodies are.
+            EnsureCosmicRegistry();
             var spaceGO = new GameObject("SpaceRenderer");
             spaceGO.AddComponent<SpaceBodyRenderer>();
 
@@ -196,6 +190,43 @@ namespace VoxelEngine.Cosmos
             {
                 cam.farClipPlane = needed;
                 Debug.Log($"[CosmosBootstrap] Camera far clip plane raised to {needed:0} so the body is visible.");
+            }
+        }
+
+        /// <summary>
+        /// Ensure a CosmicRegistry exists and is populated with the solar system template.
+        /// Without this, SpaceBodyRenderer has nothing to render (no moon/planets in the sky).
+        /// </summary>
+        private void EnsureCosmicRegistry()
+        {
+            var registry = CosmicRegistry.Instance;
+            if (registry == null)
+            {
+                var regGO = new GameObject("CosmicRegistry");
+                registry = regGO.AddComponent<CosmicRegistry>();
+            }
+            if (!registry.IsReady)
+            {
+                // Load the Sol system template if available.
+                var sys = Resources.Load<SolarSystemTemplate>("System_Sol");
+#if UNITY_EDITOR
+                if (sys == null)
+                    sys = UnityEditor.AssetDatabase.LoadAssetAtPath<SolarSystemTemplate>(
+                        "Assets/VoxelEngineAssets/Planets/System_Sol.asset");
+#endif
+                if (sys != null)
+                {
+                    var session = VoxelEngine.Menu.WorldSession.Instance;
+                    int seed = session != null ? session.seed : 1337;
+                    registry.GenerateLayout(sys, seed);
+                    Debug.Log("[CosmosBootstrap] CosmicRegistry populated with " + sys.systemName +
+                              " — " + registry.Bodies.Count + " bodies (planets + moons visible in sky).");
+                }
+                else
+                {
+                    Debug.LogWarning("[CosmosBootstrap] No SolarSystemTemplate found. Run " +
+                                     "Tools ▸ Voxel Engine ▸ Create Solar System (Sol) to see other planets.");
+                }
             }
         }
 
