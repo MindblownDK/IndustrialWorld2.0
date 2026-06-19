@@ -226,10 +226,11 @@ namespace VoxelEngine.Cosmos
                 float2 climate = SampleClimate(prm.seed, dir);
                 bool atSurface = depth < biome.surfaceDepth;
 
+                // Beach band: ONLY right at the waterline (±1m, top 2 voxels). The old band was
+                // ±2.5m × 4 deep which covered the entire surface when terrain sat near sea level.
                 if (biome.allowBeach == 1 &&
-                    radius >= prm.seaRadius - 1.5f && radius <= prm.seaRadius + 2.5f && depth < 4)
+                    radius >= prm.seaRadius - 1f && radius <= prm.seaRadius + 1f && depth < 2)
                 {
-                    // Beach band: sand at coastlines.
                     material = (byte)MaterialId.Sand;
                 }
                 else if (depth < biome.surfaceDepth)

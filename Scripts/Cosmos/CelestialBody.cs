@@ -50,7 +50,11 @@ namespace VoxelEngine.Cosmos
             float radiusM = Mathf.Max(50f, settings.radiusKm * 1000f);
             genParams.seed                = settings.seed;
             genParams.radiusWorld         = radiusM;
-            genParams.baseHeight          = settings.waterLevel;          // sea level offset
+            // Terrain height vs sea level: mean terrain should be ABOVE sea level so there's
+            // actual LAND (not beach/ocean everywhere). In the flat world baseHeight=100 and
+            // seaLevel=96 (4m of land above water). We mirror that: baseHeight = waterLevel + a
+            // terrain buffer so the mean surface sits above the sea.
+            genParams.baseHeight          = settings.waterLevel + 12f;   // mean terrain 12m above water
             genParams.seaRadius           = radiusM + settings.waterLevel;
             // Continent wavelength ≈ planet circumference / ~6 continents.
             float circumference           = Mathf.PI * 2f * radiusM;
