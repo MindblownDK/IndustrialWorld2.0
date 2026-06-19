@@ -379,7 +379,7 @@ namespace VoxelEngine.Cosmos
             HasGenerated(c.coord + new Vector3Int( 0, 0,  1));
         private bool HasGenerated(Vector3Int coord) => _chunks.TryGetValue(coord, out var n) && n.isGenerated;
 
-        private void ScheduleMeshJob(Chunk chunk)
+        public void ScheduleMeshJob(Chunk chunk)
         {
             for (int i = 0; i < _pendingMesh.Count; i++)
                 if (_pendingMesh[i].chunk == chunk) return;

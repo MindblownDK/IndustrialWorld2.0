@@ -23,7 +23,7 @@ namespace VoxelEngine.Modification
         /// If no target Y has been set yet, sets the target to the Y of the looked-at voxel and returns false
         /// (so the caller can show feedback "anchored").
         /// </summary>
-        public static bool ApplyAt(VoxelWorld world, MaterialRegistry registry,
+        public static bool ApplyAt(IVoxelWorld world, MaterialRegistry registry,
                                    Vector3 worldPos, float radius, int verticalReach)
         {
             if (world == null) return false;

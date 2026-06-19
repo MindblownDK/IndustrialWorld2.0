@@ -19,6 +19,8 @@ namespace VoxelEngine.Core
         bool TryGetChunk(Vector3Int coord, out Chunk chunk);
         Vector3Int WorldToVoxel(Vector3 worldPos);
         Vector3Int WorldToChunk(Vector3 worldPos);
+        /// <summary>Force a chunk to rebuild its mesh (used by editing tools after voxel writes).</summary>
+        void ScheduleMeshJob(Chunk chunk);
     }
 
     /// <summary>
