@@ -1,82 +1,210 @@
 // Assets/Scripts/VoxelEngine/Cosmos/QuasarRenderer.cs
 //
-// Renders a GIANT glowing quasar pinned to the deep-space skybox — a purely aesthetic
-// background feature from the design brief. It's a billboarded, emissive disc with two
-// relativistic jets that glows on the horizon, far beyond the solar system.
-//
-// The quasar follows the viewer (so it always appears "infinitely far away" like a real
-// background object) and uses the QuasarSettings from the solar system template for its
-// colour, brightness, and sky direction.
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║                    THE QUASAR — maximum visual effort                 ║
+// ║                                                                       ║
+// ║  A fully layered, billboarded quasar composed of:                      ║
+// ║                                                                       ║
+// ║  1. OUTER HALO     — soft radial glow (QuasarGlow.shader)             ║
+// ║  2. ACCRETION DISC — swirling procedural disc with Doppler beaming    ║
+// ║                      photon ring, black hole shadow                   ║
+// ║                      (QuasarAccretionDisc.shader)                      ║
+// ║  3. POLAR JET (×2) — volumetric flowing jets perpendicular to disc    ║
+// ║                      with knotted turbulence (QuasarJet.shader)        ║
+// ║                                                                       ║
+// ║  All layers billboard toward the viewer so the quasar always looks    ║
+// ║  correct from any angle. The structure is pinned to a sky direction   ║
+// ║  and positioned far beyond the solar system (visualDistance).         ║
+// ║                                                                       ║
+// ║  This is the "wow" moment when a player looks up at the night sky.   ║
+// ╚══════════════════════════════════════════════════════════════════════╝
 using UnityEngine;
 
 namespace VoxelEngine.Cosmos
 {
-    /// <summary>
-    /// Renders the background quasar as a glowing billboard. Attach near the SpaceBodyRenderer.
-    /// </summary>
     [ExecuteAlways]
     public class QuasarRenderer : MonoBehaviour
     {
-        [Tooltip("Quasar settings. If null, uses sensible defaults.")]
+        [Header("Settings")]
         public QuasarSettings settings = new QuasarSettings();
 
-        [Tooltip("Visual distance (how far away the quasar appears).")]
-        public float visualDistance = 15000f;
+        [Tooltip("How far away the quasar appears (metres). Large = small on screen.")]
+        public float visualDistance = 12000f;
 
-        private GameObject _coreGO;
-        private GameObject _jet1GO;
-        private GameObject _jet2GO;
-        private Material _coreMat;
-        private Material _jetMat;
+        [Tooltip("Overall visual scale multiplier.")]
+        public float overallScale = 1f;
+
+        [Header("Layer Sizes (relative to overall)")]
+        [Range(0.5f, 5f)] public float haloSize = 2.5f;
+        [Range(0.5f, 5f)] public float discSize = 1.5f;
+        [Range(0.5f, 8f)] public float jetLength = 4f;
+        [Range(0.1f, 3f)] public float jetWidth = 0.5f;
+
+        [Header("Animation")]
+        [Range(0f, 2f)] public float discSpeed = 0.3f;
+        [Range(0f, 2f)] public float jetSpeed = 0.5f;
+
+        // ── Layer objects ──
+        private GameObject _haloGO, _discGO, _jet1GO, _jet2GO;
+        private Material _haloMat, _discMat, _jetMat;
+        private Mesh _quadMesh, _jetMesh;
 
         private void OnEnable() => EnsureObjects();
-        private void OnDisable()
-        {
-            if (_coreGO != null) DestroyImmediate(_coreGO);
-            if (_jet1GO != null) DestroyImmediate(_jet1GO);
-            if (_jet2GO != null) DestroyImmediate(_jet2GO);
-        }
+        private void OnDisable() => Cleanup();
 
         private void Update()
         {
-            if (!settings.enabled) return;
+            if (!settings.enabled)
+            {
+                SetAllActive(false);
+                return;
+            }
+            SetAllActive(true);
             EnsureObjects();
 
-            // Follow the viewer so the quasar always appears infinitely distant.
             Vector3 viewerPos = GetViewerPosition();
-            Vector3 dir = settings.skyDirection.normalized;
-            if (dir.sqrMagnitude < 0.01f) dir = Vector3.forward;
+            Vector3 dir = settings.skyDirection.sqrMagnitude > 0.01f
+                ? settings.skyDirection.normalized : Vector3.forward;
             Vector3 center = viewerPos + dir * visualDistance;
 
-            // Core disc: faces the viewer.
-            float coreSize = visualDistance * 0.08f * settings.apparentSize;
-            _coreGO.transform.position = center;
-            _coreGO.transform.localScale = Vector3.one * coreSize;
-            _coreGO.transform.rotation = Quaternion.LookRotation(viewerPos - center, Vector3.up);
+            // Billboard rotation: face the viewer.
+            Quaternion billboard = Quaternion.LookRotation(viewerPos - center, Vector3.up);
 
-            // Jets: two elongated planes perpendicular to the disc, pointing "up" and "down".
-            Vector3 jetDir = Vector3.Cross(dir, Vector3.up).normalized;
-            if (jetDir.sqrMagnitude < 0.01f) jetDir = Vector3.right;
-            float jetLen = coreSize * 4f;
-            float jetWidth = coreSize * 0.3f;
+            // The disc is tilted within the billboard plane (looks 3D).
+            Quaternion discTilt = billboard * Quaternion.Euler(90f * 0.35f, 0, 0);
 
-            Vector3 jet1Pos = center + jetDir * jetLen * 0.5f;
-            _jet1GO.transform.position = jet1Pos;
-            _jet1GO.transform.localScale = new Vector3(jetWidth, jetLen, 1f);
-            _jet1GO.transform.rotation = Quaternion.LookRotation(viewerPos - jet1Pos, jetDir);
+            float baseSize = visualDistance * 0.06f * settings.apparentSize * overallScale;
 
-            Vector3 jet2Pos = center - jetDir * jetLen * 0.5f;
-            _jet2GO.transform.position = jet2Pos;
-            _jet2GO.transform.localScale = new Vector3(jetWidth, jetLen, 1f);
-            _jet2GO.transform.rotation = Quaternion.LookRotation(viewerPos - jet2Pos, -jetDir);
+            // ── Halo ──
+            _haloGO.transform.position = center;
+            _haloGO.transform.rotation = billboard;
+            _haloGO.transform.localScale = Vector3.one * baseSize * haloSize;
 
-            // Apply colours + brightness.
-            Color coreCol = settings.coreColor * settings.brightness;
-            Color jetCol = settings.jetColor * settings.brightness;
-            if (_coreMat.HasProperty("_BaseColor")) _coreMat.SetColor("_BaseColor", coreCol);
-            if (_coreMat.HasProperty("_Color"))     _coreMat.SetColor("_Color", coreCol);
-            if (_jetMat.HasProperty("_BaseColor"))  _jetMat.SetColor("_BaseColor", jetCol);
-            if (_jetMat.HasProperty("_Color"))      _jetMat.SetColor("_Color", jetCol);
+            // ── Accretion disc ──
+            _discGO.transform.position = center;
+            _discGO.transform.rotation = discTilt;
+            _discGO.transform.localScale = new Vector3(baseSize * discSize, baseSize * discSize, 1);
+
+            // ── Polar jets: perpendicular to the disc, pointing "up" and "down" ──
+            Vector3 jetAxis = discTilt * Vector3.up;  // perpendicular to the disc plane
+            float jLen = baseSize * jetLength;
+            float jWid = baseSize * jetWidth;
+
+            // Jet 1 (above the disc).
+            Vector3 j1Pos = center + jetAxis * jLen * 0.5f;
+            _jet1GO.transform.position = j1Pos;
+            // Orient so the mesh's X axis aligns with the jet axis (the jet shader uses X = along).
+            _jet1GO.transform.rotation = Quaternion.LookRotation(jetAxis, Vector3.up) * Quaternion.Euler(0, -90, 0);
+            _jet1GO.transform.localScale = new Vector3(jLen, jWid, 1);
+
+            // Jet 2 (below the disc, flipped).
+            Vector3 j2Pos = center - jetAxis * jLen * 0.5f;
+            _jet2GO.transform.position = j2Pos;
+            _jet2GO.transform.rotation = Quaternion.LookRotation(-jetAxis, Vector3.up) * Quaternion.Euler(0, -90, 0);
+            _jet2GO.transform.localScale = new Vector3(jLen, jWid, 1);
+
+            // ── Push animation params to the shaders ──
+            if (_discMat != null)
+            {
+                _discMat.SetFloat("_TimeScale", discSpeed);
+                _discMat.SetFloat("_Brightness", settings.brightness);
+                _discMat.SetColor("_CoreColor", settings.coreColor);
+            }
+            if (_jetMat != null)
+            {
+                _jetMat.SetFloat("_TimeScale", jetSpeed);
+                _jetMat.SetFloat("_Brightness", settings.brightness * 0.8f);
+                _jetMat.SetColor("_CoreColor", settings.jetColor);
+            }
+            if (_haloMat != null)
+            {
+                _haloMat.SetFloat("_Brightness", settings.brightness * 0.5f);
+                _haloMat.SetColor("_InnerColor", settings.coreColor * 0.9f);
+                _haloMat.SetColor("_OuterColor", settings.jetColor * 0.6f);
+            }
+        }
+
+        // ── Setup ──
+        private void EnsureObjects()
+        {
+            if (_haloGO != null) return;
+
+            _quadMesh = CreateQuad();
+            _jetMesh = CreateJetQuad();
+
+            // Halo (largest, renders first / behind).
+            _haloGO = CreateLayer("Quasar_Halo", _quadMesh);
+            _haloMat = CreateMaterial("QuasarGlow");
+            _haloGO.GetComponent<MeshRenderer>().sharedMaterial = _haloMat;
+
+            // Accretion disc (the centrepiece).
+            _discGO = CreateLayer("Quasar_Disc", _quadMesh);
+            _discMat = CreateMaterial("QuasarAccretionDisc");
+            _discGO.GetComponent<MeshRenderer>().sharedMaterial = _discMat;
+
+            // Jets (two elongated quads).
+            _jet1GO = CreateLayer("Quasar_Jet1", _jetMesh);
+            _jetMat = CreateMaterial("QuasarJet");
+            _jet1GO.GetComponent<MeshRenderer>().sharedMaterial = _jetMat;
+
+            _jet2GO = CreateLayer("Quasar_Jet2", _jetMesh);
+            _jet2GO.GetComponent<MeshRenderer>().sharedMaterial = _jetMat;
+        }
+
+        private GameObject CreateLayer(string name, Mesh mesh)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(null);
+            var mf = go.AddComponent<MeshFilter>();
+            var mr = go.AddComponent<MeshRenderer>();
+            mf.sharedMesh = mesh;
+            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            mr.receiveShadows = false;
+            return go;
+        }
+
+        private static Material CreateMaterial(string shaderName)
+        {
+            var shader = Shader.Find("VoxelEngine/" + shaderName);
+            if (shader == null)
+            {
+                // Fallback — should never happen if shaders are in the project.
+                shader = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Standard");
+            }
+            return new Material(shader) { name = "Mat_" + shaderName };
+        }
+
+        // A centered quad (2 triangles), UVs 0..1.
+        private static Mesh CreateQuad()
+        {
+            var mesh = new Mesh { name = "QuasarQuad" };
+            mesh.vertices = new Vector3[]
+            {
+                new(-0.5f, -0.5f, 0), new(0.5f, -0.5f, 0),
+                new(-0.5f,  0.5f, 0), new(0.5f,  0.5f, 0),
+            };
+            mesh.uv = new Vector2[] { new(0,0), new(1,0), new(0,1), new(1,1) };
+            mesh.triangles = new int[] { 0, 2, 1, 1, 2, 3 };
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+
+        // An elongated quad for jets: wider along X (the jet axis in the shader).
+        private static Mesh CreateJetQuad()
+        {
+            var mesh = new Mesh { name = "QuasarJetQuad" };
+            mesh.vertices = new Vector3[]
+            {
+                new(-0.5f, -0.5f, 0), new(0.5f, -0.5f, 0),
+                new(-0.5f,  0.5f, 0), new(0.5f,  0.5f, 0),
+            };
+            // UV: x = 0 at the core side, x = 1 at the tip. y = across.
+            mesh.uv = new Vector2[] { new(0,0), new(1,0), new(0,1), new(1,1) };
+            mesh.triangles = new int[] { 0, 2, 1, 1, 2, 3 };
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            return mesh;
         }
 
         private Vector3 GetViewerPosition()
@@ -87,61 +215,25 @@ namespace VoxelEngine.Cosmos
             return cam != null ? cam.transform.position : transform.position;
         }
 
-        private void EnsureObjects()
+        private void SetAllActive(bool active)
         {
-            if (_coreGO != null) return;
-
-            // Core: a glowing disc (quad) with emissive material.
-            _coreGO = CreateBillboard("Quasar_Core");
-            _coreMat = CreateEmissiveMaterial(settings.coreColor, settings.brightness);
-            _coreGO.GetComponent<MeshRenderer>().sharedMaterial = _coreMat;
-
-            // Two jets.
-            _jet1GO = CreateBillboard("Quasar_Jet1");
-            _jetMat = CreateEmissiveMaterial(settings.jetColor, settings.brightness * 0.7f);
-            _jet1GO.GetComponent<MeshRenderer>().sharedMaterial = _jetMat;
-
-            _jet2GO = CreateBillboard("Quasar_Jet2");
-            _jet2GO.GetComponent<MeshRenderer>().sharedMaterial = _jetMat;
+            if (_haloGO != null) _haloGO.SetActive(active);
+            if (_discGO != null) _discGO.SetActive(active);
+            if (_jet1GO != null) _jet1GO.SetActive(active);
+            if (_jet2GO != null) _jet2GO.SetActive(active);
         }
 
-        private static GameObject CreateBillboard(string name)
+        private void Cleanup()
         {
-            var go = new GameObject(name);
-            go.transform.SetParent(null);
-            var mf = go.AddComponent<MeshFilter>();
-            var mr = go.AddComponent<MeshRenderer>();
-            // A simple quad (2 triangles) facing +Z.
-            var mesh = new Mesh { name = name + "_mesh" };
-            mesh.vertices = new Vector3[]
-            {
-                new Vector3(-0.5f, -0.5f, 0), new Vector3(0.5f, -0.5f, 0),
-                new Vector3(-0.5f,  0.5f, 0), new Vector3(0.5f,  0.5f, 0),
-            };
-            mesh.uv = new Vector2[] { new(0,0), new(1,0), new(0,1), new(1,1) };
-            mesh.triangles = new int[] { 0, 2, 1, 1, 2, 3 };
-            mesh.RecalculateNormals();
-            mesh.RecalculateBounds();
-            mf.sharedMesh = mesh;
-            return go;
-        }
-
-        private static Material CreateEmissiveMaterial(Color color, float brightness)
-        {
-            var shader = Shader.Find("Universal Render Pipeline/Unlit")
-                       ?? Shader.Find("Unlit/Color")
-                       ?? Shader.Find("Standard");
-            var mat = new Material(shader);
-            mat.name = "Mat_Quasar_Runtime";
-            Color emit = color * brightness;
-            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", emit);
-            if (mat.HasProperty("_Color"))     mat.SetColor("_Color", emit);
-            // Additive blend so it glows on top of the skybox.
-            mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.One);
-            mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.One);
-            mat.SetInt("_ZWrite", 0);
-            mat.renderQueue = 2500;  // renders after skybox
-            return mat;
+            DestroyImmediate(_haloGO); _haloGO = null;
+            DestroyImmediate(_discGO); _discGO = null;
+            DestroyImmediate(_jet1GO); _jet1GO = null;
+            DestroyImmediate(_jet2GO); _jet2GO = null;
+            DestroyImmediate(_haloMat);
+            DestroyImmediate(_discMat);
+            DestroyImmediate(_jetMat);
+            DestroyImmediate(_quadMesh);
+            DestroyImmediate(_jetMesh);
         }
     }
 }
