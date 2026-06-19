@@ -232,26 +232,46 @@ namespace VoxelEngine.Cosmos
             WaterSim.WaterMeshBuilder.Pump(maxJobsPerFrame);
             ProcessDeferredScatter();
 
-            // Periodic diagnostic: log chunk status every 2 seconds so we can confirm terrain is
-            // generating + meshing. Remove or gate behind a debug flag once validated.
+            // ── Comprehensive diagnostics (every 3 seconds) ──
             _diagTimer += Time.deltaTime;
-            if (_diagTimer > 2f)
+            if (_diagTimer > 3f)
             {
                 _diagTimer = 0f;
-                int gen = 0, meshed = 0;
+                int gen = 0, meshed = 0, waterChunks = 0, scattered = 0, waterVoxels = 0;
                 foreach (var kv in _chunks)
                 {
-                    if (kv.Value.isGenerated) gen++;
-                    if (kv.Value.meshFilter != null && kv.Value.meshFilter.sharedMesh != null &&
-                        kv.Value.meshFilter.sharedMesh.vertexCount > 0) meshed++;
+                    var ch = kv.Value;
+                    if (ch.isGenerated) gen++;
+                    if (ch.meshFilter != null && ch.meshFilter.sharedMesh != null &&
+                        ch.meshFilter.sharedMesh.vertexCount > 0) meshed++;
+                    if (ch.isScattered) scattered++;
+                    // Count water voxels + water mesh GOs.
+                    if (ch.waterMeshGO != null) waterChunks++;
+                    if (ch.fluidGrid != null) waterChunks++;
                 }
-                if (gen != _diagGenerated || meshed != _diagMeshed)
+                // Sample a few chunks for actual water voxel count.
+                int sampled = 0;
+                foreach (var kv in _chunks)
                 {
-                    _diagGenerated = gen;
-                    _diagMeshed = meshed;
-                    Debug.Log($"[SphereWorld] Chunks: {_chunks.Count} active, {gen} generated, {meshed} meshed (non-empty). " +
-                              $"Gen queue: {_genQueue.Count}, Mesh queue: {_meshQueue.Count}");
+                    if (sampled >= 5) break;
+                    var ch = kv.Value;
+                    if (!ch.isGenerated) continue;
+                    for (int wz = 0; wz < 8; wz++)
+                    for (int wy = 0; wy < 8; wy++)
+                    for (int wx = 0; wx < 8; wx++)
+                    {
+                        var v = ch.GetVoxelLocal(wx * 4, wy * 4, wz * 4);
+                        if (v.waterLevel > 0 || v.material == (byte)VoxelEngine.Materials.MaterialId.WaterLiquid)
+                            waterVoxels++;
+                    }
+                    sampled++;
                 }
+                var fm = WaterSim.FluidManager.Instance;
+                Debug.Log($"[SphereWorld] Chunks: {_chunks.Count} active | {gen} gen | {meshed} meshed | " +
+                          $"{scattered} scattered | {waterChunks} with water-GO | {waterVoxels} water voxels (5-chunk sample) | " +
+                          $"FluidMgr: {(fm == null ? "NULL" : "alive")} | " +
+                          $"genQ:{_genQueue.Count} meshQ:{_meshQueue.Count} | " +
+                          $"seaRadius:{body?.SeaRadius} meanSurf:{body?.SurfaceRadius}");
             }
         }
 

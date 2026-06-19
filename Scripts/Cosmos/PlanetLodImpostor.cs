@@ -222,25 +222,26 @@ namespace VoxelEngine.Cosmos
         private void UpdateFade(CelestialBody body)
         {
             if (meshRenderer == null || _lodMaterial == null) return;
+            // The LOD is ALWAYS visible — whole planet visible from surface (like Space Engineers).
             float a = 1f;
             if (viewer != null)
             {
                 float alt = body.AltitudeAt(viewer.position);
                 float r = body.SurfaceRadius;
-                float hi = r * showAboveAltitudeFactor;
-                float lo = r * hideBelowAltitudeFactor;
-                a = Mathf.Clamp01((alt - lo) / Mathf.Max(0.001f, hi - lo));
+                float surfaceFadeStart = r * 0.15f;
+                float surfaceFadeEnd = r * 0.02f;
+                if (alt < surfaceFadeStart)
+                    a = Mathf.Lerp(0.15f, 1f, Mathf.Clamp01((alt - surfaceFadeEnd) / Mathf.Max(0.001f, surfaceFadeStart - surfaceFadeEnd)));
             }
-            // Apply alpha via whichever colour property the shader exposes.
             if (_lodMaterial.HasProperty("_BaseColor"))
             {
-                var c = _lodMaterial.GetColor("_BaseColor"); c.a = a; _lodMaterial.SetColor("_BaseColor", c);
+                var col = _lodMaterial.GetColor("_BaseColor"); col.a = a; _lodMaterial.SetColor("_BaseColor", col);
             }
             else if (_lodMaterial.HasProperty("_Color"))
             {
-                var c = _lodMaterial.GetColor("_Color"); c.a = a; _lodMaterial.SetColor("_Color", c);
+                var col = _lodMaterial.GetColor("_Color"); col.a = a; _lodMaterial.SetColor("_Color", col);
             }
-            meshRenderer.enabled = a > 0.01f;
+            meshRenderer.enabled = true;
         }
 
         private void Release()

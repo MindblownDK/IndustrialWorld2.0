@@ -24,6 +24,10 @@ namespace VoxelEngine.Cosmos
                  "won't fit this slot.")]
         public PlanetTemplate planetTemplate;
 
+        [Tooltip("Solar system template (for seeing other planets/moons/sun in the sky). " +
+                 "If null, auto-loads System_Sol from the project.")]
+        public SolarSystemTemplate solarSystemTemplate;
+
         [Tooltip("Where to place the body's core in world space. Keep it within the camera's far " +
                  "clip plane so it's visible/reachable. (0,700,400) puts it high above the flat " +
                  "terrain ceiling (~256m) and in front of the spawn — look up and fly to it.)")]
@@ -207,8 +211,9 @@ namespace VoxelEngine.Cosmos
             }
             if (!registry.IsReady)
             {
-                // Load the Sol system template if available.
-                var sys = Resources.Load<SolarSystemTemplate>("System_Sol");
+                // Use the inspector-assigned template, or auto-load System_Sol.
+                var sys = solarSystemTemplate;
+                if (sys == null) sys = Resources.Load<SolarSystemTemplate>("System_Sol");
 #if UNITY_EDITOR
                 if (sys == null)
                     sys = UnityEditor.AssetDatabase.LoadAssetAtPath<SolarSystemTemplate>(
