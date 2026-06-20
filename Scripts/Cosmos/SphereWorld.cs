@@ -231,8 +231,10 @@ namespace VoxelEngine.Cosmos
             DispatchGenerationJobs();
             DispatchMeshingJobs();
             CompleteFinishedJobs();
-            // WaterMeshBuilder.Pump DISABLED — the flat-world water builder creates horizontal
-            // planes that break on a sphere (floating discs). Water renders as solid voxels instead.
+            
+            // Re-enabled WaterMeshBuilder for Spheres
+            VoxelEngine.WaterSim.WaterMeshBuilder.Pump(4);
+            
             ProcessDeferredScatter();
 
             // ── Comprehensive diagnostics (every 3 seconds) ──

@@ -137,6 +137,11 @@ namespace VoxelEngine.WaterSim
 
         private static void Build(Chunk c)
         {
+            if (VoxelEngine.Core.ActiveWorld.Current is VoxelEngine.Cosmos.SphereWorld) {
+                BuildSphere(c);
+                return;
+            }
+
             const int S = VoxelConstants.CHUNK_SIZE;
             EnsureGO(c);
             FlowFieldManager.UpdateFlowField(c);
@@ -420,6 +425,138 @@ namespace VoxelEngine.WaterSim
             for (int n = 0; n < 4; n++) uv2s.Add(flow);
             tris.Add(i); tris.Add(i + 2); tris.Add(i + 1);
             tris.Add(i); tris.Add(i + 3); tris.Add(i + 2);
+        }
+
+        private static void BuildSphere(Chunk c)
+        {
+            const int S = VoxelConstants.CHUNK_SIZE;
+            EnsureGO(c);
+
+            var verts     = new List<Vector3>(S * S * 4);
+            var norms     = new List<Vector3>(S * S * 4);
+            var uvs       = new List<Vector2>(S * S * 4);
+            var uv2s      = new List<Vector2>(S * S * 4);
+            var waterTris = new List<int>(S * S * 6);
+            var oilTris   = new List<int>(S * S * 6);
+
+            float wX = c.coord.x * S;
+            float wY = c.coord.y * S;
+            float wZ = c.coord.z * S;
+            bool any = false;
+
+            for (int x = 0; x < S; x++)
+            for (int y = 0; y < S; y++)
+            for (int z = 0; z < S; z++)
+            {
+                var v = c.GetVoxelLocal(x, y, z);
+                if (!FluidMaterialUtility.IsFluid(v)) continue;
+                
+                LiquidType liquid = FluidMaterialUtility.LiquidFromVoxel(v);
+                var tris = liquid == LiquidType.CrudeOil ? oilTris : waterTris;
+                any = true;
+
+                // Check 6 neighbors
+                CheckAndAddSphereFace(c, x, y, z, 1, 0, 0, new Vector3(1, 0, 0), wX, wY, wZ, verts, norms, uvs, uv2s, tris);
+                CheckAndAddSphereFace(c, x, y, z, -1, 0, 0, new Vector3(-1, 0, 0), wX, wY, wZ, verts, norms, uvs, uv2s, tris);
+                CheckAndAddSphereFace(c, x, y, z, 0, 1, 0, new Vector3(0, 1, 0), wX, wY, wZ, verts, norms, uvs, uv2s, tris);
+                CheckAndAddSphereFace(c, x, y, z, 0, -1, 0, new Vector3(0, -1, 0), wX, wY, wZ, verts, norms, uvs, uv2s, tris);
+                CheckAndAddSphereFace(c, x, y, z, 0, 0, 1, new Vector3(0, 0, 1), wX, wY, wZ, verts, norms, uvs, uv2s, tris);
+                CheckAndAddSphereFace(c, x, y, z, 0, 0, -1, new Vector3(0, 0, -1), wX, wY, wZ, verts, norms, uvs, uv2s, tris);
+            }
+
+            if (!any) { ClearGO(c); return; }
+
+            var mesh = c.waterMesh;
+            if (mesh == null)
+            {
+                mesh = new Mesh { name = "FluidMesh" };
+                mesh.indexFormat = IndexFormat.UInt32;
+                c.waterMesh = mesh;
+                c.waterMeshFilter.sharedMesh = mesh;
+            }
+            mesh.Clear();
+            mesh.SetVertices(verts);
+            mesh.SetNormals(norms);
+            mesh.SetUVs(0, uvs);
+            mesh.SetUVs(1, uv2s);
+
+            mesh.subMeshCount = 2;
+            mesh.SetTriangles(waterTris, 0);
+            mesh.SetTriangles(oilTris, 1);
+            mesh.RecalculateBounds();
+
+            var mats = new Material[2];
+            mats[0] = _waterMat;
+            mats[1] = _oilMat;
+            c.waterMeshRenderer.sharedMaterials = mats;
+            c.waterMeshGO.SetActive(true);
+        }
+
+        private static void CheckAndAddSphereFace(Chunk c, int x, int y, int z, int dx, int dy, int dz, Vector3 normal, 
+            float wX, float wY, float wZ, List<Vector3> verts, List<Vector3> norms, List<Vector2> uvs, List<Vector2> uv2s, List<int> tris)
+        {
+            const int S = VoxelConstants.CHUNK_SIZE;
+            int nx = x + dx;
+            int ny = y + dy;
+            int nz = z + dz;
+            
+            Voxel neighbor;
+            if (nx >= 0 && nx < S && ny >= 0 && ny < S && nz >= 0 && nz < S)
+            {
+                neighbor = c.GetVoxelLocal(nx, ny, nz);
+            }
+            else
+            {
+                // Edge of chunk - just assume air for simplicity to close the mesh, or fetch from active world
+                var world = ActiveWorld.Current;
+                if (world != null) {
+                    var wPos = new Vector3Int(Mathf.FloorToInt(wX + nx), Mathf.FloorToInt(wY + ny), Mathf.FloorToInt(wZ + nz));
+                    neighbor = world.GetVoxelWorld(wPos);
+                } else {
+                    neighbor = new Voxel(-1, 0, 0);
+                }
+            }
+
+            // Only generate face against air (density <= 0) and non-fluid
+            if (neighbor.density <= 0 && !FluidMaterialUtility.IsFluid(neighbor))
+            {
+                int i = verts.Count;
+                
+                // Base corner
+                Vector3 p = new Vector3(x, y, z);
+                
+                Vector3 t1 = Vector3.zero;
+                Vector3 t2 = Vector3.zero;
+                
+                if (dx != 0) { t1 = new Vector3(0, 1, 0); t2 = new Vector3(0, 0, 1); p.x += (dx > 0 ? 1 : 0); }
+                else if (dy != 0) { t1 = new Vector3(1, 0, 0); t2 = new Vector3(0, 0, 1); p.y += (dy > 0 ? 1 : 0); }
+                else if (dz != 0) { t1 = new Vector3(1, 0, 0); t2 = new Vector3(0, 1, 0); p.z += (dz > 0 ? 1 : 0); }
+
+                verts.Add(p);
+                verts.Add(p + t1);
+                verts.Add(p + t1 + t2);
+                verts.Add(p + t2);
+
+                for (int n = 0; n < 4; n++) norms.Add(normal);
+                for (int n = 0; n < 4; n++) {
+                    Vector3 wp = verts[verts.Count - 4 + n] + new Vector3(wX, wY, wZ);
+                    uvs.Add(new Vector2(wp.x + wp.y, wp.z + wp.y));
+                    uv2s.Add(Vector2.zero);
+                }
+
+                // Ensure winding is correct based on normal direction
+                Vector3 cross = Vector3.Cross(t1, t2);
+                if (Vector3.Dot(cross, normal) < 0)
+                {
+                    tris.Add(i); tris.Add(i + 2); tris.Add(i + 1);
+                    tris.Add(i); tris.Add(i + 3); tris.Add(i + 2);
+                }
+                else
+                {
+                    tris.Add(i); tris.Add(i + 1); tris.Add(i + 2);
+                    tris.Add(i); tris.Add(i + 2); tris.Add(i + 3);
+                }
+            }
         }
 
         private static void AddCurtainQuadZ(float xA, float xB, float hTop, float hBot, float cz, Vector3 normal,

@@ -82,11 +82,27 @@ namespace VoxelEngine.WaterSim
                 bool didChange;
                 try
                 {
+                    int downX = 0, downY = -1, downZ = 0;
+                    if (world is VoxelEngine.Cosmos.SphereWorld) {
+                        Vector3 worldOrigin = chunk.coord * VoxelConstants.CHUNK_SIZE + new Vector3(VoxelConstants.CHUNK_SIZE/2f, VoxelConstants.CHUNK_SIZE/2f, VoxelConstants.CHUNK_SIZE/2f);
+                        Vector3 gravity = -worldOrigin.normalized;
+                        if (Mathf.Abs(gravity.x) > Mathf.Abs(gravity.y) && Mathf.Abs(gravity.x) > Mathf.Abs(gravity.z)) {
+                            downX = (int)Mathf.Sign(gravity.x); downY = 0; downZ = 0;
+                        } else if (Mathf.Abs(gravity.z) > Mathf.Abs(gravity.y)) {
+                            downZ = (int)Mathf.Sign(gravity.z); downX = 0; downY = 0;
+                        } else {
+                            downY = (int)Mathf.Sign(gravity.y); downX = 0; downZ = 0;
+                        }
+                    }
+
                     var job = new FluidSimJob
                     {
                         voxels     = chunk.voxels,
                         chunkSize  = VoxelConstants.CHUNK_SIZE,
                         chunkSizeP = VoxelConstants.CHUNK_SIZE_P,
+                        downX      = downX,
+                        downY      = downY,
+                        downZ      = downZ,
                         changed    = changed
                     };
                     job.Run();

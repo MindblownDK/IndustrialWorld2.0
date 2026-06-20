@@ -30,6 +30,10 @@ namespace VoxelEngine.WaterSim
         public NativeArray<Voxel> voxels; // padded chunk (CHUNK_SIZE_P^3)
         public int chunkSize;
         public int chunkSizeP;
+        
+        public int downX;
+        public int downY;
+        public int downZ;
 
         public NativeArray<int> changed; // single-element array, 0 or 1
 
@@ -50,11 +54,19 @@ namespace VoxelEngine.WaterSim
             int SP = chunkSizeP;
             bool any = false;
 
-            // Bottom-to-top lets a falling stream cascade several cells in one pass.
-            for (int y = 0; y < S; y++)
-            for (int z = 0; z < S; z++)
-            for (int x = 0; x < S; x++)
+            int startY = downY == 1 ? S - 1 : 0; int stepY = downY == 1 ? -1 : 1;
+            int startZ = downZ == 1 ? S - 1 : 0; int stepZ = downZ == 1 ? -1 : 1;
+            int startX = downX == 1 ? S - 1 : 0; int stepX = downX == 1 ? -1 : 1;
+
+            // Iterate such that we process "bottom" cells first to allow falling streams to cascade
+            for (int iY = 0; iY < S; iY++)
+            for (int iZ = 0; iZ < S; iZ++)
+            for (int iX = 0; iX < S; iX++)
             {
+                int y = startY + iY * stepY;
+                int z = startZ + iZ * stepZ;
+                int x = startX + iX * stepX;
+
                 int i = Pad(x, y, z, SP);
                 var v = voxels[i];
                 if (v.waterLevel == 0) continue;
@@ -91,7 +103,7 @@ namespace VoxelEngine.WaterSim
                 int hStep   = isOil ? OilHorizontalStep : WaterHorizontalStep;
 
                 // --- Oil sinks through water (density swap) ---
-                int belowI = Pad(x, y - 1, z, SP);
+                int belowI = Pad(x + downX, y + downY, z + downZ, SP);
                 var below = voxels[belowI];
                 if (isOil && IsWater(below) && !below.IsSolid && v.waterLevel > 6)
                 {
@@ -137,10 +149,18 @@ namespace VoxelEngine.WaterSim
 
                 if (belowBlocked && v.waterLevel > 1)
                 {
-                    TryFlowHorizontal(i, x + 1, y, z, SP, liquidMat, hStep, ref v);
-                    TryFlowHorizontal(i, x - 1, y, z, SP, liquidMat, hStep, ref v);
-                    TryFlowHorizontal(i, x, y, z + 1, SP, liquidMat, hStep, ref v);
-                    TryFlowHorizontal(i, x, y, z - 1, SP, liquidMat, hStep, ref v);
+                    int rightX = downY != 0 ? 1 : (downZ != 0 ? 1 : 0);
+                    int rightY = downX != 0 ? 1 : 0;
+                    int rightZ = 0;
+                    
+                    int fwdX = 0;
+                    int fwdY = downZ != 0 ? 1 : 0;
+                    int fwdZ = downX != 0 ? 1 : (downY != 0 ? 1 : 0);
+
+                    TryFlowHorizontal(i, x + rightX, y + rightY, z + rightZ, SP, liquidMat, hStep, ref v);
+                    TryFlowHorizontal(i, x - rightX, y - rightY, z - rightZ, SP, liquidMat, hStep, ref v);
+                    TryFlowHorizontal(i, x + fwdX, y + fwdY, z + fwdZ, SP, liquidMat, hStep, ref v);
+                    TryFlowHorizontal(i, x - fwdX, y - fwdY, z - fwdZ, SP, liquidMat, hStep, ref v);
                     if (v.waterLevel == 0) v.material = AirMat;
                     voxels[i] = v;
                 }
