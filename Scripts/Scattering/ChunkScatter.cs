@@ -121,6 +121,9 @@ namespace VoxelEngine.Scattering
                 BiomeDefinition biome = PickBiome(registry, climate);
                 if (biome == null || biome.scatter == null || biome.scatter.Length == 0) continue;
 
+                // Restrict scatter to valid surface materials to prevent spawning inside caves or on ore deposits
+                if (topMat != biome.surfaceMat && topMat != (byte)MaterialId.Sand && topMat != (byte)MaterialId.Ice && topMat != (byte)MaterialId.Snow) continue;
+
                 foreach (var entry in biome.scatter)
                 {
                     if (entry.prefab == null || entry.density <= 0f) continue;
