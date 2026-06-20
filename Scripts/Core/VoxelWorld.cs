@@ -505,7 +505,9 @@ namespace VoxelEngine.Core
                 indexScratch    = pending.idxScratch,
                 cellVertexIndex  = pending.cellLut,
                 materialColors   = _materialColors,
-                vertexAttributes = _vertexAttributes
+                vertexAttributes = _vertexAttributes,
+                isSphere         = false,
+                chunkOrigin      = new float3(chunk.coord.x, chunk.coord.y, chunk.coord.z) * VoxelConstants.CHUNK_SIZE
             };
             pending.handle = job.Schedule();
             _pendingMesh.Add(pending);

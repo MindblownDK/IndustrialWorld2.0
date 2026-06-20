@@ -88,35 +88,42 @@ namespace VoxelEngine.Scattering
                 int worldY = chunkWorldY + topY + 1;
                 int worldZ = chunk.coord.z * S + z;
 
+                bool isSphere = world is SphereWorld;
+                float altitude = isSphere ? math.length(new float3(worldX, worldY, worldZ)) : worldY;
+
                 // 6) Skip if below or at sea level (catches near-shore positions).
-                if (worldY <= world.SeaLevel)
+                if (altitude <= world.SeaLevel)
                     continue;
 
                 // Climate sampling: use the world position as a 3D direction (sphere-correct).
                 // The flat-world BiomePicker.SampleClimate uses 2D snoise; on a sphere we need
                 // 3D direction sampling so trees spawn in the RIGHT biome (not random).
                 float3 dir = math.normalizesafe(new float3(worldX, worldY, worldZ), new float3(0, 1, 0));
-                float2 climate = SphereClimateSample(seed, dir);
+                float2 climate = isSphere ? SphereClimateSample(seed, dir) : VoxelEngine.Biomes.BiomePicker.SampleClimate(seed, worldX, worldZ);
                 BiomeDefinition biome = PickBiome(registry, climate);
                 if (biome == null || biome.scatter == null || biome.scatter.Length == 0) continue;
 
                 foreach (var entry in biome.scatter)
                 {
                     if (entry.prefab == null || entry.density <= 0f) continue;
-                    if (worldY < entry.minHeight || worldY > entry.maxHeight) continue;
+                    if (altitude < entry.minHeight || altitude > entry.maxHeight) continue;
                     if (rng.NextFloat() > entry.density) continue;
 
                     Vector3 pos = new Vector3(
                         worldX + rng.NextFloat(0.1f, 0.9f),
                         worldY,
                         worldZ + rng.NextFloat(0.1f, 0.9f)) * VoxelConstants.VOXEL_SIZE;
-                    Quaternion rot = Quaternion.Euler(0, rng.NextFloat(0, 360f), 0);
+                        
+                    Vector3 upDir = isSphere ? pos.normalized : Vector3.up;
+                    Quaternion randomYaw = Quaternion.Euler(0, rng.NextFloat(0, 360f), 0);
+                    Quaternion rot = isSphere ? Quaternion.FromToRotation(Vector3.up, upDir) * randomYaw : randomYaw;
+
                     float scale = rng.NextFloat(entry.minScale, entry.maxScale);
 
                     // Overlap check — but lighter (don't use Physics for scatter, too expensive).
                     float clearRadius = Mathf.Max(0.6f, scale * 0.7f);
                     bool blocked = false;
-                    var hits = Physics.OverlapSphere(pos + Vector3.up * 0.5f, clearRadius);
+                    var hits = Physics.OverlapSphere(pos + upDir * 0.5f, clearRadius);
                     foreach (var col in hits)
                     {
                         if (col == null) continue;
@@ -191,8 +198,8 @@ namespace VoxelEngine.Scattering
         private static float2 SphereClimateSample(int seed, float3 dir)
         {
             float3 p = dir;
-            float tNoise = noise.snoise(p * 1.7f + (seed * 0.073f + 55.3f)) * 0.5f + 0.5f;
-            float hNoise = noise.snoise(p * 2.1f + (seed * 0.149f + 99.7f)) * 0.5f + 0.5f;
+            float tNoise = noise.snoise(p * 1.7f + (seed * 0.073f + 47.3f)) * 0.5f + 0.5f;
+            float hNoise = noise.snoise(p * 2.1f + (seed * 0.149f + 91.7f)) * 0.5f + 0.5f;
             float lat = math.abs(dir.y);
             float tLat = math.saturate(1f - lat * 1.25f);
             float hLat = math.cos(lat * 3.0f) * 0.3f + 0.55f;

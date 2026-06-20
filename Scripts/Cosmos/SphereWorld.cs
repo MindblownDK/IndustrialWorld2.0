@@ -438,6 +438,8 @@ namespace VoxelEngine.Cosmos
                 colorScratch = pending.colScratch, indexScratch = pending.idxScratch,
                 cellVertexIndex = pending.cellLut, materialColors = _materialColors,
                 vertexAttributes = _vertexAttributes,
+                isSphere = true,
+                chunkOrigin = new float3(chunk.coord.x, chunk.coord.y, chunk.coord.z) * VoxelConstants.CHUNK_SIZE
             };
             pending.handle = job.Schedule();
             _pendingMesh.Add(pending);

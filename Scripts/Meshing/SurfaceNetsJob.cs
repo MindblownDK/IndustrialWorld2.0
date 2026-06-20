@@ -47,6 +47,9 @@ namespace VoxelEngine.Meshing
         // Pre-allocated vertex attribute descriptors (Burst can't `new` managed arrays).
         [ReadOnly] public NativeArray<VertexAttributeDescriptor> vertexAttributes;
 
+        public bool isSphere;
+        public float3 chunkOrigin;
+
         // Fluid material IDs — these are treated as EMPTY for terrain mesh generation
         private const byte WaterVoxelMat = 5;  // MaterialId.WaterVoxel  (solid form)
         private const byte WaterLiquidMat = 6;  // MaterialId.WaterLiquid (sim form)
@@ -254,7 +257,7 @@ namespace VoxelEngine.Meshing
         /// Fluid materials (WaterVoxel, WaterLiquid, CrudeOil) are treated as empty
         /// so the terrain mesh never generates faces inside fluid volumes.
         /// </summary>
-        private static bool IsTerrainSolid(Voxel v)
+        private bool IsTerrainSolid(Voxel v)
         {
             return v.density > 0 && !IsFluidMat(v.material);
         }
@@ -265,8 +268,9 @@ namespace VoxelEngine.Meshing
         /// may contain solid water blocks that would otherwise generate blue
         /// terrain faces indistinguishable from the water surface.
         /// </summary>
-        private static bool IsFluidMat(byte mat)
+        private bool IsFluidMat(byte mat)
         {
+            if (isSphere) return false; // In sphere world, fluid is solid terrain
             return mat == WaterVoxelMat || mat == WaterLiquidMat || mat == OilMat;
         }
 
@@ -305,7 +309,17 @@ namespace VoxelEngine.Meshing
 
             // 2. Slope darkening: flat terrain (normal pointing up) is brighter; steep = darker.
             // This makes hills and mountains read as 3D even without textures.
-            float upDot = math.abs(normal.y);  // 1 = flat, 0 = vertical
+            float upDot;
+            if (isSphere)
+            {
+                float3 worldPos = chunkOrigin + localPos;
+                float3 upVector = math.normalizesafe(worldPos, new float3(0, 1, 0));
+                upDot = math.abs(math.dot(normal, upVector));
+            }
+            else
+            {
+                upDot = math.abs(normal.y);
+            }
             float slopeShade = math.lerp(0.75f, 1.0f, math.saturate(upDot));
             r *= slopeShade;
             g *= slopeShade;
