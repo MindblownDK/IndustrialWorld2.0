@@ -152,6 +152,16 @@ namespace VoxelEngine.Cosmos
 
                 // Slope check: the surface normal must be roughly aligned with radial up.
                 float3 radialUp = math.normalizesafe(worldPos - (float3)body.transform.position, new float3(0, 1, 0));
+                
+                // Get terrain normal from density gradient
+                float dx = world.GetVoxelWorld(new Vector3Int(wx - 1, topY, wz)).density - world.GetVoxelWorld(new Vector3Int(wx + 1, topY, wz)).density;
+                float dy = world.GetVoxelWorld(new Vector3Int(wx, topY - 1, wz)).density - world.GetVoxelWorld(new Vector3Int(wx, topY + 1, wz)).density;
+                float dz = world.GetVoxelWorld(new Vector3Int(wx, topY, wz - 1)).density - world.GetVoxelWorld(new Vector3Int(wx, topY, wz + 1)).density;
+                
+                float3 terrainNormal = math.normalizesafe(new float3(dx, dy, dz), radialUp);
+                // Blend with radial up to keep grass slightly upright, preventing it from sticking perfectly horizontal on cliffs
+                terrainNormal = math.normalizesafe(math.lerp(radialUp, terrainNormal, 0.6f));
+
                 // Sample one voxel above to estimate the normal (cheap).
                 float aboveDensity = world.GetVoxelWorld(new Vector3Int(wx, topY + 2, wz)).density;
                 if (aboveDensity > 0) continue; // buried — skip
@@ -167,13 +177,13 @@ namespace VoxelEngine.Cosmos
                         rng.NextFloat(-0.5f, 0.5f));
                     float3 bladePos = worldPos + jitter;
 
-                    // Orient blade: rotate the mesh's local UP (Vector3.up) to align with radialUp.
+                    // Orient blade: rotate the mesh's local UP (Vector3.up) to align with terrain normal.
                     // FromToRotation is the foolproof "stand this upright along this direction"
                     // method — it ALWAYS produces a valid rotation, unlike LookRotation which
                     // breaks when forward and up are nearly parallel.
-                    Quaternion rot = Quaternion.FromToRotation(Vector3.up, (Vector3)radialUp);
-                    // Add random yaw around radialUp for natural variation.
-                    rot = Quaternion.AngleAxis(rng.NextFloat(0f, 360f), (Vector3)radialUp) * rot;
+                    Quaternion rot = Quaternion.FromToRotation(Vector3.up, (Vector3)terrainNormal);
+                    // Add random yaw around terrainNormal for natural variation.
+                    rot = Quaternion.AngleAxis(rng.NextFloat(0f, 360f), (Vector3)terrainNormal) * rot;
                     float h = bladeHeight * (1f + rng.NextFloat(-heightVariance, heightVariance));
                     float3 scale = new float3(bladeWidth, h, 1f);
 

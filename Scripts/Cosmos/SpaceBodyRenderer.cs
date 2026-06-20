@@ -68,9 +68,9 @@ namespace VoxelEngine.Cosmos
                 var sun = registry.Sun;
                 float intensity = sun.settings != null ? sun.settings.intensity : 1f;
                 Color glow = sun.settings != null ? sun.settings.glowColor : new Color(1f, 0.9f, 0.7f);
-                // Position the sun FAR from the viewer in a fixed sky direction (not at world
-                // origin — that overlapped the planet). Use a large visual distance.
-                Vector3 sunDir = new Vector3(0.4f, 0.7f, 0.6f).normalized;
+                // Position the sun FAR from the viewer in the ACTUAL cosmic direction.
+                Vector3 sunDirKm = sun.positionKm - viewerKm;
+                Vector3 sunDir = sunDirKm.sqrMagnitude < 1f ? Vector3.up : sunDirKm.normalized;
                 Vector3 sunPos = GetViewerPosition() + sunDir * visualRange * 1.5f;
                 PositionBody(_sunVisuals[0], sunPos, sunVisualScale * intensity, glow, emissive: true);
             }

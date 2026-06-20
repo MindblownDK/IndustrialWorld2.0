@@ -95,6 +95,9 @@ namespace VoxelEngine.Scattering
                 if (altitude <= world.SeaLevel)
                     continue;
 
+                // Map sphere altitude back to flat-world scale so authored min/max heights work
+                float effectiveAltitude = isSphere ? (altitude - world.SeaLevel + 96f) : altitude;
+
                 // Climate sampling: use the world position as a 3D direction (sphere-correct).
                 // The flat-world BiomePicker.SampleClimate uses 2D snoise; on a sphere we need
                 // 3D direction sampling so trees spawn in the RIGHT biome (not random).
@@ -106,7 +109,7 @@ namespace VoxelEngine.Scattering
                 foreach (var entry in biome.scatter)
                 {
                     if (entry.prefab == null || entry.density <= 0f) continue;
-                    if (altitude < entry.minHeight || altitude > entry.maxHeight) continue;
+                    if (effectiveAltitude < entry.minHeight || effectiveAltitude > entry.maxHeight) continue;
                     if (rng.NextFloat() > entry.density) continue;
 
                     Vector3 pos = new Vector3(

@@ -270,7 +270,6 @@ namespace VoxelEngine.Meshing
         /// </summary>
         private bool IsFluidMat(byte mat)
         {
-            if (isSphere) return false; // In sphere world, fluid is solid terrain
             return mat == WaterVoxelMat || mat == WaterLiquidMat || mat == OilMat;
         }
 

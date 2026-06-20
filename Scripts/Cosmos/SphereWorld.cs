@@ -151,6 +151,10 @@ namespace VoxelEngine.Cosmos
                 terrainMaterial = new Material(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"));
                 terrainMaterial.name = "Mat_Terrain_Fallback";
             }
+            if (terrainMaterial.HasProperty("_Smoothness"))
+            {
+                terrainMaterial.SetFloat("_Smoothness", 0f); // Fix glossy land
+            }
 
             // Recover the body if not assigned (search this GameObject + siblings).
             if (body == null) body = GetComponent<CelestialBody>();
