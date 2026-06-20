@@ -494,11 +494,6 @@ namespace VoxelEngine.EditorTools
                 $"{ASSET_ROOT}/Tiered/TieredBlockRegistry.asset");
 
             // Full map UI (M key opens).
-            var mapGo = new GameObject("FullMap");
-            mapGo.transform.SetParent(playerGo.transform, false);
-            var mapDoc = mapGo.AddComponent<UnityEngine.UIElements.UIDocument>();
-            if (panelSettings != null) mapDoc.panelSettings = panelSettings;
-            mapGo.AddComponent<VoxelEngine.UI.FullMap>();
 
             world.viewer = playerGo.transform;
 
