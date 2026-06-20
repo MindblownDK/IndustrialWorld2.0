@@ -117,7 +117,7 @@ namespace VoxelEngine.Core
             if (materialRegistry == null)
                 materialRegistry = Resources.Load<MaterialRegistry>("MaterialRegistry");
             if (flatBiomeRegistry == null)
-                // PlanetSettings no longer loaded — flat world uses inline fields.
+                flatBiomeRegistry = Resources.Load<BiomeRegistry>("BiomeRegistry");
             if (terrainMaterial == null)
                 terrainMaterial = Resources.Load<Material>("Mat_Terrain");
 

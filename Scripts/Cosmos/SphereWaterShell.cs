@@ -72,6 +72,7 @@ namespace VoxelEngine.Cosmos
 
         private void Rebuild()
         {
+            EnsureComponents();
             var body = GetComponentInParent<CelestialBody>();
             if (body == null || body.settings == null) return;
             body.ApplySettings();
@@ -86,9 +87,15 @@ namespace VoxelEngine.Cosmos
                 Subdivide(verts, tris);
                 sub++;
             }
-            // Scale to sea radius.
+            var uvs = new System.Collections.Generic.List<Vector2>(verts.Count);
+            var uv2s = new System.Collections.Generic.List<Vector2>(verts.Count);
             for (int i = 0; i < verts.Count; i++)
+            {
                 verts[i] = verts[i].normalized * radius;
+                Vector3 n = verts[i].normalized;
+                uvs.Add(new Vector2(Mathf.Atan2(n.x, n.z) / (2f * Mathf.PI) + 0.5f, n.y * 0.5f + 0.5f));
+                uv2s.Add(Vector2.zero);
+            }
 
             if (_mesh == null)
             {
@@ -97,6 +104,8 @@ namespace VoxelEngine.Cosmos
             }
             _mesh.Clear();
             _mesh.SetVertices(verts);
+            _mesh.SetUVs(0, uvs);
+            _mesh.SetUVs(1, uv2s);
             _mesh.SetTriangles(tris, 0);
             _mesh.RecalculateNormals();
             _mesh.RecalculateBounds();
@@ -114,9 +123,25 @@ namespace VoxelEngine.Cosmos
             // Pretty water shader properties
             if (_mat.HasProperty("_ShallowColor")) _mat.SetColor("_ShallowColor", new Color(0.08f, 0.52f, 0.82f, 0.92f));
             if (_mat.HasProperty("_DeepColor"))    _mat.SetColor("_DeepColor",    new Color(0.01f, 0.06f, 0.22f, 0.97f));
-            if (_mat.HasProperty("_WaveAmp")) _mat.SetFloat("_WaveAmp", 0.35f);
+            if (_mat.HasProperty("_FoamColor"))    _mat.SetColor("_FoamColor",    new Color(0.92f, 0.96f, 1.00f, 0.88f));
+            
+            // Turn off wave amp for sphere to prevent cartesian artifacts
+            if (_mat.HasProperty("_WaveAmp")) _mat.SetFloat("_WaveAmp", 0.0f);
             if (_mat.HasProperty("_WaveFreq")) _mat.SetFloat("_WaveFreq", 0.55f);
             if (_mat.HasProperty("_WaveSpeed")) _mat.SetFloat("_WaveSpeed", 0.72f);
+            if (_mat.HasProperty("_WaveChop")) _mat.SetFloat("_WaveChop", 0.28f);
+            if (_mat.HasProperty("_NormalScale")) _mat.SetFloat("_NormalScale", 1.4f);
+            if (_mat.HasProperty("_Gloss")) _mat.SetFloat("_Gloss", 0.96f);
+            if (_mat.HasProperty("_FresnelPower")) _mat.SetFloat("_FresnelPower", 3.2f);
+            if (_mat.HasProperty("_RefractionStrength")) _mat.SetFloat("_RefractionStrength", 0.032f);
+            if (_mat.HasProperty("_CausticsIntensity")) _mat.SetFloat("_CausticsIntensity", 0.25f);
+            if (_mat.HasProperty("_DepthFade")) _mat.SetFloat("_DepthFade", 2.5f);
+            if (_mat.HasProperty("_ShoreOpaqueDepth")) _mat.SetFloat("_ShoreOpaqueDepth", 1.5f);
+            if (_mat.HasProperty("_ShoreFoamWidth")) _mat.SetFloat("_ShoreFoamWidth", 2.0f);
+            if (_mat.HasProperty("_ShoreFoamIntensity")) _mat.SetFloat("_ShoreFoamIntensity", 1.2f);
+            if (_mat.HasProperty("_SSSIntensity")) _mat.SetFloat("_SSSIntensity", 0.35f);
+            if (_mat.HasProperty("_FlowNormalStrength")) _mat.SetFloat("_FlowNormalStrength", 0.0f); // Disable flow maps on sphere
+            if (_mat.HasProperty("_FlowFoamStrength")) _mat.SetFloat("_FlowFoamStrength", 0.0f);
             
             // Fallback Lit properties
             if (_mat.HasProperty("_BaseColor")) _mat.SetColor("_BaseColor", waterColor);
