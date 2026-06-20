@@ -154,11 +154,11 @@ namespace VoxelEngine.Cosmos
                 float3 radialUp = math.normalizesafe(worldPos - (float3)body.transform.position, new float3(0, 1, 0));
                 
                 // Get terrain normal from density gradient
-                float dx = world.GetVoxelWorld(new Vector3Int(wx - 1, topY, wz)).density - world.GetVoxelWorld(new Vector3Int(wx + 1, topY, wz)).density;
-                float dy = world.GetVoxelWorld(new Vector3Int(wx, topY - 1, wz)).density - world.GetVoxelWorld(new Vector3Int(wx, topY + 1, wz)).density;
-                float dz = world.GetVoxelWorld(new Vector3Int(wx, topY, wz - 1)).density - world.GetVoxelWorld(new Vector3Int(wx, topY, wz + 1)).density;
+                float gradX = world.GetVoxelWorld(new Vector3Int(wx - 1, topY, wz)).density - world.GetVoxelWorld(new Vector3Int(wx + 1, topY, wz)).density;
+                float gradY = world.GetVoxelWorld(new Vector3Int(wx, topY - 1, wz)).density - world.GetVoxelWorld(new Vector3Int(wx, topY + 1, wz)).density;
+                float gradZ = world.GetVoxelWorld(new Vector3Int(wx, topY, wz - 1)).density - world.GetVoxelWorld(new Vector3Int(wx, topY, wz + 1)).density;
                 
-                float3 terrainNormal = math.normalizesafe(new float3(dx, dy, dz), radialUp);
+                float3 terrainNormal = math.normalizesafe(new float3(gradX, gradY, gradZ), radialUp);
                 // Blend with radial up to keep grass slightly upright, preventing it from sticking perfectly horizontal on cliffs
                 terrainNormal = math.normalizesafe(math.lerp(radialUp, terrainNormal, 0.6f));
 

@@ -61,6 +61,22 @@ namespace VoxelEngine.Cosmos
             var registry = CosmicRegistry.Instance;
             if (registry == null || !registry.IsReady) return;
 
+            // Player position in cosmic space (approximate: use the active body's position).
+            Vector3 viewerKm = Vector3.zero;
+            var activeBody = GravityProvider.ActiveBody;
+            if (activeBody != null)
+            {
+                // Find this body in the registry to get its cosmic position.
+                for (int i = 0; i < registry.Bodies.Count; i++)
+                {
+                    if (registry.Bodies[i].settings == activeBody.settings)
+                    {
+                        viewerKm = registry.Bodies[i].positionKm;
+                        break;
+                    }
+                }
+            }
+
             // Render the sun(s).
             EnsureCount(_sunVisuals, registry.Sun != null ? 1 : 0, "SpaceSun");
             if (registry.Sun != null)
@@ -78,22 +94,6 @@ namespace VoxelEngine.Cosmos
             // Render planets + moons.
             int bodyCount = registry.Bodies.Count;
             EnsureCount(_bodyVisuals, bodyCount, "SpaceBody");
-
-            // Player position in cosmic space (approximate: use the active body's position).
-            Vector3 viewerKm = Vector3.zero;
-            var activeBody = GravityProvider.ActiveBody;
-            if (activeBody != null)
-            {
-                // Find this body in the registry to get its cosmic position.
-                for (int i = 0; i < registry.Bodies.Count; i++)
-                {
-                    if (registry.Bodies[i].settings == activeBody.settings)
-                    {
-                        viewerKm = registry.Bodies[i].positionKm;
-                        break;
-                    }
-                }
-            }
 
             for (int i = 0; i < bodyCount; i++)
             {
