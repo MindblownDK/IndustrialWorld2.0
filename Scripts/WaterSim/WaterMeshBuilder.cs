@@ -456,12 +456,12 @@ namespace VoxelEngine.WaterSim
                 any = true;
 
                 // Check 6 neighbors
-                CheckAndAddSphereFace(c, x, y, z, 1, 0, 0, new Vector3(1, 0, 0), wX, wY, wZ, verts, norms, uvs, uv2s, tris);
-                CheckAndAddSphereFace(c, x, y, z, -1, 0, 0, new Vector3(-1, 0, 0), wX, wY, wZ, verts, norms, uvs, uv2s, tris);
-                CheckAndAddSphereFace(c, x, y, z, 0, 1, 0, new Vector3(0, 1, 0), wX, wY, wZ, verts, norms, uvs, uv2s, tris);
-                CheckAndAddSphereFace(c, x, y, z, 0, -1, 0, new Vector3(0, -1, 0), wX, wY, wZ, verts, norms, uvs, uv2s, tris);
-                CheckAndAddSphereFace(c, x, y, z, 0, 0, 1, new Vector3(0, 0, 1), wX, wY, wZ, verts, norms, uvs, uv2s, tris);
-                CheckAndAddSphereFace(c, x, y, z, 0, 0, -1, new Vector3(0, 0, -1), wX, wY, wZ, verts, norms, uvs, uv2s, tris);
+                CheckAndAddSphereFace(c, x, y, z, v.waterLevel, 1, 0, 0, new Vector3(1, 0, 0), wX, wY, wZ, verts, norms, uvs, uv2s, tris);
+                CheckAndAddSphereFace(c, x, y, z, v.waterLevel, -1, 0, 0, new Vector3(-1, 0, 0), wX, wY, wZ, verts, norms, uvs, uv2s, tris);
+                CheckAndAddSphereFace(c, x, y, z, v.waterLevel, 0, 1, 0, new Vector3(0, 1, 0), wX, wY, wZ, verts, norms, uvs, uv2s, tris);
+                CheckAndAddSphereFace(c, x, y, z, v.waterLevel, 0, -1, 0, new Vector3(0, -1, 0), wX, wY, wZ, verts, norms, uvs, uv2s, tris);
+                CheckAndAddSphereFace(c, x, y, z, v.waterLevel, 0, 0, 1, new Vector3(0, 0, 1), wX, wY, wZ, verts, norms, uvs, uv2s, tris);
+                CheckAndAddSphereFace(c, x, y, z, v.waterLevel, 0, 0, -1, new Vector3(0, 0, -1), wX, wY, wZ, verts, norms, uvs, uv2s, tris);
             }
 
             if (!any) { ClearGO(c); return; }
@@ -492,7 +492,7 @@ namespace VoxelEngine.WaterSim
             c.waterMeshGO.SetActive(true);
         }
 
-        private static void CheckAndAddSphereFace(Chunk c, int x, int y, int z, int dx, int dy, int dz, Vector3 normal, 
+        private static void CheckAndAddSphereFace(Chunk c, int x, int y, int z, byte waterLevel, int dx, int dy, int dz, Vector3 normal, 
             float wX, float wY, float wZ, List<Vector3> verts, List<Vector3> norms, List<Vector2> uvs, List<Vector2> uv2s, List<int> tris)
         {
             const int S = VoxelConstants.CHUNK_SIZE;
@@ -532,10 +532,35 @@ namespace VoxelEngine.WaterSim
                 else if (dy != 0) { t1 = new Vector3(1, 0, 0); t2 = new Vector3(0, 0, 1); p.y += (dy > 0 ? 1 : 0); }
                 else if (dz != 0) { t1 = new Vector3(1, 0, 0); t2 = new Vector3(0, 1, 0); p.z += (dz > 0 ? 1 : 0); }
 
-                verts.Add(p);
-                verts.Add(p + t1);
-                verts.Add(p + t1 + t2);
-                verts.Add(p + t2);
+                Vector3 v0 = p;
+                Vector3 v1 = p + t1;
+                Vector3 v2 = p + t1 + t2;
+                Vector3 v3 = p + t2;
+
+                // If this is a TOP face (facing away from the planet core), offset the vertices radially to make a perfectly smooth surface
+                Vector3 cellWorldPos = new Vector3(wX + x + 0.5f, wY + y + 0.5f, wZ + z + 0.5f);
+                Vector3 radialDir = cellWorldPos.normalized;
+                
+                if (Vector3.Dot(normal, radialDir) > 0.5f)
+                {
+                    // The distance from the center of the planet is seaLevel (for full blocks) or scaled by waterLevel
+                    float distanceOffset = (waterLevel / 255f) - 0.5f;
+
+                    // Compute true center distance of this cell
+                    float baseDist = cellWorldPos.magnitude;
+                    float targetDist = baseDist + distanceOffset;
+
+                    // Project the face vertices radially to the target distance
+                    v0 = (v0 + new Vector3(wX, wY, wZ)).normalized * targetDist - new Vector3(wX, wY, wZ);
+                    v1 = (v1 + new Vector3(wX, wY, wZ)).normalized * targetDist - new Vector3(wX, wY, wZ);
+                    v2 = (v2 + new Vector3(wX, wY, wZ)).normalized * targetDist - new Vector3(wX, wY, wZ);
+                    v3 = (v3 + new Vector3(wX, wY, wZ)).normalized * targetDist - new Vector3(wX, wY, wZ);
+                }
+
+                verts.Add(v0);
+                verts.Add(v1);
+                verts.Add(v2);
+                verts.Add(v3);
 
                 for (int n = 0; n < 4; n++) norms.Add(normal);
                 for (int n = 0; n < 4; n++) {

@@ -301,10 +301,10 @@ namespace VoxelEngine.Cosmos
             }
             else
             {
-                if (radius <= prm.seaRadius)
+                if (radius <= prm.seaRadius && surfaceRadius <= prm.seaRadius)
                 {
-                    // For the dynamic VoxelWater system, fluid voxels must be empty (-5) so the terrain
-                    // mesh leaves a basin, allowing WaterMeshBuilder to build the water quads inside it!
+                    // Only fill water if the actual terrain surface is below sea level (it's an ocean).
+                    // This prevents underground caves under continents from being flooded!
                     var v = new Voxel(-5, (byte)MaterialId.WaterLiquid, 255);
                     return v;
                 }
