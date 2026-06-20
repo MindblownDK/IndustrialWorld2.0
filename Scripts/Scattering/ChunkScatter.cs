@@ -26,9 +26,6 @@ namespace VoxelEngine.Scattering
 
             const int S = VoxelConstants.CHUNK_SIZE;
 
-            bool hasChunkAbove = world.TryGetChunk(chunk.coord + new Vector3Int(0, 1, 0), out var above)
-                                 && above.isGenerated;
-
             // Use world-space parenting so scatter doesn't appear in wrong position
             // while chunk GO transform is being set up.
             var holder = new GameObject("__scatter");
@@ -42,54 +39,72 @@ namespace VoxelEngine.Scattering
 
             // Pre-compute the world Y origin for this chunk.
             int chunkWorldY = chunk.coord.y * S;
+            bool isSphere = world is SphereWorld;
 
             for (int x = 0; x < S; x++)
+            for (int y = 0; y < S; y++)
             for (int z = 0; z < S; z++)
             {
-                // 1) Find the topmost solid voxel in this column.
-                int topY = -1;
-                byte topMat = 0;
-                for (int y = S - 1; y >= 0; y--)
+                var v = chunk.GetVoxelLocal(x, y, z);
+                if (v.density <= 0) continue;
+
+                int worldX = chunk.coord.x * S + x;
+                int worldY = chunk.coord.y * S + y;
+                int worldZ = chunk.coord.z * S + z;
+
+                float3 wPos = new float3(worldX, worldY, worldZ);
+                float3 normalDir = isSphere ? math.normalizesafe(wPos) : new float3(0, 1, 0);
+
+                int dx = (int)math.round(normalDir.x);
+                int dy = (int)math.round(normalDir.y);
+                int dz = (int)math.round(normalDir.z);
+                if (dx == 0 && dy == 0 && dz == 0) dy = 1;
+
+                int nx = x + dx;
+                int ny = y + dy;
+                int nz = z + dz;
+                bool aboveSolid = false;
+
+                if (nx >= 0 && nx < S && ny >= 0 && ny < S && nz >= 0 && nz < S)
                 {
-                    var v = chunk.GetVoxelLocal(x, y, z);
-                    if (v.density > 0)
+                    aboveSolid = chunk.GetVoxelLocal(nx, ny, nz).density > 0;
+                }
+                else
+                {
+                    int cx = chunk.coord.x + (nx < 0 ? -1 : (nx >= S ? 1 : 0));
+                    int cy = chunk.coord.y + (ny < 0 ? -1 : (ny >= S ? 1 : 0));
+                    int cz = chunk.coord.z + (nz < 0 ? -1 : (nz >= S ? 1 : 0));
+                    
+                    if (world.TryGetChunk(new Vector3Int(cx, cy, cz), out var neighbor) && neighbor.isGenerated)
                     {
-                        topY = y;
-                        topMat = v.material;
-                        break;
+                        aboveSolid = neighbor.GetVoxelLocal((nx % S + S) % S, (ny % S + S) % S, (nz % S + S) % S).density > 0;
+                    }
+                    else
+                    {
+                        aboveSolid = true; // Assume solid if ungenerated
                     }
                 }
-                if (topY < 0) continue;
 
-                // 2) Verify nothing solid is directly above.
-                bool aboveSolid;
-                if (topY < S - 1)
-                    aboveSolid = chunk.GetVoxelLocal(x, topY + 1, z).density > 0;
-                else
-                    aboveSolid = hasChunkAbove && above.GetVoxelLocal(x, 0, z).density > 0;
                 if (aboveSolid) continue;
+
+                byte topMat = v.material;
 
                 // 3) Skip water material voxels.
                 if (topMat == (byte)MaterialId.WaterVoxel ||
                     topMat == (byte)MaterialId.WaterLiquid ||
                     topMat == (byte)MaterialId.CrudeOil) continue;
 
-                // 4) *** FIX: Check FluidGrid for water at or above this position. ***
-                // OceanSeeder converts WaterVoxel to Air+FluidGrid, so the material check
-                // above won't catch ocean surfaces. We need to check the fluid grid too.
-                if (HasFluidAbove(chunk, world, x, topY, z))
-                    continue; // underwater — don't place trees here!
-
+                // 4) Check FluidGrid for water at or above this position.
+                if (!isSphere && nx >= 0 && nx < S && ny >= 0 && ny < S && nz >= 0 && nz < S)
+                {
+                    if (HasFluidAbove(chunk, world, nx, ny, nz))
+                        continue;
+                }
 
                 // 5) Skip stone (looks weird with trees on bare stone).
                 if (topMat == (byte)MaterialId.Stone) continue;
 
-                int worldX = chunk.coord.x * S + x;
-                int worldY = chunkWorldY + topY + 1;
-                int worldZ = chunk.coord.z * S + z;
-
-                bool isSphere = world is SphereWorld;
-                float altitude = isSphere ? math.length(new float3(worldX, worldY, worldZ)) : worldY;
+                float altitude = isSphere ? math.length(wPos) : worldY;
 
                 // 6) Skip if below or at sea level (catches near-shore positions).
                 if (altitude <= world.SeaLevel)
@@ -112,21 +127,30 @@ namespace VoxelEngine.Scattering
                     if (effectiveAltitude < entry.minHeight || effectiveAltitude > entry.maxHeight) continue;
                     if (rng.NextFloat() > entry.density) continue;
 
-                    Vector3 pos = new Vector3(
-                        worldX + rng.NextFloat(0.1f, 0.9f),
-                        worldY,
-                        worldZ + rng.NextFloat(0.1f, 0.9f)) * VoxelConstants.VOXEL_SIZE;
-                        
-                    Vector3 upDir = isSphere ? pos.normalized : Vector3.up;
+                    Vector3 posCenter = new Vector3(worldX + 0.5f, worldY + 0.5f, worldZ + 0.5f) * VoxelConstants.VOXEL_SIZE;
+                    Vector3 upDir = isSphere ? posCenter.normalized : Vector3.up;
+                    
+                    Vector3 tangentX = Vector3.Cross(upDir, Vector3.up);
+                    if (tangentX.sqrMagnitude < 0.1f) tangentX = Vector3.right;
+                    tangentX.Normalize();
+                    Vector3 tangentZ = Vector3.Cross(upDir, tangentX).normalized;
+                    
+                    Vector3 localBodyPos = posCenter + tangentX * rng.NextFloat(-0.4f, 0.4f) + tangentZ * rng.NextFloat(-0.4f, 0.4f);
+
                     Quaternion randomYaw = Quaternion.Euler(0, rng.NextFloat(0, 360f), 0);
-                    Quaternion rot = isSphere ? Quaternion.FromToRotation(Vector3.up, upDir) * randomYaw : randomYaw;
+                    Quaternion localBodyRot = isSphere ? Quaternion.FromToRotation(Vector3.up, upDir) * randomYaw : randomYaw;
+
+                    // Convert body-local pos/rot to world space for Instantiate
+                    Transform rootTransform = chunk.go.transform.parent;
+                    Vector3 worldPos = rootTransform != null ? rootTransform.TransformPoint(localBodyPos) : localBodyPos;
+                    Quaternion worldRot = rootTransform != null ? rootTransform.rotation * localBodyRot : localBodyRot;
 
                     float scale = rng.NextFloat(entry.minScale, entry.maxScale);
 
-                    // Overlap check — but lighter (don't use Physics for scatter, too expensive).
+                    // Overlap check
                     float clearRadius = Mathf.Max(0.6f, scale * 0.7f);
                     bool blocked = false;
-                    var hits = Physics.OverlapSphere(pos + upDir * 0.5f, clearRadius);
+                    var hits = Physics.OverlapSphere(worldPos + (rootTransform != null ? rootTransform.TransformDirection(upDir) : upDir) * 0.5f, clearRadius);
                     foreach (var col in hits)
                     {
                         if (col == null) continue;
@@ -137,7 +161,7 @@ namespace VoxelEngine.Scattering
                     }
                     if (blocked) break;
 
-                    var go = Object.Instantiate(entry.prefab, pos, rot, holder.transform);
+                    var go = Object.Instantiate(entry.prefab, worldPos, worldRot, holder.transform);
                     go.transform.localScale = Vector3.one * scale;
                     break;
                 }

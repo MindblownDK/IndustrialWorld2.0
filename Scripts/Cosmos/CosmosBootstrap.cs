@@ -163,6 +163,9 @@ namespace VoxelEngine.Cosmos
             grass.body = body;
             grass.viewer = viewer;
 
+            // ── Sphere Water Shell ──
+            var waterShell = _bodyGO.AddComponent<SphereWaterShell>();
+
             // ── Waterfall system (Phase 4) ──
             var waterfallGO = new GameObject("Waterfalls");
             waterfallGO.transform.SetParent(_bodyGO.transform, false);

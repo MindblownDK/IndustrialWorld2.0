@@ -104,11 +104,21 @@ namespace VoxelEngine.Cosmos
 
             if (_mat == null)
             {
-                var shader = Shader.Find("Universal Render Pipeline/Lit")
+                var shader = Shader.Find("VoxelEngine/VoxelWaterURP")
+                           ?? Shader.Find("Universal Render Pipeline/Lit")
                            ?? Shader.Find("Standard");
                 _mat = new Material(shader);
                 _mat.name = "Mat_SphereWater_Runtime";
             }
+            
+            // Pretty water shader properties
+            if (_mat.HasProperty("_ShallowColor")) _mat.SetColor("_ShallowColor", new Color(0.08f, 0.52f, 0.82f, 0.92f));
+            if (_mat.HasProperty("_DeepColor"))    _mat.SetColor("_DeepColor",    new Color(0.01f, 0.06f, 0.22f, 0.97f));
+            if (_mat.HasProperty("_WaveAmp")) _mat.SetFloat("_WaveAmp", 0.35f);
+            if (_mat.HasProperty("_WaveFreq")) _mat.SetFloat("_WaveFreq", 0.55f);
+            if (_mat.HasProperty("_WaveSpeed")) _mat.SetFloat("_WaveSpeed", 0.72f);
+            
+            // Fallback Lit properties
             if (_mat.HasProperty("_BaseColor")) _mat.SetColor("_BaseColor", waterColor);
             if (_mat.HasProperty("_Color"))     _mat.SetColor("_Color", waterColor);
             if (_mat.HasProperty("_Smoothness")) _mat.SetFloat("_Smoothness", smoothness);
