@@ -98,7 +98,10 @@ namespace VoxelEngine.Maritime
 
             const int ceilingVoxels = 96;
             const int floorVoxels = 96;
-            int topY = Mathf.RoundToInt(SeaLevel / VOXEL_SIZE) + ceilingVoxels;
+            
+            // Use the world's actual sea level (for spheres, this is the radial sea radius).
+            float seaLevel = world.SeaLevel * VOXEL_SIZE;
+            int topY = Mathf.RoundToInt(seaLevel / VOXEL_SIZE) + ceilingVoxels;
 
             for (int y = topY; y >= topY - ceilingVoxels - floorVoxels; y--)
             {

@@ -321,7 +321,7 @@ namespace VoxelEngine.GridSystem
                 {
                     _cockpitSearchTimer = 0;
                     _cachedCockpit = null;
-                    var cockpits = Object.FindObjectsByType<GridCockpit>(FindObjectsInactive.Exclude);
+                    var cockpits = Object.FindObjectsByType<GridCockpit>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
                     foreach (var cp in cockpits)
                         if (cp.Pilot != null) { _cachedCockpit = cp; break; }
                     cockpit = _cachedCockpit;

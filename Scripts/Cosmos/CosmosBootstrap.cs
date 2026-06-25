@@ -47,7 +47,7 @@ namespace VoxelEngine.Cosmos
 
         [Header("Tuning (overrides template for fast iteration)")]
         [Range(0.2f, 6f)] public float testRadiusKm = 0.5f;   // small enough to fly to quickly
-        [Range(3, 16)] public int viewDistance = 5;   // 3D-ball streaming: 5 = ~520 chunks (~62MB), keep modest
+        [Range(3, 16)] public int viewDistance = 8;   // 3D-ball streaming: 5 = ~520 chunks (~62MB), keep modest
 
         private GameObject _bodyGO;
 
@@ -162,9 +162,6 @@ namespace VoxelEngine.Cosmos
             var grass = grassGO.AddComponent<GpuGrassRenderer>();
             grass.body = body;
             grass.viewer = viewer;
-
-            // ── Sphere Water Shell ──
-            var waterShell = _bodyGO.AddComponent<SphereWaterShell>();
 
             // ── Waterfall system (Phase 4) ──
             var waterfallGO = new GameObject("Waterfalls");

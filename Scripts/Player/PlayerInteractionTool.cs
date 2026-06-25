@@ -269,6 +269,22 @@ namespace VoxelEngine.Player
                 var chest = hit.collider.GetComponentInParent<Chest>();
                 if (chest != null) { UI.GameUIController.Instance?.OpenContainer(chest.container, chest); return; }
 
+                // Piston Interaction: Right-click to toggle push/pull.
+                var piston = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridPiston>();
+                if (piston != null)
+                {
+                    piston.Toggle();
+                    return;
+                }
+
+                // Lighting Control: if hit object is a light, select it for the UI.
+                var lightCtrl = hit.collider.GetComponentInParent<VoxelEngine.Power.VoxelLightController>();
+                if (lightCtrl != null)
+                {
+                    VoxelEngine.UI.LightingManager.Instance?.SelectLight(lightCtrl);
+                    return;
+                }
+
                 var bed = hit.collider.GetComponentInParent<VoxelEngine.Building.Bed>();
                 if (bed != null) { bed.ClaimAsSpawn(); return; }
 

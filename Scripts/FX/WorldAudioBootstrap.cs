@@ -60,42 +60,42 @@ namespace VoxelEngine.FX
         private void SweepMachines()
         {
             // ── Crafting / processing ──────────────────────────────
-            foreach (var m in FindObjectsByType<Furnace>(FindObjectsInactive.Exclude))
+            foreach (var m in FindObjectsByType<Furnace>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
                 Attach(m, Sfx.FurnaceBurn, () => m.IsBurning ? (m.Current != null ? 1f : 0.5f) : 0f, vol: 0.6f, dist: 18f);
 
-            foreach (var m in FindObjectsByType<ElectricFurnace>(FindObjectsInactive.Exclude))
+            foreach (var m in FindObjectsByType<ElectricFurnace>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
                 Attach(m, Sfx.MachineHum, () => (m.IsOnline && m.Current != null) ? 1f : 0f, vol: 0.55f, dist: 18f);
 
-            foreach (var m in FindObjectsByType<OilRefinery>(FindObjectsInactive.Exclude))
+            foreach (var m in FindObjectsByType<OilRefinery>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
                 Attach(m, Sfx.MachineHum, () => (m.IsOnline && m.Current != null) ? 1f : 0f, vol: 0.6f, dist: 20f, basePitch: 0.85f);
 
-            foreach (var m in FindObjectsByType<Pumpjack>(FindObjectsInactive.Exclude))
+            foreach (var m in FindObjectsByType<Pumpjack>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
                 Attach(m, Sfx.EngineRumble, () => (m.IsOnline && m.HasReservoir) ? 1f : 0f, vol: 0.6f, dist: 24f, basePitch: 0.8f, pitchSpread: 0.18f);
 
             // ── Power ──────────────────────────────────────────────
-            foreach (var m in FindObjectsByType<CoalGeneratorFuel>(FindObjectsInactive.Exclude))
+            foreach (var m in FindObjectsByType<CoalGeneratorFuel>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
                 Attach(m, Sfx.EngineRumble, () => m.IsBurning ? 1f : 0f, vol: 0.6f, dist: 22f);
 
             // ── Gas ────────────────────────────────────────────────
-            foreach (var m in FindObjectsByType<HydrogenEngine>(FindObjectsInactive.Exclude))
+            foreach (var m in FindObjectsByType<HydrogenEngine>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
                 Attach(m, Sfx.EngineRumble, () => m.IsRunning ? 1f : 0f, vol: 0.65f, dist: 24f, basePitch: 1.1f);
 
-            foreach (var m in FindObjectsByType<Electrolyser>(FindObjectsInactive.Exclude))
+            foreach (var m in FindObjectsByType<Electrolyser>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
                 Attach(m, Sfx.ElectricWhine, () => m.IsRunning ? 1f : 0f, vol: 0.5f, dist: 18f);
 
             // ── Nuclear ────────────────────────────────────────────
-            foreach (var m in FindObjectsByType<ReactorCore>(FindObjectsInactive.Exclude))
+            foreach (var m in FindObjectsByType<ReactorCore>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
                 Attach(m, Sfx.ReactorThrum, () => m.IsOnline ? (m.IsOverheating ? 1f : 0.7f) : 0f, vol: 0.7f, dist: 30f);
 
-            foreach (var m in FindObjectsByType<SteamTurbine>(FindObjectsInactive.Exclude))
+            foreach (var m in FindObjectsByType<SteamTurbine>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
                 Attach(m, Sfx.SteamHiss, () => m.IsRunning ? Mathf.Lerp(0.4f, 1f, m.SteamFill01) : 0f, vol: 0.6f, dist: 24f);
 
             // ── Transport ──────────────────────────────────────────
-            foreach (var m in FindObjectsByType<Quarry>(FindObjectsInactive.Exclude))
+            foreach (var m in FindObjectsByType<Quarry>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
                 Attach(m, Sfx.QuarryGrind, () => m.IsMining ? 1f : 0f, vol: 0.7f, dist: 32f, pitchSpread: 0.1f);
 
             // ── Ship/vehicle grid blocks ───────────────────────────
-            foreach (var m in FindObjectsByType<GridThruster>(FindObjectsInactive.Exclude))
+            foreach (var m in FindObjectsByType<GridThruster>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
             {
                 Sfx s = m.thrusterType switch
                 {
@@ -106,10 +106,10 @@ namespace VoxelEngine.FX
                 Attach(m, s, () => m.IsOperational ? m.GetThrustFraction() : 0f, vol: 0.7f, dist: 40f, pitchSpread: 0.25f);
             }
 
-            foreach (var m in FindObjectsByType<GridDrill>(FindObjectsInactive.Exclude))
+            foreach (var m in FindObjectsByType<GridDrill>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
                 Attach(m, Sfx.DrillSpin, () => m.IsActive ? 1f : 0f, vol: 0.6f, dist: 24f, pitchSpread: 0.2f);
 
-            foreach (var m in FindObjectsByType<GridWheel>(FindObjectsInactive.Exclude))
+            foreach (var m in FindObjectsByType<GridWheel>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
                 Attach(m, Sfx.WheelMotor, () =>
                 {
                     if (!m.IsGrounded || m.Grid == null) return 0f;

@@ -235,7 +235,7 @@ namespace VoxelEngine.UI
             { _machineRefreshAccum = 0f; Refresh(); }
             ResearchHud.Tick();
             TickUpgradePrompt();
-            if (inventory != null) Minimap.Tick(inventory.transform.position);
+            
             VoxelEngine.GridSystem.UI.BlockRotationHud.Tick();
             VoxelEngine.GridSystem.UI.ShipToolHud.Tick();
 
@@ -776,7 +776,7 @@ namespace VoxelEngine.UI
             PlayerHud.EnsureMounted(_root);
             ResearchHud.EnsureMounted(_root);
             UpgradePromptHud.EnsureMounted(_root);
-            Minimap.EnsureMounted(_root);
+            
             VoxelEngine.GridSystem.UI.BlockRotationHud.EnsureMounted(_root);
             VoxelEngine.GridSystem.UI.ShipToolHud.EnsureMounted(_root);
             RustStyleHud.EnsureMounted(_root);
@@ -2529,7 +2529,7 @@ namespace VoxelEngine.UI
         {
             CraftQueue best = null;
             float bestSqr = stationRadius * stationRadius;
-            var stations = FindObjectsByType<Crafting.CraftingStation>(FindObjectsInactive.Exclude);
+            var stations = FindObjectsByType<Crafting.CraftingStation>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
             foreach (var st in stations)
             {
                 if (st.tier != tier) continue;

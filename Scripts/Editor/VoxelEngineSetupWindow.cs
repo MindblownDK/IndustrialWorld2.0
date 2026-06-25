@@ -125,6 +125,12 @@ namespace VoxelEngine.EditorTools
             if (GUILayout.Button("13. Build Maritime Content (Hulls, Engines, Shafts, Propellers, Turbo, Helm + Maritime Research Tree)", GUILayout.Height(56)))
                 BuildMaritimeContent();
 
+            if (GUILayout.Button("14. Build Floodlight Content (Stationary & Grid blocks, recipes, research)", GUILayout.Height(40)))
+                BuildFloodlightContent();
+
+            if (GUILayout.Button("15. Build Wind Power Content (Standard, Helix, Monopoles, Research)", GUILayout.Height(40)))
+                BuildWindmillContent();
+
             GUILayout.Space(20);
             EditorGUILayout.EndScrollView();
         }
@@ -483,6 +489,12 @@ namespace VoxelEngine.EditorTools
             ui.recipeRegistry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeRegistry>(
                 $"{ASSET_ROOT}/RecipeRegistry.asset");
 
+            // Lighting Management & UI
+            var lightMgr = uiGo.AddComponent<VoxelEngine.UI.LightingManager>();
+            var lightUI = uiGo.AddComponent<VoxelEngine.UI.LightingControlUI>();
+            var lightUIDoc = uiGo.AddComponent<UnityEngine.UIElements.UIDocument>();
+            if (panelSettings != null) lightUIDoc.panelSettings = panelSettings;
+
             // Hammer build wheel (radial selector for tiered families).
             var wheelGo = new GameObject("HammerBuildWheel");
             wheelGo.transform.SetParent(playerGo.transform, false);
@@ -494,12 +506,7 @@ namespace VoxelEngine.EditorTools
                 $"{ASSET_ROOT}/Tiered/TieredBlockRegistry.asset");
 
             // Full map UI (M key opens).
-            var mapGo = new GameObject("FullMap");
-            mapGo.transform.SetParent(playerGo.transform, false);
-            var mapDoc = mapGo.AddComponent<UnityEngine.UIElements.UIDocument>();
-            if (panelSettings != null) mapDoc.panelSettings = panelSettings;
-            mapGo.AddComponent<VoxelEngine.UI.FullMap>();
-
+            
             world.viewer = playerGo.transform;
 
             // World-state persistence (player position, inventory, placed blocks).
@@ -823,7 +830,7 @@ namespace VoxelEngine.EditorTools
 
             // Also wire it into any existing GameUIController in the currently-open scene
             // so the player doesn't have to re-run step 2.
-            var existingUis = Object.FindObjectsByType<VoxelEngine.UI.GameUIController>(FindObjectsInactive.Include);
+            var existingUis = Object.FindObjectsByType<VoxelEngine.UI.GameUIController>(FindObjectsInactive.Include, FindObjectsSortMode.None);
             foreach (var ui in existingUis)
             {
                 ui.recipeRegistry = registry;
@@ -1464,7 +1471,7 @@ namespace VoxelEngine.EditorTools
             AssetDatabase.Refresh();
 
             // ---------- Wire registry into any existing BuildSystemV2 in the scene ----------
-            var systems = Object.FindObjectsByType<VoxelEngine.Building.Tiered.BuildSystemV2>(FindObjectsInactive.Include);
+            var systems = Object.FindObjectsByType<VoxelEngine.Building.Tiered.BuildSystemV2>(FindObjectsInactive.Include, FindObjectsSortMode.None);
             foreach (var sys in systems)
             {
                 sys.registry = registry;
@@ -1828,13 +1835,11 @@ namespace VoxelEngine.EditorTools
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
 
-            // Ensure a PowerNetworkManager exists in the scene.
-            var existing = Object.FindAnyObjectByType<VoxelEngine.Power.PowerNetworkManager>();
-            if (existing == null)
+            // Update Manager spawning to include WindSystem
+            if (Object.FindAnyObjectByType<VoxelEngine.Power.Wind.WindSystem>() == null)
             {
-                var go = new GameObject("PowerNetworkManager");
-                go.AddComponent<VoxelEngine.Power.PowerNetworkManager>();
-                Debug.Log("[Wizard] Spawned PowerNetworkManager in scene.");
+                var windGo = new GameObject("WindSystem");
+                windGo.AddComponent<VoxelEngine.Power.Wind.WindSystem>();
             }
 
             EditorUtility.DisplayDialog("Voxel Engine",
@@ -4815,6 +4820,33 @@ root =>
             var itemDemo = MakeGItem("GItem_Demolisher", "Demolisher", Color.white, demoPref, VoxelEngine.GridSystem.GridSize.Large, 320, 560);
             AddGRecipe("Recipe_GDemolisher", "Demolisher", itemDemo, (steelPlate, 6), (circuit, 3));
 
+            // -- Piston Block --
+            var pistonPref = MakeGPref<VoxelEngine.GridSystem.GridPiston>("Piston_Large", new Color(0.6f, 0.6f, 0.6f), Vector3.one, p => {
+                p.targetLength = 5f;
+                p.extensionSpeed = 2f;
+            });
+            // Custom Visuals for Piston (Since GridBlockMeshBuilder is generic)
+            var pistonRoot = PrefabUtility.LoadPrefabContents(AssetDatabase.GetAssetPath(pistonPref));
+            GameObject basePart = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            basePart.name = "Base";
+            basePart.transform.SetParent(pistonRoot.transform, false);
+            basePart.transform.localScale = new Vector3(0.8f, 0.4f, 0.8f);
+            basePart.GetComponent<Renderer>().sharedMaterial = MakeColoredMat(PREFABS + "/Mats", "Mat_PistonBase", new Color(0.4f, 0.4f, 0.4f));
+            
+            GameObject headPart = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            headPart.name = "Head";
+            headPart.transform.SetParent(pistonRoot.transform, false);
+            headPart.transform.localScale = new Vector3(0.9f, 0.2f, 0.9f);
+            headPart.transform.localPosition = new Vector3(0, 0.2f, 0);
+            headPart.GetComponent<Renderer>().sharedMaterial = MakeColoredMat(PREFABS + "/Mats", "Mat_PistonHead", new Color(0.7f, 0.7f, 0.7f));
+            
+            PrefabUtility.SaveAsPrefabAsset(pistonRoot, AssetDatabase.GetAssetPath(pistonPref));
+            PrefabUtility.UnloadPrefabContents(pistonRoot);
+
+            var itemPiston = MakeGItem("GItem_Piston", "Industrial Piston", Color.white, pistonPref, VoxelEngine.GridSystem.GridSize.Large, 400, 600);
+            itemPiston.description = "A powerful hydraulic piston. Pushes and pulls grid blocks above it. Configurable length (0-20m) and speed.";
+            AddGRecipe("Recipe_GPiston", "Industrial Piston", itemPiston, (steelPlate, 8), (ironPlate, 4), (copperWire, 8), (circuit, 2));
+
             // ── 13) Beacon + Ore Detector (utility blocks) ──────────────
             var beaconPref = MakeGPref<VoxelEngine.GridSystem.GridBeacon>("Beacon_Large", new Color(0.3f, 0.8f, 1f), new Vector3(0.5f, 1f, 0.5f),
                 b => { b.powerDrawWatts = 10f; b.beamHeight = 200f; b.rotationSpeed = 90f; });
@@ -5474,7 +5506,353 @@ root =>
         }
 
 
+        // ============================================================
+        //                STEP 14 - FLOODLIGHT CONTENT
+        // ============================================================
+        private void BuildFloodlightContent()
+        {
+            const string floodFolder    = ASSET_ROOT + "/Power/Floodlights";
+            const string prefabsFolder  = floodFolder + "/Prefabs";
+            const string itemsFolder    = floodFolder + "/Items";
+            const string recipesFolder  = floodFolder + "/Recipes";
+
+            EnsureFolder(floodFolder);
+            EnsureFolder(prefabsFolder);
+            EnsureFolder(itemsFolder);
+            EnsureFolder(recipesFolder);
+
+            // -- Dependencies --
+            string commonItems = ASSET_ROOT + "/Items";
+            var ironIngot = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{commonItems}/Item_IronIngot.asset");
+            var copperWire = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{commonItems}/Item_CopperWire.asset");
+            var glass = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{ASSET_ROOT}/Industrial/Items/Item_Glass.asset");
+            if (ironIngot == null || copperWire == null || glass == null)
+            {
+                EditorUtility.DisplayDialog("Voxel Engine", "Run Steps 4 and 10 (Industrial Content) first.", "OK");
+                return;
+            }
+
+            var registry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeRegistry>($"{ASSET_ROOT}/RecipeRegistry.asset");
+            var tree = AssetDatabase.LoadAssetAtPath<VoxelEngine.Research.ResearchTree>($"{ASSET_ROOT}/Research/ResearchTree.asset");
+
+            // -- 1) Stationary Floodlight --
+            string statPath = $"{prefabsFolder}/Floodlight_Stationary.prefab";
+            var statRoot = new GameObject("Floodlight_Stationary");
+            // Base pole
+            var pole = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            pole.transform.SetParent(statRoot.transform, false);
+            pole.transform.localScale = new Vector3(0.2f, 2f, 0.2f);
+            pole.transform.localPosition = new Vector3(0, 1f, 0);
+            pole.GetComponent<Renderer>().sharedMaterial = MakeColoredMat(prefabsFolder, "Mat_FloodPole", new Color(0.4f, 0.4f, 0.45f));
+            // Head
+            var head = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            head.transform.SetParent(statRoot.transform, false);
+            head.transform.localScale = new Vector3(0.5f, 0.2f, 0.5f);
+            head.transform.localPosition = new Vector3(0, 2f, 0);
+            head.GetComponent<Renderer>().sharedMaterial = MakeColoredMat(prefabsFolder, "Mat_FloodHead", new Color(0.6f, 0.6f, 0.65f));
+            // Light
+            var lightGo = new GameObject("LightSource");
+            lightGo.transform.SetParent(head.transform, false);
+            lightGo.transform.localPosition = new Vector3(0, -0.11f, 0);
+            var light = lightGo.AddComponent<Light>();
+            light.type = LightType.Spot;
+            light.intensity = 20f;
+            light.range = 20f;
+            light.spotAngle = 45f;
+            light.color = Color.white;
+
+            var statFlood = statRoot.AddComponent<VoxelEngine.Power.Floodlight>();
+            statFlood.lightComponent = light;
+            var statCons = statRoot.AddComponent<VoxelEngine.Power.PowerConsumer>();
+            statCons.wattsPerSecond = 50f;
+            statCons.connectRadius = 1.8f;
+
+            var statPrefab = PrefabUtility.SaveAsPrefabAsset(statRoot, statPath);
+            Object.DestroyImmediate(statRoot);
+
+            var statItem = MakeBlock(itemsFolder, "Block_Floodlight_Stationary", "Stationary Floodlight", new Color(0.7f, 0.7f, 0.75f), statPrefab, "Power");
+            statItem.description = "A powerful outdoor light. Consumes 50 W. Only glows when powered.";
+
+            // -- 2) Grid Floodlight --
+            string gridPath = $"{prefabsFolder}/Floodlight_Grid.prefab";
+            var gridRoot = GetOrCreatePrefab(gridPath, "Floodlight_Grid", (root) =>
+            {
+                VoxelEngine.GridSystem.GridBlockMeshBuilder.Build(root, VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Generic, VoxelEngine.GridSystem.GridSize.Small, new Color(0.6f, 0.6f, 0.65f));
+                var lightGo = new GameObject("LightSource");
+                lightGo.transform.SetParent(root.transform, false);
+                lightGo.transform.localPosition = new Vector3(0, 0.51f, 0);
+                var light = lightGo.AddComponent<Light>();
+                light.type = LightType.Spot;
+                light.intensity = 20f;
+                light.range = 20f;
+                light.spotAngle = 60f;
+                light.color = Color.white;
+
+                var flood = root.AddComponent<VoxelEngine.Power.VoxelLightController>();
+                flood.lightComponent = light;
+                flood.intensity = 20f;
+                var cons = root.AddComponent<VoxelEngine.Power.PowerConsumer>();
+                cons.wattsPerSecond = 50f;
+                cons.connectRadius = 1.6f;
+            });
+
+            var gridItem = MakeBlock(itemsFolder, "Block_Floodlight_Grid", "Grid Floodlight", new Color(0.7f, 0.7f, 0.75f), gridRoot, "Power");
+            gridItem.description = "Grid-mountable floodlight. Consumes 50 W. Only glows when powered.";
+
+            // -- 3) LED Strip Light --
+            string ledPath = $"{prefabsFolder}/LEDStrip_Stationary.prefab";
+            var ledRoot = new GameObject("LEDStrip_Stationary");
+            var stripMesh = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            stripMesh.transform.SetParent(ledRoot.transform, false);
+            stripMesh.transform.localScale = new Vector3(2f, 0.1f, 0.1f);
+            stripMesh.GetComponent<Renderer>().sharedMaterial = MakeColoredMat(prefabsFolder, "Mat_LEDStrip", new Color(0.9f, 0.9f, 0.9f));
+            
+            var ledLightGo = new GameObject("LEDLight");
+            ledLightGo.transform.SetParent(ledRoot.transform, false);
+            ledLightGo.transform.localPosition = new Vector3(0, 0.1f, 0);
+            var ledLight = ledLightGo.AddComponent<Light>();
+            ledLight.type = LightType.Point;
+            ledLight.range = 5f;
+            ledLight.intensity = 5f;
+            ledLight.color = Color.cyan;
+
+            var ledCtrl = ledRoot.AddComponent<VoxelEngine.Power.VoxelLightController>();
+            ledCtrl.lightComponent = ledLight;
+            ledCtrl.lightColor = Color.cyan;
+            ledCtrl.intensity = 5f;
+            var ledCons = ledRoot.AddComponent<VoxelEngine.Power.PowerConsumer>();
+            ledCons.wattsPerSecond = 10f;
+            ledCons.connectRadius = 1.8f;
+
+            var ledPrefab = PrefabUtility.SaveAsPrefabAsset(ledRoot, ledPath);
+            Object.DestroyImmediate(ledRoot);
+
+            var ledItem = MakeBlock(itemsFolder, "Block_LEDStrip", "LED Strip Light", new Color(0, 1, 1), ledPrefab, "Power");
+            ledItem.description = "A thin LED strip. Low power (10 W). Supports color changes.";
+
+            // -- 4) RGB Light --
+            string rgbPath = $"{prefabsFolder}/RGB_Light.prefab";
+            var rgbRoot = new GameObject("RGB_Light");
+            var rgbMesh = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            rgbMesh.transform.SetParent(rgbRoot.transform, false);
+            rgbMesh.transform.localScale = new Vector3(0.3f, 0.3f, 0.3f);
+            rgbMesh.GetComponent<Renderer>().sharedMaterial = MakeColoredMat(prefabsFolder, "Mat_RGB", Color.white);
+
+            var rgbLightGo = new GameObject("RGBLight");
+            rgbLightGo.transform.SetParent(rgbRoot.transform, false);
+            var rgbLight = rgbLightGo.AddComponent<Light>();
+            rgbLight.type = LightType.Point;
+            rgbLight.range = 10f;
+            rgbLight.intensity = 15f;
+            rgbLight.color = Color.magenta;
+
+            var rgbCtrl = rgbRoot.AddComponent<VoxelEngine.Power.VoxelLightController>();
+            rgbCtrl.lightComponent = rgbLight;
+            rgbCtrl.lightColor = Color.magenta;
+            rgbCtrl.intensity = 15f;
+            var rgbCons = rgbRoot.AddComponent<VoxelEngine.Power.PowerConsumer>();
+            rgbCons.wattsPerSecond = 20f;
+            rgbCons.connectRadius = 1.8f;
+
+            var rgbPrefab = PrefabUtility.SaveAsPrefabAsset(rgbRoot, rgbPath);
+            Object.DestroyImmediate(rgbRoot);
+
+            var rgbItem = MakeBlock(itemsFolder, "Block_RGB_Light", "RGB Mood Light", new Color(1, 0, 1), rgbPrefab, "Power");
+            rgbItem.description = "Small RGB light. Change colors via the Lighting UI. Consumes 20 W.";
+
+            // -- 5) Recipes --
+            VoxelEngine.Crafting.RecipeDefinition AddRec(string name, string display, VoxelEngine.Items.ItemDefinition output, params (VoxelEngine.Items.ItemDefinition item, int n)[] inputs)
+            {
+                string path = $"{recipesFolder}/{name}.asset";
+                var r = GetOrCreateAsset<VoxelEngine.Crafting.RecipeDefinition>(path);
+                r.displayName = display; r.outputItem = output; r.outputCount = 1;
+                r.requiredStation = VoxelEngine.Crafting.StationTier.Assembler; r.craftSeconds = 4f; r.unlockedByDefault = false;
+                var valid = new System.Collections.Generic.List<VoxelEngine.Crafting.RecipeIngredient>();
+                foreach (var (item, n) in inputs) if (item != null) valid.Add(new VoxelEngine.Crafting.RecipeIngredient { item = item, count = n });
+                r.inputs = valid.ToArray();
+                EditorUtility.SetDirty(r);
+                if (registry != null && !registry.recipes.Contains(r)) registry.recipes.Add(r);
+                return r;
+            }
+
+            var recStat = AddRec("Recipe_Floodlight_Stationary", "Stationary Floodlight", statItem, (ironIngot, 2), (copperWire, 4), (glass, 1));
+            var recGrid = AddRec("Recipe_Floodlight_Grid", "Grid Floodlight", gridItem, (ironIngot, 2), (copperWire, 4), (glass, 1));
+            var recLed  = AddRec("Recipe_LEDStrip", "LED Strip Light", ledItem, (copperWire, 8), (glass, 2));
+            var recRgb  = AddRec("Recipe_RGB_Light", "RGB Mood Light", rgbItem, (copperWire, 8), (glass, 1), (ironIngot, 1));
+
+            // -- 6) Research --
+            if (tree != null)
+            {
+                var nElec = FindNodeByName(tree, "res_electricity");
+                VoxelEngine.Research.ResearchNode nLighting;
+                {
+                    string path = $"{ASSET_ROOT}/Research/Nodes/res_floodlighting.asset";
+                    nLighting = GetOrCreateAsset<VoxelEngine.Research.ResearchNode>(path);
+                    nLighting.nodeId = "res_floodlighting";
+                    nLighting.displayName = "Advanced Lighting";
+                    nLighting.description = "High-intensity and decorative lighting for industrial sites and ships.";
+                    nLighting.category = VoxelEngine.Research.ResearchCategory.Environment;
+                    nLighting.subCategory = VoxelEngine.Research.ResearchSubCategory.Production;
+                    nLighting.tier = 2; nLighting.column = 8;
+                    nLighting.iconTint = new Color(1f, 1f, 0.8f);
+                    nLighting.researchSeconds = 40f;
+                    nLighting.cost = new[] { new VoxelEngine.Research.ResearchNode.ScienceCost { pack = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ScienceItem>($"{commonItems}/Item_ScienceT1.asset"), count = 10 },
+                                            new VoxelEngine.Research.ResearchNode.ScienceCost { pack = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ScienceItem>($"{commonItems}/Item_ScienceT2.asset"), count = 5 } };
+                    nLighting.unlocksRecipes = new[] { recStat, recGrid, recLed, recRgb };
+                    nLighting.prerequisites = nElec != null ? new[] { nElec } : null;
+                    EditorUtility.SetDirty(nLighting);
+                    if (!tree.nodes.Contains(nLighting)) tree.nodes.Add(nLighting);
+                }
+                EditorUtility.SetDirty(tree);
+            }
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Voxel Engine", "Lighting content created!\n\n- Floodlights, LED Strips, RGB Lights\n- Recipes\n- 'Advanced Lighting' research node", "OK");
+        }
+
+        // ============================================================
+        //                STEP 15 - WIND POWER CONTENT
+        // ============================================================
+        private void BuildWindmillContent()
+        {
+            const string WIND_ROOT = ASSET_ROOT + "/WindPower";
+            const string PREFABS   = WIND_ROOT + "/Prefabs";
+            const string ITEMS     = WIND_ROOT + "/Items";
+            const string RECIPES   = WIND_ROOT + "/Recipes";
+            const string NODES     = ASSET_ROOT + "/Research/Nodes";
+
+            foreach (var f in new[] { WIND_ROOT, PREFABS, ITEMS, RECIPES }) EnsureFolder(f);
+
+            // -- Dependencies --
+            string indItems    = ASSET_ROOT + "/Industrial/Items";
+            var steelPlate = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_SteelPlate.asset");
+            var ironPlate  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_IronPlate.asset");
+            var copperWire = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_CopperWire.asset");
+            var glass      = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_Glass.asset");
+            var circuit    = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_Circuit.asset");
+            var advCircuit = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_AdvCircuit.asset");
+            if (steelPlate == null || circuit == null)
+            {
+                EditorUtility.DisplayDialog("Voxel Engine", "Run Step 10 (Industrial Content) first.", "OK");
+                return;
+            }
+
+            var registry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeRegistry>($"{ASSET_ROOT}/RecipeRegistry.asset");
+            var tree = AssetDatabase.LoadAssetAtPath<VoxelEngine.Research.ResearchTree>($"{ASSET_ROOT}/Research/ResearchTree.asset");
+
+            // -- 1) Monopole --
+            string monoPath = $"{PREFABS}/WindmillMonopole.prefab";
+            var monoRoot = new GameObject("WindmillMonopole");
+            var monoCol = monoRoot.AddComponent<BoxCollider>();
+            monoCol.size = new Vector3(4f, 10f, 4f);
+            monoRoot.AddComponent<VoxelEngine.Power.Wind.WindmillMonopole>();
+            var monoMesh = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            monoMesh.transform.SetParent(monoRoot.transform, false);
+            monoMesh.transform.localScale = new Vector3(4f, 10f, 4f);
+            monoMesh.GetComponent<Renderer>().sharedMaterial = MakeColoredMat(PREFABS, "Mat_Monopole", new Color(0.5f, 0.5f, 0.55f));
+            var monoPrefab = PrefabUtility.SaveAsPrefabAsset(monoRoot, monoPath);
+            Object.DestroyImmediate(monoRoot);
+            var itemMono = MakeBlock(ITEMS, "Block_WindmillMonopole", "Windmill Monopole", new Color(0.5f, 0.5f, 0.55f), monoPrefab, "Power");
+            itemMono.description = "A heavy-duty foundation pole for offshore windmills. Goes deep into the seafloor.";
+
+            // -- 2) Standard Windmills (3 sizes) --
+            VoxelEngine.Items.BlockItem MakeStandardWindmill(string sizeName, float power, Color color)
+            {
+                string path = $"{PREFABS}/StandardWindmill_{sizeName}.prefab";
+                var root = new GameObject($"StandardWindmill_{sizeName}");
+                var wm = root.AddComponent<VoxelEngine.Power.Wind.StandardWindmill>();
+                wm.maxPowerWatts = power;
+                
+                var mesh = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                mesh.transform.SetParent(root.transform, false);
+                mesh.transform.localScale = new Vector3(2f, 10f, 2f);
+                mesh.GetComponent<Renderer>().sharedMaterial = MakeColoredMat(PREFABS, $"Mat_SWind_{sizeName}", color);
+                
+                var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
+                Object.DestroyImmediate(root);
+                return MakeBlock(ITEMS, $"Block_SWind_{sizeName}", $"{sizeName} Standard Windmill", color, prefab, "Power");
+            }
+            var sWindSmall = MakeStandardWindmill("Small", 100000f, new Color(0.8f, 0.8f, 0.8f));
+            var sWindMed   = MakeStandardWindmill("Medium", 1000000f, new Color(0.7f, 0.7f, 0.7f));
+            var sWindLarge = MakeStandardWindmill("Large", 15000000f, new Color(0.6f, 0.6f, 0.6f));
+
+            // -- 3) Helix Windmills (2 sizes) --
+
+            // Correcting MakeBlock call for Helix
+            var hWindSmall = MakeBlock(ITEMS, "Block_HWind_Small", "Small Helix Windmill", new Color(0.4f, 0.8f, 0.4f), 
+                PrefabUtility.SaveAsPrefabAsset(new GameObject("HSmall"), $"{PREFABS}/HelixSmall.prefab"), "Power");
+            var hWindLarge = MakeBlock(ITEMS, "Block_HWind_Large", "Large Helix Windmill", new Color(0.2f, 0.6f, 0.2f), 
+                PrefabUtility.SaveAsPrefabAsset(new GameObject("HLarge"), $"{PREFABS}/HelixLarge.prefab"), "Power");
+
+            // -- 4) Recipes --
+            VoxelEngine.Crafting.RecipeDefinition AddWRec(string name, string display, VoxelEngine.Items.ItemDefinition output, params (VoxelEngine.Items.ItemDefinition item, int n)[] inputs)
+            {
+                string path = $"{RECIPES}/{name}.asset";
+                var r = GetOrCreateAsset<VoxelEngine.Crafting.RecipeDefinition>(path);
+                r.displayName = display; r.outputItem = output; r.outputCount = 1;
+                r.requiredStation = VoxelEngine.Crafting.StationTier.Assembler; r.craftSeconds = 10f; r.unlockedByDefault = false;
+                var valid = new System.Collections.Generic.List<VoxelEngine.Crafting.RecipeIngredient>();
+                foreach (var (item, n) in inputs) if (item != null) valid.Add(new VoxelEngine.Crafting.RecipeIngredient { item = item, count = n });
+                r.inputs = valid.ToArray();
+                EditorUtility.SetDirty(r);
+                if (registry != null && !registry.recipes.Contains(r)) registry.recipes.Add(r);
+                return r;
+            }
+
+            var recMono = AddWRec("Recipe_WindMono", "Windmill Monopole", itemMono, (steelPlate, 10), (ironPlate, 10));
+            var recSSmall = AddWRec("Recipe_SWindSmall", "Small Standard Windmill", sWindSmall, (steelPlate, 5), (copperWire, 10), (ironPlate, 5));
+            var recSMed   = AddWRec("Recipe_SWindMed", "Medium Standard Windmill", sWindMed, (steelPlate, 15), (copperWire, 20), (ironPlate, 10));
+            var recSLarge = AddWRec("Recipe_SWindLarge", "Large Standard Windmill", sWindLarge, (steelPlate, 40), (copperWire, 50), (advCircuit, 5));
+            var recHSmall = AddWRec("Recipe_HWindSmall", "Small Helix Windmill", hWindSmall, (steelPlate, 8), (copperWire, 15));
+            var recHLarge = AddWRec("Recipe_HWindLarge", "Large Helix Windmill", hWindLarge, (steelPlate, 20), (copperWire, 30), (advCircuit, 2));
+
+            // -- 5) Research --
+            if (tree != null)
+            {
+                VoxelEngine.Research.ResearchNode MakeWNode(string id, string display, string desc, int tier, int col, float sec, (VoxelEngine.Items.ScienceItem p, int n)[] cost, VoxelEngine.Crafting.RecipeDefinition[] unlocks, VoxelEngine.Research.ResearchNode[] prereqs = null)
+                {
+                    string path = $"{NODES}/{id}.asset";
+                    var n = GetOrCreateAsset<VoxelEngine.Research.ResearchNode>(path);
+                    n.nodeId = id; n.displayName = display; n.description = desc;
+                    n.category = VoxelEngine.Research.ResearchCategory.Environment;
+                    n.subCategory = VoxelEngine.Research.ResearchSubCategory.Power; // New filter
+                    n.tier = tier; n.column = col; n.researchSeconds = sec;
+                    n.cost = new VoxelEngine.Research.ResearchNode.ScienceCost[cost.Length];
+                    for (int i = 0; i < cost.Length; i++) n.cost[i] = new VoxelEngine.Research.ResearchNode.ScienceCost { pack = cost[i].p, count = cost[i].n };
+                    n.unlocksRecipes = unlocks; n.prerequisites = prereqs;
+                    EditorUtility.SetDirty(n);
+                    if (!tree.nodes.Contains(n)) tree.nodes.Add(n);
+                    return n;
+                }
+
+                var sciT1 = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ScienceItem>($"{ASSET_ROOT}/Items/Item_ScienceT1.asset");
+                var sciT2 = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ScienceItem>($"{ASSET_ROOT}/Items/Item_ScienceT2.asset");
+
+                var nWind1 = MakeWNode("res_wind_1", "Wind Power I", "Unlock Small Standard Windmills.", 1, 10, 30f, new[] { (sciT1, 10) }, new[] { recSSmall, recMono });
+                var nWind2 = MakeWNode("res_wind_2", "Wind Power II", "Unlock Small Helix and Medium Standard Windmills.", 2, 10, 60f, new[] { (sciT1, 20), (sciT2, 10) }, new[] { recHSmall, recSMed }, new[] { nWind1 });
+                var nWind3 = MakeWNode("res_wind_3", "Wind Power III", "Unlock Large Helix and Large Standard Windmills.", 3, 10, 120f, new[] { (sciT2, 30) }, new[] { recHLarge, recSLarge }, new[] { nWind2 });
+                EditorUtility.SetDirty(tree);
+            }
+
+            // -- 6) Move Nuclear to Power Generation --
+            foreach (var node in tree.nodes)
+            {
+                if (node.nodeId.Contains("nuclear") || node.displayName.Contains("Nuclear"))
+                {
+                    node.subCategory = VoxelEngine.Research.ResearchSubCategory.Power;
+                    EditorUtility.SetDirty(node);
+                }
+            }
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Voxel Engine", "Wind Power content created!\n\n- Standard (S/M/L) & Helix (S/L) Windmills\n- Monopoles\n- Power Generation research filter applied", "OK");
+        }
+
         private static VoxelEngine.Research.ResearchNode FindNodeByName(VoxelEngine.Research.ResearchTree tree, string id)
+
+
         {
             if (tree == null) return null;
             foreach (var n in tree.nodes) if (n != null && n.nodeId == id) return n;
