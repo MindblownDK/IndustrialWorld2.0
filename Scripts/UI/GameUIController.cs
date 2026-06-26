@@ -281,7 +281,7 @@ namespace VoxelEngine.UI
             // Hotbar wheel — only when no UI is open and no modifier is held (Ctrl/Shift
             // + wheel rotate the grid build ghost, so they must not also cycle the hotbar).
             bool ctrl = false, shift = false;
-#if ENABLE_INPUT_SYSTEM
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
             var kbWheel = UnityEngine.InputSystem.Keyboard.current;
             ctrl  = kbWheel != null && (kbWheel.leftCtrlKey.isPressed  || kbWheel.rightCtrlKey.isPressed);
             shift = kbWheel != null && (kbWheel.leftShiftKey.isPressed || kbWheel.rightShiftKey.isPressed);
@@ -350,7 +350,7 @@ namespace VoxelEngine.UI
             }
 
             // Tick custom tooltip overlay
-            #if ENABLE_INPUT_SYSTEM
+            #if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
             Vector2 mp = UnityEngine.InputSystem.Mouse.current != null
                 ? UnityEngine.InputSystem.Mouse.current.position.ReadValue() : Vector2.zero;
             #else
@@ -2824,7 +2824,7 @@ namespace VoxelEngine.UI
         private bool PointerOverInteractiveUI()
         {
             if (_root?.panel == null) return false;
-#if ENABLE_INPUT_SYSTEM
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
             var mouse = UnityEngine.InputSystem.Mouse.current;
             if (mouse == null) return false;
             Vector2 sp = mouse.position.ReadValue();
@@ -2845,7 +2845,7 @@ namespace VoxelEngine.UI
             if (!_inventoryOpen) return;
 
             // --- Read mouse state directly from the device ---
-#if ENABLE_INPUT_SYSTEM
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
             var mouse = UnityEngine.InputSystem.Mouse.current;
             if (mouse == null) return;
             Vector2 screenPos    = mouse.position.ReadValue();
@@ -3188,7 +3188,7 @@ namespace VoxelEngine.UI
             if (inventory == null || inventory.container == null) return;
             if (hotbarIdx < 0 || hotbarIdx >= Inventory.HOTBAR_SIZE) return;
 
-#if ENABLE_INPUT_SYSTEM
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
             var mouse = UnityEngine.InputSystem.Mouse.current;
             if (mouse == null) return;
             Vector2 screenPos = mouse.position.ReadValue();
@@ -3238,7 +3238,7 @@ namespace VoxelEngine.UI
             if (_searchHasFocus || !_inventoryOpen) return;
             if (!GameSettings.WasPressed(InputAction.DropItem)) return;
 
-#if ENABLE_INPUT_SYSTEM
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
             var mouse = UnityEngine.InputSystem.Mouse.current;
             if (mouse == null) return;
             Vector2 screenPos = mouse.position.ReadValue();

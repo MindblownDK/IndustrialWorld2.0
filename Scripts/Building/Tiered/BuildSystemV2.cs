@@ -59,7 +59,7 @@ namespace VoxelEngine.Building.Tiered
 
             // Rotate ghost only with Ctrl+wheel (matches GameUIController).
             bool ctrl = false;
-#if ENABLE_INPUT_SYSTEM
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
             ctrl = UnityEngine.InputSystem.Keyboard.current != null
                    && UnityEngine.InputSystem.Keyboard.current.leftCtrlKey.isPressed;
             float wheel = UnityEngine.InputSystem.Mouse.current != null

@@ -463,7 +463,7 @@ namespace VoxelEngine.Player
 
         private static bool IsShiftHeld()
         {
-#if ENABLE_INPUT_SYSTEM
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
             var kb = UnityEngine.InputSystem.Keyboard.current;
             return kb != null && (kb.leftShiftKey.isPressed || kb.rightShiftKey.isPressed);
 #else

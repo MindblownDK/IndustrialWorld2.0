@@ -1,7 +1,7 @@
 // Assets/Scripts/VoxelEngine/Settings/KeyRebindCapture.cs
 using System;
 using UnityEngine;
-#if ENABLE_INPUT_SYSTEM
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
 using UnityEngine.InputSystem;
 #endif
 
@@ -17,7 +17,7 @@ namespace VoxelEngine.Settings
 
         private void Update()
         {
-#if ENABLE_INPUT_SYSTEM
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
             if (Mouse.current != null)
             {
                 if (Mouse.current.leftButton.wasPressedThisFrame)   { Done("Mouse0"); return; }

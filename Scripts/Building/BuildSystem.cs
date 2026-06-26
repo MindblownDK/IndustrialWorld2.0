@@ -56,7 +56,7 @@ namespace VoxelEngine.Building
 
             // Rotate ghost only while holding LeftCtrl — otherwise the wheel scrolls the hotbar.
             bool ctrlHeld = false;
-#if ENABLE_INPUT_SYSTEM
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
             ctrlHeld = UnityEngine.InputSystem.Keyboard.current != null
                        && UnityEngine.InputSystem.Keyboard.current.leftCtrlKey.isPressed;
             float wheel = UnityEngine.InputSystem.Mouse.current != null

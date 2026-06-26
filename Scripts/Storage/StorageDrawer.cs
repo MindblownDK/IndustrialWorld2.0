@@ -55,6 +55,7 @@ namespace VoxelEngine.Storage
 
         private void Awake()
         {
+            RemoveLegacyPipeConfig();
             EnsureContainers();
             RefreshDisplay();
         }
@@ -69,6 +70,14 @@ namespace VoxelEngine.Storage
         private void OnDisable()
         {
             if (upgradeSlots != null) upgradeSlots.OnChanged -= HandleUpgradeChanged;
+        }
+
+        private void RemoveLegacyPipeConfig()
+        {
+            var routing = GetComponent<VoxelEngine.Transport.ItemPortRouting>();
+            if (routing != null) Destroy(routing);
+            var ports = GetComponent<VoxelEngine.Transport.PortConfig>();
+            if (ports != null) Destroy(ports);
         }
 
         public void EnsureContainers()
