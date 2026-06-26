@@ -908,6 +908,155 @@ namespace VoxelEngine.Storage
             return p;
         }
 
+        // ════════════════════════════════════════════════════════════
+        //                     STORAGE DRAWER
+        // ════════════════════════════════════════════════════════════
+        public static VisualElement BuildDrawerPanel(StorageDrawer drawer, MachineUIs.SlotBuilder slotBuilder)
+        {
+            drawer.EnsureContainers();
+            var p = T.MachinePanel();
+            p.style.width = 500;
+            bool hasItem = drawer.storedItem != null && drawer.storedCount > 0;
+            var (hdr, _, _, _) = T.HeaderRow("▣ Storage Drawer", hasItem ? drawer.storedItem.displayName : "EMPTY",
+                hasItem ? T.AccentTeal : T.TextMuted);
+            p.Add(hdr);
+            p.Add(T.AccentDivider(T.AccentTeal));
+            p.Add(T.StatRow("📦", "Stored", $"{drawer.storedCount:N0} / {drawer.Capacity:N0}", T.AccentCyan));
+            p.Add(T.StatRow("⇈", "Stack Limit", $"{drawer.StackMultiplier}x", T.AccentGold));
+            p.Add(T.StatRow("🕳", "Overflow", drawer.HasVoidUpgrade ? "VOID" : "BLOCK", drawer.HasVoidUpgrade ? T.AccentPurple : T.TextMuted));
+            var (bar, _) = T.ProgressBar(drawer.Capacity > 0 ? drawer.storedCount / (float)drawer.Capacity : 0f, T.AccentTeal, 8, true);
+            p.Add(bar);
+            p.Add(T.Divider());
+
+            p.Add(T.Subtitle("Stored Item"));
+            var itemGrid = T.SlotGrid();
+            itemGrid.Add(slotBuilder(drawer, 0, drawer.GetSlot(0), false, true));
+            p.Add(itemGrid);
+            p.Add(T.Spacer(8));
+
+            p.Add(T.Subtitle("Upgrade Slots (12)"));
+            var upgradeGrid = T.SlotGrid();
+            for (int i = 0; i < drawer.upgradeSlots.Size; i++)
+                upgradeGrid.Add(slotBuilder(drawer.upgradeSlots, i, drawer.upgradeSlots.GetSlot(i), false, true));
+            p.Add(upgradeGrid);
+            p.Add(T.Divider());
+            p.Add(T.Muted("LMB front = take 1 · RMB with item = insert hand stack · Shift+RMB = insert all matching items. Configure in/out faces from Item Ports."));
+            return p;
+        }
+
+        // ════════════════════════════════════════════════════════════
+        //                  DRAWER CONTROLLER
+        // ════════════════════════════════════════════════════════════
+        public static VisualElement BuildDrawerControllerPanel(StorageDrawerController controller)
+        {
+            controller.RefreshLinks();
+            var p = T.MachinePanel();
+            p.style.width = 500;
+            bool online = controller.ConnectedRack != null && controller.ConnectedRack.IsOnline;
+            var (hdr, _, _, _) = T.HeaderRow("▤ Drawer Controller", online ? "LINKED" : "NO RACK",
+                online ? T.AccentGreen : T.AccentRed);
+            p.Add(hdr);
+            p.Add(T.AccentDivider(T.AccentGreen));
+            p.Add(T.StatRow("🖥", "Server Rack", controller.ConnectedRack != null ? controller.ConnectedRack.name : "None", online ? T.AccentGreen : T.TextMuted));
+            p.Add(T.StatRow("▣", "Drawers", controller.Drawers.Count.ToString(), T.AccentCyan));
+            p.Add(T.StatRow("📡", "Drawer Radius", $"{controller.drawerRadius:0} m", T.TextSecondary));
+            p.Add(T.Divider());
+            p.Add(T.Subtitle("Controller Item Storage"));
+            var summary = controller.BuildItemSummary();
+            if (summary.Count == 0)
+            {
+                p.Add(T.Muted("No stored items in linked drawers."));
+            }
+            else
+            {
+                var scroll = new ScrollView(ScrollViewMode.Vertical);
+                scroll.style.maxHeight = 180;
+                foreach (var entry in summary.Values)
+                {
+                    var item = FindItemDef(entry.itemId);
+                    scroll.Add(T.StatRow("📦", entry.displayName, entry.count.ToString("N0"), item != null ? item.iconTint : T.AccentCyan));
+                }
+                p.Add(scroll);
+            }
+
+            p.Add(T.Divider());
+            p.Add(T.Subtitle("Linked Drawers"));
+            if (controller.Drawers.Count == 0)
+            {
+                p.Add(T.Muted("No drawers in range."));
+            }
+            else
+            {
+                foreach (var drawer in controller.Drawers)
+                {
+                    if (drawer == null) continue;
+                    string name = drawer.storedItem != null ? drawer.storedItem.displayName : "Empty Drawer";
+                    p.Add(T.StatRow("▣", name, $"{drawer.storedCount:N0}/{drawer.Capacity:N0}", drawer.storedItem != null ? T.AccentCyan : T.TextMuted));
+                }
+            }
+            p.Add(T.Spacer(6));
+            p.Add(T.Muted("RMB the controller with an item to import it into linked drawers. Shift+RMB imports every matching stack. Item pipes import/export through controller item ports."));
+            return p;
+        }
+
+        // ════════════════════════════════════════════════════════════
+        //                  STORAGE ITEM DISPLAY
+        // ════════════════════════════════════════════════════════════
+        public static VisualElement BuildItemDisplayPanel(StorageItemDisplayBlock display, MachineUIs.SlotBuilder slotBuilder)
+        {
+            var p = T.MachinePanel();
+            p.style.width = 460;
+            bool online = display.ConnectedRack != null && display.ConnectedRack.IsOnline;
+            var (hdr, _, _, _) = T.HeaderRow("◫ Item Display", online ? "ONLINE" : "NO RACK", online ? T.AccentCyan : T.AccentRed);
+            p.Add(hdr);
+            p.Add(T.AccentDivider(T.AccentCyan));
+            p.Add(T.StatRow("🔎", "Filter", display.filterItem != null ? display.filterItem.displayName : "None", display.filterItem != null ? T.AccentGold : T.TextMuted));
+            p.Add(T.StatRow("#", "System Amount", display.filterItem != null ? display.CurrentCount.ToString("N0") : "—", T.AccentCyan));
+            p.Add(T.Divider());
+            p.Add(T.Subtitle("Drag Item Filter"));
+            var grid = T.SlotGrid();
+            grid.Add(slotBuilder(display.FilterSlot, 0, display.FilterSlot.GetSlot(0), false, true));
+            p.Add(grid);
+            p.Add(T.Spacer(8));
+
+            p.Add(T.Subtitle("Search Item"));
+            var search = new TextField { value = "" };
+            search.style.minHeight = 26;
+            p.Add(search);
+            var results = new ScrollView(ScrollViewMode.Vertical);
+            results.style.maxHeight = 180;
+            results.style.marginTop = 6;
+            p.Add(results);
+
+            void Rebuild(string q)
+            {
+                results.Clear();
+                q = (q ?? string.Empty).Trim().ToLowerInvariant();
+                if (q.Length < 2) { results.Add(T.Muted("Type at least 2 letters to search.")); return; }
+                int shown = 0;
+                foreach (var item in Resources.FindObjectsOfTypeAll<ItemDefinition>())
+                {
+                    if (item == null || string.IsNullOrEmpty(item.displayName)) continue;
+                    if (!item.displayName.ToLowerInvariant().Contains(q) && !item.itemId.ToLowerInvariant().Contains(q)) continue;
+                    var local = item;
+                    var btn = T.SmallButton(local.displayName, () =>
+                    {
+                        display.SetFilter(local);
+                        GameUIController.Instance?.RefreshCurrentPanel();
+                    }, local.iconTint);
+                    btn.style.marginBottom = 3;
+                    results.Add(btn);
+                    if (++shown >= 24) break;
+                }
+                if (shown == 0) results.Add(T.Muted("No matching item."));
+            }
+            search.RegisterValueChangedCallback(e => Rebuild(e.newValue));
+            Rebuild("");
+            p.Add(T.Spacer(6));
+            p.Add(T.Muted("Shows a configured item icon and its total amount across the connected storage system."));
+            return p;
+        }
+
         // ── Helpers ────────────────────────────────────────────────
         internal static ItemDefinition FindItemDef(string id)
         {

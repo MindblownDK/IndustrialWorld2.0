@@ -86,7 +86,7 @@ namespace VoxelEngine.EditorTools
             EditorGUILayout.HelpBox(
                 "Step 11 fills in EVERY system the research nodes were already pointing at:\n" +
                 "  • Farming  (Wheat / Corn / Carrot crops + Seeds + Foods + Hoe + Tilled Soil + Sprinkler + Harvester + cooking)\n" +
-                "  • Storage  (RAM / CPU / PSU at 4 tiers + 5 Disk tiers + ServerRack / NAS / Terminals / Importer / Exporter / Powerstation / Disk Manipulator)\n" +
+                "  • Storage  (RAM / CPU / PSU at 4 tiers + 5 Disk tiers + ServerRack / NAS / Terminals / Drawers / Displays / Importer / Exporter / Powerstation / Disk Manipulator)\n" +
                 "  • Wrench tool (universal network connector)\n" +
                 "  • Item Pipes  (Solid + Glass variants)\n" +
                 "  • Quarry + Upgrades (Range / Speed / Efficiency)\n" +
@@ -4071,6 +4071,26 @@ root =>
             var psu500 = MakeComp("PSU_500", "PSU (500 W)",      VoxelEngine.Storage.ComponentType.PSU, 500f, new Color(0.85f, 0.65f, 0.20f), "Powers up to 500 W of storage hardware.");
             var psu2k  = MakeComp("PSU_2K",  "PSU (2000 W)",     VoxelEngine.Storage.ComponentType.PSU, 2000f,new Color(0.85f, 0.45f, 0.20f), "Powers up to 2000 W of storage hardware.");
 
+            VoxelEngine.Storage.StorageDrawerUpgradeItem MakeDrawerUpgrade(string assetName, string display,
+                VoxelEngine.Storage.StorageDrawerUpgradeKind kind, int mult, Color tint, string desc)
+            {
+                string path = $"{STORE_ITEMS}/{assetName}.asset";
+                var u = GetOrCreateAsset<VoxelEngine.Storage.StorageDrawerUpgradeItem>(path);
+                u.itemId = assetName.ToLower(); u.displayName = display; u.description = desc;
+                u.iconTint = tint; u.maxStack = 12; u.massPerUnit = 0.25f; u.category = "Storage";
+                u.upgradeKind = kind; u.stackMultiplier = Mathf.Max(1, mult);
+                EditorUtility.SetDirty(u);
+                return u;
+            }
+
+            var drawerVoid = MakeDrawerUpgrade("DrawerUpgrade_Void", "Void Upgrade", VoxelEngine.Storage.StorageDrawerUpgradeKind.Void, 1,
+                new Color(0.45f,0.20f,0.70f), "Drawer overflow is deleted instead of blocking insertion.");
+            var drawerStack1  = MakeDrawerUpgrade("DrawerUpgrade_Stack_1x",  "Drawer Stack Upgrade (1x)",  VoxelEngine.Storage.StorageDrawerUpgradeKind.StackLimit, 1,  new Color(0.55f,0.70f,0.80f), "Sets drawer capacity to 2,000 items.");
+            var drawerStack2  = MakeDrawerUpgrade("DrawerUpgrade_Stack_2x",  "Drawer Stack Upgrade (2x)",  VoxelEngine.Storage.StorageDrawerUpgradeKind.StackLimit, 2,  new Color(0.45f,0.80f,0.75f), "Sets drawer capacity to 4,000 items.");
+            var drawerStack4  = MakeDrawerUpgrade("DrawerUpgrade_Stack_4x",  "Drawer Stack Upgrade (4x)",  VoxelEngine.Storage.StorageDrawerUpgradeKind.StackLimit, 4,  new Color(0.35f,0.85f,0.55f), "Sets drawer capacity to 8,000 items.");
+            var drawerStack8  = MakeDrawerUpgrade("DrawerUpgrade_Stack_8x",  "Drawer Stack Upgrade (8x)",  VoxelEngine.Storage.StorageDrawerUpgradeKind.StackLimit, 8,  new Color(0.85f,0.70f,0.25f), "Sets drawer capacity to 16,000 items.");
+            var drawerStack16 = MakeDrawerUpgrade("DrawerUpgrade_Stack_16x", "Drawer Stack Upgrade (16x)", VoxelEngine.Storage.StorageDrawerUpgradeKind.StackLimit, 16, new Color(0.95f,0.45f,0.20f), "Sets drawer capacity to 32,000 items.");
+
             // ── Server Rack ──
             var serverRackPrefab = MakePref(STORE_PREFABS, "ServerRack",
                 new Color(0.15f, 0.18f, 0.22f), new Vector3(1.2f, 2.0f, 1.0f),
@@ -4149,6 +4169,89 @@ root =>
                 "Transfers items from a Source Disk to a Destination Disk. Use to upgrade disk tiers.",
                 new Color(0.55f, 0.55f, 0.55f), diskManipPrefab, "Storage", hp: 300);
 
+            // ── Industrial Storage Drawer ──
+            var drawerPrefab = MakePref(STORE_PREFABS, "StorageDrawer",
+                new Color(0.16f, 0.19f, 0.19f), new Vector3(1.15f, 1.0f, 1.0f),
+                root =>
+                {
+                    var drawer = root.AddComponent<VoxelEngine.Storage.StorageDrawer>();
+                    drawer.baseStackSize = 2000; drawer.maxUpgradeSlots = 12;
+                    var front = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    front.name = "RecessedFrontPanel";
+                    front.transform.SetParent(root.transform, false);
+                    front.transform.localPosition = new Vector3(0, 0, 0.515f);
+                    front.transform.localScale = new Vector3(0.82f, 0.62f, 0.035f);
+                    front.GetComponent<Renderer>().sharedMaterial = MakeColoredMat(STORE_PREFABS, "Mat_StorageDrawer_Front", new Color(0.06f,0.08f,0.09f));
+                    drawer.fillRenderer = front.GetComponent<Renderer>();
+                    var iconGo = new GameObject("ItemIcon");
+                    iconGo.transform.SetParent(root.transform, false);
+                    iconGo.transform.localPosition = new Vector3(0, 0.09f, 0.545f);
+                    iconGo.transform.localScale = Vector3.one * 0.42f;
+                    drawer.itemIconRenderer = iconGo.AddComponent<SpriteRenderer>();
+                    var txtGo = new GameObject("AmountText");
+                    txtGo.transform.SetParent(root.transform, false);
+                    txtGo.transform.localPosition = new Vector3(0, -0.30f, 0.555f);
+                    txtGo.transform.localRotation = Quaternion.identity;
+                    var txt = txtGo.AddComponent<TextMesh>();
+                    txt.anchor = TextAnchor.MiddleCenter; txt.alignment = TextAlignment.Center;
+                    txt.characterSize = 0.105f; txt.fontSize = 48; txt.text = "EMPTY";
+                    drawer.amountText = txt;
+                });
+            var blockDrawer = MakeBlk(STORE_BLOCKS, "Block_StorageDrawer", "Storage Drawer",
+                "Single-item industrial drawer. Stores 2,000 items by default, accepts 12 upgrades, displays its item and amount on the front.",
+                new Color(0.22f,0.30f,0.30f), drawerPrefab, "Storage", hp: 350);
+
+            // ── Drawer Controller ──
+            var drawerControllerPrefab = MakePref(STORE_PREFABS, "StorageDrawerController",
+                new Color(0.10f, 0.34f, 0.32f), new Vector3(1.0f, 1.2f, 0.8f),
+                root =>
+                {
+                    var c = root.AddComponent<VoxelEngine.Storage.StorageDrawerController>();
+                    c.drawerRadius = 12f; c.rackRadius = 16f;
+                    var ports = root.GetComponent<VoxelEngine.Transport.PortConfig>();
+                    ports.ports = new VoxelEngine.Transport.PortConfig.FacePort[6];
+                    for (int pi = 0; pi < 6; pi++)
+                    {
+                        ports.ports[pi].face = (VoxelEngine.Transport.CubeFace)pi;
+                        ports.ports[pi].direction = VoxelEngine.Transport.PortDirection.Input;
+                        ports.ports[pi].networkType = VoxelEngine.Transport.PortNetworkType.Any;
+                        ports.ports[pi].enabled = true;
+                    }
+                });
+            var blockDrawerController = MakeBlk(STORE_BLOCKS, "Block_StorageDrawerController", "Drawer Controller",
+                "Links nearby Storage Drawers into the storage network as external physical storage.",
+                new Color(0.10f,0.55f,0.50f), drawerControllerPrefab, "Storage", hp: 400);
+
+            // ── Storage Item Display ──
+            var itemDisplayPrefab = MakePref(STORE_PREFABS, "StorageItemDisplay",
+                new Color(0.12f, 0.16f, 0.22f), new Vector3(0.9f, 0.9f, 0.25f),
+                root =>
+                {
+                    var d = root.AddComponent<VoxelEngine.Storage.StorageItemDisplayBlock>();
+                    var face = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    face.name = "DisplayFace";
+                    face.transform.SetParent(root.transform, false);
+                    face.transform.localPosition = new Vector3(0, 0, 0.145f);
+                    face.transform.localScale = new Vector3(0.72f, 0.72f, 0.025f);
+                    face.GetComponent<Renderer>().sharedMaterial = MakeColoredMat(STORE_PREFABS, "Mat_ItemDisplay_Face", new Color(0.03f,0.055f,0.075f));
+                    d.statusRenderer = face.GetComponent<Renderer>();
+                    var iconGo = new GameObject("ItemIcon");
+                    iconGo.transform.SetParent(root.transform, false);
+                    iconGo.transform.localPosition = new Vector3(0, 0.12f, 0.175f);
+                    iconGo.transform.localScale = Vector3.one * 0.38f;
+                    d.itemIconRenderer = iconGo.AddComponent<SpriteRenderer>();
+                    var txtGo = new GameObject("AmountText");
+                    txtGo.transform.SetParent(root.transform, false);
+                    txtGo.transform.localPosition = new Vector3(0, -0.26f, 0.185f);
+                    var txt = txtGo.AddComponent<TextMesh>();
+                    txt.anchor = TextAnchor.MiddleCenter; txt.alignment = TextAlignment.Center;
+                    txt.characterSize = 0.09f; txt.fontSize = 46; txt.text = "NO FILTER";
+                    d.amountText = txt;
+                });
+            var blockItemDisplay = MakeBlk(STORE_BLOCKS, "Block_StorageItemDisplay", "Storage Item Display",
+                "Configurable wall display that shows one item icon and the amount currently available in the storage system.",
+                new Color(0.25f,0.45f,0.75f), itemDisplayPrefab, "Storage", hp: 250);
+
             // ── Storage recipes (gated by Logistics Network / Mass Storage / Crystalline Storage) ──
             // Components
             AddRecipe(STORE_RECIPES, "Recipe_RAM_4",   "RAM Module (4)",   ram4,   1, VoxelEngine.Crafting.StationTier.Assembler, unlockedByDefault: false, (circuit, 1), (copperWire, 4));
@@ -4176,6 +4279,15 @@ root =>
             AddRecipe(STORE_RECIPES, "Recipe_NASBlock",         "NAS Block",         blockNAS,           1, VoxelEngine.Crafting.StationTier.Assembler, unlockedByDefault: false, (steelPlate, 4), (circuit, 4), (copperWire, 6));
             AddRecipe(STORE_RECIPES, "Recipe_Powerstation",     "Powerstation",      blockPowerstation,  1, VoxelEngine.Crafting.StationTier.Assembler, unlockedByDefault: false, (steelPlate, 4), (copperWire, 8), (circuit, 2));
             AddRecipe(STORE_RECIPES, "Recipe_DiskManipulator",  "Disk Manipulator",  blockDiskManip,     1, VoxelEngine.Crafting.StationTier.Assembler, unlockedByDefault: false, (ironPlate, 4), (circuit, 2));
+            AddRecipe(STORE_RECIPES, "Recipe_StorageDrawer", "Storage Drawer", blockDrawer, 1, VoxelEngine.Crafting.StationTier.CraftingBench, unlockedByDefault: false, (ironPlate, 3), (ironGear, 1), (copperWire, 2));
+            AddRecipe(STORE_RECIPES, "Recipe_StorageDrawerController", "Drawer Controller", blockDrawerController, 1, VoxelEngine.Crafting.StationTier.Assembler, unlockedByDefault: false, (ironPlate, 4), (circuit, 2), (copperWire, 4));
+            AddRecipe(STORE_RECIPES, "Recipe_StorageItemDisplay", "Storage Item Display", blockItemDisplay, 1, VoxelEngine.Crafting.StationTier.CraftingBench, unlockedByDefault: false, (ironPlate, 2), (glass, 1), (copperWire, 2));
+            AddRecipe(STORE_RECIPES, "Recipe_DrawerUpgradeVoid", "Void Upgrade", drawerVoid, 1, VoxelEngine.Crafting.StationTier.Assembler, unlockedByDefault: false, (circuit, 1), (plastic, 1));
+            AddRecipe(STORE_RECIPES, "Recipe_DrawerUpgradeStack1x", "Drawer Stack Upgrade (1x)", drawerStack1, 1, VoxelEngine.Crafting.StationTier.CraftingBench, unlockedByDefault: false, (ironPlate, 1));
+            AddRecipe(STORE_RECIPES, "Recipe_DrawerUpgradeStack2x", "Drawer Stack Upgrade (2x)", drawerStack2, 1, VoxelEngine.Crafting.StationTier.CraftingBench, unlockedByDefault: false, (ironPlate, 1), (copperWire, 1));
+            AddRecipe(STORE_RECIPES, "Recipe_DrawerUpgradeStack4x", "Drawer Stack Upgrade (4x)", drawerStack4, 1, VoxelEngine.Crafting.StationTier.Assembler, unlockedByDefault: false, (ironPlate, 2), (circuit, 1));
+            AddRecipe(STORE_RECIPES, "Recipe_DrawerUpgradeStack8x", "Drawer Stack Upgrade (8x)", drawerStack8, 1, VoxelEngine.Crafting.StationTier.Assembler, unlockedByDefault: false, (steelPlate, 1), (circuit, 2));
+            AddRecipe(STORE_RECIPES, "Recipe_DrawerUpgradeStack16x", "Drawer Stack Upgrade (16x)", drawerStack16, 1, VoxelEngine.Crafting.StationTier.Assembler, unlockedByDefault: false, (steelPlate, 2), (advCircuit, 1));
 
             // ════════════════════════════════════════════════════════════
             //  RESEARCH — wire newly created recipes into existing nodes
@@ -4210,18 +4322,21 @@ root =>
                 RGet("Recipe_StorageImporter"), RGet("Recipe_StorageExporter"),
                 RGet("Recipe_PatternTerminal"), RGet("Recipe_CraftingTerminal"),
                 RGet("Recipe_RAM_4"), RGet("Recipe_CPU_1"), RGet("Recipe_PSU_500"),
-                RGet("Recipe_DiskManipulator"));
+                RGet("Recipe_DiskManipulator"), RGet("Recipe_StorageDrawer"),
+                RGet("Recipe_StorageDrawerController"), RGet("Recipe_StorageItemDisplay"),
+                RGet("Recipe_DrawerUpgradeStack1x"), RGet("Recipe_DrawerUpgradeStack2x"));
 
             // Mass Storage: 16K + NAS + bigger PSU/CPU.
             AppendUnlocks("res_mass_storage",
                 RGet("Recipe_StorageDisk16K"), RGet("Recipe_NASBlock"),
                 RGet("Recipe_RAM_16"), RGet("Recipe_CPU_2"), RGet("Recipe_PSU_2K"),
-                RGet("Recipe_Powerstation"));
+                RGet("Recipe_Powerstation"), RGet("Recipe_DrawerUpgradeVoid"),
+                RGet("Recipe_DrawerUpgradeStack4x"), RGet("Recipe_DrawerUpgradeStack8x"));
 
             // Crystalline Storage: 64K + 90K + best CPU.
             AppendUnlocks("res_crystalline_storage",
                 RGet("Recipe_StorageDisk64K"), RGet("Recipe_StorageDisk90K"),
-                RGet("Recipe_CPU_4"));
+                RGet("Recipe_CPU_4"), RGet("Recipe_DrawerUpgradeStack16x"));
 
             // Item Logistics: item pipe.
             AppendUnlocks("res_item_logistics",

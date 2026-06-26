@@ -233,6 +233,26 @@ namespace VoxelEngine.Persistence
         // To keep the save schema simple we just check for the well-known component types.
         private SavedContainer TryFindContainer(GameObject go)
         {
+            var drawer = go.GetComponentInChildren<VoxelEngine.Storage.StorageDrawer>();
+            if (drawer != null)
+            {
+                var sc = SerializeMultiDrawer(drawer);
+                AttachPortSnapshot(go, sc);
+                return sc;
+            }
+
+            var display = go.GetComponentInChildren<VoxelEngine.Storage.StorageItemDisplayBlock>();
+            if (display != null)
+                return SerializeDisplayFilter(display);
+
+            var drawerController = go.GetComponentInChildren<VoxelEngine.Storage.StorageDrawerController>();
+            if (drawerController != null)
+            {
+                var sc = new SavedContainer();
+                AttachPortSnapshot(go, sc);
+                return sc;
+            }
+
             var chest = go.GetComponentInChildren<Chest>();
             if (chest != null)
             {
@@ -310,6 +330,43 @@ namespace VoxelEngine.Persistence
                     });
                 }
             }
+            return sc;
+        }
+
+        private SavedContainer SerializeMultiDrawer(VoxelEngine.Storage.StorageDrawer drawer)
+        {
+            drawer.EnsureContainers();
+            var sc = new SavedContainer();
+            sc.containerSizes.Add(1);
+            sc.entries.Add(new SavedStack
+            {
+                itemId = drawer.storedItem != null && drawer.storedCount > 0 ? drawer.storedItem.itemId : "",
+                count = drawer.storedItem != null ? drawer.storedCount : 0,
+                durability = 0
+            });
+            sc.containerSizes.Add(drawer.upgradeSlots.Size);
+            for (int i = 0; i < drawer.upgradeSlots.Size; i++)
+            {
+                var s = drawer.upgradeSlots.GetSlot(i);
+                sc.entries.Add(new SavedStack
+                {
+                    itemId = s.IsEmpty ? "" : s.item.itemId,
+                    count = s.IsEmpty ? 0 : s.count,
+                    durability = s.IsEmpty ? 0 : s.durability
+                });
+            }
+            return sc;
+        }
+
+        private SavedContainer SerializeDisplayFilter(VoxelEngine.Storage.StorageItemDisplayBlock display)
+        {
+            var sc = new SavedContainer();
+            sc.entries.Add(new SavedStack
+            {
+                itemId = display.filterItem != null ? display.filterItem.itemId : "",
+                count = display.filterItem != null ? 1 : 0,
+                durability = 0
+            });
             return sc;
         }
 
@@ -392,6 +449,30 @@ namespace VoxelEngine.Persistence
 
         private void RestoreContainer(GameObject go, SavedContainer sc)
         {
+            var drawer = go.GetComponentInChildren<VoxelEngine.Storage.StorageDrawer>();
+            if (drawer != null)
+            {
+                RestoreDrawer(drawer, sc);
+                RestorePortSnapshot(go, sc);
+                return;
+            }
+
+            var display = go.GetComponentInChildren<VoxelEngine.Storage.StorageItemDisplayBlock>();
+            if (display != null)
+            {
+                if (sc != null && sc.entries.Count > 0 && !string.IsNullOrEmpty(sc.entries[0].itemId)
+                    && _itemById.TryGetValue(sc.entries[0].itemId, out var item))
+                    display.SetFilter(item);
+                return;
+            }
+
+            var drawerController = go.GetComponentInChildren<VoxelEngine.Storage.StorageDrawerController>();
+            if (drawerController != null)
+            {
+                RestorePortSnapshot(go, sc);
+                return;
+            }
+
             var chest = go.GetComponentInChildren<Chest>();
             if (chest != null)
             {
@@ -416,6 +497,35 @@ namespace VoxelEngine.Persistence
                 RestorePortSnapshot(go, sc);
                 return;
             }
+        }
+
+        private void RestoreDrawer(VoxelEngine.Storage.StorageDrawer drawer, SavedContainer sc)
+        {
+            if (drawer == null || sc == null) return;
+            drawer.EnsureContainers();
+            if (sc.entries.Count > 0)
+            {
+                var e = sc.entries[0];
+                if (!string.IsNullOrEmpty(e.itemId) && e.count > 0 && _itemById.TryGetValue(e.itemId, out var item))
+                {
+                    drawer.storedItem = item;
+                    drawer.storedCount = e.count;
+                }
+                else
+                {
+                    drawer.storedItem = null;
+                    drawer.storedCount = 0;
+                }
+            }
+            int idx = sc.containerSizes.Count > 0 ? sc.containerSizes[0] : 1;
+            for (int i = 0; i < drawer.upgradeSlots.Size && idx < sc.entries.Count; i++, idx++)
+            {
+                var e = sc.entries[idx];
+                if (string.IsNullOrEmpty(e.itemId) || e.count <= 0) { drawer.upgradeSlots.SetSlot(i, new ItemStack()); continue; }
+                if (!_itemById.TryGetValue(e.itemId, out var item)) { drawer.upgradeSlots.SetSlot(i, new ItemStack()); continue; }
+                drawer.upgradeSlots.SetSlot(i, new ItemStack { item = item, count = e.count, durability = e.durability });
+            }
+            drawer.RefreshDisplay();
         }
 
         /// <summary>Restore item-port config onto any machine with ItemPortRouting.</summary>

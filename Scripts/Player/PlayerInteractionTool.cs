@@ -130,6 +130,60 @@ namespace VoxelEngine.Player
                 if (mineHeld || buildHeld) return;
             }
 
+            // ── Storage drawer direct interaction ─────────────────────
+            var drawer = hit.collider.GetComponentInParent<VoxelEngine.Storage.StorageDrawer>();
+            if (drawer != null)
+            {
+                if (mineDown && Time.time >= _nextHit)
+                {
+                    drawer.TryPlayerExtract(inventory, 1);
+                    _nextHit = Time.time + 0.12f;
+                    return;
+                }
+                if (buildDown && Time.time >= _nextHit)
+                {
+                    bool shiftHeld = IsShiftHeld();
+                    if (!inventory.ActiveStack.IsEmpty)
+                    {
+                        bool moved = false;
+                        if (shiftHeld)
+                        {
+                            var controller = VoxelEngine.Storage.StorageDrawerController.FindNearest(drawer.transform.position);
+                            if (controller != null)
+                            {
+                                controller.RefreshLinks();
+                                moved = controller.TryPlayerInsert(inventory, true, drawer.transform.position, requireExistingMatch: true);
+                            }
+                        }
+                        if (!moved) drawer.TryPlayerInsert(inventory, shiftHeld);
+                        _nextHit = Time.time + 0.12f;
+                    }
+                    else
+                    {
+                        UI.GameUIController.Instance?.OpenMachine(drawer);
+                    }
+                    return;
+                }
+            }
+
+            // ── Drawer controller direct insertion ───────────────────
+            var drawerController = hit.collider.GetComponentInParent<VoxelEngine.Storage.StorageDrawerController>();
+            if (drawerController != null && buildDown && Time.time >= _nextHit)
+            {
+                bool shiftHeld = IsShiftHeld();
+                if (!inventory.ActiveStack.IsEmpty)
+                {
+                    drawerController.RefreshLinks();
+                    drawerController.TryPlayerInsert(inventory, shiftHeld, drawerController.transform.position);
+                    _nextHit = Time.time + 0.12f;
+                }
+                else
+                {
+                    UI.GameUIController.Instance?.OpenMachine(drawerController);
+                }
+                return;
+            }
+
             // ---------- LMB ----------
             if (mineHeld)
             {
@@ -355,6 +409,10 @@ namespace VoxelEngine.Player
                 }
 
                 // Storage system.
+                var storageDrawerController = hit.collider.GetComponentInParent<VoxelEngine.Storage.StorageDrawerController>();
+                if (storageDrawerController != null) { UI.GameUIController.Instance?.OpenMachine(storageDrawerController); return; }
+                var itemDisplay = hit.collider.GetComponentInParent<VoxelEngine.Storage.StorageItemDisplayBlock>();
+                if (itemDisplay != null) { UI.GameUIController.Instance?.OpenMachine(itemDisplay); return; }
                 var storageTerminal = hit.collider.GetComponentInParent<VoxelEngine.Storage.StorageTerminal>();
                 if (storageTerminal != null) { UI.GameUIController.Instance?.OpenMachine(storageTerminal); return; }
                 var serverRack = hit.collider.GetComponentInParent<VoxelEngine.Storage.ServerRack>();
@@ -402,6 +460,16 @@ namespace VoxelEngine.Player
             }
         }
 
+
+        private static bool IsShiftHeld()
+        {
+#if ENABLE_INPUT_SYSTEM
+            var kb = UnityEngine.InputSystem.Keyboard.current;
+            return kb != null && (kb.leftShiftKey.isPressed || kb.rightShiftKey.isPressed);
+#else
+            return Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+#endif
+        }
 
         private bool IsHoldingGridBlock()
         {
