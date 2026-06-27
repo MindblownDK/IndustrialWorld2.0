@@ -89,6 +89,6 @@ namespace VoxelEngine.WaterSim
             return Mathf.Lerp(0.75f, 1.35f, TidalPhase(localPosition));
         }
 
-        public static float3 ToFloat3(Vector3 v) => new(v.x, v.y, v.z);
+        public static Unity.Mathematics.float3 ToFloat3(Vector3 v) => new(v.x, v.y, v.z);
     }
 }
