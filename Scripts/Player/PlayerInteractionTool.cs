@@ -132,11 +132,14 @@ namespace VoxelEngine.Player
 
             // ── Storage drawer direct interaction ─────────────────────
             var drawer = hit.collider.GetComponentInParent<VoxelEngine.Storage.StorageDrawer>();
-            if (drawer != null)
+            if (drawer != null && IsFrontHit(drawer.transform, hit))
             {
                 if (mineDown && Time.time >= _nextHit)
                 {
-                    drawer.TryPlayerExtract(inventory, 1);
+                    int amount = 1;
+                    if (IsShiftHeld() && drawer.storedItem != null)
+                        amount = Mathf.Max(VoxelEngine.Storage.StorageDrawer.DefaultBaseStackSize, drawer.storedItem.maxStack);
+                    drawer.TryPlayerExtract(inventory, amount);
                     _nextHit = Time.time + 0.12f;
                     return;
                 }
@@ -164,11 +167,14 @@ namespace VoxelEngine.Player
                     }
                     return;
                 }
+                // The drawer front is an interaction face, not a mining face.
+                // To break the drawer, hit any side/back face instead.
+                if (mineHeld || buildHeld) return;
             }
 
             // ── Drawer controller direct insertion ───────────────────
             var drawerController = hit.collider.GetComponentInParent<VoxelEngine.Storage.StorageDrawerController>();
-            if (drawerController != null && buildDown && Time.time >= _nextHit)
+            if (drawerController != null && buildDown && Time.time >= _nextHit && IsFrontHit(drawerController.transform, hit))
             {
                 bool shiftHeld = IsShiftHeld();
                 if (!inventory.ActiveStack.IsEmpty)
@@ -410,7 +416,7 @@ namespace VoxelEngine.Player
 
                 // Storage system.
                 var storageDrawerController = hit.collider.GetComponentInParent<VoxelEngine.Storage.StorageDrawerController>();
-                if (storageDrawerController != null) { UI.GameUIController.Instance?.OpenMachine(storageDrawerController); return; }
+                if (storageDrawerController != null && IsFrontHit(storageDrawerController.transform, hit)) { UI.GameUIController.Instance?.OpenMachine(storageDrawerController); return; }
                 var itemDisplay = hit.collider.GetComponentInParent<VoxelEngine.Storage.StorageItemDisplayBlock>();
                 if (itemDisplay != null) { UI.GameUIController.Instance?.OpenMachine(itemDisplay); return; }
                 var storageTerminal = hit.collider.GetComponentInParent<VoxelEngine.Storage.StorageTerminal>();
@@ -460,6 +466,12 @@ namespace VoxelEngine.Player
             }
         }
 
+
+        private static bool IsFrontHit(Transform blockTransform, RaycastHit hit)
+        {
+            if (blockTransform == null) return false;
+            return Vector3.Dot(hit.normal.normalized, blockTransform.forward) > 0.55f;
+        }
 
         private static bool IsShiftHeld()
         {

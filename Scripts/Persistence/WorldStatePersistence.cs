@@ -301,12 +301,7 @@ namespace VoxelEngine.Persistence
             for (int i = 0; i < c.Slots.Count; i++)
             {
                 var s = c.GetSlot(i);
-                sc.entries.Add(new SavedStack
-                {
-                    itemId = s.IsEmpty ? "" : s.item.itemId,
-                    count  = s.IsEmpty ? 0  : s.count,
-                    durability = s.IsEmpty ? 0 : s.durability
-                });
+                sc.entries.Add(SerializeStack(s));
             }
             return sc;
         }
@@ -322,15 +317,32 @@ namespace VoxelEngine.Persistence
                 for (int i = 0; i < c.Slots.Count; i++)
                 {
                     var s = c.GetSlot(i);
-                    sc.entries.Add(new SavedStack
-                    {
-                        itemId = s.IsEmpty ? "" : s.item.itemId,
-                        count  = s.IsEmpty ? 0  : s.count,
-                        durability = s.IsEmpty ? 0 : s.durability
-                    });
+                    sc.entries.Add(SerializeStack(s));
                 }
             }
             return sc;
+        }
+
+        private SavedStack SerializeStack(ItemStack s)
+        {
+            var saved = new SavedStack
+            {
+                itemId = s == null || s.IsEmpty ? "" : s.item.itemId,
+                count = s == null || s.IsEmpty ? 0 : s.count,
+                durability = s == null || s.IsEmpty ? 0 : s.durability
+            };
+            if (s != null && s.payload is VoxelEngine.Storage.StorageDrawer.DrawerItemPayload payload)
+            {
+                saved.isPackedDrawer = true;
+                saved.packedOriginalItemId = payload.originalItem != null ? payload.originalItem.itemId : saved.itemId;
+                saved.drawerStoredItemId = payload.storedItem != null ? payload.storedItem.itemId : "";
+                saved.drawerStoredCount = payload.storedCount;
+                saved.drawerInstanceId = payload.instanceId;
+                if (payload.upgrades != null)
+                    foreach (var up in payload.upgrades)
+                        saved.drawerUpgrades.Add(SerializeStack(up));
+            }
+            return saved;
         }
 
         private SavedContainer SerializeMultiDrawer(VoxelEngine.Storage.StorageDrawer drawer)
@@ -348,12 +360,7 @@ namespace VoxelEngine.Persistence
             for (int i = 0; i < drawer.upgradeSlots.Size; i++)
             {
                 var s = drawer.upgradeSlots.GetSlot(i);
-                sc.entries.Add(new SavedStack
-                {
-                    itemId = s.IsEmpty ? "" : s.item.itemId,
-                    count = s.IsEmpty ? 0 : s.count,
-                    durability = s.IsEmpty ? 0 : s.durability
-                });
+                sc.entries.Add(SerializeStack(s));
             }
             return sc;
         }
@@ -538,6 +545,34 @@ namespace VoxelEngine.Persistence
                 id => _itemById.TryGetValue(id, out var def) ? def : null);
         }
 
+        private ItemStack DeserializeStack(SavedStack e)
+        {
+            if (e == null || string.IsNullOrEmpty(e.itemId) || e.count <= 0) return new ItemStack();
+
+            if (e.isPackedDrawer)
+            {
+                string baseId = !string.IsNullOrEmpty(e.packedOriginalItemId) ? e.packedOriginalItemId : e.itemId;
+                if (!_itemById.TryGetValue(baseId, out var baseDef)) return new ItemStack();
+                var baseBlock = baseDef as BlockItem;
+                if (baseBlock == null) return new ItemStack();
+                var payload = new VoxelEngine.Storage.StorageDrawer.DrawerItemPayload
+                {
+                    instanceId = string.IsNullOrEmpty(e.drawerInstanceId) ? System.Guid.NewGuid().ToString("N") : e.drawerInstanceId,
+                    originalItem = baseBlock,
+                    storedItem = !string.IsNullOrEmpty(e.drawerStoredItemId) && _itemById.TryGetValue(e.drawerStoredItemId, out var stored) ? stored : null,
+                    storedCount = e.drawerStoredCount,
+                    upgrades = new List<ItemStack>()
+                };
+                if (e.drawerUpgrades != null)
+                    foreach (var up in e.drawerUpgrades)
+                        payload.upgrades.Add(DeserializeStack(up));
+                return VoxelEngine.Storage.StorageDrawer.CreatePackedDrawerStack(baseBlock, payload);
+            }
+
+            if (!_itemById.TryGetValue(e.itemId, out var item)) return new ItemStack();
+            return new ItemStack { item = item, count = e.count, durability = e.durability };
+        }
+
         private void DeserializeInto(ItemContainer c, SavedContainer sc)
         {
             if (c == null || sc == null) return;
@@ -546,9 +581,7 @@ namespace VoxelEngine.Persistence
             for (int i = 0; i < min; i++)
             {
                 var e = sc.entries[i];
-                if (string.IsNullOrEmpty(e.itemId) || e.count <= 0) { c.SetSlot(i, new ItemStack()); continue; }
-                if (!_itemById.TryGetValue(e.itemId, out var item)) { c.SetSlot(i, new ItemStack()); continue; }
-                c.SetSlot(i, new ItemStack { item = item, count = e.count, durability = e.durability });
+                c.SetSlot(i, DeserializeStack(e));
             }
         }
 
@@ -566,9 +599,7 @@ namespace VoxelEngine.Persistence
                 for (int i = 0; i < take && idx < sc.entries.Count; i++, idx++)
                 {
                     var e = sc.entries[idx];
-                    if (string.IsNullOrEmpty(e.itemId) || e.count <= 0) { c.SetSlot(i, new ItemStack()); continue; }
-                    if (!_itemById.TryGetValue(e.itemId, out var item)) { c.SetSlot(i, new ItemStack()); continue; }
-                    c.SetSlot(i, new ItemStack { item = item, count = e.count, durability = e.durability });
+                    c.SetSlot(i, DeserializeStack(e));
                 }
             }
         }
@@ -613,6 +644,12 @@ namespace VoxelEngine.Persistence
         [Serializable] private class SavedStack
         {
             public string itemId; public int count; public int durability;
+            public bool isPackedDrawer;
+            public string packedOriginalItemId;
+            public string drawerInstanceId;
+            public string drawerStoredItemId;
+            public int drawerStoredCount;
+            public List<SavedStack> drawerUpgrades = new();
         }
         [Serializable] private class SavedQuarry
         {

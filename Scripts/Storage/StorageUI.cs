@@ -940,7 +940,7 @@ namespace VoxelEngine.Storage
                 upgradeGrid.Add(slotBuilder(drawer.upgradeSlots, i, drawer.upgradeSlots.GetSlot(i), false, true));
             p.Add(upgradeGrid);
             p.Add(T.Divider());
-            p.Add(T.Muted("LMB front = take 1 · RMB with item = insert hand stack · Shift+RMB = insert all matching items. Configure in/out faces from Item Ports."));
+            p.Add(T.Muted("LMB front = take 1 · Shift+LMB = take full stack · RMB with item = insert hand stack · Shift+RMB = insert all matching items. Break from sides/back."));
             return p;
         }
 

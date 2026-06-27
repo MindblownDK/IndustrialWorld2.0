@@ -22,6 +22,7 @@ using UnityEngine.UIElements;
 using VoxelEngine.Building;
 using VoxelEngine.Items;
 using VoxelEngine.Transport;
+using VoxelEngine.Storage;
 using T = VoxelEngine.UI.UITheme;
 // Disambiguate from UnityEngine.FilterMode (texture filter enum).
 using FilterMode = VoxelEngine.Transport.FilterMode;
@@ -472,6 +473,7 @@ namespace VoxelEngine.UI
             var dir     = config.GetDirection(face);
             var enabled = config.IsFaceEnabled(face);
             var bgTint  = DirectionColor(dir);
+            var lockedDrawerPort = TryGetDrawerPortLock(host, config, face, out var drawerPortLabel);
 
             // Strict 2-column grid: each card is exactly half the row width and
             // never grows/shrinks; inner-margin handles the gutter.
@@ -518,32 +520,44 @@ namespace VoxelEngine.UI
             hr.Add(axisLbl);
             inner.Add(hr);
 
-            // Direction pill (cyclable).
+            // Direction pill (cyclable). Drawer-controller sides that physically touch a
+            // drawer/controller are locked so pipe I/O cannot be assigned to an occupied side.
             var pill = MakeDirectionPill(dir, enabled, bgTint);
-            pill.clicked += () =>
+            if (lockedDrawerPort)
             {
-                var cur = config.GetDirection(face);
-                PortDirection next;
-                if (!config.IsFaceEnabled(face))
+                pill.text = drawerPortLabel;
+                pill.SetEnabled(false);
+                pill.tooltip = "This side is occupied by a drawer network block. Break/move that block to edit this face.";
+                pill.style.backgroundColor = new StyleColor(new Color(0.15f, 0.55f, 0.50f, 0.75f));
+                T.Border(pill, 1, new Color(0.20f, 0.85f, 0.75f, 0.70f));
+            }
+            else
+            {
+                pill.clicked += () =>
                 {
-                    config.SetFaceEnabled(face, true);
-                    next = PortDirection.Input;
-                }
-                else
-                {
-                    next = cur switch
+                    var cur = config.GetDirection(face);
+                    PortDirection next;
+                    if (!config.IsFaceEnabled(face))
                     {
-                        PortDirection.None   => PortDirection.Input,
-                        PortDirection.Input  => PortDirection.Output,
-                        PortDirection.Output => PortDirection.None,
-                        _                    => PortDirection.None,
-                    };
-                    if (next == PortDirection.None) config.SetFaceEnabled(face, false);
-                }
-                config.SetDirection(face, next);
-                config.RefreshIndicators();
-                inlineChanged?.Invoke();
-            };
+                        config.SetFaceEnabled(face, true);
+                        next = PortDirection.Input;
+                    }
+                    else
+                    {
+                        next = cur switch
+                        {
+                            PortDirection.None   => PortDirection.Input,
+                            PortDirection.Input  => PortDirection.Output,
+                            PortDirection.Output => PortDirection.None,
+                            _                    => PortDirection.None,
+                        };
+                        if (next == PortDirection.None) config.SetFaceEnabled(face, false);
+                    }
+                    config.SetDirection(face, next);
+                    config.RefreshIndicators();
+                    inlineChanged?.Invoke();
+                };
+            }
             inner.Add(pill);
 
             if (enabled && dir != PortDirection.None)
@@ -558,6 +572,32 @@ namespace VoxelEngine.UI
             }
 
             return card;
+        }
+
+        private static bool TryGetDrawerPortLock(IItemPortHost host, PortConfig config, CubeFace face, out string label)
+        {
+            label = null;
+            var controller = host as StorageDrawerController;
+            if (controller == null || config == null) return false;
+            Vector3 probe = controller.transform.position + config.FaceNormal(face);
+            var hits = Physics.OverlapSphere(probe, 0.45f);
+            foreach (var col in hits)
+            {
+                if (col == null) continue;
+                var otherController = col.GetComponentInParent<StorageDrawerController>();
+                if (otherController != null && otherController != controller)
+                {
+                    label = "DRAWERCON";
+                    return true;
+                }
+                var drawer = col.GetComponentInParent<StorageDrawer>();
+                if (drawer != null)
+                {
+                    label = "DRAWER";
+                    return true;
+                }
+            }
+            return false;
         }
 
         // ── Container routing dropdown ──────────────────────────────

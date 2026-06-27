@@ -9,7 +9,7 @@ namespace VoxelEngine.Storage
 {
     [DisallowMultipleComponent]
     [RequireComponent(typeof(PlacedBlock))]
-    public class StorageDrawer : MonoBehaviour, IItemContainer
+    public class StorageDrawer : MonoBehaviour, IItemContainer, VoxelEngine.Building.IPlacedBlockPayloadReceiver, VoxelEngine.Building.ICustomBlockDrop
     {
         public const int DefaultBaseStackSize = 2000;
 
@@ -28,6 +28,7 @@ namespace VoxelEngine.Storage
         public Renderer fillRenderer;
 
         private readonly List<ItemStack> _slotView = new(1) { new ItemStack() };
+        private BlockItem _originalBlockItem;
 
         public string Name => "Storage Drawer";
         public IReadOnlyList<ItemStack> Slots { get { SyncSlotView(); return _slotView; } }
@@ -55,6 +56,7 @@ namespace VoxelEngine.Storage
 
         private void Awake()
         {
+            _originalBlockItem = GetComponent<PlacedBlock>()?.Item;
             RemoveLegacyPipeConfig();
             EnsureContainers();
             RefreshDisplay();
@@ -202,6 +204,87 @@ namespace VoxelEngine.Storage
             if (accepted <= 0) return false;
             Remove(item, accepted);
             return true;
+        }
+
+        public void ApplyPlacedPayload(ItemStack sourceStack)
+        {
+            if (sourceStack?.payload is DrawerItemPayload payload)
+            {
+                storedItem = payload.storedItem;
+                storedCount = Mathf.Max(0, payload.storedCount);
+                _originalBlockItem = payload.originalItem;
+                EnsureContainers();
+                if (payload.upgrades != null)
+                {
+                    for (int i = 0; i < upgradeSlots.Size && i < payload.upgrades.Count; i++)
+                        upgradeSlots.SetSlot(i, payload.upgrades[i]?.Clone() ?? new ItemStack());
+                }
+                RefreshDisplay();
+            }
+        }
+
+        public ItemStack CreateBlockDrop(BlockItem originalItem)
+        {
+            bool hasUpgrades = false;
+            EnsureContainers();
+            for (int i = 0; i < upgradeSlots.Size; i++)
+            {
+                if (!upgradeSlots.GetSlot(i).IsEmpty) { hasUpgrades = true; break; }
+            }
+
+            // No contents and no drawer-specific state: return the normal stackable block item.
+            if ((storedItem == null || storedCount <= 0) && !hasUpgrades)
+                return new ItemStack(_originalBlockItem != null ? _originalBlockItem : originalItem, 1);
+
+            var payload = new DrawerItemPayload
+            {
+                instanceId = System.Guid.NewGuid().ToString("N"),
+                originalItem = _originalBlockItem != null ? _originalBlockItem : originalItem,
+                storedItem = storedItem,
+                storedCount = storedCount,
+                upgrades = new List<ItemStack>()
+            };
+            for (int i = 0; i < upgradeSlots.Size; i++)
+                payload.upgrades.Add(upgradeSlots.GetSlot(i).Clone());
+
+            return CreatePackedDrawerStack(payload.originalItem != null ? payload.originalItem : originalItem, payload);
+        }
+
+        public static ItemStack CreatePackedDrawerStack(BlockItem baseItem, DrawerItemPayload payload)
+        {
+            if (payload == null) return baseItem != null ? new ItemStack(baseItem, 1) : new ItemStack();
+            if (string.IsNullOrWhiteSpace(payload.instanceId)) payload.instanceId = System.Guid.NewGuid().ToString("N");
+            payload.originalItem = payload.originalItem != null ? payload.originalItem : baseItem;
+
+            var packedItem = ScriptableObject.CreateInstance<BlockItem>();
+            packedItem.itemId = (baseItem != null ? baseItem.itemId : "storage_drawer") + "_packed_" + payload.instanceId;
+            packedItem.displayName = baseItem != null ? baseItem.displayName + " (Packed)" : "Packed Storage Drawer";
+            packedItem.description = "Packed drawer carrying its stored item contents and upgrades.";
+            packedItem.icon = baseItem != null ? baseItem.icon : null;
+            packedItem.iconTint = baseItem != null ? baseItem.iconTint : iconTintFallback;
+            packedItem.maxStack = 1;
+            packedItem.massPerUnit = baseItem != null ? baseItem.massPerUnit : 4f;
+            packedItem.category = baseItem != null ? baseItem.category : "Storage";
+            packedItem.placedPrefab = baseItem != null ? baseItem.placedPrefab : null;
+            packedItem.gridSize = baseItem != null ? baseItem.gridSize : Vector3Int.one;
+            packedItem.allowStacking = baseItem != null && baseItem.allowStacking;
+            packedItem.blockHealth = baseItem != null ? baseItem.blockHealth : 350;
+            packedItem.miningTier = baseItem != null ? baseItem.miningTier : 1;
+            packedItem.placedMaterial = baseItem != null ? baseItem.placedMaterial : null;
+            packedItem.texture = baseItem != null ? baseItem.texture : null;
+            return new ItemStack(packedItem, 1) { payload = payload };
+        }
+
+        private static readonly Color iconTintFallback = new Color(0.22f, 0.30f, 0.30f);
+
+        [Serializable]
+        public class DrawerItemPayload
+        {
+            public string instanceId;
+            public BlockItem originalItem;
+            public ItemDefinition storedItem;
+            public int storedCount;
+            public List<ItemStack> upgrades = new();
         }
 
         private int CountUpgrades(StorageDrawerUpgradeKind kind)

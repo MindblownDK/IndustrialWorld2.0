@@ -114,12 +114,29 @@ namespace VoxelEngine.Storage
         private void FindDrawers()
         {
             _drawers.Clear();
-            var hits = Physics.OverlapSphere(transform.position, drawerRadius);
-            foreach (var col in hits)
+            var visited = new HashSet<StorageDrawer>();
+            var queue = new Queue<StorageDrawer>();
+
+            void EnqueueNear(Vector3 pos, float radius)
             {
-                var drawer = col.GetComponentInParent<StorageDrawer>();
-                if (drawer == null || _drawers.Contains(drawer)) continue;
-                _drawers.Add(drawer);
+                var hits = Physics.OverlapSphere(pos, radius);
+                foreach (var col in hits)
+                {
+                    var drawer = col.GetComponentInParent<StorageDrawer>();
+                    if (drawer == null || visited.Contains(drawer)) continue;
+                    if ((drawer.transform.position - transform.position).sqrMagnitude > drawerRadius * drawerRadius) continue;
+                    visited.Add(drawer);
+                    queue.Enqueue(drawer);
+                    _drawers.Add(drawer);
+                }
+            }
+
+            // Directly touching controller, then drawers touching drawers.
+            EnqueueNear(transform.position, 1.65f);
+            while (queue.Count > 0)
+            {
+                var drawer = queue.Dequeue();
+                EnqueueNear(drawer.transform.position, 1.65f);
             }
         }
 
@@ -247,14 +264,14 @@ namespace VoxelEngine.Storage
         {
             EnsureRefs();
             var face = FaceTowards(fromWorldPos);
-            return face.HasValue && _ports.IsFaceEnabled(face.Value) && _ports.GetDirection(face.Value) != PortDirection.None;
+            return face.HasValue && !IsDrawerNetworkOnFace(face.Value) && _ports.IsFaceEnabled(face.Value) && _ports.GetDirection(face.Value) != PortDirection.None;
         }
 
         public int TryAcceptFromPipe(Vector3 pipeWorldPos, ItemDefinition item, int count)
         {
             EnsureRefs();
             var match = _ports.GetMatchingFace(pipeWorldPos, PortDirection.Input);
-            if (!match.HasValue || !PassesRoutingFilter(match.Value.face, item)) return 0;
+            if (!match.HasValue || IsDrawerNetworkOnFace(match.Value.face) || !PassesRoutingFilter(match.Value.face, item)) return 0;
             int before = count;
             int leftover = InsertFrom(item, count, pipeWorldPos, false);
             return before - leftover;
@@ -266,7 +283,7 @@ namespace VoxelEngine.Storage
             if (_ports == null || !_ports.HasAnyOutput()) return;
             foreach (var p in _ports.ports)
             {
-                if (!p.enabled || p.direction != PortDirection.Output) continue;
+                if (!p.enabled || p.direction != PortDirection.Output || IsDrawerNetworkOnFace(p.face)) continue;
                 var pipe = FindPipeOnFace(p.face);
                 if (pipe == null) continue;
 
@@ -285,6 +302,20 @@ namespace VoxelEngine.Storage
                     if (budget <= 0) break;
                 }
             }
+        }
+
+        private bool IsDrawerNetworkOnFace(CubeFace face)
+        {
+            Vector3 probe = transform.position + _ports.FaceNormal(face);
+            var hits = Physics.OverlapSphere(probe, 0.45f);
+            foreach (var col in hits)
+            {
+                if (col == null) continue;
+                var otherController = col.GetComponentInParent<StorageDrawerController>();
+                if (otherController != null && otherController != this) return true;
+                if (col.GetComponentInParent<StorageDrawer>() != null) return true;
+            }
+            return false;
         }
 
         private ItemPipe FindPipeOnFace(CubeFace face)
