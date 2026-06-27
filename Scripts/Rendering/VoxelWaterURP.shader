@@ -92,6 +92,7 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float3 normOS : NORMAL;
                 float2 uv     : TEXCOORD0;
                 float2 uv2    : TEXCOORD1;
+                float4 color  : COLOR;
             };
 
             struct V2F
@@ -160,7 +161,8 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float topFacing = saturate(max(i.normOS.y, dot(normalize(i.normOS), radialUp)));
                 if (topFacing > 0.45)
                 {
-                    float t = _Time.y; float amp = _WaveAmp * topFacing; float3 w = 0;
+                    float shoreAtten = saturate(i.color.r);
+                    float t = _Time.y; float amp = _WaveAmp * topFacing * shoreAtten; float3 w = 0;
                     float3 flatW = 0;
                     flatW += Gerstner(worldPos.xz, float2( 1.00,  0.23), amp,        _WaveFreq,        _WaveSpeed,        _WaveChop, t);
                     flatW += Gerstner(worldPos.xz, float2(-0.42,  0.91), amp * 0.52, _WaveFreq * 1.7,  _WaveSpeed * 1.31, _WaveChop, t);

@@ -173,24 +173,21 @@ namespace VoxelEngine.Maritime
         private static float SamplePlanetDensity(VoxelEngine.Core.IVoxelWorld world, Vector3 worldPosition, float probeRadius)
         {
             if (world == null) return 0f;
-            Vector3Int center = world.WorldToVoxel(worldPosition);
-            int r = Mathf.Clamp(Mathf.CeilToInt(probeRadius / VOXEL_SIZE) + 1, 1, 3);
-            float mass = 0f;
-            int samples = 0;
-
-            for (int z = -r; z <= r; z++)
-            for (int y = -r; y <= r; y++)
-            for (int x = -r; x <= r; x++)
+            Vector3 halfExtents = new Vector3(probeRadius, probeRadius, probeRadius);
+            float total = 0f;
+            Vector3[] pts = new Vector3[8]
             {
-                Vector3 offset = new(x, y, z);
-                if (offset.sqrMagnitude > r * r) continue;
-                var voxel = world.GetVoxelWorld(center + new Vector3Int(x, y, z));
-                if (!voxel.IsSolid && voxel.HasWater)
-                    mass += voxel.waterLevel / 255f;
-                samples++;
-            }
-
-            return samples > 0 ? Mathf.Clamp01(mass / samples * 2.5f) : 0f;
+                worldPosition + new Vector3(-halfExtents.x, -halfExtents.y, -halfExtents.z),
+                worldPosition + new Vector3( halfExtents.x, -halfExtents.y, -halfExtents.z),
+                worldPosition + new Vector3(-halfExtents.x,  halfExtents.y, -halfExtents.z),
+                worldPosition + new Vector3( halfExtents.x,  halfExtents.y, -halfExtents.z),
+                worldPosition + new Vector3(-halfExtents.x, -halfExtents.y,  halfExtents.z),
+                worldPosition + new Vector3( halfExtents.x, -halfExtents.y,  halfExtents.z),
+                worldPosition + new Vector3(-halfExtents.x,  halfExtents.y,  halfExtents.z),
+                worldPosition + new Vector3( halfExtents.x,  halfExtents.y,  halfExtents.z)
+            };
+            for (int i = 0; i < 8; i++) total += PlanetWaterUtility.SampleDensityAtWorldPos(pts[i]);
+            return total / 8f;
         }
 
         /// <summary>
@@ -248,6 +245,30 @@ namespace VoxelEngine.Maritime
         {
             _columnCache.Clear();
             _cachedFrame = -1;
+        }
+
+        private static RenderTexture _wakeTexture;
+        public static RenderTexture WakeTexture
+        {
+            get
+            {
+                if (_wakeTexture == null)
+                {
+                    _wakeTexture = new RenderTexture(512, 512, 0, RenderTextureFormat.ARGBHalf);
+                    _wakeTexture.name = "GlobalShipWakeTexture";
+                    _wakeTexture.wrapMode = TextureWrapMode.Clamp;
+                    Shader.SetGlobalTexture("_GlobalShipWakeTexture", _wakeTexture);
+                }
+                return _wakeTexture;
+            }
+        }
+
+        public static void RegisterShipWake(Vector3 shipPos, Vector3 velocity, float hullSize)
+        {
+            float speed = velocity.magnitude;
+            if (speed < 0.1f) return;
+            var wt = WakeTexture;
+            Shader.SetGlobalVector("_ShipWakeParams", new Vector4(shipPos.x, shipPos.z, velocity.x, velocity.z));
         }
     }
 }

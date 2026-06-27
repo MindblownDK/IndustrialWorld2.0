@@ -227,6 +227,8 @@ namespace VoxelEngine.Maritime
                 _rb.AddForce((Vector3)totalForce * s.forceGain, ForceMode.Force);
             if (math.lengthsq(totalTorque) > 1e-6f)
                 _rb.AddTorque((Vector3)totalTorque * s.torqueGain, ForceMode.Force);
+
+            WaterProbeSystem.RegisterShipWake(_rb.worldCenterOfMass, _rb.linearVelocity, _grid.BlockCount);
         }
 
         // Pre-allocated scratch so the per-tick position copy stays GC-free.

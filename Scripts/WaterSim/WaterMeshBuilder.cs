@@ -248,6 +248,9 @@ namespace VoxelEngine.WaterSim
             c.waterMesh.SetNormals(norms);
             c.waterMesh.SetUVs(0, uvs);
             c.waterMesh.SetUVs(1, uv2s);
+            var flatCols = new List<Color>(verts.Count);
+            for (int k = 0; k < verts.Count; k++) flatCols.Add(Color.white);
+            c.waterMesh.SetColors(flatCols);
             c.waterMesh.subMeshCount = 2;
             c.waterMesh.SetTriangles(waterTris, 0);
             c.waterMesh.SetTriangles(oilTris, 1);
@@ -444,6 +447,7 @@ namespace VoxelEngine.WaterSim
             var norms     = new List<Vector3>(S * S * 4);
             var uvs       = new List<Vector2>(S * S * 4);
             var uv2s      = new List<Vector2>(S * S * 4);
+            var cols      = new List<Color>(S * S * 4);
             var waterTris = new List<int>(S * S * 6);
             var oilTris   = new List<int>(S * S * 6);
 
@@ -465,6 +469,15 @@ namespace VoxelEngine.WaterSim
                 float fillOffset = (v.waterLevel / 255f - 0.5f) * 0.72f;
                 Vector3 surfaceCenter = new Vector3(x + 0.5f, y + 0.5f, z + 0.5f) + up * fillOffset;
 
+                float depthToTerrain = 1.0f;
+                if (c.GetVoxelLocal(x, y - 1, z).IsSolid || c.GetVoxelLocal(x + 1, y, z).IsSolid || c.GetVoxelLocal(x - 1, y, z).IsSolid || c.GetVoxelLocal(x, y, z + 1).IsSolid || c.GetVoxelLocal(x, y, z - 1).IsSolid)
+                    depthToTerrain = 0.0f;
+                else if (y >= 2 && c.GetVoxelLocal(x, y - 2, z).IsSolid)
+                    depthToTerrain = 0.5f;
+
+                Color colAttr = new Color(depthToTerrain, 1f, 1f, 1f);
+                cols.Add(colAttr); cols.Add(colAttr); cols.Add(colAttr); cols.Add(colAttr);
+
                 LiquidType liquid = FluidMaterialUtility.LiquidFromVoxel(v);
                 var tris = liquid == LiquidType.CrudeOil ? oilTris : waterTris;
                 Vector2 flow = c.GetFlow(x, z);
@@ -481,6 +494,7 @@ namespace VoxelEngine.WaterSim
             c.waterMesh.SetNormals(norms);
             c.waterMesh.SetUVs(0, uvs);
             c.waterMesh.SetUVs(1, uv2s);
+            c.waterMesh.SetColors(cols);
             c.waterMesh.subMeshCount = 2;
             c.waterMesh.SetTriangles(waterTris, 0);
             c.waterMesh.SetTriangles(oilTris, 1);

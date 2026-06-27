@@ -52,10 +52,17 @@ namespace VoxelEngine.Player
                 var world = VoxelEngine.Core.ActiveWorld.Current;
                 if (world != null)
                 {
-                    var vp = world.WorldToVoxel(transform.position);
-                    var v = world.GetVoxelWorld(vp);
-                    if (v.waterLevel > 10) IsUnderwater = true;
-                    if (_waterState != null && _waterState.WaterSurfaceY > transform.position.y) IsUnderwater = true;
+                    if (VoxelEngine.WaterSim.PlanetWaterUtility.IsPlanetWorld && VoxelEngine.WaterSim.PlanetWaterUtility.SignedDistanceToSea(transform.position) <= 0.1f)
+                    {
+                        IsUnderwater = true;
+                    }
+                    else
+                    {
+                        var vp = world.WorldToVoxel(transform.position);
+                        var v = world.GetVoxelWorld(vp);
+                        if (v.waterLevel > 10) IsUnderwater = true;
+                        if (_waterState != null && _waterState.WaterSurfaceY > transform.position.y) IsUnderwater = true;
+                    }
                 }
             }
 
@@ -90,6 +97,8 @@ namespace VoxelEngine.Player
                 RenderSettings.fogMode    = FogMode.Exponential;
                 RenderSettings.fogColor   = tint;
                 RenderSettings.fogDensity = totalDensity;
+                Shader.SetGlobalFloat("_UnderwaterCA", 1.0f);
+                Shader.SetGlobalColor("_UnderwaterFogColor", tint);
                 _applied = true;
             }
             else if (_applied && _saved)
@@ -100,6 +109,7 @@ namespace VoxelEngine.Player
 
         private void Restore()
         {
+            Shader.SetGlobalFloat("_UnderwaterCA", 0.0f);
             _cam.backgroundColor = _sBg;
             _cam.clearFlags      = _sF;
             _cam.farClipPlane    = _sFar;

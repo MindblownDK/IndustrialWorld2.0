@@ -89,6 +89,70 @@ namespace VoxelEngine.WaterSim
             return Mathf.Lerp(0.75f, 1.35f, TidalPhase(localPosition));
         }
 
+        /// <summary>
+        /// Converts a local radial direction into spherical coordinates (Latitude -PI/2..PI/2, Longitude -PI..PI).
+        /// Used for sampling cascaded global ocean displacement heightmaps.
+        /// </summary>
+        public static Vector2 ToSphericalLatLon(Vector3 localDir)
+        {
+            Vector3 n = localDir.normalized;
+            float lat = Mathf.Asin(Mathf.Clamp(n.y, -1f, 1f));
+            float lon = Mathf.Atan2(n.z, n.x);
+            return new Vector2(lat, lon);
+        }
+
+        /// <summary>
+        /// Samples the 3D Spherical Density Field at 8 bounding points under a ship hull
+        /// to compute total displaced fluid volume for realistic buoyancy mechanics.
+        /// </summary>
+        public static float SampleHullDisplacedVolume(Vector3 worldCenter, Vector3 halfExtents, Quaternion rotation)
+        {
+            var world = ActiveWorld.Current;
+            if (world == null) return 0f;
+
+            Vector3[] offsets = new Vector3[8]
+            {
+                new Vector3(-halfExtents.x, -halfExtents.y, -halfExtents.z),
+                new Vector3( halfExtents.x, -halfExtents.y, -halfExtents.z),
+                new Vector3(-halfExtents.x,  halfExtents.y, -halfExtents.z),
+                new Vector3( halfExtents.x,  halfExtents.y, -halfExtents.z),
+                new Vector3(-halfExtents.x, -halfExtents.y,  halfExtents.z),
+                new Vector3( halfExtents.x, -halfExtents.y,  halfExtents.z),
+                new Vector3(-halfExtents.x,  halfExtents.y,  halfExtents.z),
+                new Vector3( halfExtents.x,  halfExtents.y,  halfExtents.z)
+            };
+
+            float totalSubmergedDensity = 0f;
+            for (int i = 0; i < 8; i++)
+            {
+                Vector3 pt = worldCenter + rotation * offsets[i];
+                totalSubmergedDensity += SampleDensityAtWorldPos(pt);
+            }
+
+            float avgDensity = totalSubmergedDensity / 8f;
+            float hullVolume = halfExtents.x * halfExtents.y * halfExtents.z * 8f;
+            return hullVolume * avgDensity;
+        }
+
+        /// <summary>
+        /// Sample fluid density (0..1) at any world coordinate.
+        /// Interfaces with FluidManager adaptive sparse storage or fallback voxel waterLevel.
+        /// </summary>
+        public static float SampleDensityAtWorldPos(Vector3 worldPos)
+        {
+            var world = ActiveWorld.Current;
+            if (world == null) return 0f;
+
+            Vector3Int voxelPos = world.WorldToVoxel(worldPos);
+            if (FluidManager.Instance != null && FluidManager.Instance.TryGetVolumetricDensity(voxelPos, out float gpuDensity))
+            {
+                return gpuDensity;
+            }
+
+            var v = world.GetVoxelWorld(voxelPos);
+            return v.waterLevel / 255f;
+        }
+
         public static Unity.Mathematics.float3 ToFloat3(Vector3 v) => new(v.x, v.y, v.z);
     }
 }
