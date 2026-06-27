@@ -41,6 +41,7 @@ namespace VoxelEngine.Menu
         private void Awake()
         {
             _doc = GetComponent<UIDocument>();
+            _doc.sortingOrder = 1000;
             if (_doc.panelSettings == null)
                 _doc.panelSettings = Resources.Load<PanelSettings>("MenuPanelSettings");
             _root = _doc.rootVisualElement;
@@ -259,6 +260,7 @@ namespace VoxelEngine.Menu
         private void QuitToMenu()
         {
             Time.timeScale = 1f;
+            VoxelEngine.UI.UIState.ClearSceneBlocks();
             VoxelEngine.Persistence.WorldStatePersistence.Instance?.SaveAll();
             VoxelEngine.Research.ResearchManager.Instance?.SaveToDisk();
             try { SceneManager.LoadScene(mainMenuScene); }

@@ -118,7 +118,10 @@ namespace VoxelEngine.UI
         {
             if (Instance != null && Instance != this) { Destroy(this); return; }
             Instance = this;
+            UIState.Reset();
+            Time.timeScale = 1f;
             _doc = GetComponent<UIDocument>();
+            _doc.sortingOrder = 500;
             if (_doc.panelSettings == null)
                 _doc.panelSettings = Resources.Load<PanelSettings>("MenuPanelSettings");
             if (_doc.panelSettings != null)

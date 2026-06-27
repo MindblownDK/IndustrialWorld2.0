@@ -57,6 +57,10 @@ namespace VoxelEngine.Menu
         // ── Unity Lifecycle ────────────────────────────────────────
         private void Awake()
         {
+            UIState.ClearSceneBlocks();
+            Time.timeScale = 1f;
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
             _doc = GetComponent<UIDocument>();
 
             // 1) Prefer a project-authored PanelSettings (drag-assigned in inspector
@@ -395,6 +399,8 @@ namespace VoxelEngine.Menu
             // Restore this world's per-planet seeds / chosen system into the session so the
             // game-scene bootstrap can apply them to the celestial bodies.
             _session.LoadCosmosSidecar();
+            UIState.ClearSceneBlocks();
+            Time.timeScale = 1f;
             try { SceneManager.LoadScene(gameSceneName); }
             catch (Exception ex) { Debug.LogError("[MainMenu] Could not load scene: " + ex.Message); }
         }
@@ -411,6 +417,8 @@ namespace VoxelEngine.Menu
             ApplyCosmosSelectionToSession();
             _session.SaveCosmosSidecar();
 
+            UIState.ClearSceneBlocks();
+            Time.timeScale = 1f;
             try { SceneManager.LoadScene(gameSceneName); }
             catch (Exception ex) { Debug.LogError("[MainMenu] Could not load scene: " + ex.Message); }
         }
