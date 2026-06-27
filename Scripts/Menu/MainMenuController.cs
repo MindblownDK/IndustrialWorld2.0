@@ -59,8 +59,8 @@ namespace VoxelEngine.Menu
         {
             UIState.ClearSceneBlocks();
             Time.timeScale = 1f;
-            Cursor.lockState = CursorLockMode.None;
-            Cursor.visible = true;
+            UnityEngine.Cursor.lockState = CursorLockMode.None;
+            UnityEngine.Cursor.visible = true;
             _doc = GetComponent<UIDocument>();
 
             // 1) Prefer a project-authored PanelSettings (drag-assigned in inspector
