@@ -12,6 +12,7 @@ using Unity.Collections;
 using Unity.Jobs;
 using UnityEngine;
 using VoxelEngine.Core;
+using VoxelEngine.Cosmos;
 using VoxelEngine.Items;
 
 namespace VoxelEngine.WaterSim
@@ -83,16 +84,22 @@ namespace VoxelEngine.WaterSim
                 try
                 {
                     int downX = 0, downY = -1, downZ = 0;
-                    if (world is VoxelEngine.Cosmos.SphereWorld) {
-                        Vector3 worldOrigin = chunk.coord * VoxelConstants.CHUNK_SIZE + new Vector3(VoxelConstants.CHUNK_SIZE/2f, VoxelConstants.CHUNK_SIZE/2f, VoxelConstants.CHUNK_SIZE/2f);
-                        Vector3 gravity = -worldOrigin.normalized;
-                        if (Mathf.Abs(gravity.x) > Mathf.Abs(gravity.y) && Mathf.Abs(gravity.x) > Mathf.Abs(gravity.z)) {
-                            downX = (int)Mathf.Sign(gravity.x); downY = 0; downZ = 0;
-                        } else if (Mathf.Abs(gravity.z) > Mathf.Abs(gravity.y)) {
-                            downZ = (int)Mathf.Sign(gravity.z); downX = 0; downY = 0;
-                        } else {
-                            downY = (int)Mathf.Sign(gravity.y); downX = 0; downZ = 0;
-                        }
+                    Vector3Int chunkCenterVoxel = chunk.coord * VoxelConstants.CHUNK_SIZE + new Vector3Int(
+                        VoxelConstants.CHUNK_SIZE / 2,
+                        VoxelConstants.CHUNK_SIZE / 2,
+                        VoxelConstants.CHUNK_SIZE / 2);
+                    Vector3 radialDown = PlanetWaterUtility.LocalGravityDirection(chunkCenterVoxel);
+                    if (Mathf.Abs(radialDown.x) > Mathf.Abs(radialDown.y) && Mathf.Abs(radialDown.x) > Mathf.Abs(radialDown.z))
+                    {
+                        downX = radialDown.x >= 0f ? 1 : -1; downY = 0; downZ = 0;
+                    }
+                    else if (Mathf.Abs(radialDown.z) > Mathf.Abs(radialDown.y))
+                    {
+                        downZ = radialDown.z >= 0f ? 1 : -1; downX = 0; downY = 0;
+                    }
+                    else
+                    {
+                        downY = radialDown.y >= 0f ? 1 : -1; downX = 0; downZ = 0;
                     }
 
                     var job = new FluidSimJob
@@ -188,6 +195,10 @@ namespace VoxelEngine.WaterSim
                 dst.material = pad.material;
                 dst.waterLevel = pad.waterLevel;
                 target.SetVoxelLocal(lx, ly, lz, dst);
+
+                pad.waterLevel = 0;
+                FluidMaterialUtility.ClearLiquid(ref pad);
+                source.SetVoxelLocal(px, py, pz, pad);
                 changed = true;
             }
 
@@ -220,6 +231,32 @@ namespace VoxelEngine.WaterSim
 
         public bool DrainWater(Vector3Int worldVoxel) => DrainLiquid(worldVoxel, LiquidType.Water, 255) > 0;
         public bool DrainOil(Vector3Int worldVoxel) => DrainLiquid(worldVoxel, LiquidType.CrudeOil, 255) > 0;
+
+        /// <summary>
+        /// Pump from a finite liquid cell and wake the surrounding pressure field so connected water flows in naturally.
+        /// Large ocean-like sources are still treated as infinite by callers; this path keeps compact pools responsive.
+        /// </summary>
+        public byte PumpFromLiquid(Vector3Int worldVoxel, LiquidType liquid, byte maxLevel = 255, float suctionRadius = 3f)
+        {
+            byte drained = DrainLiquid(worldVoxel, liquid, maxLevel);
+            if (drained == 0) return 0;
+
+            var world = ActiveWorld.Current;
+            if (world == null) return drained;
+
+            int r = Mathf.Clamp(Mathf.CeilToInt(suctionRadius), 1, 8);
+            for (int z = -r; z <= r; z++)
+            for (int y = -r; y <= r; y++)
+            for (int x = -r; x <= r; x++)
+            {
+                var p = worldVoxel + new Vector3Int(x, y, z);
+                if ((p - worldVoxel).sqrMagnitude > r * r) continue;
+                if (!TryGetChunkAndLocal(world, p, out var coord, out _, out _, out _, out _)) continue;
+                MarkActive(coord);
+            }
+
+            return drained;
+        }
 
         /// <summary>Drain up to maxLevel fluid units from one voxel. Returns drained byte-volume.</summary>
         public byte DrainLiquid(Vector3Int worldVoxel, LiquidType liquid, byte maxLevel = 255)
@@ -289,10 +326,7 @@ namespace VoxelEngine.WaterSim
                 count++;
                 litres += v.waterLevel * litresPerLevel;
 
-                var offsets = new[]{ Vector3Int.right, Vector3Int.left, Vector3Int.forward,
-                                     Vector3Int.back, Vector3Int.up, Vector3Int.down };
-                foreach (var off in offsets)
-                {
+                foreach (var off in NeighbourOffsets)                {
                     var n = p + off;
                     if (seen.Contains(n)) continue;
                     if ((n - seed).sqrMagnitude > r2) continue;
@@ -304,6 +338,12 @@ namespace VoxelEngine.WaterSim
             bool infinite = count >= infiniteThreshold || count >= maxScan;
             return (count, litres, infinite);
         }
+
+        private static readonly Vector3Int[] NeighbourOffsets =
+        {
+            Vector3Int.right, Vector3Int.left, Vector3Int.forward,
+            Vector3Int.back, Vector3Int.up, Vector3Int.down
+        };
 
         private static bool TryGetChunkAndLocal(VoxelEngine.Core.IVoxelWorld world, Vector3Int worldVoxel, out Vector3Int coord, out Chunk ch, out int lx, out int ly, out int lz)
         {

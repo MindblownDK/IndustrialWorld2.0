@@ -28,6 +28,8 @@ namespace VoxelEngine.WaterSim
         private static readonly HashSet<Chunk> _queued = new();
         private static Material _waterMat;
         private static Material _oilMat;
+        private static readonly List<Vector3> _sphereCellCenters = new(32);
+        private static readonly HashSet<Vector3Int> _sphereSurfaceCells = new();
 
         // Fluid material IDs — same as SurfaceNetsJob
         private const byte WaterVoxelMat  = (byte)MaterialId.WaterVoxel;
@@ -94,6 +96,8 @@ namespace VoxelEngine.WaterSim
                 _waterMat.SetFloat("_SSSIntensity", 0.35f);
                 _waterMat.SetFloat("_FlowNormalStrength", 1.0f);
                 _waterMat.SetFloat("_FlowFoamStrength", 0.8f);
+                _waterMat.SetFloat("_PlanetWaveBlend", 1.0f);
+                _waterMat.SetFloat("_TideStrength", 0.22f);
             }
 
             if (_oilMat == null)
@@ -119,6 +123,8 @@ namespace VoxelEngine.WaterSim
                 _oilMat.SetFloat("_SSSIntensity", 0.0f);
                 _oilMat.SetFloat("_FlowNormalStrength", 0.3f);
                 _oilMat.SetFloat("_FlowFoamStrength", 0.2f);
+                _oilMat.SetFloat("_PlanetWaveBlend", 1.0f);
+                _oilMat.SetFloat("_TideStrength", 0.04f);
             }
         }
 
@@ -432,6 +438,8 @@ namespace VoxelEngine.WaterSim
             const int S = VoxelConstants.CHUNK_SIZE;
             EnsureGO(c);
 
+            FlowFieldManager.UpdateFlowField(c);
+
             var verts     = new List<Vector3>(S * S * 4);
             var norms     = new List<Vector3>(S * S * 4);
             var uvs       = new List<Vector2>(S * S * 4);
@@ -439,10 +447,8 @@ namespace VoxelEngine.WaterSim
             var waterTris = new List<int>(S * S * 6);
             var oilTris   = new List<int>(S * S * 6);
 
-            float wX = c.coord.x * S;
-            float wY = c.coord.y * S;
-            float wZ = c.coord.z * S;
-            bool any = false;
+            Vector3 chunkVoxel = (Vector3)(c.coord * S);
+            _sphereSurfaceCells.Clear();
 
             for (int x = 0; x < S; x++)
             for (int y = 0; y < S; y++)
@@ -450,46 +456,94 @@ namespace VoxelEngine.WaterSim
             {
                 var v = c.GetVoxelLocal(x, y, z);
                 if (!FluidMaterialUtility.IsFluid(v)) continue;
-                
+
+                Vector3Int local = new(x, y, z);
+                if (IsCoveredBySameLiquid(c, local, v)) continue;
+
+                Vector3 centerVoxel = chunkVoxel + new Vector3(x + 0.5f, y + 0.5f, z + 0.5f);
+                Vector3 up = PlanetWaterUtility.LocalUp(centerVoxel * VoxelConstants.VOXEL_SIZE);
+                float fillOffset = (v.waterLevel / 255f - 0.5f) * 0.72f;
+                Vector3 surfaceCenter = new Vector3(x + 0.5f, y + 0.5f, z + 0.5f) + up * fillOffset;
+
                 LiquidType liquid = FluidMaterialUtility.LiquidFromVoxel(v);
                 var tris = liquid == LiquidType.CrudeOil ? oilTris : waterTris;
-                any = true;
-
-                // Check 6 neighbors
-                CheckAndAddSphereFace(c, x, y, z, 1, 0, 0, new Vector3(1, 0, 0), wX, wY, wZ, verts, norms, uvs, uv2s, tris);
-                CheckAndAddSphereFace(c, x, y, z, -1, 0, 0, new Vector3(-1, 0, 0), wX, wY, wZ, verts, norms, uvs, uv2s, tris);
-                CheckAndAddSphereFace(c, x, y, z, 0, 1, 0, new Vector3(0, 1, 0), wX, wY, wZ, verts, norms, uvs, uv2s, tris);
-                CheckAndAddSphereFace(c, x, y, z, 0, -1, 0, new Vector3(0, -1, 0), wX, wY, wZ, verts, norms, uvs, uv2s, tris);
-                CheckAndAddSphereFace(c, x, y, z, 0, 0, 1, new Vector3(0, 0, 1), wX, wY, wZ, verts, norms, uvs, uv2s, tris);
-                CheckAndAddSphereFace(c, x, y, z, 0, 0, -1, new Vector3(0, 0, -1), wX, wY, wZ, verts, norms, uvs, uv2s, tris);
+                Vector2 flow = c.GetFlow(x, z);
+                AddSphereSurfacePatch(surfaceCenter, up, liquid, chunkVoxel, flow, verts, norms, uvs, uv2s, tris);
+                _sphereSurfaceCells.Add(local);
             }
 
-            if (!any) { ClearGO(c); return; }
+            if (verts.Count == 0) { ClearGO(c); return; }
 
-            var mesh = c.waterMesh;
-            if (mesh == null)
-            {
-                mesh = new Mesh { name = "FluidMesh" };
-                mesh.indexFormat = IndexFormat.UInt32;
-                c.waterMesh = mesh;
-                c.waterMeshFilter.sharedMesh = mesh;
-            }
-            mesh.Clear();
-            mesh.SetVertices(verts);
-            mesh.SetNormals(norms);
-            mesh.SetUVs(0, uvs);
-            mesh.SetUVs(1, uv2s);
+            if (c.waterMesh == null) c.waterMesh = new Mesh { name = "PlanetLockedLiquidSurface" };
+            c.waterMesh.Clear();
+            c.waterMesh.indexFormat = verts.Count > 60000 ? IndexFormat.UInt32 : IndexFormat.UInt16;
+            c.waterMesh.SetVertices(verts);
+            c.waterMesh.SetNormals(norms);
+            c.waterMesh.SetUVs(0, uvs);
+            c.waterMesh.SetUVs(1, uv2s);
+            c.waterMesh.subMeshCount = 2;
+            c.waterMesh.SetTriangles(waterTris, 0);
+            c.waterMesh.SetTriangles(oilTris, 1);
+            c.waterMesh.RecalculateBounds();
 
-            mesh.subMeshCount = 2;
-            mesh.SetTriangles(waterTris, 0);
-            mesh.SetTriangles(oilTris, 1);
-            mesh.RecalculateBounds();
-
-            var mats = new Material[2];
-            mats[0] = _waterMat;
-            mats[1] = _oilMat;
-            c.waterMeshRenderer.sharedMaterials = mats;
+            c.waterMeshFilter.sharedMesh = c.waterMesh;
+            c.waterMeshRenderer.sharedMaterials = new[] { _waterMat, _oilMat };
             c.waterMeshGO.SetActive(true);
+        }
+
+        private static bool IsCoveredBySameLiquid(Chunk c, Vector3Int local, Voxel voxel)
+        {
+            Vector3Int worldCell = c.coord * VoxelConstants.CHUNK_SIZE + local;
+            Vector3 up = PlanetWaterUtility.LocalUp(((Vector3)worldCell + Vector3.one * 0.5f) * VoxelConstants.VOXEL_SIZE);
+            Vector3Int radialOut = DominantAxis(up);
+            Vector3Int next = worldCell + radialOut;
+            var world = ActiveWorld.Current;
+            Voxel neighbour = world != null ? world.GetVoxelWorld(next) : Voxel.Empty;
+            return FluidMaterialUtility.IsFluid(neighbour) &&
+                   FluidMaterialUtility.LiquidFromVoxel(neighbour) == FluidMaterialUtility.LiquidFromVoxel(voxel);
+        }
+
+        private static Vector3Int DominantAxis(Vector3 direction)
+        {
+            Vector3 a = new(Mathf.Abs(direction.x), Mathf.Abs(direction.y), Mathf.Abs(direction.z));
+            if (a.x >= a.y && a.x >= a.z) return new Vector3Int(direction.x >= 0f ? 1 : -1, 0, 0);
+            if (a.y >= a.z) return new Vector3Int(0, direction.y >= 0f ? 1 : -1, 0);
+            return new Vector3Int(0, 0, direction.z >= 0f ? 1 : -1);
+        }
+
+        private static void AddSphereSurfacePatch(Vector3 center, Vector3 normal, LiquidType liquid, Vector3 chunkVoxel, Vector2 flow,
+            List<Vector3> verts, List<Vector3> norms, List<Vector2> uvs, List<Vector2> uv2s, List<int> tris)
+        {
+            Vector3 tangentA = Vector3.Cross(normal, Vector3.up);
+            if (tangentA.sqrMagnitude < 0.001f) tangentA = Vector3.Cross(normal, Vector3.forward);
+            tangentA.Normalize();
+            Vector3 tangentB = Vector3.Cross(normal, tangentA).normalized;
+
+            float half = 0.54f;
+            int i = verts.Count;
+            Vector3 p0 = center - tangentA * half - tangentB * half;
+            Vector3 p1 = center + tangentA * half - tangentB * half;
+            Vector3 p2 = center + tangentA * half + tangentB * half;
+            Vector3 p3 = center - tangentA * half + tangentB * half;
+
+            verts.Add(p0); verts.Add(p1); verts.Add(p2); verts.Add(p3);
+            for (int n = 0; n < 4; n++) norms.Add(normal);
+
+            Vector3 world0 = p0 + chunkVoxel;
+            Vector3 world1 = p1 + chunkVoxel;
+            Vector3 world2 = p2 + chunkVoxel;
+            Vector3 world3 = p3 + chunkVoxel;
+            uvs.Add(new Vector2(world0.x + world0.y * 0.37f, world0.z + world0.y * 0.19f));
+            uvs.Add(new Vector2(world1.x + world1.y * 0.37f, world1.z + world1.y * 0.19f));
+            uvs.Add(new Vector2(world2.x + world2.y * 0.37f, world2.z + world2.y * 0.19f));
+            uvs.Add(new Vector2(world3.x + world3.y * 0.37f, world3.z + world3.y * 0.19f));
+
+            float tide = liquid == LiquidType.Water ? PlanetWaterUtility.MoonWaveEnergy(world0 * VoxelConstants.VOXEL_SIZE) : 0.35f;
+            Vector2 encodedFlow = flow + new Vector2(tide - 1f, 1f - tide) * 0.15f;
+            for (int n = 0; n < 4; n++) uv2s.Add(encodedFlow);
+
+            tris.Add(i); tris.Add(i + 1); tris.Add(i + 2);
+            tris.Add(i); tris.Add(i + 2); tris.Add(i + 3);
         }
 
         private static void CheckAndAddSphereFace(Chunk c, int x, int y, int z, int dx, int dy, int dz, Vector3 normal, 

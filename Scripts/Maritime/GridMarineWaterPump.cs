@@ -54,9 +54,7 @@ namespace VoxelEngine.Maritime
         /// <summary>Check if the pump is touching water (bottom of block at/below water surface).</summary>
         private void UpdateSubmerged()
         {
-            float waterHeight = WaterProbeSystem.GetSurfaceHeight(transform.position.x, transform.position.z);
-            float pumpBottom = transform.position.y - 0.5f; // bottom of the block
-            IsSubmerged = pumpBottom <= waterHeight;
+            IsSubmerged = WaterProbeSystem.GetSubmergence(transform.position - transform.up * 0.5f, suctionDepth) > 0.08f;
         }
 
         private void FixedUpdate()

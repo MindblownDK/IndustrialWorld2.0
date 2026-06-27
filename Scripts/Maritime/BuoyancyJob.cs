@@ -29,6 +29,7 @@ namespace VoxelEngine.Maritime
         public NativeArray<MechanicalNode> Nodes;
 
         [ReadOnly] public NativeArray<float> WaterHeights;
+        [ReadOnly] public NativeArray<float> WaterDensities;
 
         // ── Grid transform / motion ───────────────────────────────────
         public float3 GridCenter;
@@ -57,8 +58,14 @@ namespace VoxelEngine.Maritime
             float wh = WaterHeights[i];
 
             float submergence = 0f;
-            if (wh > bottomY)
+            if (WaterDensities.IsCreated && i < WaterDensities.Length)
+            {
+                submergence = math.saturate(WaterDensities[i]);
+            }
+            else if (wh > bottomY)
+            {
                 submergence = math.saturate((wh - bottomY) / math.max(blockHeight, 1e-6f));
+            }
             node.Submergence = submergence;
 
             float3 force = float3.zero;

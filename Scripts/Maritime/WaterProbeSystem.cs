@@ -22,6 +22,7 @@ using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
 using VoxelEngine.Core;
+using VoxelEngine.WaterSim;
 
 namespace VoxelEngine.Maritime
 {
@@ -62,7 +63,7 @@ namespace VoxelEngine.Maritime
             for (int i = 0; i < n; i++)
             {
                 float3 p = positions[i];
-                outHeights[i] = SampleColumn(world, p.x, p.z);
+                outHeights[i] = SampleSurface(world, new Vector3(p.x, p.y, p.z));
             }
         }
 
@@ -72,6 +73,31 @@ namespace VoxelEngine.Maritime
             int frame = Time.frameCount;
             if (frame != _cachedFrame) { _columnCache.Clear(); _cachedFrame = frame; }
             return SampleColumn(VoxelEngine.Core.ActiveWorld.Current, worldX, worldZ);
+        }
+
+        public static float GetSurfaceHeight(Vector3 worldPosition)
+        {
+            int frame = Time.frameCount;
+            if (frame != _cachedFrame) { _columnCache.Clear(); _cachedFrame = frame; }
+            return SampleSurface(VoxelEngine.Core.ActiveWorld.Current, worldPosition);
+        }
+
+        public static float GetSubmergence(Vector3 worldPosition, float probeRadius = 0.5f)
+        {
+            var world = VoxelEngine.Core.ActiveWorld.Current;
+            if (world is VoxelEngine.Cosmos.SphereWorld)
+                return SamplePlanetDensity(world, worldPosition, probeRadius);
+
+            float h = SampleColumn(world, worldPosition.x, worldPosition.z);
+            if (h <= NoWaterHeight * 0.5f) return 0f;
+            return Mathf.Clamp01((h - (worldPosition.y - probeRadius)) / Mathf.Max(probeRadius * 2f, 0.001f));
+        }
+
+        private static float SampleSurface(VoxelEngine.Core.IVoxelWorld world, Vector3 worldPosition)
+        {
+            if (world is VoxelEngine.Cosmos.SphereWorld)
+                return SamplePlanetSignedWaterHeight(world, worldPosition);
+            return SampleColumn(world, worldPosition.x, worldPosition.z);
         }
 
         private static float SampleColumn(VoxelEngine.Core.IVoxelWorld world, float wx, float wz)
@@ -117,6 +143,56 @@ namespace VoxelEngine.Maritime
             return NoWaterHeight;
         }
 
+        private static float SamplePlanetSignedWaterHeight(VoxelEngine.Core.IVoxelWorld world, Vector3 worldPosition)
+        {
+            if (world == null) return NoWaterHeight;
+
+            Vector3Int center = world.WorldToVoxel(worldPosition);
+            Vector3 localProbe = ((Vector3)center + Vector3.one * 0.5f) * VOXEL_SIZE;
+            Vector3 radialUp = PlanetWaterUtility.LocalUp(localProbe);
+            int scan = 10;
+            float bestRadius = -1f;
+
+            for (int i = -scan; i <= scan; i++)
+            {
+                Vector3Int p = center + Vector3Int.RoundToInt(radialUp * i);
+                var voxel = world.GetVoxelWorld(p);
+                if (!voxel.IsSolid && voxel.HasWater)
+                {
+                    Vector3 lp = ((Vector3)p + Vector3.one * 0.5f) * VOXEL_SIZE;
+                    float r = lp.magnitude + (voxel.waterLevel / 255f - 0.5f) * VOXEL_SIZE;
+                    if (r > bestRadius) bestRadius = r;
+                }
+            }
+
+            if (bestRadius <= 0f) return NoWaterHeight;
+            Vector3 localWorld = PlanetWaterUtility.VoxelToLocalPosition((Vector3)center);
+            return bestRadius - Mathf.Max(0.0001f, localWorld.magnitude);
+        }
+
+        private static float SamplePlanetDensity(VoxelEngine.Core.IVoxelWorld world, Vector3 worldPosition, float probeRadius)
+        {
+            if (world == null) return 0f;
+            Vector3Int center = world.WorldToVoxel(worldPosition);
+            int r = Mathf.Clamp(Mathf.CeilToInt(probeRadius / VOXEL_SIZE) + 1, 1, 3);
+            float mass = 0f;
+            int samples = 0;
+
+            for (int z = -r; z <= r; z++)
+            for (int y = -r; y <= r; y++)
+            for (int x = -r; x <= r; x++)
+            {
+                Vector3 offset = new(x, y, z);
+                if (offset.sqrMagnitude > r * r) continue;
+                var voxel = world.GetVoxelWorld(center + new Vector3Int(x, y, z));
+                if (!voxel.IsSolid && voxel.HasWater)
+                    mass += voxel.waterLevel / 255f;
+                samples++;
+            }
+
+            return samples > 0 ? Mathf.Clamp01(mass / samples * 2.5f) : 0f;
+        }
+
         /// <summary>
         /// Estimated local water flow velocity at a world position (m/s).
         /// Samples the chunk flow field (computed by FlowFieldManager); falls back
@@ -140,10 +216,30 @@ namespace VoxelEngine.Maritime
                     int lx = vx - coord.x * CHUNK_SIZE;
                     int lz = vz - coord.z * CHUNK_SIZE;
                     Vector2 flow = chunk.GetFlow(lx, lz);
+                    if (world is VoxelEngine.Cosmos.SphereWorld)
+                    {
+                        Vector3 local = new Vector3(vx, vy, vz) * VOXEL_SIZE;
+                        Vector3 up = PlanetWaterUtility.LocalUp(local);
+                        Vector3 east = Vector3.Cross(Vector3.up, up);
+                        if (east.sqrMagnitude < 0.001f) east = Vector3.Cross(Vector3.forward, up);
+                        east.Normalize();
+                        Vector3 north = Vector3.Cross(up, east).normalized;
+                        Vector3 tangentFlow = east * flow.x + north * flow.y;
+                        float tide = PlanetWaterUtility.MoonWaveEnergy(local) - 1f;
+                        tangentFlow += north * tide * 0.35f;
+                        return new float3(tangentFlow.x, tangentFlow.y, tangentFlow.z);
+                    }
                     return new float3(flow.x, 0f, flow.y);
                 }
             }
-            // Fallback: a mild prevailing current toward +X.
+            if (VoxelEngine.Core.ActiveWorld.Current is VoxelEngine.Cosmos.SphereWorld)
+            {
+                Vector3 up = PlanetWaterUtility.WorldUp(new Vector3(worldPos.x, worldPos.y, worldPos.z));
+                Vector3 tangent = Vector3.Cross(up, Vector3.forward);
+                if (tangent.sqrMagnitude < 0.001f) tangent = Vector3.Cross(up, Vector3.right);
+                tangent.Normalize();
+                return new float3(tangent.x, tangent.y, tangent.z) * 0.25f;
+            }
             return new float3(0.4f, 0f, 0f);
         }
 
