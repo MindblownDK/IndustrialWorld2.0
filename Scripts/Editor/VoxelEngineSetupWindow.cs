@@ -29,44 +29,42 @@ namespace VoxelEngine.EditorTools
         [MenuItem("Tools/Voxel Engine/Setup Wizard")]
         public static void Open() => GetWindow<VoxelEngineSetupWindow>("Voxel Engine Setup");
 
-        private void OnGUI()
+        private void CreateGUI()
         {
-            _scrollPos = EditorGUILayout.BeginScrollView(_scrollPos);
-            GUILayout.Label("Voxel Engine — Setup Wizard", EditorStyles.boldLabel);
-            EditorGUILayout.HelpBox(
+            rootVisualElement.Clear();
+            rootVisualElement.style.paddingLeft = 10;
+            rootVisualElement.style.paddingRight = 10;
+            rootVisualElement.style.paddingTop = 10;
+            rootVisualElement.style.paddingBottom = 10;
+
+            var scroll = new UnityEngine.UIElements.ScrollView(UnityEngine.UIElements.ScrollViewMode.Vertical);
+            scroll.style.flexGrow = 1;
+            rootVisualElement.Add(scroll);
+
+            var title = new UnityEngine.UIElements.Label("Voxel Engine — Setup Wizard");
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            title.style.fontSize = 15;
+            title.style.marginBottom = 8;
+            scroll.Add(title);
+
+            AddInfo(scroll,
                 "Click each step in order.\n" +
                 "1. Create assets — generates materials, items, planet definitions.\n" +
                 "2. Spawn manager — adds VoxelWorld + Player to the active scene.\n" +
                 "3. Build main menu scene (saves browser + new world UI).\n" +
-                "Run steps in order — most are idempotent and safe to re-run.",
-                MessageType.Info);
+                "Run steps in order — most are idempotent and safe to re-run.");
 
-            if (GUILayout.Button("1. Create All Assets", GUILayout.Height(40)))
-                CreateAllAssets();
+            AddWizardButton(scroll, "1. Create All Assets", CreateAllAssets, 40);
+            AddWizardButton(scroll, "2. Spawn Manager + Player in Scene", SpawnManagerAndPlayer, 40);
+            AddWizardButton(scroll, "3. Build Main Menu Scene", BuildMainMenuScene, 40);
+            AddWizardButton(scroll, "4. Build Crafting Content (recipes, tools, stations, blocks)", BuildCraftingContent, 40);
+            AddWizardButton(scroll, "5. Build Tiered Building Content (Rust-style: 9 families x 4 tiers + Hammer)", BuildTieredContent, 40);
+            AddWizardButton(scroll, "6. Build Power Content (4 wire tiers + Generator + Battery + Light)", BuildPowerContent, 40);
+            AddWizardButton(scroll, "7. Build Research Content (Tech tree + Science packs + Research Lab)", BuildResearchContent, 40);
+            AddWizardButton(scroll, "8. Build Fluid Content (Water bucket, tank, pump, pipes)", BuildFluidContent, 40);
 
-            if (GUILayout.Button("2. Spawn Manager + Player in Scene", GUILayout.Height(40)))
-                SpawnManagerAndPlayer();
-
-            if (GUILayout.Button("3. Build Main Menu Scene", GUILayout.Height(40)))
-                BuildMainMenuScene();
-
-            if (GUILayout.Button("4. Build Crafting Content (recipes, tools, stations, blocks)", GUILayout.Height(40)))
-                BuildCraftingContent();
-
-            if (GUILayout.Button("5. Build Tiered Building Content (Rust-style: 9 families x 4 tiers + Hammer)", GUILayout.Height(40)))
-                BuildTieredContent();
-
-            if (GUILayout.Button("6. Build Power Content (4 wire tiers + Generator + Battery + Light)", GUILayout.Height(40)))
-                BuildPowerContent();
-
-            if (GUILayout.Button("7. Build Research Content (Tech tree + Science packs + Research Lab)", GUILayout.Height(40)))
-                BuildResearchContent();
-
-            if (GUILayout.Button("8. Build Fluid Content (Water bucket, tank, pump, pipes)", GUILayout.Height(40)))
-                BuildFluidContent();
-
-            GUILayout.Space(6);
-            EditorGUILayout.HelpBox(
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
                 "Step 10 expands the game with the full Industrial content pack:\n" +
                 "  • Iron / Copper / Steel PLATES, Iron Gear, Copper Wire, Glass\n" +
                 "  • Electronic & Advanced Circuits\n" +
@@ -77,13 +75,11 @@ namespace VoxelEngine.EditorTools
                 "    Oil Extraction, Oil Refining, Plastics, Logistics Network,\n" +
                 "    Mass Storage, Crystalline Storage, Wireless Access, Quarrying,\n" +
                 "    Fluid Handling, Gas Processing, Nuclear Fission, Adv Electronics).\n" +
-                "Re-runnable. Idempotent. Always run AFTER steps 4, 6, 7.", MessageType.Info);
+                "Re-runnable. Idempotent. Always run AFTER steps 4, 6, 7.");
+            AddWizardButton(scroll, "10. Build Industrial Content (plates, oil chain, advanced recipes, full research tree)", BuildIndustrialContent, 56);
 
-            if (GUILayout.Button("10. Build Industrial Content (plates, oil chain, advanced recipes, full research tree)", GUILayout.Height(56)))
-                BuildIndustrialContent();
-
-            GUILayout.Space(6);
-            EditorGUILayout.HelpBox(
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
                 "Step 11 fills in EVERY system the research nodes were already pointing at:\n" +
                 "  • Farming  (Wheat / Corn / Carrot crops + Seeds + Foods + Hoe + Tilled Soil + Sprinkler + Harvester + cooking)\n" +
                 "  • Storage  (RAM / CPU / PSU at 4 tiers + 5 Disk tiers + ServerRack / NAS / Terminals / Drawers / Displays / Importer / Exporter / Powerstation / Disk Manipulator)\n" +
@@ -93,46 +89,77 @@ namespace VoxelEngine.EditorTools
                 "  • Gas  (Electrolyser / Hydrogen Engine / Gas Tank / Gas Pipe Solid+Glass + Hydrogen / Oxygen markers)\n" +
                 "  • Nuclear  (Enriched Fuel Rod / LEU Pellet / Depleted Uranium / Spent Fuel Rod / High-Level Waste +\n" +
                 "              Uranium Processor / Reactor Core / Steam Turbine / Portable Reactor / Waste Reprocessor)\n" +
-                "  • New research node:  Farming (gates seeds/farm-plot/sprinkler/harvester/cooking)\n" +
-                "Re-runnable. Idempotent. Run AFTER steps 4, 6, 7, 8, 10.", MessageType.Info);
+                "  • New research node: Farming (gates seeds/farm-plot/sprinkler/harvester/cooking)\n" +
+                "Re-runnable. Idempotent. Run AFTER steps 4, 6, 7, 8, 10.");
+            AddWizardButton(scroll, "11. Build Survival + Industrial Logistics Content\n(Farming + Storage + Quarry + Gas + Nuclear)", BuildSurvivalAndLogisticsContent, 72);
 
-            if (GUILayout.Button("11. Build Survival + Industrial Logistics Content\n(Farming + Storage + Quarry + Gas + Nuclear)", GUILayout.Height(72)))
-                BuildSurvivalAndLogisticsContent();
-
-            GUILayout.Space(6);
-            EditorGUILayout.HelpBox(
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
                 "Step 12 builds the Grid System (Ships/Vehicles):\n" +
                 "  • Cockpit (Small/Large)\n" +
                 "  • Thrusters, Gyroscopes\n" +
                 "  • Grid Batteries, Reactors\n" +
                 "  • Landing Gear, Docking Ports\n" +
                 "  • Grid-based Tools (Drills, Grinders)\n" +
-                "Re-runnable. Idempotent. Run AFTER step 10.", MessageType.Info);
+                "Re-runnable. Idempotent. Run AFTER step 10.");
+            AddWizardButton(scroll, "12. Build Grid System Content (All Ship/Vehicle Blocks: Cockpit, Thruster, Battery, Armor, Drill, Grinder, Refinery, Weapon)", BuildGridSystemContent, 56);
 
-            if (GUILayout.Button("12. Build Grid System Content (All Ship/Vehicle Blocks: Cockpit, Thruster, Battery, Armor, Drill, Grinder, Refinery, Weapon)", GUILayout.Height(56)))
-                BuildGridSystemContent();
-
-            GUILayout.Space(6);
-            EditorGUILayout.HelpBox(
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
                 "Step 13 builds the MARITIME PROPULSION & MECHANICAL NETWORK:\n" +
                 "  • Hull materials (Untreated Wood, Tar Plank, Iron Hull, Balsa Wood)\n" +
                 "  • Propulsion (Waterwheel, Drive Shaft, Propellers, Engines, Turbo, Gearbox, Generator)\n" +
                 "  • Control (Helm) + Utility (Bilge Pump, Exhaust Pipe)\n" +
                 "  • 4-tier \"Maritime Engineering\" research tree\n" +
                 "  • MaritimeSettings balance asset\n" +
-                "Re-runnable. Idempotent. Run AFTER step 12.", MessageType.Info);
+                "Re-runnable. Idempotent. Run AFTER step 12.");
+            AddWizardButton(scroll, "13. Build Maritime Content (Hulls, Engines, Shafts, Propellers, Turbo, Helm + Maritime Research Tree)", BuildMaritimeContent, 56);
+            AddWizardButton(scroll, "14. Build Floodlight Content (Stationary & Grid blocks, recipes, research)", BuildFloodlightContent, 40);
+            AddWizardButton(scroll, "15. Build Wind Power Content (Standard, Helix, Monopoles, Research)", BuildWindmillContent, 40);
+            AddSpacer(scroll, 20);
+        }
 
-            if (GUILayout.Button("13. Build Maritime Content (Hulls, Engines, Shafts, Propellers, Turbo, Helm + Maritime Research Tree)", GUILayout.Height(56)))
-                BuildMaritimeContent();
+        private static void AddInfo(UnityEngine.UIElements.VisualElement parent, string text)
+        {
+            var box = new UnityEngine.UIElements.Label(text);
+            box.style.whiteSpace = UnityEngine.UIElements.WhiteSpace.Normal;
+            box.style.backgroundColor = new Color(0.18f, 0.20f, 0.23f, 0.35f);
+            box.style.borderTopWidth = 1; box.style.borderBottomWidth = 1;
+            box.style.borderLeftWidth = 1; box.style.borderRightWidth = 1;
+            box.style.borderTopColor = new Color(0.35f, 0.38f, 0.44f, 0.8f);
+            box.style.borderBottomColor = new Color(0.35f, 0.38f, 0.44f, 0.8f);
+            box.style.borderLeftColor = new Color(0.35f, 0.38f, 0.44f, 0.8f);
+            box.style.borderRightColor = new Color(0.35f, 0.38f, 0.44f, 0.8f);
+            box.style.paddingTop = 6; box.style.paddingBottom = 6;
+            box.style.paddingLeft = 8; box.style.paddingRight = 8;
+            box.style.marginBottom = 6;
+            parent.Add(box);
+        }
 
-            if (GUILayout.Button("14. Build Floodlight Content (Stationary & Grid blocks, recipes, research)", GUILayout.Height(40)))
-                BuildFloodlightContent();
+        private static void AddSpacer(UnityEngine.UIElements.VisualElement parent, float height)
+        {
+            var spacer = new UnityEngine.UIElements.VisualElement();
+            spacer.style.height = height;
+            parent.Add(spacer);
+        }
 
-            if (GUILayout.Button("15. Build Wind Power Content (Standard, Helix, Monopoles, Research)", GUILayout.Height(40)))
-                BuildWindmillContent();
+        private static void AddWizardButton(UnityEngine.UIElements.VisualElement parent, string text, System.Action action, float height)
+        {
+            var button = new UnityEngine.UIElements.Button(() => QueueWizardAction(action)) { text = text };
+            button.style.height = height;
+            button.style.marginBottom = 4;
+            button.style.unityFontStyleAndWeight = FontStyle.Bold;
+            parent.Add(button);
+        }
 
-            GUILayout.Space(20);
-            EditorGUILayout.EndScrollView();
+        private static void QueueWizardAction(System.Action action)
+        {
+            if (action == null) return;
+            EditorApplication.delayCall += () =>
+            {
+                try { action.Invoke(); }
+                catch (System.Exception ex) { Debug.LogException(ex); }
+            };
         }
 
         // ===== Asset creation =====
@@ -586,6 +613,8 @@ namespace VoxelEngine.EditorTools
             }
             string[] themeCandidates =
             {
+                "Assets/UI Toolkit/UnityThemes/UnityDefaultRuntimeTheme.tss",
+                "Assets/Resources/UnityDefaultRuntimeTheme.tss",
                 "Packages/com.unity.ui/PackageResources/StyleSheets/Generated/Default/UnityDefaultRuntimeTheme.tss",
                 "Packages/com.unity.modules.uielements/PackageResources/StyleSheets/Generated/Default/UnityDefaultRuntimeTheme.tss"
             };
@@ -594,6 +623,16 @@ namespace VoxelEngine.EditorTools
             {
                 theme = AssetDatabase.LoadAssetAtPath<UnityEngine.UIElements.ThemeStyleSheet>(path);
                 if (theme != null) break;
+            }
+            if (theme == null)
+            {
+                string[] themeGuids = AssetDatabase.FindAssets("UnityDefaultRuntimeTheme t:ThemeStyleSheet");
+                foreach (var guid in themeGuids)
+                {
+                    string path = AssetDatabase.GUIDToAssetPath(guid);
+                    theme = AssetDatabase.LoadAssetAtPath<UnityEngine.UIElements.ThemeStyleSheet>(path);
+                    if (theme != null) break;
+                }
             }
             if (theme != null)
             {
