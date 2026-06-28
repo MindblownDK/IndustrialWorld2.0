@@ -454,6 +454,9 @@ namespace VoxelEngine.WaterSim
             Vector3 chunkVoxel = (Vector3)(c.coord * S);
             _sphereSurfaceCells.Clear();
 
+            var world = ActiveWorld.Current;
+            float seaRad = (world != null ? world.SeaLevel : 96) * VoxelConstants.VOXEL_SIZE;
+
             for (int x = 0; x < S; x++)
             for (int y = 0; y < S; y++)
             for (int z = 0; z < S; z++)
@@ -461,13 +464,26 @@ namespace VoxelEngine.WaterSim
                 var v = c.GetVoxelLocal(x, y, z);
                 if (!FluidMaterialUtility.IsFluid(v)) continue;
 
+                Vector3 centerVoxel = chunkVoxel + new Vector3(x + 0.5f, y + 0.5f, z + 0.5f);
+                float distFromCenter = centerVoxel.magnitude;
+                LiquidType liquid = FluidMaterialUtility.LiquidFromVoxel(v);
+
+                if (liquid == LiquidType.Water && distFromCenter < seaRad - 0.85f) continue;
+
                 Vector3Int local = new(x, y, z);
                 if (IsCoveredBySameLiquid(c, local, v)) continue;
 
-                Vector3 centerVoxel = chunkVoxel + new Vector3(x + 0.5f, y + 0.5f, z + 0.5f);
                 Vector3 up = PlanetWaterUtility.LocalUp(centerVoxel * VoxelConstants.VOXEL_SIZE);
-                float fillOffset = (v.waterLevel / 255f - 0.5f) * 0.72f;
-                Vector3 surfaceCenter = new Vector3(x + 0.5f, y + 0.5f, z + 0.5f) + up * fillOffset;
+                Vector3 surfaceCenter;
+                if (liquid == LiquidType.Water && distFromCenter <= seaRad + 5f)
+                {
+                    surfaceCenter = up * seaRad - chunkVoxel;
+                }
+                else
+                {
+                    float fillOffset = (v.waterLevel / 255f - 0.5f) * 0.72f;
+                    surfaceCenter = new Vector3(x + 0.5f, y + 0.5f, z + 0.5f) + up * fillOffset;
+                }
 
                 float depthToTerrain = 1.0f;
                 if (c.GetVoxelLocal(x, y - 1, z).IsSolid || c.GetVoxelLocal(x + 1, y, z).IsSolid || c.GetVoxelLocal(x - 1, y, z).IsSolid || c.GetVoxelLocal(x, y, z + 1).IsSolid || c.GetVoxelLocal(x, y, z - 1).IsSolid)
@@ -478,10 +494,13 @@ namespace VoxelEngine.WaterSim
                 Color colAttr = new Color(depthToTerrain, 1f, 1f, 1f);
                 cols.Add(colAttr); cols.Add(colAttr); cols.Add(colAttr); cols.Add(colAttr);
 
-                LiquidType liquid = FluidMaterialUtility.LiquidFromVoxel(v);
                 var tris = liquid == LiquidType.CrudeOil ? oilTris : waterTris;
                 Vector2 flow = c.GetFlow(x, z);
-                AddSphereSurfacePatch(surfaceCenter, up, liquid, chunkVoxel, flow, verts, norms, uvs, uv2s, tris);
+                Vector3 tideDir = PlanetWaterUtility.CurrentTideDirectionLocal();
+                float tideAlign = Vector3.Dot(up, tideDir);
+                Vector2 swellFlow = flow + new Vector2(tideAlign * 0.75f, (1f - Mathf.Abs(tideAlign)) * 0.55f);
+
+                AddSphereSurfacePatch(surfaceCenter, up, liquid, chunkVoxel, swellFlow, verts, norms, uvs, uv2s, tris);
                 _sphereSurfaceCells.Add(local);
             }
 
@@ -509,7 +528,8 @@ namespace VoxelEngine.WaterSim
         {
             Vector3Int worldCell = c.coord * VoxelConstants.CHUNK_SIZE + local;
             Vector3 up = PlanetWaterUtility.LocalUp(((Vector3)worldCell + Vector3.one * 0.5f) * VoxelConstants.VOXEL_SIZE);
-            Vector3Int radialOut = DominantAxis(up);
+            Vector3Int radialOut = Vector3Int.RoundToInt(up);
+            if (radialOut == Vector3Int.zero) radialOut = Vector3Int.up;
             Vector3Int next = worldCell + radialOut;
             var world = ActiveWorld.Current;
             Voxel neighbour = world != null ? world.GetVoxelWorld(next) : Voxel.Empty;
