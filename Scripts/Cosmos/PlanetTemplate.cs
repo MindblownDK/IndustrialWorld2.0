@@ -21,6 +21,9 @@ namespace VoxelEngine.Cosmos
         [Tooltip("Solar system this planet belongs to.")]
         public SolarSystemTemplate solarSystem;
 
+        [Tooltip("Fixed distance (km) from the sun. If 0, uses the orbitalDistanceKm range.")]
+        public float distanceFromSun = 0f;
+
         [Tooltip("Min/max distance (km) the planet may sit from its star. Final value is seeded per world.")]
         public Vector2 orbitalDistanceKm = new Vector2(1500f, 6000f);
 

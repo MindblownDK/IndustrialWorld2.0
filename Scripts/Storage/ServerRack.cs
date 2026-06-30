@@ -52,6 +52,7 @@ namespace VoxelEngine.Storage
 
         private PowerConsumer _power;
         private float         _tickTimer;
+        private readonly List<IExternalStorageSource> _externalStorageSources = new();
 
         // ── Unity ──────────────────────────────────────────────────
         private void Awake()
@@ -330,11 +331,39 @@ namespace VoxelEngine.Storage
             return 0f;
         }
 
+        // ── External physical storage (drawer controllers) ─────────
+        public void RegisterExternalStorage(IExternalStorageSource source)
+        {
+            if (source == null || _externalStorageSources.Contains(source)) return;
+            _externalStorageSources.Add(source);
+            _externalStorageSources.Sort((a, b) => b.Priority.CompareTo(a.Priority));
+        }
+
+        public void UnregisterExternalStorage(IExternalStorageSource source)
+        {
+            if (source != null) _externalStorageSources.Remove(source);
+        }
+
+        private void PruneExternalStorage()
+        {
+            for (int i = _externalStorageSources.Count - 1; i >= 0; i--)
+            {
+                var s = _externalStorageSources[i];
+                if (s == null || !s.IsAvailable) _externalStorageSources.RemoveAt(i);
+            }
+        }
+
         // ── Storage API ────────────────────────────────────────────
         public int NetworkInsert(ItemDefinition item, int count)
         {
             if (!IsOnline || item == null || count <= 0) return count;
             int remaining = count;
+            PruneExternalStorage();
+            foreach (var source in _externalStorageSources)
+            {
+                remaining = source.Insert(item, remaining);
+                if (remaining <= 0) return 0;
+            }
             foreach (var d in activeDisks)
             {
                 if (d == null) continue;
@@ -349,6 +378,13 @@ namespace VoxelEngine.Storage
         {
             if (!IsOnline || count <= 0) return 0;
             int extracted = 0;
+            PruneExternalStorage();
+            foreach (var source in _externalStorageSources)
+            {
+                int got = source.Extract(itemId, count - extracted);
+                extracted += got;
+                if (extracted >= count) return extracted;
+            }
             foreach (var d in activeDisks)
             {
                 if (d == null) continue;
@@ -372,6 +408,9 @@ namespace VoxelEngine.Storage
                         { itemId = e.itemId, displayName = e.displayName, count = e.count };
                 }
             }
+            PruneExternalStorage();
+            foreach (var source in _externalStorageSources)
+                source.AppendAllItems(merged);
             var list = new List<StoredItemEntry>(merged.Values);
             list.Sort((a, b) => b.count.CompareTo(a.count));
             return list;
@@ -382,6 +421,9 @@ namespace VoxelEngine.Storage
             int total = 0;
             foreach (var d in activeDisks)
                 if (d != null) total += d.CountOf(itemId);
+            PruneExternalStorage();
+            foreach (var source in _externalStorageSources)
+                total += source.CountOf(itemId);
             return total;
         }
     }

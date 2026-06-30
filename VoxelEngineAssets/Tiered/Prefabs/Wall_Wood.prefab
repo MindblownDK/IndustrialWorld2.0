@@ -9,7 +9,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 7550275049319033588}
-  - component: {fileID: 891546699174477958}
   m_Layer: 0
   m_Name: Socket_Top
   m_TagString: Untagged
@@ -32,20 +31,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 3916240437044857628}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &891546699174477958
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1295997557614048767}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5af3e047d2a3f194da583311920f52ee, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.Tiered.BuildSocket
-  side: 0
-  family: 1
 --- !u!1 &2496659232680157510
 GameObject:
   m_ObjectHideFlags: 0
@@ -55,7 +40,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 3916240437044857628}
-  - component: {fileID: 2661208793472374022}
+  - component: {fileID: 4628525305225191156}
   m_Layer: 0
   m_Name: Wall_Wood
   m_TagString: Untagged
@@ -80,7 +65,7 @@ Transform:
   - {fileID: 7550275049319033588}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &2661208793472374022
+--- !u!114 &4628525305225191156
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -205,5 +190,4 @@ MeshRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
-  m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}

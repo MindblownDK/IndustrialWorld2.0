@@ -96,6 +96,14 @@ namespace VoxelEngine.Cosmos
                 if (i > 0)
                     planetRadius += rng.NextFloat(template.minPlanetSeparationKm, template.maxPlanetSeparationKm);
 
+                // Use fixed distance if specified, otherwise use the random range.
+                if (pt.distanceFromSun > 0f)
+                    planetRadius = pt.distanceFromSun;
+                else if (i == 0)
+                    planetRadius = rng.NextFloat(pt.orbitalDistanceKm.x, pt.orbitalDistanceKm.y);
+                else
+                    planetRadius += rng.NextFloat(template.minPlanetSeparationKm, template.maxPlanetSeparationKm);
+
                 float inclination = rng.NextFloat(-0.12f, 0.12f); // gentle 3D tilt
                 var planet = new BodyInstance
                 {

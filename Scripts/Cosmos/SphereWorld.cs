@@ -507,26 +507,8 @@ namespace VoxelEngine.Cosmos
             p.chunk.genCompletedTime = Time.time;
             p.chunk.isScattered = false;
 
-            // NO StitchBordersWithNeighbours here. The SphereChunkGenJob fills the ENTIRE padded
-            // voxel array (including the +1 border on all 6 sides) by evaluating the continuous
-            // density field at each voxel's true world position. Since density is a pure function
-            // of position, every border voxel is already correct — stitching would be redundant.
-            // (The flat VoxelWorld stitched because SetVoxelWorld edits needed to mirror into
-            //  neighbours; that's a Phase 2.1 task for the sphere, handled separately.)
-            // Removing the stitch call also eliminates the re-entrancy crash:
-            //   FinalizeGen → StitchBorders → CompleteGenJobFor(neighbour) → FinalizeGen → ...
-
-            // Wake fluid sim for chunks containing water.
-            bool hw = false;
-            const int WS = VoxelConstants.CHUNK_SIZE;
-            for (int wz = 0; wz < WS && !hw; wz++)
-            for (int wy = 0; wy < WS && !hw; wy++)
-            for (int wx = 0; wx < WS && !hw; wx++)
-                if (p.chunk.GetVoxelLocal(wx, wy, wz).waterLevel > 0) hw = true;
-            if (hw)
-            {
-                // Water is solid in the terrain mesh — no separate fluid mesh needed.
-            }
+            // Wake fluid sim and schedule real voxel water/oil meshing.
+            VoxelEngine.WaterSim.WaterMeshBuilder.Schedule(p.chunk);
 
             if (!_meshQueue.Contains(p.chunk)) _meshQueue.Enqueue(p.chunk);
         }
@@ -728,7 +710,12 @@ namespace VoxelEngine.Cosmos
             c.SetVoxelLocal(lx, ly, lz, v);
             c.isModified = true;
 
-            // Water is solid in the terrain mesh — no fluid sim wake needed.
+            // Schedule real fluid mesh rebuild if the voxel change affects fluids.
+            if (VoxelEngine.WaterSim.FluidMaterialUtility.IsFluid(v))
+            {
+                VoxelEngine.WaterSim.WaterMeshBuilder.Schedule(c);
+            }
+
             if (!remesh) return;
             EnqueueRemesh(c);
             if (lx == 0)     EnqueueRemeshNeighbour(chunkCoord + new Vector3Int(-1, 0, 0));

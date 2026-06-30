@@ -9,7 +9,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 7024031846316515514}
-  - component: {fileID: 4700312967375345778}
   m_Layer: 0
   m_Name: Socket_West
   m_TagString: Untagged
@@ -32,20 +31,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 6166919873894728621}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &4700312967375345778
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2717593228895291038}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5af3e047d2a3f194da583311920f52ee, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.Tiered.BuildSocket
-  side: 5
-  family: 0
 --- !u!1 &3655078092458630131
 GameObject:
   m_ObjectHideFlags: 0
@@ -55,7 +40,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 6166919873894728621}
-  - component: {fileID: 6925351566588040701}
+  - component: {fileID: 7724022784829800223}
   m_Layer: 0
   m_Name: Foundation_Steel
   m_TagString: Untagged
@@ -84,7 +69,7 @@ Transform:
   - {fileID: 7024031846316515514}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &6925351566588040701
+--- !u!114 &7724022784829800223
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -209,7 +194,6 @@ MeshRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
-  m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
 --- !u!1 &4478520627569616376
 GameObject:
@@ -220,7 +204,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2180657497088816810}
-  - component: {fileID: 3124606008537796650}
   m_Layer: 0
   m_Name: Socket_East
   m_TagString: Untagged
@@ -243,20 +226,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 6166919873894728621}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &3124606008537796650
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4478520627569616376}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5af3e047d2a3f194da583311920f52ee, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.Tiered.BuildSocket
-  side: 4
-  family: 0
 --- !u!1 &4644753183909117223
 GameObject:
   m_ObjectHideFlags: 0
@@ -266,7 +235,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 401876852902836765}
-  - component: {fileID: 4608348802801654605}
   m_Layer: 0
   m_Name: Socket_Top
   m_TagString: Untagged
@@ -289,20 +257,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 6166919873894728621}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &4608348802801654605
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4644753183909117223}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5af3e047d2a3f194da583311920f52ee, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.Tiered.BuildSocket
-  side: 0
-  family: 0
 --- !u!1 &7753053005043746461
 GameObject:
   m_ObjectHideFlags: 0
@@ -312,7 +266,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 7828442169641682119}
-  - component: {fileID: 187942044536620587}
   m_Layer: 0
   m_Name: Socket_North
   m_TagString: Untagged
@@ -335,20 +288,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 6166919873894728621}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &187942044536620587
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7753053005043746461}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5af3e047d2a3f194da583311920f52ee, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.Tiered.BuildSocket
-  side: 2
-  family: 0
 --- !u!1 &9199463732705195208
 GameObject:
   m_ObjectHideFlags: 0
@@ -358,7 +297,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 8655256098654347942}
-  - component: {fileID: 6315036331101841181}
   m_Layer: 0
   m_Name: Socket_South
   m_TagString: Untagged
@@ -381,17 +319,3 @@ Transform:
   m_Children: []
   m_Father: {fileID: 6166919873894728621}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &6315036331101841181
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 9199463732705195208}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5af3e047d2a3f194da583311920f52ee, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.Tiered.BuildSocket
-  side: 3
-  family: 0

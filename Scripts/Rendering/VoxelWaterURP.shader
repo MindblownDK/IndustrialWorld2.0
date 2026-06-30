@@ -25,6 +25,8 @@ Shader "VoxelEngine/VoxelWaterURP"
         _WaveFreq  ("Wave Frequency", Range(0.05, 4)) = 0.55
         _WaveSpeed ("Wave Speed", Range(0, 3)) = 0.72
         _WaveChop  ("Wave Chop", Range(0, 1)) = 0.28
+        _PlanetWaveBlend ("Planet Radial Wave Blend", Range(0, 1)) = 1
+        _TideStrength ("Moon Tide Strength", Range(0, 0.6)) = 0.22
 
         [Header(Surface Detail)]
         _NormalScale        ("Normal Strength", Range(0, 3)) = 1.4
@@ -75,6 +77,7 @@ Shader "VoxelEngine/VoxelWaterURP"
             CBUFFER_START(UnityPerMaterial)
                 float4 _ShallowColor, _DeepColor, _FoamColor;
                 float  _WaveAmp, _WaveFreq, _WaveSpeed, _WaveChop;
+                float  _PlanetWaveBlend, _TideStrength;
                 float  _NormalScale;
                 float  _Gloss, _FresnelPower, _RefractionStrength, _CausticsIntensity;
                 float  _DepthFade;
@@ -89,6 +92,7 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float3 normOS : NORMAL;
                 float2 uv     : TEXCOORD0;
                 float2 uv2    : TEXCOORD1;
+                float4 color  : COLOR;
             };
 
             struct V2F
@@ -115,6 +119,22 @@ Shader "VoxelEngine/VoxelWaterURP"
             float3 Gerstner(float2 xz, float2 dir, float amp, float freq, float speed, float chop, float t)
             { dir = normalize(dir); float phase = dot(xz, dir) * freq + t * speed; float s, c; sincos(phase, s, c); return float3(dir.x * amp * c * chop, amp * s, dir.y * amp * c * chop); }
 
+            float3 PlanetWave(float3 worldPos, float3 radialUp, float2 flow, float amp, float freq, float speed, float chop, float t)
+            {
+                float3 tangentA = cross(radialUp, float3(0,1,0));
+                if (dot(tangentA, tangentA) < 0.001) tangentA = cross(radialUp, float3(0,0,1));
+                tangentA = normalize(tangentA);
+                float3 tangentB = normalize(cross(radialUp, tangentA));
+                float2 uv = float2(dot(worldPos, tangentA), dot(worldPos, tangentB));
+                float tide = 1.0 + (flow.x - flow.y) * _TideStrength;
+                float3 local = 0;
+                local += Gerstner(uv, float2( 1.00,  0.23), amp * tide,        freq,       speed,        chop, t);
+                local += Gerstner(uv, float2(-0.42,  0.91), amp * tide * 0.52, freq * 1.7, speed * 1.31, chop, t);
+                local += Gerstner(uv, float2( 0.18, -0.98), amp * tide * 0.24, freq * 3.1, speed * 0.76, chop, t);
+                local += Gerstner(uv, float2( 0.72,  0.69), amp * tide * 0.12, freq * 5.4, speed * 1.9,  chop, t);
+                return radialUp * local.y + tangentA * local.x + tangentB * local.z;
+            }
+
             float3 FlowMappedNormal(float2 worldXZ, float2 flowDir, float flowSpeed, float t)
             {
                 float2 dir = flowDir; float speed = length(dir);
@@ -137,15 +157,19 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float3 posOS = i.posOS.xyz;
                 float3 worldPos = TransformObjectToWorld(posOS);
 
-                // Gerstner waves only on top-facing surfaces (not side curtains)
-                if (i.normOS.y > 0.5)
+                float3 radialUp = normalize(worldPos);
+                float topFacing = saturate(max(i.normOS.y, dot(normalize(i.normOS), radialUp)));
+                if (topFacing > 0.45)
                 {
-                    float t = _Time.y; float amp = _WaveAmp; float3 w = 0;
-                    w += Gerstner(worldPos.xz, float2( 1.00,  0.23), amp,        _WaveFreq,        _WaveSpeed,        _WaveChop, t);
-                    w += Gerstner(worldPos.xz, float2(-0.42,  0.91), amp * 0.52, _WaveFreq * 1.7,  _WaveSpeed * 1.31, _WaveChop, t);
-                    w += Gerstner(worldPos.xz, float2( 0.18, -0.98), amp * 0.24, _WaveFreq * 3.1,  _WaveSpeed * 0.76, _WaveChop, t);
-                    w += Gerstner(worldPos.xz, float2( 0.72,  0.69), amp * 0.12, _WaveFreq * 5.4,  _WaveSpeed * 1.9,  _WaveChop, t);
-                    w += Gerstner(worldPos.xz, float2(-0.55, -0.45), amp * 0.08, _WaveFreq * 7.8,  _WaveSpeed * 2.4,  _WaveChop, t);
+                    float shoreAtten = saturate(i.color.r);
+                    float t = _Time.y; float amp = _WaveAmp * topFacing * shoreAtten; float3 w = 0;
+                    float3 flatW = 0;
+                    flatW += Gerstner(worldPos.xz, float2( 1.00,  0.23), amp,        _WaveFreq,        _WaveSpeed,        _WaveChop, t);
+                    flatW += Gerstner(worldPos.xz, float2(-0.42,  0.91), amp * 0.52, _WaveFreq * 1.7,  _WaveSpeed * 1.31, _WaveChop, t);
+                    flatW += Gerstner(worldPos.xz, float2( 0.18, -0.98), amp * 0.24, _WaveFreq * 3.1,  _WaveSpeed * 0.76, _WaveChop, t);
+                    flatW += Gerstner(worldPos.xz, float2( 0.72,  0.69), amp * 0.12, _WaveFreq * 5.4,  _WaveSpeed * 1.9,  _WaveChop, t);
+                    float3 planetW = PlanetWave(worldPos, radialUp, i.uv2, amp, _WaveFreq, _WaveSpeed, _WaveChop, t);
+                    w = lerp(flatW, planetW, _PlanetWaveBlend);
                     posOS += w;
                     worldPos = TransformObjectToWorld(posOS);
                 }
@@ -168,7 +192,8 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float flowSpeed = length(flowDir);
 
                 // Determine if this is a side face (curtain)
-                bool isSideFace = abs(geoN.y) < 0.5;
+                float radialFacing = abs(dot(geoN, normalize(i.posWS)));
+                bool isSideFace = abs(geoN.y) < 0.5 && radialFacing < 0.5;
 
                 // Detail normals — reduced on side faces
                 float3 detailN = FlowMappedNormal(i.posWS.xz, flowDir, flowSpeed, t);

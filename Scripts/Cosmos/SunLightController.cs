@@ -106,10 +106,16 @@ namespace VoxelEngine.Cosmos
 
             // Ambient follows the day cycle too.
             RenderSettings.ambientLight = Color.Lerp(
-                new Color(0.05f, 0.06f, 0.10f, 1f),  // night ambient
+                new Color(0.02f, 0.03f, 0.08f, 1f),  // deep night ambient
                 ambientColor,                          // day ambient
                 dayFactor);
-            RenderSettings.ambientIntensity = Mathf.Lerp(0.3f, 1f, dayFactor);
+            RenderSettings.ambientIntensity = Mathf.Lerp(0.2f, 1f, dayFactor);
+            
+            // Add a subtle "moonlight" blue tint to shadows during the night
+            if (dayFactor < 0.2f)
+            {
+                RenderSettings.ambientLight += new Color(0.01f, 0.02f, 0.05f, 1f) * (1f - dayFactor);
+            }
         }
     }
 }

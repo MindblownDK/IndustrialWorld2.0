@@ -36,6 +36,24 @@ namespace VoxelEngine.UI
             UpdateState();
         }
 
+        /// <summary>
+        /// Clears stale UI blockers without touching cursor state. Use when changing
+        /// scenes because the old scene's UI objects are about to be destroyed and
+        /// may not get a chance to PopBlock() cleanly.
+        /// </summary>
+        public static void ClearSceneBlocks()
+        {
+            _blockCount = 0;
+            IsBlocking = false;
+            PauseConsumedFrame = -1;
+        }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        private static void ClearOnSceneLoad()
+        {
+            ClearSceneBlocks();
+        }
+
         private static void UpdateState()
         {
             IsBlocking = _blockCount > 0;

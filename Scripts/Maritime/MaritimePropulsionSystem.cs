@@ -59,6 +59,7 @@ namespace VoxelEngine.Maritime
         // ── Job data (persistent, rebuilt only on change) ─────────────
         private NativeArray<MechanicalNode> _nodes;
         private NativeArray<float> _waterHeights;
+        private NativeArray<float> _waterDensities;
         private NativeArray<PropulsionChain> _chains;
         private bool _allocated;
 
@@ -141,6 +142,11 @@ namespace VoxelEngine.Maritime
             for (int i = 0; i < _nodes.Length; i++)
                 _nodePosArray[i] = _nodes[i].WorldPosition;
             WaterProbeSystem.GetWavesHeights(_nodePosArray, _waterHeights);
+            for (int i = 0; i < _nodes.Length; i++)
+            {
+                float3 p = _nodePosArray[i];
+                _waterDensities[i] = WaterProbeSystem.GetSubmergence(new Vector3(p.x, p.y, p.z), _nodes[i].BlockHeight * 0.5f);
+            }
 
             // 3. Propagation job (per-chain) → writes CurrentRPM.
             var propJob = new MechanicalPropagationJob
@@ -160,10 +166,11 @@ namespace VoxelEngine.Maritime
             {
                 Nodes = _nodes,
                 WaterHeights = _waterHeights,
+                WaterDensities = _waterDensities,
                 GridCenter = _rb.worldCenterOfMass,
                 GridLinearVelocity = _rb.linearVelocity,
                 GridAngularVelocity = _rb.angularVelocity,
-                WorldUp = new float3(0f, 1f, 0f),
+                WorldUp = VoxelEngine.WaterSim.PlanetWaterUtility.ToFloat3(VoxelEngine.WaterSim.PlanetWaterUtility.WorldUp(_rb.worldCenterOfMass)),
                 Gravity = gravity,
                 WaterDensity = s.waterDensity,
                 BuoyancyGain = s.buoyancyGain,
@@ -220,6 +227,8 @@ namespace VoxelEngine.Maritime
                 _rb.AddForce((Vector3)totalForce * s.forceGain, ForceMode.Force);
             if (math.lengthsq(totalTorque) > 1e-6f)
                 _rb.AddTorque((Vector3)totalTorque * s.torqueGain, ForceMode.Force);
+
+            WaterProbeSystem.RegisterShipWake(_rb.worldCenterOfMass, _rb.linearVelocity, _grid.BlockCount);
         }
 
         // Pre-allocated scratch so the per-tick position copy stays GC-free.
@@ -347,6 +356,7 @@ namespace VoxelEngine.Maritime
             _nodes = finalNodes;
             _nodePositions.AddRange(finalPositions);
             _waterHeights = new NativeArray<float>(finalCount, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+            _waterDensities = new NativeArray<float>(finalCount, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
             _nodePosArray = new NativeArray<float3>(finalCount, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
             _posAllocated = true;
 
@@ -583,7 +593,9 @@ namespace VoxelEngine.Maritime
         {
             float scale = _grid != null ? _grid.gravityScale : 1f;
             float mult = AtmosphereManager.GetGravityMultiplier(transform.position);
-            return Physics.gravity.magnitude * Mathf.Max(0f, scale) * Mathf.Max(0f, mult);
+            float g = VoxelEngine.Cosmos.GravityProvider.GetGravity(transform.position).magnitude;
+            if (g <= 0.001f) g = Physics.gravity.magnitude;
+            return g * Mathf.Max(0f, scale) * Mathf.Max(0f, mult);
         }
 
         private void DisposeJobData()
@@ -592,6 +604,7 @@ namespace VoxelEngine.Maritime
             {
                 if (_nodes.IsCreated) _nodes.Dispose();
                 if (_waterHeights.IsCreated) _waterHeights.Dispose();
+                if (_waterDensities.IsCreated) _waterDensities.Dispose();
                 if (_chains.IsCreated) _chains.Dispose();
             }
             if (_posAllocated && _nodePosArray.IsCreated) _nodePosArray.Dispose();

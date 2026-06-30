@@ -7,7 +7,7 @@
 
 using System;
 using UnityEngine;
-#if ENABLE_INPUT_SYSTEM
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
 using UnityEngine.InputSystem;
 #endif
 
@@ -20,7 +20,7 @@ namespace VoxelEngine.Settings
         Sprint, Crouch, Jump,
         Mine, Build, Pause, ToggleFly,
         RollLeft, RollRight,   // 6DOF flight roll (Q / E) — Space-Engineers style
-        Inventory, Interact, BuildToggleGrid, BuildRotate, Research, BuildWheel, Map, DropItem,
+        Inventory, Interact, BuildToggleGrid, BuildRotate, Research, BuildWheel, DropItem,
         Hotbar1, Hotbar2, Hotbar3, Hotbar4, Hotbar5,
         Hotbar6, Hotbar7, Hotbar8, Hotbar9, Hotbar0,
         EnterCockpit, ExitCockpit
@@ -139,7 +139,7 @@ namespace VoxelEngine.Settings
             InputAction.BuildRotate     => "R",
             InputAction.Research        => "Y",
             InputAction.BuildWheel      => "B",
-            InputAction.Map             => "M",
+            
             InputAction.DropItem        => "O",
             InputAction.Hotbar1         => "Digit1",
             InputAction.Hotbar2         => "Digit2",
@@ -245,7 +245,7 @@ namespace VoxelEngine.Settings
         // ============================================================
         //  Input helpers — exception-proof. Anything weird returns false.
         // ============================================================
-#if ENABLE_INPUT_SYSTEM
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
         public static bool IsHeld(InputAction a)        => Read(a, false);
         public static bool WasPressed(InputAction a)    => Read(a, true);
 

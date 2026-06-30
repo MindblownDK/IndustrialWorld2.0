@@ -35,9 +35,9 @@ namespace VoxelEngine.Cosmos
         [Tooltip("MeshRenderer for the LOD sphere. Auto-created if missing.")]
         public MeshRenderer meshRenderer;
 
-        [Range(16, 256)]
+        [Range(16, 512)]
         [Tooltip("Icosphere subdivision level (higher = smoother from space, more verts).")]
-        public int resolution = 48;
+        public int resolution = 128;
 
         [Tooltip("Optional biome registry for accurate surface colours.")]
         public BiomeRegistry biomeRegistry;
