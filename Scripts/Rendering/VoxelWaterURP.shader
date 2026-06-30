@@ -1,16 +1,3 @@
-// Assets/Scripts/VoxelEngine/Rendering/VoxelWaterURP.shader
-//
-// V7: Shore-absorption opacity fix for "double layer" + depth-based shore foam.
-//
-// The double-layer artifact is caused by terrain mesh faces being visible through
-// semi-transparent water at the shoreline. The fix: water becomes OPAQUE when the
-// terrain below is very close (depthDiff < ~1.5 voxels). This mimics real water
-// where shallow shoreline water appears opaque due to foam, sediment, and viewing angle.
-// Deep water retains transparency so the ocean floor is visible.
-//
-// Depth-based shore foam is re-introduced with a minimum-depth threshold (0.08)
-// to avoid chunk-boundary artifacts where the depth buffer may be unreliable.
-
 Shader "VoxelEngine/VoxelWaterURP"
 {
     Properties
@@ -20,13 +7,20 @@ Shader "VoxelEngine/VoxelWaterURP"
         _DeepColor    ("Deep",    Color) = (0.01, 0.06, 0.22, 0.97)
         _FoamColor    ("Foam",    Color) = (0.92, 0.96, 1.00, 0.88)
 
-        [Header(Ocean Waves)]
-        _WaveAmp   ("Wave Amplitude", Range(0, 1.2)) = 0.35
-        _WaveFreq  ("Wave Frequency", Range(0.05, 4)) = 0.55
-        _WaveSpeed ("Wave Speed", Range(0, 3)) = 0.72
+        [Header(Planet Waves)]
+        _DeepWaveAmplitude ("Deep Wave Amplitude", Range(0, 2)) = 0.85
+        _DeepWaveFrequency ("Deep Wave Frequency", Range(0.01, 2)) = 0.22
+        _DeepWaveSpeed     ("Deep Wave Speed", Range(0, 3)) = 0.55
+        _SecondaryWaveAmplitude ("Secondary Wave Amplitude", Range(0, 1)) = 0.35
+        _SecondaryWaveFrequency ("Secondary Wave Frequency", Range(0.01, 4)) = 0.47
+        _SecondaryWaveSpeed     ("Secondary Wave Speed", Range(0, 3)) = 0.91
+        _ShallowWaveAmplitude   ("Shallow Wave Amplitude", Range(0, 0.5)) = 0.16
+        _ShallowWaveFrequency   ("Shallow Wave Frequency", Range(0.1, 6)) = 1.65
+        _ShallowWaveSpeed       ("Shallow Wave Speed", Range(0, 4)) = 1.8
         _WaveChop  ("Wave Chop", Range(0, 1)) = 0.28
         _PlanetWaveBlend ("Planet Radial Wave Blend", Range(0, 1)) = 1
         _TideStrength ("Moon Tide Strength", Range(0, 0.6)) = 0.22
+        _ShoreBlendDistance ("Shore Blend Distance", Range(0.1, 8)) = 2.5
 
         [Header(Surface Detail)]
         _NormalScale        ("Normal Strength", Range(0, 3)) = 1.4
@@ -76,8 +70,10 @@ Shader "VoxelEngine/VoxelWaterURP"
 
             CBUFFER_START(UnityPerMaterial)
                 float4 _ShallowColor, _DeepColor, _FoamColor;
-                float  _WaveAmp, _WaveFreq, _WaveSpeed, _WaveChop;
-                float  _PlanetWaveBlend, _TideStrength;
+                float  _DeepWaveAmplitude, _DeepWaveFrequency, _DeepWaveSpeed;
+                float  _SecondaryWaveAmplitude, _SecondaryWaveFrequency, _SecondaryWaveSpeed;
+                float  _ShallowWaveAmplitude, _ShallowWaveFrequency, _ShallowWaveSpeed;
+                float  _WaveChop, _PlanetWaveBlend, _TideStrength, _ShoreBlendDistance;
                 float  _NormalScale;
                 float  _Gloss, _FresnelPower, _RefractionStrength, _CausticsIntensity;
                 float  _DepthFade;
@@ -103,35 +99,45 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float  fog    : TEXCOORD2;
                 float4 scrPos : TEXCOORD3;
                 float2 flowUV : TEXCOORD4;
+                float4 data   : TEXCOORD5;
             };
 
             float Hash21(float2 p) { p = frac(p * float2(123.34, 456.21)); p += dot(p, p + 45.32); return frac(p.x * p.y); }
-
             float ValueNoise(float2 p)
             {
                 float2 i = floor(p); float2 f = frac(p); f = f * f * (3.0 - 2.0 * f);
                 return lerp(lerp(Hash21(i), Hash21(i + float2(1,0)), f.x), lerp(Hash21(i + float2(0,1)), Hash21(i + float2(1,1)), f.x), f.y);
             }
-
             float FBM(float2 p) { float v = 0; float a = 0.5; [unroll] for (int i = 0; i < 4; i++) { v += ValueNoise(p) * a; p = p * 2.03 + 17.1; a *= 0.5; } return v; }
             float FBM6(float2 p) { float v = 0; float a = 0.5; [unroll] for (int i = 0; i < 6; i++) { v += ValueNoise(p) * a; p = p * 2.03 + 17.1; a *= 0.5; } return v; }
 
             float3 Gerstner(float2 xz, float2 dir, float amp, float freq, float speed, float chop, float t)
-            { dir = normalize(dir); float phase = dot(xz, dir) * freq + t * speed; float s, c; sincos(phase, s, c); return float3(dir.x * amp * c * chop, amp * s, dir.y * amp * c * chop); }
+            {
+                dir = normalize(dir);
+                float phase = dot(xz, dir) * freq + t * speed;
+                float s, c; sincos(phase, s, c);
+                return float3(dir.x * amp * c * chop, amp * s, dir.y * amp * c * chop);
+            }
 
-            float3 PlanetWave(float3 worldPos, float3 radialUp, float2 flow, float amp, float freq, float speed, float chop, float t)
+            float3 PlanetWave(float3 worldPos, float3 radialUp, float2 flow, float deepAmp, float shoreAtten, float tideMask, float t)
             {
                 float3 tangentA = cross(radialUp, float3(0,1,0));
                 if (dot(tangentA, tangentA) < 0.001) tangentA = cross(radialUp, float3(0,0,1));
                 tangentA = normalize(tangentA);
                 float3 tangentB = normalize(cross(radialUp, tangentA));
                 float2 uv = float2(dot(worldPos, tangentA), dot(worldPos, tangentB));
-                float tide = 1.0 + (flow.x - flow.y) * _TideStrength;
-                float3 local = 0;
-                local += Gerstner(uv, float2( 1.00,  0.23), amp * tide,        freq,       speed,        chop, t);
-                local += Gerstner(uv, float2(-0.42,  0.91), amp * tide * 0.52, freq * 1.7, speed * 1.31, chop, t);
-                local += Gerstner(uv, float2( 0.18, -0.98), amp * tide * 0.24, freq * 3.1, speed * 0.76, chop, t);
-                local += Gerstner(uv, float2( 0.72,  0.69), amp * tide * 0.12, freq * 5.4, speed * 1.9,  chop, t);
+                float tide = 1.0 + tideMask * _TideStrength;
+
+                float3 deep = 0;
+                deep += Gerstner(uv, float2( 1.00,  0.23), deepAmp * tide, _DeepWaveFrequency, _DeepWaveSpeed, _WaveChop, t);
+                deep += Gerstner(uv, float2(-0.42,  0.91), _SecondaryWaveAmplitude * tide, _SecondaryWaveFrequency, _SecondaryWaveSpeed, _WaveChop, t);
+                deep += Gerstner(uv, float2( 0.18, -0.98), _SecondaryWaveAmplitude * 0.45 * tide, _SecondaryWaveFrequency * 2.4, _SecondaryWaveSpeed * 0.9, _WaveChop, t);
+
+                float shallowPhase = dot(uv, normalize(float2(0.7, -0.3))) * _ShallowWaveFrequency + t * _ShallowWaveSpeed;
+                float shallow = sin(shallowPhase) * _ShallowWaveAmplitude;
+                float3 shallowVec = radialUp * shallow;
+
+                float3 local = lerp(shallowVec, deep, shoreAtten);
                 return radialUp * local.y + tangentA * local.x + tangentB * local.z;
             }
 
@@ -159,17 +165,20 @@ Shader "VoxelEngine/VoxelWaterURP"
 
                 float3 radialUp = normalize(worldPos);
                 float topFacing = saturate(max(i.normOS.y, dot(normalize(i.normOS), radialUp)));
+                float shoreDepthMask = saturate(i.color.r);
+                float tideMask = i.color.g;
+                float shoreAtten = saturate(shoreDepthMask * (_ShoreBlendDistance / max(_ShoreBlendDistance, 0.0001)));
+
                 if (topFacing > 0.45)
                 {
-                    float shoreAtten = saturate(i.color.r);
-                    float t = _Time.y; float amp = _WaveAmp * topFacing * shoreAtten; float3 w = 0;
+                    float t = _Time.y;
+                    float deepAmp = _DeepWaveAmplitude * topFacing;
                     float3 flatW = 0;
-                    flatW += Gerstner(worldPos.xz, float2( 1.00,  0.23), amp,        _WaveFreq,        _WaveSpeed,        _WaveChop, t);
-                    flatW += Gerstner(worldPos.xz, float2(-0.42,  0.91), amp * 0.52, _WaveFreq * 1.7,  _WaveSpeed * 1.31, _WaveChop, t);
-                    flatW += Gerstner(worldPos.xz, float2( 0.18, -0.98), amp * 0.24, _WaveFreq * 3.1,  _WaveSpeed * 0.76, _WaveChop, t);
-                    flatW += Gerstner(worldPos.xz, float2( 0.72,  0.69), amp * 0.12, _WaveFreq * 5.4,  _WaveSpeed * 1.9,  _WaveChop, t);
-                    float3 planetW = PlanetWave(worldPos, radialUp, i.uv2, amp, _WaveFreq, _WaveSpeed, _WaveChop, t);
-                    w = lerp(flatW, planetW, _PlanetWaveBlend);
+                    flatW += Gerstner(worldPos.xz, float2( 1.00,  0.23), deepAmp, _DeepWaveFrequency, _DeepWaveSpeed, _WaveChop, t);
+                    flatW += Gerstner(worldPos.xz, float2(-0.42,  0.91), _SecondaryWaveAmplitude, _SecondaryWaveFrequency, _SecondaryWaveSpeed, _WaveChop, t);
+                    flatW += Gerstner(worldPos.xz, float2( 0.18, -0.98), _SecondaryWaveAmplitude * 0.45, _SecondaryWaveFrequency * 2.4, _SecondaryWaveSpeed * 0.9, _WaveChop, t);
+                    float3 planetW = PlanetWave(worldPos, radialUp, i.uv2, deepAmp, shoreAtten, tideMask, t);
+                    float3 w = lerp(flatW, planetW, _PlanetWaveBlend);
                     posOS += w;
                     worldPos = TransformObjectToWorld(posOS);
                 }
@@ -180,6 +189,7 @@ Shader "VoxelEngine/VoxelWaterURP"
                 o.fog    = ComputeFogFactor(o.posCS.z);
                 o.scrPos = ComputeScreenPos(o.posCS);
                 o.flowUV = i.uv2;
+                o.data = float4(shoreDepthMask, tideMask, topFacing, 0);
                 return o;
             }
 
@@ -190,18 +200,17 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float3 geoN = normalize(i.normWS);
                 float2 flowDir = i.flowUV;
                 float flowSpeed = length(flowDir);
+                float shoreDepthMask = i.data.x;
+                float tideMask = i.data.y;
 
-                // Determine if this is a side face (curtain)
                 float radialFacing = abs(dot(geoN, normalize(i.posWS)));
                 bool isSideFace = abs(geoN.y) < 0.5 && radialFacing < 0.5;
 
-                // Detail normals — reduced on side faces
                 float3 detailN = FlowMappedNormal(i.posWS.xz, flowDir, flowSpeed, t);
                 float3 N = normalize(float3(detailN.x, 1.0, detailN.z));
                 float blendFactor = isSideFace ? 0.15 : saturate(abs(geoN.y));
                 N = normalize(lerp(geoN, N, blendFactor));
 
-                // Depth & refraction
                 float2 screenUV = i.scrPos.xy / max(i.scrPos.w, 0.0001);
                 float2 refractUV = screenUV + N.xz * _RefractionStrength;
                 float rawDepth = SampleSceneDepth(screenUV);
@@ -210,61 +219,34 @@ Shader "VoxelEngine/VoxelWaterURP"
                 bool hasValidDepth = rawDepth > 0.00001f && rawDepth < 0.99999f;
                 float depthDiff = hasValidDepth ? max(0, sceneEyeDepth - waterEyeDepth) : 15.0f;
                 float deep01 = saturate(depthDiff / _DepthFade);
+                float shoreAtten = saturate(shoreDepthMask);
                 float3 refracted = SampleSceneColor(refractUV).rgb;
                 if (length(refracted) < 0.001f) refracted = _DeepColor.rgb;
 
-                // ═══════════════════════════════════════════════════════════════
-                //  SHORE ABSORPTION — the KEY fix for "double layer"
-                //
-                //  When terrain is very close below the water surface (shallow
-                //  shoreline), the water becomes OPAQUE. This hides the terrain
-                //  mesh face that would otherwise be visible through transparent
-                //  water, creating the "double layer" artifact.
-                //
-                //  Real water behaves this way: shoreline water appears opaque
-                //  due to foam, sediment, and shallow viewing angle absorption.
-                // ═══════════════════════════════════════════════════════════════
                 float shoreFactor = saturate(1.0 - depthDiff / _ShoreOpaqueDepth);
-                // shoreFactor: 1.0 at waterline (terrain touching surface)
-                //              0.0 at depthDiff >= _ShoreOpaqueDepth
-
-                // Water color — side faces are deeper
                 float sideDeepBoost = isSideFace ? 0.4 : 0.0;
+                float tidalTint = saturate(tideMask) * 0.08;
                 float4 waterCol = lerp(_ShallowColor, _DeepColor, saturate(deep01 + sideDeepBoost));
+                waterCol.rgb = lerp(waterCol.rgb, waterCol.rgb * float3(0.82, 0.92, 1.08), tidalTint);
 
-                // ═══════════════════════════════════════════════════════════════
-                //  FOAM
-                // ═══════════════════════════════════════════════════════════════
                 float foam = 0.0;
-
                 if (!isSideFace)
                 {
-                    // --- Depth-based shore foam ---
-                    // Only apply when depthDiff is in a valid range.
-                    // depthDiff < 0.08 is rejected to avoid chunk-boundary artifacts
-                    // where the depth buffer may be unreliable (seam between chunks).
                     float validDepth = step(0.08, depthDiff);
                     float shoreFoamFade = saturate(1.0 - depthDiff / _ShoreFoamWidth);
-                    float shoreFoam = shoreFoamFade * validDepth * _ShoreFoamIntensity;
-
-                    // --- Crest foam (open water) ---
-                    float crest = saturate((FBM(i.posWS.xz * 0.22 + t * 0.075) - 0.58) * 3.0) * saturate(_WaveAmp * 2.5);
+                    float shoreFoam = shoreFoamFade * validDepth * _ShoreFoamIntensity * (1.0 - shoreAtten + 0.15);
+                    float crest = saturate((FBM(i.posWS.xz * 0.22 + t * 0.075) - 0.58) * 3.0) * saturate(_DeepWaveAmplitude * 1.75);
                     float lace = FBM(i.posWS.xz * 0.85 + float2(t * 0.12, -t * 0.08));
                     float crestFoam = crest * lace * 0.6;
-
-                    // --- Flow foam ---
                     float flowFoam = saturate(flowSpeed * 3.0 - 0.2) * _FlowFoamStrength;
                     float2 foamScrollUV = i.posWS.xz + normalize(flowDir + 0.001) * t * 0.3;
                     flowFoam *= saturate(FBM(foamScrollUV * 1.5) * 1.5);
-
                     foam = saturate(shoreFoam + crestFoam + flowFoam);
                 }
 
-                // Fresnel
                 float NdV = saturate(dot(V, N));
                 float fresnel = pow(1.0 - NdV, _FresnelPower);
 
-                // Lighting
                 Light mainLight = GetMainLight();
                 float3 L = normalize(mainLight.direction);
                 float3 H = normalize(V + L);
@@ -272,17 +254,11 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float specTight = pow(saturate(dot(N, H)), 2400.0) * 1.2;
                 float glitterMask = isSideFace ? 0.0 : pow(saturate(FBM6(i.posWS.xz * 2.8 + t * 0.15)), 8.0);
                 float glitter = pow(saturate(dot(N, H)), 3200.0) * glitterMask * 2.5;
-
-                // SSS — only on top faces
                 float sssWrap = isSideFace ? 0.0 : pow(saturate(dot(V, -L)), 3.0) * (1.0 - deep01) * _SSSIntensity;
                 float3 sssColor = mainLight.color.rgb * sssWrap * float3(0.12, 0.75, 0.55);
-
-                // Caustics — only on top faces
                 float caustic = isSideFace ? 0.0 : pow(saturate(FBM(i.posWS.xz * 0.65 + N.xz * 1.8 - t * 0.18)), 3.0) * _CausticsIntensity * (1.0 - deep01);
 
-                // Compose color
                 float refractWeight = (1.0 - deep01) * (1.0 - fresnel) * 0.55;
-                // Reduce refraction at shoreline (opaque water doesn't refract)
                 refractWeight *= (1.0 - shoreFactor * 0.9);
                 float3 col = lerp(waterCol.rgb, refracted, refractWeight);
                 float3 sky = SampleSH(N) * 0.85 + mainLight.color.rgb * 0.10;
@@ -292,29 +268,18 @@ Shader "VoxelEngine/VoxelWaterURP"
                 col += caustic * float3(0.45, 0.95, 1.0);
                 col = lerp(col, _FoamColor.rgb, foam * _FoamColor.a);
 
-                // ═══════════════════════════════════════════════════════════════
-                //  ALPHA — shore absorption is the double-layer fix
-                // ═══════════════════════════════════════════════════════════════
                 float alpha;
                 if (isSideFace)
                 {
-                    // Side curtains: high opacity (water body seen from side)
                     alpha = lerp(0.88, 0.97, deep01);
-                    // Shore absorption on side faces too
                     alpha = lerp(alpha, 0.99, shoreFactor * 0.7);
                 }
                 else
                 {
-                    // Top surface
                     alpha = waterCol.a;
-                    // Shore absorption: when terrain is close below, become OPAQUE
-                    // This is what hides the "double layer" at the shoreline
                     alpha = lerp(alpha, 0.99, shoreFactor * 0.85);
-                    // Fresnel boost
                     alpha = lerp(alpha, min(alpha + 0.12, 0.99), fresnel);
-                    // Minimum opacity
                     alpha = max(alpha, 0.82);
-                    // Foam makes it more opaque
                     alpha = lerp(alpha, min(alpha + foam * 0.3, 0.99), foam);
                 }
 

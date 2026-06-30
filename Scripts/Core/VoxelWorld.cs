@@ -648,18 +648,23 @@ namespace VoxelEngine.Core
             c.SetVoxelLocal(lx, ly, lz, v);
             c.isModified = true;
 
-            // Wake fluid sim — if terrain was removed near water, water should flow.
-            // Wake a 3x3x3 chunk neighbourhood because mined holes often sit just
-            // below/next to water in another chunk; otherwise the source chunk may stay asleep.
-            var fm = WaterSim.FluidManager.Instance;
-            if (fm != null)
+            // Wake fluid sim — but only when the edited voxel or its immediate neighbours
+            // are already fluid-adjacent. This prevents every mining action on dry land from
+            // instantly turning into a global "water wants to flood here" hole search.
+            bool nearFluid = VoxelEngine.WaterSim.FluidMaterialUtility.IsFluid(v)
+                             || HasFluidAdjacent(worldVoxel);
+            if (nearFluid)
             {
-                for (int wz = -1; wz <= 1; wz++)
-                for (int wy = -1; wy <= 1; wy++)
-                for (int wx = -1; wx <= 1; wx++)
-                    fm.MarkActive(chunkCoord + new Vector3Int(wx, wy, wz));
+                var fm = WaterSim.FluidManager.Instance;
+                if (fm != null)
+                {
+                    for (int wz = -1; wz <= 1; wz++)
+                    for (int wy = -1; wy <= 1; wy++)
+                    for (int wx = -1; wx <= 1; wx++)
+                        fm.MarkActive(chunkCoord + new Vector3Int(wx, wy, wz));
+                }
+                WaterSim.WaterMeshBuilder.Schedule(c);
             }
-            WaterSim.WaterMeshBuilder.Schedule(c);
 
             // Mirror the write into the padded border of any neighbour chunks that share
             // this voxel, otherwise their meshing job would see stale data and the seam

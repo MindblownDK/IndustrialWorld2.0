@@ -38,7 +38,6 @@ namespace VoxelEngine.Generation
             int baseY = chunk.coord.y * S;
             int baseZ = chunk.coord.z * S;
 
-            // Scan for CrudeOil voxels — stride of 4 for perf, one reservoir per chunk max.
             bool foundOil = false;
             Vector3Int oilCenter = Vector3Int.zero;
 
@@ -56,33 +55,26 @@ namespace VoxelEngine.Generation
 
             if (!foundOil) return;
 
-            // Deterministic rarity — roughly 1 reservoir per 14 candidate chunks
             int hash = oilCenter.x * 73856093 ^ oilCenter.y * 19349663 ^ oilCenter.z * 83492791;
             int rarity = Mathf.Abs(hash % 14);
             if (rarity != 0) return;
             System.Random rng = new System.Random(hash);
 
-            int pocketRadius = 8 + rng.Next(5);  // 8–12 voxel radius
-            int funnelTopRadius = 2 + rng.Next(2); // 2–3 at the widest (surface pool)
-            int funnelBottomRadius = 1;            // narrow at the bottom (shaft)
+            int pocketRadius = 8 + rng.Next(5);
+            int funnelTopRadius = 2 + rng.Next(2);
+            int funnelBottomRadius = 1;
 
-            // 1) Find the surface Y above the oil marker
             int surfaceY = FindSurface(world, oilCenter.x, oilCenter.z, oilCenter.y);
             if (surfaceY <= oilCenter.y) return;
 
-            // 2) Carve the surface seep/pool — circular shallow depression
-            int poolRadius = funnelTopRadius + 1;
-            CarveSurfacePool(world, oilCenter.x, surfaceY, oilCenter.z, poolRadius, rng);
+            int minShaftDepth = 6;
+            int pocketTopY = Mathf.Min(oilCenter.y + pocketRadius / 2, surfaceY - minShaftDepth);
+            if (pocketTopY >= surfaceY - 1) pocketTopY = surfaceY - minShaftDepth;
+            if (pocketTopY <= oilCenter.y - 1) pocketTopY = oilCenter.y + 1;
 
-            // 3) Carve the funnel from surface down to pocket top
-            //    Funnel tapers from funnelTopRadius at the surface to funnelBottomRadius at the pocket
-            int pocketTopY = oilCenter.y + pocketRadius / 2;
-            int funnelHeight = surfaceY - pocketTopY;
-            CarveFunnel(world, oilCenter.x, oilCenter.z, surfaceY - 1, pocketTopY,
-                funnelTopRadius, funnelBottomRadius);
-
-            // 4) Carve the deep underground pocket (sphere of air + fill with oil)
-            CarveAndFillPocket(world, oilCenter, pocketRadius);
+            CarveSurfacePool(world, oilCenter.x, surfaceY, oilCenter.z, funnelTopRadius + 1, rng);
+            CarveFunnel(world, oilCenter.x, oilCenter.z, surfaceY - 1, pocketTopY, funnelTopRadius, funnelBottomRadius);
+            CarveAndFillPocket(world, new Vector3Int(oilCenter.x, oilCenter.y, oilCenter.z), pocketRadius);
         }
 
         /// <summary>Carve a visible surface pool at the seep point.</summary>

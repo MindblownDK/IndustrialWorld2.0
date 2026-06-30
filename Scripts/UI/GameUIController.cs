@@ -165,18 +165,6 @@ namespace VoxelEngine.UI
             {
                 recipeRegistry = Resources.Load<Crafting.RecipeRegistry>("RecipeRegistry");
             }
-#if UNITY_EDITOR
-            if (recipeRegistry == null)
-            {
-                var guids = UnityEditor.AssetDatabase.FindAssets("t:RecipeRegistry");
-                if (guids != null && guids.Length > 0)
-                {
-                    var path = UnityEditor.AssetDatabase.GUIDToAssetPath(guids[0]);
-                    recipeRegistry = UnityEditor.AssetDatabase.LoadAssetAtPath<Crafting.RecipeRegistry>(path);
-                    Debug.Log("[GameUI] Auto-found RecipeRegistry at " + path);
-                }
-            }
-#endif
             if (recipeRegistry == null)
                 Debug.LogWarning("[GameUI] No RecipeRegistry assigned — crafting will be empty. " +
                                  "Run Tools > Voxel Engine > Setup Wizard > Step 4 to create one, " +

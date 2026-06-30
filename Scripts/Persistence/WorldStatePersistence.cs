@@ -73,23 +73,8 @@ namespace VoxelEngine.Persistence
         private void BuildItemCache()
         {
             _itemById.Clear(); _blockById.Clear(); _tieredById.Clear();
-#if UNITY_EDITOR
-            // In-editor: scan every ItemDefinition / BlockItem / TieredBlockDefinition asset.
-            foreach (var guid in UnityEditor.AssetDatabase.FindAssets("t:ItemDefinition"))
-            {
-                var path = UnityEditor.AssetDatabase.GUIDToAssetPath(guid);
-                var item = UnityEditor.AssetDatabase.LoadAssetAtPath<ItemDefinition>(path);
-                if (item != null && !string.IsNullOrEmpty(item.itemId)) _itemById[item.itemId] = item;
-                if (item is BlockItem bi && !string.IsNullOrEmpty(bi.itemId)) _blockById[bi.itemId] = bi;
-            }
-            foreach (var guid in UnityEditor.AssetDatabase.FindAssets("t:TieredBlockDefinition"))
-            {
-                var path = UnityEditor.AssetDatabase.GUIDToAssetPath(guid);
-                var def = UnityEditor.AssetDatabase.LoadAssetAtPath<TieredBlockDefinition>(path);
-                if (def != null) _tieredById[def.family.ToString()] = def;
-            }
-#else
-            // Builds: rely on a Resources/Items + Resources/Tiered folder if the user copies them.
+            // Runtime-safe asset cache: rely on Resources-visible assets only.
+            // This avoids hard dependencies on editor-only assemblies from the runtime asmdef.
             foreach (var it in Resources.LoadAll<ItemDefinition>(""))
             {
                 if (!string.IsNullOrEmpty(it.itemId)) _itemById[it.itemId] = it;
@@ -97,7 +82,6 @@ namespace VoxelEngine.Persistence
             }
             foreach (var def in Resources.LoadAll<TieredBlockDefinition>(""))
                 _tieredById[def.family.ToString()] = def;
-#endif
         }
 
         // ============================================================

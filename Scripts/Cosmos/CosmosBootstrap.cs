@@ -291,11 +291,6 @@ namespace VoxelEngine.Cosmos
             if (planetTemplate != null) return;
 
             planetTemplate = Resources.Load<PlanetTemplate>("Planet_Earth");
-#if UNITY_EDITOR
-            if (planetTemplate == null)
-                planetTemplate = UnityEditor.AssetDatabase.LoadAssetAtPath<PlanetTemplate>(
-                    "Assets/VoxelEngineAssets/Planets/Planet_Earth.asset");
-#endif
             if (planetTemplate == null)
             {
                 planetTemplate = CreateDefaultEarthTemplate();
@@ -327,12 +322,6 @@ namespace VoxelEngine.Cosmos
                     if (terrainMaterial  == null) terrainMaterial  = flat.terrainMaterial;
                 }
             }
-#if UNITY_EDITOR
-            if (materialRegistry == null)
-                materialRegistry = UnityEditor.AssetDatabase.LoadAssetAtPath<MaterialRegistry>("Assets/VoxelEngineAssets/MaterialRegistry.asset");
-            if (terrainMaterial == null)
-                terrainMaterial  = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>("Assets/VoxelEngineAssets/Materials/Mat_Terrain.mat");
-#endif
         }
 
         /// <summary>Build a complete, ready-to-play Earth PlanetTemplate in memory.</summary>
