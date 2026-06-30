@@ -110,7 +110,6 @@ MeshRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
-  m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
 --- !u!1 &3384079488839097377
 GameObject:
@@ -121,7 +120,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 7007810178386416013}
-  - component: {fileID: 7757795125382852944}
+  - component: {fileID: 2173922438031907917}
   m_Layer: 0
   m_Name: HalfWall_Iron
   m_TagString: Untagged
@@ -146,7 +145,7 @@ Transform:
   - {fileID: 2147359276341616701}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &7757795125382852944
+--- !u!114 &2173922438031907917
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -170,7 +169,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2147359276341616701}
-  - component: {fileID: 2513860702915452292}
   m_Layer: 0
   m_Name: Socket_Top
   m_TagString: Untagged
@@ -193,17 +191,3 @@ Transform:
   m_Children: []
   m_Father: {fileID: 7007810178386416013}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &2513860702915452292
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 9143843307216098361}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5af3e047d2a3f194da583311920f52ee, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.Tiered.BuildSocket
-  side: 0
-  family: 8

@@ -110,7 +110,6 @@ MeshRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
-  m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
 --- !u!1 &8584769386448305618
 GameObject:
@@ -121,7 +120,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 862756920360349359}
-  - component: {fileID: 8865704523250656596}
   m_Layer: 0
   m_Name: Socket_Top
   m_TagString: Untagged
@@ -144,20 +142,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 7532165080726616658}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &8865704523250656596
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8584769386448305618}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5af3e047d2a3f194da583311920f52ee, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.Tiered.BuildSocket
-  side: 0
-  family: 8
 --- !u!1 &9097127242720972917
 GameObject:
   m_ObjectHideFlags: 0
@@ -167,7 +151,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 7532165080726616658}
-  - component: {fileID: 6889719465545136871}
+  - component: {fileID: 6225652729250431451}
   m_Layer: 0
   m_Name: HalfWall_Steel
   m_TagString: Untagged
@@ -192,7 +176,7 @@ Transform:
   - {fileID: 862756920360349359}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &6889719465545136871
+--- !u!114 &6225652729250431451
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
