@@ -29,44 +29,42 @@ namespace VoxelEngine.EditorTools
         [MenuItem("Tools/Voxel Engine/Setup Wizard")]
         public static void Open() => GetWindow<VoxelEngineSetupWindow>("Voxel Engine Setup");
 
-        private void OnGUI()
+        private void CreateGUI()
         {
-            _scrollPos = EditorGUILayout.BeginScrollView(_scrollPos);
-            GUILayout.Label("Voxel Engine — Setup Wizard", EditorStyles.boldLabel);
-            EditorGUILayout.HelpBox(
+            rootVisualElement.Clear();
+            rootVisualElement.style.paddingLeft = 10;
+            rootVisualElement.style.paddingRight = 10;
+            rootVisualElement.style.paddingTop = 10;
+            rootVisualElement.style.paddingBottom = 10;
+
+            var scroll = new UnityEngine.UIElements.ScrollView(UnityEngine.UIElements.ScrollViewMode.Vertical);
+            scroll.style.flexGrow = 1;
+            rootVisualElement.Add(scroll);
+
+            var title = new UnityEngine.UIElements.Label("Voxel Engine — Setup Wizard");
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            title.style.fontSize = 15;
+            title.style.marginBottom = 8;
+            scroll.Add(title);
+
+            AddInfo(scroll,
                 "Click each step in order.\n" +
                 "1. Create assets — generates materials, items, planet definitions.\n" +
                 "2. Spawn manager — adds VoxelWorld + Player to the active scene.\n" +
                 "3. Build main menu scene (saves browser + new world UI).\n" +
-                "Run steps in order — most are idempotent and safe to re-run.",
-                MessageType.Info);
+                "Run steps in order — most are idempotent and safe to re-run.");
 
-            if (GUILayout.Button("1. Create All Assets", GUILayout.Height(40)))
-                CreateAllAssets();
+            AddWizardButton(scroll, "1. Create All Assets", CreateAllAssets, 40);
+            AddWizardButton(scroll, "2. Spawn Manager + Player in Scene", SpawnManagerAndPlayer, 40);
+            AddWizardButton(scroll, "3. Build Main Menu Scene", BuildMainMenuScene, 40);
+            AddWizardButton(scroll, "4. Build Crafting Content (recipes, tools, stations, blocks)", BuildCraftingContent, 40);
+            AddWizardButton(scroll, "5. Build Tiered Building Content (Rust-style: 9 families x 4 tiers + Hammer)", BuildTieredContent, 40);
+            AddWizardButton(scroll, "6. Build Power Content (4 wire tiers + Generator + Battery + Light)", BuildPowerContent, 40);
+            AddWizardButton(scroll, "7. Build Research Content (Tech tree + Science packs + Research Lab)", BuildResearchContent, 40);
+            AddWizardButton(scroll, "8. Build Fluid Content (Water bucket, tank, pump, pipes)", BuildFluidContent, 40);
 
-            if (GUILayout.Button("2. Spawn Manager + Player in Scene", GUILayout.Height(40)))
-                SpawnManagerAndPlayer();
-
-            if (GUILayout.Button("3. Build Main Menu Scene", GUILayout.Height(40)))
-                BuildMainMenuScene();
-
-            if (GUILayout.Button("4. Build Crafting Content (recipes, tools, stations, blocks)", GUILayout.Height(40)))
-                BuildCraftingContent();
-
-            if (GUILayout.Button("5. Build Tiered Building Content (Rust-style: 9 families x 4 tiers + Hammer)", GUILayout.Height(40)))
-                BuildTieredContent();
-
-            if (GUILayout.Button("6. Build Power Content (4 wire tiers + Generator + Battery + Light)", GUILayout.Height(40)))
-                BuildPowerContent();
-
-            if (GUILayout.Button("7. Build Research Content (Tech tree + Science packs + Research Lab)", GUILayout.Height(40)))
-                BuildResearchContent();
-
-            if (GUILayout.Button("8. Build Fluid Content (Water bucket, tank, pump, pipes)", GUILayout.Height(40)))
-                BuildFluidContent();
-
-            GUILayout.Space(6);
-            EditorGUILayout.HelpBox(
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
                 "Step 10 expands the game with the full Industrial content pack:\n" +
                 "  • Iron / Copper / Steel PLATES, Iron Gear, Copper Wire, Glass\n" +
                 "  • Electronic & Advanced Circuits\n" +
@@ -77,62 +75,91 @@ namespace VoxelEngine.EditorTools
                 "    Oil Extraction, Oil Refining, Plastics, Logistics Network,\n" +
                 "    Mass Storage, Crystalline Storage, Wireless Access, Quarrying,\n" +
                 "    Fluid Handling, Gas Processing, Nuclear Fission, Adv Electronics).\n" +
-                "Re-runnable. Idempotent. Always run AFTER steps 4, 6, 7.", MessageType.Info);
+                "Re-runnable. Idempotent. Always run AFTER steps 4, 6, 7.");
+            AddWizardButton(scroll, "10. Build Industrial Content (plates, oil chain, advanced recipes, full research tree)", BuildIndustrialContent, 56);
 
-            if (GUILayout.Button("10. Build Industrial Content (plates, oil chain, advanced recipes, full research tree)", GUILayout.Height(56)))
-                BuildIndustrialContent();
-
-            GUILayout.Space(6);
-            EditorGUILayout.HelpBox(
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
                 "Step 11 fills in EVERY system the research nodes were already pointing at:\n" +
                 "  • Farming  (Wheat / Corn / Carrot crops + Seeds + Foods + Hoe + Tilled Soil + Sprinkler + Harvester + cooking)\n" +
-                "  • Storage  (RAM / CPU / PSU at 4 tiers + 5 Disk tiers + ServerRack / NAS / Terminals / Importer / Exporter / Powerstation / Disk Manipulator)\n" +
+                "  • Storage  (RAM / CPU / PSU at 4 tiers + 5 Disk tiers + ServerRack / NAS / Terminals / Drawers / Displays / Importer / Exporter / Powerstation / Disk Manipulator)\n" +
                 "  • Wrench tool (universal network connector)\n" +
                 "  • Item Pipes  (Solid + Glass variants)\n" +
                 "  • Quarry + Upgrades (Range / Speed / Efficiency)\n" +
                 "  • Gas  (Electrolyser / Hydrogen Engine / Gas Tank / Gas Pipe Solid+Glass + Hydrogen / Oxygen markers)\n" +
                 "  • Nuclear  (Enriched Fuel Rod / LEU Pellet / Depleted Uranium / Spent Fuel Rod / High-Level Waste +\n" +
                 "              Uranium Processor / Reactor Core / Steam Turbine / Portable Reactor / Waste Reprocessor)\n" +
-                "  • New research node:  Farming (gates seeds/farm-plot/sprinkler/harvester/cooking)\n" +
-                "Re-runnable. Idempotent. Run AFTER steps 4, 6, 7, 8, 10.", MessageType.Info);
+                "  • New research node: Farming (gates seeds/farm-plot/sprinkler/harvester/cooking)\n" +
+                "Re-runnable. Idempotent. Run AFTER steps 4, 6, 7, 8, 10.");
+            AddWizardButton(scroll, "11. Build Survival + Industrial Logistics Content\n(Farming + Storage + Quarry + Gas + Nuclear)", BuildSurvivalAndLogisticsContent, 72);
 
-            if (GUILayout.Button("11. Build Survival + Industrial Logistics Content\n(Farming + Storage + Quarry + Gas + Nuclear)", GUILayout.Height(72)))
-                BuildSurvivalAndLogisticsContent();
-
-            GUILayout.Space(6);
-            EditorGUILayout.HelpBox(
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
                 "Step 12 builds the Grid System (Ships/Vehicles):\n" +
                 "  • Cockpit (Small/Large)\n" +
                 "  • Thrusters, Gyroscopes\n" +
                 "  • Grid Batteries, Reactors\n" +
                 "  • Landing Gear, Docking Ports\n" +
                 "  • Grid-based Tools (Drills, Grinders)\n" +
-                "Re-runnable. Idempotent. Run AFTER step 10.", MessageType.Info);
+                "Re-runnable. Idempotent. Run AFTER step 10.");
+            AddWizardButton(scroll, "12. Build Grid System Content (All Ship/Vehicle Blocks: Cockpit, Thruster, Battery, Armor, Drill, Grinder, Refinery, Weapon)", BuildGridSystemContent, 56);
 
-            if (GUILayout.Button("12. Build Grid System Content (All Ship/Vehicle Blocks: Cockpit, Thruster, Battery, Armor, Drill, Grinder, Refinery, Weapon)", GUILayout.Height(56)))
-                BuildGridSystemContent();
-
-            GUILayout.Space(6);
-            EditorGUILayout.HelpBox(
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
                 "Step 13 builds the MARITIME PROPULSION & MECHANICAL NETWORK:\n" +
                 "  • Hull materials (Untreated Wood, Tar Plank, Iron Hull, Balsa Wood)\n" +
                 "  • Propulsion (Waterwheel, Drive Shaft, Propellers, Engines, Turbo, Gearbox, Generator)\n" +
                 "  • Control (Helm) + Utility (Bilge Pump, Exhaust Pipe)\n" +
                 "  • 4-tier \"Maritime Engineering\" research tree\n" +
                 "  • MaritimeSettings balance asset\n" +
-                "Re-runnable. Idempotent. Run AFTER step 12.", MessageType.Info);
+                "Re-runnable. Idempotent. Run AFTER step 12.");
+            AddWizardButton(scroll, "13. Build Maritime Content (Hulls, Engines, Shafts, Propellers, Turbo, Helm + Maritime Research Tree)", BuildMaritimeContent, 56);
+            AddWizardButton(scroll, "14. Build Floodlight Content (Stationary & Grid blocks, recipes, research)", BuildFloodlightContent, 40);
+            AddWizardButton(scroll, "15. Build Wind Power Content (Standard, Helix, Monopoles, Research)", BuildWindmillContent, 40);
+            AddSpacer(scroll, 20);
+        }
 
-            if (GUILayout.Button("13. Build Maritime Content (Hulls, Engines, Shafts, Propellers, Turbo, Helm + Maritime Research Tree)", GUILayout.Height(56)))
-                BuildMaritimeContent();
+        private static void AddInfo(UnityEngine.UIElements.VisualElement parent, string text)
+        {
+            var box = new UnityEngine.UIElements.Label(text);
+            box.style.whiteSpace = UnityEngine.UIElements.WhiteSpace.Normal;
+            box.style.backgroundColor = new Color(0.18f, 0.20f, 0.23f, 0.35f);
+            box.style.borderTopWidth = 1; box.style.borderBottomWidth = 1;
+            box.style.borderLeftWidth = 1; box.style.borderRightWidth = 1;
+            box.style.borderTopColor = new Color(0.35f, 0.38f, 0.44f, 0.8f);
+            box.style.borderBottomColor = new Color(0.35f, 0.38f, 0.44f, 0.8f);
+            box.style.borderLeftColor = new Color(0.35f, 0.38f, 0.44f, 0.8f);
+            box.style.borderRightColor = new Color(0.35f, 0.38f, 0.44f, 0.8f);
+            box.style.paddingTop = 6; box.style.paddingBottom = 6;
+            box.style.paddingLeft = 8; box.style.paddingRight = 8;
+            box.style.marginBottom = 6;
+            parent.Add(box);
+        }
 
-            if (GUILayout.Button("14. Build Floodlight Content (Stationary & Grid blocks, recipes, research)", GUILayout.Height(40)))
-                BuildFloodlightContent();
+        private static void AddSpacer(UnityEngine.UIElements.VisualElement parent, float height)
+        {
+            var spacer = new UnityEngine.UIElements.VisualElement();
+            spacer.style.height = height;
+            parent.Add(spacer);
+        }
 
-            if (GUILayout.Button("15. Build Wind Power Content (Standard, Helix, Monopoles, Research)", GUILayout.Height(40)))
-                BuildWindmillContent();
+        private static void AddWizardButton(UnityEngine.UIElements.VisualElement parent, string text, System.Action action, float height)
+        {
+            var button = new UnityEngine.UIElements.Button(() => QueueWizardAction(action)) { text = text };
+            button.style.height = height;
+            button.style.marginBottom = 4;
+            button.style.unityFontStyleAndWeight = FontStyle.Bold;
+            parent.Add(button);
+        }
 
-            GUILayout.Space(20);
-            EditorGUILayout.EndScrollView();
+        private static void QueueWizardAction(System.Action action)
+        {
+            if (action == null) return;
+            EditorApplication.delayCall += () =>
+            {
+                try { action.Invoke(); }
+                catch (System.Exception ex) { Debug.LogException(ex); }
+            };
         }
 
         // ===== Asset creation =====
@@ -586,6 +613,8 @@ namespace VoxelEngine.EditorTools
             }
             string[] themeCandidates =
             {
+                "Assets/UI Toolkit/UnityThemes/UnityDefaultRuntimeTheme.tss",
+                "Assets/Resources/UnityDefaultRuntimeTheme.tss",
                 "Packages/com.unity.ui/PackageResources/StyleSheets/Generated/Default/UnityDefaultRuntimeTheme.tss",
                 "Packages/com.unity.modules.uielements/PackageResources/StyleSheets/Generated/Default/UnityDefaultRuntimeTheme.tss"
             };
@@ -594,6 +623,16 @@ namespace VoxelEngine.EditorTools
             {
                 theme = AssetDatabase.LoadAssetAtPath<UnityEngine.UIElements.ThemeStyleSheet>(path);
                 if (theme != null) break;
+            }
+            if (theme == null)
+            {
+                string[] themeGuids = AssetDatabase.FindAssets("UnityDefaultRuntimeTheme t:ThemeStyleSheet");
+                foreach (var guid in themeGuids)
+                {
+                    string path = AssetDatabase.GUIDToAssetPath(guid);
+                    theme = AssetDatabase.LoadAssetAtPath<UnityEngine.UIElements.ThemeStyleSheet>(path);
+                    if (theme != null) break;
+                }
             }
             if (theme != null)
             {
@@ -4071,6 +4110,26 @@ root =>
             var psu500 = MakeComp("PSU_500", "PSU (500 W)",      VoxelEngine.Storage.ComponentType.PSU, 500f, new Color(0.85f, 0.65f, 0.20f), "Powers up to 500 W of storage hardware.");
             var psu2k  = MakeComp("PSU_2K",  "PSU (2000 W)",     VoxelEngine.Storage.ComponentType.PSU, 2000f,new Color(0.85f, 0.45f, 0.20f), "Powers up to 2000 W of storage hardware.");
 
+            VoxelEngine.Storage.StorageDrawerUpgradeItem MakeDrawerUpgrade(string assetName, string display,
+                VoxelEngine.Storage.StorageDrawerUpgradeKind kind, int mult, Color tint, string desc)
+            {
+                string path = $"{STORE_ITEMS}/{assetName}.asset";
+                var u = GetOrCreateAsset<VoxelEngine.Storage.StorageDrawerUpgradeItem>(path);
+                u.itemId = assetName.ToLower(); u.displayName = display; u.description = desc;
+                u.iconTint = tint; u.maxStack = 12; u.massPerUnit = 0.25f; u.category = "Storage";
+                u.upgradeKind = kind; u.stackMultiplier = Mathf.Max(1, mult);
+                EditorUtility.SetDirty(u);
+                return u;
+            }
+
+            var drawerVoid = MakeDrawerUpgrade("DrawerUpgrade_Void", "Void Upgrade", VoxelEngine.Storage.StorageDrawerUpgradeKind.Void, 1,
+                new Color(0.45f,0.20f,0.70f), "Drawer overflow is deleted instead of blocking insertion.");
+            var drawerStack1  = MakeDrawerUpgrade("DrawerUpgrade_Stack_1x",  "Drawer Stack Upgrade (1x)",  VoxelEngine.Storage.StorageDrawerUpgradeKind.StackLimit, 1,  new Color(0.55f,0.70f,0.80f), "Sets drawer capacity to 2,000 items.");
+            var drawerStack2  = MakeDrawerUpgrade("DrawerUpgrade_Stack_2x",  "Drawer Stack Upgrade (2x)",  VoxelEngine.Storage.StorageDrawerUpgradeKind.StackLimit, 2,  new Color(0.45f,0.80f,0.75f), "Sets drawer capacity to 4,000 items.");
+            var drawerStack4  = MakeDrawerUpgrade("DrawerUpgrade_Stack_4x",  "Drawer Stack Upgrade (4x)",  VoxelEngine.Storage.StorageDrawerUpgradeKind.StackLimit, 4,  new Color(0.35f,0.85f,0.55f), "Sets drawer capacity to 8,000 items.");
+            var drawerStack8  = MakeDrawerUpgrade("DrawerUpgrade_Stack_8x",  "Drawer Stack Upgrade (8x)",  VoxelEngine.Storage.StorageDrawerUpgradeKind.StackLimit, 8,  new Color(0.85f,0.70f,0.25f), "Sets drawer capacity to 16,000 items.");
+            var drawerStack16 = MakeDrawerUpgrade("DrawerUpgrade_Stack_16x", "Drawer Stack Upgrade (16x)", VoxelEngine.Storage.StorageDrawerUpgradeKind.StackLimit, 16, new Color(0.95f,0.45f,0.20f), "Sets drawer capacity to 32,000 items.");
+
             // ── Server Rack ──
             var serverRackPrefab = MakePref(STORE_PREFABS, "ServerRack",
                 new Color(0.15f, 0.18f, 0.22f), new Vector3(1.2f, 2.0f, 1.0f),
@@ -4149,6 +4208,89 @@ root =>
                 "Transfers items from a Source Disk to a Destination Disk. Use to upgrade disk tiers.",
                 new Color(0.55f, 0.55f, 0.55f), diskManipPrefab, "Storage", hp: 300);
 
+            // ── Industrial Storage Drawer ──
+            var drawerPrefab = MakePref(STORE_PREFABS, "StorageDrawer",
+                new Color(0.16f, 0.19f, 0.19f), new Vector3(1.15f, 1.0f, 1.0f),
+                root =>
+                {
+                    var drawer = root.AddComponent<VoxelEngine.Storage.StorageDrawer>();
+                    drawer.baseStackSize = 2000; drawer.maxUpgradeSlots = 12;
+                    var front = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    front.name = "RecessedFrontPanel";
+                    front.transform.SetParent(root.transform, false);
+                    front.transform.localPosition = new Vector3(0, 0, 0.515f);
+                    front.transform.localScale = new Vector3(0.82f, 0.62f, 0.035f);
+                    front.GetComponent<Renderer>().sharedMaterial = MakeColoredMat(STORE_PREFABS, "Mat_StorageDrawer_Front", new Color(0.06f,0.08f,0.09f));
+                    drawer.fillRenderer = front.GetComponent<Renderer>();
+                    var iconGo = new GameObject("ItemIcon");
+                    iconGo.transform.SetParent(root.transform, false);
+                    iconGo.transform.localPosition = new Vector3(0, 0.09f, 0.545f);
+                    iconGo.transform.localScale = Vector3.one * 0.42f;
+                    drawer.itemIconRenderer = iconGo.AddComponent<SpriteRenderer>();
+                    var txtGo = new GameObject("AmountText");
+                    txtGo.transform.SetParent(root.transform, false);
+                    txtGo.transform.localPosition = new Vector3(0, -0.30f, 0.555f);
+                    txtGo.transform.localRotation = Quaternion.identity;
+                    var txt = txtGo.AddComponent<TextMesh>();
+                    txt.anchor = TextAnchor.MiddleCenter; txt.alignment = TextAlignment.Center;
+                    txt.characterSize = 0.105f; txt.fontSize = 48; txt.text = "EMPTY";
+                    drawer.amountText = txt;
+                });
+            var blockDrawer = MakeBlk(STORE_BLOCKS, "Block_StorageDrawer", "Storage Drawer",
+                "Single-item industrial drawer. Stores 2,000 items by default, accepts 12 upgrades, displays its item and amount on the front.",
+                new Color(0.22f,0.30f,0.30f), drawerPrefab, "Storage", hp: 350);
+
+            // ── Drawer Controller ──
+            var drawerControllerPrefab = MakePref(STORE_PREFABS, "StorageDrawerController",
+                new Color(0.10f, 0.34f, 0.32f), new Vector3(1.0f, 1.2f, 0.8f),
+                root =>
+                {
+                    var c = root.AddComponent<VoxelEngine.Storage.StorageDrawerController>();
+                    c.drawerRadius = 12f; c.rackRadius = 16f;
+                    var ports = root.GetComponent<VoxelEngine.Transport.PortConfig>();
+                    ports.ports = new VoxelEngine.Transport.PortConfig.FacePort[6];
+                    for (int pi = 0; pi < 6; pi++)
+                    {
+                        ports.ports[pi].face = (VoxelEngine.Transport.CubeFace)pi;
+                        ports.ports[pi].direction = VoxelEngine.Transport.PortDirection.Input;
+                        ports.ports[pi].networkType = VoxelEngine.Transport.PortNetworkType.Any;
+                        ports.ports[pi].enabled = true;
+                    }
+                });
+            var blockDrawerController = MakeBlk(STORE_BLOCKS, "Block_StorageDrawerController", "Drawer Controller",
+                "Links nearby Storage Drawers into the storage network as external physical storage.",
+                new Color(0.10f,0.55f,0.50f), drawerControllerPrefab, "Storage", hp: 400);
+
+            // ── Storage Item Display ──
+            var itemDisplayPrefab = MakePref(STORE_PREFABS, "StorageItemDisplay",
+                new Color(0.12f, 0.16f, 0.22f), new Vector3(0.9f, 0.9f, 0.25f),
+                root =>
+                {
+                    var d = root.AddComponent<VoxelEngine.Storage.StorageItemDisplayBlock>();
+                    var face = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    face.name = "DisplayFace";
+                    face.transform.SetParent(root.transform, false);
+                    face.transform.localPosition = new Vector3(0, 0, 0.145f);
+                    face.transform.localScale = new Vector3(0.72f, 0.72f, 0.025f);
+                    face.GetComponent<Renderer>().sharedMaterial = MakeColoredMat(STORE_PREFABS, "Mat_ItemDisplay_Face", new Color(0.03f,0.055f,0.075f));
+                    d.statusRenderer = face.GetComponent<Renderer>();
+                    var iconGo = new GameObject("ItemIcon");
+                    iconGo.transform.SetParent(root.transform, false);
+                    iconGo.transform.localPosition = new Vector3(0, 0.12f, 0.175f);
+                    iconGo.transform.localScale = Vector3.one * 0.38f;
+                    d.itemIconRenderer = iconGo.AddComponent<SpriteRenderer>();
+                    var txtGo = new GameObject("AmountText");
+                    txtGo.transform.SetParent(root.transform, false);
+                    txtGo.transform.localPosition = new Vector3(0, -0.26f, 0.185f);
+                    var txt = txtGo.AddComponent<TextMesh>();
+                    txt.anchor = TextAnchor.MiddleCenter; txt.alignment = TextAlignment.Center;
+                    txt.characterSize = 0.09f; txt.fontSize = 46; txt.text = "NO FILTER";
+                    d.amountText = txt;
+                });
+            var blockItemDisplay = MakeBlk(STORE_BLOCKS, "Block_StorageItemDisplay", "Storage Item Display",
+                "Configurable wall display that shows one item icon and the amount currently available in the storage system.",
+                new Color(0.25f,0.45f,0.75f), itemDisplayPrefab, "Storage", hp: 250);
+
             // ── Storage recipes (gated by Logistics Network / Mass Storage / Crystalline Storage) ──
             // Components
             AddRecipe(STORE_RECIPES, "Recipe_RAM_4",   "RAM Module (4)",   ram4,   1, VoxelEngine.Crafting.StationTier.Assembler, unlockedByDefault: false, (circuit, 1), (copperWire, 4));
@@ -4176,6 +4318,15 @@ root =>
             AddRecipe(STORE_RECIPES, "Recipe_NASBlock",         "NAS Block",         blockNAS,           1, VoxelEngine.Crafting.StationTier.Assembler, unlockedByDefault: false, (steelPlate, 4), (circuit, 4), (copperWire, 6));
             AddRecipe(STORE_RECIPES, "Recipe_Powerstation",     "Powerstation",      blockPowerstation,  1, VoxelEngine.Crafting.StationTier.Assembler, unlockedByDefault: false, (steelPlate, 4), (copperWire, 8), (circuit, 2));
             AddRecipe(STORE_RECIPES, "Recipe_DiskManipulator",  "Disk Manipulator",  blockDiskManip,     1, VoxelEngine.Crafting.StationTier.Assembler, unlockedByDefault: false, (ironPlate, 4), (circuit, 2));
+            AddRecipe(STORE_RECIPES, "Recipe_StorageDrawer", "Storage Drawer", blockDrawer, 1, VoxelEngine.Crafting.StationTier.CraftingBench, unlockedByDefault: false, (ironPlate, 3), (ironGear, 1), (copperWire, 2));
+            AddRecipe(STORE_RECIPES, "Recipe_StorageDrawerController", "Drawer Controller", blockDrawerController, 1, VoxelEngine.Crafting.StationTier.Assembler, unlockedByDefault: false, (ironPlate, 4), (circuit, 2), (copperWire, 4));
+            AddRecipe(STORE_RECIPES, "Recipe_StorageItemDisplay", "Storage Item Display", blockItemDisplay, 1, VoxelEngine.Crafting.StationTier.CraftingBench, unlockedByDefault: false, (ironPlate, 2), (glass, 1), (copperWire, 2));
+            AddRecipe(STORE_RECIPES, "Recipe_DrawerUpgradeVoid", "Void Upgrade", drawerVoid, 1, VoxelEngine.Crafting.StationTier.Assembler, unlockedByDefault: false, (circuit, 1), (plastic, 1));
+            AddRecipe(STORE_RECIPES, "Recipe_DrawerUpgradeStack1x", "Drawer Stack Upgrade (1x)", drawerStack1, 1, VoxelEngine.Crafting.StationTier.CraftingBench, unlockedByDefault: false, (ironPlate, 1));
+            AddRecipe(STORE_RECIPES, "Recipe_DrawerUpgradeStack2x", "Drawer Stack Upgrade (2x)", drawerStack2, 1, VoxelEngine.Crafting.StationTier.CraftingBench, unlockedByDefault: false, (ironPlate, 1), (copperWire, 1));
+            AddRecipe(STORE_RECIPES, "Recipe_DrawerUpgradeStack4x", "Drawer Stack Upgrade (4x)", drawerStack4, 1, VoxelEngine.Crafting.StationTier.Assembler, unlockedByDefault: false, (ironPlate, 2), (circuit, 1));
+            AddRecipe(STORE_RECIPES, "Recipe_DrawerUpgradeStack8x", "Drawer Stack Upgrade (8x)", drawerStack8, 1, VoxelEngine.Crafting.StationTier.Assembler, unlockedByDefault: false, (steelPlate, 1), (circuit, 2));
+            AddRecipe(STORE_RECIPES, "Recipe_DrawerUpgradeStack16x", "Drawer Stack Upgrade (16x)", drawerStack16, 1, VoxelEngine.Crafting.StationTier.Assembler, unlockedByDefault: false, (steelPlate, 2), (advCircuit, 1));
 
             // ════════════════════════════════════════════════════════════
             //  RESEARCH — wire newly created recipes into existing nodes
@@ -4210,18 +4361,21 @@ root =>
                 RGet("Recipe_StorageImporter"), RGet("Recipe_StorageExporter"),
                 RGet("Recipe_PatternTerminal"), RGet("Recipe_CraftingTerminal"),
                 RGet("Recipe_RAM_4"), RGet("Recipe_CPU_1"), RGet("Recipe_PSU_500"),
-                RGet("Recipe_DiskManipulator"));
+                RGet("Recipe_DiskManipulator"), RGet("Recipe_StorageDrawer"),
+                RGet("Recipe_StorageDrawerController"), RGet("Recipe_StorageItemDisplay"),
+                RGet("Recipe_DrawerUpgradeStack1x"), RGet("Recipe_DrawerUpgradeStack2x"));
 
             // Mass Storage: 16K + NAS + bigger PSU/CPU.
             AppendUnlocks("res_mass_storage",
                 RGet("Recipe_StorageDisk16K"), RGet("Recipe_NASBlock"),
                 RGet("Recipe_RAM_16"), RGet("Recipe_CPU_2"), RGet("Recipe_PSU_2K"),
-                RGet("Recipe_Powerstation"));
+                RGet("Recipe_Powerstation"), RGet("Recipe_DrawerUpgradeVoid"),
+                RGet("Recipe_DrawerUpgradeStack4x"), RGet("Recipe_DrawerUpgradeStack8x"));
 
             // Crystalline Storage: 64K + 90K + best CPU.
             AppendUnlocks("res_crystalline_storage",
                 RGet("Recipe_StorageDisk64K"), RGet("Recipe_StorageDisk90K"),
-                RGet("Recipe_CPU_4"));
+                RGet("Recipe_CPU_4"), RGet("Recipe_DrawerUpgradeStack16x"));
 
             // Item Logistics: item pipe.
             AppendUnlocks("res_item_logistics",

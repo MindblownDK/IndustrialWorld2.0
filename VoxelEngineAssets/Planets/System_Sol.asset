@@ -1,0 +1,33 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2dd16210e839e7e48bdbfa9431ff92ac, type: 3}
+  m_Name: System_Sol
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Cosmos.SolarSystemTemplate
+  systemName: Sol System
+  sun:
+    displayName: Sol
+    sunCount: 1
+    intensity: 1.3
+    glowColor: {r: 1, g: 0.95, b: 0.78, a: 1}
+    waterColor: {r: 0.09, g: 0.34, b: 0.55, a: 0.85}
+  minPlanetSeparationKm: 500
+  maxPlanetSeparationKm: 10000
+  planets:
+  - {fileID: 11400000, guid: 6b8926c97bffb6c4fbfe2e0ab40c06bb, type: 2}
+  asteroidFields: []
+  quasar:
+    enabled: 1
+    coreColor: {r: 0.62, g: 0.82, b: 1, a: 1}
+    jetColor: {r: 0.4, g: 0.6, b: 1, a: 0.9}
+    brightness: 1.4
+    skyDirection: {x: 0.3, y: 0.4, z: 1}
+    apparentSize: 1.2

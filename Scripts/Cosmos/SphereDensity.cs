@@ -301,21 +301,24 @@ namespace VoxelEngine.Cosmos
             }
             else
             {
-            if (radius <= prm.seaRadius)
-            {
-                // ── Oil Pockets ──
-                // Lowered threshold from 0.75f to 0.65f for better spawn rates.
-                float oilNoise = noise.snoise(worldPos * 0.02f + (prm.seed * 0.123f));
-                if (oilNoise > 0.65f && radius < prm.seaRadius - 10f)
+                if (radius <= prm.seaRadius)
                 {
-                    return new Voxel(-5, (byte)MaterialId.CrudeOil, 255);
+                    float oilNoise = noise.snoise(worldPos * 0.02f + (prm.seed * 0.123f));
+                    if (oilNoise > 0.65f && radius < prm.seaRadius - 10f)
+                    {
+                        return new Voxel(-5, (byte)MaterialId.CrudeOil, 255);
+                    }
+                    var v = new Voxel(-5, (byte)MaterialId.WaterLiquid, 255);
+                    return v;
                 }
-
-                // For the dynamic VoxelWater system, fluid voxels must be empty (-5) so the terrain
-                // mesh leaves a basin, allowing WaterMeshBuilder to build the water quads inside it!
-                var v = new Voxel(-5, (byte)MaterialId.WaterLiquid, 255);
-                return v;
-            }
+                else if (radius < prm.seaRadius + 18f && radius > surfaceRadius - 2f && radius < surfaceRadius + 1f)
+                {
+                    float surfaceOilNoise = noise.snoise(worldPos * 0.018f + (prm.seed * 0.789f));
+                    if (surfaceOilNoise > 0.68f)
+                    {
+                        return new Voxel(-5, (byte)MaterialId.CrudeOil, 255);
+                    }
+                }
                 return new Voxel((sbyte)math.clamp(density, -127f, -1f), (byte)MaterialId.Air, 0);
             }
         }

@@ -20,7 +20,17 @@ namespace VoxelEngine.Building
             Hp -= amount;
             if (Hp <= 0)
             {
-                if (recipient != null && Item != null) recipient.Add(Item, 1);
+                if (recipient != null && Item != null)
+                {
+                    var customDrop = GetComponentInChildren<ICustomBlockDrop>();
+                    var stack = customDrop != null ? customDrop.CreateBlockDrop(Item) : new ItemStack(Item, 1);
+                    if (stack != null && !stack.IsEmpty)
+                    {
+                        var leftover = recipient.container != null ? recipient.container.Insert(stack) : stack;
+                        if (leftover != null && leftover.count > 0)
+                            DroppedItem.Spawn(leftover, transform.position + Vector3.up * 0.6f, Vector3.up);
+                    }
+                }
                 Destroy(gameObject);
             }
         }

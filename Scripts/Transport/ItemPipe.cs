@@ -204,21 +204,31 @@ namespace VoxelEngine.Transport
                 if (col.gameObject == gameObject) continue;
                 if (col.GetComponentInParent<ItemPipe>() != null) continue; // pipes already handled
 
-                // PORT HOSTS (chests, furnaces, processors…): only connect when the
-                // face pointing at us is an ENABLED Input/Output port. A disabled /
-                // None face means NO connection — no arm, no item exchange.
-                var routing = col.GetComponentInParent<ItemPortRouting>();
-                if (routing != null)
+                // DIRECT ENDPOINTS (drawers, single-item deep stores): these own their
+                // capacity/filter logic and can still expose the same face config.
+                var direct = col.GetComponentInParent<IDirectItemPortEndpoint>();
+                if (direct != null)
                 {
-                    if (!routing.IsFaceConnectable(transform.position)) continue;
+                    if (!direct.IsFaceConnectable(transform.position)) continue;
                 }
                 else
                 {
-                    // Legacy endpoints without per-face routing still connect if
-                    // they expose an item interface or container.
-                    bool isEndpoint = col.GetComponentInParent<IInventoryInterface>() != null
-                                   || col.GetComponentInParent<IItemContainer>() != null;
-                    if (!isEndpoint) continue;
+                    // PORT HOSTS (chests, furnaces, processors…): only connect when the
+                    // face pointing at us is an ENABLED Input/Output port. A disabled /
+                    // None face means NO connection — no arm, no item exchange.
+                    var routing = col.GetComponentInParent<ItemPortRouting>();
+                    if (routing != null)
+                    {
+                        if (!routing.IsFaceConnectable(transform.position)) continue;
+                    }
+                    else
+                    {
+                        // Legacy endpoints without per-face routing still connect if
+                        // they expose an item interface or container.
+                        bool isEndpoint = col.GetComponentInParent<IInventoryInterface>() != null
+                                       || col.GetComponentInParent<IItemContainer>() != null;
+                        if (!isEndpoint) continue;
+                    }
                 }
 
                 Vector3 to = col.bounds.center - transform.position;
@@ -333,6 +343,23 @@ namespace VoxelEngine.Transport
             {
                 if (col.gameObject == gameObject) continue;
                 if (col.GetComponentInParent<ItemPipe>() != null) continue; // skip pipes
+
+                // DIRECT ENDPOINTS (drawers, virtual stores) own their capacity/filter logic.
+                var direct = col.GetComponentInParent<IDirectItemPortEndpoint>();
+                if (direct != null)
+                {
+                    int accepted = direct.TryAcceptFromPipe(transform.position, stack.item, stack.count);
+                    if (accepted > 0)
+                    {
+                        var directComponent = direct as Component;
+                        Vector3 target = directComponent != null ? directComponent.transform.position : col.bounds.center;
+                        Vector3 toDir = (target - transform.position).normalized;
+                        RecordSegment(stack.item, SafeEntry(entryDir, toDir), toDir);
+                        stack.count -= accepted;
+                        if (stack.IsEmpty || stack.count <= 0) return;
+                    }
+                    continue;
+                }
 
                 // PORT HOSTS respect their ADVANCED PORT CONFIG: items only enter
                 // through an enabled INPUT face whose filter accepts the item, and

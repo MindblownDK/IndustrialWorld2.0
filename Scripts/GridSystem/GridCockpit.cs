@@ -6,7 +6,7 @@ using UnityEngine;
 using VoxelEngine.Maritime;
 using VoxelEngine.Settings;
 using InputAction = VoxelEngine.Settings.InputAction;
-#if ENABLE_INPUT_SYSTEM
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
 using UnityEngine.InputSystem;
 #endif
 
@@ -168,7 +168,7 @@ namespace VoxelEngine.GridSystem
 
         private static bool CKeyHeld()
         {
-#if ENABLE_INPUT_SYSTEM
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
             return Keyboard.current != null && Keyboard.current.cKey.isPressed;
 #else
             return Input.GetKey(KeyCode.C);
@@ -179,7 +179,7 @@ namespace VoxelEngine.GridSystem
         {
             get
             {
-#if ENABLE_INPUT_SYSTEM
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
                 return Keyboard.current != null && Keyboard.current.vKey.wasPressedThisFrame;
 #else
                 return Input.GetKeyDown(KeyCode.V);

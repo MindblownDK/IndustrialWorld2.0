@@ -10,7 +10,9 @@ GameObject:
   m_Component:
   - component: {fileID: 7462752828815606410}
   - component: {fileID: 3324902071998980367}
-  - component: {fileID: 2921808834323466691}
+  - component: {fileID: 5640714930425441551}
+  - component: {fileID: 7498831071946940370}
+  - component: {fileID: 5943342639548504497}
   m_Layer: 0
   m_Name: Generator_Coal
   m_TagString: Untagged
@@ -47,9 +49,69 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Power.PowerGenerator
   connectRadius: 1.8
+  requireGridAlignedNeighbours: 0
+  gridSize: 1
+  connectionBlockingLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
   wattsPerSecond: 800
   isOn: 0
---- !u!114 &2921808834323466691
+--- !u!114 &5640714930425441551
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 33722737517157823}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 04cec34cc4f1e1d47a08090bcd4f29aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.PortConfig
+  ports:
+  - face: 0
+    direction: 2
+    networkType: 0
+    enabled: 1
+  - face: 1
+    direction: 0
+    networkType: 0
+    enabled: 1
+  - face: 2
+    direction: 0
+    networkType: 0
+    enabled: 1
+  - face: 3
+    direction: 0
+    networkType: 0
+    enabled: 1
+  - face: 4
+    direction: 0
+    networkType: 0
+    enabled: 1
+  - face: 5
+    direction: 0
+    networkType: 0
+    enabled: 1
+  portIndicatorSize: 0.4
+  showPortIndicators: 1
+--- !u!114 &7498831071946940370
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 33722737517157823}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9eacd68ef9a141ae95f225d895db1c7b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.ItemPortRouting
+  pushInterval: 0.5
+  pushPerTick: 8
+  pipeConnectRadius: 1.6
+  distribution: 0
+--- !u!114 &5943342639548504497
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -67,6 +129,7 @@ MonoBehaviour:
     _minSize: 1
   fuelRemaining: 0
   fuelMaxDuration: 0
+  userEnabled: 1
 --- !u!1 &7906727958296040640
 GameObject:
   m_ObjectHideFlags: 0

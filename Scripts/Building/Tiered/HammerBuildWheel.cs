@@ -58,15 +58,6 @@ namespace VoxelEngine.Building.Tiered
         {
             if (inventory == null) inventory = FindAnyObjectByType<Inventory>();
             if (registry == null) registry = Resources.Load<TieredBlockRegistry>("TieredBlockRegistry");
-#if UNITY_EDITOR
-            if (registry == null)
-            {
-                var guids = UnityEditor.AssetDatabase.FindAssets("t:TieredBlockRegistry");
-                if (guids != null && guids.Length > 0)
-                    registry = UnityEditor.AssetDatabase.LoadAssetAtPath<TieredBlockRegistry>(
-                        UnityEditor.AssetDatabase.GUIDToAssetPath(guids[0]));
-            }
-#endif
         }
 
         private void Update()

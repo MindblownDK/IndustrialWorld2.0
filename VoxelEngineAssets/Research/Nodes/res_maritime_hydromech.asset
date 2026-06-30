@@ -1,0 +1,43 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe52eb4685f86c44d967d9cd3e4bd91a, type: 3}
+  m_Name: res_maritime_hydromech
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Research.ResearchNode
+  nodeId: res_maritime_hydromech
+  displayName: Hydro-Mechanics
+  description: Master water power. Unlocks the Waterwheel, Drive Shaft, Rotation
+    Transfer, Encased Chain Drive, Untreated Wood hull, Small Propeller, and the
+    Helm.
+  iconTint: {r: 0.2, g: 0.5, b: 0.8, a: 1}
+  category: 0
+  subCategory: 6
+  tier: 1
+  column: 6
+  prerequisites:
+  - {fileID: 11400000, guid: 7f037218eb84d6e47b710258eb6ad9ab, type: 2}
+  researchSeconds: 40
+  cost:
+  - pack: {fileID: 11400000, guid: e7eec7f45c4b5fb4db5018e3431f77f0, type: 2}
+    count: 10
+  unlocksRecipes:
+  - {fileID: 11400000, guid: de0039c88f80a7440aa75182bdf6f94b, type: 2}
+  - {fileID: 11400000, guid: 717ec434863d39047a2d2f946ef8d02b, type: 2}
+  - {fileID: 11400000, guid: feea2acf856f215428c37992cbe0e63d, type: 2}
+  - {fileID: 11400000, guid: fee796c23b160d7449f24e734f771c78, type: 2}
+  - {fileID: 11400000, guid: e7caef9713391af4f969bca6d91718d6, type: 2}
+  - {fileID: 11400000, guid: 30b8d8e58d21e2d4f8c5bc45ee501fc4, type: 2}
+  - {fileID: 11400000, guid: f6eab2a5e40cc7b40904f6cb2ff55bf2, type: 2}
+  - {fileID: 11400000, guid: df8bf40ad9adef349b60767e97b13d45, type: 2}
+  upgradeKind: 0
+  upgradePerRankAmount: 0
+  maxRanks: 1
+  costScalesWithRank: 1

@@ -19,9 +19,7 @@ namespace VoxelEngine.Cosmos
     {
         [Tooltip("Planet template to spawn. LEAVE EMPTY to auto-use a built-in Earth body " +
                  "(gravity 1g, oxygen, grass, full ore catalogue). To customise, run " +
-                 "Tools ▸ Voxel Engine ▸ Author Earth Planet Template. NOTE: the old " +
-                 "Planet_Earthlike.asset is a DIFFERENT type (flat-world PlanetSettings) and " +
-                 "won't fit this slot.")]
+                 "Tools ▸ Voxel Engine ▸ Author Earth Planet Template.")]
         public PlanetTemplate planetTemplate;
 
         [Tooltip("Solar system template (for seeing other planets/moons/sun in the sky). " +
@@ -115,7 +113,7 @@ namespace VoxelEngine.Cosmos
             world.viewDistance = viewDistance;
             world.enableScatter = true;  // Safe now — flat world is disabled, sphere is sole world.
             world.biomeRegistry = biomeRegistry;
-            world.worldName = session != null ? session.worldName + "_sphere" : "SphereTest";
+            world.worldName = session != null ? session.worldName : "SphereTest";
 
             // ── Far LOD (space view), as a CHILD of the body ──
             var lodGO = new GameObject("LOD");
@@ -291,11 +289,6 @@ namespace VoxelEngine.Cosmos
             if (planetTemplate != null) return;
 
             planetTemplate = Resources.Load<PlanetTemplate>("Planet_Earth");
-#if UNITY_EDITOR
-            if (planetTemplate == null)
-                planetTemplate = UnityEditor.AssetDatabase.LoadAssetAtPath<PlanetTemplate>(
-                    "Assets/VoxelEngineAssets/Planets/Planet_Earth.asset");
-#endif
             if (planetTemplate == null)
             {
                 planetTemplate = CreateDefaultEarthTemplate();
@@ -327,12 +320,6 @@ namespace VoxelEngine.Cosmos
                     if (terrainMaterial  == null) terrainMaterial  = flat.terrainMaterial;
                 }
             }
-#if UNITY_EDITOR
-            if (materialRegistry == null)
-                materialRegistry = UnityEditor.AssetDatabase.LoadAssetAtPath<MaterialRegistry>("Assets/VoxelEngineAssets/MaterialRegistry.asset");
-            if (terrainMaterial == null)
-                terrainMaterial  = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>("Assets/VoxelEngineAssets/Materials/Mat_Terrain.mat");
-#endif
         }
 
         /// <summary>Build a complete, ready-to-play Earth PlanetTemplate in memory.</summary>

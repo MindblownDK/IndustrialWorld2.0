@@ -13,7 +13,7 @@ using UnityEngine;
 // own version-define from VoxelEngine.asmdef (VE_HAS_INPUT_SYSTEM). When either
 // is on, we route shift-detection through the new Input System; otherwise we
 // fall back to legacy. This makes the wrench work in every project configuration.
-#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
 using UnityEngine.InputSystem;
 #endif
 using VoxelEngine.Items;
@@ -48,7 +48,7 @@ namespace VoxelEngine.Networks
         /// </summary>
         private static bool ShiftHeld()
         {
-#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
             try
             {
                 var kb = Keyboard.current;

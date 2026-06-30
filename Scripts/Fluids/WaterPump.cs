@@ -223,7 +223,7 @@ namespace VoxelEngine.Fluids
             {
                 float remaining = litres - drained;
                 byte levels = (byte)Mathf.Clamp(Mathf.CeilToInt(remaining / litresPerLevel), 1, 255);
-                byte got = FluidManager.Instance != null ? FluidManager.Instance.DrainLiquid(_poolCells[i], liquidType, levels) : (byte)0;
+                byte got = FluidManager.Instance != null ? FluidManager.Instance.PumpFromLiquid(_poolCells[i], liquidType, levels, reach) : (byte)0;
                 drained += got * litresPerLevel;
             }
             if (drained > 0f) ScanSource();

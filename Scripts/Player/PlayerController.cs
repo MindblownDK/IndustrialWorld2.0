@@ -13,7 +13,7 @@ using UnityEngine;
 using VoxelEngine.Settings;
 using VoxelEngine.Cosmos;
 using InputAction = VoxelEngine.Settings.InputAction;
-#if ENABLE_INPUT_SYSTEM
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
 using UnityEngine.InputSystem;
 #endif
 
@@ -509,7 +509,7 @@ namespace VoxelEngine.Player
 
         private static Vector2 GetMouseDelta()
         {
-#if ENABLE_INPUT_SYSTEM
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
             return Mouse.current != null ? Mouse.current.delta.ReadValue() : Vector2.zero;
 #else
             return new Vector2(Input.GetAxisRaw("Mouse X") * 10f, Input.GetAxisRaw("Mouse Y") * 10f);

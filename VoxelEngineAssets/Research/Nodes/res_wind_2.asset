@@ -1,0 +1,37 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe52eb4685f86c44d967d9cd3e4bd91a, type: 3}
+  m_Name: res_wind_2
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Research.ResearchNode
+  nodeId: res_wind_2
+  displayName: Wind Power II
+  description: Unlock Small Helix and Medium Standard Windmills.
+  iconTint: {r: 1, g: 1, b: 1, a: 1}
+  category: 0
+  subCategory: 3
+  tier: 2
+  column: 10
+  prerequisites:
+  - {fileID: 11400000, guid: 4e4a684682b67be408be12e1b608b093, type: 2}
+  researchSeconds: 60
+  cost:
+  - pack: {fileID: 11400000, guid: 5c6861815f491e546a7fd36f4b664f0e, type: 2}
+    count: 20
+  - pack: {fileID: 11400000, guid: e7eec7f45c4b5fb4db5018e3431f77f0, type: 2}
+    count: 10
+  unlocksRecipes:
+  - {fileID: 11400000, guid: facfe45742b541240a3d131924151792, type: 2}
+  - {fileID: 11400000, guid: d6e8ed289d4b85c4283380d9a36fdb08, type: 2}
+  upgradeKind: 0
+  upgradePerRankAmount: 0
+  maxRanks: 1
+  costScalesWithRank: 1

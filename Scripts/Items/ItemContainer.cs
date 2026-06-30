@@ -115,6 +115,7 @@ namespace VoxelEngine.Items
                 {
                     var s = _slots[i];
                     if (s.IsEmpty || s.item != stack.item) continue;
+                    if (!ItemStack.CanMerge(s, stack)) continue;
                     int space = stack.item.maxStack - s.count;
                     if (space <= 0) continue;
                     int add = Mathf.Min(space, stack.count);

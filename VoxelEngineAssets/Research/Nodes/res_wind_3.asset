@@ -1,0 +1,35 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe52eb4685f86c44d967d9cd3e4bd91a, type: 3}
+  m_Name: res_wind_3
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Research.ResearchNode
+  nodeId: res_wind_3
+  displayName: Wind Power III
+  description: Unlock Large Helix and Large Standard Windmills.
+  iconTint: {r: 1, g: 1, b: 1, a: 1}
+  category: 0
+  subCategory: 3
+  tier: 3
+  column: 10
+  prerequisites:
+  - {fileID: 11400000, guid: fe793cc174cdc65419429a2d92700eb4, type: 2}
+  researchSeconds: 120
+  cost:
+  - pack: {fileID: 11400000, guid: e7eec7f45c4b5fb4db5018e3431f77f0, type: 2}
+    count: 30
+  unlocksRecipes:
+  - {fileID: 11400000, guid: 80c8f97494bd3324e835e7d2cbe2a655, type: 2}
+  - {fileID: 11400000, guid: 0ece79bf1002ac94497d04627199b1d9, type: 2}
+  upgradeKind: 0
+  upgradePerRankAmount: 0
+  maxRanks: 1
+  costScalesWithRank: 1

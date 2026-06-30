@@ -11,6 +11,8 @@ GameObject:
   - component: {fileID: 261872535914717193}
   - component: {fileID: 5704872568236233175}
   - component: {fileID: 1727426814223796119}
+  - component: {fileID: 4918739668769833156}
+  - component: {fileID: 8726895853972071679}
   - component: {fileID: 1498168813536899646}
   m_Layer: 0
   m_Name: Electrolyser
@@ -69,6 +71,61 @@ MonoBehaviour:
   Item: {fileID: 0}
   Hp: 100
   onGrid: 1
+--- !u!114 &4918739668769833156
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7720980295324842664}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 04cec34cc4f1e1d47a08090bcd4f29aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.PortConfig
+  ports:
+  - face: 0
+    direction: 2
+    networkType: 0
+    enabled: 1
+  - face: 1
+    direction: 0
+    networkType: 0
+    enabled: 1
+  - face: 2
+    direction: 0
+    networkType: 0
+    enabled: 1
+  - face: 3
+    direction: 0
+    networkType: 0
+    enabled: 1
+  - face: 4
+    direction: 0
+    networkType: 0
+    enabled: 1
+  - face: 5
+    direction: 0
+    networkType: 0
+    enabled: 1
+  portIndicatorSize: 0.4
+  showPortIndicators: 1
+--- !u!114 &8726895853972071679
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7720980295324842664}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9eacd68ef9a141ae95f225d895db1c7b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.ItemPortRouting
+  pushInterval: 0.5
+  pushPerTick: 8
+  pipeConnectRadius: 1.6
+  distribution: 0
 --- !u!114 &1498168813536899646
 MonoBehaviour:
   m_ObjectHideFlags: 0

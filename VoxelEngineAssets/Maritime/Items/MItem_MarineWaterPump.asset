@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e230da79876505a41b25678102c74c13, type: 3}
+  m_Name: MItem_MarineWaterPump
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.GridSystem.GridBlockItem
+  itemId: marine_water_pump
+  displayName: Marine Water Pump
+  description: Marine Water Pump. Must be placed at or below the waterline to operate.
+    Sucks seawater into an internal buffer, then pushes it into connected Water tanks.
+    Used to supply engine coolant (Water) for HFO and MGO engines. Draws power from
+    the grid.
+  icon: {fileID: 0}
+  iconTint: {r: 0.15, g: 0.35, b: 0.55, a: 1}
+  maxStack: 20
+  massPerUnit: 1
+  category: Maritime
+  viewmodelPrefab: {fileID: 0}
+  gridSize: 1
+  blockPrefab: {fileID: 996175317375238445, guid: fcabe38a9530e344d86e5d62efb04b25, type: 3}
+  blockMass: 2500
+  blockHP: 350

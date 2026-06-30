@@ -7,7 +7,7 @@
 
 using System;
 using UnityEngine;
-#if ENABLE_INPUT_SYSTEM
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
 using UnityEngine.InputSystem;
 #endif
 
@@ -245,7 +245,7 @@ namespace VoxelEngine.Settings
         // ============================================================
         //  Input helpers — exception-proof. Anything weird returns false.
         // ============================================================
-#if ENABLE_INPUT_SYSTEM
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
         public static bool IsHeld(InputAction a)        => Read(a, false);
         public static bool WasPressed(InputAction a)    => Read(a, true);
 

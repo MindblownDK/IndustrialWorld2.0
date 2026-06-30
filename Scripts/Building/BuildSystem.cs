@@ -56,7 +56,7 @@ namespace VoxelEngine.Building
 
             // Rotate ghost only while holding LeftCtrl — otherwise the wheel scrolls the hotbar.
             bool ctrlHeld = false;
-#if ENABLE_INPUT_SYSTEM
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
             ctrlHeld = UnityEngine.InputSystem.Keyboard.current != null
                        && UnityEngine.InputSystem.Keyboard.current.leftCtrlKey.isPressed;
             float wheel = UnityEngine.InputSystem.Mouse.current != null
@@ -136,10 +136,15 @@ namespace VoxelEngine.Building
             if (go.GetComponentInChildren<Collider>() == null)
                 go.AddComponent<BoxCollider>();
 
-            var pb = go.AddComponent<PlacedBlock>();
+            var pb = go.GetComponent<PlacedBlock>();
+            if (pb == null) pb = go.AddComponent<PlacedBlock>();
             pb.Item   = block;
             pb.Hp     = block.blockHealth;
             pb.onGrid = gridSnap;
+
+            var payloadReceiver = go.GetComponentInChildren<IPlacedBlockPayloadReceiver>();
+            if (payloadReceiver != null && inventory != null)
+                payloadReceiver.ApplyPlacedPayload(inventory.ActiveStack);
 
             // Apply optional texture/material override at runtime.
             if (block.placedMaterial != null || block.texture != null)

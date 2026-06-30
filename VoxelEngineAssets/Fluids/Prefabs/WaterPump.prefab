@@ -66,8 +66,19 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Fluids.WaterPump
   connectRadius: 3
+  liquidType: 0
   pumpLps: 20
-  reach: 3
+  outputLps: 180
+  internalCapacityLitres: 500
+  internalLitres: 0
+  reach: 5
+  infiniteVoxelThreshold: 1400
+  maxPoolScanVoxels: 4096
+  _hasSource: 0
+  _sourceInfinite: 0
+  _sourceLitres: 0
+  _sourceVoxels: 0
+  _lastSourceVoxel: {x: 0, y: 0, z: 0}
 --- !u!1 &8252788193141081982
 GameObject:
   m_ObjectHideFlags: 0

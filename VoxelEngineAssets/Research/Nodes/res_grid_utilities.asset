@@ -1,0 +1,37 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe52eb4685f86c44d967d9cd3e4bd91a, type: 3}
+  m_Name: res_grid_utilities
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Research.ResearchNode
+  nodeId: res_grid_utilities
+  displayName: Grid Utilities
+  description: Navigation and surveying equipment. Unlocks the Beacon (visible sky
+    beam) and the Ore Detector (scans for underground deposits).
+  iconTint: {r: 0.3, g: 0.8, b: 1, a: 1}
+  category: 0
+  subCategory: 1
+  tier: 3
+  column: 7
+  prerequisites:
+  - {fileID: 11400000, guid: 7f037218eb84d6e47b710258eb6ad9ab, type: 2}
+  researchSeconds: 50
+  cost:
+  - pack: {fileID: 11400000, guid: e7eec7f45c4b5fb4db5018e3431f77f0, type: 2}
+    count: 15
+  unlocksRecipes:
+  - {fileID: 11400000, guid: 7629d2c4c98c21440a703c3a357913d8, type: 2}
+  - {fileID: 11400000, guid: a9a13c3198c16134cbe5b262c214cdc1, type: 2}
+  - {fileID: 11400000, guid: 57cafceba2371604a805d4a287807426, type: 2}
+  upgradeKind: 0
+  upgradePerRankAmount: 0
+  maxRanks: 1
+  costScalesWithRank: 1

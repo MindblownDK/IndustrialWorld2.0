@@ -1,0 +1,41 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe52eb4685f86c44d967d9cd3e4bd91a, type: 3}
+  m_Name: res_maritime_combustion
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Research.ResearchNode
+  nodeId: res_maritime_combustion
+  displayName: Steam & Internal Combustion
+  description: Harness fire. Unlocks the Small Engine, Exhaust Pipe, Tar-Coated Plank,
+    Balsa Wood, and Gearbox.
+  iconTint: {r: 0.2, g: 0.5, b: 0.8, a: 1}
+  category: 0
+  subCategory: 6
+  tier: 2
+  column: 6
+  prerequisites:
+  - {fileID: 11400000, guid: e04a3a0c86171174290499d5b197fae2, type: 2}
+  researchSeconds: 80
+  cost:
+  - pack: {fileID: 11400000, guid: e7eec7f45c4b5fb4db5018e3431f77f0, type: 2}
+    count: 20
+  - pack: {fileID: 11400000, guid: d5b7bf57e47a51c4db099afff757b24d, type: 2}
+    count: 5
+  unlocksRecipes:
+  - {fileID: 11400000, guid: 4fc6b616adfe78148ac5f0fb877e7a17, type: 2}
+  - {fileID: 11400000, guid: b085c6c69c895ed47985e7c21553e578, type: 2}
+  - {fileID: 11400000, guid: f6eab2a5e40cc7b40904f6cb2ff55bf2, type: 2}
+  - {fileID: 11400000, guid: d18c283c7f7eaac43bcb882be778d7d5, type: 2}
+  - {fileID: 11400000, guid: c3183b776152e974a9b3c4ade89d2fd0, type: 2}
+  upgradeKind: 0
+  upgradePerRankAmount: 0
+  maxRanks: 1
+  costScalesWithRank: 1

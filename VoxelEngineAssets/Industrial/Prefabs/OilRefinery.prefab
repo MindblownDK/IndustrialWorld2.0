@@ -10,6 +10,8 @@ GameObject:
   m_Component:
   - component: {fileID: 3319058042801539670}
   - component: {fileID: 170816462954424330}
+  - component: {fileID: 3000894092109729147}
+  - component: {fileID: 3387278165750162986}
   - component: {fileID: 6322670362272368617}
   m_Layer: 0
   m_Name: OilRefinery
@@ -48,6 +50,61 @@ MonoBehaviour:
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Crafting.CraftingStation
   tier: 3
   displayName: Oil Refinery
+--- !u!114 &3000894092109729147
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2979341714112518969}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 04cec34cc4f1e1d47a08090bcd4f29aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.PortConfig
+  ports:
+  - face: 0
+    direction: 2
+    networkType: 0
+    enabled: 1
+  - face: 1
+    direction: 0
+    networkType: 0
+    enabled: 1
+  - face: 2
+    direction: 0
+    networkType: 0
+    enabled: 1
+  - face: 3
+    direction: 0
+    networkType: 0
+    enabled: 1
+  - face: 4
+    direction: 0
+    networkType: 0
+    enabled: 1
+  - face: 5
+    direction: 0
+    networkType: 0
+    enabled: 1
+  portIndicatorSize: 0.4
+  showPortIndicators: 1
+--- !u!114 &3387278165750162986
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2979341714112518969}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9eacd68ef9a141ae95f225d895db1c7b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.ItemPortRouting
+  pushInterval: 0.5
+  pushPerTick: 8
+  pipeConnectRadius: 1.6
+  distribution: 0
 --- !u!114 &6322670362272368617
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -63,6 +120,8 @@ MonoBehaviour:
   knownRecipes:
   - {fileID: 11400000, guid: 6f2f8619536a3dc45a2b8a02b684a4db, type: 2}
   - {fileID: 11400000, guid: 33e1fd62d46bd7d4aaccde60f6df5642, type: 2}
+  - {fileID: 11400000, guid: 2d3fb2a98cf79c844847afcf903728e9, type: 2}
+  - {fileID: 11400000, guid: f1793d04ec679514cbbfb7dcbf1cd610, type: 2}
   inputC:
     _name: Container
     _slots: []
@@ -75,6 +134,18 @@ MonoBehaviour:
     _name: Container
     _slots: []
     _minSize: 1
+  fluidIn:
+    label: Fluid In
+    liquid: 1
+    capacity: 2000
+    stored: 0
+    autoType: 1
+  fluidOut:
+    label: Fluid Out
+    liquid: 2
+    capacity: 2000
+    stored: 0
+    autoType: 1
   baseWattsPerSecond: 400
   idleWattsPerSecond: 20
 --- !u!1 &8929997191841931757

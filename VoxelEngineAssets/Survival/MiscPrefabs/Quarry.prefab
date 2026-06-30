@@ -10,7 +10,9 @@ GameObject:
   m_Component:
   - component: {fileID: 3587921893917634021}
   - component: {fileID: 1811286065260332702}
+  - component: {fileID: 5376167653330107744}
   - component: {fileID: 974850511392172208}
+  - component: {fileID: 5073875390983313161}
   - component: {fileID: 493083597009612633}
   m_Layer: 0
   m_Name: Quarry
@@ -54,6 +56,45 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 4294967295
   wattsPerSecond: 500
+--- !u!114 &5376167653330107744
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1057471961362557668}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 04cec34cc4f1e1d47a08090bcd4f29aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.PortConfig
+  ports:
+  - face: 0
+    direction: 2
+    networkType: 0
+    enabled: 1
+  - face: 1
+    direction: 0
+    networkType: 0
+    enabled: 1
+  - face: 2
+    direction: 0
+    networkType: 0
+    enabled: 1
+  - face: 3
+    direction: 0
+    networkType: 0
+    enabled: 1
+  - face: 4
+    direction: 0
+    networkType: 0
+    enabled: 1
+  - face: 5
+    direction: 1
+    networkType: 1
+    enabled: 1
+  portIndicatorSize: 0.4
+  showPortIndicators: 1
 --- !u!114 &974850511392172208
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -69,6 +110,22 @@ MonoBehaviour:
   Item: {fileID: 0}
   Hp: 100
   onGrid: 1
+--- !u!114 &5073875390983313161
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1057471961362557668}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9eacd68ef9a141ae95f225d895db1c7b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.ItemPortRouting
+  pushInterval: 0.5
+  pushPerTick: 8
+  pipeConnectRadius: 1.6
+  distribution: 0
 --- !u!114 &493083597009612633
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -82,13 +139,33 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.Quarry
   defaultSize: 16
-  mineInterval: 0.5
-  quarryTier: 3
   forwardOffset: 2
-  frameBuildInterval: 0.08
-  frameColor: {r: 0.3, g: 0.3, b: 0.35, a: 1}
+  baseMineInterval: 0.5
+  minePerTick: 1
+  quarryTier: 3
+  basePowerDraw: 500
+  powerPerPerfUpgrade: 25
+  powerSavePerEffUpgrade: 35
+  frameBuildInterval: 0.06
+  frameColor: {r: 0.18, g: 0.19, b: 0.22, a: 1}
+  frameAccentColor: {r: 0.92, g: 0.52, b: 0.08, a: 0.85}
+  tapePreviewDuration: 2.5
+  tapeColor1: {r: 0.95, g: 0.55, b: 0.05, a: 0.75}
+  tapeColor2: {r: 0.92, g: 0.82, b: 0.08, a: 0.75}
   outputSlots: 6
-  landmarkSearchRadius: 64
+  upgradeC:
+    _name: Upgrades
+    _slots:
+    - item: {fileID: 0}
+      count: 0
+      durability: 0
+    - item: {fileID: 0}
+      count: 0
+      durability: 0
+    - item: {fileID: 0}
+      count: 0
+      durability: 0
+    _minSize: 3
 --- !u!1 &8326969819999651527
 GameObject:
   m_ObjectHideFlags: 0

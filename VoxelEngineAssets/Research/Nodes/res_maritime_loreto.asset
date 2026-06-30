@@ -1,0 +1,36 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe52eb4685f86c44d967d9cd3e4bd91a, type: 3}
+  m_Name: res_maritime_loreto
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Research.ResearchNode
+  nodeId: res_maritime_loreto
+  displayName: MSC Loreto-class Propulsion
+  description: The pinnacle of maritime engineering. Unlocks the Giant Diesel Engine,
+    Turbocharger, and Large Propeller.
+  iconTint: {r: 0.2, g: 0.5, b: 0.8, a: 1}
+  category: 0
+  subCategory: 6
+  tier: 4
+  column: 6
+  prerequisites:
+  - {fileID: 11400000, guid: a90e75639b0e9f74c8d2a7c92415ab16, type: 2}
+  researchSeconds: 200
+  cost:
+  - pack: {fileID: 11400000, guid: d5b7bf57e47a51c4db099afff757b24d, type: 2}
+    count: 40
+  unlocksRecipes:
+  - {fileID: 11400000, guid: ec8b3e8252886554689f66f12f479c99, type: 2}
+  - {fileID: 11400000, guid: e413f8b9e0a8ab84ba184394c5bb1a4d, type: 2}
+  upgradeKind: 0
+  upgradePerRankAmount: 0
+  maxRanks: 1
+  costScalesWithRank: 1
