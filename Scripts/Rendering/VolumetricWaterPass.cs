@@ -1,61 +1,20 @@
 // Assets/Scripts/VoxelEngine/Rendering/VolumetricWaterPass.cs
 //
-// Stable renderer feature host for planet water integration.
+// Renderer feature intentionally removed from runtime use.
 //
-// This feature intentionally performs no fullscreen blit yet. Its job is to keep
-// URP renderer-feature deserialization stable while the planet water visuals are
-// driven by world meshes and water materials. A future post pass can be layered on
-// top once the pipeline path is fully validated against the active Unity 6 URP setup.
+// Keeping only a plain helper class here avoids URP renderer-feature deserialization issues
+// on this Unity/URP version while preserving the file path for future work.
 
 using UnityEngine;
-using UnityEngine.Rendering.Universal;
 
 namespace VoxelEngine.Rendering
 {
-    public sealed class VolumetricWaterPass : ScriptableRenderPass
+    public static class VolumetricWaterPass
     {
-        public void Setup(Material material)
+        public static Material CreatePreviewMaterial(Shader shader)
         {
-        }
-    }
-
-    public sealed class VolumetricWaterRenderFeature : ScriptableRendererFeature
-    {
-        [SerializeField] private Shader blitShader;
-
-        private VolumetricWaterPass _waterPass;
-        private Material _material;
-
-        public override void Create()
-        {
-            _waterPass = new VolumetricWaterPass
-            {
-                renderPassEvent = RenderPassEvent.AfterRenderingTransparents
-            };
-
-            if (blitShader == null)
-                blitShader = Shader.Find("VoxelEngine/VolumetricWaterPost");
-
-            if (blitShader != null)
-                _material = new Material(blitShader) { name = "VolumetricWaterPost_Runtime" };
-        }
-
-        public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
-        {
-            if (_waterPass == null)
-                return;
-
-            _waterPass.Setup(_material);
-        }
-
-        protected override void Dispose(bool disposing)
-        {
-            if (_material != null)
-            {
-                if (Application.isPlaying) Object.Destroy(_material);
-                else Object.DestroyImmediate(_material);
-                _material = null;
-            }
+            if (shader == null) return null;
+            return new Material(shader) { name = "PlanetWaterPost_Runtime" };
         }
     }
 }

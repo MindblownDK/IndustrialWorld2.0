@@ -4,9 +4,7 @@ using VoxelEngine.Core;
 namespace VoxelEngine.WaterSim
 {
     /// <summary>
-    /// Ensures the planet water runtime is alive in every game scene without changing
-    /// any existing save/runtime contract. This keeps the simulation, mesh generation,
-    /// buoyancy probes, pumps, and generators active together.
+    /// Keeps planet water globals in sync and drives queued liquid mesh builds.
     /// </summary>
     public class PlanetWaterRendererBootstrap : MonoBehaviour
     {
@@ -30,27 +28,34 @@ namespace VoxelEngine.WaterSim
 
         private void ApplyProfile()
         {
-            if (oceanProfile == null) return;
+            if (oceanProfile != null)
+            {
+                Shader.SetGlobalFloat("_PlanetOceanSeaLevelOffset", oceanProfile.seaLevelRadiusOffsetVoxels * VoxelConstants.VOXEL_SIZE);
+                Shader.SetGlobalFloat("_PlanetOceanDeepWaveAmplitude", oceanProfile.deepWaveAmplitude);
+                Shader.SetGlobalFloat("_PlanetOceanDeepWaveFrequency", oceanProfile.deepWaveFrequency);
+                Shader.SetGlobalFloat("_PlanetOceanDeepWaveSpeed", oceanProfile.deepWaveSpeed);
+                Shader.SetGlobalFloat("_PlanetOceanSecondaryWaveAmplitude", oceanProfile.secondaryWaveAmplitude);
+                Shader.SetGlobalFloat("_PlanetOceanSecondaryWaveFrequency", oceanProfile.secondaryWaveFrequency);
+                Shader.SetGlobalFloat("_PlanetOceanSecondaryWaveSpeed", oceanProfile.secondaryWaveSpeed);
+                Shader.SetGlobalFloat("_PlanetOceanWaveChop", oceanProfile.chop);
+                Shader.SetGlobalFloat("_PlanetOceanShoreAttenuationDistance", oceanProfile.shoreAttenuationDistance);
+                Shader.SetGlobalFloat("_PlanetOceanShallowRippleAmplitude", oceanProfile.shallowRippleAmplitude);
+                Shader.SetGlobalFloat("_PlanetOceanShallowRippleFrequency", oceanProfile.shallowRippleFrequency);
+                Shader.SetGlobalFloat("_PlanetOceanShallowRippleSpeed", oceanProfile.shallowRippleSpeed);
+                Shader.SetGlobalFloat("_PlanetOceanTidalWaveBoost", oceanProfile.tidalWaveBoost);
+                Shader.SetGlobalFloat("_PlanetOceanTidalHeightBoost", oceanProfile.tidalHeightBoost);
+                Shader.SetGlobalColor("_PlanetOceanShallowColor", oceanProfile.shallowColor);
+                Shader.SetGlobalColor("_PlanetOceanDeepColor", oceanProfile.deepColor);
+                Shader.SetGlobalColor("_PlanetOceanFoamColor", oceanProfile.foamColor);
+                Shader.SetGlobalFloat("_PlanetOceanRefractionStrength", oceanProfile.refractionStrength);
+                Shader.SetGlobalFloat("_PlanetOceanFresnelPower", oceanProfile.fresnelPower);
+                Shader.SetGlobalFloat("_PlanetOceanSSS", oceanProfile.subsurfaceScattering);
+            }
+            else
+            {
+                Shader.SetGlobalFloat("_PlanetOceanSeaLevelOffset", 0f);
+            }
 
-            Shader.SetGlobalFloat("_PlanetOceanDeepWaveAmplitude", oceanProfile.deepWaveAmplitude);
-            Shader.SetGlobalFloat("_PlanetOceanDeepWaveFrequency", oceanProfile.deepWaveFrequency);
-            Shader.SetGlobalFloat("_PlanetOceanDeepWaveSpeed", oceanProfile.deepWaveSpeed);
-            Shader.SetGlobalFloat("_PlanetOceanSecondaryWaveAmplitude", oceanProfile.secondaryWaveAmplitude);
-            Shader.SetGlobalFloat("_PlanetOceanSecondaryWaveFrequency", oceanProfile.secondaryWaveFrequency);
-            Shader.SetGlobalFloat("_PlanetOceanSecondaryWaveSpeed", oceanProfile.secondaryWaveSpeed);
-            Shader.SetGlobalFloat("_PlanetOceanWaveChop", oceanProfile.chop);
-            Shader.SetGlobalFloat("_PlanetOceanShoreAttenuationDistance", oceanProfile.shoreAttenuationDistance);
-            Shader.SetGlobalFloat("_PlanetOceanShallowRippleAmplitude", oceanProfile.shallowRippleAmplitude);
-            Shader.SetGlobalFloat("_PlanetOceanShallowRippleFrequency", oceanProfile.shallowRippleFrequency);
-            Shader.SetGlobalFloat("_PlanetOceanShallowRippleSpeed", oceanProfile.shallowRippleSpeed);
-            Shader.SetGlobalFloat("_PlanetOceanTidalWaveBoost", oceanProfile.tidalWaveBoost);
-            Shader.SetGlobalFloat("_PlanetOceanTidalHeightBoost", oceanProfile.tidalHeightBoost);
-            Shader.SetGlobalColor("_PlanetOceanShallowColor", oceanProfile.shallowColor);
-            Shader.SetGlobalColor("_PlanetOceanDeepColor", oceanProfile.deepColor);
-            Shader.SetGlobalColor("_PlanetOceanFoamColor", oceanProfile.foamColor);
-            Shader.SetGlobalFloat("_PlanetOceanRefractionStrength", oceanProfile.refractionStrength);
-            Shader.SetGlobalFloat("_PlanetOceanFresnelPower", oceanProfile.fresnelPower);
-            Shader.SetGlobalFloat("_PlanetOceanSSS", oceanProfile.subsurfaceScattering);
         }
     }
 }

@@ -1,8 +1,6 @@
 // Assets/Scripts/VoxelEngine/Player/UnderwaterEffect.cs
 //
-// Underwater VFX — ALWAYS active when camera is below water surface.
-// Rain makes the fog denser/darker. Clean binary on/off with reliable restore.
-// State saved ONCE on entry, always restored on exit. No stuck states.
+// Underwater VFX — active only when the camera head is actually below the water volume.
 
 using UnityEngine;
 
@@ -35,53 +33,39 @@ namespace VoxelEngine.Player
         private Color _sFC;
         private float _sFD;
         private FogMode _sFM;
+        private Color _sAmbient;
+        private float _sAmbientIntensity;
 
         private PlayerWaterState _waterState;
 
-        void Awake() { _cam = GetComponent<Camera>(); }
+        void Awake()
+        {
+            _cam = GetComponent<Camera>();
+            Shader.SetGlobalFloat("_UnderwaterCA", 0.0f);
+            Shader.SetGlobalFloat("_UnderwaterPostStrength", 0.0f);
+        }
 
         void LateUpdate()
         {
             _waterState = GetComponentInParent<PlayerWaterState>();
-            IsUnderwater = false;
-
-            if (_waterState != null && _waterState.IsHeadUnderwater) IsUnderwater = true;
-
-            if (!IsUnderwater)
-            {
-                var world = VoxelEngine.Core.ActiveWorld.Current;
-                if (world != null)
-                {
-                    if (VoxelEngine.WaterSim.PlanetWaterUtility.IsPlanetWorld && VoxelEngine.WaterSim.PlanetWaterUtility.SignedDistanceToSea(transform.position) <= 0.1f)
-                    {
-                        IsUnderwater = true;
-                    }
-                    else
-                    {
-                        var vp = world.WorldToVoxel(transform.position);
-                        var v = world.GetVoxelWorld(vp);
-                        if (v.waterLevel > 10) IsUnderwater = true;
-                        if (_waterState != null && _waterState.WaterSurfaceY > transform.position.y) IsUnderwater = true;
-                    }
-                }
-            }
+            IsUnderwater = _waterState != null && _waterState.IsHeadUnderwater;
 
             if (IsUnderwater)
             {
-                // Save original state ONCE
                 if (!_saved)
                 {
-                    _sBg  = _cam.backgroundColor;
-                    _sF   = _cam.clearFlags;
+                    _sBg = _cam.backgroundColor;
+                    _sF = _cam.clearFlags;
                     _sFar = _cam.farClipPlane;
                     _sFog = RenderSettings.fog;
-                    _sFC  = RenderSettings.fogColor;
-                    _sFD  = RenderSettings.fogDensity;
-                    _sFM  = RenderSettings.fogMode;
+                    _sFC = RenderSettings.fogColor;
+                    _sFD = RenderSettings.fogDensity;
+                    _sFM = RenderSettings.fogMode;
+                    _sAmbient = RenderSettings.ambientLight;
+                    _sAmbientIntensity = RenderSettings.ambientIntensity;
                     _saved = true;
                 }
 
-                // Rain intensity boost
                 float rainIntensity = 0f;
                 var weather = Weather.WeatherManager.Instance;
                 if (weather != null && weather.IsPrecipitating && !weather.IsSnowBiome)
@@ -90,44 +74,56 @@ namespace VoxelEngine.Player
                 float totalDensity = baseFogDensity + maxRainFogBoost * rainIntensity;
                 Color tint = Color.Lerp(underwaterTint, rainTint, rainIntensity * 0.6f);
 
-                _cam.backgroundColor  = tint;
-                _cam.clearFlags       = CameraClearFlags.SolidColor;
-                _cam.farClipPlane     = underwaterFarClip;
-                RenderSettings.fog    = true;
-                RenderSettings.fogMode    = FogMode.Exponential;
-                RenderSettings.fogColor   = tint;
+                _cam.backgroundColor = tint;
+                _cam.clearFlags = CameraClearFlags.SolidColor;
+                _cam.farClipPlane = underwaterFarClip;
+                RenderSettings.fog = true;
+                RenderSettings.fogMode = FogMode.Exponential;
+                RenderSettings.fogColor = tint;
                 RenderSettings.fogDensity = totalDensity;
+                RenderSettings.ambientLight = Color.Lerp(_sAmbient, tint, 0.35f);
+                RenderSettings.ambientIntensity = Mathf.Min(_sAmbientIntensity, 0.45f);
                 Shader.SetGlobalFloat("_UnderwaterCA", 1.0f);
                 Shader.SetGlobalColor("_UnderwaterFogColor", tint);
+                Shader.SetGlobalFloat("_UnderwaterPostStrength", 1.0f);
                 _applied = true;
             }
             else if (_applied && _saved)
             {
                 Restore();
             }
+            else
+            {
+                Shader.SetGlobalFloat("_UnderwaterCA", 0.0f);
+                Shader.SetGlobalFloat("_UnderwaterPostStrength", 0.0f);
+            }
         }
 
         private void Restore()
         {
             Shader.SetGlobalFloat("_UnderwaterCA", 0.0f);
+            Shader.SetGlobalFloat("_UnderwaterPostStrength", 0.0f);
             _cam.backgroundColor = _sBg;
-            _cam.clearFlags      = _sF;
-            _cam.farClipPlane    = _sFar;
-
-            if (Weather.WeatherManager.Instance == null)
-            {
-                RenderSettings.fog        = _sFog;
-                RenderSettings.fogColor   = _sFC;
-                RenderSettings.fogDensity = _sFD;
-                RenderSettings.fogMode    = _sFM;
-            }
-            _saved   = false;
+            _cam.clearFlags = _sF;
+            _cam.farClipPlane = _sFar;
+            RenderSettings.fog = _sFog;
+            RenderSettings.fogColor = _sFC;
+            RenderSettings.fogDensity = _sFD;
+            RenderSettings.fogMode = _sFM;
+            RenderSettings.ambientLight = _sAmbient;
+            RenderSettings.ambientIntensity = _sAmbientIntensity;
+            _saved = false;
             _applied = false;
         }
 
         void OnDisable()
         {
             if (_applied && _saved) Restore();
+            else
+            {
+                Shader.SetGlobalFloat("_UnderwaterCA", 0.0f);
+                Shader.SetGlobalFloat("_UnderwaterPostStrength", 0.0f);
+            }
         }
     }
 }

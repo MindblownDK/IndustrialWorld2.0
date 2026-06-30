@@ -502,13 +502,13 @@ namespace VoxelEngine.WaterSim
                 else if (y >= 2 && c.GetVoxelLocal(x, y - 2, z).IsSolid)
                     depthToTerrain = 0.5f;
 
-                Color colAttr = new Color(depthToTerrain, 1f, 1f, 1f);
+                Vector3 tideDir = PlanetWaterUtility.CurrentTideDirectionLocal();
+                float tideAlign = Vector3.Dot(up, tideDir);
+                Color colAttr = new Color(depthToTerrain, Mathf.Clamp01(Mathf.Abs(tideAlign)), 1f, 1f);
                 cols.Add(colAttr); cols.Add(colAttr); cols.Add(colAttr); cols.Add(colAttr);
 
                 var tris = liquid == LiquidType.CrudeOil ? oilTris : waterTris;
                 Vector2 flow = c.GetFlow(x, z);
-                Vector3 tideDir = PlanetWaterUtility.CurrentTideDirectionLocal();
-                float tideAlign = Vector3.Dot(up, tideDir);
                 Vector2 swellFlow = flow + new Vector2(tideAlign * 0.75f, (1f - Mathf.Abs(tideAlign)) * 0.55f);
 
                 AddSphereSurfacePatch(surfaceCenter, up, liquid, chunkVoxel, swellFlow, verts, norms, uvs, uv2s, tris);

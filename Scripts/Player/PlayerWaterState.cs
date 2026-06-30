@@ -1,7 +1,6 @@
 // Assets/Scripts/VoxelEngine/Player/PlayerWaterState.cs
 //
 // Queries fluid state at the player's position for swimming mechanics.
-// Fully supports radial planet gravity orientations and flat worlds.
 
 using UnityEngine;
 using VoxelEngine.Core;
@@ -14,44 +13,97 @@ namespace VoxelEngine.Player
         public bool IsSwimming { get; set; }
         public bool IsHeadUnderwater { get; set; }
         public float WaterDepth { get; set; }
-        public float WaterSurfaceY { get; private set; } = -9999;
+        public float WaterSurfaceY { get; private set; } = -9999f;
+        public float WaterSurfaceRadius { get; private set; } = -1f;
+        public float SubmergenceDepthMeters { get; private set; }
+
+        private const float BodyHeightMeters = 1.8f;
+        private const float HeadOffsetMeters = 1.6f;
 
         private void Update()
         {
             var world = ActiveWorld.Current;
-            if (world == null) { IsSwimming = false; WaterDepth = 0; IsHeadUnderwater = false; return; }
-
-            if (PlanetWaterUtility.IsPlanetWorld)
+            if (world == null)
             {
-                float seaRadius = world.SeaLevel * VoxelConstants.VOXEL_SIZE;
-                WaterSurfaceY = seaRadius;
-                float playerRadius = transform.position.magnitude;
-                float submerged = seaRadius - playerRadius;
-
-                var centerVoxel = world.WorldToVoxel(transform.position);
-                var v = world.GetVoxelWorld(centerVoxel);
-                bool inLiquidBasin = v.waterLevel > 0 || v.material == (byte)Materials.MaterialId.WaterLiquid || submerged > 0f;
-
-                IsSwimming = submerged > 0.75f && (inLiquidBasin || submerged < 60f);
-                IsHeadUnderwater = submerged > 1.6f;
-                WaterDepth = IsSwimming ? Mathf.Clamp01(Mathf.Max(submerged, 1.8f) / 1.8f) : 0f;
+                ClearState();
                 return;
             }
 
+            if (PlanetWaterUtility.IsPlanetWorld)
+            {
+                UpdateSphereState(world);
+                return;
+            }
+
+            UpdateFlatState(world);
+        }
+
+        private void UpdateSphereState(IVoxelWorld world)
+        {
+            Vector3 centerDir = transform.position.sqrMagnitude > 0.0001f ? transform.position.normalized : Vector3.up;
             Vector3 feet = transform.position;
-            Vector3 head = feet + Vector3.up * 1.6f;
+            Vector3 chest = feet + centerDir * 0.9f;
+            Vector3 head = feet + centerDir * HeadOffsetMeters;
+
+            WaterSurfaceRadius = PlanetWaterUtility.GetVisualSeaRadius(world);
+            WaterSurfaceY = WaterSurfaceRadius;
+
+            float feetSubmerged = WaterSurfaceRadius - feet.magnitude;
+            float chestSubmerged = WaterSurfaceRadius - chest.magnitude;
+            float headSubmerged = WaterSurfaceRadius - head.magnitude;
+
+            SubmergenceDepthMeters = Mathf.Max(0f, feetSubmerged);
+
+            var feetVoxel = world.GetVoxelWorld(world.WorldToVoxel(feet));
+            var chestVoxel = world.GetVoxelWorld(world.WorldToVoxel(chest));
+            var headVoxel = world.GetVoxelWorld(world.WorldToVoxel(head));
+
+            bool nearLiquid = IsLiquid(feetVoxel) || IsLiquid(chestVoxel) || IsLiquid(headVoxel);
+            bool volumetricSubmerged = feetSubmerged > 0.12f;
+            bool bodySubmerged = chestSubmerged > 0.18f;
+            bool headInside = headSubmerged > 0.02f;
+
+            IsSwimming = (volumetricSubmerged && bodySubmerged) || (nearLiquid && chestSubmerged > -0.15f);
+            IsHeadUnderwater = (volumetricSubmerged && headInside) || (IsLiquid(headVoxel) && headSubmerged > -0.2f);
+
+            float normalizedDepth = Mathf.Max(0f, feetSubmerged + 0.25f) / BodyHeightMeters;
+            WaterDepth = IsSwimming ? Mathf.Clamp01(normalizedDepth) : 0f;
+        }
+
+        private void UpdateFlatState(IVoxelWorld world)
+        {
+            WaterSurfaceRadius = -1f;
+            SubmergenceDepthMeters = 0f;
+
+            Vector3 feet = transform.position;
+            Vector3 head = feet + Vector3.up * HeadOffsetMeters;
 
             var feetVoxel = world.GetVoxelWorld(world.WorldToVoxel(feet));
             var headVoxel = world.GetVoxelWorld(world.WorldToVoxel(head));
 
             WaterSurfaceY = SampleWaterSurface(world, feet);
-            float flatSubmerged = WaterSurfaceY > -9000 ? (WaterSurfaceY - feet.y) : 0f;
+            float flatSubmerged = WaterSurfaceY > -9000f ? (WaterSurfaceY - feet.y) : 0f;
             bool feetInLiquid = feetVoxel.waterLevel > 10 && !feetVoxel.IsSolid;
 
-            const float SWIM_DEPTH = 0.85f;
-            IsSwimming       = feetInLiquid && (WaterSurfaceY <= -9000 || flatSubmerged > SWIM_DEPTH);
+            const float SwimDepth = 0.85f;
+            IsSwimming = feetInLiquid && (WaterSurfaceY <= -9000f || flatSubmerged > SwimDepth);
             IsHeadUnderwater = headVoxel.waterLevel > 10 && !headVoxel.IsSolid;
-            WaterDepth       = IsSwimming ? Mathf.Clamp01(Mathf.Max(flatSubmerged, 1.8f) / 1.8f) : 0f;
+            WaterDepth = IsSwimming ? Mathf.Clamp01(Mathf.Max(flatSubmerged, 1.8f) / 1.8f) : 0f;
+        }
+
+        private void ClearState()
+        {
+            IsSwimming = false;
+            WaterDepth = 0f;
+            IsHeadUnderwater = false;
+            WaterSurfaceY = -9999f;
+            WaterSurfaceRadius = -1f;
+            SubmergenceDepthMeters = 0f;
+        }
+
+        private static bool IsLiquid(Voxel v)
+        {
+            return FluidMaterialUtility.IsFluid(v) || (v.waterLevel > 10 && !v.IsSolid);
         }
 
         private float SampleWaterSurface(IVoxelWorld world, Vector3 pos)
@@ -82,7 +134,7 @@ namespace VoxelEngine.Player
                 }
             }
 
-            return -9999;
+            return -9999f;
         }
 
         public void MarkInWater() { }
