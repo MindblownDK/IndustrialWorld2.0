@@ -104,6 +104,7 @@ namespace VoxelEngine.Rendering
         public override void Create()
         {
             _waterPass = new VolumetricWaterPass();
+            if (blitShader == null) blitShader = Shader.Find("VoxelEngine/VolumetricWaterPost");
             if (blitShader != null) _mat = CoreUtils.CreateEngineMaterial(blitShader);
         }
 

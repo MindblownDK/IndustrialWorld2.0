@@ -625,9 +625,6 @@ namespace VoxelEngine.Cosmos
                 p.chunk.genCompletedTime = Time.time;
                 p.chunk.isScattered = false;
                 if (!_meshQueue.Contains(p.chunk)) _meshQueue.Enqueue(p.chunk);
-                
-                VoxelEngine.WaterSim.WaterMeshBuilder.Schedule(p.chunk);
-                
                 return;
             }
         }

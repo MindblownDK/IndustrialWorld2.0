@@ -76,7 +76,7 @@ namespace VoxelEngine.GridSystem.UI
             if (show != _visible)
             {
                 _visible = show;
-                // VoxelEngine.UI.Minimap.SetVisible(!show); // hide minimap while this is up
+                // Minimap removed.
             }
         }
     }

@@ -77,6 +77,9 @@ namespace VoxelEngine.UI
         private VoxelEngine.Storage.DiskManipulator    _openDiskManipulator;
         private VoxelEngine.Storage.NASBlock           _openNAS;
         private VoxelEngine.Storage.Powerstation       _openPowerstation;
+        private VoxelEngine.Storage.StorageDrawer      _openStorageDrawer;
+        private VoxelEngine.Storage.StorageDrawerController _openDrawerController;
+        private VoxelEngine.Storage.StorageItemDisplayBlock _openItemDisplay;
         // Containers whose OnChanged should call Refresh; cleared on each panel switch.
         private System.Collections.Generic.List<ItemContainer> _watchedContainers = new();
 
@@ -115,7 +118,10 @@ namespace VoxelEngine.UI
         {
             if (Instance != null && Instance != this) { Destroy(this); return; }
             Instance = this;
+            UIState.Reset();
+            Time.timeScale = 1f;
             _doc = GetComponent<UIDocument>();
+            _doc.sortingOrder = 500;
             if (_doc.panelSettings == null)
                 _doc.panelSettings = Resources.Load<PanelSettings>("MenuPanelSettings");
             if (_doc.panelSettings != null)
@@ -235,6 +241,7 @@ namespace VoxelEngine.UI
             { _machineRefreshAccum = 0f; Refresh(); }
             ResearchHud.Tick();
             TickUpgradePrompt();
+            
             VoxelEngine.GridSystem.UI.BlockRotationHud.Tick();
             VoxelEngine.GridSystem.UI.ShipToolHud.Tick();
 
@@ -277,7 +284,7 @@ namespace VoxelEngine.UI
             // Hotbar wheel — only when no UI is open and no modifier is held (Ctrl/Shift
             // + wheel rotate the grid build ghost, so they must not also cycle the hotbar).
             bool ctrl = false, shift = false;
-#if ENABLE_INPUT_SYSTEM
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
             var kbWheel = UnityEngine.InputSystem.Keyboard.current;
             ctrl  = kbWheel != null && (kbWheel.leftCtrlKey.isPressed  || kbWheel.rightCtrlKey.isPressed);
             shift = kbWheel != null && (kbWheel.leftShiftKey.isPressed || kbWheel.rightShiftKey.isPressed);
@@ -346,7 +353,7 @@ namespace VoxelEngine.UI
             }
 
             // Tick custom tooltip overlay
-            #if ENABLE_INPUT_SYSTEM
+            #if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
             Vector2 mp = UnityEngine.InputSystem.Mouse.current != null
                 ? UnityEngine.InputSystem.Mouse.current.position.ReadValue() : Vector2.zero;
             #else
@@ -397,6 +404,7 @@ namespace VoxelEngine.UI
             _openPatternTerminal = null; _openCraftTerminal   = null;
             _openImporter        = null; _openExporter        = null;
             _openDiskManipulator = null; _openNAS             = null;
+            _openPowerstation = null; _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
 
             UnlockCursor();
             Refresh();
@@ -511,6 +519,9 @@ namespace VoxelEngine.UI
             _openReprocessor= null; _openElectrolyser= null;
             _openHydroEngine= null; _openGasTank     = null; _openWaterPump = null; _openGridBlock = null; _openOilRefinery = null; _openChemPlant = null; _openGridTerminal = null;
             _openStation    = null;
+            _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
+            _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
+            _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             UnwatchAllContainers();
             if (c is ItemContainer ic) WatchContainer(ic);
             UnlockCursor();
@@ -527,6 +538,9 @@ namespace VoxelEngine.UI
             _openReprocessor= null; _openElectrolyser= null;
             _openHydroEngine= null; _openGasTank     = null; _openWaterPump = null; _openGridBlock = null; _openOilRefinery = null; _openChemPlant = null; _openGridTerminal = null;
             _rightContainer = null; _openChest = null;
+            _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
+            _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
+            _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _openStation    = f.GetComponent<CraftingStation>();
             _inventoryOpen  = true;
             UnwatchAllContainers();
@@ -546,6 +560,9 @@ namespace VoxelEngine.UI
             _openReprocessor= null; _openElectrolyser= null;
             _openHydroEngine= null; _openGasTank     = null; _openWaterPump = null; _openGridBlock = null; _openOilRefinery = null; _openChemPlant = null; _openGridTerminal = null;
             _rightContainer = null; _openChest = null;
+            _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
+            _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
+            _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _openStation    = ef.GetComponent<CraftingStation>();
             _inventoryOpen  = true;
             UnwatchAllContainers();
@@ -564,6 +581,9 @@ namespace VoxelEngine.UI
             _openReprocessor= null; _openElectrolyser= null;
             _openHydroEngine= null; _openGasTank     = null; _openWaterPump = null; _openGridBlock = null; _openOilRefinery = null; _openChemPlant = null; _openGridTerminal = null;
             _rightContainer = null; _openChest = null; _openStation = null;
+            _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
+            _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
+            _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _inventoryOpen  = true;
             UnwatchAllContainers();
             if (fuel != null) { fuel.EnsureContainers(); WatchContainer(fuel.fuelC); }
@@ -578,6 +598,9 @@ namespace VoxelEngine.UI
             _openFurnace    = null; _openElectric = null;
             _openCoalGen    = null;
             _rightContainer = null; _openChest = null; _openStation = null;
+            _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
+            _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
+            _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _inventoryOpen  = true;
             UnwatchAllContainers();
             if (quarry != null) { quarry.EnsureOutputPublic(); quarry.EnsureUpgrades(); WatchContainer(quarry.Output); WatchContainer(quarry.upgradeC); }
@@ -598,6 +621,7 @@ namespace VoxelEngine.UI
             _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null;
             _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
+            _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _inventoryOpen = true;
             UnwatchAllContainers();
             switch (machine)
@@ -656,6 +680,13 @@ namespace VoxelEngine.UI
                 case VoxelEngine.Storage.Powerstation ps:
                     _openPowerstation = ps; ps.EnsureContainers();
                     WatchContainer(ps.psuSlots); break;
+                case VoxelEngine.Storage.StorageDrawer sd:
+                    _openStorageDrawer = sd; sd.EnsureContainers();
+                    WatchContainer(sd.upgradeSlots); break;
+                case VoxelEngine.Storage.StorageDrawerController dc:
+                    _openDrawerController = dc; dc.RefreshLinks(); break;
+                case VoxelEngine.Storage.StorageItemDisplayBlock dib:
+                    _openItemDisplay = dib; break;
                 case VoxelEngine.Storage.ServerRack sr:
                     _openServerRack = sr; sr.EnsureContainers();
                     WatchContainer(sr.diskSlots); WatchContainer(sr.ramSlots);
@@ -682,6 +713,7 @@ namespace VoxelEngine.UI
             _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null;
             _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
+            _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _openGridTerminal = grid; _terminalTab = -1;
             _inventoryOpen = true;
             UnwatchAllContainers();
@@ -702,6 +734,9 @@ namespace VoxelEngine.UI
             _openPortReactor= null; _openProcessor   = null;
             _openReprocessor= null; _openElectrolyser= null;
             _openHydroEngine= null; _openGasTank     = null; _openWaterPump = null; _openGridBlock = null; _openOilRefinery = null; _openChemPlant = null; _openGridTerminal = null;
+            _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
+            _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
+            _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _inventoryOpen  = true;
             // Lazy-create a queue on the station so progress survives panel closure/reopen.
             _activeQueue    = st.GetComponent<CraftQueue>();
@@ -731,6 +766,7 @@ namespace VoxelEngine.UI
             _openImporter   = null; _openExporter     = null;
             _openDiskManipulator = null; _openNAS     = null;
             _openPowerstation= null;
+            _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _openStorageTerminal = null; _openServerRack = null;
             _activeQueue    = null;
             _openCoalGen    = null;
@@ -775,6 +811,7 @@ namespace VoxelEngine.UI
             PlayerHud.EnsureMounted(_root);
             ResearchHud.EnsureMounted(_root);
             UpgradePromptHud.EnsureMounted(_root);
+            
             VoxelEngine.GridSystem.UI.BlockRotationHud.EnsureMounted(_root);
             VoxelEngine.GridSystem.UI.ShipToolHud.EnsureMounted(_root);
             RustStyleHud.EnsureMounted(_root);
@@ -856,7 +893,8 @@ namespace VoxelEngine.UI
                     _openGasTank != null || _openWaterPump != null || _openStorageTerminal != null || _openServerRack != null ||
                     _openPatternTerminal != null || _openCraftTerminal != null || _openImporter != null ||
                     _openExporter != null || _openDiskManipulator != null || _openNAS != null ||
-                    _openPowerstation != null;
+                    _openPowerstation != null || _openStorageDrawer != null ||
+                    _openDrawerController != null || _openItemDisplay != null;
                 // The station pane (_openStation) renders its OWN crafting list on
                 // the right, so we suppress the center panel only in that case.
                 // For every other right panel (chest / furnace / storage terminal)
@@ -893,6 +931,9 @@ namespace VoxelEngine.UI
                 else if (_openDiskManipulator  != null) _root.Add(VoxelEngine.Storage.StorageUI.BuildDiskManipulatorPanel(_openDiskManipulator, BuildSlot));
                 else if (_openNAS              != null) _root.Add(VoxelEngine.Storage.StorageUI.BuildNASPanel(_openNAS, BuildSlot));
                 else if (_openPowerstation     != null) _root.Add(BuildPowerstationPanel(_openPowerstation));
+                else if (_openStorageDrawer   != null) _root.Add(VoxelEngine.Storage.StorageUI.BuildDrawerPanel(_openStorageDrawer, BuildSlot));
+                else if (_openDrawerController!= null) { var mp = VoxelEngine.Storage.StorageUI.BuildDrawerControllerPanel(_openDrawerController); _root.Add(mp); AppendItemPorts(mp, _openDrawerController); }
+                else if (_openItemDisplay     != null) _root.Add(VoxelEngine.Storage.StorageUI.BuildItemDisplayPanel(_openItemDisplay, BuildSlot));
                 else if (_openGridBlock        != null) { var mp = VoxelEngine.GridSystem.UI.GridBlockUI.BuildPanel(_openGridBlock, BuildSlot); _root.Add(mp); if (_openGridBlock is VoxelEngine.Transport.IItemPortHost) AppendItemPorts(mp, _openGridBlock); }
                 else if (_openOilRefinery      != null) { var mp = VoxelEngine.Crafting.ProcessorUI.OilRefineryPanel(_openOilRefinery, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openOilRefinery); }
                 else if (_openChemPlant        != null) { var mp = VoxelEngine.Crafting.ProcessorUI.ChemicalPlantPanel(_openChemPlant, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openChemPlant); }
@@ -2364,6 +2405,43 @@ namespace VoxelEngine.UI
             // Same slot — cancel.
             if (srcC == destC && srcIdx == destIdx) { CancelDrag(); return; }
 
+            // UI-only filter slots record the item type without consuming the dragged stack.
+            if (destC is VoxelEngine.Storage.IItemFilterSlot filterSlot)
+            {
+                if (!srcStack.IsEmpty) filterSlot.ApplyFilter(srcStack.item);
+                CancelDrag();
+                Refresh();
+                return;
+            }
+
+            // Virtual drawer storage is capacity-based, not slot-swap based.
+            if (destC is VoxelEngine.Storage.StorageDrawer destDrawer)
+            {
+                int accepted = destDrawer.InsertItems(srcStack.item, srcStack.count);
+                if (accepted > 0)
+                {
+                    if (srcC is VoxelEngine.Storage.StorageDrawer srcDrawer) srcDrawer.Remove(srcStack.item, accepted);
+                    else
+                    {
+                        if (accepted >= srcStack.count) srcC.SetSlot(srcIdx, new ItemStack());
+                        else { srcStack.count -= accepted; srcC.SetSlot(srcIdx, srcStack); }
+                    }
+                }
+                CancelDrag();
+                Refresh();
+                return;
+            }
+            if (srcC is VoxelEngine.Storage.StorageDrawer sourceDrawer)
+            {
+                var clone = srcStack.Clone();
+                var leftover = destC.Insert(clone);
+                int moved = srcStack.count - (leftover?.count ?? 0);
+                if (moved > 0) sourceDrawer.Remove(srcStack.item, moved);
+                CancelDrag();
+                Refresh();
+                return;
+            }
+
             // Respect destination/source AcceptFilter gates during direct drag/swap too.
             // Insert() already honours filters, but SetSlot()-based swaps used to bypass them.
             if (!CanDirectSet(destC, srcStack) || !CanDirectSet(srcC, dstStack))
@@ -2527,7 +2605,7 @@ namespace VoxelEngine.UI
         {
             CraftQueue best = null;
             float bestSqr = stationRadius * stationRadius;
-            var stations = FindObjectsByType<Crafting.CraftingStation>(FindObjectsInactive.Exclude);
+            var stations = FindObjectsByType<Crafting.CraftingStation>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
             foreach (var st in stations)
             {
                 if (st.tier != tier) continue;
@@ -2749,7 +2827,7 @@ namespace VoxelEngine.UI
         private bool PointerOverInteractiveUI()
         {
             if (_root?.panel == null) return false;
-#if ENABLE_INPUT_SYSTEM
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
             var mouse = UnityEngine.InputSystem.Mouse.current;
             if (mouse == null) return false;
             Vector2 sp = mouse.position.ReadValue();
@@ -2770,7 +2848,7 @@ namespace VoxelEngine.UI
             if (!_inventoryOpen) return;
 
             // --- Read mouse state directly from the device ---
-#if ENABLE_INPUT_SYSTEM
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
             var mouse = UnityEngine.InputSystem.Mouse.current;
             if (mouse == null) return;
             Vector2 screenPos    = mouse.position.ReadValue();
@@ -2875,6 +2953,12 @@ namespace VoxelEngine.UI
                 IItemContainer explicitDest = ResolveQuickTransferDestination(sourceC, srcStack.item);
                 if (explicitDest != null)
                 {
+                    if (explicitDest is VoxelEngine.Storage.IItemFilterSlot filterSlot)
+                    {
+                        filterSlot.ApplyFilter(srcStack.item);
+                        Refresh();
+                        return;
+                    }
                     var clone1 = new ItemStack { item = srcStack.item, count = srcStack.count, durability = srcStack.durability, payload = srcStack.payload };
                     var leftover1 = explicitDest.Insert(clone1);
                     int moved1 = leftover1 == null ? srcStack.count : (srcStack.count - leftover1.count);
@@ -3011,6 +3095,12 @@ namespace VoxelEngine.UI
                 if (_openImporter != null)        return _openImporter.upgradeSlots;
                 if (_openExporter != null)        return _openExporter.upgradeSlots;
                 if (_openPowerstation != null)    return _openPowerstation.psuSlots;
+                if (_openStorageDrawer != null)
+                {
+                    if (item is VoxelEngine.Storage.StorageDrawerUpgradeItem) return _openStorageDrawer.upgradeSlots;
+                    return _openStorageDrawer;
+                }
+                if (_openItemDisplay != null) return _openItemDisplay.FilterSlot;
 
                 // Server Rack: hardware items go to their dedicated slots — never wrong-typed.
                 if (_openServerRack != null)
@@ -3101,7 +3191,7 @@ namespace VoxelEngine.UI
             if (inventory == null || inventory.container == null) return;
             if (hotbarIdx < 0 || hotbarIdx >= Inventory.HOTBAR_SIZE) return;
 
-#if ENABLE_INPUT_SYSTEM
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
             var mouse = UnityEngine.InputSystem.Mouse.current;
             if (mouse == null) return;
             Vector2 screenPos = mouse.position.ReadValue();
@@ -3151,7 +3241,7 @@ namespace VoxelEngine.UI
             if (_searchHasFocus || !_inventoryOpen) return;
             if (!GameSettings.WasPressed(InputAction.DropItem)) return;
 
-#if ENABLE_INPUT_SYSTEM
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
             var mouse = UnityEngine.InputSystem.Mouse.current;
             if (mouse == null) return;
             Vector2 screenPos = mouse.position.ReadValue();

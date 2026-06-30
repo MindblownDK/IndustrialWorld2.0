@@ -207,9 +207,11 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float rawDepth = SampleSceneDepth(screenUV);
                 float sceneEyeDepth = LinearEyeDepth(rawDepth, _ZBufferParams);
                 float waterEyeDepth = i.scrPos.w;
-                float depthDiff = max(0, sceneEyeDepth - waterEyeDepth);
+                bool hasValidDepth = rawDepth > 0.00001f && rawDepth < 0.99999f;
+                float depthDiff = hasValidDepth ? max(0, sceneEyeDepth - waterEyeDepth) : 15.0f;
                 float deep01 = saturate(depthDiff / _DepthFade);
                 float3 refracted = SampleSceneColor(refractUV).rgb;
+                if (length(refracted) < 0.001f) refracted = _DeepColor.rgb;
 
                 // ═══════════════════════════════════════════════════════════════
                 //  SHORE ABSORPTION — the KEY fix for "double layer"
