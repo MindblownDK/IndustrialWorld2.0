@@ -16,10 +16,5 @@ namespace VoxelEngine.Rendering
         {
             _material = material;
         }
-
-        public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
-        {
-            // Host pass ready for future volumetric post-processing blit execution.
-        }
     }
 }
