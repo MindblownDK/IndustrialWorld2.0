@@ -233,13 +233,13 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float4 waterCol = lerp(_ShallowColor, _DeepColor, saturate(deep01 + sideDeepBoost));
                 waterCol.rgb = lerp(waterCol.rgb, waterCol.rgb * float3(0.82, 0.92, 1.08), tidalTint);
 
-                float validDepth = step(0.08, depthDiff);
-                float shoreFoamFade = saturate(1.0 - depthDiff / _ShoreFoamWidth);
-                float shoreFoam = shoreFoamFade * validDepth * _ShoreFoamIntensity * (1.0 - shoreAtten + 0.15);
-                float crest = saturate((FBM(surfUV * 0.22 + t * 0.075) - 0.58) * 3.0) * saturate(_DeepWaveAmplitude * 1.75);
+                float validDepth = step(0.05, depthDiff);
+                float shoreFoamFade = saturate(1.0 - depthDiff / (_ShoreFoamWidth * 0.7));
+                float shoreFoam = shoreFoamFade * validDepth * _ShoreFoamIntensity * saturate(1.0 - shoreAtten) * 0.45;
+                float crest = saturate((FBM(surfUV * 0.25 + t * 0.08) - 0.62) * 3.5) * saturate(_DeepWaveAmplitude * 1.5);
                 float lace = FBM(surfUV * 0.85 + float2(t * 0.12, -t * 0.08));
-                float crestFoam = crest * lace * 0.6;
-                float flowFoam = saturate(flowSpeed * 3.0 - 0.2) * _FlowFoamStrength;
+                float crestFoam = crest * lace * 0.35;
+                float flowFoam = saturate(flowSpeed - 1.2) * _FlowFoamStrength * 0.4;
                 float2 foamScrollUV = surfUV + normalize(flowDir + 0.001) * t * 0.3;
                 flowFoam *= saturate(FBM(foamScrollUV * 1.5) * 1.5);
                 float foam = saturate(shoreFoam + crestFoam + flowFoam);

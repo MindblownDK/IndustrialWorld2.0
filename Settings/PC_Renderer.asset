@@ -1,5 +1,19 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
+--- !u!114 &-2929471668946659056
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 78b20aa8aad219e43b1dd39b9573d68e, type: 3}
+  m_Name: VolumetricWaterRenderFeature
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Rendering.VolumetricWaterRenderFeature
+  m_Active: 1
+  blitShader: {fileID: 4800000, guid: 56bbd69c8cfcfad449f1a1cb0605b076, type: 3}
 --- !u!114 &11400000
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -26,8 +40,8 @@ MonoBehaviour:
     probeVolumeBlendStatesCS: {fileID: 7200000, guid: b9a23f869c4fd45f19c5ada54dd82176, type: 3}
   m_RendererFeatures:
   - {fileID: 7833122117494664109}
-  - {fileID: 8110049394109796893}
-  m_RendererFeatureMap: ad6b866f10d7b46c1d52c97ef4ae8c70
+  - {fileID: 664447709425830631}
+  m_RendererFeatureMap: ad6b866f10d7b46ce70a26dcab973809
   m_UseNativeRenderPass: 1
   xrSystemData: {fileID: 0}
   postProcessData: {fileID: 11400000, guid: 41439944d30ece34e96484bdb6645b55, type: 2}
@@ -56,6 +70,20 @@ MonoBehaviour:
   m_DepthTextureFormat: 0
   m_AccurateGbufferNormals: 0
   m_IntermediateTextureMode: 0
+--- !u!114 &664447709425830631
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fccc3e1960eb4134b9c69b12e1eb35c3, type: 3}
+  m_Name: VolumetricWaterRenderFeature
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Rendering.VolumetricWaterRenderFeature
+  m_Active: 1
+  blitShader: {fileID: 4800000, guid: 56bbd69c8cfcfad449f1a1cb0605b076, type: 3}
 --- !u!114 &2986304101548154585
 MonoBehaviour:
   m_ObjectHideFlags: 0

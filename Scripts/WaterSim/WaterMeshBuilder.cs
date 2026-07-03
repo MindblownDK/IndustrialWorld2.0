@@ -482,7 +482,7 @@ namespace VoxelEngine.WaterSim
             tangentA.Normalize();
             Vector3 tangentB = Vector3.Cross(normal, tangentA).normalized;
 
-            float half = 0.50f;
+            float half = 0.58f;
             int i = verts.Count;
             Vector3 p0 = center - tangentA * half - tangentB * half;
             Vector3 p1 = center + tangentA * half - tangentB * half;
