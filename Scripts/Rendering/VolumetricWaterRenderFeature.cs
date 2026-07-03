@@ -2,12 +2,11 @@
 //
 // Stable renderer feature host for planet water integration.
 //
-// This feature intentionally performs no fullscreen blit yet. Its job is to keep
-// URP renderer-feature deserialization stable while the planet water visuals are
-// driven by world meshes and water materials. A future post pass can be layered on
-// top once the pipeline path is fully validated against the active Unity 6 URP setup.
+// Uses URP CoreUtils for safe engine material lifecycle management without
+// polluting serialized asset data or triggering OnValidate serialization errors.
 
 using UnityEngine;
+using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 
 namespace VoxelEngine.Rendering
@@ -21,34 +20,40 @@ namespace VoxelEngine.Rendering
 
         public override void Create()
         {
-            _waterPass = new VolumetricWaterPass
+            if (_waterPass == null)
             {
-                renderPassEvent = RenderPassEvent.AfterRenderingTransparents
-            };
+                _waterPass = new VolumetricWaterPass
+                {
+                    renderPassEvent = RenderPassEvent.AfterRenderingTransparents
+                };
+            }
 
             if (blitShader == null)
                 blitShader = Shader.Find("VoxelEngine/VolumetricWaterPost");
-
-            if (blitShader != null)
-                _material = new Material(blitShader) { name = "VolumetricWaterPost_Runtime" };
         }
 
         public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
         {
-            if (_waterPass == null)
+            if (blitShader == null || _waterPass == null)
                 return;
 
-            _waterPass.Setup(_material);
+            if (_material == null || _material.shader != blitShader)
+            {
+                _material = CoreUtils.CreateEngineMaterial(blitShader);
+                if (_material != null) _material.name = "VolumetricWaterPost_Runtime";
+            }
+
+            if (_material != null)
+            {
+                _waterPass.Setup(_material);
+                renderer.EnqueuePass(_waterPass);
+            }
         }
 
         protected override void Dispose(bool disposing)
         {
-            if (_material != null)
-            {
-                if (Application.isPlaying) Object.Destroy(_material);
-                else Object.DestroyImmediate(_material);
-                _material = null;
-            }
+            CoreUtils.Destroy(_material);
+            _material = null;
         }
     }
 }
