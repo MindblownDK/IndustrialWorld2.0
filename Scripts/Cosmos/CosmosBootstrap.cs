@@ -298,7 +298,29 @@ namespace VoxelEngine.Cosmos
         {
             if (planetTemplate != null) return;
 
-            planetTemplate = Resources.Load<PlanetTemplate>("Planet_Earth");
+            var session = VoxelEngine.Menu.WorldSession.Instance;
+            if (session != null && session.seedState != null && session.seedState.planets != null)
+            {
+                int spawnIdx = Mathf.Clamp(session.spawnPlanetIndex, 0, session.seedState.planets.Count - 1);
+                var sys = solarSystemTemplate;
+                if (sys == null) sys = Resources.Load<SolarSystemTemplate>("System_Sol");
+#if UNITY_EDITOR
+                if (sys == null)
+                    sys = UnityEditor.AssetDatabase.LoadAssetAtPath<SolarSystemTemplate>(
+                        "Assets/VoxelEngineAssets/Planets/System_Sol.asset");
+#endif
+                if (sys != null && sys.planets != null && spawnIdx < sys.planets.Length && sys.planets[spawnIdx] != null)
+                {
+                    planetTemplate = sys.planets[spawnIdx];
+                }
+            }
+
+            if (planetTemplate == null) planetTemplate = Resources.Load<PlanetTemplate>("Planet_Earth");
+#if UNITY_EDITOR
+            if (planetTemplate == null)
+                planetTemplate = UnityEditor.AssetDatabase.LoadAssetAtPath<PlanetTemplate>(
+                    "Assets/VoxelEngineAssets/Planets/Planet_Earth.asset");
+#endif
             if (planetTemplate == null)
             {
                 planetTemplate = CreateDefaultEarthTemplate();

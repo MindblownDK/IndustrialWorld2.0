@@ -128,6 +128,7 @@ namespace VoxelEngine.Cosmos
         {
             if (Instance != null && Instance != this) { Destroy(this); return; }
             Instance = this;
+            VoxelEngine.WaterSim.WaterMeshBuilder.ResetForNewWorld();
 
             // Ensure the fluid sim exists. The flat VoxelWorld is disabled by CosmosBootstrap
             // when the sphere is active, so there's no cross-contamination — the sphere owns the

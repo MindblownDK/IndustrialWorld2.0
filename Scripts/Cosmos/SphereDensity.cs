@@ -35,6 +35,15 @@ namespace VoxelEngine.Cosmos
         // latitude with regional noise variation — looks like Earth.
         private const float LatitudeBlend = 0.55f;
 
+        private static float SeedOffset(int seed, int channel)
+        {
+            uint h = (uint)(seed ^ (channel * 0x9E3779B9));
+            h = (h ^ (h >> 16)) * 0x85EBCA6Bu;
+            h = (h ^ (h >> 13)) * 0xC2B2AE35u;
+            h = h ^ (h >> 16);
+            return ((h & 0xFFFF) / 65535f - 0.5f) * 1000f;
+        }
+
         /// <summary>
         /// Sample the planet's climate field at a surface direction.
         /// Returns temperature &amp; humidity in 0..1.
@@ -47,8 +56,8 @@ namespace VoxelEngine.Cosmos
         public static float2 SampleClimate(int seed, in float3 dir)
         {
             float3 p = dir * 1f;
-            float tNoise = noise.snoise(p * TempScale   + (seed * 0.073f + TempOffset))  * 0.5f + 0.5f;
-            float hNoise = noise.snoise(p * HumidScale  + (seed * 0.149f + HumidOffset)) * 0.5f + 0.5f;
+            float tNoise = noise.snoise(p * TempScale   + (SeedOffset(seed, 1) + TempOffset))  * 0.5f + 0.5f;
+            float hNoise = noise.snoise(p * HumidScale  + (SeedOffset(seed, 2) + HumidOffset)) * 0.5f + 0.5f;
 
             // Latitude: |dir.y| = 0 at equator (hot), 1 at poles (cold).
             float lat = math.abs(dir.y);                          // 0 = equator, 1 = pole
@@ -76,7 +85,7 @@ namespace VoxelEngine.Cosmos
         /// </summary>
         public static float LandMask(int seed, in float3 dir, float continentScaleDir)
         {
-            float3 p = dir + seed * 0.0031f;
+            float3 p = dir + SeedOffset(seed, 3);
             float coarse = noise.snoise(p * continentScaleDir)             * 0.5f + 0.5f;
             float shape  = noise.snoise(p * continentScaleDir * 2.3f + 13f) * 0.5f + 0.5f;
             float land   = coarse * 0.72f + shape * 0.28f;
@@ -303,7 +312,7 @@ namespace VoxelEngine.Cosmos
             {
                 if (radius <= prm.seaRadius)
                 {
-                    float oilNoise = noise.snoise(worldPos * 0.02f + (prm.seed * 0.123f));
+                    float oilNoise = noise.snoise(worldPos * 0.02f + SeedOffset(prm.seed, 4));
                     if (oilNoise > 0.65f && radius < prm.seaRadius - 10f)
                     {
                         return new Voxel(-5, (byte)MaterialId.CrudeOil, 255);
@@ -313,7 +322,7 @@ namespace VoxelEngine.Cosmos
                 }
                 else if (radius < prm.seaRadius + 18f && radius > surfaceRadius - 2f && radius < surfaceRadius + 1f)
                 {
-                    float surfaceOilNoise = noise.snoise(worldPos * 0.018f + (prm.seed * 0.789f));
+                    float surfaceOilNoise = noise.snoise(worldPos * 0.018f + SeedOffset(prm.seed, 5));
                     if (surfaceOilNoise > 0.68f)
                     {
                         return new Voxel(-5, (byte)MaterialId.CrudeOil, 255);

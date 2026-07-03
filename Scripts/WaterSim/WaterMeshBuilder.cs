@@ -47,6 +47,16 @@ namespace VoxelEngine.WaterSim
             public float terrainH;
         }
 
+        public static void ResetForNewWorld()
+        {
+            _queue.Clear();
+            _queued.Clear();
+            _sphereCellCenters.Clear();
+            _sphereSurfaceCells.Clear();
+            if (_waterMat != null) { if (Application.isPlaying) Object.Destroy(_waterMat); else Object.DestroyImmediate(_waterMat); _waterMat = null; }
+            if (_oilMat != null)   { if (Application.isPlaying) Object.Destroy(_oilMat); else Object.DestroyImmediate(_oilMat); _oilMat = null; }
+        }
+
         public static void Schedule(Chunk c)
         {
             if (c != null && _queued.Add(c)) _queue.Enqueue(c);
