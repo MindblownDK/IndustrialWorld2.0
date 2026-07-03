@@ -177,7 +177,7 @@ namespace VoxelEngine.Cosmos
             var session = VoxelEngine.Menu.WorldSession.Instance;
             if (session != null)
             {
-                worldName = session.worldName + "_sphere";
+                worldName = session.worldName;
             }
 
             materialRegistry.Build();

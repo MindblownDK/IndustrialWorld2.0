@@ -107,6 +107,11 @@ namespace VoxelEngine.Core
         // ---- Lifecycle ----
         private void Awake()
         {
+            if (FindAnyObjectByType<VoxelEngine.Cosmos.CosmosBootstrap>(FindObjectsInactive.Include) != null)
+            {
+                enabled = false;
+                return;
+            }
             if (Instance != null && Instance != this) { Destroy(this); return; }
             Instance = this;
             // Volumetric water simulation.

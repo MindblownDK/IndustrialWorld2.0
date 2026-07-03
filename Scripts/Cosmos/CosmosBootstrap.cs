@@ -123,7 +123,7 @@ namespace VoxelEngine.Cosmos
             world.viewDistance = viewDistance;
             world.enableScatter = true;  // Safe now — flat world is disabled, sphere is sole world.
             world.biomeRegistry = biomeRegistry;
-            world.worldName = session != null ? session.worldName + "_sphere" : "SphereTest";
+            world.worldName = session != null ? session.worldName : "SphereTest";
 
             // ── Far LOD (space view), as a CHILD of the body ──
             var lodGO = new GameObject("LOD");
@@ -195,7 +195,7 @@ namespace VoxelEngine.Cosmos
             // to fight over the same singletons and generate chunks at each other's positions →
             // job-safety violations + scatter crashes. We disable the component (not destroy it)
             // so its inspector-assigned assets stay available for the sphere to borrow.
-            var flatWorld = FindAnyObjectByType<VoxelEngine.Core.VoxelWorld>();
+            var flatWorld = FindAnyObjectByType<VoxelEngine.Core.VoxelWorld>(FindObjectsInactive.Include);
             if (flatWorld != null && flatWorld != this)
             {
                 flatWorld.enabled = false;
@@ -323,7 +323,7 @@ namespace VoxelEngine.Cosmos
             // missing shader): we reuse the flat world's proven vertex-colour URP material.
             if (materialRegistry == null || terrainMaterial == null)
             {
-                var flat = FindAnyObjectByType<VoxelEngine.Core.VoxelWorld>();
+                var flat = FindAnyObjectByType<VoxelEngine.Core.VoxelWorld>(FindObjectsInactive.Include);
                 if (flat != null)
                 {
                     if (materialRegistry == null) materialRegistry = flat.materialRegistry;
