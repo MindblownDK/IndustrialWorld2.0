@@ -101,12 +101,20 @@ namespace VoxelEngine.Cosmos
             var enhancedShader = Shader.Find("VoxelEngine/VoxelTerrainEnhanced");
             if (enhancedShader != null && terrainMaterial != null)
             {
-                var enhancedMat = new Material(enhancedShader);
-                enhancedMat.name = "Mat_Terrain_Enhanced";
-                // Carry over the base colour from the original material.
+                var enhancedMat = new Material(enhancedShader) { name = "Mat_Terrain_Enhanced" };
                 if (terrainMaterial.HasProperty("_BaseColor"))
-                    enhancedMat.SetColor("_BaseColor", terrainMaterial.GetColor("_BaseColor"));
-                enhancedMat.CopyPropertiesFromMaterial(terrainMaterial);
+                {
+                    var col = terrainMaterial.GetColor("_BaseColor");
+                    enhancedMat.SetColor("_BaseColor", col == Color.clear || col == Color.black ? Color.white : col);
+                }
+                else
+                {
+                    enhancedMat.SetColor("_BaseColor", Color.white);
+                }
+                if (terrainMaterial.HasProperty("_Smoothness"))
+                    enhancedMat.SetFloat("_Smoothness", terrainMaterial.GetFloat("_Smoothness"));
+                if (terrainMaterial.HasProperty("_Metallic"))
+                    enhancedMat.SetFloat("_Metallic", terrainMaterial.GetFloat("_Metallic"));
                 terrainMaterial = enhancedMat;
             }
             world.materialRegistry = materialRegistry;

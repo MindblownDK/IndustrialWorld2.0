@@ -626,6 +626,16 @@ namespace VoxelEngine.Core
             return c.GetVoxelLocal(lx, ly, lz);
         }
 
+        private bool HasFluidAdjacent(Vector3Int worldVoxel)
+        {
+            return VoxelEngine.WaterSim.FluidMaterialUtility.IsFluid(GetVoxelWorld(worldVoxel + new Vector3Int(1, 0, 0))) ||
+                   VoxelEngine.WaterSim.FluidMaterialUtility.IsFluid(GetVoxelWorld(worldVoxel + new Vector3Int(-1, 0, 0))) ||
+                   VoxelEngine.WaterSim.FluidMaterialUtility.IsFluid(GetVoxelWorld(worldVoxel + new Vector3Int(0, 1, 0))) ||
+                   VoxelEngine.WaterSim.FluidMaterialUtility.IsFluid(GetVoxelWorld(worldVoxel + new Vector3Int(0, -1, 0))) ||
+                   VoxelEngine.WaterSim.FluidMaterialUtility.IsFluid(GetVoxelWorld(worldVoxel + new Vector3Int(0, 0, 1))) ||
+                   VoxelEngine.WaterSim.FluidMaterialUtility.IsFluid(GetVoxelWorld(worldVoxel + new Vector3Int(0, 0, -1)));
+        }
+
         public void SetVoxelWorld(Vector3Int worldVoxel, Voxel v, bool remesh = true)
         {
             const int S = VoxelConstants.CHUNK_SIZE;

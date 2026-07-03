@@ -150,10 +150,16 @@ namespace VoxelEngine.Cosmos
                 Debug.LogWarning("[SphereWorld] No terrain material found — creating a URP-Lit fallback.");
                 terrainMaterial = new Material(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"));
                 terrainMaterial.name = "Mat_Terrain_Fallback";
+                if (terrainMaterial.HasProperty("_BaseColor")) terrainMaterial.SetColor("_BaseColor", Color.white);
             }
             if (terrainMaterial.HasProperty("_Smoothness"))
             {
                 terrainMaterial.SetFloat("_Smoothness", 0f); // Fix glossy land
+            }
+            if (terrainMaterial.HasProperty("_BaseColor"))
+            {
+                var col = terrainMaterial.GetColor("_BaseColor");
+                if (col == Color.clear || col == Color.black) terrainMaterial.SetColor("_BaseColor", Color.white);
             }
 
             // Recover the body if not assigned (search this GameObject + siblings).

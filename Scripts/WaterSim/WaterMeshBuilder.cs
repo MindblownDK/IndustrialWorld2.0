@@ -91,16 +91,16 @@ namespace VoxelEngine.WaterSim
                 _waterMat.SetFloat("_ShallowWaveSpeed", 1.8f);
                 _waterMat.SetFloat("_ShoreBlendDistance", 2.5f);
                 _waterMat.SetFloat("_WaveChop", 0.28f);
-                _waterMat.SetFloat("_NormalScale", 1.4f);
-                _waterMat.SetFloat("_Gloss", 0.96f);
-                _waterMat.SetFloat("_FresnelPower", 3.2f);
-                _waterMat.SetFloat("_RefractionStrength", 0.032f);
-                _waterMat.SetFloat("_CausticsIntensity", 0.25f);
+                _waterMat.SetFloat("_NormalScale", 2.4f);
+                _waterMat.SetFloat("_Gloss", 0.94f);
+                _waterMat.SetFloat("_FresnelPower", 3.5f);
+                _waterMat.SetFloat("_RefractionStrength", 0.045f);
+                _waterMat.SetFloat("_CausticsIntensity", 0.45f);
                 _waterMat.SetFloat("_DepthFade", 2.5f);
                 _waterMat.SetFloat("_ShoreOpaqueDepth", 1.5f);
                 _waterMat.SetFloat("_ShoreFoamWidth", 2.0f);
                 _waterMat.SetFloat("_ShoreFoamIntensity", 1.2f);
-                _waterMat.SetFloat("_SSSIntensity", 0.35f);
+                _waterMat.SetFloat("_SSSIntensity", 0.45f);
                 _waterMat.SetFloat("_FlowNormalStrength", 1.0f);
                 _waterMat.SetFloat("_FlowFoamStrength", 0.8f);
                 _waterMat.SetFloat("_PlanetWaveBlend", 1.0f);
@@ -479,10 +479,10 @@ namespace VoxelEngine.WaterSim
                 float distFromCenter = centerVoxel.magnitude;
                 LiquidType liquid = FluidMaterialUtility.LiquidFromVoxel(v);
 
-                if (liquid == LiquidType.Water && distFromCenter < seaRad - 0.85f) continue;
+                if (liquid == LiquidType.Water && distFromCenter < seaRad - 0.35f) continue;
 
                 Vector3Int local = new(x, y, z);
-                if (IsCoveredBySameLiquid(c, local, v)) continue;
+                if (IsCoveredBySameLiquid(c, local, v, distFromCenter, seaRad)) continue;
 
                 Vector3 up = PlanetWaterUtility.LocalUp(centerVoxel * VoxelConstants.VOXEL_SIZE);
                 Vector3 surfaceCenter;
@@ -496,11 +496,16 @@ namespace VoxelEngine.WaterSim
                     surfaceCenter = new Vector3(x + 0.5f, y + 0.5f, z + 0.5f) + up * fillOffset;
                 }
 
+                Vector3Int downDir = DominantAxis(-up);
                 float depthToTerrain = 1.0f;
-                if (c.GetVoxelLocal(x, y - 1, z).IsSolid || c.GetVoxelLocal(x + 1, y, z).IsSolid || c.GetVoxelLocal(x - 1, y, z).IsSolid || c.GetVoxelLocal(x, y, z + 1).IsSolid || c.GetVoxelLocal(x, y, z - 1).IsSolid)
-                    depthToTerrain = 0.0f;
-                else if (y >= 2 && c.GetVoxelLocal(x, y - 2, z).IsSolid)
-                    depthToTerrain = 0.5f;
+                var vBelow = c.GetVoxelLocal(x + downDir.x, y + downDir.y, z + downDir.z);
+                if (vBelow.IsSolid)
+                    depthToTerrain = 0.25f;
+                else
+                {
+                    var vBelow2 = c.GetVoxelLocal(x + downDir.x * 2, y + downDir.y * 2, z + downDir.z * 2);
+                    if (vBelow2.IsSolid) depthToTerrain = 0.65f;
+                }
 
                 Color colAttr = new Color(depthToTerrain, 1f, 1f, 1f);
                 cols.Add(colAttr); cols.Add(colAttr); cols.Add(colAttr); cols.Add(colAttr);
@@ -535,11 +540,13 @@ namespace VoxelEngine.WaterSim
             c.waterMeshGO.SetActive(true);
         }
 
-        private static bool IsCoveredBySameLiquid(Chunk c, Vector3Int local, Voxel voxel)
+        private static bool IsCoveredBySameLiquid(Chunk c, Vector3Int local, Voxel voxel, float distFromCenter, float seaRad)
         {
+            if (distFromCenter < seaRad - 0.65f) return true;
+            if (FluidMaterialUtility.LiquidFromVoxel(voxel) == LiquidType.Water) return false;
             Vector3Int worldCell = c.coord * VoxelConstants.CHUNK_SIZE + local;
             Vector3 up = PlanetWaterUtility.LocalUp(((Vector3)worldCell + Vector3.one * 0.5f) * VoxelConstants.VOXEL_SIZE);
-            Vector3Int radialOut = Vector3Int.RoundToInt(up);
+            Vector3Int radialOut = DominantAxis(up);
             if (radialOut == Vector3Int.zero) radialOut = Vector3Int.up;
             Vector3Int next = worldCell + radialOut;
             var world = ActiveWorld.Current;
@@ -564,7 +571,7 @@ namespace VoxelEngine.WaterSim
             tangentA.Normalize();
             Vector3 tangentB = Vector3.Cross(normal, tangentA).normalized;
 
-            float half = 0.54f;
+            float half = 0.50f;
             int i = verts.Count;
             Vector3 p0 = center - tangentA * half - tangentB * half;
             Vector3 p1 = center + tangentA * half - tangentB * half;

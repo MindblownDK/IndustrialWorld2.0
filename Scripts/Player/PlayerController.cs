@@ -377,7 +377,7 @@ namespace VoxelEngine.Player
             if (inWater)
             {
                 float surfY = waterState.WaterSurfaceY;
-                float depth = surfY - transform.position.y;
+                float depth = GravityProvider.IsRadial ? (surfY - transform.position.magnitude) : (surfY - transform.position.y);
 
                 // ── Build 3D swim direction using camera look ────────────────
                 Vector3 camFwd = cameraPivot != null
@@ -387,11 +387,12 @@ namespace VoxelEngine.Player
                     ? cameraPivot.right
                     : transform.right;
 
+                Vector3 radialUp = GravityProvider.IsRadial ? UpVec : Vector3.up;
                 bool wantsUp = GameSettings.IsHeld(InputAction.Jump);
                 bool wantsDown = GameSettings.IsHeld(InputAction.Crouch) || GameSettings.IsHeld(InputAction.Down);
                 Vector3 swimDir = (camFwd * wish.y + camRight * wish.x);
-                if (wantsUp)   swimDir += Vector3.up;
-                if (wantsDown) swimDir += Vector3.down;
+                if (wantsUp)   swimDir += radialUp;
+                if (wantsDown) swimDir -= radialUp;
 
                 bool hasSwimInput = swimDir.sqrMagnitude > 0.001f;
                 if (hasSwimInput) swimDir.Normalize();
@@ -400,7 +401,7 @@ namespace VoxelEngine.Player
                 float swimSpeed = walkSpeed * 0.65f;
                 if (sprintHeld) swimSpeed *= 1.4f;
                 Vector3 wishVel = swimDir * swimSpeed;
-                if (!hasSwimInput) wishVel = Vector3.down * 0.85f;
+                if (!hasSwimInput) wishVel = -radialUp * 0.85f;
 
                 // Smoothly accelerate toward the wish velocity in all 3 axes.
                 _velocity = Vector3.Lerp(_velocity, wishVel, 1f - Mathf.Exp(-6f * dt));
@@ -408,15 +409,20 @@ namespace VoxelEngine.Player
                 // Natural buoyancy: if the player gives horizontal input but no
                 // vertical input, add a small sinking bias instead of hovering frozen.
                 if (hasSwimInput && !wantsUp && !wantsDown)
-                    _velocity.y -= 0.35f * dt;
+                    _velocity -= radialUp * (0.35f * dt);
 
-                // Hard caps so swimming is always controllable.
-                _velocity.y = Mathf.Clamp(_velocity.y, -3.8f, 3.2f);
+                // Hard caps along vertical/radial axis so swimming is always controllable
+                float vertSpd = Vector3.Dot(_velocity, radialUp);
+                if (vertSpd < -3.8f) _velocity += radialUp * (-3.8f - vertSpd);
+                if (vertSpd >  3.2f) _velocity += radialUp * ( 3.2f - vertSpd);
 
                 // Jump-out: when the player presses Jump and is at/near the
                 // surface AND moving up, give a small boost so they pop out.
-                if (GameSettings.WasPressed(InputAction.Jump) && depth < 0.5f && _velocity.y > 0)
-                    _velocity.y = Mathf.Sqrt(-2f * gravity * 0.55f);
+                if (GameSettings.WasPressed(InputAction.Jump) && depth < 0.5f && vertSpd > 0)
+                {
+                    _velocity -= radialUp * vertSpd;
+                    _velocity += radialUp * Mathf.Sqrt(-2f * gravity * 0.55f);
+                }
             }
             else
             {

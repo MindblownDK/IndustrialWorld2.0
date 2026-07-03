@@ -146,13 +146,13 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float2 dir = flowDir; float speed = length(dir);
                 dir = speed > 0.001f ? normalize(dir) : float2(0.04, 0.03);
                 float flowTime = t * (0.35 + speed * 1.5);
-                float2 uv1 = worldXZ * 0.09 + dir * flowTime * 0.8;
-                float2 uv2 = worldXZ * 0.17 + dir * flowTime * 0.5 + float2(5.3, 7.1);
-                float2 uv3 = worldXZ * 0.45 - dir * flowTime * 0.3;
-                float h  = FBM(uv1 * 5.0) * 0.50 + FBM(uv2 * 8.0) * 0.30 + FBM(uv3 * 11.0) * 0.20;
-                float eps = 0.08;
-                float hx = FBM((uv1 + float2(eps, 0)) * 5.0) * 0.50 + FBM((uv2 + float2(eps, 0)) * 8.0) * 0.30 + FBM((uv3 + float2(eps, 0)) * 11.0) * 0.20;
-                float hz = FBM((uv1 + float2(0, eps)) * 5.0) * 0.50 + FBM((uv2 + float2(0, eps)) * 8.0) * 0.30 + FBM((uv3 + float2(0, eps)) * 11.0) * 0.20;
+                float2 uv1 = worldXZ * 0.14 + dir * flowTime * 0.8;
+                float2 uv2 = worldXZ * 0.38 + dir * flowTime * 0.5 + float2(5.3, 7.1);
+                float2 uv3 = worldXZ * 0.85 - dir * flowTime * 0.3;
+                float h  = FBM(uv1 * 4.0) * 0.50 + FBM(uv2 * 6.0) * 0.35 + FBM(uv3 * 10.0) * 0.15;
+                float eps = 0.05;
+                float hx = FBM((uv1 + float2(eps, 0)) * 4.0) * 0.50 + FBM((uv2 + float2(eps, 0)) * 6.0) * 0.35 + FBM((uv3 + float2(eps, 0)) * 10.0) * 0.15;
+                float hz = FBM((uv1 + float2(0, eps)) * 4.0) * 0.50 + FBM((uv2 + float2(0, eps)) * 6.0) * 0.35 + FBM((uv3 + float2(0, eps)) * 10.0) * 0.15;
                 float strength = _NormalScale * (1.0 + speed * _FlowNormalStrength * 2.0);
                 return normalize(float3((h - hx) * strength, 1.0, (h - hz) * strength));
             }
@@ -169,7 +169,7 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float tideMask = i.color.g;
                 float shoreAtten = saturate(shoreDepthMask * (_ShoreBlendDistance / max(_ShoreBlendDistance, 0.0001)));
 
-                if (topFacing > 0.45)
+                if (topFacing > 0.15)
                 {
                     float t = _Time.y;
                     float deepAmp = _DeepWaveAmplitude * topFacing;
@@ -203,13 +203,17 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float shoreDepthMask = i.data.x;
                 float tideMask = i.data.y;
 
-                float radialFacing = abs(dot(geoN, normalize(i.posWS)));
-                bool isSideFace = abs(geoN.y) < 0.5 && radialFacing < 0.5;
+                float3 radialUp = normalize(i.posWS);
+                float3 tanA = cross(radialUp, float3(0,1,0));
+                if (dot(tanA, tanA) < 0.001) tanA = cross(radialUp, float3(0,0,1));
+                tanA = normalize(tanA);
+                float3 tanB = normalize(cross(radialUp, tanA));
+                float2 surfUV = float2(dot(i.posWS, tanA), dot(i.posWS, tanB));
+                bool isSideFace = false;
 
-                float3 detailN = FlowMappedNormal(i.posWS.xz, flowDir, flowSpeed, t);
-                float3 N = normalize(float3(detailN.x, 1.0, detailN.z));
-                float blendFactor = isSideFace ? 0.15 : saturate(abs(geoN.y));
-                N = normalize(lerp(geoN, N, blendFactor));
+                float3 detailN = FlowMappedNormal(surfUV, flowDir, flowSpeed, t);
+                float3 worldDetailN = normalize(tanA * detailN.x + radialUp * detailN.y + tanB * detailN.z);
+                float3 N = normalize(lerp(geoN, worldDetailN, 0.90));
 
                 float2 screenUV = i.scrPos.xy / max(i.scrPos.w, 0.0001);
                 float2 refractUV = screenUV + N.xz * _RefractionStrength;
@@ -224,25 +228,21 @@ Shader "VoxelEngine/VoxelWaterURP"
                 if (length(refracted) < 0.001f) refracted = _DeepColor.rgb;
 
                 float shoreFactor = saturate(1.0 - depthDiff / _ShoreOpaqueDepth);
-                float sideDeepBoost = isSideFace ? 0.4 : 0.0;
+                float sideDeepBoost = 0.0;
                 float tidalTint = saturate(tideMask) * 0.08;
                 float4 waterCol = lerp(_ShallowColor, _DeepColor, saturate(deep01 + sideDeepBoost));
                 waterCol.rgb = lerp(waterCol.rgb, waterCol.rgb * float3(0.82, 0.92, 1.08), tidalTint);
 
-                float foam = 0.0;
-                if (!isSideFace)
-                {
-                    float validDepth = step(0.08, depthDiff);
-                    float shoreFoamFade = saturate(1.0 - depthDiff / _ShoreFoamWidth);
-                    float shoreFoam = shoreFoamFade * validDepth * _ShoreFoamIntensity * (1.0 - shoreAtten + 0.15);
-                    float crest = saturate((FBM(i.posWS.xz * 0.22 + t * 0.075) - 0.58) * 3.0) * saturate(_DeepWaveAmplitude * 1.75);
-                    float lace = FBM(i.posWS.xz * 0.85 + float2(t * 0.12, -t * 0.08));
-                    float crestFoam = crest * lace * 0.6;
-                    float flowFoam = saturate(flowSpeed * 3.0 - 0.2) * _FlowFoamStrength;
-                    float2 foamScrollUV = i.posWS.xz + normalize(flowDir + 0.001) * t * 0.3;
-                    flowFoam *= saturate(FBM(foamScrollUV * 1.5) * 1.5);
-                    foam = saturate(shoreFoam + crestFoam + flowFoam);
-                }
+                float validDepth = step(0.08, depthDiff);
+                float shoreFoamFade = saturate(1.0 - depthDiff / _ShoreFoamWidth);
+                float shoreFoam = shoreFoamFade * validDepth * _ShoreFoamIntensity * (1.0 - shoreAtten + 0.15);
+                float crest = saturate((FBM(surfUV * 0.22 + t * 0.075) - 0.58) * 3.0) * saturate(_DeepWaveAmplitude * 1.75);
+                float lace = FBM(surfUV * 0.85 + float2(t * 0.12, -t * 0.08));
+                float crestFoam = crest * lace * 0.6;
+                float flowFoam = saturate(flowSpeed * 3.0 - 0.2) * _FlowFoamStrength;
+                float2 foamScrollUV = surfUV + normalize(flowDir + 0.001) * t * 0.3;
+                flowFoam *= saturate(FBM(foamScrollUV * 1.5) * 1.5);
+                float foam = saturate(shoreFoam + crestFoam + flowFoam);
 
                 float NdV = saturate(dot(V, N));
                 float fresnel = pow(1.0 - NdV, _FresnelPower);
@@ -252,11 +252,11 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float3 H = normalize(V + L);
                 float specBroad = pow(saturate(dot(N, H)), lerp(80.0, 900.0, _Gloss)) * 0.7;
                 float specTight = pow(saturate(dot(N, H)), 2400.0) * 1.2;
-                float glitterMask = isSideFace ? 0.0 : pow(saturate(FBM6(i.posWS.xz * 2.8 + t * 0.15)), 8.0);
+                float glitterMask = pow(saturate(FBM6(surfUV * 2.8 + t * 0.15)), 8.0);
                 float glitter = pow(saturate(dot(N, H)), 3200.0) * glitterMask * 2.5;
-                float sssWrap = isSideFace ? 0.0 : pow(saturate(dot(V, -L)), 3.0) * (1.0 - deep01) * _SSSIntensity;
+                float sssWrap = pow(saturate(dot(V, -L)), 3.0) * (1.0 - deep01) * _SSSIntensity;
                 float3 sssColor = mainLight.color.rgb * sssWrap * float3(0.12, 0.75, 0.55);
-                float caustic = isSideFace ? 0.0 : pow(saturate(FBM(i.posWS.xz * 0.65 + N.xz * 1.8 - t * 0.18)), 3.0) * _CausticsIntensity * (1.0 - deep01);
+                float caustic = pow(saturate(FBM(surfUV * 0.65 + N.xz * 1.8 - t * 0.18)), 3.0) * _CausticsIntensity * (1.0 - deep01);
 
                 float refractWeight = (1.0 - deep01) * (1.0 - fresnel) * 0.55;
                 refractWeight *= (1.0 - shoreFactor * 0.9);
@@ -268,20 +268,11 @@ Shader "VoxelEngine/VoxelWaterURP"
                 col += caustic * float3(0.45, 0.95, 1.0);
                 col = lerp(col, _FoamColor.rgb, foam * _FoamColor.a);
 
-                float alpha;
-                if (isSideFace)
-                {
-                    alpha = lerp(0.88, 0.97, deep01);
-                    alpha = lerp(alpha, 0.99, shoreFactor * 0.7);
-                }
-                else
-                {
-                    alpha = waterCol.a;
-                    alpha = lerp(alpha, 0.99, shoreFactor * 0.85);
-                    alpha = lerp(alpha, min(alpha + 0.12, 0.99), fresnel);
-                    alpha = max(alpha, 0.82);
-                    alpha = lerp(alpha, min(alpha + foam * 0.3, 0.99), foam);
-                }
+                float alpha = waterCol.a;
+                alpha = lerp(alpha, 0.99, shoreFactor * 0.85);
+                alpha = lerp(alpha, min(alpha + 0.12, 0.99), fresnel);
+                alpha = max(alpha, 0.82);
+                alpha = lerp(alpha, min(alpha + foam * 0.3, 0.99), foam);
 
                 col = MixFog(col, i.fog);
                 return half4(col, alpha);

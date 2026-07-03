@@ -46,6 +46,7 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
             #pragma multi_compile_fog
             #pragma multi_compile_instancing
             #pragma instancing_options renderinglayer
+            #pragma multi_compile _ DOTS_INSTANCING_ON
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
@@ -153,7 +154,10 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
                 baseColor *= detailMod;
 
                 // ── Slope-aware shading: steep = darker (enhances relief) ──
-                float upDot = abs(worldNormal.y);
+                // Support both flat world (Y-up) and spherical planets (radial-up from center)
+                float radialUpDot = abs(dot(worldNormal, normalize(worldPos)));
+                float flatUpDot = abs(worldNormal.y);
+                float upDot = max(flatUpDot, radialUpDot);
                 float slopeFactor = lerp(1.0 - _SlopeDarken, 1.0, saturate(upDot * 1.5));
                 baseColor *= slopeFactor;
 
@@ -172,12 +176,16 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
                 inputData.bakedGI           = SampleSH(worldNormal);
 
                 SurfaceData surface = (SurfaceData)0;
-                surface.albedo     = baseColor;
-                surface.metallic   = _Metallic;
-                surface.smoothness = smoothness;
-                surface.alpha      = 1.0;
-                surface.occlusion  = 1.0;
-                surface.normalTS   = float3(0,0,1);
+                surface.albedo              = baseColor;
+                surface.specular            = float3(0, 0, 0);
+                surface.metallic            = _Metallic;
+                surface.smoothness          = smoothness;
+                surface.normalTS            = float3(0, 0, 1);
+                surface.emission            = float3(0, 0, 0);
+                surface.occlusion           = 1.0;
+                surface.alpha               = 1.0;
+                surface.clearCoatMask       = 0.0;
+                surface.clearCoatSmoothness = 0.0;
 
                 half4 finalColor = UniversalFragmentPBR(inputData, surface);
                 finalColor.rgb = MixFog(finalColor.rgb, IN.fogCoord);
