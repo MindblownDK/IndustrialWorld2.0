@@ -124,13 +124,6 @@ namespace VoxelEngine.UI
             _doc.sortingOrder = 500;
             if (_doc.panelSettings == null)
                 _doc.panelSettings = Resources.Load<PanelSettings>("MenuPanelSettings");
-            if (_doc.panelSettings != null)
-            {
-                // Keep UI authored pixel sizes stable on 1440p/4K/ultrawide displays.
-                // Scale-with-screen made every panel huge and stretched on big monitors.
-                _doc.panelSettings.scaleMode = PanelScaleMode.ConstantPixelSize;
-                _doc.panelSettings.scale = 1f;
-            }
             _root = _doc.rootVisualElement;
             _root.style.flexGrow = 1;
             // Pin the root to a DEFINITE full-screen size so absolutely-positioned children

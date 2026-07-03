@@ -409,7 +409,7 @@ namespace VoxelEngine.WaterSim
                 float tideAlign = Vector3.Dot(up, tideDir);
                 Vector2 swellFlow = flow + new Vector2(tideAlign * 0.75f, (1f - Mathf.Abs(tideAlign)) * 0.55f);
 
-                AddSphereSurfacePatch(surfaceCenter, up, liquid, chunkVoxel, swellFlow, verts, norms, uvs, uv2s, tris);
+                AddSphereSurfacePatch(surfaceCenter, up, liquid, chunkVoxel, swellFlow, depthToTerrain, verts, norms, uvs, uv2s, tris);
                 _sphereSurfaceCells.Add(local);
             }
 
@@ -474,7 +474,7 @@ namespace VoxelEngine.WaterSim
             return new Vector3Int(0, 0, direction.z >= 0f ? 1 : -1);
         }
 
-        private static void AddSphereSurfacePatch(Vector3 center, Vector3 normal, LiquidType liquid, Vector3 chunkVoxel, Vector2 flow,
+        private static void AddSphereSurfacePatch(Vector3 center, Vector3 normal, LiquidType liquid, Vector3 chunkVoxel, Vector2 flow, float depthToTerrain,
             List<Vector3> verts, List<Vector3> norms, List<Vector2> uvs, List<Vector2> uv2s, List<int> tris)
         {
             Vector3 tangentA = Vector3.Cross(normal, Vector3.up);
@@ -482,7 +482,7 @@ namespace VoxelEngine.WaterSim
             tangentA.Normalize();
             Vector3 tangentB = Vector3.Cross(normal, tangentA).normalized;
 
-            float half = 0.58f;
+            float half = depthToTerrain < 0.7f ? 0.72f : 0.58f;
             int i = verts.Count;
             Vector3 p0 = center - tangentA * half - tangentB * half;
             Vector3 p1 = center + tangentA * half - tangentB * half;

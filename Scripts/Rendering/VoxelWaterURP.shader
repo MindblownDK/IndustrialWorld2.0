@@ -185,7 +185,7 @@ Shader "VoxelEngine/VoxelWaterURP"
 
                 o.posWS  = worldPos;
                 o.posCS  = TransformWorldToHClip(worldPos);
-                o.normWS = TransformObjectToWorldNormal(i.normOS);
+                o.normWS = normalize(worldPos);
                 o.fog    = ComputeFogFactor(o.posCS.z);
                 o.scrPos = ComputeScreenPos(o.posCS);
                 o.flowUV = i.uv2;
@@ -213,7 +213,7 @@ Shader "VoxelEngine/VoxelWaterURP"
 
                 float3 detailN = FlowMappedNormal(surfUV, flowDir, flowSpeed, t);
                 float3 worldDetailN = normalize(tanA * detailN.x + radialUp * detailN.y + tanB * detailN.z);
-                float3 N = normalize(lerp(geoN, worldDetailN, 0.90));
+                float3 N = normalize(lerp(radialUp, worldDetailN, 0.92));
 
                 float2 screenUV = i.scrPos.xy / max(i.scrPos.w, 0.0001);
                 float2 refractUV = screenUV + N.xz * _RefractionStrength;
