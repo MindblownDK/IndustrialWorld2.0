@@ -164,122 +164,7 @@ namespace VoxelEngine.WaterSim
 
         private static void Build(Chunk c)
         {
-            if (VoxelEngine.Core.ActiveWorld.Current is VoxelEngine.Cosmos.SphereWorld) {
-                BuildSphere(c);
-                return;
-            }
-
-            const int S = VoxelConstants.CHUNK_SIZE;
-            EnsureGO(c);
-            FlowFieldManager.UpdateFlowField(c);
-
-            var cells = new SurfaceCell[S, S];
-            bool any = false;
-
-            for (int z = 0; z < S; z++)
-            for (int x = 0; x < S; x++)
-            {
-                for (int y = S - 1; y >= 0; y--)
-                {
-                    var v = c.GetVoxelLocal(x, y, z);
-                    if (!FluidMaterialUtility.IsFluid(v)) continue;
-                    if (y + 1 < S)
-                    {
-                        var above = c.GetVoxelLocal(x, y + 1, z);
-                        if (FluidMaterialUtility.IsFluid(above) &&
-                            FluidMaterialUtility.LiquidFromVoxel(above) == FluidMaterialUtility.LiquidFromVoxel(v))
-                            continue;
-                    }
-                    if (HasTerrainAbove(c, x, y + 1, z)) break;
-
-                    var liquid = FluidMaterialUtility.LiquidFromVoxel(v);
-                    float baseH = VisualSurfaceHeight(y, v.waterLevel, liquid);
-
-                    bool bordersTerrain = false;
-                    float terrainH = baseH;
-                    float tH;
-
-                    if (TryGetTerrainHeight(c, x - 1, y, z, out tH)) { bordersTerrain = true; terrainH = Mathf.Min(terrainH, tH); }
-                    if (TryGetTerrainHeight(c, x + 1, y, z, out tH)) { bordersTerrain = true; terrainH = Mathf.Min(terrainH, tH); }
-                    if (TryGetTerrainHeight(c, x, y, z - 1, out tH)) { bordersTerrain = true; terrainH = Mathf.Min(terrainH, tH); }
-                    if (TryGetTerrainHeight(c, x, y, z + 1, out tH)) { bordersTerrain = true; terrainH = Mathf.Min(terrainH, tH); }
-
-                    // Also check across chunk boundaries
-                    if (!bordersTerrain && x == 0 && IsTerrainInAdjacentChunk(c, -1, y, z)) { bordersTerrain = true; }
-                    if (!bordersTerrain && x == S - 1 && IsTerrainInAdjacentChunk(c, S, y, z)) { bordersTerrain = true; }
-                    if (!bordersTerrain && z == 0 && IsTerrainInAdjacentChunk(c, x, y, -1)) { bordersTerrain = true; }
-                    if (!bordersTerrain && z == S - 1 && IsTerrainInAdjacentChunk(c, x, y, S)) { bordersTerrain = true; }
-
-                    float h = baseH;
-                    if (bordersTerrain)
-                    {
-                        h = Mathf.Min(baseH, terrainH + 0.12f);
-                    }
-
-                    cells[x, z] = new SurfaceCell
-                    {
-                        has = true,
-                        liquid = liquid,
-                        h = h,
-                        y = y,
-                        flow = c.GetFlow(x, z),
-                        bordersTerrain = bordersTerrain,
-                        terrainH = terrainH
-                    };
-                    any = true;
-                    break;
-                }
-            }
-
-            if (!any) { ClearGO(c); return; }
-
-            // Smooth height field — but NOT boundary cells (ensures consistent
-            // height across chunk boundaries, preventing "foam at chunk edges")
-            SmoothHeightField(cells, S);
-
-            // Build mesh
-            var verts     = new List<Vector3>(S * S * 10);
-            var norms     = new List<Vector3>(S * S * 10);
-            var uvs       = new List<Vector2>(S * S * 10);
-            var uv2s      = new List<Vector2>(S * S * 10);
-            var waterTris = new List<int>(S * S * 6);
-            var oilTris   = new List<int>(S * S * 6);
-
-            float wX = c.coord.x * S;
-            float wZ = c.coord.z * S;
-
-            for (int z = 0; z < S; z++)
-            for (int x = 0; x < S; x++)
-            {
-                var cell = cells[x, z];
-                if (!cell.has) continue;
-
-                var tris = cell.liquid == LiquidType.CrudeOil ? oilTris : waterTris;
-                AddTop(c, cells, x, z, wX, wZ, verts, norms, uvs, uv2s, tris);
-                AddSideCurtains(c, cells, x, z, wX, wZ, verts, norms, uvs, uv2s, tris);
-                // NO geometry foam — shader handles all foam via depth-based detection
-            }
-
-            if (verts.Count == 0) { ClearGO(c); return; }
-
-            if (c.waterMesh == null) c.waterMesh = new Mesh { name = "LiquidSurface" };
-            c.waterMesh.Clear();
-            c.waterMesh.indexFormat = verts.Count > 60000 ? IndexFormat.UInt32 : IndexFormat.UInt16;
-            c.waterMesh.SetVertices(verts);
-            c.waterMesh.SetNormals(norms);
-            c.waterMesh.SetUVs(0, uvs);
-            c.waterMesh.SetUVs(1, uv2s);
-            var flatCols = new List<Color>(verts.Count);
-            for (int k = 0; k < verts.Count; k++) flatCols.Add(Color.white);
-            c.waterMesh.SetColors(flatCols);
-            c.waterMesh.subMeshCount = 2;
-            c.waterMesh.SetTriangles(waterTris, 0);
-            c.waterMesh.SetTriangles(oilTris, 1);
-            c.waterMesh.RecalculateBounds();
-
-            c.waterMeshFilter.sharedMesh = c.waterMesh;
-            c.waterMeshRenderer.sharedMaterials = new[] { _waterMat, _oilMat };
-            c.waterMeshGO.SetActive(true);
+            BuildSphere(c);
         }
 
         // ═══════════════════════════════════════════════════════════════════════
@@ -489,8 +374,6 @@ namespace VoxelEngine.WaterSim
                 float distFromCenter = centerVoxel.magnitude;
                 LiquidType liquid = FluidMaterialUtility.LiquidFromVoxel(v);
 
-                if (liquid == LiquidType.Water && distFromCenter < seaRad - 0.35f) continue;
-
                 Vector3Int local = new(x, y, z);
                 if (IsCoveredBySameLiquid(c, local, v, distFromCenter, seaRad)) continue;
 
@@ -552,17 +435,35 @@ namespace VoxelEngine.WaterSim
 
         private static bool IsCoveredBySameLiquid(Chunk c, Vector3Int local, Voxel voxel, float distFromCenter, float seaRad)
         {
-            if (distFromCenter < seaRad - 0.65f) return true;
-            if (FluidMaterialUtility.LiquidFromVoxel(voxel) == LiquidType.Water) return false;
-            Vector3Int worldCell = c.coord * VoxelConstants.CHUNK_SIZE + local;
-            Vector3 up = PlanetWaterUtility.LocalUp(((Vector3)worldCell + Vector3.one * 0.5f) * VoxelConstants.VOXEL_SIZE);
-            Vector3Int radialOut = DominantAxis(up);
-            if (radialOut == Vector3Int.zero) radialOut = Vector3Int.up;
-            Vector3Int next = worldCell + radialOut;
-            var world = ActiveWorld.Current;
-            Voxel neighbour = world != null ? world.GetVoxelWorld(next) : Voxel.Empty;
-            return FluidMaterialUtility.IsFluid(neighbour) &&
-                   FluidMaterialUtility.LiquidFromVoxel(neighbour) == FluidMaterialUtility.LiquidFromVoxel(voxel);
+            if (distFromCenter < seaRad - 1.5f) return true;
+            if (FluidMaterialUtility.LiquidFromVoxel(voxel) == LiquidType.Water)
+            {
+                Vector3Int worldCell = c.coord * VoxelConstants.CHUNK_SIZE + local;
+                Vector3 up = PlanetWaterUtility.LocalUp(((Vector3)worldCell + Vector3.one * 0.5f) * VoxelConstants.VOXEL_SIZE);
+                Vector3Int radialOut = DominantAxis(up);
+                if (radialOut == Vector3Int.zero) radialOut = Vector3Int.up;
+                Vector3Int next = worldCell + radialOut;
+                var world = ActiveWorld.Current;
+                if (world == null) return false;
+                Voxel neighbour = world.GetVoxelWorld(next);
+                if (!FluidMaterialUtility.IsFluid(neighbour) || FluidMaterialUtility.LiquidFromVoxel(neighbour) != LiquidType.Water)
+                    return false;
+
+                float nextDist = ((Vector3)next + Vector3.one * 0.5f).magnitude * VoxelConstants.VOXEL_SIZE;
+                return (nextDist > distFromCenter + 0.45f);
+            }
+            else
+            {
+                Vector3Int worldCell = c.coord * VoxelConstants.CHUNK_SIZE + local;
+                Vector3 up = PlanetWaterUtility.LocalUp(((Vector3)worldCell + Vector3.one * 0.5f) * VoxelConstants.VOXEL_SIZE);
+                Vector3Int radialOut = DominantAxis(up);
+                if (radialOut == Vector3Int.zero) radialOut = Vector3Int.up;
+                Vector3Int next = worldCell + radialOut;
+                var world = ActiveWorld.Current;
+                Voxel neighbour = world != null ? world.GetVoxelWorld(next) : Voxel.Empty;
+                return FluidMaterialUtility.IsFluid(neighbour) &&
+                       FluidMaterialUtility.LiquidFromVoxel(neighbour) == FluidMaterialUtility.LiquidFromVoxel(voxel);
+            }
         }
 
         private static Vector3Int DominantAxis(Vector3 direction)

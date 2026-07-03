@@ -514,6 +514,8 @@ namespace VoxelEngine.Cosmos
             p.chunk.genCompletedTime = Time.time;
             p.chunk.isScattered = false;
 
+            VoxelEngine.Generation.OilReservoirDecorator.Decorate(p.chunk, this);
+
             // Wake fluid sim and schedule real voxel water/oil meshing.
             VoxelEngine.WaterSim.WaterMeshBuilder.Schedule(p.chunk);
 

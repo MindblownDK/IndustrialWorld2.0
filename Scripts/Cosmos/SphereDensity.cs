@@ -320,14 +320,6 @@ namespace VoxelEngine.Cosmos
                     var v = new Voxel(-5, (byte)MaterialId.WaterLiquid, 255);
                     return v;
                 }
-                else if (radius < prm.seaRadius + 18f && radius > surfaceRadius - 2f && radius < surfaceRadius + 1f)
-                {
-                    float surfaceOilNoise = noise.snoise(worldPos * 0.018f + SeedOffset(prm.seed, 5));
-                    if (surfaceOilNoise > 0.68f)
-                    {
-                        return new Voxel(-5, (byte)MaterialId.CrudeOil, 255);
-                    }
-                }
                 return new Voxel((sbyte)math.clamp(density, -127f, -1f), (byte)MaterialId.Air, 0);
             }
         }

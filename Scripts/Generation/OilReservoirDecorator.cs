@@ -1,20 +1,9 @@
 // Assets/Scripts/VoxelEngine/Generation/OilReservoirDecorator.cs
 //
-// Post-generation decorator that finds CrudeOil voxels in a newly generated chunk
-// and carves proper oil reservoirs with the funnel pattern:
-//
-//   ┌───────────┐  ← Surface seep/pool (visible above ground)
-//   │  surface   │
-//   └─────┬─────┘
-//         │          ← Narrow funnel/shaft (widens at top, narrows going down)
-//         │
-//         │
-//   ┌─────┴─────┐  ← Deep underground reservoir (large spherical pocket)
-//   │   POCKET   │
-//   │  full oil  │
-//   └───────────┘
-//
-// Called from VoxelWorld after ChunkGenJob completes, before meshing.
+// Scans a chunk for CrudeOil material. When found, carves a funnel-shaped
+// reservoir: surface pool → narrowing funnel → deep underground pocket.
+// All void spaces are filled with oil fluid voxels (density = -1, material = CrudeOil, level = 255).
+// Fully supports both spherical planet worlds (radial up) and flat worlds (Y up).
 
 using UnityEngine;
 using VoxelEngine.Core;
@@ -25,12 +14,7 @@ namespace VoxelEngine.Generation
 {
     public static class OilReservoirDecorator
     {
-        /// <summary>
-        /// Scans a chunk for CrudeOil material. When found, carves a funnel-shaped
-        /// reservoir: surface pool → narrowing funnel → deep underground pocket.
-        /// All void spaces are filled with oil fluid voxels (density = -1, material = CrudeOil, level = 255).
-        /// </summary>
-        public static void Decorate(Chunk chunk, VoxelWorld world)
+        public static void Decorate(Chunk chunk, IVoxelWorld world)
         {
             if (chunk == null || world == null) return;
             const int S = VoxelConstants.CHUNK_SIZE;
@@ -64,40 +48,77 @@ namespace VoxelEngine.Generation
             int funnelTopRadius = 2 + rng.Next(2);
             int funnelBottomRadius = 1;
 
-            int surfaceY = FindSurface(world, oilCenter.x, oilCenter.z, oilCenter.y);
-            if (surfaceY <= oilCenter.y) return;
+            Vector3Int surfacePos;
+            int shaftDepth = FindSurface(world, oilCenter, out surfacePos);
+            if (shaftDepth <= 2) return;
 
             int minShaftDepth = 6;
-            int pocketTopY = Mathf.Min(oilCenter.y + pocketRadius / 2, surfaceY - minShaftDepth);
-            if (pocketTopY >= surfaceY - 1) pocketTopY = surfaceY - minShaftDepth;
-            if (pocketTopY <= oilCenter.y - 1) pocketTopY = oilCenter.y + 1;
+            int pocketTopStep = Mathf.Min(pocketRadius / 2, shaftDepth - minShaftDepth);
+            if (pocketTopStep <= 0) pocketTopStep = 1;
+            
+            Vector3 centerVec = (Vector3)oilCenter;
+            Vector3 upDir = GetUpDir(world, centerVec);
+            Vector3Int pocketTopPos = Vector3Int.RoundToInt(centerVec + upDir * pocketTopStep);
 
-            CarveSurfacePool(world, oilCenter.x, surfaceY, oilCenter.z, funnelTopRadius + 1, rng);
-            CarveFunnel(world, oilCenter.x, oilCenter.z, surfaceY - 1, pocketTopY, funnelTopRadius, funnelBottomRadius);
-            CarveAndFillPocket(world, new Vector3Int(oilCenter.x, oilCenter.y, oilCenter.z), pocketRadius);
+            CarveSurfacePool(world, surfacePos, upDir, funnelTopRadius + 1, rng);
+            CarveFunnel(world, surfacePos, pocketTopPos, funnelTopRadius, funnelBottomRadius);
+            CarveAndFillPocket(world, oilCenter, pocketRadius);
         }
 
-        /// <summary>Carve a visible surface pool at the seep point.</summary>
-        private static void CarveSurfacePool(VoxelWorld world, int cx, int surfaceY, int cz, int radius, System.Random rng)
+        private static Vector3 GetUpDir(IVoxelWorld world, Vector3 pos)
         {
-            for (int dx = -radius; dx <= radius; dx++)
-            for (int dz = -radius; dz <= radius; dz++)
+            if (world is VoxelEngine.Cosmos.SphereWorld)
             {
-                if (dx * dx + dz * dz > radius * radius + 1) continue;
+                Vector3 up = pos.normalized;
+                return up.sqrMagnitude > 0.001f ? up : Vector3.up;
+            }
+            return Vector3.up;
+        }
 
-                // Clear terrain at and just above surface level
-                Vector3Int pos = new Vector3Int(cx + dx, surfaceY, cz + dz);
+        private static int FindSurface(IVoxelWorld world, Vector3Int start, out Vector3Int surfacePos)
+        {
+            Vector3 centerVec = (Vector3)start;
+            Vector3 upDir = GetUpDir(world, centerVec);
+            surfacePos = start;
+
+            for (int d = 0; d < 150; d++)
+            {
+                Vector3Int check = Vector3Int.RoundToInt(centerVec + upDir * d);
+                var v = world.GetVoxelWorld(check);
+                var above = world.GetVoxelWorld(Vector3Int.RoundToInt(centerVec + upDir * (d + 1)));
+                if (v.density > 0 && above.density <= 0)
+                {
+                    surfacePos = check;
+                    return d;
+                }
+            }
+            surfacePos = Vector3Int.RoundToInt(centerVec + upDir * 20);
+            return 20;
+        }
+
+        private static void CarveSurfacePool(IVoxelWorld world, Vector3Int surfacePos, Vector3 upDir, int radius, System.Random rng)
+        {
+            Vector3 tanA = Vector3.Cross(upDir, Vector3.up);
+            if (tanA.sqrMagnitude < 0.001f) tanA = Vector3.Cross(upDir, Vector3.forward);
+            tanA.Normalize();
+            Vector3 tanB = Vector3.Cross(upDir, tanA).normalized;
+
+            for (int u = -radius; u <= radius; u++)
+            for (int v = -radius; v <= radius; v++)
+            {
+                if (u * u + v * v > radius * radius + 1) continue;
+
+                Vector3 pt = (Vector3)surfacePos + tanA * u + tanB * v;
+                Vector3Int pos = Vector3Int.RoundToInt(pt);
                 world.SetVoxelWorld(pos, Voxel.Empty, remesh: false);
                 PlaceOilFluid(world, pos);
 
-                // Clear one voxel above so the pool is visible
-                Vector3Int above = new Vector3Int(cx + dx, surfaceY + 1, cz + dz);
+                Vector3Int above = Vector3Int.RoundToInt(pt + upDir);
                 var aboveV = world.GetVoxelWorld(above);
                 if (aboveV.density > 0)
                     world.SetVoxelWorld(above, Voxel.Empty, remesh: false);
 
-                // Clear one voxel below for depth
-                Vector3Int below = new Vector3Int(cx + dx, surfaceY - 1, cz + dz);
+                Vector3Int below = Vector3Int.RoundToInt(pt - upDir);
                 var belowV = world.GetVoxelWorld(below);
                 if (belowV.density > 0)
                 {
@@ -107,35 +128,36 @@ namespace VoxelEngine.Generation
             }
         }
 
-        /// <summary>
-        /// Carve a tapered funnel shaft from topY down to bottomY.
-        /// Top radius = topRadius, bottom radius = bottomRadius (linear interpolation).
-        /// </summary>
-        private static void CarveFunnel(VoxelWorld world, int cx, int cz, int topY, int bottomY, int topRadius, int bottomRadius)
+        private static void CarveFunnel(IVoxelWorld world, Vector3Int topPos, Vector3Int bottomPos, int topRadius, int bottomRadius)
         {
-            int height = topY - bottomY;
-            if (height <= 0) return;
+            float dist = Vector3.Distance((Vector3)topPos, (Vector3)bottomPos);
+            int steps = Mathf.CeilToInt(dist);
+            if (steps <= 0) return;
 
-            for (int y = topY; y >= bottomY; y--)
+            for (int s = 0; s <= steps; s++)
             {
-                float t = (float)(topY - y) / height; // 0 at top, 1 at bottom
-                int radius = Mathf.CeilToInt(Mathf.Lerp(topRadius, bottomRadius, t));
-                // Add slight irregularity for natural look
-                if (radius < 1) radius = 1;
+                float t = (float)s / steps;
+                float radius = Mathf.Lerp(topRadius, bottomRadius, t);
+                if (radius < 1f) radius = 1f;
+                int rInt = Mathf.CeilToInt(radius);
+                int r2 = rInt * rInt;
 
-                for (int dx = -radius; dx <= radius; dx++)
-                for (int dz = -radius; dz <= radius; dz++)
+                Vector3 centerPt = Vector3.Lerp((Vector3)topPos, (Vector3)bottomPos, t);
+                Vector3Int centerCell = Vector3Int.RoundToInt(centerPt);
+
+                for (int dz = -rInt; dz <= rInt; dz++)
+                for (int dy = -rInt; dy <= rInt; dy++)
+                for (int dx = -rInt; dx <= rInt; dx++)
                 {
-                    if (dx * dx + dz * dz > radius * radius + 1) continue;
-                    Vector3Int pos = new Vector3Int(cx + dx, y, cz + dz);
+                    if (dx * dx + dy * dy + dz * dz > r2 + 1) continue;
+                    Vector3Int pos = new Vector3Int(centerCell.x + dx, centerCell.y + dy, centerCell.z + dz);
                     world.SetVoxelWorld(pos, Voxel.Empty, remesh: false);
                     PlaceOilFluid(world, pos);
                 }
             }
         }
 
-        /// <summary>Carve the deep underground pocket and fill it with oil.</summary>
-        private static void CarveAndFillPocket(VoxelWorld world, Vector3Int center, int radius)
+        private static void CarveAndFillPocket(IVoxelWorld world, Vector3Int center, int radius)
         {
             int r2 = radius * radius;
             for (int dz = -radius; dz <= radius; dz++)
@@ -149,21 +171,9 @@ namespace VoxelEngine.Generation
             }
         }
 
-        private static void PlaceOilFluid(VoxelWorld world, Vector3Int worldVoxel)
+        private static void PlaceOilFluid(IVoxelWorld world, Vector3Int worldVoxel)
         {
             world.SetVoxelWorld(worldVoxel, new Voxel(-1, (byte)MaterialId.CrudeOil, 255), remesh: false);
-        }
-
-        private static int FindSurface(VoxelWorld world, int wx, int wz, int startY)
-        {
-            for (int y = startY; y < VoxelConstants.WORLD_HEIGHT_VOXELS - 1; y++)
-            {
-                var v = world.GetVoxelWorld(new Vector3Int(wx, y, wz));
-                var above = world.GetVoxelWorld(new Vector3Int(wx, y + 1, wz));
-                if (v.density > 0 && above.density <= 0)
-                    return y;
-            }
-            return startY + 20;
         }
     }
 }
