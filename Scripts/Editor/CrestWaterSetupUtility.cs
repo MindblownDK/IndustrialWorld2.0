@@ -268,6 +268,16 @@ namespace VoxelEngine.EditorTools
             DisableExistingVoxelLiquidSurfaceObjects();
         }
 
+        private static void EnableExistingVoxelLiquidSurfaceObjects()
+        {
+            var transforms = Object.FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            foreach (var t in transforms)
+            {
+                if (t != null && t.name == "LiquidSurface")
+                    t.gameObject.SetActive(true);
+            }
+        }
+
         private static void DisableExistingVoxelLiquidSurfaceObjects()
         {
             var transforms = Object.FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None);
