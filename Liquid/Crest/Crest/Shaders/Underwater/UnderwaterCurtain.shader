@@ -19,12 +19,9 @@ Shader "Crest/Underwater Curtain"
 
 	SubShader
 	{
-		Tags{ "LightMode" = "ForwardBase" "Queue" = "Geometry+510" "IgnoreProjector" = "True" "RenderType" = "Opaque" }
+		Tags{ "LightMode" = "UniversalForward" "Queue" = "Geometry+510" "IgnoreProjector" = "True" "RenderType" = "Opaque" }
 
-		GrabPass
-		{
-			"_BackgroundTexture"
-		}
+		// GrabPass is disabled for SRP/URP compatibility.
 
 		Pass
 		{

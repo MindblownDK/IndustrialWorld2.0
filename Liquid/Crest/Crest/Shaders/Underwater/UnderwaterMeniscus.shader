@@ -11,7 +11,7 @@ Shader "Crest/Underwater Meniscus"
 
 	SubShader
 	{
-		Tags{ "LightMode" = "ForwardBase" "Queue" = "Transparent" "IgnoreProjector" = "True" "RenderType" = "Transparent" }
+		Tags{ "LightMode" = "UniversalForward" "Queue" = "Transparent" "IgnoreProjector" = "True" "RenderType" = "Transparent" }
 
 		Pass
 		{

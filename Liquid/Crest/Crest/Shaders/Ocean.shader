@@ -214,10 +214,10 @@ Shader "Crest/Ocean"
 			"DisableBatching"="True"
 		}
 
-		GrabPass
-		{
-			"_BackgroundTexture"
-		}
+		// GrabPass is intentionally disabled for SRP/URP. URP does not support
+		// ShaderLab GrabPass and will throw a render-thread/job-thread error.
+		// Refraction gracefully falls back to water colour until an SRP opaque
+		// texture bridge is added.
 
 		Pass
 		{
@@ -230,7 +230,7 @@ Shader "Crest/Ocean"
 			{
 				// Tell Unity we're going to render water in forward manner and we're going to do lighting and it will set
 				// the appropriate uniforms.
-				"LightMode"="ForwardBase"
+				"LightMode"="UniversalForward"
 			}
 
 			CGPROGRAM
