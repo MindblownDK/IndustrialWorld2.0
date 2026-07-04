@@ -145,6 +145,12 @@ namespace VoxelEngine.WaterSim
             }
         }
 
+        public static Material GetWaterMaterial()
+        {
+            EnsureMats();
+            return _waterMat;
+        }
+
         private static void ConfigureTransparent(Material mat)
         {
             mat.SetOverrideTag("RenderType", "Transparent");
@@ -373,6 +379,8 @@ namespace VoxelEngine.WaterSim
                 Vector3 centerVoxel = chunkVoxel + new Vector3(x + 0.5f, y + 0.5f, z + 0.5f);
                 float distFromCenter = centerVoxel.magnitude;
                 LiquidType liquid = FluidMaterialUtility.LiquidFromVoxel(v);
+
+                if (liquid == LiquidType.Water && distFromCenter >= seaRad - 15f && distFromCenter <= seaRad + 5f) continue;
 
                 Vector3Int local = new(x, y, z);
                 if (IsCoveredBySameLiquid(c, local, v, distFromCenter, seaRad)) continue;

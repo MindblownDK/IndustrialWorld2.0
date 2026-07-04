@@ -206,11 +206,34 @@ namespace VoxelEngine.Settings
             bool modeChanged    = fsm != Screen.fullScreenMode;
             bool refreshChanged = RefreshRate > 0 && RefreshRate != curHz;
             if (rw > 0 && rh > 0 && (resChanged || modeChanged || refreshChanged))
+            {
+                if (fsm == FullScreenMode.Windowed)
+                {
+                    int maxW = Screen.currentResolution.width;
+                    int maxH = Screen.currentResolution.height;
+                    if (rw >= maxW || rh >= maxH)
+                    {
+                        rw = Mathf.RoundToInt(maxW * 0.8f);
+                        rh = Mathf.RoundToInt(maxH * 0.8f);
+                    }
+                }
                 Screen.SetResolution(rw, rh, fsm,
                     new RefreshRate { numerator = (uint)Mathf.Max(1, RefreshRate), denominator = 1 });
+            }
 
             PlayerPrefs.Save();
             Notify();
+        }
+
+        public static void ConfigurePanelSettings(UnityEngine.UIElements.PanelSettings ps)
+        {
+            if (ps == null) return;
+            ps.scaleMode = UnityEngine.UIElements.PanelScaleMode.ScaleWithScreenSize;
+            ps.referenceResolution = new Vector2Int(1920, 1080);
+            ps.screenMatchMode = UnityEngine.UIElements.PanelScreenMatchMode.MatchWidthOrHeight;
+            float curAspect = (float)Screen.width / Mathf.Max(1, Screen.height);
+            float refAspect = 1920f / 1080f;
+            ps.match = curAspect < refAspect ? 0.0f : 1.0f;
         }
 
         private static void Notify() => OnChanged?.Invoke();

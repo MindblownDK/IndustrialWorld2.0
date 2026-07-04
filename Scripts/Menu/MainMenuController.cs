@@ -77,6 +77,7 @@ namespace VoxelEngine.Menu
                 // "No Theme Style Sheet set" warning disappears.
                 _doc.panelSettings.themeStyleSheet = LoadOrCreateDefaultTheme();
             }
+            VoxelEngine.Settings.GameSettings.ConfigurePanelSettings(_doc.panelSettings);
 
             if (_newSeed == 0)
                 _newSeed = UnityEngine.Random.Range(1, int.MaxValue);
@@ -116,6 +117,11 @@ namespace VoxelEngine.Menu
                 case Page.NewWorld: BuildNewWorldPage(); break;
                 case Page.Settings: BuildSettingsPage(); break;
             }
+        }
+
+        private void Update()
+        {
+            if (_doc != null) VoxelEngine.Settings.GameSettings.ConfigurePanelSettings(_doc.panelSettings);
         }
 
         // ════════════════════════════════════════════════════════════
