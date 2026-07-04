@@ -225,6 +225,16 @@ namespace VoxelEngine.Settings
             Notify();
         }
 
+        public static void ApplyUiScaleAndFit(UnityEngine.UIElements.PanelSettings ps)
+        {
+            if (ps == null) return;
+            ps.scaleMode = UnityEngine.UIElements.PanelScaleMode.ScaleWithScreenSize;
+            ps.referenceResolution = new Vector2Int(1920, 1080);
+            ps.screenMatchMode = UnityEngine.UIElements.PanelScreenMatchMode.Expand;
+            ps.referenceDpi = 96;
+            ps.fallbackDpi = 96;
+        }
+
         private static void Notify() => OnChanged?.Invoke();
 
         // ----- Reset -----

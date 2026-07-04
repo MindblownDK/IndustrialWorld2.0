@@ -124,6 +124,7 @@ namespace VoxelEngine.UI
             _doc.sortingOrder = 500;
             if (_doc.panelSettings == null)
                 _doc.panelSettings = Resources.Load<PanelSettings>("MenuPanelSettings");
+            VoxelEngine.Settings.GameSettings.ApplyUiScaleAndFit(_doc.panelSettings);
             _root = _doc.rootVisualElement;
             _root.style.flexGrow = 1;
             // Pin the root to a DEFINITE full-screen size so absolutely-positioned children
@@ -191,6 +192,7 @@ namespace VoxelEngine.UI
         private float         _machineRefreshAccum;
         private void Update()
         {
+            if (_doc != null) VoxelEngine.Settings.GameSettings.ApplyUiScaleAndFit(_doc.panelSettings);
             // Live-update the open furnace panel in-place every frame (no rebuild needed).
             TickFurnaceLiveUI();
             PlayerHud.Tick();
