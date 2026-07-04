@@ -29,7 +29,7 @@ namespace VoxelEngine.EditorTools
                 "• UI PanelSettings fit mode\n" +
                 "• Shallow/clear Crest water material values\n" +
                 "• Crest sample planes removed from the scene\n" +
-                "• Procedural water patch renderer enabled from voxel ocean/lake data\n" +
+                "• Generated voxel ocean/lake water re-enabled with procedural patch fallback\n" +
                 "• Existing maritime grids with water-only Crest wake emitters\n" +
                 "• Scene lighting and solar-system sun left untouched", "OK");
         }
@@ -87,15 +87,18 @@ namespace VoxelEngine.EditorTools
                 if (bootstrap == null) bootstrap = go.AddComponent<VoxelEngine.WaterSim.PlanetWaterRendererBootstrap>();
             }
 
-            // Use the finite procedural patch renderer for visuals. Voxel liquid
-            // data remains active for pumps/buoyancy, but old chunk-local water
-            // meshes are disabled to avoid black seams/overdraw.
-            bootstrap.renderVoxelLiquidSurfaces = false;
-            bootstrap.rescheduleVisibleLiquidSurfaces = false;
+            // Keep generated voxel/chunk water active as the authoritative visual
+            // fallback while the procedural patch bridge stabilizes. The patch renderer
+            // is also configured below, but old water must remain visible if patch
+            // sampling misses a frame or a body has not streamed yet.
+            bootstrap.renderVoxelLiquidSurfaces = true;
+            bootstrap.rescheduleVisibleLiquidSurfaces = true;
+            bootstrap.liquidRescheduleChunkRadius = 6;
+            bootstrap.liquidRescheduleInterval = 0.35f;
             bootstrap.waterMaterialOverride = null;
             bootstrap.oilMaterialOverride = null;
-            VoxelEngine.WaterSim.WaterMeshBuilder.RenderingEnabled = false;
-            DisableExistingVoxelLiquidSurfaceObjects();
+            VoxelEngine.WaterSim.WaterMeshBuilder.RenderingEnabled = true;
+            EnableExistingVoxelLiquidSurfaceObjects();
             ConfigureProceduralPatchRenderer();
             EditorUtility.SetDirty(bootstrap);
         }
@@ -117,7 +120,8 @@ namespace VoxelEngine.EditorTools
 
             var go = new GameObject("Procedural Water Patch Renderer");
             go.AddComponent<MeshFilter>();
-            go.AddComponent<MeshRenderer>();
+            var mr = go.AddComponent<MeshRenderer>();
+            mr.enabled = true;
             var renderer = go.AddComponent<VoxelEngine.WaterSim.ProceduralWaterPatchRenderer>();
             renderer.enabled = true;
             renderer.keepLastValidMesh = true;
