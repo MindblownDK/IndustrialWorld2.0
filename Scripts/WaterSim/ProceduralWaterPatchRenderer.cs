@@ -23,6 +23,13 @@ namespace VoxelEngine.WaterSim
         [UnityEngine.Range(0.1f, 3f)] public float rebuildInterval = 0.35f;
         public float waterHeightOffset = 0.04f;
 
+        [Header("Performance / Continuity")]
+        [Tooltip("For spherical planets, render a continuous local sea patch from the planet sea radius instead of scanning every vertex. This removes gaps and prevents heavy voxel scan spikes.")]
+        public bool fastSphericalOceanPatch = true;
+
+        [Tooltip("Only rebuild when the viewer has moved this far from the previous patch anchor.")]
+        public float anchorMoveThreshold = 24f;
+
         [Tooltip("Keep the last successful water mesh visible if a transient chunk-streaming frame cannot sample water.")]
         public bool keepLastValidMesh = true;
 
@@ -44,6 +51,7 @@ namespace VoxelEngine.WaterSim
         private Transform _cachedViewpoint;
         private float _nextRebuild;
         private bool _hasValidMesh;
+        private Vector3 _lastAnchor = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
 
         private readonly List<Vector3> _vertices = new(16384);
         private readonly List<Vector3> _normals = new(16384);
@@ -151,31 +159,19 @@ namespace VoxelEngine.WaterSim
                 return;
             }
 
-            if (!VoxelWaterDepthSampler.TryFindNearbyWater(view.position, searchRadius, Mathf.Max(tileSize, 8f), out var waterCenter, out _, out _))
+            Vector3 waterCenter;
+            if (PlanetWaterUtility.IsPlanetWorld && fastSphericalOceanPatch)
             {
-                // Fallback directly to the current sea shell/sea level. This avoids
-                // a compile/runtime dependency on a separate helper and guarantees
-                // the renderer can still produce an ocean patch while chunks stream.
-                if (PlanetWaterUtility.IsPlanetWorld)
-                {
-                    Vector3 bodyCenter = Vector3.zero;
-                    if (world is VoxelEngine.Cosmos.SphereWorld sphere && sphere.body != null)
-                        bodyCenter = sphere.body.transform.position;
-
-                    Vector3 upFallback = PlanetWaterUtility.WorldUp(view.position);
-                    if (upFallback.sqrMagnitude < 0.0001f)
-                    {
-                        Vector3 fromCenter = view.position - bodyCenter;
-                        upFallback = fromCenter.sqrMagnitude > 0.0001f ? fromCenter.normalized : Vector3.up;
-                    }
-                    upFallback.Normalize();
-                    waterCenter = bodyCenter + upFallback * (world.SeaLevel * VoxelConstants.VOXEL_SIZE);
-                }
-                else
-                {
-                    waterCenter = new Vector3(view.position.x, world.SeaLevel * VoxelConstants.VOXEL_SIZE, view.position.z);
-                }
+                waterCenter = GetPlanetSeaPoint(world, view.position);
             }
+            else if (!VoxelWaterDepthSampler.TryFindNearbyWater(view.position, searchRadius, Mathf.Max(tileSize, 8f), out waterCenter, out _, out _))
+            {
+                waterCenter = PlanetWaterUtility.IsPlanetWorld
+                    ? GetPlanetSeaPoint(world, view.position)
+                    : new Vector3(view.position.x, world.SeaLevel * VoxelConstants.VOXEL_SIZE, view.position.z);
+            }
+
+            _lastAnchor = view.position;
 
             Vector3 up = PlanetWaterUtility.IsPlanetWorld ? PlanetWaterUtility.WorldUp(waterCenter) : Vector3.up;
             if (up.sqrMagnitude < 0.0001f) up = Vector3.up;
@@ -258,8 +254,24 @@ namespace VoxelEngine.WaterSim
         private bool TrySample(Vector3 samplePosition, out Sample sample)
         {
             sample = default;
-            bool hasWater = VoxelWaterDepthSampler.TrySampleDepth(samplePosition, out float depth, out float surface) ||
-                            VoxelWaterDepthSampler.TrySampleSeaSurface(samplePosition, out depth, out surface);
+            float depth;
+            float surface;
+            bool hasWater;
+
+            if (PlanetWaterUtility.IsPlanetWorld && fastSphericalOceanPatch)
+            {
+                // Fast path: avoid thousands of voxel-column scans per rebuild. The
+                // patch is already anchored to the procedural sea shell, so each
+                // vertex can stay on that shell and use stable deep-ocean depth.
+                depth = deepDepth;
+                surface = 0f;
+                hasWater = true;
+            }
+            else
+            {
+                hasWater = VoxelWaterDepthSampler.TrySampleDepth(samplePosition, out depth, out surface) ||
+                           VoxelWaterDepthSampler.TrySampleSeaSurface(samplePosition, out depth, out surface);
+            }
 
             Vector3 up = PlanetWaterUtility.IsPlanetWorld ? PlanetWaterUtility.WorldUp(samplePosition) : Vector3.up;
             if (up.sqrMagnitude < 0.0001f) up = Vector3.up;
