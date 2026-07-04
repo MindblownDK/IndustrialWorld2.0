@@ -10,6 +10,9 @@
 // body hierarchy INACTIVE, wiring every field, then activating it last so Awake sees a fully
 // configured component graph.
 using UnityEngine;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 using VoxelEngine.Biomes;
 using VoxelEngine.Materials;
 
@@ -339,10 +342,17 @@ namespace VoxelEngine.Cosmos
             if (materialRegistry == null) materialRegistry = Resources.Load<MaterialRegistry>("MaterialRegistry");
             if (terrainMaterial == null)  terrainMaterial  = Resources.Load<Material>("Mat_Terrain");
 
-            // Pull the EXACT working material + registry from the flat VoxelWorld (inspector-
-            // assigned, guaranteed correct). This is a RUNTIME API — no #if UNITY_EDITOR guard —
-            // so it works in builds too. This is the key fix for the "purple planet" (magenta =
-            // missing shader): we reuse the flat world's proven vertex-colour URP material.
+#if UNITY_EDITOR
+            // In the editor the authored assets live under VoxelEngineAssets, not Resources.
+            // Resolve them by path so play-mode planets do not fall back to empty registries
+            // and white URP materials.
+            if (materialRegistry == null)
+                materialRegistry = AssetDatabase.LoadAssetAtPath<MaterialRegistry>("Assets/VoxelEngineAssets/MaterialRegistry.asset");
+            if (terrainMaterial == null)
+                terrainMaterial = AssetDatabase.LoadAssetAtPath<Material>("Assets/VoxelEngineAssets/VoxelTerrain.mat");
+#endif
+
+            // Pull the exact working material + registry from the flat VoxelWorld if present.
             if (materialRegistry == null || terrainMaterial == null)
             {
                 var flat = FindAnyObjectByType<VoxelEngine.Core.VoxelWorld>(FindObjectsInactive.Include);
