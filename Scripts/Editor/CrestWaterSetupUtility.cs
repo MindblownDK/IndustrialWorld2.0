@@ -28,8 +28,8 @@ namespace VoxelEngine.EditorTools
                 "Configured:\n" +
                 "• UI PanelSettings fit mode\n" +
                 "• Shallow/clear Crest water material values\n" +
-                "• Crest plane/ocean test rig disabled for spherical worlds\n" +
-                "• Procedural voxel ocean/lake surfaces re-enabled\n" +
+                "• Crest sample planes removed from the scene\n" +
+                "• Procedural voxel ocean/lake surfaces re-enabled and rescheduled\n" +
                 "• Existing maritime grids with water-only Crest wake emitters", "OK");
         }
 
@@ -75,6 +75,9 @@ namespace VoxelEngine.EditorTools
             }
 
             bootstrap.renderVoxelLiquidSurfaces = true;
+            bootstrap.rescheduleVisibleLiquidSurfaces = true;
+            bootstrap.liquidRescheduleChunkRadius = 4;
+            bootstrap.liquidRescheduleInterval = 0.5f;
             bootstrap.waterMaterialOverride = null;
             bootstrap.oilMaterialOverride = null;
             VoxelEngine.WaterSim.WaterMeshBuilder.RenderingEnabled = true;
@@ -143,11 +146,19 @@ namespace VoxelEngine.EditorTools
 
         private static void RemoveExistingCrestRuntimeObjects()
         {
-            string[] names = { "Crest Water Runtime", "Crest Ocean", "Crest Animated Waves" };
-            foreach (var name in names)
+            string[] names = { "Crest Water Runtime", "Crest Ocean", "Crest Animated Waves", "Ocean", "Waves" };
+            var transforms = Object.FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            foreach (var t in transforms)
             {
-                var go = GameObject.Find(name);
-                if (go != null) Object.DestroyImmediate(go);
+                if (t == null || string.IsNullOrEmpty(t.gameObject.scene.name)) continue;
+                for (int i = 0; i < names.Length; i++)
+                {
+                    if (t.name == names[i])
+                    {
+                        Object.DestroyImmediate(t.gameObject);
+                        break;
+                    }
+                }
             }
 
             var oceanType = FindType("Crest.OceanRenderer");

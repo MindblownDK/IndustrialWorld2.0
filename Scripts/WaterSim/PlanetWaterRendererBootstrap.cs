@@ -19,6 +19,14 @@ namespace VoxelEngine.WaterSim
         [Tooltip("When Crest is used as the scene water renderer, leave voxel liquid data active for pumps/buoyancy but stop rendering the old chunk-local liquid surface meshes.")]
         public bool renderVoxelLiquidSurfaces = true;
 
+        [Tooltip("Schedules nearby generated liquid chunks in case a scene was previously saved with liquid surfaces disabled.")]
+        public bool rescheduleVisibleLiquidSurfaces = true;
+
+        [Range(1, 8)] public int liquidRescheduleChunkRadius = 3;
+        [Range(0.25f, 5f)] public float liquidRescheduleInterval = 1.0f;
+
+        private float _nextLiquidReschedule;
+
         [Header("Visual Materials")]
         [Tooltip("Optional imported/stylized water material. Simulation, pumps and buoyancy keep using voxel liquid data.")]
         public Material waterMaterialOverride;
@@ -37,8 +45,46 @@ namespace VoxelEngine.WaterSim
         {
             ApplyMaterialOverrides();
             if (renderVoxelLiquidSurfaces)
+            {
+                ScheduleNearbyLiquidChunks();
                 WaterMeshBuilder.Pump(Mathf.Max(1, meshBuildBudgetPerFrame));
+            }
             ApplyProfile();
+        }
+
+        private void ScheduleNearbyLiquidChunks()
+        {
+            if (!rescheduleVisibleLiquidSurfaces || Time.unscaledTime < _nextLiquidReschedule) return;
+            _nextLiquidReschedule = Time.unscaledTime + liquidRescheduleInterval;
+
+            var world = ActiveWorld.Current;
+            var viewer = world?.Viewer != null ? world.Viewer : (Camera.main != null ? Camera.main.transform : null);
+            if (world == null || viewer == null) return;
+
+            Vector3Int center = world.WorldToChunk(viewer.position);
+            int radius = Mathf.Max(1, liquidRescheduleChunkRadius);
+            for (int z = -radius; z <= radius; z++)
+            for (int y = -radius; y <= radius; y++)
+            for (int x = -radius; x <= radius; x++)
+            {
+                var coord = center + new Vector3Int(x, y, z);
+                if (!world.TryGetChunk(coord, out var chunk) || chunk == null || !chunk.isGenerated) continue;
+                if (ChunkHasVisibleLiquid(chunk))
+                    WaterMeshBuilder.Schedule(chunk);
+            }
+        }
+
+        private static bool ChunkHasVisibleLiquid(Chunk chunk)
+        {
+            const int S = VoxelConstants.CHUNK_SIZE;
+            for (int z = 0; z < S; z += 2)
+            for (int y = 0; y < S; y += 2)
+            for (int x = 0; x < S; x += 2)
+            {
+                var v = chunk.GetVoxelLocal(x, y, z);
+                if (FluidMaterialUtility.IsFluid(v)) return true;
+            }
+            return false;
         }
 
         private void ApplyMaterialOverrides()
