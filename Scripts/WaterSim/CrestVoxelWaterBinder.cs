@@ -5,37 +5,39 @@ using VoxelEngine.Core;
 namespace VoxelEngine.WaterSim
 {
     /// <summary>
-    /// Aligns the imported Crest test-scene ocean to IndustrialWorld's procedural
-    /// water datum. Crest remains the visual renderer; voxel water remains the
-    /// gameplay source for pumps, depth, swimming and maritime logic.
+    /// Binds Crest's imported ocean renderer to procedural voxel water.
+    /// It enables Crest only near real generated water and aligns the visual water
+    /// to the sampled voxel surface so it does not behave like a random plane in space.
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class CrestVoxelWaterBinder : MonoBehaviour
     {
-        [Tooltip("Optional viewpoint. If empty, Camera.main is used.")]
         public Transform viewpoint;
-
-        [Tooltip("Small vertical adjustment for art tuning.")]
         public float waterHeightOffset = 0f;
-
-        [Tooltip("On spherical worlds, the Crest ocean becomes a local tangent patch under the viewer instead of a global plane.")]
         public bool alignToPlanetSurface = true;
-
-        [Tooltip("For flat worlds, keep the ocean centered at world origin instead of following the camera horizontally.")]
-        public bool keepFlatOceanAtWorldOrigin = true;
+        public bool followNearestProceduralWater = true;
+        public float waterSearchRadius = 512f;
+        public float waterSearchSpacing = 32f;
 
         [Header("Depth Debug")]
+        [SerializeField] private bool proceduralWaterFound;
         [SerializeField] private float sampledWaterDepth;
         [SerializeField] private float sampledSurfaceOffset;
 
         private Component _oceanRenderer;
+        private Behaviour _oceanBehaviour;
         private FieldInfo _viewpointField;
         private Transform _cachedViewpoint;
+        private Renderer[] _renderers;
 
         private void Awake()
         {
-            _oceanRenderer = GetComponent(System.Type.GetType("Crest.OceanRenderer, Crest"));
-            CacheOceanFields();
+            CacheOcean();
+        }
+
+        private void OnEnable()
+        {
+            CacheOcean();
         }
 
         private void LateUpdate()
@@ -44,33 +46,44 @@ namespace VoxelEngine.WaterSim
             var view = ResolveViewpoint();
             if (world == null || view == null) return;
 
-            if (_oceanRenderer == null)
-                _oceanRenderer = GetComponent(System.Type.GetType("Crest.OceanRenderer, Crest"));
+            CacheOcean();
             if (_oceanRenderer != null && _viewpointField != null)
                 _viewpointField.SetValue(_oceanRenderer, view);
 
-            if (PlanetWaterUtility.IsPlanetWorld && alignToPlanetSurface)
-                AlignPlanetPatch(world, view.position);
-            else
-                AlignFlatOcean(world, view.position);
+            proceduralWaterFound = VoxelWaterDepthSampler.TryFindNearbyWater(
+                view.position,
+                waterSearchRadius,
+                waterSearchSpacing,
+                out Vector3 waterPosition,
+                out float depth,
+                out float surface);
 
-            if (VoxelWaterDepthSampler.TrySampleDepth(view.position, out float depth, out float surface))
-            {
-                sampledWaterDepth = depth;
-                sampledSurfaceOffset = surface;
-            }
+            sampledWaterDepth = proceduralWaterFound ? depth : 0f;
+            sampledSurfaceOffset = proceduralWaterFound ? surface : 0f;
+
+            SetCrestVisualActive(proceduralWaterFound);
+            if (!proceduralWaterFound) return;
+
+            if (PlanetWaterUtility.IsPlanetWorld && alignToPlanetSurface)
+                AlignPlanetPatch(world, waterPosition);
             else
-            {
-                sampledWaterDepth = 0f;
-                sampledSurfaceOffset = 0f;
-            }
+                AlignFlatPatch(waterPosition, surface);
         }
 
-        private void CacheOceanFields()
+        private void CacheOcean()
         {
-            if (_oceanRenderer == null) return;
-            var type = _oceanRenderer.GetType();
-            _viewpointField = type.GetField("_viewpoint", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            var oceanType = System.Type.GetType("Crest.OceanRenderer, Crest");
+            if (oceanType != null && _oceanRenderer == null)
+            {
+                _oceanRenderer = GetComponent(oceanType);
+                _oceanBehaviour = _oceanRenderer as Behaviour;
+            }
+
+            if (_oceanRenderer != null && _viewpointField == null)
+                _viewpointField = _oceanRenderer.GetType().GetField("_viewpoint", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+            if (_renderers == null || _renderers.Length == 0)
+                _renderers = GetComponentsInChildren<Renderer>(includeInactive: true);
         }
 
         private Transform ResolveViewpoint()
@@ -78,38 +91,39 @@ namespace VoxelEngine.WaterSim
             if (viewpoint != null) return viewpoint;
             if (_cachedViewpoint != null) return _cachedViewpoint;
 
-            var cam = Camera.main;
-            if (cam != null)
-            {
-                _cachedViewpoint = cam.transform;
-                return _cachedViewpoint;
-            }
-
-            var anyCamera = Object.FindFirstObjectByType<Camera>();
-            if (anyCamera != null)
-                _cachedViewpoint = anyCamera.transform;
-
+            var cam = Camera.main != null ? Camera.main : Object.FindFirstObjectByType<Camera>();
+            _cachedViewpoint = cam != null ? cam.transform : null;
             return _cachedViewpoint;
         }
 
-        private void AlignFlatOcean(IVoxelWorld world, Vector3 viewerPosition)
+        private void SetCrestVisualActive(bool active)
         {
-            float seaY = world.SeaLevel * VoxelConstants.VOXEL_SIZE + waterHeightOffset;
-            Vector3 position = keepFlatOceanAtWorldOrigin
-                ? new Vector3(0f, seaY, 0f)
-                : new Vector3(viewerPosition.x, seaY, viewerPosition.z);
+            if (_oceanBehaviour != null && _oceanBehaviour.enabled != active)
+                _oceanBehaviour.enabled = active;
 
-            transform.SetPositionAndRotation(position, Quaternion.identity);
+            if (_renderers == null) return;
+            for (int i = 0; i < _renderers.Length; i++)
+            {
+                if (_renderers[i] != null && _renderers[i].enabled != active)
+                    _renderers[i].enabled = active;
+            }
         }
 
-        private void AlignPlanetPatch(IVoxelWorld world, Vector3 viewerPosition)
+        private void AlignFlatPatch(Vector3 waterPosition, float surfaceHeight)
         {
-            Vector3 up = PlanetWaterUtility.WorldUp(viewerPosition);
+            float seaY = surfaceHeight + waterHeightOffset;
+            transform.SetPositionAndRotation(new Vector3(waterPosition.x, seaY, waterPosition.z), Quaternion.identity);
+        }
+
+        private void AlignPlanetPatch(IVoxelWorld world, Vector3 waterPosition)
+        {
+            Vector3 up = PlanetWaterUtility.WorldUp(waterPosition);
             if (up.sqrMagnitude < 0.0001f) up = Vector3.up;
+            up.Normalize();
 
             float seaRadius = world.SeaLevel * VoxelConstants.VOXEL_SIZE + waterHeightOffset;
-            Vector3 position = up.normalized * seaRadius;
-            Quaternion rotation = Quaternion.FromToRotation(Vector3.up, up.normalized);
+            Vector3 position = up * seaRadius;
+            Quaternion rotation = Quaternion.FromToRotation(Vector3.up, up);
             transform.SetPositionAndRotation(position, rotation);
         }
     }

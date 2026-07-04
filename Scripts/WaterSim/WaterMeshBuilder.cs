@@ -99,11 +99,21 @@ namespace VoxelEngine.WaterSim
 
         public static void SetMaterialOverrides(Material waterMaterial, Material oilMaterial)
         {
+            var previousExternalWater = _externalWaterMat;
+            var previousExternalOil = _externalOilMat;
+
             _externalWaterMat = waterMaterial;
             _externalOilMat = oilMaterial;
 
-            if (waterMaterial != null) _waterMat = waterMaterial;
-            if (oilMaterial != null) _oilMat = oilMaterial;
+            if (waterMaterial != null)
+                _waterMat = waterMaterial;
+            else if (previousExternalWater != null && _waterMat == previousExternalWater)
+                _waterMat = null;
+
+            if (oilMaterial != null)
+                _oilMat = oilMaterial;
+            else if (previousExternalOil != null && _oilMat == previousExternalOil)
+                _oilMat = null;
         }
 
         private static void EnsureMats()

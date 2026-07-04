@@ -14,9 +14,8 @@ namespace VoxelEngine.EditorTools
         public static void Configure()
         {
             EnsurePanelSettingsFitMode();
-            ImportCrestMainSceneWaterRig();
-            var waterMaterial = ConfigureCrestWaterMaterial();
-            ConfigureCrestRuntimeInScene(waterMaterial);
+            ConfigureCrestProceduralVoxelWaterMode();
+            ConfigureCrestWaterMaterial();
             ConfigureExistingMaritimeWakeEmitters();
 
             AssetDatabase.SaveAssets();
@@ -29,8 +28,8 @@ namespace VoxelEngine.EditorTools
                 "Configured:\n" +
                 "• UI PanelSettings fit mode\n" +
                 "• Shallow/clear Crest water material values\n" +
-                "• Crest ocean dynamic waves + flow flags where available\n" +
-                "• Planet water bootstrap material override\n" +
+                "• Crest plane/ocean test rig disabled for spherical worlds\n" +
+                "• Procedural voxel ocean/lake surfaces re-enabled\n" +
                 "• Existing maritime grids with water-only Crest wake emitters", "OK");
         }
 
@@ -56,6 +55,31 @@ namespace VoxelEngine.EditorTools
             panelSettings.referenceDpi = 96;
             panelSettings.fallbackDpi = 96;
             EditorUtility.SetDirty(panelSettings);
+        }
+
+        private static void ConfigureCrestProceduralVoxelWaterMode()
+        {
+            // For spherical/procedural worlds we must not leave Crest's sample-scene
+            // infinite ocean plane in the scene. Until we generate proper Crest clip
+            // masks/patches from voxel water bodies, the correct visual source is the
+            // procedural voxel water surface itself.
+            RemoveExistingCrestRuntimeObjects();
+
+            var bootstraps = Object.FindObjectsByType<VoxelEngine.WaterSim.PlanetWaterRendererBootstrap>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var bootstrap = bootstraps != null && bootstraps.Length > 0 ? bootstraps[0] : null;
+            if (bootstrap == null)
+            {
+                var go = GameObject.Find("Liquid Visual Runtime") ?? new GameObject("Liquid Visual Runtime");
+                bootstrap = go.GetComponent<VoxelEngine.WaterSim.PlanetWaterRendererBootstrap>();
+                if (bootstrap == null) bootstrap = go.AddComponent<VoxelEngine.WaterSim.PlanetWaterRendererBootstrap>();
+            }
+
+            bootstrap.renderVoxelLiquidSurfaces = true;
+            bootstrap.waterMaterialOverride = null;
+            bootstrap.oilMaterialOverride = null;
+            VoxelEngine.WaterSim.WaterMeshBuilder.RenderingEnabled = true;
+            EnableExistingVoxelLiquidSurfaceObjects();
+            EditorUtility.SetDirty(bootstrap);
         }
 
         private static void ImportCrestMainSceneWaterRig()
@@ -275,8 +299,10 @@ namespace VoxelEngine.EditorTools
             if (ocean == null) return;
             var binder = ocean.GetComponent<VoxelEngine.WaterSim.CrestVoxelWaterBinder>();
             if (binder == null) binder = ocean.gameObject.AddComponent<VoxelEngine.WaterSim.CrestVoxelWaterBinder>();
-            binder.keepFlatOceanAtWorldOrigin = true;
+            binder.followNearestProceduralWater = true;
             binder.alignToPlanetSurface = true;
+            binder.waterSearchRadius = 512f;
+            binder.waterSearchSpacing = 32f;
             binder.waterHeightOffset = 0f;
             EditorUtility.SetDirty(binder);
         }

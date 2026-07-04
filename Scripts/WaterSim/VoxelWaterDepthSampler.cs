@@ -25,6 +25,62 @@ namespace VoxelEngine.WaterSim
             return TrySampleFlatDepth(world, worldPosition, out depth, out surfaceHeight);
         }
 
+
+        public static bool TryFindNearbyWater(Vector3 center, float radius, float spacing, out Vector3 waterPosition, out float depth, out float surfaceHeight)
+        {
+            waterPosition = center;
+            depth = 0f;
+            surfaceHeight = 0f;
+
+            var world = ActiveWorld.Current;
+            if (world == null) return false;
+
+            spacing = Mathf.Max(2f, spacing);
+            radius = Mathf.Max(spacing, radius);
+
+            if (TrySampleDepth(center, out depth, out surfaceHeight))
+            {
+                waterPosition = PlanetWaterUtility.IsPlanetWorld
+                    ? PlanetWaterUtility.WorldUp(center) * (center.magnitude + surfaceHeight)
+                    : new Vector3(center.x, surfaceHeight, center.z);
+                return true;
+            }
+
+            Vector3 up = PlanetWaterUtility.IsPlanetWorld ? PlanetWaterUtility.WorldUp(center) : Vector3.up;
+            if (up.sqrMagnitude < 0.0001f) up = Vector3.up;
+            up.Normalize();
+            Vector3 tangentA = Vector3.Cross(up, Vector3.forward);
+            if (tangentA.sqrMagnitude < 0.0001f) tangentA = Vector3.Cross(up, Vector3.right);
+            tangentA.Normalize();
+            Vector3 tangentB = Vector3.Cross(up, tangentA).normalized;
+
+            float bestDistSq = float.MaxValue;
+            bool found = false;
+            int steps = Mathf.CeilToInt(radius / spacing);
+            for (int z = -steps; z <= steps; z++)
+            for (int x = -steps; x <= steps; x++)
+            {
+                Vector2 offset2 = new Vector2(x * spacing, z * spacing);
+                if (offset2.sqrMagnitude > radius * radius) continue;
+
+                Vector3 sample = center + tangentA * offset2.x + tangentB * offset2.y;
+                if (!TrySampleDepth(sample, out float d, out float surf)) continue;
+
+                float distSq = offset2.sqrMagnitude;
+                if (distSq >= bestDistSq) continue;
+
+                bestDistSq = distSq;
+                depth = d;
+                surfaceHeight = surf;
+                waterPosition = PlanetWaterUtility.IsPlanetWorld
+                    ? PlanetWaterUtility.WorldUp(sample) * (sample.magnitude + surf)
+                    : new Vector3(sample.x, surf, sample.z);
+                found = true;
+            }
+
+            return found;
+        }
+
         private static bool TrySampleFlatDepth(IVoxelWorld world, Vector3 worldPosition, out float depth, out float surfaceHeight)
         {
             depth = 0f;
