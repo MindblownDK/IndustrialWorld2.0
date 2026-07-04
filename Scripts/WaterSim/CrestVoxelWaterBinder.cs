@@ -32,7 +32,13 @@ namespace VoxelEngine.WaterSim
         public bool smoothFollow = true;
         [Range(1f, 20f)] public float followSmoothing = 8f;
         [Tooltip("Keep Crest active even if no voxel water found – prevents flicker over oceans.")]
-        public bool forceOceanAlwaysOn = true;
+        public bool forceOceanAlwaysOn = false;
+
+        [Header("Crest Mode v3.20.2")]
+        [Tooltip("Disable Crest OceanRenderer plane – we use Crest material on voxel water mesh instead.")]
+        public bool disableCrestOceanPlane = true;
+        [Tooltip("Bridge Crest material to voxel water mesh renderer.")]
+        public bool bridgeCrestMaterialToVoxelMesh = true;
 
         [Header("Crest Material Tuning")]
         public bool autoConfigureCrestMaterial = true;
@@ -70,15 +76,17 @@ namespace VoxelEngine.WaterSim
         {
             CacheOcean();
             ApplyCrestMaterialTuning();
-            // Disable legacy voxel water mesh rendering – Crest is now authoritative visual
-            WaterMeshBuilder.RenderingEnabled = false;
+            // v3.20.2 – Bridge Crest material to voxel mesh – voxel mesh IS visual
+            WaterMeshBuilder.RenderingEnabled = true;
+            TryBridgeMaterialToVoxel();
         }
 
         private void OnEnable()
         {
             CacheOcean();
             ApplyCrestMaterialTuning();
-            WaterMeshBuilder.RenderingEnabled = false;
+            WaterMeshBuilder.RenderingEnabled = true;
+            TryBridgeMaterialToVoxel();
             _nextScanTime = 0f;
         }
 
@@ -215,6 +223,9 @@ namespace VoxelEngine.WaterSim
 
         private void SetCrestVisualActive(bool active)
         {
+            // v3.20.2 – no ocean plane – we bridge Crest material to voxel mesh
+            if (disableCrestOceanPlane) active = false;
+
             if (_oceanBehaviour != null && _oceanBehaviour.enabled != active)
                 _oceanBehaviour.enabled = active;
 
@@ -225,6 +236,34 @@ namespace VoxelEngine.WaterSim
                 if (r != null && r.enabled != active)
                     r.enabled = active;
             }
+
+            // Bridge Crest material to voxel water mesh
+            if (bridgeCrestMaterialToVoxelMesh && !active)
+            {
+                TryBridgeMaterialToVoxel();
+            }
+        }
+
+        private void TryBridgeMaterialToVoxel()
+        {
+            if (_oceanRenderer == null) return;
+            try
+            {
+                var oceanType = _oceanRenderer.GetType();
+                var matProp = oceanType.GetProperty("OceanMaterial", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+                Material crestMat = matProp != null ? matProp.GetValue(_oceanRenderer) as Material : null;
+                if (crestMat == null)
+                {
+                    var matField = oceanType.GetField("_material", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+                    crestMat = matField != null ? matField.GetValue(_oceanRenderer) as Material : null;
+                }
+                if (crestMat != null)
+                {
+                    WaterMeshBuilder.SetMaterialOverrides(crestMat, null);
+                    WaterMeshBuilder.RenderingEnabled = true;
+                }
+            }
+            catch { }
         }
 
         private void UpdateFlatPatchTarget(Vector3 waterPosition, float surfaceHeight)

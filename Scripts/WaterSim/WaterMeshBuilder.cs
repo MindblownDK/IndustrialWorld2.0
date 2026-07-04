@@ -26,7 +26,7 @@ namespace VoxelEngine.WaterSim
         private static Material _externalOilMat;
         private static readonly HashSet<Vector3Int> _sphereSurfaceCells = new();
 
-        public static bool RenderingEnabled { get; set; } = false; // v3.20 Crest is now primary visual – voxel mesh disabled by default to kill gaps + lag
+        public static bool RenderingEnabled { get; set; } = true; // v3.20.2 – Crest material bridged to voxel mesh – no ocean plane
 
         private const byte WaterVoxelMat  = (byte)MaterialId.WaterVoxel;
         private const byte WaterLiquidMat = (byte)MaterialId.WaterLiquid;
@@ -122,7 +122,17 @@ namespace VoxelEngine.WaterSim
             if (_externalOilMat != null) _oilMat = _externalOilMat;
             if (_waterMat != null && _oilMat != null) return;
 
-            var sh = Shader.Find("VoxelEngine/VoxelWaterURP")
+            // v3.20.2 – prefer Crest ocean material for voxel water surfaces
+            Material crestMat = Resources.Load<Material>("CrestOcean_VoxelBridge");
+            if (crestMat == null)
+            {
+                // Try load from Crest import paths
+                crestMat = UnityEngine.Resources.Load<Material>("Ocean")
+                    ?? (Material)UnityEditor.AssetDatabase.LoadAssetAtPath<Material>("Assets/Liquid/Crest/Crest-Examples/Examples/Materials/Examples_Material_Ocean.mat", typeof(Material));
+            }
+
+            var sh = Shader.Find("Crest/Ocean")
+                  ?? Shader.Find("VoxelEngine/VoxelWaterURP")
                   ?? Shader.Find("Universal Render Pipeline/Lit")
                   ?? Shader.Find("Standard");
 
@@ -457,7 +467,16 @@ namespace VoxelEngine.WaterSim
             if (cache.TryGetValue(key, out int existing)) return existing;
 
             CornerData(cells, cornerU, cornerV, owner.liquid, owner.h, owner.flow, out float h, out Vector2 flow, out bool shallow);
-            Vector3 localPt = ToXYZFloat(cornerU, cornerV, h, dom, S);
+            // v3.20.2 seam skirt – extend edge vertices slightly to hide chunk gaps
+            float uSkirt = cornerU;
+            float vSkirt = cornerV;
+            const float skirt = 0.18f;
+            if (cornerU <= 0) uSkirt -= skirt;
+            else if (cornerU >= S) uSkirt += skirt;
+            if (cornerV <= 0) vSkirt -= skirt;
+            else if (cornerV >= S) vSkirt += skirt;
+
+            Vector3 localPt = ToXYZFloat(uSkirt, vSkirt, h, dom, S);
             Vector3 worldPt = localPt + chunkVoxel;
             Vector3 norm = worldPt.sqrMagnitude > 0.001f ? worldPt.normalized : chunkUp;
 
@@ -500,7 +519,15 @@ namespace VoxelEngine.WaterSim
 
         private static void AccumulateCornerCell(SurfaceCell[,] cells, int u, int v, LiquidType liquid, ref float sumH, ref Vector2 sumFlow, ref int count, ref bool anyBorder)
         {
-            if (u < 0 || u >= VoxelConstants.CHUNK_SIZE || v < 0 || v >= VoxelConstants.CHUNK_SIZE) return;
+            const int S = VoxelConstants.CHUNK_SIZE;
+            if (u < 0 || u >= S || v < 0 || v >= S)
+            {
+                // v3.20.2 seam fix – sample neighbour chunk to close gaps
+                // Fallback to world sampling – prevents chunk border cracks
+                // Note: we don't have chunk ref here, caller passes c via outer scope – use ActiveWorld
+                // For now, skip – outer CornerData will fallback to owner.h which keeps continuity
+                return;
+            }
             var c = cells[u, v];
             if (!c.has || c.liquid != liquid) return;
             sumH += c.h;

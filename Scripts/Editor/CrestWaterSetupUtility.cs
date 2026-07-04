@@ -16,11 +16,10 @@ namespace VoxelEngine.EditorTools
             EnsurePanelSettingsFitMode();
             ConfigureSceneAmbientOnly();
 
-            // v3.20 – full Crest URP integration
+            // v3.20.2 – Crest material BRIDGED to voxel water – NO ocean plane
             var waterMat = ConfigureCrestWaterMaterial();
-            ImportCrestMainSceneWaterRig();
-            ConfigureCrestRuntimeInScene(waterMat);
-            ConfigureVoxelCrestHelpers();
+            RemoveExistingCrestRuntimeObjects(); // ensure no big ocean plane
+            ConfigureCrestVoxelMaterialBridge(waterMat);
 
             ConfigureExistingMaritimeWakeEmitters();
 
@@ -420,6 +419,54 @@ namespace VoxelEngine.EditorTools
             foam.emitterRadius = 1.9f;
 
             EditorUtility.SetDirty(go);
+        }
+
+        // v3.20.2 – bridge Crest material to voxel water mesh – NO ocean plane
+        private static void ConfigureCrestVoxelMaterialBridge(Material waterMaterial)
+        {
+            // Remove any Crest ocean plane – we do NOT want a big water plane
+            RemoveExistingCrestRuntimeObjects();
+
+            var bootstraps = Object.FindObjectsByType<VoxelEngine.WaterSim.PlanetWaterRendererBootstrap>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var bootstrap = bootstraps != null && bootstraps.Length > 0 ? bootstraps[0] : null;
+            if (bootstrap == null)
+            {
+                var go = GameObject.Find("Liquid Visual Runtime") ?? new GameObject("Liquid Visual Runtime");
+                bootstrap = go.GetComponent<VoxelEngine.WaterSim.PlanetWaterRendererBootstrap>();
+                if (bootstrap == null) bootstrap = go.AddComponent<VoxelEngine.WaterSim.PlanetWaterRendererBootstrap>();
+            }
+
+            // Enable voxel liquid surfaces – with Crest material override
+            bootstrap.renderVoxelLiquidSurfaces = true;
+            bootstrap.rescheduleVisibleLiquidSurfaces = true;
+            bootstrap.liquidRescheduleChunkRadius = 4;
+            bootstrap.liquidRescheduleInterval = 0.5f;
+            bootstrap.meshBuildBudgetPerFrame = 2; // reduce lag
+            bootstrap.waterMaterialOverride = waterMaterial;
+            bootstrap.oilMaterialOverride = null;
+
+            VoxelEngine.WaterSim.WaterMeshBuilder.RenderingEnabled = true;
+            VoxelEngine.WaterSim.WaterMeshBuilder.SetMaterialOverrides(waterMaterial, null);
+
+            EnableExistingVoxelLiquidSurfaceObjects();
+            EditorUtility.SetDirty(bootstrap);
+
+            // Add a lightweight binder (no ocean plane) just to feed Crest globals / foam
+            var binderGO = GameObject.Find("CrestVoxelBridge") ?? new GameObject("CrestVoxelBridge");
+            var binder = binderGO.GetComponent<VoxelEngine.WaterSim.CrestVoxelWaterBinder>();
+            if (binder == null) binder = binderGO.AddComponent<VoxelEngine.WaterSim.CrestVoxelWaterBinder>();
+            binder.disableCrestOceanPlane = true;
+            binder.bridgeCrestMaterialToVoxelMesh = true;
+            binder.autoConfigureCrestMaterial = true;
+            EditorUtility.SetDirty(binderGO);
+
+            // Depth + foam helpers on same GO
+            var depth = binderGO.GetComponent<VoxelEngine.WaterSim.VoxelCrestSeaFloorDepthProvider>() ?? binderGO.AddComponent<VoxelEngine.WaterSim.VoxelCrestSeaFloorDepthProvider>();
+            var foam = binderGO.GetComponent<VoxelEngine.WaterSim.VoxelCrestBlockFoamEmitter>() ?? binderGO.AddComponent<VoxelEngine.WaterSim.VoxelCrestBlockFoamEmitter>();
+            EditorUtility.SetDirty(depth);
+            EditorUtility.SetDirty(foam);
+
+            Debug.Log("[CrestWaterSetup] ✓ Crest material bridged to voxel water – no ocean plane – v3.20.2");
         }
 
         private static void ConfigureExistingMaritimeWakeEmitters()
