@@ -26,6 +26,10 @@ namespace VoxelEngine.WaterSim
         public float shallowDepth = 2.5f;
         public float deepDepth = 24f;
 
+        [Header("Surface Motion")]
+        [Tooltip("How strongly Crest flow splines/current data influence water normals and foam.")]
+        [UnityEngine.Range(0f, 2f)] public float flowVisualStrength = 1f;
+
         [Header("Material")]
         public Material waterMaterial;
 
@@ -48,6 +52,7 @@ namespace VoxelEngine.WaterSim
             public Vector3 position;
             public Vector3 normal;
             public float depth;
+            public Vector2 flow;
         }
 
         private void Awake()
@@ -201,7 +206,22 @@ namespace VoxelEngine.WaterSim
             sample.position = position;
             sample.normal = up;
             sample.depth = depth;
+            sample.flow = SampleFlow(position, up);
             return true;
+        }
+
+        private Vector2 SampleFlow(Vector3 position, Vector3 up)
+        {
+            if (!CrestFlowSampler.TrySampleFlow(position, out var flow3)) return Vector2.zero;
+
+            Vector3 flow = new Vector3(flow3.x, flow3.y, flow3.z);
+            if (flow.sqrMagnitude < 0.0001f) return Vector2.zero;
+
+            Vector3 tangentA = Vector3.Cross(up, Vector3.forward);
+            if (tangentA.sqrMagnitude < 0.0001f) tangentA = Vector3.Cross(up, Vector3.right);
+            tangentA.Normalize();
+            Vector3 tangentB = Vector3.Cross(up, tangentA).normalized;
+            return new Vector2(Vector3.Dot(flow, tangentA), Vector3.Dot(flow, tangentB)) * flowVisualStrength;
         }
 
         private void AddQuad(Sample a, Sample b, Sample c, Sample d)
@@ -220,7 +240,7 @@ namespace VoxelEngine.WaterSim
             _vertices.Add(transform.InverseTransformPoint(s.position));
             _normals.Add(transform.InverseTransformDirection(s.normal).normalized);
             _uvs.Add(new Vector2(s.position.x * 0.08f + s.position.y * 0.013f, s.position.z * 0.08f));
-            _uv2s.Add(Vector2.zero);
+            _uv2s.Add(s.flow);
             float shallow = Mathf.InverseLerp(deepDepth, shallowDepth, s.depth);
             float depth01 = Mathf.InverseLerp(shallowDepth, deepDepth, s.depth);
             _colors.Add(new Color(Mathf.Lerp(1f, 0.35f, shallow), 1f, depth01, 1f));
