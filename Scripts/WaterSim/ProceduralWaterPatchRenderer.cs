@@ -12,6 +12,7 @@ namespace VoxelEngine.WaterSim
     /// had this script attached cannot throw MissingComponentException on load.
     /// </summary>
     [DisallowMultipleComponent]
+    [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
     public sealed class ProceduralWaterPatchRenderer : MonoBehaviour
     {
         [Header("Patch Sampling")]
@@ -32,8 +33,6 @@ namespace VoxelEngine.WaterSim
 
         [Header("Material")]
         public Material waterMaterial;
-
-        private const string MeshChildName = "Water Patch Mesh";
 
         private GameObject _meshObject;
         private Mesh _mesh;
@@ -87,20 +86,14 @@ namespace VoxelEngine.WaterSim
 
         private void EnsureRuntimeObjects()
         {
-            if (_meshObject == null)
-            {
-                var child = transform.Find(MeshChildName);
-                _meshObject = child != null ? child.gameObject : new GameObject(MeshChildName);
-                _meshObject.transform.SetParent(transform, false);
-                _meshObject.transform.localPosition = Vector3.zero;
-                _meshObject.transform.localRotation = Quaternion.identity;
-                _meshObject.transform.localScale = Vector3.one;
-            }
+            // Keep the MeshFilter/MeshRenderer on the SAME GameObject. This is
+            // more Unity-inspector friendly and prevents old scenes showing a
+            // root renderer with a missing mesh.
+            _filter = GetComponent<MeshFilter>();
+            if (_filter == null) _filter = gameObject.AddComponent<MeshFilter>();
 
-            if (_filter == null)
-                _filter = _meshObject.GetComponent<MeshFilter>() ?? _meshObject.AddComponent<MeshFilter>();
-            if (_renderer == null)
-                _renderer = _meshObject.GetComponent<MeshRenderer>() ?? _meshObject.AddComponent<MeshRenderer>();
+            _renderer = GetComponent<MeshRenderer>();
+            if (_renderer == null) _renderer = gameObject.AddComponent<MeshRenderer>();
 
             if (_mesh == null)
             {
@@ -227,8 +220,8 @@ namespace VoxelEngine.WaterSim
         private int AddSharedVertex(Sample s)
         {
             int index = _vertices.Count;
-            _vertices.Add(_meshObject.transform.InverseTransformPoint(s.position));
-            _normals.Add(_meshObject.transform.InverseTransformDirection(s.normal).normalized);
+            _vertices.Add(transform.InverseTransformPoint(s.position));
+            _normals.Add(transform.InverseTransformDirection(s.normal).normalized);
             _uvs.Add(new Vector2(s.position.x * 0.08f + s.position.y * 0.013f, s.position.z * 0.08f));
             _uv2s.Add(s.flow);
             float shallow = Mathf.InverseLerp(deepDepth, shallowDepth, s.depth);

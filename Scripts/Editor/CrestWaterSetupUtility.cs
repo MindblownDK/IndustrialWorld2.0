@@ -102,15 +102,23 @@ namespace VoxelEngine.EditorTools
 
         private static void ConfigureProceduralPatchRenderer()
         {
-            var renderers = Object.FindObjectsByType<VoxelEngine.WaterSim.ProceduralWaterPatchRenderer>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-            var renderer = renderers != null && renderers.Length > 0 ? renderers[0] : null;
-            if (renderer == null)
+            // Recreate this object cleanly every time. Older scene saves may have
+            // a disabled script or a MeshRenderer without a MeshFilter; starting
+            // fresh avoids persistent bad component states.
+            var existing = Object.FindObjectsByType<VoxelEngine.WaterSim.ProceduralWaterPatchRenderer>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            if (existing != null)
             {
-                var go = GameObject.Find("Procedural Water Patch Renderer") ?? new GameObject("Procedural Water Patch Renderer");
-                renderer = go.GetComponent<VoxelEngine.WaterSim.ProceduralWaterPatchRenderer>();
-                if (renderer == null) renderer = go.AddComponent<VoxelEngine.WaterSim.ProceduralWaterPatchRenderer>();
+                foreach (var r in existing)
+                {
+                    if (r != null && !string.IsNullOrEmpty(r.gameObject.scene.name))
+                        Object.DestroyImmediate(r.gameObject);
+                }
             }
 
+            var go = new GameObject("Procedural Water Patch Renderer");
+            go.AddComponent<MeshFilter>();
+            go.AddComponent<MeshRenderer>();
+            var renderer = go.AddComponent<VoxelEngine.WaterSim.ProceduralWaterPatchRenderer>();
             renderer.enabled = true;
             renderer.searchRadius = 512f;
             renderer.tileSize = 12f;
