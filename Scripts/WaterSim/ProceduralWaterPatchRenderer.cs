@@ -153,8 +153,11 @@ namespace VoxelEngine.WaterSim
 
             if (!VoxelWaterDepthSampler.TryFindNearbyWater(view.position, searchRadius, Mathf.Max(tileSize, 8f), out var waterCenter, out _, out _))
             {
-                ClearMesh();
-                return;
+                if (!TryGetFallbackSeaCenter(world, view.position, out waterCenter))
+                {
+                    ClearMesh();
+                    return;
+                }
             }
 
             Vector3 up = PlanetWaterUtility.IsPlanetWorld ? PlanetWaterUtility.WorldUp(waterCenter) : Vector3.up;
@@ -238,13 +241,20 @@ namespace VoxelEngine.WaterSim
         private bool TrySample(Vector3 samplePosition, out Sample sample)
         {
             sample = default;
-            if (!VoxelWaterDepthSampler.TrySampleDepth(samplePosition, out float depth, out float surface) &&
-                !VoxelWaterDepthSampler.TrySampleSeaSurface(samplePosition, out depth, out surface))
-                return false;
+            bool hasWater = VoxelWaterDepthSampler.TrySampleDepth(samplePosition, out float depth, out float surface) ||
+                            VoxelWaterDepthSampler.TrySampleSeaSurface(samplePosition, out depth, out surface);
 
             Vector3 up = PlanetWaterUtility.IsPlanetWorld ? PlanetWaterUtility.WorldUp(samplePosition) : Vector3.up;
             if (up.sqrMagnitude < 0.0001f) up = Vector3.up;
             up.Normalize();
+
+            if (!hasWater)
+            {
+                var world = ActiveWorld.Current;
+                if (world == null) return false;
+                surface = PlanetWaterUtility.IsPlanetWorld ? 0f : world.SeaLevel * VoxelConstants.VOXEL_SIZE;
+                depth = 32f;
+            }
 
             Vector3 position = PlanetWaterUtility.IsPlanetWorld
                 ? samplePosition + up * (surface + waterHeightOffset)
@@ -281,8 +291,8 @@ namespace VoxelEngine.WaterSim
 
         private void ClearMesh()
         {
-            // Chunk streaming can briefly make depth queries fail. Do not blink the
-            // ocean off if we already have a valid mesh from the previous frame.
+            // Never disable the MeshRenderer here. Disabling it made the scene look
+            // like water was broken and prevented manual inspection in play mode.
             if (keepLastValidMesh && _hasValidMesh)
             {
                 if (_renderer != null) _renderer.enabled = true;
@@ -291,7 +301,7 @@ namespace VoxelEngine.WaterSim
 
             if (_mesh != null) _mesh.Clear();
             _hasValidMesh = false;
-            if (_renderer != null) _renderer.enabled = false;
+            if (_renderer != null) _renderer.enabled = true;
         }
     }
 }
