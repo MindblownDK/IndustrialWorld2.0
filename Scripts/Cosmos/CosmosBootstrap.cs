@@ -125,9 +125,6 @@ namespace VoxelEngine.Cosmos
             world.biomeRegistry = biomeRegistry;
             world.worldName = session != null ? session.worldName : "SphereTest";
 
-            var oceanLod = _bodyGO.AddComponent<VoxelEngine.WaterSim.PlanetOceanLod>();
-            oceanLod.body = body;
-
             // ── Far LOD (space view), as a CHILD of the body ──
             var lodGO = new GameObject("LOD");
             lodGO.transform.SetParent(_bodyGO.transform, false);

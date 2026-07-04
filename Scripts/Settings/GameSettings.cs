@@ -230,10 +230,7 @@ namespace VoxelEngine.Settings
             if (ps == null) return;
             ps.scaleMode = UnityEngine.UIElements.PanelScaleMode.ScaleWithScreenSize;
             ps.referenceResolution = new Vector2Int(1920, 1080);
-            ps.screenMatchMode = UnityEngine.UIElements.PanelScreenMatchMode.MatchWidthOrHeight;
-            float curAspect = (float)Screen.width / Mathf.Max(1, Screen.height);
-            float refAspect = 1920f / 1080f;
-            ps.match = curAspect < refAspect ? 0.0f : 1.0f;
+            ps.screenMatchMode = UnityEngine.UIElements.PanelScreenMatchMode.Shrink;
         }
 
         private static void Notify() => OnChanged?.Invoke();

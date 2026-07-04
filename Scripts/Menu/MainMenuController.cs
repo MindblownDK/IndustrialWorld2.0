@@ -937,10 +937,8 @@ namespace VoxelEngine.Menu
         private static PanelSettings CreateDefaultPanelSettings()
         {
             var ps = ScriptableObject.CreateInstance<PanelSettings>();
-            ps.name                = "MainMenu_RuntimePanelSettings";
-            ps.scaleMode           = PanelScaleMode.ScaleWithScreenSize;
-            ps.referenceResolution = new Vector2Int(1920, 1080);
-            ps.match               = 0.5f;
+            ps.name = "MainMenu_RuntimePanelSettings";
+            VoxelEngine.Settings.GameSettings.ConfigurePanelSettings(ps);
 
             // CRITICAL — without a ThemeStyleSheet, UI Toolkit logs the warning
             // "No Theme Style Sheet set to PanelSettings, UI will not render properly"

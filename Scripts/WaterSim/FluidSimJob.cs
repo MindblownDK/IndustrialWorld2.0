@@ -44,9 +44,9 @@ namespace VoxelEngine.WaterSim
 
         // Viscosity parameters — oil is much more viscous than water
         private const int WaterMaxFall        = 255;
-        private const int OilMaxFall          = 64;   // slow — viscous drag
-        private const int WaterHorizontalStep = 48;
-        private const int OilHorizontalStep   = 10;   // very slow horizontal spread
+        private const int OilMaxFall          = 32;   // slow — viscous drag
+        private const int WaterHorizontalStep = 64;
+        private const int OilHorizontalStep   = 6;    // very slow horizontal spread
 
         public void Execute()
         {
