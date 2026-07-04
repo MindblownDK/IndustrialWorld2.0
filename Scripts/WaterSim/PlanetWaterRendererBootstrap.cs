@@ -16,6 +16,9 @@ namespace VoxelEngine.WaterSim
         [Tooltip("How many queued liquid chunks may rebuild their water meshes per frame.")]
         [Range(1, 24)] public int meshBuildBudgetPerFrame = 4;
 
+        [Tooltip("When Crest is used as the scene water renderer, leave voxel liquid data active for pumps/buoyancy but stop rendering the old chunk-local liquid surface meshes.")]
+        public bool renderVoxelLiquidSurfaces = true;
+
         [Header("Visual Materials")]
         [Tooltip("Optional imported/stylized water material. Simulation, pumps and buoyancy keep using voxel liquid data.")]
         public Material waterMaterialOverride;
@@ -33,7 +36,8 @@ namespace VoxelEngine.WaterSim
         private void Update()
         {
             ApplyMaterialOverrides();
-            WaterMeshBuilder.Pump(Mathf.Max(1, meshBuildBudgetPerFrame));
+            if (renderVoxelLiquidSurfaces)
+                WaterMeshBuilder.Pump(Mathf.Max(1, meshBuildBudgetPerFrame));
             ApplyProfile();
         }
 

@@ -61,9 +61,9 @@ namespace VoxelEngine.EditorTools
         {
             string[] candidates =
             {
-                "Assets/Liquid/Crest/Crest-Examples/LakesAndRivers/Materials/LakesAndRivers_Material_Water.mat",
                 "Assets/Liquid/Crest/Crest-Examples/Examples/Materials/Examples_Material_Ocean.mat",
-                "Assets/Liquid/Crest/Crest/Materials/Ocean.mat"
+                "Assets/Liquid/Crest/Crest/Materials/Ocean.mat",
+                "Assets/Liquid/Crest/Crest-Examples/LakesAndRivers/Materials/LakesAndRivers_Material_Water.mat"
             };
 
             Material mat = null;
@@ -85,9 +85,13 @@ namespace VoxelEngine.EditorTools
             if (mat.HasProperty("_SubSurfaceShallowColShadow")) mat.SetColor("_SubSurfaceShallowColShadow", new Color(0.10f, 0.28f, 0.32f, 1f));
             if (mat.HasProperty("_SubSurfaceDepthMax")) mat.SetFloat("_SubSurfaceDepthMax", 7.5f);
             if (mat.HasProperty("_SubSurfaceDepthPower")) mat.SetFloat("_SubSurfaceDepthPower", 2.1f);
-            if (mat.HasProperty("_DepthFogDensity")) mat.SetVector("_DepthFogDensity", new Vector4(0.13f, 0.10f, 0.08f, 1f));
-            if (mat.HasProperty("_Diffuse")) mat.SetColor("_Diffuse", new Color(0.015f, 0.12f, 0.22f, 1f));
-            if (mat.HasProperty("_DiffuseGrazing")) mat.SetColor("_DiffuseGrazing", new Color(0.08f, 0.25f, 0.30f, 1f));
+            if (mat.HasProperty("_DepthFogDensity")) mat.SetVector("_DepthFogDensity", new Vector4(0.10f, 0.08f, 0.055f, 1f));
+            if (mat.HasProperty("_Diffuse")) mat.SetColor("_Diffuse", new Color(0.015f, 0.18f, 0.32f, 1f));
+            if (mat.HasProperty("_DiffuseGrazing")) mat.SetColor("_DiffuseGrazing", new Color(0.11f, 0.36f, 0.42f, 1f));
+            if (mat.HasProperty("_NormalsStrengthOverall")) mat.SetFloat("_NormalsStrengthOverall", 1f);
+            if (mat.HasProperty("_ApplyNormalMapping")) mat.SetFloat("_ApplyNormalMapping", 1f);
+            if (mat.HasProperty("_NormalsStrength")) mat.SetFloat("_NormalsStrength", 0.55f);
+            if (mat.HasProperty("_NormalsScale")) mat.SetFloat("_NormalsScale", 32f);
             if (mat.HasProperty("_Flow")) mat.SetFloat("_Flow", 1f);
 
             EditorUtility.SetDirty(mat);
@@ -120,6 +124,7 @@ namespace VoxelEngine.EditorTools
                 }
 
                 ConfigureSerializedCrestOcean(ocean, waterMaterial);
+                EnsureAnimatedWaves(ocean);
             }
             else
             {
@@ -135,11 +140,12 @@ namespace VoxelEngine.EditorTools
                 if (bootstrap == null) bootstrap = go.AddComponent<VoxelEngine.WaterSim.PlanetWaterRendererBootstrap>();
             }
 
-            if (waterMaterial != null)
-            {
-                bootstrap.waterMaterialOverride = waterMaterial;
-                EditorUtility.SetDirty(bootstrap);
-            }
+            // Crest should render the water visually. Do not assign Crest's ocean material
+            // to voxel chunk water meshes; that makes the old voxel surface look flat/oily.
+            bootstrap.renderVoxelLiquidSurfaces = false;
+            bootstrap.waterMaterialOverride = null;
+            EditorUtility.SetDirty(bootstrap);
+            DisableExistingVoxelLiquidSurfaceObjects();
         }
 
         private static void ConfigureSerializedCrestOcean(Component ocean, Material waterMaterial)
@@ -167,6 +173,81 @@ namespace VoxelEngine.EditorTools
 
             so.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(ocean);
+        }
+
+        private static void EnsureAnimatedWaves(Component ocean)
+        {
+            if (ocean == null) return;
+
+            var shapeType = FindType("Crest.ShapeGerstner");
+            if (shapeType == null)
+            {
+                Debug.LogWarning("[CrestWaterSetup] Crest.ShapeGerstner was not found, so animated wave inputs could not be created.");
+                return;
+            }
+
+            var existingShapes = Object.FindObjectsByType(shapeType, FindObjectsInactive.Include, FindObjectsSortMode.None);
+            Component shape = null;
+            if (existingShapes != null)
+            {
+                foreach (var candidate in existingShapes)
+                {
+                    var component = candidate as Component;
+                    if (component == null || string.IsNullOrEmpty(component.gameObject.scene.name)) continue;
+                    shape = component;
+                    break;
+                }
+            }
+
+            if (shape == null)
+            {
+                var wavesGo = new GameObject("Crest Animated Waves");
+                wavesGo.transform.position = new Vector3(0f, ocean.transform.position.y + 5f, 0f);
+                shape = wavesGo.AddComponent(shapeType);
+                Undo.RegisterCreatedObjectUndo(wavesGo, "Create Crest Animated Waves");
+            }
+
+            var so = new SerializedObject(shape);
+            var spectrum = LoadFirstAsset<Object>(
+                "Assets/Liquid/Crest/Crest-Examples/Shared/WaveSpectra/WavesModerate.asset",
+                "Assets/Liquid/Crest/Crest-Examples/Main/Data/SettingsAnimWaves.asset",
+                "Assets/Liquid/Crest/Crest-Examples/Shared/WaveSpectra/WavesBoatScene.asset",
+                "Assets/Liquid/Crest/Crest-Examples/LakesAndRivers/Settings/LakesAndRivers_WaveSpectrum_LakeLarge.asset");
+
+            var spectrumProperty = so.FindProperty("_spectrum");
+            if (spectrumProperty != null && spectrum != null)
+                spectrumProperty.objectReferenceValue = spectrum;
+
+            SetBool(so, "_spectrumFixedAtRuntime", true);
+            SetNumber(so, "_waveDirectionHeadingAngle", 180f);
+            SetBool(so, "_overrideGlobalWindSpeed", false);
+            SetNumber(so, "_windSpeed", 25f);
+            SetBool(so, "_respectShallowWaterAttenuation", true);
+            SetNumber(so, "_weight", 1f);
+            SetNumber(so, "_componentsPerOctave", 8f);
+            SetNumber(so, "_randomSeed", 0f);
+            so.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(shape);
+        }
+
+        private static T LoadFirstAsset<T>(params string[] paths) where T : Object
+        {
+            foreach (var path in paths)
+            {
+                var asset = AssetDatabase.LoadAssetAtPath<T>(path);
+                if (asset != null) return asset;
+            }
+            return null;
+        }
+
+        private static void DisableExistingVoxelLiquidSurfaceObjects()
+        {
+            var transforms = Object.FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            foreach (var t in transforms)
+            {
+                if (t != null && t.name == "LiquidSurface")
+                    t.gameObject.SetActive(false);
+            }
         }
 
         private static void ConfigureExistingMaritimeWakeEmitters()
