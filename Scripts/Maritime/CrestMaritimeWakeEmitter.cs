@@ -16,15 +16,15 @@ namespace VoxelEngine.Maritime
     public sealed class CrestMaritimeWakeEmitter : MonoBehaviour
     {
         [Header("Probe Layout")]
-        [Range(4, 128)] public int maxInteractionProbes = 48;
-        [Range(0.15f, 2.5f)] public float radiusMultiplier = 0.62f;
-        [Range(-10f, 10f)] public float wakeWeight = 1.15f;
+        [UnityEngine.Range(4, 128)] public int maxInteractionProbes = 48;
+        [UnityEngine.Range(0.15f, 2.5f)] public float radiusMultiplier = 0.62f;
+        [UnityEngine.Range(-10f, 10f)] public float wakeWeight = 1.15f;
         public bool boostLargeWakes = true;
-        [Range(0.25f, 5f)] public float rebuildIntervalSeconds = 1.25f;
+        [UnityEngine.Range(0.25f, 5f)] public float rebuildIntervalSeconds = 1.25f;
 
         [Header("Activation")]
         public bool requireWaterContact = true;
-        [Range(0.05f, 1f)] public float waterContactCheckInterval = 0.18f;
+        [UnityEngine.Range(0.05f, 1f)] public float waterContactCheckInterval = 0.18f;
 
         private GridEntity _grid;
         private readonly List<SphereWaterInteraction> _probes = new(64);
