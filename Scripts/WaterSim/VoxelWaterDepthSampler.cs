@@ -41,7 +41,7 @@ namespace VoxelEngine.WaterSim
             if (TrySampleDepth(center, out depth, out surfaceHeight) || TrySampleSeaSurface(center, out depth, out surfaceHeight))
             {
                 waterPosition = PlanetWaterUtility.IsPlanetWorld
-                    ? PlanetWaterUtility.WorldUp(center) * (center.magnitude + surfaceHeight)
+                    ? center + PlanetWaterUtility.WorldUp(center) * surfaceHeight
                     : new Vector3(center.x, surfaceHeight, center.z);
                 return true;
             }
@@ -73,7 +73,7 @@ namespace VoxelEngine.WaterSim
                 depth = d;
                 surfaceHeight = surf;
                 waterPosition = PlanetWaterUtility.IsPlanetWorld
-                    ? PlanetWaterUtility.WorldUp(sample) * (sample.magnitude + surf)
+                    ? sample + PlanetWaterUtility.WorldUp(sample) * surf
                     : new Vector3(sample.x, surf, sample.z);
                 found = true;
             }
@@ -124,11 +124,15 @@ namespace VoxelEngine.WaterSim
             signedSurface = 0f;
 
             Vector3 up = PlanetWaterUtility.WorldUp(worldPosition);
-            if (up.sqrMagnitude < 0.0001f) up = worldPosition.sqrMagnitude > 0.0001f ? worldPosition.normalized : Vector3.up;
+            if (up.sqrMagnitude < 0.0001f) up = Vector3.up;
             up.Normalize();
 
+            Vector3 bodyCenter = Vector3.zero;
+            if (world is VoxelEngine.Cosmos.SphereWorld sphere && sphere.body != null)
+                bodyCenter = sphere.body.transform.position;
+
             float seaRadius = world.SeaLevel * VoxelConstants.VOXEL_SIZE;
-            Vector3 seaPoint = up * seaRadius;
+            Vector3 seaPoint = bodyCenter + up * seaRadius;
             Vector3Int seaVoxel = world.WorldToVoxel(seaPoint);
             const int scanIn = 256;
 
@@ -146,7 +150,7 @@ namespace VoxelEngine.WaterSim
             if (terrainRadius <= 0f || terrainRadius >= seaRadius - 0.05f) return false;
 
             depth = Mathf.Max(0f, seaRadius - terrainRadius);
-            signedSurface = seaRadius - worldPosition.magnitude;
+            signedSurface = seaRadius - (worldPosition - bodyCenter).magnitude;
             return depth > 0.05f;
         }
 

@@ -16,7 +16,7 @@ namespace VoxelEngine.EditorTools
             EnsurePanelSettingsFitMode();
             ConfigureCrestProceduralVoxelWaterMode();
             ConfigureCrestWaterMaterial();
-            ConfigureSceneLighting();
+            ConfigureSceneAmbientOnly();
             ConfigureExistingMaritimeWakeEmitters();
 
             AssetDatabase.SaveAssets();
@@ -30,8 +30,9 @@ namespace VoxelEngine.EditorTools
                 "• UI PanelSettings fit mode\n" +
                 "• Shallow/clear Crest water material values\n" +
                 "• Crest sample planes removed from the scene\n" +
-                "• Procedural patch water renderer enabled from voxel water data\n" +
-                "• Existing maritime grids with water-only Crest wake emitters", "OK");
+                "• Generated voxel ocean/lake water visuals re-enabled\n" +
+                "• Existing maritime grids with water-only Crest wake emitters\n" +
+                "• Scene lighting left untouched for the solar-system sun", "OK");
         }
 
         private static void EnsurePanelSettingsFitMode()
@@ -58,40 +59,16 @@ namespace VoxelEngine.EditorTools
             EditorUtility.SetDirty(panelSettings);
         }
 
-        private static void ConfigureSceneLighting()
+        private static void ConfigureSceneAmbientOnly()
         {
+            // Do not create or modify a directional sun here. The solar-system
+            // generator owns the real sun/light. We only keep ambient/fog from
+            // washing terrain materials out to white after earlier setup passes.
             RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = new Color(0.62f, 0.70f, 0.82f, 1f);
-            RenderSettings.ambientEquatorColor = new Color(0.38f, 0.45f, 0.52f, 1f);
-            RenderSettings.ambientGroundColor = new Color(0.20f, 0.22f, 0.25f, 1f);
+            RenderSettings.ambientSkyColor = new Color(0.30f, 0.34f, 0.40f, 1f);
+            RenderSettings.ambientEquatorColor = new Color(0.20f, 0.23f, 0.27f, 1f);
+            RenderSettings.ambientGroundColor = new Color(0.09f, 0.10f, 0.12f, 1f);
             RenderSettings.fog = false;
-
-            Light sun = null;
-            var lights = Object.FindObjectsByType<Light>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-            foreach (var l in lights)
-            {
-                if (l != null && l.type == LightType.Directional)
-                {
-                    sun = l;
-                    break;
-                }
-            }
-
-            if (sun == null)
-            {
-                var go = new GameObject("Sun");
-                sun = go.AddComponent<Light>();
-                sun.type = LightType.Directional;
-                Undo.RegisterCreatedObjectUndo(go, "Create Sun");
-            }
-
-            sun.name = "Sun";
-            sun.enabled = true;
-            sun.transform.rotation = Quaternion.Euler(48f, -32f, 0f);
-            sun.color = new Color(1.0f, 0.96f, 0.88f, 1f);
-            sun.intensity = 1.85f;
-            sun.shadows = LightShadows.Soft;
-            EditorUtility.SetDirty(sun);
         }
 
         private static void ConfigureCrestProceduralVoxelWaterMode()
@@ -111,16 +88,18 @@ namespace VoxelEngine.EditorTools
                 if (bootstrap == null) bootstrap = go.AddComponent<VoxelEngine.WaterSim.PlanetWaterRendererBootstrap>();
             }
 
-            // Use the finite procedural patch renderer for visuals. Keep voxel liquid
-            // data active for simulation, but prevent old chunk-local LiquidSurface
-            // meshes from drawing over/under the patch renderer and causing seams.
-            bootstrap.renderVoxelLiquidSurfaces = false;
-            bootstrap.rescheduleVisibleLiquidSurfaces = false;
+            // Use generated voxel/chunk water as the visual source for spherical planets.
+            // Crest's infinite sample plane is removed, but voxel water remains active so
+            // oceans/lakes appear exactly where world generation placed liquid.
+            bootstrap.renderVoxelLiquidSurfaces = true;
+            bootstrap.rescheduleVisibleLiquidSurfaces = true;
+            bootstrap.liquidRescheduleChunkRadius = 6;
+            bootstrap.liquidRescheduleInterval = 0.35f;
             bootstrap.waterMaterialOverride = null;
             bootstrap.oilMaterialOverride = null;
-            VoxelEngine.WaterSim.WaterMeshBuilder.RenderingEnabled = false;
-            DisableExistingVoxelLiquidSurfaceObjects();
-            ConfigureProceduralPatchRenderer();
+            VoxelEngine.WaterSim.WaterMeshBuilder.RenderingEnabled = true;
+            EnableExistingVoxelLiquidSurfaceObjects();
+            RemoveProceduralPatchRenderer();
             EditorUtility.SetDirty(bootstrap);
         }
 

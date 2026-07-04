@@ -226,7 +226,7 @@ namespace VoxelEngine.WaterSim
             up.Normalize();
 
             Vector3 position = PlanetWaterUtility.IsPlanetWorld
-                ? up * (samplePosition.magnitude + surface + waterHeightOffset)
+                ? samplePosition + up * (surface + waterHeightOffset)
                 : new Vector3(samplePosition.x, surface + waterHeightOffset, samplePosition.z);
 
             sample.water = true;
