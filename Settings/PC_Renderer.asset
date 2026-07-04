@@ -68,8 +68,8 @@ MonoBehaviour:
     probeVolumeBlendStatesCS: {fileID: 7200000, guid: b9a23f869c4fd45f19c5ada54dd82176, type: 3}
   m_RendererFeatures:
   - {fileID: 7833122117494664109}
-  - {fileID: -8498198693427618292}
-  m_RendererFeatureMap: ad6b866f10d7b46c0cde8e4f5055108a
+  - {fileID: 874203188745508524}
+  m_RendererFeatureMap: ad6b866f10d7b46cac96b01e2bcb210c
   m_UseNativeRenderPass: 1
   xrSystemData: {fileID: 0}
   postProcessData: {fileID: 11400000, guid: 41439944d30ece34e96484bdb6645b55, type: 2}
@@ -108,6 +108,20 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: fccc3e1960eb4134b9c69b12e1eb35c3, type: 3}
+  m_Name: VolumetricWaterRenderFeature
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Rendering.VolumetricWaterRenderFeature
+  m_Active: 1
+  blitShader: {fileID: 4800000, guid: 56bbd69c8cfcfad449f1a1cb0605b076, type: 3}
+--- !u!114 &874203188745508524
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4ba08cbb759b9ab40ae7473b4f57ae7c, type: 3}
   m_Name: VolumetricWaterRenderFeature
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Rendering.VolumetricWaterRenderFeature
   m_Active: 1

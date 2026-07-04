@@ -22,6 +22,8 @@ namespace VoxelEngine.WaterSim
         private static readonly HashSet<Chunk> _queued = new();
         private static Material _waterMat;
         private static Material _oilMat;
+        private static Material _externalWaterMat;
+        private static Material _externalOilMat;
         private static readonly HashSet<Vector3Int> _sphereSurfaceCells = new();
 
         private const byte WaterVoxelMat  = (byte)MaterialId.WaterVoxel;
@@ -39,13 +41,33 @@ namespace VoxelEngine.WaterSim
             public float terrainH;
         }
 
+        private readonly struct VertexKey : System.IEquatable<VertexKey>
+        {
+            private readonly ushort _u;
+            private readonly ushort _v;
+            private readonly byte _liquid;
+
+            public VertexKey(int u, int v, LiquidType liquid)
+            {
+                _u = (ushort)Mathf.Clamp(u, 0, VoxelConstants.CHUNK_SIZE);
+                _v = (ushort)Mathf.Clamp(v, 0, VoxelConstants.CHUNK_SIZE);
+                _liquid = (byte)liquid;
+            }
+
+            public bool Equals(VertexKey other) => _u == other._u && _v == other._v && _liquid == other._liquid;
+            public override bool Equals(object obj) => obj is VertexKey other && Equals(other);
+            public override int GetHashCode() => (_u * 73856093) ^ (_v * 19349663) ^ (_liquid * 83492791);
+        }
+
         public static void ResetForNewWorld()
         {
             _queue.Clear();
             _queued.Clear();
             _sphereSurfaceCells.Clear();
-            if (_waterMat != null) { if (Application.isPlaying) Object.Destroy(_waterMat); else Object.DestroyImmediate(_waterMat); _waterMat = null; }
-            if (_oilMat != null)   { if (Application.isPlaying) Object.Destroy(_oilMat); else Object.DestroyImmediate(_oilMat); _oilMat = null; }
+            if (_waterMat != null && _waterMat != _externalWaterMat) { if (Application.isPlaying) Object.Destroy(_waterMat); else Object.DestroyImmediate(_waterMat); }
+            if (_oilMat != null && _oilMat != _externalOilMat) { if (Application.isPlaying) Object.Destroy(_oilMat); else Object.DestroyImmediate(_oilMat); }
+            _waterMat = _externalWaterMat;
+            _oilMat = _externalOilMat;
         }
 
         public static void Schedule(Chunk c)
@@ -66,8 +88,19 @@ namespace VoxelEngine.WaterSim
             }
         }
 
+        public static void SetMaterialOverrides(Material waterMaterial, Material oilMaterial)
+        {
+            _externalWaterMat = waterMaterial;
+            _externalOilMat = oilMaterial;
+
+            if (waterMaterial != null) _waterMat = waterMaterial;
+            if (oilMaterial != null) _oilMat = oilMaterial;
+        }
+
         private static void EnsureMats()
         {
+            if (_externalWaterMat != null) _waterMat = _externalWaterMat;
+            if (_externalOilMat != null) _oilMat = _externalOilMat;
             if (_waterMat != null && _oilMat != null) return;
 
             var sh = Shader.Find("VoxelEngine/VoxelWaterURP")
@@ -78,8 +111,8 @@ namespace VoxelEngine.WaterSim
             {
                 _waterMat = new Material(sh) { name = "VoxelWater_KWS2" };
                 ConfigureTransparent(_waterMat);
-                _waterMat.SetColor("_ShallowColor", new Color(0.08f, 0.52f, 0.82f, 0.92f));
-                _waterMat.SetColor("_DeepColor",    new Color(0.01f, 0.06f, 0.22f, 0.97f));
+                _waterMat.SetColor("_ShallowColor", new Color(0.08f, 0.52f, 0.82f, 0.97f));
+                _waterMat.SetColor("_DeepColor",    new Color(0.01f, 0.06f, 0.22f, 0.995f));
                 _waterMat.SetColor("_FoamColor",    new Color(0.92f, 0.96f, 1.00f, 0.88f));
                 _waterMat.SetFloat("_DeepWaveAmplitude", 0.85f);
                 _waterMat.SetFloat("_DeepWaveFrequency", 0.22f);
@@ -248,6 +281,7 @@ namespace VoxelEngine.WaterSim
             var cols      = new List<Color>(S * S * 6);
             var waterTris = new List<int>(S * S * 6);
             var oilTris   = new List<int>(S * S * 6);
+            var topVertexCache = new Dictionary<VertexKey, int>(S * S * 2);
 
             int lodStride = Mathf.Clamp(GetChunkLodStride(c), 1, 8);
             for (int v = 0; v < S; v += lodStride)
@@ -257,12 +291,17 @@ namespace VoxelEngine.WaterSim
                 if (!cell.has) continue;
 
                 var tris = cell.liquid == LiquidType.CrudeOil ? oilTris : waterTris;
-                AddTopSpherical(c, cells, u, v, Mathf.Min(u + lodStride, S), Mathf.Min(v + lodStride, S), cell, dom, S, chunkVoxel, chunkUp, seaRad, verts, norms, uvs, uv2s, cols, tris);
-
-                // Near-field water keeps exact shoreline curtains. Mid/far LODs are top-surface only
-                // to cut transparent overdraw while the next LOD rebuild restores full edge detail.
                 if (lodStride == 1)
-                    AddSideCurtainsSpherical(c, cells, u, v, dom, S, chunkVoxel, chunkUp, seaRad, verts, norms, uvs, uv2s, cols, tris);
+                {
+                    AddTopConnected(c, cells, u, v, cell, dom, S, chunkVoxel, chunkUp, topVertexCache, verts, norms, uvs, uv2s, cols, tris);
+                    // Visual liquid is now top-surface only. The simulation still uses
+                    // voxel volumes, but rendering side curtains made shore/chunk edges
+                    // look like vertical water walls with stylized water materials.
+                }
+                else
+                {
+                    AddTopSpherical(c, cells, u, v, Mathf.Min(u + lodStride, S), Mathf.Min(v + lodStride, S), cell, dom, S, chunkVoxel, chunkUp, seaRad, verts, norms, uvs, uv2s, cols, tris);
+                }
             }
 
             if (verts.Count == 0) { ClearGO(c); return; }
@@ -287,17 +326,11 @@ namespace VoxelEngine.WaterSim
 
         public static int GetChunkLodStride(Chunk c)
         {
-            var cam = Camera.main;
-            if (c == null || cam == null) return 1;
-
-            const float S = VoxelConstants.CHUNK_SIZE * VoxelConstants.VOXEL_SIZE;
-            Vector3 center = c.WorldOrigin + Vector3.one * (S * 0.5f);
-            float distance = Vector3.Distance(cam.transform.position, center);
-
-            if (distance < 220f) return 1;
-            if (distance < 520f) return 2;
-            if (distance < 1100f) return 4;
-            return 8;
+            // Quality-first mode: keep generated liquid surfaces fully connected.
+            // Coarse geometry LOD caused visible square patches with stylized/transparent
+            // water shaders, so distance LOD is intentionally disabled until the next
+            // dedicated ocean-tile renderer pass.
+            return 1;
         }
 
         private static SurfaceCell SampleLodCell(SurfaceCell[,] cells, int startU, int startV, int stride, int S)
@@ -384,6 +417,77 @@ namespace VoxelEngine.WaterSim
             {
                 if (tempW[u, v] > 0f) cells[u, v].h = tempH[u, v];
             }
+        }
+
+        private static void AddTopConnected(Chunk c, SurfaceCell[,] cells, int u, int v, SurfaceCell cell, Vector3Int dom, int S, Vector3 chunkVoxel, Vector3 chunkUp,
+            Dictionary<VertexKey, int> cache, List<Vector3> verts, List<Vector3> norms, List<Vector2> uvs, List<Vector2> uv2s, List<Color> cols, List<int> tris)
+        {
+            int i00 = GetOrCreateTopVertex(c, cells, u,     v,     cell, dom, S, chunkVoxel, chunkUp, cache, verts, norms, uvs, uv2s, cols);
+            int i10 = GetOrCreateTopVertex(c, cells, u + 1, v,     cell, dom, S, chunkVoxel, chunkUp, cache, verts, norms, uvs, uv2s, cols);
+            int i11 = GetOrCreateTopVertex(c, cells, u + 1, v + 1, cell, dom, S, chunkVoxel, chunkUp, cache, verts, norms, uvs, uv2s, cols);
+            int i01 = GetOrCreateTopVertex(c, cells, u,     v + 1, cell, dom, S, chunkVoxel, chunkUp, cache, verts, norms, uvs, uv2s, cols);
+
+            tris.Add(i00); tris.Add(i11); tris.Add(i10);
+            tris.Add(i00); tris.Add(i01); tris.Add(i11);
+        }
+
+        private static int GetOrCreateTopVertex(Chunk c, SurfaceCell[,] cells, int cornerU, int cornerV, SurfaceCell owner, Vector3Int dom, int S, Vector3 chunkVoxel, Vector3 chunkUp,
+            Dictionary<VertexKey, int> cache, List<Vector3> verts, List<Vector3> norms, List<Vector2> uvs, List<Vector2> uv2s, List<Color> cols)
+        {
+            var key = new VertexKey(cornerU, cornerV, owner.liquid);
+            if (cache.TryGetValue(key, out int existing)) return existing;
+
+            CornerData(cells, cornerU, cornerV, owner.liquid, owner.h, owner.flow, out float h, out Vector2 flow, out bool shallow);
+            Vector3 localPt = ToXYZFloat(cornerU, cornerV, h, dom, S);
+            Vector3 worldPt = localPt + chunkVoxel;
+            Vector3 norm = worldPt.sqrMagnitude > 0.001f ? worldPt.normalized : chunkUp;
+
+            int index = verts.Count;
+            verts.Add(localPt);
+            norms.Add(norm);
+            uvs.Add(new Vector2(worldPt.x * 0.37f + worldPt.y * 0.19f, worldPt.z + worldPt.y * 0.19f));
+            float tide = owner.liquid == LiquidType.Water ? PlanetWaterUtility.MoonWaveEnergy(worldPt) : 0.35f;
+            uv2s.Add(flow + new Vector2(tide - 1f, 1f - tide) * 0.15f);
+            cols.Add(new Color(shallow ? 0.35f : 1f, 1f, 1f, 1f));
+            cache[key] = index;
+            return index;
+        }
+
+        private static void CornerData(SurfaceCell[,] cells, int cornerU, int cornerV, LiquidType liquid, float fallbackH, Vector2 fallbackFlow,
+            out float height, out Vector2 flow, out bool shallow)
+        {
+            float sumH = 0f;
+            Vector2 sumFlow = Vector2.zero;
+            int count = 0;
+            bool anyBorder = false;
+
+            AccumulateCornerCell(cells, cornerU - 1, cornerV - 1, liquid, ref sumH, ref sumFlow, ref count, ref anyBorder);
+            AccumulateCornerCell(cells, cornerU,     cornerV - 1, liquid, ref sumH, ref sumFlow, ref count, ref anyBorder);
+            AccumulateCornerCell(cells, cornerU - 1, cornerV,     liquid, ref sumH, ref sumFlow, ref count, ref anyBorder);
+            AccumulateCornerCell(cells, cornerU,     cornerV,     liquid, ref sumH, ref sumFlow, ref count, ref anyBorder);
+
+            if (count == 0)
+            {
+                height = fallbackH;
+                flow = fallbackFlow;
+                shallow = true;
+                return;
+            }
+
+            height = sumH / count;
+            flow = sumFlow / count;
+            shallow = anyBorder;
+        }
+
+        private static void AccumulateCornerCell(SurfaceCell[,] cells, int u, int v, LiquidType liquid, ref float sumH, ref Vector2 sumFlow, ref int count, ref bool anyBorder)
+        {
+            if (u < 0 || u >= VoxelConstants.CHUNK_SIZE || v < 0 || v >= VoxelConstants.CHUNK_SIZE) return;
+            var c = cells[u, v];
+            if (!c.has || c.liquid != liquid) return;
+            sumH += c.h;
+            sumFlow += c.flow;
+            count++;
+            anyBorder |= c.bordersTerrain;
         }
 
         private static void AddTopSpherical(Chunk c, SurfaceCell[,] cells, int u, int v, int uEnd, int vEnd, SurfaceCell cell, Vector3Int dom, int S, Vector3 chunkVoxel, Vector3 chunkUp, float seaRad,

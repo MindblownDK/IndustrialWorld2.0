@@ -230,8 +230,9 @@ namespace VoxelEngine.Settings
             if (ps == null) return;
             ps.scaleMode = UnityEngine.UIElements.PanelScaleMode.ScaleWithScreenSize;
             ps.referenceResolution = new Vector2Int(1920, 1080);
-            ps.screenMatchMode = UnityEngine.UIElements.PanelScreenMatchMode.MatchWidthOrHeight;
-            ps.match = 0.5f;
+            // Do not force PanelSettings.screenMatchMode here. Designers must be able
+            // to set MenuPanelSettings.asset to Shrink/Fit without the main menu
+            // changing it back at runtime.
             ps.referenceDpi = 96;
             ps.fallbackDpi = 96;
         }

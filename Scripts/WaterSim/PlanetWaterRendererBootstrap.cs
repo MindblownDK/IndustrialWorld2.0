@@ -16,16 +16,30 @@ namespace VoxelEngine.WaterSim
         [Tooltip("How many queued liquid chunks may rebuild their water meshes per frame.")]
         [Range(1, 24)] public int meshBuildBudgetPerFrame = 4;
 
+        [Header("Visual Materials")]
+        [Tooltip("Optional imported/stylized water material. Simulation, pumps and buoyancy keep using voxel liquid data.")]
+        public Material waterMaterialOverride;
+
+        [Tooltip("Optional imported/stylized oil material. If left empty, the built-in viscous oil material is used.")]
+        public Material oilMaterialOverride;
+
         private void Awake()
         {
             FluidManager.EnsureInstance();
+            ApplyMaterialOverrides();
             ApplyProfile();
         }
 
         private void Update()
         {
+            ApplyMaterialOverrides();
             WaterMeshBuilder.Pump(Mathf.Max(1, meshBuildBudgetPerFrame));
             ApplyProfile();
+        }
+
+        private void ApplyMaterialOverrides()
+        {
+            WaterMeshBuilder.SetMaterialOverrides(waterMaterialOverride, oilMaterialOverride);
         }
 
         private void ApplyProfile()

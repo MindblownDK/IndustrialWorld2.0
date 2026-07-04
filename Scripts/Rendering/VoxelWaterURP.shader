@@ -258,7 +258,7 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float3 sssColor = mainLight.color.rgb * sssWrap * float3(0.12, 0.75, 0.55);
                 float caustic = pow(saturate(FBM(surfUV * 0.65 + N.xz * 1.8 - t * 0.18)), 3.0) * _CausticsIntensity * (1.0 - deep01);
 
-                float refractWeight = (1.0 - deep01) * (1.0 - fresnel) * 0.55;
+                float refractWeight = (1.0 - deep01) * (1.0 - fresnel) * 0.22;
                 refractWeight *= (1.0 - shoreFactor * 0.9);
                 float3 col = lerp(waterCol.rgb, refracted, refractWeight);
                 float3 sky = SampleSH(N) * 0.85 + mainLight.color.rgb * 0.10;
@@ -271,7 +271,7 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float alpha = waterCol.a;
                 alpha = lerp(alpha, 0.99, shoreFactor * 0.85);
                 alpha = lerp(alpha, min(alpha + 0.12, 0.99), fresnel);
-                alpha = max(alpha, 0.82);
+                alpha = max(alpha, 0.94);
                 alpha = lerp(alpha, min(alpha + foam * 0.3, 0.99), foam);
 
                 col = MixFog(col, i.fog);
