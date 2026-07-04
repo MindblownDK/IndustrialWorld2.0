@@ -139,34 +139,6 @@ namespace VoxelEngine.WaterSim
             return mat;
         }
 
-        private bool TryGetFallbackSeaCenter(IVoxelWorld world, Vector3 viewerPosition, out Vector3 waterCenter)
-        {
-            waterCenter = viewerPosition;
-            if (world == null) return false;
-
-            if (PlanetWaterUtility.IsPlanetWorld)
-            {
-                Vector3 bodyCenter = Vector3.zero;
-                if (world is VoxelEngine.Cosmos.SphereWorld sphere && sphere.body != null)
-                    bodyCenter = sphere.body.transform.position;
-
-                Vector3 up = PlanetWaterUtility.WorldUp(viewerPosition);
-                if (up.sqrMagnitude < 0.0001f)
-                {
-                    Vector3 fromCenter = viewerPosition - bodyCenter;
-                    up = fromCenter.sqrMagnitude > 0.0001f ? fromCenter.normalized : Vector3.up;
-                }
-                up.Normalize();
-
-                float seaRadius = world.SeaLevel * VoxelConstants.VOXEL_SIZE;
-                waterCenter = bodyCenter + up * seaRadius;
-                return true;
-            }
-
-            waterCenter = new Vector3(viewerPosition.x, world.SeaLevel * VoxelConstants.VOXEL_SIZE, viewerPosition.z);
-            return true;
-        }
-
         private void Rebuild()
         {
             EnsureRuntimeObjects();
@@ -181,10 +153,27 @@ namespace VoxelEngine.WaterSim
 
             if (!VoxelWaterDepthSampler.TryFindNearbyWater(view.position, searchRadius, Mathf.Max(tileSize, 8f), out var waterCenter, out _, out _))
             {
-                if (!TryGetFallbackSeaCenter(world, view.position, out waterCenter))
+                // Fallback directly to the current sea shell/sea level. This avoids
+                // a compile/runtime dependency on a separate helper and guarantees
+                // the renderer can still produce an ocean patch while chunks stream.
+                if (PlanetWaterUtility.IsPlanetWorld)
                 {
-                    ClearMesh();
-                    return;
+                    Vector3 bodyCenter = Vector3.zero;
+                    if (world is VoxelEngine.Cosmos.SphereWorld sphere && sphere.body != null)
+                        bodyCenter = sphere.body.transform.position;
+
+                    Vector3 upFallback = PlanetWaterUtility.WorldUp(view.position);
+                    if (upFallback.sqrMagnitude < 0.0001f)
+                    {
+                        Vector3 fromCenter = view.position - bodyCenter;
+                        upFallback = fromCenter.sqrMagnitude > 0.0001f ? fromCenter.normalized : Vector3.up;
+                    }
+                    upFallback.Normalize();
+                    waterCenter = bodyCenter + upFallback * (world.SeaLevel * VoxelConstants.VOXEL_SIZE);
+                }
+                else
+                {
+                    waterCenter = new Vector3(view.position.x, world.SeaLevel * VoxelConstants.VOXEL_SIZE, view.position.z);
                 }
             }
 
