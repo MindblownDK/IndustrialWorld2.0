@@ -139,6 +139,34 @@ namespace VoxelEngine.WaterSim
             return mat;
         }
 
+        private bool TryGetFallbackSeaCenter(IVoxelWorld world, Vector3 viewerPosition, out Vector3 waterCenter)
+        {
+            waterCenter = viewerPosition;
+            if (world == null) return false;
+
+            if (PlanetWaterUtility.IsPlanetWorld)
+            {
+                Vector3 bodyCenter = Vector3.zero;
+                if (world is VoxelEngine.Cosmos.SphereWorld sphere && sphere.body != null)
+                    bodyCenter = sphere.body.transform.position;
+
+                Vector3 up = PlanetWaterUtility.WorldUp(viewerPosition);
+                if (up.sqrMagnitude < 0.0001f)
+                {
+                    Vector3 fromCenter = viewerPosition - bodyCenter;
+                    up = fromCenter.sqrMagnitude > 0.0001f ? fromCenter.normalized : Vector3.up;
+                }
+                up.Normalize();
+
+                float seaRadius = world.SeaLevel * VoxelConstants.VOXEL_SIZE;
+                waterCenter = bodyCenter + up * seaRadius;
+                return true;
+            }
+
+            waterCenter = new Vector3(viewerPosition.x, world.SeaLevel * VoxelConstants.VOXEL_SIZE, viewerPosition.z);
+            return true;
+        }
+
         private void Rebuild()
         {
             EnsureRuntimeObjects();
