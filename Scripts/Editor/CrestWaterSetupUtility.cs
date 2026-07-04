@@ -233,6 +233,16 @@ namespace VoxelEngine.EditorTools
             DisableExistingVoxelLiquidSurfaceObjects();
         }
 
+        private static void DisableExistingVoxelLiquidSurfaceObjects()
+        {
+            var transforms = Object.FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            foreach (var t in transforms)
+            {
+                if (t != null && t.name == "LiquidSurface")
+                    t.gameObject.SetActive(false);
+            }
+        }
+
         private static void ConfigureSerializedCrestOcean(Component ocean, Material waterMaterial)
         {
             if (ocean == null) return;
