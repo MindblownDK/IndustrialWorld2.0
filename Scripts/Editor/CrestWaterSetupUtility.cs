@@ -14,8 +14,14 @@ namespace VoxelEngine.EditorTools
         public static void Configure()
         {
             EnsurePanelSettingsFitMode();
-            ConfigureCrestProceduralVoxelWaterMode();
-            ConfigureCrestWaterMaterial();
+            ConfigureSceneAmbientOnly();
+
+            // v3.20 – full Crest URP integration
+            var waterMat = ConfigureCrestWaterMaterial();
+            ImportCrestMainSceneWaterRig();
+            ConfigureCrestRuntimeInScene(waterMat);
+            ConfigureVoxelCrestHelpers();
+
             ConfigureExistingMaritimeWakeEmitters();
 
             AssetDatabase.SaveAssets();
@@ -23,7 +29,7 @@ namespace VoxelEngine.EditorTools
             if (scene.IsValid() && scene.isLoaded)
                 UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(scene);
 
-            EditorUtility.DisplayDialog("Voxel Engine - Crest Water",
+            EditorUtility.DisplayDialog("Voxel Engine - Crest Water v3.20",
                 "Crest water integration configured for the active scene.\n\n" +
                 "Configured:\n" +
                 "• UI PanelSettings fit mode\n" +
@@ -374,10 +380,46 @@ namespace VoxelEngine.EditorTools
             if (binder == null) binder = ocean.gameObject.AddComponent<VoxelEngine.WaterSim.CrestVoxelWaterBinder>();
             binder.followNearestProceduralWater = true;
             binder.alignToPlanetSurface = true;
-            binder.waterSearchRadius = 512f;
-            binder.waterSearchSpacing = 32f;
-            binder.waterHeightOffset = 0f;
+            binder.waterSearchRadius = 768f;
+            binder.waterSearchSpacing = 24f;
+            binder.waterHeightOffset = 0.08f;
+            binder.smoothFollow = true;
+            binder.forceOceanAlwaysOn = true;
             EditorUtility.SetDirty(binder);
+        }
+
+        private static void ConfigureVoxelCrestHelpers()
+        {
+            // Attach helper components to the Crest Ocean root
+            var oceanType = FindType("Crest.OceanRenderer");
+            Component ocean = null;
+            if (oceanType != null)
+            {
+                var found = Resources.FindObjectsOfTypeAll(oceanType);
+                foreach (var c in found)
+                {
+                    var comp = c as Component;
+                    if (comp != null && !string.IsNullOrEmpty(comp.gameObject.scene.name))
+                    { ocean = comp; break; }
+                }
+            }
+            if (ocean == null) return;
+
+            var go = ocean.gameObject;
+
+            var depthProvider = go.GetComponent<VoxelEngine.WaterSim.VoxelCrestSeaFloorDepthProvider>();
+            if (depthProvider == null) depthProvider = go.AddComponent<VoxelEngine.WaterSim.VoxelCrestSeaFloorDepthProvider>();
+            depthProvider.sampleRadius = 64f;
+            depthProvider.samplesPerAxis = 14;
+            depthProvider.updateInterval = 0.25f;
+
+            var foam = go.GetComponent<VoxelEngine.WaterSim.VoxelCrestBlockFoamEmitter>();
+            if (foam == null) foam = go.AddComponent<VoxelEngine.WaterSim.VoxelCrestBlockFoamEmitter>();
+            foam.scanRadius = 96f;
+            foam.maxEmitters = 36;
+            foam.emitterRadius = 1.9f;
+
+            EditorUtility.SetDirty(go);
         }
 
         private static void ConfigureExistingMaritimeWakeEmitters()

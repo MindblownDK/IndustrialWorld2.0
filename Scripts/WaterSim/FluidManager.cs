@@ -22,13 +22,20 @@ namespace VoxelEngine.WaterSim
 
         [Header("Simulation")]
         [Tooltip("Ticks per second for chunk sleep tracking.")]
-        public float tickRate = 15f;
+        public float tickRate = 8f;
         [Tooltip("Max chunks to process CPU sync per tick.")]
-        public int maxChunksPerTick = 4;
+        public int maxChunksPerTick = 6;
         [Tooltip("Chunks within this radius of the player are active.")]
-        public int activeRadius = 6;
+        public int activeRadius = 4;
         [Tooltip("Compute solver iterations dispatched per rendered frame.")]
-        public int computeIterationsPerFrame = 3;
+        public int computeIterationsPerFrame = 1;
+
+        [Header("Performance – v3.20 Crest Integration")]
+        [Tooltip("Skip compute every N frames to save GPU. 1 = every frame, 2 = every other frame.")]
+        public int computeFrameSkip = 2;
+        [Tooltip("Disable volumetric compute when Crest is handling visuals – saves massive GPU time.")]
+        public bool useCrestVisualMode = true;
+        private int _computeFrameCounter;
 
         private readonly HashSet<Vector3Int> _activeChunks = new();
         private readonly Queue<Vector3Int> _workQueue = new();
@@ -95,10 +102,26 @@ namespace VoxelEngine.WaterSim
 
         private void OnBeginContextRendering(ScriptableRenderContext context, List<Camera> cameras)
         {
+            // Crest Visual Mode: skip heavy GPU compute – Crest handles surface visuals.
+            // We keep CPU voxel fluid sim for pumps / gameplay, but GPU volumetric is optional.
+            if (useCrestVisualMode) 
+            {
+                // Still update LOD allocation occasionally, but at 1/4 rate
+                if ((Time.frameCount & 3) == 0 && cameras != null && cameras.Count > 0)
+                {
+                    Camera mainCam = cameras[0];
+                    UpdateLodAndSparseAllocation(mainCam != null ? mainCam.transform.position : Vector3.zero);
+                }
+                return;
+            }
+
             if (!_isComputeInitialized || _fluidSimShader == null || cameras == null || cameras.Count == 0) return;
 
-            Camera mainCam = cameras[0];
-            UpdateLodAndSparseAllocation(mainCam != null ? mainCam.transform.position : Vector3.zero);
+            _computeFrameCounter++;
+            if (_computeFrameCounter % Mathf.Max(1, computeFrameSkip) != 0) return;
+
+            Camera mainCam2 = cameras[0];
+            UpdateLodAndSparseAllocation(mainCam2 != null ? mainCam2.transform.position : Vector3.zero);
 
             if (_sparseChunks.Count > 0 && _kernelPressureSolve >= 0 && _kernelUpdateFlow >= 0)
             {
@@ -109,7 +132,7 @@ namespace VoxelEngine.WaterSim
                 Vector3 tideDir = PlanetWaterUtility.CurrentTideDirectionLocal();
                 _fluidSimShader.SetVector("_GravityDir", tideDir);
 
-                for (int i = 0; i < computeIterationsPerFrame; i++)
+                for (int i = 0; i < Mathf.Clamp(computeIterationsPerFrame,1,2); i++)
                 {
                     _fluidSimShader.Dispatch(_kernelPressureSolve, VoxelConstants.CHUNK_SIZE / 4, VoxelConstants.CHUNK_SIZE / 4, VoxelConstants.CHUNK_SIZE / 4);
                     _fluidSimShader.Dispatch(_kernelUpdateFlow, VoxelConstants.CHUNK_SIZE / 4, VoxelConstants.CHUNK_SIZE / 4, VoxelConstants.CHUNK_SIZE / 4);

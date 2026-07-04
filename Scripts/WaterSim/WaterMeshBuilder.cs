@@ -26,7 +26,7 @@ namespace VoxelEngine.WaterSim
         private static Material _externalOilMat;
         private static readonly HashSet<Vector3Int> _sphereSurfaceCells = new();
 
-        public static bool RenderingEnabled { get; set; } = true;
+        public static bool RenderingEnabled { get; set; } = false; // v3.20 Crest is now primary visual – voxel mesh disabled by default to kill gaps + lag
 
         private const byte WaterVoxelMat  = (byte)MaterialId.WaterVoxel;
         private const byte WaterLiquidMat = (byte)MaterialId.WaterLiquid;

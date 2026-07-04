@@ -17,7 +17,7 @@ namespace VoxelEngine.WaterSim
         [Range(1, 24)] public int meshBuildBudgetPerFrame = 4;
 
         [Tooltip("When Crest is used as the scene water renderer, leave voxel liquid data active for pumps/buoyancy but stop rendering the old chunk-local liquid surface meshes.")]
-        public bool renderVoxelLiquidSurfaces = true;
+        public bool renderVoxelLiquidSurfaces = false; // v3.20 Crest default
 
         [Tooltip("Schedules nearby generated liquid chunks in case a scene was previously saved with liquid surfaces disabled.")]
         public bool rescheduleVisibleLiquidSurfaces = true;
