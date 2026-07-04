@@ -1,5 +1,19 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
+--- !u!114 &-8498198693427618292
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8c7ebde846ab8434dbff4f432b14f6b1, type: 3}
+  m_Name: VolumetricWaterRenderFeature
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Rendering.VolumetricWaterRenderFeature
+  m_Active: 1
+  blitShader: {fileID: 4800000, guid: 56bbd69c8cfcfad449f1a1cb0605b076, type: 3}
 --- !u!114 &-6914391240469910961
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -54,8 +68,8 @@ MonoBehaviour:
     probeVolumeBlendStatesCS: {fileID: 7200000, guid: b9a23f869c4fd45f19c5ada54dd82176, type: 3}
   m_RendererFeatures:
   - {fileID: 7833122117494664109}
-  - {fileID: 1581433653977243335}
-  m_RendererFeatureMap: ad6b866f10d7b46cc75e298d8761f215
+  - {fileID: -8498198693427618292}
+  m_RendererFeatureMap: ad6b866f10d7b46c0cde8e4f5055108a
   m_UseNativeRenderPass: 1
   xrSystemData: {fileID: 0}
   postProcessData: {fileID: 11400000, guid: 41439944d30ece34e96484bdb6645b55, type: 2}
@@ -176,6 +190,20 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2e75c7254b45f834eb6e6d353075a51f, type: 3}
+  m_Name: VolumetricWaterRenderFeature
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Rendering.VolumetricWaterRenderFeature
+  m_Active: 1
+  blitShader: {fileID: 4800000, guid: 56bbd69c8cfcfad449f1a1cb0605b076, type: 3}
+--- !u!114 &9196363032478071796
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a6d377a40e866244a9f5ae9aec3273d1, type: 3}
   m_Name: VolumetricWaterRenderFeature
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Rendering.VolumetricWaterRenderFeature
   m_Active: 1

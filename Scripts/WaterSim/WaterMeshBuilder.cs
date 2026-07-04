@@ -204,15 +204,6 @@ namespace VoxelEngine.WaterSim
                     var liquid = FluidMaterialUtility.LiquidFromVoxel(vox);
                     float baseH = h + (vox.waterLevel / 255f);
 
-                    Vector3 centerVoxel = chunkVoxel + (Vector3)local + Vector3.one * 0.5f;
-                    float distFromCenter = centerVoxel.magnitude;
-                    if (liquid == LiquidType.Water && distFromCenter >= seaRad - 2f && distFromCenter <= seaRad + 2f)
-                    {
-                        float centerH = Vector3.Dot(chunkCenterWorld, chunkUp);
-                        float oceanH = (seaRad / VoxelConstants.VOXEL_SIZE) - centerH + (S * 0.5f);
-                        baseH = Mathf.Max(baseH, oceanH);
-                    }
-
                     bool bordersTerrain = false;
                     float terrainH = baseH;
                     float tH;
@@ -514,7 +505,6 @@ namespace VoxelEngine.WaterSim
 
         private static bool IsCoveredBySameLiquid(Chunk c, Vector3Int local, Voxel voxel, float distFromCenter, float seaRad)
         {
-            if (distFromCenter < seaRad - 1.5f) return true;
             if (FluidMaterialUtility.LiquidFromVoxel(voxel) == LiquidType.Water)
             {
                 Vector3Int worldCell = c.coord * VoxelConstants.CHUNK_SIZE + local;

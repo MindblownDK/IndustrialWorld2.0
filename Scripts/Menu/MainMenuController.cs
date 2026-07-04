@@ -77,7 +77,6 @@ namespace VoxelEngine.Menu
                 // "No Theme Style Sheet set" warning disappears.
                 _doc.panelSettings.themeStyleSheet = LoadOrCreateDefaultTheme();
             }
-            VoxelEngine.Settings.GameSettings.ConfigurePanelSettings(_doc.panelSettings);
 
             if (_newSeed == 0)
                 _newSeed = UnityEngine.Random.Range(1, int.MaxValue);
@@ -117,11 +116,6 @@ namespace VoxelEngine.Menu
                 case Page.NewWorld: BuildNewWorldPage(); break;
                 case Page.Settings: BuildSettingsPage(); break;
             }
-        }
-
-        private void Update()
-        {
-            if (_doc != null) VoxelEngine.Settings.GameSettings.ConfigurePanelSettings(_doc.panelSettings);
         }
 
         // ════════════════════════════════════════════════════════════
@@ -938,7 +932,9 @@ namespace VoxelEngine.Menu
         {
             var ps = ScriptableObject.CreateInstance<PanelSettings>();
             ps.name = "MainMenu_RuntimePanelSettings";
-            VoxelEngine.Settings.GameSettings.ConfigurePanelSettings(ps);
+            ps.scaleMode = PanelScaleMode.ScaleWithScreenSize;
+            ps.referenceResolution = new Vector2Int(1920, 1080);
+            ps.match = 0.5f;
 
             // CRITICAL — without a ThemeStyleSheet, UI Toolkit logs the warning
             // "No Theme Style Sheet set to PanelSettings, UI will not render properly"
