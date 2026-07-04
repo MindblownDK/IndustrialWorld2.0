@@ -122,13 +122,24 @@ namespace VoxelEngine.WaterSim
             if (_externalOilMat != null) _oilMat = _externalOilMat;
             if (_waterMat != null && _oilMat != null) return;
 
-            // v3.20.2 – prefer Crest ocean material for voxel water surfaces
+            // v3.20.3 – prefer Crest ocean material for voxel water surfaces
             Material crestMat = Resources.Load<Material>("CrestOcean_VoxelBridge");
             if (crestMat == null)
             {
-                // Try load from Crest import paths
-                crestMat = UnityEngine.Resources.Load<Material>("Ocean")
-                    ?? (Material)UnityEditor.AssetDatabase.LoadAssetAtPath<Material>("Assets/Liquid/Crest/Crest-Examples/Examples/Materials/Examples_Material_Ocean.mat", typeof(Material));
+                crestMat = Resources.Load<Material>("Ocean");
+#if UNITY_EDITOR
+                if (crestMat == null)
+                {
+                    crestMat = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>("Assets/Liquid/Crest/Crest-Examples/Examples/Materials/Examples_Material_Ocean.mat");
+                    if (crestMat == null)
+                        crestMat = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>("Assets/Liquid/Crest/Crest/Materials/Ocean.mat");
+                }
+#endif
+            }
+            if (crestMat != null)
+            {
+                _externalWaterMat = crestMat;
+                _waterMat = crestMat;
             }
 
             var sh = Shader.Find("Crest/Ocean")

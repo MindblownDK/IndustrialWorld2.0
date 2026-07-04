@@ -178,7 +178,7 @@ namespace VoxelEngine.WaterSim
             }
 
             _mesh.Clear();
-            _mesh.SetVertices(_vertices: _verts);
+            _mesh.SetVertices(_verts);
             _mesh.SetUVs(0, _uvs);
             _mesh.SetTriangles(_tris, 0);
             _mesh.RecalculateBounds();
