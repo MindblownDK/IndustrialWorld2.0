@@ -120,8 +120,9 @@ namespace VoxelEngine.EditorTools
             go.AddComponent<MeshRenderer>();
             var renderer = go.AddComponent<VoxelEngine.WaterSim.ProceduralWaterPatchRenderer>();
             renderer.enabled = true;
-            renderer.searchRadius = 512f;
-            renderer.tileSize = 12f;
+            renderer.keepLastValidMesh = true;
+            renderer.searchRadius = 1024f;
+            renderer.tileSize = 16f;
             renderer.maxTilesPerAxis = 64;
             renderer.rebuildInterval = 0.25f;
             renderer.shallowDepth = 2.5f;

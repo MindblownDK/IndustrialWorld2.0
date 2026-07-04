@@ -23,6 +23,9 @@ namespace VoxelEngine.WaterSim
         [UnityEngine.Range(0.1f, 3f)] public float rebuildInterval = 0.35f;
         public float waterHeightOffset = 0.04f;
 
+        [Tooltip("Keep the last successful water mesh visible if a transient chunk-streaming frame cannot sample water.")]
+        public bool keepLastValidMesh = true;
+
         [Header("Shallow/Deep")]
         public float shallowDepth = 2.5f;
         public float deepDepth = 28f;
@@ -40,6 +43,7 @@ namespace VoxelEngine.WaterSim
         private MeshRenderer _renderer;
         private Transform _cachedViewpoint;
         private float _nextRebuild;
+        private bool _hasValidMesh;
 
         private readonly List<Vector3> _vertices = new(16384);
         private readonly List<Vector3> _normals = new(16384);
@@ -215,6 +219,7 @@ namespace VoxelEngine.WaterSim
             _mesh.RecalculateBounds();
             _filter.sharedMesh = _mesh;
             _renderer.enabled = true;
+            _hasValidMesh = true;
         }
 
         private int AddSharedVertex(Sample s)
@@ -276,7 +281,16 @@ namespace VoxelEngine.WaterSim
 
         private void ClearMesh()
         {
+            // Chunk streaming can briefly make depth queries fail. Do not blink the
+            // ocean off if we already have a valid mesh from the previous frame.
+            if (keepLastValidMesh && _hasValidMesh)
+            {
+                if (_renderer != null) _renderer.enabled = true;
+                return;
+            }
+
             if (_mesh != null) _mesh.Clear();
+            _hasValidMesh = false;
             if (_renderer != null) _renderer.enabled = false;
         }
     }

@@ -147,10 +147,21 @@ namespace VoxelEngine.WaterSim
                 break;
             }
 
-            if (terrainRadius <= 0f || terrainRadius >= seaRadius - 0.05f) return false;
+            signedSurface = seaRadius - (worldPosition - bodyCenter).magnitude;
+
+            if (terrainRadius <= 0f)
+            {
+                // Some sampled points are outside currently generated chunks during
+                // streaming. If the point is at/near the sea shell, assume open ocean
+                // instead of dropping the whole visual patch for a frame.
+                if (signedSurface < -8f) return false;
+                depth = 32f;
+                return true;
+            }
+
+            if (terrainRadius >= seaRadius - 0.05f) return false;
 
             depth = Mathf.Max(0f, seaRadius - terrainRadius);
-            signedSurface = seaRadius - (worldPosition - bodyCenter).magnitude;
             return depth > 0.05f;
         }
 
