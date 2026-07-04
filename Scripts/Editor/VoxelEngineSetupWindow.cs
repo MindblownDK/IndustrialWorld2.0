@@ -116,6 +116,17 @@ namespace VoxelEngine.EditorTools
             AddWizardButton(scroll, "13. Build Maritime Content (Hulls, Engines, Shafts, Propellers, Turbo, Helm + Maritime Research Tree)", BuildMaritimeContent, 56);
             AddWizardButton(scroll, "14. Build Floodlight Content (Stationary & Grid blocks, recipes, research)", BuildFloodlightContent, 40);
             AddWizardButton(scroll, "15. Build Wind Power Content (Standard, Helix, Monopoles, Research)", BuildWindmillContent, 40);
+
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 16 configures Crest water for the active scene:\n" +
+                "  • UI Toolkit panel fit settings\n" +
+                "  • Shallow/clear Crest water material settings\n" +
+                "  • Crest dynamic waves + flow simulation where available\n" +
+                "  • Planet water bootstrap material overrides\n" +
+                "  • Water-only maritime wake emitters on ship grids\n" +
+                "Re-runnable. Idempotent. Run after importing Crest into Liquid/.");
+            AddWizardButton(scroll, "16. Configure Crest Water Integration (UI fit, shallow water, flow + boat wakes)", CrestWaterSetupUtility.Configure, 56);
             AddSpacer(scroll, 20);
         }
 
