@@ -82,7 +82,28 @@ namespace VoxelEngine.EditorTools
             bootstrap.oilMaterialOverride = null;
             VoxelEngine.WaterSim.WaterMeshBuilder.RenderingEnabled = true;
             EnableExistingVoxelLiquidSurfaceObjects();
+            ConfigureProceduralPatchRenderer();
             EditorUtility.SetDirty(bootstrap);
+        }
+
+        private static void ConfigureProceduralPatchRenderer()
+        {
+            var renderers = Object.FindObjectsByType<VoxelEngine.WaterSim.ProceduralWaterPatchRenderer>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var renderer = renderers != null && renderers.Length > 0 ? renderers[0] : null;
+            if (renderer == null)
+            {
+                var go = GameObject.Find("Procedural Water Patch Renderer") ?? new GameObject("Procedural Water Patch Renderer");
+                renderer = go.GetComponent<VoxelEngine.WaterSim.ProceduralWaterPatchRenderer>();
+                if (renderer == null) renderer = go.AddComponent<VoxelEngine.WaterSim.ProceduralWaterPatchRenderer>();
+            }
+
+            renderer.searchRadius = 384f;
+            renderer.tileSize = 12f;
+            renderer.maxTilesPerAxis = 64;
+            renderer.rebuildInterval = 0.25f;
+            renderer.shallowDepth = 2.5f;
+            renderer.deepDepth = 28f;
+            EditorUtility.SetDirty(renderer);
         }
 
         private static void ImportCrestMainSceneWaterRig()
