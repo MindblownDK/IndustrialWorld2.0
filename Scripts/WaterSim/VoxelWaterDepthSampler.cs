@@ -38,7 +38,7 @@ namespace VoxelEngine.WaterSim
             spacing = Mathf.Max(2f, spacing);
             radius = Mathf.Max(spacing, radius);
 
-            if (TrySampleDepth(center, out depth, out surfaceHeight))
+            if (TrySampleDepth(center, out depth, out surfaceHeight) || TrySampleSeaSurface(center, out depth, out surfaceHeight))
             {
                 waterPosition = PlanetWaterUtility.IsPlanetWorld
                     ? PlanetWaterUtility.WorldUp(center) * (center.magnitude + surfaceHeight)
@@ -64,7 +64,7 @@ namespace VoxelEngine.WaterSim
                 if (offset2.sqrMagnitude > radius * radius) continue;
 
                 Vector3 sample = center + tangentA * offset2.x + tangentB * offset2.y;
-                if (!TrySampleDepth(sample, out float d, out float surf)) continue;
+                if (!TrySampleDepth(sample, out float d, out float surf) && !TrySampleSeaSurface(sample, out d, out surf)) continue;
 
                 float distSq = offset2.sqrMagnitude;
                 if (distSq >= bestDistSq) continue;
@@ -79,6 +79,75 @@ namespace VoxelEngine.WaterSim
             }
 
             return found;
+        }
+
+        public static bool TrySampleSeaSurface(Vector3 worldPosition, out float depth, out float surfaceHeight)
+        {
+            depth = 0f;
+            surfaceHeight = 0f;
+
+            var world = ActiveWorld.Current;
+            if (world == null) return false;
+
+            if (PlanetWaterUtility.IsPlanetWorld)
+                return TrySamplePlanetSeaSurface(world, worldPosition, out depth, out surfaceHeight);
+
+            return TrySampleFlatSeaSurface(world, worldPosition, out depth, out surfaceHeight);
+        }
+
+        private static bool TrySampleFlatSeaSurface(IVoxelWorld world, Vector3 worldPosition, out float depth, out float surfaceHeight)
+        {
+            depth = 0f;
+            surfaceHeight = world.SeaLevel * VoxelConstants.VOXEL_SIZE;
+
+            int ix = Mathf.RoundToInt(worldPosition.x / VoxelConstants.VOXEL_SIZE);
+            int iz = Mathf.RoundToInt(worldPosition.z / VoxelConstants.VOXEL_SIZE);
+            int seaY = Mathf.RoundToInt(world.SeaLevel);
+            int bottom = seaY - 192;
+
+            int floorY = int.MinValue;
+            for (int y = seaY; y >= bottom; y--)
+            {
+                var v = world.GetVoxelWorld(new Vector3Int(ix, y, iz));
+                if (IsTerrain(v)) { floorY = y; break; }
+            }
+
+            if (floorY == int.MinValue || floorY >= seaY) return false;
+            float floorHeight = (floorY + 1) * VoxelConstants.VOXEL_SIZE;
+            depth = Mathf.Max(0f, surfaceHeight - floorHeight);
+            return depth > 0.05f;
+        }
+
+        private static bool TrySamplePlanetSeaSurface(IVoxelWorld world, Vector3 worldPosition, out float depth, out float signedSurface)
+        {
+            depth = 0f;
+            signedSurface = 0f;
+
+            Vector3 up = PlanetWaterUtility.WorldUp(worldPosition);
+            if (up.sqrMagnitude < 0.0001f) up = worldPosition.sqrMagnitude > 0.0001f ? worldPosition.normalized : Vector3.up;
+            up.Normalize();
+
+            float seaRadius = world.SeaLevel * VoxelConstants.VOXEL_SIZE;
+            Vector3 seaPoint = up * seaRadius;
+            Vector3Int seaVoxel = world.WorldToVoxel(seaPoint);
+            const int scanIn = 256;
+
+            float terrainRadius = 0f;
+            for (int i = 0; i >= -scanIn; i--)
+            {
+                Vector3Int p = seaVoxel + Vector3Int.RoundToInt(up * i);
+                var v = world.GetVoxelWorld(p);
+                if (!IsTerrain(v)) continue;
+
+                terrainRadius = (((Vector3)p + Vector3.one * 0.5f) * VoxelConstants.VOXEL_SIZE).magnitude + 0.5f * VoxelConstants.VOXEL_SIZE;
+                break;
+            }
+
+            if (terrainRadius <= 0f || terrainRadius >= seaRadius - 0.05f) return false;
+
+            depth = Mathf.Max(0f, seaRadius - terrainRadius);
+            signedSurface = seaRadius - worldPosition.magnitude;
+            return depth > 0.05f;
         }
 
         private static bool TrySampleFlatDepth(IVoxelWorld world, Vector3 worldPosition, out float depth, out float surfaceHeight)
