@@ -16,10 +16,13 @@ namespace VoxelEngine.EditorTools
             EnsurePanelSettingsFitMode();
             ConfigureSceneAmbientOnly();
 
-            // v3.20.2 – Crest material BRIDGED to voxel water – NO ocean plane
+            // v3.20.3 – HYBRID: Crest OceanRenderer clipped to voxel water + voxel mesh for lakes/rivers/oil
             var waterMat = ConfigureCrestWaterMaterial();
-            RemoveExistingCrestRuntimeObjects(); // ensure no big ocean plane
-            ConfigureCrestVoxelMaterialBridge(waterMat);
+            // Import Crest ocean rig – we DO want OceanRenderer, but clipped
+            ImportCrestMainSceneWaterRig();
+            ConfigureCrestRuntimeInScene(waterMat);
+            ConfigureVoxelCrestHelpers();
+            ConfigureHybridVoxelBridge(waterMat);
 
             ConfigureExistingMaritimeWakeEmitters();
 
@@ -467,6 +470,99 @@ namespace VoxelEngine.EditorTools
             EditorUtility.SetDirty(foam);
 
             Debug.Log("[CrestWaterSetup] ✓ Crest material bridged to voxel water – no ocean plane – v3.20.2");
+        }
+
+        // v3.20.3 HYBRID – Crest Ocean clipped + voxel mesh
+        private static void ConfigureHybridVoxelBridge(Material waterMaterial)
+        {
+            var bootstraps = Object.FindObjectsByType<VoxelEngine.WaterSim.PlanetWaterRendererBootstrap>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var bootstrap = bootstraps != null && bootstraps.Length > 0 ? bootstraps[0] : null;
+            if (bootstrap == null)
+            {
+                var go = GameObject.Find("Liquid Visual Runtime") ?? new GameObject("Liquid Visual Runtime");
+                bootstrap = go.GetComponent<VoxelEngine.WaterSim.PlanetWaterRendererBootstrap>();
+                if (bootstrap == null) bootstrap = go.AddComponent<VoxelEngine.WaterSim.PlanetWaterRendererBootstrap>();
+            }
+
+            // HYBRID: voxel mesh ON for lakes/rivers/oil puddles, Crest Ocean ON for big oceans (clipped)
+            bootstrap.renderVoxelLiquidSurfaces = true;
+            bootstrap.rescheduleVisibleLiquidSurfaces = true;
+            bootstrap.liquidRescheduleChunkRadius = 3;
+            bootstrap.liquidRescheduleInterval = 0.6f;
+            bootstrap.meshBuildBudgetPerFrame = 2;
+            bootstrap.waterMaterialOverride = waterMaterial; // Crest material on voxel mesh
+            bootstrap.oilMaterialOverride = null;
+
+            VoxelEngine.WaterSim.WaterMeshBuilder.RenderingEnabled = true;
+            VoxelEngine.WaterSim.WaterMeshBuilder.SetMaterialOverrides(waterMaterial, null);
+            EnableExistingVoxelLiquidSurfaceObjects();
+            EditorUtility.SetDirty(bootstrap);
+
+            // Find Crest Ocean that was just imported
+            var oceanType = FindType("Crest.OceanRenderer");
+            Component ocean = null;
+            if (oceanType != null)
+            {
+                var found = Object.FindObjectsByType(oceanType, FindObjectsInactive.Include, FindObjectsSortMode.None);
+                foreach (var c in found) { var comp = c as Component; if (comp != null && !string.IsNullOrEmpty(comp.gameObject.scene.name)) { ocean = comp; break; } }
+            }
+            if (ocean != null)
+            {
+                // Ensure clip surface is enabled in OceanRenderer
+                var so = new SerializedObject(ocean);
+                var clipProp = so.FindProperty("_createClipSurfaceData");
+                if (clipProp != null) { clipProp.boolValue = true; so.ApplyModifiedPropertiesWithoutUndo(); }
+
+                var go = ocean.gameObject;
+                // Add clip surface provider – this REMOVES the big plane artifact
+                var clip = go.GetComponent<VoxelEngine.WaterSim.VoxelCrestClipSurfaceProvider>();
+                if (clip == null) clip = go.AddComponent<VoxelEngine.WaterSim.VoxelCrestClipSurfaceProvider>();
+                clip.radius = 900f;
+                clip.cellSize = 28f;
+                clip.minDepthToInclude = 1.2f;
+                clip.rebuildInterval = 0.45f;
+
+                // Also keep depth + foam helpers
+                var depth = go.GetComponent<VoxelEngine.WaterSim.VoxelCrestSeaFloorDepthProvider>() ?? go.AddComponent<VoxelEngine.WaterSim.VoxelCrestSeaFloorDepthProvider>();
+                var foam = go.GetComponent<VoxelEngine.WaterSim.VoxelCrestBlockFoamEmitter>() ?? go.AddComponent<VoxelEngine.WaterSim.VoxelCrestBlockFoamEmitter>();
+
+                // Configure binder to NOT disable ocean – we WANT ocean tiles, but clipped
+                var binder = go.GetComponent<VoxelEngine.WaterSim.CrestVoxelWaterBinder>() ?? go.AddComponent<VoxelEngine.WaterSim.CrestVoxelWaterBinder>();
+                binder.disableCrestOceanPlane = false; // allow Crest tiles
+                binder.forceOceanAlwaysOn = true;
+                binder.bridgeCrestMaterialToVoxelMesh = true;
+                binder.alignToPlanetSurface = true;
+
+                EditorUtility.SetDirty(go);
+                Debug.Log("[CrestWaterSetup] ✓ HYBRID v3.20.3 – Crest Ocean clipped + voxel mesh – no unclipped plane");
+            }
+
+            // Oil second ocean
+            ConfigureOilOcean(waterMaterial);
+        }
+
+        private static void ConfigureOilOcean(Material waterMaterial)
+        {
+            // Create a second Crest OceanRenderer for oil – disabled by default, enabled by CrestOilOceanController when oil is nearby
+            var oceanType = FindType("Crest.OceanRenderer");
+            if (oceanType == null) return;
+
+            var existingOil = GameObject.Find("Crest Oil Ocean");
+            if (existingOil == null)
+            {
+                var go = new GameObject("Crest Oil Ocean");
+                var ocean = go.AddComponent(oceanType);
+                // copy serialized settings from main ocean if present
+                var mainOcean = Object.FindFirstObjectByType(oceanType) as Component;
+                if (mainOcean != null && ocean != mainOcean)
+                {
+                    UnityEditor.EditorUtility.CopySerialized(mainOcean, ocean);
+                }
+                // attach oil controller
+                var oilCtrl = go.AddComponent<VoxelEngine.WaterSim.CrestOilOceanController>();
+                oilCtrl.oilMaterialOverride = null; // user can assign viscous oil mat
+                Undo.RegisterCreatedObjectUndo(go, "Create Crest Oil Ocean");
+            }
         }
 
         private static void ConfigureExistingMaritimeWakeEmitters()
