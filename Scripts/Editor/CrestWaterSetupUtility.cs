@@ -112,8 +112,6 @@ namespace VoxelEngine.EditorTools
             }
 
             renderer.enabled = true;
-            if (renderer.GetComponent<MeshFilter>() == null) renderer.gameObject.AddComponent<MeshFilter>();
-            if (renderer.GetComponent<MeshRenderer>() == null) renderer.gameObject.AddComponent<MeshRenderer>();
             renderer.searchRadius = 512f;
             renderer.tileSize = 12f;
             renderer.maxTilesPerAxis = 64;
