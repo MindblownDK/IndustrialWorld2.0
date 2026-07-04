@@ -26,6 +26,8 @@ namespace VoxelEngine.WaterSim
         private static Material _externalOilMat;
         private static readonly HashSet<Vector3Int> _sphereSurfaceCells = new();
 
+        public static bool RenderingEnabled { get; set; } = true;
+
         private const byte WaterVoxelMat  = (byte)MaterialId.WaterVoxel;
         private const byte WaterLiquidMat = (byte)MaterialId.WaterLiquid;
         private const byte OilMat         = (byte)MaterialId.CrudeOil;
@@ -72,11 +74,18 @@ namespace VoxelEngine.WaterSim
 
         public static void Schedule(Chunk c)
         {
+            if (!RenderingEnabled) return;
             if (c != null && _queued.Add(c)) _queue.Enqueue(c);
         }
 
         public static void Pump(int budget)
         {
+            if (!RenderingEnabled)
+            {
+                _queue.Clear();
+                _queued.Clear();
+                return;
+            }
             EnsureMats();
             int done = 0;
             while (done < budget && _queue.Count > 0)

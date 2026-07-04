@@ -43,6 +43,7 @@ namespace VoxelEngine.WaterSim
 
         private void ApplyMaterialOverrides()
         {
+            WaterMeshBuilder.RenderingEnabled = renderVoxelLiquidSurfaces;
             WaterMeshBuilder.SetMaterialOverrides(waterMaterialOverride, oilMaterialOverride);
         }
 

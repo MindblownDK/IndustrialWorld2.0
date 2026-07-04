@@ -14,6 +14,7 @@ namespace VoxelEngine.EditorTools
         public static void Configure()
         {
             EnsurePanelSettingsFitMode();
+            ImportCrestMainSceneWaterRig();
             var waterMaterial = ConfigureCrestWaterMaterial();
             ConfigureCrestRuntimeInScene(waterMaterial);
             ConfigureExistingMaritimeWakeEmitters();
@@ -55,6 +56,90 @@ namespace VoxelEngine.EditorTools
             panelSettings.referenceDpi = 96;
             panelSettings.fallbackDpi = 96;
             EditorUtility.SetDirty(panelSettings);
+        }
+
+        private static void ImportCrestMainSceneWaterRig()
+        {
+            const string prefabPath = "Assets/Liquid/Crest/Crest-Examples/Main/Scenes/Internal/MainSceneCore.prefab";
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+            if (prefab == null)
+            {
+                Debug.LogWarning("[CrestWaterSetup] MainSceneCore prefab was not found. Cannot copy the known-good Crest test-scene water rig.");
+                return;
+            }
+
+            RemoveExistingCrestRuntimeObjects();
+
+            GameObject contents = null;
+            GameObject runtimeRoot = null;
+            try
+            {
+                contents = PrefabUtility.LoadPrefabContents(prefabPath);
+                var oceanSource = FindChildByName(contents.transform, "Ocean");
+                var wavesSource = FindChildByName(contents.transform, "Waves");
+
+                runtimeRoot = new GameObject("Crest Water Runtime");
+                Undo.RegisterCreatedObjectUndo(runtimeRoot, "Create Crest Water Runtime");
+
+                if (oceanSource != null)
+                {
+                    var ocean = Object.Instantiate(oceanSource.gameObject);
+                    ocean.name = "Ocean";
+                    ocean.transform.SetParent(runtimeRoot.transform, worldPositionStays: true);
+                    Undo.RegisterCreatedObjectUndo(ocean, "Create Crest Ocean From Main Scene");
+                }
+                else Debug.LogWarning("[CrestWaterSetup] Could not find Ocean object in MainSceneCore prefab.");
+
+                if (wavesSource != null)
+                {
+                    var waves = Object.Instantiate(wavesSource.gameObject);
+                    waves.name = "Waves";
+                    waves.transform.SetParent(runtimeRoot.transform, worldPositionStays: true);
+                    Undo.RegisterCreatedObjectUndo(waves, "Create Crest Waves From Main Scene");
+                }
+                else Debug.LogWarning("[CrestWaterSetup] Could not find Waves object in MainSceneCore prefab.");
+            }
+            finally
+            {
+                if (contents != null) PrefabUtility.UnloadPrefabContents(contents);
+            }
+        }
+
+        private static Transform FindChildByName(Transform root, string name)
+        {
+            if (root == null) return null;
+            if (root.name == name) return root;
+            for (int i = 0; i < root.childCount; i++)
+            {
+                var found = FindChildByName(root.GetChild(i), name);
+                if (found != null) return found;
+            }
+            return null;
+        }
+
+        private static void RemoveExistingCrestRuntimeObjects()
+        {
+            string[] names = { "Crest Water Runtime", "Crest Ocean", "Crest Animated Waves" };
+            foreach (var name in names)
+            {
+                var go = GameObject.Find(name);
+                if (go != null) Object.DestroyImmediate(go);
+            }
+
+            var oceanType = FindType("Crest.OceanRenderer");
+            if (oceanType != null)
+            {
+                var found = Resources.FindObjectsOfTypeAll(oceanType);
+                if (found != null)
+                {
+                    foreach (var candidate in found)
+                    {
+                        var component = candidate as Component;
+                        if (component == null || string.IsNullOrEmpty(component.gameObject.scene.name)) continue;
+                        Object.DestroyImmediate(component.gameObject);
+                    }
+                }
+            }
         }
 
         private static Material ConfigureCrestWaterMaterial()
@@ -124,7 +209,7 @@ namespace VoxelEngine.EditorTools
                 }
 
                 ConfigureSerializedCrestOcean(ocean, waterMaterial);
-                EnsureAnimatedWaves(ocean);
+                ConfigureVoxelBinder(ocean);
             }
             else
             {
@@ -175,79 +260,15 @@ namespace VoxelEngine.EditorTools
             EditorUtility.SetDirty(ocean);
         }
 
-        private static void EnsureAnimatedWaves(Component ocean)
+        private static void ConfigureVoxelBinder(Component ocean)
         {
             if (ocean == null) return;
-
-            var shapeType = FindType("Crest.ShapeGerstner");
-            if (shapeType == null)
-            {
-                Debug.LogWarning("[CrestWaterSetup] Crest.ShapeGerstner was not found, so animated wave inputs could not be created.");
-                return;
-            }
-
-            var existingShapes = Object.FindObjectsByType(shapeType, FindObjectsInactive.Include, FindObjectsSortMode.None);
-            Component shape = null;
-            if (existingShapes != null)
-            {
-                foreach (var candidate in existingShapes)
-                {
-                    var component = candidate as Component;
-                    if (component == null || string.IsNullOrEmpty(component.gameObject.scene.name)) continue;
-                    shape = component;
-                    break;
-                }
-            }
-
-            if (shape == null)
-            {
-                var wavesGo = new GameObject("Crest Animated Waves");
-                wavesGo.transform.position = new Vector3(0f, ocean.transform.position.y + 5f, 0f);
-                shape = wavesGo.AddComponent(shapeType);
-                Undo.RegisterCreatedObjectUndo(wavesGo, "Create Crest Animated Waves");
-            }
-
-            var so = new SerializedObject(shape);
-            var spectrum = LoadFirstAsset<Object>(
-                "Assets/Liquid/Crest/Crest-Examples/Shared/WaveSpectra/WavesModerate.asset",
-                "Assets/Liquid/Crest/Crest-Examples/Main/Data/SettingsAnimWaves.asset",
-                "Assets/Liquid/Crest/Crest-Examples/Shared/WaveSpectra/WavesBoatScene.asset",
-                "Assets/Liquid/Crest/Crest-Examples/LakesAndRivers/Settings/LakesAndRivers_WaveSpectrum_LakeLarge.asset");
-
-            var spectrumProperty = so.FindProperty("_spectrum");
-            if (spectrumProperty != null && spectrum != null)
-                spectrumProperty.objectReferenceValue = spectrum;
-
-            SetBool(so, "_spectrumFixedAtRuntime", true);
-            SetNumber(so, "_waveDirectionHeadingAngle", 180f);
-            SetBool(so, "_overrideGlobalWindSpeed", false);
-            SetNumber(so, "_windSpeed", 25f);
-            SetBool(so, "_respectShallowWaterAttenuation", true);
-            SetNumber(so, "_weight", 1f);
-            SetNumber(so, "_componentsPerOctave", 8f);
-            SetNumber(so, "_randomSeed", 0f);
-            so.ApplyModifiedPropertiesWithoutUndo();
-            EditorUtility.SetDirty(shape);
-        }
-
-        private static T LoadFirstAsset<T>(params string[] paths) where T : Object
-        {
-            foreach (var path in paths)
-            {
-                var asset = AssetDatabase.LoadAssetAtPath<T>(path);
-                if (asset != null) return asset;
-            }
-            return null;
-        }
-
-        private static void DisableExistingVoxelLiquidSurfaceObjects()
-        {
-            var transforms = Object.FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-            foreach (var t in transforms)
-            {
-                if (t != null && t.name == "LiquidSurface")
-                    t.gameObject.SetActive(false);
-            }
+            var binder = ocean.GetComponent<VoxelEngine.WaterSim.CrestVoxelWaterBinder>();
+            if (binder == null) binder = ocean.gameObject.AddComponent<VoxelEngine.WaterSim.CrestVoxelWaterBinder>();
+            binder.keepFlatOceanAtWorldOrigin = true;
+            binder.alignToPlanetSurface = true;
+            binder.waterHeightOffset = 0f;
+            EditorUtility.SetDirty(binder);
         }
 
         private static void ConfigureExistingMaritimeWakeEmitters()
