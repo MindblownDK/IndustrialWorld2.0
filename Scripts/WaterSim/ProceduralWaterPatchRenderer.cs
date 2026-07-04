@@ -149,6 +149,13 @@ namespace VoxelEngine.WaterSim
 
         private void Rebuild()
         {
+            // v3.20 – Crest is now authoritative water visual.
+            // This legacy procedural patch renderer is disabled to prevent a second big ocean plane.
+            // Keep mesh cleared so it does not compete with Crest.
+            ClearMesh();
+            if (_renderer != null) _renderer.enabled = false;
+            return;
+
             EnsureRuntimeObjects();
 
             var world = ActiveWorld.Current;
@@ -316,6 +323,21 @@ namespace VoxelEngine.WaterSim
             if (ActiveWorld.Current?.Viewer != null) return _cachedViewpoint = ActiveWorld.Current.Viewer;
             var cam = Camera.main != null ? Camera.main : Object.FindFirstObjectByType<Camera>();
             return _cachedViewpoint = cam != null ? cam.transform : null;
+        }
+
+        // v3.20 – missing helper restored for compile compatibility.
+        // Crest is authoritative now, but keep method for legacy fallback.
+        private static Vector3 GetPlanetSeaPoint(IVoxelWorld world, Vector3 viewPos)
+        {
+            if (world == null) return viewPos;
+            Vector3 up = PlanetWaterUtility.WorldUp(viewPos);
+            if (up.sqrMagnitude < 0.0001f) up = Vector3.up;
+            up.Normalize();
+            float seaRadius = world.SeaLevel * VoxelConstants.VOXEL_SIZE;
+            Vector3 bodyCenter = Vector3.zero;
+            if (world is VoxelEngine.Cosmos.SphereWorld sphere && sphere.body != null)
+                bodyCenter = sphere.body.transform.position;
+            return bodyCenter + up * seaRadius;
         }
 
         private void ClearMesh()
