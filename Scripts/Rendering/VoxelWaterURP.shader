@@ -56,7 +56,7 @@ Shader "VoxelEngine/VoxelWaterURP"
             Blend SrcAlpha OneMinusSrcAlpha
             ZWrite Off
             ZTest LEqual
-            Cull Back
+            Cull Off
 
             HLSLPROGRAM
             #pragma vertex vert

@@ -230,7 +230,8 @@ namespace VoxelEngine.Settings
             if (ps == null) return;
             ps.scaleMode = UnityEngine.UIElements.PanelScaleMode.ScaleWithScreenSize;
             ps.referenceResolution = new Vector2Int(1920, 1080);
-            ps.screenMatchMode = UnityEngine.UIElements.PanelScreenMatchMode.Expand;
+            ps.screenMatchMode = UnityEngine.UIElements.PanelScreenMatchMode.MatchWidthOrHeight;
+            ps.match = 0.5f;
             ps.referenceDpi = 96;
             ps.fallbackDpi = 96;
         }

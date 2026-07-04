@@ -115,9 +115,15 @@ namespace VoxelEngine.WaterSim
                 _oilMat.SetColor("_ShallowColor", new Color(0.12f, 0.085f, 0.05f, 0.90f));
                 _oilMat.SetColor("_DeepColor",    new Color(0.02f, 0.015f, 0.01f, 0.98f));
                 _oilMat.SetColor("_FoamColor",    new Color(0.35f, 0.25f, 0.12f, 0.40f));
-                _oilMat.SetFloat("_WaveAmp", 0.04f);
-                _oilMat.SetFloat("_WaveFreq", 0.40f);
-                _oilMat.SetFloat("_WaveSpeed", 0.12f);
+                _oilMat.SetFloat("_DeepWaveAmplitude", 0.04f);
+                _oilMat.SetFloat("_DeepWaveFrequency", 0.40f);
+                _oilMat.SetFloat("_DeepWaveSpeed", 0.12f);
+                _oilMat.SetFloat("_SecondaryWaveAmplitude", 0.025f);
+                _oilMat.SetFloat("_SecondaryWaveFrequency", 0.85f);
+                _oilMat.SetFloat("_SecondaryWaveSpeed", 0.08f);
+                _oilMat.SetFloat("_ShallowWaveAmplitude", 0.015f);
+                _oilMat.SetFloat("_ShallowWaveFrequency", 1.1f);
+                _oilMat.SetFloat("_ShallowWaveSpeed", 0.16f);
                 _oilMat.SetFloat("_WaveChop", 0.06f);
                 _oilMat.SetFloat("_NormalScale", 0.45f);
                 _oilMat.SetFloat("_Gloss", 1.0f);
@@ -149,6 +155,7 @@ namespace VoxelEngine.WaterSim
             mat.SetInt("_DstBlend", (int)BlendMode.OneMinusSrcAlpha);
             mat.SetInt("_ZWrite", 0);
             mat.renderQueue = 3000;
+            mat.SetInt("_Cull", (int)CullMode.Off);
             mat.SetFloat("_Surface", 1.0f);
             mat.SetFloat("_Blend", 0.0f);
             mat.SetColor("_BaseColor", new Color(0.08f, 0.52f, 0.82f, 0.88f));
@@ -242,15 +249,20 @@ namespace VoxelEngine.WaterSim
             var waterTris = new List<int>(S * S * 6);
             var oilTris   = new List<int>(S * S * 6);
 
-            for (int v = 0; v < S; v++)
-            for (int u = 0; u < S; u++)
+            int lodStride = Mathf.Clamp(GetChunkLodStride(c), 1, 8);
+            for (int v = 0; v < S; v += lodStride)
+            for (int u = 0; u < S; u += lodStride)
             {
-                var cell = cells[u, v];
+                var cell = lodStride == 1 ? cells[u, v] : SampleLodCell(cells, u, v, lodStride, S);
                 if (!cell.has) continue;
 
                 var tris = cell.liquid == LiquidType.CrudeOil ? oilTris : waterTris;
-                AddTopSpherical(c, cells, u, v, dom, S, chunkVoxel, chunkUp, seaRad, verts, norms, uvs, uv2s, cols, tris);
-                AddSideCurtainsSpherical(c, cells, u, v, dom, S, chunkVoxel, chunkUp, seaRad, verts, norms, uvs, uv2s, cols, tris);
+                AddTopSpherical(c, cells, u, v, Mathf.Min(u + lodStride, S), Mathf.Min(v + lodStride, S), cell, dom, S, chunkVoxel, chunkUp, seaRad, verts, norms, uvs, uv2s, cols, tris);
+
+                // Near-field water keeps exact shoreline curtains. Mid/far LODs are top-surface only
+                // to cut transparent overdraw while the next LOD rebuild restores full edge detail.
+                if (lodStride == 1)
+                    AddSideCurtainsSpherical(c, cells, u, v, dom, S, chunkVoxel, chunkUp, seaRad, verts, norms, uvs, uv2s, cols, tris);
             }
 
             if (verts.Count == 0) { ClearGO(c); return; }
@@ -271,6 +283,65 @@ namespace VoxelEngine.WaterSim
             c.waterMeshFilter.sharedMesh = c.waterMesh;
             c.waterMeshRenderer.sharedMaterials = new[] { _waterMat, _oilMat };
             c.waterMeshGO.SetActive(true);
+        }
+
+        public static int GetChunkLodStride(Chunk c)
+        {
+            var cam = Camera.main;
+            if (c == null || cam == null) return 1;
+
+            const float S = VoxelConstants.CHUNK_SIZE * VoxelConstants.VOXEL_SIZE;
+            Vector3 center = c.WorldOrigin + Vector3.one * (S * 0.5f);
+            float distance = Vector3.Distance(cam.transform.position, center);
+
+            if (distance < 220f) return 1;
+            if (distance < 520f) return 2;
+            if (distance < 1100f) return 4;
+            return 8;
+        }
+
+        private static SurfaceCell SampleLodCell(SurfaceCell[,] cells, int startU, int startV, int stride, int S)
+        {
+            int waterCount = 0, oilCount = 0;
+            float waterH = 0f, oilH = 0f;
+            int waterY = 0, oilY = 0;
+            Vector2 waterFlow = Vector2.zero, oilFlow = Vector2.zero;
+            bool waterBorder = false, oilBorder = false;
+            float waterTerrain = float.MaxValue, oilTerrain = float.MaxValue;
+
+            int endU = Mathf.Min(startU + stride, S);
+            int endV = Mathf.Min(startV + stride, S);
+            for (int v = startV; v < endV; v++)
+            for (int u = startU; u < endU; u++)
+            {
+                var c = cells[u, v];
+                if (!c.has) continue;
+
+                if (c.liquid == LiquidType.CrudeOil)
+                {
+                    oilCount++; oilH += c.h; oilY += c.y; oilFlow += c.flow;
+                    oilBorder |= c.bordersTerrain; oilTerrain = Mathf.Min(oilTerrain, c.terrainH);
+                }
+                else
+                {
+                    waterCount++; waterH += c.h; waterY += c.y; waterFlow += c.flow;
+                    waterBorder |= c.bordersTerrain; waterTerrain = Mathf.Min(waterTerrain, c.terrainH);
+                }
+            }
+
+            if (waterCount == 0 && oilCount == 0) return default;
+            bool useOil = oilCount > waterCount;
+            int count = useOil ? oilCount : waterCount;
+            return new SurfaceCell
+            {
+                has = true,
+                liquid = useOil ? LiquidType.CrudeOil : LiquidType.Water,
+                h = (useOil ? oilH : waterH) / Mathf.Max(1, count),
+                y = Mathf.RoundToInt((useOil ? oilY : waterY) / Mathf.Max(1f, count)),
+                flow = (useOil ? oilFlow : waterFlow) / Mathf.Max(1, count),
+                bordersTerrain = useOil ? oilBorder : waterBorder,
+                terrainH = useOil ? oilTerrain : waterTerrain
+            };
         }
 
         private static void SmoothHeightField(SurfaceCell[,] cells, int S)
@@ -315,42 +386,42 @@ namespace VoxelEngine.WaterSim
             }
         }
 
-        private static void AddTopSpherical(Chunk c, SurfaceCell[,] cells, int u, int v, Vector3Int dom, int S, Vector3 chunkVoxel, Vector3 chunkUp, float seaRad,
+        private static void AddTopSpherical(Chunk c, SurfaceCell[,] cells, int u, int v, int uEnd, int vEnd, SurfaceCell cell, Vector3Int dom, int S, Vector3 chunkVoxel, Vector3 chunkUp, float seaRad,
             List<Vector3> verts, List<Vector3> norms, List<Vector2> uvs, List<Vector2> uv2s, List<Color> cols, List<int> tris)
         {
-            var cell = cells[u, v];
             float h00 = CornerHeight(cells, u, v, cell.liquid, -1, -1, cell.h);
-            float h10 = CornerHeight(cells, u, v, cell.liquid,  1, -1, cell.h);
-            float h11 = CornerHeight(cells, u, v, cell.liquid,  1,  1, cell.h);
-            float h01 = CornerHeight(cells, u, v, cell.liquid, -1,  1, cell.h);
+            float h10 = CornerHeight(cells, Mathf.Max(uEnd - 1, u), v, cell.liquid,  1, -1, cell.h);
+            float h11 = CornerHeight(cells, Mathf.Max(uEnd - 1, u), Mathf.Max(vEnd - 1, v), cell.liquid,  1,  1, cell.h);
+            float h01 = CornerHeight(cells, u, Mathf.Max(vEnd - 1, v), cell.liquid, -1,  1, cell.h);
 
-            float u0 = u, u1 = u + 1, v0 = v, v1 = v + 1;
+            float u0 = u, u1 = uEnd, v0 = v, v1 = vEnd;
             float tuck = cell.liquid == LiquidType.CrudeOil ? 0.30f : 0.85f;
 
             if (TryGetTerrainH(c, u - 1, v, cell.y, dom, S, out _)) u0 -= tuck;
-            if (TryGetTerrainH(c, u + 1, v, cell.y, dom, S, out _)) u1 += tuck;
+            if (TryGetTerrainH(c, uEnd, v, cell.y, dom, S, out _)) u1 += tuck;
             if (TryGetTerrainH(c, u, v - 1, cell.y, dom, S, out _)) v0 -= tuck;
-            if (TryGetTerrainH(c, u, v + 1, cell.y, dom, S, out _)) v1 += tuck;
+            if (TryGetTerrainH(c, u, vEnd, cell.y, dom, S, out _)) v1 += tuck;
 
-            Vector3 pt00 = ToXYZFloat(u0, v0, h00, dom, S) + chunkVoxel;
-            Vector3 pt10 = ToXYZFloat(u1, v0, h10, dom, S) + chunkVoxel;
-            Vector3 pt11 = ToXYZFloat(u1, v1, h11, dom, S) + chunkVoxel;
-            Vector3 pt01 = ToXYZFloat(u0, v1, h01, dom, S) + chunkVoxel;
+            Vector3 local00 = ToXYZFloat(u0, v0, h00, dom, S);
+            Vector3 local10 = ToXYZFloat(u1, v0, h10, dom, S);
+            Vector3 local11 = ToXYZFloat(u1, v1, h11, dom, S);
+            Vector3 local01 = ToXYZFloat(u0, v1, h01, dom, S);
 
             int i = verts.Count;
-            verts.Add(pt00); verts.Add(pt10); verts.Add(pt11); verts.Add(pt01);
+            verts.Add(local00); verts.Add(local10); verts.Add(local11); verts.Add(local01);
 
             for (int n = 0; n < 4; n++)
             {
-                Vector3 pt = verts[i + n];
-                Vector3 norm = pt.sqrMagnitude > 0.001f ? pt.normalized : chunkUp;
+                Vector3 localPt = verts[i + n];
+                Vector3 worldPt = localPt + chunkVoxel;
+                Vector3 norm = worldPt.sqrMagnitude > 0.001f ? worldPt.normalized : chunkUp;
                 norms.Add(norm);
-                uvs.Add(new Vector2(pt.x * 0.37f + pt.y * 0.19f, pt.z + pt.y * 0.19f));
-                float tide = cell.liquid == LiquidType.Water ? PlanetWaterUtility.MoonWaveEnergy(pt) : 0.35f;
+                uvs.Add(new Vector2(worldPt.x * 0.37f + worldPt.y * 0.19f, worldPt.z + worldPt.y * 0.19f));
+                float tide = cell.liquid == LiquidType.Water ? PlanetWaterUtility.MoonWaveEnergy(worldPt) : 0.35f;
                 uv2s.Add(cell.flow + new Vector2(tide - 1f, 1f - tide) * 0.15f);
                 
                 float depthToTerrain = 1.0f;
-                Vector3Int checkBelow = Vector3Int.RoundToInt(pt - norm * 1.5f) - c.coord * S;
+                Vector3Int checkBelow = Vector3Int.RoundToInt(localPt - norm * 1.5f);
                 if (checkBelow.x >= 0 && checkBelow.x < S && checkBelow.y >= 0 && checkBelow.y < S && checkBelow.z >= 0 && checkBelow.z < S)
                 {
                     if (c.GetVoxelLocal(checkBelow.x, checkBelow.y, checkBelow.z).IsSolid) depthToTerrain = 0.35f;
@@ -407,14 +478,14 @@ namespace VoxelEngine.WaterSim
             List<Vector3> verts, List<Vector3> norms, List<Vector2> uvs, List<Vector2> uv2s, List<Color> cols, List<int> tris)
         {
             int i = verts.Count;
-            Vector3 pt0 = ToXYZFloat(cu, vA, hTop, dom, S) + chunkVoxel;
-            Vector3 pt1 = ToXYZFloat(cu, vB, hTop, dom, S) + chunkVoxel;
-            Vector3 pt2 = ToXYZFloat(cu, vB, hBot, dom, S) + chunkVoxel;
-            Vector3 pt3 = ToXYZFloat(cu, vA, hBot, dom, S) + chunkVoxel;
+            Vector3 pt0 = ToXYZFloat(cu, vA, hTop, dom, S);
+            Vector3 pt1 = ToXYZFloat(cu, vB, hTop, dom, S);
+            Vector3 pt2 = ToXYZFloat(cu, vB, hBot, dom, S);
+            Vector3 pt3 = ToXYZFloat(cu, vA, hBot, dom, S);
             verts.Add(pt0); verts.Add(pt1); verts.Add(pt2); verts.Add(pt3);
             for (int n = 0; n < 4; n++)
             {
-                Vector3 pt = verts[i + n];
+                Vector3 pt = verts[i + n] + chunkVoxel;
                 Vector3 norm = pt.sqrMagnitude > 0.001f ? pt.normalized : chunkUp;
                 norms.Add(norm);
                 uvs.Add(new Vector2(pt.x * 0.37f + pt.y * 0.19f, pt.z + pt.y * 0.19f));
@@ -429,14 +500,14 @@ namespace VoxelEngine.WaterSim
             List<Vector3> verts, List<Vector3> norms, List<Vector2> uvs, List<Vector2> uv2s, List<Color> cols, List<int> tris)
         {
             int i = verts.Count;
-            Vector3 pt0 = ToXYZFloat(uA, cv, hTop, dom, S) + chunkVoxel;
-            Vector3 pt1 = ToXYZFloat(uB, cv, hTop, dom, S) + chunkVoxel;
-            Vector3 pt2 = ToXYZFloat(uB, cv, hBot, dom, S) + chunkVoxel;
-            Vector3 pt3 = ToXYZFloat(uA, cv, hBot, dom, S) + chunkVoxel;
+            Vector3 pt0 = ToXYZFloat(uA, cv, hTop, dom, S);
+            Vector3 pt1 = ToXYZFloat(uB, cv, hTop, dom, S);
+            Vector3 pt2 = ToXYZFloat(uB, cv, hBot, dom, S);
+            Vector3 pt3 = ToXYZFloat(uA, cv, hBot, dom, S);
             verts.Add(pt0); verts.Add(pt1); verts.Add(pt2); verts.Add(pt3);
             for (int n = 0; n < 4; n++)
             {
-                Vector3 pt = verts[i + n];
+                Vector3 pt = verts[i + n] + chunkVoxel;
                 Vector3 norm = pt.sqrMagnitude > 0.001f ? pt.normalized : chunkUp;
                 norms.Add(norm);
                 uvs.Add(new Vector2(pt.x * 0.37f + pt.y * 0.19f, pt.z + pt.y * 0.19f));
@@ -557,6 +628,8 @@ namespace VoxelEngine.WaterSim
             if (c.waterMeshGO != null)
             {
                 foreach (var col in c.waterMeshGO.GetComponents<Collider>()) Object.Destroy(col);
+                var existingLod = c.waterMeshGO.GetComponent<WaterSurfaceLodController>();
+                if (existingLod != null) existingLod.Configure(c);
                 return;
             }
             c.waterMeshGO = new GameObject("LiquidSurface");
@@ -565,6 +638,7 @@ namespace VoxelEngine.WaterSim
             c.waterMeshRenderer = c.waterMeshGO.AddComponent<MeshRenderer>();
             c.waterMeshRenderer.shadowCastingMode = ShadowCastingMode.Off;
             c.waterMeshRenderer.receiveShadows = false;
+            c.waterMeshGO.AddComponent<WaterSurfaceLodController>().Configure(c);
         }
     }
 }
