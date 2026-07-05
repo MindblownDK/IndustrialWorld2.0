@@ -27,9 +27,15 @@ namespace VoxelEngine.Power.Wind
         private static readonly Color AccentTurbine = new(0.22f, 0.56f, 0.92f);
         private static readonly Color SteelBright   = new(0.72f, 0.76f, 0.82f);
 
+        // Scroll position survives the 4 Hz live-refresh rebuild — without this the
+        // panel snapped back to the top every refresh tick. Reset per turbine.
+        private static float _savedScroll;
+        private static int   _savedScrollOwner;
+
         public static VisualElement BuildPanel(WindTurbineController c, Inventory inventory)
         {
             var p = T.MachinePanel();
+            p.style.width = 512;   // a touch wider so no row ever overflows sideways
             if (c == null)
             {
                 p.Add(T.Title("Wind Turbine"));
@@ -65,8 +71,27 @@ namespace VoxelEngine.Power.Wind
             p.Add(sub);
             p.Add(T.AccentDivider(AccentTurbine));
 
+            // Vertical-only scroller: horizontal is explicitly off and inner content
+            // is clamped to the viewport width so it can never overflow sideways.
             var scroll = new ScrollView(ScrollViewMode.Vertical);
             scroll.style.flexGrow = 1;
+            scroll.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
+            scroll.verticalScrollerVisibility   = ScrollerVisibility.Auto;
+            scroll.contentContainer.style.width = new StyleLength(new Length(100f, LengthUnit.Percent));
+            scroll.contentContainer.style.paddingRight = 6;   // breathing room next to the scrollbar
+
+            // Restore the player's scroll position after a live-refresh rebuild —
+            // exactly once (first layout pass), so it never fights active scrolling.
+            if (_savedScrollOwner != c.GetInstanceID()) { _savedScroll = 0f; _savedScrollOwner = c.GetInstanceID(); }
+            bool restored = false;
+            scroll.RegisterCallback<GeometryChangedEvent>(_ =>
+            {
+                if (restored) return;
+                restored = true;
+                if (_savedScroll > 0f)
+                    scroll.schedule.Execute(() => scroll.scrollOffset = new Vector2(0f, _savedScroll));
+            });
+            scroll.verticalScroller.valueChanged += v => _savedScroll = v;
             p.Add(scroll);
 
             // ── Live output ───────────────────────────────────────────

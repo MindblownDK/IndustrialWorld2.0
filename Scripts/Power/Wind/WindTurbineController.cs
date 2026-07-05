@@ -249,7 +249,9 @@ namespace VoxelEngine.Power.Wind
             switch (part.kind)
             {
                 case WindTurbinePartKind.Nacelle:
-                    Nacelle = part; Snap(part, _yaw, nacelleSocket, Quaternion.identity); break;
+                    Nacelle = part; Snap(part, _yaw, nacelleSocket, Quaternion.identity);
+                    _roofLid = part.transform.Find("RoofLid");
+                    break;
                 case WindTurbinePartKind.Gearbox:
                     Gearbox = part; Snap(part, _yaw, gearboxSocket, Quaternion.identity); break;
                 case WindTurbinePartKind.Generator:
@@ -354,6 +356,8 @@ namespace VoxelEngine.Power.Wind
         // ────────────────────────────────────────────────────────────────
         private void Update()
         {
+            UpdateRoofLid();
+
             var wind = WindSystem.Instance;
             if (wind == null || !IsComplete)
             {
@@ -416,6 +420,49 @@ namespace VoxelEngine.Power.Wind
         private bool  _obstructedCache;
         private float _degradeAccum;
         private float _worstConditionCache = 100f;
+
+        // ────────────────────────────────────────────────────────────────
+        //  Nacelle roof lid — swings open when the player walks up holding
+        //  a Gearbox or Generator for THIS turbine, so they can watch the
+        //  part snap into the machinery bay. Eases shut again afterwards.
+        // ────────────────────────────────────────────────────────────────
+        private Transform _roofLid;
+        private float _lidAngle;            // current hinge angle (0 = closed)
+        private const float LID_OPEN_ANGLE = 115f;
+
+        /// <summary>True while the roof should be open: an internals socket is
+        /// still empty AND the local player is nearby holding a matching part.</summary>
+        private bool WantsRoofOpen()
+        {
+            if (vertical || Nacelle == null) return false;
+            if (Gearbox != null && Generator != null) return false;
+
+            var ui = VoxelEngine.UI.GameUIController.Instance;
+            var inv = ui != null ? ui.inventory : null;
+            if (inv == null) return false;
+
+            var stack = inv.ActiveStack;
+            if (stack.IsEmpty || !(stack.item is BlockItem bi) || bi.placedPrefab == null) return false;
+            var proto = bi.placedPrefab.GetComponent<WindTurbinePart>();
+            if (proto == null || proto.tierId != tierId) return false;
+            if (proto.kind != WindTurbinePartKind.Gearbox && proto.kind != WindTurbinePartKind.Generator) return false;
+            if (!NeedsKind(proto.kind)) return false;
+
+            // Within working range of the nacelle (build reach + a little slack).
+            float range = Mathf.Max(14f, hubHeight * 0.35f);
+            return Vector3.Distance(inv.transform.position, _yaw.position) <= range;
+        }
+
+        private void UpdateRoofLid()
+        {
+            if (_roofLid == null) return;
+            float target = WantsRoofOpen() ? LID_OPEN_ANGLE : 0f;
+            // Heavy hydraulic ease — fast to start, settles softly.
+            _lidAngle = Mathf.Lerp(_lidAngle, target, 1f - Mathf.Exp(-Time.deltaTime * 3.5f));
+            if (Mathf.Abs(_lidAngle - target) < 0.01f) _lidAngle = target;
+            // Hinge sits on the left edge → negative Z-roll swings the lid up+out.
+            _roofLid.localRotation = Quaternion.Euler(0f, 0f, _lidAngle);
+        }
 
         private void ApplySpin()
         {
@@ -494,12 +541,13 @@ namespace VoxelEngine.Power.Wind
 
         /// <summary>
         /// If the player is aiming at this turbine while holding a matching part,
-        /// returns the exact world socket the part should snap to. Lets players
-        /// mount a nacelle 40 m up by clicking anywhere on the tower.
+        /// returns the exact world socket POSE the part should snap to — position
+        /// AND rotation, so blades arrive pre-rotated into their 120° slot and can
+        /// never be placed in a wrong orientation.
         /// </summary>
-        public static bool TryGetSnapPoint(GameObject heldPrefab, RaycastHit hit, out Vector3 pos)
+        public static bool TryGetSnapPoint(GameObject heldPrefab, RaycastHit hit, out Vector3 pos, out Quaternion rot)
         {
-            pos = Vector3.zero;
+            pos = Vector3.zero; rot = Quaternion.identity;
             if (heldPrefab == null || hit.collider == null) return false;
             var partProto = heldPrefab.GetComponent<WindTurbinePart>();
             if (partProto == null || heldPrefab.GetComponent<WindTurbineController>() != null) return false;
@@ -507,7 +555,7 @@ namespace VoxelEngine.Power.Wind
             var controller = hit.collider.GetComponentInParent<WindTurbineController>();
             if (controller == null || controller.tierId != partProto.tierId) return false;
             if (!controller.NeedsKind(partProto.kind)) return false;
-            if (!controller.TryGetSocketWorld(partProto.kind, out pos, out _)) return false;
+            if (!controller.TryGetSocketWorld(partProto.kind, out pos, out rot)) return false;
             return true;
         }
     }

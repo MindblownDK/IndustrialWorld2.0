@@ -40,7 +40,7 @@ namespace VoxelEngine.EditorTools
         private const string NODES      = ASSET_ROOT + "/Research/Nodes";
 
         // Shared materials (built once per run)
-        private static Material _matShell, _matDark, _matAccent, _matCopper, _matBlade, _matPort, _matMono, _matHub;
+        private static Material _matShell, _matDark, _matAccent, _matCopper, _matBlade, _matPort, _matMono, _matHub, _matTipMark;
 
         // ════════════════════════════════════════════════════════════════
         //  ENTRY POINT
@@ -254,7 +254,8 @@ namespace VoxelEngine.EditorTools
             _matDark   = MakeMat("Mat_TurbineDark",   new Color(0.16f, 0.18f, 0.21f), 0.60f, 0.48f);
             _matAccent = MakeMat("Mat_TurbineAccent", new Color(0.16f, 0.40f, 0.72f), 0.55f, 0.60f);
             _matCopper = MakeMat("Mat_TurbineCopper", new Color(0.72f, 0.44f, 0.22f), 0.90f, 0.62f);
-            _matBlade  = MakeMat("Mat_TurbineBlade",  new Color(0.93f, 0.94f, 0.96f), 0.20f, 0.58f);
+            _matBlade  = MakeMat("Mat_TurbineBlade",  new Color(0.94f, 0.95f, 0.97f), 0.12f, 0.68f);
+            _matTipMark= MakeMat("Mat_TurbineTipMark",new Color(0.80f, 0.16f, 0.14f), 0.10f, 0.55f);
             _matHub    = MakeMat("Mat_TurbineHub",    new Color(0.78f, 0.80f, 0.84f), 0.80f, 0.70f);
             _matMono   = MakeMat("Mat_MonopoleSteel", new Color(0.52f, 0.55f, 0.59f), 0.75f, 0.45f);
             _matPort   = MakeMat("Mat_PowerPort",     new Color(0.05f, 0.09f, 0.08f), 0.30f, 0.40f);
@@ -367,12 +368,47 @@ namespace VoxelEngine.EditorTools
                 part.tierId = s.id;
 
                 Vector3 n = s.nacelle;
-                // Shell (slightly rounded feel: main box + chamfer caps)
-                var shell = Prim(PrimitiveType.Cube, root.transform, "Shell", Vector3.zero, n, _matShell);
-                Object.DestroyImmediate(shell.GetComponent<Collider>());
-                var roof = Prim(PrimitiveType.Cube, root.transform, "Roof",
-                    new Vector3(0f, n.y * 0.5f, 0f), new Vector3(n.x * 0.9f, n.y * 0.12f, n.z * 0.92f), _matShell);
-                Object.DestroyImmediate(roof.GetComponent<Collider>());
+                // Shell — open-top box: floor + two flanks + front/back walls, so the
+                // machinery bay is genuinely visible when the roof lid swings open.
+                var floor = Prim(PrimitiveType.Cube, root.transform, "Floor",
+                    new Vector3(0f, -n.y * 0.44f, 0f), new Vector3(n.x, n.y * 0.12f, n.z), _matShell);
+                Object.DestroyImmediate(floor.GetComponent<Collider>());
+                foreach (float side in new[] { -1f, 1f })
+                {
+                    var wall = Prim(PrimitiveType.Cube, root.transform, side > 0 ? "WallR" : "WallL",
+                        new Vector3(side * n.x * 0.44f, 0f, 0f), new Vector3(n.x * 0.12f, n.y, n.z), _matShell);
+                    Object.DestroyImmediate(wall.GetComponent<Collider>());
+                }
+                var wallF = Prim(PrimitiveType.Cube, root.transform, "WallFront",
+                    new Vector3(0f, 0f, n.z * 0.47f), new Vector3(n.x, n.y, n.z * 0.06f), _matShell);
+                Object.DestroyImmediate(wallF.GetComponent<Collider>());
+                var wallB = Prim(PrimitiveType.Cube, root.transform, "WallBack",
+                    new Vector3(0f, 0f, -n.z * 0.47f), new Vector3(n.x, n.y, n.z * 0.06f), _matShell);
+                Object.DestroyImmediate(wallB.GetComponent<Collider>());
+
+                // Interior deck detail (dark machinery bed the parts sit on)
+                var bed = Prim(PrimitiveType.Cube, root.transform, "MachineBed",
+                    new Vector3(0f, -n.y * 0.34f, 0f), new Vector3(n.x * 0.72f, n.y * 0.06f, n.z * 0.78f), _matDark);
+                Object.DestroyImmediate(bed.GetComponent<Collider>());
+
+                // ── ROOF LID — hinged at the LEFT edge, opened by the controller
+                //    when the player approaches holding a Gearbox / Generator. ──
+                var lid = new GameObject("RoofLid");
+                lid.transform.SetParent(root.transform, false);
+                lid.transform.localPosition = new Vector3(-n.x * 0.5f, n.y * 0.5f, 0f);  // hinge line
+                var lidPlate = Prim(PrimitiveType.Cube, lid.transform, "LidPlate",
+                    new Vector3(n.x * 0.5f, n.y * 0.05f, 0f), new Vector3(n.x * 1.02f, n.y * 0.10f, n.z * 1.02f), _matShell);
+                Object.DestroyImmediate(lidPlate.GetComponent<Collider>());
+                var lidStripe = Prim(PrimitiveType.Cube, lid.transform, "LidStripe",
+                    new Vector3(n.x * 0.5f, n.y * 0.11f, 0f), new Vector3(n.x * 0.16f, n.y * 0.02f, n.z * 0.9f), _matAccent);
+                Object.DestroyImmediate(lidStripe.GetComponent<Collider>());
+                for (int i = 0; i < 2; i++)
+                {
+                    var hinge = Prim(PrimitiveType.Cylinder, lid.transform, $"Hinge{i}",
+                        new Vector3(0f, 0f, (i == 0 ? -1f : 1f) * n.z * 0.32f), new Vector3(0.10f, n.z * 0.07f, 0.10f), _matDark);
+                    hinge.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                    Object.DestroyImmediate(hinge.GetComponent<Collider>());
+                }
 
                 // Cooling vents (dark insets on both flanks)
                 for (int i = 0; i < 3; i++)
@@ -511,36 +547,75 @@ namespace VoxelEngine.EditorTools
                 float len = s.bladeLen;
                 float rootChord = Mathf.Max(0.55f, s.hubR * 0.72f);
 
-                // Root cylinder → tapering airfoil segments with a gentle twist.
-                var rootSeg = Prim(PrimitiveType.Cylinder, root.transform, "BladeRoot",
-                    new Vector3(0f, len * 0.04f, 0f), new Vector3(rootChord, len * 0.05f, rootChord), _matBlade);
-                Object.DestroyImmediate(rootSeg.GetComponent<Collider>());
+                // ── Root: bolt collar + cylindrical shank easing into the airfoil ──
+                var collar = Prim(PrimitiveType.Cylinder, root.transform, "RootCollar",
+                    new Vector3(0f, len * 0.015f, 0f), new Vector3(rootChord * 1.12f, len * 0.015f, rootChord * 1.12f), _matDark);
+                Object.DestroyImmediate(collar.GetComponent<Collider>());
+                var shank = Prim(PrimitiveType.Cylinder, root.transform, "RootShank",
+                    new Vector3(0f, len * 0.055f, 0f), new Vector3(rootChord * 0.95f, len * 0.035f, rootChord * 0.95f), _matBlade);
+                Object.DestroyImmediate(shank.GetComponent<Collider>());
 
-                int segs = 4;
-                for (int i = 0; i < segs; i++)
+                // ── Airfoil body: many thin overlapping slices → smooth taper,
+                //    aerodynamic twist AND a gentle downwind prebend curve.
+                //    Slices are flattened cylinders (elliptical cross-section),
+                //    which reads as a real composite blade instead of boxes. ──
+                int slices = 12;
+                for (int i = 0; i < slices; i++)
                 {
-                    float t0 = 0.08f + (i / (float)segs) * 0.92f;
-                    float t1 = 0.08f + ((i + 1) / (float)segs) * 0.92f;
+                    float t0 = 0.09f + (i / (float)slices) * 0.91f;
+                    float t1 = 0.09f + ((i + 1) / (float)slices) * 0.91f;
                     float mid = (t0 + t1) * 0.5f;
-                    float chord = Mathf.Lerp(rootChord * 1.35f, rootChord * 0.28f, mid);
-                    float thick = Mathf.Lerp(rootChord * 0.42f, rootChord * 0.10f, mid);
-                    float twist = Mathf.Lerp(16f, 1.5f, mid);
 
-                    var seg = Prim(PrimitiveType.Cube, root.transform, $"BladeSeg{i}",
-                        new Vector3(0f, mid * len, 0f),
-                        new Vector3(thick, (t1 - t0) * len * 1.04f, chord), _matBlade);
-                    seg.transform.localRotation = Quaternion.Euler(0f, twist, 0f);
-                    Object.DestroyImmediate(seg.GetComponent<Collider>());
+                    // Chord swells to max at ~30% span then tapers to a fine tip.
+                    float swell = Mathf.Sin(Mathf.Clamp01((mid - 0.05f) / 0.30f) * Mathf.PI * 0.5f);
+                    float taper = Mathf.Pow(1f - Mathf.Clamp01((mid - 0.30f) / 0.70f), 1.25f);
+                    float chord = rootChord * Mathf.Lerp(0.9f, 1.55f, swell) * Mathf.Lerp(0.16f, 1f, taper);
+                    float thick = chord * Mathf.Lerp(0.34f, 0.14f, mid);
+
+                    // Twist washes out from ~20° at the root to ~1° at the tip.
+                    float twist = Mathf.Lerp(20f, 1f, Mathf.Pow(mid, 0.65f));
+                    // Prebend: tip curves gently downwind (local +X here; the 120°
+                    // slot rotation orients it correctly on the hub).
+                    float bend = Mathf.Pow(mid, 2.1f) * len * 0.055f;
+
+                    var slice = Prim(PrimitiveType.Cylinder, root.transform, $"Foil{i:00}",
+                        new Vector3(bend, mid * len, 0f),
+                        new Vector3(thick, (t1 - t0) * len * 0.62f, chord), _matBlade);
+                    slice.transform.localRotation = Quaternion.Euler(0f, twist, Mathf.Pow(mid, 2.1f) * 6f);
+                    Object.DestroyImmediate(slice.GetComponent<Collider>());
                 }
 
-                // Blade tip accent
-                var tip = Prim(PrimitiveType.Cube, root.transform, "TipMarker",
-                    new Vector3(0f, len * 0.985f, 0f), new Vector3(rootChord * 0.11f, len * 0.03f, rootChord * 0.30f), _matAccent);
-                Object.DestroyImmediate(tip.GetComponent<Collider>());
+                // Trailing-edge spine — thin dark strip that sells the airfoil silhouette.
+                for (int i = 0; i < 4; i++)
+                {
+                    float mid = 0.18f + i * 0.20f;
+                    float taper = Mathf.Pow(1f - Mathf.Clamp01((mid - 0.30f) / 0.70f), 1.25f);
+                    float swell = Mathf.Sin(Mathf.Clamp01((mid - 0.05f) / 0.30f) * Mathf.PI * 0.5f);
+                    float chord = rootChord * Mathf.Lerp(0.9f, 1.55f, swell) * Mathf.Lerp(0.16f, 1f, taper);
+                    float bend = Mathf.Pow(mid, 2.1f) * len * 0.055f;
+                    var spine = Prim(PrimitiveType.Cube, root.transform, $"Spine{i}",
+                        new Vector3(bend, mid * len, -chord * 0.48f),
+                        new Vector3(chord * 0.05f, len * 0.185f, chord * 0.06f), _matDark);
+                    spine.transform.localRotation = Quaternion.Euler(0f, Mathf.Lerp(20f, 1f, Mathf.Pow(mid, 0.65f)), 0f);
+                    Object.DestroyImmediate(spine.GetComponent<Collider>());
+                }
+
+                // Fine swept tip + red aviation marker band.
+                float tipBend = len * 0.055f;
+                var tipCone = Prim(PrimitiveType.Cylinder, root.transform, "TipCone",
+                    new Vector3(tipBend, len * 0.985f, 0f),
+                    new Vector3(rootChord * 0.07f, len * 0.022f, rootChord * 0.22f), _matBlade);
+                tipCone.transform.localRotation = Quaternion.Euler(0f, 1f, 8f);
+                Object.DestroyImmediate(tipCone.GetComponent<Collider>());
+                var marker = Prim(PrimitiveType.Cylinder, root.transform, "TipMarker",
+                    new Vector3(tipBend * 0.88f, len * 0.945f, 0f),
+                    new Vector3(rootChord * 0.12f, len * 0.012f, rootChord * 0.34f), _matTipMark);
+                marker.transform.localRotation = Quaternion.Euler(0f, 2f, 7f);
+                Object.DestroyImmediate(marker.GetComponent<Collider>());
 
                 var col = root.AddComponent<BoxCollider>();
-                col.center = new Vector3(0f, len * 0.5f, 0f);
-                col.size = new Vector3(rootChord, len, rootChord * 1.2f);
+                col.center = new Vector3(len * 0.02f, len * 0.5f, 0f);
+                col.size = new Vector3(rootChord * 1.1f, len, rootChord * 1.7f);
             });
         }
 

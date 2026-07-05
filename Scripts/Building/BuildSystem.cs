@@ -101,8 +101,7 @@ namespace VoxelEngine.Building
             }
             _ghost.SetActive(true);
 
-            Vector3 pos = ComputePlacementPosition(hit, block);
-            Quaternion rot = Quaternion.Euler(0, _ghostYaw, 0);
+            ComputePlacementPose(hit, block, out Vector3 pos, out Quaternion rot);
             _ghost.transform.SetPositionAndRotation(pos, rot);
 
             bool valid = IsPlacementValid(pos, block);
@@ -126,10 +125,10 @@ namespace VoxelEngine.Building
 
         public bool TryPlace(BlockItem block, RaycastHit hit, Vector3 viewDir)
         {
-            Vector3 pos = ComputePlacementPosition(hit, block);
+            ComputePlacementPose(hit, block, out Vector3 pos, out Quaternion rot);
             if (!IsPlacementValid(pos, block)) return false;
 
-            var go = Instantiate(block.placedPrefab, pos, Quaternion.Euler(0, _ghostYaw, 0));
+            var go = Instantiate(block.placedPrefab, pos, rot);
             go.name = block.displayName;
 
             // Make sure it has a collider for future raycasts.
@@ -157,18 +156,25 @@ namespace VoxelEngine.Building
         }
 
         // ---------- Placement math ----------
+
+        /// <summary>
+        /// Full placement pose (position + rotation). Wind turbine parts snap to
+        /// their exact socket pose — including rotation, so blades arrive in the
+        /// correct 120° slot orientation and can never be placed wrong. Everything
+        /// else falls back to the classic position + player-controlled yaw.
+        /// </summary>
+        private void ComputePlacementPose(RaycastHit hit, BlockItem block, out Vector3 pos, out Quaternion rot)
+        {
+            if (block != null && block.placedPrefab != null &&
+                VoxelEngine.Power.Wind.WindTurbineController.TryGetSnapPoint(block.placedPrefab, hit, out pos, out rot))
+                return;
+
+            pos = ComputePlacementPosition(hit, block);
+            rot = Quaternion.Euler(0, _ghostYaw, 0);
+        }
+
         private Vector3 ComputePlacementPosition(RaycastHit hit, BlockItem block)
         {
-            // ── WIND TURBINE PART SNAP ──────────────────────────────────────
-            // Holding a turbine part (nacelle / gearbox / generator / hub /
-            // blade / vertical blade set) while aiming anywhere at a matching,
-            // incomplete turbine snaps the ghost to the exact socket — the
-            // player can never misplace a part.
-            if (block != null && block.placedPrefab != null &&
-                VoxelEngine.Power.Wind.WindTurbineController.TryGetSnapPoint(block.placedPrefab, hit, out var socketPos))
-            {
-                return socketPos;
-            }
 
             // ── BUSBAR SNAP ─────────────────────────────────────────────────
             // If the player is placing a Power Busbar AND looking at the END
