@@ -5,11 +5,22 @@ using VoxelEngine.Core;
 namespace VoxelEngine.WaterSim
 {
     /// <summary>
-    /// Crest Voxel Ocean Controller v3.20
-    /// Binds Crest's URP OceanRenderer to procedural voxel water with seamless
-    /// planet-surface alignment, shallow water depth feeding, and block foam.
-    /// 
-    /// Replaces the old voxel mesh water surface to eliminate gaps and draw call spam.
+    /// Crest Voxel Ocean Controller v3.12.0
+    ///
+    /// KEEPS Crest's OceanRenderer alive (it is the driver for the LOD cascades
+    /// that feed the Crest/Ocean shader — animated waves, foam, flow, sea-floor
+    /// depth, shadow). Previously the binder DESTROYED OceanRenderer, which is
+    /// why voxel water rendered as a flat dark-blue polygon: the shader was
+    /// starved of its LOD textures.
+    ///
+    /// New behaviour:
+    ///  • OceanRenderer stays alive and receives the correct viewpoint / sea
+    ///    level every frame.
+    ///  • Crest's own infinite ocean tiles are HIDDEN (Renderer.enabled = false)
+    ///    so the visible ocean is 100% our procedural voxel mesh.
+    ///  • Every voxel water chunk gets a VoxelCrestChunkBinder that binds a
+    ///    per-slice MaterialPropertyBlock so the Crest shader can sample its
+    ///    LODs correctly.
     /// </summary>
     [DisallowMultipleComponent]
     [DefaultExecutionOrder(-50)]
@@ -34,9 +45,9 @@ namespace VoxelEngine.WaterSim
         [Tooltip("Keep Crest active even if no voxel water found – prevents flicker over oceans.")]
         public bool forceOceanAlwaysOn = false;
 
-        [Header("Crest Mode v3.20.2")]
-        [Tooltip("Disable Crest OceanRenderer plane – we use Crest material on voxel water mesh instead.")]
-        public bool disableCrestOceanPlane = true;
+        [Header("Crest Mode v3.12.0")]
+        [Tooltip("Hide Crest's built-in infinite ocean tiles. Their MeshRenderers are disabled but OceanRenderer itself stays alive so the LOD cascades keep feeding our voxel water.")]
+        public bool hideCrestOceanTiles = true;
         [Tooltip("Bridge Crest material to voxel water mesh renderer.")]
         public bool bridgeCrestMaterialToVoxelMesh = true;
 
@@ -76,15 +87,10 @@ namespace VoxelEngine.WaterSim
         {
             CacheOcean();
             ApplyCrestMaterialTuning();
-            // v3.20.5 – NO OCEAN PLANE – procedural voxel only
-            if (disableCrestOceanPlane && _oceanRenderer != null)
-            {
-                // Nuke the Crest OceanRenderer to prevent OceanChunkRenderer crashes + infinite plane
-                try { Destroy(_oceanRenderer.gameObject); } catch { }
-                _oceanRenderer = null;
-                _oceanBehaviour = null;
-            }
-            // Bridge Crest material to voxel mesh – voxel mesh IS visual
+            // v3.12.0 – Crest OceanRenderer stays ALIVE (LOD driver). Only its
+            // visible infinite ocean tiles are hidden so voxel water is the only
+            // thing the player sees rendering.
+            HideCrestOceanTiles(hideCrestOceanTiles);
             WaterMeshBuilder.RenderingEnabled = true;
             TryBridgeMaterialToVoxel();
         }
@@ -93,12 +99,7 @@ namespace VoxelEngine.WaterSim
         {
             CacheOcean();
             ApplyCrestMaterialTuning();
-            if (disableCrestOceanPlane && _oceanRenderer != null)
-            {
-                try { Destroy(_oceanRenderer.gameObject); } catch { }
-                _oceanRenderer = null;
-                _oceanBehaviour = null;
-            }
+            HideCrestOceanTiles(hideCrestOceanTiles);
             WaterMeshBuilder.RenderingEnabled = true;
             TryBridgeMaterialToVoxel();
             _nextScanTime = 0f;
@@ -186,11 +187,19 @@ namespace VoxelEngine.WaterSim
                 if (_viewpointField != null)
                     _viewpointField.SetValue(_oceanRendererInstance ?? _oceanRenderer, view);
 
-                // Also try sea level override if present
-                if (_seaLevelProperty != null && _seaLevelProperty.CanWrite)
-                    _seaLevelProperty.SetValue(_oceanRendererInstance ?? _oceanRenderer, transform.position.y);
-                else if (_seaLevelField != null)
-                    _seaLevelField.SetValue(_oceanRendererInstance ?? _oceanRenderer, transform.position.y);
+                // v3.12.0 – Crest's SeaLevel is derived from OceanRenderer.Root.position.y
+                // (read-only property). Instead of trying to overwrite it, move the
+                // OceanRenderer's own transform so its Root.y == our sea level. This
+                // keeps every LodDataMgr sampler aligned with our voxel water plane.
+                var world = ActiveWorld.Current;
+                if (world != null && _oceanBehaviour != null)
+                {
+                    float seaY = world.SeaLevel * VoxelConstants.VOXEL_SIZE + waterHeightOffset;
+                    var t = _oceanBehaviour.transform;
+                    var p = t.position;
+                    if (Mathf.Abs(p.y - seaY) > 0.01f)
+                        t.position = new Vector3(p.x, seaY, p.z);
+                }
             }
             catch { /* reflection safe */ }
         }
@@ -217,8 +226,13 @@ namespace VoxelEngine.WaterSim
                 }
             }
 
-            if (_renderers == null || _renderers.Length == 0)
-                _renderers = GetComponentsInChildren<Renderer>(includeInactive: true);
+            // v3.12.0 – gather renderers from the ACTUAL OceanRenderer subtree,
+            // not from this binder's own GameObject (they usually live apart).
+            if (_oceanRenderer != null &&
+                (_renderers == null || _renderers.Length == 0))
+            {
+                _renderers = _oceanRenderer.GetComponentsInChildren<Renderer>(includeInactive: true);
+            }
         }
 
         private Transform ResolveViewpoint()
@@ -235,26 +249,50 @@ namespace VoxelEngine.WaterSim
             return _cachedViewpoint;
         }
 
+        private int _tileRescanFrame = -1;
         private void SetCrestVisualActive(bool active)
         {
-            // v3.20.2 – no ocean plane – we bridge Crest material to voxel mesh
-            if (disableCrestOceanPlane) active = false;
+            // v3.12.0 – OceanRenderer itself stays ENABLED always so the LOD
+            // cascades keep populating. We only toggle the visibility of the
+            // built-in Crest ocean tiles (which we always want hidden when the
+            // user selected the hide-tiles mode).
+            if (_oceanBehaviour != null && !_oceanBehaviour.enabled)
+                _oceanBehaviour.enabled = true;
 
-            if (_oceanBehaviour != null && _oceanBehaviour.enabled != active)
-                _oceanBehaviour.enabled = active;
+            // Crest builds its tile hierarchy at runtime after OceanRenderer.Awake,
+            // so rescan every ~1s until we've found some tiles.
+            if (_renderers == null || _renderers.Length == 0 ||
+                (Time.frameCount - _tileRescanFrame) > 60)
+            {
+                _tileRescanFrame = Time.frameCount;
+                if (_oceanRenderer != null)
+                    _renderers = _oceanRenderer.GetComponentsInChildren<Renderer>(includeInactive: true);
+            }
 
-            if (_renderers == null) return;
+            HideCrestOceanTiles(hideCrestOceanTiles);
+
+            if (bridgeCrestMaterialToVoxelMesh)
+                TryBridgeMaterialToVoxel();
+        }
+
+        /// <summary>
+        /// v3.12.0 — hides only Crest's own ocean-tile MeshRenderers. Leaves
+        /// OceanRenderer + LodData components enabled so cascades keep updating.
+        /// </summary>
+        private static System.Type _oceanChunkRendererType;
+        private void HideCrestOceanTiles(bool hide)
+        {
+            if (_renderers == null || _renderers.Length == 0) return;
+            if (_oceanChunkRendererType == null)
+                _oceanChunkRendererType = System.Type.GetType("Crest.OceanChunkRenderer, Crest");
+            if (_oceanChunkRendererType == null) return;
             for (int i = 0; i < _renderers.Length; i++)
             {
                 var r = _renderers[i];
-                if (r != null && r.enabled != active)
-                    r.enabled = active;
-            }
-
-            // Bridge Crest material to voxel water mesh
-            if (bridgeCrestMaterialToVoxelMesh && !active)
-            {
-                TryBridgeMaterialToVoxel();
+                if (r == null) continue;
+                if (r.GetComponent(_oceanChunkRendererType) == null) continue;
+                bool shouldBeEnabled = !hide;
+                if (r.enabled != shouldBeEnabled) r.enabled = shouldBeEnabled;
             }
         }
 

@@ -7,7 +7,11 @@ namespace VoxelEngine.EditorTools
 {
     /// <summary>
     /// Editor-only Crest setup helper used by the Voxel Engine Setup Wizard.
-    /// v3.20.9 – NO OCEAN PLANE – voxel water only + Crest material bridge – legacy nuke removed + Crest type-scan hardened
+    /// v3.12.0 – GENUINE CREST BRIDGE:
+    ///   • OceanRenderer is KEPT ALIVE (LOD cascade driver)
+    ///   • Crest's own infinite ocean tiles are hidden at runtime by the binder
+    ///   • Voxel water chunks are painted with the real Crest/Ocean material
+    ///     and each carries a VoxelCrestChunkBinder so waves / foam / flow show up
     /// </summary>
     public static class CrestWaterSetupUtility
     {
@@ -19,12 +23,19 @@ namespace VoxelEngine.EditorTools
                 EnsurePanelSettingsFitMode();
                 ConfigureSceneAmbientOnly();
 
+                // v3.12.0 – GENUINE CREST BRIDGE – use the real Crest/Ocean material.
+                // Fall back to a stylized voxel material only if Crest is missing.
                 var waterMat = ConfigureCrestWaterMaterial();
                 if (waterMat == null)
                 {
                     waterMat = CreateFallbackWaterMaterial();
-                    Debug.LogWarning("[CrestWaterSetup] Crest material not found – using fallback.");
+                    Debug.LogWarning("[CrestWaterSetup] Crest material not found – using fallback URP Lit water.");
                 }
+
+                // v3.12.0 – DO NOT DESTROY OCEAN RENDERER. It is the LOD driver
+                // that powers Crest waves / foam / flow. The runtime binder will
+                // simply hide its infinite ocean tiles for us.
+                EnsureCrestOceanRendererInScene(waterMat);
 
                 ConfigureCrestVoxelMaterialBridge(waterMat);
 
@@ -35,21 +46,24 @@ namespace VoxelEngine.EditorTools
                 if (scene.IsValid() && scene.isLoaded)
                     UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(scene);
 
-                EditorUtility.DisplayDialog("Voxel Engine - Crest Water v3.21.0",
-                    "Crest water integration configured!\n\n" +
+                EditorUtility.DisplayDialog("Voxel Engine - Crest Water v3.12.0",
+                    "Genuine Crest bridge configured.\n\n" +
                     "Configured:\n" +
                     "• UI PanelSettings fit mode\n" +
-                    "• Voxel liquid surfaces ENABLED – visible water material bridged\n" +
-                    "• CrestVoxelBridge GO added (binder + depth + foam)\n" +
+                    "• Real Crest/Ocean material assigned to voxel water\n" +
+                    "• OceanRenderer KEPT ALIVE (LOD cascade driver)\n" +
+                    "• Crest built-in ocean tiles hidden at runtime\n" +
+                    "• VoxelCrestChunkBinder auto-attached per water chunk\n" +
+                    "• WaterMeshBuilder.RenderingEnabled = true\n" +
                     "• Maritime wake emitters updated",
                     "OK");
 
-                Debug.Log("[CrestWaterSetup] ✓ v3.21.0 – voxel water configured with Crest high-fidelity rendering");
+                Debug.Log("[CrestWaterSetup] ✓ v3.12.0 – Genuine Crest bridge: OceanRenderer alive, tiles hidden, voxel mesh uses Crest/Ocean shader.");
             }
             catch (Exception ex)
             {
                 Debug.LogError("[CrestWaterSetup] Configure FAILED: " + ex);
-                EditorUtility.DisplayDialog("Crest Water Setup FAILED", ex.Message, "OK");
+                EditorUtility.DisplayDialog("Crest Water Setup FAILED", ex.Message + "\n\nSee console for full stack trace.\n\nThe setup attempted to nuke Crest planes safely – check that Crest URP package is imported at Assets/Liquid/Crest/", "OK");
             }
         }
 
@@ -215,15 +229,99 @@ namespace VoxelEngine.EditorTools
 
         private static Material ConfigureCrestWaterMaterial()
         {
-            // Crest's ocean shader depends on Crest OceanRenderer/LodData runtime globals and can render
-            // invisible on standalone voxel chunk meshes when the no-plane mode removes OceanRenderer.
-            // Use the project voxel-water URP shader for the visible mesh, while Crest still supplies
-            // underwater/post-process behaviour through the bridge helpers.
-            var mat = CreateOrUpdateVoxelWaterVisualMaterial();
-            if (mat != null) return mat;
+            // v3.12.0 – Prefer the REAL Crest ocean material. Crest's shader
+            // samples LOD cascades (animated waves, foam, flow, shadow,
+            // sea-floor depth) that OceanRenderer populates each frame. The
+            // per-chunk VoxelCrestChunkBinder attaches an MPB with _LD_SliceIndex
+            // so each voxel chunk becomes a valid Crest LOD tile.
+            var crestMat = LoadOrCopyCrestOceanMaterial();
+            if (crestMat != null)
+            {
+                Debug.Log("[CrestWaterSetup] ✓ Using genuine Crest ocean material: " + crestMat.name);
+                return crestMat;
+            }
 
-            Debug.LogWarning("[CrestWaterSetup] Voxel water visual material could not be created – using fallback URP Lit water.");
-            return CreateFallbackWaterMaterial();
+            Debug.LogWarning("[CrestWaterSetup] Crest ocean material not found under Assets/Liquid/Crest – using stylized voxel water shader as fallback.");
+            var fallback = CreateOrUpdateVoxelWaterVisualMaterial();
+            return fallback != null ? fallback : CreateFallbackWaterMaterial();
+        }
+
+        /// <summary>
+        /// Loads the shipped Crest Ocean.mat, copies it to Resources/ so the
+        /// runtime WaterMeshBuilder can find it, and returns the runtime copy.
+        /// </summary>
+        private static Material LoadOrCopyCrestOceanMaterial()
+        {
+            const string crestOceanMatPath = "Assets/Liquid/Crest/Crest/Materials/Ocean.mat";
+            var source = AssetDatabase.LoadAssetAtPath<Material>(crestOceanMatPath);
+            if (source == null)
+            {
+                // Fallback – search the project for any material using Crest/Ocean shader.
+                var crestShader = Shader.Find("Crest/Ocean");
+                if (crestShader == null) return null;
+                string[] guids = AssetDatabase.FindAssets("t:Material");
+                for (int i = 0; i < guids.Length; i++)
+                {
+                    var path = AssetDatabase.GUIDToAssetPath(guids[i]);
+                    var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
+                    if (mat != null && mat.shader == crestShader) { source = mat; break; }
+                }
+                if (source == null) return null;
+            }
+
+            const string resourcesFolder = "Assets/Resources";
+            if (!AssetDatabase.IsValidFolder(resourcesFolder))
+                AssetDatabase.CreateFolder("Assets", "Resources");
+
+            const string bridgeMatPath = "Assets/Resources/CrestOcean_VoxelBridge.mat";
+            var bridge = AssetDatabase.LoadAssetAtPath<Material>(bridgeMatPath);
+            if (bridge == null)
+            {
+                bridge = new Material(source) { name = "CrestOcean_VoxelBridge" };
+                AssetDatabase.CreateAsset(bridge, bridgeMatPath);
+            }
+            else
+            {
+                EditorUtility.CopySerialized(source, bridge);
+                bridge.name = "CrestOcean_VoxelBridge";
+                EditorUtility.SetDirty(bridge);
+            }
+            AssetDatabase.SaveAssets();
+            return bridge;
+        }
+
+        /// <summary>
+        /// v3.12.0 – ensures a Crest OceanRenderer exists in the scene and uses
+        /// the shared bridge material. If one already exists, its material is
+        /// updated in place.
+        /// </summary>
+        private static void EnsureCrestOceanRendererInScene(Material waterMaterial)
+        {
+            var oceanType = FindTypeSafe("Crest.OceanRenderer");
+            if (oceanType == null)
+            {
+                Debug.LogWarning("[CrestWaterSetup] Crest.OceanRenderer type not found. Import Crest under Assets/Liquid/Crest.");
+                return;
+            }
+
+            var existing = UnityEngine.Object.FindFirstObjectByType(oceanType) as Component;
+            if (existing == null)
+            {
+                var go = new GameObject("Crest Ocean");
+                existing = go.AddComponent(oceanType) as Component;
+                Undo.RegisterCreatedObjectUndo(go, "Create Crest Ocean");
+            }
+            if (existing == null) return;
+
+            ConfigureSerializedCrestOcean(existing, waterMaterial);
+
+            var t = existing.transform;
+            var world = UnityEngine.Object.FindFirstObjectByType<VoxelEngine.Core.VoxelWorld>();
+            if (world != null)
+            {
+                float seaY = world.flatSeaLevel * VoxelEngine.Core.VoxelConstants.VOXEL_SIZE;
+                t.position = new Vector3(t.position.x, seaY, t.position.z);
+            }
         }
 
         private static Material CreateOrUpdateVoxelWaterVisualMaterial()
@@ -364,6 +462,8 @@ namespace VoxelEngine.EditorTools
             }
         }
 
+        // v3.20.2 – bridge visible water material to voxel water mesh – NO ocean plane
+        // v3.20.9 – hardened null checks
         private static void ConfigureCrestVoxelMaterialBridge(Material waterMaterial)
         {
             if (waterMaterial == null)
@@ -371,7 +471,9 @@ namespace VoxelEngine.EditorTools
                 waterMaterial = CreateFallbackWaterMaterial();
             }
 
-            // Do NOT nuke Crest here anymore! We want Crest's features fully alive.
+            // v3.12.0 – DO NOT nuke Crest here. OceanRenderer must stay alive
+            // so its LOD cascades keep populating the shader globals; the runtime
+            // CrestVoxelWaterBinder hides the visible ocean tiles instead.
 
             var bootstraps = UnityEngine.Object.FindObjectsByType<VoxelEngine.WaterSim.PlanetWaterRendererBootstrap>(FindObjectsInactive.Include, FindObjectsSortMode.None);
             var bootstrap = bootstraps != null && bootstraps.Length > 0 ? bootstraps[0] : null;
@@ -398,7 +500,7 @@ namespace VoxelEngine.EditorTools
             EnableExistingVoxelLiquidSurfaceObjects();
             EditorUtility.SetDirty(bootstrap);
 
-            // Add a binder and set it up to bridge Crest features to voxel mesh
+            // Add a lightweight binder (no ocean plane) just to feed Crest globals / foam
             var binderGO = GameObject.Find("CrestVoxelBridge");
             if (binderGO == null)
             {
@@ -408,7 +510,7 @@ namespace VoxelEngine.EditorTools
 
             var binder = binderGO.GetComponent<VoxelEngine.WaterSim.CrestVoxelWaterBinder>();
             if (binder == null) binder = binderGO.AddComponent<VoxelEngine.WaterSim.CrestVoxelWaterBinder>();
-            binder.disableCrestOceanPlane = false; // Keep it false to let Crest features remain active
+            binder.hideCrestOceanTiles = true;
             binder.bridgeCrestMaterialToVoxelMesh = true;
             binder.autoConfigureCrestMaterial = true;
             binder.followNearestProceduralWater = true;
@@ -424,7 +526,7 @@ namespace VoxelEngine.EditorTools
             EditorUtility.SetDirty(depth);
             EditorUtility.SetDirty(foam);
 
-            Debug.Log("[CrestWaterSetup] ✓ visible water material bridged to voxel water – v3.20.9");
+            Debug.Log("[CrestWaterSetup] ✓ visible water material bridged to voxel water – no ocean plane – v3.20.9");
         }
 
         // ---------------------------------------------------------------------
@@ -744,7 +846,7 @@ namespace VoxelEngine.EditorTools
                 binder.waterHeightOffset = 0.08f;
                 binder.smoothFollow = true;
                 binder.forceOceanAlwaysOn = true;
-                binder.disableCrestOceanPlane = true; // v3.20.9 – enforce NO PLANE
+                binder.hideCrestOceanTiles = true; // v3.12.0 – hide built-in Crest tiles but keep OceanRenderer alive
                 binder.bridgeCrestMaterialToVoxelMesh = true;
                 EditorUtility.SetDirty(binder);
             }

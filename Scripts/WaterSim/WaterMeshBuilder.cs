@@ -113,8 +113,8 @@ namespace VoxelEngine.WaterSim
             var previousExternalWater = _externalWaterMat;
             var previousExternalOil = _externalOilMat;
 
-            // ACCEPT Crest ocean materials for voxel mesh rendering!
-            _externalWaterMat = waterMaterial;
+            // v3.12.0 – now also accepts Crest/* shaders. See IsVoxelWaterCompatible.
+            _externalWaterMat = IsVoxelWaterCompatible(waterMaterial) ? waterMaterial : null;
             _externalOilMat = oilMaterial;
 
             if (_externalWaterMat != null)
@@ -126,6 +126,31 @@ namespace VoxelEngine.WaterSim
                 _oilMat = oilMaterial;
             else if (previousExternalOil != null && _oilMat == previousExternalOil)
                 _oilMat = null;
+
+            // v3.12.0 – propagate binder + material to all live water chunks so
+            // swapping to/from Crest applies without a chunk rebuild.
+            RefreshLiveWaterRenderers();
+        }
+
+        /// <summary>
+        /// v3.12.0 – walks live water surface GameObjects and (a) reassigns
+        /// materials to the current pair and (b) adds/removes the Crest binder.
+        /// </summary>
+        private static void RefreshLiveWaterRenderers()
+        {
+            if (_waterMat == null && _oilMat == null) return;
+            var filters = Object.FindObjectsByType<MeshFilter>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            for (int i = 0; i < filters.Length; i++)
+            {
+                var f = filters[i];
+                if (f == null || f.gameObject == null) continue;
+                if (f.gameObject.name != "LiquidSurface") continue;
+                var r = f.GetComponent<MeshRenderer>();
+                if (r == null) continue;
+                if (_waterMat != null && _oilMat != null)
+                    r.sharedMaterials = new[] { _waterMat, _oilMat };
+                EnsureCrestBinder(f.gameObject);
+            }
         }
 
         private static void EnsureMats()
@@ -134,9 +159,10 @@ namespace VoxelEngine.WaterSim
             if (_externalOilMat != null) _oilMat = _externalOilMat;
             if (_waterMat != null && _oilMat != null) return;
 
-            // Prefer the bridged Crest material
+            // Prefer the project voxel-water shader. Crest ocean materials depend on OceanRenderer
+            // and LodData globals; in no-plane mode they can render invisible on chunk meshes.
             Material bridgeMat = Resources.Load<Material>("CrestOcean_VoxelBridge");
-            if (bridgeMat != null)
+            if (IsVoxelWaterCompatible(bridgeMat))
             {
                 _externalWaterMat = bridgeMat;
                 _waterMat = bridgeMat;
@@ -218,9 +244,21 @@ namespace VoxelEngine.WaterSim
         {
             if (mat == null || mat.shader == null) return false;
             string shaderName = mat.shader.name;
+            // v3.12.0 — accept Crest's real ocean shader so voxel chunks render
+            // with genuine Crest waves / foam / flow, provided each chunk carries
+            // a VoxelCrestChunkBinder to feed the per-slice MPB values.
             return shaderName == "VoxelEngine/VoxelWaterURP" ||
                    shaderName == "Universal Render Pipeline/Lit" ||
-                   shaderName == "Standard";
+                   shaderName == "Standard" ||
+                   shaderName == "Crest/Ocean" ||
+                   shaderName.StartsWith("Crest/", System.StringComparison.Ordinal);
+        }
+
+        /// <summary>True when the currently active water material is a Crest/* shader.</summary>
+        public static bool IsCurrentMaterialCrest()
+        {
+            return _waterMat != null && _waterMat.shader != null &&
+                   _waterMat.shader.name.StartsWith("Crest/", System.StringComparison.Ordinal);
         }
 
         public static Material GetWaterMaterial()
@@ -799,6 +837,7 @@ namespace VoxelEngine.WaterSim
                 foreach (var col in c.waterMeshGO.GetComponents<Collider>()) Object.Destroy(col);
                 var existingLod = c.waterMeshGO.GetComponent<WaterSurfaceLodController>();
                 if (existingLod != null) existingLod.Configure(c);
+                EnsureCrestBinder(c.waterMeshGO);
                 return;
             }
             c.waterMeshGO = new GameObject("LiquidSurface");
@@ -808,6 +847,27 @@ namespace VoxelEngine.WaterSim
             c.waterMeshRenderer.shadowCastingMode = ShadowCastingMode.Off;
             c.waterMeshRenderer.receiveShadows = false;
             c.waterMeshGO.AddComponent<WaterSurfaceLodController>().Configure(c);
+            EnsureCrestBinder(c.waterMeshGO);
+        }
+
+        /// <summary>
+        /// v3.12.0 — attach the per-chunk Crest LOD binder whenever the active
+        /// water material is a Crest shader, and remove it otherwise. This is
+        /// what makes waves / foam / flow actually appear on voxel chunks.
+        /// </summary>
+        private static void EnsureCrestBinder(GameObject go)
+        {
+            if (go == null) return;
+            var existing = go.GetComponent<VoxelCrestChunkBinder>();
+            if (IsCurrentMaterialCrest())
+            {
+                if (existing == null) go.AddComponent<VoxelCrestChunkBinder>();
+            }
+            else if (existing != null)
+            {
+                if (Application.isPlaying) Object.Destroy(existing);
+                else Object.DestroyImmediate(existing);
+            }
         }
     }
 }
