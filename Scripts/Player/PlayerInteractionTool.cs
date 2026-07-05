@@ -383,6 +383,16 @@ namespace VoxelEngine.Player
                 var liquidPump = hit.collider.GetComponentInParent<VoxelEngine.Fluids.WaterPump>();
                 if (liquidPump != null) { UI.GameUIController.Instance?.OpenMachine(liquidPump); return; }
 
+                // Wind turbines — right-click ANY part (tower, nacelle, blade…) to open
+                // the turbine dashboard (assembly checklist / output / condition).
+                var windTurbine = hit.collider.GetComponentInParent<VoxelEngine.Power.Wind.WindTurbineController>();
+                if (windTurbine == null)
+                {
+                    var windPart = hit.collider.GetComponentInParent<VoxelEngine.Power.Wind.WindTurbinePart>();
+                    if (windPart != null) windTurbine = windPart.Controller;
+                }
+                if (windTurbine != null) { UI.GameUIController.Instance?.OpenMachine(windTurbine); return; }
+
                 // Industrial fluid processors.
                 var oilRefinery = hit.collider.GetComponentInParent<VoxelEngine.Crafting.OilRefinery>();
                 if (oilRefinery != null) { UI.GameUIController.Instance?.OpenMachine(oilRefinery); return; }

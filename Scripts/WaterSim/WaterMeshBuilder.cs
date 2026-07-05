@@ -29,12 +29,12 @@ namespace VoxelEngine.WaterSim
         public static bool RenderingEnabled { get; set; } = true;
 
         /// <summary>
-        /// v3.23.0 – DEFAULT OFF. Voxel water is authoritative again (Crest
-        /// tiles are hidden per user request), so we render voxel water
-        /// everywhere including the ocean. Toggle to true only if you later
-        /// re-enable Crest's ocean plane and want the two to coexist.
+        /// v3.22.0 – When true, voxel water columns whose surface is at or below
+        /// the world sea level are skipped entirely so Crest's native ocean tiles
+        /// own the visual there. Inland lakes and rivers above sea level still
+        /// render with the stylized voxel water shader. Prevents z-fighting.
         /// </summary>
-        public static bool SkipVoxelWaterAtOrBelowSeaLevel { get; set; } = false;
+        public static bool SkipVoxelWaterAtOrBelowSeaLevel { get; set; } = true;
 
         /// <summary>
         /// v3.22.0 – Small negative bias in voxel units. A cell is considered
@@ -171,18 +171,6 @@ namespace VoxelEngine.WaterSim
 
         private static void EnsureMats()
         {
-            // v3.23.1 – Safety-net world-up global. CrestVoxelWaterBinder pushes
-            // the accurate value every LateUpdate, but if no binder is in the
-            // scene yet the VoxelWaterURP shader would sample an all-zero vector
-            // and default to (0,1,0). Set a sane default here just in case.
-            var worldForUp = ActiveWorld.Current;
-            if (worldForUp != null)
-            {
-                bool isPlanet = worldForUp is VoxelEngine.Cosmos.SphereWorld;
-                Shader.SetGlobalVector("_VoxelWaterWorldUp",
-                    new Vector4(0f, 1f, 0f, isPlanet ? 1f : 0f));
-            }
-
             if (_externalWaterMat != null) _waterMat = _externalWaterMat;
             if (_externalOilMat != null) _oilMat = _externalOilMat;
             if (_waterMat != null && _oilMat != null) return;

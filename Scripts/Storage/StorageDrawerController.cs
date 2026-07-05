@@ -96,7 +96,7 @@ namespace VoxelEngine.Storage
 
         private void FindRack()
         {
-            var racks = FindObjectsByType<ServerRack>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            var racks = FindObjectsByType<ServerRack>(FindObjectsInactive.Exclude);
             ServerRack best = null;
             float bestD = rackRadius * rackRadius;
             foreach (var rack in racks)
@@ -365,7 +365,7 @@ namespace VoxelEngine.Storage
 
         public static StorageDrawerController FindNearest(Vector3 position, float range = 16f)
         {
-            var controllers = FindObjectsByType<StorageDrawerController>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            var controllers = FindObjectsByType<StorageDrawerController>(FindObjectsInactive.Exclude);
             StorageDrawerController best = null;
             float bestD = range * range;
             foreach (var controller in controllers)

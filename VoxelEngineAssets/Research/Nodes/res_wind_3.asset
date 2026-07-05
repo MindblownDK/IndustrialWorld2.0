@@ -13,9 +13,9 @@ MonoBehaviour:
   m_Name: res_wind_3
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Research.ResearchNode
   nodeId: res_wind_3
-  displayName: Wind Power III
-  description: Unlocks Large Vertical Helix + Large V236 Standard Windmill (15MW,
-    offshore capable). Monopole support.
+  displayName: Off-Shore Wind Systems
+  description: "Unlocks the flagship T236 - 15 MW turbine and monopole foundations
+    for all three T-Series tiers \u2014 build wind farms at sea."
   iconTint: {r: 1, g: 1, b: 1, a: 1}
   category: 0
   subCategory: 3
@@ -23,15 +23,22 @@ MonoBehaviour:
   column: 10
   prerequisites:
   - {fileID: 11400000, guid: fb1079cce98044e7a9db4faf1f3dca69, type: 2}
-  researchSeconds: 120
+  researchSeconds: 140
   cost:
   - pack: {fileID: 11400000, guid: e7eec7f45c4b5fb4db5018e3431f77f0, type: 2}
     count: 30
+  - pack: {fileID: 11400000, guid: d5b7bf57e47a51c4db099afff757b24d, type: 2}
+    count: 20
   unlocksRecipes:
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 11400000, guid: df3bc8385b637418098775c3c2a8d609, type: 2}
-  - {fileID: 11400000, guid: 5ba850684b02c459196127ce8aa3782b, type: 2}
+  - {fileID: 11400000, guid: e30ebc9bd60d2274f8ecc1eb9db3de83, type: 2}
+  - {fileID: 11400000, guid: c1cc2f36b1d55da4ca015221b9ee5bb9, type: 2}
+  - {fileID: 11400000, guid: 774b63398b33614418ee065dc2cefba9, type: 2}
+  - {fileID: 11400000, guid: 8ee53002d3d98ca4a8fe324e67664457, type: 2}
+  - {fileID: 11400000, guid: 7c2b355672e571a4dbfe9fe5b1d56d25, type: 2}
+  - {fileID: 11400000, guid: a28dd93892736c740a71baa4168bd418, type: 2}
+  - {fileID: 11400000, guid: 274a94fe4fd1ce648bbf04e9592c823f, type: 2}
+  - {fileID: 11400000, guid: 68cacb0ce324e4049a48b6b9161ff04d, type: 2}
+  - {fileID: 11400000, guid: 7a2f3182c841a5643a693feb840976be, type: 2}
   upgradeKind: 0
   upgradePerRankAmount: 0
   maxRanks: 1

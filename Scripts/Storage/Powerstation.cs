@@ -85,7 +85,7 @@ namespace VoxelEngine.Storage
             // Find nearest rack and contribute our wattage.
             _connectedRack = null;
             float bestSqr  = searchRadius * searchRadius;
-            var   racks    = FindObjectsByType<ServerRack>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            var   racks    = FindObjectsByType<ServerRack>(FindObjectsInactive.Exclude);
             foreach (var r in racks)
             {
                 float d = (r.transform.position - transform.position).sqrMagnitude;

@@ -129,7 +129,7 @@ namespace VoxelEngine.Persistence
 
         private void SavePlacedBlocks(SaveData save)
         {
-            var placed = FindObjectsByType<PlacedBlock>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            var placed = FindObjectsByType<PlacedBlock>(FindObjectsInactive.Exclude);
             foreach (var pb in placed)
             {
                 if (pb == null || pb.Item == null) continue;
@@ -141,13 +141,15 @@ namespace VoxelEngine.Persistence
                     hp = pb.Hp,
                     container = TryFindContainer(pb.gameObject)
                 };
+                var windPart = pb.GetComponent<VoxelEngine.Power.Wind.WindTurbinePart>();
+                if (windPart != null) entry.windCondition = Mathf.Max(0.01f, windPart.condition);
                 save.placedBlocks.Add(entry);
             }
         }
 
         private void SavePlacedTiered(SaveData save)
         {
-            var placed = FindObjectsByType<PlacedTieredBlock>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            var placed = FindObjectsByType<PlacedTieredBlock>(FindObjectsInactive.Exclude);
             foreach (var pb in placed)
             {
                 if (pb == null || pb.definition == null) continue;
@@ -164,7 +166,7 @@ namespace VoxelEngine.Persistence
 
         private void SaveQuarries(SaveData save)
         {
-            var quarries = FindObjectsByType<VoxelEngine.Transport.Quarry>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            var quarries = FindObjectsByType<VoxelEngine.Transport.Quarry>(FindObjectsInactive.Exclude);
             foreach (var q in quarries)
             {
                 if (q == null) continue;
@@ -190,7 +192,7 @@ namespace VoxelEngine.Persistence
             if (save.quarries == null) return;
             // Quarries are restored by finding already-placed quarry blocks (from RestorePlacedBlocks)
             // and applying their saved state.
-            var quarries = FindObjectsByType<VoxelEngine.Transport.Quarry>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            var quarries = FindObjectsByType<VoxelEngine.Transport.Quarry>(FindObjectsInactive.Exclude);
             foreach (var sq in save.quarries)
             {
                 // Find the quarry closest to the saved position.
@@ -412,6 +414,9 @@ namespace VoxelEngine.Persistence
                 var pb = go.GetComponent<PlacedBlock>();
                 if (pb == null) pb = go.AddComponent<PlacedBlock>();
                 pb.Item = blockItem; pb.Hp = sb.hp;
+                var windPart = go.GetComponent<VoxelEngine.Power.Wind.WindTurbinePart>();
+                if (windPart != null && sb.windCondition > 0f)
+                    windPart.condition = Mathf.Clamp(sb.windCondition, 0f, 100f);
                 if (blockItem.placedMaterial != null || blockItem.texture != null)
                 {
                     var tex = go.AddComponent<BlockTexturizer>();
@@ -610,6 +615,9 @@ namespace VoxelEngine.Persistence
             public Vector3 pos; public float rotY;
             public int hp;
             public SavedContainer container;
+            // Wind turbine part condition (0..100). 0 = "not set" (legacy saves)
+            // and restores as factory-new. Only written for WindTurbinePart blocks.
+            public float windCondition;
         }
         [Serializable] private class SavedPlacedTiered
         {

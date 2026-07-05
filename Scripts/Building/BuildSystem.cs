@@ -159,6 +159,17 @@ namespace VoxelEngine.Building
         // ---------- Placement math ----------
         private Vector3 ComputePlacementPosition(RaycastHit hit, BlockItem block)
         {
+            // ── WIND TURBINE PART SNAP ──────────────────────────────────────
+            // Holding a turbine part (nacelle / gearbox / generator / hub /
+            // blade / vertical blade set) while aiming anywhere at a matching,
+            // incomplete turbine snaps the ghost to the exact socket — the
+            // player can never misplace a part.
+            if (block != null && block.placedPrefab != null &&
+                VoxelEngine.Power.Wind.WindTurbineController.TryGetSnapPoint(block.placedPrefab, hit, out var socketPos))
+            {
+                return socketPos;
+            }
+
             // ── BUSBAR SNAP ─────────────────────────────────────────────────
             // If the player is placing a Power Busbar AND looking at the END
             // face of an existing busbar, snap the ghost to that busbar's tip

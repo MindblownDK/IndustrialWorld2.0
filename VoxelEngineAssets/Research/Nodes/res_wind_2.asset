@@ -13,9 +13,9 @@ MonoBehaviour:
   m_Name: res_wind_2
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Research.ResearchNode
   nodeId: res_wind_2
-  displayName: Wind Power II
-  description: Unlocks Small Vertical Helix Windmill + Medium Standard Windmill.
-    Cross-size helix wings supported.
+  displayName: Medium Wind Systems
+  description: Unlocks the T150 - 6 MW turbine (Tower, Nacelle, Gearbox, Generator,
+    Hub, Blades) and the Large Vertical Turbine (Rotor, Blades).
   iconTint: {r: 1, g: 1, b: 1, a: 1}
   category: 0
   subCategory: 3
@@ -23,17 +23,21 @@ MonoBehaviour:
   column: 10
   prerequisites:
   - {fileID: 11400000, guid: fdf59193a107d468c8d59f0800332c73, type: 2}
-  researchSeconds: 60
+  researchSeconds: 80
   cost:
   - pack: {fileID: 11400000, guid: 5c6861815f491e546a7fd36f4b664f0e, type: 2}
-    count: 20
+    count: 25
   - pack: {fileID: 11400000, guid: e7eec7f45c4b5fb4db5018e3431f77f0, type: 2}
-    count: 10
+    count: 15
   unlocksRecipes:
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 11400000, guid: 4dc36b616b53b4493b5fcc96b795e20c, type: 2}
-  - {fileID: 11400000, guid: c75a8f85739604ee3aaee3d863f81afd, type: 2}
+  - {fileID: 11400000, guid: d1871534489e51540821f233ac73a01a, type: 2}
+  - {fileID: 11400000, guid: ab657860c044eb8479f6e7d0331649c2, type: 2}
+  - {fileID: 11400000, guid: b9d7e96a031d1674baa1e02204c6c5cf, type: 2}
+  - {fileID: 11400000, guid: 08b2d90ccc2b35e43ae44b0b9d2c1f84, type: 2}
+  - {fileID: 11400000, guid: ee44344938abf0f45991c7b6852f2d24, type: 2}
+  - {fileID: 11400000, guid: e6d300f7095673d4eb41b8d63212bed8, type: 2}
+  - {fileID: 11400000, guid: 50f597b81a0d82b4591720fa27e06306, type: 2}
+  - {fileID: 11400000, guid: 101d0359ceadede488ddd4ee4f9ec840, type: 2}
   upgradeKind: 0
   upgradePerRankAmount: 0
   maxRanks: 1

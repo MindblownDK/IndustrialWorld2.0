@@ -56,7 +56,7 @@ namespace VoxelEngine.Farming
 
         private void ScanAndHarvest()
         {
-            var plots = FindObjectsByType<FarmPlot>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            var plots = FindObjectsByType<FarmPlot>(FindObjectsInactive.Exclude);
             foreach (var plot in plots)
             {
                 if (plot == null || plot.plantedCrop == null) continue;

@@ -157,33 +157,13 @@ Shader "VoxelEngine/VoxelWaterURP"
                 return normalize(float3((h - hx) * strength, 1.0, (h - hz) * strength));
             }
 
-            // v3.23.1 – Global set by CrestVoxelWaterBinder / PlanetWaterUtility:
-            //   xyz = world "up" direction for the water column (planet radial or 0,1,0)
-            //   w   = 1 for planet, 0 for flat
-            float4 _VoxelWaterWorldUp;
-
             V2F vert(A2V i)
             {
                 V2F o = (V2F)0;
                 float3 posOS = i.posOS.xyz;
                 float3 worldPos = TransformObjectToWorld(posOS);
 
-                // v3.23.1 – Use provided world-up when present; on flat worlds the
-                // fallback is straight up. This fixes the "waves point wrong" look
-                // that came from using worldPos radial on flat worlds.
-                float3 radialUp;
-                if (_VoxelWaterWorldUp.w > 0.5)
-                {
-                    radialUp = normalize(worldPos);           // planet
-                }
-                else if (dot(_VoxelWaterWorldUp.xyz, _VoxelWaterWorldUp.xyz) > 0.01)
-                {
-                    radialUp = normalize(_VoxelWaterWorldUp.xyz); // flat, explicit
-                }
-                else
-                {
-                    radialUp = float3(0, 1, 0);               // flat, default
-                }
+                float3 radialUp = normalize(worldPos);
                 float topFacing = saturate(max(i.normOS.y, dot(normalize(i.normOS), radialUp)));
                 float shoreDepthMask = saturate(i.color.r);
                 float tideMask = i.color.g;
@@ -227,13 +207,7 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float tideMask = i.data.y;
                 float geometryDepth01 = saturate(i.data.w);
 
-                float3 radialUp;
-                if (_VoxelWaterWorldUp.w > 0.5)
-                    radialUp = normalize(i.posWS);
-                else if (dot(_VoxelWaterWorldUp.xyz, _VoxelWaterWorldUp.xyz) > 0.01)
-                    radialUp = normalize(_VoxelWaterWorldUp.xyz);
-                else
-                    radialUp = float3(0, 1, 0);
+                float3 radialUp = normalize(i.posWS);
                 float3 tanA = cross(radialUp, float3(0,1,0));
                 if (dot(tanA, tanA) < 0.001) tanA = cross(radialUp, float3(0,0,1));
                 tanA = normalize(tanA);

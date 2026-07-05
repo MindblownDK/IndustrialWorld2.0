@@ -115,7 +115,7 @@ namespace VoxelEngine.EditorTools
                 "Re-runnable. Idempotent. Run AFTER step 12.");
             AddWizardButton(scroll, "13. Build Maritime Content (Hulls, Engines, Shafts, Propellers, Turbo, Helm + Maritime Research Tree)", BuildMaritimeContent, 56);
             AddWizardButton(scroll, "14. Build Floodlight Content (Stationary & Grid blocks, recipes, research)", BuildFloodlightContent, 40);
-            AddWizardButton(scroll, "15. Build Wind Power Content (Standard, Helix, Monopoles, Research)", BuildWindmillContent, 40);
+            AddWizardButton(scroll, "15. Build Wind Power Content (Modular T-Series T90/T150/T236 + Vertical Turbines + Monopoles + Research)", BuildWindmillContent, 40);
 
             AddSpacer(scroll, 6);
             AddInfo(scroll,
@@ -880,7 +880,7 @@ namespace VoxelEngine.EditorTools
 
             // Also wire it into any existing GameUIController in the currently-open scene
             // so the player doesn't have to re-run step 2.
-            var existingUis = Object.FindObjectsByType<VoxelEngine.UI.GameUIController>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var existingUis = Object.FindObjectsByType<VoxelEngine.UI.GameUIController>(FindObjectsInactive.Include);
             foreach (var ui in existingUis)
             {
                 ui.recipeRegistry = registry;
@@ -1521,7 +1521,7 @@ namespace VoxelEngine.EditorTools
             AssetDatabase.Refresh();
 
             // ---------- Wire registry into any existing BuildSystemV2 in the scene ----------
-            var systems = Object.FindObjectsByType<VoxelEngine.Building.Tiered.BuildSystemV2>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var systems = Object.FindObjectsByType<VoxelEngine.Building.Tiered.BuildSystemV2>(FindObjectsInactive.Include);
             foreach (var sys in systems)
             {
                 sys.registry = registry;
@@ -5877,142 +5877,14 @@ root =>
         }
 
         // ============================================================
-        //                STEP 15 - WIND POWER CONTENT
+        //                STEP 15 - WIND POWER CONTENT (modular 4.0)
         // ============================================================
         private void BuildWindmillContent()
         {
-            const string WIND_ROOT = ASSET_ROOT + "/WindPower";
-            const string PREFABS   = WIND_ROOT + "/Prefabs";
-            const string ITEMS     = WIND_ROOT + "/Items";
-            const string RECIPES   = WIND_ROOT + "/Recipes";
-            const string NODES     = ASSET_ROOT + "/Research/Nodes";
-
-            foreach (var f in new[] { WIND_ROOT, PREFABS, ITEMS, RECIPES }) EnsureFolder(f);
-
-            // -- Dependencies --
-            string indItems    = ASSET_ROOT + "/Industrial/Items";
-            var steelPlate = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_SteelPlate.asset");
-            var ironPlate  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_IronPlate.asset");
-            var copperWire = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_CopperWire.asset");
-            var glass      = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_Glass.asset");
-            var circuit    = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_Circuit.asset");
-            var advCircuit = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_AdvCircuit.asset");
-            if (steelPlate == null || circuit == null)
-            {
-                EditorUtility.DisplayDialog("Voxel Engine", "Run Step 10 (Industrial Content) first.", "OK");
-                return;
-            }
-
-            var registry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeRegistry>($"{ASSET_ROOT}/RecipeRegistry.asset");
-            var tree = AssetDatabase.LoadAssetAtPath<VoxelEngine.Research.ResearchTree>($"{ASSET_ROOT}/Research/ResearchTree.asset");
-
-            // -- 1) Monopole --
-            string monoPath = $"{PREFABS}/WindmillMonopole.prefab";
-            var monoRoot = new GameObject("WindmillMonopole");
-            var monoCol = monoRoot.AddComponent<BoxCollider>();
-            monoCol.size = new Vector3(4f, 10f, 4f);
-            monoRoot.AddComponent<VoxelEngine.Power.Wind.WindmillMonopole>();
-            var monoMesh = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            monoMesh.transform.SetParent(monoRoot.transform, false);
-            monoMesh.transform.localScale = new Vector3(4f, 10f, 4f);
-            monoMesh.GetComponent<Renderer>().sharedMaterial = MakeColoredMat(PREFABS, "Mat_Monopole", new Color(0.5f, 0.5f, 0.55f));
-            var monoPrefab = PrefabUtility.SaveAsPrefabAsset(monoRoot, monoPath);
-            Object.DestroyImmediate(monoRoot);
-            var itemMono = MakeBlock(ITEMS, "Block_WindmillMonopole", "Windmill Monopole", new Color(0.5f, 0.5f, 0.55f), monoPrefab, "Power");
-            itemMono.description = "A heavy-duty foundation pole for offshore windmills. Goes deep into the seafloor.";
-
-            // -- 2) Standard Windmills (3 sizes) --
-            VoxelEngine.Items.BlockItem MakeStandardWindmill(string sizeName, float power, Color color)
-            {
-                string path = $"{PREFABS}/StandardWindmill_{sizeName}.prefab";
-                var root = new GameObject($"StandardWindmill_{sizeName}");
-                var wm = root.AddComponent<VoxelEngine.Power.Wind.StandardWindmill>();
-                wm.maxPowerWatts = power;
-                
-                var mesh = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                mesh.transform.SetParent(root.transform, false);
-                mesh.transform.localScale = new Vector3(2f, 10f, 2f);
-                mesh.GetComponent<Renderer>().sharedMaterial = MakeColoredMat(PREFABS, $"Mat_SWind_{sizeName}", color);
-                
-                var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
-                Object.DestroyImmediate(root);
-                return MakeBlock(ITEMS, $"Block_SWind_{sizeName}", $"{sizeName} Standard Windmill", color, prefab, "Power");
-            }
-            var sWindSmall = MakeStandardWindmill("Small", 100000f, new Color(0.8f, 0.8f, 0.8f));
-            var sWindMed   = MakeStandardWindmill("Medium", 1000000f, new Color(0.7f, 0.7f, 0.7f));
-            var sWindLarge = MakeStandardWindmill("Large", 15000000f, new Color(0.6f, 0.6f, 0.6f));
-
-            // -- 3) Helix Windmills (2 sizes) --
-
-            // Correcting MakeBlock call for Helix
-            var hWindSmall = MakeBlock(ITEMS, "Block_HWind_Small", "Small Helix Windmill", new Color(0.4f, 0.8f, 0.4f), 
-                PrefabUtility.SaveAsPrefabAsset(new GameObject("HSmall"), $"{PREFABS}/HelixSmall.prefab"), "Power");
-            var hWindLarge = MakeBlock(ITEMS, "Block_HWind_Large", "Large Helix Windmill", new Color(0.2f, 0.6f, 0.2f), 
-                PrefabUtility.SaveAsPrefabAsset(new GameObject("HLarge"), $"{PREFABS}/HelixLarge.prefab"), "Power");
-
-            // -- 4) Recipes --
-            VoxelEngine.Crafting.RecipeDefinition AddWRec(string name, string display, VoxelEngine.Items.ItemDefinition output, params (VoxelEngine.Items.ItemDefinition item, int n)[] inputs)
-            {
-                string path = $"{RECIPES}/{name}.asset";
-                var r = GetOrCreateAsset<VoxelEngine.Crafting.RecipeDefinition>(path);
-                r.displayName = display; r.outputItem = output; r.outputCount = 1;
-                r.requiredStation = VoxelEngine.Crafting.StationTier.Assembler; r.craftSeconds = 10f; r.unlockedByDefault = false;
-                var valid = new System.Collections.Generic.List<VoxelEngine.Crafting.RecipeIngredient>();
-                foreach (var (item, n) in inputs) if (item != null) valid.Add(new VoxelEngine.Crafting.RecipeIngredient { item = item, count = n });
-                r.inputs = valid.ToArray();
-                EditorUtility.SetDirty(r);
-                if (registry != null && !registry.recipes.Contains(r)) registry.recipes.Add(r);
-                return r;
-            }
-
-            var recMono = AddWRec("Recipe_WindMono", "Windmill Monopole", itemMono, (steelPlate, 10), (ironPlate, 10));
-            var recSSmall = AddWRec("Recipe_SWindSmall", "Small Standard Windmill", sWindSmall, (steelPlate, 5), (copperWire, 10), (ironPlate, 5));
-            var recSMed   = AddWRec("Recipe_SWindMed", "Medium Standard Windmill", sWindMed, (steelPlate, 15), (copperWire, 20), (ironPlate, 10));
-            var recSLarge = AddWRec("Recipe_SWindLarge", "Large Standard Windmill", sWindLarge, (steelPlate, 40), (copperWire, 50), (advCircuit, 5));
-            var recHSmall = AddWRec("Recipe_HWindSmall", "Small Helix Windmill", hWindSmall, (steelPlate, 8), (copperWire, 15));
-            var recHLarge = AddWRec("Recipe_HWindLarge", "Large Helix Windmill", hWindLarge, (steelPlate, 20), (copperWire, 30), (advCircuit, 2));
-
-            // -- 5) Research --
-            if (tree != null)
-            {
-                VoxelEngine.Research.ResearchNode MakeWNode(string id, string display, string desc, int tier, int col, float sec, (VoxelEngine.Items.ScienceItem p, int n)[] cost, VoxelEngine.Crafting.RecipeDefinition[] unlocks, VoxelEngine.Research.ResearchNode[] prereqs = null)
-                {
-                    string path = $"{NODES}/{id}.asset";
-                    var n = GetOrCreateAsset<VoxelEngine.Research.ResearchNode>(path);
-                    n.nodeId = id; n.displayName = display; n.description = desc;
-                    n.category = VoxelEngine.Research.ResearchCategory.Environment;
-                    n.subCategory = VoxelEngine.Research.ResearchSubCategory.Power; // New filter
-                    n.tier = tier; n.column = col; n.researchSeconds = sec;
-                    n.cost = new VoxelEngine.Research.ResearchNode.ScienceCost[cost.Length];
-                    for (int i = 0; i < cost.Length; i++) n.cost[i] = new VoxelEngine.Research.ResearchNode.ScienceCost { pack = cost[i].p, count = cost[i].n };
-                    n.unlocksRecipes = unlocks; n.prerequisites = prereqs;
-                    EditorUtility.SetDirty(n);
-                    if (!tree.nodes.Contains(n)) tree.nodes.Add(n);
-                    return n;
-                }
-
-                var sciT1 = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ScienceItem>($"{ASSET_ROOT}/Items/Item_ScienceT1.asset");
-                var sciT2 = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ScienceItem>($"{ASSET_ROOT}/Items/Item_ScienceT2.asset");
-
-                var nWind1 = MakeWNode("res_wind_1", "Wind Power I", "Unlock Small Standard Windmills.", 1, 10, 30f, new[] { (sciT1, 10) }, new[] { recSSmall, recMono });
-                var nWind2 = MakeWNode("res_wind_2", "Wind Power II", "Unlock Small Helix and Medium Standard Windmills.", 2, 10, 60f, new[] { (sciT1, 20), (sciT2, 10) }, new[] { recHSmall, recSMed }, new[] { nWind1 });
-                var nWind3 = MakeWNode("res_wind_3", "Wind Power III", "Unlock Large Helix and Large Standard Windmills.", 3, 10, 120f, new[] { (sciT2, 30) }, new[] { recHLarge, recSLarge }, new[] { nWind2 });
-                EditorUtility.SetDirty(tree);
-            }
-
-            // -- 6) Move Nuclear to Power Generation --
-            foreach (var node in tree.nodes)
-            {
-                if (node.nodeId.Contains("nuclear") || node.displayName.Contains("Nuclear"))
-                {
-                    node.subCategory = VoxelEngine.Research.ResearchSubCategory.Power;
-                    EditorUtility.SetDirty(node);
-                }
-            }
-
-            AssetDatabase.SaveAssets();
-            AssetDatabase.Refresh();
-            EditorUtility.DisplayDialog("Voxel Engine", "Wind Power content created!\n\n- Standard (S/M/L) & Helix (S/L) Windmills\n- Monopoles\n- Power Generation research filter applied", "OK");
+            // Delegated to the dedicated modular wind power builder — creates all
+            // T-Series (T90/T150/T236) + Vertical turbine prefabs, items, recipes,
+            // monopoles and research nodes, and removes pre-4.0 legacy wind assets.
+            WindPowerContentBuilder.BuildAll();
         }
 
         private static VoxelEngine.Research.ResearchNode FindNodeByName(VoxelEngine.Research.ResearchTree tree, string id)
