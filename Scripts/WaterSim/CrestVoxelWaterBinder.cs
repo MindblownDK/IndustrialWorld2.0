@@ -76,7 +76,15 @@ namespace VoxelEngine.WaterSim
         {
             CacheOcean();
             ApplyCrestMaterialTuning();
-            // v3.20.2 – Bridge Crest material to voxel mesh – voxel mesh IS visual
+            // v3.20.5 – NO OCEAN PLANE – procedural voxel only
+            if (disableCrestOceanPlane && _oceanRenderer != null)
+            {
+                // Nuke the Crest OceanRenderer to prevent OceanChunkRenderer crashes + infinite plane
+                try { Destroy(_oceanRenderer.gameObject); } catch { }
+                _oceanRenderer = null;
+                _oceanBehaviour = null;
+            }
+            // Bridge Crest material to voxel mesh – voxel mesh IS visual
             WaterMeshBuilder.RenderingEnabled = true;
             TryBridgeMaterialToVoxel();
         }
@@ -85,6 +93,12 @@ namespace VoxelEngine.WaterSim
         {
             CacheOcean();
             ApplyCrestMaterialTuning();
+            if (disableCrestOceanPlane && _oceanRenderer != null)
+            {
+                try { Destroy(_oceanRenderer.gameObject); } catch { }
+                _oceanRenderer = null;
+                _oceanBehaviour = null;
+            }
             WaterMeshBuilder.RenderingEnabled = true;
             TryBridgeMaterialToVoxel();
             _nextScanTime = 0f;

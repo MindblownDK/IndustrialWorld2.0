@@ -16,13 +16,13 @@ namespace VoxelEngine.EditorTools
             EnsurePanelSettingsFitMode();
             ConfigureSceneAmbientOnly();
 
-            // v3.20.3 – HYBRID: Crest OceanRenderer clipped to voxel water + voxel mesh for lakes/rivers/oil
+            // v3.20.5 – NO OCEAN PLANE – pure procedural voxel water with Crest material
             var waterMat = ConfigureCrestWaterMaterial();
-            // Import Crest ocean rig – we DO want OceanRenderer, but clipped
-            ImportCrestMainSceneWaterRig();
-            ConfigureCrestRuntimeInScene(waterMat);
-            ConfigureVoxelCrestHelpers();
-            ConfigureHybridVoxelBridge(waterMat);
+            // Kill ALL Crest OceanRenderer planes – user explicitly: NO infinite planes!
+            RemoveExistingCrestRuntimeObjects();
+            ConfigureCrestVoxelMaterialBridge(waterMat);
+            // Also nuke any rogue clip surface providers / oil ocean objects
+            NukeCrestOceanObjects();
 
             ConfigureExistingMaritimeWakeEmitters();
 
@@ -206,7 +206,7 @@ namespace VoxelEngine.EditorTools
 
         private static void RemoveExistingCrestRuntimeObjects()
         {
-            string[] names = { "Crest Water Runtime", "Crest Ocean", "Crest Animated Waves", "Ocean", "Waves" };
+            string[] names = { "Crest Water Runtime", "Crest Ocean", "Crest Animated Waves", "Ocean", "Waves", "Crest Oil Ocean", "CrestVoxelBridge", "Procedural Water Patch Renderer", "CrestVoxelBridge", "VoxelCrestClipSurfaceProvider" };
             var transforms = Object.FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None);
             foreach (var t in transforms)
             {
@@ -235,6 +235,37 @@ namespace VoxelEngine.EditorTools
                     }
                 }
             }
+        }
+
+        // v3.20.5 – aggressive nuke – called after material bridge to guarantee NO ocean plane remains
+        private static void NukeCrestOceanObjects()
+        {
+            RemoveExistingCrestRuntimeObjects();
+            // Also nuke any lingering OceanChunkRenderer, LodDataManagers, etc.
+            var allTypes = new string[]
+            {
+                "Crest.OceanRenderer",
+                "Crest.OceanChunkRenderer",
+                "Crest.LodDataMgr",
+                "Crest.RegisterClipSurfaceInput",
+                "Crest.RegisterSeaFloorDepthInput"
+            };
+            foreach (var typeName in allTypes)
+            {
+                var t = FindType(typeName);
+                if (t == null) continue;
+                var found = Object.FindObjectsByType(t, FindObjectsInactive.Include, FindObjectsSortMode.None);
+                foreach (var c in found)
+                {
+                    var comp = c as Component;
+                    if (comp == null) continue;
+                    if (string.IsNullOrEmpty(comp.gameObject.scene.name)) continue;
+                    // Don't destroy our bridge helper – only OceanRenderer derived
+                    if (typeName.Contains("OceanRenderer") || typeName.Contains("OceanChunkRenderer"))
+                        Object.DestroyImmediate(comp.gameObject);
+                }
+            }
+            Debug.Log("[CrestWaterSetup] ✓ NukeCrestOceanObjects – all Crest ocean planes destroyed – v3.20.5");
         }
 
         private static Material ConfigureCrestWaterMaterial()
