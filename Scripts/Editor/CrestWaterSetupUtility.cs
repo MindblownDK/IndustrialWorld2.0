@@ -7,7 +7,7 @@ namespace VoxelEngine.EditorTools
 {
     /// <summary>
     /// Editor-only Crest setup helper used by the Voxel Engine Setup Wizard.
-    /// v3.20.8 – NO OCEAN PLANE – voxel water only + Crest material bridge – legacy nuke removed + Crest type-scan hardened
+    /// v3.20.9 – NO OCEAN PLANE – voxel water only + Crest material bridge – legacy nuke removed + Crest type-scan hardened
     /// </summary>
     public static class CrestWaterSetupUtility
     {
@@ -19,7 +19,7 @@ namespace VoxelEngine.EditorTools
                 EnsurePanelSettingsFitMode();
                 ConfigureSceneAmbientOnly();
 
-                // v3.20.8 – NO OCEAN PLANE – pure procedural voxel water with Crest material
+                // v3.20.9 – NO OCEAN PLANE – pure procedural voxel water with Crest-compatible visible material
                 var waterMat = ConfigureCrestWaterMaterial();
                 if (waterMat == null)
                 {
@@ -42,20 +42,20 @@ namespace VoxelEngine.EditorTools
                 if (scene.IsValid() && scene.isLoaded)
                     UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(scene);
 
-                EditorUtility.DisplayDialog("Voxel Engine - Crest Water v3.20.8",
+                EditorUtility.DisplayDialog("Voxel Engine - Crest Water v3.20.9",
                     "Crest water integration configured (NO PLANE mode).\n\n" +
                     "Configured:\n" +
                     "• UI PanelSettings fit mode\n" +
-                    "• Crest water material tuned / fallback created\n" +
+                    "• Visible voxel water material tuned / fallback created\n" +
                     "• ALL Crest OceanRenderer planes DESTROYED\n" +
-                    "• Voxel liquid surfaces ENABLED – Crest material bridged\n" +
+                    "• Voxel liquid surfaces ENABLED – visible water material bridged\n" +
                     "• CrestVoxelBridge GO added (binder + depth + foam)\n" +
                     "• WaterMeshBuilder.RenderingEnabled = true\n" +
                     "• Maritime wake emitters updated\n" +
                     "• Lighting / sun untouched",
                     "OK");
 
-                Debug.Log("[CrestWaterSetup] ✓ v3.20.8 – voxel water ONLY, Crest material bridged, zero OceanRenderer planes");
+                Debug.Log("[CrestWaterSetup] ✓ v3.20.9 – voxel water ONLY, visible water material bridged, zero OceanRenderer planes");
             }
             catch (Exception ex)
             {
@@ -99,7 +99,7 @@ namespace VoxelEngine.EditorTools
             RenderSettings.fog = false;
         }
 
-        // v3.20.8 safe nuke – replaces all previous Nuke / RemoveExisting versions
+        // v3.20.9 safe nuke – replaces all previous Nuke / RemoveExisting versions
         private static void SafeNukeAllCrest()
         {
             try
@@ -226,61 +226,120 @@ namespace VoxelEngine.EditorTools
 
         private static Material ConfigureCrestWaterMaterial()
         {
-            string[] candidates =
-            {
-                "Assets/Liquid/Crest/Crest-Examples/Examples/Materials/Examples_Material_Ocean.mat",
-                "Assets/Liquid/Crest/Crest/Materials/Ocean.mat",
-                "Assets/Liquid/Crest/Crest-Examples/LakesAndRivers/Materials/LakesAndRivers_Material_Water.mat"
-            };
+            // Crest's ocean shader depends on Crest OceanRenderer/LodData runtime globals and can render
+            // invisible on standalone voxel chunk meshes when the no-plane mode removes OceanRenderer.
+            // Use the project voxel-water URP shader for the visible mesh, while Crest still supplies
+            // underwater/post-process behaviour through the bridge helpers.
+            var mat = CreateOrUpdateVoxelWaterVisualMaterial();
+            if (mat != null) return mat;
 
-            Material mat = null;
-            foreach (var path in candidates)
-            {
-                try
-                {
-                    mat = AssetDatabase.LoadAssetAtPath<Material>(path);
-                    if (mat != null) break;
-                }
-                catch { }
-            }
+            Debug.LogWarning("[CrestWaterSetup] Voxel water visual material could not be created – using fallback URP Lit water.");
+            return CreateFallbackWaterMaterial();
+        }
 
-            if (mat == null)
-            {
-                Debug.LogWarning("[CrestWaterSetup] Crest water material was not found under Assets/Liquid/Crest.");
-                return null;
-            }
-
+        private static Material CreateOrUpdateVoxelWaterVisualMaterial()
+        {
             try
             {
-                if (mat.HasProperty("_Transparency")) mat.SetFloat("_Transparency", 1f);
-                if (mat.HasProperty("_SubSurfaceShallowColour")) mat.SetFloat("_SubSurfaceShallowColour", 1f);
-                if (mat.HasProperty("_SubSurfaceShallowCol")) mat.SetColor("_SubSurfaceShallowCol", new Color(0.42f, 0.78f, 0.72f, 1f));
-                if (mat.HasProperty("_SubSurfaceShallowColShadow")) mat.SetColor("_SubSurfaceShallowColShadow", new Color(0.10f, 0.28f, 0.32f, 1f));
-                if (mat.HasProperty("_SubSurfaceDepthMax")) mat.SetFloat("_SubSurfaceDepthMax", 7.5f);
-                if (mat.HasProperty("_SubSurfaceDepthPower")) mat.SetFloat("_SubSurfaceDepthPower", 2.1f);
-                if (mat.HasProperty("_DepthFogDensity")) mat.SetVector("_DepthFogDensity", new Vector4(0.10f, 0.08f, 0.055f, 1f));
-                if (mat.HasProperty("_Diffuse")) mat.SetColor("_Diffuse", new Color(0.015f, 0.18f, 0.32f, 1f));
-                if (mat.HasProperty("_DiffuseGrazing")) mat.SetColor("_DiffuseGrazing", new Color(0.11f, 0.36f, 0.42f, 1f));
-                if (mat.HasProperty("_NormalsStrengthOverall")) mat.SetFloat("_NormalsStrengthOverall", 1f);
-                if (mat.HasProperty("_ApplyNormalMapping")) mat.SetFloat("_ApplyNormalMapping", 1f);
-                if (mat.HasProperty("_NormalsStrength")) mat.SetFloat("_NormalsStrength", 0.55f);
-                if (mat.HasProperty("_NormalsScale")) mat.SetFloat("_NormalsScale", 32f);
-                if (mat.HasProperty("_Flow")) mat.SetFloat("_Flow", 1f);
+                const string folder = "Assets/Resources";
+                if (!AssetDatabase.IsValidFolder(folder)) AssetDatabase.CreateFolder("Assets", "Resources");
 
+                const string path = "Assets/Resources/CrestOcean_VoxelBridge.mat";
+                var shader = Shader.Find("VoxelEngine/VoxelWaterURP")
+                          ?? Shader.Find("Universal Render Pipeline/Lit")
+                          ?? Shader.Find("Standard");
+                if (shader == null) return null;
+
+                var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
+                if (mat == null)
+                {
+                    mat = new Material(shader) { name = "CrestOcean_VoxelBridge" };
+                    AssetDatabase.CreateAsset(mat, path);
+                }
+                else if (mat.shader != shader)
+                {
+                    mat.shader = shader;
+                }
+
+                ConfigureVoxelWaterMaterial(mat);
                 EditorUtility.SetDirty(mat);
+                AssetDatabase.SaveAssets();
+                return mat;
             }
             catch (Exception e)
             {
-                Debug.LogWarning("[CrestWaterSetup] Material tuning partially failed: " + e.Message);
+                Debug.LogWarning("[CrestWaterSetup] Voxel water visual material setup failed: " + e.Message);
+                return null;
             }
-            return mat;
+        }
+
+        private static void ConfigureVoxelWaterMaterial(Material mat)
+        {
+            if (mat == null) return;
+
+            ConfigureTransparent(mat);
+            SetColorIfPresent(mat, "_ShallowColor", new Color(0.10f, 0.70f, 0.92f, 0.94f));
+            SetColorIfPresent(mat, "_DeepColor", new Color(0.005f, 0.08f, 0.24f, 0.98f));
+            SetColorIfPresent(mat, "_FoamColor", new Color(0.92f, 0.98f, 1.00f, 0.90f));
+            SetColorIfPresent(mat, "_BaseColor", new Color(0.08f, 0.52f, 0.82f, 0.88f));
+            SetColorIfPresent(mat, "_Color", new Color(0.08f, 0.52f, 0.82f, 0.88f));
+
+            SetFloatIfPresent(mat, "_DeepWaveAmplitude", 0.82f);
+            SetFloatIfPresent(mat, "_DeepWaveFrequency", 0.22f);
+            SetFloatIfPresent(mat, "_DeepWaveSpeed", 0.55f);
+            SetFloatIfPresent(mat, "_SecondaryWaveAmplitude", 0.32f);
+            SetFloatIfPresent(mat, "_SecondaryWaveFrequency", 0.47f);
+            SetFloatIfPresent(mat, "_SecondaryWaveSpeed", 0.91f);
+            SetFloatIfPresent(mat, "_ShallowWaveAmplitude", 0.15f);
+            SetFloatIfPresent(mat, "_ShallowWaveFrequency", 1.65f);
+            SetFloatIfPresent(mat, "_ShallowWaveSpeed", 1.8f);
+            SetFloatIfPresent(mat, "_WaveChop", 0.28f);
+            SetFloatIfPresent(mat, "_PlanetWaveBlend", 1.0f);
+            SetFloatIfPresent(mat, "_TideStrength", 0.22f);
+            SetFloatIfPresent(mat, "_ShoreBlendDistance", 2.5f);
+            SetFloatIfPresent(mat, "_NormalScale", 1.65f);
+            SetFloatIfPresent(mat, "_Gloss", 0.96f);
+            SetFloatIfPresent(mat, "_FresnelPower", 3.2f);
+            SetFloatIfPresent(mat, "_RefractionStrength", 0.032f);
+            SetFloatIfPresent(mat, "_CausticsIntensity", 0.30f);
+            SetFloatIfPresent(mat, "_DepthFade", 2.5f);
+            SetFloatIfPresent(mat, "_ShoreOpaqueDepth", 1.5f);
+            SetFloatIfPresent(mat, "_ShoreFoamWidth", 2.0f);
+            SetFloatIfPresent(mat, "_ShoreFoamIntensity", 1.2f);
+            SetFloatIfPresent(mat, "_SSSIntensity", 0.38f);
+            SetFloatIfPresent(mat, "_FlowNormalStrength", 1.0f);
+            SetFloatIfPresent(mat, "_FlowFoamStrength", 0.8f);
+        }
+
+        private static void ConfigureTransparent(Material mat)
+        {
+            if (mat == null) return;
+            mat.SetOverrideTag("RenderType", "Transparent");
+            mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+            SetFloatIfPresent(mat, "_Surface", 1f);
+            SetFloatIfPresent(mat, "_Blend", 0f);
+            SetFloatIfPresent(mat, "_ZWrite", 0f);
+            SetFloatIfPresent(mat, "_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            SetFloatIfPresent(mat, "_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            SetFloatIfPresent(mat, "_Cull", (float)UnityEngine.Rendering.CullMode.Off);
+            mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        }
+
+        private static void SetColorIfPresent(Material mat, string property, Color value)
+        {
+            if (mat != null && mat.HasProperty(property)) mat.SetColor(property, value);
+        }
+
+        private static void SetFloatIfPresent(Material mat, string property, float value)
+        {
+            if (mat != null && mat.HasProperty(property)) mat.SetFloat(property, value);
         }
 
         private static Material CreateFallbackWaterMaterial()
         {
             try
             {
-                var shader = Shader.Find("Crest/Ocean")
+                var shader = Shader.Find("VoxelEngine/VoxelWaterURP")
                           ?? Shader.Find("Universal Render Pipeline/Lit")
                           ?? Shader.Find("Standard");
                 var mat = new Material(shader);
@@ -316,8 +375,8 @@ namespace VoxelEngine.EditorTools
             }
         }
 
-        // v3.20.2 – bridge Crest material to voxel water mesh – NO ocean plane
-        // v3.20.8 – hardened null checks
+        // v3.20.2 – bridge visible water material to voxel water mesh – NO ocean plane
+        // v3.20.9 – hardened null checks
         private static void ConfigureCrestVoxelMaterialBridge(Material waterMaterial)
         {
             if (waterMaterial == null)
@@ -337,7 +396,7 @@ namespace VoxelEngine.EditorTools
                 if (bootstrap == null) bootstrap = go.AddComponent<VoxelEngine.WaterSim.PlanetWaterRendererBootstrap>();
             }
 
-            // Enable voxel liquid surfaces – with Crest material override
+            // Enable voxel liquid surfaces – with visible water material override
             bootstrap.renderVoxelLiquidSurfaces = true;
             bootstrap.rescheduleVisibleLiquidSurfaces = true;
             bootstrap.liquidRescheduleChunkRadius = 4;
@@ -379,7 +438,7 @@ namespace VoxelEngine.EditorTools
             EditorUtility.SetDirty(depth);
             EditorUtility.SetDirty(foam);
 
-            Debug.Log("[CrestWaterSetup] ✓ Crest material bridged to voxel water – no ocean plane – v3.20.8");
+            Debug.Log("[CrestWaterSetup] ✓ visible water material bridged to voxel water – no ocean plane – v3.20.9");
         }
 
         // ---------------------------------------------------------------------
@@ -413,7 +472,7 @@ namespace VoxelEngine.EditorTools
 
         private static void ConfigureProceduralPatchRenderer()
         {
-            // Left intentionally disabled in v3.20.8 – patch renderer causes second ocean plane
+            // Left intentionally disabled in v3.20.9 – patch renderer causes second ocean plane
             // If you need it, uncomment below
             /*
             var existing = UnityEngine.Object.FindObjectsByType<VoxelEngine.WaterSim.ProceduralWaterPatchRenderer>(FindObjectsInactive.Include, FindObjectsSortMode.None);
@@ -508,7 +567,7 @@ namespace VoxelEngine.EditorTools
                     var oilCtrl = go.AddComponent<VoxelEngine.WaterSim.CrestOilOceanController>();
                     if (oilCtrl != null) oilCtrl.oilMaterialOverride = null;
                     Undo.RegisterCreatedObjectUndo(go, "Create Crest Oil Ocean");
-                    // Immediately destroy – NO PLANE policy v3.20.8
+                    // Immediately destroy – NO PLANE policy v3.20.9
                     UnityEngine.Object.DestroyImmediate(go);
                     Debug.Log("[CrestWaterSetup] Oil Ocean created then nuked – NO PLANE policy");
                 }
@@ -548,7 +607,7 @@ namespace VoxelEngine.EditorTools
             }
         }
 
-        // ---------------- SAFE TYPE HELPERS – v3.20.8 ----------------
+        // ---------------- SAFE TYPE HELPERS – v3.20.9 ----------------
 
         private static System.Type FindTypeSafe(string fullName)
         {
@@ -699,7 +758,7 @@ namespace VoxelEngine.EditorTools
                 binder.waterHeightOffset = 0.08f;
                 binder.smoothFollow = true;
                 binder.forceOceanAlwaysOn = true;
-                binder.disableCrestOceanPlane = true; // v3.20.8 – enforce NO PLANE
+                binder.disableCrestOceanPlane = true; // v3.20.9 – enforce NO PLANE
                 binder.bridgeCrestMaterialToVoxelMesh = true;
                 EditorUtility.SetDirty(binder);
             }

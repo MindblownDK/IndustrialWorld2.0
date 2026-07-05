@@ -92,6 +92,17 @@ namespace VoxelEngine.WaterSim
             {
                 var c = _queue.Dequeue(); _queued.Remove(c);
                 if (c == null || !c.isGenerated) continue;
+
+                // Water mesh generation reads voxel NativeArrays on the main thread. Make sure
+                // world generation/terrain meshing jobs are complete first, especially for
+                // spherical worlds where SphereChunkGenJob can still own the voxel buffer.
+                var world = ActiveWorld.Current;
+                if (world != null)
+                {
+                    world.CompleteGenJobForChunk(c);
+                    world.CompleteMeshJobForChunk(c);
+                }
+
                 Build(c);
                 done++;
             }
@@ -102,11 +113,13 @@ namespace VoxelEngine.WaterSim
             var previousExternalWater = _externalWaterMat;
             var previousExternalOil = _externalOilMat;
 
-            _externalWaterMat = waterMaterial;
+            // Reject Crest ocean materials for voxel mesh rendering. They require OceanRenderer/LodData
+            // globals and can become invisible in no-plane mode.
+            _externalWaterMat = IsVoxelWaterCompatible(waterMaterial) ? waterMaterial : null;
             _externalOilMat = oilMaterial;
 
-            if (waterMaterial != null)
-                _waterMat = waterMaterial;
+            if (_externalWaterMat != null)
+                _waterMat = _externalWaterMat;
             else if (previousExternalWater != null && _waterMat == previousExternalWater)
                 _waterMat = null;
 
@@ -122,28 +135,16 @@ namespace VoxelEngine.WaterSim
             if (_externalOilMat != null) _oilMat = _externalOilMat;
             if (_waterMat != null && _oilMat != null) return;
 
-            // v3.20.3 – prefer Crest ocean material for voxel water surfaces
-            Material crestMat = Resources.Load<Material>("CrestOcean_VoxelBridge");
-            if (crestMat == null)
+            // Prefer the project voxel-water shader. Crest ocean materials depend on OceanRenderer
+            // and LodData globals; in no-plane mode they can render invisible on chunk meshes.
+            Material bridgeMat = Resources.Load<Material>("CrestOcean_VoxelBridge");
+            if (IsVoxelWaterCompatible(bridgeMat))
             {
-                crestMat = Resources.Load<Material>("Ocean");
-#if UNITY_EDITOR
-                if (crestMat == null)
-                {
-                    crestMat = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>("Assets/Liquid/Crest/Crest-Examples/Examples/Materials/Examples_Material_Ocean.mat");
-                    if (crestMat == null)
-                        crestMat = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>("Assets/Liquid/Crest/Crest/Materials/Ocean.mat");
-                }
-#endif
-            }
-            if (crestMat != null)
-            {
-                _externalWaterMat = crestMat;
-                _waterMat = crestMat;
+                _externalWaterMat = bridgeMat;
+                _waterMat = bridgeMat;
             }
 
-            var sh = Shader.Find("Crest/Ocean")
-                  ?? Shader.Find("VoxelEngine/VoxelWaterURP")
+            var sh = Shader.Find("VoxelEngine/VoxelWaterURP")
                   ?? Shader.Find("Universal Render Pipeline/Lit")
                   ?? Shader.Find("Standard");
 
@@ -213,6 +214,15 @@ namespace VoxelEngine.WaterSim
                 _oilMat.SetFloat("_PlanetWaveBlend", 1.0f);
                 _oilMat.SetFloat("_TideStrength", 0.04f);
             }
+        }
+
+        private static bool IsVoxelWaterCompatible(Material mat)
+        {
+            if (mat == null || mat.shader == null) return false;
+            string shaderName = mat.shader.name;
+            return shaderName == "VoxelEngine/VoxelWaterURP" ||
+                   shaderName == "Universal Render Pipeline/Lit" ||
+                   shaderName == "Standard";
         }
 
         public static Material GetWaterMaterial()

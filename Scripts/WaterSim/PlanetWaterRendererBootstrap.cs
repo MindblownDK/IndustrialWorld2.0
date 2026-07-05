@@ -69,6 +69,13 @@ namespace VoxelEngine.WaterSim
             {
                 var coord = center + new Vector3Int(x, y, z);
                 if (!world.TryGetChunk(coord, out var chunk) || chunk == null || !chunk.isGenerated) continue;
+
+                // Generation/meshing jobs can still be in flight for chunks that are already marked
+                // generated. Complete them before main-thread voxel reads to satisfy Unity's
+                // NativeArray safety system and prevent SphereChunkGenJob read/write races.
+                world.CompleteGenJobForChunk(chunk);
+                world.CompleteMeshJobForChunk(chunk);
+
                 if (ChunkHasVisibleLiquid(chunk))
                     WaterMeshBuilder.Schedule(chunk);
             }
