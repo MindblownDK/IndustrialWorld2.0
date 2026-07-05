@@ -7,7 +7,7 @@ namespace VoxelEngine.EditorTools
 {
     /// <summary>
     /// Editor-only Crest setup helper used by the Voxel Engine Setup Wizard.
-    /// v3.20.7 – NO OCEAN PLANE – voxel water only + Crest material bridge – legacy nuke removed + Crest type-scan hardened
+    /// v3.20.8 – NO OCEAN PLANE – voxel water only + Crest material bridge – legacy nuke removed + Crest type-scan hardened
     /// </summary>
     public static class CrestWaterSetupUtility
     {
@@ -19,7 +19,7 @@ namespace VoxelEngine.EditorTools
                 EnsurePanelSettingsFitMode();
                 ConfigureSceneAmbientOnly();
 
-                // v3.20.7 – NO OCEAN PLANE – pure procedural voxel water with Crest material
+                // v3.20.8 – NO OCEAN PLANE – pure procedural voxel water with Crest material
                 var waterMat = ConfigureCrestWaterMaterial();
                 if (waterMat == null)
                 {
@@ -42,7 +42,7 @@ namespace VoxelEngine.EditorTools
                 if (scene.IsValid() && scene.isLoaded)
                     UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(scene);
 
-                EditorUtility.DisplayDialog("Voxel Engine - Crest Water v3.20.7",
+                EditorUtility.DisplayDialog("Voxel Engine - Crest Water v3.20.8",
                     "Crest water integration configured (NO PLANE mode).\n\n" +
                     "Configured:\n" +
                     "• UI PanelSettings fit mode\n" +
@@ -55,7 +55,7 @@ namespace VoxelEngine.EditorTools
                     "• Lighting / sun untouched",
                     "OK");
 
-                Debug.Log("[CrestWaterSetup] ✓ v3.20.7 – voxel water ONLY, Crest material bridged, zero OceanRenderer planes");
+                Debug.Log("[CrestWaterSetup] ✓ v3.20.8 – voxel water ONLY, Crest material bridged, zero OceanRenderer planes");
             }
             catch (Exception ex)
             {
@@ -99,7 +99,7 @@ namespace VoxelEngine.EditorTools
             RenderSettings.fog = false;
         }
 
-        // v3.20.7 safe nuke – replaces all previous Nuke / RemoveExisting versions
+        // v3.20.8 safe nuke – replaces all previous Nuke / RemoveExisting versions
         private static void SafeNukeAllCrest()
         {
             try
@@ -126,7 +126,7 @@ namespace VoxelEngine.EditorTools
             // Unity's object list; Crest editor callbacks can mutate the hierarchy during teardown.
             try
             {
-                var transforms = Object.FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+                var transforms = UnityEngine.Object.FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None);
                 foreach (var t in transforms)
                 {
                     if (!IsLiveSceneObject(t)) continue;
@@ -306,7 +306,7 @@ namespace VoxelEngine.EditorTools
                 {
                     EditorUtility.CopySerialized(mat, existing);
                     EditorUtility.SetDirty(existing);
-                    Object.DestroyImmediate(mat);
+                    UnityEngine.Object.DestroyImmediate(mat);
                     return existing;
                 }
             }
@@ -317,7 +317,7 @@ namespace VoxelEngine.EditorTools
         }
 
         // v3.20.2 – bridge Crest material to voxel water mesh – NO ocean plane
-        // v3.20.7 – hardened null checks
+        // v3.20.8 – hardened null checks
         private static void ConfigureCrestVoxelMaterialBridge(Material waterMaterial)
         {
             if (waterMaterial == null)
@@ -328,7 +328,7 @@ namespace VoxelEngine.EditorTools
             // Remove any Crest ocean plane – we do NOT want a big water plane
             SafeNukeAllCrest();
 
-            var bootstraps = Object.FindObjectsByType<VoxelEngine.WaterSim.PlanetWaterRendererBootstrap>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var bootstraps = UnityEngine.Object.FindObjectsByType<VoxelEngine.WaterSim.PlanetWaterRendererBootstrap>(FindObjectsInactive.Include, FindObjectsSortMode.None);
             var bootstrap = bootstraps != null && bootstraps.Length > 0 ? bootstraps[0] : null;
             if (bootstrap == null)
             {
@@ -379,7 +379,7 @@ namespace VoxelEngine.EditorTools
             EditorUtility.SetDirty(depth);
             EditorUtility.SetDirty(foam);
 
-            Debug.Log("[CrestWaterSetup] ✓ Crest material bridged to voxel water – no ocean plane – v3.20.7");
+            Debug.Log("[CrestWaterSetup] ✓ Crest material bridged to voxel water – no ocean plane – v3.20.8");
         }
 
         // ---------------------------------------------------------------------
@@ -391,7 +391,7 @@ namespace VoxelEngine.EditorTools
         {
             SafeNukeAllCrest();
 
-            var bootstraps = Object.FindObjectsByType<VoxelEngine.WaterSim.PlanetWaterRendererBootstrap>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var bootstraps = UnityEngine.Object.FindObjectsByType<VoxelEngine.WaterSim.PlanetWaterRendererBootstrap>(FindObjectsInactive.Include, FindObjectsSortMode.None);
             var bootstrap = bootstraps != null && bootstraps.Length > 0 ? bootstraps[0] : null;
             if (bootstrap == null)
             {
@@ -413,16 +413,16 @@ namespace VoxelEngine.EditorTools
 
         private static void ConfigureProceduralPatchRenderer()
         {
-            // Left intentionally disabled in v3.20.7 – patch renderer causes second ocean plane
+            // Left intentionally disabled in v3.20.8 – patch renderer causes second ocean plane
             // If you need it, uncomment below
             /*
-            var existing = Object.FindObjectsByType<VoxelEngine.WaterSim.ProceduralWaterPatchRenderer>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var existing = UnityEngine.Object.FindObjectsByType<VoxelEngine.WaterSim.ProceduralWaterPatchRenderer>(FindObjectsInactive.Include, FindObjectsSortMode.None);
             if (existing != null)
             {
                 foreach (var r in existing)
                 {
                     if (r != null && !string.IsNullOrEmpty(r.gameObject.scene.name))
-                        Object.DestroyImmediate(r.gameObject);
+                        UnityEngine.Object.DestroyImmediate(r.gameObject);
                 }
             }
             var go = new GameObject("Procedural Water Patch Renderer");
@@ -508,8 +508,8 @@ namespace VoxelEngine.EditorTools
                     var oilCtrl = go.AddComponent<VoxelEngine.WaterSim.CrestOilOceanController>();
                     if (oilCtrl != null) oilCtrl.oilMaterialOverride = null;
                     Undo.RegisterCreatedObjectUndo(go, "Create Crest Oil Ocean");
-                    // Immediately destroy – NO PLANE policy v3.20.7
-                    Object.DestroyImmediate(go);
+                    // Immediately destroy – NO PLANE policy v3.20.8
+                    UnityEngine.Object.DestroyImmediate(go);
                     Debug.Log("[CrestWaterSetup] Oil Ocean created then nuked – NO PLANE policy");
                 }
             }
@@ -525,7 +525,7 @@ namespace VoxelEngine.EditorTools
         {
             try
             {
-                var grids = Object.FindObjectsByType<VoxelEngine.GridSystem.GridEntity>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+                var grids = UnityEngine.Object.FindObjectsByType<VoxelEngine.GridSystem.GridEntity>(FindObjectsInactive.Include, FindObjectsSortMode.None);
                 foreach (var grid in grids)
                 {
                     if (grid == null) continue;
@@ -548,7 +548,7 @@ namespace VoxelEngine.EditorTools
             }
         }
 
-        // ---------------- SAFE TYPE HELPERS – v3.20.7 ----------------
+        // ---------------- SAFE TYPE HELPERS – v3.20.8 ----------------
 
         private static System.Type FindTypeSafe(string fullName)
         {
@@ -628,7 +628,7 @@ namespace VoxelEngine.EditorTools
         {
             try
             {
-                var transforms = Object.FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+                var transforms = UnityEngine.Object.FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None);
                 foreach (var t in transforms)
                 {
                     if (t != null && t.name == "LiquidSurface")
@@ -642,7 +642,7 @@ namespace VoxelEngine.EditorTools
         {
             try
             {
-                var transforms = Object.FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+                var transforms = UnityEngine.Object.FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None);
                 foreach (var t in transforms)
                 {
                     if (t != null && t.name == "LiquidSurface")
@@ -699,7 +699,7 @@ namespace VoxelEngine.EditorTools
                 binder.waterHeightOffset = 0.08f;
                 binder.smoothFollow = true;
                 binder.forceOceanAlwaysOn = true;
-                binder.disableCrestOceanPlane = true; // v3.20.7 – enforce NO PLANE
+                binder.disableCrestOceanPlane = true; // v3.20.8 – enforce NO PLANE
                 binder.bridgeCrestMaterialToVoxelMesh = true;
                 EditorUtility.SetDirty(binder);
             }
