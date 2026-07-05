@@ -25,7 +25,7 @@ namespace VoxelEngine.Power.Wind
             // Apply size-based definition
             ApplySizeDefinition();
             _assembly.SetDefinition(definition);
-            _assembly.windmillType = WindmillType.Standard;
+            _assembly.windmillType = WindmillDefinition.WindmillType.Standard;
 
             // Large ones get climbable interior + higher connect radius
             if (size == WindmillDefinition.SizeCategory.Large)
@@ -53,7 +53,7 @@ namespace VoxelEngine.Power.Wind
                     definition.rotorDiameter = 82f;
                     definition.maxEffectiveHeight = 110f;
                     definition.heightBonusPerMeter = 0.007f;
-                    definition.requiresWings = 3;
+                    definition.requiredWings = 3;
                     definition.hasClimbableInterior = false;
                     break;
 
@@ -91,7 +91,7 @@ namespace VoxelEngine.Power.Wind
         {
             if (_assembly != null && !_assembly.IsFullyAssembled())
             {
-                if (powerGenRef != null) powerGenRef.wattsPerSecond = 0;
+                wattsPerSecond = 0;
                 return;
             }
             base.Update();

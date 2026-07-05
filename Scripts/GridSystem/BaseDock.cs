@@ -21,7 +21,7 @@ namespace VoxelEngine.GridSystem
         /// <summary>Undock the ship currently docked here.</summary>
         public void UndockShip()
         {
-            var ports = FindObjectsByType<GridDockingPort>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            var ports = FindObjectsByType<GridDockingPort>(FindObjectsInactive.Exclude);
             foreach (var port in ports)
             {
                 if (port.ConnectedBaseDock == this)

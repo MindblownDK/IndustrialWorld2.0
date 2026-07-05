@@ -226,21 +226,21 @@ namespace VoxelEngine.Power.Wind
 
         private void UpdateVisuals()
         {
-            if (nacelle != null) nacelle.SetActive(standardStage >= AssemblyStage.NacelleInstalled || windmillType == WindmillType.HelixVertical);
+            if (nacelle != null) nacelle.SetActive(standardStage >= AssemblyStage.NacelleInstalled || windmillType == WindmillDefinition.WindmillType.HelixVertical);
             if (hub != null) hub.SetActive(standardStage >= AssemblyStage.HubInstalled);
             if (nacelleRoof != null) nacelleRoof.SetActive(standardStage >= AssemblyStage.NacelleInstalled);
 
             for (int i = 0; i < blades.Length; i++)
             {
                 if (blades[i] != null)
-                    blades[i].SetActive(wingsInstalled > i || (windmillType == WindmillType.HelixVertical && helixStage == HelixStage.WingsInstalled));
+                    blades[i].SetActive(wingsInstalled > i || (windmillType == WindmillDefinition.WindmillType.HelixVertical && helixStage == HelixStage.WingsInstalled));
             }
 
             if (helixRotor != null)
                 helixRotor.SetActive(helixStage >= HelixStage.WingsInstalled);
 
             // Adjust efficiency for mismatched helix sizes (handled in HelixWindmill but exposed here)
-            if (windmillType == WindmillType.HelixVertical)
+            if (windmillType == WindmillDefinition.WindmillType.HelixVertical)
             {
                 // Will be overridden by specific Helix controller if needed
                 currentEfficiency = 1f;
@@ -303,7 +303,7 @@ namespace VoxelEngine.Power.Wind
             definition = def;
             if (def != null)
             {
-                windmillType = def.type == WindmillDefinition.WindmillType.Standard ? WindmillType.Standard : WindmillType.HelixVertical;
+                windmillType = def.type == WindmillDefinition.WindmillType.Standard ? WindmillDefinition.WindmillType.Standard : WindmillDefinition.WindmillType.HelixVertical;
             }
         }
     }

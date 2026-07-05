@@ -5,22 +5,23 @@ using VoxelEngine.Core;
 namespace VoxelEngine.WaterSim
 {
     /// <summary>
-    /// Crest Voxel Ocean Controller v3.12.0
+    /// Crest Voxel Ocean Controller v3.22.0 — Hybrid Ocean Mode.
     ///
-    /// KEEPS Crest's OceanRenderer alive (it is the driver for the LOD cascades
-    /// that feed the Crest/Ocean shader — animated waves, foam, flow, sea-floor
-    /// depth, shadow). Previously the binder DESTROYED OceanRenderer, which is
-    /// why voxel water rendered as a flat dark-blue polygon: the shader was
-    /// starved of its LOD textures.
+    /// Design (revised from v3.12.0):
+    ///  • Crest's OceanRenderer is ALIVE and its native ocean tiles are
+    ///    VISIBLE — they are the ocean visual (Gerstner waves, foam, etc.).
+    ///  • OceanRenderer follows the player viewpoint so LOD cascades track
+    ///    the camera.
+    ///  • OceanRenderer's transform Y is snapped to `world.SeaLevel *
+    ///    VOXEL_SIZE` so Crest's sea level matches the voxel world's.
+    ///  • Voxel water at or below sea level is skipped in WaterMeshBuilder
+    ///    (see SkipVoxelWaterAtOrBelowSeaLevel), so Crest owns the ocean
+    ///    and voxel water only renders for inland lakes / rivers above sea
+    ///    level with the stylized shader.
     ///
-    /// New behaviour:
-    ///  • OceanRenderer stays alive and receives the correct viewpoint / sea
-    ///    level every frame.
-    ///  • Crest's own infinite ocean tiles are HIDDEN (Renderer.enabled = false)
-    ///    so the visible ocean is 100% our procedural voxel mesh.
-    ///  • Every voxel water chunk gets a VoxelCrestChunkBinder that binds a
-    ///    per-slice MaterialPropertyBlock so the Crest shader can sample its
-    ///    LODs correctly.
+    /// This replaces the v3.12.0 "paint Crest shader on voxel mesh" approach
+    /// which broke because Crest's vertex-snap logic is only valid on Crest's
+    /// own concentric grid tiles.
     /// </summary>
     [DisallowMultipleComponent]
     [DefaultExecutionOrder(-50)]
@@ -45,11 +46,11 @@ namespace VoxelEngine.WaterSim
         [Tooltip("Keep Crest active even if no voxel water found – prevents flicker over oceans.")]
         public bool forceOceanAlwaysOn = false;
 
-        [Header("Crest Mode v3.12.0")]
-        [Tooltip("Hide Crest's built-in infinite ocean tiles. Their MeshRenderers are disabled but OceanRenderer itself stays alive so the LOD cascades keep feeding our voxel water.")]
-        public bool hideCrestOceanTiles = true;
-        [Tooltip("Bridge Crest material to voxel water mesh renderer.")]
-        public bool bridgeCrestMaterialToVoxelMesh = true;
+        [Header("Crest Mode v3.22.0 – Hybrid Ocean")]
+        [Tooltip("Hide Crest's built-in infinite ocean tiles. Default OFF in v3.22.0 – Crest tiles ARE the ocean visual, so we want them visible.")]
+        public bool hideCrestOceanTiles = false;
+        [Tooltip("LEGACY (v3.12.0). Ignored in v3.22.0 – voxel water no longer uses the Crest shader because its vertex snap is incompatible with heightfield topology.")]
+        public bool bridgeCrestMaterialToVoxelMesh = false;
 
         [Header("Crest Material Tuning")]
         public bool autoConfigureCrestMaterial = true;
@@ -298,24 +299,11 @@ namespace VoxelEngine.WaterSim
 
         private void TryBridgeMaterialToVoxel()
         {
-            if (_oceanRenderer == null) return;
-            try
-            {
-                var oceanType = _oceanRenderer.GetType();
-                var matProp = oceanType.GetProperty("OceanMaterial", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
-                Material crestMat = matProp != null ? matProp.GetValue(_oceanRenderer) as Material : null;
-                if (crestMat == null)
-                {
-                    var matField = oceanType.GetField("_material", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
-                    crestMat = matField != null ? matField.GetValue(_oceanRenderer) as Material : null;
-                }
-                if (crestMat != null)
-                {
-                    WaterMeshBuilder.SetMaterialOverrides(crestMat, null);
-                    WaterMeshBuilder.RenderingEnabled = true;
-                }
-            }
-            catch { }
+            // v3.22.0 – NO-OP. In the hybrid ocean model voxel water uses the
+            // stylized voxel shader for inland lakes and Crest owns the open
+            // ocean. Painting the Crest shader onto voxel heightfields caused
+            // vertex-snap-driven topology collapse (dark patches around the
+            // shore in v3.12.0).
         }
 
         private void UpdateFlatPatchTarget(Vector3 waterPosition, float surfaceHeight)

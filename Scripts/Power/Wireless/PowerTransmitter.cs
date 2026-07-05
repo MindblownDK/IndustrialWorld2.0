@@ -33,7 +33,7 @@ namespace VoxelEngine.Power.Wireless
             // Find all receivers in range; total their demand.
             float demand = 0f;
             var receivers = new List<PowerReceiver>();
-            var all = Object.FindObjectsByType<PowerReceiver>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            var all = Object.FindObjectsByType<PowerReceiver>(FindObjectsInactive.Exclude);
             foreach (var r in all)
             {
                 if (r == null) continue;

@@ -11,6 +11,7 @@ using UnityEditor;
 #endif
 using UnityEngine;
 using System.Collections.Generic;
+using VoxelEngine.Building;
 
 namespace VoxelEngine.Power.Wind
 {

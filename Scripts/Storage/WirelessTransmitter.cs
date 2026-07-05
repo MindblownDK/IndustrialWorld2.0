@@ -37,7 +37,7 @@ namespace VoxelEngine.Storage
             if (!IsOnline) { ConnectedRack = null; return; }
 
             // Find connected ServerRack within range.
-            var racks = FindObjectsByType<ServerRack>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            var racks = FindObjectsByType<ServerRack>(FindObjectsInactive.Exclude);
             ServerRack best = null; float bestD = 400f; // 20m range
             foreach (var r in racks)
             {
@@ -51,7 +51,7 @@ namespace VoxelEngine.Storage
         /// <summary>Get all online wireless transmitters in the world.</summary>
         public static WirelessTransmitter[] GetAllOnline()
         {
-            var all = FindObjectsByType<WirelessTransmitter>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            var all = FindObjectsByType<WirelessTransmitter>(FindObjectsInactive.Exclude);
             var online = new System.Collections.Generic.List<WirelessTransmitter>();
             foreach (var t in all) if (t.IsOnline && t.ConnectedRack != null) online.Add(t);
             return online.ToArray();

@@ -880,7 +880,7 @@ namespace VoxelEngine.EditorTools
 
             // Also wire it into any existing GameUIController in the currently-open scene
             // so the player doesn't have to re-run step 2.
-            var existingUis = Object.FindObjectsByType<VoxelEngine.UI.GameUIController>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var existingUis = Object.FindObjectsByType<VoxelEngine.UI.GameUIController>(FindObjectsInactive.Include);
             foreach (var ui in existingUis)
             {
                 ui.recipeRegistry = registry;
@@ -1521,7 +1521,7 @@ namespace VoxelEngine.EditorTools
             AssetDatabase.Refresh();
 
             // ---------- Wire registry into any existing BuildSystemV2 in the scene ----------
-            var systems = Object.FindObjectsByType<VoxelEngine.Building.Tiered.BuildSystemV2>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var systems = Object.FindObjectsByType<VoxelEngine.Building.Tiered.BuildSystemV2>(FindObjectsInactive.Include);
             foreach (var sys in systems)
             {
                 sys.registry = registry;
@@ -5927,7 +5927,7 @@ root =>
                 string path = $"{PREFABS}/StandardWindmill_{sizeName}.prefab";
                 var root = new GameObject($"StandardWindmill_{sizeName}");
                 var wm = root.AddComponent<VoxelEngine.Power.Wind.StandardWindmill>();
-                wm.maxPowerWatts = power;
+                wm.runtimeMaxPowerOverride = power;
                 
                 var mesh = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
                 mesh.transform.SetParent(root.transform, false);

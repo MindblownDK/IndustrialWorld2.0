@@ -56,7 +56,7 @@ namespace VoxelEngine.Crafting
         public static StationTier MaxAccessibleStation(Vector3 origin, float radius)
         {
             StationTier best = StationTier.None;
-            var stations = Object.FindObjectsByType<CraftingStation>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            var stations = Object.FindObjectsByType<CraftingStation>(FindObjectsInactive.Exclude);
             foreach (var st in stations)
             {
                 if ((st.transform.position - origin).sqrMagnitude > radius * radius) continue;

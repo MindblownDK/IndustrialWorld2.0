@@ -26,7 +26,23 @@ namespace VoxelEngine.WaterSim
         private static Material _externalOilMat;
         private static readonly HashSet<Vector3Int> _sphereSurfaceCells = new();
 
-        public static bool RenderingEnabled { get; set; } = true; // v3.20.2 – Crest material bridged to voxel mesh – no ocean plane
+        public static bool RenderingEnabled { get; set; } = true;
+
+        /// <summary>
+        /// v3.22.0 – When true, voxel water columns whose surface is at or below
+        /// the world sea level are skipped entirely so Crest's native ocean tiles
+        /// own the visual there. Inland lakes and rivers above sea level still
+        /// render with the stylized voxel water shader. Prevents z-fighting.
+        /// </summary>
+        public static bool SkipVoxelWaterAtOrBelowSeaLevel { get; set; } = true;
+
+        /// <summary>
+        /// v3.22.0 – Small negative bias in voxel units. A cell is considered
+        /// "at sea level" when its surface Y is within SeaLevel + bias. Keep it
+        /// slightly positive so shore cells right at the water line still render
+        /// (for smooth shore blend) but full-ocean cells are dropped.
+        /// </summary>
+        public static float SeaLevelSkipBiasVoxels { get; set; } = -0.25f;
 
         private const byte WaterVoxelMat  = (byte)MaterialId.WaterVoxel;
         private const byte WaterLiquidMat = (byte)MaterialId.WaterLiquid;
@@ -149,7 +165,7 @@ namespace VoxelEngine.WaterSim
                 if (r == null) continue;
                 if (_waterMat != null && _oilMat != null)
                     r.sharedMaterials = new[] { _waterMat, _oilMat };
-                EnsureCrestBinder(f.gameObject);
+                RemoveLegacyCrestBinder(f.gameObject);
             }
         }
 
@@ -244,22 +260,18 @@ namespace VoxelEngine.WaterSim
         {
             if (mat == null || mat.shader == null) return false;
             string shaderName = mat.shader.name;
-            // v3.12.0 — accept Crest's real ocean shader so voxel chunks render
-            // with genuine Crest waves / foam / flow, provided each chunk carries
-            // a VoxelCrestChunkBinder to feed the per-slice MPB values.
+            // v3.22.0 – REVERTED Crest acceptance. The Crest/Ocean shader's
+            // vertex snap logic is designed for Crest's own regular concentric
+            // tile mesh and collapses arbitrary voxel-heightfield topology. We
+            // now use Crest for the OCEAN (its native tiles) and the stylized
+            // voxel water shader ONLY for inland lakes above sea level.
             return shaderName == "VoxelEngine/VoxelWaterURP" ||
                    shaderName == "Universal Render Pipeline/Lit" ||
-                   shaderName == "Standard" ||
-                   shaderName == "Crest/Ocean" ||
-                   shaderName.StartsWith("Crest/", System.StringComparison.Ordinal);
+                   shaderName == "Standard";
         }
 
-        /// <summary>True when the currently active water material is a Crest/* shader.</summary>
-        public static bool IsCurrentMaterialCrest()
-        {
-            return _waterMat != null && _waterMat.shader != null &&
-                   _waterMat.shader.name.StartsWith("Crest/", System.StringComparison.Ordinal);
-        }
+        /// <summary>Always false in v3.22.0 – voxel water no longer uses Crest shader.</summary>
+        public static bool IsCurrentMaterialCrest() => false;
 
         public static Material GetWaterMaterial()
         {
@@ -329,6 +341,23 @@ namespace VoxelEngine.WaterSim
 
                     var liquid = FluidMaterialUtility.LiquidFromVoxel(vox);
                     float baseH = h + (vox.waterLevel / 255f);
+
+                    // v3.22.0 – Skip open-ocean cells so Crest's native tiles
+                    // own the visual there. Only applies to Water (oil pools
+                    // are never at world sea level). Handles both flat and
+                    // spherical worlds: on a planet sea level is a RADIUS.
+                    if (SkipVoxelWaterAtOrBelowSeaLevel && liquid == LiquidType.Water)
+                    {
+                        int seaLevelVoxels = world != null ? world.SeaLevel : 96;
+                        Vector3 surfaceCenter = chunkVoxel + (Vector3)local + Vector3.one * 0.5f;
+                        surfaceCenter += (Vector3)dom * ((vox.waterLevel / 255f) - 0.5f);
+                        bool belowSeaLevel;
+                        if (PlanetWaterUtility.IsPlanetWorld)
+                            belowSeaLevel = surfaceCenter.magnitude <= seaLevelVoxels + SeaLevelSkipBiasVoxels;
+                        else
+                            belowSeaLevel = surfaceCenter.y <= seaLevelVoxels + SeaLevelSkipBiasVoxels;
+                        if (belowSeaLevel) continue;
+                    }
 
                     bool bordersTerrain = false;
                     float terrainH = baseH;
@@ -837,7 +866,7 @@ namespace VoxelEngine.WaterSim
                 foreach (var col in c.waterMeshGO.GetComponents<Collider>()) Object.Destroy(col);
                 var existingLod = c.waterMeshGO.GetComponent<WaterSurfaceLodController>();
                 if (existingLod != null) existingLod.Configure(c);
-                EnsureCrestBinder(c.waterMeshGO);
+                RemoveLegacyCrestBinder(c.waterMeshGO);
                 return;
             }
             c.waterMeshGO = new GameObject("LiquidSurface");
@@ -847,27 +876,22 @@ namespace VoxelEngine.WaterSim
             c.waterMeshRenderer.shadowCastingMode = ShadowCastingMode.Off;
             c.waterMeshRenderer.receiveShadows = false;
             c.waterMeshGO.AddComponent<WaterSurfaceLodController>().Configure(c);
-            EnsureCrestBinder(c.waterMeshGO);
         }
 
         /// <summary>
-        /// v3.12.0 — attach the per-chunk Crest LOD binder whenever the active
-        /// water material is a Crest shader, and remove it otherwise. This is
-        /// what makes waves / foam / flow actually appear on voxel chunks.
+        /// v3.22.0 – legacy cleanup: removes VoxelCrestChunkBinder if it was
+        /// added by an earlier build. In the hybrid ocean model voxel water
+        /// never uses the Crest shader so the binder is a no-op / cost.
         /// </summary>
-        private static void EnsureCrestBinder(GameObject go)
+#pragma warning disable CS0618 // reference to obsolete stub is intentional cleanup
+        private static void RemoveLegacyCrestBinder(GameObject go)
         {
             if (go == null) return;
             var existing = go.GetComponent<VoxelCrestChunkBinder>();
-            if (IsCurrentMaterialCrest())
-            {
-                if (existing == null) go.AddComponent<VoxelCrestChunkBinder>();
-            }
-            else if (existing != null)
-            {
-                if (Application.isPlaying) Object.Destroy(existing);
-                else Object.DestroyImmediate(existing);
-            }
+            if (existing == null) return;
+            if (Application.isPlaying) Object.Destroy(existing);
+            else Object.DestroyImmediate(existing);
         }
+#pragma warning restore CS0618
     }
 }

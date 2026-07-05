@@ -105,7 +105,7 @@ namespace VoxelEngine.Storage
 
         private void FindRack()
         {
-            var racks = FindObjectsByType<ServerRack>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            var racks = FindObjectsByType<ServerRack>(FindObjectsInactive.Exclude);
             ServerRack best = null; float bestD = 100f;
             foreach (var r in racks)
             {

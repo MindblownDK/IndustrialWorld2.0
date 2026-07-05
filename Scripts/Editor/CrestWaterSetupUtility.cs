@@ -7,11 +7,14 @@ namespace VoxelEngine.EditorTools
 {
     /// <summary>
     /// Editor-only Crest setup helper used by the Voxel Engine Setup Wizard.
-    /// v3.12.0 – GENUINE CREST BRIDGE:
-    ///   • OceanRenderer is KEPT ALIVE (LOD cascade driver)
-    ///   • Crest's own infinite ocean tiles are hidden at runtime by the binder
-    ///   • Voxel water chunks are painted with the real Crest/Ocean material
-    ///     and each carries a VoxelCrestChunkBinder so waves / foam / flow show up
+    /// v3.22.0 – HYBRID OCEAN:
+    ///   • OceanRenderer is created if missing and kept ALIVE
+    ///   • Crest's own ocean tiles are VISIBLE and render the ocean surface
+    ///   • Material feature toggles (_Foam / _Flow / _Shadows / _ClipSurface /
+    ///     _Albedo) are aligned with the subsystems enabled on OceanRenderer,
+    ///     silencing the "not enabled on material" startup warnings
+    ///   • WaterMeshBuilder skips voxel water at or below sea level so Crest
+    ///     owns the ocean; voxel water only renders inland lakes above sea level
     /// </summary>
     public static class CrestWaterSetupUtility
     {
@@ -23,8 +26,9 @@ namespace VoxelEngine.EditorTools
                 EnsurePanelSettingsFitMode();
                 ConfigureSceneAmbientOnly();
 
-                // v3.12.0 – GENUINE CREST BRIDGE – use the real Crest/Ocean material.
-                // Fall back to a stylized voxel material only if Crest is missing.
+                // v3.22.0 – HYBRID OCEAN. Load / copy the real Crest ocean
+                // material so its tiles look correct. Fallback to stylized
+                // voxel material if Crest is missing.
                 var waterMat = ConfigureCrestWaterMaterial();
                 if (waterMat == null)
                 {
@@ -32,9 +36,7 @@ namespace VoxelEngine.EditorTools
                     Debug.LogWarning("[CrestWaterSetup] Crest material not found – using fallback URP Lit water.");
                 }
 
-                // v3.12.0 – DO NOT DESTROY OCEAN RENDERER. It is the LOD driver
-                // that powers Crest waves / foam / flow. The runtime binder will
-                // simply hide its infinite ocean tiles for us.
+                // v3.22.0 – OceanRenderer stays alive, its tiles stay visible.
                 EnsureCrestOceanRendererInScene(waterMat);
 
                 ConfigureCrestVoxelMaterialBridge(waterMat);
@@ -46,19 +48,20 @@ namespace VoxelEngine.EditorTools
                 if (scene.IsValid() && scene.isLoaded)
                     UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(scene);
 
-                EditorUtility.DisplayDialog("Voxel Engine - Crest Water v3.12.0",
-                    "Genuine Crest bridge configured.\n\n" +
-                    "Configured:\n" +
-                    "• UI PanelSettings fit mode\n" +
-                    "• Real Crest/Ocean material assigned to voxel water\n" +
-                    "• OceanRenderer KEPT ALIVE (LOD cascade driver)\n" +
-                    "• Crest built-in ocean tiles hidden at runtime\n" +
-                    "• VoxelCrestChunkBinder auto-attached per water chunk\n" +
-                    "• WaterMeshBuilder.RenderingEnabled = true\n" +
-                    "• Maritime wake emitters updated",
+                EditorUtility.DisplayDialog("Voxel Engine - Crest Water v3.22.0",
+                    "Hybrid Crest Ocean + Voxel Lakes configured.\n\n" +
+                    "Result:\n" +
+                    "• OceanRenderer alive, tiles VISIBLE = the ocean.\n" +
+                    "• Voxel water at/below sea level is skipped.\n" +
+                    "• Voxel water ABOVE sea level (lakes/rivers) uses the\n" +
+                    "  stylized VoxelWaterURP shader.\n" +
+                    "• Crest material keywords aligned with subsystems\n" +
+                    "  (Foam ON, Flow OFF) – no more startup warnings.\n" +
+                    "• Sea level Y auto-aligned to world sea level.\n" +
+                    "• Maritime wake emitters updated.",
                     "OK");
 
-                Debug.Log("[CrestWaterSetup] ✓ v3.12.0 – Genuine Crest bridge: OceanRenderer alive, tiles hidden, voxel mesh uses Crest/Ocean shader.");
+                Debug.Log("[CrestWaterSetup] ✓ v3.22.0 – Hybrid: Crest owns the ocean, voxel water owns inland lakes above sea level.");
             }
             catch (Exception ex)
             {
@@ -286,8 +289,44 @@ namespace VoxelEngine.EditorTools
                 bridge.name = "CrestOcean_VoxelBridge";
                 EditorUtility.SetDirty(bridge);
             }
+
+            // v3.22.0 – align material feature toggles with the subsystems we
+            // actually create on OceanRenderer. Prevents Crest's "not enabled
+            // on material" runtime warnings.
+            AlignCrestMaterialKeywords(bridge,
+                foam: true,
+                flow: false,
+                shadows: false,
+                clipSurface: false,
+                albedo: false);
+
             AssetDatabase.SaveAssets();
             return bridge;
+        }
+
+        /// <summary>
+        /// v3.22.0 – toggles Crest ocean material features (float property +
+        /// shader keyword pair) so they match the subsystems we enable on
+        /// OceanRenderer. Silences the Crest LodDataMgr.Start() warnings.
+        /// </summary>
+        private static void AlignCrestMaterialKeywords(Material mat, bool foam, bool flow, bool shadows, bool clipSurface, bool albedo)
+        {
+            if (mat == null) return;
+            SetCrestFeature(mat, "_Foam", "_FOAM_ON", foam);
+            SetCrestFeature(mat, "_Flow", "_FLOW_ON", flow);
+            SetCrestFeature(mat, "_Shadows", "_SHADOWS_ON", shadows);
+            SetCrestFeature(mat, "_ClipSurface", "_CLIPSURFACE_ON", clipSurface);
+            SetCrestFeature(mat, "_Albedo", "_ALBEDO_ON", albedo);
+            EditorUtility.SetDirty(mat);
+        }
+
+        private static void SetCrestFeature(Material mat, string property, string keyword, bool enabled)
+        {
+            if (mat == null) return;
+            if (mat.HasProperty(property))
+                mat.SetFloat(property, enabled ? 1f : 0f);
+            if (enabled) mat.EnableKeyword(keyword);
+            else mat.DisableKeyword(keyword);
         }
 
         /// <summary>
@@ -510,8 +549,8 @@ namespace VoxelEngine.EditorTools
 
             var binder = binderGO.GetComponent<VoxelEngine.WaterSim.CrestVoxelWaterBinder>();
             if (binder == null) binder = binderGO.AddComponent<VoxelEngine.WaterSim.CrestVoxelWaterBinder>();
-            binder.hideCrestOceanTiles = true;
-            binder.bridgeCrestMaterialToVoxelMesh = true;
+            binder.hideCrestOceanTiles = false; // v3.22.0 – Crest tiles ARE the ocean visual
+            binder.bridgeCrestMaterialToVoxelMesh = false;
             binder.autoConfigureCrestMaterial = true;
             binder.followNearestProceduralWater = true;
             binder.alignToPlanetSurface = true;
@@ -805,14 +844,24 @@ namespace VoxelEngine.EditorTools
             try
             {
                 var so = new SerializedObject(ocean);
-                SetBool(so, "_createDynamicWaveSim", true);
-                SetBool(so, "_createFlowSim", true);
+                // v3.22.0 – align OceanRenderer subsystem creation with what the
+                // material actually has enabled. Creating a subsystem whose
+                // material keyword is off triggers a "not enabled on material"
+                // warning at startup. Foam + sea-floor depth ON (we want shore
+                // foam & shallow tinting). Flow OFF (no flow inputs in this
+                // project). Dynamic waves OFF (heavy, not used).
+                SetBool(so, "_createDynamicWaveSim", false);
+                SetBool(so, "_createFlowSim", false);
                 SetBool(so, "_createSeaFloorDepthData", true);
                 SetBool(so, "_createFoamSim", true);
+                SetBool(so, "_createShadowData", false);
+                SetBool(so, "_createAlbedoData", false);
+                SetBool(so, "_createClipSurfaceData", false);
                 SetBool(so, "_heightQueries", true);
-                SetBool(so, "_hideOceanTileGameObjects", true);
+                // v3.22.0 – Crest tiles are the OCEAN VISUAL now. Do NOT hide them.
+                SetBool(so, "_hideOceanTileGameObjects", false);
                 SetNumber(so, "_lodDataResolution", 384f);
-                SetNumber(so, "_geometryDownSampleFactor", 4f);
+                SetNumber(so, "_geometryDownSampleFactor", 2f);
                 SetNumber(so, "_lodCount", 7f);
                 SetNumber(so, "_minScale", 4f);
                 SetNumber(so, "_maxScale", 256f);
@@ -846,8 +895,8 @@ namespace VoxelEngine.EditorTools
                 binder.waterHeightOffset = 0.08f;
                 binder.smoothFollow = true;
                 binder.forceOceanAlwaysOn = true;
-                binder.hideCrestOceanTiles = true; // v3.12.0 – hide built-in Crest tiles but keep OceanRenderer alive
-                binder.bridgeCrestMaterialToVoxelMesh = true;
+                binder.hideCrestOceanTiles = false; // v3.22.0 – Crest tiles ARE the ocean visual
+                binder.bridgeCrestMaterialToVoxelMesh = false; // v3.22.0 – legacy field, kept for serialization compatibility
                 EditorUtility.SetDirty(binder);
             }
             catch { }
