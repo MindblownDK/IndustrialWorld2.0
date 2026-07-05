@@ -58,7 +58,7 @@ namespace VoxelEngine.Weather
         {
             if (directionalLight == null)
             {
-                var lights = FindObjectsByType<Light>(FindObjectsInactive.Exclude);
+                var lights = FindObjectsByType<Light>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
                 foreach (var l in lights)
                     if (l.type == LightType.Directional) { directionalLight = l; break; }
             }

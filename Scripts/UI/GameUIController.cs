@@ -2588,7 +2588,7 @@ namespace VoxelEngine.UI
         {
             CraftQueue best = null;
             float bestSqr = stationRadius * stationRadius;
-            var stations = FindObjectsByType<Crafting.CraftingStation>(FindObjectsInactive.Exclude);
+            var stations = FindObjectsByType<Crafting.CraftingStation>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
             foreach (var st in stations)
             {
                 if (st.tier != tier) continue;

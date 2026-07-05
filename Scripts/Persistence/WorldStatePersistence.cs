@@ -129,7 +129,7 @@ namespace VoxelEngine.Persistence
 
         private void SavePlacedBlocks(SaveData save)
         {
-            var placed = FindObjectsByType<PlacedBlock>(FindObjectsInactive.Exclude);
+            var placed = FindObjectsByType<PlacedBlock>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
             foreach (var pb in placed)
             {
                 if (pb == null || pb.Item == null) continue;
@@ -147,7 +147,7 @@ namespace VoxelEngine.Persistence
 
         private void SavePlacedTiered(SaveData save)
         {
-            var placed = FindObjectsByType<PlacedTieredBlock>(FindObjectsInactive.Exclude);
+            var placed = FindObjectsByType<PlacedTieredBlock>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
             foreach (var pb in placed)
             {
                 if (pb == null || pb.definition == null) continue;
@@ -164,7 +164,7 @@ namespace VoxelEngine.Persistence
 
         private void SaveQuarries(SaveData save)
         {
-            var quarries = FindObjectsByType<VoxelEngine.Transport.Quarry>(FindObjectsInactive.Exclude);
+            var quarries = FindObjectsByType<VoxelEngine.Transport.Quarry>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
             foreach (var q in quarries)
             {
                 if (q == null) continue;
@@ -190,7 +190,7 @@ namespace VoxelEngine.Persistence
             if (save.quarries == null) return;
             // Quarries are restored by finding already-placed quarry blocks (from RestorePlacedBlocks)
             // and applying their saved state.
-            var quarries = FindObjectsByType<VoxelEngine.Transport.Quarry>(FindObjectsInactive.Exclude);
+            var quarries = FindObjectsByType<VoxelEngine.Transport.Quarry>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
             foreach (var sq in save.quarries)
             {
                 // Find the quarry closest to the saved position.

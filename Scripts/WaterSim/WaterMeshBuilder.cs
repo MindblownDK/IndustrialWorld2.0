@@ -29,12 +29,12 @@ namespace VoxelEngine.WaterSim
         public static bool RenderingEnabled { get; set; } = true;
 
         /// <summary>
-        /// v3.22.0 – When true, voxel water columns whose surface is at or below
-        /// the world sea level are skipped entirely so Crest's native ocean tiles
-        /// own the visual there. Inland lakes and rivers above sea level still
-        /// render with the stylized voxel water shader. Prevents z-fighting.
+        /// v3.23.0 – DEFAULT OFF. Voxel water is authoritative again (Crest
+        /// tiles are hidden per user request), so we render voxel water
+        /// everywhere including the ocean. Toggle to true only if you later
+        /// re-enable Crest's ocean plane and want the two to coexist.
         /// </summary>
-        public static bool SkipVoxelWaterAtOrBelowSeaLevel { get; set; } = true;
+        public static bool SkipVoxelWaterAtOrBelowSeaLevel { get; set; } = false;
 
         /// <summary>
         /// v3.22.0 – Small negative bias in voxel units. A cell is considered

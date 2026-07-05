@@ -4,7 +4,96 @@ Branch: **Dev** · Semantic Versioning 2.0.0
 
 ---
 
-## [3.22.0] — Hybrid Crest Ocean + Voxel Lakes
+## [3.23.0] — Voxel Water Authoritative (Kill Ocean Plane)
+
+**Type:** MINOR — Design pivot back from 3.22.0. Voxel water renders as the
+one and only ocean visual using the stylized VoxelEngine/VoxelWaterURP shader
+(waves, foam, flow, fresnel). Crest's infinite ocean plane is hidden per user
+request. Save-compatible.
+
+### Fixed
+- **Voxel water was invisible after 3.22.0.** Two components in the scene were
+  force-setting `WaterMeshBuilder.RenderingEnabled = false` at scene start:
+    - `FluidPerformanceBootstrap` (Awake / OnEnable / `Apply()`)
+    - `CrestOilOceanController` (OnEnable)
+  Both are now fixed. `FluidPerformanceBootstrap` gained a
+  `forceWaterMeshRendering` toggle (default `true`) that keeps voxel water on.
+  `CrestOilOceanController` no longer touches `RenderingEnabled`.
+- **Infinite Crest ocean plane still spawning.** Root cause: `SetBool(so,
+  "_hideOceanTileGameObjects", false)` in v3.22.0 setup and matching
+  `hideCrestOceanTiles = false` on the runtime binder. Both defaults reversed
+  in v3.23.0. OceanRenderer stays alive (for future hooks) but its tile GOs
+  are hidden.
+- **Sea-level skip was hiding voxel water everywhere.** v3.22.0 introduced
+  `SkipVoxelWaterAtOrBelowSeaLevel = true` to defer to Crest at sea level.
+  Since Crest is now hidden, the skip default is `false` in v3.23.0 — voxel
+  water renders everywhere.
+- **Crest startup warnings** ("Foam is not enabled on the ocean material",
+  "Flow is not enabled...", etc.) fully silenced. Setup wizard now disables
+  every Crest subsystem AND zeroes every material feature keyword since
+  OceanRenderer is silent.
+
+### Added
+- `FluidPerformanceBootstrap.forceWaterMeshRendering` (bool, default `true`).
+- `Assets/Resources/CrestOcean_Hidden.mat` — Crest material used by
+  OceanRenderer (invisible). Split from `CrestOcean_VoxelBridge.mat` so the
+  two roles no longer race over the same asset.
+- Setup wizard now scans and fixes any existing
+  `FluidPerformanceBootstrap` in the scene (sets `forceWaterMeshRendering =
+  true`, `enableCrestMode = false`).
+
+### Changed
+- `CrestVoxelWaterBinder.hideCrestOceanTiles` default: `false` → `true`.
+- `WaterMeshBuilder.SkipVoxelWaterAtOrBelowSeaLevel` default: `true` → `false`.
+- `CrestWaterSetupUtility.ConfigureSerializedCrestOcean(...)`:
+  - `_hideOceanTileGameObjects` = **true** (was false)
+  - `_createFoamSim` = **false** (was true)
+  - `_createSeaFloorDepthData` = **false** (was true)
+  - `_lodDataResolution` = 128 (was 384) — silent LOD driver, save GPU
+  - `_geometryDownSampleFactor` = 4 (was 2)
+  - `_lodCount` = 4 (was 7)
+  - `_heightQueries` = false
+- `CrestWaterSetupUtility.ConfigureCrestVoxelMaterialBridge(...)` now creates
+  a fresh voxel material (`CreateOrUpdateVoxelWaterVisualMaterial()`) for the
+  water MESH override instead of pushing the Crest material there (Crest's
+  shader is topologically incompatible with our voxel heightfields).
+- `LoadOrCopyCrestOceanMaterial()` writes to `CrestOcean_Hidden.mat` instead
+  of `CrestOcean_VoxelBridge.mat` — no more asset-write race.
+- `AlignCrestMaterialKeywords(...)` now passes ALL features off (matching the
+  fact that every Crest subsystem is disabled).
+- `GameVersion` bumped to `3.23.0-dev`.
+
+### Manual Unity steps
+1. Pull the branch, let Unity recompile.
+2. Menu: **Tools → Voxel Engine → Configure Crest Water Integration**.
+   Dialog now reads *"Voxel Water Authoritative configured — no infinite
+   Crest plane."*
+3. In the Hierarchy find **`Crest Ocean`**. Confirm in Inspector:
+   - `Hide Ocean Tile Game Objects` = **on**
+   - `Create Foam Sim`, `Create Flow Sim`, `Create Sea Floor Depth Data`,
+     `Create Dynamic Wave Sim`, `Create Shadow Data` = **all off**
+4. Find any `Fluid Performance Bootstrap` component in the scene (usually on
+   `Liquid Visual Runtime` or the world root). Confirm:
+   - `Force Water Mesh Rendering` = **on**
+   - `Enable Crest Mode` = **off**
+5. Press Play. You should see:
+   - No infinite blue plane anywhere.
+   - Voxel water surface visible at sea level everywhere (with waves, foam,
+     shore blend from the VoxelWaterURP shader).
+   - Clean console — no Crest "not enabled on material" warnings.
+6. If water is still invisible: open **Window → Analysis → Frame Debugger**
+   during Play, look for a draw call named "LiquidSurface". If it's absent,
+   `WaterMeshBuilder.RenderingEnabled` is still being flipped off by
+   something. Search the project for `RenderingEnabled = false` and ping me.
+
+### Deferred
+- Wake foam around grid hulls (Crest-driven or texture-driven).
+- Swimming + underwater fog volume.
+- World-gen lag pass — still on deck as `[3.23.1]` or `[3.24.0]`.
+
+---
+
+## [3.22.0] — Hybrid Crest Ocean + Voxel Lakes *(superseded by 3.23.0)*
 
 **Type:** MINOR — Save-compatible visual pivot. Crest tiles are now visible
 and *are* the ocean. Voxel water is used only for inland lakes above sea

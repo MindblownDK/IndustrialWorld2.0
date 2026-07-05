@@ -5,23 +5,17 @@ using VoxelEngine.Core;
 namespace VoxelEngine.WaterSim
 {
     /// <summary>
-    /// Crest Voxel Ocean Controller v3.22.0 — Hybrid Ocean Mode.
+    /// Crest Voxel Ocean Controller v3.23.0 — Voxel Water Authoritative.
     ///
-    /// Design (revised from v3.12.0):
-    ///  • Crest's OceanRenderer is ALIVE and its native ocean tiles are
-    ///    VISIBLE — they are the ocean visual (Gerstner waves, foam, etc.).
-    ///  • OceanRenderer follows the player viewpoint so LOD cascades track
-    ///    the camera.
-    ///  • OceanRenderer's transform Y is snapped to `world.SeaLevel *
-    ///    VOXEL_SIZE` so Crest's sea level matches the voxel world's.
-    ///  • Voxel water at or below sea level is skipped in WaterMeshBuilder
-    ///    (see SkipVoxelWaterAtOrBelowSeaLevel), so Crest owns the ocean
-    ///    and voxel water only renders for inland lakes / rivers above sea
-    ///    level with the stylized shader.
-    ///
-    /// This replaces the v3.12.0 "paint Crest shader on voxel mesh" approach
-    /// which broke because Crest's vertex-snap logic is only valid on Crest's
-    /// own concentric grid tiles.
+    /// Design (revised from v3.22.0 hybrid):
+    ///  • Crest's OceanRenderer is ALIVE (kept for future wake-foam hooks)
+    ///    but its infinite ocean tiles are HIDDEN — the user does not want
+    ///    an infinite Crest plane.
+    ///  • Voxel water renders everywhere (including at sea level) with the
+    ///    stylized VoxelEngine/VoxelWaterURP shader (waves, foam, flow,
+    ///    fresnel, depth fog).
+    ///  • OceanRenderer's transform Y is still snapped to sea level so any
+    ///    future Crest LOD sampling stays coherent.
     /// </summary>
     [DisallowMultipleComponent]
     [DefaultExecutionOrder(-50)]
@@ -46,10 +40,10 @@ namespace VoxelEngine.WaterSim
         [Tooltip("Keep Crest active even if no voxel water found – prevents flicker over oceans.")]
         public bool forceOceanAlwaysOn = false;
 
-        [Header("Crest Mode v3.22.0 – Hybrid Ocean")]
-        [Tooltip("Hide Crest's built-in infinite ocean tiles. Default OFF in v3.22.0 – Crest tiles ARE the ocean visual, so we want them visible.")]
-        public bool hideCrestOceanTiles = false;
-        [Tooltip("LEGACY (v3.12.0). Ignored in v3.22.0 – voxel water no longer uses the Crest shader because its vertex snap is incompatible with heightfield topology.")]
+        [Header("Crest Mode v3.23.0 – Voxel Water Authoritative")]
+        [Tooltip("Hide Crest's built-in infinite ocean tiles. Default ON in v3.23.0 – user does not want an infinite Crest plane; voxel water is the visual.")]
+        public bool hideCrestOceanTiles = true;
+        [Tooltip("LEGACY – ignored since v3.22.0. Kept for scene-serialization compatibility.")]
         public bool bridgeCrestMaterialToVoxelMesh = false;
 
         [Header("Crest Material Tuning")]

@@ -53,7 +53,7 @@ namespace VoxelEngine.Storage
 
         private void FindRack()
         {
-            var racks = FindObjectsByType<ServerRack>(FindObjectsInactive.Exclude);
+            var racks = FindObjectsByType<ServerRack>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
             ServerRack best = null;
             float bestD = rackRadius * rackRadius;
             foreach (var rack in racks)

@@ -119,6 +119,58 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
+--- !u!1 &96498999
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 96499001}
+  - component: {fileID: 96499000}
+  m_Layer: 0
+  m_Name: Liquid Visual Runtime
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &96499000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 96498999}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e4b851e2e6854245b1a964889509be79, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.WaterSim.PlanetWaterRendererBootstrap
+  oceanProfile: {fileID: 0}
+  meshBuildBudgetPerFrame: 2
+  renderVoxelLiquidSurfaces: 1
+  rescheduleVisibleLiquidSurfaces: 1
+  liquidRescheduleChunkRadius: 4
+  liquidRescheduleInterval: 0.5
+  waterMaterialOverride: {fileID: 2100000, guid: c16086c6d69b0b74ab7c6851170f14d4, type: 2}
+  oilMaterialOverride: {fileID: 0}
+--- !u!4 &96499001
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 96498999}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &177553672
 GameObject:
   m_ObjectHideFlags: 0
@@ -508,112 +560,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &684838753
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 684838757}
-  - component: {fileID: 684838756}
-  - component: {fileID: 684838755}
-  - component: {fileID: 684838754}
-  m_Layer: 0
-  m_Name: CrestVoxelBridge
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &684838754
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 684838753}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 695488bff09546244bde0bd4d6d3ba93, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.WaterSim.VoxelCrestBlockFoamEmitter
-  followTarget: {fileID: 0}
-  scanRadius: 96
-  scanInterval: 0.5
-  maxEmitters: 32
-  blockMask:
-    serializedVersion: 2
-    m_Bits: 4294967295
-  emitterRadius: 1.8
-  weight: 1.25
-  addToPlacedBlocksOnly: 1
---- !u!114 &684838755
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 684838753}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 54559ff93655290429c9d96a79e23996, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.WaterSim.VoxelCrestSeaFloorDepthProvider
-  sampleCenter: {fileID: 0}
-  sampleRadius: 48
-  samplesPerAxis: 12
-  updateInterval: 0.25
-  shallowDepth: 2.2
-  deepDepth: 24
---- !u!114 &684838756
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 684838753}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d1a8d09948254ff5b4f4f34859271fc4, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.WaterSim.CrestVoxelWaterBinder
-  viewpoint: {fileID: 0}
-  waterHeightOffset: 0.08
-  alignToPlanetSurface: 1
-  followNearestProceduralWater: 1
-  waterSearchRadius: 768
-  waterSearchSpacing: 24
-  scanInterval: 0.15
-  smoothFollow: 1
-  followSmoothing: 8
-  forceOceanAlwaysOn: 1
-  hideCrestOceanTiles: 1
-  bridgeCrestMaterialToVoxelMesh: 1
-  autoConfigureCrestMaterial: 1
-  shallowColor: {r: 0.18, g: 0.72, b: 0.88, a: 0.92}
-  deepColor: {r: 0.008, g: 0.14, b: 0.34, a: 1}
-  scatterColor: {r: 0.12, g: 0.58, b: 0.52, a: 1}
-  proceduralWaterFound: 0
-  sampledWaterDepth: 0
-  sampledSurfaceOffset: 0
-  currentOceanUp: {x: 0, y: 1, z: 0}
---- !u!4 &684838757
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 684838753}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &783353183
 GameObject:
   m_ObjectHideFlags: 0
@@ -729,37 +675,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &1064499775
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1064499776}
-  m_Layer: 0
-  m_Name: HSmall
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &1064499776
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1064499775}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1321117567
 GameObject:
   m_ObjectHideFlags: 0
@@ -858,6 +773,112 @@ MonoBehaviour:
   terrainMaterial: {fileID: 0}
   testRadiusKm: 0.5
   viewDistance: 5
+--- !u!1 &1451735781
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1451735785}
+  - component: {fileID: 1451735784}
+  - component: {fileID: 1451735783}
+  - component: {fileID: 1451735782}
+  m_Layer: 0
+  m_Name: CrestVoxelBridge
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1451735782
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1451735781}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 695488bff09546244bde0bd4d6d3ba93, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.WaterSim.VoxelCrestBlockFoamEmitter
+  followTarget: {fileID: 0}
+  scanRadius: 96
+  scanInterval: 0.5
+  maxEmitters: 32
+  blockMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  emitterRadius: 1.8
+  weight: 1.25
+  addToPlacedBlocksOnly: 1
+--- !u!114 &1451735783
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1451735781}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 54559ff93655290429c9d96a79e23996, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.WaterSim.VoxelCrestSeaFloorDepthProvider
+  sampleCenter: {fileID: 0}
+  sampleRadius: 48
+  samplesPerAxis: 12
+  updateInterval: 0.25
+  shallowDepth: 2.2
+  deepDepth: 24
+--- !u!114 &1451735784
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1451735781}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d1a8d09948254ff5b4f4f34859271fc4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.WaterSim.CrestVoxelWaterBinder
+  viewpoint: {fileID: 0}
+  waterHeightOffset: 0.08
+  alignToPlanetSurface: 1
+  followNearestProceduralWater: 1
+  waterSearchRadius: 768
+  waterSearchSpacing: 24
+  scanInterval: 0.15
+  smoothFollow: 1
+  followSmoothing: 8
+  forceOceanAlwaysOn: 1
+  hideCrestOceanTiles: 1
+  bridgeCrestMaterialToVoxelMesh: 0
+  autoConfigureCrestMaterial: 1
+  shallowColor: {r: 0.18, g: 0.72, b: 0.88, a: 0.92}
+  deepColor: {r: 0.008, g: 0.14, b: 0.34, a: 1}
+  scatterColor: {r: 0.12, g: 0.58, b: 0.52, a: 1}
+  proceduralWaterFound: 0
+  sampledWaterDepth: 0
+  sampledSurfaceOffset: 0
+  currentOceanUp: {x: 0, y: 1, z: 0}
+--- !u!4 &1451735785
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1451735781}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1456742218
 GameObject:
   m_ObjectHideFlags: 0
@@ -890,7 +911,7 @@ Transform:
   - {fileID: 1844107485}
   m_Father: {fileID: 439090091}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &1627322740
+--- !u!1 &1462682308
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -898,39 +919,8 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 1627322741}
-  m_Layer: 0
-  m_Name: HLarge
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &1627322741
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1627322740}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &1657049101
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1657049103}
-  - component: {fileID: 1657049102}
+  - component: {fileID: 1462682310}
+  - component: {fileID: 1462682309}
   m_Layer: 0
   m_Name: Crest Ocean
   m_TagString: Untagged
@@ -938,13 +928,13 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1657049102
+--- !u!114 &1462682309
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1657049101}
+  m_GameObject: {fileID: 1462682308}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: dde37eff0f7685f41902f400d1de0c6c, type: 3}
@@ -961,7 +951,7 @@ MonoBehaviour:
   _timeProvider: {fileID: 0}
   _primaryLight: {fileID: 0}
   _searchForPrimaryLightOnStartup: 1
-  _material: {fileID: 2100000, guid: c16086c6d69b0b74ab7c6851170f14d4, type: 2}
+  _material: {fileID: 2100000, guid: 7e41ac8461b1f284781d75d554fbb7b7, type: 2}
   _waterTilePrefab: {fileID: 0}
   _layerName: 
   _layer: 4
@@ -972,18 +962,18 @@ MonoBehaviour:
   _minScale: 4
   _maxScale: 256
   _dropDetailHeightBasedOnWaves: 0.2
-  _lodDataResolution: 384
+  _lodDataResolution: 128
   _geometryDownSampleFactor: 4
-  _lodCount: 7
+  _lodCount: 4
   _extentsSizeMultiplier: 100
   _simSettingsAnimatedWaves: {fileID: 0}
-  _createSeaFloorDepthData: 1
+  _createSeaFloorDepthData: 0
   _simSettingsSeaFloorDepth: {fileID: 0}
-  _createFoamSim: 1
+  _createFoamSim: 0
   _simSettingsFoam: {fileID: 0}
-  _createDynamicWaveSim: 1
+  _createDynamicWaveSim: 0
   _simSettingsDynamicWaves: {fileID: 0}
-  _createFlowSim: 1
+  _createFlowSim: 0
   _simSettingsFlow: {fileID: 0}
   _createShadowData: 0
   _simSettingsShadow: {fileID: 0}
@@ -999,7 +989,7 @@ MonoBehaviour:
   _showOceanProxyPlane: 0
   _editModeFPS: 30
   _followSceneCamera: 1
-  _heightQueries: 1
+  _heightQueries: 0
   _debug:
     _attachDebugGUI: 0
     _showOceanTileGameObjects: 0
@@ -1007,13 +997,13 @@ MonoBehaviour:
     _destroyResourcesInOnDisable: 0
     _forceBatchMode: 0
     _forceNoGPU: 0
---- !u!4 &1657049103
+--- !u!4 &1462682310
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1657049101}
+  m_GameObject: {fileID: 1462682308}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
@@ -1083,58 +1073,6 @@ Transform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1746488545}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &1768106461
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1768106463}
-  - component: {fileID: 1768106462}
-  m_Layer: 0
-  m_Name: Liquid Visual Runtime
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &1768106462
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1768106461}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e4b851e2e6854245b1a964889509be79, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.WaterSim.PlanetWaterRendererBootstrap
-  oceanProfile: {fileID: 0}
-  meshBuildBudgetPerFrame: 2
-  renderVoxelLiquidSurfaces: 1
-  rescheduleVisibleLiquidSurfaces: 1
-  liquidRescheduleChunkRadius: 4
-  liquidRescheduleInterval: 0.5
-  waterMaterialOverride: {fileID: 2100000, guid: c16086c6d69b0b74ab7c6851170f14d4, type: 2}
-  oilMaterialOverride: {fileID: 0}
---- !u!4 &1768106463
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1768106461}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
@@ -1445,8 +1383,6 @@ SceneRoots:
   - {fileID: 177553674}
   - {fileID: 595644111}
   - {fileID: 1436353756}
-  - {fileID: 1064499776}
-  - {fileID: 1627322741}
-  - {fileID: 1768106463}
-  - {fileID: 684838757}
-  - {fileID: 1657049103}
+  - {fileID: 1462682310}
+  - {fileID: 96499001}
+  - {fileID: 1451735785}

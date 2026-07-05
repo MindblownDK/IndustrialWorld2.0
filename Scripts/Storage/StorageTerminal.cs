@@ -36,7 +36,7 @@ namespace VoxelEngine.Storage
         private void FindRack()
         {
             float range = isWireless ? wirelessRange : searchRadius;
-            var racks = FindObjectsByType<ServerRack>(FindObjectsInactive.Exclude);
+            var racks = FindObjectsByType<ServerRack>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
             ServerRack best = null;
             float bestDist = range * range;
             foreach (var r in racks)

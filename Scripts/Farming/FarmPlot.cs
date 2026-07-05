@@ -150,7 +150,7 @@ namespace VoxelEngine.Farming
             isIrrigated = false;
 
             // Check for sprinklers in range.
-            var sprinklers = FindObjectsByType<Sprinkler>(FindObjectsInactive.Exclude);
+            var sprinklers = FindObjectsByType<Sprinkler>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
             foreach (var s in sprinklers)
             {
                 if (s == null || !s.IsActive) continue;
