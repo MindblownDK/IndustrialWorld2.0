@@ -82,12 +82,9 @@ namespace VoxelEngine.WaterSim
         {
             CacheOcean();
             ApplyCrestMaterialTuning();
-            // v3.12.0 – Crest OceanRenderer stays ALIVE (LOD driver). Only its
-            // visible infinite ocean tiles are hidden so voxel water is the only
-            // thing the player sees rendering.
             HideCrestOceanTiles(hideCrestOceanTiles);
             WaterMeshBuilder.RenderingEnabled = true;
-            TryBridgeMaterialToVoxel();
+            PushWorldUpGlobal(); // v3.23.1 – valid from frame 0
         }
 
         private void OnEnable()
@@ -96,8 +93,22 @@ namespace VoxelEngine.WaterSim
             ApplyCrestMaterialTuning();
             HideCrestOceanTiles(hideCrestOceanTiles);
             WaterMeshBuilder.RenderingEnabled = true;
-            TryBridgeMaterialToVoxel();
+            PushWorldUpGlobal();
             _nextScanTime = 0f;
+        }
+
+        /// <summary>
+        /// v3.23.1 – Push the world-up vector that VoxelWaterURP samples.
+        /// Called on Awake/OnEnable so the shader has valid data from the
+        /// very first frame (before LateUpdate ever runs).
+        /// </summary>
+        private void PushWorldUpGlobal()
+        {
+            bool isPlanet = PlanetWaterUtility.IsPlanetWorld;
+            Vector3 up = isPlanet ? currentOceanUp : Vector3.up;
+            if (up.sqrMagnitude < 0.0001f) up = Vector3.up;
+            Shader.SetGlobalVector("_VoxelWaterWorldUp",
+                new Vector4(up.x, up.y, up.z, isPlanet ? 1f : 0f));
         }
 
         private void OnValidate()
@@ -160,6 +171,14 @@ namespace VoxelEngine.WaterSim
             Shader.SetGlobalFloat("_VoxelWaterDepth", sampledWaterDepth);
             Shader.SetGlobalVector("_VoxelOceanUp", currentOceanUp);
             Shader.SetGlobalFloat("_VoxelCrestSeaLevel", world.SeaLevel * VoxelConstants.VOXEL_SIZE);
+
+            // v3.23.1 – feed VoxelWaterURP shader:
+            //   xyz = world-up direction (planet radial or (0,1,0))
+            //   w   = 1.0 for planet, 0.0 for flat world
+            float isPlanet = PlanetWaterUtility.IsPlanetWorld ? 1.0f : 0.0f;
+            Vector3 upDir = isPlanet > 0.5f ? currentOceanUp : Vector3.up;
+            Shader.SetGlobalVector("_VoxelWaterWorldUp",
+                new Vector4(upDir.x, upDir.y, upDir.z, isPlanet));
         }
 
         private void ApplySmoothFollow()
@@ -271,23 +290,46 @@ namespace VoxelEngine.WaterSim
         }
 
         /// <summary>
-        /// v3.12.0 — hides only Crest's own ocean-tile MeshRenderers. Leaves
-        /// OceanRenderer + LodData components enabled so cascades keep updating.
+        /// v3.23.1 — belt-and-braces: even if someone re-enables the Crest
+        /// OceanRenderer component at runtime, this pass disables its every
+        /// MeshRenderer (found by scanning the whole scene for OceanChunkRenderer)
+        /// AND disables the OceanRenderer behaviour itself. That's the only
+        /// reliable way to fully suppress Crest's infinite ocean plane —
+        /// `_hideOceanTileGameObjects` only affects the hierarchy view.
         /// </summary>
         private static System.Type _oceanChunkRendererType;
+        private static System.Type _oceanRendererType;
         private void HideCrestOceanTiles(bool hide)
         {
-            if (_renderers == null || _renderers.Length == 0) return;
+            if (!hide) return;
+
+            if (_oceanRendererType == null)
+                _oceanRendererType = System.Type.GetType("Crest.OceanRenderer, Crest");
             if (_oceanChunkRendererType == null)
                 _oceanChunkRendererType = System.Type.GetType("Crest.OceanChunkRenderer, Crest");
-            if (_oceanChunkRendererType == null) return;
-            for (int i = 0; i < _renderers.Length; i++)
+
+            // Disable the OceanRenderer behaviour itself → tears down tiles.
+            if (_oceanRendererType != null)
             {
-                var r = _renderers[i];
-                if (r == null) continue;
-                if (r.GetComponent(_oceanChunkRendererType) == null) continue;
-                bool shouldBeEnabled = !hide;
-                if (r.enabled != shouldBeEnabled) r.enabled = shouldBeEnabled;
+                var renderers = Object.FindObjectsByType(_oceanRendererType, FindObjectsInactive.Include, FindObjectsSortMode.None);
+                for (int i = 0; renderers != null && i < renderers.Length; i++)
+                {
+                    var b = renderers[i] as Behaviour;
+                    if (b != null && b.enabled) b.enabled = false;
+                }
+            }
+
+            // Also disable every OceanChunkRenderer's MeshRenderer as safety.
+            if (_oceanChunkRendererType != null)
+            {
+                var chunks = Object.FindObjectsByType(_oceanChunkRendererType, FindObjectsInactive.Include, FindObjectsSortMode.None);
+                for (int i = 0; chunks != null && i < chunks.Length; i++)
+                {
+                    var comp = chunks[i] as Component;
+                    if (comp == null) continue;
+                    var rend = comp.GetComponent<Renderer>();
+                    if (rend != null && rend.enabled) rend.enabled = false;
+                }
             }
         }
 

@@ -4,7 +4,81 @@ Branch: **Dev** · Semantic Versioning 2.0.0
 
 ---
 
-## [3.23.0] — Voxel Water Authoritative (Kill Ocean Plane)
+## [3.23.1] — Actually Kill Ocean Plane + Premium Water Look
+
+**Type:** PATCH — Save-compatible. Fixes leftover Crest plane and retunes
+water visuals so they look great instead of like the pre-Crest starting point.
+
+### Fixed
+- **Infinite Crest ocean plane still visible.** `_hideOceanTileGameObjects`
+  only hides tile GameObjects in the hierarchy view — the tiles still
+  render. The fix is to disable the `OceanRenderer` component itself, which
+  tears down all its ocean tiles + LOD dispatch on `OnDisable`. Setup wizard
+  now sets `behaviour.enabled = false` AND `gameObject.SetActive(false)` on
+  Crest Ocean. Runtime `CrestVoxelWaterBinder.HideCrestOceanTiles` now also
+  scans the entire scene for `Crest.OceanRenderer` + `Crest.OceanChunkRenderer`
+  and disables them (belt and braces — if anything re-enables Crest at
+  runtime it gets killed the next binder tick).
+- **Water looked flat / muddy on flat worlds.** The shader was using
+  `radialUp = normalize(worldPos)` unconditionally, treating flat worlds as
+  planet worlds with origin at 0,0,0 — this made the wave frame and
+  Fresnel/lighting vectors point away from world origin instead of straight
+  up. Fixed with a new `_VoxelWaterWorldUp` global (xyz = up, w = isPlanet
+  flag) pushed by `CrestVoxelWaterBinder.PushWorldUpGlobal()` and a safety
+  default in `WaterMeshBuilder.EnsureMats()`.
+- **`_PlanetWaveBlend` was hardcoded 1.0** even on flat worlds, mixing in
+  planet radial waves that pointed the wrong way. Setup wizard now
+  auto-detects `SphereWorld` presence and sets it to 1 for planets, 0 for
+  flat worlds.
+
+### Added
+- **Global shader input** `_VoxelWaterWorldUp` (xyz = world-up direction,
+  w = 1.0 for planets, 0.0 for flat) sampled by both vertex and fragment
+  stages of `VoxelWaterURP`. Fixes wave orientation and lighting on flat
+  worlds.
+- Premium material tuning (v3.23.1 defaults):
+  - Shallow color → clean Caribbean turquoise `(0.16, 0.78, 0.86)`
+  - Deep color → deep navy-teal `(0.02, 0.14, 0.30)`
+  - Larger, slower deep waves; faster shallow ripple
+  - Longer `_DepthFade` (2.5 → 4.0) so shallow water reads as clearer
+  - Stronger shore foam (`_ShoreFoamIntensity` 1.2 → 1.4)
+  - Stronger subsurface glow (`_SSSIntensity` 0.38 → 0.45)
+  - Fresnel bumped 3.2 → 4.0 for a richer deep-water sheen
+
+### Changed
+- `CrestWaterSetupUtility.EnsureCrestOceanRendererInScene(...)` now leaves
+  the OceanRenderer GO **disabled**. Kept in the scene so a future feature
+  can re-enable it, but zero rendering cost until then.
+- Setup dialog now reports the detected world type (PLANET / FLAT).
+- `GameVersion` bumped to `3.23.1-dev`.
+
+### Shader
+- `Scripts/Rendering/VoxelWaterURP.shader` — vertex + fragment both consume
+  `_VoxelWaterWorldUp` to derive the tangent frame. When the global is
+  unset (all zeros), safely defaults to `(0,1,0)`.
+
+### Manual Unity steps
+1. Pull, let Unity recompile (shaders will auto-reimport).
+2. Menu: **Tools → Voxel Engine → Configure Crest Water Integration**.
+   Dialog now reads *"Voxel Water Authoritative + Premium Look configured"*
+   and reports the auto-detected world type.
+3. Confirm in the Hierarchy: the **Crest Ocean** GameObject is **disabled**
+   (grey icon, unchecked). If it's still active, uncheck it manually or
+   re-run the wizard.
+4. Press Play. Expected:
+   - No blue rectangle anywhere in the scene.
+   - Voxel water shows clear turquoise near shore, deep navy in open water,
+     rolling waves, shore foam where terrain meets water.
+   - Console clean.
+5. Tweak from `Assets/Resources/CrestOcean_VoxelBridge.mat` if you want
+   different color/wave/foam values — the material is inspector-editable.
+
+### Deferred
+- Wake foam around grid hulls; swimming + underwater fog; world-gen lag.
+
+---
+
+## [3.23.0] — Voxel Water Authoritative (Kill Ocean Plane) *(superseded)*
 
 **Type:** MINOR — Design pivot back from 3.22.0. Voxel water renders as the
 one and only ocean visual using the stylized VoxelEngine/VoxelWaterURP shader

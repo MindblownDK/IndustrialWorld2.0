@@ -53,21 +53,21 @@ namespace VoxelEngine.EditorTools
                 if (scene.IsValid() && scene.isLoaded)
                     UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(scene);
 
-                EditorUtility.DisplayDialog("Voxel Engine - Crest Water v3.23.0",
-                    "Voxel Water Authoritative configured — no infinite Crest plane.\n\n" +
+                EditorUtility.DisplayDialog("Voxel Engine - Crest Water v3.23.1",
+                    "Voxel Water Authoritative + Premium Look configured.\n\n" +
                     "Result:\n" +
-                    "• Crest infinite ocean tiles are HIDDEN.\n" +
-                    "• Voxel water renders EVERYWHERE with the stylized\n" +
-                    "  VoxelWaterURP shader (Gerstner waves, foam, flow).\n" +
-                    "• All Crest subsystems requiring material keywords are\n" +
-                    "  disabled → zero \"not enabled on material\" warnings.\n" +
+                    "• Crest OceanRenderer component DISABLED (no infinite plane).\n" +
+                    "• Voxel water renders EVERYWHERE with premium tuned\n" +
+                    "  VoxelWaterURP shader (Gerstner waves, shore foam,\n" +
+                    "  fresnel sheen, subsurface glow, caustics).\n" +
+                    "• Auto-detected " + (UnityEngine.Object.FindFirstObjectByType<VoxelEngine.Cosmos.SphereWorld>() != null ? "PLANET" : "FLAT") + " world → wave frame set correctly.\n" +
+                    "• Zero Crest startup warnings.\n" +
                     "• WaterMeshBuilder.RenderingEnabled forced ON; legacy\n" +
                     "  FluidPerformanceBootstrap flag auto-fixed in scene.\n" +
-                    "• OceanRenderer kept alive (silent) for future wake foam.\n" +
                     "• Maritime wake emitters updated.",
                     "OK");
 
-                Debug.Log("[CrestWaterSetup] ✓ v3.23.0 – Voxel water authoritative, no infinite Crest plane, RenderingEnabled forced ON.");
+                Debug.Log("[CrestWaterSetup] ✓ v3.23.1 – Voxel water authoritative, Crest fully disabled, premium tuning applied.");
             }
             catch (Exception ex)
             {
@@ -342,9 +342,13 @@ namespace VoxelEngine.EditorTools
         }
 
         /// <summary>
-        /// v3.12.0 – ensures a Crest OceanRenderer exists in the scene and uses
-        /// the shared bridge material. If one already exists, its material is
-        /// updated in place.
+        /// v3.23.1 – ensures a Crest OceanRenderer exists in the scene but
+        /// leaves it fully DISABLED. `_hideOceanTileGameObjects` only hides
+        /// the tiles in the hierarchy view — it does not stop them from
+        /// rendering. The only way to fully kill Crest's infinite ocean
+        /// plane is to disable the OceanRenderer component itself, which
+        /// tears down all its ocean tiles + LOD dispatch. We keep the GO
+        /// (disabled) so future features that need Crest can re-enable it.
         /// </summary>
         private static void EnsureCrestOceanRendererInScene(Material waterMaterial)
         {
@@ -355,7 +359,10 @@ namespace VoxelEngine.EditorTools
                 return;
             }
 
-            var existing = UnityEngine.Object.FindFirstObjectByType(oceanType) as Component;
+            // Include-inactive scan so we still find (and re-disable) the
+            // Crest Ocean GO if a previous run already deactivated it.
+            var found = UnityEngine.Object.FindObjectsByType(oceanType, FindObjectsInactive.Include, FindObjectsSortMode.None);
+            Component existing = (found != null && found.Length > 0) ? found[0] as Component : null;
             if (existing == null)
             {
                 var go = new GameObject("Crest Ocean");
@@ -366,13 +373,14 @@ namespace VoxelEngine.EditorTools
 
             ConfigureSerializedCrestOcean(existing, waterMaterial);
 
-            var t = existing.transform;
-            var world = UnityEngine.Object.FindFirstObjectByType<VoxelEngine.Core.VoxelWorld>();
-            if (world != null)
-            {
-                float seaY = world.flatSeaLevel * VoxelEngine.Core.VoxelConstants.VOXEL_SIZE;
-                t.position = new Vector3(t.position.x, seaY, t.position.z);
-            }
+            // v3.23.1 – Disable the component so no tiles/cameras spawn.
+            // Also disable the GO — belt and braces (some Crest builds
+            // recreate tiles on re-enable of the child hierarchy).
+            var behaviour = existing as Behaviour;
+            if (behaviour != null && behaviour.enabled) behaviour.enabled = false;
+            if (existing.gameObject.activeSelf) existing.gameObject.SetActive(false);
+
+            Debug.Log("[CrestWaterSetup] ✓ v3.23.1 – Crest OceanRenderer disabled (no infinite plane).");
         }
 
         private static Material CreateOrUpdateVoxelWaterVisualMaterial()
@@ -416,35 +424,50 @@ namespace VoxelEngine.EditorTools
             if (mat == null) return;
 
             ConfigureTransparent(mat);
-            SetColorIfPresent(mat, "_ShallowColor", new Color(0.10f, 0.70f, 0.92f, 0.94f));
-            SetColorIfPresent(mat, "_DeepColor", new Color(0.005f, 0.08f, 0.24f, 0.98f));
-            SetColorIfPresent(mat, "_FoamColor", new Color(0.92f, 0.98f, 1.00f, 0.90f));
-            SetColorIfPresent(mat, "_BaseColor", new Color(0.08f, 0.52f, 0.82f, 0.88f));
-            SetColorIfPresent(mat, "_Color", new Color(0.08f, 0.52f, 0.82f, 0.88f));
 
-            SetFloatIfPresent(mat, "_DeepWaveAmplitude", 0.82f);
-            SetFloatIfPresent(mat, "_DeepWaveFrequency", 0.22f);
-            SetFloatIfPresent(mat, "_DeepWaveSpeed", 0.55f);
-            SetFloatIfPresent(mat, "_SecondaryWaveAmplitude", 0.32f);
-            SetFloatIfPresent(mat, "_SecondaryWaveFrequency", 0.47f);
-            SetFloatIfPresent(mat, "_SecondaryWaveSpeed", 0.91f);
-            SetFloatIfPresent(mat, "_ShallowWaveAmplitude", 0.15f);
-            SetFloatIfPresent(mat, "_ShallowWaveFrequency", 1.65f);
-            SetFloatIfPresent(mat, "_ShallowWaveSpeed", 1.8f);
-            SetFloatIfPresent(mat, "_WaveChop", 0.28f);
-            SetFloatIfPresent(mat, "_PlanetWaveBlend", 1.0f);
-            SetFloatIfPresent(mat, "_TideStrength", 0.22f);
-            SetFloatIfPresent(mat, "_ShoreBlendDistance", 2.5f);
-            SetFloatIfPresent(mat, "_NormalScale", 1.65f);
-            SetFloatIfPresent(mat, "_Gloss", 0.96f);
-            SetFloatIfPresent(mat, "_FresnelPower", 3.2f);
-            SetFloatIfPresent(mat, "_RefractionStrength", 0.032f);
-            SetFloatIfPresent(mat, "_CausticsIntensity", 0.30f);
-            SetFloatIfPresent(mat, "_DepthFade", 2.5f);
-            SetFloatIfPresent(mat, "_ShoreOpaqueDepth", 1.5f);
-            SetFloatIfPresent(mat, "_ShoreFoamWidth", 2.0f);
-            SetFloatIfPresent(mat, "_ShoreFoamIntensity", 1.2f);
-            SetFloatIfPresent(mat, "_SSSIntensity", 0.38f);
+            // v3.23.1 – premium tropical-ocean palette:
+            //   Shallow  = clean turquoise (Caribbean shore)
+            //   Deep     = deep navy with a hint of teal (open ocean)
+            //   Foam     = soft cream white
+            // Colors chosen to give strong shallow→deep gradient without going
+            // muddy in the middle band.
+            SetColorIfPresent(mat, "_ShallowColor", new Color(0.16f, 0.78f, 0.86f, 0.88f));
+            SetColorIfPresent(mat, "_DeepColor",    new Color(0.02f, 0.14f, 0.30f, 0.98f));
+            SetColorIfPresent(mat, "_FoamColor",    new Color(0.96f, 0.99f, 1.00f, 0.92f));
+            SetColorIfPresent(mat, "_BaseColor",    new Color(0.10f, 0.55f, 0.78f, 0.90f));
+            SetColorIfPresent(mat, "_Color",        new Color(0.10f, 0.55f, 0.78f, 0.90f));
+
+            // v3.23.1 – wave shape retuned for the "big open ocean" look.
+            // Deep waves are slower + larger, secondary adds detail, shallow
+            // ripple is faster/tighter.
+            SetFloatIfPresent(mat, "_DeepWaveAmplitude", 0.55f);
+            SetFloatIfPresent(mat, "_DeepWaveFrequency", 0.14f);
+            SetFloatIfPresent(mat, "_DeepWaveSpeed",     0.42f);
+            SetFloatIfPresent(mat, "_SecondaryWaveAmplitude", 0.22f);
+            SetFloatIfPresent(mat, "_SecondaryWaveFrequency", 0.38f);
+            SetFloatIfPresent(mat, "_SecondaryWaveSpeed",     0.78f);
+            SetFloatIfPresent(mat, "_ShallowWaveAmplitude",   0.08f);
+            SetFloatIfPresent(mat, "_ShallowWaveFrequency",   1.35f);
+            SetFloatIfPresent(mat, "_ShallowWaveSpeed",       1.60f);
+            SetFloatIfPresent(mat, "_WaveChop", 0.35f);
+
+            // v3.23.1 – auto-detect world type. Planet uses radial waves,
+            // flat world uses horizontal waves. Prevents "waves point wrong"
+            // on flat worlds where worldPos.normalize() was giving nonsense up.
+            bool isPlanet = UnityEngine.Object.FindFirstObjectByType<VoxelEngine.Cosmos.SphereWorld>() != null;
+            SetFloatIfPresent(mat, "_PlanetWaveBlend", isPlanet ? 1.0f : 0.0f);
+            SetFloatIfPresent(mat, "_TideStrength", 0.18f);
+            SetFloatIfPresent(mat, "_ShoreBlendDistance", 3.0f);
+            SetFloatIfPresent(mat, "_NormalScale", 1.35f);            // slightly softer normals
+            SetFloatIfPresent(mat, "_Gloss", 0.94f);                  // strong specular but not mirror
+            SetFloatIfPresent(mat, "_FresnelPower", 4.0f);            // stronger Fresnel = deep-water sheen
+            SetFloatIfPresent(mat, "_RefractionStrength", 0.028f);
+            SetFloatIfPresent(mat, "_CausticsIntensity", 0.22f);
+            SetFloatIfPresent(mat, "_DepthFade", 4.0f);               // longer fade → clearer shallows
+            SetFloatIfPresent(mat, "_ShoreOpaqueDepth", 2.0f);
+            SetFloatIfPresent(mat, "_ShoreFoamWidth", 2.5f);
+            SetFloatIfPresent(mat, "_ShoreFoamIntensity", 1.4f);      // more visible shore foam
+            SetFloatIfPresent(mat, "_SSSIntensity", 0.45f);           // more subsurface glow
             SetFloatIfPresent(mat, "_FlowNormalStrength", 1.0f);
             SetFloatIfPresent(mat, "_FlowFoamStrength", 0.8f);
         }

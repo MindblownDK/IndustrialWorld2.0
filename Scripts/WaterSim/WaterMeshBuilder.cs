@@ -171,6 +171,18 @@ namespace VoxelEngine.WaterSim
 
         private static void EnsureMats()
         {
+            // v3.23.1 – Safety-net world-up global. CrestVoxelWaterBinder pushes
+            // the accurate value every LateUpdate, but if no binder is in the
+            // scene yet the VoxelWaterURP shader would sample an all-zero vector
+            // and default to (0,1,0). Set a sane default here just in case.
+            var worldForUp = ActiveWorld.Current;
+            if (worldForUp != null)
+            {
+                bool isPlanet = worldForUp is VoxelEngine.Cosmos.SphereWorld;
+                Shader.SetGlobalVector("_VoxelWaterWorldUp",
+                    new Vector4(0f, 1f, 0f, isPlanet ? 1f : 0f));
+            }
+
             if (_externalWaterMat != null) _waterMat = _externalWaterMat;
             if (_externalOilMat != null) _oilMat = _externalOilMat;
             if (_waterMat != null && _oilMat != null) return;
