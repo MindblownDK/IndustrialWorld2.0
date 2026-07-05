@@ -113,9 +113,8 @@ namespace VoxelEngine.WaterSim
             var previousExternalWater = _externalWaterMat;
             var previousExternalOil = _externalOilMat;
 
-            // Reject Crest ocean materials for voxel mesh rendering. They require OceanRenderer/LodData
-            // globals and can become invisible in no-plane mode.
-            _externalWaterMat = IsVoxelWaterCompatible(waterMaterial) ? waterMaterial : null;
+            // ACCEPT Crest ocean materials for voxel mesh rendering!
+            _externalWaterMat = waterMaterial;
             _externalOilMat = oilMaterial;
 
             if (_externalWaterMat != null)
@@ -135,10 +134,9 @@ namespace VoxelEngine.WaterSim
             if (_externalOilMat != null) _oilMat = _externalOilMat;
             if (_waterMat != null && _oilMat != null) return;
 
-            // Prefer the project voxel-water shader. Crest ocean materials depend on OceanRenderer
-            // and LodData globals; in no-plane mode they can render invisible on chunk meshes.
+            // Prefer the bridged Crest material
             Material bridgeMat = Resources.Load<Material>("CrestOcean_VoxelBridge");
-            if (IsVoxelWaterCompatible(bridgeMat))
+            if (bridgeMat != null)
             {
                 _externalWaterMat = bridgeMat;
                 _waterMat = bridgeMat;

@@ -19,21 +19,14 @@ namespace VoxelEngine.EditorTools
                 EnsurePanelSettingsFitMode();
                 ConfigureSceneAmbientOnly();
 
-                // v3.20.9 – NO OCEAN PLANE – pure procedural voxel water with Crest-compatible visible material
                 var waterMat = ConfigureCrestWaterMaterial();
                 if (waterMat == null)
                 {
                     waterMat = CreateFallbackWaterMaterial();
-                    Debug.LogWarning("[CrestWaterSetup] Crest material not found – using fallback URP Lit water.");
+                    Debug.LogWarning("[CrestWaterSetup] Crest material not found – using fallback.");
                 }
 
-                // Kill ALL Crest OceanRenderer planes – user explicitly: NO infinite planes!
-                SafeNukeAllCrest();
-
                 ConfigureCrestVoxelMaterialBridge(waterMat);
-
-                // Final nuke – guarantee NO ocean plane remains
-                SafeNukeAllCrest();
 
                 ConfigureExistingMaritimeWakeEmitters();
 
@@ -42,25 +35,21 @@ namespace VoxelEngine.EditorTools
                 if (scene.IsValid() && scene.isLoaded)
                     UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(scene);
 
-                EditorUtility.DisplayDialog("Voxel Engine - Crest Water v3.20.9",
-                    "Crest water integration configured (NO PLANE mode).\n\n" +
+                EditorUtility.DisplayDialog("Voxel Engine - Crest Water v3.21.0",
+                    "Crest water integration configured!\n\n" +
                     "Configured:\n" +
                     "• UI PanelSettings fit mode\n" +
-                    "• Visible voxel water material tuned / fallback created\n" +
-                    "• ALL Crest OceanRenderer planes DESTROYED\n" +
                     "• Voxel liquid surfaces ENABLED – visible water material bridged\n" +
                     "• CrestVoxelBridge GO added (binder + depth + foam)\n" +
-                    "• WaterMeshBuilder.RenderingEnabled = true\n" +
-                    "• Maritime wake emitters updated\n" +
-                    "• Lighting / sun untouched",
+                    "• Maritime wake emitters updated",
                     "OK");
 
-                Debug.Log("[CrestWaterSetup] ✓ v3.20.9 – voxel water ONLY, visible water material bridged, zero OceanRenderer planes");
+                Debug.Log("[CrestWaterSetup] ✓ v3.21.0 – voxel water configured with Crest high-fidelity rendering");
             }
             catch (Exception ex)
             {
                 Debug.LogError("[CrestWaterSetup] Configure FAILED: " + ex);
-                EditorUtility.DisplayDialog("Crest Water Setup FAILED", ex.Message + "\n\nSee console for full stack trace.\n\nThe setup attempted to nuke Crest planes safely – check that Crest URP package is imported at Assets/Liquid/Crest/", "OK");
+                EditorUtility.DisplayDialog("Crest Water Setup FAILED", ex.Message, "OK");
             }
         }
 
@@ -375,8 +364,6 @@ namespace VoxelEngine.EditorTools
             }
         }
 
-        // v3.20.2 – bridge visible water material to voxel water mesh – NO ocean plane
-        // v3.20.9 – hardened null checks
         private static void ConfigureCrestVoxelMaterialBridge(Material waterMaterial)
         {
             if (waterMaterial == null)
@@ -384,8 +371,7 @@ namespace VoxelEngine.EditorTools
                 waterMaterial = CreateFallbackWaterMaterial();
             }
 
-            // Remove any Crest ocean plane – we do NOT want a big water plane
-            SafeNukeAllCrest();
+            // Do NOT nuke Crest here anymore! We want Crest's features fully alive.
 
             var bootstraps = UnityEngine.Object.FindObjectsByType<VoxelEngine.WaterSim.PlanetWaterRendererBootstrap>(FindObjectsInactive.Include, FindObjectsSortMode.None);
             var bootstrap = bootstraps != null && bootstraps.Length > 0 ? bootstraps[0] : null;
@@ -412,7 +398,7 @@ namespace VoxelEngine.EditorTools
             EnableExistingVoxelLiquidSurfaceObjects();
             EditorUtility.SetDirty(bootstrap);
 
-            // Add a lightweight binder (no ocean plane) just to feed Crest globals / foam
+            // Add a binder and set it up to bridge Crest features to voxel mesh
             var binderGO = GameObject.Find("CrestVoxelBridge");
             if (binderGO == null)
             {
@@ -422,7 +408,7 @@ namespace VoxelEngine.EditorTools
 
             var binder = binderGO.GetComponent<VoxelEngine.WaterSim.CrestVoxelWaterBinder>();
             if (binder == null) binder = binderGO.AddComponent<VoxelEngine.WaterSim.CrestVoxelWaterBinder>();
-            binder.disableCrestOceanPlane = true;
+            binder.disableCrestOceanPlane = false; // Keep it false to let Crest features remain active
             binder.bridgeCrestMaterialToVoxelMesh = true;
             binder.autoConfigureCrestMaterial = true;
             binder.followNearestProceduralWater = true;
@@ -438,7 +424,7 @@ namespace VoxelEngine.EditorTools
             EditorUtility.SetDirty(depth);
             EditorUtility.SetDirty(foam);
 
-            Debug.Log("[CrestWaterSetup] ✓ visible water material bridged to voxel water – no ocean plane – v3.20.9");
+            Debug.Log("[CrestWaterSetup] ✓ visible water material bridged to voxel water – v3.20.9");
         }
 
         // ---------------------------------------------------------------------
