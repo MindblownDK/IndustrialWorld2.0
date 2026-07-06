@@ -733,6 +733,18 @@ namespace VoxelEngine.UI
             scroller.slider.style.marginRight  = 0;
             scroller.slider.style.flexGrow     = 1;
 
+            // The default runtime theme paints the slider (and its drag container)
+            // with a grey plate that is wider than our 6px bar — strip EVERY
+            // background layer so only the slim track + thumb remain visible.
+            scroller.slider.style.backgroundColor = new StyleColor(Color.clear);
+            Border(scroller.slider, 0, Color.clear);
+            var dragContainer = scroller.slider.Q("unity-drag-container");
+            if (dragContainer != null)
+            {
+                dragContainer.style.backgroundColor = new StyleColor(Color.clear);
+                Border(dragContainer, 0, Color.clear);
+            }
+
             // NOTE: tracker & dragger are absolutely-positioned inside the slider,
             // so width/alignSelf alone anchors them to the left/top edge — they
             // must be centred with explicit cross-axis insets:
@@ -755,6 +767,15 @@ namespace VoxelEngine.UI
                     tracker.style.top    = 2; tracker.style.bottom = 2;
                     tracker.style.height = StyleKeyword.Auto;
                 }
+            }
+
+            // Some runtime themes add a border overlay around the thumb — hide it.
+            var draggerBorder = scroller.slider.Q("unity-dragger-border");
+            if (draggerBorder != null)
+            {
+                draggerBorder.style.backgroundColor = new StyleColor(Color.clear);
+                Border(draggerBorder, 0, Color.clear);
+                draggerBorder.style.display = DisplayStyle.None;
             }
 
             // Thumb — rounded steel bar, brightens on hover, accent when dragged.
