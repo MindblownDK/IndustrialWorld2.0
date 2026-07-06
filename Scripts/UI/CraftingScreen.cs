@@ -228,6 +228,7 @@ namespace VoxelEngine.UI
 
             // ── Column 1: category rail ─────────────────────────────────────
             var rail = new ScrollView(ScrollViewMode.Vertical);
+            VoxelEngine.UI.UITheme.StyleScroller(rail);   // themed slim scrollbar
             rail.style.width      = RAIL_W;
             rail.style.flexShrink = 0;
             rail.style.marginRight = 8;
@@ -235,6 +236,7 @@ namespace VoxelEngine.UI
 
             // ── Column 2: tile grid ─────────────────────────────────────────
             var gridScroll = new ScrollView(ScrollViewMode.Vertical);
+            VoxelEngine.UI.UITheme.StyleScroller(gridScroll);   // themed slim scrollbar
             gridScroll.style.flexGrow = 1;
             var grid = new VisualElement();
             grid.style.flexDirection = FlexDirection.Row;
@@ -690,6 +692,7 @@ namespace VoxelEngine.UI
                 detail.Add(T.Subtitle("In Progress"));
 
                 var qscroll = new ScrollView(ScrollViewMode.Vertical);
+                VoxelEngine.UI.UITheme.StyleScroller(qscroll);   // themed slim scrollbar
                 qscroll.style.maxHeight = 150;
                 detail.Add(qscroll);
 

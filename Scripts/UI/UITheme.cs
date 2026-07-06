@@ -698,21 +698,29 @@ namespace VoxelEngine.UI
         // ── Themed ScrollView ─────────────────────────────────────────────
 
         /// <summary>
-        /// Restyles a ScrollView's vertical scroller to match the design system:
-        /// the default grey Unity scrollbar becomes a slim 6px steel track with a
-        /// rounded accent thumb that brightens on hover. Call after constructing
-        /// any ScrollView inside a themed panel. Optional accent overrides the
-        /// default teal-steel thumb colour.
+        /// Restyles a ScrollView's scrollbars to match the design system: the
+        /// default grey Unity scrollbar becomes a slim 6px steel bar in a
+        /// near-invisible inset track, with hover brighten + accent-on-drag
+        /// micro-interactions. Handles vertical AND horizontal scrollers.
+        /// Call after constructing any ScrollView inside a themed panel.
+        /// Optional accent overrides the default steel-blue thumb colour.
         /// </summary>
         public static void StyleScroller(ScrollView scroll, Color? accent = null)
         {
             if (scroll == null) return;
             Color thumbCol = accent ?? new Color(0.30f, 0.42f, 0.56f);   // muted steel-blue
+            StyleOneScroller(scroll.verticalScroller,   thumbCol, vertical: true);
+            StyleOneScroller(scroll.horizontalScroller, thumbCol, vertical: false);
+        }
 
-            var scroller = scroll.verticalScroller;
-            scroller.style.width       = 10;
-            scroller.style.marginLeft  = 2;
-            scroller.style.borderLeftWidth = 0;
+        private static void StyleOneScroller(Scroller scroller, Color thumbCol, bool vertical)
+        {
+            if (scroller == null) return;
+
+            // Rail: 10px thin, transparent background.
+            if (vertical) { scroller.style.width  = 10; scroller.style.marginLeft = 2; }
+            else          { scroller.style.height = 10; scroller.style.marginTop  = 2; }
+            Border(scroller, 0, Color.clear);
             scroller.style.backgroundColor = new StyleColor(Color.clear);
 
             // Hide the tiny arrow buttons — modern scrollbars don't need them.
@@ -721,7 +729,14 @@ namespace VoxelEngine.UI
             // Reclaim the space the buttons occupied.
             scroller.slider.style.marginTop    = 0;
             scroller.slider.style.marginBottom = 0;
+            scroller.slider.style.marginLeft   = 0;
+            scroller.slider.style.marginRight  = 0;
             scroller.slider.style.flexGrow     = 1;
+
+            // NOTE: tracker & dragger are absolutely-positioned inside the slider,
+            // so width/alignSelf alone anchors them to the left/top edge — they
+            // must be centred with explicit cross-axis insets:
+            // (rail 10px − bar 6px) / 2 = 2px on each side.
 
             // Track — near-invisible inset channel.
             var tracker = scroller.slider.Q("unity-tracker");
@@ -730,8 +745,16 @@ namespace VoxelEngine.UI
                 tracker.style.backgroundColor = new StyleColor(new Color(1f, 1f, 1f, 0.04f));
                 Radius(tracker, 3f);
                 Border(tracker, 0, Color.clear);
-                tracker.style.width = 6;
-                tracker.style.alignSelf = Align.Center;
+                if (vertical)
+                {
+                    tracker.style.left  = 2; tracker.style.right  = 2;
+                    tracker.style.width = StyleKeyword.Auto;
+                }
+                else
+                {
+                    tracker.style.top    = 2; tracker.style.bottom = 2;
+                    tracker.style.height = StyleKeyword.Auto;
+                }
             }
 
             // Thumb — rounded steel bar, brightens on hover, accent when dragged.
@@ -741,9 +764,8 @@ namespace VoxelEngine.UI
                 dragger.style.backgroundColor = new StyleColor(thumbCol);
                 Radius(dragger, 3f);
                 Border(dragger, 0, Color.clear);
-                dragger.style.width = 6;
-                dragger.style.alignSelf = Align.Center;
-                dragger.style.minHeight = 24;
+                if (vertical) { dragger.style.left = 2; dragger.style.width  = 6; dragger.style.minHeight = 24; }
+                else          { dragger.style.top  = 2; dragger.style.height = 6; dragger.style.minWidth  = 24; }
 
                 Color hover  = new(thumbCol.r * 1.35f, thumbCol.g * 1.35f, thumbCol.b * 1.35f);
                 Color active = AccentCyan;

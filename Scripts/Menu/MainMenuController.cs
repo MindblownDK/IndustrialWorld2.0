@@ -188,6 +188,7 @@ namespace VoxelEngine.Menu
             panel.Add(T.Spacer(4));
 
             var scroll = new ScrollView(ScrollViewMode.Vertical);
+            VoxelEngine.UI.UITheme.StyleScroller(scroll);   // themed slim scrollbar
             scroll.style.flexGrow   = 1;
             scroll.style.minHeight  = 380;
             scroll.style.maxHeight  = 480;
@@ -297,6 +298,7 @@ namespace VoxelEngine.Menu
             panel.Add(T.Spacer(4));
 
             var scroll = new ScrollView(ScrollViewMode.Vertical);
+            VoxelEngine.UI.UITheme.StyleScroller(scroll);   // themed slim scrollbar
             scroll.style.flexGrow   = 1;
             scroll.style.maxHeight  = 460;
             panel.Add(scroll);
@@ -366,6 +368,7 @@ namespace VoxelEngine.Menu
             panel.Add(tabs);
 
             var scroll = new ScrollView(ScrollViewMode.Vertical);
+            VoxelEngine.UI.UITheme.StyleScroller(scroll);   // themed slim scrollbar
             scroll.style.flexGrow  = 1;
             scroll.style.maxHeight = 420;
             panel.Add(scroll);

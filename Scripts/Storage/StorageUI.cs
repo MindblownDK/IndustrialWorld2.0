@@ -101,6 +101,7 @@ namespace VoxelEngine.Storage
 
             // ── Slot grid (scrollable) ────────────────────────────
             var scroll = new ScrollView(ScrollViewMode.Vertical);
+            VoxelEngine.UI.UITheme.StyleScroller(scroll);   // themed slim scrollbar
             scroll.style.flexGrow  = 1;
             scroll.style.maxHeight = 340;
             p.Add(scroll);
@@ -396,6 +397,7 @@ namespace VoxelEngine.Storage
             var recipes = recipeRegistry != null ? recipeRegistry.recipes
                           : new System.Collections.Generic.List<VoxelEngine.Crafting.RecipeDefinition>();
             var scroll  = new ScrollView(ScrollViewMode.Vertical);
+            VoxelEngine.UI.UITheme.StyleScroller(scroll);   // themed slim scrollbar
             scroll.style.maxHeight = 220;
             scroll.style.marginTop = 4;
 
@@ -520,6 +522,7 @@ namespace VoxelEngine.Storage
             {
                 p.Add(T.Subtitle("Available Patterns"));
                 var scroll = new ScrollView(ScrollViewMode.Vertical);
+                VoxelEngine.UI.UITheme.StyleScroller(scroll);   // themed slim scrollbar
                 scroll.style.maxHeight = 220;
                 scroll.style.marginTop = 4;
 
@@ -970,6 +973,7 @@ namespace VoxelEngine.Storage
             else
             {
                 var scroll = new ScrollView(ScrollViewMode.Vertical);
+                VoxelEngine.UI.UITheme.StyleScroller(scroll);   // themed slim scrollbar
                 scroll.style.maxHeight = 180;
                 foreach (var entry in summary.Values)
                 {
@@ -1024,6 +1028,7 @@ namespace VoxelEngine.Storage
             search.style.minHeight = 26;
             p.Add(search);
             var results = new ScrollView(ScrollViewMode.Vertical);
+            VoxelEngine.UI.UITheme.StyleScroller(results);   // themed slim scrollbar
             results.style.maxHeight = 180;
             results.style.marginTop = 6;
             p.Add(results);

@@ -1361,6 +1361,7 @@ namespace VoxelEngine.UI
 
             // --- Recipe list container — persists scroll offset across full Refresh() rebuilds ---
             var scroll = new ScrollView(ScrollViewMode.Vertical);
+            VoxelEngine.UI.UITheme.StyleScroller(scroll);   // themed slim scrollbar
             scroll.style.flexGrow = 1;
             scroll.style.marginTop = 4;
             parent.Add(scroll);
@@ -1464,6 +1465,7 @@ namespace VoxelEngine.UI
 
             // Scroll so the slot grid + advanced port config both fit on small panels.
             var scroll = new ScrollView(ScrollViewMode.Vertical);
+            VoxelEngine.UI.UITheme.StyleScroller(scroll);   // themed slim scrollbar
             scroll.style.flexGrow = 1;
             // Force the scroll CONTENT container to fill the panel width — otherwise
             // it sizes to content and the 50%-wide port cards collapse into one
@@ -1576,6 +1578,7 @@ namespace VoxelEngine.UI
 
             // Scrollable body so it never overflows the screen.
             var scroll = new ScrollView(ScrollViewMode.Vertical);
+            VoxelEngine.UI.UITheme.StyleScroller(scroll);   // themed slim scrollbar
             scroll.style.flexGrow = 1;
             scroll.contentContainer.style.width = Length.Percent(100);
             card.Add(scroll);

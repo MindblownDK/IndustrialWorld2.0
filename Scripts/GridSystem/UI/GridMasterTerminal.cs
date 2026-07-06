@@ -213,6 +213,7 @@ namespace VoxelEngine.GridSystem.UI
             pop.Add(T.AccentDivider(T.AccentAmber));
 
             var scroll = new ScrollView(ScrollViewMode.Vertical);
+            VoxelEngine.UI.UITheme.StyleScroller(scroll);   // themed slim scrollbar
             scroll.style.maxHeight = 360;
             float total = 0f;
             if (grid != null)
@@ -292,6 +293,7 @@ namespace VoxelEngine.GridSystem.UI
                 col.Add(BuildSelectionTools(state));
 
             var list = new ScrollView();
+            VoxelEngine.UI.UITheme.StyleScroller(list);   // themed slim scrollbar
             list.style.flexGrow = 1;
             list.style.minHeight = 0;
             PersistScroll(list, "blocklist");
@@ -584,6 +586,7 @@ namespace VoxelEngine.GridSystem.UI
             int tab, MachineUIs.SlotBuilder slot)
         {
             var wrap = new ScrollView(ScrollViewMode.Vertical);
+            VoxelEngine.UI.UITheme.StyleScroller(wrap);   // themed slim scrollbar
             wrap.style.flexGrow = 1;
             wrap.style.minHeight = 0;
             wrap.style.minWidth = 0;

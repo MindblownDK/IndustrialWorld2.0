@@ -274,6 +274,7 @@ namespace VoxelEngine.GridSystem.UI
 
             p.Add(GridUIHelpers.SectionTitle("Inventory"));
             var invScroll = new ScrollView(ScrollViewMode.Vertical);
+            VoxelEngine.UI.UITheme.StyleScroller(invScroll);   // themed slim scrollbar
             invScroll.style.maxHeight = 360;
             invScroll.style.flexShrink = 1;
             invScroll.contentContainer.style.width = Length.Percent(100);

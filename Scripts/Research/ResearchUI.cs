@@ -418,6 +418,7 @@ namespace VoxelEngine.Research
             parent.Add(col);
 
             var scroll = new ScrollView(ScrollViewMode.VerticalAndHorizontal);
+            VoxelEngine.UI.UITheme.StyleScroller(scroll);   // themed slim scrollbar
             scroll.style.flexGrow = 1;
             col.Add(scroll);
 

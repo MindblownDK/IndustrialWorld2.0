@@ -180,6 +180,7 @@ namespace VoxelEngine.Menu
             panel.Add(tabs);
 
             var scroll = new ScrollView(ScrollViewMode.Vertical);
+            VoxelEngine.UI.UITheme.StyleScroller(scroll);   // themed slim scrollbar
             scroll.style.flexGrow = 1;
             panel.Add(scroll);
 

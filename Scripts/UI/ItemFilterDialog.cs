@@ -144,6 +144,7 @@ namespace VoxelEngine.UI
             card.Add(search);
 
             var resultsScroll = new ScrollView(ScrollViewMode.Vertical);
+            VoxelEngine.UI.UITheme.StyleScroller(resultsScroll);   // themed slim scrollbar
             resultsScroll.style.marginTop = 6;
             resultsScroll.style.maxHeight = 200;
             card.Add(resultsScroll);
