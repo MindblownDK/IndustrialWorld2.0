@@ -45,10 +45,91 @@ namespace VoxelEngine.Power.Wind
         private float _retryTimer;
         private bool  _isRoot;
 
+        // ── Visual weathering ─────────────────────────────────────────────
+        // Metal parts rust toward an oxide brown; blades soot-darken. Applied
+        // via MaterialPropertyBlocks so shared material assets are never touched
+        // and no material instances leak. Repairing restores the factory look.
+        private static readonly Color RustColor = new(0.46f, 0.27f, 0.16f);
+        private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+        private static readonly int ColorId     = Shader.PropertyToID("_Color");
+        private static readonly int SmoothId    = Shader.PropertyToID("_Smoothness");
+
+        private Renderer[] _weatherRenderers;
+        private Color[]    _factoryColors;
+        private float[]    _factorySmoothness;
+        private MaterialPropertyBlock _mpb;
+        private float _appliedWear = -1f;   // last wear level actually pushed to renderers
+
         private void Awake()
         {
             // Tower / VerticalRotor prefabs carry the controller on the same GameObject.
             _isRoot = GetComponent<WindTurbineController>() != null;
+            CacheWeatherTargets();
+        }
+
+        private void CacheWeatherTargets()
+        {
+            var all = GetComponentsInChildren<Renderer>(true);
+            var list = new System.Collections.Generic.List<Renderer>(all.Length);
+            foreach (var r in all)
+            {
+                if (r == null || r.sharedMaterial == null) continue;
+                // Keep the emissive power-port square pristine — it is a UI marker.
+                if (r.gameObject.name.StartsWith("PowerPort")) continue;
+                list.Add(r);
+            }
+            _weatherRenderers  = list.ToArray();
+            _factoryColors     = new Color[_weatherRenderers.Length];
+            _factorySmoothness = new float[_weatherRenderers.Length];
+            for (int i = 0; i < _weatherRenderers.Length; i++)
+            {
+                var m = _weatherRenderers[i].sharedMaterial;
+                _factoryColors[i]     = m.HasProperty(BaseColorId) ? m.GetColor(BaseColorId) : m.color;
+                _factorySmoothness[i] = m.HasProperty(SmoothId) ? m.GetFloat(SmoothId) : 0.5f;
+            }
+            _mpb = new MaterialPropertyBlock();
+        }
+
+        /// <summary>
+        /// Pushes the current condition to the visuals. Cheap (skips when wear
+        /// hasn't moved ≥0.5%), called by the controller's 1 Hz degrade tick,
+        /// on attach, and after repairs.
+        /// </summary>
+        public void ApplyWeathering()
+        {
+            if (_weatherRenderers == null || _mpb == null) return;
+            float wear = 1f - Mathf.Clamp01(condition / 100f);
+            if (Mathf.Abs(wear - _appliedWear) < 0.005f) return;
+            _appliedWear = wear;
+
+            bool isBlade = kind == WindTurbinePartKind.Blade || kind == WindTurbinePartKind.VerticalBlade;
+
+            for (int i = 0; i < _weatherRenderers.Length; i++)
+            {
+                var r = _weatherRenderers[i];
+                if (r == null) continue;
+
+                Color factory = _factoryColors[i];
+                Color aged;
+                if (isBlade)
+                {
+                    // Blades: gelcoat soots and greys — darken toward charcoal.
+                    aged = Color.Lerp(factory, factory * 0.32f, wear * 0.85f);
+                }
+                else
+                {
+                    // Metal: blend toward oxide-brown rust and lose sheen.
+                    aged = Color.Lerp(factory, RustColor, wear * 0.70f);
+                    aged *= Mathf.Lerp(1f, 0.82f, wear);   // grime darkening
+                    aged.a = factory.a;
+                }
+
+                r.GetPropertyBlock(_mpb);
+                _mpb.SetColor(BaseColorId, aged);
+                _mpb.SetColor(ColorId, aged);
+                _mpb.SetFloat(SmoothId, Mathf.Lerp(_factorySmoothness[i], 0.08f, wear));
+                r.SetPropertyBlock(_mpb);
+            }
         }
 
         private bool _live;
@@ -59,6 +140,8 @@ namespace VoxelEngine.Power.Wind
             // ghost part claim a real turbine socket.
             _live = GetComponent<VoxelEngine.Building.PlacedBlock>() != null;
             if (_live && !_isRoot) TryAttach();
+            // Save-restored parts carry non-factory condition — show it right away.
+            if (_live && condition < 99.5f) ApplyWeathering();
         }
 
         private void Update()

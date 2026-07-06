@@ -29,12 +29,29 @@ namespace VoxelEngine.WaterSim
         public static bool RenderingEnabled { get; set; } = true;
 
         /// <summary>
-        /// v3.22.0 – When true, voxel water columns whose surface is at or below
-        /// the world sea level are skipped entirely so Crest's native ocean tiles
-        /// own the visual there. Inland lakes and rivers above sea level still
-        /// render with the stylized voxel water shader. Prevents z-fighting.
+        /// v3.23.0 – DEFAULT OFF. Voxel water is authoritative again (Crest
+        /// tiles are hidden per user request), so we render voxel water
+        /// everywhere including the ocean. Toggle to true only if you later
+        /// re-enable Crest's ocean plane and want the two to coexist.
         /// </summary>
-        public static bool SkipVoxelWaterAtOrBelowSeaLevel { get; set; } = true;
+        public static bool SkipVoxelWaterAtOrBelowSeaLevel { get; set; } = false;
+
+        /// <summary>
+        /// v3.23.2 – When true, ocean-level water (any Water cell within
+        /// FlattenBandVoxels of world SeaLevel) is snapped to exactly SeaLevel.
+        /// Fixes the "stepped voxel ocean" look — water becomes a smooth flat
+        /// plane, and the VoxelWaterURP shader adds Gerstner-wave displacement
+        /// on top. Inland lakes above the flatten band keep their local water
+        /// height so mountain pools still look right.
+        /// </summary>
+        public static bool FlattenOceanToSeaLevel { get; set; } = true;
+
+        /// <summary>
+        /// v3.23.2 – Half-width (in voxels) of the "this is ocean" band around
+        /// SeaLevel. Cells inside the band get flattened; cells outside keep
+        /// their per-column voxel height (mountain lakes, rivers).
+        /// </summary>
+        public static float FlattenBandVoxels { get; set; } = 4f;
 
         /// <summary>
         /// v3.22.0 – Small negative bias in voxel units. A cell is considered
@@ -171,6 +188,18 @@ namespace VoxelEngine.WaterSim
 
         private static void EnsureMats()
         {
+            // v3.23.1 – Safety-net world-up global. CrestVoxelWaterBinder pushes
+            // the accurate value every LateUpdate, but if no binder is in the
+            // scene yet the VoxelWaterURP shader would sample an all-zero vector
+            // and default to (0,1,0). Set a sane default here just in case.
+            var worldForUp = ActiveWorld.Current;
+            if (worldForUp != null)
+            {
+                bool isPlanet = worldForUp is VoxelEngine.Cosmos.SphereWorld;
+                Shader.SetGlobalVector("_VoxelWaterWorldUp",
+                    new Vector4(0f, 1f, 0f, isPlanet ? 1f : 0f));
+            }
+
             if (_externalWaterMat != null) _waterMat = _externalWaterMat;
             if (_externalOilMat != null) _oilMat = _externalOilMat;
             if (_waterMat != null && _oilMat != null) return;
@@ -370,6 +399,56 @@ namespace VoxelEngine.WaterSim
                     float finalH = baseH;
                     if (bordersTerrain) finalH = Mathf.Min(baseH, terrainH + 0.12f);
 
+                    // v3.23.2 – Flatten ocean-level cells to exact sea level so
+                    // the ocean mesh is a smooth plane instead of a per-column
+                    // stair-step. Shader adds Gerstner-wave displacement on top.
+                    if (FlattenOceanToSeaLevel && liquid == LiquidType.Water)
+                    {
+                        int seaLevelVoxels = world != null ? world.SeaLevel : 96;
+
+                        if (PlanetWaterUtility.IsPlanetWorld)
+                        {
+                            // Planet: sea level is a RADIUS. Solve for the h
+                            // (along the chunk's dominant axis) that puts the
+                            // cell surface on the sea sphere.
+                            //   |chunkVoxel + local(u,v,h) + 0.5| = seaRad
+                            // Approximation: fix (u,v) contribution and solve
+                            // for the axial component.
+                            Vector3 tangentContribution = chunkVoxel + ToXYZFloat(u, v, 0f, dom, S) + new Vector3(0.5f, 0.5f, 0.5f);
+                            Vector3 axisDir = (Vector3)dom;
+                            // Subtract axial component to isolate tangent.
+                            float axialAlreadyIn = Vector3.Dot(tangentContribution, axisDir);
+                            tangentContribution -= axisDir * axialAlreadyIn;
+                            float tangentMagSq = tangentContribution.sqrMagnitude;
+                            float seaRadSq = (float)seaLevelVoxels * seaLevelVoxels;
+                            if (tangentMagSq < seaRadSq)
+                            {
+                                float axialTarget = Mathf.Sqrt(seaRadSq - tangentMagSq);
+                                // axialTarget is world axial coordinate; convert to chunk-local h.
+                                float axialInChunk = axialTarget - axialAlreadyIn;
+                                if (Mathf.Abs(axialInChunk - baseH) <= FlattenBandVoxels)
+                                {
+                                    finalH = bordersTerrain
+                                        ? Mathf.Min(axialInChunk, terrainH + 0.12f)
+                                        : axialInChunk;
+                                }
+                            }
+                        }
+                        else
+                        {
+                            // Flat world.
+                            int chunkOriginY = c.coord.y * S;
+                            float surfaceWorldY = chunkOriginY + baseH;
+                            if (Mathf.Abs(surfaceWorldY - seaLevelVoxels) <= FlattenBandVoxels)
+                            {
+                                float flatLocalH = seaLevelVoxels - chunkOriginY;
+                                finalH = bordersTerrain
+                                    ? Mathf.Min(flatLocalH, terrainH + 0.12f)
+                                    : flatLocalH;
+                            }
+                        }
+                    }
+
                     cells[u, v] = new SurfaceCell
                     {
                         has = true,
@@ -552,7 +631,7 @@ namespace VoxelEngine.WaterSim
             var key = new VertexKey(cornerU, cornerV, owner.liquid);
             if (cache.TryGetValue(key, out int existing)) return existing;
 
-            CornerData(cells, cornerU, cornerV, owner.liquid, owner.h, owner.flow, out float h, out Vector2 flow, out bool shallow);
+            CornerData(c, cells, cornerU, cornerV, owner.liquid, owner.h, owner.y, owner.flow, dom, S, out float h, out Vector2 flow, out bool shallow);
             // v3.20.2 seam skirt – extend edge vertices slightly to hide chunk gaps
             float uSkirt = cornerU;
             float vSkirt = cornerV;
@@ -577,7 +656,8 @@ namespace VoxelEngine.WaterSim
             return index;
         }
 
-        private static void CornerData(SurfaceCell[,] cells, int cornerU, int cornerV, LiquidType liquid, float fallbackH, Vector2 fallbackFlow,
+        private static void CornerData(Chunk chunk, SurfaceCell[,] cells, int cornerU, int cornerV, LiquidType liquid,
+            float fallbackH, int ownerY, Vector2 fallbackFlow, Vector3Int dom, int S,
             out float height, out Vector2 flow, out bool shallow)
         {
             float sumH = 0f;
@@ -585,10 +665,10 @@ namespace VoxelEngine.WaterSim
             int count = 0;
             bool anyBorder = false;
 
-            AccumulateCornerCell(cells, cornerU - 1, cornerV - 1, liquid, ref sumH, ref sumFlow, ref count, ref anyBorder);
-            AccumulateCornerCell(cells, cornerU,     cornerV - 1, liquid, ref sumH, ref sumFlow, ref count, ref anyBorder);
-            AccumulateCornerCell(cells, cornerU - 1, cornerV,     liquid, ref sumH, ref sumFlow, ref count, ref anyBorder);
-            AccumulateCornerCell(cells, cornerU,     cornerV,     liquid, ref sumH, ref sumFlow, ref count, ref anyBorder);
+            AccumulateCornerCell(chunk, cells, cornerU - 1, cornerV - 1, liquid, ownerY, dom, S, ref sumH, ref sumFlow, ref count, ref anyBorder);
+            AccumulateCornerCell(chunk, cells, cornerU,     cornerV - 1, liquid, ownerY, dom, S, ref sumH, ref sumFlow, ref count, ref anyBorder);
+            AccumulateCornerCell(chunk, cells, cornerU - 1, cornerV,     liquid, ownerY, dom, S, ref sumH, ref sumFlow, ref count, ref anyBorder);
+            AccumulateCornerCell(chunk, cells, cornerU,     cornerV,     liquid, ownerY, dom, S, ref sumH, ref sumFlow, ref count, ref anyBorder);
 
             if (count == 0)
             {
@@ -603,23 +683,65 @@ namespace VoxelEngine.WaterSim
             shallow = anyBorder;
         }
 
-        private static void AccumulateCornerCell(SurfaceCell[,] cells, int u, int v, LiquidType liquid, ref float sumH, ref Vector2 sumFlow, ref int count, ref bool anyBorder)
+        /// <summary>
+        /// v3.23.2 – When (u,v) is out of chunk bounds, uses the sea-level
+        /// height as a best-effort neighbour proxy. When FlattenOceanToSeaLevel
+        /// is on (default), this makes chunk seams line up exactly at sea level
+        /// on both sides of the border — no more diagonal shore stripes.
+        /// For water above the flatten band, falls back to the owner cell's
+        /// height (worst case: subtle seam, no visible gap).
+        /// </summary>
+        private static void AccumulateCornerCell(Chunk chunk, SurfaceCell[,] cells, int u, int v, LiquidType liquid, int ownerY, Vector3Int dom, int S,
+            ref float sumH, ref Vector2 sumFlow, ref int count, ref bool anyBorder)
         {
-            const int S = VoxelConstants.CHUNK_SIZE;
-            if (u < 0 || u >= S || v < 0 || v >= S)
+            if (u >= 0 && u < S && v >= 0 && v < S)
             {
-                // v3.20.2 seam fix – sample neighbour chunk to close gaps
-                // Fallback to world sampling – prevents chunk border cracks
-                // Note: we don't have chunk ref here, caller passes c via outer scope – use ActiveWorld
-                // For now, skip – outer CornerData will fallback to owner.h which keeps continuity
+                var cc = cells[u, v];
+                if (!cc.has || cc.liquid != liquid) return;
+                sumH += cc.h;
+                sumFlow += cc.flow;
+                count++;
+                anyBorder |= cc.bordersTerrain;
                 return;
             }
-            var c = cells[u, v];
-            if (!c.has || c.liquid != liquid) return;
-            sumH += c.h;
-            sumFlow += c.flow;
+
+            // Out of chunk bounds. If we're flattening ocean to sea level,
+            // just use sea level (both chunks will do the same → seamless).
+            if (!FlattenOceanToSeaLevel || liquid != LiquidType.Water || chunk == null) return;
+
+            var world = ActiveWorld.Current;
+            if (world == null) return;
+
+            int seaLevelVoxels = world.SeaLevel;
+            Vector3 chunkVoxelOrigin = (Vector3)(chunk.coord * S);
+
+            if (PlanetWaterUtility.IsPlanetWorld)
+            {
+                // Planet: solve axial coordinate that lands on the sea sphere,
+                // using the same math as the in-chunk flattening pass.
+                Vector3 tangentContribution = chunkVoxelOrigin + ToXYZFloat(u, v, 0f, dom, S) + new Vector3(0.5f, 0.5f, 0.5f);
+                Vector3 axisDir = (Vector3)dom;
+                float axialAlreadyIn = Vector3.Dot(tangentContribution, axisDir);
+                tangentContribution -= axisDir * axialAlreadyIn;
+                float tangentMagSq = tangentContribution.sqrMagnitude;
+                float seaRadSq = (float)seaLevelVoxels * seaLevelVoxels;
+                if (tangentMagSq >= seaRadSq) return;
+                float axialTarget = Mathf.Sqrt(seaRadSq - tangentMagSq);
+                float axialInChunk = axialTarget - axialAlreadyIn;
+                if (Mathf.Abs(axialInChunk - ownerY) > FlattenBandVoxels) return;
+                sumH += axialInChunk;
+                count++;
+                return;
+            }
+
+            // Flat world.
+            int chunkOriginY = chunk.coord.y * S;
+            float ownerWorld = chunkOriginY + ownerY;
+            if (Mathf.Abs(ownerWorld - seaLevelVoxels) > FlattenBandVoxels) return;
+
+            float flatLocalH = seaLevelVoxels - chunkOriginY;
+            sumH += flatLocalH;
             count++;
-            anyBorder |= c.bordersTerrain;
         }
 
         private static void AddTopSpherical(Chunk c, SurfaceCell[,] cells, int u, int v, int uEnd, int vEnd, SurfaceCell cell, Vector3Int dom, int S, Vector3 chunkVoxel, Vector3 chunkUp, float seaRad,

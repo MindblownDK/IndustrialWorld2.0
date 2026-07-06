@@ -221,12 +221,13 @@ namespace VoxelEngine.EditorTools
             AssetDatabase.Refresh();
 
             EditorUtility.DisplayDialog("Voxel Engine — Step 15",
-                "Modular Wind Power content created!\n\n" +
-                "• T90 - 2 MW / T150 - 6 MW / T236 - 15 MW — 6 modular parts each\n" +
-                "• Small + Large Vertical Turbines — Rotor + Blades\n" +
-                "• 3 offshore Monopole foundations\n" +
-                "• 25 items, 25 recipes, 3 research nodes — all linked\n\n" +
-                "Parts snap automatically. Right-click any placed part for the turbine dashboard.", "OK");
+                "Modular Wind Power content verified!\n\n" +
+                "NON-DESTRUCTIVE PASS:\n" +
+                "• Missing prefabs / items / recipes / research → created\n" +
+                "• Existing assets → your tweaks kept, missing scripts re-added\n" +
+                "• All links verified: prefab → item → recipe → research → registry\n\n" +
+                "T90 / T150 / T236 (6 parts each) · 2 Vertical Turbines · 3 Monopoles.\n" +
+                "Tip: delete a prefab asset and re-run Step 15 to regenerate its visuals.", "OK");
         }
 
         // ════════════════════════════════════════════════════════════════
@@ -259,21 +260,25 @@ namespace VoxelEngine.EditorTools
             _matHub    = MakeMat("Mat_TurbineHub",    new Color(0.78f, 0.80f, 0.84f), 0.80f, 0.70f);
             _matMono   = MakeMat("Mat_MonopoleSteel", new Color(0.52f, 0.55f, 0.59f), 0.75f, 0.45f);
             _matPort   = MakeMat("Mat_PowerPort",     new Color(0.05f, 0.09f, 0.08f), 0.30f, 0.40f);
-            _matPort.EnableKeyword("_EMISSION");
-            _matPort.globalIlluminationFlags = MaterialGlobalIlluminationFlags.None;
-            _matPort.SetColor("_EmissionColor", new Color(0.10f, 0.95f, 0.65f) * 2.2f);
-            EditorUtility.SetDirty(_matPort);
+            if (!_matPort.IsKeywordEnabled("_EMISSION"))
+            {
+                _matPort.EnableKeyword("_EMISSION");
+                _matPort.globalIlluminationFlags = MaterialGlobalIlluminationFlags.None;
+                _matPort.SetColor("_EmissionColor", new Color(0.10f, 0.95f, 0.65f) * 2.2f);
+                EditorUtility.SetDirty(_matPort);
+            }
         }
 
         private static Material MakeMat(string name, Color c, float metallic, float smooth)
         {
+            // Non-destructive: existing materials keep any colour/PBR tweaks you
+            // made in the inspector — values are only written on first creation.
             string path = $"{MATERIALS}/{name}.mat";
             var m = Load<Material>(path);
-            if (m == null)
-            {
-                m = new Material(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard")) { name = name };
-                AssetDatabase.CreateAsset(m, path);
-            }
+            if (m != null) return m;
+
+            m = new Material(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard")) { name = name };
+            AssetDatabase.CreateAsset(m, path);
             m.color = c;
             if (m.HasProperty("_BaseColor"))  m.SetColor("_BaseColor", c);
             if (m.HasProperty("_Metallic"))   m.SetFloat("_Metallic", metallic);
@@ -287,32 +292,48 @@ namespace VoxelEngine.EditorTools
         // ════════════════════════════════════════════════════════════════
         private static GameObject BuildTowerPrefab(HawtSpec s)
         {
-            return RebuildPrefab($"{PREFABS}/Turbine_{s.id}_Tower.prefab", $"Turbine_{s.id}_Tower", root =>
+            // Script pass — idempotent: adds missing components, initialises ONLY
+            // freshly-added ones. Existing components keep every inspector tweak.
+            void EnsureScripts(GameObject root)
             {
-                // Controller + generator + root part
-                var gen = root.AddComponent<VoxelEngine.Power.PowerGenerator>();
-                gen.wattsPerSecond = 0f;
-                gen.connectRadius = 7f;
+                EnsureComponent<VoxelEngine.Power.PowerGenerator>(root, gen =>
+                {
+                    gen.wattsPerSecond = 0f;
+                    gen.connectRadius = 7f;
+                });
+                EnsureComponent<WindTurbinePart>(root, part =>
+                {
+                    part.kind = WindTurbinePartKind.Tower;
+                    part.tierId = s.id;
+                });
+                EnsureComponent<WindTurbineController>(root, c =>
+                {
+                    c.tierId = s.id;
+                    c.displayName = s.label;
+                    c.vertical = false;
+                    c.ratedPowerWatts = s.watts;
+                    c.rotorDiameter = s.rotorD;
+                    c.hubHeight = s.towerH + s.nacelle.y * 0.5f;
+                    c.bladeCount = 3;
+                    c.yawPivotLocal      = new Vector3(0f, s.towerH, 0f);
+                    c.nacelleSocket      = new Vector3(0f, s.nacelle.y * 0.5f, -s.nacelle.z * 0.12f);
+                    c.gearboxSocket      = new Vector3(0f, s.nacelle.y * 0.42f, -s.nacelle.z * 0.05f);
+                    c.generatorSocket    = new Vector3(0f, s.nacelle.y * 0.42f, -s.nacelle.z * 0.32f);
+                    c.hubSocket          = new Vector3(0f, s.nacelle.y * 0.5f, s.nacelle.z * 0.52f);
+                    c.bladeMountRadius   = s.hubR * 0.85f;
+                    c.repairPlateCost    = s.id == "t236" ? 12 : (s.id == "t150" ? 8 : 4);
+                });
+                if (root.GetComponent<Collider>() == null)
+                {
+                    var col = root.AddComponent<BoxCollider>();
+                    col.center = new Vector3(0f, s.towerH * 0.5f, 0f);
+                    col.size = new Vector3(s.baseR * 2f, s.towerH, s.baseR * 2f);
+                }
+            }
 
-                var part = root.AddComponent<WindTurbinePart>();
-                part.kind = WindTurbinePartKind.Tower;
-                part.tierId = s.id;
-
-                var c = root.AddComponent<WindTurbineController>();
-                c.tierId = s.id;
-                c.displayName = s.label;
-                c.vertical = false;
-                c.ratedPowerWatts = s.watts;
-                c.rotorDiameter = s.rotorD;
-                c.hubHeight = s.towerH + s.nacelle.y * 0.5f;
-                c.bladeCount = 3;
-                c.yawPivotLocal      = new Vector3(0f, s.towerH, 0f);
-                c.nacelleSocket      = new Vector3(0f, s.nacelle.y * 0.5f, -s.nacelle.z * 0.12f);
-                c.gearboxSocket      = new Vector3(0f, s.nacelle.y * 0.42f, -s.nacelle.z * 0.05f);
-                c.generatorSocket    = new Vector3(0f, s.nacelle.y * 0.42f, -s.nacelle.z * 0.32f);
-                c.hubSocket          = new Vector3(0f, s.nacelle.y * 0.5f, s.nacelle.z * 0.52f);
-                c.bladeMountRadius   = s.hubR * 0.85f;
-                c.repairPlateCost    = s.id == "t236" ? 12 : (s.id == "t150" ? 8 : 4);
+            return EnsurePrefab($"{PREFABS}/Turbine_{s.id}_Tower.prefab", $"Turbine_{s.id}_Tower", root =>
+            {
+                EnsureScripts(root);
 
                 // Visuals — tapered tube in 4 segments + flange rings + base door + accent stripe.
                 int segs = 4;
@@ -351,21 +372,28 @@ namespace VoxelEngine.EditorTools
 
                 // POWER PORT — glowing square marker on the base front.
                 BuildPortMarker(root.transform, new Vector3(0f, 0.9f, s.baseR * 1.02f));
-
-                // Collider — one box covering the full tube (mine/interact anywhere).
-                var col = root.AddComponent<BoxCollider>();
-                col.center = new Vector3(0f, s.towerH * 0.5f, 0f);
-                col.size = new Vector3(s.baseR * 2f, s.towerH, s.baseR * 2f);
-            });
+            }, EnsureScripts);
         }
 
         private static GameObject BuildNacellePrefab(HawtSpec s)
         {
-            return RebuildPrefab($"{PREFABS}/Turbine_{s.id}_Nacelle.prefab", $"Turbine_{s.id}_Nacelle", root =>
+            void EnsureScripts(GameObject root)
             {
-                var part = root.AddComponent<WindTurbinePart>();
-                part.kind = WindTurbinePartKind.Nacelle;
-                part.tierId = s.id;
+                EnsureComponent<WindTurbinePart>(root, part =>
+                {
+                    part.kind = WindTurbinePartKind.Nacelle;
+                    part.tierId = s.id;
+                });
+                if (root.GetComponent<Collider>() == null)
+                {
+                    var col = root.AddComponent<BoxCollider>();
+                    col.size = s.nacelle;
+                }
+            }
+
+            return EnsurePrefab($"{PREFABS}/Turbine_{s.id}_Nacelle.prefab", $"Turbine_{s.id}_Nacelle", root =>
+            {
+                EnsureScripts(root);
 
                 Vector3 n = s.nacelle;
                 // Shell — open-top box: floor + two flanks + front/back walls, so the
@@ -434,19 +462,37 @@ namespace VoxelEngine.EditorTools
                     new Vector3(n.x * 0.2f, n.y * 0.75f, -n.z * 0.42f), new Vector3(0.06f, n.y * 0.35f, 0.06f), _matDark);
                 Object.DestroyImmediate(mast.GetComponent<Collider>());
 
-                var col = root.AddComponent<BoxCollider>();
-                col.size = n;
-            });
+            }, EnsureScripts);
+        }
+
+        /// <summary>Shared idempotent script pass for simple parts (part marker + box collider).</summary>
+        private static System.Action<GameObject> PartEnsure(WindTurbinePartKind kind, string tierId,
+            Vector3 colCenter, Vector3 colSize)
+        {
+            return root =>
+            {
+                EnsureComponent<WindTurbinePart>(root, part =>
+                {
+                    part.kind = kind;
+                    part.tierId = tierId;
+                });
+                if (root.GetComponent<Collider>() == null)
+                {
+                    var col = root.AddComponent<BoxCollider>();
+                    col.center = colCenter;
+                    col.size = colSize;
+                }
+            };
         }
 
         private static GameObject BuildGearboxPrefab(HawtSpec s)
         {
             float k = s.nacelle.y;   // scale driver
-            return RebuildPrefab($"{PREFABS}/Turbine_{s.id}_Gearbox.prefab", $"Turbine_{s.id}_Gearbox", root =>
+            var ensure = PartEnsure(WindTurbinePartKind.Gearbox, s.id,
+                Vector3.zero, new Vector3(k * 0.6f, k * 0.55f, k * 0.9f));
+            return EnsurePrefab($"{PREFABS}/Turbine_{s.id}_Gearbox.prefab", $"Turbine_{s.id}_Gearbox", root =>
             {
-                var part = root.AddComponent<WindTurbinePart>();
-                part.kind = WindTurbinePartKind.Gearbox;
-                part.tierId = s.id;
+                ensure(root);
 
                 var body = Prim(PrimitiveType.Cube, root.transform, "Housing",
                     Vector3.zero, new Vector3(k * 0.55f, k * 0.5f, k * 0.75f), _matDark);
@@ -468,19 +514,17 @@ namespace VoxelEngine.EditorTools
                         new Vector3(k * 0.04f, k * 0.10f, k * 0.6f), _matHub);
                     Object.DestroyImmediate(rib.GetComponent<Collider>());
                 }
-                var col = root.AddComponent<BoxCollider>();
-                col.size = new Vector3(k * 0.6f, k * 0.55f, k * 0.9f);
-            });
+            }, ensure);
         }
 
         private static GameObject BuildGeneratorPrefab(HawtSpec s)
         {
             float k = s.nacelle.y;
-            return RebuildPrefab($"{PREFABS}/Turbine_{s.id}_Generator.prefab", $"Turbine_{s.id}_Generator", root =>
+            var ensure = PartEnsure(WindTurbinePartKind.Generator, s.id,
+                Vector3.zero, new Vector3(k * 0.62f, k * 0.62f, k * 0.75f));
+            return EnsurePrefab($"{PREFABS}/Turbine_{s.id}_Generator.prefab", $"Turbine_{s.id}_Generator", root =>
             {
-                var part = root.AddComponent<WindTurbinePart>();
-                part.kind = WindTurbinePartKind.Generator;
-                part.tierId = s.id;
+                ensure(root);
 
                 var body = Prim(PrimitiveType.Cylinder, root.transform, "Stator",
                     Vector3.zero, new Vector3(k * 0.55f, k * 0.35f, k * 0.55f), _matShell);
@@ -499,18 +543,28 @@ namespace VoxelEngine.EditorTools
                     new Vector3(0f, k * 0.32f, 0f), new Vector3(k * 0.2f, k * 0.14f, k * 0.24f), _matDark);
                 Object.DestroyImmediate(tbox.GetComponent<Collider>());
 
-                var col = root.AddComponent<BoxCollider>();
-                col.size = new Vector3(k * 0.62f, k * 0.62f, k * 0.75f);
-            });
+            }, ensure);
         }
 
         private static GameObject BuildHubPrefab(HawtSpec s)
         {
-            return RebuildPrefab($"{PREFABS}/Turbine_{s.id}_Hub.prefab", $"Turbine_{s.id}_Hub", root =>
+            void EnsureScripts(GameObject root)
             {
-                var part = root.AddComponent<WindTurbinePart>();
-                part.kind = WindTurbinePartKind.Hub;
-                part.tierId = s.id;
+                EnsureComponent<WindTurbinePart>(root, part =>
+                {
+                    part.kind = WindTurbinePartKind.Hub;
+                    part.tierId = s.id;
+                });
+                if (root.GetComponent<Collider>() == null)
+                {
+                    var col = root.AddComponent<SphereCollider>();
+                    col.radius = s.hubR * 1.15f;
+                }
+            }
+
+            return EnsurePrefab($"{PREFABS}/Turbine_{s.id}_Hub.prefab", $"Turbine_{s.id}_Hub", root =>
+            {
+                EnsureScripts(root);
 
                 float r = s.hubR;
                 // Spinner nose (sphere + forward cone-ish cap)
@@ -531,18 +585,18 @@ namespace VoxelEngine.EditorTools
                     Object.DestroyImmediate(mount.GetComponent<Collider>());
                 }
 
-                var col = root.AddComponent<SphereCollider>();
-                col.radius = r * 1.15f;
-            });
+            }, EnsureScripts);
         }
 
         private static GameObject BuildBladePrefab(HawtSpec s)
         {
-            return RebuildPrefab($"{PREFABS}/Turbine_{s.id}_Blade.prefab", $"Turbine_{s.id}_Blade", root =>
+            float lenC = s.bladeLen;
+            float chordC = Mathf.Max(0.55f, s.hubR * 0.72f);
+            var ensure = PartEnsure(WindTurbinePartKind.Blade, s.id,
+                new Vector3(lenC * 0.02f, lenC * 0.5f, 0f), new Vector3(chordC * 1.1f, lenC, chordC * 1.7f));
+            return EnsurePrefab($"{PREFABS}/Turbine_{s.id}_Blade.prefab", $"Turbine_{s.id}_Blade", root =>
             {
-                var part = root.AddComponent<WindTurbinePart>();
-                part.kind = WindTurbinePartKind.Blade;
-                part.tierId = s.id;
+                ensure(root);
 
                 float len = s.bladeLen;
                 float rootChord = Mathf.Max(0.55f, s.hubR * 0.72f);
@@ -613,10 +667,7 @@ namespace VoxelEngine.EditorTools
                 marker.transform.localRotation = Quaternion.Euler(0f, 2f, 7f);
                 Object.DestroyImmediate(marker.GetComponent<Collider>());
 
-                var col = root.AddComponent<BoxCollider>();
-                col.center = new Vector3(len * 0.02f, len * 0.5f, 0f);
-                col.size = new Vector3(rootChord * 1.1f, len, rootChord * 1.7f);
-            });
+            }, ensure);
         }
 
         // ════════════════════════════════════════════════════════════════
@@ -624,27 +675,42 @@ namespace VoxelEngine.EditorTools
         // ════════════════════════════════════════════════════════════════
         private static GameObject BuildVerticalRotorPrefab(VawtSpec s)
         {
-            return RebuildPrefab($"{PREFABS}/Turbine_{s.id}_Rotor.prefab", $"Turbine_{s.id}_Rotor", root =>
+            void EnsureScripts(GameObject root)
             {
-                var gen = root.AddComponent<VoxelEngine.Power.PowerGenerator>();
-                gen.wattsPerSecond = 0f;
-                gen.connectRadius = 5f;
+                EnsureComponent<VoxelEngine.Power.PowerGenerator>(root, gen =>
+                {
+                    gen.wattsPerSecond = 0f;
+                    gen.connectRadius = 5f;
+                });
+                EnsureComponent<WindTurbinePart>(root, part =>
+                {
+                    part.kind = WindTurbinePartKind.VerticalRotor;
+                    part.tierId = s.id;
+                });
+                EnsureComponent<WindTurbineController>(root, c =>
+                {
+                    c.tierId = s.id;
+                    c.displayName = s.label;
+                    c.vertical = true;
+                    c.ratedPowerWatts = s.watts;
+                    c.rotorDiameter = s.cageR * 2f;
+                    c.hubHeight = s.drumH + s.mastH + s.cageH * 0.5f;
+                    c.bladeCount = 1;                                   // one blade-cage item
+                    c.yawPivotLocal = new Vector3(0f, s.drumH + s.mastH, 0f);
+                    c.verticalBladeSocket = Vector3.zero;
+                    c.repairPlateCost = s.id == "vlarge" ? 4 : 2;
+                });
+                if (root.GetComponent<Collider>() == null)
+                {
+                    var col = root.AddComponent<BoxCollider>();
+                    col.center = new Vector3(0f, (s.drumH + s.mastH) * 0.5f, 0f);
+                    col.size = new Vector3(s.drumR * 2f, s.drumH + s.mastH, s.drumR * 2f);
+                }
+            }
 
-                var part = root.AddComponent<WindTurbinePart>();
-                part.kind = WindTurbinePartKind.VerticalRotor;
-                part.tierId = s.id;
-
-                var c = root.AddComponent<WindTurbineController>();
-                c.tierId = s.id;
-                c.displayName = s.label;
-                c.vertical = true;
-                c.ratedPowerWatts = s.watts;
-                c.rotorDiameter = s.cageR * 2f;
-                c.hubHeight = s.drumH + s.mastH + s.cageH * 0.5f;
-                c.bladeCount = 1;                                   // one blade-cage item
-                c.yawPivotLocal = new Vector3(0f, s.drumH + s.mastH, 0f);
-                c.verticalBladeSocket = Vector3.zero;
-                c.repairPlateCost = s.id == "vlarge" ? 4 : 2;
+            return EnsurePrefab($"{PREFABS}/Turbine_{s.id}_Rotor.prefab", $"Turbine_{s.id}_Rotor", root =>
+            {
+                EnsureScripts(root);
 
                 // Generator drum
                 var drum = Prim(PrimitiveType.Cylinder, root.transform, "GeneratorDrum",
@@ -664,20 +730,16 @@ namespace VoxelEngine.EditorTools
 
                 // POWER PORT — marked square on the drum.
                 BuildPortMarker(root.transform, new Vector3(0f, s.drumH * 0.45f, s.drumR * 1.01f));
-
-                var col = root.AddComponent<BoxCollider>();
-                col.center = new Vector3(0f, (s.drumH + s.mastH) * 0.5f, 0f);
-                col.size = new Vector3(s.drumR * 2f, s.drumH + s.mastH, s.drumR * 2f);
-            });
+            }, EnsureScripts);
         }
 
         private static GameObject BuildVerticalBladePrefab(VawtSpec s)
         {
-            return RebuildPrefab($"{PREFABS}/Turbine_{s.id}_Blades.prefab", $"Turbine_{s.id}_Blades", root =>
+            var ensure = PartEnsure(WindTurbinePartKind.VerticalBlade, s.id,
+                new Vector3(0f, s.cageH * 0.5f, 0f), new Vector3(s.cageR * 2.2f, s.cageH, s.cageR * 2.2f));
+            return EnsurePrefab($"{PREFABS}/Turbine_{s.id}_Blades.prefab", $"Turbine_{s.id}_Blades", root =>
             {
-                var part = root.AddComponent<WindTurbinePart>();
-                part.kind = WindTurbinePartKind.VerticalBlade;
-                part.tierId = s.id;
+                ensure(root);
 
                 // Central shaft
                 var shaft = Prim(PrimitiveType.Cylinder, root.transform, "Shaft",
@@ -712,10 +774,7 @@ namespace VoxelEngine.EditorTools
                     }
                 }
 
-                var col = root.AddComponent<BoxCollider>();
-                col.center = new Vector3(0f, s.cageH * 0.5f, 0f);
-                col.size = new Vector3(s.cageR * 2.2f, s.cageH, s.cageR * 2.2f);
-            });
+            }, ensure);
         }
 
         // ════════════════════════════════════════════════════════════════
@@ -723,8 +782,23 @@ namespace VoxelEngine.EditorTools
         // ════════════════════════════════════════════════════════════════
         private static GameObject BuildMonopolePrefab(HawtSpec s)
         {
-            return RebuildPrefab($"{PREFABS}/Turbine_{s.id}_Monopole.prefab", $"Turbine_{s.id}_Monopole", root =>
+            float rC = s.baseR * 1.15f;
+            float depthC = 18f + s.towerH * 0.15f;
+            const float deckC = 3.5f;
+            void EnsureScripts(GameObject root)
             {
+                if (root.GetComponent<Collider>() == null)
+                {
+                    var col = root.AddComponent<BoxCollider>();
+                    col.center = new Vector3(0f, (deckC - depthC) * 0.5f, 0f);
+                    col.size = new Vector3(rC * 2.2f, deckC + depthC, rC * 2.2f);
+                }
+            }
+
+            return EnsurePrefab($"{PREFABS}/Turbine_{s.id}_Monopole.prefab", $"Turbine_{s.id}_Monopole", root =>
+            {
+                EnsureScripts(root);
+
                 float r = s.baseR * 1.15f;
                 float depth = 18f + s.towerH * 0.15f;   // below waterline
                 float deck = 3.5f;                       // above waterline
@@ -751,10 +825,7 @@ namespace VoxelEngine.EditorTools
                     Object.DestroyImmediate(post.GetComponent<Collider>());
                 }
 
-                var col = root.AddComponent<BoxCollider>();
-                col.center = new Vector3(0f, (deck - depth) * 0.5f, 0f);
-                col.size = new Vector3(r * 2.2f, deck + depth, r * 2.2f);
-            });
+            }, EnsureScripts);
         }
 
         // ════════════════════════════════════════════════════════════════
@@ -784,69 +855,139 @@ namespace VoxelEngine.EditorTools
             return go;
         }
 
-        /// <summary>Deletes any existing prefab at path and builds it fresh — geometry
-        /// tweaks between versions never leave stale child objects behind.</summary>
-        private static GameObject RebuildPrefab(string path, string name, System.Action<GameObject> build)
+        /// <summary>
+        /// NON-DESTRUCTIVE prefab pass:
+        ///   • Prefab missing            → build it fresh (geometry + scripts).
+        ///   • Prefab exists             → keep ALL visuals and serialized values;
+        ///     only strip broken script references and run <paramref name="ensure"/>,
+        ///     which adds any missing components (never overwriting existing ones).
+        /// Delete a prefab manually if you want its visuals regenerated.
+        /// </summary>
+        private static GameObject EnsurePrefab(string path, string name,
+            System.Action<GameObject> buildFresh, System.Action<GameObject> ensure)
         {
-            if (AssetDatabase.LoadMainAssetAtPath(path) != null) AssetDatabase.DeleteAsset(path);
-            var root = new GameObject(name);
+            var existing = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            if (existing == null)
+            {
+                var root = new GameObject(name);
+                try
+                {
+                    buildFresh(root);
+                    return PrefabUtility.SaveAsPrefabAsset(root, path);
+                }
+                finally { Object.DestroyImmediate(root); }
+            }
+
+            // Additive repair pass on the existing prefab.
+            GameObject contents = null;
             try
             {
-                build(root);
-                return PrefabUtility.SaveAsPrefabAsset(root, path);
+                contents = PrefabUtility.LoadPrefabContents(path);
+                foreach (var t in contents.GetComponentsInChildren<Transform>(true))
+                    if (t != null) GameObjectUtility.RemoveMonoBehavioursWithMissingScript(t.gameObject);
+                ensure?.Invoke(contents);
+                return PrefabUtility.SaveAsPrefabAsset(contents, path);
             }
-            finally { Object.DestroyImmediate(root); }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"[WindPowerContentBuilder] Could not repair '{path}' additively ({ex.Message}). Leaving it untouched.");
+                return existing;
+            }
+            finally
+            {
+                if (contents != null) PrefabUtility.UnloadPrefabContents(contents);
+            }
         }
 
+        /// <summary>GetComponent-or-add. Runs <paramref name="onAdded"/> ONLY for a
+        /// freshly added component — existing components keep every tweaked value.</summary>
+        private static T EnsureComponent<T>(GameObject go, System.Action<T> onAdded = null) where T : Component
+        {
+            var c = go.GetComponent<T>();
+            if (c == null)
+            {
+                c = go.AddComponent<T>();
+                onAdded?.Invoke(c);
+            }
+            return c;
+        }
+
+        /// <summary>
+        /// NON-DESTRUCTIVE item pass. New asset → fully initialised. Existing
+        /// asset → every tuned value (name, health, stack size, icon…) is kept;
+        /// only broken/missing LINKS are repaired: itemId (needed by save files)
+        /// and placedPrefab (item → prefab).
+        /// </summary>
         private static VoxelEngine.Items.BlockItem MakeBlock(string assetName, string display,
             GameObject prefab, string description, int health)
         {
             string path = $"{ITEMS}/{assetName}.asset";
             var b = Load<VoxelEngine.Items.BlockItem>(path);
-            if (b == null)
+            bool fresh = b == null;
+            if (fresh)
             {
                 b = ScriptableObject.CreateInstance<VoxelEngine.Items.BlockItem>();
                 AssetDatabase.CreateAsset(b, path);
+                b.displayName = display;
+                b.description = description;
+                b.iconTint = new Color(0.80f, 0.84f, 0.90f);
+                b.maxStack = 10;
+                b.massPerUnit = 25f;
+                b.gridSize = Vector3Int.one;
+                b.allowStacking = true;      // parts may occupy space near the tower
+                b.blockHealth = health;
+                b.miningTier = 1;
+                b.category = "Power";
             }
-            b.itemId = assetName.ToLower();
-            b.displayName = display;
-            b.description = description;
-            b.iconTint = new Color(0.80f, 0.84f, 0.90f);
-            b.maxStack = 10;
-            b.massPerUnit = 25f;
-            b.placedPrefab = prefab;
-            b.gridSize = Vector3Int.one;
-            b.allowStacking = true;      // parts may occupy space near the tower
-            b.blockHealth = health;
-            b.miningTier = 1;
-            b.category = "Power";
+
+            // Always-verified links (harmless when already correct):
+            if (string.IsNullOrEmpty(b.itemId)) b.itemId = assetName.ToLower();
+            if (b.placedPrefab == null && prefab != null) b.placedPrefab = prefab;
             EditorUtility.SetDirty(b);
             return b;
         }
 
+        /// <summary>
+        /// NON-DESTRUCTIVE recipe pass. New asset → fully initialised. Existing
+        /// asset → tuned costs / craft time / station are kept; only broken links
+        /// are repaired: outputItem, dead ingredient references, and registry
+        /// membership (recipe → registry).
+        /// </summary>
         private static VoxelEngine.Crafting.RecipeDefinition MakeRecipe(string assetName, string display,
             VoxelEngine.Items.ItemDefinition output, float seconds,
             params (VoxelEngine.Items.ItemDefinition item, int count)[] inputs)
         {
             string path = $"{RECIPES}/{assetName}.asset";
             var r = Load<VoxelEngine.Crafting.RecipeDefinition>(path);
-            if (r == null)
+            bool fresh = r == null;
+            if (fresh)
             {
                 r = ScriptableObject.CreateInstance<VoxelEngine.Crafting.RecipeDefinition>();
                 AssetDatabase.CreateAsset(r, path);
+                r.displayName = display;
+                r.outputCount = 1;
+                r.requiredStation = VoxelEngine.Crafting.StationTier.Assembler;
+                r.craftSeconds = seconds;
+                r.unlockedByDefault = false;
             }
-            r.displayName = display;
-            r.outputItem = output;
-            r.outputCount = 1;
-            r.requiredStation = VoxelEngine.Crafting.StationTier.Assembler;
-            r.craftSeconds = seconds;
-            r.unlockedByDefault = false;
 
-            var valid = new List<VoxelEngine.Crafting.RecipeIngredient>();
-            foreach (var (item, count) in inputs)
-                if (item != null && count > 0)
-                    valid.Add(new VoxelEngine.Crafting.RecipeIngredient { item = item, count = count });
-            r.inputs = valid.ToArray();
+            // Link repair — output must point at the right item.
+            if (r.outputItem == null) r.outputItem = output;
+
+            // Ingredients: write defaults on fresh assets; on existing assets only
+            // replace the list if it is empty or contains dead (null-item) entries.
+            bool inputsBroken = r.inputs == null || r.inputs.Length == 0;
+            if (!inputsBroken)
+                foreach (var ing in r.inputs)
+                    if (ing.item == null) { inputsBroken = true; break; }
+            if (fresh || inputsBroken)
+            {
+                var valid = new List<VoxelEngine.Crafting.RecipeIngredient>();
+                foreach (var (item, count) in inputs)
+                    if (item != null && count > 0)
+                        valid.Add(new VoxelEngine.Crafting.RecipeIngredient { item = item, count = count });
+                r.inputs = valid.ToArray();
+            }
             EditorUtility.SetDirty(r);
 
             var registry = Load<VoxelEngine.Crafting.RecipeRegistry>($"{ASSET_ROOT}/RecipeRegistry.asset");
@@ -870,24 +1011,48 @@ namespace VoxelEngine.EditorTools
             VoxelEngine.Crafting.RecipeDefinition[] unlocks,
             VoxelEngine.Research.ResearchNode[] prereqs)
         {
+            // NON-DESTRUCTIVE node pass: fresh nodes are fully authored; existing
+            // nodes keep tuned names/costs/tier placement. Links are ALWAYS
+            // verified: dead unlock entries are dropped, missing wind recipes are
+            // appended (union merge), prerequisites are repaired if broken, and
+            // tree membership is guaranteed.
             string path = $"{NODES}/{id}.asset";
             var n = Load<VoxelEngine.Research.ResearchNode>(path);
-            if (n == null)
+            bool fresh = n == null;
+            if (fresh)
             {
                 n = ScriptableObject.CreateInstance<VoxelEngine.Research.ResearchNode>();
                 AssetDatabase.CreateAsset(n, path);
+                n.displayName = display;
+                n.description = desc;
+                n.category = VoxelEngine.Research.ResearchCategory.Environment;
+                n.subCategory = VoxelEngine.Research.ResearchSubCategory.Power;
+                n.tier = tier;
+                n.column = column;
+                n.researchSeconds = seconds;
+                n.cost = cost;
             }
-            n.nodeId = id;
-            n.displayName = display;
-            n.description = desc;
-            n.category = VoxelEngine.Research.ResearchCategory.Environment;
-            n.subCategory = VoxelEngine.Research.ResearchSubCategory.Power;
-            n.tier = tier;
-            n.column = column;
-            n.researchSeconds = seconds;
-            n.cost = cost;
-            n.unlocksRecipes = unlocks;
-            n.prerequisites = prereqs ?? new VoxelEngine.Research.ResearchNode[0];
+
+            if (string.IsNullOrEmpty(n.nodeId) || n.nodeId != id) n.nodeId = id;
+            if (n.cost == null || n.cost.Length == 0) n.cost = cost;
+
+            // Unlock links: keep valid existing entries, drop nulls, append ours.
+            var merged = new List<VoxelEngine.Crafting.RecipeDefinition>();
+            if (n.unlocksRecipes != null)
+                foreach (var r in n.unlocksRecipes)
+                    if (r != null && !merged.Contains(r)) merged.Add(r);
+            foreach (var r in unlocks)
+                if (r != null && !merged.Contains(r)) merged.Add(r);
+            n.unlocksRecipes = merged.ToArray();
+
+            // Prerequisite links: repair only when empty or containing dead refs.
+            bool prereqBroken = n.prerequisites == null || n.prerequisites.Length == 0;
+            if (!prereqBroken)
+                foreach (var p in n.prerequisites)
+                    if (p == null) { prereqBroken = true; break; }
+            if (prereqBroken)
+                n.prerequisites = prereqs ?? new VoxelEngine.Research.ResearchNode[0];
+
             EditorUtility.SetDirty(n);
             if (tree != null && !tree.nodes.Contains(n)) tree.nodes.Add(n);
             return n;

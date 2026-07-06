@@ -274,6 +274,7 @@ namespace VoxelEngine.Power.Wind
                 default: return;
             }
             part.Controller = this;
+            part.ApplyWeathering();   // restored-from-save parts show their age immediately
         }
 
         public void Detach(WindTurbinePart part)
@@ -483,6 +484,7 @@ namespace VoxelEngine.Power.Wind
             {
                 float weight = StressWeight(p.kind);
                 p.condition = Mathf.Max(0f, p.condition - basePerSecond * weight);
+                p.ApplyWeathering();   // rust / soot creeps in as condition drops
             }
         }
 
@@ -518,7 +520,11 @@ namespace VoxelEngine.Power.Wind
             if (inventory.container.CountOf(plates) < repairPlateCost) return false;
 
             inventory.container.Remove(plates, repairPlateCost);
-            foreach (var p in EnumerateAttached()) p.condition = 100f;
+            foreach (var p in EnumerateAttached())
+            {
+                p.condition = 100f;
+                p.ApplyWeathering();   // full service restores the factory finish
+            }
             return true;
         }
 
