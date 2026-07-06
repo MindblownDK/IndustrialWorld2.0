@@ -79,6 +79,7 @@ namespace VoxelEngine.Power.Wind
             scroll.verticalScrollerVisibility   = ScrollerVisibility.Auto;
             scroll.contentContainer.style.width = new StyleLength(new Length(100f, LengthUnit.Percent));
             scroll.contentContainer.style.paddingRight = 6;   // breathing room next to the scrollbar
+            T.StyleScroller(scroll, AccentTurbine);           // slim themed scrollbar
 
             // Restore the player's scroll position after a live-refresh rebuild —
             // exactly once (first layout pass), so it never fights active scrolling.
@@ -290,6 +291,7 @@ namespace VoxelEngine.Power.Wind
             row.style.alignItems    = Align.Center;
             row.style.minHeight     = 20;
             row.style.marginBottom  = 3;
+            row.style.overflow      = Overflow.Hidden;   // belt & braces — never bleed out of the card
             row.pickingMode = PickingMode.Ignore;
 
             var name = new Label(label);
@@ -302,6 +304,11 @@ namespace VoxelEngine.Power.Wind
 
             float cond01 = part.condition / 100f;
             var (bar, _) = T.ProgressBar(cond01, ConditionColor(part.condition), 6, true);
+            // ProgressBar(flexGrow) sets width:100%, which added to the fixed-width
+            // label + value columns overflowed the card. Let flex do the sizing:
+            // grow AND shrink between the two fixed columns, no hard width.
+            bar.style.width       = StyleKeyword.Auto;
+            bar.style.flexShrink  = 1;
             bar.style.marginLeft  = 4;
             bar.style.marginRight = 8;
             row.Add(bar);

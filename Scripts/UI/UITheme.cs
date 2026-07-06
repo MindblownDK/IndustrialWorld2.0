@@ -694,5 +694,68 @@ namespace VoxelEngine.UI
         {
             fill.style.height = new StyleLength(new Length(Mathf.Clamp01(t01) * 100f, LengthUnit.Percent));
         }
+
+        // ── Themed ScrollView ─────────────────────────────────────────────
+
+        /// <summary>
+        /// Restyles a ScrollView's vertical scroller to match the design system:
+        /// the default grey Unity scrollbar becomes a slim 6px steel track with a
+        /// rounded accent thumb that brightens on hover. Call after constructing
+        /// any ScrollView inside a themed panel. Optional accent overrides the
+        /// default teal-steel thumb colour.
+        /// </summary>
+        public static void StyleScroller(ScrollView scroll, Color? accent = null)
+        {
+            if (scroll == null) return;
+            Color thumbCol = accent ?? new Color(0.30f, 0.42f, 0.56f);   // muted steel-blue
+
+            var scroller = scroll.verticalScroller;
+            scroller.style.width       = 10;
+            scroller.style.marginLeft  = 2;
+            scroller.style.borderLeftWidth = 0;
+            scroller.style.backgroundColor = new StyleColor(Color.clear);
+
+            // Hide the tiny arrow buttons — modern scrollbars don't need them.
+            scroller.lowButton.style.display  = DisplayStyle.None;
+            scroller.highButton.style.display = DisplayStyle.None;
+            // Reclaim the space the buttons occupied.
+            scroller.slider.style.marginTop    = 0;
+            scroller.slider.style.marginBottom = 0;
+            scroller.slider.style.flexGrow     = 1;
+
+            // Track — near-invisible inset channel.
+            var tracker = scroller.slider.Q("unity-tracker");
+            if (tracker != null)
+            {
+                tracker.style.backgroundColor = new StyleColor(new Color(1f, 1f, 1f, 0.04f));
+                Radius(tracker, 3f);
+                Border(tracker, 0, Color.clear);
+                tracker.style.width = 6;
+                tracker.style.alignSelf = Align.Center;
+            }
+
+            // Thumb — rounded steel bar, brightens on hover, accent when dragged.
+            var dragger = scroller.slider.Q("unity-dragger");
+            if (dragger != null)
+            {
+                dragger.style.backgroundColor = new StyleColor(thumbCol);
+                Radius(dragger, 3f);
+                Border(dragger, 0, Color.clear);
+                dragger.style.width = 6;
+                dragger.style.alignSelf = Align.Center;
+                dragger.style.minHeight = 24;
+
+                Color hover  = new(thumbCol.r * 1.35f, thumbCol.g * 1.35f, thumbCol.b * 1.35f);
+                Color active = AccentCyan;
+                dragger.RegisterCallback<PointerEnterEvent>(_ =>
+                    dragger.style.backgroundColor = new StyleColor(hover));
+                dragger.RegisterCallback<PointerLeaveEvent>(_ =>
+                    dragger.style.backgroundColor = new StyleColor(thumbCol));
+                dragger.RegisterCallback<PointerDownEvent>(_ =>
+                    dragger.style.backgroundColor = new StyleColor(active), TrickleDown.TrickleDown);
+                dragger.RegisterCallback<PointerUpEvent>(_ =>
+                    dragger.style.backgroundColor = new StyleColor(thumbCol), TrickleDown.TrickleDown);
+            }
+        }
     }
 }
