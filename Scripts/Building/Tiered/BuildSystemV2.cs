@@ -8,6 +8,7 @@
 //   * The Hammer tool (separate) handles upgrade / rotate / destroy.
 
 using UnityEngine;
+using VoxelEngine.Cosmos;
 using VoxelEngine.Items;
 using VoxelEngine.Settings;
 using InputAction = VoxelEngine.Settings.InputAction;
@@ -168,10 +169,10 @@ namespace VoxelEngine.Building.Tiered
             if (bestSocket != null)
             {
                 _ghostPos = bestSocket.transform.position;
-                // Match the socket's yaw so the piece faces correctly out of its host.
-                Vector3 socketUp = bestSocket.transform.up;
+                // Match the socket's yaw so the piece faces correctly out of its host,
+                // but keep the piece's +Y aligned with the local planet surface normal.
                 float baseYaw = bestSocket.transform.eulerAngles.y;
-                _ghostRot = Quaternion.Euler(0, baseYaw + _ghostYaw, 0);
+                _ghostRot = GravityProvider.GetSurfaceRotation(_ghostPos, baseYaw + _ghostYaw);
                 _ghostValid = ValidateOverlap(_ghostPos, def.family);
                 return;
             }
@@ -184,7 +185,7 @@ namespace VoxelEngine.Building.Tiered
                     Mathf.Floor(raw.y / gridSize) * gridSize + gridSize * 0.5f,
                     Mathf.Floor(raw.z / gridSize) * gridSize + gridSize * 0.5f)
                 : hit.point + hit.normal * 0.01f;
-            _ghostRot = Quaternion.Euler(0, _ghostYaw, 0);
+            _ghostRot = GravityProvider.GetSurfaceRotation(_ghostPos, _ghostYaw);
             _ghostValid = ValidateOverlap(_ghostPos, def.family);
         }
 
@@ -269,8 +270,8 @@ namespace VoxelEngine.Building.Tiered
         public void Rotate(PlacedTieredBlock target, float delta)
         {
             if (target == null) return;
-            target.transform.rotation = Quaternion.Euler(0,
-                target.transform.eulerAngles.y + delta, 0);
+            Vector3 planetUp = GravityProvider.GetUp(target.transform.position);
+            target.transform.rotation = Quaternion.AngleAxis(delta, planetUp) * target.transform.rotation;
         }
 
         // ============================================================

@@ -64,5 +64,30 @@ namespace VoxelEngine.Cosmos
 
         /// <summary>Flat-world gravity magnitude (for code that only cares about the scalar).</summary>
         public static float FlatMagnitude => Instance != null ? Instance.flatGravity : 22f;
+
+        // ── Surface-aligned orientation helper ────────────────────────
+        /// <summary>
+        /// Returns a rotation whose +Y axis aligns with the local planet "up" at
+        /// <paramref name="position"/> (or world-up when no celestial body is active).
+        /// The +Z axis is the projection of <paramref name="referenceForward"/> onto the
+        /// tangent plane, falling back to world +Z (then world +X) if the reference is
+        /// parallel to the surface normal. An optional <paramref name="yaw"/> rotates the
+        /// result around the local up axis.
+        /// </summary>
+        public static Quaternion GetSurfaceRotation(Vector3 position, float yaw = 0f, Vector3 referenceForward = default)
+        {
+            Vector3 up = GetUp(position);
+            Vector3 forward = referenceForward.sqrMagnitude > 0.001f
+                ? Vector3.ProjectOnPlane(referenceForward, up)
+                : Vector3.ProjectOnPlane(Vector3.forward, up);
+            if (forward.sqrMagnitude < 0.001f)
+                forward = Vector3.ProjectOnPlane(Vector3.right, up);
+            if (forward.sqrMagnitude < 0.001f)
+                forward = Vector3.ProjectOnPlane(Vector3.forward, -up); // last-resort fallback
+            forward = forward.normalized;
+
+            Quaternion baseRot = Quaternion.LookRotation(forward, up);
+            return baseRot * Quaternion.Euler(0f, yaw, 0f);
+        }
     }
 }

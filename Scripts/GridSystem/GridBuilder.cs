@@ -3,6 +3,7 @@
 // GridBuilder with grid size selection when creating a new ship.
 
 using UnityEngine;
+using VoxelEngine.Cosmos;
 using VoxelEngine.Items;
 using VoxelEngine.Settings;
 using InputAction = VoxelEngine.Settings.InputAction;
@@ -104,16 +105,20 @@ namespace VoxelEngine.GridSystem
             }
             else
             {
-                // Brand-new grid — snap the first block to a clean world-space cell.
+                // Brand-new grid — orient to the planet surface so the first block sits
+                // flush with the local ground and the grid's +Y points away from the core.
                 // IMPORTANT: respect the item's OWN grid size — never mutate the shared
                 // ScriptableObject (that corrupted the asset and caused size mismatches).
                 float cs = gbi.gridSize.CellSize();
+                Vector3 planetUp = GravityProvider.GetUp(hit.point);
+                Vector3 raw = hit.point + planetUp * (cs * 0.5f);
                 worldPos = new Vector3(
-                    Mathf.Round(hit.point.x / cs) * cs,
-                    Mathf.Round((hit.point.y + cs * 0.5f) / cs) * cs,
-                    Mathf.Round(hit.point.z / cs) * cs);
+                    Mathf.Round(raw.x / cs) * cs,
+                    Mathf.Round(raw.y / cs) * cs,
+                    Mathf.Round(raw.z / cs) * cs);
                 gridPos = Vector3Int.zero;
                 targetGrid = null;
+                rotation = GravityProvider.GetSurfaceRotation(worldPos);
             }
 
             bool placingTurbo = IsTurbochargerItem(gbi, out var turboTier);

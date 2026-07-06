@@ -5,6 +5,7 @@
 
 using UnityEngine;
 using VoxelEngine.Core;
+using VoxelEngine.Cosmos;
 using VoxelEngine.Items;
 using VoxelEngine.Settings;
 using VoxelEngine.Transport;
@@ -170,7 +171,7 @@ namespace VoxelEngine.Building
                 return;
 
             pos = ComputePlacementPosition(hit, block);
-            rot = Quaternion.Euler(0, _ghostYaw, 0);
+            rot = GravityProvider.GetSurfaceRotation(pos, _ghostYaw);
         }
 
         private Vector3 ComputePlacementPosition(RaycastHit hit, BlockItem block)
