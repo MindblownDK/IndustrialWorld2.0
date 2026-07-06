@@ -221,8 +221,18 @@ namespace VoxelEngine.Power.Wind
                 case WindTurbinePartKind.Nacelle:
                     pos = _yaw.TransformPoint(nacelleSocket);   rot = _yaw.rotation;  return true;
                 case WindTurbinePartKind.Gearbox:
+                    // Prefer the yellow alignment pad in the nacelle prefab — moving
+                    // the pad moves the real snap point. Part rests ON the pad.
+                    if (_gearboxMarker != null)
+                    {
+                        pos = _gearboxMarker.position; rot = _gearboxMarker.rotation; return true;
+                    }
                     pos = _yaw.TransformPoint(gearboxSocket);   rot = _yaw.rotation;  return true;
                 case WindTurbinePartKind.Generator:
+                    if (_generatorMarker != null)
+                    {
+                        pos = _generatorMarker.position; rot = _generatorMarker.rotation; return true;
+                    }
                     pos = _yaw.TransformPoint(generatorSocket); rot = _yaw.rotation;  return true;
                 case WindTurbinePartKind.Hub:
                     pos = _yaw.TransformPoint(hubSocket);       rot = _yaw.rotation;  return true;
@@ -250,12 +260,20 @@ namespace VoxelEngine.Power.Wind
             {
                 case WindTurbinePartKind.Nacelle:
                     Nacelle = part; Snap(part, _yaw, nacelleSocket, Quaternion.identity);
-                    _roofLid = part.transform.Find("RoofLid");
+                    _roofLid = part.GetComponentInChildren<NacelleRoofLid>(true);
+                    _gearboxMarker   = part.transform.Find("SnapMarker_Gearbox");
+                    _generatorMarker = part.transform.Find("SnapMarker_Generator");
                     break;
                 case WindTurbinePartKind.Gearbox:
-                    Gearbox = part; Snap(part, _yaw, gearboxSocket, Quaternion.identity); break;
+                    Gearbox = part;
+                    if (_gearboxMarker != null) SnapToMarker(part, _gearboxMarker);
+                    else Snap(part, _yaw, gearboxSocket, Quaternion.identity);
+                    break;
                 case WindTurbinePartKind.Generator:
-                    Generator = part; Snap(part, _yaw, generatorSocket, Quaternion.identity); break;
+                    Generator = part;
+                    if (_generatorMarker != null) SnapToMarker(part, _generatorMarker);
+                    else Snap(part, _yaw, generatorSocket, Quaternion.identity);
+                    break;
                 case WindTurbinePartKind.Hub:
                     Hub = part; Snap(part, _spin, Vector3.zero, Quaternion.identity); break;
                 case WindTurbinePartKind.Blade:
@@ -280,7 +298,13 @@ namespace VoxelEngine.Power.Wind
         public void Detach(WindTurbinePart part)
         {
             if (part == null) return;
-            if (Nacelle   == part) Nacelle   = null;
+            if (Nacelle == part)
+            {
+                Nacelle = null;
+                _roofLid = null;
+                _gearboxMarker = null;
+                _generatorMarker = null;
+            }
             if (Gearbox   == part) Gearbox   = null;
             if (Generator == part) Generator = null;
             if (Hub       == part) Hub       = null;
@@ -294,6 +318,23 @@ namespace VoxelEngine.Power.Wind
             part.transform.SetParent(parent, true);
             part.transform.localPosition = localPos;
             part.transform.localRotation = localRot;
+        }
+
+        /// <summary>Seats a part on a yellow alignment pad inside the nacelle. The
+        /// part is parented to the yaw pivot (so it turns with the head), takes the
+        /// marker's pose, then is lifted so its collider RESTS ON the pad instead
+        /// of sinking through it — move the pad, move the part.</summary>
+        private void SnapToMarker(WindTurbinePart part, Transform marker)
+        {
+            part.transform.SetParent(_yaw, true);
+            part.transform.SetPositionAndRotation(marker.position, marker.rotation);
+
+            var col = part.GetComponentInChildren<Collider>();
+            if (col != null)
+            {
+                float sink = marker.position.y - col.bounds.min.y;
+                if (sink > 0.001f) part.transform.position += Vector3.up * sink;
+            }
         }
 
         private int FreeBladeSlot()
@@ -426,10 +467,17 @@ namespace VoxelEngine.Power.Wind
         //  Nacelle roof lid — swings open when the player walks up holding
         //  a Gearbox or Generator for THIS turbine, so they can watch the
         //  part snap into the machinery bay. Eases shut again afterwards.
+        //  Swing angle / speed / visuals live on the NacelleRoofLid rig in
+        //  the nacelle prefab; the controller only drives TargetOpen.
         // ────────────────────────────────────────────────────────────────
-        private Transform _roofLid;
-        private float _lidAngle;            // current hinge angle (0 = closed)
-        private const float LID_OPEN_ANGLE = 115f;
+        private NacelleRoofLid _roofLid;
+
+        // Yellow alignment pads inside the nacelle. When present they ARE the
+        // gearbox / generator sockets — move a pad in the prefab and the snap
+        // point follows. Falls back to the serialized socket offsets when a
+        // nacelle has no markers (older customised prefabs).
+        private Transform _gearboxMarker;
+        private Transform _generatorMarker;
 
         /// <summary>True while the roof should be open: an internals socket is
         /// still empty AND the local player is nearby holding a matching part.</summary>
@@ -457,12 +505,7 @@ namespace VoxelEngine.Power.Wind
         private void UpdateRoofLid()
         {
             if (_roofLid == null) return;
-            float target = WantsRoofOpen() ? LID_OPEN_ANGLE : 0f;
-            // Heavy hydraulic ease — fast to start, settles softly.
-            _lidAngle = Mathf.Lerp(_lidAngle, target, 1f - Mathf.Exp(-Time.deltaTime * 3.5f));
-            if (Mathf.Abs(_lidAngle - target) < 0.01f) _lidAngle = target;
-            // Hinge sits on the left edge → negative Z-roll swings the lid up+out.
-            _roofLid.localRotation = Quaternion.Euler(0f, 0f, _lidAngle);
+            _roofLid.TargetOpen = WantsRoofOpen();   // the rig animates itself
         }
 
         private void ApplySpin()

@@ -74,8 +74,10 @@ namespace VoxelEngine.Power.Wind
             foreach (var r in all)
             {
                 if (r == null || r.sharedMaterial == null) continue;
-                // Keep the emissive power-port square pristine — it is a UI marker.
+                // Keep UI markers pristine — the emissive power-port square and
+                // the yellow gearbox/generator alignment pads never weather.
                 if (r.gameObject.name.StartsWith("PowerPort")) continue;
+                if (r.gameObject.name.StartsWith("SnapMarker")) continue;
                 list.Add(r);
             }
             _weatherRenderers  = list.ToArray();

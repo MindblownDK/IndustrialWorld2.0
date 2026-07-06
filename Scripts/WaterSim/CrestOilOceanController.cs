@@ -29,8 +29,7 @@ namespace VoxelEngine.WaterSim
         {
             CacheOcean();
             ApplyOilMaterial();
-            // v3.23.0 – Voxel water/oil surfaces are authoritative visuals.
-            // Do NOT toggle RenderingEnabled here; that hides ALL water.
+            WaterMeshBuilder.RenderingEnabled = false; // ensure voxel oil mesh off when Crest oil is active
         }
 
         private void LateUpdate()

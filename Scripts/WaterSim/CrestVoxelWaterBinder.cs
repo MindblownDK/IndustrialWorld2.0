@@ -5,17 +5,23 @@ using VoxelEngine.Core;
 namespace VoxelEngine.WaterSim
 {
     /// <summary>
-    /// Crest Voxel Ocean Controller v3.23.0 — Voxel Water Authoritative.
+    /// Crest Voxel Ocean Controller v3.22.0 — Hybrid Ocean Mode.
     ///
-    /// Design (revised from v3.22.0 hybrid):
-    ///  • Crest's OceanRenderer is ALIVE (kept for future wake-foam hooks)
-    ///    but its infinite ocean tiles are HIDDEN — the user does not want
-    ///    an infinite Crest plane.
-    ///  • Voxel water renders everywhere (including at sea level) with the
-    ///    stylized VoxelEngine/VoxelWaterURP shader (waves, foam, flow,
-    ///    fresnel, depth fog).
-    ///  • OceanRenderer's transform Y is still snapped to sea level so any
-    ///    future Crest LOD sampling stays coherent.
+    /// Design (revised from v3.12.0):
+    ///  • Crest's OceanRenderer is ALIVE and its native ocean tiles are
+    ///    VISIBLE — they are the ocean visual (Gerstner waves, foam, etc.).
+    ///  • OceanRenderer follows the player viewpoint so LOD cascades track
+    ///    the camera.
+    ///  • OceanRenderer's transform Y is snapped to `world.SeaLevel *
+    ///    VOXEL_SIZE` so Crest's sea level matches the voxel world's.
+    ///  • Voxel water at or below sea level is skipped in WaterMeshBuilder
+    ///    (see SkipVoxelWaterAtOrBelowSeaLevel), so Crest owns the ocean
+    ///    and voxel water only renders for inland lakes / rivers above sea
+    ///    level with the stylized shader.
+    ///
+    /// This replaces the v3.12.0 "paint Crest shader on voxel mesh" approach
+    /// which broke because Crest's vertex-snap logic is only valid on Crest's
+    /// own concentric grid tiles.
     /// </summary>
     [DisallowMultipleComponent]
     [DefaultExecutionOrder(-50)]
@@ -40,10 +46,10 @@ namespace VoxelEngine.WaterSim
         [Tooltip("Keep Crest active even if no voxel water found – prevents flicker over oceans.")]
         public bool forceOceanAlwaysOn = false;
 
-        [Header("Crest Mode v3.23.0 – Voxel Water Authoritative")]
-        [Tooltip("Hide Crest's built-in infinite ocean tiles. Default ON in v3.23.0 – user does not want an infinite Crest plane; voxel water is the visual.")]
-        public bool hideCrestOceanTiles = true;
-        [Tooltip("LEGACY – ignored since v3.22.0. Kept for scene-serialization compatibility.")]
+        [Header("Crest Mode v3.22.0 – Hybrid Ocean")]
+        [Tooltip("Hide Crest's built-in infinite ocean tiles. Default OFF in v3.22.0 – Crest tiles ARE the ocean visual, so we want them visible.")]
+        public bool hideCrestOceanTiles = false;
+        [Tooltip("LEGACY (v3.12.0). Ignored in v3.22.0 – voxel water no longer uses the Crest shader because its vertex snap is incompatible with heightfield topology.")]
         public bool bridgeCrestMaterialToVoxelMesh = false;
 
         [Header("Crest Material Tuning")]
@@ -82,9 +88,12 @@ namespace VoxelEngine.WaterSim
         {
             CacheOcean();
             ApplyCrestMaterialTuning();
+            // v3.12.0 – Crest OceanRenderer stays ALIVE (LOD driver). Only its
+            // visible infinite ocean tiles are hidden so voxel water is the only
+            // thing the player sees rendering.
             HideCrestOceanTiles(hideCrestOceanTiles);
             WaterMeshBuilder.RenderingEnabled = true;
-            PushWorldUpGlobal(); // v3.23.1 – valid from frame 0
+            TryBridgeMaterialToVoxel();
         }
 
         private void OnEnable()
@@ -93,22 +102,8 @@ namespace VoxelEngine.WaterSim
             ApplyCrestMaterialTuning();
             HideCrestOceanTiles(hideCrestOceanTiles);
             WaterMeshBuilder.RenderingEnabled = true;
-            PushWorldUpGlobal();
+            TryBridgeMaterialToVoxel();
             _nextScanTime = 0f;
-        }
-
-        /// <summary>
-        /// v3.23.1 – Push the world-up vector that VoxelWaterURP samples.
-        /// Called on Awake/OnEnable so the shader has valid data from the
-        /// very first frame (before LateUpdate ever runs).
-        /// </summary>
-        private void PushWorldUpGlobal()
-        {
-            bool isPlanet = PlanetWaterUtility.IsPlanetWorld;
-            Vector3 up = isPlanet ? currentOceanUp : Vector3.up;
-            if (up.sqrMagnitude < 0.0001f) up = Vector3.up;
-            Shader.SetGlobalVector("_VoxelWaterWorldUp",
-                new Vector4(up.x, up.y, up.z, isPlanet ? 1f : 0f));
         }
 
         private void OnValidate()
@@ -171,14 +166,6 @@ namespace VoxelEngine.WaterSim
             Shader.SetGlobalFloat("_VoxelWaterDepth", sampledWaterDepth);
             Shader.SetGlobalVector("_VoxelOceanUp", currentOceanUp);
             Shader.SetGlobalFloat("_VoxelCrestSeaLevel", world.SeaLevel * VoxelConstants.VOXEL_SIZE);
-
-            // v3.23.1 – feed VoxelWaterURP shader:
-            //   xyz = world-up direction (planet radial or (0,1,0))
-            //   w   = 1.0 for planet, 0.0 for flat world
-            float isPlanet = PlanetWaterUtility.IsPlanetWorld ? 1.0f : 0.0f;
-            Vector3 upDir = isPlanet > 0.5f ? currentOceanUp : Vector3.up;
-            Shader.SetGlobalVector("_VoxelWaterWorldUp",
-                new Vector4(upDir.x, upDir.y, upDir.z, isPlanet));
         }
 
         private void ApplySmoothFollow()
@@ -290,47 +277,23 @@ namespace VoxelEngine.WaterSim
         }
 
         /// <summary>
-        /// v3.23.2 — actively DESTROYS any Crest ocean that appears in the
-        /// scene. The user does not want a Crest ocean, so we don't just
-        /// disable — we remove it entirely. This runs on every Update cycle
-        /// so late-loaded prefabs or additive scenes with Crest also get
-        /// nuked immediately.
+        /// v3.12.0 — hides only Crest's own ocean-tile MeshRenderers. Leaves
+        /// OceanRenderer + LodData components enabled so cascades keep updating.
         /// </summary>
         private static System.Type _oceanChunkRendererType;
-        private static System.Type _oceanRendererType;
         private void HideCrestOceanTiles(bool hide)
         {
-            if (!hide) return;
-
-            if (_oceanRendererType == null)
-                _oceanRendererType = System.Type.GetType("Crest.OceanRenderer, Crest");
+            if (_renderers == null || _renderers.Length == 0) return;
             if (_oceanChunkRendererType == null)
                 _oceanChunkRendererType = System.Type.GetType("Crest.OceanChunkRenderer, Crest");
-
-            // Destroy the OceanRenderer GameObject → tears down all tiles + cameras.
-            if (_oceanRendererType != null)
+            if (_oceanChunkRendererType == null) return;
+            for (int i = 0; i < _renderers.Length; i++)
             {
-                var renderers = Object.FindObjectsByType(_oceanRendererType, FindObjectsInactive.Include, FindObjectsSortMode.None);
-                for (int i = 0; renderers != null && i < renderers.Length; i++)
-                {
-                    var comp = renderers[i] as Component;
-                    if (comp == null || comp.gameObject == null) continue;
-                    if (Application.isPlaying) Destroy(comp.gameObject);
-                    else DestroyImmediate(comp.gameObject);
-                }
-            }
-
-            // Also destroy any orphan OceanChunkRenderer GOs that might survive.
-            if (_oceanChunkRendererType != null)
-            {
-                var chunks = Object.FindObjectsByType(_oceanChunkRendererType, FindObjectsInactive.Include, FindObjectsSortMode.None);
-                for (int i = 0; chunks != null && i < chunks.Length; i++)
-                {
-                    var comp = chunks[i] as Component;
-                    if (comp == null || comp.gameObject == null) continue;
-                    if (Application.isPlaying) Destroy(comp.gameObject);
-                    else DestroyImmediate(comp.gameObject);
-                }
+                var r = _renderers[i];
+                if (r == null) continue;
+                if (r.GetComponent(_oceanChunkRendererType) == null) continue;
+                bool shouldBeEnabled = !hide;
+                if (r.enabled != shouldBeEnabled) r.enabled = shouldBeEnabled;
             }
         }
 

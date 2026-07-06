@@ -40,7 +40,7 @@ namespace VoxelEngine.EditorTools
         private const string NODES      = ASSET_ROOT + "/Research/Nodes";
 
         // Shared materials (built once per run)
-        private static Material _matShell, _matDark, _matAccent, _matCopper, _matBlade, _matPort, _matMono, _matHub, _matTipMark;
+        private static Material _matShell, _matDark, _matAccent, _matCopper, _matBlade, _matPort, _matMono, _matHub, _matTipMark, _matSnapMark;
 
         // ════════════════════════════════════════════════════════════════
         //  ENTRY POINT
@@ -259,6 +259,14 @@ namespace VoxelEngine.EditorTools
             _matTipMark= MakeMat("Mat_TurbineTipMark",new Color(0.80f, 0.16f, 0.14f), 0.10f, 0.55f);
             _matHub    = MakeMat("Mat_TurbineHub",    new Color(0.78f, 0.80f, 0.84f), 0.80f, 0.70f);
             _matMono   = MakeMat("Mat_MonopoleSteel", new Color(0.52f, 0.55f, 0.59f), 0.75f, 0.45f);
+            _matSnapMark = MakeMat("Mat_SnapMarker",  new Color(0.95f, 0.80f, 0.10f), 0.10f, 0.45f);
+            if (!_matSnapMark.IsKeywordEnabled("_EMISSION"))
+            {
+                _matSnapMark.EnableKeyword("_EMISSION");
+                _matSnapMark.globalIlluminationFlags = MaterialGlobalIlluminationFlags.None;
+                _matSnapMark.SetColor("_EmissionColor", new Color(0.85f, 0.70f, 0.05f) * 1.1f);
+                EditorUtility.SetDirty(_matSnapMark);
+            }
             _matPort   = MakeMat("Mat_PowerPort",     new Color(0.05f, 0.09f, 0.08f), 0.30f, 0.40f);
             if (!_matPort.IsKeywordEnabled("_EMISSION"))
             {
@@ -377,6 +385,54 @@ namespace VoxelEngine.EditorTools
 
         private static GameObject BuildNacellePrefab(HawtSpec s)
         {
+            Vector3 nc = s.nacelle;
+
+            // ── Roof lid subtree — hinge PIVOT at the FRONT (rotor side). ──
+            //    "RoofLid" is the parent: EVERYTHING under it swings with the
+            //    lid, so restyle the plate / stripe / hinges (or add your own
+            //    children) freely in the prefab. Swing angle & speed live on
+            //    the NacelleRoofLid component (default 75°).
+            void BuildRoofLid(GameObject root)
+            {
+                var lid = new GameObject("RoofLid");
+                lid.transform.SetParent(root.transform, false);
+                lid.transform.localPosition = new Vector3(0f, nc.y * 0.5f, nc.z * 0.5f);   // front hinge line
+                lid.AddComponent<NacelleRoofLid>();   // openAngle=75, easeSpeed=3.5 defaults
+
+                // Plate spans backwards from the hinge so pitching up tips it over the rotor side.
+                var lidPlate = Prim(PrimitiveType.Cube, lid.transform, "LidPlate",
+                    new Vector3(0f, nc.y * 0.05f, -nc.z * 0.5f), new Vector3(nc.x * 1.02f, nc.y * 0.10f, nc.z * 1.02f), _matShell);
+                Object.DestroyImmediate(lidPlate.GetComponent<Collider>());
+                var lidStripe = Prim(PrimitiveType.Cube, lid.transform, "LidStripe",
+                    new Vector3(0f, nc.y * 0.11f, -nc.z * 0.5f), new Vector3(nc.x * 0.9f, nc.y * 0.02f, nc.z * 0.14f), _matAccent);
+                Object.DestroyImmediate(lidStripe.GetComponent<Collider>());
+                for (int i = 0; i < 2; i++)
+                {
+                    var hinge = Prim(PrimitiveType.Cylinder, lid.transform, $"Hinge{i}",
+                        new Vector3((i == 0 ? -1f : 1f) * nc.x * 0.32f, 0f, 0f), new Vector3(0.10f, nc.x * 0.07f, 0.10f), _matDark);
+                    hinge.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);   // along hinge (X) axis
+                    Object.DestroyImmediate(hinge.GetComponent<Collider>());
+                }
+            }
+
+            // ── Yellow alignment markers — flat pads on the machine bed showing
+            //    exactly where the Gearbox / Generator snap. The controller reads
+            //    these transforms as the REAL sockets, so nudging a marker in the
+            //    prefab moves the actual snap point with it. ──
+            void BuildSnapMarkers(GameObject root)
+            {
+                void Marker(string name, Vector3 localPos, float foot)
+                {
+                    var m = Prim(PrimitiveType.Cube, root.transform, name,
+                        localPos, new Vector3(foot, nc.y * 0.015f, foot), _matSnapMark);
+                    Object.DestroyImmediate(m.GetComponent<Collider>());
+                }
+                // Pads sit just above the machine bed (bed top ≈ -0.31 * y).
+                float padY = -nc.y * 0.30f;
+                Marker("SnapMarker_Gearbox",   new Vector3(0f, padY,  nc.z * 0.07f), nc.y * 0.62f);
+                Marker("SnapMarker_Generator", new Vector3(0f, padY, -nc.z * 0.20f), nc.y * 0.60f);
+            }
+
             void EnsureScripts(GameObject root)
             {
                 EnsureComponent<WindTurbinePart>(root, part =>
@@ -387,8 +443,25 @@ namespace VoxelEngine.EditorTools
                 if (root.GetComponent<Collider>() == null)
                 {
                     var col = root.AddComponent<BoxCollider>();
-                    col.size = s.nacelle;
+                    col.size = nc;
                 }
+
+                // Upgrade pass for EXISTING nacelles:
+                //  • old side-hinged lid (no NacelleRoofLid script) → replaced with
+                //    the new front-hinged rig. A lid you already customised (has
+                //    the script) is left completely untouched.
+                var oldLid = root.transform.Find("RoofLid");
+                if (oldLid != null && oldLid.GetComponent<NacelleRoofLid>() == null)
+                {
+                    Object.DestroyImmediate(oldLid.gameObject);
+                    oldLid = null;
+                }
+                if (oldLid == null) BuildRoofLid(root);
+
+                //  • snap markers added if missing (never duplicated / overwritten).
+                if (root.transform.Find("SnapMarker_Gearbox") == null &&
+                    root.transform.Find("SnapMarker_Generator") == null)
+                    BuildSnapMarkers(root);
             }
 
             return EnsurePrefab($"{PREFABS}/Turbine_{s.id}_Nacelle.prefab", $"Turbine_{s.id}_Nacelle", root =>
@@ -419,24 +492,8 @@ namespace VoxelEngine.EditorTools
                     new Vector3(0f, -n.y * 0.34f, 0f), new Vector3(n.x * 0.72f, n.y * 0.06f, n.z * 0.78f), _matDark);
                 Object.DestroyImmediate(bed.GetComponent<Collider>());
 
-                // ── ROOF LID — hinged at the LEFT edge, opened by the controller
-                //    when the player approaches holding a Gearbox / Generator. ──
-                var lid = new GameObject("RoofLid");
-                lid.transform.SetParent(root.transform, false);
-                lid.transform.localPosition = new Vector3(-n.x * 0.5f, n.y * 0.5f, 0f);  // hinge line
-                var lidPlate = Prim(PrimitiveType.Cube, lid.transform, "LidPlate",
-                    new Vector3(n.x * 0.5f, n.y * 0.05f, 0f), new Vector3(n.x * 1.02f, n.y * 0.10f, n.z * 1.02f), _matShell);
-                Object.DestroyImmediate(lidPlate.GetComponent<Collider>());
-                var lidStripe = Prim(PrimitiveType.Cube, lid.transform, "LidStripe",
-                    new Vector3(n.x * 0.5f, n.y * 0.11f, 0f), new Vector3(n.x * 0.16f, n.y * 0.02f, n.z * 0.9f), _matAccent);
-                Object.DestroyImmediate(lidStripe.GetComponent<Collider>());
-                for (int i = 0; i < 2; i++)
-                {
-                    var hinge = Prim(PrimitiveType.Cylinder, lid.transform, $"Hinge{i}",
-                        new Vector3(0f, 0f, (i == 0 ? -1f : 1f) * n.z * 0.32f), new Vector3(0.10f, n.z * 0.07f, 0.10f), _matDark);
-                    hinge.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
-                    Object.DestroyImmediate(hinge.GetComponent<Collider>());
-                }
+                // (RoofLid + yellow snap markers are created by EnsureScripts above,
+                //  so fresh builds and repaired prefabs share one code path.)
 
                 // Cooling vents (dark insets on both flanks)
                 for (int i = 0; i < 3; i++)
