@@ -129,6 +129,10 @@ namespace VoxelEngine.Player
             if (playerCamera != null && playerCamera.GetComponent<UnderwaterEffect>() == null)
                 playerCamera.gameObject.AddComponent<UnderwaterEffect>();
 
+            // Camera screenshake / FOV feedback for ship acceleration.
+            if (playerCamera != null && playerCamera.GetComponent<CameraFeedback>() == null)
+                playerCamera.gameObject.AddComponent<CameraFeedback>();
+
             _yaw = transform.eulerAngles.y;
             _pitch = 0f;
             ApplyFov();

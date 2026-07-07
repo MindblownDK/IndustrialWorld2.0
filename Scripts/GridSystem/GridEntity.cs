@@ -55,6 +55,14 @@ namespace VoxelEngine.GridSystem
         public float   RotationRoll { get; set; }
         public bool    DampenersOn { get; set; } = true;
 
+        // ── Thrust feel ────────────────────────────────────────────
+        // Thrust doesn't hit instantly; it spools up/down so heavy ships feel weighty.
+        private Vector3 _smoothedThrustInput;
+        private const float THRUST_SPOOL_RATE = 3.5f;
+
+        // ── Camera feedback ────────────────────────────────────────
+        private Vector3 _prevVelocity;
+
         /// <summary>Total max thrust (N) available along each of the 6 local directions —
         /// Fwd, Back, Right, Left, Up, Down — for the cockpit HUD readout.</summary>
         public (float fwd, float back, float right, float left, float up, float down) GetThrustByDirection()
@@ -189,6 +197,8 @@ namespace VoxelEngine.GridSystem
             // + water interaction for free (harmless for ships in space — zero submergence = zero force).
             if (GetComponent<VoxelEngine.Maritime.MaritimePropulsionSystem>() == null)
                 gameObject.AddComponent<VoxelEngine.Maritime.MaritimePropulsionSystem>();
+
+            _prevVelocity = _rb.linearVelocity;
         }
 
         private void FixedUpdate()
@@ -202,6 +212,17 @@ namespace VoxelEngine.GridSystem
             UpdateDampeners();
             UpdateWheels();
             ApplyGravity();
+
+            // Camera screenshake/FOV warp from the previous physics step's net acceleration.
+            // Subtract gravity so free-fall doesn't constantly shake the camera — only
+            // thrust impulses and impacts create the "power" feel.
+            if (_rb != null)
+            {
+                Vector3 acceleration = (_rb.linearVelocity - _prevVelocity) / Time.fixedDeltaTime
+                                     - CurrentGravityAcceleration();
+                VoxelEngine.Player.CameraFeedback.Impulse(acceleration);
+                _prevVelocity = _rb.linearVelocity;
+            }
         }
 
         private void Update()
@@ -465,12 +486,25 @@ namespace VoxelEngine.GridSystem
         //   direction in the cockpit's frame.
         private void UpdateThrust()
         {
-            if (!IsControlled) return;
+            // Reset all thruster visual/audio fractions; only the ones that actually fire
+            // this frame will get a new value below.
+            foreach (var kv in _blocks)
+                if (kv.Value is GridThruster t) t.ThrustFraction = 0f;
+
+            if (!IsControlled)
+            {
+                // Decay any remaining smoothed input so the ship doesn't lurch when re-entered.
+                _smoothedThrustInput = Vector3.MoveTowards(_smoothedThrustInput, Vector3.zero, THRUST_SPOOL_RATE * 2f * Time.fixedDeltaTime);
+                return;
+            }
 
             // Control-seat local frame (so "forward" = where the pilot is looking).
             Transform frame = CurrentControlFrame;
 
-            Vector3 input = ThrustInput; // local: x=right, y=up, z=forward
+            // Smooth the pilot's binary key input so thrust ramps up/down instead of
+            // snapping instantly. This is the core of "feeling the mass" of the ship.
+            Vector3 input = Vector3.MoveTowards(_smoothedThrustInput, ThrustInput, THRUST_SPOOL_RATE * Time.fixedDeltaTime);
+            _smoothedThrustInput = input;
 
             // Accumulate world-space force from the thrusters that push each requested way.
             Vector3 worldForce = Vector3.zero;
@@ -489,9 +523,12 @@ namespace VoxelEngine.GridSystem
 
                 if (want <= 0.05f) continue; // this thruster doesn't help the requested move
 
+                float fraction = Mathf.Clamp01(want);
+                thruster.ThrustFraction = fraction;
+
                 // Consume this thruster's fuel/power + get its usable thrust (N), then push
                 // the ship along the thruster's real push direction (so it stays balanced).
-                float thrustN = thruster.AvailableThrust(input, this) * Mathf.Clamp01(want);
+                float thrustN = thruster.AvailableThrust(input, this) * fraction;
                 worldForce += thruster.PushDirection * thrustN;
             }
 
@@ -523,27 +560,33 @@ namespace VoxelEngine.GridSystem
         private void UpdateDampeners()
         {
             if (!DampenersOn) return;
-            
-            // Even if not controlled, we want to maintain position if dampeners are on.
-            // If controlled, we only dampen if the player isn't actively giving thrust.
+
+            // Only dampen when the pilot isn't actively asking for thrust.
             bool isThrusting = HasManualThrustInput();
-            
+
             Vector3 vel = _rb.linearVelocity;
             if (!isThrusting && vel.sqrMagnitude > 0.0001f)
             {
-                // Strong braking toward zero velocity (acceleration-based so mass-independent).
-                _rb.AddForce(-vel * 8.0f, ForceMode.Acceleration);
+                // Mass-aware braking: heavier ships take longer to cancel drift, so the
+                // dampeners feel like they're wrestling real inertia.
+                float massFactor = 10000f / Mathf.Max(10000f, _rb.mass);
+                float brake = 2.5f * massFactor;
 
-                // Snap tiny residual velocities away. Without this, physics integration can leave
-                // a slow centimetres-per-second sink that feels like dampeners are failing.
-                if (vel.magnitude < 0.04f)
+                // Soften the brake at very low speeds so the ship coasts gently to a stop
+                // instead of slamming on the brakes.
+                float speed = vel.magnitude;
+                float settle = Mathf.Clamp01(speed / 0.5f);
+                _rb.AddForce(-vel * brake * settle, ForceMode.Acceleration);
+
+                // Hard snap only when almost stopped, so the ship doesn't drift forever.
+                if (speed < 0.03f)
                     _rb.linearVelocity = Vector3.zero;
             }
 
             Vector3 angVel = _rb.angularVelocity;
             if (!isThrusting && angVel.sqrMagnitude > 0.01f)
             {
-                _rb.angularVelocity = Vector3.Lerp(angVel, Vector3.zero, 6f * Time.fixedDeltaTime);
+                _rb.angularVelocity = Vector3.Lerp(angVel, Vector3.zero, 4f * Time.fixedDeltaTime);
             }
         }
 
