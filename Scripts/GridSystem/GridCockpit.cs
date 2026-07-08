@@ -24,10 +24,27 @@ namespace VoxelEngine.GridSystem
 
         public bool IsFlightOnline => Enabled && Grid != null && Grid.HasPower;
 
-        private bool _thirdPersonCamera;
         private bool _hasDefaultCameraPose;
         private Vector3 _defaultPivotLocalPosition;
         private Quaternion _defaultPivotLocalRotation;
+
+        // ── Scroll camera zoom ───────────────────────────────────────
+        [Header("Camera")]
+        [Tooltip("Maximum distance the third-person camera can be scrolled out from the grid center.")]
+        public float maxCameraDistance = 35f;
+        [Tooltip("How fast the mouse wheel zooms in/out.")]
+        public float zoomSpeed = 9.0f;
+        [Tooltip("How fast the camera distance catches up to the target.")]
+        public float zoomSmooth = 16f;
+        [Tooltip("Mouse sensitivity for orbiting the third-person camera around the grid center.")]
+        public float orbitSensitivity = 4.0f;
+
+        private float _cameraDistance;
+        private float _targetCameraDistance;
+        private float _orbitYaw;
+        private float _orbitPitch;
+        private bool  _freeOrbiting;
+        private const float THIRD_PERSON_THRESHOLD = 0.35f;
 
         /// <summary>The cockpit the local player is currently seated in (null if on foot).</summary>
         public static GridCockpit ActivePilotSeat { get; private set; }
@@ -90,6 +107,9 @@ namespace VoxelEngine.GridSystem
                 Cursor.visible = false;
             }
 
+            // Scroll zooms the cockpit camera between first-person and third-person.
+            UpdateCameraZoom();
+
             // V toggles cockpit camera: first-person ⇄ exterior chase camera.
             if (VPressed) ToggleCameraMode();
 
@@ -100,6 +120,32 @@ namespace VoxelEngine.GridSystem
             if (GridInput.PPressed) ToggleAllLandingGear();
 
             ReadFlightInput();
+        }
+
+        private bool IsThirdPerson => _cameraDistance > THIRD_PERSON_THRESHOLD;
+
+        private void UpdateCameraZoom()
+        {
+            float scroll = GridInput.Scroll;
+            if (Mathf.Abs(scroll) > 0.01f)
+            {
+                _targetCameraDistance = Mathf.Clamp(
+                    _targetCameraDistance - scroll * zoomSpeed,
+                    0f, maxCameraDistance);
+            }
+            _cameraDistance = Mathf.MoveTowards(_cameraDistance, _targetCameraDistance, zoomSmooth * Time.deltaTime);
+
+            // Camera orbit is only active while Alt is held. When Alt is released, smoothly
+            // return the orbit offset to zero so the camera follows the ship from its default
+            // position while the mouse controls the gyros.
+            if (!GridInput.Alt)
+            {
+                const float ORBIT_RETURN_SPEED = 120f; // degrees per second
+                _orbitYaw   = Mathf.MoveTowardsAngle(_orbitYaw,   0f, ORBIT_RETURN_SPEED * Time.deltaTime);
+                _orbitPitch = Mathf.MoveTowardsAngle(_orbitPitch, 0f, ORBIT_RETURN_SPEED * Time.deltaTime);
+            }
+
+            ApplyCameraMode();
         }
 
         private void ReadFlightInput()
@@ -122,14 +168,45 @@ namespace VoxelEngine.GridSystem
             Vector2 md = GridInput.MouseDelta;
             float mouseX = md.x, mouseY = md.y;
 
+            // Tool cycle (T) — moved off the scroll wheel so scroll can control camera zoom.
+            if (GameSettings.WasPressed(InputAction.ToolCycle))
+            {
+                int n = Grid.ToolGroupCount;
+                if (n > 0) Grid.SelectedToolIndex = (Grid.SelectedToolIndex + 1) % n;
+            }
+
+            // Alt = free-look / free-orbit. Mouse movement otherwise controls the ship gyros.
             if (GridInput.Alt)
             {
-                // FREE-LOOK: hold Alt to look around the cockpit without turning the ship.
-                FreeLook(mouseX, mouseY);
+                if (IsThirdPerson)
+                {
+                    // In third-person, Alt orbits the camera around the grid center while
+                    // the gyros stay idle.
+                    OrbitCamera(mouseX, mouseY);
+                    _freeOrbiting = true;
+                    ApplyCameraMode();
+                }
+                else
+                {
+                    FreeLook(mouseX, mouseY);
+                }
                 Grid.SetFlightInput(thrust, 0f, 0f, roll); // no gyro turn while free-looking
                 return;
             }
             ResetFreeLook();
+
+            // Track third-person mode so we can zero the orbit when returning to first-person.
+            // Mouse look here always drives the ship gyros; camera orbit is Alt-only.
+            if (IsThirdPerson)
+            {
+                _freeOrbiting = true;
+            }
+            else if (_freeOrbiting)
+            {
+                _orbitYaw = 0f;
+                _orbitPitch = 0f;
+                _freeOrbiting = false;
+            }
 
             float sens = 0.06f;
             float yaw   = Mathf.Clamp(mouseX * sens, -1f, 1f);
@@ -141,14 +218,6 @@ namespace VoxelEngine.GridSystem
             // If this ship has a MaritimePropulsionSystem, drive its throttle + steer
             // from the cockpit too (W = throttle, mouse yaw = rudder steer).
             DriveMaritime(fwd, yaw);
-
-            // Scroll cycles between TOOL GROUPS (Drill ⇄ Weapon).
-            float scroll = GridInput.Scroll;
-            if (Mathf.Abs(scroll) > 0.01f)
-            {
-                int n = Grid.ToolGroupCount;
-                if (n > 0) Grid.SelectedToolIndex = ((Grid.SelectedToolIndex + (scroll > 0 ? 1 : -1)) % n + n) % n;
-            }
 
             // While the Drill group is selected: LMB = mine + collect, RMB = mine + VOID (faster).
             Grid.DrillVoidMode = GridInput.Mouse1 && !GridInput.Mouse0;
@@ -188,6 +257,18 @@ namespace VoxelEngine.GridSystem
         }
 
         private static bool Held(InputAction a) => GameSettings.IsHeld(a);
+
+        private void OrbitCamera(float mouseX, float mouseY)
+        {
+            float orbitSens = orbitSensitivity;
+            _orbitYaw   += mouseX * orbitSens;
+            _orbitPitch += -mouseY * orbitSens;
+
+            // Full 360° sphere around the grid center; keep angles in a clean range so the
+            // return-to-follow direction is predictable when Alt is released.
+            _orbitYaw   = Mathf.Repeat(_orbitYaw   + 180f, 360f) - 180f;
+            _orbitPitch = Mathf.Repeat(_orbitPitch + 180f, 360f) - 180f;
+        }
 
         /// <summary>P key — if ANY landing gear is locked, unlock them all; otherwise lock them all.</summary>
         private void ToggleAllLandingGear()
@@ -232,11 +313,19 @@ namespace VoxelEngine.GridSystem
 
         private void ToggleCameraMode()
         {
-            _thirdPersonCamera = !_thirdPersonCamera;
+            if (_cameraDistance > THIRD_PERSON_THRESHOLD)
+            {
+                _targetCameraDistance = 0f;
+                _orbitYaw = 0f;
+                _orbitPitch = 0f;
+            }
+            else
+            {
+                _targetCameraDistance = maxCameraDistance * 0.6f;
+            }
             _freeLooking = false;
             _lookYaw = 0f;
             _lookPitch = 0f;
-            ApplyCameraMode();
         }
 
         private void CaptureDefaultCameraPose(Player.PlayerController player)
@@ -253,13 +342,49 @@ namespace VoxelEngine.GridSystem
             var pivot = Pilot != null ? Pilot.cameraPivot : null;
             if (pivot == null || !_hasDefaultCameraPose) return;
 
-            if (_thirdPersonCamera)
+            if (IsThirdPerson)
             {
-                pivot.localPosition = _defaultPivotLocalPosition + new Vector3(0f, 3.4f, -10.5f);
-                pivot.localRotation = Quaternion.Euler(13f, 0f, 0f);
+                Vector3 gridCenter = Grid != null ? Grid.GetGridCenter() : transform.position;
+
+                // Default camera offset: from grid center, behind the cockpit, at the current distance.
+                Vector3 toCockpit = transform.position - gridCenter;
+                float baseRadius = toCockpit.magnitude;
+                Vector3 baseDir = baseRadius > 0.001f ? toCockpit / baseRadius : transform.forward;
+                Vector3 offset = baseDir * (baseRadius + _cameraDistance);
+
+                // Full 360° spherical orbit around the grid center (Space-Engineers-2 style).
+                // Yaw rotates around the grid's up axis, pitch rotates around the camera's right axis.
+                if (Mathf.Abs(_orbitYaw) > 0.001f)
+                    offset = Quaternion.AngleAxis(_orbitYaw, transform.up) * offset;
+
+                Vector3 right = Vector3.Cross(transform.up, offset);
+                if (right.sqrMagnitude > 0.0001f)
+                {
+                    right.Normalize();
+                    offset = Quaternion.AngleAxis(_orbitPitch, right) * offset;
+                }
+
+                // Camera position is exactly on the sphere around the grid center.
+                Vector3 targetPos = gridCenter + offset;
+
+                // Look at the grid center so the ship is always framed by its pivot point.
+                Vector3 lookDir = gridCenter - targetPos;
+                if (lookDir.sqrMagnitude > 0.0001f)
+                {
+                    // Derive the camera's up vector from the ship's up so the view stays upright
+                    // even when the camera is directly above or below the grid center.
+                    Vector3 camRight = Vector3.Cross(transform.up, lookDir);
+                    if (camRight.sqrMagnitude < 0.0001f)
+                        camRight = transform.right; // fallback at the poles so the camera doesn't roll
+                    camRight.Normalize();
+                    Vector3 camUp = Vector3.Cross(lookDir, camRight).normalized;
+                    Quaternion targetRot = Quaternion.LookRotation(lookDir, camUp);
+                    pivot.SetPositionAndRotation(targetPos, targetRot);
+                }
             }
             else
             {
+                // Restore the first-person cockpit pose.
                 pivot.localPosition = _defaultPivotLocalPosition;
                 pivot.localRotation = _defaultPivotLocalRotation;
             }
@@ -271,7 +396,11 @@ namespace VoxelEngine.GridSystem
 
             Pilot = player;
             CaptureDefaultCameraPose(player);
-            _thirdPersonCamera = false;
+            _cameraDistance = 0f;
+            _targetCameraDistance = 0f;
+            _orbitYaw = 0f;
+            _orbitPitch = 0f;
+            _freeOrbiting = false;
             ApplyCameraMode();
             player.enabled = false;
             // The player uses a CharacterController (not a Rigidbody) — disable it
@@ -299,6 +428,9 @@ namespace VoxelEngine.GridSystem
             // Rebuild the HUD now so the on-foot hotbar is hidden immediately on entry
             // (BuildHotbar skips while ActivePilotSeat != null) — the ship toolbar replaces it.
             VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+
+            // Enable camera screenshake/FOV feedback only while actually piloting this grid.
+            VoxelEngine.Player.CameraFeedback.IsPiloting = true;
         }
 
         private Transform _originalParent;
@@ -350,7 +482,11 @@ namespace VoxelEngine.GridSystem
             ZeroMaritime();
 
             // Restore first-person camera before unparenting/leaving the cockpit.
-            _thirdPersonCamera = false;
+            _cameraDistance = 0f;
+            _targetCameraDistance = 0f;
+            _orbitYaw = 0f;
+            _orbitPitch = 0f;
+            _freeOrbiting = false;
             _freeLooking = false;
             ApplyCameraMode();
 
@@ -372,6 +508,9 @@ namespace VoxelEngine.GridSystem
                 ActiveControlPilot = null;
             }
             VoxelEngine.UI.GameUIController.Instance?.CloseAll();
+
+            // Camera shake/FOV warp is for piloting only — turn it off when leaving the seat.
+            VoxelEngine.Player.CameraFeedback.IsPiloting = false;
         }
 
         public void SwitchToSmallGrid()

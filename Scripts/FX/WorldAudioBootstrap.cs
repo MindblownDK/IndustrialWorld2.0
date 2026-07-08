@@ -95,16 +95,8 @@ namespace VoxelEngine.FX
                 Attach(m, Sfx.QuarryGrind, () => m.IsMining ? 1f : 0f, vol: 0.7f, dist: 32f, pitchSpread: 0.1f);
 
             // ── Ship/vehicle grid blocks ───────────────────────────
-            foreach (var m in FindObjectsByType<GridThruster>(FindObjectsInactive.Exclude))
-            {
-                Sfx s = m.thrusterType switch
-                {
-                    ThrusterType.Ion      => Sfx.ThrusterIon,
-                    ThrusterType.Hydrogen => Sfx.ThrusterHydrogen,
-                    _                     => Sfx.ThrusterAtmo
-                };
-                Attach(m, s, () => m.IsOperational ? m.GetThrustFraction() : 0f, vol: 0.7f, dist: 40f, pitchSpread: 0.25f);
-            }
+            // GridThruster now has its own immersive audio/visual system built in, so we
+            // skip it here to avoid double-spatialised thruster sounds.
 
             foreach (var m in FindObjectsByType<GridDrill>(FindObjectsInactive.Exclude))
                 Attach(m, Sfx.DrillSpin, () => m.IsActive ? 1f : 0f, vol: 0.6f, dist: 24f, pitchSpread: 0.2f);

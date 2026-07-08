@@ -14,11 +14,17 @@ namespace VoxelEngine.Player
     {
         public static CameraFeedback Instance { get; private set; }
 
+        /// <summary>
+        /// The cockpit sets this while the local player is seated. Screenshake/FOV warp
+        /// is suppressed the rest of the time so walking around or standing still feels calm.
+        /// </summary>
+        public static bool IsPiloting { get; set; }
+
         [Header("Shake")]
         [Tooltip("Maximum positional shake in metres at 1 G of acceleration.")]
-        public float maxPosShake = 0.045f;
+        public float maxPosShake = 0.018f;
         [Tooltip("Maximum rotational shake in degrees at 1 G of acceleration.")]
-        public float maxRotShake = 0.55f;
+        public float maxRotShake = 0.22f;
         [Tooltip("How fast the shake decays to zero when acceleration stops.")]
         public float shakeDecay = 4.0f;
         [Tooltip("Perlin noise scroll speed for the shake pattern.")]
@@ -26,7 +32,7 @@ namespace VoxelEngine.Player
 
         [Header("FOV")]
         [Tooltip("Maximum FOV offset in degrees at 1 G of acceleration.")]
-        public float maxFovOffset = 4.0f;
+        public float maxFovOffset = 1.5f;
         [Tooltip("How fast the FOV catches up to acceleration.")]
         public float fovResponse = 3.5f;
 
@@ -59,6 +65,18 @@ namespace VoxelEngine.Player
 
             // Base FOV can change in settings; track it each frame.
             _baseFov = GameSettings.Fov;
+
+            // Not piloting? Damp everything to zero so walking around or standing still is calm.
+            if (!IsPiloting)
+            {
+                _impulse = 0f;
+                _impulseTarget = 0f;
+                _fovOffset = Mathf.MoveTowards(_fovOffset, 0f, fovResponse * Time.deltaTime);
+                transform.localPosition = Vector3.zero;
+                transform.localRotation = Quaternion.identity;
+                _cam.fieldOfView = _baseFov + _fovOffset;
+                return;
+            }
 
             // Smoothly decay / approach the impulse target.
             _impulse = Mathf.MoveTowards(_impulse, _impulseTarget, shakeDecay * Time.deltaTime);
@@ -97,8 +115,10 @@ namespace VoxelEngine.Player
         {
             if (Instance == null) return;
             float g = acceleration.magnitude / 9.81f;
-            // Square-law so tiny bumps don't shake, but powerful thrust really rumbles.
-            Instance._impulseTarget = Mathf.Clamp01(g * g * 0.7f);
+            // Dead zone: a stationary ship can have tiny residual physics jitter; ignore it.
+            if (g < 0.15f) return;
+            // Gentler square-law so powerful thrust rumbles but idle drift is silent.
+            Instance._impulseTarget = Mathf.Clamp01(g * g * 0.22f);
         }
     }
 }

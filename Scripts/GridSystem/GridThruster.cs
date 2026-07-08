@@ -133,6 +133,15 @@ namespace VoxelEngine.GridSystem
             CreateExhaustLight();
         }
 
+        private void Start()
+        {
+            // Old saves / loaded grids didn't run OnPlaced, so ensure the immersive
+            // feedback objects exist before the first Update tick.
+            if (_thrustFX == null) CreateThrustEffect();
+            if (_audio == null) CreateAudio();
+            if (_exhaustLight == null) CreateExhaustLight();
+        }
+
         private void Update()
         {
             if (_thrustFX == null) return;

@@ -214,13 +214,19 @@ namespace VoxelEngine.GridSystem
             ApplyGravity();
 
             // Camera screenshake/FOV warp from the previous physics step's net acceleration.
-            // Subtract gravity so free-fall doesn't constantly shake the camera — only
-            // thrust impulses and impacts create the "power" feel.
-            if (_rb != null)
+            // Only fire when a player is actually controlling this grid so walking around or
+            // watching another ship doesn't shake the camera. Subtract gravity so free-fall
+            // doesn't constantly shake the camera — only thrust impulses and impacts create the
+            // "power" feel.
+            if (_rb != null && IsControlled)
             {
                 Vector3 acceleration = (_rb.linearVelocity - _prevVelocity) / Time.fixedDeltaTime
                                      - CurrentGravityAcceleration();
                 VoxelEngine.Player.CameraFeedback.Impulse(acceleration);
+                _prevVelocity = _rb.linearVelocity;
+            }
+            else if (_rb != null)
+            {
                 _prevVelocity = _rb.linearVelocity;
             }
         }
@@ -370,6 +376,24 @@ namespace VoxelEngine.GridSystem
         {
             float cs = gridSize.CellSize();
             return transform.TransformPoint(new Vector3(gridPos.x, gridPos.y, gridPos.z) * cs);
+        }
+
+        /// <summary>
+        /// Approximate visual center of the grid (average of all block world positions).
+        /// Used by the cockpit third-person camera to pivot around the ship.
+        /// </summary>
+        public Vector3 GetGridCenter()
+        {
+            if (_blocks.Count == 0) return transform.position;
+            Vector3 sum = Vector3.zero;
+            int count = 0;
+            foreach (var kv in _blocks)
+            {
+                if (kv.Value == null) continue;
+                sum += kv.Value.transform.position;
+                count++;
+            }
+            return count > 0 ? sum / count : transform.position;
         }
 
         /// <summary>Sum of every block's structural mass + its current content mass
