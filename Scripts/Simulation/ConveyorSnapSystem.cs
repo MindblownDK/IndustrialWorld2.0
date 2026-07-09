@@ -1,78 +1,41 @@
 // Assets/Scripts/VoxelEngine/Simulation/ConveyorSnapSystem.cs
-//
-// ╔══════════════════════════════════════════════════════════════════╗
-// ║  INDUSTRIAL WORLD — CONVEYOR SNAP SYSTEM                        ║
-// ║  When holding a conveyor belt, snap placement to nearby belts    ║
-// ║  BEFORE falling back to grid snap. Toggle belt-snap with X key. ║
-// ║  Shows a HUD indicator when belt-snap is active.                ║
-// ╚══════════════════════════════════════════════════════════════════╝
-
 using UnityEngine;
 using UnityEngine.UIElements;
 using VoxelEngine.UI;
 
 namespace VoxelEngine.Simulation
 {
-    /// <summary>
-    /// Manages conveyor belt placement snapping. When the player holds
-    /// a conveyor belt item:
-    ///   1. Belt-snap mode (default ON): ghost snaps to the nearest
-    ///      conveyor belt's exit point, auto-orienting to continue the line.
-    ///   2. Grid-snap fallback: if no belt is nearby, snaps to the build grid.
-    ///   3. X key toggles belt-snap on/off (shows HUD indicator).
-    ///
-    /// Attach to the player GameObject. References the camera for raycasts
-    /// and the ConveyorNetwork for finding nearby belts.
-    /// </summary>
     public class ConveyorSnapSystem : MonoBehaviour
     {
         [Header("References")]
         public Camera playerCamera;
 
         [Header("Snap Settings")]
-        [Tooltip("Maximum distance to detect a nearby belt for snapping.")]
         public float snapDetectRadius = 2.5f;
-
-        [Tooltip("Grid cell size for fallback grid snapping.")]
         public float gridSize = 1f;
 
         [Header("Key Bindings")]
         public KeyCode toggleSnapKey = KeyCode.X;
 
-        // ── State ─────────────────────────────────────────────────────
-
-        /// <summary>Whether belt-to-belt snapping is currently enabled.</summary>
         public bool BeltSnapEnabled { get; private set; } = true;
-
-        /// <summary>The belt we're currently snapped to (null if none).</summary>
         public ConveyorBelt SnappedBelt { get; private set; }
-
-        /// <summary>The suggested placement position (snapped or grid).</summary>
         public Vector3 SuggestedPosition { get; private set; }
-
-        /// <summary>The suggested rotation (aligned to snapped belt or player facing).</summary>
         public Quaternion SuggestedRotation { get; private set; }
-
-        /// <summary>True when the player is holding a conveyor belt item.</summary>
         public bool IsHoldingConveyor { get; set; }
 
-        // HUD elements.
         private VisualElement _hudRoot;
         private Label _snapLabel;
         private bool _hudBuilt;
 
-        // ── Lifecycle ─────────────────────────────────────────────────
-
         private void Update()
         {
-            // Toggle belt-snap with X.
             if (Input.GetKeyDown(toggleSnapKey) && IsHoldingConveyor)
             {
                 BeltSnapEnabled = !BeltSnapEnabled;
                 UpdateHUD();
+                VoxelEngine.UI.BuildFeedbackHud.Show("Conveyor Snap", BeltSnapEnabled ? "ENABLED" : "DISABLED", null, BeltSnapEnabled ? Color.cyan : Color.red);
             }
 
-            // Calculate snap position when holding a conveyor.
             if (IsHoldingConveyor)
             {
                 CalculateSnap();
@@ -85,28 +48,22 @@ namespace VoxelEngine.Simulation
             }
         }
 
-        // ── Snap Calculation ──────────────────────────────────────────
-
         private void CalculateSnap()
         {
             if (playerCamera == null) return;
 
-            // Raycast from camera to find the point the player is looking at.
-            Ray ray = playerCamera.ScreenPointToRay(new Vector3(Screen.width * 0.5f, Screen.height * 0.5f));
+            Ray ray = playerCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
             if (!Physics.Raycast(ray, out RaycastHit hit, 20f))
             {
                 SuggestedPosition = ray.GetPoint(5f);
-                SuggestedRotation = Quaternion.LookRotation(
-                    Vector3.ProjectOnPlane(playerCamera.transform.forward, Vector3.up).normalized);
+                SuggestedRotation = GetPlayerFacingRotation();
                 SnappedBelt = null;
                 return;
             }
 
             Vector3 hitPoint = hit.point;
-            SuggestedRotation = Quaternion.LookRotation(
-                Vector3.ProjectOnPlane(playerCamera.transform.forward, Vector3.up).normalized);
+            SuggestedRotation = GetPlayerFacingRotation();
 
-            // Try belt-snap first.
             if (BeltSnapEnabled)
             {
                 var nearestBelt = FindNearestBelt(hitPoint);
@@ -119,10 +76,20 @@ namespace VoxelEngine.Simulation
                 }
             }
 
-            // Fallback: grid snap.
             SnappedBelt = null;
             SuggestedPosition = SnapToGrid(hitPoint);
             UpdateHUD();
+        }
+
+        private Quaternion GetPlayerFacingRotation()
+        {
+            Vector3 forward = Vector3.ProjectOnPlane(playerCamera.transform.forward, Vector3.up).normalized;
+            if (forward.sqrMagnitude < 0.01f) forward = Vector3.forward;
+            
+            // Snap to 90 degree increments
+            float angle = Mathf.Atan2(forward.x, forward.z) * Mathf.Rad2Deg;
+            angle = Mathf.Round(angle / 90f) * 90f;
+            return Quaternion.Euler(0, angle, 0);
         }
 
         private ConveyorBelt FindNearestBelt(Vector3 worldPos)
@@ -148,23 +115,29 @@ namespace VoxelEngine.Simulation
 
         private void SnapToBelt(ConveyorBelt belt, Vector3 hitPoint)
         {
-            // Place at the exit end of the snapped belt, continuing its direction.
+            // Smart Snap: check if we are looking more at the exit or the sides
             Vector3 exitDir = belt.GetExitDirection();
-            Vector3 exitPos = belt.transform.position + exitDir * gridSize;
+            Vector3 sideDir = Vector3.Cross(Vector3.up, exitDir);
+            
+            Vector3 toHit = (hitPoint - belt.transform.position).normalized;
+            float dotExit = Vector3.Dot(toHit, exitDir);
+            float dotSide = Vector3.Dot(toHit, sideDir);
 
-            // Snap to grid cell nearest to the exit position.
-            SuggestedPosition = SnapToGrid(exitPos);
-
-            // Align rotation to continue the belt line.
-            if (belt.shape == ConveyorShape.Corner)
+            Vector3 snapDir = exitDir;
+            if (Mathf.Abs(dotSide) > 0.6f && dotExit < 0.4f)
             {
-                // After a corner, continue in the corner's exit direction.
-                SuggestedRotation = Quaternion.LookRotation(exitDir);
+                snapDir = sideDir * Mathf.Sign(dotSide);
             }
-            else
-            {
+
+            SuggestedPosition = SnapToGrid(belt.transform.position + snapDir * gridSize);
+            // Ensure same level
+            SuggestedPosition = new Vector3(SuggestedPosition.x, belt.transform.position.y, SuggestedPosition.z);
+            
+            // Orientation: if snapping to exit, continue direction. If side, face away from belt.
+            if (snapDir == exitDir)
                 SuggestedRotation = belt.transform.rotation;
-            }
+            else
+                SuggestedRotation = Quaternion.LookRotation(snapDir);
         }
 
         private Vector3 SnapToGrid(Vector3 worldPos)
@@ -177,23 +150,21 @@ namespace VoxelEngine.Simulation
             );
         }
 
-        // ── HUD ───────────────────────────────────────────────────────
-
         private void EnsureHUD()
         {
             if (_hudBuilt) { _hudRoot.style.display = DisplayStyle.Flex; return; }
 
-            // Find or create a UIDocument for the HUD.
             var doc = GetComponentInChildren<UIDocument>();
             if (doc == null) return;
 
             _hudRoot = new VisualElement();
             _hudRoot.style.position = Position.Absolute;
-            _hudRoot.style.bottom = 140;
+            _hudRoot.style.bottom = 100; // Above hotbar
             _hudRoot.style.left = 0;
             _hudRoot.style.right = 0;
             _hudRoot.style.alignItems = Align.Center;
             _hudRoot.style.justifyContent = Justify.Center;
+            _hudRoot.pickingMode = PickingMode.Ignore;
             doc.rootVisualElement.Add(_hudRoot);
 
             var pill = new VisualElement();
@@ -208,7 +179,6 @@ namespace VoxelEngine.Simulation
             UITheme.Border(pill, 1, UITheme.BorderDim);
             _hudRoot.Add(pill);
 
-            // Key hint.
             var keyLabel = new Label("[X]");
             keyLabel.style.color = new StyleColor(UITheme.AccentCyan);
             keyLabel.style.fontSize = 11;
@@ -217,7 +187,7 @@ namespace VoxelEngine.Simulation
             keyLabel.pickingMode = PickingMode.Ignore;
             pill.Add(keyLabel);
 
-            _snapLabel = new Label("Belt Snap: ON");
+            _snapLabel = new Label("Conveyor Snap: ENABLED");
             _snapLabel.style.fontSize = 11;
             _snapLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
             _snapLabel.pickingMode = PickingMode.Ignore;
@@ -233,15 +203,12 @@ namespace VoxelEngine.Simulation
 
             if (BeltSnapEnabled)
             {
-                _snapLabel.text = SnappedBelt != null
-                    ? "Belt Snap: LOCKED"
-                    : "Belt Snap: ON";
-                _snapLabel.style.color = new StyleColor(
-                    SnappedBelt != null ? UITheme.AccentGreen : UITheme.AccentCyan);
+                _snapLabel.text = "Conveyor Snap: ENABLED";
+                _snapLabel.style.color = new StyleColor(UITheme.AccentCyan);
             }
             else
             {
-                _snapLabel.text = "Belt Snap: OFF";
+                _snapLabel.text = "Conveyor Snap: DISABLED";
                 _snapLabel.style.color = new StyleColor(UITheme.AccentRed);
             }
         }

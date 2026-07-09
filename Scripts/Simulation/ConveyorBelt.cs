@@ -52,6 +52,11 @@ namespace VoxelEngine.Simulation
         [Tooltip("Local-space direction items travel. Set automatically from shape.")]
         public Vector3 travelDirection = Vector3.forward;
 
+        /// <summary>Which local direction the belt receives items from.</summary>
+        public Vector3 entryDirection = Vector3.back;
+        /// <summary>Which local direction the belt sends items to.</summary>
+        public Vector3 exitDirection = Vector3.forward;
+
         [Header("Connections")]
         [Tooltip("Auto-detected upstream provider (belt, chute, machine output).")]
         public MonoBehaviour upstreamSource;
@@ -95,11 +100,24 @@ namespace VoxelEngine.Simulation
         {
             ConveyorNetwork.EnsureInstance();
             ConveyorNetwork.Instance?.Register(this);
+            Invoke(nameof(RefreshNearby), 0.1f);
         }
 
         private void OnDisable()
         {
             ConveyorNetwork.Instance?.Unregister(this);
+            RefreshNearby();
+        }
+
+        private void RefreshNearby()
+        {
+            var hits = Physics.OverlapSphere(transform.position, 1.5f);
+            foreach (var hit in hits)
+            {
+                var belt = hit.GetComponentInParent<ConveyorBelt>();
+                if (belt != null && belt != this) belt.RefreshShape();
+            }
+            RefreshShape();
         }
 
         private void Update()
@@ -234,22 +252,67 @@ namespace VoxelEngine.Simulation
         private void ScanConnections()
         {
             // Find downstream consumer at the exit end of this belt.
-            Vector3 exitDir = GetExitDirection();
-            Vector3 exitWorld = transform.position + exitDir * 1.2f;
+            Vector3 worldExitDir = GetExitDirection();
+            Vector3 exitWorld = transform.position + worldExitDir * 1.2f;
             downstreamTarget = FindConsumerAt(exitWorld);
 
-            // Also check for funnels adjacent to the exit.
             if (downstreamTarget == null)
                 downstreamTarget = FindFunnelAt(exitWorld);
 
             // Find upstream provider at the entry end of this belt.
-            Vector3 entryDir = GetEntryDirection();
-            Vector3 entryWorld = transform.position + entryDir * 1.2f;
+            Vector3 worldEntryDir = GetEntryDirection();
+            Vector3 entryWorld = transform.position + worldEntryDir * 1.2f;
             upstreamSource = FindProviderAt(entryWorld);
 
-            // Also check for funnels adjacent to the entry.
             if (upstreamSource == null)
                 upstreamSource = FindFunnelAt(entryWorld);
+        }
+
+        public void RefreshShape()
+        {
+            var upFront = FindConsumerAt(transform.position + transform.forward * 1.0f + Vector3.up * 1.0f);
+            var downFront = FindConsumerAt(transform.position + transform.forward * 1.0f + Vector3.down * 1.0f);
+
+            if (upFront != null)
+            {
+                shape = ConveyorShape.RampUp;
+                entryDirection = Vector3.back;
+                exitDirection = new Vector3(0, 0.5f, 1).normalized;
+            }
+            else if (downFront != null)
+            {
+                shape = ConveyorShape.RampDown;
+                entryDirection = Vector3.back;
+                exitDirection = new Vector3(0, -0.5f, 1).normalized;
+            }
+            else
+            {
+                var left = FindProviderAt(transform.position - transform.right * 1.0f);
+                var right = FindProviderAt(transform.position + transform.right * 1.0f);
+                var back = FindProviderAt(transform.position - transform.forward * 1.0f);
+
+                if (back != null || (left == null && right == null))
+                {
+                    shape = ConveyorShape.Straight;
+                    entryDirection = Vector3.back;
+                    exitDirection = Vector3.forward;
+                }
+                else if (left != null)
+                {
+                    shape = ConveyorShape.Corner;
+                    entryDirection = Vector3.left;
+                    exitDirection = Vector3.forward;
+                }
+                else if (right != null)
+                {
+                    shape = ConveyorShape.Corner;
+                    entryDirection = Vector3.right;
+                    exitDirection = Vector3.forward;
+                }
+            }
+
+            UpdateTravelDirection();
+            if (_visuals != null) _visuals.RebuildMesh();
         }
 
         private MonoBehaviour FindFunnelAt(Vector3 worldPos)

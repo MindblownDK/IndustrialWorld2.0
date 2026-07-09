@@ -19,6 +19,30 @@ namespace VoxelEngine.EditorTools
     /// </summary>
     public class VoxelEngineSetupWindow : EditorWindow
     {
+        private static VoxelEngine.Crafting.RecipeDefinition AddRecipe(
+            VoxelEngine.Crafting.RecipeRegistry registry,
+            string recipesFolder,
+            string assetName, string display,
+            VoxelEngine.Items.ItemDefinition output, int outputCount,
+            VoxelEngine.Crafting.StationTier station,
+            params (VoxelEngine.Items.ItemDefinition item, int n)[] inputs)
+        {
+            string path = $"{recipesFolder}/{assetName}.asset";
+            var r = GetOrCreateAsset<VoxelEngine.Crafting.RecipeDefinition>(path);
+            r.displayName = display;
+            r.outputItem = output;
+            r.outputCount = outputCount;
+            r.requiredStation = station;
+            r.craftSeconds = 0f;
+            r.unlockedByDefault = true;
+            r.inputs = new VoxelEngine.Crafting.RecipeIngredient[inputs.Length];
+            for (int i = 0; i < inputs.Length; i++)
+                r.inputs[i] = new VoxelEngine.Crafting.RecipeIngredient { item = inputs[i].item, count = inputs[i].n };
+            if (registry != null && !registry.recipes.Contains(r)) registry.recipes.Add(r);
+            EditorUtility.SetDirty(r);
+            return r;
+        }
+
         private static T EnsureComponent<T>(GameObject go, System.Action<T> onAdded = null) where T : Component
         {
             var c = go.GetComponent<T>();
@@ -1636,16 +1660,13 @@ namespace VoxelEngine.EditorTools
                 return;
             }
 
+            var recipeRegistry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeRegistry>($"{ASSET_ROOT}/RecipeRegistry.asset");
+
             // ── Electrical Pipe Definitions ──
             VoxelEngine.Power.ElectricalPipeDefinition MakePipeDef(string name, float cap, Color tint)
             {
                 string path = $"{pipesFolder}/Pipe_{name.Replace(" ", "")}.asset";
-                var w = AssetDatabase.LoadAssetAtPath<VoxelEngine.Power.ElectricalPipeDefinition>(path);
-                if (w == null)
-                {
-                    w = ScriptableObject.CreateInstance<VoxelEngine.Power.ElectricalPipeDefinition>();
-                    AssetDatabase.CreateAsset(w, path);
-                }
+                var w = GetOrCreateAsset<VoxelEngine.Power.ElectricalPipeDefinition>(path);
                 w.displayName   = name + " Electrical Pipe";
                 w.capacityWatts = cap;
                 w.tint          = tint;
@@ -1719,43 +1740,28 @@ namespace VoxelEngine.EditorTools
             var blockLight = MakePowerBlockInternal("Block_Light", "Power Light", new Color(1f,0.95f,0.6f), lightPrefab, "Consumes 10 W.", hp: 80);
 
             // ── LV Manual Wires ──
-            var lvWireCu = MakeResource(itemsFolder, "Copper LV Wire", new Color(0.85f, 0.45f, 0.20f), 100, VoxelEngine.Items.ResourceCategory.Component, uiCategory: "Power");
+            var itemsFolderSO = ASSET_ROOT + "/Items";
+            var lvWireCu = MakeResource(itemsFolderSO, "Copper LV Wire", new Color(0.85f, 0.45f, 0.20f), 100, VoxelEngine.Items.ResourceCategory.Component, uiCategory: "Power");
             lvWireCu.itemId = "copper_lv_wire";
-            var lvWireAu = MakeResource(itemsFolder, "Gold LV Wire", new Color(0.95f, 0.85f, 0.20f), 100, VoxelEngine.Items.ResourceCategory.Component, uiCategory: "Power");
+            var lvWireAu = MakeResource(itemsFolderSO, "Gold LV Wire", new Color(0.95f, 0.85f, 0.20f), 100, VoxelEngine.Items.ResourceCategory.Component, uiCategory: "Power");
             lvWireAu.itemId = "gold_lv_wire";
-            var lvWireGr = MakeResource(itemsFolder, "Graphite LV Wire", new Color(0.20f, 0.20f, 0.20f), 100, VoxelEngine.Items.ResourceCategory.Component, uiCategory: "Power");
+            var lvWireGr = MakeResource(itemsFolderSO, "Graphite LV Wire", new Color(0.20f, 0.20f, 0.20f), 100, VoxelEngine.Items.ResourceCategory.Component, uiCategory: "Power");
             lvWireGr.itemId = "graphite_lv_wire";
             
-            // ── Recipe Helper ──
-            var recipeRegistry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeRegistry>($"{ASSET_ROOT}/RecipeRegistry.asset");
-            VoxelEngine.Crafting.RecipeDefinition AddPowerRecipeInternal(string assetName, string display, VoxelEngine.Items.ItemDefinition output, int outputCount, VoxelEngine.Crafting.StationTier station, params (VoxelEngine.Items.ItemDefinition item, int n)[] inputs)
-            {
-                string path = $"{recipesFolder}/{assetName}.asset";
-                var r = GetOrCreateAsset<VoxelEngine.Crafting.RecipeDefinition>(path);
-                r.displayName = display; r.outputItem = output; r.outputCount = outputCount;
-                r.requiredStation = station; r.craftSeconds = 0f; r.unlockedByDefault = true;
-                r.inputs = new VoxelEngine.Crafting.RecipeIngredient[inputs.Length];
-                for (int i = 0; i < inputs.Length; i++)
-                    r.inputs[i] = new VoxelEngine.Crafting.RecipeIngredient { item = inputs[i].item, count = inputs[i].n };
-                if (recipeRegistry != null && !recipeRegistry.recipes.Contains(r)) recipeRegistry.recipes.Add(r);
-                EditorUtility.SetDirty(r);
-                return r;
-            }
-
             if (recipeRegistry != null)
             {
-                AddPowerRecipeInternal("Recipe_Pipe_Copper", "Copper Electrical Pipe", blockPipeCu, 4, VoxelEngine.Crafting.StationTier.CraftingBench, (copperIngot, 2), (ironIngot, 1));
-                AddPowerRecipeInternal("Recipe_Pipe_Iron",   "Iron Electrical Pipe",   blockPipeFe, 4, VoxelEngine.Crafting.StationTier.CraftingBench, (ironIngot, 4));
-                AddPowerRecipeInternal("Recipe_Pipe_Gold",   "Gold Electrical Pipe",   blockPipeAu, 4, VoxelEngine.Crafting.StationTier.Assembler,    (goldOre != null ? goldOre : ironIngot, 2), (ironIngot, 2));
-                AddPowerRecipeInternal("Recipe_Pipe_Super",  "Superconductor Pipe",    blockPipeSc, 4, VoxelEngine.Crafting.StationTier.Assembler,    (steelIngot, 4), (goldOre != null ? goldOre : ironIngot, 2));
+                AddRecipe(recipeRegistry, recipesFolder, "Recipe_Pipe_Copper", "Copper Electrical Pipe", blockPipeCu, 4, VoxelEngine.Crafting.StationTier.CraftingBench, (copperIngot, 2), (ironIngot, 1));
+                AddRecipe(recipeRegistry, recipesFolder, "Recipe_Pipe_Iron",   "Iron Electrical Pipe",   blockPipeFe, 4, VoxelEngine.Crafting.StationTier.CraftingBench, (ironIngot, 4));
+                AddRecipe(recipeRegistry, recipesFolder, "Recipe_Pipe_Gold",   "Gold Electrical Pipe",   blockPipeAu, 4, VoxelEngine.Crafting.StationTier.Assembler,    (goldOre != null ? goldOre : ironIngot, 2), (ironIngot, 2));
+                AddRecipe(recipeRegistry, recipesFolder, "Recipe_Pipe_Super",  "Superconductor Pipe",    blockPipeSc, 4, VoxelEngine.Crafting.StationTier.Assembler,    (steelIngot, 4), (goldOre != null ? goldOre : ironIngot, 2));
                 
-                AddPowerRecipeInternal("Recipe_Generator", "Coal Generator", blockGen, 1, VoxelEngine.Crafting.StationTier.CraftingBench, (ironIngot, 4), (stone, 4));
-                AddPowerRecipeInternal("Recipe_Battery",   "Battery",        blockBat, 1, VoxelEngine.Crafting.StationTier.Assembler,    (copperIngot, 4), (ironIngot, 2), (lithium, 2));
-                AddPowerRecipeInternal("Recipe_Light",     "Power Light",    blockLight, 1, VoxelEngine.Crafting.StationTier.CraftingBench, (copperIngot, 1));
+                AddRecipe(recipeRegistry, recipesFolder, "Recipe_Generator", "Coal Generator", blockGen, 1, VoxelEngine.Crafting.StationTier.CraftingBench, (ironIngot, 4), (stone, 4));
+                AddRecipe(recipeRegistry, recipesFolder, "Recipe_Battery",   "Battery",        blockBat, 1, VoxelEngine.Crafting.StationTier.Assembler,    (copperIngot, 4), (ironIngot, 2), (lithium, 2));
+                AddRecipe(recipeRegistry, recipesFolder, "Recipe_Light",     "Power Light",    blockLight, 1, VoxelEngine.Crafting.StationTier.CraftingBench, (copperIngot, 1));
 
-                AddPowerRecipeInternal("Recipe_Wire_Cu_LV", "Copper LV Wire", lvWireCu, 5, VoxelEngine.Crafting.StationTier.None, (copperWire, 1)); 
-                AddPowerRecipeInternal("Recipe_Wire_Au_LV", "Gold LV Wire",   lvWireAu, 5, VoxelEngine.Crafting.StationTier.Assembler, (goldOre != null ? goldOre : ironIngot, 1), (copperWire, 2));
-                AddPowerRecipeInternal("Recipe_Wire_Gr_LV", "Graphite LV Wire", lvWireGr, 5, VoxelEngine.Crafting.StationTier.Assembler, (graphite != null ? graphite : coal, 2), (copperWire, 2));
+                AddRecipe(recipeRegistry, recipesFolder, "Recipe_Wire_Cu_LV", "Copper LV Wire", lvWireCu, 5, VoxelEngine.Crafting.StationTier.None, (copperWire, 1)); 
+                AddRecipe(recipeRegistry, recipesFolder, "Recipe_Wire_Au_LV", "Gold LV Wire",   lvWireAu, 5, VoxelEngine.Crafting.StationTier.Assembler, (goldOre != null ? goldOre : ironIngot, 1), (copperWire, 2));
+                AddRecipe(recipeRegistry, recipesFolder, "Recipe_Wire_Gr_LV", "Graphite LV Wire", lvWireGr, 5, VoxelEngine.Crafting.StationTier.Assembler, (graphite != null ? graphite : coal, 2), (copperWire, 2));
             }
         }
         private void BuildResearchContent()
@@ -5762,44 +5768,19 @@ root =>
 
             string commonItems = ASSET_ROOT + "/Items";
             string indItems    = ASSET_ROOT + "/Industrial/Items";
-            var ironIngot   = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{commonItems}/Item_IronIngot.asset");
-            var copperIngot = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{commonItems}/Item_CopperIngot.asset");
-            var steelIngot  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{commonItems}/Item_SteelIngot.asset");
             var ironPlate   = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_IronPlate.asset");
             var steelPlate  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_SteelPlate.asset");
             var copperWire  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_CopperWire.asset");
             var circuit     = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_Circuit.asset");
-            var advCircuit  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_AdvCircuit.asset");
             var ironGear    = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_IronGear.asset");
             var glass       = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_Glass.asset");
-            var stone       = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{ITEM_FOLDER}/Item_Stone.asset");
-            var sciT1       = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ScienceItem>($"{commonItems}/Item_ScienceT1.asset");
+            var ironIngot   = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{commonItems}/Item_IronIngot.asset");
+            var copperIngot = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{commonItems}/Item_CopperIngot.asset");
             var sciT2       = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ScienceItem>($"{commonItems}/Item_ScienceT2.asset");
             var sciT3       = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ScienceItem>($"{commonItems}/Item_ScienceT3.asset");
 
             var registry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeRegistry>($"{ASSET_ROOT}/RecipeRegistry.asset");
             var tree     = AssetDatabase.LoadAssetAtPath<VoxelEngine.Research.ResearchTree>($"{ASSET_ROOT}/Research/ResearchTree.asset");
-
-            if (ironIngot == null || registry == null)
-            {
-                EditorUtility.DisplayDialog("Voxel Engine", "Run Step 4 first.", "OK");
-                return;
-            }
-
-            // ── Recipe Helper ──
-            VoxelEngine.Crafting.RecipeDefinition AddHVRecipeInternal(string assetName, string display, VoxelEngine.Items.ItemDefinition output, int outputCount, VoxelEngine.Crafting.StationTier station, bool unlocked, params (VoxelEngine.Items.ItemDefinition item, int n)[] inputs)
-            {
-                string path = $"{HV_RECIPES}/{assetName}.asset";
-                var r = GetOrCreateAsset<VoxelEngine.Crafting.RecipeDefinition>(path);
-                r.displayName = display; r.outputItem = output; r.outputCount = outputCount;
-                r.requiredStation = station; r.craftSeconds = 4f; r.unlockedByDefault = unlocked;
-                var valid = new List<VoxelEngine.Crafting.RecipeIngredient>();
-                foreach (var (item, n) in inputs) if (item != null) valid.Add(new VoxelEngine.Crafting.RecipeIngredient { item = item, count = n });
-                r.inputs = valid.ToArray();
-                if (!registry.recipes.Contains(r)) registry.recipes.Add(r);
-                EditorUtility.SetDirty(r);
-                return r;
-            }
 
             // ── HV Wire Item ──
             var hvWireItem = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{HV_ITEMS}/Item_HV_Wire.asset");
@@ -5812,9 +5793,34 @@ root =>
             hvWireItem.category = "Power";
             EditorUtility.SetDirty(hvWireItem);
 
-            var recHVWire = AddHVRecipeInternal("Recipe_HV_Wire", "High Voltage Wire", hvWireItem, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 4), (copperWire, 20), (circuit, 2));
+            // ── Recipe Helper ──
+            VoxelEngine.Crafting.RecipeDefinition AddFactoryRecipe(string folder, string assetName, string display, VoxelEngine.Items.ItemDefinition output, int outputCount, VoxelEngine.Crafting.StationTier station, bool unlocked, params (VoxelEngine.Items.ItemDefinition item, int n)[] inputs)
+            {
+                string path = $"{folder}/{assetName}.asset";
+                var r = GetOrCreateAsset<VoxelEngine.Crafting.RecipeDefinition>(path);
+                r.displayName = display; r.outputItem = output; r.outputCount = outputCount;
+                r.requiredStation = station; r.craftSeconds = 4f; r.unlockedByDefault = unlocked;
+                var valid = new List<VoxelEngine.Crafting.RecipeIngredient>();
+                foreach (var (item, n) in inputs) if (item != null) valid.Add(new VoxelEngine.Crafting.RecipeIngredient { item = item, count = n });
+                r.inputs = valid.ToArray();
+                if (registry != null && !registry.recipes.Contains(r)) registry.recipes.Add(r);
+                EditorUtility.SetDirty(r);
+                return r;
+            }
 
-            // ── HV Infrastructure Prefabs ──
+            var recHVWire = AddFactoryRecipe(HV_RECIPES, "Recipe_HV_Wire", "High Voltage Wire", hvWireItem, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 4), (copperWire, 20), (circuit, 2));
+
+            // ── Funnel ──
+            var funnelPrefab = GetOrCreatePrefab($"{FAC_PREFABS}/Funnel.prefab", "Funnel", root => {
+                var c = EnsureComponent<VoxelEngine.Simulation.Funnel>(root);
+                c.mode = FunnelMode.Import;
+                c.transferInterval = 0.5f;
+                c.bufferSize = 4;
+            });
+            var blockFunnel = MakeBlock(FAC_ITEMS, "Block_Funnel", "Funnel", new Color(0.42f, 0.45f, 0.50f), funnelPrefab, "Factory");
+            var recFunnel = AddFactoryRecipe(FAC_RECIPES, "Recipe_Funnel", "Funnel", blockFunnel, 1, VoxelEngine.Crafting.StationTier.CraftingBench, false, (ironPlate, 2), (ironGear, 1));
+
+            // ── Transformers ──
             var stepUpPrefab = GetOrCreatePrefab($"{HV_PREFABS}/StepUpTransformer.prefab", "StepUpTransformer", root => {
                 var c = EnsureComponent<VoxelEngine.Simulation.StepUpTransformer>(root);
                 c.maxThroughputWatts = 200_000_000f;
@@ -5825,40 +5831,54 @@ root =>
                 c.maxThroughputWatts = 200_000_000f;
                 c.conversionLoss = 0.02f;
             });
-            
-            // ... (I'll skip more of the boilerplate but ensure the variables the foreach needs are defined)
-            var blockPowerPole = GetOrCreateAsset<VoxelEngine.Items.BlockItem>($"{HV_ITEMS}/Block_PowerPole.asset");
-            var blockSubstation = GetOrCreateAsset<VoxelEngine.Items.BlockItem>($"{HV_ITEMS}/Block_Substation.asset");
-            var blockHVTower = GetOrCreateAsset<VoxelEngine.Items.BlockItem>($"{HV_ITEMS}/Block_HVTower.asset");
+
             var blockStepUp = GetOrCreateAsset<VoxelEngine.Items.BlockItem>($"{HV_ITEMS}/Block_StepUpTransformer.asset");
+            blockStepUp.placedPrefab = stepUpPrefab; blockStepUp.displayName = "Step-Up Transformer";
             var blockStepDown = GetOrCreateAsset<VoxelEngine.Items.BlockItem>($"{HV_ITEMS}/Block_StepDownTransformer.asset");
+            blockStepDown.placedPrefab = stepDownPrefab; blockStepDown.displayName = "Step-Down Transformer";
 
-            var recPowerPole = AddHVRecipeInternal("Recipe_PowerPole", "Power Pole", blockPowerPole, 2, VoxelEngine.Crafting.StationTier.CraftingBench, false, (ironIngot, 3), (copperWire, 2));
-            var recSubstation = AddHVRecipeInternal("Recipe_Substation", "Electrical Substation", blockSubstation, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 8), (copperWire, 12), (circuit, 4));
-            var recHVTower = AddHVRecipeInternal("Recipe_HVTower", "HV Transmission Tower", blockHVTower, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 16), (copperWire, 8), (circuit, 2));
-            var recStepUp = AddHVRecipeInternal("Recipe_StepUpTransformer", "Step-Up Transformer", blockStepUp, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 24), (copperWire, 16), (advCircuit, 8), (circuit, 4));
-            var recStepDown = AddHVRecipeInternal("Recipe_StepDownTransformer", "Step-Down Transformer", blockStepDown, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 24), (copperWire, 16), (advCircuit, 8), (circuit, 4));
+            var recStepUp = AddFactoryRecipe(HV_RECIPES, "Recipe_StepUpTransformer", blockStepUp, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 24), (copperWire, 16));
+            var recStepDown = AddFactoryRecipe(HV_RECIPES, "Recipe_StepDownTransformer", blockStepDown, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 24), (copperWire, 16));
 
+            // ── Research ──
             if (tree != null)
             {
-                var nElec = FindNodeByName(tree, "res_electricity");
                 string hvNodePath = $"{NODES}/res_hv_transmission.asset";
                 var nHV = GetOrCreateAsset<VoxelEngine.Research.ResearchNode>(hvNodePath);
                 
-                var recWireGrLV = FindRecipeByName("Recipe_Wire_Gr_LV");
-                var recPipeSc = FindRecipeByName("Recipe_Pipe_Super");
+                var rWireGrLV = FindRecipeByName("Recipe_Wire_Gr_LV");
+                var rPipeSc = FindRecipeByName("Recipe_Pipe_Super");
 
                 var list = new List<VoxelEngine.Crafting.RecipeDefinition>();
-                foreach (var r in new[] { recHVWire, recWireGrLV, recPipeSc, recPowerPole, recSubstation, recHVTower, recStepUp, recStepDown })
+                foreach (var r in new[] { recHVWire, rWireGrLV, rPipeSc, recStepUp, recStepDown })
                     if (r != null) list.Add(r);
                 
+                if (registry != null)
+                {
+                    var rPowerPole = FindRecipeByName("Recipe_PowerPole");
+                    if (rPowerPole != null) list.Add(rPowerPole);
+                    var rSubstation = FindRecipeByName("Recipe_Substation");
+                    if (rSubstation != null) list.Add(rSubstation);
+                    var rHVTower = FindRecipeByName("Recipe_HVTower");
+                    if (rHVTower != null) list.Add(rHVTower);
+                }
+
                 nHV.unlocksRecipes = list.ToArray();
                 EditorUtility.SetDirty(nHV);
+
+                // Add Funnel to Factory Logistics
+                var nFac = FindNodeByName(tree, "res_factory_logistics");
+                if (nFac != null)
+                {
+                    var unlocks = new List<VoxelEngine.Crafting.RecipeDefinition>(nFac.unlocksRecipes);
+                    if (!unlocks.Contains(recFunnel)) unlocks.Add(recFunnel);
+                    nFac.unlocksRecipes = unlocks.ToArray();
+                    EditorUtility.SetDirty(nFac);
+                }
             }
             
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
-            EditorUtility.DisplayDialog("Voxel Engine", "Factory Foundations + HV Grid built!", "OK");
         }
         private void BuildWindmillContent()
         {

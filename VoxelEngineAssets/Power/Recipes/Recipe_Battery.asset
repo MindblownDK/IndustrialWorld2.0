@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e6e37d290c6cb84409b3993312f66bca, type: 3}
+  m_Name: Recipe_Battery
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Crafting.RecipeDefinition
+  displayName: Battery
+  icon: {fileID: 0}
+  inputs:
+  - item: {fileID: 11400000, guid: f9cdf5616932e8b4ea8dfcaab45e7e67, type: 2}
+    count: 4
+  - item: {fileID: 11400000, guid: 50c6b1ff7afb6ad41bb10ae26e7891c0, type: 2}
+    count: 2
+  - item: {fileID: 11400000, guid: 0f1419ed5858dcd4dbb62ad1a3790917, type: 2}
+    count: 2
+  outputItem: {fileID: 11400000, guid: 5c9625e5a49366d48a39784bf82f7b41, type: 2}
+  outputCount: 1
+  requiredStation: 3
+  craftSeconds: 0
+  unlockedByDefault: 1
