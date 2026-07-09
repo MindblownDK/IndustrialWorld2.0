@@ -121,6 +121,15 @@ namespace VoxelEngine.Simulation
             "2.5x speed multiplier. The pinnacle of automated crafting — required for " +
             "endgame components, nuclear fuel rods, and aerospace alloys.";
 
+        public const string Funnel =
+            "Bidirectional item transfer block. Bridges conveyor belts and machines/chests. " +
+            "IMPORT mode: pulls items from a belt below and pushes them into a machine above. " +
+            "EXPORT mode: pulls items from a machine above and pushes them onto a belt below. " +
+            "Right-click the placed block to toggle between Import and Export. " +
+            "Has a 4-slot internal buffer. Transfers one item every 0.5 seconds. " +
+            "Auto-detects connections on all sides. Essential for feeding assemblers and " +
+            "extracting finished products from your production line.";
+
         public const string ConveyorBelt =
             "Standard item transport belt. Carries items visually from input to output. " +
             "Three speed tiers: Basic (2 items/s), Fast (5 items/s), Express (10 items/s). " +
@@ -131,6 +140,17 @@ namespace VoxelEngine.Simulation
             "Vertical item transport chute. Drops items from one elevation to another — " +
             "essential for multi-level factory designs. Items slide visually through the " +
             "channel. Connects belts and machines at different heights.";
+
+        public const string ConveyorCorner =
+            "90-degree corner conveyor belt. Turns items from the entry direction to the right. " +
+            "Use to route belt lines around obstacles, through walls, or create compact " +
+            "U-shaped production loops. Same speed tiers as straight belts.";
+
+        public const string ConveyorRamp =
+            "Sloped conveyor belt that raises or lowers items by 0.5 meters per segment. " +
+            "Ramp-up belts carry items to higher elevations; ramp-down belts carry them lower. " +
+            "Chain multiple ramps for multi-story factory designs. Connects seamlessly to " +
+            "straight belts and corners at either end.";
 
         // ── Gameplay Hints ────────────────────────────────────────────
 

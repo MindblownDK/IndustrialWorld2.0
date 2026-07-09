@@ -1,0 +1,45 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe52eb4685f86c44d967d9cd3e4bd91a, type: 3}
+  m_Name: res_factory_logistics
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Research.ResearchNode
+  nodeId: res_factory_logistics
+  displayName: Factory Logistics
+  description: Automate your production lines. Unlocks conveyor belts, chutes, the
+    Crusher, Assembler Mk.1, grid lights, and LED strips. The foundation of every
+    great factory.
+  iconTint: {r: 0.88, g: 0.52, b: 0.12, a: 1}
+  category: 0
+  subCategory: 2
+  tier: 2
+  column: 8
+  prerequisites:
+  - {fileID: 11400000, guid: b7c5808767158cb44adea430a03ce665, type: 2}
+  researchSeconds: 60
+  cost:
+  - pack: {fileID: 11400000, guid: 5c6861815f491e546a7fd36f4b664f0e, type: 2}
+    count: 15
+  - pack: {fileID: 11400000, guid: e7eec7f45c4b5fb4db5018e3431f77f0, type: 2}
+    count: 8
+  unlocksRecipes:
+  - {fileID: 11400000, guid: 6b462701cbb7b2541ac7430e64e73b42, type: 2}
+  - {fileID: 11400000, guid: 7cac17191170f494fbbae9f55281d6cb, type: 2}
+  - {fileID: 11400000, guid: 94883780f3aeb06418f684c0c708f88a, type: 2}
+  - {fileID: 11400000, guid: 11bb19a1463773641843ef495e263751, type: 2}
+  - {fileID: 11400000, guid: fefcbfefa1618c44699512854811c264, type: 2}
+  - {fileID: 11400000, guid: 0428bde91b58c8f4f975d2d79b788241, type: 2}
+  - {fileID: 11400000, guid: eebb574166e4cf74ebeb73132c832b3e, type: 2}
+  - {fileID: 11400000, guid: 15593e2e88c25514ca68bb380f0af95b, type: 2}
+  upgradeKind: 0
+  upgradePerRankAmount: 0
+  maxRanks: 1
+  costScalesWithRank: 1

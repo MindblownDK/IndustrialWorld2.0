@@ -987,12 +987,12 @@ namespace VoxelEngine.EditorTools
 
         private static void EnsureFolder(string path)
         {
-            if (!AssetDatabase.IsValidFolder(path))
-            {
-                var parent = System.IO.Path.GetDirectoryName(path).Replace("\\", "/");
-                var leaf   = System.IO.Path.GetFileName(path);
-                AssetDatabase.CreateFolder(parent, leaf);
-            }
+            if (AssetDatabase.IsValidFolder(path)) return;
+            var parent = System.IO.Path.GetDirectoryName(path).Replace("\\", "/");
+            var leaf   = System.IO.Path.GetFileName(path);
+            if (string.IsNullOrEmpty(parent) || string.IsNullOrEmpty(leaf)) return;
+            EnsureFolder(parent); // recurse up — ensure parent exists first
+            AssetDatabase.CreateFolder(parent, leaf);
         }
 
         private static VoxelEngine.Items.ResourceItem MakeResource(string folder, string display, Color tint, int maxStack,
@@ -4519,6 +4519,7 @@ root =>
         // ===== Procedural scatter-prefab helpers =====
         private static Material MakeColoredMat(string folder, string name, Color c)
         {
+            EnsureFolder(folder);
             var sh = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
             var m = new Material(sh) { name = name };
             m.color = c;
@@ -5907,18 +5908,20 @@ root =>
         {
             const string FAC_ROOT    = ASSET_ROOT + "/Factory";
             const string FAC_PREFABS = FAC_ROOT + "/Prefabs";
+            const string FAC_MATS    = FAC_PREFABS + "/Materials";
             const string FAC_ITEMS   = FAC_ROOT + "/Items";
             const string FAC_RECIPES = FAC_ROOT + "/Recipes";
             const string FAC_DEFS    = FAC_ROOT + "/Definitions";
             const string FAC_MRECIPES= FAC_ROOT + "/MachineRecipes";
             const string HV_ROOT     = ASSET_ROOT + "/HighVoltage";
             const string HV_PREFABS  = HV_ROOT + "/Prefabs";
+            const string HV_MATS     = HV_PREFABS + "/Materials";
             const string HV_ITEMS    = HV_ROOT + "/Items";
             const string HV_RECIPES  = HV_ROOT + "/Recipes";
             const string NODES       = ASSET_ROOT + "/Research/Nodes";
 
-            foreach (var f in new[] { FAC_ROOT, FAC_PREFABS, FAC_ITEMS, FAC_RECIPES, FAC_DEFS, FAC_MRECIPES,
-                                       HV_ROOT, HV_PREFABS, HV_ITEMS, HV_RECIPES, NODES })
+            foreach (var f in new[] { FAC_ROOT, FAC_PREFABS, FAC_MATS, FAC_ITEMS, FAC_RECIPES, FAC_DEFS, FAC_MRECIPES,
+                                       HV_ROOT, HV_PREFABS, HV_MATS, HV_ITEMS, HV_RECIPES, NODES })
                 EnsureFolder(f);
 
             // ── Dependencies ──────────────────────────────────────────
@@ -6088,12 +6091,69 @@ root =>
             var mrecipeBattery   = MakeMRecipe("battery_cell","Industrial Battery Cell",MachineRecipeType.Assembling, batteryItem,  1, 8f, (copperIngot, 4), (ironIngot, 2));
 
             // ════════════════════════════════════════════════════════════
-            //  4. FACTORY PREFABS
+            //  4. FACTORY PREFABS (with procedural visual meshes)
             // ════════════════════════════════════════════════════════════
+            // Helper: add a visual child primitive to a prefab root.
+            void AddVisual(GameObject parent, PrimitiveType type, string childName,
+                Vector3 localPos, Vector3 localScale, Color color, Quaternion? rot = null)
+            {
+                var mat = MakeColoredMat(FAC_MATS, $"Mat_Fac_{childName}", color);
+                var existing = parent.transform.Find(childName);
+                if (existing != null)
+                {
+                    // Child exists — just reassign material to the correct subfolder.
+                    var r = existing.GetComponent<Renderer>();
+                    if (r != null) r.sharedMaterial = mat;
+                    return;
+                }
+                var go = GameObject.CreatePrimitive(type);
+                go.name = childName;
+                go.transform.SetParent(parent.transform, false);
+                go.transform.localPosition = localPos;
+                go.transform.localScale = localScale;
+                if (rot.HasValue) go.transform.localRotation = rot.Value;
+                go.GetComponent<Renderer>().sharedMaterial = mat;
+                var col = go.GetComponent<Collider>();
+                if (col != null) Object.DestroyImmediate(col);
+            }
+
+            // -- Conveyor Belt helper (shared visual for all 3 tiers) --
+            void BuildConveyorVisuals(GameObject root, Color beltColor, string tierLabel)
+            {
+                AddVisual(root, PrimitiveType.Cube, "BeltSurface",
+                    new Vector3(0, 0.48f, 0), new Vector3(0.85f, 0.04f, 0.95f), beltColor);
+                AddVisual(root, PrimitiveType.Cube, "RailLeft",
+                    new Vector3(-0.45f, 0.50f, 0), new Vector3(0.06f, 0.08f, 0.95f),
+                    new Color(0.35f, 0.38f, 0.42f));
+                AddVisual(root, PrimitiveType.Cube, "RailRight",
+                    new Vector3(0.45f, 0.50f, 0), new Vector3(0.06f, 0.08f, 0.95f),
+                    new Color(0.35f, 0.38f, 0.42f));
+                // End rollers.
+                AddVisual(root, PrimitiveType.Cylinder, "RollerFront",
+                    new Vector3(0, 0.46f, 0.45f), new Vector3(0.08f, 0.42f, 0.08f),
+                    new Color(0.50f, 0.52f, 0.55f), Quaternion.Euler(0, 0, 90));
+                AddVisual(root, PrimitiveType.Cylinder, "RollerBack",
+                    new Vector3(0, 0.46f, -0.45f), new Vector3(0.08f, 0.42f, 0.08f),
+                    new Color(0.50f, 0.52f, 0.55f), Quaternion.Euler(0, 0, 90));
+                // Frame legs.
+                AddVisual(root, PrimitiveType.Cube, "LegFL",
+                    new Vector3(-0.40f, 0.22f, 0.40f), new Vector3(0.06f, 0.44f, 0.06f),
+                    new Color(0.30f, 0.32f, 0.35f));
+                AddVisual(root, PrimitiveType.Cube, "LegFR",
+                    new Vector3(0.40f, 0.22f, 0.40f), new Vector3(0.06f, 0.44f, 0.06f),
+                    new Color(0.30f, 0.32f, 0.35f));
+                AddVisual(root, PrimitiveType.Cube, "LegBL",
+                    new Vector3(-0.40f, 0.22f, -0.40f), new Vector3(0.06f, 0.44f, 0.06f),
+                    new Color(0.30f, 0.32f, 0.35f));
+                AddVisual(root, PrimitiveType.Cube, "LegBR",
+                    new Vector3(0.40f, 0.22f, -0.40f), new Vector3(0.06f, 0.44f, 0.06f),
+                    new Color(0.30f, 0.32f, 0.35f));
+            }
 
             // -- Conveyor Belt (Basic) --
             var conveyorBasicPrefab = GetOrCreatePrefab($"{FAC_PREFABS}/ConveyorBelt_Basic.prefab", "ConveyorBelt_Basic", root =>
             {
+                BuildConveyorVisuals(root, new Color(0.15f, 0.16f, 0.18f), "Basic");
                 if (root.GetComponent<VoxelEngine.Simulation.ConveyorBelt>() == null)
                 {
                     var belt = root.AddComponent<VoxelEngine.Simulation.ConveyorBelt>();
@@ -6101,7 +6161,6 @@ root =>
                     belt.shape = ConveyorShape.Straight;
                     belt.maxItems = 8;
                 }
-                // Always ensure collider exists for physics overlap scans.
                 if (root.GetComponent<BoxCollider>() == null)
                 {
                     var col = root.AddComponent<BoxCollider>();
@@ -6113,6 +6172,7 @@ root =>
             // -- Conveyor Belt (Fast) --
             var conveyorFastPrefab = GetOrCreatePrefab($"{FAC_PREFABS}/ConveyorBelt_Fast.prefab", "ConveyorBelt_Fast", root =>
             {
+                BuildConveyorVisuals(root, new Color(0.18f, 0.20f, 0.24f), "Fast");
                 if (root.GetComponent<VoxelEngine.Simulation.ConveyorBelt>() == null)
                 {
                     var belt = root.AddComponent<VoxelEngine.Simulation.ConveyorBelt>();
@@ -6131,6 +6191,7 @@ root =>
             // -- Conveyor Belt (Express) --
             var conveyorExpressPrefab = GetOrCreatePrefab($"{FAC_PREFABS}/ConveyorBelt_Express.prefab", "ConveyorBelt_Express", root =>
             {
+                BuildConveyorVisuals(root, new Color(0.22f, 0.24f, 0.28f), "Express");
                 if (root.GetComponent<VoxelEngine.Simulation.ConveyorBelt>() == null)
                 {
                     var belt = root.AddComponent<VoxelEngine.Simulation.ConveyorBelt>();
@@ -6149,6 +6210,23 @@ root =>
             // -- Conveyor Chute --
             var chutePrefab = GetOrCreatePrefab($"{FAC_PREFABS}/ConveyorChute.prefab", "ConveyorChute", root =>
             {
+                // Outer shell.
+                AddVisual(root, PrimitiveType.Cube, "ChuteBody",
+                    Vector3.zero, new Vector3(0.6f, 1.0f, 0.6f),
+                    new Color(0.30f, 0.33f, 0.38f));
+                // Inner channel (darker).
+                AddVisual(root, PrimitiveType.Cube, "ChuteChannel",
+                    Vector3.zero, new Vector3(0.45f, 0.95f, 0.45f),
+                    new Color(0.12f, 0.13f, 0.16f));
+                // Top rim.
+                AddVisual(root, PrimitiveType.Cube, "ChuteRimTop",
+                    new Vector3(0, 0.52f, 0), new Vector3(0.65f, 0.04f, 0.65f),
+                    new Color(0.40f, 0.42f, 0.46f));
+                // Bottom rim.
+                AddVisual(root, PrimitiveType.Cube, "ChuteRimBot",
+                    new Vector3(0, -0.52f, 0), new Vector3(0.65f, 0.04f, 0.65f),
+                    new Color(0.40f, 0.42f, 0.46f));
+
                 if (root.GetComponent<VoxelEngine.Simulation.ConveyorChute>() == null)
                 {
                     var chute = root.AddComponent<VoxelEngine.Simulation.ConveyorChute>();
@@ -6163,9 +6241,41 @@ root =>
                 }
             });
 
+            // -- Machine visual helper (shared look for Crusher + Assemblers) --
+            void BuildMachineVisuals(GameObject root, Color bodyColor, Color accentColor, string label)
+            {
+                // Main body.
+                AddVisual(root, PrimitiveType.Cube, "MachineBody",
+                    new Vector3(0, 0.5f, 0), new Vector3(1.2f, 1.0f, 1.2f), bodyColor);
+                // Input hopper (top).
+                AddVisual(root, PrimitiveType.Cube, "InputHopper",
+                    new Vector3(0, 1.15f, 0), new Vector3(0.6f, 0.3f, 0.6f),
+                    new Color(bodyColor.r * 0.8f, bodyColor.g * 0.8f, bodyColor.b * 0.8f));
+                // Output port (front-bottom).
+                AddVisual(root, PrimitiveType.Cube, "OutputPort",
+                    new Vector3(0, 0.2f, 0.62f), new Vector3(0.4f, 0.3f, 0.04f), accentColor);
+                // Status LED (front-top).
+                AddVisual(root, PrimitiveType.Sphere, "StatusLED",
+                    new Vector3(0.4f, 0.9f, 0.62f), new Vector3(0.1f, 0.1f, 0.1f),
+                    new Color(0.22f, 0.78f, 0.42f));
+                // Base plate.
+                AddVisual(root, PrimitiveType.Cube, "BasePlate",
+                    new Vector3(0, 0.02f, 0), new Vector3(1.3f, 0.04f, 1.3f),
+                    new Color(0.25f, 0.27f, 0.30f));
+                // Side vents.
+                AddVisual(root, PrimitiveType.Cube, "VentLeft",
+                    new Vector3(-0.62f, 0.5f, 0), new Vector3(0.02f, 0.5f, 0.8f),
+                    new Color(bodyColor.r * 0.6f, bodyColor.g * 0.6f, bodyColor.b * 0.6f));
+                AddVisual(root, PrimitiveType.Cube, "VentRight",
+                    new Vector3(0.62f, 0.5f, 0), new Vector3(0.02f, 0.5f, 0.8f),
+                    new Color(bodyColor.r * 0.6f, bodyColor.g * 0.6f, bodyColor.b * 0.6f));
+            }
+
             // -- Crusher --
             var crusherPrefab = GetOrCreatePrefab($"{FAC_PREFABS}/Crusher.prefab", "Crusher", root =>
             {
+                BuildMachineVisuals(root, new Color(0.55f, 0.40f, 0.30f),
+                    new Color(0.85f, 0.55f, 0.20f), "Crusher");
                 if (root.GetComponent<VoxelEngine.Simulation.Crusher>() == null)
                 {
                     var crusher = root.AddComponent<VoxelEngine.Simulation.Crusher>();
@@ -6176,7 +6286,6 @@ root =>
                         mrecipeCrushIron, mrecipeCrushCopper, mrecipeCrushStone
                     };
                 }
-                // Ensure PowerConsumer exists (don't overwrite watts).
                 if (root.GetComponent<VoxelEngine.Power.PowerConsumer>() == null)
                 {
                     var pc = root.AddComponent<VoxelEngine.Power.PowerConsumer>();
@@ -6189,6 +6298,8 @@ root =>
             // -- Assembler Mk.1 --
             var assemblerMk1Prefab = GetOrCreatePrefab($"{FAC_PREFABS}/Assembler_Mk1.prefab", "Assembler_Mk1", root =>
             {
+                BuildMachineVisuals(root, new Color(0.20f, 0.50f, 0.85f),
+                    new Color(0.22f, 0.78f, 0.42f), "Assembler_Mk1");
                 if (root.GetComponent<VoxelEngine.Simulation.Assembler>() == null)
                 {
                     var asm = root.AddComponent<VoxelEngine.Simulation.Assembler>();
@@ -6212,6 +6323,8 @@ root =>
             // -- Assembler Mk.2 --
             var assemblerMk2Prefab = GetOrCreatePrefab($"{FAC_PREFABS}/Assembler_Mk2.prefab", "Assembler_Mk2", root =>
             {
+                BuildMachineVisuals(root, new Color(0.25f, 0.55f, 0.90f),
+                    new Color(0.18f, 0.72f, 0.88f), "Assembler_Mk2");
                 if (root.GetComponent<VoxelEngine.Simulation.Assembler>() == null)
                 {
                     var asm = root.AddComponent<VoxelEngine.Simulation.Assembler>();
@@ -6235,6 +6348,8 @@ root =>
             // -- Assembler Mk.3 --
             var assemblerMk3Prefab = GetOrCreatePrefab($"{FAC_PREFABS}/Assembler_Mk3.prefab", "Assembler_Mk3", root =>
             {
+                BuildMachineVisuals(root, new Color(0.30f, 0.60f, 0.95f),
+                    new Color(0.58f, 0.30f, 0.84f), "Assembler_Mk3");
                 if (root.GetComponent<VoxelEngine.Simulation.Assembler>() == null)
                 {
                     var asm = root.AddComponent<VoxelEngine.Simulation.Assembler>();
@@ -6258,6 +6373,19 @@ root =>
             // -- Grid Light Block --
             var gridLightPrefab = GetOrCreatePrefab($"{FAC_PREFABS}/GridLight.prefab", "GridLight", root =>
             {
+                // Housing.
+                AddVisual(root, PrimitiveType.Cube, "LightHousing",
+                    new Vector3(0, 0.15f, 0), new Vector3(0.3f, 0.12f, 0.3f),
+                    new Color(0.35f, 0.38f, 0.42f));
+                // Lens.
+                AddVisual(root, PrimitiveType.Sphere, "LightLens",
+                    new Vector3(0, 0.22f, 0.12f), new Vector3(0.18f, 0.18f, 0.08f),
+                    new Color(1f, 0.95f, 0.7f));
+                // Mount bracket.
+                AddVisual(root, PrimitiveType.Cube, "MountBracket",
+                    new Vector3(0, 0.05f, -0.12f), new Vector3(0.15f, 0.10f, 0.06f),
+                    new Color(0.30f, 0.32f, 0.35f));
+
                 if (root.GetComponent<VoxelEngine.Simulation.GridLightBlock>() == null)
                 {
                     var gl = root.AddComponent<VoxelEngine.Simulation.GridLightBlock>();
@@ -6273,6 +6401,19 @@ root =>
             // -- LED Strip --
             var ledStripPrefab = GetOrCreatePrefab($"{FAC_PREFABS}/LEDStrip.prefab", "LEDStrip", root =>
             {
+                // Strip body.
+                AddVisual(root, PrimitiveType.Cube, "StripBody",
+                    Vector3.zero, new Vector3(1f, 0.02f, 0.04f),
+                    new Color(0.18f, 0.72f, 0.88f));
+                // LED dots along the strip.
+                for (int i = 0; i < 5; i++)
+                {
+                    float x = -0.4f + i * 0.2f;
+                    AddVisual(root, PrimitiveType.Sphere, $"LED_{i}",
+                        new Vector3(x, 0.02f, 0), new Vector3(0.03f, 0.03f, 0.03f),
+                        new Color(0.18f, 0.85f, 1f));
+                }
+
                 if (root.GetComponent<VoxelEngine.Simulation.LEDStrip>() == null)
                 {
                     var led = root.AddComponent<VoxelEngine.Simulation.LEDStrip>();
@@ -6284,13 +6425,159 @@ root =>
                 }
             });
 
+            // -- Funnel (Import/Export item transfer) --
+            var funnelPrefab = GetOrCreatePrefab($"{FAC_PREFABS}/Funnel.prefab", "Funnel", root =>
+            {
+                AddVisual(root, PrimitiveType.Cube, "FunnelBody",
+                    new Vector3(0, 0.4f, 0), new Vector3(0.8f, 0.6f, 0.8f),
+                    new Color(0.42f, 0.45f, 0.50f));
+                AddVisual(root, PrimitiveType.Cube, "HopperRim",
+                    new Vector3(0, 0.72f, 0), new Vector3(0.9f, 0.04f, 0.9f),
+                    new Color(0.50f, 0.53f, 0.58f));
+                AddVisual(root, PrimitiveType.Cube, "OutputNozzle",
+                    new Vector3(0, 0.08f, 0), new Vector3(0.35f, 0.16f, 0.35f),
+                    new Color(0.42f, 0.45f, 0.50f));
+                AddVisual(root, PrimitiveType.Sphere, "StatusLED",
+                    new Vector3(0.35f, 0.55f, 0.42f), new Vector3(0.08f, 0.08f, 0.08f),
+                    new Color(0.22f, 0.78f, 0.42f));
+                AddVisual(root, PrimitiveType.Cube, "DirectionArrow",
+                    new Vector3(0, 0.4f, 0.42f), new Vector3(0.25f, 0.20f, 0.02f),
+                    new Color(0.22f, 0.78f, 0.42f));
+                AddVisual(root, PrimitiveType.Cube, "BracketL",
+                    new Vector3(-0.42f, 0.4f, 0), new Vector3(0.04f, 0.30f, 0.40f),
+                    new Color(0.35f, 0.38f, 0.42f));
+                AddVisual(root, PrimitiveType.Cube, "BracketR",
+                    new Vector3(0.42f, 0.4f, 0), new Vector3(0.04f, 0.30f, 0.40f),
+                    new Color(0.35f, 0.38f, 0.42f));
+
+                if (root.GetComponent<VoxelEngine.Simulation.Funnel>() == null)
+                {
+                    var funnel = root.AddComponent<VoxelEngine.Simulation.Funnel>();
+                    funnel.mode = FunnelMode.Import;
+                    funnel.transferInterval = 0.5f;
+                    funnel.bufferSize = 4;
+                }
+                if (root.GetComponent<BoxCollider>() == null)
+                    root.AddComponent<BoxCollider>();
+            });
+
+            // -- Conveyor Corner (Basic) --
+            var conveyorCornerPrefab = GetOrCreatePrefab($"{FAC_PREFABS}/ConveyorBelt_Basic_Corner.prefab", "ConveyorBelt_Basic_Corner", root =>
+            {
+                var bc = new Color(0.15f, 0.16f, 0.18f);
+                var rail = new Color(0.35f, 0.38f, 0.42f);
+                var leg = new Color(0.30f, 0.32f, 0.35f);
+                AddVisual(root, PrimitiveType.Cube, "BeltA", new Vector3(0, 0.48f, -0.25f), new Vector3(0.85f, 0.04f, 0.5f), bc);
+                AddVisual(root, PrimitiveType.Cube, "BeltB", new Vector3(0.25f, 0.48f, 0), new Vector3(0.5f, 0.04f, 0.85f), bc);
+                AddVisual(root, PrimitiveType.Cube, "RailOL", new Vector3(-0.45f, 0.50f, -0.25f), new Vector3(0.06f, 0.08f, 0.5f), rail);
+                AddVisual(root, PrimitiveType.Cube, "RailOB", new Vector3(0.25f, 0.50f, -0.45f), new Vector3(0.5f, 0.08f, 0.06f), rail);
+                AddVisual(root, PrimitiveType.Cube, "LegFL", new Vector3(-0.40f, 0.22f, 0.40f), new Vector3(0.06f, 0.44f, 0.06f), leg);
+                AddVisual(root, PrimitiveType.Cube, "LegFR", new Vector3(0.40f, 0.22f, 0.40f), new Vector3(0.06f, 0.44f, 0.06f), leg);
+                AddVisual(root, PrimitiveType.Cube, "LegBL", new Vector3(-0.40f, 0.22f, -0.40f), new Vector3(0.06f, 0.44f, 0.06f), leg);
+                AddVisual(root, PrimitiveType.Cube, "LegBR", new Vector3(0.40f, 0.22f, -0.40f), new Vector3(0.06f, 0.44f, 0.06f), leg);
+                if (root.GetComponent<VoxelEngine.Simulation.ConveyorBelt>() == null)
+                {
+                    var belt = root.AddComponent<VoxelEngine.Simulation.ConveyorBelt>();
+                    belt.speed = ConveyorSpeed.Basic; belt.shape = ConveyorShape.Corner; belt.maxItems = 8;
+                }
+                if (root.GetComponent<BoxCollider>() == null) { var col = root.AddComponent<BoxCollider>(); col.size = new Vector3(1f, 0.6f, 1f); col.center = new Vector3(0, 0.3f, 0); }
+            });
+
+            // -- Conveyor Ramp Up --
+            var conveyorRampUpPrefab = GetOrCreatePrefab($"{FAC_PREFABS}/ConveyorBelt_Basic_RampUp.prefab", "ConveyorBelt_Basic_RampUp", root =>
+            {
+                var bc = new Color(0.15f, 0.16f, 0.18f);
+                var rail = new Color(0.35f, 0.38f, 0.42f);
+                var leg = new Color(0.30f, 0.32f, 0.35f);
+                AddVisual(root, PrimitiveType.Cube, "BeltSurface", new Vector3(0, 0.73f, 0), new Vector3(0.85f, 0.04f, 1.12f), bc, Quaternion.Euler(-26.5f, 0, 0));
+                AddVisual(root, PrimitiveType.Cube, "RailL", new Vector3(-0.45f, 0.75f, 0), new Vector3(0.06f, 0.08f, 1.12f), rail, Quaternion.Euler(-26.5f, 0, 0));
+                AddVisual(root, PrimitiveType.Cube, "RailR", new Vector3(0.45f, 0.75f, 0), new Vector3(0.06f, 0.08f, 1.12f), rail, Quaternion.Euler(-26.5f, 0, 0));
+                AddVisual(root, PrimitiveType.Cube, "LegFL", new Vector3(-0.40f, 0.35f, 0.40f), new Vector3(0.06f, 0.70f, 0.06f), leg);
+                AddVisual(root, PrimitiveType.Cube, "LegFR", new Vector3(0.40f, 0.35f, 0.40f), new Vector3(0.06f, 0.70f, 0.06f), leg);
+                AddVisual(root, PrimitiveType.Cube, "LegBL", new Vector3(-0.40f, 0.11f, -0.40f), new Vector3(0.06f, 0.22f, 0.06f), leg);
+                AddVisual(root, PrimitiveType.Cube, "LegBR", new Vector3(0.40f, 0.11f, -0.40f), new Vector3(0.06f, 0.22f, 0.06f), leg);
+                AddVisual(root, PrimitiveType.Cube, "CrossBrace", new Vector3(0, 0.25f, 0), new Vector3(0.80f, 0.04f, 0.04f), leg);
+                if (root.GetComponent<VoxelEngine.Simulation.ConveyorBelt>() == null)
+                {
+                    var belt = root.AddComponent<VoxelEngine.Simulation.ConveyorBelt>();
+                    belt.speed = ConveyorSpeed.Basic; belt.shape = ConveyorShape.RampUp; belt.maxItems = 6;
+                }
+                if (root.GetComponent<BoxCollider>() == null) { var col = root.AddComponent<BoxCollider>(); col.size = new Vector3(1f, 1f, 1.2f); col.center = new Vector3(0, 0.5f, 0); }
+            });
+
+            // -- Conveyor Ramp Down --
+            var conveyorRampDownPrefab = GetOrCreatePrefab($"{FAC_PREFABS}/ConveyorBelt_Basic_RampDown.prefab", "ConveyorBelt_Basic_RampDown", root =>
+            {
+                var bc = new Color(0.15f, 0.16f, 0.18f);
+                var rail = new Color(0.35f, 0.38f, 0.42f);
+                var leg = new Color(0.30f, 0.32f, 0.35f);
+                AddVisual(root, PrimitiveType.Cube, "BeltSurface", new Vector3(0, 0.73f, 0), new Vector3(0.85f, 0.04f, 1.12f), bc, Quaternion.Euler(26.5f, 0, 0));
+                AddVisual(root, PrimitiveType.Cube, "RailL", new Vector3(-0.45f, 0.75f, 0), new Vector3(0.06f, 0.08f, 1.12f), rail, Quaternion.Euler(26.5f, 0, 0));
+                AddVisual(root, PrimitiveType.Cube, "RailR", new Vector3(0.45f, 0.75f, 0), new Vector3(0.06f, 0.08f, 1.12f), rail, Quaternion.Euler(26.5f, 0, 0));
+                AddVisual(root, PrimitiveType.Cube, "LegFL", new Vector3(-0.40f, 0.11f, 0.40f), new Vector3(0.06f, 0.22f, 0.06f), leg);
+                AddVisual(root, PrimitiveType.Cube, "LegFR", new Vector3(0.40f, 0.11f, 0.40f), new Vector3(0.06f, 0.22f, 0.06f), leg);
+                AddVisual(root, PrimitiveType.Cube, "LegBL", new Vector3(-0.40f, 0.35f, -0.40f), new Vector3(0.06f, 0.70f, 0.06f), leg);
+                AddVisual(root, PrimitiveType.Cube, "LegBR", new Vector3(0.40f, 0.35f, -0.40f), new Vector3(0.06f, 0.70f, 0.06f), leg);
+                AddVisual(root, PrimitiveType.Cube, "CrossBrace", new Vector3(0, 0.25f, 0), new Vector3(0.80f, 0.04f, 0.04f), leg);
+                if (root.GetComponent<VoxelEngine.Simulation.ConveyorBelt>() == null)
+                {
+                    var belt = root.AddComponent<VoxelEngine.Simulation.ConveyorBelt>();
+                    belt.speed = ConveyorSpeed.Basic; belt.shape = ConveyorShape.RampDown; belt.maxItems = 6;
+                }
+                if (root.GetComponent<BoxCollider>() == null) { var col = root.AddComponent<BoxCollider>(); col.size = new Vector3(1f, 1f, 1.2f); col.center = new Vector3(0, 0.5f, 0); }
+            });
+
             // ════════════════════════════════════════════════════════════
-            //  5. HIGH VOLTAGE PREFABS
+            //  5. HIGH VOLTAGE PREFABS (with procedural visual meshes)
             // ════════════════════════════════════════════════════════════
+            // HV visual helper.
+            void AddHVVisual(GameObject parent, PrimitiveType type, string childName,
+                Vector3 localPos, Vector3 localScale, Color color, Quaternion? rot = null)
+            {
+                var mat = MakeColoredMat(HV_MATS, $"Mat_HV_{childName}", color);
+                var existing = parent.transform.Find(childName);
+                if (existing != null)
+                {
+                    var r = existing.GetComponent<Renderer>();
+                    if (r != null) r.sharedMaterial = mat;
+                    return;
+                }
+                var go = GameObject.CreatePrimitive(type);
+                go.name = childName;
+                go.transform.SetParent(parent.transform, false);
+                go.transform.localPosition = localPos;
+                go.transform.localScale = localScale;
+                if (rot.HasValue) go.transform.localRotation = rot.Value;
+                go.GetComponent<Renderer>().sharedMaterial = mat;
+                var col = go.GetComponent<Collider>();
+                if (col != null) Object.DestroyImmediate(col);
+            }
 
             // -- Power Pole (LV, realistic) --
             var powerPolePrefab = GetOrCreatePrefab($"{HV_PREFABS}/PowerPole.prefab", "PowerPole", root =>
             {
+                // Pole shaft.
+                AddHVVisual(root, PrimitiveType.Cylinder, "PoleShaft",
+                    new Vector3(0, 1.5f, 0), new Vector3(0.12f, 1.5f, 0.12f),
+                    new Color(0.45f, 0.40f, 0.35f));
+                // Cross arm.
+                AddHVVisual(root, PrimitiveType.Cube, "CrossArm",
+                    new Vector3(0, 3f, 0), new Vector3(1.2f, 0.08f, 0.08f),
+                    new Color(0.45f, 0.40f, 0.35f));
+                // Insulator dots (green = available connection).
+                for (int i = 0; i < 6; i++)
+                {
+                    float angle = (360f / 6f) * i * Mathf.Deg2Rad;
+                    AddHVVisual(root, PrimitiveType.Sphere, $"ConnPoint_{i}",
+                        new Vector3(Mathf.Cos(angle) * 0.4f, 3.1f, Mathf.Sin(angle) * 0.4f),
+                        new Vector3(0.08f, 0.08f, 0.08f),
+                        new Color(0.22f, 0.78f, 0.42f));
+                }
+                // Base plate.
+                AddHVVisual(root, PrimitiveType.Cylinder, "BasePlate",
+                    new Vector3(0, 0.02f, 0), new Vector3(0.5f, 0.02f, 0.5f),
+                    new Color(0.35f, 0.33f, 0.30f));
+
                 if (root.GetComponent<VoxelEngine.Simulation.PowerPole>() == null)
                 {
                     var pole = root.AddComponent<VoxelEngine.Simulation.PowerPole>();
@@ -6309,6 +6596,48 @@ root =>
             // -- Electrical Substation --
             var substationPrefab = GetOrCreatePrefab($"{HV_PREFABS}/ElectricalSubstation.prefab", "ElectricalSubstation", root =>
             {
+                // Foundation — sits ON the ground (bottom at y=0).
+                AddHVVisual(root, PrimitiveType.Cube, "Foundation",
+                    new Vector3(0, 0.15f, 0), new Vector3(3f, 0.3f, 2f),
+                    new Color(0.55f, 0.53f, 0.50f));
+                // Transformer body — raised above foundation.
+                AddHVVisual(root, PrimitiveType.Cube, "TransformerBody",
+                    new Vector3(0, 2.3f, 0), new Vector3(2f, 3f, 1.5f),
+                    new Color(0.40f, 0.42f, 0.46f));
+                // Cooling fins (4 on each side).
+                for (int i = 0; i < 4; i++)
+                {
+                    AddHVVisual(root, PrimitiveType.Cube, $"FinL_{i}",
+                        new Vector3(-1.1f, 1.5f + i * 0.6f, 0), new Vector3(0.08f, 0.5f, 1.3f),
+                        new Color(0.40f, 0.42f, 0.46f));
+                    AddHVVisual(root, PrimitiveType.Cube, $"FinR_{i}",
+                        new Vector3(1.1f, 1.5f + i * 0.6f, 0), new Vector3(0.08f, 0.5f, 1.3f),
+                        new Color(0.40f, 0.42f, 0.46f));
+                }
+                // Insulators on top.
+                AddHVVisual(root, PrimitiveType.Cylinder, "InsulatorL",
+                    new Vector3(-1.5f, 5.3f, 0), new Vector3(0.15f, 0.6f, 0.15f),
+                    new Color(0.85f, 0.82f, 0.75f));
+                AddHVVisual(root, PrimitiveType.Cylinder, "InsulatorR",
+                    new Vector3(1.5f, 5.3f, 0), new Vector3(0.15f, 0.6f, 0.15f),
+                    new Color(0.85f, 0.82f, 0.75f));
+                // Warning stripe on front face.
+                AddHVVisual(root, PrimitiveType.Cube, "WarningStripe",
+                    new Vector3(0, 3.05f, 0.76f), new Vector3(1.8f, 0.15f, 0.01f),
+                    new Color(0.92f, 0.60f, 0.12f));
+                // Cable junction box — FRONT-BOTTOM (wire connection point).
+                AddHVVisual(root, PrimitiveType.Cube, "CableJunction",
+                    new Vector3(0, 0.5f, 1.05f), new Vector3(0.6f, 0.4f, 0.12f),
+                    new Color(0.30f, 0.32f, 0.35f));
+                // Green connection indicator on junction.
+                AddHVVisual(root, PrimitiveType.Sphere, "ConnIndicator",
+                    new Vector3(0, 0.5f, 1.12f), new Vector3(0.1f, 0.1f, 0.1f),
+                    new Color(0.22f, 0.78f, 0.42f));
+                // Cable conduit from junction up to transformer.
+                AddHVVisual(root, PrimitiveType.Cylinder, "CableConduit",
+                    new Vector3(0, 1.1f, 0.9f), new Vector3(0.08f, 0.6f, 0.08f),
+                    new Color(0.25f, 0.25f, 0.28f));
+
                 if (root.GetComponent<VoxelEngine.Simulation.ElectricalSubstation>() == null)
                 {
                     var sub = root.AddComponent<VoxelEngine.Simulation.ElectricalSubstation>();
@@ -6319,14 +6648,63 @@ root =>
                 if (root.GetComponent<BoxCollider>() == null)
                 {
                     var col = root.AddComponent<BoxCollider>();
-                    col.size = new Vector3(3f, 6f, 2f);
-                    col.center = new Vector3(0, 2.5f, 0);
+                    col.size = new Vector3(3f, 5.5f, 2.2f);
+                    col.center = new Vector3(0, 2.75f, 0);
                 }
             });
 
             // -- HV Transmission Tower --
             var hvTowerPrefab = GetOrCreatePrefab($"{HV_PREFABS}/HighVoltagePole.prefab", "HighVoltagePole", root =>
             {
+                // Four tapered legs.
+                float bw = 1.5f, tw = 0.6f, h = 12f;
+                Vector3[] baseC = { new Vector3(-bw,0,-bw), new Vector3(bw,0,-bw), new Vector3(bw,0,bw), new Vector3(-bw,0,bw) };
+                Vector3[] topC  = { new Vector3(-tw,h,-tw), new Vector3(tw,h,-tw), new Vector3(tw,h,tw), new Vector3(-tw,h,tw) };
+                for (int i = 0; i < 4; i++)
+                {
+                    Vector3 mid = (baseC[i] + topC[i]) * 0.5f;
+                    float len = Vector3.Distance(baseC[i], topC[i]);
+                    Vector3 dir = (topC[i] - baseC[i]).normalized;
+                    AddHVVisual(root, PrimitiveType.Cube, $"Leg_{i}",
+                        mid, new Vector3(0.10f, 0.10f, len),
+                        new Color(0.52f, 0.54f, 0.56f),
+                        Quaternion.LookRotation(dir));
+                }
+                // Cross-arms at two levels.
+                for (int arm = 0; arm < 2; arm++)
+                {
+                    float armY = h - 0.5f - arm * 1.8f;
+                    AddHVVisual(root, PrimitiveType.Cube, $"CrossArm_{arm}",
+                        new Vector3(0, armY, 0), new Vector3(7f, 0.08f, 0.08f),
+                        new Color(0.52f, 0.54f, 0.56f));
+                    // Diagonal braces under arms.
+                    AddHVVisual(root, PrimitiveType.Cube, $"BraceL_{arm}",
+                        new Vector3(-2.5f, armY - 0.5f, 0), new Vector3(0.04f, 0.04f, 1.5f),
+                        new Color(0.52f, 0.54f, 0.56f),
+                        Quaternion.Euler(0, 0, 35f));
+                    AddHVVisual(root, PrimitiveType.Cube, $"BraceR_{arm}",
+                        new Vector3(2.5f, armY - 0.5f, 0), new Vector3(0.04f, 0.04f, 1.5f),
+                        new Color(0.52f, 0.54f, 0.56f),
+                        Quaternion.Euler(0, 0, -35f));
+                }
+                // Horizontal cross-braces (X pattern at 3 heights).
+                for (int b = 0; b < 3; b++)
+                {
+                    float by = 2f + b * 3f;
+                    AddHVVisual(root, PrimitiveType.Cube, $"XBrace_{b}",
+                        new Vector3(0, by, 0), new Vector3(0.04f, 0.04f, 2.5f),
+                        new Color(0.52f, 0.54f, 0.56f),
+                        Quaternion.Euler(0, 0, 45f));
+                }
+                // Lightning rod at peak.
+                AddHVVisual(root, PrimitiveType.Cylinder, "LightningRod",
+                    new Vector3(0, h + 0.75f, 0), new Vector3(0.04f, 0.75f, 0.04f),
+                    new Color(0.60f, 0.62f, 0.64f));
+                // Peak sphere.
+                AddHVVisual(root, PrimitiveType.Sphere, "PeakBall",
+                    new Vector3(0, h + 1.5f, 0), new Vector3(0.12f, 0.12f, 0.12f),
+                    new Color(0.60f, 0.62f, 0.64f));
+
                 if (root.GetComponent<VoxelEngine.Simulation.HighVoltagePole>() == null)
                 {
                     var hv = root.AddComponent<VoxelEngine.Simulation.HighVoltagePole>();
@@ -6349,6 +6727,61 @@ root =>
             // -- Step-Up Transformer (LV → HV, BLUE) --
             var stepUpPrefab = GetOrCreatePrefab($"{HV_PREFABS}/StepUpTransformer.prefab", "StepUpTransformer", root =>
             {
+                // Foundation pad.
+                AddHVVisual(root, PrimitiveType.Cube, "Foundation",
+                    Vector3.zero, new Vector3(10f, 0.3f, 6f),
+                    new Color(0.62f, 0.60f, 0.58f));
+                // Main transformer tank.
+                AddHVVisual(root, PrimitiveType.Cube, "TankMain",
+                    new Vector3(0, 2f, 0), new Vector3(4f, 3.5f, 3f),
+                    new Color(0.55f, 0.56f, 0.52f));
+                // Secondary tank.
+                AddHVVisual(root, PrimitiveType.Cube, "TankSec",
+                    new Vector3(3.5f, 1.3f, 0), new Vector3(2.5f, 2.2f, 2f),
+                    new Color(0.55f, 0.56f, 0.52f));
+                // Radiator fins (5 per side).
+                for (int i = 0; i < 5; i++)
+                {
+                    float z = -1.2f + i * 0.6f;
+                    AddHVVisual(root, PrimitiveType.Cube, $"RadL_{i}",
+                        new Vector3(-2.3f, 1.5f, z), new Vector3(0.08f, 2.5f, 0.45f),
+                        new Color(0.55f, 0.56f, 0.52f));
+                    AddHVVisual(root, PrimitiveType.Cube, $"RadR_{i}",
+                        new Vector3(2.3f, 1.5f, z), new Vector3(0.08f, 2.5f, 0.45f),
+                        new Color(0.55f, 0.56f, 0.52f));
+                }
+                // HV bushings (tall, blue-tipped).
+                for (int i = 0; i < 3; i++)
+                {
+                    float x = -1.5f + i * 1.5f;
+                    AddHVVisual(root, PrimitiveType.Cylinder, $"HVBushing_{i}",
+                        new Vector3(x, 4.75f, 0), new Vector3(0.22f, 1f, 0.22f),
+                        new Color(0.70f, 0.60f, 0.45f));
+                }
+                // LV bushings (shorter).
+                for (int i = 0; i < 3; i++)
+                {
+                    float x = -1.5f + i * 1.5f;
+                    AddHVVisual(root, PrimitiveType.Cylinder, $"LVBushing_{i}",
+                        new Vector3(x, 4.35f, -1.2f), new Vector3(0.18f, 0.6f, 0.18f),
+                        new Color(0.60f, 0.50f, 0.35f));
+                }
+                // BLUE accent sign (Step-Up identity).
+                AddHVVisual(root, PrimitiveType.Cube, "StepUpSign",
+                    new Vector3(0, 4.5f, 1.55f), new Vector3(2.5f, 0.6f, 0.05f),
+                    new Color(0.15f, 0.45f, 0.85f));
+                // Blue arrows.
+                AddHVVisual(root, PrimitiveType.Cube, "ArrowUp1",
+                    new Vector3(-0.4f, 4.5f, 1.58f), new Vector3(0.15f, 0.4f, 0.02f),
+                    new Color(0.15f, 0.45f, 0.85f));
+                AddHVVisual(root, PrimitiveType.Cube, "ArrowUp2",
+                    new Vector3(0.4f, 4.5f, 1.58f), new Vector3(0.15f, 0.4f, 0.02f),
+                    new Color(0.15f, 0.45f, 0.85f));
+                // Control cabinet.
+                AddHVVisual(root, PrimitiveType.Cube, "Cabinet",
+                    new Vector3(-4f, 1f, 0), new Vector3(1.2f, 1.8f, 0.8f),
+                    new Color(0.55f, 0.56f, 0.52f));
+
                 if (root.GetComponent<VoxelEngine.Simulation.StepUpTransformer>() == null)
                 {
                     var su = root.AddComponent<VoxelEngine.Simulation.StepUpTransformer>();
@@ -6366,6 +6799,75 @@ root =>
             // -- Step-Down Transformer (HV → LV, AMBER) --
             var stepDownPrefab = GetOrCreatePrefab($"{HV_PREFABS}/StepDownTransformer.prefab", "StepDownTransformer", root =>
             {
+                // Foundation pad (wider than Step-Up).
+                AddHVVisual(root, PrimitiveType.Cube, "Foundation",
+                    Vector3.zero, new Vector3(12f, 0.3f, 7f),
+                    new Color(0.60f, 0.58f, 0.55f));
+                // Primary transformer tank (larger).
+                AddHVVisual(root, PrimitiveType.Cube, "TankPrimary",
+                    new Vector3(0, 2.2f, 0), new Vector3(5f, 4f, 3.5f),
+                    new Color(0.50f, 0.52f, 0.48f));
+                // Regulation tank.
+                AddHVVisual(root, PrimitiveType.Cube, "RegTank",
+                    new Vector3(-4f, 1.5f, 0), new Vector3(2f, 2.5f, 2.2f),
+                    new Color(0.50f, 0.52f, 0.48f));
+                // Radiator fins (7 per side).
+                for (int i = 0; i < 7; i++)
+                {
+                    float z = -1.5f + i * 0.5f;
+                    AddHVVisual(root, PrimitiveType.Cube, $"RadL_{i}",
+                        new Vector3(-2.8f, 1.8f, z), new Vector3(0.08f, 3f, 0.38f),
+                        new Color(0.50f, 0.52f, 0.48f));
+                    AddHVVisual(root, PrimitiveType.Cube, $"RadR_{i}",
+                        new Vector3(2.8f, 1.8f, z), new Vector3(0.08f, 3f, 0.38f),
+                        new Color(0.50f, 0.52f, 0.48f));
+                }
+                // HV bushings (tall, on right side).
+                for (int i = 0; i < 3; i++)
+                {
+                    float x = 1f + i * 1.5f;
+                    AddHVVisual(root, PrimitiveType.Cylinder, $"HVBushing_{i}",
+                        new Vector3(x, 5.45f, 0), new Vector3(0.25f, 1.25f, 0.25f),
+                        new Color(0.72f, 0.62f, 0.42f));
+                }
+                // LV bushings (shorter, on left side).
+                for (int i = 0; i < 3; i++)
+                {
+                    float x = -1.5f + i * 1.2f;
+                    AddHVVisual(root, PrimitiveType.Cylinder, $"LVBushing_{i}",
+                        new Vector3(x, 4.7f, -1.4f), new Vector3(0.16f, 0.5f, 0.16f),
+                        new Color(0.58f, 0.48f, 0.32f));
+                }
+                // Surge arresters (tall cylinders on flanks).
+                AddHVVisual(root, PrimitiveType.Cylinder, "ArresterL",
+                    new Vector3(-4.5f, 2.5f, 0), new Vector3(0.2f, 2f, 0.2f),
+                    new Color(0.38f, 0.40f, 0.42f));
+                AddHVVisual(root, PrimitiveType.Cylinder, "ArresterR",
+                    new Vector3(4.5f, 2.5f, 0), new Vector3(0.2f, 2f, 0.2f),
+                    new Color(0.38f, 0.40f, 0.42f));
+                // AMBER accent sign (Step-Down identity).
+                AddHVVisual(root, PrimitiveType.Cube, "StepDownSign",
+                    new Vector3(0, 5f, 1.8f), new Vector3(3f, 0.7f, 0.05f),
+                    new Color(0.92f, 0.60f, 0.12f));
+                // Amber arrows.
+                AddHVVisual(root, PrimitiveType.Cube, "ArrowDown1",
+                    new Vector3(-0.4f, 5f, 1.83f), new Vector3(0.15f, 0.4f, 0.02f),
+                    new Color(0.92f, 0.60f, 0.12f));
+                AddHVVisual(root, PrimitiveType.Cube, "ArrowDown2",
+                    new Vector3(0.4f, 5f, 1.83f), new Vector3(0.15f, 0.4f, 0.02f),
+                    new Color(0.92f, 0.60f, 0.12f));
+                // Warning stripes (amber/black).
+                for (int i = 0; i < 6; i++)
+                {
+                    AddHVVisual(root, PrimitiveType.Cube, $"WarnStripe_{i}",
+                        new Vector3(-5f + i * 2f, 0.16f, 3.5f), new Vector3(0.8f, 0.02f, 0.3f),
+                        i % 2 == 0 ? new Color(0.12f, 0.12f, 0.12f) : new Color(0.92f, 0.60f, 0.12f));
+                }
+                // Control building.
+                AddHVVisual(root, PrimitiveType.Cube, "ControlBuilding",
+                    new Vector3(-4.5f, 1.2f, -2.5f), new Vector3(2f, 2.2f, 1.8f),
+                    new Color(0.60f, 0.58f, 0.55f));
+
                 if (root.GetComponent<VoxelEngine.Simulation.StepDownTransformer>() == null)
                 {
                     var sd = root.AddComponent<VoxelEngine.Simulation.StepDownTransformer>();
@@ -6403,6 +6905,14 @@ root =>
             blockGridLight.description       = VoltageItemDescriptions.GridLight;
             var blockLEDStrip        = MakeBlock(FAC_ITEMS, "Block_LEDStrip",             "LED Strip",               new Color(0.18f, 0.72f, 0.88f),   ledStripPrefab,        "Factory");
             blockLEDStrip.description        = VoltageItemDescriptions.LEDStrip;
+            var blockFunnel           = MakeBlock(FAC_ITEMS, "Block_Funnel",                   "Funnel",                    new Color(0.42f, 0.45f, 0.50f),   funnelPrefab,            "Factory");
+            blockFunnel.description          = VoltageItemDescriptions.Funnel;
+            var blockConveyorCorner   = MakeBlock(FAC_ITEMS, "Block_ConveyorBelt_Corner",      "Conveyor Belt (Corner)",    new Color(0.30f, 0.32f, 0.35f),   conveyorCornerPrefab,    "Factory");
+            blockConveyorCorner.description  = VoltageItemDescriptions.ConveyorCorner;
+            var blockConveyorRampUp   = MakeBlock(FAC_ITEMS, "Block_ConveyorBelt_RampUp",      "Conveyor Belt (Ramp Up)",   new Color(0.30f, 0.32f, 0.35f),   conveyorRampUpPrefab,    "Factory");
+            blockConveyorRampUp.description  = VoltageItemDescriptions.ConveyorRamp;
+            var blockConveyorRampDown = MakeBlock(FAC_ITEMS, "Block_ConveyorBelt_RampDown",    "Conveyor Belt (Ramp Down)", new Color(0.30f, 0.32f, 0.35f),   conveyorRampDownPrefab,  "Factory");
+            blockConveyorRampDown.description= VoltageItemDescriptions.ConveyorRamp;
 
             // HV block items.
             var blockPowerPole       = MakeBlock(HV_ITEMS, "Block_PowerPole",             "Power Pole",              new Color(0.45f, 0.40f, 0.35f),   powerPolePrefab,       "Power");
@@ -6480,6 +6990,10 @@ root =>
             var recAssemblerMk3    = AddFacRecipe("Recipe_Assembler_Mk3",        "Assembler Mk.3",          blockAssemblerMk3,    1, VoxelEngine.Crafting.StationTier.Assembler,     false, (steelPlate, 16), (advCircuit, 8), (copperWire, 12), (ironGear, 8));
             var recGridLight       = AddFacRecipe("Recipe_GridLight",            "Grid Light",              blockGridLight,       2, VoxelEngine.Crafting.StationTier.CraftingBench, false, (copperWire, 2), (glass, 1));
             var recLEDStrip        = AddFacRecipe("Recipe_LEDStrip",             "LED Strip",               blockLEDStrip,        4, VoxelEngine.Crafting.StationTier.CraftingBench, false, (copperWire, 4), (glass, 1));
+            var recFunnel          = AddFacRecipe("Recipe_Funnel",               "Funnel",                  blockFunnel,           2, VoxelEngine.Crafting.StationTier.CraftingBench, false, (ironPlate, 2), (ironGear, 1));
+            var recConveyorCorner  = AddFacRecipe("Recipe_ConveyorBelt_Corner",  "Conveyor Belt (Corner)",  blockConveyorCorner,   4, VoxelEngine.Crafting.StationTier.CraftingBench, false, (ironPlate, 1), (ironGear, 1));
+            var recConveyorRampUp  = AddFacRecipe("Recipe_ConveyorBelt_RampUp",  "Conveyor Belt (Ramp Up)", blockConveyorRampUp,   4, VoxelEngine.Crafting.StationTier.CraftingBench, false, (ironPlate, 2), (ironGear, 1));
+            var recConveyorRampDown= AddFacRecipe("Recipe_ConveyorBelt_RampDown","Conveyor Belt (Ramp Down)",blockConveyorRampDown,4, VoxelEngine.Crafting.StationTier.CraftingBench, false, (ironPlate, 2), (ironGear, 1));
 
             // HV Grid recipes (gated behind research).
             var recPowerPole  = AddHVRecipe("Recipe_PowerPole",          "Power Pole",              blockPowerPole,  2, VoxelEngine.Crafting.StationTier.CraftingBench, false, (ironIngot, 3), (copperWire, 2));
@@ -6523,7 +7037,8 @@ root =>
                 if (nFactory.unlocksRecipes != null)
                     foreach (var r in nFactory.unlocksRecipes) if (r != null) facUnlocks.Add(r);
                 foreach (var r in new[] { recConveyorBasic, recConveyorFast, recConveyorExpress, recChute,
-                    recCrusher, recAssemblerMk1, recGridLight, recLEDStrip })
+                    recCrusher, recAssemblerMk1, recGridLight, recLEDStrip,
+                    recFunnel, recConveyorCorner, recConveyorRampUp, recConveyorRampDown })
                     if (r != null && !facUnlocks.Contains(r)) facUnlocks.Add(r);
                 nFactory.unlocksRecipes = facUnlocks.ToArray();
                 EditorUtility.SetDirty(nFactory);

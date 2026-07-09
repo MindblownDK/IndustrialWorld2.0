@@ -1,0 +1,38 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe52eb4685f86c44d967d9cd3e4bd91a, type: 3}
+  m_Name: res_adv_automation
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Research.ResearchNode
+  nodeId: res_adv_automation
+  displayName: Advanced Automation
+  description: Faster, more capable assemblers. Unlocks Assembler Mk.2 (6 inputs,
+    1.5x speed) and Assembler Mk.3 (9 inputs, 2.5x speed). Required for endgame components.
+  iconTint: {r: 0.3, g: 0.6, b: 0.95, a: 1}
+  category: 0
+  subCategory: 2
+  tier: 3
+  column: 9
+  prerequisites:
+  - {fileID: 11400000, guid: 1abad94ec4d0e434383bbdd71d9005bf, type: 2}
+  researchSeconds: 90
+  cost:
+  - pack: {fileID: 11400000, guid: e7eec7f45c4b5fb4db5018e3431f77f0, type: 2}
+    count: 20
+  - pack: {fileID: 11400000, guid: d5b7bf57e47a51c4db099afff757b24d, type: 2}
+    count: 10
+  unlocksRecipes:
+  - {fileID: 11400000, guid: 950c27c5f4127c945b5a1af8493e4085, type: 2}
+  - {fileID: 11400000, guid: e82e23c5c3bfc8643b79d461aabeaebe, type: 2}
+  upgradeKind: 0
+  upgradePerRankAmount: 0
+  maxRanks: 1
+  costScalesWithRank: 1

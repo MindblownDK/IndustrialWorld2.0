@@ -15,8 +15,7 @@ namespace VoxelEngine.Simulation
     public class VoltageSystemConfig : ScriptableObject
     {
         [Header("Low Voltage / High Voltage Threshold")]
-        [Tooltip("When total network wattage exceeds this value, the player must \" +
-                 \"use a Step-Up Transformer and HV transmission lines. In watts.\")]
+        [Tooltip("When total network wattage exceeds this value, the player must use a Step-Up Transformer and HV transmission lines. In watts.")]
         public float lvThresholdWatts = 25_000_000f; // 25 MW
 
         [Header("Conversion")]

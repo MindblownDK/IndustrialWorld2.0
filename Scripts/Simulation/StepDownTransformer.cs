@@ -92,7 +92,7 @@ namespace VoxelEngine.Simulation
             // Find LV pole on the output side (left of station).
             if (lvOutputPole == null)
             {
-                Vector3 outputPos = transform.position + transform.left * 5f;
+                Vector3 outputPos = transform.position - transform.right * 5f;
                 var hits = Physics.OverlapSphere(outputPos, 4f);
                 foreach (var col in hits)
                 {

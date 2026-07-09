@@ -234,12 +234,34 @@ namespace VoxelEngine.Simulation
         private void ScanConnections()
         {
             // Find downstream consumer at the exit end of this belt.
-            Vector3 exitWorld = transform.position + transform.TransformDirection(travelDirection) * 1.2f;
+            Vector3 exitDir = GetExitDirection();
+            Vector3 exitWorld = transform.position + exitDir * 1.2f;
             downstreamTarget = FindConsumerAt(exitWorld);
 
+            // Also check for funnels adjacent to the exit.
+            if (downstreamTarget == null)
+                downstreamTarget = FindFunnelAt(exitWorld);
+
             // Find upstream provider at the entry end of this belt.
-            Vector3 entryWorld = transform.position - transform.TransformDirection(travelDirection) * 1.2f;
+            Vector3 entryDir = GetEntryDirection();
+            Vector3 entryWorld = transform.position + entryDir * 1.2f;
             upstreamSource = FindProviderAt(entryWorld);
+
+            // Also check for funnels adjacent to the entry.
+            if (upstreamSource == null)
+                upstreamSource = FindFunnelAt(entryWorld);
+        }
+
+        private MonoBehaviour FindFunnelAt(Vector3 worldPos)
+        {
+            var hits = Physics.OverlapSphere(worldPos, 0.8f);
+            foreach (var col in hits)
+            {
+                if (col.gameObject == gameObject) continue;
+                var funnel = col.GetComponentInParent<Funnel>();
+                if (funnel != null) return funnel;
+            }
+            return null;
         }
 
         private MonoBehaviour FindConsumerAt(Vector3 worldPos)
@@ -310,18 +332,96 @@ namespace VoxelEngine.Simulation
 
         /// <summary>
         /// Returns the world-space position of an item at a given progress (0-1)
-        /// along this belt segment. Used by BeltVisualController to position
-        /// item sprites/models on the belt.
+        /// along this belt segment. Handles straight, corner (90° curve),
+        /// and slope (ramp up/down) shapes.
         /// </summary>
         public Vector3 GetWorldPosition(float progress, float lateralOffset = 0f)
         {
-            Vector3 localStart = -travelDirection * 0.5f;
-            Vector3 localEnd   =  travelDirection * 0.5f;
-            Vector3 localPos   = Vector3.Lerp(localStart, localEnd, Mathf.Clamp01(progress));
-            localPos += transform.right * lateralOffset;
-            localPos += Vector3.up * 0.52f; // ride on top of the belt surface
+            float t = Mathf.Clamp01(progress);
+            Vector3 localPos;
+
+            switch (shape)
+            {
+                case ConveyorShape.Corner:
+                    // 90° turn: items follow a quarter-circle arc from forward to right.
+                    float angle = t * Mathf.PI * 0.5f; // 0 → 90°
+                    float radius = 0.5f;
+                    localPos = new Vector3(
+                        Mathf.Sin(angle) * radius,
+                        0.52f,
+                        Mathf.Cos(angle) * radius
+                    );
+                    localPos += transform.right * lateralOffset;
+                    break;
+
+                case ConveyorShape.RampUp:
+                    // Ramp going up: forward + upward.
+                    localPos = new Vector3(
+                        0f,
+                        0.52f + t * 0.5f, // rises 0.5m over the belt length
+                        -0.5f + t * 1.0f  // travels 1m forward
+                    );
+                    localPos += transform.right * lateralOffset;
+                    break;
+
+                case ConveyorShape.RampDown:
+                    // Ramp going down: forward + downward.
+                    localPos = new Vector3(
+                        0f,
+                        0.52f - t * 0.5f, // drops 0.5m over the belt length
+                        -0.5f + t * 1.0f  // travels 1m forward
+                    );
+                    localPos += transform.right * lateralOffset;
+                    break;
+
+                default: // Straight
+                    localPos = new Vector3(
+                        lateralOffset,
+                        0.52f,
+                        -0.5f + t * 1.0f
+                    );
+                    break;
+            }
 
             return transform.TransformPoint(localPos);
+        }
+
+        /// <summary>
+        /// Returns the world-space EXIT direction for this belt shape.
+        /// Used by ScanConnections to find the downstream target.
+        /// </summary>
+        public Vector3 GetExitDirection()
+        {
+            switch (shape)
+            {
+                case ConveyorShape.Corner:
+                    return transform.right; // exits to the right
+                case ConveyorShape.RampUp:
+                    return transform.TransformDirection(new Vector3(0, 0.5f, 1f).normalized);
+                case ConveyorShape.RampDown:
+                    return transform.TransformDirection(new Vector3(0, -0.5f, 1f).normalized);
+                default:
+                    return transform.forward;
+            }
+        }
+
+        /// <summary>
+        /// Returns the world-space ENTRY direction for this belt shape.
+        /// Used by ScanConnections to find the upstream source.
+        /// </summary>
+        public Vector3 GetEntryDirection()
+        {
+            switch (shape)
+            {
+                case ConveyorShape.Corner:
+                    return -transform.forward; // enters from behind
+                case ConveyorShape.RampUp:
+                    return transform.TransformDirection(new Vector3(0, -0.5f, -1f).normalized);
+                case ConveyorShape.RampDown:
+                    return transform.TransformDirection(new Vector3(0, 0.5f, -1f).normalized);
+                default:
+                    return -transform.forward;
+            }
         }
     }
 }
