@@ -3,30 +3,27 @@ using VoxelEngine.Power;
 
 namespace VoxelEngine.Simulation
 {
-    public class ElectricalSubstation : MonoBehaviour, IVoltageStation
+    public class ElectricalSubstation : VoltageStationBase
     {
         [Header("Substation Configuration")]
         public float relayDistance = 150f;
-        public float maxThroughputWatts = 50000f;
+        // Inherited maxThroughputWatts
         public float structureHeight = 5f;
 
         private PowerPole _inputPole;
         private PowerPole _outputPole;
         private PowerCable _powerNode;
 
-        // IVoltageStation implementation
-        public Vector3 ConnectionPoint => transform.position + Vector3.up * structureHeight;
-        public Transform StationTransform => transform;
-        public bool CanConnectMore => true;
-        public bool IsHighVoltage => false; // User requested LV for substation
+        public override float TotalProduced => _powerNode != null && _powerNode.network != null ? _powerNode.network.producedThisTick : 0f;
+        public override float TotalConsumed => _powerNode != null && _powerNode.network != null ? _powerNode.network.consumedThisTick : 0f;
+        public override float MaxCapacity => _powerNode != null && _powerNode.network != null ? _powerNode.network.bottleneckWatts : 0f;
 
-        public float TotalProduced => _powerNode != null && _powerNode.network != null ? _powerNode.network.producedThisTick : 0f;
-        public float TotalConsumed => _powerNode != null && _powerNode.network != null ? _powerNode.network.consumedThisTick : 0f;
-        public float MaxCapacity => _powerNode != null && _powerNode.network != null ? _powerNode.network.bottleneckWatts : 0f;
-        public float CurrentPower => TotalProduced;
-
-        private void Awake()
+        protected override void Awake()
         {
+            base.Awake();
+            isHighVoltage = false;
+            maxThroughputWatts = 50000f;
+            connectionPointOffset = new Vector3(0, structureHeight, 0);
             CreateInternalPoles();
         }
 
@@ -52,8 +49,5 @@ namespace VoxelEngine.Simulation
 
         public bool ConnectInput(PowerPole sourcePole) => _inputPole.TryConnect(sourcePole);
         public bool ConnectOutput(PowerPole destPole) => _outputPole.TryConnect(destPole);
-
-        public void AddConnection(IVoltageStation other) { /* Handled by internal poles */ }
-        public void RemoveConnection(IVoltageStation other) { /* Handled by internal poles */ }
     }
 }

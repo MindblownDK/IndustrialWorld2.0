@@ -29,6 +29,10 @@ namespace VoxelEngine.Simulation
         public abstract float MaxCapacity { get; }
         public float CurrentPower => TotalProduced; // Simplified for now
 
+        // Fields expected by Setup Wizard
+        public float maxThroughputWatts = 50000f;
+        public float conversionLoss = 0.02f;
+
         protected virtual void Awake()
         {
             if (wireMaterial == null)

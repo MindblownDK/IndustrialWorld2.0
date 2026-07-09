@@ -4,43 +4,30 @@ using VoxelEngine.Power;
 
 namespace VoxelEngine.Simulation
 {
-    public class PowerPole : MonoBehaviour, IVoltageStation
+    public class PowerPole : VoltageStationBase, IVoltageStation
     {
         [Header("Pole Configuration")]
-        public int maxConnections = 6;
-        public float wireReach = 15f;
-        public float poleHeight = 3f;
-
-        private readonly List<PowerPoleConnection> _connections = new(6);
-        private PowerNode _powerNode;
-        private LineRenderer[] _wireRenderers;
+        // ... (rest of the fields)
 
         // IVoltageStation implementation
-        public Vector3 ConnectionPoint => transform.position + Vector3.up * poleHeight;
-        public Transform StationTransform => transform;
-        public bool CanConnectMore => _connections.Count < maxConnections;
-        public bool IsHighVoltage => false; // User requested LV for power pole
+        public override float TotalProduced => _powerNode != null && _powerNode.network != null ? _powerNode.network.producedThisTick : 0f;
+        public override float TotalConsumed => _powerNode != null && _powerNode.network != null ? _powerNode.network.consumedThisTick : 0f;
+        public override float MaxCapacity => _powerNode != null && _powerNode.network != null ? _powerNode.network.bottleneckWatts : 0f;
 
-        public float TotalProduced => _powerNode != null && _powerNode.network != null ? _powerNode.network.producedThisTick : 0f;
-        public float TotalConsumed => _powerNode != null && _powerNode.network != null ? _powerNode.network.consumedThisTick : 0f;
-        public float MaxCapacity => _powerNode != null && _powerNode.network != null ? _powerNode.network.bottleneckWatts : 0f;
-        public float CurrentPower => TotalProduced;
+        private PowerNode _powerNode;
+        private LineRenderer[] _poleWireRenderers; // Renamed to avoid conflict
 
-        public void AddConnection(IVoltageStation other) 
+        protected override void Awake()
         {
-            if (other is PowerPole otherPole) TryConnect(otherPole);
-        }
-        
-        public void RemoveConnection(IVoltageStation other)
-        {
-            if (other is PowerPole otherPole) Disconnect(otherPole);
-        }
-
-        private void Awake()
-        {
+            base.Awake();
             _powerNode = GetComponent<PowerNode>();
             if (_powerNode == null) _powerNode = gameObject.AddComponent<PowerCable>();
-            _wireRenderers = new LineRenderer[maxConnections];
+            
+            isHighVoltage = false;
+            connectionPointOffset = new Vector3(0, poleHeight, 0);
+            wireReach = 15f;
+
+            _poleWireRenderers = new LineRenderer[maxConnections];
         }
 
         public bool TryConnect(PowerPole target)

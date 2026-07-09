@@ -42,16 +42,21 @@ namespace VoxelEngine.Power
         protected virtual void OnEnable()  { PowerNetworkManager.EnsureInstance(); PowerNetworkManager.Instance.Register(this); }
         protected virtual void OnDisable() { PowerNetworkManager.Instance?.Unregister(this); }
 
+        /// <summary>
+        /// Hook called by the manager during topology rebuild to test whether a candidate
+        /// neighbour is legal. Default policy: enforce 6-axis grid alignment (if required)
+        /// AND require an unobstructed straight line between the two positions.
+        ///
+        /// Override per-subclass for custom rules (e.g. wireless transmitter ignores LOS).
+        /// </summary>
         public virtual bool CanLinkTo(PowerNode other)
         {
             if (other == null || other == this) return false;
-            
-            // Manual links always allowed.
+
+            // Manual links (from High Voltage wires) always bypass grid/LOS checks.
             if (manualLinks.Contains(other)) return true;
 
             Vector3 a = transform.position;
-            // ... (rest of the method)
-
             Vector3 b = other.transform.position;
             Vector3 delta = b - a;
 
@@ -75,9 +80,6 @@ namespace VoxelEngine.Power
                 else if (dz > EPS) return false;
                 if (oneAxisCount != 1) return false;
             }
-
-            // (Per-face PortConfig check removed — cables now auto-connect to any
-            // face of any block; no per-machine I/O selection is required.)
 
             // Line-of-sight: no solid block may sit between the two cable centres.
             // We shrink the line slightly off both endpoints so we don't hit the
