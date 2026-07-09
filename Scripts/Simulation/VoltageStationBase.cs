@@ -16,6 +16,10 @@ namespace VoxelEngine.Simulation
         public float wireWidth = 0.05f;
         public Material wireMaterial;
 
+        // Fields expected by Setup Wizard
+        public float maxThroughputWatts = 50000f;
+        public float conversionLoss = 0.02f;
+
         protected List<IVoltageStation> _connectedStations = new();
         protected Dictionary<IVoltageStation, LineRenderer> _wireRenderers = new();
 
@@ -27,11 +31,7 @@ namespace VoxelEngine.Simulation
         public abstract float TotalProduced { get; }
         public abstract float TotalConsumed { get; }
         public abstract float MaxCapacity { get; }
-        public float CurrentPower => TotalProduced; // Simplified for now
-
-        // Fields expected by Setup Wizard
-        public float maxThroughputWatts = 50000f;
-        public float conversionLoss = 0.02f;
+        public float CurrentPower => TotalProduced;
 
         protected virtual void Awake()
         {
@@ -51,7 +51,6 @@ namespace VoxelEngine.Simulation
 
             _connectedStations.Add(other);
             
-            // Link PowerNodes
             var myNode = GetComponent<PowerNode>();
             if (myNode != null && other.StationTransform != null)
             {
@@ -71,7 +70,6 @@ namespace VoxelEngine.Simulation
         {
             if (_connectedStations.Remove(other))
             {
-                // Unlink PowerNodes
                 var myNode = GetComponent<PowerNode>();
                 if (myNode != null && other.StationTransform != null)
                 {
@@ -94,7 +92,6 @@ namespace VoxelEngine.Simulation
 
         protected virtual void Update()
         {
-            // Only one station in a pair needs to update the wire position
             foreach (var kvp in _wireRenderers)
             {
                 if (kvp.Key != null)
@@ -111,7 +108,6 @@ namespace VoxelEngine.Simulation
                 if (other == null) continue;
                 if (!_wireRenderers.ContainsKey(other))
                 {
-                    // Check if the other station already has a wire to us to avoid duplicates
                     if (other is VoltageStationBase otherBase && otherBase._wireRenderers.ContainsKey(this))
                         continue;
 

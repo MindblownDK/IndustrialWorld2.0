@@ -1595,25 +1595,29 @@ namespace VoxelEngine.EditorTools
         private void BuildPowerContent()
         {
             const string powerFolder    = ASSET_ROOT + "/Power";
-            const string wiresFolder    = powerFolder + "/Wires";
+            const string pipesFolder    = powerFolder + "/ElectricalPipes";
             const string prefabsFolder  = powerFolder + "/Prefabs";
             const string blocksFolder   = powerFolder + "/Blocks";
             const string recipesFolder  = powerFolder + "/Recipes";
 
             EnsureFolder(powerFolder);
-            EnsureFolder(wiresFolder);
+            EnsureFolder(pipesFolder);
             EnsureFolder(prefabsFolder);
             EnsureFolder(blocksFolder);
             EnsureFolder(recipesFolder);
 
             // ---- Pull required items ----
             string itemsFolder = ASSET_ROOT + "/Items";
+            string indItems    = ASSET_ROOT + "/Industrial/Items";
             var copperIngot = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{itemsFolder}/Item_CopperIngot.asset");
             var ironIngot   = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{itemsFolder}/Item_IronIngot.asset");
             var steelIngot  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{itemsFolder}/Item_SteelIngot.asset");
+            var graphite    = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_Graphite.asset");
             var stone       = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{ITEM_FOLDER}/Item_Stone.asset");
             var coal        = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{ITEM_FOLDER}/Item_Coal.asset");
             var goldOre     = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{ITEM_FOLDER}/Item_Gold.asset");
+            var copperWire  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_CopperWire.asset");
+            
             var lithium     = EnsureLithiumResource();
             if (copperIngot == null || ironIngot == null || steelIngot == null)
             {
@@ -1622,93 +1626,87 @@ namespace VoxelEngine.EditorTools
                 return;
             }
 
-            // ---- 1) Wire tier definitions ----
-            VoxelEngine.Power.WireDefinition MakeWire(string name, float cap, Color tint)
+            // ---- 1) Electrical Pipe tier definitions ----
+            VoxelEngine.Power.ElectricalPipeDefinition MakePipe(string name, float cap, Color tint)
             {
-                var w = ScriptableObject.CreateInstance<VoxelEngine.Power.WireDefinition>();
-                w.displayName   = name;
+                string path = $"{pipesFolder}/Pipe_{name.Replace(" ", "")}.asset";
+                var w = AssetDatabase.LoadAssetAtPath<VoxelEngine.Power.ElectricalPipeDefinition>(path);
+                if (w == null)
+                {
+                    w = ScriptableObject.CreateInstance<VoxelEngine.Power.ElectricalPipeDefinition>();
+                    AssetDatabase.CreateAsset(w, path);
+                }
+                w.displayName   = name + " Electrical Pipe";
                 w.capacityWatts = cap;
                 w.tint          = tint;
                 w.connectRadius = 1.6f;
-                AssetDatabase.CreateAsset(w, $"{wiresFolder}/Wire_{name.Replace(" ", "")}.asset");
+                EditorUtility.SetDirty(w);
                 return w;
             }
-            var wireCopper = MakeWire("Copper",         1000f, new Color(0.85f, 0.45f, 0.20f));
-            var wireIron   = MakeWire("Iron",           5000f, new Color(0.78f, 0.78f, 0.85f));
-            var wireGold   = MakeWire("Gold",          25000f, new Color(0.95f, 0.78f, 0.20f));
-            var wireSuper  = MakeWire("Superconductor",100000f,new Color(0.45f, 0.85f, 1.00f));
+            var pipeCopper = MakePipe("Copper",         10000f, new Color(0.85f, 0.45f, 0.20f));
+            var pipeIron   = MakePipe("Iron",           30000f, new Color(0.78f, 0.78f, 0.85f));
+            var pipeGold   = MakePipe("Gold",           50000f, new Color(0.95f, 0.78f, 0.20f));
+            var pipeSuper  = MakePipe("Superconductor", 1000000000f, new Color(0.45f, 0.85f, 1.00f)); // Infinite transfer
 
             // ---- 2) Helper: make a power prefab (cube + power-component) ----
             GameObject MakePowerPrefab<T>(string assetName, Color color, Vector3 scale,
                                          System.Action<T> configure) where T : VoxelEngine.Power.PowerNode
             {
                 string path = $"{prefabsFolder}/{assetName}.prefab";
-                var root = new GameObject(assetName);
-                var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                cube.transform.SetParent(root.transform, false);
-                cube.transform.localScale = scale;
-                var mat = MakeColoredMat(prefabsFolder, $"Mat_{assetName}", color);
-                cube.GetComponent<Renderer>().sharedMaterial = mat;
-
-                var node = root.AddComponent<T>();
-                configure?.Invoke(node);
-
-                var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
-                Object.DestroyImmediate(root);
-                return prefab;
+                return GetOrCreatePrefab(path, assetName, (root) =>
+                {
+                    if (root.transform.childCount == 0)
+                    {
+                        var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                        cube.transform.SetParent(root.transform, false);
+                        cube.transform.localScale = scale;
+                        var mat = MakeColoredMat(prefabsFolder, $"Mat_{assetName}", color);
+                        cube.GetComponent<Renderer>().sharedMaterial = mat;
+                        if (cube.TryGetComponent<Collider>(out var col)) Object.DestroyImmediate(col);
+                    }
+                    var node = EnsureComponent<T>(root);
+                    configure?.Invoke(node);
+                    if (root.GetComponent<Collider>() == null) root.AddComponent<BoxCollider>();
+                });
             }
 
-            // Cable prefabs (one per wire tier).
-            var cableCu = MakePowerPrefab<VoxelEngine.Power.PowerCable>("Cable_Copper", wireCopper.tint, new Vector3(0.2f, 0.2f, 1f),
-                c => { c.wire = wireCopper; });
-            var cableFe = MakePowerPrefab<VoxelEngine.Power.PowerCable>("Cable_Iron", wireIron.tint, new Vector3(0.2f, 0.2f, 1f),
-                c => { c.wire = wireIron; });
-            var cableAu = MakePowerPrefab<VoxelEngine.Power.PowerCable>("Cable_Gold", wireGold.tint, new Vector3(0.2f, 0.2f, 1f),
-                c => { c.wire = wireGold; });
-            var cableSc = MakePowerPrefab<VoxelEngine.Power.PowerCable>("Cable_Superconductor", wireSuper.tint, new Vector3(0.2f, 0.2f, 1f),
-                c => { c.wire = wireSuper; });
+            // Electrical Pipe prefabs (one per pipe tier).
+            var pipeCu = MakePowerPrefab<VoxelEngine.Power.PowerCable>("Pipe_Copper", pipeCopper.tint, new Vector3(0.25f, 0.25f, 1f),
+                c => { c.wire = pipeCopper; });
+            var pipeFe = MakePowerPrefab<VoxelEngine.Power.PowerCable>("Pipe_Iron", pipeIron.tint, new Vector3(0.25f, 0.25f, 1f),
+                c => { c.wire = pipeIron; });
+            var pipeAu = MakePowerPrefab<VoxelEngine.Power.PowerCable>("Pipe_Gold", pipeGold.tint, new Vector3(0.25f, 0.25f, 1f),
+                c => { c.wire = pipeGold; });
+            var pipeSc = MakePowerPrefab<VoxelEngine.Power.PowerCable>("Pipe_Superconductor", pipeSuper.tint, new Vector3(0.25f, 0.25f, 1f),
+                c => { c.wire = pipeSuper; });
 
             // Generator (coal-fired, 800 W/s while burning fuel).
             var genPrefab = MakePowerPrefab<VoxelEngine.Power.PowerGenerator>("Generator_Coal",
                 new Color(0.30f, 0.30f, 0.32f), new Vector3(1.5f, 1.5f, 1.5f),
                 g => { g.wattsPerSecond = 800f; g.isOn = false; g.connectRadius = 1.8f; });
-            // Add the fuel-slot wrapper component to the generator prefab.
-            {
-                string path = AssetDatabase.GetAssetPath(genPrefab);
-                var contents = PrefabUtility.LoadPrefabContents(path);
-                if (contents.GetComponent<VoxelEngine.Power.CoalGeneratorFuel>() == null)
-                    contents.AddComponent<VoxelEngine.Power.CoalGeneratorFuel>();
-                PrefabUtility.SaveAsPrefabAsset(contents, path);
-                PrefabUtility.UnloadPrefabContents(contents);
-            }
-
+            
             // Battery (1000 Wh).
             var batPrefab = MakePowerPrefab<VoxelEngine.Power.PowerBattery>("Battery_Basic",
                 new Color(0.20f, 0.50f, 0.85f), new Vector3(0.8f, 1.2f, 0.8f),
-                b => { b.capacityWattHours = 1000f; b.ioRate = 200f; b.connectRadius = 1.5f; });
+                b => { b.capacityWattHours = 10000f; b.ioRate = 200f; b.connectRadius = 1.5f; });
 
             // Light consumer (10 W/s).
             var lightPrefab = MakePowerPrefab<VoxelEngine.Power.PowerConsumer>("Light_Basic",
                 new Color(1f, 0.95f, 0.6f), new Vector3(0.3f, 0.3f, 0.3f),
                 c => { c.wattsPerSecond = 10f; c.connectRadius = 1.5f; });
 
-            // ---- 3) BlockItems (placeable via existing BuildSystem / hotbar) ----
+            // ---- 3) BlockItems (placeable) ----
             VoxelEngine.Items.BlockItem MakePowerBlock(string assetName, string display, Color tint, GameObject prefab,
                                                        string desc, int hp = 200)
             {
                 string path = $"{blocksFolder}/{assetName}.asset";
-                var b = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.BlockItem>(path);
-                if (b == null)
-                {
-                    b = ScriptableObject.CreateInstance<VoxelEngine.Items.BlockItem>();
-                    AssetDatabase.CreateAsset(b, path);
-                }
+                var b = GetOrCreateAsset<VoxelEngine.Items.BlockItem>(path);
                 b.itemId       = assetName.ToLower();
                 b.displayName  = display;
                 b.description  = desc;
                 b.iconTint     = tint;
                 b.maxStack     = 99;
-                b.massPerUnit  = 2f;
+                b.massPerUnit  = 3f; 
                 b.placedPrefab = prefab;
                 b.gridSize     = Vector3Int.one;
                 b.allowStacking= false;
@@ -1718,41 +1716,55 @@ namespace VoxelEngine.EditorTools
                 EditorUtility.SetDirty(b);
                 return b;
             }
-            var blockCableCu = MakePowerBlock("Block_Cable_Copper", "Copper Cable", wireCopper.tint, cableCu,
-                "Carries up to 1000 W between machines. Cheap but limited - upgrade to Iron for serious factories.");
-            var blockCableFe = MakePowerBlock("Block_Cable_Iron", "Iron Cable", wireIron.tint, cableFe,
-                "Carries up to 5000 W. Mid-tier wire for industrial machines.");
-            var blockCableAu = MakePowerBlock("Block_Cable_Gold", "Gold Cable", wireGold.tint, cableAu,
-                "Carries up to 25000 W. Premium wire for heavy power loads.");
-            var blockCableSc = MakePowerBlock("Block_Cable_Superconductor", "Superconductor Cable", wireSuper.tint, cableSc,
-                "Carries up to 100000 W. End-game wire with no practical bottleneck.");
+            var blockPipeCu = MakePowerBlock("Block_Pipe_Copper", "Copper Electrical Pipe", pipeCopper.tint, pipeCu,
+                "High-capacity electrical pipe. Carries up to 10,000 W. Mid-game standard for base wiring.");
+            var blockPipeFe = MakePowerBlock("Block_Pipe_Iron", "Iron Electrical Pipe", pipeIron.tint, pipeFe,
+                "Reinforced electrical pipe. Carries up to 30,000 W. Suitable for heavy industrial loads.");
+            var blockPipeAu = MakePowerBlock("Block_Pipe_Gold", "Gold Electrical Pipe", pipeGold.tint, pipeAu,
+                "Premium electrical pipe. Carries up to 50,000 W. High efficiency for advanced bases.");
+            var blockPipeSc = MakePowerBlock("Block_Pipe_Super", "Superconductor Electrical Pipe", pipeSuper.tint, pipeSc,
+                "Near-zero resistance pipe. Unlimited power transfer. The ultimate endgame base wiring.");
 
             var blockGen   = MakePowerBlock("Block_Gen_Coal", "Coal Generator", new Color(0.30f,0.30f,0.32f), genPrefab,
                 "Burns coal to produce 800 W of electricity. Connect cables to its sides.", hp: 600);
             var blockBat   = MakePowerBlock("Block_Battery", "Battery", new Color(0.20f,0.50f,0.85f), batPrefab,
                 "Stores up to 1000 Wh. Charges from generator surplus, discharges to power deficits.", hp: 400);
             var blockLight = MakePowerBlock("Block_Light", "Power Light", new Color(1f,0.95f,0.6f), lightPrefab,
-                "Consumes 10 W. Glows when powered (visualisation TBD).", hp: 80);
+                "Consumes 10 W. Glows when powered.", hp: 80);
 
-            // ---- 4) Recipes (Crafting Bench / Assembler) ----
+            // ── LV MANUAL WIRES ──
+            var itemsFolderSO = ASSET_ROOT + "/Items";
+            var lvWireCu = MakeResource(itemsFolderSO, "Copper LV Wire", new Color(0.85f, 0.45f, 0.20f), 100, VoxelEngine.Items.ResourceCategory.Component, uiCategory: "Power");
+            lvWireCu.itemId = "copper_lv_wire";
+            lvWireCu.description = "Basic low-voltage wire for power poles. Capacity: 1,500 W. Consumed when connecting LV stations.";
+            
+            var lvWireAu = MakeResource(itemsFolderSO, "Gold LV Wire", new Color(0.95f, 0.85f, 0.20f), 100, VoxelEngine.Items.ResourceCategory.Component, uiCategory: "Power");
+            lvWireAu.itemId = "gold_lv_wire";
+            lvWireAu.description = "High-conductivity manual wire. Capacity: 15,000 W. Used for mid-game LV power distribution.";
+            
+            var lvWireGr = MakeResource(itemsFolderSO, "Graphite LV Wire", new Color(0.20f, 0.20f, 0.20f), 100, VoxelEngine.Items.ResourceCategory.Component, uiCategory: "Power");
+            lvWireGr.itemId = "graphite_lv_wire";
+            lvWireGr.description = "Advanced carbon-based wire. Capacity: 50,000 W. Top-tier manual cabling before superconductivity.";
+            
+            // ---- Recipes ----
             var recipeRegistry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeRegistry>($"{ASSET_ROOT}/RecipeRegistry.asset");
-            if (recipeRegistry == null)
+            if (recipeRegistry != null)
             {
-                EditorUtility.DisplayDialog("Voxel Engine",
-                    "Run Step 4 first - RecipeRegistry.asset doesn\'t exist.", "OK");
-                return;
-            }
+                AddRecipe("Recipe_Pipe_Copper", "Copper Electrical Pipe", blockPipeCu, 4, VoxelEngine.Crafting.StationTier.CraftingBench, (copperIngot, 2), (ironIngot, 1));
+                AddRecipe("Recipe_Pipe_Iron",   "Iron Electrical Pipe",   blockPipeFe, 4, VoxelEngine.Crafting.StationTier.CraftingBench, (ironIngot, 4));
+                AddRecipe("Recipe_Pipe_Gold",   "Gold Electrical Pipe",   blockPipeAu, 4, VoxelEngine.Crafting.StationTier.Assembler,    (goldOre != null ? goldOre : ironIngot, 2), (ironIngot, 2));
+                AddRecipe("Recipe_Pipe_Super",  "Superconductor Pipe",    blockPipeSc, 4, VoxelEngine.Crafting.StationTier.Assembler,    (steelIngot, 4), (goldOre != null ? goldOre : ironIngot, 2));
+                
+                AddRecipe("Recipe_Generator", "Coal Generator", blockGen, 1, VoxelEngine.Crafting.StationTier.CraftingBench, (ironIngot, 4), (stone, 4));
+                AddRecipe("Recipe_Battery",   "Battery",        blockBat, 1, VoxelEngine.Crafting.StationTier.Assembler,    (copperIngot, 4), (ironIngot, 2), (lithium, 2));
+                AddRecipe("Recipe_Light",     "Power Light",    blockLight, 1, VoxelEngine.Crafting.StationTier.CraftingBench, (copperIngot, 1));
 
-            VoxelEngine.Crafting.RecipeDefinition AddRecipe(string assetName, string display,
-                VoxelEngine.Items.ItemDefinition output, int outputCount,
-                VoxelEngine.Crafting.StationTier station,
-                params (VoxelEngine.Items.ItemDefinition item, int n)[] inputs)
-            {
-                string path = $"{recipesFolder}/{assetName}.asset";
-                var r = GetOrCreateAsset<VoxelEngine.Crafting.RecipeDefinition>(path);
-                r.displayName = display;
-                r.outputItem = output;
-                r.outputCount = outputCount;
+                // LV Wire Recipes
+                AddRecipe("Recipe_Wire_Cu_LV", "Copper LV Wire", lvWireCu, 5, VoxelEngine.Crafting.StationTier.None, (copperWire, 1)); 
+                AddRecipe("Recipe_Wire_Au_LV", "Gold LV Wire",   lvWireAu, 5, VoxelEngine.Crafting.StationTier.Assembler, (goldOre != null ? goldOre : ironIngot, 1), (copperWire, 2));
+                AddRecipe("Recipe_Wire_Gr_LV", "Graphite LV Wire", lvWireGr, 5, VoxelEngine.Crafting.StationTier.Assembler, (graphite != null ? graphite : coal, 2), (copperWire, 2));
+            }
+        }
                 r.requiredStation = station;
                 r.craftSeconds = 0f;
                 r.unlockedByDefault = true;
@@ -1765,13 +1777,13 @@ namespace VoxelEngine.EditorTools
             }
 
             // Cables: 1 ingot -> 4 cables.
-            AddRecipe("Recipe_Cable_Copper", "Copper Cable", blockCableCu, 4,
+            AddRecipe("Recipe_Cable_Copper", "Copper Cable", blockPipeCu, 4,
                 VoxelEngine.Crafting.StationTier.CraftingBench, (copperIngot, 1));
-            AddRecipe("Recipe_Cable_Iron",   "Iron Cable",   blockCableFe, 4,
+            AddRecipe("Recipe_Cable_Iron",   "Iron Cable",   blockPipeFe, 4,
                 VoxelEngine.Crafting.StationTier.CraftingBench, (ironIngot, 1));
-            AddRecipe("Recipe_Cable_Gold",   "Gold Cable",   blockCableAu, 4,
+            AddRecipe("Recipe_Cable_Gold",   "Gold Cable",   blockPipeAu, 4,
                 VoxelEngine.Crafting.StationTier.Assembler,    (goldOre != null ? goldOre : ironIngot, 1));
-            AddRecipe("Recipe_Cable_Super",  "Superconductor Cable", blockCableSc, 4,
+            AddRecipe("Recipe_Cable_Super",  "Superconductor Cable", blockPipeSc, 4,
                 VoxelEngine.Crafting.StationTier.Assembler,    (steelIngot, 1), (goldOre != null ? goldOre : ironIngot, 1));
 
             // Resource refinement for battery chemistry.
@@ -1885,7 +1897,7 @@ namespace VoxelEngine.EditorTools
             var rxGen = rxRoot.AddComponent<VoxelEngine.Power.PowerGenerator>();
             rxGen.wattsPerSecond = 0f; rxGen.connectRadius = 1.6f;
             var rxComp = rxRoot.AddComponent<VoxelEngine.Power.Wireless.PowerReceiver>();
-            rxComp.requestedWatts = 1000f;
+            rxComp.requestedWatts = 10000f;
             var rxPrefab = PrefabUtility.SaveAsPrefabAsset(rxRoot, rxPath);
             Object.DestroyImmediate(rxRoot);
 
@@ -2077,10 +2089,13 @@ namespace VoxelEngine.EditorTools
             var recGenerator = FindRecipe("Recipe_Generator");
             var recBattery   = FindRecipe("Recipe_Battery");
             var recAssembler = FindRecipe("Recipe_Assembler");
-            var recCableCu   = FindRecipe("Recipe_Cable_Copper");
-            var recCableFe   = FindRecipe("Recipe_Cable_Iron");
-            var recCableAu   = FindRecipe("Recipe_Cable_Gold");
-            var recCableSc   = FindRecipe("Recipe_Cable_Super");
+            var recPipeCu   = FindRecipe("Recipe_Pipe_Copper");
+            var recPipeFe   = FindRecipe("Recipe_Pipe_Iron");
+            var recPipeAu   = FindRecipe("Recipe_Pipe_Gold");
+            var recPipeSc   = FindRecipe("Recipe_Pipe_Super");
+            var recWireLV    = FindRecipe("Recipe_Wire_Cu_LV");
+            var recWireAuLV  = FindRecipe("Recipe_Wire_Au_LV");
+            var recWireGrLV  = FindRecipe("Recipe_Wire_Gr_LV");
 
             // Lock recipes that will require research. (Players who don't unlock these
             // can still play, but with reduced options.)
@@ -2088,7 +2103,8 @@ namespace VoxelEngine.EditorTools
             Lock(recPickStone); Lock(recPickIron); Lock(recPickSteel);
             Lock(recFurnace);   Lock(recElectric);
             Lock(recGenerator); Lock(recBattery);  Lock(recAssembler);
-            Lock(recCableCu);   Lock(recCableFe);  Lock(recCableAu);  Lock(recCableSc);
+            Lock(recPipeCu);   Lock(recPipeFe);  Lock(recPipeAu);  Lock(recPipeSc);
+            Lock(recWireAuLV); Lock(recWireGrLV);
 
             // ---- 5) Research nodes (the tree) ----
             VoxelEngine.Research.ResearchNode MakeNode(
@@ -2133,16 +2149,16 @@ namespace VoxelEngine.EditorTools
                 new[] { nStoneWorking });
 
             var nElectricity = MakeNode("res_electricity", "Electricity",
-                "Generate and store electric power. Unlocks the Coal Generator and copper/iron cables.",
+                "Generate and store electric power. Unlocks the Coal Generator, Copper LV Wire, and early Electrical Pipes.",
                 2, 1, 40f, new[] { (sciT1, 10), (sciT2, 5) },
-                new[] { recGenerator, recCableCu, recCableFe },
+                new[] { recGenerator, recWireLV, recPipeCu, recPipeFe },
                 new[] { nStoneWorking });
 
             // Tier 3 - advanced machines
             var nAdvManufacturing = MakeNode("res_adv_manufacturing", "Advanced Manufacturing",
-                "Industrial-tier production unlocks the Assembler, Electric Furnace, and Battery.",
+                "Industrial-tier production unlocks the Assembler, Electric Furnace, Battery, and mid-tier wiring.",
                 3, 0, 60f, new[] { (sciT2, 15), (sciT3, 5) },
-                new[] { recAssembler, recElectric, recBattery },
+                new[] { recAssembler, recElectric, recBattery, recWireAuLV, recPipeAu },
                 new[] { nSmelting, nElectricity });
 
             var nSteelAlloy = MakeNode("res_steel_alloy", "Steel Alloy",
@@ -2155,7 +2171,7 @@ namespace VoxelEngine.EditorTools
             var recWirelessTx = FindRecipe("Recipe_Wireless_Tx");
             var recWirelessRx = FindRecipe("Recipe_Wireless_Rx");
             var hvUnlocks = new System.Collections.Generic.List<VoxelEngine.Crafting.RecipeDefinition>
-                            { recCableAu, recCableSc };
+                            { recPipeAu, recPipeSc };
             if (recWirelessTx != null) hvUnlocks.Add(recWirelessTx);
             if (recWirelessRx != null) hvUnlocks.Add(recWirelessRx);
 
@@ -2355,7 +2371,7 @@ namespace VoxelEngine.EditorTools
                     var col = fill.GetComponent<Collider>(); if (col != null) Object.DestroyImmediate(col);
                 }
                 var t = root.AddComponent<VoxelEngine.Fluids.WaterTank>();
-                t.capacityLitres = 1000f;
+                t.capacityLitres = 10000f;
                 t.isGlass = isGlass;
                 var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
                 Object.DestroyImmediate(root);
@@ -2620,7 +2636,7 @@ namespace VoxelEngine.EditorTools
 
             // ─ Mechanical / electrical intermediates ─
             var ironGear    = MakeIndustrialResource("Item_IronGear",   "Iron Gear",     "Toothed iron cog. Used in any rotating machinery.",                           new Color(0.65f, 0.68f, 0.72f), VoxelEngine.Items.ResourceCategory.Component, "Mechanical");
-            var copperWire  = MakeIndustrialResource("Item_CopperWire", "Copper Wire",   "Drawn copper conductor. The basic ingredient of all electronics.",            new Color(0.92f, 0.58f, 0.30f), VoxelEngine.Items.ResourceCategory.Component, "Electronics");
+            var copperWire  = MakeIndustrialResource("Item_CopperWire", "Copper LV Wire",   "Drawn copper conductor. The basic ingredient of all electronics.",            new Color(0.92f, 0.58f, 0.30f), VoxelEngine.Items.ResourceCategory.Component, "Electronics");
             var circuitBasic= MakeIndustrialResource("Item_Circuit",    "Electronic Circuit", "PCB with copper traces on an iron substrate. Brain of every machine.", new Color(0.30f, 0.65f, 0.40f), VoxelEngine.Items.ResourceCategory.Component, "Electronics");
             var circuitAdv  = MakeIndustrialResource("Item_AdvCircuit", "Advanced Circuit",  "Layered logic board. Powers high-tier automation and digital storage.",   new Color(0.30f, 0.55f, 0.95f), VoxelEngine.Items.ResourceCategory.Component, "Electronics");
 
@@ -3928,7 +3944,7 @@ root =>
                 root =>
                 {
                     var t = root.AddComponent<VoxelEngine.Gas.GasTank>();
-                    t.capacity = 1000f; t.acceptInput = true; t.allowOutput = true;
+                    t.capacity = 10000f; t.acceptInput = true; t.allowOutput = true;
                 });
             var blockGasTank = MakeBlk(GAS_BLOCKS, "Block_GasTank", "Gas Tank",
                 "Buffers up to 1000 units of one gas type. Auto-locks to first gas inserted. Pipe-in from Electrolyser, pipe-out to Engine.",
@@ -4029,7 +4045,7 @@ root =>
                 {
                     var r = root.AddComponent<VoxelEngine.Nuclear.ReactorCore>();
                     r.fuelRodItem = enrichedRod; r.spentFuelRod = spentRod;
-                    r.fuelRodBurnTime = 600f; r.maxThermalKW = 1000f;
+                    r.fuelRodBurnTime = 600f; r.maxThermalKW = 10000f;
                     r.controlRodLevel = 0.5f; r.coreTemperature = 300f;
                     r.maxSafeTemperature = 800f; r.passiveCoolingKW = 50f;
                     r.waterTankCapacity = 500f; r.steamTankCapacity = 500f;
@@ -4841,7 +4857,7 @@ root =>
             // Higher thrust, lower power draw for better flight feel.
             MakeThruster("AtmoThruster_Small", "Small Atmospheric Thruster", SzS, new Color(0.85f,0.45f,0.15f), TAtmo, 60000f,  200f, 0f, (steelPlate, 2), (copperWire, 4));
             MakeThruster("AtmoThruster_Large", "Large Atmospheric Thruster", SzL, new Color(0.85f,0.45f,0.15f), TAtmo, 800000f, 2500f, 0f, (steelPlate, 12), (copperWire, 16), (circuit, 2));
-            MakeThruster("IonThruster_Small",  "Small Ion Thruster",         SzS, new Color(0.5f,0.3f,0.95f),  TIon,  45000f,  300f, 0f, (steelPlate, 2), (circuit, 3));
+            MakeThruster("IonThruster_Small",  "Small Ion Thruster",         SzS, new Color(0.5f,0.3f,0.95f),  TIon,  430000f,  300f, 0f, (steelPlate, 2), (circuit, 3));
             MakeThruster("IonThruster_Large",  "Large Ion Thruster",         SzL, new Color(0.5f,0.3f,0.95f),  TIon,  600000f, 3500f, 0f, (steelPlate, 12), (circuit, 8), (copperWire, 8));
             MakeThruster("HydroThruster_Small","Small Hydrogen Thruster",    SzS, new Color(0.2f,0.55f,0.95f), THyd,  80000f,  0f,   3f, (steelPlate, 2), (copperWire, 4));
             MakeThruster("HydroThruster_Large","Large Hydrogen Thruster",    SzL, new Color(0.2f,0.55f,0.95f), THyd,  1000000f,0f,   18f,(steelPlate, 12), (copperWire, 16), (circuit, 2));
@@ -4858,7 +4874,7 @@ root =>
 
             // -- 3) Energy --
             var batSmallPref = MakeGPref<VoxelEngine.GridSystem.GridBattery>("Battery_Small", new Color(0.2f, 0.7f, 0.3f), new Vector3(0.5f, 0.5f, 0.5f),
-                b => { b.capacityWh = 1000000f; b.maxDischargeRate = 5000f; });
+                b => { b.capacityWh = 1000000f; b.maxDischargeRate = 30000f; });
             var batLargePref = MakeGPref<VoxelEngine.GridSystem.GridBattery>("Battery_Large", new Color(0.2f, 0.7f, 0.3f), new Vector3(2f, 2f, 2f),
                 b => { b.capacityWh = 25000000f; b.maxDischargeRate = 60000f; });
             var batGiantPref = MakeGPref<VoxelEngine.GridSystem.GridBattery>("Battery_Giant_Large", new Color(0.12f, 0.85f, 0.55f), new Vector3(2.5f, 2.5f, 2.5f),
@@ -6789,8 +6805,9 @@ root =>
                 if (root.GetComponent<VoxelEngine.Simulation.StepUpTransformer>() == null)
                 {
                     var su = root.AddComponent<VoxelEngine.Simulation.StepUpTransformer>();
-                    su.maxThroughputWatts = 200_000_000f;
-                    su.conversionLoss = 0.02f;
+                    var baseStation = (VoxelEngine.Simulation.VoltageStationBase)su;
+                    baseStation.maxThroughputWatts = 200_000_000f;
+                    baseStation.conversionLoss = 0.02f;
                 }
                 if (root.GetComponent<BoxCollider>() == null)
                 {
@@ -6875,8 +6892,9 @@ root =>
                 if (root.GetComponent<VoxelEngine.Simulation.StepDownTransformer>() == null)
                 {
                     var sd = root.AddComponent<VoxelEngine.Simulation.StepDownTransformer>();
-                    sd.maxThroughputWatts = 200_000_000f;
-                    sd.conversionLoss = 0.02f;
+                    var baseStation = (VoxelEngine.Simulation.VoltageStationBase)sd;
+                    baseStation.maxThroughputWatts = 200_000_000f;
+                    baseStation.conversionLoss = 0.02f;
                 }
                 if (root.GetComponent<BoxCollider>() == null)
                 {
@@ -7063,7 +7081,7 @@ root =>
                 var hvUnlocks = new System.Collections.Generic.List<VoxelEngine.Crafting.RecipeDefinition>();
                 if (nHV.unlocksRecipes != null)
                     foreach (var r in nHV.unlocksRecipes) if (r != null) hvUnlocks.Add(r);
-                foreach (var r in new[] { recHVWire, recPowerPole, recSubstation, recHVTower, recStepUp, recStepDown })
+                foreach (var r in new[] { recHVWire, recWireGrLV, recPipeSc, recPowerPole, recSubstation, recHVTower, recStepUp, recStepDown })
                     if (r != null && !hvUnlocks.Contains(r)) hvUnlocks.Add(r);
                 nHV.unlocksRecipes = hvUnlocks.ToArray();
                 EditorUtility.SetDirty(nHV);

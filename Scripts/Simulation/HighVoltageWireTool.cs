@@ -12,7 +12,6 @@ namespace VoxelEngine.Simulation
         public Inventory inventory;
         public float reach = 20f;
         public LayerMask stationLayer;
-        public ItemDefinition wireItem;
 
         private IVoltageStation _firstStation;
         private LineRenderer _previewLine;
@@ -37,7 +36,17 @@ namespace VoxelEngine.Simulation
         {
             if (inventory == null) return;
             var stack = inventory.ActiveStack;
-            if (stack.IsEmpty || stack.item.itemId != "hv_wire")
+            if (stack.IsEmpty)
+            {
+                CancelConnection();
+                return;
+            }
+
+            // Must hold a recognized wire item
+            bool isHV = stack.item.itemId == "hv_wire";
+            bool isLV = stack.item.itemId.EndsWith("_lv_wire");
+
+            if (!isHV && !isLV)
             {
                 CancelConnection();
                 return;
@@ -45,7 +54,7 @@ namespace VoxelEngine.Simulation
 
             if (Input.GetMouseButtonDown(0))
             {
-                HandleClick();
+                HandleClick(isHV, isLV);
             }
 
             if (Input.GetKeyDown(KeyCode.Escape))
@@ -56,7 +65,7 @@ namespace VoxelEngine.Simulation
             UpdatePreview();
         }
 
-        private void HandleClick()
+        private void HandleClick(bool holdingHV, bool holdingLV)
         {
             Ray ray = playerCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
             if (Physics.Raycast(ray, out RaycastHit hit, reach, stationLayer))
@@ -64,6 +73,25 @@ namespace VoxelEngine.Simulation
                 var station = hit.collider.GetComponentInParent<IVoltageStation>();
                 if (station != null)
                 {
+                    // Validation: HV wire only for HV stations (or transformers).
+                    // LV wire only for LV stations (or transformers).
+                    bool stationIsHV = station.IsHighVoltage;
+                    
+                    // Transformers (isHighVoltage=true) can actually take LV connections too.
+                    // This is a special case: we allow LV wire to connect to a Transformer IF it's the second station.
+                    // Or more simply: Transformers are bridges.
+                    
+                    if (holdingHV && !stationIsHV)
+                    {
+                        VoxelEngine.UI.BuildFeedbackHud.Show("Invalid Wire", "HV Wire only for HV stations!", null, Color.red);
+                        return;
+                    }
+                    if (holdingLV && stationIsHV && !(station is StepUpTransformer || station is StepDownTransformer))
+                    {
+                         VoxelEngine.UI.BuildFeedbackHud.Show("Invalid Wire", "LV Wire only for LV stations!", null, Color.red);
+                         return;
+                    }
+
                     if (_firstStation == null)
                     {
                         _firstStation = station;
@@ -75,7 +103,7 @@ namespace VoxelEngine.Simulation
                         {
                             var item = inventory.ActiveStack.item;
                             inventory.container.Remove(item, 1);
-                            VoxelEngine.UI.BuildFeedbackHud.Show("HV Wire Connected", "-1 " + item.displayName, item.icon, new Color(0.95f, 0.85f, 0.20f));
+                            VoxelEngine.UI.BuildFeedbackHud.Show("Wire Connected", "-1 " + item.displayName, item.icon, new Color(0.95f, 0.85f, 0.20f));
                         }
                         _firstStation = null;
                         _previewLine.enabled = false;
@@ -86,9 +114,12 @@ namespace VoxelEngine.Simulation
 
         private bool ConnectStations(IVoltageStation a, IVoltageStation b)
         {
-            if (Vector3.Distance(a.ConnectionPoint, b.ConnectionPoint) > 200f) // Max reach
+            float maxReach = 200f;
+            if (inventory.ActiveStack.item.itemId.EndsWith("_lv_wire")) maxReach = 15f;
+
+            if (Vector3.Distance(a.ConnectionPoint, b.ConnectionPoint) > maxReach)
             {
-                Debug.Log("Stations too far apart!");
+                VoxelEngine.UI.BuildFeedbackHud.Show("Too Far!", $"Max reach is {maxReach}m", null, Color.red);
                 return false;
             }
 

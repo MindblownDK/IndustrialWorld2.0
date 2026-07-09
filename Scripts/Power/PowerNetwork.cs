@@ -23,8 +23,14 @@ namespace VoxelEngine.Power
             {
                 if (n is PowerCable c && c.wire != null)
                 {
-                    if (c.wire.capacityWatts < bottleneckWatts)
+                    if (c.wire.capacityWatts < 0 || c.wire.capacityWatts >= 1000000f) // Superconductor / infinite
+                    {
+                        // Don't lower the bottleneck
+                    }
+                    else if (c.wire.capacityWatts < bottleneckWatts)
+                    {
                         bottleneckWatts = c.wire.capacityWatts;
+                    }
                 }
             }
             // No cables in the network → power flows freely (direct connection).

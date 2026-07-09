@@ -30,7 +30,7 @@ namespace VoxelEngine.Power
         public override PowerNodeKind Kind => PowerNodeKind.Cable;
 
         [Header("Tier")]
-        public WireDefinition wire;
+        public ElectricalPipeDefinition wire;
 
         [Header("Visual")]
         [Tooltip("Edge length of the central cable hub cube, in metres. A typical 1m grid " +
