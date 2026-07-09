@@ -1,6 +1,7 @@
 // Assets/Scripts/VoxelEngine/Power/PowerNode.cs
 using System.Collections.Generic;
 using UnityEngine;
+using VoxelEngine.Transport;
 
 namespace VoxelEngine.Power
 {
@@ -34,7 +35,10 @@ namespace VoxelEngine.Power
         // Network membership — assigned by PowerNetworkManager.
         [System.NonSerialized] public PowerNetwork network;
         [System.NonSerialized] public List<PowerNode> neighbours = new();
+        
+        // Manual links (from manual wires)
         [System.NonSerialized] public List<PowerNode> manualLinks = new();
+        [System.NonSerialized] public Dictionary<PowerNode, float> manualLinkCapacities = new();
 
         /// <summary>Raised after PowerNetworkManager rebuilds topology, so visuals can refresh.</summary>
         public System.Action onNeighboursChanged;
@@ -42,31 +46,20 @@ namespace VoxelEngine.Power
         protected virtual void OnEnable()  { PowerNetworkManager.EnsureInstance(); PowerNetworkManager.Instance.Register(this); }
         protected virtual void OnDisable() { PowerNetworkManager.Instance?.Unregister(this); }
 
-        /// <summary>
-        /// Hook called by the manager during topology rebuild to test whether a candidate
-        /// neighbour is legal. Default policy: enforce 6-axis grid alignment (if required)
-        /// AND require an unobstructed straight line between the two positions.
-        ///
-        /// Override per-subclass for custom rules (e.g. wireless transmitter ignores LOS).
-        /// </summary>
         public virtual bool CanLinkTo(PowerNode other)
         {
             if (other == null || other == this) return false;
-
-            // Manual links (from High Voltage wires) always bypass grid/LOS checks.
+            
+            // Manual links always allowed.
             if (manualLinks.Contains(other)) return true;
 
             Vector3 a = transform.position;
             Vector3 b = other.transform.position;
             Vector3 delta = b - a;
 
-            // 6-axis grid alignment check (only enforced when BOTH ends require it —
-            // a machine without the flag can still attach to a cable on any of its faces).
             if (requireGridAlignedNeighbours && other.requireGridAlignedNeighbours)
             {
                 float g = Mathf.Max(0.01f, gridSize);
-                // Convert delta into grid-unit space and accept iff it is exactly one
-                // step along a single cardinal axis (with a small tolerance for float drift).
                 float dx = Mathf.Abs(delta.x) / g;
                 float dy = Mathf.Abs(delta.y) / g;
                 float dz = Mathf.Abs(delta.z) / g;
@@ -81,13 +74,10 @@ namespace VoxelEngine.Power
                 if (oneAxisCount != 1) return false;
             }
 
-            // Line-of-sight: no solid block may sit between the two cable centres.
-            // We shrink the line slightly off both endpoints so we don't hit the
-            // colliders of the cables themselves.
             float dist = delta.magnitude;
             if (dist < 0.001f) return true;
             Vector3 dir = delta / dist;
-            const float SHRINK = 0.30f; // half a cable's thickness
+            const float SHRINK = 0.30f;
             float castDist = Mathf.Max(0f, dist - SHRINK * 2f);
             if (castDist <= 0f) return true;
             Vector3 origin = a + dir * SHRINK;
@@ -97,10 +87,8 @@ namespace VoxelEngine.Power
             {
                 var h = hits[i];
                 if (h.collider == null) continue;
-                // Ignore hits on either endpoint node and any of its renderers.
                 var node = h.collider.GetComponentInParent<PowerNode>();
                 if (node == this || node == other) continue;
-                // A solid object (PlacedBlock or anything else) blocks the connection.
                 return false;
             }
             return true;

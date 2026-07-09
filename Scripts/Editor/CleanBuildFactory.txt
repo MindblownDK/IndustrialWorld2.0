@@ -1,0 +1,90 @@
+        private void BuildFactoryFoundationsContent()
+        {
+            const string FAC_ROOT    = ASSET_ROOT + "/Factory";
+            const string FAC_PREFABS = FAC_ROOT + "/Prefabs";
+            const string FAC_MATS    = FAC_PREFABS + "/Materials";
+            const string FAC_ITEMS   = FAC_ROOT + "/Items";
+            const string FAC_RECIPES = FAC_ROOT + "/Recipes";
+            const string FAC_DEFS    = FAC_ROOT + "/Definitions";
+            const string FAC_MRECIPES= FAC_ROOT + "/MachineRecipes";
+            const string HV_ROOT     = ASSET_ROOT + "/HighVoltage";
+            const string HV_PREFABS  = HV_ROOT + "/Prefabs";
+            const string HV_MATS     = HV_PREFABS + "/Materials";
+            const string HV_ITEMS    = HV_ROOT + "/Items";
+            const string HV_RECIPES  = HV_ROOT + "/Recipes";
+            const string NODES       = ASSET_ROOT + "/Research/Nodes";
+
+            foreach (var f in new[] { FAC_ROOT, FAC_PREFABS, FAC_MATS, FAC_ITEMS, FAC_RECIPES, FAC_DEFS, FAC_MRECIPES,
+                                       HV_ROOT, HV_PREFABS, HV_MATS, HV_ITEMS, HV_RECIPES, NODES })
+                EnsureFolder(f);
+
+            string commonItems = ASSET_ROOT + "/Items";
+            string indItems    = ASSET_ROOT + "/Industrial/Items";
+            var ironIngot   = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{commonItems}/Item_IronIngot.asset");
+            var copperIngot = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{commonItems}/Item_CopperIngot.asset");
+            var steelIngot  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{commonItems}/Item_SteelIngot.asset");
+            var ironPlate   = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_IronPlate.asset");
+            var steelPlate  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_SteelPlate.asset");
+            var copperWire  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_CopperWire.asset");
+            var circuit     = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_Circuit.asset");
+            var advCircuit  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_AdvCircuit.asset");
+            var ironGear    = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_IronGear.asset");
+            var glass       = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_Glass.asset");
+            var stone       = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{ITEM_FOLDER}/Item_Stone.asset");
+            var sciT1       = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ScienceItem>($"{commonItems}/Item_ScienceT1.asset");
+            var sciT2       = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ScienceItem>($"{commonItems}/Item_ScienceT2.asset");
+            var sciT3       = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ScienceItem>($"{commonItems}/Item_ScienceT3.asset");
+
+            var registry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeRegistry>($"{ASSET_ROOT}/RecipeRegistry.asset");
+            var tree     = AssetDatabase.LoadAssetAtPath<VoxelEngine.Research.ResearchTree>($"{ASSET_ROOT}/Research/ResearchTree.asset");
+
+            // HV Wire Item
+            var hvWireItem = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{HV_ITEMS}/Item_HV_Wire.asset");
+            hvWireItem.itemId = "hv_wire";
+            hvWireItem.displayName = "High Voltage Wire";
+            hvWireItem.description = "Heavy-duty reinforced cable for High Voltage Transmission. Very expensive. Consumes 1 per HV connection.";
+            hvWireItem.iconTint = new Color(0.95f, 0.85f, 0.20f);
+            hvWireItem.maxStack = 50;
+            hvWireItem.massPerUnit = 5f;
+            hvWireItem.category = "Power";
+            EditorUtility.SetDirty(hvWireItem);
+
+            VoxelEngine.Crafting.RecipeDefinition AddHVRec(string name, string display,
+                VoxelEngine.Items.ItemDefinition output, int outputCount,
+                VoxelEngine.Crafting.StationTier station, bool unlocked,
+                params (VoxelEngine.Items.ItemDefinition item, int n)[] inputs)
+            {
+                string path = $"{HV_RECIPES}/{name}.asset";
+                var r = GetOrCreateAsset<VoxelEngine.Crafting.RecipeDefinition>(path);
+                r.displayName = display; r.outputItem = output; r.outputCount = outputCount;
+                r.requiredStation = station; r.craftSeconds = 4f; r.unlockedByDefault = unlocked;
+                var valid = new List<VoxelEngine.Crafting.RecipeIngredient>();
+                foreach (var (item, n) in inputs) if (item != null) valid.Add(new VoxelEngine.Crafting.RecipeIngredient { item = item, count = n });
+                r.inputs = valid.ToArray();
+                EditorUtility.SetDirty(r);
+                if (registry != null && !registry.recipes.Contains(r)) registry.recipes.Add(r);
+                return r;
+            }
+
+            var recHVWire = AddHVRec("Recipe_HV_Wire", "High Voltage Wire", hvWireItem, 1,
+                VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 4), (copperWire, 20), (circuit, 2));
+
+            // ... (rest of the logic for conveyors etc skipped for brevity in this scratch file)
+            // But I must include the Transformers logic correctly.
+            
+            // Step-Up Transformer
+            var stepUpPrefab = GetOrCreatePrefab($"{HV_PREFABS}/StepUpTransformer.prefab", "StepUpTransformer", root => {
+                var su = EnsureComponent<VoxelEngine.Simulation.StepUpTransformer>(root);
+                var bs = (VoxelEngine.Simulation.VoltageStationBase)su;
+                bs.maxThroughputWatts = 200000000f;
+                bs.conversionLoss = 0.02f;
+            });
+
+            // Step-Down Transformer
+            var stepDownPrefab = GetOrCreatePrefab($"{HV_PREFABS}/StepDownTransformer.prefab", "StepDownTransformer", root => {
+                var sd = EnsureComponent<VoxelEngine.Simulation.StepDownTransformer>(root);
+                var bs = (VoxelEngine.Simulation.VoltageStationBase)sd;
+                bs.maxThroughputWatts = 200000000f;
+                bs.conversionLoss = 0.02f;
+            });
+        }

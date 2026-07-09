@@ -6,6 +6,10 @@ namespace VoxelEngine.Simulation
 {
     public class StepUpTransformer : VoltageStationBase
     {
+        // Fields for Setup Wizard compatibility
+        public new float maxThroughputWatts = 200_000_000f;
+        public new float conversionLoss = 0.02f;
+
         public override float TotalProduced => hvNetwork != null ? hvNetwork.producedThisTick : 0f;
         public override float TotalConsumed => hvNetwork != null ? hvNetwork.consumedThisTick : 0f;
         public override float MaxCapacity => maxThroughputWatts;
@@ -26,9 +30,9 @@ namespace VoxelEngine.Simulation
             
             var lvGo = new GameObject("LV_Node");
             lvGo.transform.SetParent(transform, false);
-            lvGo.transform.localPosition = new Vector3(0, 0, -1.5f); // Position at the LV bushing side
+            lvGo.transform.localPosition = new Vector3(0, 0, -1.5f);
             _lvNode = lvGo.AddComponent<PowerCable>();
-            _lvNode.requireGridAlignedNeighbours = false; // Allow tapping in from pipes
+            _lvNode.requireGridAlignedNeighbours = false;
             _lvNode.connectRadius = 3f;
         }
     }

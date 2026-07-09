@@ -16,7 +16,6 @@ namespace VoxelEngine.Simulation
         public float wireWidth = 0.05f;
         public Material wireMaterial;
 
-        // Fields expected by Setup Wizard
         public float maxThroughputWatts = 50000f;
         public float conversionLoss = 0.02f;
 
@@ -43,7 +42,9 @@ namespace VoxelEngine.Simulation
             }
         }
 
-        public virtual void AddConnection(IVoltageStation other)
+        public virtual void AddConnection(IVoltageStation other) => AddConnection(other, 1000000000f);
+
+        public virtual void AddConnection(IVoltageStation other, float capacity)
         {
             if (other == null || other == (IVoltageStation)this) return;
             if (_connectedStations.Contains(other)) return;
@@ -58,7 +59,11 @@ namespace VoxelEngine.Simulation
                 if (otherNode != null)
                 {
                     if (!myNode.manualLinks.Contains(otherNode)) myNode.manualLinks.Add(otherNode);
+                    myNode.manualLinkCapacities[otherNode] = capacity;
+                    
                     if (!otherNode.manualLinks.Contains(myNode)) otherNode.manualLinks.Add(myNode);
+                    otherNode.manualLinkCapacities[myNode] = capacity;
+
                     PowerNetworkManager.Instance?.SetDirty();
                 }
             }
@@ -77,7 +82,9 @@ namespace VoxelEngine.Simulation
                     if (otherNode != null)
                     {
                         myNode.manualLinks.Remove(otherNode);
+                        myNode.manualLinkCapacities.Remove(otherNode);
                         otherNode.manualLinks.Remove(myNode);
+                        otherNode.manualLinkCapacities.Remove(myNode);
                         PowerNetworkManager.Instance?.SetDirty();
                     }
                 }

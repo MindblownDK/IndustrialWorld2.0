@@ -42,7 +42,6 @@ namespace VoxelEngine.Simulation
                 return;
             }
 
-            // Must hold a recognized wire item
             bool isHV = stack.item.itemId == "hv_wire";
             bool isLV = stack.item.itemId.EndsWith("_lv_wire");
 
@@ -73,13 +72,7 @@ namespace VoxelEngine.Simulation
                 var station = hit.collider.GetComponentInParent<IVoltageStation>();
                 if (station != null)
                 {
-                    // Validation: HV wire only for HV stations (or transformers).
-                    // LV wire only for LV stations (or transformers).
                     bool stationIsHV = station.IsHighVoltage;
-                    
-                    // Transformers (isHighVoltage=true) can actually take LV connections too.
-                    // This is a special case: we allow LV wire to connect to a Transformer IF it's the second station.
-                    // Or more simply: Transformers are bridges.
                     
                     if (holdingHV && !stationIsHV)
                     {
@@ -99,7 +92,8 @@ namespace VoxelEngine.Simulation
                     }
                     else if (_firstStation != station)
                     {
-                        if (ConnectStations(_firstStation, station))
+                        float capacity = GetCurrentWireCapacity();
+                        if (ConnectStations(_firstStation, station, capacity))
                         {
                             var item = inventory.ActiveStack.item;
                             inventory.container.Remove(item, 1);
@@ -112,7 +106,17 @@ namespace VoxelEngine.Simulation
             }
         }
 
-        private bool ConnectStations(IVoltageStation a, IVoltageStation b)
+        private float GetCurrentWireCapacity()
+        {
+            var id = inventory.ActiveStack.item.itemId;
+            if (id == "hv_wire") return 1000000000f; // Infinite
+            if (id == "copper_lv_wire") return 1500f;
+            if (id == "gold_lv_wire") return 15000f;
+            if (id == "graphite_lv_wire") return 50000f;
+            return 1000f;
+        }
+
+        private bool ConnectStations(IVoltageStation a, IVoltageStation b, float capacity)
         {
             float maxReach = 200f;
             if (inventory.ActiveStack.item.itemId.EndsWith("_lv_wire")) maxReach = 15f;
@@ -123,8 +127,8 @@ namespace VoxelEngine.Simulation
                 return false;
             }
 
-            a.AddConnection(b);
-            b.AddConnection(a);
+            a.AddConnection(b, capacity);
+            b.AddConnection(a, capacity);
             return true;
         }
 

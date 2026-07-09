@@ -1,39 +1,48 @@
 // Assets/Scripts/VoxelEngine/Power/PowerNetwork.cs
 using System.Collections.Generic;
+using UnityEngine;
 
 namespace VoxelEngine.Power
 {
-    /// <summary>
-    /// One connected component of power nodes (cables + machines). Recomputed lazily
-    /// when nodes change. Holds the network-wide bottleneck = minimum cable capacity
-    /// among all cables in the network. Generators contribute up to that bottleneck.
-    /// </summary>
     public class PowerNetwork
     {
         public readonly List<PowerNode> nodes = new();
-        public float bottleneckWatts;          // minimum cable capacity in this network (W/s)
+        public float bottleneckWatts;
         public float producedThisTick;
         public float consumedThisTick;
-        public float storedThisTick;           // delta into batteries
+        public float storedThisTick;
 
         public void Recompute()
         {
             bottleneckWatts = float.PositiveInfinity;
+            
+            // Check node-based capacity (Electrical Pipes)
             foreach (var n in nodes)
             {
                 if (n is PowerCable c && c.wire != null)
                 {
-                    if (c.wire.capacityWatts < 0 || c.wire.capacityWatts >= 1000000f) // Superconductor / infinite
-                    {
-                        // Don't lower the bottleneck
-                    }
-                    else if (c.wire.capacityWatts < bottleneckWatts)
-                    {
+                    // Superconductor / infinite capacity check
+                    if (c.wire.capacityWatts < 0 || c.wire.capacityWatts >= 1000000000f)
+                        continue;
+
+                    if (c.wire.capacityWatts < bottleneckWatts)
                         bottleneckWatts = c.wire.capacityWatts;
+                }
+            }
+
+            // Check manual link-based capacity (LV Wires)
+            foreach (var n in nodes)
+            {
+                foreach (var nb in n.neighbours)
+                {
+                    if (n.manualLinkCapacities.TryGetValue(nb, out float cap))
+                    {
+                        if (cap > 0 && cap < bottleneckWatts)
+                            bottleneckWatts = cap;
                     }
                 }
             }
-            // No cables in the network → power flows freely (direct connection).
+
             if (float.IsInfinity(bottleneckWatts)) bottleneckWatts = float.MaxValue;
         }
     }
