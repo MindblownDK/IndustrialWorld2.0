@@ -8,6 +8,7 @@ using VoxelEngine.Items;
 using VoxelEngine.Materials;
 using VoxelEngine.Generation;
 using VoxelEngine.Biomes;
+using VoxelEngine.Simulation;
 
 namespace VoxelEngine.EditorTools
 {
@@ -127,6 +128,26 @@ namespace VoxelEngine.EditorTools
                 "  • Water-only maritime wake emitters on ship grids\n" +
                 "Re-runnable. Idempotent. Run after importing Crest into Liquid/.");
             AddWizardButton(scroll, "16. Configure Crest Water Integration (UI fit, shallow water, flow + boat wakes)", CrestWaterSetupUtility.Configure, 56);
+
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 17 builds the FACTORY FOUNDATIONS + HIGH VOLTAGE GRID:\n" +
+                "  • Conveyor Belt (Basic / Fast / Express tiers)\n" +
+                "  • Conveyor Chute (vertical item transport)\n" +
+                "  • Crusher + Assembler Mk.1/Mk.2/Mk.3 machines\n" +
+                "  • MachineDefinition + MachineRecipe ScriptableObjects\n" +
+                "  • VoltageSystemConfig (25 MW LV/HV threshold)\n" +
+                "  • Power Pole (6 connections, 15 m reach, realistic lattice visuals)\n" +
+                "  • Electrical Substation (150 m relay)\n" +
+                "  • HV Transmission Tower (12 m lattice, 200 m span, unlimited power)\n" +
+                "  • Step-Up Transformer (LV→HV, BLUE accent, 200 MW, 2% loss)\n" +
+                "  • Step-Down Transformer (HV→LV, AMBER accent, 200 MW, 2% loss)\n" +
+                "  • Grid Light Block + LED Strip (accent lighting)\n" +
+                "  • Research node: Factory Logistics (gates conveyors, machines, HV)\n" +
+                "Re-runnable. Idempotent. Non-destructive — never overwrites balance values.\n" +
+                "Run AFTER steps 4, 6, 7, 10, 12.");
+            AddWizardButton(scroll, "17. Build Factory Foundations + HV Grid\n(Conveyors, Machines, Power Poles, Transformers, HV Towers)", BuildFactoryFoundationsContent, 72);
+
             AddSpacer(scroll, 20);
         }
 
@@ -5879,6 +5900,737 @@ root =>
         // ============================================================
         //                STEP 15 - WIND POWER CONTENT (modular 4.0)
         // ============================================================
+        // ============================================================
+        //       STEP 17 - FACTORY FOUNDATIONS + HIGH VOLTAGE GRID
+        // ============================================================
+        private void BuildFactoryFoundationsContent()
+        {
+            const string FAC_ROOT    = ASSET_ROOT + "/Factory";
+            const string FAC_PREFABS = FAC_ROOT + "/Prefabs";
+            const string FAC_ITEMS   = FAC_ROOT + "/Items";
+            const string FAC_RECIPES = FAC_ROOT + "/Recipes";
+            const string FAC_DEFS    = FAC_ROOT + "/Definitions";
+            const string FAC_MRECIPES= FAC_ROOT + "/MachineRecipes";
+            const string HV_ROOT     = ASSET_ROOT + "/HighVoltage";
+            const string HV_PREFABS  = HV_ROOT + "/Prefabs";
+            const string HV_ITEMS    = HV_ROOT + "/Items";
+            const string HV_RECIPES  = HV_ROOT + "/Recipes";
+            const string NODES       = ASSET_ROOT + "/Research/Nodes";
+
+            foreach (var f in new[] { FAC_ROOT, FAC_PREFABS, FAC_ITEMS, FAC_RECIPES, FAC_DEFS, FAC_MRECIPES,
+                                       HV_ROOT, HV_PREFABS, HV_ITEMS, HV_RECIPES, NODES })
+                EnsureFolder(f);
+
+            // ── Dependencies ──────────────────────────────────────────
+            string commonItems = ASSET_ROOT + "/Items";
+            string indItems    = ASSET_ROOT + "/Industrial/Items";
+            var ironIngot   = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{commonItems}/Item_IronIngot.asset");
+            var copperIngot = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{commonItems}/Item_CopperIngot.asset");
+            var steelIngot  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{commonItems}/Item_SteelIngot.asset");
+            var ironPlate   = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_IronPlate.asset");
+            var steelPlate  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_SteelPlate.asset");
+            var copperWire  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_CopperWire.asset");
+            var circuit     = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_Circuit.asset");
+            var advCircuit  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_AdvCircuit.asset");
+            var ironGear    = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_IronGear.asset");
+            var glass       = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{indItems}/Item_Glass.asset");
+            var stone       = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{ITEM_FOLDER}/Item_Stone.asset");
+            var coal        = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{ITEM_FOLDER}/Item_Coal.asset");
+            var ironOre     = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{ITEM_FOLDER}/Item_Iron.asset");
+            var copperOre   = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{ITEM_FOLDER}/Item_Copper.asset");
+            var sciT1       = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ScienceItem>($"{commonItems}/Item_ScienceT1.asset");
+            var sciT2       = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ScienceItem>($"{commonItems}/Item_ScienceT2.asset");
+            var sciT3       = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ScienceItem>($"{commonItems}/Item_ScienceT3.asset");
+
+            if (ironIngot == null || copperIngot == null || steelIngot == null)
+            {
+                EditorUtility.DisplayDialog("Voxel Engine",
+                    "Run Step 4 (Build Crafting Content) first — it creates Iron/Copper/Steel ingots.", "OK");
+                return;
+            }
+
+            var registry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeRegistry>($"{ASSET_ROOT}/RecipeRegistry.asset");
+            var tree     = AssetDatabase.LoadAssetAtPath<VoxelEngine.Research.ResearchTree>($"{ASSET_ROOT}/Research/ResearchTree.asset");
+            if (registry == null)
+            {
+                EditorUtility.DisplayDialog("Voxel Engine",
+                    "Run Step 4 first — RecipeRegistry.asset doesn't exist.", "OK");
+                return;
+            }
+
+            // ════════════════════════════════════════════════════════════
+            //  1. VOLTAGE SYSTEM CONFIG
+            // ════════════════════════════════════════════════════════════
+            string configPath = "Assets/Resources/VoltageSystemConfig.asset";
+            EnsureFolder("Assets/Resources");
+            var voltageConfig = AssetDatabase.LoadAssetAtPath<VoltageSystemConfig>(configPath);
+            if (voltageConfig == null)
+            {
+                voltageConfig = ScriptableObject.CreateInstance<VoltageSystemConfig>();
+                voltageConfig.lvThresholdWatts    = 25_000_000f;
+                voltageConfig.defaultStepUpLoss   = 0.02f;
+                voltageConfig.defaultStepDownLoss = 0.02f;
+                voltageConfig.hvLineReach         = 200f;
+                voltageConfig.lvWireReach         = 15f;
+                voltageConfig.lvPoleMaxConnections = 6;
+                AssetDatabase.CreateAsset(voltageConfig, configPath);
+                Debug.Log("[Step 17] Created VoltageSystemConfig in Resources/");
+            }
+            // Never overwrite — user may have tuned these values.
+
+            // ════════════════════════════════════════════════════════════
+            //  2. MACHINE DEFINITIONS (ScriptableObjects)
+            // ════════════════════════════════════════════════════════════
+            MachineDefinition MakeDef(string id, string display, MachineCategory cat,
+                float activeW, float idleW, int inSlots, int outSlots, int upSlots, Color col)
+            {
+                string path = $"{FAC_DEFS}/MachineDef_{id}.asset";
+                var def = AssetDatabase.LoadAssetAtPath<MachineDefinition>(path);
+                bool isNew = def == null;
+                if (isNew)
+                {
+                    def = ScriptableObject.CreateInstance<MachineDefinition>();
+                    AssetDatabase.CreateAsset(def, path);
+                }
+                if (isNew)
+                {
+                    def.machineId    = id;
+                    def.displayName  = display;
+                    def.category     = cat;
+                    def.activeWatts  = activeW;
+                    def.idleWatts    = idleW;
+                    def.inputSlots   = inSlots;
+                    def.outputSlots  = outSlots;
+                    def.upgradeSlots = upSlots;
+                    def.primaryColor = col;
+                    def.speedMultiplier = 1f;
+                }
+                // Always ensure links are valid.
+                EditorUtility.SetDirty(def);
+                return def;
+            }
+
+            var defCrusher     = MakeDef("crusher",       "Crusher",        MachineCategory.Crusher,   250f, 8f,  1, 4, 2, new Color(0.55f, 0.40f, 0.30f));
+            var defAssemblerMk1= MakeDef("assembler_mk1", "Assembler Mk.1", MachineCategory.Assembler, 300f, 10f, 4, 4, 2, new Color(0.20f, 0.50f, 0.85f));
+            var defAssemblerMk2= MakeDef("assembler_mk2", "Assembler Mk.2", MachineCategory.Assembler, 450f, 12f, 6, 6, 3, new Color(0.25f, 0.55f, 0.90f));
+            var defAssemblerMk3= MakeDef("assembler_mk3", "Assembler Mk.3", MachineCategory.Assembler, 600f, 15f, 9, 8, 4, new Color(0.30f, 0.60f, 0.95f));
+
+            // ════════════════════════════════════════════════════════════
+            //  3. MACHINE RECIPES (ScriptableObjects)
+            // ════════════════════════════════════════════════════════════
+            MachineRecipe MakeMRecipe(string id, string display, MachineRecipeType type,
+                ItemDefinition output, int outCount, float seconds,
+                params (ItemDefinition item, int count)[] inputs)
+            {
+                string path = $"{FAC_MRECIPES}/MRecipe_{id}.asset";
+                var r = AssetDatabase.LoadAssetAtPath<MachineRecipe>(path);
+                bool isNew = r == null;
+                if (isNew)
+                {
+                    r = ScriptableObject.CreateInstance<MachineRecipe>();
+                    AssetDatabase.CreateAsset(r, path);
+                }
+                if (isNew)
+                {
+                    r.displayName    = display;
+                    r.recipeType     = type;
+                    r.outputItem     = output;
+                    r.outputCount    = outCount;
+                    r.processSeconds = seconds;
+                    r.inputs = new MachineRecipeSlot[inputs.Length];
+                    for (int i = 0; i < inputs.Length; i++)
+                        r.inputs[i] = new MachineRecipeSlot { item = inputs[i].item, count = inputs[i].count };
+                    r.unlockedByDefault = true;
+                }
+                // Always ensure links are valid (output item may have been re-created).
+                if (r.outputItem == null && output != null) r.outputItem = output;
+                EditorUtility.SetDirty(r);
+                return r;
+            }
+
+            // Crusher recipes.
+            var crushedIron  = MakeResource(FAC_ITEMS, "Crushed Iron Ore",  new Color(0.60f, 0.42f, 0.35f), 999, VoxelEngine.Items.ResourceCategory.Raw, uiCategory: "Factory");
+            crushedIron.description = "Finely crushed iron ore. Smelts 25% faster than raw ore and has a chance at bonus yield.";
+            EditorUtility.SetDirty(crushedIron);
+
+            var crushedCopper = MakeResource(FAC_ITEMS, "Crushed Copper Ore", new Color(0.78f, 0.50f, 0.22f), 999, VoxelEngine.Items.ResourceCategory.Raw, uiCategory: "Factory");
+            crushedCopper.description = "Finely crushed copper ore. Smelts 25% faster than raw ore.";
+            EditorUtility.SetDirty(crushedCopper);
+
+            var gravel = MakeResource(FAC_ITEMS, "Gravel", new Color(0.55f, 0.52f, 0.48f), 999, VoxelEngine.Items.ResourceCategory.Raw, uiCategory: "Factory");
+            gravel.description = "Crushed stone. Used in construction and concrete recipes.";
+            EditorUtility.SetDirty(gravel);
+
+            var mrecipeCrushIron   = MakeMRecipe("crush_iron",   "Crush Iron Ore",   MachineRecipeType.Crushing, crushedIron,  1, 3f, (ironOre, 1));
+            var mrecipeCrushCopper = MakeMRecipe("crush_copper", "Crush Copper Ore", MachineRecipeType.Crushing, crushedCopper, 1, 3f, (copperOre, 1));
+            var mrecipeCrushStone  = MakeMRecipe("crush_stone",  "Crush Stone",      MachineRecipeType.Crushing, gravel,        2, 2f, (stone, 1));
+
+            // Assembler recipes (component items).
+            var motorItem    = MakeResource(FAC_ITEMS, "Electric Motor",  new Color(0.45f, 0.48f, 0.55f), 999, VoxelEngine.Items.ResourceCategory.Component, uiCategory: "Factory");
+            motorItem.description = VoltageItemDescriptions.AssemblerMk1 + "\n\nComponent: Used in conveyors, pumps, and vehicle drivetrains.";
+            EditorUtility.SetDirty(motorItem);
+
+            var steelBeamItem = MakeResource(FAC_ITEMS, "Steel Beam", new Color(0.55f, 0.58f, 0.65f), 999, VoxelEngine.Items.ResourceCategory.Component, uiCategory: "Factory");
+            steelBeamItem.description = "Structural steel I-beam. Used in heavy construction and grid ship hulls.";
+            EditorUtility.SetDirty(steelBeamItem);
+
+            var pipeItem = MakeResource(FAC_ITEMS, "Steel Pipe", new Color(0.50f, 0.52f, 0.56f), 999, VoxelEngine.Items.ResourceCategory.Component, uiCategory: "Factory");
+            pipeItem.description = "Hollow steel pipe. Used in fluid transport and structural frameworks.";
+            EditorUtility.SetDirty(pipeItem);
+
+            var batteryItem = MakeResource(FAC_ITEMS, "Industrial Battery Cell", new Color(0.25f, 0.65f, 0.35f), 999, VoxelEngine.Items.ResourceCategory.Component, uiCategory: "Factory");
+            batteryItem.description = "High-capacity battery cell. Used in grid batteries, vehicles, and UPS systems.";
+            EditorUtility.SetDirty(batteryItem);
+
+            var mrecipeMotor     = MakeMRecipe("motor",      "Electric Motor",        MachineRecipeType.Assembling, motorItem,     1, 6f, (ironIngot, 2), (copperIngot, 3));
+            var mrecipeSteelBeam = MakeMRecipe("steel_beam", "Steel Beam",            MachineRecipeType.Assembling, steelBeamItem, 2, 4f, (steelIngot, 3));
+            var mrecipePipe      = MakeMRecipe("steel_pipe", "Steel Pipe",            MachineRecipeType.Assembling, pipeItem,      4, 3f, (steelIngot, 2));
+            var mrecipeBattery   = MakeMRecipe("battery_cell","Industrial Battery Cell",MachineRecipeType.Assembling, batteryItem,  1, 8f, (copperIngot, 4), (ironIngot, 2));
+
+            // ════════════════════════════════════════════════════════════
+            //  4. FACTORY PREFABS
+            // ════════════════════════════════════════════════════════════
+
+            // -- Conveyor Belt (Basic) --
+            var conveyorBasicPrefab = GetOrCreatePrefab($"{FAC_PREFABS}/ConveyorBelt_Basic.prefab", "ConveyorBelt_Basic", root =>
+            {
+                if (root.GetComponent<VoxelEngine.Simulation.ConveyorBelt>() == null)
+                {
+                    var belt = root.AddComponent<VoxelEngine.Simulation.ConveyorBelt>();
+                    belt.speed = ConveyorSpeed.Basic;
+                    belt.shape = ConveyorShape.Straight;
+                    belt.maxItems = 8;
+                }
+                // Always ensure collider exists for physics overlap scans.
+                if (root.GetComponent<BoxCollider>() == null)
+                {
+                    var col = root.AddComponent<BoxCollider>();
+                    col.size = new Vector3(1f, 0.6f, 1f);
+                    col.center = new Vector3(0, 0.3f, 0);
+                }
+            });
+
+            // -- Conveyor Belt (Fast) --
+            var conveyorFastPrefab = GetOrCreatePrefab($"{FAC_PREFABS}/ConveyorBelt_Fast.prefab", "ConveyorBelt_Fast", root =>
+            {
+                if (root.GetComponent<VoxelEngine.Simulation.ConveyorBelt>() == null)
+                {
+                    var belt = root.AddComponent<VoxelEngine.Simulation.ConveyorBelt>();
+                    belt.speed = ConveyorSpeed.Fast;
+                    belt.shape = ConveyorShape.Straight;
+                    belt.maxItems = 12;
+                }
+                if (root.GetComponent<BoxCollider>() == null)
+                {
+                    var col = root.AddComponent<BoxCollider>();
+                    col.size = new Vector3(1f, 0.6f, 1f);
+                    col.center = new Vector3(0, 0.3f, 0);
+                }
+            });
+
+            // -- Conveyor Belt (Express) --
+            var conveyorExpressPrefab = GetOrCreatePrefab($"{FAC_PREFABS}/ConveyorBelt_Express.prefab", "ConveyorBelt_Express", root =>
+            {
+                if (root.GetComponent<VoxelEngine.Simulation.ConveyorBelt>() == null)
+                {
+                    var belt = root.AddComponent<VoxelEngine.Simulation.ConveyorBelt>();
+                    belt.speed = ConveyorSpeed.Express;
+                    belt.shape = ConveyorShape.Straight;
+                    belt.maxItems = 16;
+                }
+                if (root.GetComponent<BoxCollider>() == null)
+                {
+                    var col = root.AddComponent<BoxCollider>();
+                    col.size = new Vector3(1f, 0.6f, 1f);
+                    col.center = new Vector3(0, 0.3f, 0);
+                }
+            });
+
+            // -- Conveyor Chute --
+            var chutePrefab = GetOrCreatePrefab($"{FAC_PREFABS}/ConveyorChute.prefab", "ConveyorChute", root =>
+            {
+                if (root.GetComponent<VoxelEngine.Simulation.ConveyorChute>() == null)
+                {
+                    var chute = root.AddComponent<VoxelEngine.Simulation.ConveyorChute>();
+                    chute.shape = ChuteShape.Straight;
+                    chute.maxItems = 6;
+                    chute.slideSpeed = 3f;
+                }
+                if (root.GetComponent<BoxCollider>() == null)
+                {
+                    var col = root.AddComponent<BoxCollider>();
+                    col.size = new Vector3(0.7f, 1.2f, 0.7f);
+                }
+            });
+
+            // -- Crusher --
+            var crusherPrefab = GetOrCreatePrefab($"{FAC_PREFABS}/Crusher.prefab", "Crusher", root =>
+            {
+                if (root.GetComponent<VoxelEngine.Simulation.Crusher>() == null)
+                {
+                    var crusher = root.AddComponent<VoxelEngine.Simulation.Crusher>();
+                    crusher.baseWattsPerSecond = 250f;
+                    crusher.idleWattsPerSecond = 8f;
+                    crusher.knownRecipes = new System.Collections.Generic.List<MachineRecipe>
+                    {
+                        mrecipeCrushIron, mrecipeCrushCopper, mrecipeCrushStone
+                    };
+                }
+                // Ensure PowerConsumer exists (don't overwrite watts).
+                if (root.GetComponent<VoxelEngine.Power.PowerConsumer>() == null)
+                {
+                    var pc = root.AddComponent<VoxelEngine.Power.PowerConsumer>();
+                    pc.connectRadius = 1.6f;
+                }
+                if (root.GetComponent<BoxCollider>() == null)
+                    root.AddComponent<BoxCollider>();
+            });
+
+            // -- Assembler Mk.1 --
+            var assemblerMk1Prefab = GetOrCreatePrefab($"{FAC_PREFABS}/Assembler_Mk1.prefab", "Assembler_Mk1", root =>
+            {
+                if (root.GetComponent<VoxelEngine.Simulation.Assembler>() == null)
+                {
+                    var asm = root.AddComponent<VoxelEngine.Simulation.Assembler>();
+                    asm.tier = AssemblerTier.Mk1;
+                    asm.baseWattsPerSecond = 300f;
+                    asm.idleWattsPerSecond = 10f;
+                    asm.knownRecipes = new System.Collections.Generic.List<MachineRecipe>
+                    {
+                        mrecipeMotor, mrecipeSteelBeam, mrecipePipe, mrecipeBattery
+                    };
+                }
+                if (root.GetComponent<VoxelEngine.Power.PowerConsumer>() == null)
+                {
+                    var pc = root.AddComponent<VoxelEngine.Power.PowerConsumer>();
+                    pc.connectRadius = 1.6f;
+                }
+                if (root.GetComponent<BoxCollider>() == null)
+                    root.AddComponent<BoxCollider>();
+            });
+
+            // -- Assembler Mk.2 --
+            var assemblerMk2Prefab = GetOrCreatePrefab($"{FAC_PREFABS}/Assembler_Mk2.prefab", "Assembler_Mk2", root =>
+            {
+                if (root.GetComponent<VoxelEngine.Simulation.Assembler>() == null)
+                {
+                    var asm = root.AddComponent<VoxelEngine.Simulation.Assembler>();
+                    asm.tier = AssemblerTier.Mk2;
+                    asm.baseWattsPerSecond = 450f;
+                    asm.idleWattsPerSecond = 12f;
+                    asm.knownRecipes = new System.Collections.Generic.List<MachineRecipe>
+                    {
+                        mrecipeMotor, mrecipeSteelBeam, mrecipePipe, mrecipeBattery
+                    };
+                }
+                if (root.GetComponent<VoxelEngine.Power.PowerConsumer>() == null)
+                {
+                    var pc = root.AddComponent<VoxelEngine.Power.PowerConsumer>();
+                    pc.connectRadius = 1.6f;
+                }
+                if (root.GetComponent<BoxCollider>() == null)
+                    root.AddComponent<BoxCollider>();
+            });
+
+            // -- Assembler Mk.3 --
+            var assemblerMk3Prefab = GetOrCreatePrefab($"{FAC_PREFABS}/Assembler_Mk3.prefab", "Assembler_Mk3", root =>
+            {
+                if (root.GetComponent<VoxelEngine.Simulation.Assembler>() == null)
+                {
+                    var asm = root.AddComponent<VoxelEngine.Simulation.Assembler>();
+                    asm.tier = AssemblerTier.Mk3;
+                    asm.baseWattsPerSecond = 600f;
+                    asm.idleWattsPerSecond = 15f;
+                    asm.knownRecipes = new System.Collections.Generic.List<MachineRecipe>
+                    {
+                        mrecipeMotor, mrecipeSteelBeam, mrecipePipe, mrecipeBattery
+                    };
+                }
+                if (root.GetComponent<VoxelEngine.Power.PowerConsumer>() == null)
+                {
+                    var pc = root.AddComponent<VoxelEngine.Power.PowerConsumer>();
+                    pc.connectRadius = 1.6f;
+                }
+                if (root.GetComponent<BoxCollider>() == null)
+                    root.AddComponent<BoxCollider>();
+            });
+
+            // -- Grid Light Block --
+            var gridLightPrefab = GetOrCreatePrefab($"{FAC_PREFABS}/GridLight.prefab", "GridLight", root =>
+            {
+                if (root.GetComponent<VoxelEngine.Simulation.GridLightBlock>() == null)
+                {
+                    var gl = root.AddComponent<VoxelEngine.Simulation.GridLightBlock>();
+                    gl.lightColor = Color.white;
+                    gl.range = 20f;
+                    gl.intensity = 3f;
+                    gl.spotAngle = 60f;
+                    gl.BlockMass = 15f;
+                    gl.maxHP = 100f;
+                }
+            });
+
+            // -- LED Strip --
+            var ledStripPrefab = GetOrCreatePrefab($"{FAC_PREFABS}/LEDStrip.prefab", "LEDStrip", root =>
+            {
+                if (root.GetComponent<VoxelEngine.Simulation.LEDStrip>() == null)
+                {
+                    var led = root.AddComponent<VoxelEngine.Simulation.LEDStrip>();
+                    led.stripColor = new Color(0.18f, 0.72f, 0.88f);
+                    led.brightness = 1.5f;
+                    led.stripLength = 1f;
+                    led.mode = LEDMode.Static;
+                    led.wattsDraw = 5f;
+                }
+            });
+
+            // ════════════════════════════════════════════════════════════
+            //  5. HIGH VOLTAGE PREFABS
+            // ════════════════════════════════════════════════════════════
+
+            // -- Power Pole (LV, realistic) --
+            var powerPolePrefab = GetOrCreatePrefab($"{HV_PREFABS}/PowerPole.prefab", "PowerPole", root =>
+            {
+                if (root.GetComponent<VoxelEngine.Simulation.PowerPole>() == null)
+                {
+                    var pole = root.AddComponent<VoxelEngine.Simulation.PowerPole>();
+                    pole.maxConnections = 6;
+                    pole.wireReach = 15f;
+                    pole.poleHeight = 3f;
+                }
+                if (root.GetComponent<BoxCollider>() == null)
+                {
+                    var col = root.AddComponent<BoxCollider>();
+                    col.size = new Vector3(1.2f, 3.5f, 1.2f);
+                    col.center = new Vector3(0, 1.5f, 0);
+                }
+            });
+
+            // -- Electrical Substation --
+            var substationPrefab = GetOrCreatePrefab($"{HV_PREFABS}/ElectricalSubstation.prefab", "ElectricalSubstation", root =>
+            {
+                if (root.GetComponent<VoxelEngine.Simulation.ElectricalSubstation>() == null)
+                {
+                    var sub = root.AddComponent<VoxelEngine.Simulation.ElectricalSubstation>();
+                    sub.relayDistance = 150f;
+                    sub.maxThroughputWatts = 50000f;
+                    sub.structureHeight = 5f;
+                }
+                if (root.GetComponent<BoxCollider>() == null)
+                {
+                    var col = root.AddComponent<BoxCollider>();
+                    col.size = new Vector3(3f, 6f, 2f);
+                    col.center = new Vector3(0, 2.5f, 0);
+                }
+            });
+
+            // -- HV Transmission Tower --
+            var hvTowerPrefab = GetOrCreatePrefab($"{HV_PREFABS}/HighVoltagePole.prefab", "HighVoltagePole", root =>
+            {
+                if (root.GetComponent<VoxelEngine.Simulation.HighVoltagePole>() == null)
+                {
+                    var hv = root.AddComponent<VoxelEngine.Simulation.HighVoltagePole>();
+                    hv.towerHeight = 12f;
+                    hv.baseWidth = 3f;
+                    hv.topWidth = 1.2f;
+                    hv.crossArmLevels = 2;
+                    hv.crossArmLength = 3.5f;
+                    hv.maxConnections = 4;
+                    hv.wireReach = 200f;
+                }
+                if (root.GetComponent<BoxCollider>() == null)
+                {
+                    var col = root.AddComponent<BoxCollider>();
+                    col.size = new Vector3(4f, 14f, 4f);
+                    col.center = new Vector3(0, 6f, 0);
+                }
+            });
+
+            // -- Step-Up Transformer (LV → HV, BLUE) --
+            var stepUpPrefab = GetOrCreatePrefab($"{HV_PREFABS}/StepUpTransformer.prefab", "StepUpTransformer", root =>
+            {
+                if (root.GetComponent<VoxelEngine.Simulation.StepUpTransformer>() == null)
+                {
+                    var su = root.AddComponent<VoxelEngine.Simulation.StepUpTransformer>();
+                    su.maxThroughputWatts = 200_000_000f;
+                    su.conversionLoss = 0.02f;
+                }
+                if (root.GetComponent<BoxCollider>() == null)
+                {
+                    var col = root.AddComponent<BoxCollider>();
+                    col.size = new Vector3(10f, 5f, 6f);
+                    col.center = new Vector3(0, 2f, 0);
+                }
+            });
+
+            // -- Step-Down Transformer (HV → LV, AMBER) --
+            var stepDownPrefab = GetOrCreatePrefab($"{HV_PREFABS}/StepDownTransformer.prefab", "StepDownTransformer", root =>
+            {
+                if (root.GetComponent<VoxelEngine.Simulation.StepDownTransformer>() == null)
+                {
+                    var sd = root.AddComponent<VoxelEngine.Simulation.StepDownTransformer>();
+                    sd.maxThroughputWatts = 200_000_000f;
+                    sd.conversionLoss = 0.02f;
+                }
+                if (root.GetComponent<BoxCollider>() == null)
+                {
+                    var col = root.AddComponent<BoxCollider>();
+                    col.size = new Vector3(12f, 5.5f, 7f);
+                    col.center = new Vector3(0, 2.2f, 0);
+                }
+            });
+
+            // ════════════════════════════════════════════════════════════
+            //  6. BLOCK ITEMS (placeable)
+            // ════════════════════════════════════════════════════════════
+            var blockConveyorBasic   = MakeBlock(FAC_ITEMS, "Block_ConveyorBelt_Basic",   "Conveyor Belt (Basic)",   new Color(0.30f, 0.32f, 0.35f), conveyorBasicPrefab,   "Factory");
+            blockConveyorBasic.description   = VoltageItemDescriptions.ConveyorBelt;
+            var blockConveyorFast    = MakeBlock(FAC_ITEMS, "Block_ConveyorBelt_Fast",    "Conveyor Belt (Fast)",    new Color(0.35f, 0.38f, 0.42f), conveyorFastPrefab,    "Factory");
+            blockConveyorFast.description    = VoltageItemDescriptions.ConveyorBelt + "\n\nFast tier: 5 items/s throughput.";
+            var blockConveyorExpress = MakeBlock(FAC_ITEMS, "Block_ConveyorBelt_Express", "Conveyor Belt (Express)", new Color(0.42f, 0.45f, 0.50f), conveyorExpressPrefab, "Factory");
+            blockConveyorExpress.description = VoltageItemDescriptions.ConveyorBelt + "\n\nExpress tier: 10 items/s throughput.";
+            var blockChute           = MakeBlock(FAC_ITEMS, "Block_ConveyorChute",        "Conveyor Chute",          new Color(0.30f, 0.33f, 0.38f), chutePrefab,           "Factory");
+            blockChute.description           = VoltageItemDescriptions.ConveyorChute;
+            var blockCrusher         = MakeBlock(FAC_ITEMS, "Block_Crusher",              "Crusher",                 new Color(0.55f, 0.40f, 0.30f), crusherPrefab,         "Factory");
+            blockCrusher.description         = VoltageItemDescriptions.Crusher;
+            var blockAssemblerMk1    = MakeBlock(FAC_ITEMS, "Block_Assembler_Mk1",        "Assembler Mk.1",          new Color(0.20f, 0.50f, 0.85f), assemblerMk1Prefab,    "Factory");
+            blockAssemblerMk1.description    = VoltageItemDescriptions.AssemblerMk1;
+            var blockAssemblerMk2    = MakeBlock(FAC_ITEMS, "Block_Assembler_Mk2",        "Assembler Mk.2",          new Color(0.25f, 0.55f, 0.90f), assemblerMk2Prefab,    "Factory");
+            blockAssemblerMk2.description    = VoltageItemDescriptions.AssemblerMk2;
+            var blockAssemblerMk3    = MakeBlock(FAC_ITEMS, "Block_Assembler_Mk3",        "Assembler Mk.3",          new Color(0.30f, 0.60f, 0.95f), assemblerMk3Prefab,    "Factory");
+            blockAssemblerMk3.description    = VoltageItemDescriptions.AssemblerMk3;
+            var blockGridLight       = MakeBlock(FAC_ITEMS, "Block_GridLight",            "Grid Light",              new Color(1f, 0.95f, 0.6f),       gridLightPrefab,       "Factory");
+            blockGridLight.description       = VoltageItemDescriptions.GridLight;
+            var blockLEDStrip        = MakeBlock(FAC_ITEMS, "Block_LEDStrip",             "LED Strip",               new Color(0.18f, 0.72f, 0.88f),   ledStripPrefab,        "Factory");
+            blockLEDStrip.description        = VoltageItemDescriptions.LEDStrip;
+
+            // HV block items.
+            var blockPowerPole       = MakeBlock(HV_ITEMS, "Block_PowerPole",             "Power Pole",              new Color(0.45f, 0.40f, 0.35f),   powerPolePrefab,       "Power");
+            blockPowerPole.description       = VoltageItemDescriptions.PowerPole;
+            var blockSubstation      = MakeBlock(HV_ITEMS, "Block_Substation",            "Electrical Substation",   new Color(0.40f, 0.42f, 0.46f),   substationPrefab,      "Power");
+            blockSubstation.description      = VoltageItemDescriptions.ElectricalSubstation;
+            var blockHVTower         = MakeBlock(HV_ITEMS, "Block_HVTower",               "HV Transmission Tower",   new Color(0.52f, 0.54f, 0.56f),   hvTowerPrefab,         "Power");
+            blockHVTower.description         = VoltageItemDescriptions.HighVoltagePole;
+            var blockStepUp          = MakeBlock(HV_ITEMS, "Block_StepUpTransformer",     "Step-Up Transformer",     new Color(0.15f, 0.45f, 0.85f),   stepUpPrefab,          "Power");
+            blockStepUp.description          = VoltageItemDescriptions.StepUpTransformer;
+            var blockStepDown        = MakeBlock(HV_ITEMS, "Block_StepDownTransformer",   "Step-Down Transformer",   new Color(0.92f, 0.60f, 0.12f),   stepDownPrefab,        "Power");
+            blockStepDown.description        = VoltageItemDescriptions.StepDownTransformer;
+
+            // ════════════════════════════════════════════════════════════
+            //  7. CRAFTING RECIPES
+            // ════════════════════════════════════════════════════════════
+            var allNewRecipes = new System.Collections.Generic.List<VoxelEngine.Crafting.RecipeDefinition>();
+
+            VoxelEngine.Crafting.RecipeDefinition AddFacRecipe(string name, string display,
+                VoxelEngine.Items.ItemDefinition output, int outputCount,
+                VoxelEngine.Crafting.StationTier station, bool unlocked,
+                params (VoxelEngine.Items.ItemDefinition item, int n)[] inputs)
+            {
+                string path = $"{FAC_RECIPES}/{name}.asset";
+                bool existed = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeDefinition>(path) != null;
+                var r = GetOrCreateAsset<VoxelEngine.Crafting.RecipeDefinition>(path);
+                if (!existed)
+                {
+                    r.displayName = display; r.outputItem = output; r.outputCount = outputCount;
+                    r.requiredStation = station; r.craftSeconds = station == VoxelEngine.Crafting.StationTier.Assembler ? 4f : 2f;
+                    r.unlockedByDefault = unlocked;
+                    var valid = new System.Collections.Generic.List<VoxelEngine.Crafting.RecipeIngredient>();
+                    foreach (var (item, n) in inputs) if (item != null) valid.Add(new VoxelEngine.Crafting.RecipeIngredient { item = item, count = n });
+                    r.inputs = valid.ToArray();
+                }
+                // Always ensure links.
+                if (r.outputItem == null && output != null) r.outputItem = output;
+                EditorUtility.SetDirty(r);
+                if (!registry.recipes.Contains(r)) registry.recipes.Add(r);
+                allNewRecipes.Add(r);
+                return r;
+            }
+
+            VoxelEngine.Crafting.RecipeDefinition AddHVRecipe(string name, string display,
+                VoxelEngine.Items.ItemDefinition output, int outputCount,
+                VoxelEngine.Crafting.StationTier station, bool unlocked,
+                params (VoxelEngine.Items.ItemDefinition item, int n)[] inputs)
+            {
+                string path = $"{HV_RECIPES}/{name}.asset";
+                bool existed = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeDefinition>(path) != null;
+                var r = GetOrCreateAsset<VoxelEngine.Crafting.RecipeDefinition>(path);
+                if (!existed)
+                {
+                    r.displayName = display; r.outputItem = output; r.outputCount = outputCount;
+                    r.requiredStation = station; r.craftSeconds = 4f; r.unlockedByDefault = unlocked;
+                    var valid = new System.Collections.Generic.List<VoxelEngine.Crafting.RecipeIngredient>();
+                    foreach (var (item, n) in inputs) if (item != null) valid.Add(new VoxelEngine.Crafting.RecipeIngredient { item = item, count = n });
+                    r.inputs = valid.ToArray();
+                }
+                if (r.outputItem == null && output != null) r.outputItem = output;
+                EditorUtility.SetDirty(r);
+                if (!registry.recipes.Contains(r)) registry.recipes.Add(r);
+                allNewRecipes.Add(r);
+                return r;
+            }
+
+            // Factory recipes (gated behind research).
+            var recConveyorBasic   = AddFacRecipe("Recipe_ConveyorBelt_Basic",   "Conveyor Belt (Basic)",   blockConveyorBasic,   4, VoxelEngine.Crafting.StationTier.CraftingBench, false, (ironPlate, 1), (ironGear, 1));
+            var recConveyorFast    = AddFacRecipe("Recipe_ConveyorBelt_Fast",    "Conveyor Belt (Fast)",    blockConveyorFast,    4, VoxelEngine.Crafting.StationTier.Assembler,     false, (steelPlate, 1), (ironGear, 2));
+            var recConveyorExpress = AddFacRecipe("Recipe_ConveyorBelt_Express", "Conveyor Belt (Express)", blockConveyorExpress, 4, VoxelEngine.Crafting.StationTier.Assembler,     false, (steelPlate, 2), (ironGear, 2), (circuit, 1));
+            var recChute           = AddFacRecipe("Recipe_ConveyorChute",        "Conveyor Chute",          blockChute,           2, VoxelEngine.Crafting.StationTier.CraftingBench, false, (ironPlate, 2));
+            var recCrusher         = AddFacRecipe("Recipe_Crusher",              "Crusher",                 blockCrusher,         1, VoxelEngine.Crafting.StationTier.Assembler,     false, (steelPlate, 6), (ironGear, 4), (circuit, 2), (copperWire, 4));
+            var recAssemblerMk1    = AddFacRecipe("Recipe_Assembler_Mk1",        "Assembler Mk.1",          blockAssemblerMk1,    1, VoxelEngine.Crafting.StationTier.Assembler,     false, (steelPlate, 8), (circuit, 4), (copperWire, 6), (ironGear, 4));
+            var recAssemblerMk2    = AddFacRecipe("Recipe_Assembler_Mk2",        "Assembler Mk.2",          blockAssemblerMk2,    1, VoxelEngine.Crafting.StationTier.Assembler,     false, (steelPlate, 12), (advCircuit, 4), (copperWire, 8), (ironGear, 6));
+            var recAssemblerMk3    = AddFacRecipe("Recipe_Assembler_Mk3",        "Assembler Mk.3",          blockAssemblerMk3,    1, VoxelEngine.Crafting.StationTier.Assembler,     false, (steelPlate, 16), (advCircuit, 8), (copperWire, 12), (ironGear, 8));
+            var recGridLight       = AddFacRecipe("Recipe_GridLight",            "Grid Light",              blockGridLight,       2, VoxelEngine.Crafting.StationTier.CraftingBench, false, (copperWire, 2), (glass, 1));
+            var recLEDStrip        = AddFacRecipe("Recipe_LEDStrip",             "LED Strip",               blockLEDStrip,        4, VoxelEngine.Crafting.StationTier.CraftingBench, false, (copperWire, 4), (glass, 1));
+
+            // HV Grid recipes (gated behind research).
+            var recPowerPole  = AddHVRecipe("Recipe_PowerPole",          "Power Pole",              blockPowerPole,  2, VoxelEngine.Crafting.StationTier.CraftingBench, false, (ironIngot, 3), (copperWire, 2));
+            var recSubstation = AddHVRecipe("Recipe_Substation",         "Electrical Substation",   blockSubstation, 1, VoxelEngine.Crafting.StationTier.Assembler,     false, (steelPlate, 8), (copperWire, 12), (circuit, 4));
+            var recHVTower    = AddHVRecipe("Recipe_HVTower",            "HV Transmission Tower",   blockHVTower,    1, VoxelEngine.Crafting.StationTier.Assembler,     false, (steelPlate, 16), (copperWire, 8), (circuit, 2));
+            var recStepUp     = AddHVRecipe("Recipe_StepUpTransformer",  "Step-Up Transformer",     blockStepUp,     1, VoxelEngine.Crafting.StationTier.Assembler,     false, (steelPlate, 24), (copperWire, 16), (advCircuit, 8), (circuit, 4));
+            var recStepDown   = AddHVRecipe("Recipe_StepDownTransformer", "Step-Down Transformer",  blockStepDown,   1, VoxelEngine.Crafting.StationTier.Assembler,     false, (steelPlate, 24), (copperWire, 16), (advCircuit, 8), (circuit, 4));
+
+            // ════════════════════════════════════════════════════════════
+            //  8. RESEARCH NODE
+            // ════════════════════════════════════════════════════════════
+            if (tree != null)
+            {
+                var nElec = FindNodeByName(tree, "res_electricity");
+
+                // -- Factory Logistics node --
+                string facNodePath = $"{NODES}/res_factory_logistics.asset";
+                bool facNodeExisted = AssetDatabase.LoadAssetAtPath<VoxelEngine.Research.ResearchNode>(facNodePath) != null;
+                var nFactory = GetOrCreateAsset<VoxelEngine.Research.ResearchNode>(facNodePath);
+                if (!facNodeExisted)
+                {
+                    nFactory.nodeId       = "res_factory_logistics";
+                    nFactory.displayName  = "Factory Logistics";
+                    nFactory.description  = "Automate your production lines. Unlocks conveyor belts, chutes, the Crusher, " +
+                                            "Assembler Mk.1, grid lights, and LED strips. The foundation of every great factory.";
+                    nFactory.category     = VoxelEngine.Research.ResearchCategory.Environment;
+                    nFactory.subCategory  = VoxelEngine.Research.ResearchSubCategory.Production;
+                    nFactory.tier         = 2;
+                    nFactory.column       = 8;
+                    nFactory.iconTint     = new Color(0.88f, 0.52f, 0.12f);
+                    nFactory.researchSeconds = 60f;
+                    nFactory.cost = new[]
+                    {
+                        new VoxelEngine.Research.ResearchNode.ScienceCost { pack = sciT1, count = 15 },
+                        new VoxelEngine.Research.ResearchNode.ScienceCost { pack = sciT2, count = 8 },
+                    };
+                    nFactory.prerequisites = nElec != null ? new[] { nElec } : new VoxelEngine.Research.ResearchNode[0];
+                }
+                // Always merge unlocks (non-destructive).
+                var facUnlocks = new System.Collections.Generic.List<VoxelEngine.Crafting.RecipeDefinition>();
+                if (nFactory.unlocksRecipes != null)
+                    foreach (var r in nFactory.unlocksRecipes) if (r != null) facUnlocks.Add(r);
+                foreach (var r in new[] { recConveyorBasic, recConveyorFast, recConveyorExpress, recChute,
+                    recCrusher, recAssemblerMk1, recGridLight, recLEDStrip })
+                    if (r != null && !facUnlocks.Contains(r)) facUnlocks.Add(r);
+                nFactory.unlocksRecipes = facUnlocks.ToArray();
+                EditorUtility.SetDirty(nFactory);
+                if (!tree.nodes.Contains(nFactory)) tree.nodes.Add(nFactory);
+
+                // -- Advanced Automation node (Mk.2/Mk.3 assemblers) --
+                string advNodePath = $"{NODES}/res_adv_automation.asset";
+                bool advNodeExisted = AssetDatabase.LoadAssetAtPath<VoxelEngine.Research.ResearchNode>(advNodePath) != null;
+                var nAdvAuto = GetOrCreateAsset<VoxelEngine.Research.ResearchNode>(advNodePath);
+                if (!advNodeExisted)
+                {
+                    nAdvAuto.nodeId       = "res_adv_automation";
+                    nAdvAuto.displayName  = "Advanced Automation";
+                    nAdvAuto.description  = "Faster, more capable assemblers. Unlocks Assembler Mk.2 (6 inputs, 1.5x speed) " +
+                                            "and Assembler Mk.3 (9 inputs, 2.5x speed). Required for endgame components.";
+                    nAdvAuto.category     = VoxelEngine.Research.ResearchCategory.Environment;
+                    nAdvAuto.subCategory  = VoxelEngine.Research.ResearchSubCategory.Production;
+                    nAdvAuto.tier         = 3;
+                    nAdvAuto.column       = 9;
+                    nAdvAuto.iconTint     = new Color(0.30f, 0.60f, 0.95f);
+                    nAdvAuto.researchSeconds = 90f;
+                    nAdvAuto.cost = new[]
+                    {
+                        new VoxelEngine.Research.ResearchNode.ScienceCost { pack = sciT2, count = 20 },
+                        new VoxelEngine.Research.ResearchNode.ScienceCost { pack = sciT3, count = 10 },
+                    };
+                    nAdvAuto.prerequisites = new[] { nFactory };
+                }
+                var advUnlocks = new System.Collections.Generic.List<VoxelEngine.Crafting.RecipeDefinition>();
+                if (nAdvAuto.unlocksRecipes != null)
+                    foreach (var r in nAdvAuto.unlocksRecipes) if (r != null) advUnlocks.Add(r);
+                foreach (var r in new[] { recAssemblerMk2, recAssemblerMk3 })
+                    if (r != null && !advUnlocks.Contains(r)) advUnlocks.Add(r);
+                nAdvAuto.unlocksRecipes = advUnlocks.ToArray();
+                EditorUtility.SetDirty(nAdvAuto);
+                if (!tree.nodes.Contains(nAdvAuto)) tree.nodes.Add(nAdvAuto);
+
+                // -- High Voltage Transmission node --
+                string hvNodePath = $"{NODES}/res_hv_transmission.asset";
+                bool hvNodeExisted = AssetDatabase.LoadAssetAtPath<VoxelEngine.Research.ResearchNode>(hvNodePath) != null;
+                var nHV = GetOrCreateAsset<VoxelEngine.Research.ResearchNode>(hvNodePath);
+                if (!hvNodeExisted)
+                {
+                    nHV.nodeId       = "res_hv_transmission";
+                    nHV.displayName  = "High-Voltage Transmission";
+                    nHV.description  = "When your power network exceeds 25 MW, standard wires can no longer carry the load. " +
+                                       "Unlocks Power Poles, Electrical Substations, HV Transmission Towers, and the " +
+                                       "Step-Up / Step-Down Transformer stations needed for long-distance power distribution.";
+                    nHV.category     = VoxelEngine.Research.ResearchCategory.Environment;
+                    nHV.subCategory  = VoxelEngine.Research.ResearchSubCategory.Power;
+                    nHV.tier         = 3;
+                    nHV.column       = 9;
+                    nHV.iconTint     = new Color(0.92f, 0.60f, 0.12f);
+                    nHV.researchSeconds = 80f;
+                    nHV.cost = new[]
+                    {
+                        new VoxelEngine.Research.ResearchNode.ScienceCost { pack = sciT2, count = 25 },
+                        new VoxelEngine.Research.ResearchNode.ScienceCost { pack = sciT3, count = 12 },
+                    };
+                    nHV.prerequisites = nElec != null ? new[] { nElec } : new VoxelEngine.Research.ResearchNode[0];
+                }
+                var hvUnlocks = new System.Collections.Generic.List<VoxelEngine.Crafting.RecipeDefinition>();
+                if (nHV.unlocksRecipes != null)
+                    foreach (var r in nHV.unlocksRecipes) if (r != null) hvUnlocks.Add(r);
+                foreach (var r in new[] { recPowerPole, recSubstation, recHVTower, recStepUp, recStepDown })
+                    if (r != null && !hvUnlocks.Contains(r)) hvUnlocks.Add(r);
+                nHV.unlocksRecipes = hvUnlocks.ToArray();
+                EditorUtility.SetDirty(nHV);
+                if (!tree.nodes.Contains(nHV)) tree.nodes.Add(nHV);
+
+                EditorUtility.SetDirty(tree);
+            }
+
+            // ════════════════════════════════════════════════════════════
+            //  9. SAVE + REPORT
+            // ════════════════════════════════════════════════════════════
+            EditorUtility.SetDirty(registry);
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
+            EditorUtility.DisplayDialog("Voxel Engine — Step 17",
+                "Factory Foundations + High-Voltage Grid built!\n\n" +
+                "FACTORY (" + FAC_ROOT + ")\n" +
+                "  • Conveyor Belt (Basic / Fast / Express) — 3 speed tiers\n" +
+                "  • Conveyor Chute — vertical item transport\n" +
+                "  • Crusher — ore → crushed ore + gravel byproduct\n" +
+                "  • Assembler Mk.1 / Mk.2 / Mk.3 — multi-input crafting\n" +
+                "  • Grid Light + LED Strip — accent lighting\n" +
+                "  • MachineDefinition + MachineRecipe ScriptableObjects\n" +
+                "  • 4 component items: Electric Motor, Steel Beam, Steel Pipe, Battery Cell\n" +
+                "  • 3 crusher recipes + 4 assembler recipes\n\n" +
+                "HIGH VOLTAGE (" + HV_ROOT + ")\n" +
+                "  • Power Pole (6 connections, 15 m reach)\n" +
+                "  • Electrical Substation (150 m relay)\n" +
+                "  • HV Transmission Tower (12 m lattice, 200 m span, unlimited power)\n" +
+                "  • Step-Up Transformer (LV→HV, BLUE, 200 MW, 2% loss)\n" +
+                "  • Step-Down Transformer (HV→LV, AMBER, 200 MW, 2% loss)\n" +
+                "  • VoltageSystemConfig in Resources/ (25 MW threshold)\n\n" +
+                "RESEARCH NODES\n" +
+                "  • Factory Logistics (Tier 2) — conveyors, crusher, assembler, lights\n" +
+                "  • Advanced Automation (Tier 3) — assembler Mk.2/Mk.3\n" +
+                "  • High-Voltage Transmission (Tier 3) — poles, towers, transformers\n\n" +
+                "All assets are NON-DESTRUCTIVE: re-running this step preserves\n" +
+                "user-tuned balance values, power settings, and custom materials.",
+                "OK");
+        }
+
         private void BuildWindmillContent()
         {
             // Delegated to the dedicated modular wind power builder — creates all
