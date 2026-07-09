@@ -25,6 +25,7 @@ using VoxelEngine.Building;
 using VoxelEngine.Crafting;
 using VoxelEngine.Items;
 using VoxelEngine.Settings;
+using VoxelEngine.Simulation;
 using InputAction = VoxelEngine.Settings.InputAction;
 using Cursor      = UnityEngine.Cursor;
 
