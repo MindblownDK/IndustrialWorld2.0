@@ -2,9 +2,9 @@
 
 **Branch:** `Dev`  
 **Current Version:** `4.5.1-dev`  
-**Roadmap Version:** `4.5.6-dev`  
+**Roadmap Version:** `4.5.7-dev`  
 **Date:** 2026-07-08  
-**Status:** Iterated Planning Deliverable — Power Pole Wire System, Substations & LED Strips Added
+**Status:** Iterated Planning Deliverable — Radiation, Heat, Oxygen, Airtight Systems & Painting Added
 
 ---
 
@@ -72,7 +72,15 @@ The design goal is a seamless blend of:
 | UI theming | 🟡 Early | Design system exists, needs 10+ themes and per-block overrides |
 | Research UI | 🟡 Functional | Needs visual overhaul and better UX |
 | Damage / destruction | ❌ Missing | Grids and static blocks are indestructible |
+:-|:--|:--|
 | Weapons / combat | ❌ Missing | No swords, guns, missiles, turrets |
+| Radiation system | ❌ Missing | No reactor radiation, waste, or hazmat protection |
+| Heat system | ❌ Missing | No atmospheric entry heat, block heat tolerance, heatshields |
+| Oxygen / life support | ❌ Missing | No underwater/space suffocation, helmets, tanks |
+| Airtight systems | ❌ Missing | No airtight doors, vents, or pressurized rooms |
+| Fall damage | ❌ Missing | Player takes no damage from falls |
+| Painting / finishes | ❌ Missing | No block painting or material finishes |
+| Armor crafting/upgrades | 🟡 Early | Needs armor station, jetpack, hazmat, heat/oxygen upgrades |
 | Enemies / hazards | ❌ Missing | World feels safe, low tension |
 | Narrative / context | ❌ Missing | Player lacks long-term purpose |
 | Multiplayer | ❌ Missing | Future consideration |
@@ -400,12 +408,49 @@ Every body in the star system has a unique industrial identity.
     - Remote-detonated charge.
     - Demolition pack for terrain/grid mining.
 
-11. **Grid Weapons**
+11. **Armor Station**
+    - New crafting station for armor, armor upgrades, and jetpacks.
+    - Upgrade modules: heat tolerance, radiation shielding, oxygen efficiency, mobility.
+
+12. **Jetpack**
+    - Separate inventory slot.
+    - Unlocks the existing flight system.
+    - Consumes fuel or hydrogen.
+    - Upgradable thrust and fuel capacity at the armor station.
+
+13. **Player Armor Upgrades**
+    - Heat tolerance tiers 1–5.
+    - Radiation shielding tiers 1–5.
+    - Oxygen efficiency tiers 1–5.
+    - Fall impact reduction tiers 1–5.
+
+14. **Hazmat Suit & Hazmat Armor Upgrade**
+    - Full hazmat suit for heavy radiation zones.
+    - Hazmat upgrade module can be applied to any armor piece.
+
+15. **Space Helmet & Oxygen Tank**
+    - Helmet seals against vacuum; player can toggle visor open/closed.
+    - Visor open: no oxygen use, but no pressure protection.
+    - Visor closed: uses oxygen from chest tank.
+    - Without helmet/tank in vacuum/underwater: rapid suffocation damage.
+
+16. **Geiger Counter**
+    - Handheld or suit-integrated tool.
+    - Clicks and displays radiation level in sieverts.
+    - Warns when entering dangerous zones.
+
+17. **Painting System**
+    - Painting tool item.
+    - Paint any static block or grid block.
+    - 15 material finishes: futuristic, metallic, rusty, industrial, carbon, chrome, matte, glossy, etc.
+    - Finish is cosmetic only and preserved on save.
+
+18. **Grid Weapons**
     - Small turret block for rovers/ships.
     - Missile launcher block.
     - Railgun block (late-tier).
 
-12. **Grid Building Improvements**
+19. **Grid Building Improvements**
     - **Sloped blocks** for aerodynamic ships and rovers.
     - **Heavy armor blocks** with high health and mass.
     - **Heavy armor sloped blocks**.
@@ -418,36 +463,52 @@ Every body in the star system has a unique industrial identity.
 
 #### Improved Features
 
-13. **Grid Power Integration**
+20. **Grid Power Integration**
     - Vehicles with generators contribute power when docked.
     - Power pole auto-connection visualizer.
 
-14. **Wind Turbine Upgrades**
+21. **Wind Turbine Upgrades**
     - Module slots for lubricant and blade upgrades.
 
-15. **Crash & Collision Damage**
+22. **Crash & Collision Damage**
     - Grids take damage proportional to impact force.
     - Heavy grids damage terrain; terrain damages grids at high speed.
     - Optional invulnerability timer after spawning to prevent spawn-killing.
 
+23. **Fall Damage**
+    - Player takes damage from high falls.
+    - Armor upgrades reduce impact damage.
+
+24. **Oxygen Underwater**
+    - Player drowns without oxygen tank.
+    - Underwater exploration requires sealed helmet and tank.
+
 #### Code Improvements
 
-16. **Unified Power Network**
+25. **Unified Power Network**
     - Merge grid power, machine power, and vehicle power into one `PowerNetwork`.
     - Support AC/DC separation if desired.
 
-17. **Damage Service**
+26. **Damage Service**
     - Central `DamageSystem` handles all damage events.
     - `IDamageable` interface for blocks, grids, entities, terrain.
     - Damage events are deterministic and network-ready for future multiplayer.
 
-18. **Ballistics & Projectile Pooling**
+27. **Ballistics & Projectile Pooling**
     - Object-pooled bullets, missiles, railgun slugs.
     - Raycast + projectile hybrid: bullets use raycast, missiles use physics bodies.
 
-19. **Grid Block Shape Registry**
+28. **Grid Block Shape Registry**
     - Support cube, slope, and heavy variants from a single block definition.
     - Non-destructive setup via Voxel Engine Setup.
+
+29. **Life Support Service**
+    - Tracks oxygen, pressure, radiation exposure, and heat for the player.
+    - Modular upgrade system for armor and helmets.
+
+30. **Painting Service**
+    - Stores cosmetic finish data per block.
+    - Separates visual material from block type.
 
 ---
 
@@ -571,13 +632,27 @@ Every body in the star system has a unique industrial identity.
    - Passive creatures for atmosphere.
    - Hostile creatures in deep biomes.
 
-8. **Enemies**
-   - **Wildlife**: territorial beasts that attack if provoked.
-   - **Automated Drones**: remnants of the dead civilization, patrolling ruins.
-   - **Raider Vehicles**: occasional roaming grid vehicles that attack bases (mid/late game).
-   - Enemy AI uses senses: sight, sound, damage events.
+8. **Environmental Radiation Zones**
+   - Certain biomes and ruins emit low-level radiation.
+   - Hazmat suit or radiation upgrades reduce exposure.
+   - Geiger counter warns the player.
 
-9. **Weather System**
+9. **Environmental Heat Zones**
+   - Hot biomes and volcanic areas deal heat damage without protection.
+   - Heat tolerance armor upgrades allow longer exposure.
+
+10. **Airtight Doors and Vents**
+    - Sliding futuristic doors for grid bases.
+    - Airtight variants seal rooms for pressurization.
+    - Vents pump oxygen in or out of sealed spaces.
+
+11. **Enemies**
+    - **Wildlife**: territorial beasts that attack if provoked.
+    - **Automated Drones**: remnants of the dead civilization, patrolling ruins.
+    - **Raider Vehicles**: occasional roaming grid vehicles that attack bases (mid/late game).
+    - Enemy AI uses senses: sight, sound, damage events.
+
+12. **Weather System**
    - Each planet type has its own climate profile:
      - Temperate: light rain, overcast, occasional storms.
      - Barren: dust devils, meteor showers.
@@ -590,30 +665,30 @@ Every body in the star system has a unique industrial identity.
      - Player exposure/hazard levels.
      - Visibility and flight handling.
 
-10. **Wind Turbine Degradation**
+13. **Wind Turbine Degradation**
     - Generator and gearbox lose condition very slowly over time.
     - Storms increase degradation rate slightly.
     - Higher-tier parts degrade slower.
     - Broken parts can be repaired with steel plates and lubricant.
 
-11. **Static Anti-Air / Base Defense**
+14. **Static Anti-Air / Base Defense**
     - Missile turret block for base defense.
     - Flak cannon block.
     - Requires power and ammunition.
 
-12. **Prospecting Tools**
+15. **Prospecting Tools**
     - Ore detector, terrain scanner, sample drill.
 
 #### Improved Features
 
-13. **Realistic Water Simulation**
+16. **Realistic Water Simulation**
     - Water has volume and seeks its own level.
     - Flows downhill, fills cavities, exerts pressure.
     - Pumps can move water; dams can hold it back.
     - Visual: caustics, foam, translucency, reflections.
     - Interacts with voxel terrain (erosion optional, performance-dependent).
 
-14. **Planet-Specific Skies & Atmospheres**
+17. **Planet-Specific Skies & Atmospheres**
     - Each planet type gets a unique skybox / atmosphere shader.
     - Temperate worlds: blue sky, white clouds, realistic sunset gradients.
     - Barren moons: black starry sky, crisp shadows.
@@ -622,56 +697,61 @@ Every body in the star system has a unique industrial identity.
     - Transition from sky to space is seamless and cinematic.
     - From orbit, planets render as colored spheres matching their atmosphere.
 
-15. **Gravity & Orbit Fixes**
+18. **Gravity & Orbit Fixes**
     - All grids, dropped items, and players experience consistent planetary gravity.
     - No more falling through the world or zero-gravity bugs on surfaces.
     - Realistic orbital mechanics: velocity + altitude = orbit.
     - Atmospheric drag slows low orbits; escape velocity possible.
     - Stable physics for landed grids and docked ships.
 
-16. **Space Ambiance Overhaul**
+19. **Space Ambiance Overhaul**
     - Space is black, silent, and filled with distant stars and nebulae.
     - Nearby planets and moons are visible as proper spheres.
     - Sun glare, lens flares, and subtle dust particles.
     - Audio ducking: exterior sounds muted in vacuum.
 
-17. **World Generation Refactor**
+20. **World Generation Refactor**
     - Planet-aware, biome-aware ore placement.
     - Larger, more distinct biomes.
     - Ruin placement influenced by biome and planet history.
 
-18. **Environmental Suit System**
+21. **Environmental Suit System**
     - Suit modules tied to research.
-    - Weather resistance is a module stat.
+    - Weather, radiation, and heat resistance are module stats.
 
 #### Code Improvements
 
-19. **Biome Registry**
+22. **Biome Registry**
     - ScriptableObject biome definitions with hazards, ores, flora, weather profile.
 
-20. **Planet Generation Service**
+23. **Planet Generation Service**
     - Procedural planet parameters: size, gravity, atmosphere, resource density, climate.
     - Seed-based star system generation.
 
-21. **Weather Service**
+24. **Weather Service**
     - Deterministic weather based on planet seed and time.
     - Local weather cells that move across the planet.
     - Event-driven weather transitions.
 
-22. **Water Simulation System**
+25. **Water Simulation System**
     - Cellular-automata or shallow-water-equation based flow.
     - Chunk-based updates with LOD for distant water.
     - Save/load water state.
 
-23. **Enemy AI Framework**
+26. **Enemy AI Framework**
     - Behavior trees for wildlife, drones, raiders.
     - Faction system (player, wild, remnant, raiders).
     - Spawn controller tied to player progression and biome threat level.
 
-24. **Atmosphere & Gravity Service**
+27. **Atmosphere & Gravity Service**
     - Unified gravity field for players, grids, items, and projectiles.
     - Atmospheric density curves per planet.
     - Sky shader parameters driven by `PlanetDefinition`.
+
+28. **Pressure & Airtight Service**
+    - Detects sealed rooms using grid blocks and airtight doors.
+    - Tracks oxygen level per room.
+    - Vents add or remove oxygen.
 
 ---
 
@@ -739,62 +819,124 @@ Every body in the star system has a unique industrial identity.
    - Deployable starter base modules for new worlds.
    - Includes power, life support, storage, and landing pad.
 
-2. **Nuclear Fission**
+2. **Nuclear Fission — Uranium Reactor**
    - Uranium processing, fuel rods, reactors, waste.
    - High risk / high reward.
    - Unlocked by rare isotopes from volcanic worlds / asteroid belts.
+   - Reactor is a large container-style block inspired by compact molten salt designs.
+   - Reactor itself is shielded; radiation only leaks if radioactive waste storage overflows.
 
-3. **Nuclear Warheads & Heavy Ordinance**
-   - Craftable nuclear warheads for grid-mounted missiles.
-   - Massive blast radius and radiation zone.
-   - Anti-installation weapon for late-game threats.
-   - Requires secure storage and launch authorization.
+3. **Thorium Reactor & Thorium Material**
+   - New late-game reactor fuel: thorium.
+   - Thorium is more abundant than uranium and more efficient per rod.
+   - Recipe unlocks after advanced nuclear research.
+   - Produces far less radioactive waste than uranium.
 
-4. **Exo-Alloys & Advanced Components**
-   - Alloys requiring resources from multiple worlds.
-   - Example: titanium + nickel + rare earths → aerospace alloy.
+4. **Radioactive Waste System**
+   - Uranium reactors produce radioactive waste.
+   - Thorium reactors produce a much smaller amount of lower-radioactivity waste.
+   - Waste must be stored in radiation-sealed containers.
+   - Overflowing waste causes radiation leakage around the reactor.
 
-5. **Mass Driver / Orbital Cannon**
-   - Launch cargo containers between worlds without rockets.
-   - Late-game high-throughput logistics.
+5. **Radiation-Sealed Container**
+   - Block for safely storing radioactive waste.
+   - Has limited capacity.
+   - Must be kept near the reactor or transported to storage.
 
-6. **Warp Gate Prototype**
-   - Experimental travel to distant star systems.
-   - Endgame expansion hook.
+6. **Radiation Sealing Block**
+   - Special grid block used to build shielded reactor rooms.
+   - Reduces radiation passing through walls.
+   - Required for safe large-scale nuclear power.
 
-7. **Planetary Forge / World Builder**
-   - Late-megastructure that lets the player **craft a new planet or moon**.
-   - Costs an immense amount of resources and sustained gigawatts of power.
-   - The player chooses the new body’s type (barren, ice, volcanic, etc.) and a **limited, non-overpowered resource signature**.
-   - Resource signature rules prevent cheating:
-     - Maximum one rare resource type per forged body.
-     - Rare resource yield is lower than natural bodies.
-     - Body size is smaller than natural equivalents.
-   - Creates a permanent new zone in the star system.
-   - Purely additive — does not replace exploration or trivialize scarcity.
+7. **Radiation Damage**
+   - Players exposed to high radiation take damage over time.
+   - Hazmat suit and radiation armor upgrades reduce exposure.
+   - Geiger counter shows current exposure level.
+
+8. **Heat System for Grids**
+   - Every grid block has a heat tolerance value shown in its description.
+   - Engines, thrusters, reactors, and exhaust pipes generate heat.
+   - Thruster nozzles and side surfaces heat nearby blocks.
+   - Maritime engines produce significant heat.
+   - Blocks take damage or fail when heat tolerance is exceeded.
+
+9. **Heatshield Block**
+   - Special block with extremely high heat tolerance.
+   - Used to protect grids during atmospheric entry and near reactors/thrusters.
+
+10. **Atmospheric Entry Heat**
+    - Ships entering atmosphere at high speed heat up based on velocity and atmospheric density.
+    - Cockpit UI shows heat warning: green, yellow, red.
+    - Ship blocks take damage if heat exceeds tolerance.
+    - Heatshield blocks and shallow entry angles reduce risk.
+
+11. **Cockpit Heat Indicator**
+    - Shows current external heat in degrees.
+    - Green = safe, yellow = approaching limit, red = taking damage.
+    - Linked to ship thermal state and armor heat tolerance.
+
+12. **Player Heat UI**
+    - Shows player temperature in degrees.
+    - Green/yellow/red indicator.
+    - Excessive heat causes damage over time.
+    - Heat tolerance armor upgrades raise the safe threshold.
+
+13. **Nuclear Warheads & Heavy Ordinance**
+    - Craftable nuclear warheads for grid-mounted missiles.
+    - Massive blast radius and radiation zone.
+    - Anti-installation weapon for late-game threats.
+    - Requires secure storage and launch authorization.
+
+15. **Exo-Alloys & Advanced Components**
+    - Alloys requiring resources from multiple worlds.
+    - Example: titanium + nickel + rare earths → aerospace alloy.
+
+16. **Mass Driver / Orbital Cannon**
+    - Launch cargo containers between worlds without rockets.
+    - Late-game high-throughput logistics.
+
+17. **Warp Gate Prototype**
+    - Experimental travel to distant star systems.
+    - Endgame expansion hook.
+
+18. **Planetary Forge / World Builder**
+    - Late-megastructure that lets the player **craft a new planet or moon**.
+    - Costs an immense amount of resources and sustained gigawatts of power.
+    - The player chooses the new body’s type (barren, ice, volcanic, etc.) and a **limited, non-overpowered resource signature**.
+    - Resource signature rules prevent cheating:
+      - Maximum one rare resource type per forged body.
+      - Rare resource yield is lower than natural bodies.
+      - Body size is smaller than natural equivalents.
+    - Creates a permanent new zone in the star system.
+    - Purely additive — does not replace exploration or trivialize scarcity.
 
 #### Improved Features
 
-8. **Empire Dashboard UI**
-   - Overview of all bases, production rates, and cargo routes.
-   - Alerts for low stock or bottlenecks on any world.
+19. **Empire Dashboard UI**
+    - Overview of all bases, production rates, and cargo routes.
+    - Alerts for low stock or bottlenecks on any world.
 
-9. **Save Schema v2 Final**
-   - Full persistence for planet-aligned rotation, multi-world grids, orbital cargo, empire state.
+20. **Save Schema v2 Final**
+    - Full persistence for planet-aligned rotation, multi-world grids, orbital cargo, empire state.
 
 #### Code Improvements
 
-10. **Save Migration Pipeline**
+21. **Save Migration Pipeline**
     - Automatic v1 → v2 migration.
     - Versioned save serializers.
 
-11. **Distributed Simulation**
+22. **Distributed Simulation**
     - Dormant worlds simulate at reduced tick rate.
     - Active world runs full simulation.
 
-12. **Nuclear & Radiation Service**
+23. **Nuclear & Radiation Service**
     - Tracks fallout zones from warheads and reactor meltdowns.
     - Radiation affects player, enemies, and crops over time.
+
+24. **Thermal Simulation Service**
+    - Tracks heat generation, dissipation, and damage for grid blocks.
+    - Heat maps for thrusters, engines, reactors, exhaust pipes.
+    - Atmospheric reentry heat curves.
 
 ---
 
@@ -961,11 +1103,18 @@ For each version, these are the high-level Unity tasks you will perform manually
 8. Create shape variant prefabs: slope, half block, half slope, corner, inverted slope for light and heavy armor.
 9. Implement the shape variant wheel UI, reusing the build hammer wheel.
 10. Improve small-grid snap and maritime grid buoyancy blocks.
-10. Add damage VFX: sparks, smoke, fire, debris.
-11. Set up collision damage thresholds for grids and terrain.
-12. Create player armor models and inventory slots.
-13. **Run setup wizard step (non-destructive)**
-    - Step 18 for power/vehicle/combat/armor blocks.
+11. Add damage VFX: sparks, smoke, fire, debris.
+12. Set up collision damage thresholds for grids and terrain.
+13. Create player armor models and inventory slots (helmet, chest, legs, boots, backpack, jetpack).
+14. Create armor station prefab for crafting armor, upgrades, and jetpacks.
+15. Create jetpack prefab with fuel slot and upgrade tiers.
+16. Create hazmat suit and hazmat armor upgrade module prefabs.
+17. Create space helmet and oxygen tank prefabs with visor toggle.
+18. Create geiger counter item/tool.
+19. Create painting tool item and 15 material finish variants.
+20. Add fall damage system and oxygen underwater system.
+21. **Run setup wizard step (non-destructive)**
+    - Step 18 for power/vehicle/combat/armor/painting blocks.
     - Preserve existing grid power values and weapon damage.
 
 ### For 4.8.0 (Logistics 2.0, Screens & Trajectory)
@@ -998,8 +1147,10 @@ For each version, these are the high-level Unity tasks you will perform manually
 12. Fix gravity for players, grids, dropped items, and projectiles.
 13. Implement orbital mechanics and atmospheric drag.
 14. Overhaul space ambiance: starfield, nebulae, sun glare, vacuum audio.
-15. **Run setup wizard step (non-destructive)**
-    - Step 20 for ruins, enemies, weather, water, and sky systems.
+15. Add environmental radiation zones and heat zones to biomes.
+16. Create sliding airtight door and vent prefabs.
+17. **Run setup wizard step (non-destructive)**
+    - Step 20 for ruins, enemies, weather, water, sky, and life-support systems.
 
 ### For 5.0.0 (Orbital Expansion)
 
@@ -1017,9 +1168,19 @@ For each version, these are the high-level Unity tasks you will perform manually
 2. Author exo-alloy recipes requiring multi-world inputs.
 3. Create mass driver / orbital cannon prefab.
 4. Create nuclear warhead and missile silo prefabs.
-5. Build empire dashboard UI.
-6. **Run setup wizard step (non-destructive)**
-   - Step 22 for planetary bases, exo-alloys, and nuclear systems.
+5. Create uranium reactor prefab as large container-style block.
+6. Create thorium material and thorium reactor prefab.
+7. Create radioactive waste item and radiation-sealed container block.
+8. Create radiation sealing block prefab.
+9. Create heatshield block prefab.
+10. Add heat tolerance values to all grid block descriptions.
+11. Implement heat generation for engines, thrusters, reactors, and exhaust pipes.
+12. Build cockpit heat indicator UI.
+13. Build player heat UI with green/yellow/red indicator.
+14. Implement atmospheric entry heat simulation.
+15. Build empire dashboard UI.
+16. **Run setup wizard step (non-destructive)**
+    - Step 22 for planetary bases, exo-alloys, nuclear, radiation, and heat systems.
 
 ### For 5.2.0 (Architect Era)
 
@@ -1043,6 +1204,37 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [4.5.7-dev] Iterated Factory-Forward Roadmap — Radiation, Heat, Oxygen, Airtight Systems & Painting
+
+**Type:** PATCH — roadmap refinement (no save/API touch)
+
+**Added:**
+- **Radiation system** to 5.1.0:
+  - Uranium reactor and thorium reactor (thorium material, more efficient, less rare, late-game unlock).
+  - Radioactive waste system; thorium waste is much less radioactive.
+  - Radiation-sealed containers and radiation sealing blocks.
+  - Radiation damage to players; hazmat suit and geiger counter.
+  - Reactor stays shielded unless waste storage overflows.
+  - Large container-style reactor design.
+- **Heat system** to 5.1.0:
+  - Heat tolerance for every grid block, shown in descriptions.
+  - Heat generation for engines, thrusters, reactors, and exhaust pipes.
+  - Heatshield block, atmospheric entry heat simulation, cockpit heat indicator, player heat UI.
+- **Life support** features:
+  - Space helmet with visor toggle, oxygen tank for chest slot.
+  - Suffocation in space/underwater without helmet/tank.
+  - Airtight sliding doors and vents.
+- **Armor Station** and **Jetpack** to 4.7.0.
+- **Armor upgrades** tiers 1–5 for heat, radiation, oxygen, and fall impact.
+- **Fall damage** and **oxygen underwater** to 4.7.0.
+- **Painting system** to 4.7.0 with 15 material finishes.
+- New cross-cutting services: Life Support Service, Pressure & Airtight Service, Thermal Simulation Service, Painting Service.
+
+**Changed:**
+- Roadmap version bumped from `4.5.6-dev` to `4.5.7-dev`.
+- Updated current state snapshot with radiation, heat, oxygen, airtight, fall damage, painting, and armor crafting.
+- Updated 4.7.0, 4.9.0, and 5.1.0 feature breakdowns and manual Unity steps.
 
 ### [4.5.6-dev] Iterated Factory-Forward Roadmap — Power Pole Wire System, Substations & LED Strips
 
