@@ -5,9 +5,13 @@ namespace VoxelEngine.Simulation
 {
     public class StepDownTransformer : VoltageStationBase
     {
+        [Header("Transformer Configuration")]
+        public float maxThroughputWatts = 200_000_000f;
+        public float conversionLoss = 0.02f;
+
         public override float TotalProduced => hvNetwork != null ? hvNetwork.producedThisTick : 0f;
         public override float TotalConsumed => hvNetwork != null ? hvNetwork.consumedThisTick : 0f;
-        public override float MaxCapacity => hvNetwork != null ? hvNetwork.bottleneckWatts : 0f;
+        public override float MaxCapacity => maxThroughputWatts;
 
         private PowerNetwork hvNetwork => _hvNode != null ? _hvNode.network : null;
         private PowerNode _hvNode;
