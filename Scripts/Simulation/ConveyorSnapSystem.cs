@@ -30,10 +30,10 @@ namespace VoxelEngine.Simulation
         public Camera playerCamera;
 
         [Header("Snap Settings")]
-        [Tooltip("Maximum distance to detect a nearby belt for snapping.")]\
+        [Tooltip("Maximum distance to detect a nearby belt for snapping.")]
         public float snapDetectRadius = 2.5f;
 
-        [Tooltip("Grid cell size for fallback grid snapping.")]\
+        [Tooltip("Grid cell size for fallback grid snapping.")]
         public float gridSize = 1f;
 
         [Header("Key Bindings")]

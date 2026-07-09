@@ -81,6 +81,7 @@ namespace VoxelEngine.UI
         private VoxelEngine.Storage.StorageDrawer      _openStorageDrawer;
         private VoxelEngine.Storage.StorageDrawerController _openDrawerController;
         private VoxelEngine.Storage.StorageItemDisplayBlock _openItemDisplay;
+        private IVoltageStation _openVoltageStation;
         // Containers whose OnChanged should call Refresh; cleared on each panel switch.
         private System.Collections.Generic.List<ItemContainer> _watchedContainers = new();
 
@@ -606,8 +607,15 @@ namespace VoxelEngine.UI
             _openImporter = null; _openExporter = null;
             _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
+            _openVoltageStation = null;
             _inventoryOpen = true;
             UnwatchAllContainers();
+            
+            if (machine is IVoltageStation vs)
+            {
+                _openVoltageStation = vs;
+            }
+
             switch (machine)
             {
                 case VoxelEngine.Nuclear.ReactorCore r:
@@ -923,6 +931,7 @@ namespace VoxelEngine.UI
                 else if (_openGridBlock        != null) { var mp = VoxelEngine.GridSystem.UI.GridBlockUI.BuildPanel(_openGridBlock, BuildSlot); _root.Add(mp); if (_openGridBlock is VoxelEngine.Transport.IItemPortHost) AppendItemPorts(mp, _openGridBlock); }
                 else if (_openOilRefinery      != null) { var mp = VoxelEngine.Crafting.ProcessorUI.OilRefineryPanel(_openOilRefinery, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openOilRefinery); }
                 else if (_openChemPlant        != null) { var mp = VoxelEngine.Crafting.ProcessorUI.ChemicalPlantPanel(_openChemPlant, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openChemPlant); }
+                else if (_openVoltageStation   != null) _root.Add(VoxelEngine.Simulation.VoltageStationUI.BuildPanel(_openVoltageStation));
                 else if (_openStation  != null) BuildRightStationCrafting(_root, _openStation);
             }
             else

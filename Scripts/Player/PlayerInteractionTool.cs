@@ -453,6 +453,13 @@ namespace VoxelEngine.Player
                 var electric = hit.collider.GetComponentInParent<ElectricFurnace>();
                 if (electric != null) { UI.GameUIController.Instance?.OpenElectricFurnace(electric); return; }
 
+                var vStation = hit.collider.GetComponentInParent<VoxelEngine.Simulation.IVoltageStation>();
+                if (vStation != null && vStation is MonoBehaviour mb)
+                {
+                    UI.GameUIController.Instance?.OpenMachine(mb);
+                    return;
+                }
+
                 var furnace = hit.collider.GetComponentInParent<Furnace>();
                 if (furnace != null) { UI.GameUIController.Instance?.OpenFurnace(furnace); return; }
 

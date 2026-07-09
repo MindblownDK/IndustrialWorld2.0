@@ -34,6 +34,7 @@ namespace VoxelEngine.Power
         // Network membership — assigned by PowerNetworkManager.
         [System.NonSerialized] public PowerNetwork network;
         [System.NonSerialized] public List<PowerNode> neighbours = new();
+        [System.NonSerialized] public List<PowerNode> manualLinks = new();
 
         /// <summary>Raised after PowerNetworkManager rebuilds topology, so visuals can refresh.</summary>
         public System.Action onNeighboursChanged;
@@ -41,18 +42,16 @@ namespace VoxelEngine.Power
         protected virtual void OnEnable()  { PowerNetworkManager.EnsureInstance(); PowerNetworkManager.Instance.Register(this); }
         protected virtual void OnDisable() { PowerNetworkManager.Instance?.Unregister(this); }
 
-        /// <summary>
-        /// Hook called by the manager during topology rebuild to test whether a candidate
-        /// neighbour is legal. Default policy: enforce 6-axis grid alignment (if required)
-        /// AND require an unobstructed straight line between the two positions.
-        ///
-        /// Override per-subclass for custom rules (e.g. wireless transmitter ignores LOS).
-        /// </summary>
         public virtual bool CanLinkTo(PowerNode other)
         {
             if (other == null || other == this) return false;
+            
+            // Manual links always allowed.
+            if (manualLinks.Contains(other)) return true;
 
             Vector3 a = transform.position;
+            // ... (rest of the method)
+
             Vector3 b = other.transform.position;
             Vector3 delta = b - a;
 
