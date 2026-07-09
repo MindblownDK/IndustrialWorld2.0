@@ -6616,10 +6616,9 @@ root =>
 
                 if (root.GetComponent<VoxelEngine.Simulation.StepUpTransformer>() == null)
                 {
-                    var su = root.AddComponent<VoxelEngine.Simulation.StepUpTransformer>();
-                    var baseStation = (VoxelEngine.Simulation.VoltageStationBase)su;
-                    baseStation.maxThroughputWatts = 200_000_000f;
-                    baseStation.conversionLoss = 0.02f;
+                    var component = root.AddComponent<VoxelEngine.Simulation.StepUpTransformer>();
+                    component.maxThroughputWatts = 200_000_000f;
+                    component.conversionLoss = 0.02f;
                 }
                 if (root.GetComponent<BoxCollider>() == null)
                 {
@@ -6703,10 +6702,9 @@ root =>
 
                 if (root.GetComponent<VoxelEngine.Simulation.StepDownTransformer>() == null)
                 {
-                    var sd = root.AddComponent<VoxelEngine.Simulation.StepDownTransformer>();
-                    var baseStation = (VoxelEngine.Simulation.VoltageStationBase)sd;
-                    baseStation.maxThroughputWatts = 200_000_000f;
-                    baseStation.conversionLoss = 0.02f;
+                    var component = root.AddComponent<VoxelEngine.Simulation.StepDownTransformer>();
+                    component.maxThroughputWatts = 200_000_000f;
+                    component.conversionLoss = 0.02f;
                 }
                 if (root.GetComponent<BoxCollider>() == null)
                 {

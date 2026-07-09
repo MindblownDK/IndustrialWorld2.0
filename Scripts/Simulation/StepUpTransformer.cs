@@ -6,10 +6,6 @@ namespace VoxelEngine.Simulation
 {
     public class StepUpTransformer : VoltageStationBase
     {
-        // Fields for Setup Wizard compatibility
-        public new float maxThroughputWatts = 200_000_000f;
-        public new float conversionLoss = 0.02f;
-
         public override float TotalProduced => hvNetwork != null ? hvNetwork.producedThisTick : 0f;
         public override float TotalConsumed => hvNetwork != null ? hvNetwork.consumedThisTick : 0f;
         public override float MaxCapacity => maxThroughputWatts;

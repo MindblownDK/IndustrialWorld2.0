@@ -12,6 +12,7 @@ namespace VoxelEngine.Simulation
         Transform StationTransform { get; }
         bool CanConnectMore { get; }
         void AddConnection(IVoltageStation other);
+        void AddConnection(IVoltageStation other, float capacity);
         void RemoveConnection(IVoltageStation other);
         
         // Power stats for UI
