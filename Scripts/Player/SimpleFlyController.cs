@@ -67,7 +67,7 @@ namespace VoxelEngine.Player
             if (GameSettings.IsHeld(InputAction.Right))   dir += transform.right;
             if (GameSettings.IsHeld(InputAction.Left))    dir -= transform.right;
             if (GameSettings.IsHeld(InputAction.Up))      dir += Vector3.up;
-            if (GameSettings.IsHeld(InputAction.Down))    dir -= Vector3.up;
+            if (GameSettings.IsHeld(InputAction.Crouch))  dir -= Vector3.up;
             transform.position += dir.normalized * speed * Time.deltaTime;
         }
 

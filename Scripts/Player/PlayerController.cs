@@ -385,7 +385,7 @@ namespace VoxelEngine.Player
 
                 Vector3 radialUp = GravityProvider.IsRadial ? UpVec : Vector3.up;
                 bool wantsUp = GameSettings.IsHeld(InputAction.Jump);
-                bool wantsDown = GameSettings.IsHeld(InputAction.Crouch) || GameSettings.IsHeld(InputAction.Down);
+                bool wantsDown = GameSettings.IsHeld(InputAction.Crouch);
                 Vector3 swimDir = (camFwd * wish.y + camRight * wish.x);
                 if (wantsUp)   swimDir += radialUp;
                 if (wantsDown) swimDir -= radialUp;

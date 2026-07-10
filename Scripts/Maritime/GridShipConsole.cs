@@ -196,7 +196,7 @@ namespace VoxelEngine.Maritime
         {
             float fwd = (Held(InputAction.Forward) ? 1f : 0f) - (Held(InputAction.Back) ? 1f : 0f);
             float right = (Held(InputAction.Right) ? 1f : 0f) - (Held(InputAction.Left) ? 1f : 0f);
-            float up = (Held(InputAction.Jump) ? 1f : 0f) - (Held(InputAction.Down) ? 1f : 0f);
+            float up = (Held(InputAction.Jump) ? 1f : 0f) - (Held(InputAction.Crouch) ? 1f : 0f);
             Vector3 thrust = new Vector3(right, up, fwd);
 
             const float ROLL_SENS = 0.35f;

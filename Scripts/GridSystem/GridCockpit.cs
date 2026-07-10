@@ -150,11 +150,10 @@ namespace VoxelEngine.GridSystem
 
         private void ReadFlightInput()
         {
-            // Translation — WASD + Space/Ctrl (relative to the cockpit's facing).
+            // Translation — WASD + Space/C (relative to the cockpit's facing).
             float fwd   = (Held(InputAction.Forward) ? 1 : 0) - (Held(InputAction.Back) ? 1 : 0);
             float right = (Held(InputAction.Right) ? 1 : 0)   - (Held(InputAction.Left) ? 1 : 0);
-            bool descendHeld = Held(InputAction.Down)
-                               || (PilotHoldingGridBlock() && (Held(InputAction.Crouch) || CKeyHeld()));
+            bool descendHeld = Held(InputAction.Crouch) || CKeyHeld();
             float up    = (Held(InputAction.Jump) ? 1 : 0)    - (descendHeld ? 1 : 0);
             Vector3 thrust = new Vector3(right, up, fwd);
 

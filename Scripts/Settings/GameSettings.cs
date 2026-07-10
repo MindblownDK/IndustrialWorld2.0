@@ -51,7 +51,7 @@ namespace VoxelEngine.Settings
 
         // Bump this when default keybinds change to force a one-time migration
         // that fills in missing or invalid bindings on old saves.
-        private const int    CURRENT_VERSION = 10;
+        private const int    CURRENT_VERSION = 11;
 
         // ----- defaults -----
         public const float DEFAULT_FOV       = 75f;
@@ -179,6 +179,14 @@ namespace VoxelEngine.Settings
                 if (string.IsNullOrEmpty(current) || current == "None")
                     PlayerPrefs.SetString(K_KEY_PREFIX + a, DefaultKey(a));
             }
+
+            // v11: Fly/jetpack descent moved from Ctrl to C so Ctrl remains a
+            // dedicated placement-rotation modifier. Preserve custom Down binds,
+            // but migrate the old default.
+            string down = PlayerPrefs.GetString(K_KEY_PREFIX + InputAction.Down, "");
+            if (saved < 11 && (string.IsNullOrEmpty(down) || down == "LeftCtrl" || down == "RightCtrl"))
+                PlayerPrefs.SetString(K_KEY_PREFIX + InputAction.Down, "C");
+
             PlayerPrefs.SetInt(K_VERSION, CURRENT_VERSION);
             PlayerPrefs.Save();
             Debug.Log("[GameSettings] Migrated keybinds to version " + CURRENT_VERSION);

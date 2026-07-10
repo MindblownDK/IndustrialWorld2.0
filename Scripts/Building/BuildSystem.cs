@@ -9,6 +9,7 @@ using VoxelEngine.Cosmos;
 using VoxelEngine.Items;
 using VoxelEngine.Settings;
 using VoxelEngine.Transport;
+using VoxelEngine.GridSystem;
 using InputAction = VoxelEngine.Settings.InputAction;
 
 namespace VoxelEngine.Building
@@ -29,13 +30,16 @@ namespace VoxelEngine.Building
 
         [Header("Rotation")]
         public float yawStep = 90f;
-        private float _ghostYaw = 0f;
 
         // Runtime
         private GameObject _ghost;
         private BlockItem  _ghostItem;
         private Material   _ghostMaterialValid;
         private Material   _ghostMaterialInvalid;
+        private Vector3Int _rotSteps;
+
+        public static bool HoldingBlock { get; private set; }
+        public static string HeldBlockName { get; private set; } = string.Empty;
 
         private void Awake()
         {
@@ -49,27 +53,13 @@ namespace VoxelEngine.Building
 
         private void Update()
         {
-            if (VoxelEngine.UI.UIState.IsBlocking) { HideGhost(); return; }
+            if (VoxelEngine.UI.UIState.IsBlocking) { HoldingBlock = false; HeldBlockName = string.Empty; HideGhost(); return; }
 
             // Toggle grid mode.
             if (GameSettings.WasPressed(InputAction.BuildToggleGrid))
                 gridSnap = !gridSnap;
 
-            // Rotate ghost only while holding LeftCtrl — otherwise the wheel scrolls the hotbar.
-            bool ctrlHeld = false;
-#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
-            ctrlHeld = UnityEngine.InputSystem.Keyboard.current != null
-                       && UnityEngine.InputSystem.Keyboard.current.leftCtrlKey.isPressed;
-            float wheel = UnityEngine.InputSystem.Mouse.current != null
-                ? UnityEngine.InputSystem.Mouse.current.scroll.ReadValue().y : 0f;
-#else
-            ctrlHeld = Input.GetKey(KeyCode.LeftControl);
-            float wheel = Input.mouseScrollDelta.y;
-#endif
-            if (ctrlHeld && Mathf.Abs(wheel) > 0.01f && _ghost != null)
-                _ghostYaw += Mathf.Sign(wheel) * yawStep;
-            if (GameSettings.WasPressed(InputAction.BuildRotate) && _ghost != null)
-                _ghostYaw += yawStep;
+            HandleRotationInput();
 
             UpdateGhost();
 
@@ -80,13 +70,17 @@ namespace VoxelEngine.Building
         // ---------- Ghost ----------
         private void UpdateGhost()
         {
-            if (inventory == null) { HideGhost(); return; }
+            if (inventory == null) { HoldingBlock = false; HeldBlockName = string.Empty; HideGhost(); return; }
             var stack = inventory.ActiveStack;
             if (stack.IsEmpty || !(stack.item is BlockItem block) || block.placedPrefab == null)
             {
+                HoldingBlock = false;
+                HeldBlockName = string.Empty;
                 HideGhost();
                 return;
             }
+            HoldingBlock = true;
+            HeldBlockName = block.displayName;
             if (_ghost == null || _ghostItem != block)
             {
                 if (_ghost != null) Destroy(_ghost);
@@ -123,7 +117,23 @@ namespace VoxelEngine.Building
 
         private void HideGhost()
         {
+            HoldingBlock = false;
+            HeldBlockName = string.Empty;
             if (_ghost != null) { Destroy(_ghost); _ghost = null; _ghostItem = null; } Quarry.HidePlacementPreview();
+        }
+
+        private void HandleRotationInput()
+        {
+            float scroll = GridInput.Scroll;
+            bool ctrl = GridInput.Ctrl;
+            bool shift = GridInput.Shift;
+            if (Mathf.Abs(scroll) < 0.01f) return;
+            if (!ctrl && !shift) return;
+
+            int dir = scroll > 0 ? 1 : -1;
+            if (ctrl && shift) _rotSteps.z = (_rotSteps.z + dir + 4) % 4;
+            else if (ctrl) _rotSteps.y = (_rotSteps.y + dir + 4) % 4;
+            else if (shift) _rotSteps.x = (_rotSteps.x + dir + 4) % 4;
         }
 
         public bool TryPlace(BlockItem block, RaycastHit hit, Vector3 viewDir)
@@ -181,7 +191,7 @@ namespace VoxelEngine.Building
                 return;
 
             pos = ComputePlacementPosition(hit, block);
-            rot = GravityProvider.GetSurfaceRotation(pos, _ghostYaw);
+            rot = GravityProvider.GetSurfaceRotation(pos) * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
         }
 
         private bool TryGetFactorySnapPose(RaycastHit hit, BlockItem block, out Vector3 pos, out Quaternion rot)
@@ -210,7 +220,7 @@ namespace VoxelEngine.Building
                 // placement can create a parallel lane, feed into the target belt,
                 // or make a clean turn with the BuildRotate key.
                 pos = targetBelt.transform.position + snapDirection.normalized * Mathf.Max(gridSize, 1f);
-                rot = Quaternion.AngleAxis(_ghostYaw, targetBelt.transform.up) * targetBelt.transform.rotation;
+                rot = targetBelt.transform.rotation * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
                 return true;
             }
 
