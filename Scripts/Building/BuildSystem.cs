@@ -166,12 +166,57 @@ namespace VoxelEngine.Building
         /// </summary>
         private void ComputePlacementPose(RaycastHit hit, BlockItem block, out Vector3 pos, out Quaternion rot)
         {
+            if (TryGetFactorySnapPose(hit, block, out pos, out rot))
+                return;
+
             if (block != null && block.placedPrefab != null &&
                 VoxelEngine.Power.Wind.WindTurbineController.TryGetSnapPoint(block.placedPrefab, hit, out pos, out rot))
                 return;
 
             pos = ComputePlacementPosition(hit, block);
             rot = GravityProvider.GetSurfaceRotation(pos, _ghostYaw);
+        }
+
+        private bool TryGetFactorySnapPose(RaycastHit hit, BlockItem block, out Vector3 pos, out Quaternion rot)
+        {
+            pos = default;
+            rot = default;
+            if (block == null || block.placedPrefab == null || hit.collider == null) return false;
+
+            bool placingBelt = block.placedPrefab.GetComponentInChildren<VoxelEngine.Simulation.ConveyorBelt>(true) != null;
+            bool placingChute = block.placedPrefab.GetComponentInChildren<VoxelEngine.Simulation.ConveyorChute>(true) != null;
+            if (!placingBelt && !placingChute) return false;
+
+            var targetBelt = hit.collider.GetComponentInParent<VoxelEngine.Simulation.ConveyorBelt>();
+            if (placingBelt && targetBelt != null)
+            {
+                Vector3 localHit = targetBelt.transform.InverseTransformPoint(hit.point);
+                Vector3 snapDirection;
+                bool sideSnap = Mathf.Abs(localHit.x) > Mathf.Abs(localHit.z);
+                if (sideSnap)
+                {
+                    snapDirection = targetBelt.transform.right * Mathf.Sign(localHit.x == 0f ? 1f : localHit.x);
+                    rot = Quaternion.LookRotation(snapDirection, targetBelt.transform.up);
+                }
+                else
+                {
+                    snapDirection = targetBelt.transform.forward * Mathf.Sign(localHit.z == 0f ? 1f : localHit.z);
+                    rot = targetBelt.transform.rotation;
+                }
+
+                pos = targetBelt.transform.position + snapDirection.normalized * Mathf.Max(gridSize, 1f);
+                return true;
+            }
+
+            var targetChute = hit.collider.GetComponentInParent<VoxelEngine.Simulation.ConveyorChute>();
+            if (placingChute && targetChute != null)
+            {
+                pos = targetChute.transform.position + targetChute.transform.up * Mathf.Max(gridSize, 1f);
+                rot = targetChute.transform.rotation;
+                return true;
+            }
+
+            return false;
         }
 
         private Vector3 ComputePlacementPosition(RaycastHit hit, BlockItem block)

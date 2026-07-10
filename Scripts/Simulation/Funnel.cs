@@ -8,6 +8,7 @@
 
 using UnityEngine;
 using VoxelEngine.Items;
+using VoxelEngine.Transport;
 
 namespace VoxelEngine.Simulation
 {
@@ -203,7 +204,10 @@ namespace VoxelEngine.Simulation
             foreach (var mb in behaviours)
             {
                 if (mb == null || mb == this) continue;
-                if (mb is IItemProvider || mb is IItemContainer) return mb;
+                if (mb is IItemProvider) return mb;
+                if (mb is IItemContainer) return mb;
+                if (mb is IInventoryInterface inventory && inventory.GetOutputContainer() != null) return mb;
+                if (mb is IItemPortHost portHost && HasPortContainer(portHost, canOutput: true)) return mb;
             }
             return null;
         }
@@ -215,9 +219,26 @@ namespace VoxelEngine.Simulation
             foreach (var mb in behaviours)
             {
                 if (mb == null || mb == this) continue;
-                if (mb is IItemConsumer || mb is IItemContainer) return mb;
+                if (mb is IItemConsumer) return mb;
+                if (mb is IItemContainer) return mb;
+                if (mb is IInventoryInterface inventory && inventory.GetInputContainer() != null) return mb;
+                if (mb is IItemPortHost portHost && HasPortContainer(portHost, canInput: true)) return mb;
             }
             return null;
+        }
+
+        private static bool HasPortContainer(IItemPortHost host, bool canInput = false, bool canOutput = false)
+        {
+            if (host == null) return false;
+            var containers = host.GetPortContainers();
+            if (containers == null) return false;
+            foreach (var port in containers)
+            {
+                if (port.Container == null) continue;
+                if (canInput && port.CanInput) return true;
+                if (canOutput && port.CanOutput) return true;
+            }
+            return false;
         }
 
         // ── Transfer Logic ────────────────────────────────────────────
@@ -243,9 +264,34 @@ namespace VoxelEngine.Simulation
                 return;
             }
 
-            if (inputSource is IItemContainer container)
+            if (inputSource is IItemContainer directContainer)
             {
-                PullFromContainer(container);
+                PullFromContainer(directContainer);
+                return;
+            }
+
+            if (inputSource is IInventoryInterface inventory)
+            {
+                PullFromContainer(inventory.GetOutputContainer());
+                return;
+            }
+
+            if (inputSource is IItemPortHost portHost)
+            {
+                PullFromPortHost(portHost);
+            }
+        }
+
+        private void PullFromPortHost(IItemPortHost host)
+        {
+            if (host == null) return;
+            var ports = host.GetPortContainers();
+            if (ports == null) return;
+            foreach (var port in ports)
+            {
+                if (!port.CanOutput || port.Container == null) continue;
+                PullFromContainer(port.Container);
+                if (BufferedCount > 0) return;
             }
         }
 
@@ -283,10 +329,17 @@ namespace VoxelEngine.Simulation
                     if (capacity > 0)
                         moved = consumer.TryInsert(slot.item, Mathf.Min(capacity, slot.count));
                 }
-                else if (outputTarget is IItemContainer container)
+                else if (outputTarget is IItemContainer directContainer)
                 {
-                    var leftover = container.Insert(new ItemStack(slot.item, slot.count));
-                    moved = slot.count - (leftover?.count ?? 0);
+                    moved = PushToContainer(directContainer, slot.item, slot.count);
+                }
+                else if (outputTarget is IInventoryInterface inventory)
+                {
+                    moved = PushToContainer(inventory.GetInputContainer(), slot.item, slot.count);
+                }
+                else if (outputTarget is IItemPortHost portHost)
+                {
+                    moved = PushToPortHost(portHost, slot.item, slot.count);
                 }
 
                 if (moved > 0)
@@ -295,6 +348,27 @@ namespace VoxelEngine.Simulation
                     return;
                 }
             }
+        }
+
+        private static int PushToPortHost(IItemPortHost host, ItemDefinition item, int count)
+        {
+            if (host == null || item == null || count <= 0) return 0;
+            var ports = host.GetPortContainers();
+            if (ports == null) return 0;
+            foreach (var port in ports)
+            {
+                if (!port.CanInput || port.Container == null) continue;
+                int moved = PushToContainer(port.Container, item, count);
+                if (moved > 0) return moved;
+            }
+            return 0;
+        }
+
+        private static int PushToContainer(IItemContainer container, ItemDefinition item, int count)
+        {
+            if (container == null || item == null || count <= 0) return 0;
+            var leftover = container.Insert(new ItemStack(item, count));
+            return count - (leftover?.count ?? 0);
         }
 
         // ── IItemConsumer ─────────────────────────────────────────────

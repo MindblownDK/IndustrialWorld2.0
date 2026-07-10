@@ -39,7 +39,7 @@ namespace VoxelEngine.Core
         // ── Bump these when you ship ──────────────────────────────────────
         public const int    Major = 5;
         public const int    Minor = 0;
-        public const int    Patch = 7;
+        public const int    Patch = 9;
 
         /// <summary>
         /// Channel suffix appended after a hyphen. Use "" for a stable release,

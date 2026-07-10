@@ -6174,19 +6174,26 @@ root =>
 
             var powerPolePrefab = GetOrCreatePrefab($"{HV_PREFABS}/PowerPole.prefab", "PowerPole", root =>
             {
-                var poleMat = GetMaterial(HV_MATS, "Mat_PowerPole", new Color(0.32f, 0.34f, 0.36f));
-                var capMat = GetMaterial(HV_MATS, "Mat_PowerPoleCap", new Color(0.22f, 0.78f, 0.42f), true);
-                var insulatorMat = GetMaterial(HV_MATS, "Mat_PowerPoleInsulators", new Color(0.88f, 0.90f, 0.86f));
-                var transformerMat = GetMaterial(HV_MATS, "Mat_PoleTransformer", new Color(0.62f, 0.66f, 0.68f));
-                EnsurePrimitive(root, "Generated_Pole", PrimitiveType.Cylinder, new Vector3(0f, 1.55f, 0f), new Vector3(0.13f, 1.55f, 0.13f), poleMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_CrossArm", PrimitiveType.Cube, new Vector3(0f, 2.95f, 0f), new Vector3(1.55f, 0.10f, 0.12f), poleMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_TransformerCan", PrimitiveType.Cylinder, new Vector3(0.32f, 2.05f, -0.18f), new Vector3(0.24f, 0.34f, 0.24f), transformerMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_ServiceBox", PrimitiveType.Cube, new Vector3(-0.20f, 1.55f, -0.14f), new Vector3(0.22f, 0.34f, 0.16f), transformerMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_LeftInsulator", PrimitiveType.Cylinder, new Vector3(-0.58f, 2.82f, 0f), new Vector3(0.055f, 0.16f, 0.055f), insulatorMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_RightInsulator", PrimitiveType.Cylinder, new Vector3(0.58f, 2.82f, 0f), new Vector3(0.055f, 0.16f, 0.055f), insulatorMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_CenterInsulator", PrimitiveType.Cylinder, new Vector3(0f, 2.82f, 0f), new Vector3(0.055f, 0.16f, 0.055f), insulatorMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_ConnectionCap", PrimitiveType.Sphere, new Vector3(0f, 3.08f, 0f), new Vector3(0.16f, 0.16f, 0.16f), capMat, Vector3.zero);
-                EnsureRootCollider(root, new Vector3(1.7f, 3.3f, 0.9f), new Vector3(0f, 1.65f, 0f));
+                ClearGeneratedChildren(root);
+                var poleMat = GetMaterial(HV_MATS, "Mat_PowerPoleWood", new Color(0.36f, 0.25f, 0.16f));
+                var metalMat = GetMaterial(HV_MATS, "Mat_PowerPoleGalvanizedMetal", new Color(0.55f, 0.58f, 0.58f));
+                var wireMat = GetMaterial(HV_MATS, "Mat_PowerPoleWire", new Color(0.035f, 0.035f, 0.035f));
+                var capMat = GetMaterial(HV_MATS, "Mat_PowerPoleLiveCap", new Color(0.22f, 0.78f, 0.42f), true);
+                var insulatorMat = GetMaterial(HV_MATS, "Mat_PowerPoleCeramicInsulators", new Color(0.88f, 0.90f, 0.86f));
+                var transformerMat = GetMaterial(HV_MATS, "Mat_PoleTransformerCan", new Color(0.66f, 0.70f, 0.72f));
+                EnsurePrimitive(root, "Generated_WoodPole", PrimitiveType.Cylinder, new Vector3(0f, 1.65f, 0f), new Vector3(0.14f, 1.65f, 0.14f), poleMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_TopCrossArm", PrimitiveType.Cube, new Vector3(0f, 3.12f, 0f), new Vector3(1.85f, 0.12f, 0.16f), poleMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_LowerCrossArm", PrimitiveType.Cube, new Vector3(0f, 2.55f, -0.05f), new Vector3(1.35f, 0.10f, 0.12f), poleMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_TransformerCan", PrimitiveType.Cylinder, new Vector3(0.42f, 2.10f, -0.22f), new Vector3(0.30f, 0.40f, 0.30f), transformerMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_TransformerLid", PrimitiveType.Cylinder, new Vector3(0.42f, 2.53f, -0.22f), new Vector3(0.32f, 0.04f, 0.32f), metalMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_ServiceBox", PrimitiveType.Cube, new Vector3(-0.28f, 1.45f, -0.16f), new Vector3(0.28f, 0.42f, 0.18f), metalMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_LeftInsulator", PrimitiveType.Cylinder, new Vector3(-0.72f, 3.02f, 0f), new Vector3(0.055f, 0.20f, 0.055f), insulatorMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_CenterInsulator", PrimitiveType.Cylinder, new Vector3(0f, 3.02f, 0f), new Vector3(0.055f, 0.20f, 0.055f), insulatorMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_RightInsulator", PrimitiveType.Cylinder, new Vector3(0.72f, 3.02f, 0f), new Vector3(0.055f, 0.20f, 0.055f), insulatorMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_HighWire", PrimitiveType.Cube, new Vector3(0f, 3.32f, 0f), new Vector3(2.1f, 0.025f, 0.025f), wireMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_DropWireA", PrimitiveType.Cube, new Vector3(0.32f, 2.78f, -0.10f), new Vector3(0.025f, 0.58f, 0.025f), wireMat, new Vector3(0f, 0f, 12f));
+                EnsurePrimitive(root, "Generated_ConnectionCap", PrimitiveType.Sphere, new Vector3(0f, 3.36f, 0f), new Vector3(0.16f, 0.16f, 0.16f), capMat, Vector3.zero);
+                EnsureRootCollider(root, new Vector3(2.2f, 3.6f, 1.0f), new Vector3(0f, 1.78f, 0f));
                 var pole = EnsureComponent<VoxelEngine.Simulation.PowerPole>(root);
                 pole.poleHeight = 3f;
                 pole.maxConnections = 6;
@@ -6198,20 +6205,26 @@ root =>
 
             var substationPrefab = GetOrCreatePrefab($"{HV_PREFABS}/ElectricalSubstation.prefab", "ElectricalSubstation", root =>
             {
-                var baseMat = GetMaterial(HV_MATS, "Mat_SubstationBase", new Color(0.23f, 0.25f, 0.28f));
-                var coilMat = GetMaterial(HV_MATS, "Mat_SubstationCoils", new Color(0.85f, 0.45f, 0.20f));
-                var glowMat = GetMaterial(HV_MATS, "Mat_SubstationGlow", new Color(0.18f, 0.72f, 0.88f), true);
-                var bushingMat = GetMaterial(HV_MATS, "Mat_SubstationBushings", new Color(0.10f, 0.09f, 0.085f));
-                EnsurePrimitive(root, "Generated_Base", PrimitiveType.Cube, new Vector3(0f, 0.25f, 0f), new Vector3(2.35f, 0.5f, 1.55f), baseMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_TransformerTank", PrimitiveType.Cube, new Vector3(0f, 0.92f, 0f), new Vector3(1.55f, 0.82f, 0.95f), baseMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_LeftCoil", PrimitiveType.Cylinder, new Vector3(-0.55f, 1.46f, 0f), new Vector3(0.16f, 0.32f, 0.16f), coilMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_RightCoil", PrimitiveType.Cylinder, new Vector3(0.55f, 1.46f, 0f), new Vector3(0.16f, 0.32f, 0.16f), coilMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_LeftBushing", PrimitiveType.Cylinder, new Vector3(-0.55f, 1.86f, 0f), new Vector3(0.08f, 0.22f, 0.08f), bushingMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_RightBushing", PrimitiveType.Cylinder, new Vector3(0.55f, 1.86f, 0f), new Vector3(0.08f, 0.22f, 0.08f), bushingMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_RadiatorLeft", PrimitiveType.Cube, new Vector3(-0.90f, 0.92f, 0f), new Vector3(0.08f, 0.72f, 0.88f), coilMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_RadiatorRight", PrimitiveType.Cube, new Vector3(0.90f, 0.92f, 0f), new Vector3(0.08f, 0.72f, 0.88f), coilMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_StatusBar", PrimitiveType.Cube, new Vector3(0f, 0.62f, -0.81f), new Vector3(0.9f, 0.05f, 0.04f), glowMat, Vector3.zero);
-                EnsureRootCollider(root, new Vector3(2.45f, 2.15f, 1.65f), new Vector3(0f, 1.02f, 0f));
+                ClearGeneratedChildren(root);
+                var baseMat = GetMaterial(HV_MATS, "Mat_SubstationConcretePad", new Color(0.44f, 0.45f, 0.43f));
+                var frameMat = GetMaterial(HV_MATS, "Mat_SubstationSteelFrame", new Color(0.46f, 0.49f, 0.50f));
+                var tankMat = GetMaterial(HV_MATS, "Mat_SubstationTransformerTank", new Color(0.66f, 0.70f, 0.69f));
+                var radiatorMat = GetMaterial(HV_MATS, "Mat_SubstationRadiators", new Color(0.48f, 0.52f, 0.52f));
+                var glowMat = GetMaterial(HV_MATS, "Mat_SubstationStatusGlow", new Color(0.18f, 0.72f, 0.88f), true);
+                var bushingMat = GetMaterial(HV_MATS, "Mat_SubstationBlackBushings", new Color(0.08f, 0.075f, 0.07f));
+                EnsurePrimitive(root, "Generated_ConcretePad", PrimitiveType.Cube, new Vector3(0f, 0.08f, 0f), new Vector3(3.4f, 0.16f, 2.4f), baseMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_GantryLeftPost", PrimitiveType.Cube, new Vector3(-1.45f, 1.30f, -0.86f), new Vector3(0.08f, 2.45f, 0.08f), frameMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_GantryRightPost", PrimitiveType.Cube, new Vector3(1.45f, 1.30f, -0.86f), new Vector3(0.08f, 2.45f, 0.08f), frameMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_GantryBeam", PrimitiveType.Cube, new Vector3(0f, 2.50f, -0.86f), new Vector3(3.05f, 0.08f, 0.08f), frameMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_MainTransformerTank", PrimitiveType.Cube, new Vector3(0f, 0.78f, 0.18f), new Vector3(1.55f, 1.05f, 1.05f), tankMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_RadiatorBankLeft", PrimitiveType.Cube, new Vector3(-0.96f, 0.78f, 0.18f), new Vector3(0.12f, 0.95f, 0.95f), radiatorMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_RadiatorBankRight", PrimitiveType.Cube, new Vector3(0.96f, 0.78f, 0.18f), new Vector3(0.12f, 0.95f, 0.95f), radiatorMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_TopBushingA", PrimitiveType.Cylinder, new Vector3(-0.48f, 1.50f, -0.12f), new Vector3(0.07f, 0.28f, 0.07f), bushingMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_TopBushingB", PrimitiveType.Cylinder, new Vector3(0f, 1.56f, -0.12f), new Vector3(0.07f, 0.34f, 0.07f), bushingMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_TopBushingC", PrimitiveType.Cylinder, new Vector3(0.48f, 1.50f, -0.12f), new Vector3(0.07f, 0.28f, 0.07f), bushingMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_ControlCabinet", PrimitiveType.Cube, new Vector3(1.25f, 0.55f, 0.88f), new Vector3(0.36f, 0.72f, 0.22f), tankMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_StatusBar", PrimitiveType.Cube, new Vector3(0f, 0.35f, -0.48f), new Vector3(0.86f, 0.05f, 0.04f), glowMat, Vector3.zero);
+                EnsureRootCollider(root, new Vector3(3.5f, 2.75f, 2.5f), new Vector3(0f, 1.28f, 0f));
                 var substation = EnsureComponent<VoxelEngine.Simulation.ElectricalSubstation>(root);
                 substation.relayDistance = 150f;
                 substation.structureHeight = 5f;
@@ -6224,24 +6237,38 @@ root =>
 
             var hvTowerPrefab = GetOrCreatePrefab($"{HV_PREFABS}/HVTower.prefab", "HVTower", root =>
             {
-                var steelMat = GetMaterial(HV_MATS, "Mat_HVTowerSteel", new Color(0.48f, 0.50f, 0.54f));
-                var amberMat = GetMaterial(HV_MATS, "Mat_HVTowerAmber", new Color(0.92f, 0.45f, 0.12f), true);
-                var insulatorMat = GetMaterial(HV_MATS, "Mat_HVTowerInsulators", new Color(0.08f, 0.075f, 0.07f));
-                EnsurePrimitive(root, "Generated_LeftFrontLeg", PrimitiveType.Cube, new Vector3(-0.72f, 3.0f, -0.22f), new Vector3(0.08f, 6f, 0.08f), steelMat, new Vector3(0f, 0f, -6f));
-                EnsurePrimitive(root, "Generated_RightFrontLeg", PrimitiveType.Cube, new Vector3(0.72f, 3.0f, -0.22f), new Vector3(0.08f, 6f, 0.08f), steelMat, new Vector3(0f, 0f, 6f));
-                EnsurePrimitive(root, "Generated_LeftBackLeg", PrimitiveType.Cube, new Vector3(-0.72f, 3.0f, 0.22f), new Vector3(0.08f, 6f, 0.08f), steelMat, new Vector3(0f, 0f, -6f));
-                EnsurePrimitive(root, "Generated_RightBackLeg", PrimitiveType.Cube, new Vector3(0.72f, 3.0f, 0.22f), new Vector3(0.08f, 6f, 0.08f), steelMat, new Vector3(0f, 0f, 6f));
-                EnsurePrimitive(root, "Generated_BraceA", PrimitiveType.Cube, new Vector3(0f, 2.2f, -0.24f), new Vector3(0.07f, 2.8f, 0.07f), steelMat, new Vector3(0f, 0f, 32f));
-                EnsurePrimitive(root, "Generated_BraceB", PrimitiveType.Cube, new Vector3(0f, 2.2f, 0.24f), new Vector3(0.07f, 2.8f, 0.07f), steelMat, new Vector3(0f, 0f, -32f));
-                EnsurePrimitive(root, "Generated_BraceC", PrimitiveType.Cube, new Vector3(0f, 4.4f, -0.24f), new Vector3(0.07f, 2.8f, 0.07f), steelMat, new Vector3(0f, 0f, -28f));
-                EnsurePrimitive(root, "Generated_BraceD", PrimitiveType.Cube, new Vector3(0f, 4.4f, 0.24f), new Vector3(0.07f, 2.8f, 0.07f), steelMat, new Vector3(0f, 0f, 28f));
-                EnsurePrimitive(root, "Generated_LowerArm", PrimitiveType.Cube, new Vector3(0f, 3.6f, 0f), new Vector3(3.6f, 0.08f, 0.10f), steelMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_UpperArm", PrimitiveType.Cube, new Vector3(0f, 5.1f, 0f), new Vector3(2.8f, 0.08f, 0.10f), steelMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_LeftInsulator", PrimitiveType.Cylinder, new Vector3(-1.45f, 3.25f, 0f), new Vector3(0.08f, 0.32f, 0.08f), insulatorMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_RightInsulator", PrimitiveType.Cylinder, new Vector3(1.45f, 3.25f, 0f), new Vector3(0.08f, 0.32f, 0.08f), insulatorMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_TopInsulator", PrimitiveType.Cylinder, new Vector3(0f, 4.78f, 0f), new Vector3(0.08f, 0.32f, 0.08f), insulatorMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_HVBeacon", PrimitiveType.Sphere, new Vector3(0f, 5.8f, 0f), new Vector3(0.18f, 0.18f, 0.18f), amberMat, Vector3.zero);
-                EnsureRootCollider(root, new Vector3(3.8f, 6.2f, 0.9f), new Vector3(0f, 3.1f, 0f));
+                ClearGeneratedChildren(root);
+                var steelMat = GetMaterial(HV_MATS, "Mat_HVTowerGalvanizedSteel", new Color(0.48f, 0.50f, 0.54f));
+                var amberMat = GetMaterial(HV_MATS, "Mat_HVTowerPhaseMarkers", new Color(0.92f, 0.45f, 0.12f), true);
+                var insulatorMat = GetMaterial(HV_MATS, "Mat_HVTowerDarkInsulators", new Color(0.08f, 0.075f, 0.07f));
+                var baseMat = GetMaterial(HV_MATS, "Mat_HVTowerConcreteFeet", new Color(0.42f, 0.42f, 0.40f));
+                EnsurePrimitive(root, "Generated_FootA", PrimitiveType.Cube, new Vector3(-0.88f, 0.06f, -0.30f), new Vector3(0.36f, 0.12f, 0.32f), baseMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_FootB", PrimitiveType.Cube, new Vector3(0.88f, 0.06f, -0.30f), new Vector3(0.36f, 0.12f, 0.32f), baseMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_FootC", PrimitiveType.Cube, new Vector3(-0.88f, 0.06f, 0.30f), new Vector3(0.36f, 0.12f, 0.32f), baseMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_FootD", PrimitiveType.Cube, new Vector3(0.88f, 0.06f, 0.30f), new Vector3(0.36f, 0.12f, 0.32f), baseMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_LeftFrontLeg", PrimitiveType.Cube, new Vector3(-0.70f, 3.0f, -0.24f), new Vector3(0.075f, 6.0f, 0.075f), steelMat, new Vector3(0f, 0f, -7f));
+                EnsurePrimitive(root, "Generated_RightFrontLeg", PrimitiveType.Cube, new Vector3(0.70f, 3.0f, -0.24f), new Vector3(0.075f, 6.0f, 0.075f), steelMat, new Vector3(0f, 0f, 7f));
+                EnsurePrimitive(root, "Generated_LeftBackLeg", PrimitiveType.Cube, new Vector3(-0.70f, 3.0f, 0.24f), new Vector3(0.075f, 6.0f, 0.075f), steelMat, new Vector3(0f, 0f, -7f));
+                EnsurePrimitive(root, "Generated_RightBackLeg", PrimitiveType.Cube, new Vector3(0.70f, 3.0f, 0.24f), new Vector3(0.075f, 6.0f, 0.075f), steelMat, new Vector3(0f, 0f, 7f));
+                for (int level = 0; level < 4; level++)
+                {
+                    float y = 1.25f + level * 1.05f;
+                    EnsurePrimitive(root, $"Generated_XBraceFront_{level}_A", PrimitiveType.Cube, new Vector3(0f, y, -0.30f), new Vector3(0.055f, 1.45f, 0.055f), steelMat, new Vector3(0f, 0f, 36f));
+                    EnsurePrimitive(root, $"Generated_XBraceFront_{level}_B", PrimitiveType.Cube, new Vector3(0f, y, -0.30f), new Vector3(0.055f, 1.45f, 0.055f), steelMat, new Vector3(0f, 0f, -36f));
+                    EnsurePrimitive(root, $"Generated_XBraceBack_{level}_A", PrimitiveType.Cube, new Vector3(0f, y, 0.30f), new Vector3(0.055f, 1.45f, 0.055f), steelMat, new Vector3(0f, 0f, 36f));
+                    EnsurePrimitive(root, $"Generated_XBraceBack_{level}_B", PrimitiveType.Cube, new Vector3(0f, y, 0.30f), new Vector3(0.055f, 1.45f, 0.055f), steelMat, new Vector3(0f, 0f, -36f));
+                }
+                EnsurePrimitive(root, "Generated_LowerCrossArm", PrimitiveType.Cube, new Vector3(0f, 3.45f, 0f), new Vector3(3.75f, 0.09f, 0.10f), steelMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_UpperCrossArm", PrimitiveType.Cube, new Vector3(0f, 4.95f, 0f), new Vector3(2.95f, 0.09f, 0.10f), steelMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_PeakA", PrimitiveType.Cube, new Vector3(-0.24f, 5.55f, 0f), new Vector3(0.07f, 1.05f, 0.07f), steelMat, new Vector3(0f, 0f, -25f));
+                EnsurePrimitive(root, "Generated_PeakB", PrimitiveType.Cube, new Vector3(0.24f, 5.55f, 0f), new Vector3(0.07f, 1.05f, 0.07f), steelMat, new Vector3(0f, 0f, 25f));
+                EnsurePrimitive(root, "Generated_LeftInsulator", PrimitiveType.Cylinder, new Vector3(-1.55f, 3.12f, 0f), new Vector3(0.075f, 0.34f, 0.075f), insulatorMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_RightInsulator", PrimitiveType.Cylinder, new Vector3(1.55f, 3.12f, 0f), new Vector3(0.075f, 0.34f, 0.075f), insulatorMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_TopInsulator", PrimitiveType.Cylinder, new Vector3(0f, 4.55f, 0f), new Vector3(0.075f, 0.34f, 0.075f), insulatorMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_PhaseMarkerA", PrimitiveType.Cube, new Vector3(-1.55f, 2.72f, 0f), new Vector3(0.20f, 0.20f, 0.20f), amberMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_PhaseMarkerB", PrimitiveType.Cube, new Vector3(1.55f, 2.72f, 0f), new Vector3(0.20f, 0.20f, 0.20f), amberMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_HVBeacon", PrimitiveType.Sphere, new Vector3(0f, 6.15f, 0f), new Vector3(0.18f, 0.18f, 0.18f), amberMat, Vector3.zero);
+                EnsureRootCollider(root, new Vector3(4.0f, 6.4f, 1.0f), new Vector3(0f, 3.2f, 0f));
                 var tower = EnsureComponent<VoxelEngine.Simulation.HighVoltagePole>(root);
                 tower.towerHeight = 12f;
                 tower.baseWidth = 3f;
@@ -6256,37 +6283,66 @@ root =>
             });
             var blockHVTower = ConfigureBlock(HV_ITEMS, "Block_HVTower", "HV Transmission Tower", "High-voltage lattice tower for 200 m transmission spans and unlimited throughput.", new Color(0.92f, 0.45f, 0.12f), hvTowerPrefab, "Power", 1100, 3, new Vector3Int(3, 6, 1));
 
-            GameObject CreateTransformerPrefab<T>(string assetName, Color accent, bool stepUp) where T : VoxelEngine.Simulation.VoltageStationBase
+            var stepUpPrefab = GetOrCreatePrefab($"{HV_PREFABS}/StepUpTransformer.prefab", "StepUpTransformer", root =>
             {
-                return GetOrCreatePrefab($"{HV_PREFABS}/{assetName}.prefab", assetName, root =>
+                ClearGeneratedChildren(root);
+                var tankMat = GetMaterial(HV_MATS, "Mat_StepUpLargeTank", new Color(0.62f, 0.66f, 0.65f));
+                var radiatorMat = GetMaterial(HV_MATS, "Mat_StepUpRadiatorFins", new Color(0.42f, 0.46f, 0.46f));
+                var bushingMat = GetMaterial(HV_MATS, "Mat_StepUpBlackBushings", new Color(0.07f, 0.065f, 0.06f));
+                var copperMat = GetMaterial(HV_MATS, "Mat_StepUpCopperBus", new Color(0.78f, 0.42f, 0.18f));
+                var blueGlow = GetMaterial(HV_MATS, "Mat_StepUpBlueStatus", new Color(0.15f, 0.45f, 0.85f), true);
+                EnsurePrimitive(root, "Generated_SkidBase", PrimitiveType.Cube, new Vector3(0f, 0.12f, 0f), new Vector3(2.65f, 0.24f, 1.55f), tankMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_MainTank", PrimitiveType.Cube, new Vector3(0f, 0.82f, 0f), new Vector3(2.05f, 1.12f, 1.05f), tankMat, Vector3.zero);
+                for (int i = 0; i < 6; i++)
                 {
-                    var baseMat = GetMaterial(HV_MATS, "Mat_TransformerBase", new Color(0.24f, 0.26f, 0.30f));
-                    var coilMat = GetMaterial(HV_MATS, "Mat_TransformerCoil", new Color(0.75f, 0.45f, 0.24f));
-                    var glowMat = GetMaterial(HV_MATS, $"Mat_{assetName}_Accent", accent, true);
-                    var bushingMat = GetMaterial(HV_MATS, "Mat_TransformerBushings", new Color(0.08f, 0.075f, 0.07f));
-                    EnsurePrimitive(root, "Generated_Base", PrimitiveType.Cube, new Vector3(0f, 0.28f, 0f), new Vector3(2.0f, 0.56f, 1.3f), baseMat, Vector3.zero);
-                    EnsurePrimitive(root, "Generated_Core", PrimitiveType.Cube, new Vector3(0f, 0.98f, 0f), new Vector3(1.20f, 0.9f, 0.64f), baseMat, Vector3.zero);
-                    EnsurePrimitive(root, "Generated_RadiatorLeft", PrimitiveType.Cube, new Vector3(-0.74f, 0.98f, 0f), new Vector3(0.08f, 0.76f, 0.72f), coilMat, Vector3.zero);
-                    EnsurePrimitive(root, "Generated_RadiatorRight", PrimitiveType.Cube, new Vector3(0.74f, 0.98f, 0f), new Vector3(0.08f, 0.76f, 0.72f), coilMat, Vector3.zero);
-                    EnsurePrimitive(root, "Generated_CoilA", PrimitiveType.Cylinder, new Vector3(-0.36f, 1.48f, 0f), new Vector3(0.12f, 0.24f, 0.12f), coilMat, Vector3.zero);
-                    EnsurePrimitive(root, "Generated_CoilB", PrimitiveType.Cylinder, new Vector3(0.36f, 1.48f, 0f), new Vector3(0.12f, 0.24f, 0.12f), coilMat, Vector3.zero);
-                    EnsurePrimitive(root, "Generated_BushingA", PrimitiveType.Cylinder, new Vector3(-0.36f, 1.80f, 0f), new Vector3(0.06f, 0.18f, 0.06f), bushingMat, Vector3.zero);
-                    EnsurePrimitive(root, "Generated_BushingB", PrimitiveType.Cylinder, new Vector3(0.36f, 1.80f, 0f), new Vector3(0.06f, 0.18f, 0.06f), bushingMat, Vector3.zero);
-                    EnsurePrimitive(root, "Generated_ModeStrip", PrimitiveType.Cube, new Vector3(0f, 0.48f, -0.68f), new Vector3(0.82f, 0.05f, 0.04f), glowMat, Vector3.zero);
-                    EnsureLight(root, "Generated_StatusLight", new Vector3(0f, 1.48f, -0.32f), LightType.Point, accent, 1.6f, 4f);
-                    EnsureRootCollider(root, new Vector3(2.05f, 2.05f, 1.35f), new Vector3(0f, 0.96f, 0f));
-                    var transformer = EnsureComponent<T>(root);
-                    transformer.maxThroughputWatts = 200_000_000f;
-                    transformer.conversionLoss = 0.02f;
-                    transformer.maxConnections = 4;
-                    transformer.wireReach = stepUp ? 100f : 100f;
-                    transformer.connectionPointOffset = new Vector3(0f, 1.45f, 0f);
-                    transformer.isHighVoltage = true;
-                });
-            }
+                    float z = -0.42f + i * 0.17f;
+                    EnsurePrimitive(root, $"Generated_LeftRadiatorFin_{i}", PrimitiveType.Cube, new Vector3(-1.15f, 0.82f, z), new Vector3(0.06f, 1.02f, 0.08f), radiatorMat, Vector3.zero);
+                    EnsurePrimitive(root, $"Generated_RightRadiatorFin_{i}", PrimitiveType.Cube, new Vector3(1.15f, 0.82f, z), new Vector3(0.06f, 1.02f, 0.08f), radiatorMat, Vector3.zero);
+                }
+                EnsurePrimitive(root, "Generated_ConservatorTank", PrimitiveType.Cylinder, new Vector3(0.72f, 1.72f, 0.18f), new Vector3(0.18f, 0.72f, 0.18f), tankMat, new Vector3(0f, 0f, 90f));
+                EnsurePrimitive(root, "Generated_HVBushingA", PrimitiveType.Cylinder, new Vector3(-0.62f, 1.58f, -0.22f), new Vector3(0.08f, 0.34f, 0.08f), bushingMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_HVBushingB", PrimitiveType.Cylinder, new Vector3(0f, 1.66f, -0.22f), new Vector3(0.08f, 0.42f, 0.08f), bushingMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_HVBushingC", PrimitiveType.Cylinder, new Vector3(0.62f, 1.58f, -0.22f), new Vector3(0.08f, 0.34f, 0.08f), bushingMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_CopperBusA", PrimitiveType.Cube, new Vector3(0f, 1.98f, -0.22f), new Vector3(1.45f, 0.04f, 0.04f), copperMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_StepUpStatus", PrimitiveType.Cube, new Vector3(0f, 0.42f, -0.56f), new Vector3(0.84f, 0.05f, 0.04f), blueGlow, Vector3.zero);
+                EnsureLight(root, "Generated_StatusLight", new Vector3(0f, 1.32f, -0.58f), LightType.Point, new Color(0.15f, 0.45f, 0.85f), 1.6f, 4f);
+                EnsureRootCollider(root, new Vector3(2.8f, 2.15f, 1.65f), new Vector3(0f, 1.0f, 0f));
+                var transformer = EnsureComponent<VoxelEngine.Simulation.StepUpTransformer>(root);
+                transformer.maxThroughputWatts = 200_000_000f;
+                transformer.conversionLoss = 0.02f;
+                transformer.maxConnections = 4;
+                transformer.wireReach = 100f;
+                transformer.connectionPointOffset = new Vector3(0f, 1.95f, 0f);
+                transformer.isHighVoltage = true;
+            });
 
-            var stepUpPrefab = CreateTransformerPrefab<VoxelEngine.Simulation.StepUpTransformer>("StepUpTransformer", new Color(0.15f, 0.45f, 0.85f), true);
-            var stepDownPrefab = CreateTransformerPrefab<VoxelEngine.Simulation.StepDownTransformer>("StepDownTransformer", new Color(0.92f, 0.60f, 0.12f), false);
+            var stepDownPrefab = GetOrCreatePrefab($"{HV_PREFABS}/StepDownTransformer.prefab", "StepDownTransformer", root =>
+            {
+                ClearGeneratedChildren(root);
+                var poleMat = GetMaterial(HV_MATS, "Mat_StepDownPoleFrame", new Color(0.38f, 0.40f, 0.42f));
+                var canMat = GetMaterial(HV_MATS, "Mat_StepDownCan", new Color(0.68f, 0.72f, 0.73f));
+                var darkMat = GetMaterial(HV_MATS, "Mat_StepDownBushings", new Color(0.07f, 0.065f, 0.06f));
+                var amberGlow = GetMaterial(HV_MATS, "Mat_StepDownAmberStatus", new Color(0.92f, 0.60f, 0.12f), true);
+                EnsurePrimitive(root, "Generated_PoleFrame", PrimitiveType.Cube, new Vector3(0f, 0.88f, 0.36f), new Vector3(1.55f, 0.10f, 0.12f), poleMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_LeftHanger", PrimitiveType.Cube, new Vector3(-0.58f, 0.58f, 0.36f), new Vector3(0.08f, 0.58f, 0.08f), poleMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_RightHanger", PrimitiveType.Cube, new Vector3(0.58f, 0.58f, 0.36f), new Vector3(0.08f, 0.58f, 0.08f), poleMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_CylindricalCan", PrimitiveType.Cylinder, new Vector3(0f, 0.66f, 0f), new Vector3(0.44f, 0.54f, 0.44f), canMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_TopCap", PrimitiveType.Cylinder, new Vector3(0f, 1.22f, 0f), new Vector3(0.46f, 0.05f, 0.46f), canMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_HVBushing", PrimitiveType.Cylinder, new Vector3(0f, 1.48f, -0.08f), new Vector3(0.07f, 0.22f, 0.07f), darkMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_LVBox", PrimitiveType.Cube, new Vector3(0.54f, 0.46f, -0.10f), new Vector3(0.24f, 0.34f, 0.20f), canMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_DropCable", PrimitiveType.Cube, new Vector3(0.34f, 1.20f, -0.08f), new Vector3(0.025f, 0.52f, 0.025f), darkMat, new Vector3(0f, 0f, -18f));
+                EnsurePrimitive(root, "Generated_StepDownStatus", PrimitiveType.Cube, new Vector3(0f, 0.30f, -0.46f), new Vector3(0.50f, 0.04f, 0.04f), amberGlow, Vector3.zero);
+                EnsureLight(root, "Generated_StatusLight", new Vector3(0f, 1.20f, -0.36f), LightType.Point, new Color(0.92f, 0.60f, 0.12f), 1.4f, 3.5f);
+                EnsureRootCollider(root, new Vector3(1.75f, 1.85f, 1.05f), new Vector3(0f, 0.78f, 0f));
+                var transformer = EnsureComponent<VoxelEngine.Simulation.StepDownTransformer>(root);
+                transformer.maxThroughputWatts = 200_000_000f;
+                transformer.conversionLoss = 0.02f;
+                transformer.maxConnections = 4;
+                transformer.wireReach = 100f;
+                transformer.connectionPointOffset = new Vector3(0f, 1.45f, 0f);
+                transformer.isHighVoltage = true;
+            });
+
             var blockStepUp = ConfigureBlock(HV_ITEMS, "Block_StepUpTransformer", "Step-Up Transformer", "Converts low-voltage production networks into high-voltage transmission lines with 2% loss.", new Color(0.15f, 0.45f, 0.85f), stepUpPrefab, "Power", 820, 2, new Vector3Int(2, 1, 1));
             var blockStepDown = ConfigureBlock(HV_ITEMS, "Block_StepDownTransformer", "Step-Down Transformer", "Converts high-voltage transmission back into local low-voltage factory power with 2% loss.", new Color(0.92f, 0.60f, 0.12f), stepDownPrefab, "Power", 820, 2, new Vector3Int(2, 1, 1));
 
