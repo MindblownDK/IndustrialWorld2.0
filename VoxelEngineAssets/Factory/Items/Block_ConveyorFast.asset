@@ -12,19 +12,19 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9b76ccf0d2c60d942965b00c15422682, type: 3}
   m_Name: Block_ConveyorFast
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Items.BlockItem
-  itemId: iron_ore
-  displayName: Iron Ore
-  description: 
+  itemId: block_conveyorfast
+  displayName: Fast Conveyor Belt
+  description: Moves item packets at 5 items per second for denser factory lines.
   icon: {fileID: 0}
-  iconTint: {r: 1, g: 1, b: 1, a: 1}
-  maxStack: 999
-  massPerUnit: 1
-  category: Misc
+  iconTint: {r: 0.18, g: 0.72, b: 0.88, a: 1}
+  maxStack: 99
+  massPerUnit: 4
+  category: Factory
   viewmodelPrefab: {fileID: 0}
-  placedPrefab: {fileID: 0}
+  placedPrefab: {fileID: 8595244015419287308, guid: c18eb060f97f7c546b545b9f1effb819, type: 3}
   gridSize: {x: 1, y: 1, z: 1}
   allowStacking: 1
-  blockHealth: 100
-  miningTier: 0
+  blockHealth: 200
+  miningTier: 1
   placedMaterial: {fileID: 0}
   texture: {fileID: 0}
