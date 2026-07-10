@@ -94,17 +94,30 @@ namespace VoxelEngine.Simulation
 
         private void BuildStripVisuals()
         {
-            // Strip mesh — thin flat bar.
-            var strip = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            strip.name = "LEDStripMesh";
-            strip.transform.SetParent(transform, false);
-            strip.transform.localPosition = Vector3.zero;
+            // Strip mesh — thin flat bar. Reuse setup-wizard geometry when present
+            // so generated prefabs look correct in the editor and do not duplicate
+            // their strip mesh at runtime.
+            var stripTransform = transform.Find("LEDStripMesh");
+            GameObject strip;
+            if (stripTransform == null)
+            {
+                strip = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                strip.name = "LEDStripMesh";
+                strip.transform.SetParent(transform, false);
+                strip.transform.localPosition = Vector3.zero;
+            }
+            else
+            {
+                strip = stripTransform.gameObject;
+            }
+
             strip.transform.localScale = new Vector3(stripLength, 0.02f, 0.04f);
 
             var col = strip.GetComponent<Collider>();
             if (col != null) Destroy(col);
 
             _stripRenderer = strip.GetComponent<MeshRenderer>();
+            if (_stripRenderer == null) _stripRenderer = strip.AddComponent<MeshRenderer>();
             var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
             _stripMaterial = new Material(shader);
             _stripMaterial.color = stripColor * 0.3f; // dark base
@@ -114,12 +127,22 @@ namespace VoxelEngine.Simulation
             _stripMaterial.SetFloat("_Smoothness", 0.6f);
             _stripRenderer.material = _stripMaterial;
 
-            // Point light for illumination.
-            var lightGo = new GameObject("LEDLight");
-            lightGo.transform.SetParent(transform, false);
-            lightGo.transform.localPosition = Vector3.up * 0.05f;
+            // Point light for illumination. Reuse generated light if available.
+            var lightTransform = transform.Find("LEDLight");
+            GameObject lightGo;
+            if (lightTransform == null)
+            {
+                lightGo = new GameObject("LEDLight");
+                lightGo.transform.SetParent(transform, false);
+                lightGo.transform.localPosition = Vector3.up * 0.05f;
+            }
+            else
+            {
+                lightGo = lightTransform.gameObject;
+            }
 
-            _light = lightGo.AddComponent<Light>();
+            _light = lightGo.GetComponent<Light>();
+            if (_light == null) _light = lightGo.AddComponent<Light>();
             _light.type = LightType.Point;
             _light.color = stripColor;
             _light.intensity = brightness;
