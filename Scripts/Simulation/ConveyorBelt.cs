@@ -270,45 +270,31 @@ namespace VoxelEngine.Simulation
 
         public void RefreshShape()
         {
-            var upFront = FindConsumerAt(transform.position + transform.forward * 1.0f + Vector3.up * 1.0f);
-            var downFront = FindConsumerAt(transform.position + transform.forward * 1.0f + Vector3.down * 1.0f);
+            // Keep automatic shape detection conservative. Earlier ramp probing used
+            // loose overlap spheres above/below the forward socket, so an inline belt
+            // could be mistaken for an upper neighbour and the visual flipped upward.
+            // Ramps should be explicit variants; normal snapped belts stay level.
+            var left = FindProviderAt(transform.position - transform.right * 1.0f);
+            var right = FindProviderAt(transform.position + transform.right * 1.0f);
+            var back = FindProviderAt(transform.position - transform.forward * 1.0f);
 
-            if (upFront != null)
+            if (back != null || (left == null && right == null))
             {
-                shape = ConveyorShape.RampUp;
+                shape = ConveyorShape.Straight;
                 entryDirection = Vector3.back;
-                exitDirection = new Vector3(0, 0.5f, 1).normalized;
+                exitDirection = Vector3.forward;
             }
-            else if (downFront != null)
+            else if (left != null)
             {
-                shape = ConveyorShape.RampDown;
-                entryDirection = Vector3.back;
-                exitDirection = new Vector3(0, -0.5f, 1).normalized;
+                shape = ConveyorShape.Corner;
+                entryDirection = Vector3.left;
+                exitDirection = Vector3.forward;
             }
-            else
+            else if (right != null)
             {
-                var left = FindProviderAt(transform.position - transform.right * 1.0f);
-                var right = FindProviderAt(transform.position + transform.right * 1.0f);
-                var back = FindProviderAt(transform.position - transform.forward * 1.0f);
-
-                if (back != null || (left == null && right == null))
-                {
-                    shape = ConveyorShape.Straight;
-                    entryDirection = Vector3.back;
-                    exitDirection = Vector3.forward;
-                }
-                else if (left != null)
-                {
-                    shape = ConveyorShape.Corner;
-                    entryDirection = Vector3.left;
-                    exitDirection = Vector3.forward;
-                }
-                else if (right != null)
-                {
-                    shape = ConveyorShape.Corner;
-                    entryDirection = Vector3.right;
-                    exitDirection = Vector3.forward;
-                }
+                shape = ConveyorShape.Corner;
+                entryDirection = Vector3.right;
+                exitDirection = Vector3.forward;
             }
 
             UpdateTravelDirection();

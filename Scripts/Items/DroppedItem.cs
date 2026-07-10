@@ -124,8 +124,31 @@ namespace VoxelEngine.Items
         {
             if (Time.time - _spawnTime < _pickupDelay) return;
             if (stack == null || stack.IsEmpty) return;
+
+            var belt = other.GetComponentInParent<VoxelEngine.Simulation.ConveyorBelt>();
+            if (belt != null && TryInsertIntoConveyor(belt)) return;
+
             var inv = other.GetComponentInParent<Inventory>();
             if (inv != null) TryPickup(inv);
+        }
+
+        private bool TryInsertIntoConveyor(VoxelEngine.Simulation.ConveyorBelt belt)
+        {
+            if (belt == null || stack == null || stack.IsEmpty || stack.item == null) return false;
+            int capacity = belt.GetInputCapacity(stack.item);
+            if (capacity <= 0) return false;
+
+            int moved = belt.TryInsert(stack.item, Mathf.Min(stack.count, capacity));
+            if (moved <= 0) return false;
+
+            stack.count -= moved;
+            UI.BuildFeedbackHud.Show($"Loaded {stack.item.displayName}", $"→ belt x{moved}", stack.item.icon, stack.item.iconTint);
+            if (stack.count <= 0)
+            {
+                Destroy(gameObject);
+                return true;
+            }
+            return false;
         }
 
         public bool TryPickup(Inventory inv)

@@ -146,6 +146,11 @@ namespace VoxelEngine.Building
             if (payloadReceiver != null && inventory != null)
                 payloadReceiver.ApplyPlacedPayload(inventory.ActiveStack);
 
+            // Power pipes/nodes register during Instantiate, before all placement
+            // payload has settled. Force one topology refresh after the final pose.
+            if (go.GetComponentInChildren<VoxelEngine.Power.PowerNode>(true) != null)
+                VoxelEngine.Power.PowerNetworkManager.Instance?.SetDirty();
+
             // Apply optional texture/material override at runtime.
             if (block.placedMaterial != null || block.texture != null)
             {
@@ -185,7 +190,8 @@ namespace VoxelEngine.Building
 
             bool placingBelt = block.placedPrefab.GetComponentInChildren<VoxelEngine.Simulation.ConveyorBelt>(true) != null;
             bool placingChute = block.placedPrefab.GetComponentInChildren<VoxelEngine.Simulation.ConveyorChute>(true) != null;
-            if (!placingBelt && !placingChute) return false;
+            bool placingPowerPipe = block.placedPrefab.GetComponentInChildren<VoxelEngine.Power.PowerCable>(true) != null;
+            if (!placingBelt && !placingChute && !placingPowerPipe) return false;
 
             var targetBelt = hit.collider.GetComponentInParent<VoxelEngine.Simulation.ConveyorBelt>();
             if (placingBelt && targetBelt != null)
@@ -213,7 +219,27 @@ namespace VoxelEngine.Building
                 return true;
             }
 
+            var targetPipe = hit.collider.GetComponentInParent<VoxelEngine.Power.PowerCable>();
+            if (placingPowerPipe && targetPipe != null)
+            {
+                Vector3 localHit = targetPipe.transform.InverseTransformPoint(hit.point);
+                Vector3 localDirection = NearestLocalCardinal(localHit);
+                if (localDirection.sqrMagnitude < 0.01f) localDirection = Vector3.forward;
+
+                pos = targetPipe.transform.position + targetPipe.transform.TransformDirection(localDirection) * Mathf.Max(gridSize, 1f);
+                rot = targetPipe.transform.rotation;
+                return true;
+            }
+
             return false;
+        }
+
+        private static Vector3 NearestLocalCardinal(Vector3 local)
+        {
+            float ax = Mathf.Abs(local.x), ay = Mathf.Abs(local.y), az = Mathf.Abs(local.z);
+            if (ax >= ay && ax >= az) return new Vector3(Mathf.Sign(Mathf.Approximately(local.x, 0f) ? 1f : local.x), 0f, 0f);
+            if (ay >= ax && ay >= az) return new Vector3(0f, Mathf.Sign(Mathf.Approximately(local.y, 0f) ? 1f : local.y), 0f);
+            return new Vector3(0f, 0f, Mathf.Sign(Mathf.Approximately(local.z, 0f) ? 1f : local.z));
         }
 
         private Vector3 ComputePlacementPosition(RaycastHit hit, BlockItem block)

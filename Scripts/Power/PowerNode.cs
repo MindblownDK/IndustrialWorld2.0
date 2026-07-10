@@ -35,7 +35,7 @@ namespace VoxelEngine.Power
         // Network membership — assigned by PowerNetworkManager.
         [System.NonSerialized] public PowerNetwork network;
         [System.NonSerialized] public List<PowerNode> neighbours = new();
-        
+
         // Manual links (from manual wires)
         [System.NonSerialized] public List<PowerNode> manualLinks = new();
         [System.NonSerialized] public Dictionary<PowerNode, float> manualLinkCapacities = new();
@@ -49,7 +49,7 @@ namespace VoxelEngine.Power
         public virtual bool CanLinkTo(PowerNode other)
         {
             if (other == null || other == this) return false;
-            
+
             // Manual links always allowed.
             if (manualLinks.Contains(other)) return true;
 
@@ -60,18 +60,32 @@ namespace VoxelEngine.Power
             if (requireGridAlignedNeighbours && other.requireGridAlignedNeighbours)
             {
                 float g = Mathf.Max(0.01f, gridSize);
-                float dx = Mathf.Abs(delta.x) / g;
-                float dy = Mathf.Abs(delta.y) / g;
-                float dz = Mathf.Abs(delta.z) / g;
-                const float EPS = 0.15f;
-                int oneAxisCount = 0;
-                if (Mathf.Abs(dx - 1f) < EPS) oneAxisCount++;
-                else if (dx > EPS) return false;
-                if (Mathf.Abs(dy - 1f) < EPS) oneAxisCount++;
-                else if (dy > EPS) return false;
-                if (Mathf.Abs(dz - 1f) < EPS) oneAxisCount++;
-                else if (dz > EPS) return false;
-                if (oneAxisCount != 1) return false;
+                float distForGrid = delta.magnitude;
+
+                // On flat worlds, keep the strict one-cardinal-axis rule. On radial
+                // planets the build grid is locally tangent to the surface, so adjacent
+                // cables are often not aligned to global X/Y/Z. In that case, accepting
+                // a single grid-step distance is the robust connection rule.
+                bool radial = VoxelEngine.Cosmos.GravityProvider.IsRadial;
+                if (radial)
+                {
+                    if (distForGrid < g * 0.55f || distForGrid > g * 1.35f) return false;
+                }
+                else
+                {
+                    float dx = Mathf.Abs(delta.x) / g;
+                    float dy = Mathf.Abs(delta.y) / g;
+                    float dz = Mathf.Abs(delta.z) / g;
+                    const float EPS = 0.15f;
+                    int oneAxisCount = 0;
+                    if (Mathf.Abs(dx - 1f) < EPS) oneAxisCount++;
+                    else if (dx > EPS) return false;
+                    if (Mathf.Abs(dy - 1f) < EPS) oneAxisCount++;
+                    else if (dy > EPS) return false;
+                    if (Mathf.Abs(dz - 1f) < EPS) oneAxisCount++;
+                    else if (dz > EPS) return false;
+                    if (oneAxisCount != 1) return false;
+                }
             }
 
             float dist = delta.magnitude;

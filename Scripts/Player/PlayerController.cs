@@ -168,20 +168,12 @@ namespace VoxelEngine.Player
             }
 
             // While a menu is open: stop look + movement entirely. Camera stays put.
+            // Do not keep applying radial gravity here: on curved planets opening
+            // inventory on a steep surface could slide/pull the controller sideways.
             if (VoxelEngine.UI.UIState.IsBlocking)
             {
-                // Cursor visibility/lock is owned by UIState — we just stop reading mouse.
-                // Still apply gravity so you don't float — but no horizontal input.
-                if (!GameSettings.FlyMode)
-                {
-                    Vector3 upM = UpVec;
-                    Vector3 horiz = Vector3.ProjectOnPlane(_velocity, upM);
-                    horiz = Vector3.MoveTowards(horiz, Vector3.zero, 30f * Time.deltaTime);
-                    _velocity += GravVec * Time.deltaTime;
-                    _velocity = horiz + Vector3.Project(_velocity, upM);
-                    _cc.Move(_velocity * Time.deltaTime);
-                    if (_cc.isGrounded) _velocity = horiz + upM * (-2f);
-                }
+                _velocity = Vector3.zero;
+                _sliding = false;
                 return;
             }
 
