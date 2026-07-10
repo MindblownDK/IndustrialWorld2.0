@@ -40,6 +40,7 @@ namespace VoxelEngine.Building
 
         public static bool HoldingBlock { get; private set; }
         public static string HeldBlockName { get; private set; } = string.Empty;
+        public static Vector3Int RotationSteps { get; private set; }
 
         private void Awake()
         {
@@ -119,6 +120,7 @@ namespace VoxelEngine.Building
         {
             HoldingBlock = false;
             HeldBlockName = string.Empty;
+            RotationSteps = _rotSteps;
             if (_ghost != null) { Destroy(_ghost); _ghost = null; _ghostItem = null; } Quarry.HidePlacementPreview();
         }
 
@@ -134,6 +136,7 @@ namespace VoxelEngine.Building
             if (ctrl && shift) _rotSteps.z = (_rotSteps.z + dir + 4) % 4;
             else if (ctrl) _rotSteps.y = (_rotSteps.y + dir + 4) % 4;
             else if (shift) _rotSteps.x = (_rotSteps.x + dir + 4) % 4;
+            RotationSteps = _rotSteps;
         }
 
         public bool TryPlace(BlockItem block, RaycastHit hit, Vector3 viewDir)

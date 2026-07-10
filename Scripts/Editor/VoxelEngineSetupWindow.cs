@@ -14,8 +14,8 @@ namespace VoxelEngine.EditorTools
 {
     /// <summary>
     /// One-click bootstrapper. Tools ▸ Voxel Engine ▸ Setup Wizard.
-    /// Generates every ScriptableObject asset (materials, items, planet, registry) and
-    /// builds a fully-configured Manager GameObject in the active scene.
+    /// Generates ScriptableObject assets, player setup, UI setup, and content packs
+    /// without overwriting hand-authored scene/world bootstrap objects.
     /// </summary>
     public class VoxelEngineSetupWindow : EditorWindow
     {
@@ -106,12 +106,12 @@ namespace VoxelEngine.EditorTools
             AddInfo(scroll,
                 "Click each step in order.\n" +
                 "1. Create assets — generates materials, items, planet definitions.\n" +
-                "2. Spawn manager — adds VoxelWorld + Player to the active scene.\n" +
+                "2. Spawn player — adds Player + UI and links any existing world.\n" +
                 "3. Build main menu scene (saves browser + new world UI).\n" +
                 "Run steps in order — most are idempotent and safe to re-run.");
 
             AddWizardButton(scroll, "1. Create All Assets", CreateAllAssets, 40);
-            AddWizardButton(scroll, "2. Spawn Manager + Player in Scene", SpawnManagerAndPlayer, 40);
+            AddWizardButton(scroll, "2. Spawn Player + UI in Scene", SpawnManagerAndPlayer, 40);
             AddWizardButton(scroll, "3. Build Main Menu Scene", BuildMainMenuScene, 40);
             AddWizardButton(scroll, "4. Build Crafting Content (recipes, tools, stations, blocks)", BuildBaseCraftingContent, 40);
             AddWizardButton(scroll, "5. Build Tiered Building Content (tiered construction: 9 families x 4 tiers + Hammer)", BuildTieredContent, 40);
@@ -513,42 +513,38 @@ namespace VoxelEngine.EditorTools
             Selection.activeObject = registry;
         }
 
-        // ===== Manager spawning =====
+        // ===== Player / UI spawning =====
         private void SpawnManagerAndPlayer()
         {
             var registry = AssetDatabase.LoadAssetAtPath<MaterialRegistry>($"{ASSET_ROOT}/MaterialRegistry.asset");
-            var mat      = AssetDatabase.LoadAssetAtPath<Material>($"{ASSET_ROOT}/VoxelTerrain.mat");
-            if (registry == null || mat == null)
+
+            // Step 2 no longer creates a world manager. The current game scene is
+            // expected to own its world through CosmosBootstrap/SphereWorld or an
+            // existing VoxelWorld. We only link the player to whatever world already exists.
+            VoxelEngine.Core.IVoxelWorld activeWorld = VoxelEngine.Core.ActiveWorld.Current;
+            var flatWorld = Object.FindAnyObjectByType<VoxelEngine.Core.VoxelWorld>();
+            var sphereWorld = Object.FindAnyObjectByType<VoxelEngine.Cosmos.SphereWorld>();
+            if (activeWorld == null)
             {
-                EditorUtility.DisplayDialog("Voxel Engine",
-                    "Run Step 1 first to create assets.", "OK");
-                return;
+                if (flatWorld != null) activeWorld = flatWorld;
+                else if (sphereWorld != null) activeWorld = sphereWorld;
+                if (activeWorld != null) VoxelEngine.Core.ActiveWorld.Current = activeWorld;
             }
 
-            // Manager
-            var managerGo = new GameObject("VoxelWorld_Manager");
-            var world = managerGo.AddComponent<VoxelEngine.Core.VoxelWorld>();
-            world.materialRegistry = registry;
-            // Flat world uses inline fields now (flatSeed, flatSeaLevel, etc.)
-            world.terrainMaterial  = mat;
-
             // ----- Player -----
-            // Spawn well above the surface so the player drops onto terrain instead of clipping into it.
             var playerGo = new GameObject("Player");
-            playerGo.transform.position = new Vector3(0, 150, 0); // flat world spawn height
+            playerGo.transform.position = new Vector3(0, 150, 0);
 
             // CharacterController for collisions with the voxel mesh.
             var ccp = playerGo.AddComponent<CharacterController>();
             ccp.height = 1.85f;
             ccp.radius = 0.4f;
             ccp.center = new Vector3(0, 0.925f, 0);
-            ccp.slopeLimit = 55f;
-            ccp.stepOffset = 0.4f;
-            ccp.skinWidth  = 0.05f;
+            ccp.slopeLimit = 85f;
+            ccp.stepOffset = 0.6f;
+            ccp.skinWidth = 0.05f;
             ccp.minMoveDistance = 0f;
 
-            // CameraPivot is created by PlayerController if absent — but we create it here
-            // so we can wire the camera + pickaxe tool deterministically.
             var pivotGo = new GameObject("CameraPivot");
             pivotGo.transform.SetParent(playerGo.transform, false);
             pivotGo.transform.localPosition = new Vector3(0, 1.65f, 0);
@@ -564,15 +560,15 @@ namespace VoxelEngine.EditorTools
             playerGo.AddComponent<VoxelEngine.Player.PlayerStats>();
             playerGo.AddComponent<VoxelEngine.Player.PlayerWaterState>();
             playerGo.AddComponent<VoxelEngine.Player.PlayerSpawner>();
-            pc.cameraPivot  = pivotGo.transform;
+            pc.cameraPivot = pivotGo.transform;
             pc.playerCamera = cam;
 
             var inv = playerGo.AddComponent<VoxelEngine.Items.Inventory>();
             var pick = camGo.AddComponent<VoxelEngine.Player.PlayerInteractionTool>();
-            pick.world        = world;
-            pick.registry     = registry;
-            pick.shootCamera  = cam;
-            pick.inventory    = inv;
+            pick.world = activeWorld;
+            pick.registry = registry;
+            pick.shootCamera = cam;
+            pick.inventory = inv;
 
             // Held-tool viewmodel + camera-punch feedback on the camera.
             var held = camGo.AddComponent<VoxelEngine.Player.HeldToolView>();
@@ -581,51 +577,57 @@ namespace VoxelEngine.EditorTools
             var hvTool = camGo.AddComponent<VoxelEngine.Simulation.HighVoltageWireTool>();
             hvTool.playerCamera = cam;
             hvTool.inventory = inv;
-            hvTool.stationLayer = 1 << 0; // Default layer, change in inspector if needed
+            hvTool.stationLayer = 1 << 0;
 
-            // BuildSystem on the player (legacy single-block system, still used for chests/furnaces).
+            // BuildSystem on the player (single-block/static placement system).
             var build = playerGo.AddComponent<VoxelEngine.Building.BuildSystem>();
             build.shootCamera = cam;
-            build.inventory   = inv;
+            build.inventory = inv;
 
             // BuildSystemV2 on the player (tiered construction workflow).
             var buildV2 = playerGo.AddComponent<VoxelEngine.Building.Tiered.BuildSystemV2>();
             buildV2.shootCamera = cam;
-            buildV2.inventory   = inv;
-            buildV2.registry    = AssetDatabase.LoadAssetAtPath<VoxelEngine.Building.Tiered.TieredBlockRegistry>(
+            buildV2.inventory = inv;
+            buildV2.registry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Building.Tiered.TieredBlockRegistry>(
                 $"{ASSET_ROOT}/Tiered/TieredBlockRegistry.asset");
 
             // In-game HUD/UI (inventory + crafting + container panels + hotbar).
             var uiGo = new GameObject("GameUI");
             uiGo.transform.SetParent(playerGo.transform, false);
             var doc = uiGo.AddComponent<UnityEngine.UIElements.UIDocument>();
+            doc.sortingOrder = 500;
             var panelSettings = AssetDatabase.LoadAssetAtPath<UnityEngine.UIElements.PanelSettings>(
                 "Assets/Resources/MenuPanelSettings.asset");
-            if (panelSettings != null) doc.panelSettings = panelSettings;
+            if (panelSettings == null)
+            {
+                EnsureFolder("Assets/Resources");
+                panelSettings = ScriptableObject.CreateInstance<UnityEngine.UIElements.PanelSettings>();
+                panelSettings.name = "MenuPanelSettings";
+                AssetDatabase.CreateAsset(panelSettings, "Assets/Resources/MenuPanelSettings.asset");
+            }
+            VoxelEngine.Settings.GameSettings.ApplyUiScaleAndFit(panelSettings);
+            EditorUtility.SetDirty(panelSettings);
+            doc.panelSettings = panelSettings;
+
             var ui = uiGo.AddComponent<VoxelEngine.UI.GameUIController>();
-            ui.inventory      = inv;
+            ui.inventory = inv;
             ui.recipeRegistry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeRegistry>(
                 $"{ASSET_ROOT}/RecipeRegistry.asset");
-
-            // Lighting Management & UI
-            var lightMgr = uiGo.AddComponent<VoxelEngine.UI.LightingManager>();
-            var lightUI = uiGo.AddComponent<VoxelEngine.UI.LightingControlUI>();
-            var lightUIDoc = uiGo.AddComponent<UnityEngine.UIElements.UIDocument>();
-            if (panelSettings != null) lightUIDoc.panelSettings = panelSettings;
 
             // Hammer build wheel (radial selector for tiered families).
             var wheelGo = new GameObject("HammerBuildWheel");
             wheelGo.transform.SetParent(playerGo.transform, false);
             var wheelDoc = wheelGo.AddComponent<UnityEngine.UIElements.UIDocument>();
-            if (panelSettings != null) wheelDoc.panelSettings = panelSettings;
+            wheelDoc.sortingOrder = 600;
+            wheelDoc.panelSettings = panelSettings;
             var wheel = wheelGo.AddComponent<VoxelEngine.Building.Tiered.HammerBuildWheel>();
             wheel.inventory = inv;
-            wheel.registry  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Building.Tiered.TieredBlockRegistry>(
+            wheel.registry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Building.Tiered.TieredBlockRegistry>(
                 $"{ASSET_ROOT}/Tiered/TieredBlockRegistry.asset");
 
-            // Full map UI (M key opens).
-
-            world.viewer = playerGo.transform;
+            // Link viewer on whichever world exists. No manager is created here.
+            if (flatWorld != null) flatWorld.viewer = playerGo.transform;
+            if (sphereWorld != null) sphereWorld.viewer = playerGo.transform;
 
             // World-state persistence (player position, inventory, placed blocks).
             if (Object.FindAnyObjectByType<VoxelEngine.Persistence.WorldStatePersistence>() == null)
@@ -644,9 +646,12 @@ namespace VoxelEngine.EditorTools
                 lt.intensity = 1.2f;
             }
 
-            Selection.activeObject = managerGo;
+            Selection.activeObject = playerGo;
             EditorUtility.DisplayDialog("Voxel Engine",
-                "Manager + Player spawned. Press Play!", "OK");
+                activeWorld != null
+                    ? "Player + UI spawned and linked to the existing world. Press Play!"
+                    : "Player + UI spawned. No active world was found, so terrain mining/building will link when a world bootstrap sets ActiveWorld.Current.",
+                "OK");
         }
 
         private void BuildMainMenuScene()
@@ -654,18 +659,26 @@ namespace VoxelEngine.EditorTools
             const string menuScenePath = "Assets/MainMenu.unity";
             const string gameScenePath = "Assets/Game.unity";
 
-            // ===== STEP A: ensure the current scene (manager+player) is saved as Game.unity =====
+            // ===== STEP A: ensure the current gameplay scene is saved as Game.unity =====
             var currentScene = UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene();
-            bool hasManager = false;
+            bool hasGameplayRoot = false;
             foreach (var go in currentScene.GetRootGameObjects())
-                if (go.GetComponentInChildren<VoxelEngine.Core.VoxelWorld>(true) != null) { hasManager = true; break; }
+            {
+                if (go.GetComponentInChildren<VoxelEngine.Player.PlayerController>(true) != null ||
+                    go.GetComponentInChildren<VoxelEngine.Cosmos.CosmosBootstrap>(true) != null ||
+                    go.GetComponentInChildren<VoxelEngine.Cosmos.SphereWorld>(true) != null ||
+                    go.GetComponentInChildren<VoxelEngine.Core.VoxelWorld>(true) != null)
+                {
+                    hasGameplayRoot = true;
+                    break;
+                }
+            }
 
-            if (!hasManager)
+            if (!hasGameplayRoot)
             {
                 EditorUtility.DisplayDialog("Voxel Engine",
-                    "The active scene doesn't contain a VoxelWorld_Manager.\n\n" +
-                    "Run 'Step 2 - Spawn Manager + Player' first, THEN re-run this step.\n" +
-                    "(Or open your existing game scene before running this.)", "OK");
+                    "The active scene does not look like a gameplay scene yet.\n\n" +
+                    "Run Step 2 to spawn the Player + UI, or open your existing game scene before running this step.", "OK");
                 return;
             }
 

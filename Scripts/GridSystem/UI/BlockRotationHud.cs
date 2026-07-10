@@ -14,6 +14,8 @@ namespace VoxelEngine.GridSystem.UI
     {
         private static VisualElement _root, _box;
         private static Label _nameLabel;
+        private static VisualElement _cube;
+        private static Label _stepLabel;
         private static bool _visible;
 
         public static void EnsureMounted(VisualElement uiRoot)
@@ -70,20 +72,31 @@ namespace VoxelEngine.GridSystem.UI
             wrap.style.justifyContent = Justify.Center;
             wrap.pickingMode = PickingMode.Ignore;
 
-            var cube = new VisualElement();
-            cube.style.position = Position.Relative;
-            cube.style.width = 84;
-            cube.style.height = 84;
-            cube.style.backgroundColor = new StyleColor(new Color(0.12f, 0.27f, 0.36f, 0.58f));
-            T.Border(cube, 2, new Color(0.35f, 0.75f, 0.95f, 0.65f));
-            T.Radius(cube, 6);
-            cube.style.rotate = new StyleRotate(new Rotate(new Angle(-12f, AngleUnit.Degree)));
-            cube.pickingMode = PickingMode.Ignore;
-            wrap.Add(cube);
+            _cube = new VisualElement();
+            _cube.style.position = Position.Relative;
+            _cube.style.width = 84;
+            _cube.style.height = 84;
+            _cube.style.backgroundColor = new StyleColor(new Color(0.12f, 0.27f, 0.36f, 0.58f));
+            T.Border(_cube, 2, new Color(0.35f, 0.75f, 0.95f, 0.65f));
+            T.Radius(_cube, 6);
+            _cube.style.rotate = new StyleRotate(new Rotate(new Angle(0f, AngleUnit.Degree)));
+            _cube.pickingMode = PickingMode.Ignore;
+            wrap.Add(_cube);
 
-            cube.Add(Arrow("Yaw", "↔", T.AccentGreen, 4, 28, 76, 24));
-            cube.Add(Arrow("Pitch", "↕", T.AccentGold, 28, 2, 30, 24));
-            cube.Add(Arrow("Roll", "⟳", T.AccentTeal, 28, 56, 34, 24));
+            _cube.Add(Arrow("Yaw", "↔", T.AccentGreen, 4, 28, 76, 24));
+            _cube.Add(Arrow("Pitch", "↕", T.AccentGold, 28, 2, 30, 24));
+            _cube.Add(Arrow("Roll", "⟳", T.AccentTeal, 28, 56, 34, 24));
+
+            _stepLabel = new Label("Pitch 0° · Yaw 0° · Roll 0°");
+            _stepLabel.style.position = Position.Absolute;
+            _stepLabel.style.bottom = 0;
+            _stepLabel.style.left = 0;
+            _stepLabel.style.right = 0;
+            _stepLabel.style.fontSize = 9;
+            _stepLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
+            _stepLabel.style.color = new StyleColor(new Color(0.78f, 0.84f, 0.90f));
+            _stepLabel.pickingMode = PickingMode.Ignore;
+            wrap.Add(_stepLabel);
 
             return wrap;
         }
@@ -103,6 +116,27 @@ namespace VoxelEngine.GridSystem.UI
             label.style.color = new StyleColor(color);
             label.pickingMode = PickingMode.Ignore;
             return label;
+        }
+
+        private static void UpdateCube(Vector3Int steps)
+        {
+            if (_cube != null)
+            {
+                float yaw = steps.y * 90f;
+                float roll = steps.z * 90f;
+                float pitch = steps.x * 90f;
+                _cube.style.rotate = new StyleRotate(new Rotate(new Angle(yaw + roll, AngleUnit.Degree)));
+                float pitchScale = Mathf.Lerp(1f, 0.72f, Mathf.Abs(Mathf.Sin(pitch * Mathf.Deg2Rad)));
+                _cube.style.scale = new StyleScale(new Scale(new Vector3(1f, pitchScale, 1f)));
+                _cube.style.borderTopColor = new StyleColor(steps.y != 0 ? T.AccentGreen : new Color(0.35f, 0.75f, 0.95f, 0.65f));
+                _cube.style.borderRightColor = new StyleColor(steps.z != 0 ? T.AccentTeal : new Color(0.35f, 0.75f, 0.95f, 0.65f));
+                _cube.style.borderBottomColor = new StyleColor(steps.x != 0 ? T.AccentGold : new Color(0.35f, 0.75f, 0.95f, 0.65f));
+            }
+
+            if (_stepLabel != null)
+            {
+                _stepLabel.text = $"Pitch {steps.x * 90}° · Yaw {steps.y * 90}° · Roll {steps.z * 90}°";
+            }
         }
 
         private static VisualElement Row(string keys, string action, Color color)
@@ -137,10 +171,12 @@ namespace VoxelEngine.GridSystem.UI
             bool show = (gridBlock || staticBlock) && !VoxelEngine.UI.UIState.IsBlocking;
 
             _box.style.display = show ? DisplayStyle.Flex : DisplayStyle.None;
-            if (show && _nameLabel != null)
+            if (show)
             {
                 string heldName = gridBlock ? GridBuilder.HeldBlockName : VoxelEngine.Building.BuildSystem.HeldBlockName;
-                _nameLabel.text = "▣ " + heldName;
+                Vector3Int steps = gridBlock ? GridBuilder.RotationSteps : VoxelEngine.Building.BuildSystem.RotationSteps;
+                if (_nameLabel != null) _nameLabel.text = "▣ " + heldName;
+                UpdateCube(steps);
             }
 
             if (show != _visible)

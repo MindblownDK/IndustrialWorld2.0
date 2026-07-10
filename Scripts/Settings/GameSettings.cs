@@ -184,7 +184,7 @@ namespace VoxelEngine.Settings
             // dedicated placement-rotation modifier. Preserve custom Down binds,
             // but migrate the old default.
             string down = PlayerPrefs.GetString(K_KEY_PREFIX + InputAction.Down, "");
-            if (saved < 11 && (string.IsNullOrEmpty(down) || down == "LeftCtrl" || down == "RightCtrl"))
+            if (string.IsNullOrEmpty(down) || down == "LeftCtrl" || down == "RightCtrl")
                 PlayerPrefs.SetString(K_KEY_PREFIX + InputAction.Down, "C");
 
             PlayerPrefs.SetInt(K_VERSION, CURRENT_VERSION);

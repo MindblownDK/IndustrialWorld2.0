@@ -38,6 +38,9 @@ namespace VoxelEngine.GridSystem
         /// <summary>Display name of the grid block currently in hand (for the rotation HUD).</summary>
         public static string HeldBlockName { get; private set; } = "";
 
+        /// <summary>Current 90-degree rotation steps (pitch/yaw/roll) shown by the rotation HUD.</summary>
+        public static Vector3Int RotationSteps { get; private set; }
+
         private void Start()
         {
             if (buildCamera == null) buildCamera = Camera.main;
@@ -270,6 +273,7 @@ namespace VoxelEngine.GridSystem
             if (ctrl && shift)      _rotSteps.z = (_rotSteps.z + dir + 4) % 4; // roll
             else if (ctrl)          _rotSteps.y = (_rotSteps.y + dir + 4) % 4; // yaw
             else if (shift)         _rotSteps.x = (_rotSteps.x + dir + 4) % 4; // pitch
+            RotationSteps = _rotSteps;
         }
 
         // Find a grid of the given size whose nearest cell is within ~1 cell of the

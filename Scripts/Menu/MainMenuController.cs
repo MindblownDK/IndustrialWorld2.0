@@ -22,7 +22,7 @@ namespace VoxelEngine.Menu
     [RequireComponent(typeof(UIDocument))]
     public class MainMenuController : MonoBehaviour
     {
-        [Tooltip("Scene name (without .unity) containing your VoxelWorld_Manager. " +
+        [Tooltip("Scene name (without .unity) containing the gameplay scene. " +
                  "Ensure it is added to File > Build Profiles > Scene List.")]
         public string gameSceneName = "Game";
 
@@ -98,6 +98,13 @@ namespace VoxelEngine.Menu
             _root = _doc.rootVisualElement;
             VoxelEngine.FX.UiAudio.Attach(_root);   // click/hover audio (idempotent)
             _root.Clear();
+            _root.style.position = Position.Absolute;
+            _root.style.left = 0;
+            _root.style.top = 0;
+            _root.style.right = 0;
+            _root.style.bottom = 0;
+            _root.style.width = new StyleLength(new Length(100, LengthUnit.Percent));
+            _root.style.height = new StyleLength(new Length(100, LengthUnit.Percent));
             _root.style.flexGrow        = 1;
             _root.style.backgroundColor = new StyleColor(T.BgBase);
             _root.style.alignItems      = Align.Center;
@@ -697,8 +704,19 @@ namespace VoxelEngine.Menu
         private static VisualElement MakePanel(int w, int h)
         {
             var v = new VisualElement();
-            if (w > 0) v.style.width  = w;
-            if (h > 0) v.style.height = h;
+            if (w > 0)
+            {
+                v.style.width = new StyleLength(new Length(92f, LengthUnit.Percent));
+                v.style.maxWidth = w;
+                v.style.minWidth = Mathf.Min(320, w);
+            }
+            if (h > 0)
+            {
+                v.style.height = new StyleLength(new Length(88f, LengthUnit.Percent));
+                v.style.maxHeight = h;
+            }
+            v.style.maxHeight = new StyleLength(new Length(92f, LengthUnit.Percent));
+            v.style.overflow = Overflow.Hidden;
             v.style.paddingTop    = T.PanelPaddingV + 6;
             v.style.paddingBottom = T.PanelPaddingV + 6;
             v.style.paddingLeft   = T.PanelPaddingH + 4;
