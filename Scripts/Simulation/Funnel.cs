@@ -2,12 +2,8 @@
 //
 // ╔══════════════════════════════════════════════════════════════════╗
 // ║  INDUSTRIAL WORLD — FUNNEL BLOCK                                ║
-// ║  Bidirectional item transfer between belts and machines/chests. ║
-// ║  Two modes:                                                     ║
-// ║    IMPORT: Pulls items from a belt and pushes into a machine.   ║
-// ║    EXPORT: Pulls items from a machine and pushes onto a belt.   ║
-// ║  Player toggles mode by right-clicking the placed block.        ║
-// ║  Uses IItemConsumer + IItemProvider for full belt integration.  ║
+// ║  Directional logistical hopper for moving items between an      ║
+// ║  inventory/machine side and a moving belt side.                 ║
 // ╚══════════════════════════════════════════════════════════════════╝
 
 using UnityEngine;
@@ -18,23 +14,18 @@ namespace VoxelEngine.Simulation
     /// <summary>Funnel operating mode.</summary>
     public enum FunnelMode
     {
-        /// <summary>Pulls from belt (below/side) → pushes into machine (above/side).</summary>
+        /// <summary>Pulls items from the belt side and pushes them into the inventory side.</summary>
         Import,
-        /// <summary>Pulls from machine (above/side) → pushes onto belt (below/side).</summary>
+        /// <summary>Pulls items from the inventory side and pushes them onto the belt side.</summary>
         Export
     }
 
     /// <summary>
-    /// Funnel block that bridges conveyor belts and machines/chests.
-    /// Implements both IItemConsumer (receives from belts) and IItemProvider
-    /// (feeds into belts) so it works in either direction.
-    ///
-    /// Placement:
-    ///   • Place ON TOP of a belt → acts as Import (belt → machine above).
-    ///   • Place BELOW a machine output → acts as Export (machine → belt below).
-    ///   • Right-click to toggle Import/Export mode.
-    ///
-    /// Transfer rate: one item every <see cref="transferInterval"/> seconds.
+    /// Directional side-mounted hopper for loading and unloading belts.
+    /// Place it on the side of a chest, machine, or other inventory with a
+    /// mechanical belt on the opposite side. In Import mode it pulls items from
+    /// the belt into the inventory. In Export mode it pulls from the inventory
+    /// and pushes directly onto the belt.
     /// </summary>
     public class Funnel : MonoBehaviour, IItemConsumer, IItemProvider
     {
@@ -47,10 +38,24 @@ namespace VoxelEngine.Simulation
         [Tooltip("Maximum items buffered internally.")]
         public int bufferSize = 4;
 
+        [Header("Directional Ports")]
+        [Tooltip("Local direction pointing toward the inventory/machine side.")]
+        public Vector3 inventoryDirection = Vector3.back;
+
+        [Tooltip("Local direction pointing toward the belt side.")]
+        public Vector3 beltDirection = Vector3.forward;
+
+        [Tooltip("Distance from funnel center used when scanning each port.")]
+        public float portOffset = 0.85f;
+
+        [Tooltip("Radius used when scanning for neighbouring inventories, machines, and belts.")]
+        public float scanRadius = 0.65f;
+
         [Header("Auto-detected connections")]
-        [Tooltip("The belt or machine on the INPUT side.")]
+        [Tooltip("Current item source for the active mode.")]
         public MonoBehaviour inputSource;
-        [Tooltip("The belt or machine on the OUTPUT side.")]
+
+        [Tooltip("Current item destination for the active mode.")]
         public MonoBehaviour outputTarget;
 
         // ── Runtime ───────────────────────────────────────────────────
@@ -70,7 +75,10 @@ namespace VoxelEngine.Simulation
                 if (_buffer == null) return 0;
                 int total = 0;
                 for (int i = 0; i < _buffer.Size; i++)
-                    if (!_buffer.GetSlot(i).IsEmpty) total += _buffer.GetSlot(i).count;
+                {
+                    var slot = _buffer.GetSlot(i);
+                    if (!slot.IsEmpty) total += slot.count;
+                }
                 return total;
             }
         }
@@ -87,15 +95,13 @@ namespace VoxelEngine.Simulation
             EnsureBuffer();
             float dt = Time.deltaTime;
 
-            // Periodically scan for connections.
             _scanTimer += dt;
-            if (_scanTimer >= 0.5f)
+            if (_scanTimer >= 0.35f)
             {
                 _scanTimer = 0f;
                 ScanConnections();
             }
 
-            // Transfer items at the configured interval.
             _transferTimer += dt;
             if (_transferTimer >= transferInterval)
             {
@@ -107,49 +113,109 @@ namespace VoxelEngine.Simulation
         private void EnsureBuffer()
         {
             if (_buffer == null)
-                _buffer = new ItemContainer("FunnelBuffer", bufferSize);
+                _buffer = new ItemContainer("FunnelBuffer", Mathf.Max(1, bufferSize));
             else
-                _buffer.Resize(bufferSize);
+                _buffer.Resize(Mathf.Max(1, bufferSize));
         }
 
         // ── Connection Scanning ───────────────────────────────────────
 
         private void ScanConnections()
         {
-            // Input source: the belt/machine BELOW or on the BACK of the funnel.
-            Vector3 inputPos = transform.position + Vector3.down * 0.8f;
-            inputSource = FindInterfaceAt(inputPos, inputSource);
+            Vector3 inventoryPos = PortWorldPosition(inventoryDirection);
+            Vector3 beltPos = PortWorldPosition(beltDirection);
 
-            // Output target: the machine/belt ABOVE or on the FRONT of the funnel.
-            Vector3 outputPos = transform.position + Vector3.up * 0.8f;
-            outputTarget = FindInterfaceAt(outputPos, outputTarget);
-
-            // Also check sides (±X, ±Z) for belt connections.
-            if (inputSource == null)
-                inputSource = FindInterfaceAt(transform.position + transform.forward * 0.8f, null);
-            if (outputTarget == null)
-                outputTarget = FindInterfaceAt(transform.position - transform.forward * 0.8f, null);
+            if (mode == FunnelMode.Import)
+            {
+                inputSource = FindProviderAt(beltPos) ?? FindProviderFallback(preferBelt: true);
+                outputTarget = FindConsumerAt(inventoryPos) ?? FindConsumerFallback(preferInventory: true);
+            }
+            else
+            {
+                inputSource = FindProviderAt(inventoryPos) ?? FindProviderFallback(preferBelt: false);
+                outputTarget = FindConsumerAt(beltPos) ?? FindConsumerFallback(preferInventory: false);
+            }
         }
 
-        private MonoBehaviour FindInterfaceAt(Vector3 worldPos, MonoBehaviour current)
+        private Vector3 PortWorldPosition(Vector3 localDirection)
         {
-            if (current != null) return current; // Keep existing connection.
+            Vector3 direction = localDirection.sqrMagnitude > 0.0001f ? localDirection.normalized : Vector3.forward;
+            return transform.position + transform.TransformDirection(direction) * portOffset;
+        }
 
-            var hits = Physics.OverlapSphere(worldPos, 0.6f);
+        private MonoBehaviour FindProviderAt(Vector3 worldPos)
+        {
+            var hits = Physics.OverlapSphere(worldPos, scanRadius);
             foreach (var col in hits)
             {
-                if (col.gameObject == gameObject) continue;
+                var mb = ResolveProvider(col);
+                if (mb != null) return mb;
+            }
+            return null;
+        }
 
-                // Check for IItemConsumer or IItemProvider.
-                var consumer = col.GetComponentInParent<MonoBehaviour>() as IItemConsumer;
-                if (consumer != null) return consumer as MonoBehaviour;
+        private MonoBehaviour FindConsumerAt(Vector3 worldPos)
+        {
+            var hits = Physics.OverlapSphere(worldPos, scanRadius);
+            foreach (var col in hits)
+            {
+                var mb = ResolveConsumer(col);
+                if (mb != null) return mb;
+            }
+            return null;
+        }
 
-                var provider = col.GetComponentInParent<MonoBehaviour>() as IItemProvider;
-                if (provider != null) return provider as MonoBehaviour;
+        private MonoBehaviour FindProviderFallback(bool preferBelt)
+        {
+            var hits = Physics.OverlapSphere(transform.position, portOffset + scanRadius);
+            MonoBehaviour fallback = null;
+            foreach (var col in hits)
+            {
+                var mb = ResolveProvider(col);
+                if (mb == null) continue;
+                if (preferBelt && mb is ConveyorBelt) return mb;
+                if (!preferBelt && !(mb is ConveyorBelt)) return mb;
+                fallback ??= mb;
+            }
+            return fallback;
+        }
 
-                // Check for ItemContainer (chests, machines).
-                var container = col.GetComponentInParent<IItemContainer>();
-                if (container != null) return col.GetComponentInParent<MonoBehaviour>();
+        private MonoBehaviour FindConsumerFallback(bool preferInventory)
+        {
+            var hits = Physics.OverlapSphere(transform.position, portOffset + scanRadius);
+            MonoBehaviour fallback = null;
+            foreach (var col in hits)
+            {
+                var mb = ResolveConsumer(col);
+                if (mb == null) continue;
+                bool isInventoryLike = mb is IItemContainer || !(mb is ConveyorBelt);
+                if (preferInventory && isInventoryLike) return mb;
+                if (!preferInventory && mb is ConveyorBelt) return mb;
+                fallback ??= mb;
+            }
+            return fallback;
+        }
+
+        private MonoBehaviour ResolveProvider(Collider col)
+        {
+            if (col == null || col.gameObject == gameObject) return null;
+            var behaviours = col.GetComponentsInParent<MonoBehaviour>(true);
+            foreach (var mb in behaviours)
+            {
+                if (mb == null || mb == this) continue;
+                if (mb is IItemProvider || mb is IItemContainer) return mb;
+            }
+            return null;
+        }
+
+        private MonoBehaviour ResolveConsumer(Collider col)
+        {
+            if (col == null || col.gameObject == gameObject) return null;
+            var behaviours = col.GetComponentsInParent<MonoBehaviour>(true);
+            foreach (var mb in behaviours)
+            {
+                if (mb == null || mb == this) continue;
+                if (mb is IItemConsumer || mb is IItemContainer) return mb;
             }
             return null;
         }
@@ -158,172 +224,102 @@ namespace VoxelEngine.Simulation
 
         private void TransferTick()
         {
-            if (mode == FunnelMode.Import)
-                TransferImport();
-            else
-                TransferExport();
-        }
-
-        /// <summary>
-        /// IMPORT mode: Pull from input source → buffer → push to output target.
-        /// </summary>
-        private void TransferImport()
-        {
-            // Step 1: Pull from input (belt below).
-            if (BufferedCount < bufferSize && inputSource != null)
-            {
-                var provider = inputSource as IItemProvider;
-                if (provider != null)
-                {
-                    var item = provider.PeekOutput(out int available);
-                    if (item != null && available > 0)
-                    {
-                        int want = Mathf.Min(available, bufferSize - BufferedCount);
-                        int got = provider.TryExtract(item, want);
-                        if (got > 0)
-                            _buffer.Insert(new ItemStack(item, got));
-                    }
-                }
-                else
-                {
-                    // Input might be a raw IItemContainer (chest).
-                    var container = inputSource.GetComponent<IItemContainer>();
-                    if (container != null)
-                    {
-                        for (int i = 0; i < container.Slots.Count; i++)
-                        {
-                            var slot = container.GetSlot(i);
-                            if (!slot.IsEmpty && slot.item != null && BufferedCount < bufferSize)
-                            {
-                                int take = Mathf.Min(slot.count, bufferSize - BufferedCount);
-                                int removed = container.Remove(slot.item, take);
-                                if (removed > 0)
-                                    _buffer.Insert(new ItemStack(slot.item, removed));
-                                break; // One item type per tick.
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Step 2: Push buffer to output (machine above).
+            PullFromInput();
             PushBufferToOutput();
         }
 
-        /// <summary>
-        /// EXPORT mode: Pull from input (machine above) → buffer → push to output (belt below).
-        /// </summary>
-        private void TransferExport()
+        private void PullFromInput()
         {
-            // Step 1: Pull from input (machine output).
-            if (BufferedCount < bufferSize && inputSource != null)
+            if (BufferedCount >= bufferSize || inputSource == null) return;
+
+            if (inputSource is IItemProvider provider)
             {
-                var provider = inputSource as IItemProvider;
-                if (provider != null)
-                {
-                    var item = provider.PeekOutput(out int available);
-                    if (item != null && available > 0)
-                    {
-                        int want = Mathf.Min(available, bufferSize - BufferedCount);
-                        int got = provider.TryExtract(item, want);
-                        if (got > 0)
-                            _buffer.Insert(new ItemStack(item, got));
-                    }
-                }
-                else
-                {
-                    var container = inputSource.GetComponent<IItemContainer>();
-                    if (container != null)
-                    {
-                        for (int i = 0; i < container.Slots.Count; i++)
-                        {
-                            var slot = container.GetSlot(i);
-                            if (!slot.IsEmpty && slot.item != null && BufferedCount < bufferSize)
-                            {
-                                int take = Mathf.Min(slot.count, bufferSize - BufferedCount);
-                                int removed = container.Remove(slot.item, take);
-                                if (removed > 0)
-                                    _buffer.Insert(new ItemStack(slot.item, removed));
-                                break;
-                            }
-                        }
-                    }
-                }
+                var item = provider.PeekOutput(out int available);
+                if (item == null || available <= 0) return;
+
+                int want = Mathf.Min(available, bufferSize - BufferedCount);
+                int got = provider.TryExtract(item, want);
+                if (got > 0) _buffer.Insert(new ItemStack(item, got));
+                return;
             }
 
-            // Step 2: Push buffer to output (belt below).
-            PushBufferToOutput();
+            if (inputSource is IItemContainer container)
+            {
+                PullFromContainer(container);
+            }
+        }
+
+        private void PullFromContainer(IItemContainer container)
+        {
+            if (container == null) return;
+            for (int i = 0; i < container.Slots.Count && BufferedCount < bufferSize; i++)
+            {
+                var slot = container.GetSlot(i);
+                if (slot.IsEmpty || slot.item == null) continue;
+
+                int take = Mathf.Min(slot.count, bufferSize - BufferedCount);
+                int removed = container.Remove(slot.item, take);
+                if (removed > 0)
+                {
+                    _buffer.Insert(new ItemStack(slot.item, removed));
+                    return;
+                }
+            }
         }
 
         private void PushBufferToOutput()
         {
-            if (outputTarget == null) return;
+            if (outputTarget == null || _buffer == null) return;
 
-            var consumer = outputTarget as IItemConsumer;
-            if (consumer != null)
+            for (int i = 0; i < _buffer.Size; i++)
             {
-                for (int i = 0; i < _buffer.Size; i++)
+                var slot = _buffer.GetSlot(i);
+                if (slot.IsEmpty || slot.item == null) continue;
+
+                int moved = 0;
+                if (outputTarget is IItemConsumer consumer)
                 {
-                    var slot = _buffer.GetSlot(i);
-                    if (slot.IsEmpty) continue;
-
-                    int cap = consumer.GetInputCapacity(slot.item);
-                    if (cap <= 0) continue;
-
-                    int send = Mathf.Min(slot.count, cap);
-                    int accepted = consumer.TryInsert(slot.item, send);
-                    if (accepted > 0)
-                    {
-                        slot.count -= accepted;
-                        _buffer.SetSlot(i, slot.count > 0 ? slot : new ItemStack());
-                    }
-                    break; // One item type per tick.
+                    int capacity = consumer.GetInputCapacity(slot.item);
+                    if (capacity > 0)
+                        moved = consumer.TryInsert(slot.item, Mathf.Min(capacity, slot.count));
                 }
-            }
-            else
-            {
-                // Output might be a raw container or belt.
-                var container = outputTarget.GetComponent<IItemContainer>();
-                if (container != null)
+                else if (outputTarget is IItemContainer container)
                 {
-                    for (int i = 0; i < _buffer.Size; i++)
-                    {
-                        var slot = _buffer.GetSlot(i);
-                        if (slot.IsEmpty) continue;
+                    var leftover = container.Insert(new ItemStack(slot.item, slot.count));
+                    moved = slot.count - (leftover?.count ?? 0);
+                }
 
-                        var leftover = container.Insert(new ItemStack(slot.item, slot.count));
-                        int accepted = slot.count - (leftover?.count ?? 0);
-                        if (accepted > 0)
-                        {
-                            slot.count -= accepted;
-                            _buffer.SetSlot(i, slot.count > 0 ? slot : new ItemStack());
-                        }
-                        break;
-                    }
+                if (moved > 0)
+                {
+                    _buffer.Remove(slot.item, moved);
+                    return;
                 }
             }
         }
 
-        // ── IItemConsumer (belts can push items INTO this funnel) ─────
+        // ── IItemConsumer ─────────────────────────────────────────────
 
         public int GetInputCapacity(ItemDefinition item)
         {
             if (item == null) return 0;
-            return _buffer.HasSpace(item, 1) ? item.maxStack : 0;
+            return Mathf.Max(0, bufferSize - BufferedCount);
         }
 
         public int TryInsert(ItemDefinition item, int count)
         {
             if (item == null || count <= 0) return 0;
-            var leftover = _buffer.Insert(new ItemStack(item, count));
-            return count - (leftover?.count ?? 0);
+            EnsureBuffer();
+            int accepted = Mathf.Min(count, Mathf.Max(0, bufferSize - BufferedCount));
+            if (accepted <= 0) return 0;
+            _buffer.Insert(new ItemStack(item, accepted));
+            return accepted;
         }
 
-        // ── IItemProvider (belts can pull items FROM this funnel) ─────
+        // ── IItemProvider ─────────────────────────────────────────────
 
         public ItemDefinition PeekOutput(out int count)
         {
-            count = 0;
+            EnsureBuffer();
             for (int i = 0; i < _buffer.Size; i++)
             {
                 var slot = _buffer.GetSlot(i);
@@ -333,23 +329,36 @@ namespace VoxelEngine.Simulation
                     return slot.item;
                 }
             }
+
+            count = 0;
             return null;
         }
 
         public int TryExtract(ItemDefinition item, int count)
         {
+            EnsureBuffer();
+            if (item == null || count <= 0) return 0;
             return _buffer.Remove(item, count);
         }
 
-        // ── Public API ────────────────────────────────────────────────
+        // ── Public Controls ───────────────────────────────────────────
 
-        /// <summary>Toggle between Import and Export mode.</summary>
+        /// <summary>Toggle import/export mode.</summary>
         public void ToggleMode()
         {
-            mode = (mode == FunnelMode.Import) ? FunnelMode.Export : FunnelMode.Import;
-            // Reset connections so they re-scan for the new direction.
+            mode = mode == FunnelMode.Import ? FunnelMode.Export : FunnelMode.Import;
             inputSource = null;
             outputTarget = null;
+            ScanConnections();
+        }
+
+        /// <summary>Set explicit mode from UI/interaction code.</summary>
+        public void SetMode(FunnelMode newMode)
+        {
+            mode = newMode;
+            inputSource = null;
+            outputTarget = null;
+            ScanConnections();
         }
     }
 }

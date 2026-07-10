@@ -5745,6 +5745,17 @@ root =>
                 return collider;
             }
 
+            void ClearGeneratedChildren(GameObject root)
+            {
+                if (root == null) return;
+                for (int i = root.transform.childCount - 1; i >= 0; i--)
+                {
+                    var child = root.transform.GetChild(i);
+                    if (child != null && child.name.StartsWith("Generated_", System.StringComparison.Ordinal))
+                        Object.DestroyImmediate(child.gameObject);
+                }
+            }
+
             VoxelEngine.Items.BlockItem ConfigureBlock(string folder, string assetName, string display, string description, Color tint, GameObject prefab, string category, int health = 200, int miningTier = 1, Vector3Int? gridSize = null)
             {
                 string path = $"{folder}/{assetName}.asset";
@@ -5957,60 +5968,66 @@ root =>
             // ── Chute and funnel ──
             var chutePrefab = GetOrCreatePrefab($"{FAC_PREFABS}/Conveyor_Chute.prefab", "Conveyor_Chute", root =>
             {
-                var shellMat = GetMaterial(FAC_MATS, "Mat_ChuteGalvanizedShell", new Color(0.70f, 0.72f, 0.70f));
-                var flangeMat = GetMaterial(FAC_MATS, "Mat_ChuteFlanges", new Color(0.48f, 0.50f, 0.49f));
-                var innerMat = GetMaterial(FAC_MATS, "Mat_ChuteDarkInterior", new Color(0.08f, 0.085f, 0.09f));
-                var accentMat = GetMaterial(FAC_MATS, "Mat_ChuteDirectionAccent", new Color(0.18f, 0.72f, 0.88f), true);
-                EnsurePrimitive(root, "Generated_TopFlange", PrimitiveType.Cube, new Vector3(0f, 1.05f, 0f), new Vector3(0.92f, 0.10f, 0.62f), flangeMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_DownSpout", PrimitiveType.Cylinder, new Vector3(0f, 0.46f, 0f), new Vector3(0.34f, 0.52f, 0.34f), shellMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_InnerDark", PrimitiveType.Cylinder, new Vector3(0f, 0.48f, -0.01f), new Vector3(0.24f, 0.54f, 0.24f), innerMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_SideOutlet", PrimitiveType.Cube, new Vector3(0f, 0.96f, -0.42f), new Vector3(0.62f, 0.20f, 0.45f), shellMat, new Vector3(-12f, 0f, 0f));
-                EnsurePrimitive(root, "Generated_BottomFlange", PrimitiveType.Cylinder, new Vector3(0f, -0.10f, 0f), new Vector3(0.48f, 0.06f, 0.48f), flangeMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_DownArrow", PrimitiveType.Cube, new Vector3(0f, 0.34f, -0.33f), new Vector3(0.14f, 0.34f, 0.035f), accentMat, Vector3.zero);
-                EnsureRootCollider(root, new Vector3(1.0f, 1.25f, 0.95f), new Vector3(0f, 0.48f, -0.05f));
+                ClearGeneratedChildren(root);
+                var shellMat = GetMaterial(FAC_MATS, "Mat_ChuteHopperShell", new Color(0.72f, 0.74f, 0.72f));
+                var rimMat = GetMaterial(FAC_MATS, "Mat_ChuteBoltedRim", new Color(0.52f, 0.54f, 0.52f));
+                var throatMat = GetMaterial(FAC_MATS, "Mat_ChuteThroat", new Color(0.12f, 0.13f, 0.14f));
+                var accentMat = GetMaterial(FAC_MATS, "Mat_ChuteDownAccent", new Color(0.18f, 0.72f, 0.88f), true);
+                EnsurePrimitive(root, "Generated_SquareRim", PrimitiveType.Cube, new Vector3(0f, 0.96f, 0f), new Vector3(1.18f, 0.10f, 1.18f), rimMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_HopperFront", PrimitiveType.Cube, new Vector3(0f, 0.70f, -0.42f), new Vector3(1.02f, 0.54f, 0.08f), shellMat, new Vector3(-12f, 0f, 0f));
+                EnsurePrimitive(root, "Generated_HopperBack", PrimitiveType.Cube, new Vector3(0f, 0.70f, 0.42f), new Vector3(1.02f, 0.54f, 0.08f), shellMat, new Vector3(12f, 0f, 0f));
+                EnsurePrimitive(root, "Generated_HopperLeft", PrimitiveType.Cube, new Vector3(-0.42f, 0.70f, 0f), new Vector3(0.08f, 0.54f, 1.02f), shellMat, new Vector3(0f, 0f, 12f));
+                EnsurePrimitive(root, "Generated_HopperRight", PrimitiveType.Cube, new Vector3(0.42f, 0.70f, 0f), new Vector3(0.08f, 0.54f, 1.02f), shellMat, new Vector3(0f, 0f, -12f));
+                EnsurePrimitive(root, "Generated_DropTube", PrimitiveType.Cylinder, new Vector3(0f, 0.20f, 0f), new Vector3(0.34f, 0.34f, 0.34f), throatMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_BottomFlange", PrimitiveType.Cylinder, new Vector3(0f, -0.16f, 0f), new Vector3(0.48f, 0.05f, 0.48f), rimMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_DownArrow", PrimitiveType.Cube, new Vector3(0f, 0.28f, -0.39f), new Vector3(0.14f, 0.34f, 0.035f), accentMat, Vector3.zero);
+                EnsureRootCollider(root, new Vector3(1.25f, 1.22f, 1.25f), new Vector3(0f, 0.45f, 0f));
                 var chute = EnsureComponent<VoxelEngine.Simulation.ConveyorChute>(root);
                 chute.shape = VoxelEngine.Simulation.ChuteShape.Straight;
                 chute.maxItems = 6;
                 chute.slideSpeed = 3.2f;
             });
-            var blockChute = ConfigureBlock(FAC_ITEMS, "Block_ConveyorChute", "Conveyor Chute", "Downward item transfer chute for dropping items from machines or belts to a lower output.", new Color(0.18f, 0.72f, 0.88f), chutePrefab, "Factory", 180);
+            var blockChute = ConfigureBlock(FAC_ITEMS, "Block_ConveyorChute", "Conveyor Chute", "Downward hopper-chute for dropping items from machines or belts to a lower output.", new Color(0.18f, 0.72f, 0.88f), chutePrefab, "Factory", 180);
 
             var funnelPrefab = GetOrCreatePrefab($"{FAC_PREFABS}/Funnel.prefab", "Funnel", root =>
             {
-                var shellMat = GetMaterial(FAC_MATS, "Mat_FunnelGalvanizedShell", new Color(0.72f, 0.74f, 0.72f));
-                var rimMat = GetMaterial(FAC_MATS, "Mat_FunnelBoltedRim", new Color(0.52f, 0.54f, 0.52f));
-                var throatMat = GetMaterial(FAC_MATS, "Mat_FunnelThroat", new Color(0.12f, 0.13f, 0.14f));
-                var bladeMat = GetMaterial(FAC_MATS, "Mat_FunnelAnimatedVanes", new Color(0.18f, 0.72f, 0.88f), true);
-                var accentMat = GetMaterial(FAC_MATS, "Mat_FunnelInputAccent", new Color(0.95f, 0.62f, 0.18f), true);
-                EnsurePrimitive(root, "Generated_SquareRim", PrimitiveType.Cube, new Vector3(0f, 0.88f, 0f), new Vector3(1.18f, 0.10f, 1.18f), rimMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_HopperFront", PrimitiveType.Cube, new Vector3(0f, 0.62f, -0.42f), new Vector3(1.02f, 0.54f, 0.08f), shellMat, new Vector3(-12f, 0f, 0f));
-                EnsurePrimitive(root, "Generated_HopperBack", PrimitiveType.Cube, new Vector3(0f, 0.62f, 0.42f), new Vector3(1.02f, 0.54f, 0.08f), shellMat, new Vector3(12f, 0f, 0f));
-                EnsurePrimitive(root, "Generated_HopperLeft", PrimitiveType.Cube, new Vector3(-0.42f, 0.62f, 0f), new Vector3(0.08f, 0.54f, 1.02f), shellMat, new Vector3(0f, 0f, 12f));
-                EnsurePrimitive(root, "Generated_HopperRight", PrimitiveType.Cube, new Vector3(0.42f, 0.62f, 0f), new Vector3(0.08f, 0.54f, 1.02f), shellMat, new Vector3(0f, 0f, -12f));
-                EnsurePrimitive(root, "Generated_Throat", PrimitiveType.Cylinder, new Vector3(0f, 0.16f, 0f), new Vector3(0.36f, 0.22f, 0.36f), throatMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_InputCollar", PrimitiveType.Cylinder, new Vector3(0f, 0.02f, 0f), new Vector3(0.46f, 0.05f, 0.46f), rimMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_FunnelImpeller", PrimitiveType.Cube, new Vector3(0f, 0.42f, 0f), new Vector3(0.76f, 0.035f, 0.08f), bladeMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_FunnelImpellerCross", PrimitiveType.Cube, new Vector3(0f, 0.425f, 0f), new Vector3(0.08f, 0.035f, 0.76f), bladeMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_InputStatusStrip", PrimitiveType.Cube, new Vector3(0f, 0.90f, -0.61f), new Vector3(0.62f, 0.04f, 0.035f), accentMat, Vector3.zero);
-                EnsureLight(root, "Generated_InputPulse", new Vector3(0f, 0.72f, -0.44f), LightType.Point, new Color(0.95f, 0.62f, 0.18f), 1.1f, 3.5f);
-                EnsureRootCollider(root, new Vector3(1.25f, 1.05f, 1.25f), new Vector3(0f, 0.45f, 0f));
+                ClearGeneratedChildren(root);
+                var shellMat = GetMaterial(FAC_MATS, "Mat_FunnelSideShell", new Color(0.58f, 0.60f, 0.59f));
+                var darkMat = GetMaterial(FAC_MATS, "Mat_FunnelDarkInterior", new Color(0.08f, 0.085f, 0.09f));
+                var rimMat = GetMaterial(FAC_MATS, "Mat_FunnelPortRims", new Color(0.38f, 0.40f, 0.40f));
+                var beltAccentMat = GetMaterial(FAC_MATS, "Mat_FunnelBeltPort", new Color(0.18f, 0.72f, 0.88f), true);
+                var inventoryAccentMat = GetMaterial(FAC_MATS, "Mat_FunnelInventoryPort", new Color(0.95f, 0.62f, 0.18f), true);
+                EnsurePrimitive(root, "Generated_CenterHousing", PrimitiveType.Cube, new Vector3(0f, 0.36f, 0f), new Vector3(0.74f, 0.56f, 0.46f), shellMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_BeltPortRim", PrimitiveType.Cube, new Vector3(0f, 0.36f, 0.34f), new Vector3(0.86f, 0.46f, 0.08f), rimMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_BeltMouth", PrimitiveType.Cube, new Vector3(0f, 0.36f, 0.40f), new Vector3(0.62f, 0.30f, 0.06f), darkMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_InventoryPortRim", PrimitiveType.Cube, new Vector3(0f, 0.36f, -0.34f), new Vector3(0.72f, 0.38f, 0.08f), rimMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_InventoryMouth", PrimitiveType.Cube, new Vector3(0f, 0.36f, -0.40f), new Vector3(0.50f, 0.24f, 0.06f), darkMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_BeltAccent", PrimitiveType.Cube, new Vector3(0f, 0.64f, 0.405f), new Vector3(0.54f, 0.035f, 0.035f), beltAccentMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_InventoryAccent", PrimitiveType.Cube, new Vector3(0f, 0.60f, -0.405f), new Vector3(0.44f, 0.035f, 0.035f), inventoryAccentMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_DirectionalGate", PrimitiveType.Cube, new Vector3(0f, 0.36f, 0f), new Vector3(0.56f, 0.035f, 0.10f), inventoryAccentMat, Vector3.zero);
+                EnsureLight(root, "Generated_FunnelPulse", new Vector3(0f, 0.66f, 0.08f), LightType.Point, new Color(0.95f, 0.62f, 0.18f), 1.0f, 3f);
+                EnsureRootCollider(root, new Vector3(0.95f, 0.72f, 1.0f), new Vector3(0f, 0.35f, 0f));
                 var funnel = EnsureComponent<VoxelEngine.Simulation.Funnel>(root);
                 funnel.mode = VoxelEngine.Simulation.FunnelMode.Import;
                 funnel.transferInterval = 0.45f;
                 funnel.bufferSize = 6;
+                funnel.inventoryDirection = Vector3.back;
+                funnel.beltDirection = Vector3.forward;
+                funnel.portOffset = 0.72f;
+                funnel.scanRadius = 0.7f;
                 var animator = EnsureComponent<VoxelEngine.Simulation.FactoryPartAnimator>(root);
-                animator.rotatingChildName = "Generated_FunnelImpeller";
+                animator.rotatingChildName = "Generated_DirectionalGate";
                 animator.rotationAxis = Vector3.up;
-                animator.rotationDegreesPerSecond = 180f;
-                animator.bobbingChildName = "Generated_InputStatusStrip";
+                animator.rotationDegreesPerSecond = 120f;
+                animator.bobbingChildName = "Generated_BeltAccent";
                 animator.bobAxis = Vector3.up;
-                animator.bobAmplitude = 0.015f;
-                animator.bobFrequency = 2f;
-                animator.pulseLightName = "Generated_InputPulse";
-                animator.pulseAmplitude = 0.35f;
-                animator.pulseFrequency = 2.5f;
+                animator.bobAmplitude = 0.012f;
+                animator.bobFrequency = 2.2f;
+                animator.pulseLightName = "Generated_FunnelPulse";
+                animator.pulseAmplitude = 0.30f;
+                animator.pulseFrequency = 2.4f;
             });
-            var blockFunnel = ConfigureBlock(FAC_ITEMS, "Block_Funnel", "Machine Input Funnel", "Animated machine-input hopper that pulls from conveyors or containers and feeds the machine above.", new Color(0.95f, 0.62f, 0.18f), funnelPrefab, "Factory", 180);
+            var blockFunnel = ConfigureBlock(FAC_ITEMS, "Block_Funnel", "Funnel", "Directional logistical hopper for loading belts into inventories or unloading inventories onto belts.", new Color(0.95f, 0.62f, 0.18f), funnelPrefab, "Factory", 180);
 
             // ── Machine recipes and machine prefabs ──
             var crushStone = ConfigureMachineRecipe("MachineRecipe_CrushStone", "Crush Stone", VoxelEngine.Simulation.MachineRecipeType.Crushing, gravel, 2, 3f, false, sand, 1, sand != null ? 0.35f : 0f, (stone, 1));
