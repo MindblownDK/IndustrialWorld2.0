@@ -12,11 +12,17 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e6e37d290c6cb84409b3993312f66bca, type: 3}
   m_Name: Recipe_StorageDrawer
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Crafting.RecipeDefinition
-  displayName: 
+  displayName: Storage Drawer
   icon: {fileID: 0}
-  inputs: []
-  outputItem: {fileID: 0}
+  inputs:
+  - item: {fileID: 11400000, guid: 97f4ffb97f4311a48a90550a0e841dd2, type: 2}
+    count: 3
+  - item: {fileID: 11400000, guid: c086dbc8bd3f3894e8432bcffc6a88b6, type: 2}
+    count: 1
+  - item: {fileID: 11400000, guid: 9839b36c887a99d4b80802a55e83472b, type: 2}
+    count: 2
+  outputItem: {fileID: 11400000, guid: 1b7b2239c670e4573b2d1f618bb1f7eb, type: 2}
   outputCount: 1
-  requiredStation: 0
+  requiredStation: 1
   craftSeconds: 0
-  unlockedByDefault: 1
+  unlockedByDefault: 0

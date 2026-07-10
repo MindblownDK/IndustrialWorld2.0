@@ -44,6 +44,9 @@ namespace VoxelEngine.Simulation
 
         public void RebuildMesh()
         {
+            if (_belt == null) return;
+            if (!isActiveAndEnabled || !gameObject.activeInHierarchy) return;
+
             if (_meshRoot != null) Destroy(_meshRoot);
             _meshRoot = new GameObject("MeshRoot");
             _meshRoot.transform.SetParent(transform, false);
@@ -87,7 +90,7 @@ namespace VoxelEngine.Simulation
         {
             // Simple corner mesh using two boxes for now
             bool isRight = _belt.entryDirection == Vector3.left;
-            
+
             var beltA = GameObject.CreatePrimitive(PrimitiveType.Cube);
             beltA.transform.SetParent(_meshRoot.transform, false);
             beltA.transform.localPosition = new Vector3(0, 0.48f, -0.25f);

@@ -12,11 +12,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e6e37d290c6cb84409b3993312f66bca, type: 3}
   m_Name: Recipe_DrawerUpgradeStack16x
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Crafting.RecipeDefinition
-  displayName: 
+  displayName: Drawer Stack Upgrade (16x)
   icon: {fileID: 0}
-  inputs: []
-  outputItem: {fileID: 0}
+  inputs:
+  - item: {fileID: 11400000, guid: 8334f06ff41bbf844ae609a105d7dda9, type: 2}
+    count: 2
+  - item: {fileID: 11400000, guid: 336b33bc040295447ab403e0542f3faf, type: 2}
+    count: 1
+  outputItem: {fileID: 11400000, guid: 3800cc7ce764f4a2a80ba300299d57df, type: 2}
   outputCount: 1
-  requiredStation: 0
+  requiredStation: 3
   craftSeconds: 0
-  unlockedByDefault: 1
+  unlockedByDefault: 0

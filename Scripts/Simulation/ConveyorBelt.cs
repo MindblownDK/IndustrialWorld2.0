@@ -105,19 +105,32 @@ namespace VoxelEngine.Simulation
 
         private void OnDisable()
         {
+            CancelInvoke(nameof(RefreshNearby));
             ConveyorNetwork.Instance?.Unregister(this);
-            RefreshNearby();
+
+            // Do not rebuild this belt's visuals while Unity is disabling the
+            // GameObject (ghost hide, scene close, destroy). Creating/parenting
+            // MeshRoot during activation/deactivation triggers Unity warnings and
+            // leaked MeshRoot objects. Only active neighbours need a refresh.
+            NotifyNearbyBelts();
         }
 
         private void RefreshNearby()
+        {
+            if (!isActiveAndEnabled || !gameObject.activeInHierarchy) return;
+            NotifyNearbyBelts();
+            RefreshShape();
+        }
+
+        private void NotifyNearbyBelts()
         {
             var hits = Physics.OverlapSphere(transform.position, 1.5f);
             foreach (var hit in hits)
             {
                 var belt = hit.GetComponentInParent<ConveyorBelt>();
-                if (belt != null && belt != this) belt.RefreshShape();
+                if (belt != null && belt != this && belt.isActiveAndEnabled && belt.gameObject.activeInHierarchy)
+                    belt.RefreshShape();
             }
-            RefreshShape();
         }
 
         private void Update()
@@ -298,7 +311,8 @@ namespace VoxelEngine.Simulation
             }
 
             UpdateTravelDirection();
-            if (_visuals != null) _visuals.RebuildMesh();
+            if (_visuals != null && isActiveAndEnabled && gameObject.activeInHierarchy)
+                _visuals.RebuildMesh();
         }
 
         private MonoBehaviour FindFunnelAt(Vector3 worldPos)
