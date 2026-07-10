@@ -194,17 +194,14 @@ namespace VoxelEngine.Building
                 Vector3 snapDirection;
                 bool sideSnap = Mathf.Abs(localHit.x) > Mathf.Abs(localHit.z);
                 if (sideSnap)
-                {
-                    snapDirection = targetBelt.transform.right * Mathf.Sign(localHit.x == 0f ? 1f : localHit.x);
-                    rot = Quaternion.LookRotation(snapDirection, targetBelt.transform.up);
-                }
+                    snapDirection = targetBelt.transform.right * Mathf.Sign(Mathf.Approximately(localHit.x, 0f) ? 1f : localHit.x);
                 else
-                {
-                    snapDirection = targetBelt.transform.forward * Mathf.Sign(localHit.z == 0f ? 1f : localHit.z);
-                    rot = targetBelt.transform.rotation;
-                }
+                    snapDirection = targetBelt.transform.forward * Mathf.Sign(Mathf.Approximately(localHit.z, 0f) ? 1f : localHit.z);
 
+                // Keep belts level and parallel to the existing belt. Side placement is
+                // meant to create a parallel lane, not a rotated/ramped segment.
                 pos = targetBelt.transform.position + snapDirection.normalized * Mathf.Max(gridSize, 1f);
+                rot = targetBelt.transform.rotation;
                 return true;
             }
 

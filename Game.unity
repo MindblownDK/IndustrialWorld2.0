@@ -163,7 +163,7 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &488003484
+--- !u!1 &286783113
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -171,95 +171,235 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 488003485}
-  - component: {fileID: 488003489}
-  - component: {fileID: 488003488}
-  - component: {fileID: 488003487}
-  - component: {fileID: 488003486}
+  - component: {fileID: 286783122}
+  - component: {fileID: 286783121}
+  - component: {fileID: 286783120}
+  - component: {fileID: 286783119}
+  - component: {fileID: 286783118}
+  - component: {fileID: 286783117}
+  - component: {fileID: 286783116}
+  - component: {fileID: 286783115}
+  - component: {fileID: 286783114}
   m_Layer: 0
-  m_Name: GameUI
+  m_Name: Player
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &488003485
+--- !u!114 &286783114
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 286783113}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: af34d23181d9dc34a8be953a286f4ed9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.Tiered.BuildSystemV2
+  shootCamera: {fileID: 2138122597}
+  inventory: {fileID: 286783116}
+  registry: {fileID: 11400000, guid: 61b6d4cae5eb33d4ebf404f012997a1e, type: 2}
+  reach: 8
+  socketSnapRadius: 1.4
+  gridSnap: 1
+  gridSize: 1
+  ghostAlpha: 0.55
+  yawStep: 90
+--- !u!114 &286783115
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 286783113}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d43761ba87646a94aa52ca760267a140, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.BuildSystem
+  shootCamera: {fileID: 2138122597}
+  inventory: {fileID: 286783116}
+  reach: 8
+  gridSnap: 1
+  gridSize: 1
+  ghostAlpha: 0.5
+  yawStep: 90
+--- !u!114 &286783116
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 286783113}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7c238722667dfcc43b959d181c916ca1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Items.Inventory
+  container:
+    _name: Container
+    _slots: []
+    _minSize: 1
+  activeHotbarIndex: 0
+--- !u!114 &286783117
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 286783113}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6569e876e6771a942be8c57265678b59, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Player.PlayerSpawner
+  maxWaitSeconds: 12
+  searchRadius: 32
+--- !u!114 &286783118
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 286783113}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 89ff93747a4002e4cb7bf9cf128d992b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Player.PlayerWaterState
+--- !u!114 &286783119
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 286783113}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c7b3f6f4cb4a54643900894aeb16c95a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Player.PlayerStats
+  baseMaxHealth: 100
+  baseMaxStamina: 100
+  baseDamage: 5
+  baseSprintMultiplier: 1.6
+  baseMaxHunger: 100
+  baseMaxOxygen: 100
+  baseBackpackSlots: 30
+  staminaSprintDrain: 18
+  staminaRegen: 12
+  staminaJumpCost: 12
+--- !u!114 &286783120
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 286783113}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 75a896fbcef220043a8214cd91565756, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Player.PlayerController
+  walkSpeed: 5.5
+  sprintMultiplier: 1.6
+  crouchMultiplier: 0.45
+  groundAcceleration: 18
+  airAcceleration: 4
+  groundFriction: 10
+  jumpHeight: 1.4
+  gravity: -22
+  coyoteTime: 0.12
+  standHeight: 1.85
+  crouchHeight: 1.2
+  slideBoost: 4
+  slideFriction: 1.6
+  slideEndSpeed: 3
+  slideMinSpeed: 6
+  flySpeed: 14
+  flySprintMultiplier: 3
+  standEyeHeight: 1.65
+  crouchEyeHeight: 0.9
+  cameraPivot: {fileID: 310137167}
+  playerCamera: {fileID: 2138122597}
+  inspectorFlyToggle: 0
+--- !u!143 &286783121
+CharacterController:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 286783113}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Height: 1.85
+  m_Radius: 0.4
+  m_SlopeLimit: 55
+  m_StepOffset: 0.4
+  m_SkinWidth: 0.05
+  m_MinMoveDistance: 0
+  m_Center: {x: 0, y: 0.925, z: 0}
+--- !u!4 &286783122
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 488003484}
+  m_GameObject: {fileID: 286783113}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalPosition: {x: 0, y: 150, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 1380868968}
+  m_Children:
+  - {fileID: 310137167}
+  - {fileID: 1436188820}
+  m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &488003486
-MonoBehaviour:
+--- !u!1 &310137166
+GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 488003484}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8a25a63cdae1d4ff2805b4f528f5da96, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.UI.LightingControlUI
---- !u!114 &488003487
-MonoBehaviour:
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 310137167}
+  m_Layer: 0
+  m_Name: CameraPivot
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &310137167
+Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 488003484}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4b10c91b95edf4792a753db945331910, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.UI.LightingManager
---- !u!114 &488003488
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 488003484}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4ddca213626351044ae9421834ef600d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.UI.GameUIController
-  inventory: {fileID: 1380868962}
-  recipeRegistry: {fileID: 11400000, guid: f3b0d6478e2c91c419a674c4bb8443c1, type: 2}
-  stationRadius: 4
---- !u!114 &488003489
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 488003484}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 19102, guid: 0000000000000000e000000000000000, type: 0}
-  m_Name: 
-  m_EditorClassIdentifier: UnityEngine.dll::UnityEngine.UIElements.UIDocument
-  m_PanelSettings: {fileID: 11400000, guid: b2c3d4e5f607182939a4b5c6d7e8f901, type: 2}
-  m_ParentUI: {fileID: 0}
-  sourceAsset: {fileID: 0}
-  m_SortingOrder: 0
-  m_Position: 0
-  m_WorldSpaceSizeMode: 1
-  m_WorldSpaceWidth: 1920
-  m_WorldSpaceHeight: 1080
-  m_PivotReferenceSize: 0
-  m_Pivot: 0
-  m_WorldSpaceCollider: {fileID: 0}
+  m_GameObject: {fileID: 310137166}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 1.65, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 2138122603}
+  m_Father: {fileID: 286783122}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &595644108
 GameObject:
   m_ObjectHideFlags: 0
@@ -365,65 +505,6 @@ Transform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 947377673}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &1013156858
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1013156860}
-  - component: {fileID: 1013156859}
-  m_Layer: 0
-  m_Name: VoxelWorld_Manager
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &1013156859
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1013156858}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9db121b4ed98abc4598590032901f142, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Core.VoxelWorld
-  flatSeed: 1337
-  flatSeaLevel: 96
-  flatBaseHeight: 100
-  flatContinentScale: 0.0015
-  flatCrustDepth: 40
-  flatBiomeRegistry: {fileID: 0}
-  materialRegistry: {fileID: 11400000, guid: 89cc31071789f224f91b397442105307, type: 2}
-  terrainMaterial: {fileID: 2100000, guid: 035b6cf660595ab498e4ef7e242cd598, type: 2}
-  viewer: {fileID: 0}
-  viewDistance: 6
-  maxJobsPerFrame: 4
-  generateColliders: 1
-  enableScatter: 1
-  worldName: DefaultWorld
-  enablePersistence: 1
---- !u!4 &1013156860
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1013156858}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
@@ -583,7 +664,7 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &1380868959
+--- !u!1 &1436188819
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -591,203 +672,95 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 1380868968}
-  - component: {fileID: 1380868967}
-  - component: {fileID: 1380868966}
-  - component: {fileID: 1380868965}
-  - component: {fileID: 1380868964}
-  - component: {fileID: 1380868963}
-  - component: {fileID: 1380868962}
-  - component: {fileID: 1380868961}
-  - component: {fileID: 1380868960}
+  - component: {fileID: 1436188820}
+  - component: {fileID: 1436188824}
+  - component: {fileID: 1436188823}
+  - component: {fileID: 1436188822}
+  - component: {fileID: 1436188821}
   m_Layer: 0
-  m_Name: Player
+  m_Name: GameUI
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1380868960
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1380868959}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: af34d23181d9dc34a8be953a286f4ed9, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.Tiered.BuildSystemV2
-  shootCamera: {fileID: 2038261739}
-  inventory: {fileID: 1380868962}
-  registry: {fileID: 11400000, guid: 61b6d4cae5eb33d4ebf404f012997a1e, type: 2}
-  reach: 8
-  socketSnapRadius: 1.4
-  gridSnap: 1
-  gridSize: 1
-  ghostAlpha: 0.55
-  yawStep: 90
---- !u!114 &1380868961
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1380868959}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d43761ba87646a94aa52ca760267a140, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.BuildSystem
-  shootCamera: {fileID: 2038261739}
-  inventory: {fileID: 1380868962}
-  reach: 8
-  gridSnap: 1
-  gridSize: 1
-  ghostAlpha: 0.5
-  yawStep: 90
---- !u!114 &1380868962
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1380868959}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 7c238722667dfcc43b959d181c916ca1, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Items.Inventory
-  container:
-    _name: Container
-    _slots: []
-    _minSize: 1
-  activeHotbarIndex: 0
---- !u!114 &1380868963
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1380868959}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6569e876e6771a942be8c57265678b59, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Player.PlayerSpawner
-  maxWaitSeconds: 12
-  searchRadius: 32
---- !u!114 &1380868964
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1380868959}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 89ff93747a4002e4cb7bf9cf128d992b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Player.PlayerWaterState
---- !u!114 &1380868965
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1380868959}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c7b3f6f4cb4a54643900894aeb16c95a, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Player.PlayerStats
-  baseMaxHealth: 100
-  baseMaxStamina: 100
-  baseDamage: 5
-  baseSprintMultiplier: 1.6
-  baseMaxHunger: 100
-  baseMaxOxygen: 100
-  baseBackpackSlots: 30
-  staminaSprintDrain: 18
-  staminaRegen: 12
-  staminaJumpCost: 12
---- !u!114 &1380868966
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1380868959}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 75a896fbcef220043a8214cd91565756, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Player.PlayerController
-  walkSpeed: 5.5
-  sprintMultiplier: 1.6
-  crouchMultiplier: 0.45
-  groundAcceleration: 18
-  airAcceleration: 4
-  groundFriction: 10
-  jumpHeight: 1.4
-  gravity: -22
-  coyoteTime: 0.12
-  standHeight: 1.85
-  crouchHeight: 1.2
-  slideBoost: 4
-  slideFriction: 1.6
-  slideEndSpeed: 3
-  slideMinSpeed: 6
-  flySpeed: 14
-  flySprintMultiplier: 3
-  standEyeHeight: 1.65
-  crouchEyeHeight: 0.9
-  cameraPivot: {fileID: 1468478864}
-  playerCamera: {fileID: 2038261739}
-  inspectorFlyToggle: 0
---- !u!143 &1380868967
-CharacterController:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1380868959}
-  m_Material: {fileID: 0}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_LayerOverridePriority: 0
-  m_ProvidesContacts: 0
-  m_Enabled: 1
-  serializedVersion: 3
-  m_Height: 1.85
-  m_Radius: 0.4
-  m_SlopeLimit: 55
-  m_StepOffset: 0.4
-  m_SkinWidth: 0.05
-  m_MinMoveDistance: 0
-  m_Center: {x: 0, y: 0.925, z: 0}
---- !u!4 &1380868968
+--- !u!4 &1436188820
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1380868959}
+  m_GameObject: {fileID: 1436188819}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 150, z: 0}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children:
-  - {fileID: 1468478864}
-  - {fileID: 488003485}
-  m_Father: {fileID: 0}
+  m_Children: []
+  m_Father: {fileID: 286783122}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1436188821
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1436188819}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8a25a63cdae1d4ff2805b4f528f5da96, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.UI.LightingControlUI
+--- !u!114 &1436188822
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1436188819}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4b10c91b95edf4792a753db945331910, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.UI.LightingManager
+--- !u!114 &1436188823
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1436188819}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4ddca213626351044ae9421834ef600d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.UI.GameUIController
+  inventory: {fileID: 286783116}
+  recipeRegistry: {fileID: 11400000, guid: f3b0d6478e2c91c419a674c4bb8443c1, type: 2}
+  stationRadius: 4
+--- !u!114 &1436188824
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1436188819}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 19102, guid: 0000000000000000e000000000000000, type: 0}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.dll::UnityEngine.UIElements.UIDocument
+  m_PanelSettings: {fileID: 11400000, guid: b2c3d4e5f607182939a4b5c6d7e8f901, type: 2}
+  m_ParentUI: {fileID: 0}
+  sourceAsset: {fileID: 0}
+  m_SortingOrder: 0
+  m_Position: 0
+  m_WorldSpaceSizeMode: 1
+  m_WorldSpaceWidth: 1920
+  m_WorldSpaceHeight: 1080
+  m_PivotReferenceSize: 0
+  m_Pivot: 0
+  m_WorldSpaceCollider: {fileID: 0}
 --- !u!1 &1436353754
 GameObject:
   m_ObjectHideFlags: 0
@@ -841,38 +814,6 @@ MonoBehaviour:
   terrainMaterial: {fileID: 0}
   testRadiusKm: 0.5
   viewDistance: 5
---- !u!1 &1468478863
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1468478864}
-  m_Layer: 0
-  m_Name: CameraPivot
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &1468478864
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1468478863}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 1.65, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children:
-  - {fileID: 2038261745}
-  m_Father: {fileID: 1380868968}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1746488545
 GameObject:
   m_ObjectHideFlags: 0
@@ -1083,7 +1024,7 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &2038261738
+--- !u!1 &2073528087
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -1091,13 +1032,72 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 2038261745}
-  - component: {fileID: 2038261739}
-  - component: {fileID: 2038261744}
-  - component: {fileID: 2038261743}
-  - component: {fileID: 2038261742}
-  - component: {fileID: 2038261741}
-  - component: {fileID: 2038261740}
+  - component: {fileID: 2073528089}
+  - component: {fileID: 2073528088}
+  m_Layer: 0
+  m_Name: VoxelWorld_Manager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &2073528088
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2073528087}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9db121b4ed98abc4598590032901f142, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Core.VoxelWorld
+  flatSeed: 1337
+  flatSeaLevel: 96
+  flatBaseHeight: 100
+  flatContinentScale: 0.0015
+  flatCrustDepth: 40
+  flatBiomeRegistry: {fileID: 0}
+  materialRegistry: {fileID: 11400000, guid: 89cc31071789f224f91b397442105307, type: 2}
+  terrainMaterial: {fileID: 2100000, guid: 035b6cf660595ab498e4ef7e242cd598, type: 2}
+  viewer: {fileID: 0}
+  viewDistance: 6
+  maxJobsPerFrame: 4
+  generateColliders: 1
+  enableScatter: 1
+  worldName: DefaultWorld
+  enablePersistence: 1
+--- !u!4 &2073528089
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2073528087}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &2138122596
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2138122603}
+  - component: {fileID: 2138122597}
+  - component: {fileID: 2138122602}
+  - component: {fileID: 2138122601}
+  - component: {fileID: 2138122600}
+  - component: {fileID: 2138122599}
+  - component: {fileID: 2138122598}
   m_Layer: 0
   m_Name: PlayerCamera
   m_TagString: MainCamera
@@ -1105,13 +1105,13 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!20 &2038261739
+--- !u!20 &2138122597
 Camera:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2038261738}
+  m_GameObject: {fileID: 2138122596}
   m_Enabled: 1
   serializedVersion: 2
   m_ClearFlags: 1
@@ -1156,31 +1156,31 @@ Camera:
   m_OcclusionCulling: 1
   m_StereoConvergence: 10
   m_StereoSeparation: 0.022
---- !u!114 &2038261740
+--- !u!114 &2138122598
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2038261738}
+  m_GameObject: {fileID: 2138122596}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 1f0fd2729b3535c4bba987d57d4608d6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Simulation.HighVoltageWireTool
-  playerCamera: {fileID: 2038261739}
-  inventory: {fileID: 1380868962}
+  playerCamera: {fileID: 2138122597}
+  inventory: {fileID: 286783116}
   reach: 20
   stationLayer:
     serializedVersion: 2
     m_Bits: 1
---- !u!114 &2038261741
+--- !u!114 &2138122599
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2038261738}
+  m_GameObject: {fileID: 2138122596}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 0b0a0ea9e03d6924ea525fabec382d30, type: 3}
@@ -1193,19 +1193,19 @@ MonoBehaviour:
   particleCount: 14
   particleLife: 0.5
   particleSpeed: 3.5
---- !u!114 &2038261742
+--- !u!114 &2138122600
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2038261738}
+  m_GameObject: {fileID: 2138122596}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 88e4d7b47436b3f4a8be63383e52b4c3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Player.HeldToolView
-  inventory: {fileID: 1380868962}
+  inventory: {fileID: 286783116}
   anchor: {fileID: 0}
   idleLocalPos: {x: 0.3, y: -0.28, z: 0.55}
   idleLocalEuler: {x: 8, y: -15, z: -5}
@@ -1214,48 +1214,48 @@ MonoBehaviour:
   swingDuration: 0.18
   bobAmplitude: 0.012
   bobSpeedWalking: 8
---- !u!114 &2038261743
+--- !u!114 &2138122601
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2038261738}
+  m_GameObject: {fileID: 2138122596}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 58a81e634c2ac6349ba2deef671a0441, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Player.PlayerInteractionTool
-  shootCamera: {fileID: 2038261739}
+  shootCamera: {fileID: 2138122597}
   registry: {fileID: 11400000, guid: 89cc31071789f224f91b397442105307, type: 2}
-  inventory: {fileID: 1380868962}
+  inventory: {fileID: 286783116}
   reach: 8
   handStrength: 25
   handBrushRadius: 1
   handTier: 0
   handFireRate: 2.5
---- !u!81 &2038261744
+--- !u!81 &2138122602
 AudioListener:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2038261738}
+  m_GameObject: {fileID: 2138122596}
   m_Enabled: 1
---- !u!4 &2038261745
+--- !u!4 &2138122603
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2038261738}
+  m_GameObject: {fileID: 2138122596}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 1468478864}
+  m_Father: {fileID: 310137167}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
@@ -1271,5 +1271,5 @@ SceneRoots:
   - {fileID: 1436353756}
   - {fileID: 1843633981}
   - {fileID: 1039508721}
-  - {fileID: 1013156860}
-  - {fileID: 1380868968}
+  - {fileID: 2073528089}
+  - {fileID: 286783122}

@@ -85,7 +85,7 @@ namespace VoxelEngine.Simulation
         {
             Vector3 forward = Vector3.ProjectOnPlane(playerCamera.transform.forward, Vector3.up).normalized;
             if (forward.sqrMagnitude < 0.01f) forward = Vector3.forward;
-            
+
             // Snap to 90 degree increments
             float angle = Mathf.Atan2(forward.x, forward.z) * Mathf.Rad2Deg;
             angle = Mathf.Round(angle / 90f) * 90f;
@@ -118,7 +118,7 @@ namespace VoxelEngine.Simulation
             // Smart Snap: check if we are looking more at the exit or the sides
             Vector3 exitDir = belt.GetExitDirection();
             Vector3 sideDir = Vector3.Cross(Vector3.up, exitDir);
-            
+
             Vector3 toHit = (hitPoint - belt.transform.position).normalized;
             float dotExit = Vector3.Dot(toHit, exitDir);
             float dotSide = Vector3.Dot(toHit, sideDir);
@@ -129,15 +129,14 @@ namespace VoxelEngine.Simulation
                 snapDir = sideDir * Mathf.Sign(dotSide);
             }
 
-            SuggestedPosition = SnapToGrid(belt.transform.position + snapDir * gridSize);
-            // Ensure same level
-            SuggestedPosition = new Vector3(SuggestedPosition.x, belt.transform.position.y, SuggestedPosition.z);
-            
-            // Orientation: if snapping to exit, continue direction. If side, face away from belt.
-            if (snapDir == exitDir)
-                SuggestedRotation = belt.transform.rotation;
-            else
-                SuggestedRotation = Quaternion.LookRotation(snapDir);
+            // Keep snapped belts on the exact same plane as the source belt. Do not
+            // grid-round Y from the hit point, otherwise side lanes can jump upward
+            // as if they were placed on top of the existing belt.
+            SuggestedPosition = belt.transform.position + snapDir.normalized * gridSize;
+
+            // Keep side lanes parallel to the source belt. Turning happens through
+            // explicit corner/ramp variants, not accidental side snapping.
+            SuggestedRotation = belt.transform.rotation;
         }
 
         private Vector3 SnapToGrid(Vector3 worldPos)

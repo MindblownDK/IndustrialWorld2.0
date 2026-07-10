@@ -1,6 +1,6 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
---- !u!1 &1100266355528598279
+--- !u!1 &23111524436773001
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -8,192 +8,9 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 8418930053922993172}
-  - component: {fileID: 8966455028287282022}
-  - component: {fileID: 4892188921941051291}
-  - component: {fileID: 1690476068833436068}
-  - component: {fileID: 6323528813961864079}
-  - component: {fileID: 5967353153155094380}
-  - component: {fileID: 6195069946386314976}
-  m_Layer: 0
-  m_Name: ElectricFurnace
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &8418930053922993172
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1100266355528598279}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children:
-  - {fileID: 3978394506930831945}
-  - {fileID: 2163236310150244410}
-  - {fileID: 7373894766444487722}
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!65 &8966455028287282022
-BoxCollider:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1100266355528598279}
-  m_Material: {fileID: 0}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_LayerOverridePriority: 0
-  m_IsTrigger: 0
-  m_ProvidesContacts: 0
-  m_Enabled: 1
-  serializedVersion: 3
-  m_Size: {x: 1.2, y: 1.1, z: 1.2}
-  m_Center: {x: 0, y: 0.52, z: 0}
---- !u!114 &4892188921941051291
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1100266355528598279}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 39aaf583ef1899d44a6d552b40d2375c, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Crafting.CraftingStation
-  tier: 3
-  displayName: Electric Furnace
---- !u!114 &1690476068833436068
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1100266355528598279}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 04cec34cc4f1e1d47a08090bcd4f29aa, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.PortConfig
-  ports:
-  - face: 0
-    direction: 2
-    networkType: 0
-    enabled: 1
-  - face: 1
-    direction: 0
-    networkType: 0
-    enabled: 1
-  - face: 2
-    direction: 0
-    networkType: 0
-    enabled: 1
-  - face: 3
-    direction: 0
-    networkType: 0
-    enabled: 1
-  - face: 4
-    direction: 0
-    networkType: 0
-    enabled: 1
-  - face: 5
-    direction: 0
-    networkType: 0
-    enabled: 1
-  portIndicatorSize: 0.4
-  showPortIndicators: 1
---- !u!114 &6323528813961864079
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1100266355528598279}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9eacd68ef9a141ae95f225d895db1c7b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.ItemPortRouting
-  pushInterval: 0.5
-  pushPerTick: 8
-  pipeConnectRadius: 1.6
-  distribution: 0
---- !u!114 &5967353153155094380
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1100266355528598279}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 264cd4a92e84c1646b240458dce9cb99, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Crafting.ElectricFurnace
-  knownRecipes:
-  - {fileID: 11400000, guid: a3e6a0fd49b30fe459609b9f73f21d2e, type: 2}
-  - {fileID: 11400000, guid: eddd94469ac7840459dad0055c4fc6a6, type: 2}
-  - {fileID: 11400000, guid: 9ad0b50ffd1d421458eaf8226fb02215, type: 2}
-  - {fileID: 11400000, guid: 3319979ee7755aa4f9f9c6d2a444294f, type: 2}
-  inputC:
-    _name: Container
-    _slots: []
-    _minSize: 1
-  outputC:
-    _name: Container
-    _slots: []
-    _minSize: 1
-  upgradeC:
-    _name: Container
-    _slots: []
-    _minSize: 1
-  baseWattsPerSecond: 200
-  idleWattsPerSecond: 5
-  userEnabled: 1
-  autoPull: 0
-  autoPullRadius: 4
---- !u!114 &6195069946386314976
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1100266355528598279}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b231df31f45343346a2b14ed69ac7e7a, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Power.PowerConsumer
-  connectRadius: 1.6
-  requireGridAlignedNeighbours: 0
-  gridSize: 1
-  connectionBlockingLayers:
-    serializedVersion: 2
-    m_Bits: 4294967295
-  wattsPerSecond: 100
---- !u!1 &2533368603953060360
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 7373894766444487722}
-  - component: {fileID: 6118831809033706003}
-  - component: {fileID: 5582484997663407478}
+  - component: {fileID: 4977408854304158604}
+  - component: {fileID: 6211049880308408186}
+  - component: {fileID: 4123082666297493487}
   m_Layer: 0
   m_Name: Generated_TopVent
   m_TagString: Untagged
@@ -201,36 +18,36 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &7373894766444487722
+--- !u!4 &4977408854304158604
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2533368603953060360}
+  m_GameObject: {fileID: 23111524436773001}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 1, z: 0}
   m_LocalScale: {x: 0.74, y: 0.08, z: 0.74}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 8418930053922993172}
+  m_Father: {fileID: 7590255474813415980}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!33 &6118831809033706003
+--- !u!33 &6211049880308408186
 MeshFilter:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2533368603953060360}
+  m_GameObject: {fileID: 23111524436773001}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
---- !u!23 &5582484997663407478
+--- !u!23 &4123082666297493487
 MeshRenderer:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2533368603953060360}
+  m_GameObject: {fileID: 23111524436773001}
   m_Enabled: 1
   m_CastShadows: 1
   m_ReceiveShadows: 1
@@ -273,7 +90,7 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
---- !u!1 &4095008710055764762
+--- !u!1 &1646813420360528736
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -281,9 +98,9 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 2163236310150244410}
-  - component: {fileID: 7841114226712825003}
-  - component: {fileID: 7644005468284823993}
+  - component: {fileID: 5495184827172566320}
+  - component: {fileID: 965229354299238468}
+  - component: {fileID: 1142448315512974158}
   m_Layer: 0
   m_Name: Generated_HeaterWindow
   m_TagString: Untagged
@@ -291,36 +108,36 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &2163236310150244410
+--- !u!4 &5495184827172566320
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4095008710055764762}
+  m_GameObject: {fileID: 1646813420360528736}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0.5, z: -0.59}
   m_LocalScale: {x: 0.58, y: 0.34, z: 0.04}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 8418930053922993172}
+  m_Father: {fileID: 7590255474813415980}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!33 &7841114226712825003
+--- !u!33 &965229354299238468
 MeshFilter:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4095008710055764762}
+  m_GameObject: {fileID: 1646813420360528736}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
---- !u!23 &7644005468284823993
+--- !u!23 &1142448315512974158
 MeshRenderer:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4095008710055764762}
+  m_GameObject: {fileID: 1646813420360528736}
   m_Enabled: 1
   m_CastShadows: 1
   m_ReceiveShadows: 1
@@ -363,7 +180,7 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
---- !u!1 &5291044595015784944
+--- !u!1 &6916481239175357443
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -371,9 +188,215 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 3978394506930831945}
-  - component: {fileID: 7258147635010432687}
-  - component: {fileID: 2294406724836962171}
+  - component: {fileID: 7590255474813415980}
+  - component: {fileID: 1138979040715774433}
+  - component: {fileID: 8177651629585408005}
+  - component: {fileID: 170034972077666780}
+  - component: {fileID: 7577586408117415576}
+  - component: {fileID: 6682048301844866589}
+  - component: {fileID: 2703431627080544507}
+  - component: {fileID: 5310291474431373584}
+  m_Layer: 0
+  m_Name: ElectricFurnace
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7590255474813415980
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6916481239175357443}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 8893785698230411380}
+  - {fileID: 5495184827172566320}
+  - {fileID: 4977408854304158604}
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!65 &1138979040715774433
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6916481239175357443}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 1.2, y: 1.1, z: 1.2}
+  m_Center: {x: 0, y: 0.52, z: 0}
+--- !u!114 &8177651629585408005
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6916481239175357443}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 39aaf583ef1899d44a6d552b40d2375c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Crafting.CraftingStation
+  tier: 3
+  displayName: Electric Furnace
+--- !u!114 &170034972077666780
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6916481239175357443}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 04cec34cc4f1e1d47a08090bcd4f29aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.PortConfig
+  ports:
+  - face: 0
+    direction: 2
+    networkType: 0
+    enabled: 1
+  - face: 1
+    direction: 0
+    networkType: 0
+    enabled: 1
+  - face: 2
+    direction: 0
+    networkType: 0
+    enabled: 1
+  - face: 3
+    direction: 0
+    networkType: 0
+    enabled: 1
+  - face: 4
+    direction: 0
+    networkType: 0
+    enabled: 1
+  - face: 5
+    direction: 0
+    networkType: 0
+    enabled: 1
+  portIndicatorSize: 0.4
+  showPortIndicators: 1
+--- !u!114 &7577586408117415576
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6916481239175357443}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9eacd68ef9a141ae95f225d895db1c7b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.ItemPortRouting
+  pushInterval: 0.5
+  pushPerTick: 8
+  pipeConnectRadius: 1.6
+  distribution: 0
+--- !u!114 &6682048301844866589
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6916481239175357443}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 264cd4a92e84c1646b240458dce9cb99, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Crafting.ElectricFurnace
+  knownRecipes:
+  - {fileID: 11400000, guid: a3e6a0fd49b30fe459609b9f73f21d2e, type: 2}
+  - {fileID: 11400000, guid: eddd94469ac7840459dad0055c4fc6a6, type: 2}
+  - {fileID: 11400000, guid: 9ad0b50ffd1d421458eaf8226fb02215, type: 2}
+  - {fileID: 11400000, guid: 3319979ee7755aa4f9f9c6d2a444294f, type: 2}
+  inputC:
+    _name: Container
+    _slots: []
+    _minSize: 1
+  outputC:
+    _name: Container
+    _slots: []
+    _minSize: 1
+  upgradeC:
+    _name: Container
+    _slots: []
+    _minSize: 1
+  baseWattsPerSecond: 200
+  idleWattsPerSecond: 5
+  userEnabled: 1
+  autoPull: 0
+  autoPullRadius: 4
+--- !u!114 &2703431627080544507
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6916481239175357443}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b231df31f45343346a2b14ed69ac7e7a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Power.PowerConsumer
+  connectRadius: 1.6
+  requireGridAlignedNeighbours: 0
+  gridSize: 1
+  connectionBlockingLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  wattsPerSecond: 100
+--- !u!114 &5310291474431373584
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6916481239175357443}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8b3779fa1c224324900766b0130603ea, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Simulation.FactoryStatusIndicator
+  rendererChildName: Generated_HeaterWindow
+  lightChildName: 
+  refreshInterval: 0.2
+  pulseAmount: 0.18
+  pulseSpeed: 2
+  idleColor: {r: 1, g: 0.42, b: 0.12, a: 1}
+  activeColor: {r: 0.22, g: 0.78, b: 0.42, a: 1}
+  blockedColor: {r: 0.95, g: 0.18, b: 0.14, a: 1}
+  offlineColor: {r: 0.18, g: 0.72, b: 0.88, a: 1}
+  disabledColor: {r: 0.25, g: 0.26, b: 0.28, a: 1}
+--- !u!1 &8855382716742722278
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 8893785698230411380}
+  - component: {fileID: 8961923948976273766}
+  - component: {fileID: 8728781010871921093}
   m_Layer: 0
   m_Name: Generated_Shell
   m_TagString: Untagged
@@ -381,36 +404,36 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &3978394506930831945
+--- !u!4 &8893785698230411380
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5291044595015784944}
+  m_GameObject: {fileID: 8855382716742722278}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0.48, z: 0}
   m_LocalScale: {x: 1.15, y: 0.95, z: 1.15}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 8418930053922993172}
+  m_Father: {fileID: 7590255474813415980}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!33 &7258147635010432687
+--- !u!33 &8961923948976273766
 MeshFilter:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5291044595015784944}
+  m_GameObject: {fileID: 8855382716742722278}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
---- !u!23 &2294406724836962171
+--- !u!23 &8728781010871921093
 MeshRenderer:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5291044595015784944}
+  m_GameObject: {fileID: 8855382716742722278}
   m_Enabled: 1
   m_CastShadows: 1
   m_ReceiveShadows: 1

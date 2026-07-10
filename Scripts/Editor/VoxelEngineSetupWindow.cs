@@ -5954,6 +5954,11 @@ root =>
                         VoxelEngine.Simulation.ConveyorSpeed.Express => 5.4f,
                         _ => 2.2f
                     };
+                    var indicator = EnsureComponent<VoxelEngine.Simulation.FactoryStatusIndicator>(root);
+                    indicator.rendererChildName = "Generated_Arrow";
+                    indicator.idleColor = accent;
+                    indicator.activeColor = new Color(0.22f, 0.78f, 0.42f);
+                    indicator.blockedColor = new Color(0.95f, 0.18f, 0.14f);
                 });
             }
 
@@ -5986,6 +5991,11 @@ root =>
                 chute.shape = VoxelEngine.Simulation.ChuteShape.Straight;
                 chute.maxItems = 6;
                 chute.slideSpeed = 3.2f;
+                var indicator = EnsureComponent<VoxelEngine.Simulation.FactoryStatusIndicator>(root);
+                indicator.rendererChildName = "Generated_DownArrow";
+                indicator.idleColor = new Color(0.18f, 0.72f, 0.88f);
+                indicator.activeColor = new Color(0.22f, 0.78f, 0.42f);
+                indicator.blockedColor = new Color(0.95f, 0.18f, 0.14f);
             });
             var blockChute = ConfigureBlock(FAC_ITEMS, "Block_ConveyorChute", "Conveyor Chute", "Downward hopper-chute for dropping items from machines or belts to a lower output.", new Color(0.18f, 0.72f, 0.88f), chutePrefab, "Factory", 180);
 
@@ -6026,6 +6036,12 @@ root =>
                 animator.pulseLightName = "Generated_FunnelPulse";
                 animator.pulseAmplitude = 0.30f;
                 animator.pulseFrequency = 2.4f;
+                var indicator = EnsureComponent<VoxelEngine.Simulation.FactoryStatusIndicator>(root);
+                indicator.rendererChildName = "Generated_DirectionalGate";
+                indicator.lightChildName = "Generated_FunnelPulse";
+                indicator.idleColor = new Color(0.95f, 0.62f, 0.18f);
+                indicator.activeColor = new Color(0.22f, 0.78f, 0.42f);
+                indicator.blockedColor = new Color(0.95f, 0.18f, 0.14f);
             });
             var blockFunnel = ConfigureBlock(FAC_ITEMS, "Block_Funnel", "Funnel", "Directional logistical hopper for loading belts into inventories or unloading inventories onto belts.", new Color(0.95f, 0.62f, 0.18f), funnelPrefab, "Factory", 180);
 
@@ -6057,6 +6073,10 @@ root =>
                 crusher.idleWattsPerSecond = 8f;
                 var power = EnsureComponent<VoxelEngine.Power.PowerConsumer>(root);
                 power.connectRadius = 1.6f;
+                var indicator = EnsureComponent<VoxelEngine.Simulation.FactoryStatusIndicator>(root);
+                indicator.rendererChildName = "Generated_StatusStrip";
+                indicator.idleColor = new Color(0.92f, 0.45f, 0.12f);
+                indicator.activeColor = new Color(0.22f, 0.78f, 0.42f);
             });
             var blockCrusher = ConfigureBlock(FAC_ITEMS, "Block_Crusher", "Crusher", "Powered machine that crushes stone and ores into higher-yield outputs.", new Color(0.92f, 0.45f, 0.12f), crusherPrefab, "Factory", 450);
 
@@ -6116,6 +6136,12 @@ root =>
                     animator.pulseLightName = "Generated_AssemblerStatusLight";
                     animator.pulseAmplitude = 0.25f;
                     animator.pulseFrequency = 1.8f;
+                    var indicator = EnsureComponent<VoxelEngine.Simulation.FactoryStatusIndicator>(root);
+                    indicator.rendererChildName = "Generated_StatusPanel";
+                    indicator.lightChildName = "Generated_AssemblerStatusLight";
+                    indicator.idleColor = accent;
+                    indicator.activeColor = new Color(0.22f, 0.78f, 0.42f);
+                    indicator.offlineColor = new Color(0.18f, 0.72f, 0.88f);
                 });
             }
 
@@ -6152,6 +6178,11 @@ root =>
                 furnace.idleWattsPerSecond = 5f;
                 var power = EnsureComponent<VoxelEngine.Power.PowerConsumer>(root);
                 power.connectRadius = 1.6f;
+                var indicator = EnsureComponent<VoxelEngine.Simulation.FactoryStatusIndicator>(root);
+                indicator.rendererChildName = "Generated_HeaterWindow";
+                indicator.idleColor = new Color(1.0f, 0.42f, 0.12f);
+                indicator.activeColor = new Color(0.22f, 0.78f, 0.42f);
+                indicator.offlineColor = new Color(0.18f, 0.72f, 0.88f);
             });
             var blockElectricFurnace = ConfigureBlock(FAC_ITEMS, "Block_ElectricFurnace", "Electric Furnace", "Powered smelter that uses electricity instead of fuel and supports upgrade modules.", new Color(1.0f, 0.42f, 0.12f), electricFurnacePrefab, "Factory", 460);
 
