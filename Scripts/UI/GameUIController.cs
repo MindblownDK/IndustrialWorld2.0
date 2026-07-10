@@ -227,7 +227,7 @@ namespace VoxelEngine.UI
             { _machineRefreshAccum = 0f; Refresh(); }
             ResearchHud.Tick();
             TickUpgradePrompt();
-            
+
             VoxelEngine.GridSystem.UI.BlockRotationHud.Tick();
             VoxelEngine.GridSystem.UI.ShipToolHud.Tick();
 
@@ -312,7 +312,7 @@ namespace VoxelEngine.UI
                 else if (!UIState.IsBlocking && !_justClosedThisFrame)
                 {
                     // While piloting a cockpit, "I" opens the master ship terminal
-                    // instead of the player inventory (Space-Engineers style).
+                    // instead of the player inventory (grid systems style).
                     var controlledGrid = VoxelEngine.GridSystem.GridCockpit.ActiveControlGrid;
                     if (controlledGrid != null) OpenGridTerminal(controlledGrid);
                     else OpenInventory();
@@ -611,7 +611,7 @@ namespace VoxelEngine.UI
             _openVoltageStation = null;
             _inventoryOpen = true;
             UnwatchAllContainers();
-            
+
             if (machine is IVoltageStation vs)
             {
                 _openVoltageStation = vs;
@@ -690,7 +690,7 @@ namespace VoxelEngine.UI
             Refresh();
         }
 
-        /// <summary>Open the Space-Engineers-style master terminal for a whole grid:
+        /// <summary>Open the grid-terminal master terminal for a whole grid:
         /// a tabbed view of every station + an All-Storage tab spanning all containers.</summary>
         public void OpenGridTerminal(VoxelEngine.GridSystem.GridEntity grid)
         {
@@ -805,7 +805,7 @@ namespace VoxelEngine.UI
             PlayerHud.EnsureMounted(_root);
             ResearchHud.EnsureMounted(_root);
             UpgradePromptHud.EnsureMounted(_root);
-            
+
             VoxelEngine.GridSystem.UI.BlockRotationHud.EnsureMounted(_root);
             VoxelEngine.GridSystem.UI.ShipToolHud.EnsureMounted(_root);
             RustStyleHud.EnsureMounted(_root);
@@ -920,7 +920,7 @@ namespace VoxelEngine.UI
                 else if (_openStorageTerminal  != null) _root.Add(VoxelEngine.Storage.StorageUI.BuildTerminalPanel(_openStorageTerminal, BuildSlot, inventory));
                 else if (_openServerRack       != null) _root.Add(VoxelEngine.Storage.StorageUI.BuildServerPanel(_openServerRack, BuildSlot));
                 else if (_openPatternTerminal  != null) _root.Add(VoxelEngine.Storage.StorageUI.BuildPatternTerminalPanel(_openPatternTerminal, recipeRegistry, inventory));
-                else if (_openCraftTerminal    != null) _root.Add(VoxelEngine.Storage.StorageUI.BuildCraftingTerminalPanel(_openCraftTerminal, inventory));
+                else if (_openCraftTerminal    != null) _root.Add(VoxelEngine.Storage.StorageUI.CreateCraftingTerminalPanel(_openCraftTerminal, inventory));
                 else if (_openImporter         != null) _root.Add(VoxelEngine.Storage.StorageUI.BuildImporterPanel(_openImporter, BuildSlot));
                 else if (_openExporter         != null) _root.Add(VoxelEngine.Storage.StorageUI.BuildExporterPanel(_openExporter, BuildSlot));
                 else if (_openDiskManipulator  != null) _root.Add(VoxelEngine.Storage.StorageUI.BuildDiskManipulatorPanel(_openDiskManipulator, BuildSlot));
@@ -1013,8 +1013,11 @@ namespace VoxelEngine.UI
         {
             var panel = MakePanel();
             panel.style.position = Position.Absolute;
-            panel.style.top = 32; panel.style.bottom = 96;
-            panel.style.left = 32; panel.style.width = 460;
+            panel.style.top = 24; panel.style.bottom = 92;
+            panel.style.left = 18;
+            panel.style.width = new StyleLength(new Length(30f, LengthUnit.Percent));
+            panel.style.minWidth = 320;
+            panel.style.maxWidth = 460;
             root.Add(panel);
 
             panel.Add(MakeTitle("Inventory"));
@@ -1151,14 +1154,16 @@ namespace VoxelEngine.UI
             }
             else
             {
-                panel.style.top      = 32;
-                panel.style.bottom   = 96;
-                panel.style.left     = 508;   // just right of the 460-wide inventory panel (left=32)
-                // When a right-side container/machine panel is open it occupies the
-                // far-right ~540px, so we stop short of it; otherwise we stretch to the
-                // screen edge. Either way the layout stays responsive.
-                panel.style.right    = rightPanelOpen ? 568 : 28;
-                panel.style.maxWidth = 760;   // but never absurdly wide on ultrawide displays
+                panel.style.top      = 24;
+                panel.style.bottom   = 92;
+                panel.style.left     = new StyleLength(new Length(33f, LengthUnit.Percent));
+                // Keep the center panel in the safe gap between the responsive
+                // inventory and right-side machine panels.
+                panel.style.right    = rightPanelOpen
+                    ? new StyleLength(new Length(33f, LengthUnit.Percent))
+                    : 18;
+                panel.style.minWidth = 320;
+                panel.style.maxWidth = 760;
             }
             panel.style.overflow = Overflow.Hidden;
             root.Add(panel);
@@ -1467,8 +1472,11 @@ namespace VoxelEngine.UI
         {
             var panel = MakePanel();
             panel.style.position = Position.Absolute;
-            panel.style.top = 32; panel.style.bottom = 96;
-            panel.style.right = 32; panel.style.width = 520;   // room for the 2-column item-port grid
+            panel.style.top = 24; panel.style.bottom = 92;
+            panel.style.right = 18;
+            panel.style.width = new StyleLength(new Length(30f, LengthUnit.Percent));
+            panel.style.minWidth = 320;
+            panel.style.maxWidth = 520;   // room for the 2-column item-port grid
             root.Add(panel);
 
             panel.Add(MakeTitle(c.Name));
@@ -1660,9 +1668,7 @@ namespace VoxelEngine.UI
         {
             f.EnsureContainers();
             var panel = MakePanel();
-            panel.style.position = Position.Absolute;
-            panel.style.top = 32; panel.style.bottom = 96;
-            panel.style.right = 32; panel.style.width = 480;
+            DockRightPanel(panel, 480);
             root.Add(panel);
 
             // ===== Header: title + status pill =====
@@ -1860,9 +1866,7 @@ namespace VoxelEngine.UI
             }
             f.EnsureContainers();
             var panel = MakePanel();
-            panel.style.position = Position.Absolute;
-            panel.style.top = 32; panel.style.bottom = 96;
-            panel.style.right = 32; panel.style.width = 460;
+            DockRightPanel(panel, 460);
             root.Add(panel);
 
             var headerRow = new VisualElement(); headerRow.style.flexDirection = FlexDirection.Row;
@@ -1967,9 +1971,7 @@ namespace VoxelEngine.UI
         {
             ef.EnsureContainers();
             var panel = MakePanel();
-            panel.style.position = Position.Absolute;
-            panel.style.top = 32; panel.style.bottom = 96;
-            panel.style.right = 32; panel.style.width = 480;
+            DockRightPanel(panel, 480);
             root.Add(panel);
 
             // ===== Header: title + status pill + wattage =====
@@ -2154,9 +2156,7 @@ namespace VoxelEngine.UI
         private void BuildRightStationCrafting(VisualElement root, CraftingStation st)
         {
             var panel = MakePanel();
-            panel.style.position = Position.Absolute;
-            panel.style.top = 32; panel.style.bottom = 96;
-            panel.style.right = 32; panel.style.width = 460;
+            DockRightPanel(panel, 460);
             root.Add(panel);
 
             panel.Add(MakeTitle(st.displayName));
@@ -3216,6 +3216,17 @@ namespace VoxelEngine.UI
         // ============================================================
         // ── Internal UI Helpers (delegate to UITheme for full consistency) ──────
         private static VisualElement MakePanel()           => UITheme.Panel();
+        private static void DockRightPanel(VisualElement panel, float maxWidth = 500f)
+        {
+            panel.style.position = Position.Absolute;
+            panel.style.top = 24;
+            panel.style.bottom = 92;
+            panel.style.right = 18;
+            panel.style.width = new StyleLength(new Length(30f, LengthUnit.Percent));
+            panel.style.minWidth = 320;
+            panel.style.maxWidth = maxWidth;
+            panel.style.overflow = Overflow.Hidden;
+        }
         private static Label         MakeTitle(string t)   => UITheme.Title(t);
         private static Label         MakeSubtitle(string t) => UITheme.Subtitle(t);
         private static Label         MakeMutedLabel(string t) => UITheme.Muted(t);
@@ -3284,9 +3295,7 @@ namespace VoxelEngine.UI
         {
             ps.EnsureContainers();
             var p = MakePanel();
-            p.style.position = Position.Absolute;
-            p.style.top = 28; p.style.bottom = 100;
-            p.style.right = 28; p.style.width = 484;
+            DockRightPanel(p, 484);
 
             var (hdr, _, _, _) = UITheme.HeaderRow("🔌 Powerstation",
                 ps.TotalWatts > 0 ? "ACTIVE" : "EMPTY",

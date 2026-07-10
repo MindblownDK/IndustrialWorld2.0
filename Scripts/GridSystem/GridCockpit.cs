@@ -352,7 +352,7 @@ namespace VoxelEngine.GridSystem
                 Vector3 baseDir = baseRadius > 0.001f ? toCockpit / baseRadius : transform.forward;
                 Vector3 offset = baseDir * (baseRadius + _cameraDistance);
 
-                // Full 360° spherical orbit around the grid center (Space-Engineers-2 style).
+                // Full 360° spherical orbit around the grid center (full-orbit camera style).
                 // Yaw rotates around the grid's up axis, pitch rotates around the camera's right axis.
                 if (Mathf.Abs(_orbitYaw) > 0.001f)
                     offset = Quaternion.AngleAxis(_orbitYaw, transform.up) * offset;
@@ -468,7 +468,7 @@ namespace VoxelEngine.GridSystem
             }
         }
 
-        /// <summary>Open the Space-Engineers-style master terminal for this grid.</summary>
+        /// <summary>Open the grid-terminal master terminal for this grid.</summary>
         public void OpenTerminal()
         {
             VoxelEngine.UI.GameUIController.Instance?.OpenGridTerminal(Grid);

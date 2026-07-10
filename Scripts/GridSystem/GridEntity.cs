@@ -499,7 +499,7 @@ namespace VoxelEngine.GridSystem
 
         // ── Thrust Application ─────────────────────────────────────
         //
-        // PER-DIRECTION thrust (Space-Engineers style). The pilot's WASD/Space/Ctrl
+        // PER-DIRECTION thrust (grid systems style). The pilot's WASD/Space/Ctrl
         // input is expressed in COCKPIT-LOCAL axes (x=right, y=up, z=forward). For each
         // requested axis we sum ONLY the thrusters that actually push the ship that way,
         // then apply real force (N) → the ship moves exactly where the cockpit is facing

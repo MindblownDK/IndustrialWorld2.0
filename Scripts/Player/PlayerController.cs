@@ -204,7 +204,7 @@ namespace VoxelEngine.Player
 
             if (GameSettings.FlyMode)
             {
-                // ── 6DOF flight look (Space-Engineers style) ──────────────
+                // ── 6DOF flight look ─────────────────────────────────────
                 // Mouse X = yaw about LOCAL up, Mouse Y = pitch about LOCAL right.
                 float yaw   = d.x * sens;
                 float pitch = -d.y * sens * invert;
@@ -471,14 +471,11 @@ namespace VoxelEngine.Player
 
             // 6DOF movement relative to the body's full orientation (includes pitch + roll).
             //   WASD   = forward/left/back/right
-            //   Space  = up, LeftCtrl = down  (relative to where you're looking/rolled)
-            //   Q / E  = roll  (handled in the fly-look branch)
+            //   Space = up, C = down (relative to where you're looking/rolled)
+            //   Q / E = roll (handled in the fly-look branch)
             Vector3 wishDir = transform.right * wish.x + transform.forward * wish.y;
             if (GameSettings.IsHeld(InputAction.Up)) wishDir += transform.up;
-            // Suppress Ctrl-fly-down while holding a grid block so Ctrl+Scroll rotates
-            // the block instead of sinking the player.
-            if (GameSettings.IsHeld(InputAction.Down) && !VoxelEngine.GridSystem.GridBuilder.HoldingGridBlock)
-                wishDir -= transform.up;
+            if (GameSettings.IsHeld(InputAction.Crouch)) wishDir -= transform.up;
 
             float spd = flySpeed * (GameSettings.IsHeld(InputAction.Sprint) ? flySprintMultiplier : 1f);
             Vector3 wishVel = wishDir.sqrMagnitude > 0.0001f ? wishDir.normalized * spd : Vector3.zero;

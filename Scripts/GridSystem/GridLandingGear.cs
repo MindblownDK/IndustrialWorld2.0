@@ -1,6 +1,6 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridLandingGear.cs
 //
-// Landing gear with Space-Engineers-style magnetic locking. When auto-lock is on
+// Landing gear with grid-terminal magnetic locking. When auto-lock is on
 // it snaps the grid to whatever solid surface it touches (ground, base, another
 // ship) via a FixedJoint. Lock strength is the joint break force.
 

@@ -457,7 +457,7 @@ namespace VoxelEngine.Storage
         // ════════════════════════════════════════════════════════════
         //                   CRAFTING TERMINAL
         // ════════════════════════════════════════════════════════════
-        public static VisualElement BuildCraftingTerminalPanel(
+        public static VisualElement CreateCraftingTerminalPanel(
             CraftingTerminal terminal,
             Inventory playerInv)
         {

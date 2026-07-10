@@ -80,15 +80,17 @@ namespace VoxelEngine.UI
             return v;
         }
 
-        /// <summary>Right-side machine panel — fixed position, full-height, 480px wide.</summary>
+        /// <summary>Right-side machine panel — safe-screen responsive dock.</summary>
         public static VisualElement MachinePanel()
         {
             var p = Panel();
             p.style.position = Position.Absolute;
-            p.style.top      = 28;
-            p.style.bottom   = 100;
-            p.style.right    = 28;
-            p.style.width    = 484;
+            p.style.top      = 24;
+            p.style.bottom   = 92;
+            p.style.right    = 18;
+            p.style.width    = new StyleLength(new Length(30f, LengthUnit.Percent));
+            p.style.minWidth = 320;
+            p.style.maxWidth = 520;
             p.style.overflow = Overflow.Hidden;
             return p;
         }

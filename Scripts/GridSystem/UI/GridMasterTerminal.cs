@@ -1,6 +1,6 @@
 // Assets/Scripts/VoxelEngine/GridSystem/UI/GridMasterTerminal.cs
 //
-// Space-Engineers-style ship CONTROL TERMINAL. A right-side configuration screen:
+// grid-terminal ship CONTROL TERMINAL. A right-side configuration screen:
 // left column lists every functional block on the grid; clicking one shows its
 // full panel (stats, tanks, power, inventory) on the right plus an on/off toggle.
 // Includes runtime block groups, selection, hiding, and all-grid storage.

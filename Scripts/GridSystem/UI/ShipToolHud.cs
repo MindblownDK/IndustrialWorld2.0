@@ -57,7 +57,7 @@ namespace VoxelEngine.GridSystem.UI
             _bar.style.display = show ? DisplayStyle.Flex : DisplayStyle.None;
             if (!show) { _lastSig = "\u0000"; return; }
             // GROUPED toolbar: one entry per tool TYPE (all drills = one "Drill" group, all
-            // weapons = one "Weapon" group), Space-Engineers style.
+            // weapons = one "Weapon" group), grid systems style.
             var groups = grid.GetToolGroups();
             if (groups.Count == 0) { if (_bar.childCount > 0) _bar.Clear(); _lastSig = "empty"; return; }
             int sel = ((grid.SelectedToolIndex % groups.Count) + groups.Count) % groups.Count;

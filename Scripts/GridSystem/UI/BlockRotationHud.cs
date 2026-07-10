@@ -1,6 +1,6 @@
 // Assets/Scripts/VoxelEngine/GridSystem/UI/BlockRotationHud.cs
 //
-// Top-right helper box (Space-Engineers style) shown while holding a grid block:
+// Top-right helper box (grid systems style) shown while holding a grid block:
 // explains the rotation controls. Hides the minimap while visible.
 
 using UnityEngine;

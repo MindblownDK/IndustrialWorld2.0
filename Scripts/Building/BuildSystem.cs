@@ -68,6 +68,8 @@ namespace VoxelEngine.Building
 #endif
             if (ctrlHeld && Mathf.Abs(wheel) > 0.01f && _ghost != null)
                 _ghostYaw += Mathf.Sign(wheel) * yawStep;
+            if (GameSettings.WasPressed(InputAction.BuildRotate) && _ghost != null)
+                _ghostYaw += yawStep;
 
             UpdateGhost();
 
@@ -204,10 +206,11 @@ namespace VoxelEngine.Building
                 else
                     snapDirection = targetBelt.transform.forward * Mathf.Sign(Mathf.Approximately(localHit.z, 0f) ? 1f : localHit.z);
 
-                // Keep belts level and parallel to the existing belt. Side placement is
-                // meant to create a parallel lane, not a rotated/ramped segment.
+                // Keep belts level. Rotation remains player-controlled so side
+                // placement can create a parallel lane, feed into the target belt,
+                // or make a clean turn with the BuildRotate key.
                 pos = targetBelt.transform.position + snapDirection.normalized * Mathf.Max(gridSize, 1f);
-                rot = targetBelt.transform.rotation;
+                rot = Quaternion.AngleAxis(_ghostYaw, targetBelt.transform.up) * targetBelt.transform.rotation;
                 return true;
             }
 

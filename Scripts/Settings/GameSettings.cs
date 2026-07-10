@@ -19,7 +19,7 @@ namespace VoxelEngine.Settings
         Forward, Back, Left, Right, Up, Down,
         Sprint, Crouch, Jump,
         Mine, Build, Pause, ToggleFly,
-        RollLeft, RollRight,   // 6DOF flight roll (Q / E) — Space-Engineers style
+        RollLeft, RollRight,   // 6DOF flight roll (Q / E) — grid systems style
         Inventory, Interact, BuildToggleGrid, BuildRotate, Research, BuildWheel, DropItem,
         ToolCycle,
         Hotbar1, Hotbar2, Hotbar3, Hotbar4, Hotbar5,
@@ -124,7 +124,7 @@ namespace VoxelEngine.Settings
             InputAction.Left            => "A",
             InputAction.Right           => "D",
             InputAction.Up              => "Space",
-            InputAction.Down            => "LeftCtrl",
+            InputAction.Down            => "C",
             InputAction.Sprint          => "LeftShift",
             InputAction.Crouch          => "C",
             InputAction.Jump            => "Space",
@@ -232,9 +232,10 @@ namespace VoxelEngine.Settings
             if (ps == null) return;
             ps.scaleMode = UnityEngine.UIElements.PanelScaleMode.ScaleWithScreenSize;
             ps.referenceResolution = new Vector2Int(1920, 1080);
-            // Do not force PanelSettings.screenMatchMode here. Designers must be able
-            // to set MenuPanelSettings.asset to Shrink/Fit without the main menu
-            // changing it back at runtime.
+            // Force shrink-fit so fixed premium panels never render half outside
+            // smaller windows or non-16:9 editor game views.
+            ps.screenMatchMode = UnityEngine.UIElements.PanelScreenMatchMode.Shrink;
+            ps.match = 0.5f;
             ps.referenceDpi = 96;
             ps.fallbackDpi = 96;
         }

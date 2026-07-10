@@ -2,7 +2,7 @@
 //
 // Tracks every item store on a grid (cargo containers, docking ports, …) so the
 // whole ship behaves as one storage system — the master terminal and item pipes
-// can see and move items across all of them, Space-Engineers style.
+// can see and move items across all of them, grid systems style.
 
 using System.Collections.Generic;
 using UnityEngine;

@@ -1,6 +1,6 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridWheel.cs
 //
-// Space-Engineers-style powered wheel/suspension block. Uses robust ground
+// grid-terminal powered wheel/suspension block. Uses robust ground
 // probing, powered drive force, steering, lateral tyre friction, visual wheel
 // spin, and authored wheel sizes (2x2, 3x3, 5x5).
 
