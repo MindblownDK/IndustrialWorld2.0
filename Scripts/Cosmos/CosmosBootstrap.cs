@@ -139,7 +139,7 @@ namespace VoxelEngine.Cosmos
             // support). We deliberately do NOT assign VoxelTerrain here — VoxelTerrain is a custom
             // Shader Graph that doesn't support alpha fade and renders purple at planet scale.
 
-            // ── Distant planet renderer (like Space Engineers — see other planets in the sky) ──
+            // ── Distant planet renderer (see other planets in the sky) ──
             // Needs a CosmicRegistry in the scene to know where the other bodies are.
             EnsureCosmicRegistry();
             var spaceGO = new GameObject("SpaceRenderer");

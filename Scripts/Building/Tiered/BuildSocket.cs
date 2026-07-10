@@ -33,7 +33,7 @@ namespace VoxelEngine.Building.Tiered
     {
         /// <summary>
         /// Returns true if a piece of `incoming` family can snap to a socket of `host` family on `side`.
-        /// Encodes the Rust-style placement rules in one place.
+        /// Encodes the tiered construction placement rules in one place.
         /// </summary>
         public static bool AreCompatible(BuildFamily host, SocketSide side, BuildFamily incoming)
         {

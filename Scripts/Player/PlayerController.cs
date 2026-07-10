@@ -3,7 +3,7 @@
 // Smooth FPS character controller with:
 //   • WASD + mouse look (sensitivity / FOV / invertY from GameSettings)
 //   • Sprint, Jump, hold-to-Crouch
-//   • Satisfactory-style SLIDE: pressing crouch while sprinting on the ground
+//   • momentum-based SLIDE: pressing crouch while sprinting on the ground
 //     gives an instant boost + low-friction slide that decays back to walk speed.
 //   • Optional FLY mode (toggleable via GameSettings.FlyMode or the ToggleFly key).
 //
@@ -42,7 +42,7 @@ namespace VoxelEngine.Player
         [Tooltip("Lets the player initiate a jump for a short window after walking off a ledge.")]
         public float coyoteTime = 0.12f;
 
-        [Header("Crouch / Slide (Satisfactory-style)")]
+        [Header("Crouch / Slide (momentum-based)")]
         [Tooltip("Stand-up height of the controller.")]
         public float standHeight = 1.85f;
         [Tooltip("Crouched height of the controller (camera lowers proportionally).")]
@@ -348,7 +348,7 @@ namespace VoxelEngine.Player
             // Write horizontal back, preserving the vertical (along-up) component.
             _velocity = horiz + Vector3.Project(_velocity, up);
 
-            // -- jump (allowed while sliding, like Satisfactory) --
+            // -- jump (allowed while sliding, while preserving slide momentum) --
             // Plain crouch with no slide = no jump (you'd just bonk your head).
             bool jumpAllowed = canCoyote && (!_crouched || _sliding);
             if (GameSettings.WasPressed(InputAction.Jump) && jumpAllowed
@@ -367,7 +367,7 @@ namespace VoxelEngine.Player
                 }
             }
 
-            // -- voxel water swim (Minecraft-style) --
+            // -- voxel water swim (voxel-style) --
             // While submerged: WASD swims in the look direction, Space rises,
             // Crouch dives. With no swim input the player slowly sinks, so water/oil
             // feels physical instead of freezing the character in place.

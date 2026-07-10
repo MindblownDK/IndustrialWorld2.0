@@ -92,7 +92,7 @@ namespace VoxelEngine.GridSystem
             if (container == null) container = new ItemContainer("Dock Buffer", slots);
         }
 
-        // ── Docking (magnetic lock via FixedJoint, like Space Engineers) ───────
+        // ── Docking (magnetic lock via FixedJoint) ───────
         private void FixedUpdate()
         {
             if (!Enabled || IsDocked || !autoDock || Grid == null || Grid.Body == null) return;

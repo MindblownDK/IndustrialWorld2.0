@@ -1,6 +1,6 @@
 // Assets/Scripts/VoxelEngine/Building/Tiered/HammerBuildWheel.cs
 //
-// Rust-style radial build wheel. Opens when holding Hammer and pressing the
+// tiered construction radial build wheel. Opens when holding Hammer and pressing the
 // BuildWheel key (default middle mouse or F). Shows building families in a
 // circular arrangement with cost displayed underneath each option.
 //

@@ -83,7 +83,7 @@ namespace VoxelEngine.GridSystem
             return (fwd,back,right,left,up,down);
         }
 
-        /// <summary>Tool groups the cockpit can select. Like Space Engineers, every drill on the
+        /// <summary>Tool groups the cockpit can select. Every drill on the
         /// ship acts as ONE "Drill" group and every weapon as ONE "Weapon" group — so the toolbar
         /// shows a single entry per type and firing it activates ALL blocks of that type at once.</summary>
         public enum ToolGroup { None = 0, Drill = 1, Weapon = 2 }

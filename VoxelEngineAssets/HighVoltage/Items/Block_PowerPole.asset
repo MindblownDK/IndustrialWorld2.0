@@ -12,19 +12,20 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9b76ccf0d2c60d942965b00c15422682, type: 3}
   m_Name: Block_PowerPole
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Items.BlockItem
-  itemId: iron_ore
-  displayName: Iron Ore
-  description: 
+  itemId: block_powerpole
+  displayName: Power Pole
+  description: Low-voltage pole for manual wire connections. Supports 6 links over
+    15 m.
   icon: {fileID: 0}
-  iconTint: {r: 1, g: 1, b: 1, a: 1}
-  maxStack: 999
-  massPerUnit: 1
-  category: Misc
+  iconTint: {r: 0.22, g: 0.78, b: 0.42, a: 1}
+  maxStack: 99
+  massPerUnit: 4
+  category: Power
   viewmodelPrefab: {fileID: 0}
-  placedPrefab: {fileID: 0}
+  placedPrefab: {fileID: 2969637470180917672, guid: 887c10835936ba945b74cde56d45b05f, type: 3}
   gridSize: {x: 1, y: 1, z: 1}
   allowStacking: 1
-  blockHealth: 100
-  miningTier: 0
+  blockHealth: 260
+  miningTier: 1
   placedMaterial: {fileID: 0}
   texture: {fileID: 0}

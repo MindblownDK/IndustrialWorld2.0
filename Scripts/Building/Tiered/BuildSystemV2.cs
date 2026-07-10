@@ -1,6 +1,6 @@
 // Assets/Scripts/VoxelEngine/Building/Tiered/BuildSystemV2.cs
 //
-// Rust-style tiered build system:
+// Tiered construction build system:
 //   * Holding a "BuildToken" item (one per family) shows a Wood-tier ghost preview.
 //   * Ghost snaps to the nearest BuildSocket within range; falls back to grid snap.
 //   * LMB places at Wood tier, consuming definition.placeCost from the player inventory.
@@ -125,7 +125,7 @@ namespace VoxelEngine.Building.Tiered
                 {
                     PayCost(def.placeCost);
                     Place(def, _ghostPos, _ghostRot);
-                    // Rust-style build feedback.
+                    // placement feedback.
                     var sb = new System.Text.StringBuilder();
                     if (def.placeCost?.items != null)
                         foreach (var ing in def.placeCost.items)

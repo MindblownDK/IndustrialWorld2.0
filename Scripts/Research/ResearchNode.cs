@@ -9,7 +9,7 @@ namespace VoxelEngine.Research
     public enum ResearchCategory { Environment, PlayerUpgrades }
 
     /// <summary>
-    /// Sub-category used by the Factorio-style ResearchUI to filter Environment
+    /// Sub-category used by the factory research ResearchUI to filter Environment
     /// nodes into thematic columns (Logistics, Production, Power, etc.).
     /// PlayerUpgrades nodes ignore this field and always live in the
     /// "Player Upgrades" tab.
@@ -52,7 +52,7 @@ namespace VoxelEngine.Research
 
         [Header("Category & Tree placement")]
         public ResearchCategory category = ResearchCategory.Environment;
-        [Tooltip("Sub-category used to filter the Factorio-style research UI into thematic tabs.")]
+        [Tooltip("Sub-category used to filter the factory research UI into thematic tabs.")]
         public ResearchSubCategory subCategory = ResearchSubCategory.General;
         [Range(1, 6)] public int tier = 1;
         public int column = 0;

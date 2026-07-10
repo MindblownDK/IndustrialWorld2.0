@@ -13,7 +13,7 @@
 // ║                                                                  ║
 // ║     • PipeStyle.Brass    — gas pipes (slim, polished brass)     ║
 // ║     • PipeStyle.Copper   — water/fluid pipes (fatter, copper)   ║
-// ║     • PipeStyle.Sleeve   — BuildCraft-style item pipes (sleeve  ║
+// ║     • PipeStyle.Sleeve   — sleeved industrial item pipes (sleeve  ║
 // ║                            + chunky terminal end-blocks)        ║
 // ║     • PipeStyle.WireArm  — cables (thinner shaft, joint domes)  ║
 // ╚══════════════════════════════════════════════════════════════════╝
@@ -51,7 +51,7 @@ namespace VoxelEngine.Networks
             public bool  drawCollar;       // flange ring at each joint
             public bool  drawEndCaps;      // small flat cap if arm dead-ends
             public float endCapInset;      // distance from arm tip for the cap
-            // ── Sleeve / box-arm extras (BuildCraft look) ──
+            // ── Sleeve / box-arm extras (sleeved industrial look) ──
             public bool  useBoxArms;       // true = box arms instead of cylinders (BC)
             public bool  drawSleeveBand;   // long terminal box covering most of the arm
             public float terminalLength;   // length of the terminal end-block (sleeve only)
@@ -134,7 +134,7 @@ namespace VoxelEngine.Networks
                         twinShaft      = false, twinSeparation = 0f,
                     };
                 case PipeStyle.Sleeve:
-                    // BuildCraft / Thermal Expansion style:
+                    // Sleeved industrial pipe style:
                     //   • ROUND dark sleeve shaft along the run
                     //   • Bright wide BRASS COLLAR clad around every joint
                     //   • Bright square TERMINAL end-block on un-connected faces
@@ -332,7 +332,7 @@ namespace VoxelEngine.Networks
                     // ── ARM SHAFT — cylinder OR square box depending on style ──
                     if (p.useBoxArms)
                     {
-                        // Square sleeve arm (BuildCraft / Thermal pipes).
+                        // Square sleeve arm (sleeved industrial pipes).
                         // Cross-section is 2*armRadius wide so the silhouette
                         // matches the cube hub it springs out of.
                         Vector3 size = AxisAlignedBoxSize(dir, armLen,
@@ -403,7 +403,7 @@ namespace VoxelEngine.Networks
                     // ── FLANGE COLLAR / TERMINAL END-BLOCK ──
                     // Sleeve style: ONE long square terminal block covering the
                     // outer half of the arm — bright accent colour — this is the
-                    // BuildCraft "end cap" silhouette. Other styles get a small
+                    // boxed end-cap silhouette. Other styles get a small
                     // cylindrical flange ring at the hub end of the arm.
                     if (p.drawSleeveBand)
                     {

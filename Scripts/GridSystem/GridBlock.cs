@@ -23,7 +23,7 @@ namespace VoxelEngine.GridSystem
 
         /// <summary>Master on/off toggle (set from the ship terminal). Functional
         /// blocks should respect this — a disabled block draws no power and does
-        /// no work, like toggling a block off in Space Engineers.</summary>
+        /// no work, matching ship-terminal toggle behavior.</summary>
         public bool Enabled = true;
 
         /// <summary>Power this block generates (W). Override in generators.</summary>

@@ -876,7 +876,7 @@ namespace VoxelEngine.UI
                     _root.Add(overlay);
                 }
 
-                // Center panel — Rust-style crafting screen (toggle-driven,
+                // Center panel — crafting screen (toggle-driven,
                 // state persisted). Only when the player toggled it ON and no
                 // workstation/container panel owns the crafting view itself.
                 bool aRightPanelIsOpen =
@@ -1028,7 +1028,7 @@ namespace VoxelEngine.UI
             // ingredients through. Selection is remembered across sessions.
             BuildWirelessTransmitterSelector(panel);
 
-            // ── Crafting screen toggle (Rust-style show / hide) ──────
+            // ── Crafting screen toggle (crafting show / hide) ──────
             // The full crafting surface lives in its own center panel (built in
             // Refresh()). Here we only render the toggle pill; its open/closed
             // state persists across sessions via CraftingScreen.Visible.
@@ -1120,7 +1120,7 @@ namespace VoxelEngine.UI
         }
 
         // ----------------------------------------------------------------
-        //  CENTER CRAFTING PANEL — the Rust-style crafting surface.
+        //  CENTER CRAFTING PANEL — the crafting surface.
         //  Sits between the left inventory and the right container, shown
         //  only when CraftingScreen.Visible is true. Its open/closed state
         //  persists across sessions; the player toggles it from the
@@ -2927,7 +2927,7 @@ namespace VoxelEngine.UI
 
         // Hotkey-on-hover: pressing 1..9/0 while hovering an inventory slot SWAPS that
         // slot with the corresponding hotbar slot. Implements the "press 1 to swap with
-        // your active hotbar slot" pattern from Minecraft / Terraria / Satisfactory.
+        // your active hotbar slot" quick-access inventory pattern.
 
         /// <summary>Shift-click: send the whole stack at (sourceC, sourceIdx) to the "other side".
         /// Smart routing: from player inventory, fuel items go to fuel slot, anything else goes to input.
@@ -2975,7 +2975,7 @@ namespace VoxelEngine.UI
                 // click came from a HOTBAR slot, push the items into the first
                 // free BACKPACK slot. Inversely, a click on a BACKPACK slot with
                 // no machine open promotes the items down to the first free
-                // HOTBAR slot. This mirrors the Minecraft / Terraria quick-move
+                // HOTBAR slot. This mirrors the quick-access inventory transfer
                 // convention: shift-click always sends items "to the other half"
                 // of the inventory when there's no external container.
                 if (sourceC is ItemContainer ic)

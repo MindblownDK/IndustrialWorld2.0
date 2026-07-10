@@ -2,7 +2,7 @@
 //
 // Renders distant celestial bodies (planets, moons, sun) as low-quality LOD spheres in the sky.
 //
-// Like Space Engineers: you see the whole solar system around you — other planets hang in the
+// The player can see the whole solar system around you — other planets hang in the
 // distance, the sun glows, moons orbit. When far away, bodies are simple coloured spheres (a
 // few hundred polys); they cost almost nothing because they're ONE draw call each.
 //

@@ -33,7 +33,7 @@ using T = VoxelEngine.UI.UITheme;
 namespace VoxelEngine.UI
 {
     /// <summary>
-    /// Stateless renderer for the Rust-style crafting panel. All transient state
+    /// Stateless renderer for the crafting panel. All transient state
     /// (selected recipe, category, search text, craft amount) is keyed by a
     /// caller-supplied <c>panelId</c> so the inventory pane and any workstation
     /// pane each keep their own independent selection.
@@ -162,7 +162,7 @@ namespace VoxelEngine.UI
         // ───────────────────────────────────────────────────────────────────
         /// <summary>
         /// Populates <paramref name="panel"/> (a pre-positioned UITheme panel) with
-        /// the Rust-style crafting UI.
+        /// the crafting UI.
         /// </summary>
         /// <param name="recipes">Recipes available at the current station tier.</param>
         /// <param name="source">Container ingredients are pulled FROM (inventory / network).</param>

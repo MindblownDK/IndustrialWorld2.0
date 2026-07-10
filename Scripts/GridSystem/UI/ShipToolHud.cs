@@ -1,6 +1,6 @@
 // Assets/Scripts/VoxelEngine/GridSystem/UI/ShipToolHud.cs
 //
-// Bottom-centre tool selector shown while piloting — like the Space Engineers
+// Bottom-centre tool selector shown while piloting — as the grid
 // toolbar. Highlights the currently-selected fire tool (Drill / Weapon N) that
 // left-click activates; scroll cycles between them.
 

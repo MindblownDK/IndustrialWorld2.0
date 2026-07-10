@@ -230,7 +230,7 @@ namespace VoxelEngine.Cosmos
         private void UpdateFade(CelestialBody body)
         {
             if (meshRenderer == null || _lodMaterial == null) return;
-            // The LOD is ALWAYS visible — whole planet visible from surface (like Space Engineers).
+            // The LOD is always visible so a whole planet can be seen from the surface.
             float a = 1f;
             if (viewer != null)
             {

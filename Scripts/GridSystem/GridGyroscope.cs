@@ -1,7 +1,7 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridGyroscope.cs
 //
-// Gyroscope — provides rotational control (yaw/pitch/roll) to the grid, like a
-// Space Engineers gyro. The grid sums the torque of all enabled gyroscopes.
+// Gyroscope — provides rotational control (yaw/pitch/roll) to the grid, as a
+// ship gyro. The grid sums the torque of all enabled gyroscopes.
 
 using UnityEngine;
 

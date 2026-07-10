@@ -87,7 +87,7 @@ namespace VoxelEngine.Transport
             // glass tube HOLLOW so the pellets are seen through the clear shell
             // instead of being hidden behind an opaque inner core.
             _visuals.hollowGlass = isGlass;
-            // Item pipes use the BuildCraft / Thermal-Expansion "sleeve" style —
+            // Item pipes use the sleeved industrial pipe style —
             // chunky terminal end-blocks at every junction, hazard-band sleeve
             // along the run.
             _visuals.style = VoxelEngine.Networks.PipeStyle.Sleeve;

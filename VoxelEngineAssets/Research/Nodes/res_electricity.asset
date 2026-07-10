@@ -14,8 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Research.ResearchNode
   nodeId: res_electricity
   displayName: Electricity
-  description: Generate and store electric power. Unlocks the Coal Generator and
-    copper/iron cables.
+  description: Generate and store electric power. Unlocks the Coal Generator, Copper
+    LV Wire, and early Electrical Pipes.
   iconTint: {r: 0.95, g: 0.85, b: 0.3, a: 1}
   category: 0
   subCategory: 3
@@ -31,8 +31,9 @@ MonoBehaviour:
     count: 5
   unlocksRecipes:
   - {fileID: 11400000, guid: 05afc51e21a04ff43be6147f7946c9d8, type: 2}
-  - {fileID: 11400000, guid: 755fbe37b90de644284a5404af6c15cf, type: 2}
-  - {fileID: 11400000, guid: a7fc79f6136e2fc4db9da5ea56fb8f0e, type: 2}
+  - {fileID: 11400000, guid: d012e44c647a88f4f961ad6c4b1317b3, type: 2}
+  - {fileID: 11400000, guid: 18a034f0b4f7047428a6f1f8cb9238dd, type: 2}
+  - {fileID: 11400000, guid: 97b7d268ca0950343b2124579edc4285, type: 2}
   upgradeKind: 0
   upgradePerRankAmount: 0
   maxRanks: 1
