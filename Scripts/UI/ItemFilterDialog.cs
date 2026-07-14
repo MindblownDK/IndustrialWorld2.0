@@ -29,7 +29,17 @@ namespace VoxelEngine.UI
         // While a dialog is open this captures items the player shift-clicks /
         // drops from their inventory. GameUIController checks IsCapturing first.
         private static Action<ItemDefinition> _captureSink;
+        private static Action _activeClose;
         public static bool IsCapturing => _captureSink != null;
+
+        internal static bool CloseActive()
+        {
+            if (_activeClose == null) return false;
+            var close = _activeClose;
+            _activeClose = null;
+            close.Invoke();
+            return true;
+        }
 
         /// <summary>Feed an item the player shift-clicked / dropped into the open dialog.</summary>
         public static bool TryCaptureItem(ItemDefinition item)
@@ -70,8 +80,9 @@ namespace VoxelEngine.UI
             void Close()
             {
                 _captureSink = null;
-                PortConfigHud.IsAnyDropdownOpen = false;
+                _activeClose = null;
                 overlay.RemoveFromHierarchy();
+                PortConfigHud.IsAnyDropdownOpen = HasAncestorNamed(uiRoot, "ItemPortsOverlay");
                 onChanged?.Invoke();
             }
 
@@ -223,6 +234,7 @@ namespace VoxelEngine.UI
 
             // Capture inventory clicks while open (player clicks an item to add it).
             _captureSink = AddItem;
+            _activeClose = Close;
             PortConfigHud.IsAnyDropdownOpen = true;   // suspend the panel auto-refresh
             panelRoot.Add(overlay);
             search.schedule.Execute(() => search.Focus()).StartingIn(40);
@@ -315,6 +327,13 @@ namespace VoxelEngine.UI
                 box.pickingMode = PickingMode.Ignore;
                 parent.Add(box);
             }
+        }
+
+        private static bool HasAncestorNamed(VisualElement element, string elementName)
+        {
+            for (var current = element; current != null; current = current.parent)
+                if (current.name == elementName) return true;
+            return false;
         }
 
         private static string FaceLabel(CubeFace f) => f switch

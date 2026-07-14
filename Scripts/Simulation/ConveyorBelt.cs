@@ -281,31 +281,45 @@ namespace VoxelEngine.Simulation
             // Find downstream consumer at the exit end of this belt.
             Vector3 worldExitDir = GetExitDirection();
             Vector3 exitWorld = transform.position + worldExitDir * 1.2f;
-            downstreamTarget = FindConsumerAt(exitWorld);
-
-            if (downstreamTarget == null)
-                downstreamTarget = FindFunnelAt(exitWorld);
+            Vector3 exitSocket = transform.position + worldExitDir * 0.5f;
+            downstreamTarget = FindConsumerAt(exitWorld, exitSocket, -worldExitDir);
 
             // Find upstream provider at the entry end of this belt.
             Vector3 worldEntryDir = GetEntryDirection();
             Vector3 entryWorld = transform.position + worldEntryDir * 1.2f;
-            upstreamSource = FindProviderAt(entryWorld);
-
-            if (upstreamSource == null)
-                upstreamSource = FindFunnelAt(entryWorld);
+            Vector3 entrySocket = transform.position + worldEntryDir * 0.5f;
+            upstreamSource = FindProviderAt(entryWorld, entrySocket, -worldEntryDir);
         }
 
         public void RefreshShape()
         {
-            // Keep automatic shape detection conservative. Earlier ramp probing used
-            // loose overlap spheres above/below the forward socket, so an inline belt
-            // could be mistaken for an upper neighbour and the visual flipped upward.
-            // Ramps should be explicit variants; normal snapped belts stay level.
-            var left = FindProviderAt(transform.position - transform.right * 1.0f);
-            var right = FindProviderAt(transform.position + transform.right * 1.0f);
-            var back = FindProviderAt(transform.position - transform.forward * 1.0f);
+            Vector3 leftEntry = -transform.right;
+            Vector3 rightEntry = transform.right;
+            Vector3 backEntry = -transform.forward;
+            Vector3 forwardExit = transform.forward;
 
-            if (back != null || (left == null && right == null))
+            var left = FindConnectedBeltProvider(
+                transform.position + leftEntry,
+                transform.position + leftEntry * 0.5f,
+                -leftEntry);
+            var right = FindConnectedBeltProvider(
+                transform.position + rightEntry,
+                transform.position + rightEntry * 0.5f,
+                -rightEntry);
+            var back = FindConnectedBeltProvider(
+                transform.position + backEntry,
+                transform.position + backEntry * 0.5f,
+                -backEntry);
+            var forward = FindConnectedBeltConsumer(
+                transform.position + forwardExit,
+                transform.position + forwardExit * 0.5f,
+                -forwardExit);
+
+            // A straight rear feed always wins. Side-fed corners are selected only
+            // when exactly one side output meets this belt and this belt has a valid
+            // forward continuation. This prevents adjacent parallel lanes and loose
+            // end segments from turning into accidental L shapes.
+            if (back != null || forward == null || (left == null) == (right == null))
             {
                 shape = ConveyorShape.Straight;
                 entryDirection = Vector3.back;
@@ -317,7 +331,7 @@ namespace VoxelEngine.Simulation
                 entryDirection = Vector3.left;
                 exitDirection = Vector3.forward;
             }
-            else if (right != null)
+            else
             {
                 shape = ConveyorShape.Corner;
                 entryDirection = Vector3.right;
@@ -329,19 +343,43 @@ namespace VoxelEngine.Simulation
                 _visuals.RebuildMesh();
         }
 
-        private MonoBehaviour FindFunnelAt(Vector3 worldPos)
+        private ConveyorBelt FindConnectedBeltProvider(Vector3 probePosition, Vector3 receiverSocket, Vector3 expectedOutputDirection)
         {
-            var hits = Physics.OverlapSphere(worldPos, 0.8f);
+            var hits = Physics.OverlapSphere(probePosition, 0.7f);
             foreach (var col in hits)
             {
                 if (col == null || col.transform.IsChildOf(transform)) continue;
-                var funnel = col.GetComponentInParent<Funnel>();
-                if (funnel != null) return funnel;
+                var belt = col.GetComponentInParent<ConveyorBelt>();
+                if (belt == null || belt == this) continue;
+
+                Vector3 candidateDirection = belt.GetExitDirection();
+                Vector3 candidateSocket = belt.transform.position + candidateDirection * 0.5f;
+                if (Vector3.Dot(candidateDirection, expectedOutputDirection.normalized) < 0.9f) continue;
+                if ((candidateSocket - receiverSocket).sqrMagnitude > 0.20f) continue;
+                return belt;
             }
             return null;
         }
 
-        private MonoBehaviour FindConsumerAt(Vector3 worldPos)
+        private ConveyorBelt FindConnectedBeltConsumer(Vector3 probePosition, Vector3 providerSocket, Vector3 expectedInputDirection)
+        {
+            var hits = Physics.OverlapSphere(probePosition, 0.7f);
+            foreach (var col in hits)
+            {
+                if (col == null || col.transform.IsChildOf(transform)) continue;
+                var belt = col.GetComponentInParent<ConveyorBelt>();
+                if (belt == null || belt == this) continue;
+
+                Vector3 candidateDirection = belt.GetEntryDirection();
+                Vector3 candidateSocket = belt.transform.position + candidateDirection * 0.5f;
+                if (Vector3.Dot(candidateDirection, expectedInputDirection.normalized) < 0.9f) continue;
+                if ((candidateSocket - providerSocket).sqrMagnitude > 0.20f) continue;
+                return belt;
+            }
+            return null;
+        }
+
+        private MonoBehaviour FindConsumerAt(Vector3 worldPos, Vector3 providerSocket, Vector3 expectedInputDirection)
         {
             var hits = Physics.OverlapSphere(worldPos, 0.8f);
             foreach (var col in hits)
@@ -350,14 +388,15 @@ namespace VoxelEngine.Simulation
                 var behaviours = col.GetComponentsInParent<MonoBehaviour>(true);
                 foreach (var behaviour in behaviours)
                 {
-                    if (behaviour != null && behaviour != this && behaviour is IItemConsumer)
+                    if (behaviour == null || behaviour == this || !(behaviour is IItemConsumer)) continue;
+                    if (IsSocketCompatible(behaviour, providerSocket, expectedInputDirection, provider: false))
                         return behaviour;
                 }
             }
             return null;
         }
 
-        private MonoBehaviour FindProviderAt(Vector3 worldPos)
+        private MonoBehaviour FindProviderAt(Vector3 worldPos, Vector3 receiverSocket, Vector3 expectedOutputDirection)
         {
             var hits = Physics.OverlapSphere(worldPos, 0.8f);
             foreach (var col in hits)
@@ -366,11 +405,46 @@ namespace VoxelEngine.Simulation
                 var behaviours = col.GetComponentsInParent<MonoBehaviour>(true);
                 foreach (var behaviour in behaviours)
                 {
-                    if (behaviour != null && behaviour != this && behaviour is IItemProvider)
+                    if (behaviour == null || behaviour == this || !(behaviour is IItemProvider)) continue;
+                    if (IsSocketCompatible(behaviour, receiverSocket, expectedOutputDirection, provider: true))
                         return behaviour;
                 }
             }
             return null;
+        }
+
+        private static bool IsSocketCompatible(MonoBehaviour behaviour, Vector3 localSocket, Vector3 expectedOutwardDirection, bool provider)
+        {
+            Vector3 candidateDirection;
+            Vector3 candidateSocket;
+
+            if (behaviour is ConveyorBelt belt)
+            {
+                candidateDirection = provider ? belt.GetExitDirection() : belt.GetEntryDirection();
+                candidateSocket = belt.transform.position + candidateDirection * 0.5f;
+            }
+            else if (behaviour is Funnel funnel)
+            {
+                if (provider && funnel.Mode != FunnelMode.Export) return false;
+                if (!provider && funnel.Mode != FunnelMode.Import) return false;
+                Vector3 localBeltDirection = funnel.beltDirection.sqrMagnitude > 0.01f
+                    ? funnel.beltDirection.normalized
+                    : Vector3.forward;
+                candidateDirection = funnel.transform.TransformDirection(localBeltDirection).normalized;
+                candidateSocket = funnel.transform.position + candidateDirection * funnel.portOffset;
+            }
+            else if (behaviour is ConveyorChute chute)
+            {
+                candidateDirection = provider ? -chute.transform.up : chute.transform.up;
+                candidateSocket = chute.transform.position + candidateDirection * 0.5f;
+            }
+            else
+            {
+                return true;
+            }
+
+            if (Vector3.Dot(candidateDirection, expectedOutwardDirection.normalized) < 0.85f) return false;
+            return (candidateSocket - localSocket).sqrMagnitude <= 0.36f;
         }
 
         private bool TryHandOff(ref ConveyorItem ci)

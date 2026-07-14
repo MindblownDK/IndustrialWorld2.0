@@ -294,6 +294,22 @@ namespace VoxelEngine.UI
                 inventory.SetActiveHotbar(next);
             }
 
+            // Item Ports owns Escape before the underlying inventory and pause menu.
+            // This remains available even while a port dropdown/filter has focus.
+            bool itemPortsClosedThisFrame = false;
+            bool pausePressed = GameSettings.WasPressed(InputAction.Pause);
+            if (pausePressed && ItemFilterDialog.CloseActive())
+            {
+                UIState.PauseConsumedFrame = Time.frameCount;
+                itemPortsClosedThisFrame = true;
+            }
+            else if (pausePressed && _itemPortsOverlay != null && _itemPortsOverlay.parent != null)
+            {
+                CloseItemPortsOverlay();
+                UIState.PauseConsumedFrame = Time.frameCount;
+                itemPortsClosedThisFrame = true;
+            }
+
             // While the search field has keyboard focus, don't react to hotkey-style keys
             // — the player is typing into the search box.
             bool typing = _searchHasFocus || PortConfigHud.IsAnyDropdownOpen;
@@ -332,7 +348,7 @@ namespace VoxelEngine.UI
                 _justClosedThisFrame = false;
             }
             // Esc closes our panels — and tells the pause menu we already handled Esc this frame.
-            if (!typing && GameSettings.WasPressed(InputAction.Pause) && weAreOpen)
+            if (!itemPortsClosedThisFrame && !typing && pausePressed && weAreOpen)
             {
                 CloseAll();
                 UIState.PauseConsumedFrame = Time.frameCount;
@@ -741,7 +757,7 @@ namespace VoxelEngine.UI
         }
         public void CloseAll()
         {
-            PortConfigHud.IsAnyDropdownOpen = false;
+            CloseItemPortsOverlay();
             if (_inventoryOpen) UIState.PopBlock();
             _inventoryOpen  = false;
             _rightContainer = null; _openChest = null;
@@ -1525,10 +1541,19 @@ namespace VoxelEngine.UI
             panel.Add(MakePortsToggle(false, () => OpenItemPortsOverlay(host, routing)));
         }
 
+        private void CloseItemPortsOverlay()
+        {
+            ItemFilterDialog.CloseActive();
+            PortConfigHud.IsAnyDropdownOpen = false;
+            if (_itemPortsOverlay != null && _itemPortsOverlay.parent != null)
+                _itemPortsOverlay.RemoveFromHierarchy();
+            _itemPortsOverlay = null;
+        }
+
         /// <summary>
         /// Open the Item-Ports editor as a centered modal overlay on the root UI,
         /// with a near-solid dim backdrop, so it never squashes the machine panel
-        /// or overflows the screen. Closes on backdrop click or the X / DONE.
+        /// or overflows the screen. Closes on Escape, the close button, or DONE.
         /// </summary>
         private void OpenItemPortsOverlay(VoxelEngine.Transport.IItemPortHost host,
                                           VoxelEngine.Transport.ItemPortRouting routing)
@@ -1557,12 +1582,7 @@ namespace VoxelEngine.UI
             dim.pickingMode = PickingMode.Ignore;
             overlay.Add(dim);
 
-            void Close()
-            {
-                VoxelEngine.UI.PortConfigHud.IsAnyDropdownOpen = false;
-                overlay.RemoveFromHierarchy();
-                if (_itemPortsOverlay == overlay) _itemPortsOverlay = null;
-            }
+            void Close() => CloseItemPortsOverlay();
 
             // Card container.
             var card = MakePanel();

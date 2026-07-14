@@ -7,6 +7,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.Items;
+using VoxelEngine.Transport;
 
 namespace VoxelEngine.Simulation
 {
@@ -55,6 +56,11 @@ namespace VoxelEngine.Simulation
         private void Awake()
         {
             EnsureVisuals();
+        }
+
+        private void OnEnable()
+        {
+            ScanConnections();
         }
 
         private void Update()
@@ -159,49 +165,113 @@ namespace VoxelEngine.Simulation
 
         private void ScanConnections()
         {
-            downstreamTarget = FindInterfaceAt<IItemConsumer>(transform.position - transform.up * 1.2f);
-            upstreamSource = FindInterfaceAt<IItemProvider>(transform.position + transform.up * 1.2f);
+            const float connectionOffset = 1f;
+            downstreamTarget = FindEndpointAt(transform.position - transform.up * connectionOffset, provider: false);
+            upstreamSource = FindEndpointAt(transform.position + transform.up * connectionOffset, provider: true);
         }
 
-        private MonoBehaviour FindInterfaceAt<T>(Vector3 worldPosition) where T : class
+        private MonoBehaviour FindEndpointAt(Vector3 worldPosition, bool provider)
         {
-            var hits = Physics.OverlapSphere(worldPosition, 0.8f);
+            const float connectionRadius = 1.05f;
+            var hits = Physics.OverlapSphere(worldPosition, connectionRadius);
+            MonoBehaviour nearest = null;
+            float nearestDistance = float.MaxValue;
+
             foreach (var col in hits)
             {
                 if (col == null || col.transform.IsChildOf(transform)) continue;
                 var behaviours = col.GetComponentsInParent<MonoBehaviour>(true);
                 foreach (var behaviour in behaviours)
                 {
-                    if (behaviour != null && behaviour != this && behaviour is T)
-                        return behaviour;
+                    if (behaviour == null || behaviour == this) continue;
+                    if (!CanUseEndpoint(behaviour, provider)) continue;
+
+                    float distance = (behaviour.transform.position - worldPosition).sqrMagnitude;
+                    if (distance >= nearestDistance) continue;
+                    nearestDistance = distance;
+                    nearest = behaviour;
                 }
             }
-            return null;
+            return nearest;
+        }
+
+        private bool CanUseEndpoint(MonoBehaviour behaviour, bool provider)
+        {
+            if (provider && behaviour is IItemProvider) return true;
+            if (!provider && behaviour is IItemConsumer) return true;
+
+            // Port-aware machines must expose the face that physically points at
+            // the chute. This takes priority over their broader inventory interface.
+            if (behaviour is IItemPortHost portHost && portHost.PortConfig != null)
+            {
+                PortDirection direction = provider ? PortDirection.Output : PortDirection.Input;
+                if (!portHost.PortConfig.GetMatchingFace(transform.position, direction).HasValue) return false;
+                var containers = portHost.GetPortContainers();
+                if (containers == null) return false;
+                foreach (var port in containers)
+                {
+                    if (port.Container == null) continue;
+                    if (provider && port.CanOutput) return true;
+                    if (!provider && port.CanInput) return true;
+                }
+                return false;
+            }
+
+            if (behaviour is IInventoryInterface inventory)
+            {
+                if (provider && inventory.HasOutputReady && inventory.GetOutputContainer() != null) return true;
+                if (!provider && inventory.CanAcceptInput && inventory.GetInputContainer() != null) return true;
+            }
+
+            return false;
         }
 
         private bool TryHandOff(ref ChuteItem chuteItem)
         {
-            if (!(downstreamTarget is IItemConsumer consumer)) return false;
-
-            int capacity = consumer.GetInputCapacity(chuteItem.item);
-            if (capacity <= 0) return false;
-
-            int sent = Mathf.Min(capacity, chuteItem.count);
-            int accepted = consumer.TryInsert(chuteItem.item, sent);
+            int accepted = PushToEndpoint(downstreamTarget, chuteItem.item, chuteItem.count);
             chuteItem.count -= accepted;
             return chuteItem.count <= 0;
         }
 
         private void TryPullFromUpstream()
         {
-            if (!(upstreamSource is IItemProvider provider)) return;
+            if (upstreamSource == null) return;
 
-            var item = provider.PeekOutput(out int available);
-            if (item == null || available <= 0) return;
+            if (upstreamSource is IItemProvider provider)
+            {
+                var item = provider.PeekOutput(out int available);
+                if (item == null || available <= 0) return;
 
-            int wanted = Mathf.Min(available, maxItems - _items.Count);
-            int received = provider.TryExtract(item, wanted);
-            for (int i = 0; i < received; i++)
+                int wanted = Mathf.Min(available, maxItems - _items.Count);
+                int received = provider.TryExtract(item, wanted);
+                AddReceivedItems(item, received);
+                return;
+            }
+
+            ItemContainer container = null;
+            if (upstreamSource is IInventoryInterface inventory && inventory.HasOutputReady)
+                container = inventory.GetOutputContainer();
+            else if (upstreamSource is IItemPortHost portHost)
+                container = FindPortContainer(portHost, canOutput: true);
+
+            if (container == null) return;
+            for (int i = 0; i < container.Size; i++)
+            {
+                var stack = container.GetSlot(i);
+                if (stack == null || stack.IsEmpty || stack.item == null) continue;
+
+                int wanted = Mathf.Min(stack.count, maxItems - _items.Count);
+                int received = container.Remove(stack.item, wanted);
+                AddReceivedItems(stack.item, received);
+                return;
+            }
+        }
+
+        private void AddReceivedItems(ItemDefinition item, int count)
+        {
+            if (item == null || count <= 0) return;
+            int accepted = Mathf.Min(count, maxItems - _items.Count);
+            for (int i = 0; i < accepted; i++)
             {
                 _items.Add(new ChuteItem
                 {
@@ -210,6 +280,46 @@ namespace VoxelEngine.Simulation
                     slideProgress = 0f
                 });
             }
+        }
+
+        private int PushToEndpoint(MonoBehaviour endpoint, ItemDefinition item, int count)
+        {
+            if (endpoint == null || item == null || count <= 0) return 0;
+
+            if (endpoint is IItemConsumer consumer)
+            {
+                int capacity = consumer.GetInputCapacity(item);
+                return capacity > 0 ? consumer.TryInsert(item, Mathf.Min(capacity, count)) : 0;
+            }
+
+            var routing = endpoint.GetComponent<ItemPortRouting>();
+            if (routing != null)
+                return routing.TryAcceptFromPipe(transform.position, item, count);
+
+            ItemContainer container = null;
+            if (endpoint is IInventoryInterface inventory && inventory.CanAcceptInput)
+                container = inventory.GetInputContainer();
+            else if (endpoint is IItemPortHost portHost)
+                container = FindPortContainer(portHost, canInput: true);
+
+            if (container == null) return 0;
+            int before = container.CountOf(item);
+            container.Insert(new ItemStack(item, count));
+            return container.CountOf(item) - before;
+        }
+
+        private static ItemContainer FindPortContainer(IItemPortHost host, bool canInput = false, bool canOutput = false)
+        {
+            if (host == null) return null;
+            var containers = host.GetPortContainers();
+            if (containers == null) return null;
+            foreach (var port in containers)
+            {
+                if (port.Container == null) continue;
+                if (canInput && port.CanInput) return port.Container;
+                if (canOutput && port.CanOutput) return port.Container;
+            }
+            return null;
         }
 
         private void EnsureVisuals()
