@@ -38,6 +38,12 @@ namespace VoxelEngine.Simulation
 
     public class ConveyorBelt : MonoBehaviour, IItemConsumer, IItemProvider
     {
+        private static readonly Vector3[] LocalSocketDirections =
+        {
+            Vector3.back, Vector3.forward, Vector3.left, Vector3.right
+        };
+        private const float SocketToleranceSqr = 0.09f;
+
         // ── Inspector ─────────────────────────────────────────────────
 
         [Header("Conveyor Configuration")]
@@ -190,8 +196,12 @@ namespace VoxelEngine.Simulation
                     exitDirection = new Vector3(0f, -0.5f, 1f).normalized;
                     break;
                 case ConveyorShape.Straight:
-                    entryDirection = Vector3.back;
-                    exitDirection = Vector3.forward;
+                    if (entryDirection.sqrMagnitude < 0.01f || exitDirection.sqrMagnitude < 0.01f
+                        || Vector3.Dot(entryDirection.normalized, exitDirection.normalized) > -0.9f)
+                    {
+                        entryDirection = Vector3.back;
+                        exitDirection = Vector3.forward;
+                    }
                     break;
             }
 
@@ -293,52 +303,56 @@ namespace VoxelEngine.Simulation
 
         public void RefreshShape()
         {
-            Vector3 leftEntry = -transform.right;
-            Vector3 rightEntry = transform.right;
-            Vector3 backEntry = -transform.forward;
-            Vector3 forwardExit = transform.forward;
+            int incomingCount = 0;
+            int outgoingCount = 0;
+            Vector3 incomingDirection = Vector3.back;
+            Vector3 outgoingDirection = Vector3.forward;
 
-            var left = FindConnectedBeltProvider(
-                transform.position + leftEntry,
-                transform.position + leftEntry * 0.5f,
-                -leftEntry);
-            var right = FindConnectedBeltProvider(
-                transform.position + rightEntry,
-                transform.position + rightEntry * 0.5f,
-                -rightEntry);
-            var back = FindConnectedBeltProvider(
-                transform.position + backEntry,
-                transform.position + backEntry * 0.5f,
-                -backEntry);
-            var forward = FindConnectedBeltConsumer(
-                transform.position + forwardExit,
-                transform.position + forwardExit * 0.5f,
-                -forwardExit);
+            foreach (var localDirection in LocalSocketDirections)
+            {
+                Vector3 worldDirection = transform.TransformDirection(localDirection).normalized;
+                Vector3 neighbourCenter = transform.position + worldDirection;
+                Vector3 localSocket = transform.position + worldDirection * 0.5f;
 
-            // A straight rear feed always wins. Side-fed corners are selected only
-            // when exactly one side output meets this belt and this belt has a valid
-            // forward continuation. This prevents adjacent parallel lanes and loose
-            // end segments from turning into accidental L shapes.
-            if (back != null || forward == null || (left == null) == (right == null))
+                if (FindConnectedBeltProvider(neighbourCenter, localSocket, -worldDirection) != null)
+                {
+                    incomingCount++;
+                    incomingDirection = localDirection;
+                }
+
+                if (FindConnectedBeltConsumer(neighbourCenter, localSocket, -worldDirection) != null)
+                {
+                    outgoingCount++;
+                    outgoingDirection = localDirection;
+                }
+            }
+
+            // Shape only when the topology is unambiguous: one belt enters and one
+            // belt leaves. Junction attempts or loose ends stay straight so parallel
+            // lanes and temporary placement states never create surprise corners.
+            if (incomingCount == 1 && outgoingCount == 1
+                && Vector3.Dot(incomingDirection, outgoingDirection) < -0.9f)
+            {
+                shape = ConveyorShape.Straight;
+                entryDirection = incomingDirection;
+                exitDirection = outgoingDirection;
+            }
+            else if (incomingCount == 1 && outgoingCount == 1
+                     && Mathf.Abs(Vector3.Dot(incomingDirection, outgoingDirection)) < 0.1f)
+            {
+                shape = ConveyorShape.Corner;
+                entryDirection = incomingDirection;
+                exitDirection = outgoingDirection;
+            }
+            else
             {
                 shape = ConveyorShape.Straight;
                 entryDirection = Vector3.back;
                 exitDirection = Vector3.forward;
             }
-            else if (left != null)
-            {
-                shape = ConveyorShape.Corner;
-                entryDirection = Vector3.left;
-                exitDirection = Vector3.forward;
-            }
-            else
-            {
-                shape = ConveyorShape.Corner;
-                entryDirection = Vector3.right;
-                exitDirection = Vector3.forward;
-            }
 
             UpdateTravelDirection();
+            ScanConnections();
             if (_visuals != null && isActiveAndEnabled && gameObject.activeInHierarchy)
                 _visuals.RebuildMesh();
         }
@@ -355,7 +369,7 @@ namespace VoxelEngine.Simulation
                 Vector3 candidateDirection = belt.GetExitDirection();
                 Vector3 candidateSocket = belt.transform.position + candidateDirection * 0.5f;
                 if (Vector3.Dot(candidateDirection, expectedOutputDirection.normalized) < 0.9f) continue;
-                if ((candidateSocket - receiverSocket).sqrMagnitude > 0.20f) continue;
+                if ((candidateSocket - receiverSocket).sqrMagnitude > SocketToleranceSqr) continue;
                 return belt;
             }
             return null;
@@ -373,7 +387,7 @@ namespace VoxelEngine.Simulation
                 Vector3 candidateDirection = belt.GetEntryDirection();
                 Vector3 candidateSocket = belt.transform.position + candidateDirection * 0.5f;
                 if (Vector3.Dot(candidateDirection, expectedInputDirection.normalized) < 0.9f) continue;
-                if ((candidateSocket - providerSocket).sqrMagnitude > 0.20f) continue;
+                if ((candidateSocket - providerSocket).sqrMagnitude > SocketToleranceSqr) continue;
                 return belt;
             }
             return null;
@@ -444,12 +458,20 @@ namespace VoxelEngine.Simulation
             }
 
             if (Vector3.Dot(candidateDirection, expectedOutwardDirection.normalized) < 0.85f) return false;
-            return (candidateSocket - localSocket).sqrMagnitude <= 0.36f;
+            return (candidateSocket - localSocket).sqrMagnitude <= SocketToleranceSqr;
         }
 
         private bool TryHandOff(ref ConveyorItem ci)
         {
             if (downstreamTarget == null) return false;
+
+            Vector3 exitDirectionWorld = GetExitDirection();
+            Vector3 exitSocket = transform.position + exitDirectionWorld * 0.5f;
+            if (!IsSocketCompatible(downstreamTarget, exitSocket, -exitDirectionWorld, provider: false))
+            {
+                downstreamTarget = null;
+                return false;
+            }
 
             var consumer = downstreamTarget as IItemConsumer;
             if (consumer == null) return false;
@@ -467,6 +489,14 @@ namespace VoxelEngine.Simulation
         {
             var provider = upstreamSource as IItemProvider;
             if (provider == null) return;
+
+            Vector3 entryDirectionWorld = GetEntryDirection();
+            Vector3 entrySocket = transform.position + entryDirectionWorld * 0.5f;
+            if (!IsSocketCompatible(upstreamSource, entrySocket, -entryDirectionWorld, provider: true))
+            {
+                upstreamSource = null;
+                return;
+            }
 
             var item = provider.PeekOutput(out int available);
             if (item == null || available <= 0) return;

@@ -29,6 +29,7 @@ namespace VoxelEngine.Simulation
         private MeshRenderer _beltRenderer;
         private Material _beltMaterial;
         private Material _railMaterial;
+        private Material _frameMaterial;
         private Material _authoredSharedMaterial;
         private bool _usingAuthoredStraight;
         private float _uvOffset;
@@ -68,7 +69,8 @@ namespace VoxelEngine.Simulation
             ReleaseGeneratedMesh();
             ReleaseRuntimeMaterials();
 
-            if (_belt.shape == ConveyorShape.Straight && TryUseAuthoredStraightVisuals())
+            if (_belt.shape == ConveyorShape.Straight && IsDefaultStraightPose()
+                && TryUseAuthoredStraightVisuals())
                 return;
 
             SetAuthoredVisualsActive(false);
@@ -104,6 +106,18 @@ namespace VoxelEngine.Simulation
                 if (child.name.StartsWith("Generated_", System.StringComparison.Ordinal))
                     _authoredVisuals.Add(child.gameObject);
             }
+        }
+
+        private bool IsDefaultStraightPose()
+        {
+            Vector3 entry = _belt.entryDirection.sqrMagnitude > 0.01f
+                ? _belt.entryDirection.normalized
+                : Vector3.back;
+            Vector3 exit = _belt.exitDirection.sqrMagnitude > 0.01f
+                ? _belt.exitDirection.normalized
+                : Vector3.forward;
+            return Vector3.Dot(entry, Vector3.back) > 0.99f
+                && Vector3.Dot(exit, Vector3.forward) > 0.99f;
         }
 
         private bool TryUseAuthoredStraightVisuals()
@@ -142,21 +156,132 @@ namespace VoxelEngine.Simulation
 
             _railMaterial = new Material(GetSharedRailMaterial()) { color = railColor };
             if (_railMaterial.HasProperty(BaseColorId)) _railMaterial.SetColor(BaseColorId, railColor);
+
+            Color frameColor = new(
+                railColor.r * 0.42f,
+                railColor.g * 0.42f,
+                railColor.b * 0.42f,
+                1f);
+            _frameMaterial = new Material(GetSharedRailMaterial()) { color = frameColor };
+            if (_frameMaterial.HasProperty(BaseColorId)) _frameMaterial.SetColor(BaseColorId, frameColor);
         }
 
         private void BuildStraightMesh()
         {
-            CreateHorizontalBeltSegment(Vector3.forward, Vector3.zero, 1f);
+            Vector3 entry = HorizontalCardinal(_belt.entryDirection, Vector3.back);
+            Vector3 exit = HorizontalCardinal(_belt.exitDirection, Vector3.forward);
+            Vector3 direction = Vector3.Dot(entry, exit) < -0.9f ? exit : Vector3.forward;
+            CreateHorizontalBeltSegment(direction, Vector3.zero, 1f);
+            BuildSupportFrame();
         }
 
         private void BuildCornerMesh()
         {
             Vector3 entry = HorizontalCardinal(_belt.entryDirection, Vector3.back);
             Vector3 exit = HorizontalCardinal(_belt.exitDirection, Vector3.right);
-            if (Mathf.Abs(Vector3.Dot(entry, exit)) > 0.1f) exit = Vector3.Cross(Vector3.up, entry).normalized;
+            if (Mathf.Abs(Vector3.Dot(entry, exit)) > 0.1f)
+                exit = Vector3.Cross(Vector3.up, entry).normalized;
 
-            CreateHorizontalBeltSegment(-entry, entry * 0.25f, 0.5f);
-            CreateHorizontalBeltSegment(exit, exit * 0.25f, 0.5f);
+            Vector3 start = entry * 0.5f;
+            Vector3 end = exit * 0.5f;
+            const int segmentCount = 9;
+            Vector3 previous = start;
+            for (int i = 1; i <= segmentCount; i++)
+            {
+                float t = i / (float)segmentCount;
+                float inverse = 1f - t;
+                Vector3 current = inverse * inverse * start + t * t * end;
+                CreateCurvedBeltSegment(previous, current);
+                previous = current;
+            }
+
+            BuildSupportFrame();
+            CreateRoller(start, -entry);
+            CreateRoller(end, exit);
+            CreateDirectionArrow(end, exit);
+        }
+
+        private void CreateCurvedBeltSegment(Vector3 start, Vector3 end)
+        {
+            Vector3 tangent = end - start;
+            float length = tangent.magnitude;
+            if (length < 0.001f) return;
+
+            Vector3 direction = tangent / length;
+            Vector3 center = (start + end) * 0.5f;
+            Quaternion rotation = Quaternion.LookRotation(direction, Vector3.up);
+
+            var beltGo = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            beltGo.name = "CurvedBeltSurface";
+            beltGo.transform.SetParent(_meshRoot.transform, false);
+            beltGo.transform.localPosition = center + Vector3.up * 0.48f;
+            beltGo.transform.localRotation = rotation;
+            beltGo.transform.localScale = new Vector3(0.82f, 0.04f, length + 0.035f);
+            Destroy(beltGo.GetComponent<Collider>());
+            var renderer = beltGo.GetComponent<MeshRenderer>();
+            renderer.sharedMaterial = _beltMaterial;
+            if (_beltRenderer == null) _beltRenderer = renderer;
+
+            Vector3 side = Vector3.Cross(Vector3.up, direction).normalized;
+            Vector3 railScale = new(0.055f, 0.10f, length + 0.04f);
+            CreateRail(center + side * 0.44f + Vector3.up * 0.51f, railScale, rotation);
+            CreateRail(center - side * 0.44f + Vector3.up * 0.51f, railScale, rotation);
+        }
+
+        private void BuildSupportFrame()
+        {
+            CreateFramePrimitive("DynamicBase", new Vector3(0f, 0.25f, 0f), new Vector3(0.92f, 0.10f, 0.92f));
+            CreateFramePrimitive("LegFrontLeft", new Vector3(-0.36f, -0.08f, 0.36f), new Vector3(0.07f, 0.56f, 0.07f));
+            CreateFramePrimitive("LegFrontRight", new Vector3(0.36f, -0.08f, 0.36f), new Vector3(0.07f, 0.56f, 0.07f));
+            CreateFramePrimitive("LegBackLeft", new Vector3(-0.36f, -0.08f, -0.36f), new Vector3(0.07f, 0.56f, 0.07f));
+            CreateFramePrimitive("LegBackRight", new Vector3(0.36f, -0.08f, -0.36f), new Vector3(0.07f, 0.56f, 0.07f));
+        }
+
+        private void CreateFramePrimitive(string objectName, Vector3 position, Vector3 scale)
+        {
+            var part = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            part.name = objectName;
+            part.transform.SetParent(_meshRoot.transform, false);
+            part.transform.localPosition = position;
+            part.transform.localScale = scale;
+            Destroy(part.GetComponent<Collider>());
+            part.GetComponent<MeshRenderer>().sharedMaterial = _frameMaterial;
+        }
+
+        private void CreateRoller(Vector3 position, Vector3 travelDirection)
+        {
+            Vector3 side = Vector3.Cross(Vector3.up, travelDirection.normalized).normalized;
+            var roller = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            roller.name = "CornerRoller";
+            roller.transform.SetParent(_meshRoot.transform, false);
+            roller.transform.localPosition = position + Vector3.up * 0.45f;
+            roller.transform.localRotation = Quaternion.FromToRotation(Vector3.up, side);
+            roller.transform.localScale = new Vector3(0.11f, 0.38f, 0.11f);
+            Destroy(roller.GetComponent<Collider>());
+            roller.GetComponent<MeshRenderer>().sharedMaterial = _railMaterial;
+        }
+
+        private void CreateDirectionArrow(Vector3 end, Vector3 exit)
+        {
+            Vector3 direction = exit.normalized;
+            Vector3 side = Vector3.Cross(Vector3.up, direction).normalized;
+            CreateArrowPart(end - direction * 0.18f + Vector3.up * 0.055f, direction, new Vector3(0.07f, 0.025f, 0.22f));
+            CreateArrowPart(end - direction * 0.05f + side * 0.07f + Vector3.up * 0.055f,
+                (direction - side * 0.75f).normalized, new Vector3(0.055f, 0.025f, 0.17f));
+            CreateArrowPart(end - direction * 0.05f - side * 0.07f + Vector3.up * 0.055f,
+                (direction + side * 0.75f).normalized, new Vector3(0.055f, 0.025f, 0.17f));
+        }
+
+        private void CreateArrowPart(Vector3 position, Vector3 direction, Vector3 scale)
+        {
+            var arrow = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            arrow.name = "DirectionArrow";
+            arrow.transform.SetParent(_meshRoot.transform, false);
+            arrow.transform.localPosition = position + Vector3.up * 0.48f;
+            arrow.transform.localRotation = Quaternion.LookRotation(direction, Vector3.up);
+            arrow.transform.localScale = scale;
+            Destroy(arrow.GetComponent<Collider>());
+            arrow.GetComponent<MeshRenderer>().sharedMaterial = _railMaterial;
         }
 
         private void CreateHorizontalBeltSegment(Vector3 direction, Vector3 center, float length)
@@ -282,10 +407,12 @@ namespace VoxelEngine.Simulation
 
             if (_beltMaterial != null) Destroy(_beltMaterial);
             if (_railMaterial != null) Destroy(_railMaterial);
+            if (_frameMaterial != null) Destroy(_frameMaterial);
 
             _beltRenderer = null;
             _beltMaterial = null;
             _railMaterial = null;
+            _frameMaterial = null;
             _authoredSharedMaterial = null;
             _usingAuthoredStraight = false;
         }

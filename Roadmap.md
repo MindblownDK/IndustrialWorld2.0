@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.1.8-dev`
-**Roadmap Version:** `5.1.8-dev`
+**Current Version:** `5.1.11-dev`
+**Roadmap Version:** `5.1.11-dev`
 **Date:** 2026-07-14
-**Status:** Active Implementation — Conveyor & Chute Runtime Reliability
+**Status:** Active Implementation — Adaptive Corners, Strict Lane Isolation & Chute Snapping
 
 ---
 
@@ -209,13 +209,13 @@ Statuses are evidence-based and move forward only after code/content review and 
 
 | Area | Status | Repository Audit |
 |------|--------|------------------|
-| Conveyor belts | 🛠️ WORKING ON | Basic, Fast, and Express transport now reuses authored straight visuals, pools item representations, preserves tuned status-light intensity, resolves interface connections reliably, and reports multi-packet extraction correctly. Authored ramp and vertical variants still need completion and validation. |
-| Conveyor chutes | 🛠️ WORKING ON | Chutes now reuse authored visuals without runtime duplication, render pooled moving items, resolve rotated/spherical-world connections, and report multi-packet extraction correctly. Corner and spiral prefabs still need authored setup variants. |
+| Conveyor belts | 🛠️ WORKING ON | Live socket validation and tighter tolerances isolate parallel lanes even after topology changes. Corners now infer any unambiguous input/output pair and render a smooth supported curve with rollers, rails, and an exit arrow. Authored ramp and vertical variants remain. |
+| Conveyor chutes | 🛠️ WORKING ON | Chutes transfer through compatible vertical endpoints and now snap beneath conveyors, onto configured top/bottom item ports, and above or below existing chutes. Corner and spiral authored variants remain. |
 | Basic machines | 🟡 PARTIALLY COMPLETE | Electric Furnace, Crusher, and three Assembler tiers exist. Crusher and Assembler use the centralized simulation tick; shared UI and persistence still need completion. |
 | Storage blocks | 🟡 PARTIALLY COMPLETE | A basic chest and the wider storage system exist. The planned Wooden Crate → Iron Chest → Steel Chest → Provider/Requester progression is not complete. |
 | Power pole, wire, and substation | 🟡 PARTIALLY COMPLETE | Manual wiring, poles, substations, transformers, and high-voltage assets exist. Setup reruns still need full non-destructive balance preservation. |
 | Grid/static lighting and LED strips | 🟡 PARTIALLY COMPLETE | Grid light, floodlight logic, and static/grid LED assets exist. Configuration UX, power validation, and complete authored variants still need verification. |
-| Shared Machine UI | 🟡 PARTIALLY COMPLETE | A programmatic UI Toolkit panel exists, but inventory slots, recipe identity, transition polish, and final binding are incomplete. |
+| Shared Machine UI | 🟡 PARTIALLY COMPLETE | Item Ports overlays remain mounted while live logistics changes container contents, retain Escape handling, and refresh the underlying inventory after closing. Shared inventory slots, recipe identity, transition polish, and final machine binding remain incomplete. |
 | Item entity system | 🟡 PARTIALLY COMPLETE | Dropped world items exist and conveyors render carried packets. A unified pooled physical-item entity lifecycle is not complete. |
 | Recipe registry refactor | 🟡 PARTIALLY COMPLETE | ScriptableObject crafting and machine recipes exist. Shaped/shapeless/smelting/machine unification and validation remain incomplete. |
 | Centralized simulation tick | 🟡 PARTIALLY COMPLETE | Crusher and Assembler register with `SimulationTickManager`; belts, chutes, and several older machines still run per-frame updates. |
@@ -1233,6 +1233,67 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.1.11-dev] Adaptive Corners, Strict Lane Isolation & Chute Snapping
+
+**Type:** PATCH — transport routing, adaptive visual, snapping, and modal stability fixes (no save/public API change)
+
+**Fixed:**
+- Conveyor handoff and pull operations now revalidate live socket alignment, preventing stale targets from moving items into a neighboring parallel lane.
+- Belt socket tolerance is tighter and shared by discovery, topology inference, pull, and handoff checks.
+- Conveyor shape inference now supports every unambiguous perpendicular input/output pair instead of assuming side-in/forward-out.
+- Ambiguous junctions and loose endpoints remain straight.
+- Item Ports no longer disappear when live logistics changes the open chest inventory.
+- Item Ports keep Escape handling active while chest contents update and rebuild the latest inventory state after closing.
+
+**Added:**
+- Smooth segmented corner-belt geometry that follows the same curve used by transported items.
+- Dynamic corner support base, four legs, endpoint rollers, curved rails, and an output-direction arrow.
+- Chute placement snapping beneath conveyors.
+- Chute placement snapping to configured top/bottom item ports.
+- Bidirectional stacking above or below existing chutes based on the selected chute face.
+
+**Changed:**
+- Straight belts with a non-default inferred axis use matching dynamic geometry; default straight belts continue using their authored Step 17 visuals.
+- Updated the runtime and roadmap version to `5.1.11-dev`.
+
+---
+
+### [5.1.10-dev] Unity-Safe Transport Visual Initialization
+
+**Type:** PATCH — Unity lifecycle compatibility fix (no save/public API change)
+
+**Fixed:**
+- `BeltVisualController` no longer creates a `MaterialPropertyBlock` from a MonoBehaviour field initializer.
+- `ConveyorChute` no longer creates a `MaterialPropertyBlock` from a MonoBehaviour field initializer.
+- Both components now allocate their property block during `Awake`, with a guarded runtime fallback before first use.
+- Asset import workers can deserialize conveyor and chute prefabs without invoking forbidden native object creation from MonoBehaviour constructors.
+
+**Changed:**
+- Updated the runtime and roadmap version to `5.1.10-dev`.
+
+---
+
+### [5.1.9-dev] Directional Conveyor, Chute & Item-Port Fixes
+
+**Type:** PATCH — transport routing and UI-close bug fixes (no save/public API change)
+
+**Fixed:**
+- Parallel conveyor lanes no longer detect each other as side inputs.
+- A conveyor accepts another belt only when the two physical sockets meet and their input/output directions oppose correctly.
+- Rear-fed conveyor lines remain straight instead of changing the first or last segment into an accidental L shape.
+- Side-fed corners require one valid side provider and a valid forward continuation, preventing loose or ambiguous corner conversion.
+- Side conveyors no longer pull from or push into the middle of an unrelated straight belt.
+- Chutes scan immediately when enabled and use a wider nearest-endpoint search above and below.
+- Chutes can transfer between belts, compatible inventory interfaces, and correctly configured item-port faces.
+- Item-port routing and filters are respected when a chute inserts into a configured endpoint.
+- Escape now closes the active item-filter dialog first, then the Item Ports overlay on the next press; each consumes pause input and leaves the underlying inventory open.
+
+**Changed:**
+- Conveyor and chute roadmap audit notes now reflect the directional routing fixes.
+- Updated the runtime and roadmap version to `5.1.9-dev`.
+
+---
 
 ### [5.1.8-dev] Conveyor & Chute Runtime Reliability
 

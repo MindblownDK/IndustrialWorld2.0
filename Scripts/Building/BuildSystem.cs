@@ -227,10 +227,29 @@ namespace VoxelEngine.Building
                 return true;
             }
 
+            float factorySpacing = Mathf.Max(gridSize, 1f);
+            if (placingChute && targetBelt != null)
+            {
+                // Chutes mounted from a belt always hang directly beneath it so
+                // the belt is the upper provider and the chute remains vertical.
+                pos = targetBelt.transform.position - targetBelt.transform.up * factorySpacing;
+                rot = targetBelt.transform.rotation;
+                return true;
+            }
+
+            if (placingChute)
+            {
+                var targetPorts = hit.collider.GetComponentInParent<PortConfig>();
+                if (TryGetVerticalItemPortSnap(targetPorts, hit, factorySpacing, out pos, out rot))
+                    return true;
+            }
+
             var targetChute = hit.collider.GetComponentInParent<VoxelEngine.Simulation.ConveyorChute>();
             if (placingChute && targetChute != null)
             {
-                pos = targetChute.transform.position + targetChute.transform.up * Mathf.Max(gridSize, 1f);
+                Vector3 localHit = targetChute.transform.InverseTransformPoint(hit.point);
+                float verticalSign = localHit.y < 0f ? -1f : 1f;
+                pos = targetChute.transform.position + targetChute.transform.up * verticalSign * factorySpacing;
                 rot = targetChute.transform.rotation;
                 return true;
             }
@@ -248,6 +267,38 @@ namespace VoxelEngine.Building
             }
 
             return false;
+        }
+
+        private static bool TryGetVerticalItemPortSnap(
+            PortConfig ports,
+            RaycastHit hit,
+            float spacing,
+            out Vector3 position,
+            out Quaternion rotation)
+        {
+            position = default;
+            rotation = default;
+            if (ports == null) return false;
+
+            bool found = false;
+            CubeFace selectedFace = CubeFace.PosY;
+            float bestDistance = float.MaxValue;
+            for (int i = 0; i < 2; i++)
+            {
+                CubeFace face = i == 0 ? CubeFace.PosY : CubeFace.NegY;
+                if (!ports.IsFaceEnabled(face) || ports.GetDirection(face) == PortDirection.None) continue;
+                float distance = (ports.FaceWorldPoint(face) - hit.point).sqrMagnitude;
+                if (distance >= bestDistance) continue;
+                bestDistance = distance;
+                selectedFace = face;
+                found = true;
+            }
+
+            if (!found) return false;
+            Vector3 normal = ports.FaceNormal(selectedFace).normalized;
+            position = ports.transform.position + normal * spacing;
+            rotation = ports.transform.rotation;
+            return true;
         }
 
         private static Vector3 NearestLocalCardinal(Vector3 local)

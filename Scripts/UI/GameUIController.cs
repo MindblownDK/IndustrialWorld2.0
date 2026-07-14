@@ -305,7 +305,7 @@ namespace VoxelEngine.UI
             }
             else if (pausePressed && _itemPortsOverlay != null && _itemPortsOverlay.parent != null)
             {
-                CloseItemPortsOverlay();
+                CloseItemPortsOverlay(refreshAfterClose: true);
                 UIState.PauseConsumedFrame = Time.frameCount;
                 itemPortsClosedThisFrame = true;
             }
@@ -806,6 +806,15 @@ namespace VoxelEngine.UI
 
         private void Refresh()
         {
+            // Container changes can arrive while logistics is moving items. Keep the
+            // modal tree mounted instead of clearing it underneath the player; the
+            // latest container state is rebuilt immediately when the overlay closes.
+            if (_itemPortsOverlay != null && _itemPortsOverlay.parent != null) return;
+            if (_itemPortsOverlay != null)
+            {
+                _itemPortsOverlay = null;
+                PortConfigHud.IsAnyDropdownOpen = false;
+            }
             if (_searchHasFocus) return;
 
             // Clear stale references — the elements they point to are about to be destroyed.
@@ -1541,13 +1550,14 @@ namespace VoxelEngine.UI
             panel.Add(MakePortsToggle(false, () => OpenItemPortsOverlay(host, routing)));
         }
 
-        private void CloseItemPortsOverlay()
+        private void CloseItemPortsOverlay(bool refreshAfterClose = false)
         {
             ItemFilterDialog.CloseActive();
             PortConfigHud.IsAnyDropdownOpen = false;
             if (_itemPortsOverlay != null && _itemPortsOverlay.parent != null)
                 _itemPortsOverlay.RemoveFromHierarchy();
             _itemPortsOverlay = null;
+            if (refreshAfterClose) Refresh();
         }
 
         /// <summary>
@@ -1582,7 +1592,7 @@ namespace VoxelEngine.UI
             dim.pickingMode = PickingMode.Ignore;
             overlay.Add(dim);
 
-            void Close() => CloseItemPortsOverlay();
+            void Close() => CloseItemPortsOverlay(refreshAfterClose: true);
 
             // Card container.
             var card = MakePanel();
