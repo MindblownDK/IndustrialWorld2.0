@@ -1,11 +1,8 @@
 // Assets/Scripts/VoxelEngine/Simulation/ConveyorChute.cs
 //
-// ╔══════════════════════════════════════════════════════════════════╗
-// ║  INDUSTRIAL WORLD — CONVEYOR CHUTE                              ║
-// ║  Drops items from one elevation to another. Items slide         ║
-// ║  visually and audibly through the chute channel.                ║
-// ║  Variants: Straight drop, Corner drop, Spiral (future).         ║
-// ╚══════════════════════════════════════════════════════════════════╝
+// Vertical item transport with authored-prefab reuse, fallback visuals, and
+// pooled item representations. Existing setup-generated visuals are never
+// duplicated at runtime.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -13,25 +10,16 @@ using VoxelEngine.Items;
 
 namespace VoxelEngine.Simulation
 {
-    /// <summary>Chute shape variant.</summary>
     public enum ChuteShape { Straight, Corner, Spiral }
 
-    /// <summary>
-    /// A single item sliding through the chute.
-    /// </summary>
     [System.Serializable]
     public struct ChuteItem
     {
         public ItemDefinition item;
         public int count;
-        /// <summary>0 = top entry, 1 = bottom exit.</summary>
         public float slideProgress;
     }
 
-    /// <summary>
-    /// Vertical/diagonal item transport. Accepts items from belts or machines
-    /// above, slides them down, and deposits onto a belt or machine below.
-    /// </summary>
     public class ConveyorChute : MonoBehaviour, IItemConsumer, IItemProvider
     {
         [Header("Chute Configuration")]
@@ -49,45 +37,47 @@ namespace VoxelEngine.Simulation
         public MonoBehaviour upstreamSource;
         public MonoBehaviour downstreamTarget;
 
-        // ── Runtime ───────────────────────────────────────────────────
+        private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+        private static readonly int ColorId = Shader.PropertyToID("_Color");
+        private static Material _fallbackShellMaterial;
+        private static Material _fallbackChannelMaterial;
+        private static Material _sharedItemMaterial;
 
         private readonly List<ChuteItem> _items = new(12);
+        private readonly List<Transform> _itemVisuals = new(12);
+        private readonly List<bool> _visualActive = new(12);
+        private readonly MaterialPropertyBlock _itemProperties = new();
         private float _scanTimer;
         private float _pullTimer;
 
-        /// <summary>Read-only view of items currently in the chute.</summary>
         public IReadOnlyList<ChuteItem> Items => _items;
-
-        // ── Lifecycle ─────────────────────────────────────────────────
 
         private void Awake()
         {
-            BuildChuteVisuals();
+            EnsureVisuals();
         }
 
         private void Update()
         {
             float dt = Time.deltaTime;
 
-            // Advance items down the chute.
             for (int i = _items.Count - 1; i >= 0; i--)
             {
-                var ci = _items[i];
-                ci.slideProgress += slideSpeed * dt;
+                var chuteItem = _items[i];
+                chuteItem.slideProgress += slideSpeed * dt;
 
-                if (ci.slideProgress >= 1f)
+                if (chuteItem.slideProgress >= 1f)
                 {
-                    if (TryHandOff(ref ci))
+                    if (TryHandOff(ref chuteItem))
                     {
                         _items.RemoveAt(i);
                         continue;
                     }
-                    ci.slideProgress = 1f; // wait at exit
+                    chuteItem.slideProgress = 1f;
                 }
-                _items[i] = ci;
+                _items[i] = chuteItem;
             }
 
-            // Scan connections periodically.
             _scanTimer += dt;
             if (_scanTimer >= 0.5f)
             {
@@ -95,16 +85,15 @@ namespace VoxelEngine.Simulation
                 ScanConnections();
             }
 
-            // Pull from upstream.
             _pullTimer += dt;
             if (_pullTimer >= 0.3f && _items.Count < maxItems && upstreamSource != null)
             {
                 _pullTimer = 0f;
                 TryPullFromUpstream();
             }
-        }
 
-        // ── IItemConsumer ─────────────────────────────────────────────
+            UpdateItemVisuals();
+        }
 
         public int GetInputCapacity(ItemDefinition item)
         {
@@ -128,8 +117,6 @@ namespace VoxelEngine.Simulation
             return accepted;
         }
 
-        // ── IItemProvider ─────────────────────────────────────────────
-
         public ItemDefinition PeekOutput(out int count)
         {
             count = 0;
@@ -137,11 +124,9 @@ namespace VoxelEngine.Simulation
 
             for (int i = _items.Count - 1; i >= 0; i--)
             {
-                if (_items[i].slideProgress >= 0.9f)
-                {
-                    count = _items[i].count;
-                    return _items[i].item;
-                }
+                if (_items[i].slideProgress < 0.9f) continue;
+                count = _items[i].count;
+                return _items[i].item;
             }
             return null;
         }
@@ -150,85 +135,73 @@ namespace VoxelEngine.Simulation
         {
             if (item == null || count <= 0) return 0;
 
+            int remaining = count;
+            int extracted = 0;
             for (int i = _items.Count - 1; i >= 0; i--)
             {
-                var ci = _items[i];
-                if (ci.item != item || ci.slideProgress < 0.9f) continue;
+                var chuteItem = _items[i];
+                if (chuteItem.item != item || chuteItem.slideProgress < 0.9f) continue;
 
-                int take = Mathf.Min(count, ci.count);
-                ci.count -= take;
-                count -= take;
+                int take = Mathf.Min(remaining, chuteItem.count);
+                chuteItem.count -= take;
+                remaining -= take;
+                extracted += take;
 
-                if (ci.count <= 0) _items.RemoveAt(i);
-                else _items[i] = ci;
+                if (chuteItem.count <= 0)
+                    _items.RemoveAt(i);
+                else
+                    _items[i] = chuteItem;
 
-                if (count <= 0) return take;
+                if (remaining <= 0) break;
             }
-            return 0;
+            return extracted;
         }
-
-        // ── Connections ───────────────────────────────────────────────
 
         private void ScanConnections()
         {
-            // Downstream = below the chute exit.
-            Vector3 exitPos = transform.position + Vector3.down * 1.2f;
-            var hits = Physics.OverlapSphere(exitPos, 0.8f);
-            downstreamTarget = null;
-            foreach (var col in hits)
-            {
-                if (col.gameObject == gameObject) continue;
-                var consumer = col.GetComponentInParent<MonoBehaviour>() as IItemConsumer;
-                if (consumer != null)
-                {
-                    downstreamTarget = consumer as MonoBehaviour;
-                    break;
-                }
-            }
-
-            // Upstream = above the chute entry.
-            Vector3 entryPos = transform.position + Vector3.up * 1.2f;
-            hits = Physics.OverlapSphere(entryPos, 0.8f);
-            upstreamSource = null;
-            foreach (var col in hits)
-            {
-                if (col.gameObject == gameObject) continue;
-                var provider = col.GetComponentInParent<MonoBehaviour>() as IItemProvider;
-                if (provider != null)
-                {
-                    upstreamSource = provider as MonoBehaviour;
-                    break;
-                }
-            }
+            downstreamTarget = FindInterfaceAt<IItemConsumer>(transform.position - transform.up * 1.2f);
+            upstreamSource = FindInterfaceAt<IItemProvider>(transform.position + transform.up * 1.2f);
         }
 
-        private bool TryHandOff(ref ChuteItem ci)
+        private MonoBehaviour FindInterfaceAt<T>(Vector3 worldPosition) where T : class
         {
-            if (downstreamTarget == null) return false;
-            var consumer = downstreamTarget as IItemConsumer;
-            if (consumer == null) return false;
+            var hits = Physics.OverlapSphere(worldPosition, 0.8f);
+            foreach (var col in hits)
+            {
+                if (col == null || col.transform.IsChildOf(transform)) continue;
+                var behaviours = col.GetComponentsInParent<MonoBehaviour>(true);
+                foreach (var behaviour in behaviours)
+                {
+                    if (behaviour != null && behaviour != this && behaviour is T)
+                        return behaviour;
+                }
+            }
+            return null;
+        }
 
-            int cap = consumer.GetInputCapacity(ci.item);
-            if (cap <= 0) return false;
+        private bool TryHandOff(ref ChuteItem chuteItem)
+        {
+            if (!(downstreamTarget is IItemConsumer consumer)) return false;
 
-            int sent = Mathf.Min(cap, ci.count);
-            int accepted = consumer.TryInsert(ci.item, sent);
-            ci.count -= accepted;
-            return ci.count <= 0;
+            int capacity = consumer.GetInputCapacity(chuteItem.item);
+            if (capacity <= 0) return false;
+
+            int sent = Mathf.Min(capacity, chuteItem.count);
+            int accepted = consumer.TryInsert(chuteItem.item, sent);
+            chuteItem.count -= accepted;
+            return chuteItem.count <= 0;
         }
 
         private void TryPullFromUpstream()
         {
-            var provider = upstreamSource as IItemProvider;
-            if (provider == null) return;
+            if (!(upstreamSource is IItemProvider provider)) return;
 
             var item = provider.PeekOutput(out int available);
             if (item == null || available <= 0) return;
 
-            int want = Mathf.Min(available, maxItems - _items.Count);
-            int got = provider.TryExtract(item, want);
-
-            for (int i = 0; i < got; i++)
+            int wanted = Mathf.Min(available, maxItems - _items.Count);
+            int received = provider.TryExtract(item, wanted);
+            for (int i = 0; i < received; i++)
             {
                 _items.Add(new ChuteItem
                 {
@@ -239,44 +212,140 @@ namespace VoxelEngine.Simulation
             }
         }
 
-        // ── Visuals ───────────────────────────────────────────────────
-
-        private void BuildChuteVisuals()
+        private void EnsureVisuals()
         {
-            // Main chute body — angled channel.
+            if (transform.Find("Generated_SquareRim") != null) return;
+            if (transform.Find("RuntimeFallbackVisuals") != null) return;
+
+            var visualRoot = new GameObject("RuntimeFallbackVisuals");
+            visualRoot.transform.SetParent(transform, false);
+
             var body = GameObject.CreatePrimitive(PrimitiveType.Cube);
             body.name = "ChuteBody";
-            body.transform.SetParent(transform, false);
-            body.transform.localPosition = Vector3.zero;
-            body.transform.localScale = new Vector3(0.6f, 1.0f, 0.6f);
+            body.transform.SetParent(visualRoot.transform, false);
+            body.transform.localScale = new Vector3(0.6f, 1f, 0.6f);
+            Destroy(body.GetComponent<Collider>());
+            body.GetComponent<MeshRenderer>().sharedMaterial = GetFallbackShellMaterial();
 
-            var col = body.GetComponent<Collider>();
-            if (col != null) Destroy(col);
+            var channel = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            channel.name = "ChuteChannel";
+            channel.transform.SetParent(visualRoot.transform, false);
+            channel.transform.localScale = new Vector3(0.45f, 0.95f, 0.45f);
+            Destroy(channel.GetComponent<Collider>());
+            channel.GetComponent<MeshRenderer>().sharedMaterial = GetFallbackChannelMaterial();
+        }
 
-            var mr = body.GetComponent<MeshRenderer>();
-            var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
-            var mat = new Material(shader);
-            mat.color = new Color(0.30f, 0.33f, 0.38f);
-            mat.SetFloat("_Metallic", 0.6f);
-            mat.SetFloat("_Smoothness", 0.4f);
-            mr.material = mat;
+        private void UpdateItemVisuals()
+        {
+            while (_itemVisuals.Count < _items.Count)
+            {
+                _itemVisuals.Add(CreateItemVisual());
+                _visualActive.Add(false);
+            }
 
-            // Inner channel — slightly transparent to see items sliding.
-            var inner = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            inner.name = "ChuteChannel";
-            inner.transform.SetParent(transform, false);
-            inner.transform.localPosition = Vector3.zero;
-            inner.transform.localScale = new Vector3(0.45f, 0.95f, 0.45f);
+            for (int i = 0; i < _itemVisuals.Count; i++)
+            {
+                if (i < _items.Count)
+                {
+                    var chuteItem = _items[i];
+                    var visual = _itemVisuals[i];
+                    visual.position = GetWorldPosition(chuteItem.slideProgress);
+                    visual.gameObject.SetActive(true);
+                    _visualActive[i] = true;
+                    SetItemColor(visual, chuteItem.item);
+                }
+                else if (_visualActive[i])
+                {
+                    _itemVisuals[i].gameObject.SetActive(false);
+                    _visualActive[i] = false;
+                }
+            }
+        }
 
-            var icol = inner.GetComponent<Collider>();
-            if (icol != null) Destroy(icol);
+        private Vector3 GetWorldPosition(float progress)
+        {
+            float t = Mathf.Clamp01(progress);
+            Vector3 localPosition;
+            switch (shape)
+            {
+                case ChuteShape.Corner:
+                    {
+                        Vector3 start = new(0f, 0.85f, -0.3f);
+                        Vector3 control = new(0f, 0.3f, 0f);
+                        Vector3 end = new(0.3f, -0.2f, 0f);
+                        float inverse = 1f - t;
+                        localPosition = inverse * inverse * start + 2f * inverse * t * control + t * t * end;
+                        break;
+                    }
+                case ChuteShape.Spiral:
+                    {
+                        float angle = t * Mathf.PI * 3f;
+                        localPosition = new Vector3(Mathf.Cos(angle) * 0.22f, Mathf.Lerp(0.85f, -0.2f, t), Mathf.Sin(angle) * 0.22f);
+                        break;
+                    }
+                default:
+                    localPosition = new Vector3(0f, Mathf.Lerp(0.85f, -0.2f, t), 0f);
+                    break;
+            }
+            return transform.TransformPoint(localPosition);
+        }
 
-            var imr = inner.GetComponent<MeshRenderer>();
-            var imat = new Material(shader);
-            imat.color = new Color(0.12f, 0.13f, 0.16f, 0.6f);
-            imat.SetFloat("_Metallic", 0.2f);
-            imat.SetFloat("_Smoothness", 0.8f);
-            imr.material = imat;
+        private Transform CreateItemVisual()
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            go.name = "ChuteItemVisual";
+            go.transform.SetParent(transform, false);
+            go.transform.localScale = Vector3.one * 0.2f;
+            Destroy(go.GetComponent<Collider>());
+            go.GetComponent<MeshRenderer>().sharedMaterial = GetSharedItemMaterial();
+            go.SetActive(false);
+            return go.transform;
+        }
+
+        private void SetItemColor(Transform visual, ItemDefinition item)
+        {
+            if (visual == null || item == null) return;
+            var renderer = visual.GetComponent<MeshRenderer>();
+            if (renderer == null) return;
+
+            renderer.GetPropertyBlock(_itemProperties);
+            _itemProperties.SetColor(BaseColorId, item.iconTint);
+            _itemProperties.SetColor(ColorId, item.iconTint);
+            renderer.SetPropertyBlock(_itemProperties);
+        }
+
+        private static Material GetFallbackShellMaterial()
+        {
+            if (_fallbackShellMaterial != null) return _fallbackShellMaterial;
+            _fallbackShellMaterial = new Material(GetRequiredShader()) { color = new Color(0.30f, 0.33f, 0.38f) };
+            _fallbackShellMaterial.SetFloat("_Metallic", 0.6f);
+            _fallbackShellMaterial.SetFloat("_Smoothness", 0.4f);
+            return _fallbackShellMaterial;
+        }
+
+        private static Material GetFallbackChannelMaterial()
+        {
+            if (_fallbackChannelMaterial != null) return _fallbackChannelMaterial;
+            _fallbackChannelMaterial = new Material(GetRequiredShader()) { color = new Color(0.12f, 0.13f, 0.16f) };
+            _fallbackChannelMaterial.SetFloat("_Metallic", 0.2f);
+            _fallbackChannelMaterial.SetFloat("_Smoothness", 0.8f);
+            return _fallbackChannelMaterial;
+        }
+
+        private static Material GetSharedItemMaterial()
+        {
+            if (_sharedItemMaterial != null) return _sharedItemMaterial;
+            _sharedItemMaterial = new Material(GetRequiredShader()) { color = Color.white };
+            _sharedItemMaterial.SetFloat("_Metallic", 0.15f);
+            _sharedItemMaterial.SetFloat("_Smoothness", 0.3f);
+            return _sharedItemMaterial;
+        }
+
+        private static Shader GetRequiredShader()
+        {
+            return Shader.Find("Universal Render Pipeline/Lit")
+                ?? Shader.Find("Standard")
+                ?? Shader.Find("Hidden/InternalErrorShader");
         }
     }
 }

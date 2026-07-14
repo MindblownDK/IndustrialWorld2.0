@@ -7,7 +7,7 @@
 // ║  along the belt direction. Snaps to grid and to machine ports.  ║
 // ║                                                                  ║
 // ║  Speed tiers: Basic (2 items/s) → Fast (5) → Express (10).      ║
-// ║  Variants: Straight, Corner, Ramp, Vertical (future).           ║
+// ║  Runtime shapes: Straight, Corner, Ramp Up, Ramp Down.          ║
 // ╚══════════════════════════════════════════════════════════════════╝
 
 using System.Collections.Generic;
@@ -179,13 +179,24 @@ namespace VoxelEngine.Simulation
 
         private void UpdateTravelDirection()
         {
-            travelDirection = shape switch
+            switch (shape)
             {
-                ConveyorShape.Corner   => Vector3.right,  // simplified — corner handled by visuals
-                ConveyorShape.RampUp   => new Vector3(0, 0.5f, 1f).normalized,
-                ConveyorShape.RampDown => new Vector3(0, -0.5f, 1f).normalized,
-                _                      => Vector3.forward
-            };
+                case ConveyorShape.RampUp:
+                    entryDirection = new Vector3(0f, -0.5f, -1f).normalized;
+                    exitDirection = new Vector3(0f, 0.5f, 1f).normalized;
+                    break;
+                case ConveyorShape.RampDown:
+                    entryDirection = new Vector3(0f, 0.5f, -1f).normalized;
+                    exitDirection = new Vector3(0f, -0.5f, 1f).normalized;
+                    break;
+                case ConveyorShape.Straight:
+                    entryDirection = Vector3.back;
+                    exitDirection = Vector3.forward;
+                    break;
+            }
+
+            travelDirection = (exitDirection - entryDirection).normalized;
+            if (travelDirection.sqrMagnitude < 0.01f) travelDirection = Vector3.forward;
         }
 
         // ── IItemConsumer ─────────────────────────────────────────────
@@ -241,23 +252,26 @@ namespace VoxelEngine.Simulation
         {
             if (item == null || count <= 0) return 0;
 
+            int remaining = count;
+            int extracted = 0;
             for (int i = _items.Count - 1; i >= 0; i--)
             {
                 var ci = _items[i];
                 if (ci.item != item || ci.progress < 0.9f) continue;
 
-                int take = Mathf.Min(count, ci.count);
+                int take = Mathf.Min(remaining, ci.count);
                 ci.count -= take;
-                count -= take;
+                remaining -= take;
+                extracted += take;
 
                 if (ci.count <= 0)
                     _items.RemoveAt(i);
                 else
                     _items[i] = ci;
 
-                if (count <= 0) return take;
+                if (remaining <= 0) break;
             }
-            return 0;
+            return extracted;
         }
 
         // ── Connections ───────────────────────────────────────────────
@@ -320,7 +334,7 @@ namespace VoxelEngine.Simulation
             var hits = Physics.OverlapSphere(worldPos, 0.8f);
             foreach (var col in hits)
             {
-                if (col.gameObject == gameObject) continue;
+                if (col == null || col.transform.IsChildOf(transform)) continue;
                 var funnel = col.GetComponentInParent<Funnel>();
                 if (funnel != null) return funnel;
             }
@@ -332,9 +346,13 @@ namespace VoxelEngine.Simulation
             var hits = Physics.OverlapSphere(worldPos, 0.8f);
             foreach (var col in hits)
             {
-                if (col.gameObject == gameObject) continue;
-                var consumer = col.GetComponentInParent<MonoBehaviour>() as IItemConsumer;
-                if (consumer != null) return consumer as MonoBehaviour;
+                if (col == null || col.transform.IsChildOf(transform)) continue;
+                var behaviours = col.GetComponentsInParent<MonoBehaviour>(true);
+                foreach (var behaviour in behaviours)
+                {
+                    if (behaviour != null && behaviour != this && behaviour is IItemConsumer)
+                        return behaviour;
+                }
             }
             return null;
         }
@@ -344,9 +362,13 @@ namespace VoxelEngine.Simulation
             var hits = Physics.OverlapSphere(worldPos, 0.8f);
             foreach (var col in hits)
             {
-                if (col.gameObject == gameObject) continue;
-                var provider = col.GetComponentInParent<MonoBehaviour>() as IItemProvider;
-                if (provider != null) return provider as MonoBehaviour;
+                if (col == null || col.transform.IsChildOf(transform)) continue;
+                var behaviours = col.GetComponentsInParent<MonoBehaviour>(true);
+                foreach (var behaviour in behaviours)
+                {
+                    if (behaviour != null && behaviour != this && behaviour is IItemProvider)
+                        return behaviour;
+                }
             }
             return null;
         }
@@ -401,90 +423,49 @@ namespace VoxelEngine.Simulation
         public Vector3 GetWorldPosition(float progress, float lateralOffset = 0f)
         {
             float t = Mathf.Clamp01(progress);
-            Vector3 localPos;
+            Vector3 localPosition;
+            Vector3 localTangent;
 
-            switch (shape)
+            if (shape == ConveyorShape.Corner)
             {
-                case ConveyorShape.Corner:
-                    // 90° turn: items follow a quarter-circle arc from forward to right.
-                    float angle = t * Mathf.PI * 0.5f; // 0 → 90°
-                    float radius = 0.5f;
-                    localPos = new Vector3(
-                        Mathf.Sin(angle) * radius,
-                        0.52f,
-                        Mathf.Cos(angle) * radius
-                    );
-                    localPos += transform.right * lateralOffset;
-                    break;
-
-                case ConveyorShape.RampUp:
-                    // Ramp going up: forward + upward.
-                    localPos = new Vector3(
-                        0f,
-                        0.52f + t * 0.5f, // rises 0.5m over the belt length
-                        -0.5f + t * 1.0f  // travels 1m forward
-                    );
-                    localPos += transform.right * lateralOffset;
-                    break;
-
-                case ConveyorShape.RampDown:
-                    // Ramp going down: forward + downward.
-                    localPos = new Vector3(
-                        0f,
-                        0.52f - t * 0.5f, // drops 0.5m over the belt length
-                        -0.5f + t * 1.0f  // travels 1m forward
-                    );
-                    localPos += transform.right * lateralOffset;
-                    break;
-
-                default: // Straight
-                    localPos = new Vector3(
-                        lateralOffset,
-                        0.52f,
-                        -0.5f + t * 1.0f
-                    );
-                    break;
+                Vector3 start = SafeLocalDirection(entryDirection, Vector3.back) * 0.5f;
+                Vector3 end = SafeLocalDirection(exitDirection, Vector3.forward) * 0.5f;
+                Vector3 control = Vector3.zero;
+                float inverse = 1f - t;
+                localPosition = inverse * inverse * start + 2f * inverse * t * control + t * t * end;
+                localTangent = 2f * inverse * (control - start) + 2f * t * (end - control);
+                localPosition.y = 0.52f;
+                localTangent.y = 0f;
+            }
+            else
+            {
+                Vector3 start = SafeLocalDirection(entryDirection, Vector3.back) * 0.5f;
+                Vector3 end = SafeLocalDirection(exitDirection, Vector3.forward) * 0.5f;
+                localPosition = Vector3.Lerp(start, end, t) + Vector3.up * 0.52f;
+                localTangent = end - start;
             }
 
-            return transform.TransformPoint(localPos);
+            Vector3 localSide = Vector3.Cross(Vector3.up, localTangent.normalized);
+            if (localSide.sqrMagnitude < 0.01f) localSide = Vector3.right;
+            localPosition += localSide.normalized * lateralOffset;
+            return transform.TransformPoint(localPosition);
         }
 
-        /// <summary>
-        /// Returns the world-space EXIT direction for this belt shape.
-        /// Used by ScanConnections to find the downstream target.
-        /// </summary>
+        /// <summary>Returns the world-space direction from the belt centre to its output.</summary>
         public Vector3 GetExitDirection()
         {
-            switch (shape)
-            {
-                case ConveyorShape.Corner:
-                    return transform.right; // exits to the right
-                case ConveyorShape.RampUp:
-                    return transform.TransformDirection(new Vector3(0, 0.5f, 1f).normalized);
-                case ConveyorShape.RampDown:
-                    return transform.TransformDirection(new Vector3(0, -0.5f, 1f).normalized);
-                default:
-                    return transform.forward;
-            }
+            return transform.TransformDirection(SafeLocalDirection(exitDirection, Vector3.forward)).normalized;
         }
 
-        /// <summary>
-        /// Returns the world-space ENTRY direction for this belt shape.
-        /// Used by ScanConnections to find the upstream source.
-        /// </summary>
+        /// <summary>Returns the world-space direction from the belt centre to its input.</summary>
         public Vector3 GetEntryDirection()
         {
-            switch (shape)
-            {
-                case ConveyorShape.Corner:
-                    return -transform.forward; // enters from behind
-                case ConveyorShape.RampUp:
-                    return transform.TransformDirection(new Vector3(0, -0.5f, -1f).normalized);
-                case ConveyorShape.RampDown:
-                    return transform.TransformDirection(new Vector3(0, 0.5f, -1f).normalized);
-                default:
-                    return -transform.forward;
-            }
+            return transform.TransformDirection(SafeLocalDirection(entryDirection, Vector3.back)).normalized;
+        }
+
+        private static Vector3 SafeLocalDirection(Vector3 direction, Vector3 fallback)
+        {
+            return direction.sqrMagnitude >= 0.01f ? direction.normalized : fallback;
         }
     }
 }

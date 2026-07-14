@@ -39,6 +39,7 @@ namespace VoxelEngine.Simulation
         private Renderer _renderer;
         private Material _material;
         private Light _light;
+        private float _baseLightIntensity = 1f;
         private float _refreshTimer;
         private FactoryVisualStatus _status = FactoryVisualStatus.Idle;
         private IMachine _machine;
@@ -66,8 +67,13 @@ namespace VoxelEngine.Simulation
             if (_light != null && pulseAmount > 0f && _status == FactoryVisualStatus.Active)
             {
                 float pulse = 1f + Mathf.Sin(Time.time * Mathf.PI * 2f * pulseSpeed) * pulseAmount;
-                _light.intensity = Mathf.Max(0f, pulse);
+                _light.intensity = Mathf.Max(0f, _baseLightIntensity * pulse);
             }
+        }
+
+        private void OnDestroy()
+        {
+            if (_material != null) Destroy(_material);
         }
 
         private void CacheLogicTargets()
@@ -87,9 +93,17 @@ namespace VoxelEngine.Simulation
 
             if (_renderer != null)
             {
-                _material = new Material(_renderer.sharedMaterial != null
-                    ? _renderer.sharedMaterial
-                    : new Material(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard")));
+                if (_renderer.sharedMaterial != null)
+                {
+                    _material = new Material(_renderer.sharedMaterial);
+                }
+                else
+                {
+                    var shader = Shader.Find("Universal Render Pipeline/Lit")
+                        ?? Shader.Find("Standard")
+                        ?? Shader.Find("Hidden/InternalErrorShader");
+                    _material = new Material(shader);
+                }
                 _renderer.sharedMaterial = _material;
                 _material.EnableKeyword("_EMISSION");
             }
@@ -97,6 +111,7 @@ namespace VoxelEngine.Simulation
             Transform lightTransform = FindChild(lightChildName);
             if (lightTransform != null) _light = lightTransform.GetComponent<Light>();
             if (_light == null) _light = GetComponentInChildren<Light>(true);
+            if (_light != null) _baseLightIntensity = Mathf.Max(0f, _light.intensity);
         }
 
         private FactoryVisualStatus ResolveStatus()
@@ -168,7 +183,9 @@ namespace VoxelEngine.Simulation
             {
                 _light.color = color;
                 _light.enabled = status != FactoryVisualStatus.Disabled;
-                _light.intensity = status == FactoryVisualStatus.Blocked ? 1.8f : 1f;
+                _light.intensity = status == FactoryVisualStatus.Blocked
+                    ? _baseLightIntensity * 1.8f
+                    : _baseLightIntensity;
             }
         }
 

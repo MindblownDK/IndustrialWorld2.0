@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
-**Branch:** `Dev`  
-**Current Version:** `4.5.1-dev`  
-**Roadmap Version:** `4.5.7-dev`  
-**Date:** 2026-07-08  
-**Status:** Iterated Planning Deliverable — Radiation, Heat, Oxygen, Airtight Systems & Painting Added
+**Branch:** `Dev`
+**Current Version:** `5.1.8-dev`
+**Roadmap Version:** `5.1.8-dev`
+**Date:** 2026-07-14
+**Status:** Active Implementation — Conveyor & Chute Runtime Reliability
 
 ---
 
@@ -187,15 +187,44 @@ Every body in the star system has a unique industrial identity.
 | **5.2.0** | Architect Era | World forge, megastructures, fusion, save schema v2 | Very High — new save format |
 | **5.3.0+** | Live Ops | Modding API, multiplayer foundations, seasonal content | TBD |
 
+### 5.1 Execution Status Convention
+
+| Marker | Meaning |
+|--------|---------|
+| 🛠️ **WORKING ON** | Active implementation is the current team focus. |
+| 🟡 **PARTIALLY COMPLETE** | Some production code or content exists, but one or more roadmap requirements or validation gates remain open. |
+| ✅ **COMPLETED** | The complete scoped section is implemented, generated through the required setup step, validated in Unity, and documented. |
+
+Statuses are evidence-based and move forward only after code/content review and Unity validation. A section may remain **PARTIALLY COMPLETE** even when its core script exists if variants, persistence, setup automation, UX, or verification are still outstanding.
+
 ---
 
 ## 6. Detailed Feature Breakdown
 
-### 6.1 Version 4.5.0 — Factory Foundations
+### 6.1 Version 4.5.0 — Factory Foundations — 🛠️ WORKING ON
 
 **Goal:** Make the player feel the factory fantasy within the first hour.
 
-#### New Content
+#### Execution Status
+
+| Area | Status | Repository Audit |
+|------|--------|------------------|
+| Conveyor belts | 🛠️ WORKING ON | Basic, Fast, and Express transport now reuses authored straight visuals, pools item representations, preserves tuned status-light intensity, resolves interface connections reliably, and reports multi-packet extraction correctly. Authored ramp and vertical variants still need completion and validation. |
+| Conveyor chutes | 🛠️ WORKING ON | Chutes now reuse authored visuals without runtime duplication, render pooled moving items, resolve rotated/spherical-world connections, and report multi-packet extraction correctly. Corner and spiral prefabs still need authored setup variants. |
+| Basic machines | 🟡 PARTIALLY COMPLETE | Electric Furnace, Crusher, and three Assembler tiers exist. Crusher and Assembler use the centralized simulation tick; shared UI and persistence still need completion. |
+| Storage blocks | 🟡 PARTIALLY COMPLETE | A basic chest and the wider storage system exist. The planned Wooden Crate → Iron Chest → Steel Chest → Provider/Requester progression is not complete. |
+| Power pole, wire, and substation | 🟡 PARTIALLY COMPLETE | Manual wiring, poles, substations, transformers, and high-voltage assets exist. Setup reruns still need full non-destructive balance preservation. |
+| Grid/static lighting and LED strips | 🟡 PARTIALLY COMPLETE | Grid light, floodlight logic, and static/grid LED assets exist. Configuration UX, power validation, and complete authored variants still need verification. |
+| Shared Machine UI | 🟡 PARTIALLY COMPLETE | A programmatic UI Toolkit panel exists, but inventory slots, recipe identity, transition polish, and final binding are incomplete. |
+| Item entity system | 🟡 PARTIALLY COMPLETE | Dropped world items exist and conveyors render carried packets. A unified pooled physical-item entity lifecycle is not complete. |
+| Recipe registry refactor | 🟡 PARTIALLY COMPLETE | ScriptableObject crafting and machine recipes exist. Shaped/shapeless/smelting/machine unification and validation remain incomplete. |
+| Centralized simulation tick | 🟡 PARTIALLY COMPLETE | Crusher and Assembler register with `SimulationTickManager`; belts, chutes, and several older machines still run per-frame updates. |
+| Factory persistence | 🟡 PARTIALLY COMPLETE | Placed blocks and selected containers persist. Belt/chute contents plus Crusher/Assembler buffers and progress are not yet serialized. |
+| Step 17 setup workflow | ✅ COMPLETED | Non-destructive create/repair logic preserves existing balance, visual, material, and effect tuning while merging required links. Static checks and the two-run Unity idempotency validation pass. |
+
+> **Completion gate:** This section becomes **✅ COMPLETED** only after Step 17 is non-destructive, all listed variants are authored through the setup wizard, factory runtime state persists, and the Unity validation checklist passes.
+
+#### New Content — 🟡 PARTIALLY COMPLETE
 
 1. **Conveyor Belt Block**
    - Straight, corner, ramp, vertical variants.
@@ -243,7 +272,7 @@ Every body in the star system has a unique industrial identity.
    - Configurable color, brightness, and blink/pulse patterns.
    - Snap to grid edges and static building surfaces.
 
-#### Improved Features
+#### Improved Features — 🟡 PARTIALLY COMPLETE
 
 6. **Machine UI**
    - Shared `MachinePanel` using UI Toolkit.
@@ -258,7 +287,7 @@ Every body in the star system has a unique industrial identity.
    - ScriptableObject-driven recipes.
    - Support for shaped, shapeless, smelting, and machine recipes.
 
-#### Code Improvements
+#### Code Improvements — 🟡 PARTIALLY COMPLETE
 
 9. **IndustrialWorld.Simulation namespace**
    - Move machine, conveyor, chute, and power logic here.
@@ -1204,6 +1233,84 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.1.8-dev] Conveyor & Chute Runtime Reliability
+
+**Type:** PATCH — transport bug fixes and visual lifecycle polish (no save/public API change)
+
+**Added:**
+- Pooled, color-coded moving item representations inside conveyor chutes.
+- Shared fallback chute materials used only when authored setup visuals are unavailable.
+- Material-property-block item coloring for belts and chutes without per-item material allocation.
+
+**Fixed:**
+- Authored conveyor and chute visuals are no longer duplicated at runtime.
+- Straight conveyors reuse their detailed Step 17 prefab visuals; runtime meshes are reserved for dynamic corner/ramp shapes.
+- Conveyor corner items now follow their configured input/output directions.
+- Conveyor and chute extraction now returns the full amount removed across multiple item packets.
+- Connection discovery now finds the correct provider/consumer component even when another component appears first on the target object.
+- Chute connection scans now follow the chute's local up axis for spherical-world placement.
+- Factory status indicators now preserve authored light intensity instead of resetting it to `1`.
+- Runtime status materials are released when their object is destroyed.
+
+**Changed:**
+- Step 17 is marked **COMPLETED** after successful two-run Unity validation.
+- Conveyor belts and conveyor chutes are marked **WORKING ON** while authored shape variants remain outstanding.
+- Updated the runtime and roadmap version to `5.1.8-dev`.
+
+---
+
+### [5.1.7-dev] Non-Destructive Step 17 Factory Setup Hardening
+
+**Type:** PATCH — editor setup safety fix (no save/runtime API change)
+
+**Added:**
+- Step 17-specific non-destructive asset and prefab creation helpers.
+- Additive recipe, research prerequisite, research unlock, and machine-recipe link merging.
+- Clear setup summary logging for created assets, created prefabs/components, preserved content, and repaired links.
+- Conflict handling that leaves wrong-type or unreadable existing assets untouched instead of deleting them.
+
+**Changed:**
+- Existing materials retain their authored colors, emission, shader properties, and other tuning.
+- Existing generated or custom prefab children retain their transforms, meshes, materials, and effects.
+- Existing component values are initialized only when the component is newly added.
+- Existing item health, mass, stack limits, grid values, power draw, throughput, connection limits, processing speeds, recipe costs, crafting times, and research costs are preserved.
+- Required prefab, registry, machine-recipe, research-tree, prerequisite, and unlock links are repaired additively without removing custom entries.
+- Legacy duplicate assets are no longer automatically deleted by Step 17.
+- Updated the runtime and roadmap version to `5.1.7-dev`.
+
+**Validation:**
+- Static non-destructive-path checks passed.
+- Source brace, whitespace, conflict-marker, version, and external-title checks passed.
+- Unity two-run idempotency validation remains required and is documented in the delivery instructions.
+
+---
+
+### [5.1.6-dev] Factory Foundations Audit & Roadmap Execution Tracking
+
+**Type:** PATCH — documentation/status alignment and version synchronization (no save/API touch)
+
+**Added:**
+- A three-state roadmap execution convention: **WORKING ON**, **PARTIALLY COMPLETE**, and **COMPLETED**.
+- A repository-backed execution status table for Factory Foundations.
+- A clear completion gate for the 4.5.0 section.
+
+**Changed:**
+- Marked Factory Foundations as **WORKING ON**.
+- Marked its New Content, Improved Features, and Code Improvements groups as **PARTIALLY COMPLETE**.
+- Synchronized the roadmap and runtime version to `5.1.6-dev`.
+- Updated the roadmap date and active implementation status.
+
+**Audit Findings:**
+- Core conveyor, chute, machine, power transmission, and lighting foundations are present.
+- Authored conveyor/chute variants, full shared machine UI, unified ticking, pooled item entities, and factory persistence remain incomplete.
+- Step 17 creates and connects the intended content, but its rerun path still requires hardening so existing balance values are never reset.
+
+**Notes:**
+- No Unity scenes, prefabs, recipes, items, research assets, save schemas, or public runtime APIs were changed.
+- The next implementation priority is the non-destructive Step 17 setup hardening required by Section 7.4.
+
+---
 
 ### [4.5.7-dev] Iterated Factory-Forward Roadmap — Radiation, Heat, Oxygen, Airtight Systems & Painting
 
