@@ -5659,74 +5659,157 @@ root =>
                 return;
             }
 
-            // Clean up the previous partial Step 17 grid-light placement so the
-            // Grid Light Block lives only in the GridSystem content folders.
-            foreach (var legacyPath in new[]
+            // Step 17 is deliberately additive. Existing assets and prefab tuning are
+            // preserved; this pass only creates missing content and repairs required links.
+            int createdAssetCount = 0;
+            int createdPrefabCount = 0;
+            int createdComponentCount = 0;
+            int preservedAssetCount = 0;
+            int preservedPrefabCount = 0;
+            int repairedLinkCount = 0;
+
+            T GetOrCreateStep17Asset<T>(string path) where T : ScriptableObject
             {
-                $"{FAC_PREFABS}/GridLightBlock.prefab",
-                $"{FAC_ITEMS}/GItem_GridLightBlock.asset",
-                $"{FAC_RECIPES}/Recipe_GridLightBlock.asset",
-                $"{FAC_PREFABS}/LEDStrip.prefab"
-            })
-            {
-                var legacyRecipe = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeDefinition>(legacyPath);
-                if (legacyRecipe != null && registry.recipes.Contains(legacyRecipe)) registry.recipes.Remove(legacyRecipe);
-                if (AssetDatabase.LoadMainAssetAtPath(legacyPath) != null) AssetDatabase.DeleteAsset(legacyPath);
+                var mainAsset = AssetDatabase.LoadMainAssetAtPath(path);
+                if (mainAsset is T existing)
+                {
+                    preservedAssetCount++;
+                    return existing;
+                }
+
+                if (mainAsset != null)
+                {
+                    Debug.LogError($"[VoxelEngineSetupWindow] Step 17 preserved '{path}' because it is not a {typeof(T).Name}. Resolve the asset-type conflict manually; no asset was deleted.");
+                    return null;
+                }
+
+                var created = ScriptableObject.CreateInstance<T>();
+                AssetDatabase.CreateAsset(created, path);
+                createdAssetCount++;
+                Debug.Log($"[VoxelEngineSetupWindow] Step 17 created asset: {path}");
+                return created;
             }
-            registry.recipes.RemoveAll(r => r == null);
-            EditorUtility.SetDirty(registry);
+
+            GameObject GetOrCreateStep17Prefab(string path, string name, System.Action<GameObject> ensureMissingContent)
+            {
+                var mainAsset = AssetDatabase.LoadMainAssetAtPath(path);
+                bool existed = mainAsset != null;
+                if (existed && !(mainAsset is GameObject))
+                {
+                    Debug.LogError($"[VoxelEngineSetupWindow] Step 17 preserved '{path}' because it is not a prefab. Resolve the asset-type conflict manually; no asset was deleted.");
+                    return null;
+                }
+
+                GameObject root = null;
+                bool loadedPrefabContents = false;
+                try
+                {
+                    if (existed)
+                    {
+                        try
+                        {
+                            root = PrefabUtility.LoadPrefabContents(path);
+                            loadedPrefabContents = true;
+                        }
+                        catch (System.Exception ex)
+                        {
+                            preservedPrefabCount++;
+                            Debug.LogError($"[VoxelEngineSetupWindow] Step 17 could not open '{path}' and left it untouched. Unity said: {ex.Message}");
+                            return AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                        }
+                    }
+                    else
+                    {
+                        root = new GameObject(name);
+                    }
+
+                    ensureMissingContent?.Invoke(root);
+                    var saved = PrefabUtility.SaveAsPrefabAsset(root, path);
+                    if (saved == null)
+                    {
+                        Debug.LogError($"[VoxelEngineSetupWindow] Step 17 could not save prefab '{path}'. The existing asset was not deleted.");
+                        return AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                    }
+
+                    if (existed)
+                    {
+                        preservedPrefabCount++;
+                        Debug.Log($"[VoxelEngineSetupWindow] Step 17 preserved prefab tuning and verified links: {path}");
+                    }
+                    else
+                    {
+                        createdPrefabCount++;
+                        Debug.Log($"[VoxelEngineSetupWindow] Step 17 created prefab: {path}");
+                    }
+                    return saved;
+                }
+                finally
+                {
+                    if (root != null)
+                    {
+                        if (loadedPrefabContents)
+                            PrefabUtility.UnloadPrefabContents(root);
+                        else
+                            Object.DestroyImmediate(root);
+                    }
+                }
+            }
 
             Material GetMaterial(string folder, string name, Color color, bool emissive = false)
             {
                 EnsureFolder(folder);
                 string path = $"{folder}/{name}.mat";
-                var material = AssetDatabase.LoadAssetAtPath<Material>(path);
-                if (material == null)
+                var mainAsset = AssetDatabase.LoadMainAssetAtPath(path);
+                if (mainAsset is Material existing)
                 {
-                    if (AssetDatabase.LoadMainAssetAtPath(path) != null) AssetDatabase.DeleteAsset(path);
-                    var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
-                    material = new Material(shader) { name = name };
-                    AssetDatabase.CreateAsset(material, path);
+                    preservedAssetCount++;
+                    return existing;
                 }
 
-                material.color = color;
+                if (mainAsset != null)
+                {
+                    Debug.LogError($"[VoxelEngineSetupWindow] Step 17 preserved '{path}' because it is not a Material. No asset was deleted.");
+                    return null;
+                }
+
+                var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+                if (shader == null)
+                {
+                    Debug.LogError($"[VoxelEngineSetupWindow] Step 17 could not create '{path}' because no supported lit shader was found.");
+                    return null;
+                }
+
+                var material = new Material(shader) { name = name, color = color };
                 if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", color);
                 if (emissive)
                 {
                     material.EnableKeyword("_EMISSION");
                     if (material.HasProperty("_EmissionColor")) material.SetColor("_EmissionColor", color * 1.5f);
                 }
-                EditorUtility.SetDirty(material);
+                AssetDatabase.CreateAsset(material, path);
+                createdAssetCount++;
+                Debug.Log($"[VoxelEngineSetupWindow] Step 17 created material: {path}");
                 return material;
             }
 
             GameObject EnsurePrimitive(GameObject root, string name, PrimitiveType type, Vector3 localPosition, Vector3 localScale, Material material, Vector3 localEuler)
             {
                 var existing = root.transform.Find(name);
-                GameObject child;
-                if (existing == null)
+                if (existing != null)
                 {
-                    child = GameObject.CreatePrimitive(type);
-                    child.name = name;
-                    child.transform.SetParent(root.transform, false);
-                }
-                else
-                {
-                    child = existing.gameObject;
-                    if (child.GetComponent<MeshFilter>() == null || child.GetComponent<MeshRenderer>() == null)
-                    {
-                        Object.DestroyImmediate(child);
-                        child = GameObject.CreatePrimitive(type);
-                        child.name = name;
-                        child.transform.SetParent(root.transform, false);
-                    }
+                    if (existing.GetComponent<MeshFilter>() == null || existing.GetComponent<MeshRenderer>() == null)
+                        Debug.LogWarning($"[VoxelEngineSetupWindow] Step 17 left custom child '{name}' on '{root.name}' untouched even though it is not generated primitive geometry.");
+                    return existing.gameObject;
                 }
 
+                var child = GameObject.CreatePrimitive(type);
+                child.name = name;
+                child.transform.SetParent(root.transform, false);
                 child.transform.localPosition = localPosition;
                 child.transform.localRotation = Quaternion.Euler(localEuler);
                 child.transform.localScale = localScale;
                 var renderer = child.GetComponent<Renderer>();
-                if (renderer != null) renderer.sharedMaterial = material;
+                if (renderer != null && material != null) renderer.sharedMaterial = material;
                 var collider = child.GetComponent<Collider>();
                 if (collider != null) Object.DestroyImmediate(collider);
                 return child;
@@ -5735,56 +5818,123 @@ root =>
             Light EnsureLight(GameObject root, string name, Vector3 localPosition, LightType type, Color color, float intensity, float range, float spotAngle = 60f)
             {
                 var existing = root.transform.Find(name);
-                GameObject child = existing != null ? existing.gameObject : new GameObject(name);
+                if (existing != null)
+                {
+                    var existingLight = existing.GetComponent<Light>();
+                    if (existingLight != null) return existingLight;
+
+                    existingLight = existing.gameObject.AddComponent<Light>();
+                    existingLight.type = type;
+                    existingLight.color = color;
+                    existingLight.intensity = intensity;
+                    existingLight.range = range;
+                    existingLight.spotAngle = spotAngle;
+                    createdComponentCount++;
+                    return existingLight;
+                }
+
+                var child = new GameObject(name);
                 child.transform.SetParent(root.transform, false);
                 child.transform.localPosition = localPosition;
                 child.transform.localRotation = Quaternion.identity;
-                var light = child.GetComponent<Light>();
-                if (light == null) light = child.AddComponent<Light>();
+                var light = child.AddComponent<Light>();
                 light.type = type;
                 light.color = color;
                 light.intensity = intensity;
                 light.range = range;
                 light.spotAngle = spotAngle;
+                createdComponentCount++;
                 return light;
             }
 
             BoxCollider EnsureRootCollider(GameObject root, Vector3 size, Vector3 center)
             {
-                var collider = root.GetComponent<BoxCollider>();
-                if (collider == null) collider = root.AddComponent<BoxCollider>();
+                var existing = root.GetComponent<BoxCollider>();
+                if (existing != null) return existing;
+
+                var collider = root.AddComponent<BoxCollider>();
                 collider.size = size;
                 collider.center = center;
+                createdComponentCount++;
                 return collider;
             }
 
-            void ClearGeneratedChildren(GameObject root)
+            T EnsureStep17Component<T>(GameObject root, System.Action<T> configureDefaults = null) where T : Component
             {
-                if (root == null) return;
-                for (int i = root.transform.childCount - 1; i >= 0; i--)
+                var existing = root.GetComponent<T>();
+                if (existing != null) return existing;
+
+                var created = root.AddComponent<T>();
+                configureDefaults?.Invoke(created);
+                createdComponentCount++;
+                return created;
+            }
+
+            List<T> MergeUniqueList<T>(List<T> existing, IEnumerable<T> required) where T : Object
+            {
+                var merged = existing ?? new List<T>();
+                if (required == null) return merged;
+                foreach (var entry in required)
                 {
-                    var child = root.transform.GetChild(i);
-                    if (child != null && child.name.StartsWith("Generated_", System.StringComparison.Ordinal))
-                        Object.DestroyImmediate(child.gameObject);
+                    if (entry != null && !merged.Contains(entry))
+                    {
+                        merged.Add(entry);
+                        repairedLinkCount++;
+                    }
                 }
+                return merged;
+            }
+
+            T[] MergeUniqueArray<T>(T[] existing, IEnumerable<T> required) where T : Object
+            {
+                var merged = new List<T>();
+                if (existing != null)
+                {
+                    foreach (var entry in existing)
+                        if (entry != null && !merged.Contains(entry)) merged.Add(entry);
+                }
+                if (required != null)
+                {
+                    foreach (var entry in required)
+                    {
+                        if (entry != null && !merged.Contains(entry))
+                        {
+                            merged.Add(entry);
+                            repairedLinkCount++;
+                        }
+                    }
+                }
+                return merged.ToArray();
             }
 
             VoxelEngine.Items.BlockItem ConfigureBlock(string folder, string assetName, string display, string description, Color tint, GameObject prefab, string category, int health = 200, int miningTier = 1, Vector3Int? gridSize = null)
             {
                 string path = $"{folder}/{assetName}.asset";
-                var item = GetOrCreateAsset<VoxelEngine.Items.BlockItem>(path);
-                item.itemId = assetName.ToLower();
-                item.displayName = display;
-                item.description = description;
-                item.iconTint = tint;
-                item.maxStack = 99;
-                item.massPerUnit = 4f;
-                item.placedPrefab = prefab;
-                item.gridSize = gridSize ?? Vector3Int.one;
-                item.allowStacking = true;
-                item.blockHealth = health;
-                item.miningTier = miningTier;
-                item.category = category;
+                bool created = AssetDatabase.LoadMainAssetAtPath(path) == null;
+                var item = GetOrCreateStep17Asset<VoxelEngine.Items.BlockItem>(path);
+                if (item == null) return null;
+
+                if (created)
+                {
+                    item.itemId = assetName.ToLowerInvariant();
+                    item.displayName = display;
+                    item.description = description;
+                    item.iconTint = tint;
+                    item.maxStack = 99;
+                    item.massPerUnit = 4f;
+                    item.gridSize = gridSize ?? Vector3Int.one;
+                    item.allowStacking = true;
+                    item.blockHealth = health;
+                    item.miningTier = miningTier;
+                    item.category = category;
+                }
+
+                if (prefab != null && item.placedPrefab != prefab)
+                {
+                    item.placedPrefab = prefab;
+                    repairedLinkCount++;
+                    Debug.Log($"[VoxelEngineSetupWindow] Step 17 connected block item '{path}' to '{AssetDatabase.GetAssetPath(prefab)}'.");
+                }
                 EditorUtility.SetDirty(item);
                 return item;
             }
@@ -5792,18 +5942,30 @@ root =>
             VoxelEngine.GridSystem.GridBlockItem ConfigureGridItem(string folder, string assetName, string display, string description, Color tint, GameObject prefab, VoxelEngine.GridSystem.GridSize gridSize, float mass, float hp)
             {
                 string path = $"{folder}/{assetName}.asset";
-                var item = GetOrCreateAsset<VoxelEngine.GridSystem.GridBlockItem>(path);
-                item.itemId = assetName.ToLower();
-                item.displayName = display;
-                item.description = description;
-                item.iconTint = tint;
-                item.maxStack = 99;
-                item.massPerUnit = Mathf.Max(1f, mass * 0.01f);
-                item.category = "Grid";
-                item.blockPrefab = prefab;
-                item.gridSize = gridSize;
-                item.blockMass = mass;
-                item.blockHP = hp;
+                bool created = AssetDatabase.LoadMainAssetAtPath(path) == null;
+                var item = GetOrCreateStep17Asset<VoxelEngine.GridSystem.GridBlockItem>(path);
+                if (item == null) return null;
+
+                if (created)
+                {
+                    item.itemId = assetName.ToLowerInvariant();
+                    item.displayName = display;
+                    item.description = description;
+                    item.iconTint = tint;
+                    item.maxStack = 99;
+                    item.massPerUnit = Mathf.Max(1f, mass * 0.01f);
+                    item.category = "Grid";
+                    item.gridSize = gridSize;
+                    item.blockMass = mass;
+                    item.blockHP = hp;
+                }
+
+                if (prefab != null && item.blockPrefab != prefab)
+                {
+                    item.blockPrefab = prefab;
+                    repairedLinkCount++;
+                    Debug.Log($"[VoxelEngineSetupWindow] Step 17 connected grid item '{path}' to '{AssetDatabase.GetAssetPath(prefab)}'.");
+                }
                 EditorUtility.SetDirty(item);
                 return item;
             }
@@ -5811,25 +5973,46 @@ root =>
             VoxelEngine.Items.ResourceItem ConfigureFactoryResource(string assetName, string itemId, string display, string description, Color tint)
             {
                 string path = $"{FAC_ITEMS}/{assetName}.asset";
-                var item = GetOrCreateAsset<VoxelEngine.Items.ResourceItem>(path);
-                item.itemId = itemId;
-                item.displayName = display;
-                item.description = description;
-                item.iconTint = tint;
-                item.maxStack = 999;
-                item.massPerUnit = 1f;
-                item.category = "Factory";
-                item.subcategory = VoxelEngine.Items.ResourceCategory.Component;
-                item.fuelSeconds = 0f;
-                EditorUtility.SetDirty(item);
+                bool created = AssetDatabase.LoadMainAssetAtPath(path) == null;
+                var item = GetOrCreateStep17Asset<VoxelEngine.Items.ResourceItem>(path);
+                if (item == null) return null;
+
+                if (created)
+                {
+                    item.itemId = itemId;
+                    item.displayName = display;
+                    item.description = description;
+                    item.iconTint = tint;
+                    item.maxStack = 999;
+                    item.massPerUnit = 1f;
+                    item.category = "Factory";
+                    item.subcategory = VoxelEngine.Items.ResourceCategory.Component;
+                    item.fuelSeconds = 0f;
+                    EditorUtility.SetDirty(item);
+                }
                 return item;
             }
 
             VoxelEngine.Crafting.RecipeDefinition CreateRecipe(VoxelEngine.Crafting.RecipeRegistry recipeRegistry, string folder, string assetName, string display, VoxelEngine.Items.ItemDefinition output, int outputCount, VoxelEngine.Crafting.StationTier station, bool unlocked, params (VoxelEngine.Items.ItemDefinition item, int n)[] inputs)
             {
-                var recipe = AddRecipe(recipeRegistry, folder, assetName, display, output, outputCount, station, unlocked, inputs);
-                if (recipe != null)
+                string path = $"{folder}/{assetName}.asset";
+                var existingRecipe = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeDefinition>(path);
+                if (output == null && existingRecipe == null)
                 {
+                    Debug.LogError($"[VoxelEngineSetupWindow] Step 17 skipped '{path}' because its required output item is unavailable. Existing assets were left untouched.");
+                    return null;
+                }
+
+                bool created = AssetDatabase.LoadMainAssetAtPath(path) == null;
+                var recipe = GetOrCreateStep17Asset<VoxelEngine.Crafting.RecipeDefinition>(path);
+                if (recipe == null) return null;
+
+                if (created)
+                {
+                    recipe.displayName = display;
+                    recipe.outputItem = output;
+                    recipe.outputCount = outputCount;
+                    recipe.requiredStation = station;
                     recipe.craftSeconds = station switch
                     {
                         VoxelEngine.Crafting.StationTier.None => 0f,
@@ -5838,29 +6021,60 @@ root =>
                         VoxelEngine.Crafting.StationTier.Assembler => 4f,
                         _ => 0f
                     };
-                    EditorUtility.SetDirty(recipe);
+                    recipe.unlockedByDefault = unlocked;
+                    var valid = new List<VoxelEngine.Crafting.RecipeIngredient>();
+                    foreach (var (item, count) in inputs)
+                    {
+                        if (item != null && count > 0)
+                            valid.Add(new VoxelEngine.Crafting.RecipeIngredient { item = item, count = count });
+                    }
+                    recipe.inputs = valid.ToArray();
                 }
+                else if (recipe.outputItem == null && output != null)
+                {
+                    recipe.outputItem = output;
+                    repairedLinkCount++;
+                }
+
+                if (recipeRegistry != null && !recipeRegistry.recipes.Contains(recipe))
+                {
+                    recipeRegistry.recipes.Add(recipe);
+                    repairedLinkCount++;
+                    EditorUtility.SetDirty(recipeRegistry);
+                }
+                EditorUtility.SetDirty(recipe);
                 return recipe;
             }
 
             VoxelEngine.Simulation.MachineDefinition ConfigureMachineDefinition(string assetName, string machineId, string display, string description, VoxelEngine.Simulation.MachineCategory category, float activeWatts, float idleWatts, float speedMultiplier, int inputSlots, int outputSlots, int upgradeSlots, Color primary, Color activeColor, GameObject prefab)
             {
                 string path = $"{FAC_DEFS}/{assetName}.asset";
-                var definition = GetOrCreateAsset<VoxelEngine.Simulation.MachineDefinition>(path);
-                definition.machineId = machineId;
-                definition.displayName = display;
-                definition.description = description;
-                definition.category = category;
-                definition.activeWatts = activeWatts;
-                definition.idleWatts = idleWatts;
-                definition.speedMultiplier = speedMultiplier;
-                definition.inputSlots = inputSlots;
-                definition.outputSlots = outputSlots;
-                definition.upgradeSlots = upgradeSlots;
-                definition.primaryColor = primary;
-                definition.activeEmissive = activeColor;
-                definition.idleEmissive = new Color(0.9f, 0.65f, 0.16f);
-                definition.prefab = prefab;
+                bool created = AssetDatabase.LoadMainAssetAtPath(path) == null;
+                var definition = GetOrCreateStep17Asset<VoxelEngine.Simulation.MachineDefinition>(path);
+                if (definition == null) return null;
+
+                if (created)
+                {
+                    definition.machineId = machineId;
+                    definition.displayName = display;
+                    definition.description = description;
+                    definition.category = category;
+                    definition.activeWatts = activeWatts;
+                    definition.idleWatts = idleWatts;
+                    definition.speedMultiplier = speedMultiplier;
+                    definition.inputSlots = inputSlots;
+                    definition.outputSlots = outputSlots;
+                    definition.upgradeSlots = upgradeSlots;
+                    definition.primaryColor = primary;
+                    definition.activeEmissive = activeColor;
+                    definition.idleEmissive = new Color(0.9f, 0.65f, 0.16f);
+                }
+
+                if (prefab != null && definition.prefab != prefab)
+                {
+                    definition.prefab = prefab;
+                    repairedLinkCount++;
+                }
                 EditorUtility.SetDirty(definition);
                 return definition;
             }
@@ -5868,23 +6082,41 @@ root =>
             VoxelEngine.Simulation.MachineRecipe ConfigureMachineRecipe(string assetName, string display, VoxelEngine.Simulation.MachineRecipeType type, VoxelEngine.Items.ItemDefinition output, int outputCount, float seconds, bool unlocked, VoxelEngine.Items.ItemDefinition byproduct, int byproductCount, float byproductChance, params (VoxelEngine.Items.ItemDefinition item, int n)[] inputs)
             {
                 string path = $"{FAC_MRECIPES}/{assetName}.asset";
-                var recipe = GetOrCreateAsset<VoxelEngine.Simulation.MachineRecipe>(path);
-                recipe.displayName = display;
-                recipe.recipeType = type;
-                var validInputs = new List<VoxelEngine.Simulation.MachineRecipeSlot>();
-                foreach (var (item, n) in inputs)
+                var existingRecipe = AssetDatabase.LoadAssetAtPath<VoxelEngine.Simulation.MachineRecipe>(path);
+                if (output == null && existingRecipe == null)
                 {
-                    if (item != null && n > 0)
-                        validInputs.Add(new VoxelEngine.Simulation.MachineRecipeSlot { item = item, count = n });
+                    Debug.LogError($"[VoxelEngineSetupWindow] Step 17 skipped '{path}' because its required output item is unavailable. Existing assets were left untouched.");
+                    return null;
                 }
-                recipe.inputs = validInputs.ToArray();
-                recipe.outputItem = output;
-                recipe.outputCount = outputCount;
-                recipe.byproductItem = byproduct;
-                recipe.byproductCount = byproductCount;
-                recipe.byproductChance = byproductChance;
-                recipe.processSeconds = seconds;
-                recipe.unlockedByDefault = unlocked;
+
+                bool created = AssetDatabase.LoadMainAssetAtPath(path) == null;
+                var recipe = GetOrCreateStep17Asset<VoxelEngine.Simulation.MachineRecipe>(path);
+                if (recipe == null) return null;
+
+                if (created)
+                {
+                    recipe.displayName = display;
+                    recipe.recipeType = type;
+                    var validInputs = new List<VoxelEngine.Simulation.MachineRecipeSlot>();
+                    foreach (var (item, count) in inputs)
+                    {
+                        if (item != null && count > 0)
+                            validInputs.Add(new VoxelEngine.Simulation.MachineRecipeSlot { item = item, count = count });
+                    }
+                    recipe.inputs = validInputs.ToArray();
+                    recipe.outputItem = output;
+                    recipe.outputCount = outputCount;
+                    recipe.byproductItem = byproduct;
+                    recipe.byproductCount = byproductCount;
+                    recipe.byproductChance = byproductChance;
+                    recipe.processSeconds = seconds;
+                    recipe.unlockedByDefault = unlocked;
+                }
+                else if (recipe.outputItem == null && output != null)
+                {
+                    recipe.outputItem = output;
+                    repairedLinkCount++;
+                }
                 EditorUtility.SetDirty(recipe);
                 return recipe;
             }
@@ -5895,19 +6127,24 @@ root =>
             }
 
             // ── Data assets ──
-            var voltageConfig = GetOrCreateAsset<VoxelEngine.Simulation.VoltageSystemConfig>($"{RESOURCES}/VoltageSystemConfig.asset");
-            voltageConfig.lvThresholdWatts = 25_000_000f;
-            voltageConfig.defaultStepUpLoss = 0.02f;
-            voltageConfig.defaultStepDownLoss = 0.02f;
-            voltageConfig.hvLineReach = 200f;
-            voltageConfig.hvMaxThroughput = float.MaxValue;
-            voltageConfig.lvWireReach = 15f;
-            voltageConfig.lvPoleMaxConnections = 6;
-            voltageConfig.lvColor = new Color(0.22f, 0.78f, 0.42f);
-            voltageConfig.hvColor = new Color(0.92f, 0.45f, 0.12f);
-            voltageConfig.stepUpAccent = new Color(0.15f, 0.45f, 0.85f);
-            voltageConfig.stepDownAccent = new Color(0.92f, 0.60f, 0.12f);
-            EditorUtility.SetDirty(voltageConfig);
+            string voltageConfigPath = $"{RESOURCES}/VoltageSystemConfig.asset";
+            bool voltageConfigCreated = AssetDatabase.LoadMainAssetAtPath(voltageConfigPath) == null;
+            var voltageConfig = GetOrCreateStep17Asset<VoxelEngine.Simulation.VoltageSystemConfig>(voltageConfigPath);
+            if (voltageConfig != null && voltageConfigCreated)
+            {
+                voltageConfig.lvThresholdWatts = 25_000_000f;
+                voltageConfig.defaultStepUpLoss = 0.02f;
+                voltageConfig.defaultStepDownLoss = 0.02f;
+                voltageConfig.hvLineReach = 200f;
+                voltageConfig.hvMaxThroughput = float.MaxValue;
+                voltageConfig.lvWireReach = 15f;
+                voltageConfig.lvPoleMaxConnections = 6;
+                voltageConfig.lvColor = new Color(0.22f, 0.78f, 0.42f);
+                voltageConfig.hvColor = new Color(0.92f, 0.45f, 0.12f);
+                voltageConfig.stepUpAccent = new Color(0.15f, 0.45f, 0.85f);
+                voltageConfig.stepDownAccent = new Color(0.92f, 0.60f, 0.12f);
+                EditorUtility.SetDirty(voltageConfig);
+            }
 
             var gravel = ConfigureFactoryResource("Item_Gravel", "gravel", "Gravel", "Crushed stone aggregate used by early factory recipes.", new Color(0.45f, 0.45f, 0.42f));
 
@@ -5927,7 +6164,7 @@ root =>
                     _ => new Color(0.045f, 0.05f, 0.055f)
                 };
 
-                return GetOrCreatePrefab($"{FAC_PREFABS}/{assetName}.prefab", assetName, root =>
+                return GetOrCreateStep17Prefab($"{FAC_PREFABS}/{assetName}.prefab", assetName, root =>
                 {
                     var frameMat = GetMaterial(FAC_MATS, "Mat_ConveyorBrushedSteel", new Color(0.42f, 0.43f, 0.40f));
                     var darkFrameMat = GetMaterial(FAC_MATS, "Mat_ConveyorDarkFrame", new Color(0.12f, 0.13f, 0.14f));
@@ -5950,28 +6187,34 @@ root =>
                     EnsurePrimitive(root, "Generated_BackLegRight", PrimitiveType.Cube, new Vector3(0.42f, -0.17f, 0.42f), new Vector3(0.06f, 0.58f, 0.06f), frameMat, Vector3.zero);
                     EnsureRootCollider(root, new Vector3(1.22f, 0.68f, 1.12f), new Vector3(0f, 0.14f, 0f));
 
-                    var belt = EnsureComponent<VoxelEngine.Simulation.ConveyorBelt>(root);
-                    belt.speed = speed;
-                    belt.shape = VoxelEngine.Simulation.ConveyorShape.Straight;
-                    belt.maxItems = maxItems;
-                    belt.entryDirection = Vector3.back;
-                    belt.exitDirection = Vector3.forward;
-                    belt.travelDirection = Vector3.forward;
-
-                    var visuals = EnsureComponent<VoxelEngine.Simulation.BeltVisualController>(root);
-                    visuals.beltColor = beltColor;
-                    visuals.railColor = Color.Lerp(new Color(0.35f, 0.38f, 0.42f), accent, 0.35f);
-                    visuals.uvScrollSpeed = speed switch
+                    EnsureStep17Component<VoxelEngine.Simulation.ConveyorBelt>(root, belt =>
                     {
-                        VoxelEngine.Simulation.ConveyorSpeed.Fast => 3.4f,
-                        VoxelEngine.Simulation.ConveyorSpeed.Express => 5.4f,
-                        _ => 2.2f
-                    };
-                    var indicator = EnsureComponent<VoxelEngine.Simulation.FactoryStatusIndicator>(root);
-                    indicator.rendererChildName = "Generated_Arrow";
-                    indicator.idleColor = accent;
-                    indicator.activeColor = new Color(0.22f, 0.78f, 0.42f);
-                    indicator.blockedColor = new Color(0.95f, 0.18f, 0.14f);
+                        belt.speed = speed;
+                        belt.shape = VoxelEngine.Simulation.ConveyorShape.Straight;
+                        belt.maxItems = maxItems;
+                        belt.entryDirection = Vector3.back;
+                        belt.exitDirection = Vector3.forward;
+                        belt.travelDirection = Vector3.forward;
+                    });
+
+                    EnsureStep17Component<VoxelEngine.Simulation.BeltVisualController>(root, visuals =>
+                    {
+                        visuals.beltColor = beltColor;
+                        visuals.railColor = Color.Lerp(new Color(0.35f, 0.38f, 0.42f), accent, 0.35f);
+                        visuals.uvScrollSpeed = speed switch
+                        {
+                            VoxelEngine.Simulation.ConveyorSpeed.Fast => 3.4f,
+                            VoxelEngine.Simulation.ConveyorSpeed.Express => 5.4f,
+                            _ => 2.2f
+                        };
+                    });
+                    EnsureStep17Component<VoxelEngine.Simulation.FactoryStatusIndicator>(root, indicator =>
+                    {
+                        indicator.rendererChildName = "Generated_Arrow";
+                        indicator.idleColor = accent;
+                        indicator.activeColor = new Color(0.22f, 0.78f, 0.42f);
+                        indicator.blockedColor = new Color(0.95f, 0.18f, 0.14f);
+                    });
                 });
             }
 
@@ -5984,9 +6227,8 @@ root =>
             var blockConveyorExpress = ConfigureBlock(FAC_ITEMS, "Block_ConveyorExpress", "Express Conveyor Belt", "Moves item packets at 10 items per second for high-throughput main buses.", new Color(0.95f, 0.62f, 0.18f), conveyorExpressPrefab, "Factory", 220);
 
             // ── Chute and funnel ──
-            var chutePrefab = GetOrCreatePrefab($"{FAC_PREFABS}/Conveyor_Chute.prefab", "Conveyor_Chute", root =>
+            var chutePrefab = GetOrCreateStep17Prefab($"{FAC_PREFABS}/Conveyor_Chute.prefab", "Conveyor_Chute", root =>
             {
-                ClearGeneratedChildren(root);
                 var shellMat = GetMaterial(FAC_MATS, "Mat_ChuteHopperShell", new Color(0.72f, 0.74f, 0.72f));
                 var rimMat = GetMaterial(FAC_MATS, "Mat_ChuteBoltedRim", new Color(0.52f, 0.54f, 0.52f));
                 var throatMat = GetMaterial(FAC_MATS, "Mat_ChuteThroat", new Color(0.12f, 0.13f, 0.14f));
@@ -6000,21 +6242,24 @@ root =>
                 EnsurePrimitive(root, "Generated_BottomFlange", PrimitiveType.Cylinder, new Vector3(0f, -0.16f, 0f), new Vector3(0.48f, 0.05f, 0.48f), rimMat, Vector3.zero);
                 EnsurePrimitive(root, "Generated_DownArrow", PrimitiveType.Cube, new Vector3(0f, 0.28f, -0.39f), new Vector3(0.14f, 0.34f, 0.035f), accentMat, Vector3.zero);
                 EnsureRootCollider(root, new Vector3(1.25f, 1.22f, 1.25f), new Vector3(0f, 0.45f, 0f));
-                var chute = EnsureComponent<VoxelEngine.Simulation.ConveyorChute>(root);
-                chute.shape = VoxelEngine.Simulation.ChuteShape.Straight;
-                chute.maxItems = 6;
-                chute.slideSpeed = 3.2f;
-                var indicator = EnsureComponent<VoxelEngine.Simulation.FactoryStatusIndicator>(root);
-                indicator.rendererChildName = "Generated_DownArrow";
-                indicator.idleColor = new Color(0.18f, 0.72f, 0.88f);
-                indicator.activeColor = new Color(0.22f, 0.78f, 0.42f);
-                indicator.blockedColor = new Color(0.95f, 0.18f, 0.14f);
+                EnsureStep17Component<VoxelEngine.Simulation.ConveyorChute>(root, chute =>
+                {
+                    chute.shape = VoxelEngine.Simulation.ChuteShape.Straight;
+                    chute.maxItems = 6;
+                    chute.slideSpeed = 3.2f;
+                });
+                EnsureStep17Component<VoxelEngine.Simulation.FactoryStatusIndicator>(root, indicator =>
+                {
+                    indicator.rendererChildName = "Generated_DownArrow";
+                    indicator.idleColor = new Color(0.18f, 0.72f, 0.88f);
+                    indicator.activeColor = new Color(0.22f, 0.78f, 0.42f);
+                    indicator.blockedColor = new Color(0.95f, 0.18f, 0.14f);
+                });
             });
             var blockChute = ConfigureBlock(FAC_ITEMS, "Block_ConveyorChute", "Conveyor Chute", "Downward hopper-chute for dropping items from machines or belts to a lower output.", new Color(0.18f, 0.72f, 0.88f), chutePrefab, "Factory", 180);
 
-            var funnelPrefab = GetOrCreatePrefab($"{FAC_PREFABS}/Funnel.prefab", "Funnel", root =>
+            var funnelPrefab = GetOrCreateStep17Prefab($"{FAC_PREFABS}/Funnel.prefab", "Funnel", root =>
             {
-                ClearGeneratedChildren(root);
                 var shellMat = GetMaterial(FAC_MATS, "Mat_FunnelSideShell", new Color(0.58f, 0.60f, 0.59f));
                 var darkMat = GetMaterial(FAC_MATS, "Mat_FunnelDarkInterior", new Color(0.08f, 0.085f, 0.09f));
                 var rimMat = GetMaterial(FAC_MATS, "Mat_FunnelPortRims", new Color(0.38f, 0.40f, 0.40f));
@@ -6030,31 +6275,37 @@ root =>
                 EnsurePrimitive(root, "Generated_DirectionalGate", PrimitiveType.Cube, new Vector3(0f, 0.36f, 0f), new Vector3(0.56f, 0.035f, 0.10f), inventoryAccentMat, Vector3.zero);
                 EnsureLight(root, "Generated_FunnelPulse", new Vector3(0f, 0.66f, 0.08f), LightType.Point, new Color(0.95f, 0.62f, 0.18f), 1.0f, 3f);
                 EnsureRootCollider(root, new Vector3(0.95f, 0.72f, 1.0f), new Vector3(0f, 0.35f, 0f));
-                var funnel = EnsureComponent<VoxelEngine.Simulation.Funnel>(root);
-                funnel.mode = VoxelEngine.Simulation.FunnelMode.Import;
-                funnel.transferInterval = 0.45f;
-                funnel.bufferSize = 6;
-                funnel.inventoryDirection = Vector3.back;
-                funnel.beltDirection = Vector3.forward;
-                funnel.portOffset = 0.72f;
-                funnel.scanRadius = 0.7f;
-                var animator = EnsureComponent<VoxelEngine.Simulation.FactoryPartAnimator>(root);
-                animator.rotatingChildName = "Generated_DirectionalGate";
-                animator.rotationAxis = Vector3.up;
-                animator.rotationDegreesPerSecond = 120f;
-                animator.bobbingChildName = "Generated_BeltAccent";
-                animator.bobAxis = Vector3.up;
-                animator.bobAmplitude = 0.012f;
-                animator.bobFrequency = 2.2f;
-                animator.pulseLightName = "Generated_FunnelPulse";
-                animator.pulseAmplitude = 0.30f;
-                animator.pulseFrequency = 2.4f;
-                var indicator = EnsureComponent<VoxelEngine.Simulation.FactoryStatusIndicator>(root);
-                indicator.rendererChildName = "Generated_DirectionalGate";
-                indicator.lightChildName = "Generated_FunnelPulse";
-                indicator.idleColor = new Color(0.95f, 0.62f, 0.18f);
-                indicator.activeColor = new Color(0.22f, 0.78f, 0.42f);
-                indicator.blockedColor = new Color(0.95f, 0.18f, 0.14f);
+                EnsureStep17Component<VoxelEngine.Simulation.Funnel>(root, funnel =>
+                {
+                    funnel.mode = VoxelEngine.Simulation.FunnelMode.Import;
+                    funnel.transferInterval = 0.45f;
+                    funnel.bufferSize = 6;
+                    funnel.inventoryDirection = Vector3.back;
+                    funnel.beltDirection = Vector3.forward;
+                    funnel.portOffset = 0.72f;
+                    funnel.scanRadius = 0.7f;
+                });
+                EnsureStep17Component<VoxelEngine.Simulation.FactoryPartAnimator>(root, animator =>
+                {
+                    animator.rotatingChildName = "Generated_DirectionalGate";
+                    animator.rotationAxis = Vector3.up;
+                    animator.rotationDegreesPerSecond = 120f;
+                    animator.bobbingChildName = "Generated_BeltAccent";
+                    animator.bobAxis = Vector3.up;
+                    animator.bobAmplitude = 0.012f;
+                    animator.bobFrequency = 2.2f;
+                    animator.pulseLightName = "Generated_FunnelPulse";
+                    animator.pulseAmplitude = 0.30f;
+                    animator.pulseFrequency = 2.4f;
+                });
+                EnsureStep17Component<VoxelEngine.Simulation.FactoryStatusIndicator>(root, indicator =>
+                {
+                    indicator.rendererChildName = "Generated_DirectionalGate";
+                    indicator.lightChildName = "Generated_FunnelPulse";
+                    indicator.idleColor = new Color(0.95f, 0.62f, 0.18f);
+                    indicator.activeColor = new Color(0.22f, 0.78f, 0.42f);
+                    indicator.blockedColor = new Color(0.95f, 0.18f, 0.14f);
+                });
             });
             var blockFunnel = ConfigureBlock(FAC_ITEMS, "Block_Funnel", "Funnel", "Directional logistical hopper for loading belts into inventories or unloading inventories onto belts.", new Color(0.95f, 0.62f, 0.18f), funnelPrefab, "Factory", 180);
 
@@ -6070,7 +6321,7 @@ root =>
             var assemblerRecipes = new List<VoxelEngine.Simulation.MachineRecipe> { assembleGear, assembleWire, assembleCircuit, assembleAdvCircuit };
             var crusherRecipes = new List<VoxelEngine.Simulation.MachineRecipe> { crushStone, crushIron, crushCopper };
 
-            var crusherPrefab = GetOrCreatePrefab($"{FAC_PREFABS}/Crusher.prefab", "Crusher", root =>
+            var crusherPrefab = GetOrCreateStep17Prefab($"{FAC_PREFABS}/Crusher.prefab", "Crusher", root =>
             {
                 var baseMat = GetMaterial(FAC_MATS, "Mat_CrusherBase", new Color(0.28f, 0.29f, 0.32f));
                 var jawMat = GetMaterial(FAC_MATS, "Mat_CrusherJaw", new Color(0.55f, 0.56f, 0.60f));
@@ -6080,16 +6331,19 @@ root =>
                 EnsurePrimitive(root, "Generated_RightJaw", PrimitiveType.Cube, new Vector3(0.25f, 0.78f, 0f), new Vector3(0.22f, 0.28f, 0.9f), jawMat, new Vector3(0f, 0f, -12f));
                 EnsurePrimitive(root, "Generated_StatusStrip", PrimitiveType.Cube, new Vector3(0f, 0.44f, -0.59f), new Vector3(0.55f, 0.05f, 0.04f), accentMat, Vector3.zero);
                 EnsureRootCollider(root, new Vector3(1.2f, 1.1f, 1.2f), new Vector3(0f, 0.5f, 0f));
-                var crusher = EnsureComponent<VoxelEngine.Simulation.Crusher>(root);
-                crusher.knownRecipes = crusherRecipes;
-                crusher.baseWattsPerSecond = 250f;
-                crusher.idleWattsPerSecond = 8f;
-                var power = EnsureComponent<VoxelEngine.Power.PowerConsumer>(root);
-                power.connectRadius = 1.6f;
-                var indicator = EnsureComponent<VoxelEngine.Simulation.FactoryStatusIndicator>(root);
-                indicator.rendererChildName = "Generated_StatusStrip";
-                indicator.idleColor = new Color(0.92f, 0.45f, 0.12f);
-                indicator.activeColor = new Color(0.22f, 0.78f, 0.42f);
+                var crusher = EnsureStep17Component<VoxelEngine.Simulation.Crusher>(root, createdCrusher =>
+                {
+                    createdCrusher.baseWattsPerSecond = 250f;
+                    createdCrusher.idleWattsPerSecond = 8f;
+                });
+                crusher.knownRecipes = MergeUniqueList(crusher.knownRecipes, crusherRecipes);
+                EnsureStep17Component<VoxelEngine.Power.PowerConsumer>(root, power => power.connectRadius = 1.6f);
+                EnsureStep17Component<VoxelEngine.Simulation.FactoryStatusIndicator>(root, indicator =>
+                {
+                    indicator.rendererChildName = "Generated_StatusStrip";
+                    indicator.idleColor = new Color(0.92f, 0.45f, 0.12f);
+                    indicator.activeColor = new Color(0.22f, 0.78f, 0.42f);
+                });
             });
             var blockCrusher = ConfigureBlock(FAC_ITEMS, "Block_Crusher", "Crusher", "Powered machine that crushes stone and ores into higher-yield outputs.", new Color(0.92f, 0.45f, 0.12f), crusherPrefab, "Factory", 450);
 
@@ -6114,7 +6368,7 @@ root =>
                     _ => 0.95f
                 };
 
-                return GetOrCreatePrefab($"{FAC_PREFABS}/{assetName}.prefab", assetName, root =>
+                return GetOrCreateStep17Prefab($"{FAC_PREFABS}/{assetName}.prefab", assetName, root =>
                 {
                     var baseMat = GetMaterial(FAC_MATS, "Mat_AssemblerBase", new Color(0.70f, 0.73f, 0.72f));
                     var darkMat = GetMaterial(FAC_MATS, "Mat_AssemblerDarkPanels", new Color(0.08f, 0.09f, 0.10f));
@@ -6130,31 +6384,37 @@ root =>
                     EnsurePrimitive(root, "Generated_RightFoot", PrimitiveType.Cube, new Vector3(width * 0.38f, -0.09f, -depth * 0.35f), new Vector3(0.08f, 0.38f, 0.08f), railMat, Vector3.zero);
                     EnsureLight(root, "Generated_AssemblerStatusLight", new Vector3(width * 0.38f, height * 0.62f, -depth * 0.62f), LightType.Point, accent, 0.9f, 3f);
                     EnsureRootCollider(root, new Vector3(width + 0.12f, height + 0.25f, depth + 0.65f), new Vector3(0f, height * 0.5f, 0f));
-                    var assembler = EnsureComponent<VoxelEngine.Simulation.Assembler>(root);
-                    assembler.tier = tier;
-                    assembler.knownRecipes = assemblerRecipes;
-                    assembler.baseWattsPerSecond = activeWatts;
-                    assembler.idleWattsPerSecond = idleWatts;
-                    var power = EnsureComponent<VoxelEngine.Power.PowerConsumer>(root);
-                    power.connectRadius = Mathf.Max(1.6f, width * 0.9f);
-                    var animator = EnsureComponent<VoxelEngine.Simulation.FactoryPartAnimator>(root);
-                    animator.rotatingChildName = "Generated_TopServiceRail";
-                    animator.rotationAxis = Vector3.up;
-                    animator.rotationDegreesPerSecond = tier switch
+                    var assembler = EnsureStep17Component<VoxelEngine.Simulation.Assembler>(root, createdAssembler =>
                     {
-                        VoxelEngine.Simulation.AssemblerTier.Mk3 => 55f,
-                        VoxelEngine.Simulation.AssemblerTier.Mk2 => 38f,
-                        _ => 24f
-                    };
-                    animator.pulseLightName = "Generated_AssemblerStatusLight";
-                    animator.pulseAmplitude = 0.25f;
-                    animator.pulseFrequency = 1.8f;
-                    var indicator = EnsureComponent<VoxelEngine.Simulation.FactoryStatusIndicator>(root);
-                    indicator.rendererChildName = "Generated_StatusPanel";
-                    indicator.lightChildName = "Generated_AssemblerStatusLight";
-                    indicator.idleColor = accent;
-                    indicator.activeColor = new Color(0.22f, 0.78f, 0.42f);
-                    indicator.offlineColor = new Color(0.18f, 0.72f, 0.88f);
+                        createdAssembler.tier = tier;
+                        createdAssembler.baseWattsPerSecond = activeWatts;
+                        createdAssembler.idleWattsPerSecond = idleWatts;
+                    });
+                    assembler.knownRecipes = MergeUniqueList(assembler.knownRecipes, assemblerRecipes);
+                    EnsureStep17Component<VoxelEngine.Power.PowerConsumer>(root, power =>
+                        power.connectRadius = Mathf.Max(1.6f, width * 0.9f));
+                    EnsureStep17Component<VoxelEngine.Simulation.FactoryPartAnimator>(root, animator =>
+                    {
+                        animator.rotatingChildName = "Generated_TopServiceRail";
+                        animator.rotationAxis = Vector3.up;
+                        animator.rotationDegreesPerSecond = tier switch
+                        {
+                            VoxelEngine.Simulation.AssemblerTier.Mk3 => 55f,
+                            VoxelEngine.Simulation.AssemblerTier.Mk2 => 38f,
+                            _ => 24f
+                        };
+                        animator.pulseLightName = "Generated_AssemblerStatusLight";
+                        animator.pulseAmplitude = 0.25f;
+                        animator.pulseFrequency = 1.8f;
+                    });
+                    EnsureStep17Component<VoxelEngine.Simulation.FactoryStatusIndicator>(root, indicator =>
+                    {
+                        indicator.rendererChildName = "Generated_StatusPanel";
+                        indicator.lightChildName = "Generated_AssemblerStatusLight";
+                        indicator.idleColor = accent;
+                        indicator.activeColor = new Color(0.22f, 0.78f, 0.42f);
+                        indicator.offlineColor = new Color(0.18f, 0.72f, 0.88f);
+                    });
                 });
             }
 
@@ -6174,7 +6434,7 @@ root =>
             foreach (var recipe in new[] { smeltIron, smeltCopper, smeltSteel, smeltGlass })
                 if (recipe != null && !smeltingRecipes.Contains(recipe)) smeltingRecipes.Add(recipe);
 
-            var electricFurnacePrefab = GetOrCreatePrefab($"{FAC_PREFABS}/ElectricFurnace.prefab", "ElectricFurnace", root =>
+            var electricFurnacePrefab = GetOrCreateStep17Prefab($"{FAC_PREFABS}/ElectricFurnace.prefab", "ElectricFurnace", root =>
             {
                 var shellMat = GetMaterial(FAC_MATS, "Mat_ElectricFurnaceShell", new Color(0.36f, 0.30f, 0.27f));
                 var heatMat = GetMaterial(FAC_MATS, "Mat_ElectricFurnaceHeat", new Color(1.0f, 0.42f, 0.12f), true);
@@ -6182,20 +6442,25 @@ root =>
                 EnsurePrimitive(root, "Generated_HeaterWindow", PrimitiveType.Cube, new Vector3(0f, 0.50f, -0.59f), new Vector3(0.58f, 0.34f, 0.04f), heatMat, Vector3.zero);
                 EnsurePrimitive(root, "Generated_TopVent", PrimitiveType.Cube, new Vector3(0f, 1.00f, 0f), new Vector3(0.74f, 0.08f, 0.74f), shellMat, Vector3.zero);
                 EnsureRootCollider(root, new Vector3(1.2f, 1.1f, 1.2f), new Vector3(0f, 0.52f, 0f));
-                var station = EnsureComponent<VoxelEngine.Crafting.CraftingStation>(root);
-                station.tier = VoxelEngine.Crafting.StationTier.Assembler;
-                station.displayName = "Electric Furnace";
-                var furnace = EnsureComponent<VoxelEngine.Crafting.ElectricFurnace>(root);
-                furnace.knownRecipes = smeltingRecipes;
-                furnace.baseWattsPerSecond = 200f;
-                furnace.idleWattsPerSecond = 5f;
-                var power = EnsureComponent<VoxelEngine.Power.PowerConsumer>(root);
-                power.connectRadius = 1.6f;
-                var indicator = EnsureComponent<VoxelEngine.Simulation.FactoryStatusIndicator>(root);
-                indicator.rendererChildName = "Generated_HeaterWindow";
-                indicator.idleColor = new Color(1.0f, 0.42f, 0.12f);
-                indicator.activeColor = new Color(0.22f, 0.78f, 0.42f);
-                indicator.offlineColor = new Color(0.18f, 0.72f, 0.88f);
+                EnsureStep17Component<VoxelEngine.Crafting.CraftingStation>(root, station =>
+                {
+                    station.tier = VoxelEngine.Crafting.StationTier.Assembler;
+                    station.displayName = "Electric Furnace";
+                });
+                var furnace = EnsureStep17Component<VoxelEngine.Crafting.ElectricFurnace>(root, createdFurnace =>
+                {
+                    createdFurnace.baseWattsPerSecond = 200f;
+                    createdFurnace.idleWattsPerSecond = 5f;
+                });
+                furnace.knownRecipes = MergeUniqueList(furnace.knownRecipes, smeltingRecipes);
+                EnsureStep17Component<VoxelEngine.Power.PowerConsumer>(root, power => power.connectRadius = 1.6f);
+                EnsureStep17Component<VoxelEngine.Simulation.FactoryStatusIndicator>(root, indicator =>
+                {
+                    indicator.rendererChildName = "Generated_HeaterWindow";
+                    indicator.idleColor = new Color(1.0f, 0.42f, 0.12f);
+                    indicator.activeColor = new Color(0.22f, 0.78f, 0.42f);
+                    indicator.offlineColor = new Color(0.18f, 0.72f, 0.88f);
+                });
             });
             var blockElectricFurnace = ConfigureBlock(FAC_ITEMS, "Block_ElectricFurnace", "Electric Furnace", "Powered smelter that uses electricity instead of fuel and supports upgrade modules.", new Color(1.0f, 0.42f, 0.12f), electricFurnacePrefab, "Factory", 460);
 
@@ -6206,19 +6471,23 @@ root =>
             ConfigureMachineDefinition("MachineDef_ElectricFurnace", "electric_furnace", "Electric Furnace", "Powered smelter that replaces fuel burning with grid power.", VoxelEngine.Simulation.MachineCategory.Furnace, 200f, 5f, 1f, 1, 4, 4, new Color(0.36f, 0.30f, 0.27f), new Color(1.0f, 0.42f, 0.12f), electricFurnacePrefab);
 
             // ── Voltage and power distribution prefabs ──
-            var hvWireItem = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{HV_ITEMS}/Item_HV_Wire.asset");
-            hvWireItem.itemId = "hv_wire";
-            hvWireItem.displayName = "High Voltage Wire";
-            hvWireItem.description = "Heavy-duty reinforced cable for high-voltage transmission. Consumes 1 per HV connection.";
-            hvWireItem.iconTint = new Color(0.95f, 0.85f, 0.20f);
-            hvWireItem.maxStack = 50;
-            hvWireItem.massPerUnit = 5f;
-            hvWireItem.category = "Power";
-            EditorUtility.SetDirty(hvWireItem);
-
-            var powerPolePrefab = GetOrCreatePrefab($"{HV_PREFABS}/PowerPole.prefab", "PowerPole", root =>
+            string hvWireItemPath = $"{HV_ITEMS}/Item_HV_Wire.asset";
+            bool hvWireItemCreated = AssetDatabase.LoadMainAssetAtPath(hvWireItemPath) == null;
+            var hvWireItem = GetOrCreateStep17Asset<VoxelEngine.Items.ItemDefinition>(hvWireItemPath);
+            if (hvWireItem != null && hvWireItemCreated)
             {
-                ClearGeneratedChildren(root);
+                hvWireItem.itemId = "hv_wire";
+                hvWireItem.displayName = "High Voltage Wire";
+                hvWireItem.description = "Heavy-duty reinforced cable for high-voltage transmission. Consumes 1 per HV connection.";
+                hvWireItem.iconTint = new Color(0.95f, 0.85f, 0.20f);
+                hvWireItem.maxStack = 50;
+                hvWireItem.massPerUnit = 5f;
+                hvWireItem.category = "Power";
+                EditorUtility.SetDirty(hvWireItem);
+            }
+
+            var powerPolePrefab = GetOrCreateStep17Prefab($"{HV_PREFABS}/PowerPole.prefab", "PowerPole", root =>
+            {
                 var poleMat = GetMaterial(HV_MATS, "Mat_PowerPoleWood", new Color(0.36f, 0.25f, 0.16f));
                 var metalMat = GetMaterial(HV_MATS, "Mat_PowerPoleGalvanizedMetal", new Color(0.55f, 0.58f, 0.58f));
                 var wireMat = GetMaterial(HV_MATS, "Mat_PowerPoleWire", new Color(0.035f, 0.035f, 0.035f));
@@ -6238,18 +6507,19 @@ root =>
                 EnsurePrimitive(root, "Generated_DropWireA", PrimitiveType.Cube, new Vector3(0.32f, 2.78f, -0.10f), new Vector3(0.025f, 0.58f, 0.025f), wireMat, new Vector3(0f, 0f, 12f));
                 EnsurePrimitive(root, "Generated_ConnectionCap", PrimitiveType.Sphere, new Vector3(0f, 3.36f, 0f), new Vector3(0.16f, 0.16f, 0.16f), capMat, Vector3.zero);
                 EnsureRootCollider(root, new Vector3(2.2f, 3.6f, 1.0f), new Vector3(0f, 1.78f, 0f));
-                var pole = EnsureComponent<VoxelEngine.Simulation.PowerPole>(root);
-                pole.poleHeight = 3f;
-                pole.maxConnections = 6;
-                pole.wireReach = 15f;
-                pole.connectionPointOffset = new Vector3(0f, 3f, 0f);
-                pole.isHighVoltage = false;
+                EnsureStep17Component<VoxelEngine.Simulation.PowerPole>(root, pole =>
+                {
+                    pole.poleHeight = 3f;
+                    pole.maxConnections = 6;
+                    pole.wireReach = 15f;
+                    pole.connectionPointOffset = new Vector3(0f, 3f, 0f);
+                    pole.isHighVoltage = false;
+                });
             });
             var blockPowerPole = ConfigureBlock(HV_ITEMS, "Block_PowerPole", "Power Pole", "Low-voltage pole for manual wire connections. Supports 6 links over 15 m.", new Color(0.22f, 0.78f, 0.42f), powerPolePrefab, "Power", 260);
 
-            var substationPrefab = GetOrCreatePrefab($"{HV_PREFABS}/ElectricalSubstation.prefab", "ElectricalSubstation", root =>
+            var substationPrefab = GetOrCreateStep17Prefab($"{HV_PREFABS}/ElectricalSubstation.prefab", "ElectricalSubstation", root =>
             {
-                ClearGeneratedChildren(root);
                 var baseMat = GetMaterial(HV_MATS, "Mat_SubstationConcretePad", new Color(0.44f, 0.45f, 0.43f));
                 var frameMat = GetMaterial(HV_MATS, "Mat_SubstationSteelFrame", new Color(0.46f, 0.49f, 0.50f));
                 var tankMat = GetMaterial(HV_MATS, "Mat_SubstationTransformerTank", new Color(0.66f, 0.70f, 0.69f));
@@ -6269,19 +6539,20 @@ root =>
                 EnsurePrimitive(root, "Generated_ControlCabinet", PrimitiveType.Cube, new Vector3(1.25f, 0.55f, 0.88f), new Vector3(0.36f, 0.72f, 0.22f), tankMat, Vector3.zero);
                 EnsurePrimitive(root, "Generated_StatusBar", PrimitiveType.Cube, new Vector3(0f, 0.35f, -0.48f), new Vector3(0.86f, 0.05f, 0.04f), glowMat, Vector3.zero);
                 EnsureRootCollider(root, new Vector3(3.5f, 2.75f, 2.5f), new Vector3(0f, 1.28f, 0f));
-                var substation = EnsureComponent<VoxelEngine.Simulation.ElectricalSubstation>(root);
-                substation.relayDistance = 150f;
-                substation.structureHeight = 5f;
-                substation.maxConnections = 4;
-                substation.wireReach = 150f;
-                substation.connectionPointOffset = new Vector3(0f, 5f, 0f);
-                substation.isHighVoltage = false;
+                EnsureStep17Component<VoxelEngine.Simulation.ElectricalSubstation>(root, substation =>
+                {
+                    substation.relayDistance = 150f;
+                    substation.structureHeight = 5f;
+                    substation.maxConnections = 4;
+                    substation.wireReach = 150f;
+                    substation.connectionPointOffset = new Vector3(0f, 5f, 0f);
+                    substation.isHighVoltage = false;
+                });
             });
             var blockSubstation = ConfigureBlock(HV_ITEMS, "Block_Substation", "Electrical Substation", "Long-range low-voltage relay for spanning up to 150 m between power networks.", new Color(0.18f, 0.72f, 0.88f), substationPrefab, "Power", 720, 2, new Vector3Int(2, 1, 1));
 
-            var hvTowerPrefab = GetOrCreatePrefab($"{HV_PREFABS}/HVTower.prefab", "HVTower", root =>
+            var hvTowerPrefab = GetOrCreateStep17Prefab($"{HV_PREFABS}/HVTower.prefab", "HVTower", root =>
             {
-                ClearGeneratedChildren(root);
                 var steelMat = GetMaterial(HV_MATS, "Mat_HVTowerGalvanizedSteel", new Color(0.48f, 0.50f, 0.54f));
                 var amberMat = GetMaterial(HV_MATS, "Mat_HVTowerPhaseMarkers", new Color(0.92f, 0.45f, 0.12f), true);
                 var insulatorMat = GetMaterial(HV_MATS, "Mat_HVTowerDarkInsulators", new Color(0.08f, 0.075f, 0.07f));
@@ -6313,23 +6584,24 @@ root =>
                 EnsurePrimitive(root, "Generated_PhaseMarkerB", PrimitiveType.Cube, new Vector3(1.55f, 2.72f, 0f), new Vector3(0.20f, 0.20f, 0.20f), amberMat, Vector3.zero);
                 EnsurePrimitive(root, "Generated_HVBeacon", PrimitiveType.Sphere, new Vector3(0f, 6.15f, 0f), new Vector3(0.18f, 0.18f, 0.18f), amberMat, Vector3.zero);
                 EnsureRootCollider(root, new Vector3(4.0f, 6.4f, 1.0f), new Vector3(0f, 3.2f, 0f));
-                var tower = EnsureComponent<VoxelEngine.Simulation.HighVoltagePole>(root);
-                tower.towerHeight = 12f;
-                tower.baseWidth = 3f;
-                tower.topWidth = 1.2f;
-                tower.crossArmLevels = 2;
-                tower.crossArmLength = 3.5f;
-                tower.maxConnections = 8;
-                tower.wireReach = 200f;
-                tower.connectionPointOffset = new Vector3(0f, 12f, 0f);
-                tower.isHighVoltage = true;
-                tower.maxThroughputWatts = float.MaxValue;
+                EnsureStep17Component<VoxelEngine.Simulation.HighVoltagePole>(root, tower =>
+                {
+                    tower.towerHeight = 12f;
+                    tower.baseWidth = 3f;
+                    tower.topWidth = 1.2f;
+                    tower.crossArmLevels = 2;
+                    tower.crossArmLength = 3.5f;
+                    tower.maxConnections = 8;
+                    tower.wireReach = 200f;
+                    tower.connectionPointOffset = new Vector3(0f, 12f, 0f);
+                    tower.isHighVoltage = true;
+                    tower.maxThroughputWatts = float.MaxValue;
+                });
             });
             var blockHVTower = ConfigureBlock(HV_ITEMS, "Block_HVTower", "HV Transmission Tower", "High-voltage lattice tower for 200 m transmission spans and unlimited throughput.", new Color(0.92f, 0.45f, 0.12f), hvTowerPrefab, "Power", 1100, 3, new Vector3Int(3, 6, 1));
 
-            var stepUpPrefab = GetOrCreatePrefab($"{HV_PREFABS}/StepUpTransformer.prefab", "StepUpTransformer", root =>
+            var stepUpPrefab = GetOrCreateStep17Prefab($"{HV_PREFABS}/StepUpTransformer.prefab", "StepUpTransformer", root =>
             {
-                ClearGeneratedChildren(root);
                 var tankMat = GetMaterial(HV_MATS, "Mat_StepUpLargeTank", new Color(0.62f, 0.66f, 0.65f));
                 var radiatorMat = GetMaterial(HV_MATS, "Mat_StepUpRadiatorFins", new Color(0.42f, 0.46f, 0.46f));
                 var bushingMat = GetMaterial(HV_MATS, "Mat_StepUpBlackBushings", new Color(0.07f, 0.065f, 0.06f));
@@ -6351,18 +6623,19 @@ root =>
                 EnsurePrimitive(root, "Generated_StepUpStatus", PrimitiveType.Cube, new Vector3(0f, 0.42f, -0.56f), new Vector3(0.84f, 0.05f, 0.04f), blueGlow, Vector3.zero);
                 EnsureLight(root, "Generated_StatusLight", new Vector3(0f, 1.32f, -0.58f), LightType.Point, new Color(0.15f, 0.45f, 0.85f), 1.6f, 4f);
                 EnsureRootCollider(root, new Vector3(2.8f, 2.15f, 1.65f), new Vector3(0f, 1.0f, 0f));
-                var transformer = EnsureComponent<VoxelEngine.Simulation.StepUpTransformer>(root);
-                transformer.maxThroughputWatts = 200_000_000f;
-                transformer.conversionLoss = 0.02f;
-                transformer.maxConnections = 4;
-                transformer.wireReach = 100f;
-                transformer.connectionPointOffset = new Vector3(0f, 1.95f, 0f);
-                transformer.isHighVoltage = true;
+                EnsureStep17Component<VoxelEngine.Simulation.StepUpTransformer>(root, transformer =>
+                {
+                    transformer.maxThroughputWatts = 200_000_000f;
+                    transformer.conversionLoss = 0.02f;
+                    transformer.maxConnections = 4;
+                    transformer.wireReach = 100f;
+                    transformer.connectionPointOffset = new Vector3(0f, 1.95f, 0f);
+                    transformer.isHighVoltage = true;
+                });
             });
 
-            var stepDownPrefab = GetOrCreatePrefab($"{HV_PREFABS}/StepDownTransformer.prefab", "StepDownTransformer", root =>
+            var stepDownPrefab = GetOrCreateStep17Prefab($"{HV_PREFABS}/StepDownTransformer.prefab", "StepDownTransformer", root =>
             {
-                ClearGeneratedChildren(root);
                 var poleMat = GetMaterial(HV_MATS, "Mat_StepDownPoleFrame", new Color(0.38f, 0.40f, 0.42f));
                 var canMat = GetMaterial(HV_MATS, "Mat_StepDownCan", new Color(0.68f, 0.72f, 0.73f));
                 var darkMat = GetMaterial(HV_MATS, "Mat_StepDownBushings", new Color(0.07f, 0.065f, 0.06f));
@@ -6378,20 +6651,22 @@ root =>
                 EnsurePrimitive(root, "Generated_StepDownStatus", PrimitiveType.Cube, new Vector3(0f, 0.30f, -0.46f), new Vector3(0.50f, 0.04f, 0.04f), amberGlow, Vector3.zero);
                 EnsureLight(root, "Generated_StatusLight", new Vector3(0f, 1.20f, -0.36f), LightType.Point, new Color(0.92f, 0.60f, 0.12f), 1.4f, 3.5f);
                 EnsureRootCollider(root, new Vector3(1.75f, 1.85f, 1.05f), new Vector3(0f, 0.78f, 0f));
-                var transformer = EnsureComponent<VoxelEngine.Simulation.StepDownTransformer>(root);
-                transformer.maxThroughputWatts = 200_000_000f;
-                transformer.conversionLoss = 0.02f;
-                transformer.maxConnections = 4;
-                transformer.wireReach = 100f;
-                transformer.connectionPointOffset = new Vector3(0f, 1.45f, 0f);
-                transformer.isHighVoltage = true;
+                EnsureStep17Component<VoxelEngine.Simulation.StepDownTransformer>(root, transformer =>
+                {
+                    transformer.maxThroughputWatts = 200_000_000f;
+                    transformer.conversionLoss = 0.02f;
+                    transformer.maxConnections = 4;
+                    transformer.wireReach = 100f;
+                    transformer.connectionPointOffset = new Vector3(0f, 1.45f, 0f);
+                    transformer.isHighVoltage = true;
+                });
             });
 
             var blockStepUp = ConfigureBlock(HV_ITEMS, "Block_StepUpTransformer", "Step-Up Transformer", "Converts low-voltage production networks into high-voltage transmission lines with 2% loss.", new Color(0.15f, 0.45f, 0.85f), stepUpPrefab, "Power", 820, 2, new Vector3Int(2, 1, 1));
             var blockStepDown = ConfigureBlock(HV_ITEMS, "Block_StepDownTransformer", "Step-Down Transformer", "Converts high-voltage transmission back into local low-voltage factory power with 2% loss.", new Color(0.92f, 0.60f, 0.12f), stepDownPrefab, "Power", 820, 2, new Vector3Int(2, 1, 1));
 
             // ── Lighting generated with Step 17 ──
-            var gridLightPrefab = GetOrCreatePrefab($"{GRID_PREFABS}/GridLightBlock.prefab", "GridLightBlock", root =>
+            var gridLightPrefab = GetOrCreateStep17Prefab($"{GRID_PREFABS}/GridLightBlock.prefab", "GridLightBlock", root =>
             {
                 var shellMat = GetMaterial(GRID_MATS, "Mat_GridSpotlightShell", new Color(0.62f, 0.64f, 0.66f));
                 var bracketMat = GetMaterial(GRID_MATS, "Mat_GridSpotlightBracket", new Color(0.22f, 0.23f, 0.24f));
@@ -6404,19 +6679,21 @@ root =>
                 EnsurePrimitive(root, "Generated_BackCap", PrimitiveType.Cylinder, new Vector3(0f, 0.10f, 0.20f), new Vector3(0.28f, 0.04f, 0.28f), bracketMat, new Vector3(90f, 0f, 0f));
                 EnsureLight(root, "Generated_Spot", new Vector3(0f, 0.10f, -0.50f), LightType.Spot, Color.white, 4.5f, 32f, 42f);
                 EnsureRootCollider(root, new Vector3(0.95f, 0.62f, 0.82f), new Vector3(0f, 0.08f, -0.10f));
-                var lightBlock = EnsureComponent<VoxelEngine.Simulation.GridLightBlock>(root);
-                lightBlock.blockName = "Grid Light Block";
-                lightBlock.lightColor = Color.white;
-                lightBlock.range = 32f;
-                lightBlock.spotAngle = 42f;
-                lightBlock.intensity = 4.5f;
-                lightBlock.lightType = LightType.Spot;
+                EnsureStep17Component<VoxelEngine.Simulation.GridLightBlock>(root, lightBlock =>
+                {
+                    lightBlock.blockName = "Grid Light Block";
+                    lightBlock.lightColor = Color.white;
+                    lightBlock.range = 32f;
+                    lightBlock.spotAngle = 42f;
+                    lightBlock.intensity = 4.5f;
+                    lightBlock.lightType = LightType.Spot;
+                });
             });
             var gridLightItem = ConfigureGridItem(GRID_ITEMS, "GItem_GridLightBlock", "Grid Light Block", "Large mounted spotlight for vehicle and base grids.", new Color(1f, 0.94f, 0.72f), gridLightPrefab, VoxelEngine.GridSystem.GridSize.Small, 95f, 220f);
 
             GameObject CreateLedStripPrefab(string folder, string matsFolder, string assetName, bool gridVariant)
             {
-                return GetOrCreatePrefab($"{folder}/{assetName}.prefab", assetName, root =>
+                return GetOrCreateStep17Prefab($"{folder}/{assetName}.prefab", assetName, root =>
                 {
                     var stripMat = GetMaterial(matsFolder, gridVariant ? "Mat_GridLEDStrip" : "Mat_StaticLEDStrip", new Color(0.18f, 0.72f, 0.88f), true);
                     var backingMat = GetMaterial(matsFolder, gridVariant ? "Mat_GridLEDBacking" : "Mat_StaticLEDBacking", new Color(0.08f, 0.09f, 0.10f));
@@ -6426,21 +6703,27 @@ root =>
                     EnsureRootCollider(root, new Vector3(2.0f, 0.16f, 0.22f), new Vector3(0f, 0.05f, 0f));
                     if (gridVariant)
                     {
-                        var gridBlock = EnsureComponent<VoxelEngine.GridSystem.GridBlock>(root);
-                        gridBlock.blockName = "Grid LED Strip";
-                        gridBlock.BlockMass = 25f;
-                        gridBlock.maxHP = 90f;
+                        EnsureStep17Component<VoxelEngine.GridSystem.GridBlock>(root, gridBlock =>
+                        {
+                            gridBlock.blockName = "Grid LED Strip";
+                            gridBlock.BlockMass = 25f;
+                            gridBlock.maxHP = 90f;
+                        });
                     }
-                    var strip = EnsureComponent<VoxelEngine.Simulation.LEDStrip>(root);
-                    strip.stripColor = new Color(0.18f, 0.72f, 0.88f);
-                    strip.brightness = 1.5f;
-                    strip.stripLength = 1.8f;
-                    strip.mode = VoxelEngine.Simulation.LEDMode.Pulse;
-                    strip.animSpeed = 1.5f;
-                    strip.wattsDraw = 5f;
-                    var power = EnsureComponent<VoxelEngine.Power.PowerConsumer>(root);
-                    power.wattsPerSecond = 5f;
-                    power.connectRadius = 1.5f;
+                    EnsureStep17Component<VoxelEngine.Simulation.LEDStrip>(root, strip =>
+                    {
+                        strip.stripColor = new Color(0.18f, 0.72f, 0.88f);
+                        strip.brightness = 1.5f;
+                        strip.stripLength = 1.8f;
+                        strip.mode = VoxelEngine.Simulation.LEDMode.Pulse;
+                        strip.animSpeed = 1.5f;
+                        strip.wattsDraw = 5f;
+                    });
+                    EnsureStep17Component<VoxelEngine.Power.PowerConsumer>(root, power =>
+                    {
+                        power.wattsPerSecond = 5f;
+                        power.connectRadius = 1.5f;
+                    });
                 });
             }
 
@@ -6498,70 +6781,97 @@ root =>
             {
                 var nElectricity = FindNodeByName(tree, "res_electricity");
                 var nAdvancedManufacturing = FindNodeByName(tree, "res_adv_manufacturing");
+                var factoryPrerequisites = nAdvancedManufacturing != null
+                    ? new[] { nAdvancedManufacturing }
+                    : (nElectricity != null ? new[] { nElectricity } : new VoxelEngine.Research.ResearchNode[0]);
 
-                var nFactory = GetOrCreateAsset<VoxelEngine.Research.ResearchNode>($"{NODES}/res_factory_logistics.asset");
-                nFactory.nodeId = "res_factory_logistics";
-                nFactory.displayName = "Factory Logistics";
-                nFactory.description = "Conveyors, chutes, funnels, crushers, assemblers, and compact factory lighting.";
-                nFactory.category = VoxelEngine.Research.ResearchCategory.Environment;
-                nFactory.subCategory = VoxelEngine.Research.ResearchSubCategory.Logistics;
-                nFactory.tier = 3;
-                nFactory.column = 5;
-                nFactory.iconTint = new Color(0.18f, 0.72f, 0.88f);
-                nFactory.researchSeconds = 80f;
-                nFactory.cost = new[]
+                string factoryNodePath = $"{NODES}/res_factory_logistics.asset";
+                bool factoryNodeCreated = AssetDatabase.LoadMainAssetAtPath(factoryNodePath) == null;
+                var nFactory = GetOrCreateStep17Asset<VoxelEngine.Research.ResearchNode>(factoryNodePath);
+                if (nFactory != null)
                 {
-                    new VoxelEngine.Research.ResearchNode.ScienceCost { pack = sciT2, count = 25 },
-                    new VoxelEngine.Research.ResearchNode.ScienceCost { pack = sciT3, count = 5 }
-                };
-                nFactory.prerequisites = nAdvancedManufacturing != null ? new[] { nAdvancedManufacturing } : (nElectricity != null ? new[] { nElectricity } : new VoxelEngine.Research.ResearchNode[0]);
-                nFactory.unlocksRecipes = factoryRecipes.ToArray();
-                nFactory.upgradeKind = VoxelEngine.Research.PlayerUpgradeKind.None;
-                nFactory.maxRanks = 1;
-                EditorUtility.SetDirty(nFactory);
-                if (!tree.nodes.Contains(nFactory)) tree.nodes.Add(nFactory);
+                    if (factoryNodeCreated)
+                    {
+                        nFactory.nodeId = "res_factory_logistics";
+                        nFactory.displayName = "Factory Logistics";
+                        nFactory.description = "Conveyors, chutes, funnels, crushers, assemblers, and compact factory lighting.";
+                        nFactory.category = VoxelEngine.Research.ResearchCategory.Environment;
+                        nFactory.subCategory = VoxelEngine.Research.ResearchSubCategory.Logistics;
+                        nFactory.tier = 3;
+                        nFactory.column = 5;
+                        nFactory.iconTint = new Color(0.18f, 0.72f, 0.88f);
+                        nFactory.researchSeconds = 80f;
+                        nFactory.cost = new[]
+                        {
+                            new VoxelEngine.Research.ResearchNode.ScienceCost { pack = sciT2, count = 25 },
+                            new VoxelEngine.Research.ResearchNode.ScienceCost { pack = sciT3, count = 5 }
+                        };
+                        nFactory.upgradeKind = VoxelEngine.Research.PlayerUpgradeKind.None;
+                        nFactory.maxRanks = 1;
+                    }
+                    nFactory.prerequisites = MergeUniqueArray(nFactory.prerequisites, factoryPrerequisites);
+                    nFactory.unlocksRecipes = MergeUniqueArray(nFactory.unlocksRecipes, factoryRecipes);
+                    EditorUtility.SetDirty(nFactory);
+                    if (!tree.nodes.Contains(nFactory))
+                    {
+                        tree.nodes.Add(nFactory);
+                        repairedLinkCount++;
+                    }
+                }
 
-                var nHV = GetOrCreateAsset<VoxelEngine.Research.ResearchNode>($"{NODES}/res_hv_transmission.asset");
-                nHV.nodeId = "res_hv_transmission";
-                nHV.displayName = "High-Voltage Transmission";
-                nHV.description = "Power poles, substations, transformers, and long-span high-voltage towers for large factories.";
-                nHV.category = VoxelEngine.Research.ResearchCategory.Environment;
-                nHV.subCategory = VoxelEngine.Research.ResearchSubCategory.Power;
-                nHV.tier = 4;
-                nHV.column = 6;
-                nHV.iconTint = new Color(0.92f, 0.45f, 0.12f);
-                nHV.researchSeconds = 110f;
-                nHV.cost = new[]
+                string hvNodePath = $"{NODES}/res_hv_transmission.asset";
+                bool hvNodeCreated = AssetDatabase.LoadMainAssetAtPath(hvNodePath) == null;
+                var nHV = GetOrCreateStep17Asset<VoxelEngine.Research.ResearchNode>(hvNodePath);
+                if (nHV != null)
                 {
-                    new VoxelEngine.Research.ResearchNode.ScienceCost { pack = sciT2, count = 30 },
-                    new VoxelEngine.Research.ResearchNode.ScienceCost { pack = sciT3, count = 15 }
-                };
-                nHV.prerequisites = new[] { nFactory };
-                nHV.unlocksRecipes = hvRecipes.ToArray();
-                nHV.upgradeKind = VoxelEngine.Research.PlayerUpgradeKind.None;
-                nHV.maxRanks = 1;
-                EditorUtility.SetDirty(nHV);
-                if (!tree.nodes.Contains(nHV)) tree.nodes.Add(nHV);
+                    if (hvNodeCreated)
+                    {
+                        nHV.nodeId = "res_hv_transmission";
+                        nHV.displayName = "High-Voltage Transmission";
+                        nHV.description = "Power poles, substations, transformers, and long-span high-voltage towers for large factories.";
+                        nHV.category = VoxelEngine.Research.ResearchCategory.Environment;
+                        nHV.subCategory = VoxelEngine.Research.ResearchSubCategory.Power;
+                        nHV.tier = 4;
+                        nHV.column = 6;
+                        nHV.iconTint = new Color(0.92f, 0.45f, 0.12f);
+                        nHV.researchSeconds = 110f;
+                        nHV.cost = new[]
+                        {
+                            new VoxelEngine.Research.ResearchNode.ScienceCost { pack = sciT2, count = 30 },
+                            new VoxelEngine.Research.ResearchNode.ScienceCost { pack = sciT3, count = 15 }
+                        };
+                        nHV.upgradeKind = VoxelEngine.Research.PlayerUpgradeKind.None;
+                        nHV.maxRanks = 1;
+                    }
+                    nHV.prerequisites = MergeUniqueArray(nHV.prerequisites, nFactory != null ? new[] { nFactory } : factoryPrerequisites);
+                    nHV.unlocksRecipes = MergeUniqueArray(nHV.unlocksRecipes, hvRecipes);
+                    EditorUtility.SetDirty(nHV);
+                    if (!tree.nodes.Contains(nHV))
+                    {
+                        tree.nodes.Add(nHV);
+                        repairedLinkCount++;
+                    }
+                }
 
                 EditorUtility.SetDirty(tree);
             }
 
+            registry.recipes.RemoveAll(recipe => recipe == null);
             EditorUtility.SetDirty(registry);
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
 
-            EditorUtility.DisplayDialog(
-                "Voxel Engine — Step 17",
-                "Factory Foundations + High-Voltage Grid built.\n\n" +
-                "Created or refreshed:\n" +
-                "• 3 conveyor tiers, chute, and funnel prefabs\n" +
-                "• Crusher, electric furnace, and 3 assembler tiers\n" +
-                "• Machine definitions and machine recipes\n" +
-                "• Voltage system config\n" +
-                "• Power pole, substation, HV tower, and transformers\n" +
-                "• Grid light block in GridSystem and static/grid LED strips\n" +
-                "• Factory Logistics and High-Voltage Transmission research nodes",
-                "OK");
+            string setupSummary =
+                "Factory Foundations + High-Voltage Grid verified non-destructively.\n\n" +
+                $"Created assets/materials: {createdAssetCount}\n" +
+                $"Created prefabs: {createdPrefabCount}\n" +
+                $"Created missing components: {createdComponentCount}\n" +
+                $"Preserved existing assets/materials: {preservedAssetCount}\n" +
+                $"Preserved existing prefabs: {preservedPrefabCount}\n" +
+                $"Repaired required links: {repairedLinkCount}\n\n" +
+                "Existing health, power, throughput, recipe costs, research costs, visual transforms, materials, and effect tuning were preserved.";
+            Debug.Log($"[VoxelEngineSetupWindow] Step 17 complete. Created assets/materials={createdAssetCount}, created prefabs={createdPrefabCount}, created components={createdComponentCount}, preserved assets/materials={preservedAssetCount}, preserved prefabs={preservedPrefabCount}, repaired links={repairedLinkCount}.");
+            EditorUtility.DisplayDialog("Voxel Engine — Step 17", setupSummary, "OK");
         }
 
         private void BuildWindmillContent()
