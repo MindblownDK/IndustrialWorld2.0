@@ -188,6 +188,7 @@ namespace VoxelEngine.EditorTools
             AddInfo(scroll,
                 "Step 17 builds the FACTORY FOUNDATIONS + HIGH VOLTAGE GRID:\n" +
                 "  • Conveyor Belt (Basic / Fast / Express tiers)\n" +
+                "  • Conveyor direction chevrons + centered status lines\n" +
                 "  • Conveyor Chute (vertical item transport)\n" +
                 "  • Crusher + Assembler Mk.1/Mk.2/Mk.3 machines\n" +
                 "  • MachineDefinition + MachineRecipe ScriptableObjects\n" +
@@ -6170,6 +6171,7 @@ root =>
                     var darkFrameMat = GetMaterial(FAC_MATS, "Mat_ConveyorDarkFrame", new Color(0.12f, 0.13f, 0.14f));
                     var beltMat = GetMaterial(FAC_MATS, $"Mat_{assetName}_Belt", beltColor);
                     var accentMat = GetMaterial(FAC_MATS, $"Mat_{assetName}_TierAccent", accent, true);
+                    var statusMat = GetMaterial(FAC_MATS, "Mat_ConveyorStatusLine", new Color(0.18f, 0.72f, 0.88f), true);
                     var rollerMat = GetMaterial(FAC_MATS, "Mat_ConveyorRollers", new Color(0.62f, 0.64f, 0.62f));
 
                     EnsurePrimitive(root, "Generated_FrameLeft", PrimitiveType.Cube, new Vector3(-0.52f, 0.28f, 0f), new Vector3(0.08f, 0.24f, 1.08f), frameMat, Vector3.zero);
@@ -6181,6 +6183,11 @@ root =>
                     EnsurePrimitive(root, "Generated_TierStripeLeft", PrimitiveType.Cube, new Vector3(-0.565f, 0.43f, 0f), new Vector3(0.035f, 0.045f, 0.92f), accentMat, Vector3.zero);
                     EnsurePrimitive(root, "Generated_TierStripeRight", PrimitiveType.Cube, new Vector3(0.565f, 0.43f, 0f), new Vector3(0.035f, 0.045f, 0.92f), accentMat, Vector3.zero);
                     EnsurePrimitive(root, "Generated_Arrow", PrimitiveType.Cube, new Vector3(0f, 0.395f, 0.26f), new Vector3(0.32f * speedScale, 0.025f, 0.18f), accentMat, new Vector3(0f, 45f, 0f));
+                    EnsurePrimitive(root, "Generated_StatusLine", PrimitiveType.Cube, new Vector3(0f, 0.405f, -0.08f), new Vector3(0.045f, 0.022f, 0.70f), statusMat, Vector3.zero);
+                    EnsurePrimitive(root, "Generated_DirectionArrowLeftA", PrimitiveType.Cube, new Vector3(-0.26f, 0.407f, 0.12f), new Vector3(0.045f, 0.020f, 0.17f), accentMat, new Vector3(0f, 35f, 0f));
+                    EnsurePrimitive(root, "Generated_DirectionArrowLeftB", PrimitiveType.Cube, new Vector3(-0.18f, 0.407f, 0.12f), new Vector3(0.045f, 0.020f, 0.17f), accentMat, new Vector3(0f, -35f, 0f));
+                    EnsurePrimitive(root, "Generated_DirectionArrowRightA", PrimitiveType.Cube, new Vector3(0.18f, 0.407f, 0.12f), new Vector3(0.045f, 0.020f, 0.17f), accentMat, new Vector3(0f, 35f, 0f));
+                    EnsurePrimitive(root, "Generated_DirectionArrowRightB", PrimitiveType.Cube, new Vector3(0.26f, 0.407f, 0.12f), new Vector3(0.045f, 0.020f, 0.17f), accentMat, new Vector3(0f, -35f, 0f));
                     EnsurePrimitive(root, "Generated_FrontLegLeft", PrimitiveType.Cube, new Vector3(-0.42f, -0.17f, -0.42f), new Vector3(0.06f, 0.58f, 0.06f), frameMat, Vector3.zero);
                     EnsurePrimitive(root, "Generated_FrontLegRight", PrimitiveType.Cube, new Vector3(0.42f, -0.17f, -0.42f), new Vector3(0.06f, 0.58f, 0.06f), frameMat, Vector3.zero);
                     EnsurePrimitive(root, "Generated_BackLegLeft", PrimitiveType.Cube, new Vector3(-0.42f, -0.17f, 0.42f), new Vector3(0.06f, 0.58f, 0.06f), frameMat, Vector3.zero);
@@ -6208,13 +6215,19 @@ root =>
                             _ => 2.2f
                         };
                     });
-                    EnsureStep17Component<VoxelEngine.Simulation.FactoryStatusIndicator>(root, indicator =>
+                    var statusIndicator = EnsureStep17Component<VoxelEngine.Simulation.FactoryStatusIndicator>(root, indicator =>
                     {
-                        indicator.rendererChildName = "Generated_Arrow";
+                        indicator.rendererChildName = "Generated_StatusLine";
                         indicator.idleColor = accent;
                         indicator.activeColor = new Color(0.22f, 0.78f, 0.42f);
                         indicator.blockedColor = new Color(0.95f, 0.18f, 0.14f);
                     });
+                    if (string.IsNullOrEmpty(statusIndicator.rendererChildName)
+                        || statusIndicator.rendererChildName == "Generated_Arrow")
+                    {
+                        statusIndicator.rendererChildName = "Generated_StatusLine";
+                        repairedLinkCount++;
+                    }
                 });
             }
 

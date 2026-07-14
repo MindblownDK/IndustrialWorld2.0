@@ -173,6 +173,12 @@ namespace VoxelEngine.Building
                 tex.overrideMaterial = block.placedMaterial;
                 tex.overrideTexture  = block.texture;
             }
+
+            // Placement is now final and the collider is registered at its snapped
+            // pose, so refresh this belt and its neighbours immediately instead of
+            // waiting for the periodic connection scan.
+            var placedBelt = go.GetComponentInChildren<VoxelEngine.Simulation.ConveyorBelt>(true);
+            placedBelt?.RefreshTopologyImmediate();
             return true;
         }
 
@@ -230,9 +236,13 @@ namespace VoxelEngine.Building
             float factorySpacing = Mathf.Max(gridSize, 1f);
             if (placingChute && targetBelt != null)
             {
-                // Chutes mounted from a belt always hang directly beneath it so
-                // the belt is the upper provider and the chute remains vertical.
-                pos = targetBelt.transform.position - targetBelt.transform.up * factorySpacing;
+                Vector3 beltUp = targetBelt.transform.up;
+                float normalHeight = Vector3.Dot(hit.normal.normalized, beltUp);
+                float localHeight = Vector3.Dot(hit.point - targetBelt.transform.position, beltUp);
+                bool snapAbove = normalHeight > 0.45f
+                    || (Mathf.Abs(normalHeight) <= 0.45f && localHeight > 0.30f);
+                float verticalSign = snapAbove ? 1f : -1f;
+                pos = targetBelt.transform.position + beltUp * verticalSign * factorySpacing;
                 rot = targetBelt.transform.rotation;
                 return true;
             }

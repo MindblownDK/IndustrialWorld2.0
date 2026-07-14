@@ -36,7 +36,7 @@ namespace VoxelEngine.Simulation
 
         private void Awake()
         {
-            _itemProperties = new MaterialPropertyBlock();
+            if (_itemProperties == null) _itemProperties = new MaterialPropertyBlock();
         }
 
         public void Initialize(ConveyorBelt belt)
@@ -137,6 +137,11 @@ namespace VoxelEngine.Simulation
             _beltMaterial.color = beltColor;
             if (_beltMaterial.HasProperty(BaseColorId)) _beltMaterial.SetColor(BaseColorId, beltColor);
             authoredRenderer.sharedMaterial = _beltMaterial;
+
+            var statusTransform = transform.Find("Generated_StatusLine") ?? transform.Find("Generated_Arrow");
+            var statusRenderer = statusTransform != null ? statusTransform.GetComponent<Renderer>() : null;
+            if (statusRenderer != null)
+                GetComponent<FactoryStatusIndicator>()?.SetRuntimeRenderer(statusRenderer);
             return true;
         }
 
@@ -173,6 +178,8 @@ namespace VoxelEngine.Simulation
             Vector3 direction = Vector3.Dot(entry, exit) < -0.9f ? exit : Vector3.forward;
             CreateHorizontalBeltSegment(direction, Vector3.zero, 1f);
             BuildSupportFrame();
+            CreateDirectionArrow(direction * 0.5f, direction);
+            CreateDynamicStatusLine(Vector3.zero, direction, 0.62f);
         }
 
         private void BuildCornerMesh()
@@ -199,6 +206,8 @@ namespace VoxelEngine.Simulation
             CreateRoller(start, -entry);
             CreateRoller(end, exit);
             CreateDirectionArrow(end, exit);
+            Vector3 midpoint = start * 0.25f + end * 0.25f;
+            CreateDynamicStatusLine(midpoint, (end - start).normalized, 0.34f);
         }
 
         private void CreateCurvedBeltSegment(Vector3 start, Vector3 end)
@@ -259,6 +268,20 @@ namespace VoxelEngine.Simulation
             roller.transform.localScale = new Vector3(0.11f, 0.38f, 0.11f);
             Destroy(roller.GetComponent<Collider>());
             roller.GetComponent<MeshRenderer>().sharedMaterial = _railMaterial;
+        }
+
+        private void CreateDynamicStatusLine(Vector3 position, Vector3 direction, float length)
+        {
+            var statusLine = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            statusLine.name = "Runtime_StatusLine";
+            statusLine.transform.SetParent(_meshRoot.transform, false);
+            statusLine.transform.localPosition = position + Vector3.up * 0.535f;
+            statusLine.transform.localRotation = Quaternion.LookRotation(direction.normalized, Vector3.up);
+            statusLine.transform.localScale = new Vector3(0.05f, 0.025f, length);
+            Destroy(statusLine.GetComponent<Collider>());
+            var renderer = statusLine.GetComponent<MeshRenderer>();
+            renderer.sharedMaterial = _railMaterial;
+            GetComponent<FactoryStatusIndicator>()?.SetRuntimeRenderer(renderer);
         }
 
         private void CreateDirectionArrow(Vector3 end, Vector3 exit)

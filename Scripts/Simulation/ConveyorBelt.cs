@@ -106,7 +106,8 @@ namespace VoxelEngine.Simulation
         {
             ConveyorNetwork.EnsureInstance();
             ConveyorNetwork.Instance?.Register(this);
-            Invoke(nameof(RefreshNearby), 0.1f);
+            RefreshNearby();
+            Invoke(nameof(RefreshNearby), 0.02f);
         }
 
         private void OnDisable()
@@ -126,6 +127,11 @@ namespace VoxelEngine.Simulation
             if (!isActiveAndEnabled || !gameObject.activeInHierarchy) return;
             NotifyNearbyBelts();
             RefreshShape();
+        }
+
+        internal void RefreshTopologyImmediate()
+        {
+            RefreshNearby();
         }
 
         private void NotifyNearbyBelts()

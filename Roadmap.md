@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.1.11-dev`
-**Roadmap Version:** `5.1.11-dev`
+**Current Version:** `5.1.12-dev`
+**Roadmap Version:** `5.1.12-dev`
 **Date:** 2026-07-14
-**Status:** Active Implementation — Adaptive Corners, Strict Lane Isolation & Chute Snapping
+**Status:** Active Implementation — Responsive Corners, Bidirectional Chute Snap & Conveyor Indicators
 
 ---
 
@@ -209,8 +209,8 @@ Statuses are evidence-based and move forward only after code/content review and 
 
 | Area | Status | Repository Audit |
 |------|--------|------------------|
-| Conveyor belts | 🛠️ WORKING ON | Live socket validation and tighter tolerances isolate parallel lanes even after topology changes. Corners now infer any unambiguous input/output pair and render a smooth supported curve with rollers, rails, and an exit arrow. Authored ramp and vertical variants remain. |
-| Conveyor chutes | 🛠️ WORKING ON | Chutes transfer through compatible vertical endpoints and now snap beneath conveyors, onto configured top/bottom item ports, and above or below existing chutes. Corner and spiral authored variants remain. |
+| Conveyor belts | 🛠️ WORKING ON | Placement now refreshes local topology immediately, with a next-frame verification pass. Step 17 adds permanent direction chevrons and a dedicated center status line; adaptive geometry receives the same live status strip. Authored ramp and vertical variants remain. |
+| Conveyor chutes | 🛠️ WORKING ON | Conveyor targeting now chooses above or below from the aimed face/height, while configured vertical item ports and chute-to-chute stacking remain supported. Corner and spiral authored variants remain. |
 | Basic machines | 🟡 PARTIALLY COMPLETE | Electric Furnace, Crusher, and three Assembler tiers exist. Crusher and Assembler use the centralized simulation tick; shared UI and persistence still need completion. |
 | Storage blocks | 🟡 PARTIALLY COMPLETE | A basic chest and the wider storage system exist. The planned Wooden Crate → Iron Chest → Steel Chest → Provider/Requester progression is not complete. |
 | Power pole, wire, and substation | 🟡 PARTIALLY COMPLETE | Manual wiring, poles, substations, transformers, and high-voltage assets exist. Setup reruns still need full non-destructive balance preservation. |
@@ -1233,6 +1233,30 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.1.12-dev] Responsive Corners, Bidirectional Chute Snap & Conveyor Indicators
+
+**Type:** PATCH — placement responsiveness, snapping behavior, and visual communication polish (no save/public API change)
+
+**Added:**
+- Immediate conveyor topology refresh when a conveyor is enabled or finishes placement.
+- A guarded next-frame topology verification pass for newly registered physics colliders.
+- Step 17-generated direction chevrons on every Basic, Fast, and Express conveyor prefab.
+- A dedicated emissive center status line generated and linked non-destructively through Step 17.
+- A dynamic status line for adaptive straight/corner geometry, including safe runtime renderer retargeting.
+
+**Fixed:**
+- Adaptive corners no longer wait for the slower periodic connection scan before changing shape.
+- A chute aimed at the upper conveyor face/upper side now snaps above the conveyor.
+- A chute aimed at the lower face/lower side continues to snap below the conveyor.
+- Runtime status materials are restored and released safely when adaptive geometry changes renderer targets.
+
+**Changed:**
+- Existing conveyor status indicators pointing at the legacy arrow are migrated to `Generated_StatusLine`; balance, colors, materials, and custom tuning remain preserved.
+- Default straight conveyors keep their authored Step 17 visuals, while adaptive geometry uses an equivalent centered live status line.
+- Updated the runtime and roadmap version to `5.1.12-dev`.
+
+---
 
 ### [5.1.11-dev] Adaptive Corners, Strict Lane Isolation & Chute Snapping
 

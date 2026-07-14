@@ -38,6 +38,7 @@ namespace VoxelEngine.Simulation
 
         private Renderer _renderer;
         private Material _material;
+        private Material _originalRendererMaterial;
         private Light _light;
         private float _baseLightIntensity = 1f;
         private float _refreshTimer;
@@ -73,7 +74,14 @@ namespace VoxelEngine.Simulation
 
         private void OnDestroy()
         {
-            if (_material != null) Destroy(_material);
+            ReleaseRendererMaterial();
+        }
+
+        internal void SetRuntimeRenderer(Renderer renderer)
+        {
+            if (renderer == null || renderer == _renderer) return;
+            BindRenderer(renderer);
+            ApplyStatus(ResolveStatus(), force: true);
         }
 
         private void CacheLogicTargets()
@@ -87,31 +95,50 @@ namespace VoxelEngine.Simulation
 
         private void CacheVisualTargets()
         {
-            Transform rendererTransform = FindChild(rendererChildName);
-            if (rendererTransform != null) _renderer = rendererTransform.GetComponent<Renderer>();
-            if (_renderer == null) _renderer = GetComponentInChildren<Renderer>(true);
-
-            if (_renderer != null)
+            if (_renderer == null)
             {
-                if (_renderer.sharedMaterial != null)
-                {
-                    _material = new Material(_renderer.sharedMaterial);
-                }
-                else
-                {
-                    var shader = Shader.Find("Universal Render Pipeline/Lit")
-                        ?? Shader.Find("Standard")
-                        ?? Shader.Find("Hidden/InternalErrorShader");
-                    _material = new Material(shader);
-                }
-                _renderer.sharedMaterial = _material;
-                _material.EnableKeyword("_EMISSION");
+                Transform rendererTransform = FindChild(rendererChildName);
+                var target = rendererTransform != null ? rendererTransform.GetComponent<Renderer>() : null;
+                if (target == null) target = GetComponentInChildren<Renderer>(true);
+                BindRenderer(target);
             }
 
             Transform lightTransform = FindChild(lightChildName);
             if (lightTransform != null) _light = lightTransform.GetComponent<Light>();
             if (_light == null) _light = GetComponentInChildren<Light>(true);
             if (_light != null) _baseLightIntensity = Mathf.Max(0f, _light.intensity);
+        }
+
+        private void BindRenderer(Renderer target)
+        {
+            if (target == null) return;
+            ReleaseRendererMaterial();
+
+            _renderer = target;
+            _originalRendererMaterial = target.sharedMaterial;
+            if (_originalRendererMaterial != null)
+            {
+                _material = new Material(_originalRendererMaterial);
+            }
+            else
+            {
+                var shader = Shader.Find("Universal Render Pipeline/Lit")
+                    ?? Shader.Find("Standard")
+                    ?? Shader.Find("Hidden/InternalErrorShader");
+                _material = new Material(shader);
+            }
+            _renderer.sharedMaterial = _material;
+            _material.EnableKeyword("_EMISSION");
+        }
+
+        private void ReleaseRendererMaterial()
+        {
+            if (_renderer != null && _renderer.sharedMaterial == _material)
+                _renderer.sharedMaterial = _originalRendererMaterial;
+            if (_material != null) Destroy(_material);
+            _renderer = null;
+            _material = null;
+            _originalRendererMaterial = null;
         }
 
         private FactoryVisualStatus ResolveStatus()
