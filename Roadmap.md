@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.1.12-dev`
-**Roadmap Version:** `5.1.12-dev`
+**Current Version:** `5.1.13-dev`
+**Roadmap Version:** `5.1.13-dev`
 **Date:** 2026-07-14
-**Status:** Active Implementation — Responsive Corners, Bidirectional Chute Snap & Conveyor Indicators
+**Status:** Active Implementation — Closed-Loop Corners, Chute-to-Belt Snap & Status Cleanup
 
 ---
 
@@ -209,8 +209,8 @@ Statuses are evidence-based and move forward only after code/content review and 
 
 | Area | Status | Repository Audit |
 |------|--------|------------------|
-| Conveyor belts | 🛠️ WORKING ON | Placement now refreshes local topology immediately, with a next-frame verification pass. Step 17 adds permanent direction chevrons and a dedicated center status line; adaptive geometry receives the same live status strip. Authored ramp and vertical variants remain. |
-| Conveyor chutes | 🛠️ WORKING ON | Conveyor targeting now chooses above or below from the aimed face/height, while configured vertical item ports and chute-to-chute stacking remain supported. Corner and spiral authored variants remain. |
+| Conveyor belts | 🛠️ WORKING ON | Closed loops now resolve corners without waiting for neighboring corners to establish their inputs. Step 17 removes the obsolete status square and retains only direction chevrons plus the centered status line. Authored ramp and vertical variants remain. |
+| Conveyor chutes | 🛠️ WORKING ON | Conveyors now snap above or below an aimed chute face; chute-to-conveyor, vertical item-port, and chute-stack snapping remain supported. Corner and spiral authored variants remain. |
 | Basic machines | 🟡 PARTIALLY COMPLETE | Electric Furnace, Crusher, and three Assembler tiers exist. Crusher and Assembler use the centralized simulation tick; shared UI and persistence still need completion. |
 | Storage blocks | 🟡 PARTIALLY COMPLETE | A basic chest and the wider storage system exist. The planned Wooden Crate → Iron Chest → Steel Chest → Provider/Requester progression is not complete. |
 | Power pole, wire, and substation | 🟡 PARTIALLY COMPLETE | Manual wiring, poles, substations, transformers, and high-voltage assets exist. Setup reruns still need full non-destructive balance preservation. |
@@ -1233,6 +1233,25 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.1.13-dev] Closed-Loop Corners, Chute-to-Belt Snap & Status Cleanup
+
+**Type:** PATCH — topology resolution, reciprocal snapping, and requested visual cleanup (no save/public API change)
+
+**Fixed:**
+- Conveyor loops no longer deadlock while every future corner waits for the next belt to expose a matching input.
+- Shape inference now uses the placed belt rotation as its intended output and only requires an adjacent forward belt while resolving topology.
+- Closed circles resolve each unambiguous side/rear input into the correct corner during the immediate refresh pass.
+- A conveyor aimed at the top or bottom of a chute now snaps to that chute face and inherits its rotation.
+
+**Changed:**
+- Step 17 no longer creates the legacy rotated `Generated_Arrow` status square.
+- Step 17 removes that specific obsolete generated square from existing conveyor prefabs, as explicitly requested.
+- Direction chevrons remain independent from the centered `Generated_StatusLine`.
+- Step 17 reports the number of removed obsolete generated visuals while preserving custom visuals and all balance values.
+- Updated the runtime and roadmap version to `5.1.13-dev`.
+
+---
 
 ### [5.1.12-dev] Responsive Corners, Bidirectional Chute Snap & Conveyor Indicators
 

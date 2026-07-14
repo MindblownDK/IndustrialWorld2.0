@@ -5668,6 +5668,7 @@ root =>
             int preservedAssetCount = 0;
             int preservedPrefabCount = 0;
             int repairedLinkCount = 0;
+            int removedLegacyVisualCount = 0;
 
             T GetOrCreateStep17Asset<T>(string path) where T : ScriptableObject
             {
@@ -6152,12 +6153,6 @@ root =>
             // ── Conveyor prefabs ──
             GameObject CreateConveyorPrefab(string assetName, VoxelEngine.Simulation.ConveyorSpeed speed, Color accent, int maxItems)
             {
-                float speedScale = speed switch
-                {
-                    VoxelEngine.Simulation.ConveyorSpeed.Fast => 1.08f,
-                    VoxelEngine.Simulation.ConveyorSpeed.Express => 1.16f,
-                    _ => 1f
-                };
                 Color beltColor = speed switch
                 {
                     VoxelEngine.Simulation.ConveyorSpeed.Fast => new Color(0.07f, 0.12f, 0.16f),
@@ -6182,12 +6177,22 @@ root =>
                     EnsurePrimitive(root, "Generated_MotorBox", PrimitiveType.Cube, new Vector3(-0.72f, 0.22f, -0.34f), new Vector3(0.22f, 0.28f, 0.34f), darkFrameMat, Vector3.zero);
                     EnsurePrimitive(root, "Generated_TierStripeLeft", PrimitiveType.Cube, new Vector3(-0.565f, 0.43f, 0f), new Vector3(0.035f, 0.045f, 0.92f), accentMat, Vector3.zero);
                     EnsurePrimitive(root, "Generated_TierStripeRight", PrimitiveType.Cube, new Vector3(0.565f, 0.43f, 0f), new Vector3(0.035f, 0.045f, 0.92f), accentMat, Vector3.zero);
-                    EnsurePrimitive(root, "Generated_Arrow", PrimitiveType.Cube, new Vector3(0f, 0.395f, 0.26f), new Vector3(0.32f * speedScale, 0.025f, 0.18f), accentMat, new Vector3(0f, 45f, 0f));
                     EnsurePrimitive(root, "Generated_StatusLine", PrimitiveType.Cube, new Vector3(0f, 0.405f, -0.08f), new Vector3(0.045f, 0.022f, 0.70f), statusMat, Vector3.zero);
                     EnsurePrimitive(root, "Generated_DirectionArrowLeftA", PrimitiveType.Cube, new Vector3(-0.26f, 0.407f, 0.12f), new Vector3(0.045f, 0.020f, 0.17f), accentMat, new Vector3(0f, 35f, 0f));
                     EnsurePrimitive(root, "Generated_DirectionArrowLeftB", PrimitiveType.Cube, new Vector3(-0.18f, 0.407f, 0.12f), new Vector3(0.045f, 0.020f, 0.17f), accentMat, new Vector3(0f, -35f, 0f));
                     EnsurePrimitive(root, "Generated_DirectionArrowRightA", PrimitiveType.Cube, new Vector3(0.18f, 0.407f, 0.12f), new Vector3(0.045f, 0.020f, 0.17f), accentMat, new Vector3(0f, 35f, 0f));
                     EnsurePrimitive(root, "Generated_DirectionArrowRightB", PrimitiveType.Cube, new Vector3(0.26f, 0.407f, 0.12f), new Vector3(0.045f, 0.020f, 0.17f), accentMat, new Vector3(0f, -35f, 0f));
+
+                    // Explicit visual migration requested for 5.1.13: the old rotated
+                    // status square has been superseded by the centered status line.
+                    var legacyStatusSquare = root.transform.Find("Generated_Arrow");
+                    if (legacyStatusSquare != null)
+                    {
+                        Object.DestroyImmediate(legacyStatusSquare.gameObject);
+                        removedLegacyVisualCount++;
+                        Debug.Log($"[VoxelEngineSetupWindow] Step 17 removed legacy conveyor status square from '{assetName}'.");
+                    }
+
                     EnsurePrimitive(root, "Generated_FrontLegLeft", PrimitiveType.Cube, new Vector3(-0.42f, -0.17f, -0.42f), new Vector3(0.06f, 0.58f, 0.06f), frameMat, Vector3.zero);
                     EnsurePrimitive(root, "Generated_FrontLegRight", PrimitiveType.Cube, new Vector3(0.42f, -0.17f, -0.42f), new Vector3(0.06f, 0.58f, 0.06f), frameMat, Vector3.zero);
                     EnsurePrimitive(root, "Generated_BackLegLeft", PrimitiveType.Cube, new Vector3(-0.42f, -0.17f, 0.42f), new Vector3(0.06f, 0.58f, 0.06f), frameMat, Vector3.zero);
@@ -6875,15 +6880,16 @@ root =>
             AssetDatabase.Refresh();
 
             string setupSummary =
-                "Factory Foundations + High-Voltage Grid verified non-destructively.\n\n" +
+                "Factory Foundations + High-Voltage Grid verified with protected migrations.\n\n" +
                 $"Created assets/materials: {createdAssetCount}\n" +
                 $"Created prefabs: {createdPrefabCount}\n" +
                 $"Created missing components: {createdComponentCount}\n" +
                 $"Preserved existing assets/materials: {preservedAssetCount}\n" +
                 $"Preserved existing prefabs: {preservedPrefabCount}\n" +
-                $"Repaired required links: {repairedLinkCount}\n\n" +
-                "Existing health, power, throughput, recipe costs, research costs, visual transforms, materials, and effect tuning were preserved.";
-            Debug.Log($"[VoxelEngineSetupWindow] Step 17 complete. Created assets/materials={createdAssetCount}, created prefabs={createdPrefabCount}, created components={createdComponentCount}, preserved assets/materials={preservedAssetCount}, preserved prefabs={preservedPrefabCount}, repaired links={repairedLinkCount}.");
+                $"Repaired required links: {repairedLinkCount}\n" +
+                $"Removed obsolete generated visuals: {removedLegacyVisualCount}\n\n" +
+                "Existing health, power, throughput, recipe costs, research costs, custom visual transforms, materials, and effect tuning were preserved.";
+            Debug.Log($"[VoxelEngineSetupWindow] Step 17 complete. Created assets/materials={createdAssetCount}, created prefabs={createdPrefabCount}, created components={createdComponentCount}, preserved assets/materials={preservedAssetCount}, preserved prefabs={preservedPrefabCount}, repaired links={repairedLinkCount}, removed legacy visuals={removedLegacyVisualCount}.");
             EditorUtility.DisplayDialog("Voxel Engine — Step 17", setupSummary, "OK");
         }
 

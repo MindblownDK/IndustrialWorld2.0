@@ -310,9 +310,7 @@ namespace VoxelEngine.Simulation
         public void RefreshShape()
         {
             int incomingCount = 0;
-            int outgoingCount = 0;
             Vector3 incomingDirection = Vector3.back;
-            Vector3 outgoingDirection = Vector3.forward;
 
             foreach (var localDirection in LocalSocketDirections)
             {
@@ -320,35 +318,30 @@ namespace VoxelEngine.Simulation
                 Vector3 neighbourCenter = transform.position + worldDirection;
                 Vector3 localSocket = transform.position + worldDirection * 0.5f;
 
-                if (FindConnectedBeltProvider(neighbourCenter, localSocket, -worldDirection) != null)
-                {
-                    incomingCount++;
-                    incomingDirection = localDirection;
-                }
-
-                if (FindConnectedBeltConsumer(neighbourCenter, localSocket, -worldDirection) != null)
-                {
-                    outgoingCount++;
-                    outgoingDirection = localDirection;
-                }
+                if (FindConnectedBeltProvider(neighbourCenter, localSocket, -worldDirection) == null) continue;
+                incomingCount++;
+                incomingDirection = localDirection;
             }
 
-            // Shape only when the topology is unambiguous: one belt enters and one
-            // belt leaves. Junction attempts or loose ends stay straight so parallel
-            // lanes and temporary placement states never create surprise corners.
-            if (incomingCount == 1 && outgoingCount == 1
-                && Vector3.Dot(incomingDirection, outgoingDirection) < -0.9f)
+            // The player's placed rotation defines the intended output: local forward.
+            // We only need an adjacent belt at that position for shape inference; its
+            // input may itself still be waiting to become a corner. Removing that
+            // circular dependency lets closed conveyor loops resolve in one refresh.
+            var forwardNeighbour = FindAdjacentBelt(transform.position + transform.forward);
+            float inputOutputDot = Vector3.Dot(incomingDirection, Vector3.forward);
+
+            if (incomingCount == 1 && forwardNeighbour != null && inputOutputDot < -0.9f)
             {
                 shape = ConveyorShape.Straight;
                 entryDirection = incomingDirection;
-                exitDirection = outgoingDirection;
+                exitDirection = Vector3.forward;
             }
-            else if (incomingCount == 1 && outgoingCount == 1
-                     && Mathf.Abs(Vector3.Dot(incomingDirection, outgoingDirection)) < 0.1f)
+            else if (incomingCount == 1 && forwardNeighbour != null
+                     && Mathf.Abs(inputOutputDot) < 0.1f)
             {
                 shape = ConveyorShape.Corner;
                 entryDirection = incomingDirection;
-                exitDirection = outgoingDirection;
+                exitDirection = Vector3.forward;
             }
             else
             {
@@ -361,6 +354,25 @@ namespace VoxelEngine.Simulation
             ScanConnections();
             if (_visuals != null && isActiveAndEnabled && gameObject.activeInHierarchy)
                 _visuals.RebuildMesh();
+        }
+
+        private ConveyorBelt FindAdjacentBelt(Vector3 expectedCenter)
+        {
+            var hits = Physics.OverlapSphere(expectedCenter, 0.55f);
+            ConveyorBelt nearest = null;
+            float nearestDistance = SocketToleranceSqr;
+            foreach (var col in hits)
+            {
+                if (col == null || col.transform.IsChildOf(transform)) continue;
+                var belt = col.GetComponentInParent<ConveyorBelt>();
+                if (belt == null || belt == this) continue;
+
+                float distance = (belt.transform.position - expectedCenter).sqrMagnitude;
+                if (distance >= nearestDistance) continue;
+                nearestDistance = distance;
+                nearest = belt;
+            }
+            return nearest;
         }
 
         private ConveyorBelt FindConnectedBeltProvider(Vector3 probePosition, Vector3 receiverSocket, Vector3 expectedOutputDirection)
@@ -376,24 +388,6 @@ namespace VoxelEngine.Simulation
                 Vector3 candidateSocket = belt.transform.position + candidateDirection * 0.5f;
                 if (Vector3.Dot(candidateDirection, expectedOutputDirection.normalized) < 0.9f) continue;
                 if ((candidateSocket - receiverSocket).sqrMagnitude > SocketToleranceSqr) continue;
-                return belt;
-            }
-            return null;
-        }
-
-        private ConveyorBelt FindConnectedBeltConsumer(Vector3 probePosition, Vector3 providerSocket, Vector3 expectedInputDirection)
-        {
-            var hits = Physics.OverlapSphere(probePosition, 0.7f);
-            foreach (var col in hits)
-            {
-                if (col == null || col.transform.IsChildOf(transform)) continue;
-                var belt = col.GetComponentInParent<ConveyorBelt>();
-                if (belt == null || belt == this) continue;
-
-                Vector3 candidateDirection = belt.GetEntryDirection();
-                Vector3 candidateSocket = belt.transform.position + candidateDirection * 0.5f;
-                if (Vector3.Dot(candidateDirection, expectedInputDirection.normalized) < 0.9f) continue;
-                if ((candidateSocket - providerSocket).sqrMagnitude > SocketToleranceSqr) continue;
                 return belt;
             }
             return null;

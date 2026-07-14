@@ -255,6 +255,15 @@ namespace VoxelEngine.Building
             }
 
             var targetChute = hit.collider.GetComponentInParent<VoxelEngine.Simulation.ConveyorChute>();
+            if (placingBelt && targetChute != null)
+            {
+                Vector3 localHit = targetChute.transform.InverseTransformPoint(hit.point);
+                float verticalSign = localHit.y < 0f ? -1f : 1f;
+                pos = targetChute.transform.position + targetChute.transform.up * verticalSign * factorySpacing;
+                rot = targetChute.transform.rotation;
+                return true;
+            }
+
             if (placingChute && targetChute != null)
             {
                 Vector3 localHit = targetChute.transform.InverseTransformPoint(hit.point);
