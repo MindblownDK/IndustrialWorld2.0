@@ -22,7 +22,7 @@ namespace VoxelEngine.Simulation
         private readonly List<Transform> _itemVisuals = new(16);
         private readonly List<bool> _visualActive = new(16);
         private readonly List<GameObject> _authoredVisuals = new(16);
-        private readonly MaterialPropertyBlock _itemProperties = new();
+        private MaterialPropertyBlock _itemProperties;
 
         private ConveyorBelt _belt;
         private GameObject _meshRoot;
@@ -33,8 +33,14 @@ namespace VoxelEngine.Simulation
         private bool _usingAuthoredStraight;
         private float _uvOffset;
 
+        private void Awake()
+        {
+            _itemProperties = new MaterialPropertyBlock();
+        }
+
         public void Initialize(ConveyorBelt belt)
         {
+            if (_itemProperties == null) _itemProperties = new MaterialPropertyBlock();
             _belt = belt;
             CacheAuthoredVisuals();
             RebuildMesh();
@@ -254,6 +260,7 @@ namespace VoxelEngine.Simulation
             if (visual == null || item == null) return;
             var renderer = visual.GetComponent<MeshRenderer>();
             if (renderer == null) return;
+            if (_itemProperties == null) _itemProperties = new MaterialPropertyBlock();
 
             renderer.GetPropertyBlock(_itemProperties);
             _itemProperties.SetColor(BaseColorId, item.iconTint);

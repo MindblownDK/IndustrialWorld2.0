@@ -47,7 +47,7 @@ namespace VoxelEngine.Simulation
         private readonly List<ChuteItem> _items = new(12);
         private readonly List<Transform> _itemVisuals = new(12);
         private readonly List<bool> _visualActive = new(12);
-        private readonly MaterialPropertyBlock _itemProperties = new();
+        private MaterialPropertyBlock _itemProperties;
         private float _scanTimer;
         private float _pullTimer;
 
@@ -55,6 +55,7 @@ namespace VoxelEngine.Simulation
 
         private void Awake()
         {
+            _itemProperties = new MaterialPropertyBlock();
             EnsureVisuals();
         }
 
@@ -417,6 +418,7 @@ namespace VoxelEngine.Simulation
             if (visual == null || item == null) return;
             var renderer = visual.GetComponent<MeshRenderer>();
             if (renderer == null) return;
+            if (_itemProperties == null) _itemProperties = new MaterialPropertyBlock();
 
             renderer.GetPropertyBlock(_itemProperties);
             _itemProperties.SetColor(BaseColorId, item.iconTint);
