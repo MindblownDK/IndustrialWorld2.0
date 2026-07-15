@@ -76,6 +76,9 @@ namespace VoxelEngine.Simulation
         private readonly List<ConveyorItem> _items = new(16);
         private float _scanTimer;
         private BeltVisualController _visuals;
+        private BoxCollider _shapeCollider;
+        private Vector3 _straightColliderCenter;
+        private Vector3 _straightColliderSize;
 
         /// <summary>Read-only view of items currently on this belt.</summary>
         public IReadOnlyList<ConveyorItem> Items => _items;
@@ -95,8 +98,13 @@ namespace VoxelEngine.Simulation
 
         private void Awake()
         {
-            // Set travel direction based on shape.
+            _shapeCollider = GetComponent<BoxCollider>();
+            if (_shapeCollider == null) _shapeCollider = gameObject.AddComponent<BoxCollider>();
+            _straightColliderCenter = _shapeCollider.center;
+            _straightColliderSize = _shapeCollider.size;
+
             UpdateTravelDirection();
+            ApplyColliderShape();
 
             // Create visual controller.
             _visuals = GetComponent<BeltVisualController>();
@@ -143,6 +151,7 @@ namespace VoxelEngine.Simulation
             shape = buildShape;
             autoShape = automatic;
             UpdateTravelDirection();
+            ApplyColliderShape();
             ScanConnections();
             if (_visuals != null && isActiveAndEnabled && gameObject.activeInHierarchy)
                 _visuals.RebuildMesh();
@@ -239,6 +248,28 @@ namespace VoxelEngine.Simulation
                 _ => (exitDirection - entryDirection).normalized
             };
             if (travelDirection.sqrMagnitude < 0.01f) travelDirection = Vector3.forward;
+        }
+
+        private void ApplyColliderShape()
+        {
+            if (_shapeCollider == null) return;
+            switch (shape)
+            {
+                case ConveyorShape.RampUp:
+                case ConveyorShape.RampDown:
+                    _shapeCollider.center = new Vector3(0f, 0.82f, 0f);
+                    _shapeCollider.size = new Vector3(1.20f, 2.05f, 1.45f);
+                    break;
+                case ConveyorShape.VerticalUp:
+                case ConveyorShape.VerticalDown:
+                    _shapeCollider.center = new Vector3(0f, 1.02f, 0f);
+                    _shapeCollider.size = new Vector3(1.12f, 1.18f, 0.42f);
+                    break;
+                default:
+                    _shapeCollider.center = _straightColliderCenter;
+                    _shapeCollider.size = _straightColliderSize;
+                    break;
+            }
         }
 
         // ── IItemConsumer ─────────────────────────────────────────────
@@ -384,6 +415,7 @@ namespace VoxelEngine.Simulation
             }
 
             UpdateTravelDirection();
+            ApplyColliderShape();
             ScanConnections();
             if (_visuals != null && isActiveAndEnabled && gameObject.activeInHierarchy)
                 _visuals.RebuildMesh();
@@ -608,11 +640,11 @@ namespace VoxelEngine.Simulation
                         break;
                     }
                 case ConveyorShape.VerticalUp:
-                    localPosition = new Vector3(0f, Mathf.Lerp(0f, 1f, t), 0f);
+                    localPosition = new Vector3(0f, Mathf.Lerp(0.52f, 1.52f, t), 0f);
                     localTangent = Vector3.up;
                     break;
                 case ConveyorShape.VerticalDown:
-                    localPosition = new Vector3(0f, Mathf.Lerp(1f, 0f, t), 0f);
+                    localPosition = new Vector3(0f, Mathf.Lerp(1.52f, 0.52f, t), 0f);
                     localTangent = Vector3.down;
                     break;
                 default:

@@ -429,7 +429,7 @@ namespace VoxelEngine.Simulation
             var backplate = GameObject.CreatePrimitive(PrimitiveType.Cube);
             backplate.name = "VerticalBackplate";
             backplate.transform.SetParent(_meshRoot.transform, false);
-            backplate.transform.localPosition = new Vector3(0f, 0.5f, 0.08f);
+            backplate.transform.localPosition = new Vector3(0f, 1.02f, 0.08f);
             backplate.transform.localScale = new Vector3(0.96f, 1.10f, 0.12f);
             Destroy(backplate.GetComponent<Collider>());
             backplate.GetComponent<MeshRenderer>().sharedMaterial = _frameMaterial;
@@ -437,16 +437,16 @@ namespace VoxelEngine.Simulation
             var beltGo = GameObject.CreatePrimitive(PrimitiveType.Cube);
             beltGo.name = "VerticalBeltSurface";
             beltGo.transform.SetParent(_meshRoot.transform, false);
-            beltGo.transform.localPosition = new Vector3(0f, 0.5f, -0.01f);
+            beltGo.transform.localPosition = new Vector3(0f, 1.02f, -0.01f);
             beltGo.transform.localScale = new Vector3(0.82f, 1.0f, 0.045f);
             Destroy(beltGo.GetComponent<Collider>());
             _beltRenderer = beltGo.GetComponent<MeshRenderer>();
             _beltRenderer.sharedMaterial = _beltMaterial;
 
-            CreateRail(new Vector3(0.45f, 0.5f, 0f), new Vector3(0.06f, 1.08f, 0.08f));
-            CreateRail(new Vector3(-0.45f, 0.5f, 0f), new Vector3(0.06f, 1.08f, 0.08f));
-            CreateVerticalRoller(new Vector3(0f, 0f, -0.04f));
-            CreateVerticalRoller(new Vector3(0f, 1f, -0.04f));
+            CreateRail(new Vector3(0.45f, 1.02f, 0f), new Vector3(0.06f, 1.08f, 0.08f));
+            CreateRail(new Vector3(-0.45f, 1.02f, 0f), new Vector3(0.06f, 1.08f, 0.08f));
+            CreateVerticalRoller(new Vector3(0f, 0.52f, -0.04f));
+            CreateVerticalRoller(new Vector3(0f, 1.52f, -0.04f));
             CreateVerticalArrow(up);
             CreateVerticalStatusLine();
         }
@@ -465,7 +465,7 @@ namespace VoxelEngine.Simulation
 
         private void CreateVerticalArrow(bool up)
         {
-            float centerY = up ? 0.62f : 0.38f;
+            float centerY = up ? 1.14f : 0.90f;
             float leftAngle = up ? -35f : 35f;
             float rightAngle = -leftAngle;
             CreateVerticalArrowPart(new Vector3(-0.065f, centerY, -0.060f), leftAngle);
@@ -489,7 +489,7 @@ namespace VoxelEngine.Simulation
             var statusLine = GameObject.CreatePrimitive(PrimitiveType.Cube);
             statusLine.name = "Runtime_StatusLine";
             statusLine.transform.SetParent(_meshRoot.transform, false);
-            statusLine.transform.localPosition = new Vector3(0f, 0.5f, -0.055f);
+            statusLine.transform.localPosition = new Vector3(0f, 1.02f, -0.055f);
             statusLine.transform.localScale = new Vector3(0.05f, 0.58f, 0.025f);
             Destroy(statusLine.GetComponent<Collider>());
             var renderer = statusLine.GetComponent<MeshRenderer>();

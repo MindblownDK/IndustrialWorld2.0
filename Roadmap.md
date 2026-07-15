@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.3.1-dev`
-**Roadmap Version:** `5.3.1-dev`
+**Current Version:** `5.3.2-dev`
+**Roadmap Version:** `5.3.2-dev`
 **Date:** 2026-07-14
-**Status:** Active Implementation — Donut Wheel Polish & Vertical Transition Fixes
+**Status:** Active Implementation — Precision Vertical Alignment & Wheel Hover Feedback
 
 ---
 
@@ -209,7 +209,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 
 | Area | Status | Repository Audit |
 |------|--------|------------------|
-| Conveyor belts | 🛠️ WORKING ON | The three-mode selector now renders as a true segmented donut wheel. Ramp frames hug the belt, arrows are flush/emissive, and exact orthogonal sockets allow Straight/Ramp ↔ Vertical placement and item transfer. Unity validation is pending. |
+| Conveyor belts | 🛠️ WORKING ON | Vertical geometry, item paths, and colliders now share the horizontal belt-surface height for precise Straight/Ramp transitions. Wheel hover now brightens the complete segment and animates its icon/label. Unity validation is pending. |
 | Conveyor chutes | 🛠️ WORKING ON | Conveyors now snap above or below an aimed chute face; chute-to-conveyor, vertical item-port, and chute-stack snapping remain supported. Corner and spiral authored variants remain. |
 | Basic machines | 🟡 PARTIALLY COMPLETE | Electric Furnace, Crusher, and three Assembler tiers exist. Crusher and Assembler use the centralized simulation tick; shared UI and persistence still need completion. |
 | Storage blocks | 🟡 PARTIALLY COMPLETE | A basic chest and the wider storage system exist. The planned Wooden Crate → Iron Chest → Steel Chest → Provider/Requester progression is not complete. |
@@ -1234,6 +1234,32 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.3.2-dev] Precision Vertical Alignment & Wheel Hover Feedback
+
+**Type:** PATCH — snapping precision, collider alignment, and interaction feedback polish
+
+**Fixed:**
+- Vertical item paths now begin/end at the same `0.52 m` belt-surface offset used by Straight and Ramp conveyors.
+- Vertical meshes, rails, rollers, arrows, and status lines are shifted to the same shared surface height.
+- Vertical shape colliders now match the visible upright frame instead of retaining the wide horizontal conveyor collider.
+- Ramp colliders now cover the complete low-to-high sloped assembly.
+- Straight/Ramp ↔ Vertical transitions no longer look vertically offset even when their logical sockets already match.
+
+**Improved:**
+- Hovering a wheel segment now changes the full wedge to a stronger light blue.
+- The hovered segment icon and label turn blue, scale to `1.12x`, and receive a subtle glow backing.
+- Selected segments remain cyan/white while still receiving the hover-scale response.
+
+**Changed:**
+- Collider dimensions update whenever a build shape changes and restore to authored straight values for Straight/Corner mode.
+- Updated the runtime and roadmap version to `5.3.2-dev`.
+
+**Roadmap Status:**
+- Vertical transition alignment and wheel feedback: **WORKING ON** — awaiting Unity validation.
+- Step 5 prerequisite repair remains **WORKING ON** until setup validation is reported.
+
+---
 
 ### [5.3.1-dev] Donut Wheel Polish & Vertical Transition Fixes
 

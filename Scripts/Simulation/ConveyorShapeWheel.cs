@@ -47,6 +47,9 @@ namespace VoxelEngine.Simulation
         private VisualElement _wheelCenter;
         private VisualElement _ringElement;
         private Texture2D _ringTexture;
+        private readonly VisualElement[] _segmentLabelRoots = new VisualElement[3];
+        private readonly Label[] _segmentIcons = new Label[3];
+        private readonly Label[] _segmentNames = new Label[3];
         private int _hoveredSegment = -1;
         private bool _open;
         private ConveyorSpeed _activeTier;
@@ -229,10 +232,14 @@ namespace VoxelEngine.Simulation
             _wheelCenter.style.transitionDuration = new System.Collections.Generic.List<TimeValue> { new(0.08f, TimeUnit.Second) };
             _wheelOverlay.Add(_wheelCenter);
 
+            System.Array.Clear(_segmentLabelRoots, 0, _segmentLabelRoots.Length);
+            System.Array.Clear(_segmentIcons, 0, _segmentIcons.Length);
+            System.Array.Clear(_segmentNames, 0, _segmentNames.Length);
             BuildRing();
             BuildCenterBadge();
             for (int i = 0; i < Modes.Length; i++)
                 BuildRingLabel(i, Modes[i], Icons[i]);
+            RefreshSegmentLabels();
         }
 
         private void BuildCenterBadge()
@@ -294,12 +301,14 @@ namespace VoxelEngine.Simulation
                 if (segment == _hoveredSegment) return;
                 _hoveredSegment = segment;
                 RefreshRingTexture();
+                RefreshSegmentLabels();
             });
             _ringElement.RegisterCallback<PointerLeaveEvent>(_ =>
             {
                 if (_hoveredSegment < 0) return;
                 _hoveredSegment = -1;
                 RefreshRingTexture();
+                RefreshSegmentLabels();
             });
             _ringElement.RegisterCallback<PointerDownEvent>(evt =>
             {
@@ -330,7 +339,11 @@ namespace VoxelEngine.Simulation
             labelRoot.style.alignItems = Align.Center;
             labelRoot.style.justifyContent = Justify.Center;
             labelRoot.pickingMode = PickingMode.Ignore;
+            UITheme.Radius(labelRoot, 30f);
+            labelRoot.style.transitionProperty = new System.Collections.Generic.List<StylePropertyName> { "scale", "background-color" };
+            labelRoot.style.transitionDuration = new System.Collections.Generic.List<TimeValue> { new(0.10f, TimeUnit.Second), new(0.10f, TimeUnit.Second) };
             _wheelCenter.Add(labelRoot);
+            _segmentLabelRoots[index] = labelRoot;
 
             bool selected = GetMode(_activeTier) == mode;
             var icon = new Label(iconText);
@@ -340,6 +353,7 @@ namespace VoxelEngine.Simulation
             icon.style.unityFontStyleAndWeight = FontStyle.Bold;
             icon.pickingMode = PickingMode.Ignore;
             labelRoot.Add(icon);
+            _segmentIcons[index] = icon;
 
             var label = new Label(mode.ToString().ToUpperInvariant());
             label.style.fontSize = 9;
@@ -349,6 +363,33 @@ namespace VoxelEngine.Simulation
             label.style.color = new StyleColor(selected ? Color.white : new Color(0.20f, 0.22f, 0.24f));
             label.pickingMode = PickingMode.Ignore;
             labelRoot.Add(label);
+            _segmentNames[index] = label;
+        }
+
+        private void RefreshSegmentLabels()
+        {
+            int selected = (int)GetMode(_activeTier);
+            for (int i = 0; i < Modes.Length; i++)
+            {
+                var root = _segmentLabelRoots[i];
+                var icon = _segmentIcons[i];
+                var label = _segmentNames[i];
+                if (root == null || icon == null || label == null) continue;
+
+                bool isSelected = i == selected;
+                bool isHovered = i == _hoveredSegment;
+                Color foreground = isSelected
+                    ? Color.white
+                    : (isHovered ? new Color(0.04f, 0.62f, 0.88f) : new Color(0.16f, 0.18f, 0.20f));
+                icon.style.color = new StyleColor(foreground);
+                label.style.color = new StyleColor(foreground);
+                root.style.scale = new StyleScale(new Scale(isHovered
+                    ? new Vector3(1.12f, 1.12f, 1f)
+                    : Vector3.one));
+                root.style.backgroundColor = new StyleColor(isHovered
+                    ? new Color(0.10f, 0.68f, 0.92f, 0.18f)
+                    : Color.clear);
+            }
         }
 
         private int SegmentAt(Vector2 localPosition)
@@ -403,7 +444,7 @@ namespace VoxelEngine.Simulation
                     if (segment == selected)
                         color = new Color32(22, 157, 220, 250);
                     else if (segment == _hoveredSegment)
-                        color = new Color32(178, 224, 238, 250);
+                        color = new Color32(70, 188, 232, 252);
                     else
                         color = new Color32(220, 218, 211, 246);
 
