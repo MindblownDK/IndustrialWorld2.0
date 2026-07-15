@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.10.0-dev`
-**Roadmap Version:** `5.10.0-dev`
+**Current Version:** `5.10.1-dev`
+**Roadmap Version:** `5.10.1-dev`
 **Date:** 2026-07-16
-**Status:** Active Implementation — Production Lines & Recipe Graph Validation
+**Status:** Active Implementation — Production Lines Recipe Repair & Validation
 
 ---
 
@@ -611,7 +611,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Area | Status | Repository Audit |
 |------|--------|------------------|
 | Assembler Mk.2 / Mk.3 | ✅ COMPLETED | Mk.2 and Mk.3 exist with larger buffers, faster tier multipliers, upgraded visuals, and machine UI binding. |
-| Recipe graph validation | ✅ COMPLETED | `Tools > Voxel Engine > Recipe Graph Validator` scans crafting, smelting, and machine recipes without mutating assets, reporting missing references, invalid counts, duplicate outputs, base-resource assumptions, and dependency cycles. |
+| Recipe graph validation | 🛠️ WORKING ON | `Tools > Voxel Engine > Recipe Graph Validator` scans crafting, smelting, and machine recipes and now includes a non-destructive missing-link repair pass. Awaiting rerun validation after repair. |
 | Production-line UI | 🛠️ WORKING ON | Crusher/Assembler UIs and responsive panels exist. Next: production statistics, recipe dependency browser, and theme overrides. |
 | Advanced processing | 🟡 PARTIALLY COMPLETE | Chemical processing and oil systems exist in code, but ore washing/enrichment and tailing loops are not complete. |
 | UI theme system | ❌ MISSING | Design tokens exist in `UITheme`; theme ScriptableObjects, runtime theme switching, and custom editor remain planned. |
@@ -1674,6 +1674,22 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.10.1-dev] Recipe Graph Missing-Link Repair
+
+**Type:** PATCH — editor repair tooling for invalid recipe references
+
+**Added / Improved:**
+- Added `Tools > Voxel Engine > Repair Missing Recipe Links`.
+- Added a `Repair Missing Links` button directly inside the Recipe Graph Validator.
+- Repair pass is non-destructive: it fills missing recipe outputs/inputs, copies valid duplicate recipe links where available, and creates missing base ore resources required by factory recipes.
+- Added targeted repair coverage for early crafting recipes, tiered build-token recipes, science packs, fluid duplicate recipes, maritime recipes, nuclear control rods, smelting recipes, and Crusher ore inputs.
+- Validator automatically rescans after running the repair button.
+
+**Manual Validation Required:**
+- Run the repair once, then run `Scan Project` again and send the new report if any errors remain.
+
+---
 
 ### [5.10.0-dev] Production Lines Kickoff & Recipe Graph Validator
 

@@ -43,6 +43,11 @@ namespace VoxelEngine.EditorTools
             using (new EditorGUILayout.HorizontalScope())
             {
                 if (GUILayout.Button("Scan Project", GUILayout.Height(30f))) ScanProject();
+                if (GUILayout.Button("Repair Missing Links", GUILayout.Height(30f), GUILayout.Width(160f)))
+                {
+                    RecipeGraphRepairUtility.RepairMissingRecipeLinks();
+                    ScanProject();
+                }
                 using (new EditorGUI.DisabledScope(string.IsNullOrWhiteSpace(_lastReport)))
                 {
                     if (GUILayout.Button("Copy Report", GUILayout.Height(30f), GUILayout.Width(120f)))
