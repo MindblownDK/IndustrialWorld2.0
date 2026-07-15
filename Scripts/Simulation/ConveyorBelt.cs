@@ -415,7 +415,7 @@ namespace VoxelEngine.Simulation
             // We only need an adjacent belt at that position for shape inference; its
             // input may itself still be waiting to become a corner. Removing that
             // circular dependency lets closed conveyor loops resolve in one refresh.
-            var forwardNeighbour = FindAdjacentBelt(transform.position + transform.forward);
+            var forwardNeighbour = FindOutputNeighbourBelt(Vector3.forward) ?? FindAdjacentBelt(transform.position + transform.forward);
             float inputOutputDot = Vector3.Dot(incomingDirection, Vector3.forward);
 
             if (incomingCount == 1 && forwardNeighbour != null && inputOutputDot < -0.9f)
@@ -446,6 +446,36 @@ namespace VoxelEngine.Simulation
                 if (isActiveAndEnabled) _visuals.RebuildMesh();
                 else _visuals.RebuildPreviewMesh();
             }
+        }
+
+        private ConveyorBelt FindOutputNeighbourBelt(Vector3 localExitDirection)
+        {
+            Vector3 worldDirection = transform.TransformDirection(SafeLocalDirection(localExitDirection, Vector3.forward)).normalized;
+            Vector3 providerSocket = transform.TransformPoint(SafeLocalDirection(localExitDirection, Vector3.forward) * 0.5f);
+            var hits = Physics.OverlapSphere(providerSocket + worldDirection * 0.35f, 1.35f);
+            ConveyorBelt nearest = null;
+            float nearestDistance = SocketToleranceSqr;
+            foreach (var col in hits)
+            {
+                if (col == null || col.transform.IsChildOf(transform)) continue;
+                var belt = col.GetComponentInParent<ConveyorBelt>();
+                if (belt == null || belt == this) continue;
+
+                Vector3 candidateSocket = belt.GetEntrySocketPosition();
+                float distance = (candidateSocket - providerSocket).sqrMagnitude;
+                if (distance >= nearestDistance) continue;
+
+                Vector3 candidateEntryDirection = belt.GetEntryDirection();
+                float alignment = Vector3.Dot(candidateEntryDirection, -worldDirection);
+                bool verticalTransition = IsVerticalShape(shape) != IsVerticalShape(belt.shape)
+                    || belt.shape == ConveyorShape.RampUp
+                    || belt.shape == ConveyorShape.RampDown;
+                if (alignment < 0.85f && !verticalTransition) continue;
+
+                nearestDistance = distance;
+                nearest = belt;
+            }
+            return nearest;
         }
 
         private ConveyorBelt FindAdjacentBelt(Vector3 expectedCenter)

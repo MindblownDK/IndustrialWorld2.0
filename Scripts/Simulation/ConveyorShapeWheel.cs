@@ -303,6 +303,8 @@ namespace VoxelEngine.Simulation
                 int segment = SegmentAt(evt.localPosition);
                 if (segment == _hoveredSegment) return;
                 _hoveredSegment = segment;
+                if (segment >= 0 && segment < Modes.Length)
+                    SetMode(_activeTier, Modes[segment]);
                 RefreshRingTexture();
                 RefreshSegmentLabels();
             });

@@ -55,6 +55,13 @@ namespace VoxelEngine.Building.Tiered
             _document = GetComponent<UIDocument>();
             if (_document.panelSettings == null)
                 _document.panelSettings = Resources.Load<PanelSettings>("MenuPanelSettings");
+            if (_document.panelSettings != null)
+            {
+                _document.panelSettings.scaleMode = PanelScaleMode.ConstantPixelSize;
+                _document.panelSettings.scale = 1f;
+                _document.panelSettings.referenceDpi = 96f;
+                _document.panelSettings.fallbackDpi = 96f;
+            }
             _root = _document.rootVisualElement;
             _root.style.flexGrow = 1;
             Hide();

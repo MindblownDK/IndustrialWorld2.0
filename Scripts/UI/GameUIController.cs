@@ -129,6 +129,13 @@ namespace VoxelEngine.UI
             _doc.sortingOrder = 500;
             if (_doc.panelSettings == null)
                 _doc.panelSettings = Resources.Load<PanelSettings>("MenuPanelSettings");
+            if (_doc.panelSettings != null)
+            {
+                _doc.panelSettings.scaleMode = PanelScaleMode.ConstantPixelSize;
+                _doc.panelSettings.scale = 1f;
+                _doc.panelSettings.referenceDpi = 96f;
+                _doc.panelSettings.fallbackDpi = 96f;
+            }
             _root = _doc.rootVisualElement;
             _root.style.flexGrow = 1;
             // Pin the root to a DEFINITE full-screen size so absolutely-positioned children
@@ -1206,16 +1213,16 @@ namespace VoxelEngine.UI
             }
             else
             {
-                panel.style.top      = 24;
-                panel.style.bottom   = 92;
-                panel.style.left     = new StyleLength(new Length(33f, LengthUnit.Percent));
+                panel.style.top      = 12;
+                panel.style.bottom   = 72;
+                panel.style.left     = new StyleLength(new Length(34f, LengthUnit.Percent));
                 // Keep the center panel in the safe gap between the responsive
                 // inventory and right-side machine panels.
                 panel.style.right    = rightPanelOpen
-                    ? new StyleLength(new Length(33f, LengthUnit.Percent))
-                    : 18;
-                panel.style.minWidth = 320;
-                panel.style.maxWidth = 760;
+                    ? new StyleLength(new Length(34f, LengthUnit.Percent))
+                    : 12;
+                panel.style.minWidth = 0;
+                panel.style.maxWidth = new StyleLength(new Length(52f, LengthUnit.Percent));
             }
             panel.style.overflow = Overflow.Hidden;
             root.Add(panel);

@@ -712,16 +712,16 @@ namespace VoxelEngine.EditorTools
             {
                 panelSettings = ScriptableObject.CreateInstance<UnityEngine.UIElements.PanelSettings>();
                 panelSettings.name      = "MenuPanelSettings";
-                panelSettings.scaleMode = UnityEngine.UIElements.PanelScaleMode.ScaleWithScreenSize;
-                panelSettings.referenceResolution = new Vector2Int(1920, 1080);
+                panelSettings.scaleMode = UnityEngine.UIElements.PanelScaleMode.ConstantPixelSize;
+                panelSettings.referenceResolution = new Vector2Int(1280, 720);
                 panelSettings.match = 0.5f;
                 AssetDatabase.CreateAsset(panelSettings, panelSettingsPath);
             }
             // Step 3 is the explicit authoring point for shared UI scaling. Runtime
             // controllers no longer overwrite these values, so Inspector edits made
             // after this step remain under developer control.
-            panelSettings.scaleMode = UnityEngine.UIElements.PanelScaleMode.ScaleWithScreenSize;
-            panelSettings.referenceResolution = new Vector2Int(1920, 1080);
+            panelSettings.scaleMode = UnityEngine.UIElements.PanelScaleMode.ConstantPixelSize;
+            panelSettings.referenceResolution = new Vector2Int(1280, 720);
             panelSettings.screenMatchMode = UnityEngine.UIElements.PanelScreenMatchMode.MatchWidthOrHeight;
             panelSettings.match = 0.5f;
             panelSettings.scale = 1f;
