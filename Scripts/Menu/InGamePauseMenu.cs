@@ -55,6 +55,15 @@ namespace VoxelEngine.Menu
         {
             if (VoxelEngine.UI.UIState.PauseConsumedThisFrame) return;
             if (!GameSettings.WasPressed(InputAction.Pause)) return;
+
+            var hammerWheel = VoxelEngine.Building.Tiered.HammerBuildWheel.Instance;
+            if (hammerWheel != null && (hammerWheel.IsOpen || hammerWheel.ActiveFamily.HasValue))
+            {
+                hammerWheel.ExitBuildMode();
+                VoxelEngine.UI.UIState.PauseConsumedFrame = Time.frameCount;
+                return;
+            }
+
             if (_open) { Close(); return; }
             if (VoxelEngine.UI.UIState.IsBlocking) return;
             Open();

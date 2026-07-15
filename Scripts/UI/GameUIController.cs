@@ -817,6 +817,7 @@ namespace VoxelEngine.UI
                 PortConfigHud.IsAnyDropdownOpen = false;
             }
             if (_searchHasFocus) return;
+            WorldInspectionHud.ClearInventoryHover();
 
             // Clear stale references — the elements they point to are about to be destroyed.
             _liveFlame = null; _liveSmeltFill = null; _liveFuelFill = null;
@@ -2326,6 +2327,8 @@ namespace VoxelEngine.UI
             {
                 // Tag the slot with its container/index so the panel-level click handler can find us.
                 slot.userData = new SlotRef { container = container, index = index };
+                if (stack != null && !stack.IsEmpty)
+                    WorldInspectionHud.BindInventoryItem(slot, stack);
             }
             else
             {

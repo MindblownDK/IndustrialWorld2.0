@@ -1347,11 +1347,83 @@ namespace VoxelEngine.EditorTools
                 return;
             }
 
-            // ---------- Tier materials (one per tier, shared across all 9 families to keep GPU Resident Drawer batches dense) ----------
-            var matWood  = MakeColoredMat(tieredMats, "Mat_Wood",  new Color(0.55f, 0.40f, 0.25f));
-            var matStone = MakeColoredMat(tieredMats, "Mat_Stone", new Color(0.55f, 0.55f, 0.58f));
-            var matIron  = MakeColoredMat(tieredMats, "Mat_Iron",  new Color(0.78f, 0.78f, 0.85f));
-            var matSteel = MakeColoredMat(tieredMats, "Mat_Steel", new Color(0.40f, 0.45f, 0.55f));
+            // ---------- Premium procedural tier surfaces (created once, user edits preserved) ----------
+            Texture2D GetOrCreateTierTexture(string assetName, Color baseColor, int style)
+            {
+                string path = $"{tieredMats}/{assetName}.asset";
+                var existing = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+                if (existing != null) return existing;
+                if (AssetDatabase.LoadMainAssetAtPath(path) != null) return null;
+
+                const int size = 128;
+                var texture = new Texture2D(size, size, TextureFormat.RGBA32, false)
+                {
+                    name = assetName,
+                    wrapMode = TextureWrapMode.Repeat,
+                    filterMode = FilterMode.Bilinear
+                };
+                var pixels = new Color[size * size];
+                for (int y = 0; y < size; y++)
+                {
+                    for (int x = 0; x < size; x++)
+                    {
+                        float nx = x / (float)size;
+                        float ny = y / (float)size;
+                        float noise = Mathf.PerlinNoise(nx * 8f + style * 3.17f, ny * 8f + style * 5.31f) - 0.5f;
+                        float pattern = noise;
+                        switch (style)
+                        {
+                            case 0: // layered wood grain
+                                pattern += Mathf.Sin((ny * 24f + noise * 2f) * Mathf.PI) * 0.12f;
+                                break;
+                            case 1: // chipped stone aggregate
+                                pattern += Mathf.PerlinNoise(nx * 28f, ny * 28f) * 0.18f - 0.09f;
+                                break;
+                            case 2: // brushed iron
+                                pattern = noise * 0.20f + Mathf.Sin(ny * 180f) * 0.035f;
+                                if (x % 32 == 2 || y % 32 == 2) pattern -= 0.10f;
+                                break;
+                            default: // plated steel seams and rivets
+                                pattern = noise * 0.14f;
+                                if (x % 64 < 2 || y % 64 < 2) pattern -= 0.14f;
+                                int rx = x % 64, ry = y % 64;
+                                if ((rx < 5 && ry < 5) || (rx > 59 && ry > 59)) pattern += 0.18f;
+                                break;
+                        }
+                        Color color = baseColor * (1f + pattern * 0.55f);
+                        color.a = 1f;
+                        pixels[y * size + x] = color;
+                    }
+                }
+                texture.SetPixels(pixels);
+                texture.Apply(false, false);
+                AssetDatabase.CreateAsset(texture, path);
+                return texture;
+            }
+
+            Material GetOrCreateTierMaterial(string materialName, Color baseColor, int style, float metallic, float smoothness)
+            {
+                string path = $"{tieredMats}/{materialName}.mat";
+                var existing = AssetDatabase.LoadAssetAtPath<Material>(path);
+                if (existing != null) return existing;
+                if (AssetDatabase.LoadMainAssetAtPath(path) != null) return null;
+
+                var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+                var material = new Material(shader) { name = materialName, color = baseColor, enableInstancing = true };
+                var texture = GetOrCreateTierTexture($"Tex_{materialName}", baseColor, style);
+                if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", Color.white);
+                if (material.HasProperty("_BaseMap")) material.SetTexture("_BaseMap", texture);
+                if (material.HasProperty("_MainTex")) material.SetTexture("_MainTex", texture);
+                if (material.HasProperty("_Metallic")) material.SetFloat("_Metallic", metallic);
+                if (material.HasProperty("_Smoothness")) material.SetFloat("_Smoothness", smoothness);
+                AssetDatabase.CreateAsset(material, path);
+                return material;
+            }
+
+            var matWood  = GetOrCreateTierMaterial("Mat_Wood_Premium",  new Color(0.55f, 0.40f, 0.25f), 0, 0.02f, 0.22f);
+            var matStone = GetOrCreateTierMaterial("Mat_Stone_Premium", new Color(0.55f, 0.55f, 0.58f), 1, 0.00f, 0.16f);
+            var matIron  = GetOrCreateTierMaterial("Mat_Iron_Premium",  new Color(0.68f, 0.70f, 0.74f), 2, 0.72f, 0.34f);
+            var matSteel = GetOrCreateTierMaterial("Mat_Steel_Premium", new Color(0.34f, 0.39f, 0.48f), 3, 0.86f, 0.48f);
             var tierMats = new[] { matWood, matStone, matIron, matSteel };
 
             // ---------- Build the 9 families, each with 4 tier prefabs ----------
@@ -1399,6 +1471,22 @@ namespace VoxelEngine.EditorTools
                         {
                              meshBuilder(root, tierMats[t]);
                              socketBuilder(root);
+                        }
+
+                        // Upgrade only known setup-generated flat materials. Custom
+                        // materials and imported meshes remain untouched.
+                        string legacyMaterialName = t switch
+                        {
+                            0 => "Mat_Wood",
+                            1 => "Mat_Stone",
+                            2 => "Mat_Iron",
+                            _ => "Mat_Steel"
+                        };
+                        foreach (var renderer in root.GetComponentsInChildren<Renderer>(true))
+                        {
+                            var current = renderer.sharedMaterial;
+                            if (current == null || current.name == legacyMaterialName)
+                                renderer.sharedMaterial = tierMats[t];
                         }
 
                         // ALWAYS ensure required components exist
@@ -4290,12 +4378,20 @@ root =>
         private static Material MakeColoredMat(string folder, string name, Color c)
         {
             EnsureFolder(folder);
+            string path = $"{folder}/{name}.mat";
+            var existing = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (existing != null) return existing;
+            if (AssetDatabase.LoadMainAssetAtPath(path) != null)
+            {
+                Debug.LogError($"[VoxelEngineSetupWindow] Preserved conflicting asset at '{path}'.");
+                return null;
+            }
+
             var sh = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
-            var m = new Material(sh) { name = name };
-            m.color = c;
-            if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", c);
-            AssetDatabase.CreateAsset(m, $"{folder}/{name}.mat");
-            return m;
+            var material = new Material(sh) { name = name, color = c };
+            if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", c);
+            AssetDatabase.CreateAsset(material, path);
+            return material;
         }
 
         private static GameObject MakeTreePrefab(string folder, string name, Material trunkMat, Material leafMat,

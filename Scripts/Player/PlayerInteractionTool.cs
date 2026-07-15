@@ -130,6 +130,14 @@ namespace VoxelEngine.Player
                 if (mineHeld || buildHeld) return;
             }
 
+            // While the Building Hammer has an active family, RMB belongs exclusively
+            // to BuildSystemV2 placement. Prevent the generic interaction path from
+            // opening or toggling the object underneath the placement ghost.
+            if (!heldStack.IsEmpty && heldStack.item is Hammer
+                && HammerBuildWheel.Instance != null && HammerBuildWheel.Instance.ActiveFamily.HasValue
+                && (buildDown || buildHeld))
+                return;
+
             // ── Storage drawer direct interaction ─────────────────────
             var drawer = hit.collider.GetComponentInParent<VoxelEngine.Storage.StorageDrawer>();
             if (drawer != null && IsFrontHit(drawer.transform, hit))

@@ -1,13 +1,5 @@
 // Assets/Scripts/VoxelEngine/Building/Tiered/HammerBuildWheel.cs
-//
-// tiered construction radial build wheel. Opens when holding Hammer and pressing the
-// BuildWheel key (default middle mouse or F). Shows building families in a
-// circular arrangement with cost displayed underneath each option.
-//
-// Visual style: dark semi-transparent backdrop, circular segments that
-// highlight on hover, cost text in green (affordable) or red (can't afford).
 
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
 using VoxelEngine.Items;
@@ -18,38 +10,50 @@ using T = VoxelEngine.UI.UITheme;
 namespace VoxelEngine.Building.Tiered
 {
     [RequireComponent(typeof(UIDocument))]
-    public class HammerBuildWheel : MonoBehaviour
+    public sealed class HammerBuildWheel : MonoBehaviour
     {
         public static HammerBuildWheel Instance { get; private set; }
-
-        public BuildFamily? ActiveFamily { get; private set; } = null;
+        public BuildFamily? ActiveFamily { get; private set; }
+        public bool IsOpen => _open;
 
         public Inventory inventory;
         public TieredBlockRegistry registry;
 
-        private UIDocument _doc;
-        private VisualElement _root;
-        private bool _open;
-
-        // Wheel layout
-        private static readonly BuildFamily[] _families = {
-            BuildFamily.Foundation, BuildFamily.Wall,    BuildFamily.Floor,
-            BuildFamily.Doorway,    BuildFamily.Window,  BuildFamily.Stairs,
-            BuildFamily.Roof,       BuildFamily.Pillar,  BuildFamily.HalfWall
+        private static readonly BuildFamily[] Families =
+        {
+            BuildFamily.Foundation, BuildFamily.Wall, BuildFamily.Floor,
+            BuildFamily.Doorway, BuildFamily.Window, BuildFamily.Stairs,
+            BuildFamily.Roof, BuildFamily.Pillar, BuildFamily.HalfWall
         };
 
-        private static readonly string[] _icons = {
+        private static readonly string[] Icons =
+        {
             "▣", "▥", "▤", "⊡", "☐", "⟋", "⌂", "▏", "▤"
         };
+
+        private const int PageSize = 8;
+        private UIDocument _document;
+        private VisualElement _root;
+        private VisualElement _wheelCenter;
+        private VisualElement _ringElement;
+        private Texture2D _ringTexture;
+        private readonly VisualElement[] _segmentLabels = new VisualElement[PageSize];
+        private int _page;
+        private int _hoveredSegment = -1;
+        private bool _open;
+        private Vector2 _parallax;
+        private float _nextPageInput;
+
+        private int PageCount => Mathf.Max(1, Mathf.CeilToInt(Families.Length / (float)PageSize));
 
         private void Awake()
         {
             if (Instance != null && Instance != this) { Destroy(this); return; }
             Instance = this;
-            _doc = GetComponent<UIDocument>();
-            if (_doc.panelSettings == null)
-                _doc.panelSettings = Resources.Load<PanelSettings>("MenuPanelSettings");
-            _root = _doc.rootVisualElement;
+            _document = GetComponent<UIDocument>();
+            if (_document.panelSettings == null)
+                _document.panelSettings = Resources.Load<PanelSettings>("MenuPanelSettings");
+            _root = _document.rootVisualElement;
             _root.style.flexGrow = 1;
             Hide();
         }
@@ -62,19 +66,52 @@ namespace VoxelEngine.Building.Tiered
 
         private void Update()
         {
+            if (inventory == null) inventory = FindAnyObjectByType<Inventory>();
             var stack = inventory != null ? inventory.ActiveStack : null;
             bool holdingHammer = stack != null && !stack.IsEmpty && stack.item is Hammer;
 
-            if (!holdingHammer) { if (_open) Close(); return; }
+            if (!holdingHammer)
+            {
+                ActiveFamily = null;
+                if (_open) Close();
+                return;
+            }
+
+            if (!VoxelEngine.UI.UIState.PauseConsumedThisFrame && GameSettings.WasPressed(InputAction.Pause))
+            {
+                ExitBuildMode();
+                VoxelEngine.UI.UIState.PauseConsumedFrame = Time.frameCount;
+                return;
+            }
+
             if (GameSettings.WasPressed(InputAction.BuildWheel))
             {
                 if (_open) Close(); else Open();
             }
+
+            if (!_open) return;
+            HandlePageScroll();
+            UpdateParallax();
+        }
+
+        private void OnDisable()
+        {
+            if (_open) Close();
+            ReleaseRingTexture();
+        }
+
+        private void OnDestroy()
+        {
+            if (_open) Close();
+            ReleaseRingTexture();
+            if (Instance == this) Instance = null;
         }
 
         public void Open()
         {
+            if (_open) return;
             _open = true;
+            _parallax = Vector2.zero;
             VoxelEngine.UI.UIState.PushBlock();
             Build();
         }
@@ -87,211 +124,369 @@ namespace VoxelEngine.Building.Tiered
             Hide();
         }
 
-        private void Hide()
+        public void ExitBuildMode()
         {
-            _root.Clear();
-            _root.pickingMode = PickingMode.Ignore;
-            _root.style.backgroundColor = new StyleColor(new Color(0, 0, 0, 0));
+            ActiveFamily = null;
+            if (_open) Close();
+            VoxelEngine.UI.BuildFeedbackHud.Show("Building Hammer", "Build mode closed", null, T.TextMuted);
         }
 
-        // ── Build the radial wheel UI ─────────────────────────────
+        private void Hide()
+        {
+            if (_root == null) return;
+            _root.Clear();
+            _root.pickingMode = PickingMode.Ignore;
+            _root.style.backgroundColor = new StyleColor(Color.clear);
+            _wheelCenter = null;
+            _ringElement = null;
+            _hoveredSegment = -1;
+            ReleaseRingTexture();
+        }
 
         private void Build()
         {
             _root.Clear();
             _root.pickingMode = PickingMode.Position;
-            _root.style.backgroundColor = new StyleColor(new Color(0, 0, 0, 0.60f));
+            _root.style.backgroundColor = new StyleColor(new Color(0.008f, 0.012f, 0.02f, 0.66f));
             _root.style.alignItems = Align.Center;
             _root.style.justifyContent = Justify.Center;
 
-            // Center container.
-            var center = new VisualElement();
-            center.style.width = 460; center.style.height = 530;
-            center.style.position = Position.Relative;
-            _root.Add(center);
+            _wheelCenter = new VisualElement();
+            _wheelCenter.style.width = 520;
+            _wheelCenter.style.height = 520;
+            _wheelCenter.style.position = Position.Relative;
+            _wheelCenter.style.transitionProperty = new System.Collections.Generic.List<StylePropertyName> { "translate" };
+            _wheelCenter.style.transitionDuration = new System.Collections.Generic.List<TimeValue> { new(0.08f, TimeUnit.Second) };
+            _root.Add(_wheelCenter);
 
-            // Title in the very center.
-            var titleBox = new VisualElement();
-            titleBox.style.position = Position.Absolute;
-            titleBox.style.left = 460 / 2 - 80; titleBox.style.top = 460 / 2 - 35;
-            titleBox.style.width = 160; titleBox.style.height = 70;
-            titleBox.style.backgroundColor = new StyleColor(T.BgDark);
-            T.Radius(titleBox, 35);
-            T.Border(titleBox, 2, T.BorderBright);
-            titleBox.style.alignItems = Align.Center;
-            titleBox.style.justifyContent = Justify.Center;
-            titleBox.pickingMode = PickingMode.Ignore;
-            center.Add(titleBox);
+            System.Array.Clear(_segmentLabels, 0, _segmentLabels.Length);
+            BuildRing();
+            BuildCenterDisc();
+            for (int i = 0; i < PageSize; i++) BuildSegmentLabel(i);
+            RefreshSegmentLabels();
+        }
 
-            var titleLabel = T.Subtitle("BUILD");
-            titleLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
-            titleLabel.pickingMode = PickingMode.Ignore;
-            titleBox.Add(titleLabel);
+        private void BuildRing()
+        {
+            _ringElement = new VisualElement { name = "HammerBuildRing" };
+            _ringElement.style.position = Position.Absolute;
+            _ringElement.style.left = 20;
+            _ringElement.style.top = 20;
+            _ringElement.style.width = 480;
+            _ringElement.style.height = 480;
+            _ringElement.pickingMode = PickingMode.Position;
+            _wheelCenter.Add(_ringElement);
+            RefreshRingTexture();
 
-            var modeLabel = T.Muted(ActiveFamily.HasValue ? ActiveFamily.Value.ToString() : "Select a piece");
-            modeLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
-            modeLabel.pickingMode = PickingMode.Ignore;
-            titleBox.Add(modeLabel);
-
-            // Arrange family cards in a circle.
-            float radius = 170f;
-            float cx = 460f / 2f;
-            float cy = 460f / 2f;
-            float angleStep = 360f / _families.Length;
-            float startAngle = -90f; // top
-
-            for (int i = 0; i < _families.Length; i++)
+            _ringElement.RegisterCallback<PointerMoveEvent>(evt =>
             {
-                float angle = (startAngle + angleStep * i) * Mathf.Deg2Rad;
-                float px = cx + Mathf.Cos(angle) * radius - 55;
-                float py = cy + Mathf.Sin(angle) * radius - 45;
+                int segment = SegmentAt(evt.localPosition);
+                if (segment == _hoveredSegment) return;
+                _hoveredSegment = segment;
+                RefreshRingTexture();
+                RefreshSegmentLabels();
+            });
+            _ringElement.RegisterCallback<PointerLeaveEvent>(_ =>
+            {
+                if (_hoveredSegment < 0) return;
+                _hoveredSegment = -1;
+                RefreshRingTexture();
+                RefreshSegmentLabels();
+            });
+            _ringElement.RegisterCallback<PointerDownEvent>(evt =>
+            {
+                if (evt.button != 0) return;
+                int segment = SegmentAt(evt.localPosition);
+                int familyIndex = FamilyIndex(segment);
+                if (familyIndex < 0) return;
+                SelectFamily(familyIndex);
+                evt.StopPropagation();
+            });
+            VoxelEngine.FX.UiAudio.MarkClickable(_ringElement);
+        }
 
-                var card = MakeFamilyCard(_families[i], _icons[i], i);
-                card.style.position = Position.Absolute;
-                card.style.left = px;
-                card.style.top = py;
-                center.Add(card);
+        private void BuildCenterDisc()
+        {
+            var disc = new VisualElement();
+            disc.style.position = Position.Absolute;
+            disc.style.left = 105;
+            disc.style.top = 105;
+            disc.style.width = 310;
+            disc.style.height = 310;
+            disc.style.alignItems = Align.Center;
+            disc.style.justifyContent = Justify.Center;
+            disc.style.backgroundColor = new StyleColor(new Color(0.025f, 0.035f, 0.055f, 0.99f));
+            disc.pickingMode = PickingMode.Position;
+            T.Radius(disc, 155f);
+            T.Border(disc, 2f, T.BorderBright);
+            _wheelCenter.Add(disc);
+
+            var icon = new Label("⌁");
+            icon.style.fontSize = 34;
+            icon.style.color = new StyleColor(ActiveFamily.HasValue ? T.AccentCyan : T.AccentGold);
+            icon.pickingMode = PickingMode.Ignore;
+            disc.Add(icon);
+
+            var title = new Label(ActiveFamily.HasValue ? ActiveFamily.Value.ToString().ToUpperInvariant() : "UPGRADE MODE");
+            title.style.fontSize = 16;
+            title.style.marginTop = 5;
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            title.style.color = new StyleColor(T.TextPrimary);
+            title.pickingMode = PickingMode.Ignore;
+            disc.Add(title);
+
+            var page = new Label($"PAGE {_page + 1}/{PageCount}  ·  SCROLL TO BROWSE");
+            page.style.fontSize = 9;
+            page.style.marginTop = 7;
+            page.style.letterSpacing = 1f;
+            page.style.color = new StyleColor(T.TextMuted);
+            page.pickingMode = PickingMode.Ignore;
+            disc.Add(page);
+
+            var hint = new Label("CLICK CENTER FOR UPGRADE MODE");
+            hint.style.fontSize = 8;
+            hint.style.marginTop = 5;
+            hint.style.color = new StyleColor(T.TextMuted);
+            hint.pickingMode = PickingMode.Ignore;
+            disc.Add(hint);
+
+            disc.RegisterCallback<PointerEnterEvent>(_ =>
+                disc.style.backgroundColor = new StyleColor(new Color(0.045f, 0.065f, 0.095f, 1f)));
+            disc.RegisterCallback<PointerLeaveEvent>(_ =>
+                disc.style.backgroundColor = new StyleColor(new Color(0.025f, 0.035f, 0.055f, 0.99f)));
+            disc.RegisterCallback<PointerDownEvent>(evt =>
+            {
+                if (evt.button != 0) return;
+                ActiveFamily = null;
+                Build();
+                evt.StopPropagation();
+            });
+            VoxelEngine.FX.UiAudio.MarkClickable(disc);
+        }
+
+        private void BuildSegmentLabel(int segment)
+        {
+            int index = FamilyIndex(segment);
+            if (index < 0) return;
+
+            const float center = 260f;
+            const float radius = 203f;
+            float angle = (-90f + segment * (360f / PageSize)) * Mathf.Deg2Rad;
+            var root = new VisualElement();
+            root.style.position = Position.Absolute;
+            root.style.left = center + Mathf.Cos(angle) * radius - 42f;
+            root.style.top = center + Mathf.Sin(angle) * radius - 34f;
+            root.style.width = 84;
+            root.style.height = 68;
+            root.style.alignItems = Align.Center;
+            root.style.justifyContent = Justify.Center;
+            root.pickingMode = PickingMode.Ignore;
+            root.style.transitionProperty = new System.Collections.Generic.List<StylePropertyName> { "scale", "background-color" };
+            root.style.transitionDuration = new System.Collections.Generic.List<TimeValue> { new(0.10f, TimeUnit.Second), new(0.10f, TimeUnit.Second) };
+            T.Radius(root, 28f);
+            _wheelCenter.Add(root);
+            _segmentLabels[segment] = root;
+
+            var icon = new Label(Icons[index]);
+            icon.name = "Icon";
+            icon.style.fontSize = 20;
+            icon.style.unityFontStyleAndWeight = FontStyle.Bold;
+            icon.pickingMode = PickingMode.Ignore;
+            root.Add(icon);
+
+            var name = new Label(Families[index].ToString().ToUpperInvariant());
+            name.name = "Name";
+            name.style.fontSize = 8;
+            name.style.unityFontStyleAndWeight = FontStyle.Bold;
+            name.style.unityTextAlign = TextAnchor.MiddleCenter;
+            name.style.whiteSpace = WhiteSpace.Normal;
+            name.pickingMode = PickingMode.Ignore;
+            root.Add(name);
+
+            var cost = new Label(GetCostText(Families[index]).Replace("Cost: ", string.Empty));
+            cost.name = "Cost";
+            cost.style.fontSize = 7;
+            cost.style.marginTop = 1;
+            cost.style.unityTextAlign = TextAnchor.MiddleCenter;
+            cost.pickingMode = PickingMode.Ignore;
+            root.Add(cost);
+        }
+
+        private void RefreshSegmentLabels()
+        {
+            for (int segment = 0; segment < PageSize; segment++)
+            {
+                var root = _segmentLabels[segment];
+                int index = FamilyIndex(segment);
+                if (root == null || index < 0) continue;
+                bool selected = ActiveFamily == Families[index];
+                bool hovered = segment == _hoveredSegment;
+                Color foreground = selected ? Color.white : (hovered ? T.AccentCyan : new Color(0.16f, 0.18f, 0.20f));
+                var icon = root.Q<Label>("Icon");
+                var name = root.Q<Label>("Name");
+                var cost = root.Q<Label>("Cost");
+                if (icon != null) icon.style.color = new StyleColor(foreground);
+                if (name != null) name.style.color = new StyleColor(foreground);
+                if (cost != null) cost.style.color = new StyleColor(CanAffordFamily(Families[index]) ? T.AccentGreen : T.AccentRed);
+                root.style.scale = new StyleScale(new Scale(hovered ? new Vector3(1.10f, 1.10f, 1f) : Vector3.one));
+                root.style.backgroundColor = new StyleColor(hovered ? new Color(T.AccentCyan.r, T.AccentCyan.g, T.AccentCyan.b, 0.16f) : Color.clear);
+            }
+        }
+
+        private int SegmentAt(Vector2 localPosition)
+        {
+            Vector2 delta = localPosition - new Vector2(240f, 240f);
+            float radius = delta.magnitude;
+            if (radius < 155f || radius > 232f) return -1;
+            float angle = Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg;
+            float segmentAngle = 360f / PageSize;
+            float normalized = Mathf.Repeat(angle + 90f + segmentAngle * 0.5f, 360f);
+            float within = normalized % segmentAngle;
+            if (within < 2.2f || within > segmentAngle - 2.2f) return -1;
+            int segment = Mathf.FloorToInt(normalized / segmentAngle);
+            return FamilyIndex(segment) >= 0 ? segment : -1;
+        }
+
+        private int FamilyIndex(int segment)
+        {
+            if (segment < 0 || segment >= PageSize) return -1;
+            int index = _page * PageSize + segment;
+            return index >= 0 && index < Families.Length ? index : -1;
+        }
+
+        private void SelectFamily(int familyIndex)
+        {
+            var family = Families[familyIndex];
+            ActiveFamily = family;
+            string cost = GetCostText(family);
+            VoxelEngine.UI.BuildFeedbackHud.Show($"Build: {family}", cost, null,
+                CanAffordFamily(family) ? T.AccentCyan : T.AccentRed);
+            Build();
+            _root.schedule.Execute(Close).ExecuteLater(140);
+        }
+
+        private void HandlePageScroll()
+        {
+            if (PageCount <= 1 || Time.unscaledTime < _nextPageInput) return;
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
+            float scroll = UnityEngine.InputSystem.Mouse.current != null
+                ? UnityEngine.InputSystem.Mouse.current.scroll.ReadValue().y
+                : 0f;
+#else
+            float scroll = Input.mouseScrollDelta.y;
+#endif
+            if (Mathf.Abs(scroll) < 0.01f) return;
+            _nextPageInput = Time.unscaledTime + 0.12f;
+            _page += scroll < 0f ? 1 : -1;
+            if (_page < 0) _page = PageCount - 1;
+            if (_page >= PageCount) _page = 0;
+            _hoveredSegment = -1;
+            Build();
+        }
+
+        private void UpdateParallax()
+        {
+            if (_wheelCenter == null) return;
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
+            var mouse = UnityEngine.InputSystem.Mouse.current;
+            Vector2 position = mouse != null ? mouse.position.ReadValue() : new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
+#else
+            Vector2 position = Input.mousePosition;
+#endif
+            Vector2 fromCenter = position - new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
+            Vector2 target = Vector2.ClampMagnitude(fromCenter * 0.025f, 14f);
+            _parallax = Vector2.Lerp(_parallax, target, 1f - Mathf.Exp(-10f * Time.unscaledDeltaTime));
+            _wheelCenter.style.translate = new StyleTranslate(new Translate(
+                new Length(_parallax.x, LengthUnit.Pixel),
+                new Length(-_parallax.y, LengthUnit.Pixel), 0f));
+        }
+
+        private void RefreshRingTexture()
+        {
+            const int size = 256;
+            if (_ringTexture == null)
+            {
+                _ringTexture = new Texture2D(size, size, TextureFormat.RGBA32, false)
+                {
+                    name = "HammerBuildWheelRing",
+                    wrapMode = TextureWrapMode.Clamp,
+                    filterMode = FilterMode.Bilinear,
+                    hideFlags = HideFlags.HideAndDontSave
+                };
             }
 
-            // Bottom: upgrade-only mode button.
-            var upgradeBtn = new VisualElement();
-            upgradeBtn.style.position = Position.Absolute;
-            upgradeBtn.style.bottom = 0;
-            upgradeBtn.style.left = 460 / 2 - 100;
-            upgradeBtn.style.width = 200; upgradeBtn.style.height = 36;
-            upgradeBtn.style.backgroundColor = new StyleColor(new Color(T.BgSlot.r, T.BgSlot.g, T.BgSlot.b, 0.95f));
-            T.Radius(upgradeBtn, 18);
-            T.Border(upgradeBtn, 1, ActiveFamily == null ? T.AccentGold : T.BorderDim);
-            upgradeBtn.style.alignItems = Align.Center;
-            upgradeBtn.style.justifyContent = Justify.Center;
-            center.Add(upgradeBtn);
+            var pixels = new Color32[size * size];
+            float center = (size - 1) * 0.5f;
+            const float innerRadius = 82f;
+            const float outerRadius = 123f;
+            float segmentAngle = 360f / PageSize;
 
-            var upgLabel = new Label("⬆ UPGRADE MODE");
-            upgLabel.style.color = new StyleColor(ActiveFamily == null ? T.AccentGold : T.TextSecondary);
-            upgLabel.style.fontSize = 11;
-            upgLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
-            upgLabel.pickingMode = PickingMode.Ignore;
-            upgradeBtn.Add(upgLabel);
-
-            upgradeBtn.RegisterCallback<MouseDownEvent>(e =>
+            for (int y = 0; y < size; y++)
             {
-                if (e.button == 0) { ActiveFamily = null; Build(); } // Rebuild to show toggle visually
-            });
+                for (int x = 0; x < size; x++)
+                {
+                    float dx = x - center;
+                    float dy = center - y;
+                    float radius = Mathf.Sqrt(dx * dx + dy * dy);
+                    if (radius < innerRadius || radius > outerRadius) continue;
+                    float angle = Mathf.Atan2(dy, dx) * Mathf.Rad2Deg;
+                    float normalized = Mathf.Repeat(angle + 90f + segmentAngle * 0.5f, 360f);
+                    float within = normalized % segmentAngle;
+                    if (within < 2.2f || within > segmentAngle - 2.2f) continue;
+                    int segment = Mathf.FloorToInt(normalized / segmentAngle);
+                    int index = FamilyIndex(segment);
+                    if (index < 0) continue;
+
+                    bool selected = ActiveFamily == Families[index];
+                    bool hovered = segment == _hoveredSegment;
+                    Color32 color = selected
+                        ? new Color32(22, 157, 220, 250)
+                        : (hovered ? new Color32(70, 188, 232, 252) : new Color32(220, 218, 211, 246));
+                    float edge = Mathf.Min(radius - innerRadius, outerRadius - radius);
+                    color.a = (byte)Mathf.RoundToInt(color.a * Mathf.Clamp01(edge));
+                    pixels[y * size + x] = color;
+                }
+            }
+
+            _ringTexture.SetPixels32(pixels);
+            _ringTexture.Apply(false, false);
+            if (_ringElement != null)
+                _ringElement.style.backgroundImage = new StyleBackground(_ringTexture);
         }
 
-        private VisualElement MakeFamilyCard(BuildFamily family, string icon, int idx)
+        private void ReleaseRingTexture()
         {
-            bool selected = ActiveFamily == family;
-            bool canAfford = CanAffordFamily(family);
-
-            var card = new VisualElement();
-            card.style.width = 110; card.style.height = 90;
-            card.style.alignItems = Align.Center;
-            card.style.justifyContent = Justify.Center;
-            card.style.paddingTop = 6; card.style.paddingBottom = 6;
-            card.style.backgroundColor = new StyleColor(selected ? new Color(T.AccentCyan.r, T.AccentCyan.g, T.AccentCyan.b, 0.25f) : T.BgPanel);
-            T.Radius(card, 10);
-            T.Border(card, 2, selected ? T.AccentCyan : T.BorderDim);
-
-            // Icon
-            var iconLabel = new Label(icon);
-            iconLabel.style.fontSize = 22;
-            iconLabel.style.color = new StyleColor(selected ? T.AccentCyan : T.TextPrimary);
-            iconLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
-            iconLabel.pickingMode = PickingMode.Ignore;
-            card.Add(iconLabel);
-
-            // Name
-            var nameLabel = new Label(family.ToString());
-            nameLabel.style.fontSize = 11;
-            nameLabel.style.color = new StyleColor(T.TextPrimary);
-            nameLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
-            nameLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
-            nameLabel.pickingMode = PickingMode.Ignore;
-            card.Add(nameLabel);
-
-            // Cost underneath
-            string costText = GetCostText(family);
-            Color costColor = canAfford ? T.AccentGreen : T.AccentRed;
-            var costLabel = new Label(costText);
-            costLabel.style.fontSize = 9;
-            costLabel.style.color = new StyleColor(costColor);
-            costLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
-            costLabel.style.whiteSpace = WhiteSpace.Normal;
-            costLabel.style.marginTop = 2;
-            costLabel.pickingMode = PickingMode.Ignore;
-            card.Add(costLabel);
-
-            // Hover effect.
-            card.RegisterCallback<MouseEnterEvent>(_ =>
-            {
-                if (!selected)
-                {
-                    card.style.backgroundColor = new StyleColor(T.BgHover);
-                    T.Border(card, 2, T.AccentCyan);
-                }
-            });
-            card.RegisterCallback<MouseLeaveEvent>(_ =>
-            {
-                if (!selected)
-                {
-                    card.style.backgroundColor = new StyleColor(T.BgPanel);
-                    T.Border(card, 2, T.BorderDim);
-                }
-            });
-
-            // Click to select.
-            card.RegisterCallback<MouseDownEvent>(e =>
-            {
-                if (e.button == 0)
-                {
-                    ActiveFamily = family;
-                    // Brief visual update then close.
-                    Build(); // rebuild to show selection
-                    // Schedule close for next frame so player sees the selection.
-                    _root.schedule.Execute(Close).ExecuteLater(150);
-
-                    VoxelEngine.UI.BuildFeedbackHud.Show(
-                        $"Build: {family}",
-                        costText,
-                        null, canAfford ? T.AccentCyan : T.AccentRed);
-                }
-                e.StopPropagation();
-            });
-
-            return card;
+            if (_ringTexture == null) return;
+            Destroy(_ringTexture);
+            _ringTexture = null;
         }
-
-        // ── Cost helpers ──────────────────────────────────────────
 
         private string GetCostText(BuildFamily family)
         {
-            if (registry == null) return "";
+            if (registry == null) return "Free";
             var def = registry.Get(family);
-            if (def == null || def.placeCost == null || def.placeCost.items == null) return "Free";
-
-            var sb = new System.Text.StringBuilder();
-            sb.Append("Cost: ");
+            if (def == null || def.placeCost?.items == null) return "Free";
+            var builder = new System.Text.StringBuilder("Cost: ");
             bool first = true;
-            foreach (var ing in def.placeCost.items)
+            foreach (var ingredient in def.placeCost.items)
             {
-                if (ing.item == null || ing.count <= 0) continue;
-                if (!first) sb.Append(", ");
-                sb.Append($"{ing.count} {ing.item.displayName}");
+                if (ingredient.item == null || ingredient.count <= 0) continue;
+                if (!first) builder.Append(", ");
+                builder.Append($"{ingredient.count} {ingredient.item.displayName}");
                 first = false;
             }
-            return first ? "Free" : sb.ToString();
+            return first ? "Free" : builder.ToString();
         }
 
         private bool CanAffordFamily(BuildFamily family)
         {
             if (registry == null || inventory == null) return false;
             var def = registry.Get(family);
-            if (def == null || def.placeCost == null || def.placeCost.items == null) return true;
-            foreach (var ing in def.placeCost.items)
+            if (def == null || def.placeCost?.items == null) return true;
+            foreach (var ingredient in def.placeCost.items)
             {
-                if (ing.item == null || ing.count <= 0) continue;
-                if (inventory.container.CountOf(ing.item) < ing.count) return false;
+                if (ingredient.item == null || ingredient.count <= 0) continue;
+                if (inventory.container.CountOf(ingredient.item) < ingredient.count) return false;
             }
             return true;
         }

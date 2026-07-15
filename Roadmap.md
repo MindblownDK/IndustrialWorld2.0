@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.4.0-dev`
-**Roadmap Version:** `5.4.0-dev`
+**Current Version:** `5.5.0-dev`
+**Roadmap Version:** `5.5.0-dev`
 **Date:** 2026-07-15
-**Status:** Active Implementation — Pollution, Planetary Ecology & World Inspection Overlay
+**Status:** Active Implementation — Defense & Autopilot Roadmap, Hammer Wheel & Inspection Upgrade
 
 ---
 
@@ -62,7 +62,8 @@ The design goal is a seamless blend of:
 | Crafting / items / storage | ✅ Exists | Needs deeper recipe chains |
 | Research / tech tree | ✅ Exists | Can be expanded into eras |
 | UI / UX | ✅ Premium | Design system rolling out |
-| Top-left world inspection overlay | 🛠️ Working On | Crosshair target name, category/state, power, item count, and integrity are implemented; Unity validation pending |
+| Top-left world inspection overlay | 🛠️ Working On | Crosshair targets, active voxel materials, mining requirements, power, occupancy, integrity, and inventory-item hover details are implemented; Unity validation pending |
+| Building Hammer wheel & placement | 🛠️ Working On | Segmented paginated donut wheel, scroll pages, RMB placement, Escape exit, and premium procedural tier materials are implemented; Unity validation pending |
 | Farming | 🟡 Early | Good seed, needs integration |
 | Nuclear | 🟡 Present | Could become endgame power |
 | Factory logistics | ❌ Missing | No conveyors, chutes, robots |
@@ -309,6 +310,8 @@ The Building Hammer gains a research-locked **Orbital Station** family with a cl
 - Exterior armor, radiator, solar, cable, and utility attachment surfaces.
 - Pieces are airtight where appropriate and integrate with life support.
 - The family appears in the Hammer wheel only after **Orbital Construction** research is completed.
+- The Hammer wheel uses a paginated segmented donut; mouse-wheel scrolling moves between construction pages so large orbital families do not overcrowd one ring.
+- Locked pages preview their research requirement without exposing unusable pieces as selectable blocks.
 - All blocks, recipes, research nodes, and prefab links are authored non-destructively through the Voxel Engine Setup workflow.
 
 ---
@@ -385,6 +388,76 @@ Each planet owns an `EcologyProfile` defining passive creatures, predators, poll
 - Planetary hazards remain active during boss encounters and are part of the mechanics rather than background decoration.
 - Boss loot tier scales with planet danger and progression era.
 - Boss Relic Cores remain guaranteed on first kill and feed the late-game research gates documented in Section 4.6.
+
+---
+
+## 4.8 Automated Defense, Route Planning & Jump Travel
+
+### Base Defense Turret Network
+
+Crusader factories require automated defenses that integrate with production and logistics rather than relying on manually spawned ammunition.
+
+| Defense | Battlefield Role | Ammunition / Supply |
+|---------|------------------|---------------------|
+| **Light Gun Turret** | Fast tracking against Ghouls, wildlife, and light infantry | Box magazines and standard cartridges |
+| **Heavy Ballistic Turret** | Armored creatures, vehicles, and medium flyers | Armor-piercing belts and high-caliber magazines |
+| **Flamethrower Turret** | Close-range swarms, burrowers, and area denial | Pumped liquid fuel or pressurized flame canisters |
+| **Mortar Turret** | Indirect fire over walls and terrain | Explosive, smoke, illumination, and specialized mortar shells |
+| **Giant Shell Turret** | Bosses, siege creatures, capital targets, and fortified positions | Factory-built heavy shells delivered individually |
+| **Anti-Air Turret** | Griffins, Rocs, drones, missiles, and atmospheric attackers | Proximity, fragmentation, guided, or planet-specific anti-air rounds |
+| **Energy / Relic Turret** | Hazard-resistant elites and late-game threats | Charged cells, exotic capacitors, or researched relic ammunition |
+
+#### Automated Ammunition Production
+
+- Ammunition chains include casings, propellant, projectile cores, primers, magazines, shells, fuel, guidance components, and optional special payloads.
+- Assemblers, chemical plants, foundries, and explosives facilities produce ammunition continuously.
+- Provider chests, requester chests, belts, chutes, item pipes, drones, and vehicle docks replenish turret buffers automatically.
+- Turrets expose minimum stock, reserve stock, accepted ammo, priority, target class, firing arc, and conserve-ammo settings.
+- Empty turrets publish logistics requests and clear warnings in the production statistics UI.
+- Damaged or disconnected supply lines create visible defensive weak points.
+
+#### Planet-Specific Ammunition
+
+- Cryogenic rounds slow heat-adapted volcanic creatures.
+- Corrosion-sealed ammunition survives acid-rain worlds.
+- Vacuum-rated propellant operates reliably on moons and asteroids.
+- Incendiary and radiant rounds are effective against Ghouls and corrupted Crusaders.
+- High-pressure naval shells are designed for Leviathan and deep-ocean encounters.
+- Petrification-resistant mirror or flash ammunition can interrupt Basilisk-class gaze mechanics.
+- Specialized ammunition requires research and local resources but never invalidates standard ammunition entirely.
+
+### Grid Route Recorder & Energy Calculator
+
+Grid ships can record, calculate, validate, and automate repeatable routes.
+
+1. **Manual Route Calculation**
+   - Select `Calculate Route To` and choose a discovered planet, moon, station, base, asteroid field, or waypoint.
+   - The system reports total distance, estimated travel time, gravity wells, atmosphere segments, required thrust, expected power/fuel use, and reserve margin.
+   - Calculation uses current ship mass, cargo contents, batteries, fuel, hydrogen, reactor output, engine efficiency, damage state, and selected speed profile.
+   - Clear warnings explain whether the current ship can complete the route and what resource is missing.
+
+2. **Recorded Routes**
+   - A piloted journey can be recorded as waypoints, approach vectors, safe altitudes, docking actions, and speed limits.
+   - Recorded paths can connect planets, stations, mining sites, and cargo docks.
+   - Routes are editable, reversible, nameable, and visible on the star map.
+
+3. **Grid Autopilot**
+   - Enabling Autopilot lets a grid follow a validated route, manage cruise thrust, reserve braking power, avoid terrain, and perform configured docking approaches.
+   - Autopilot pauses and alerts the player if mass, damage, power, fuel, territory, weather, or route obstruction makes the plan unsafe.
+   - Cargo schedules can trigger loading, unloading, charging, refueling, and return journeys.
+   - Rogue Crusader territory and hostile encounters can cause avoidance, retreat, escort requests, or player intervention.
+
+### Coordinate Jump Drive
+
+A late-game **Jump Drive** provides charged, coordinate-based faster-than-light travel without replacing normal engines or route planning.
+
+- The player chooses a known destination, beacon, or safe coordinate and sees range, charge cost, mass penalty, cooldown, and arrival error before committing.
+- Maximum range decreases as ship mass and cargo increase.
+- The drive requires a large stored-energy charge and cannot operate while critically damaged, obstructed, inside prohibited gravity depths, or without a safe arrival volume.
+- Multiple drives can combine range or reduce charge time according to research and grid configuration.
+- Blind jumps carry larger arrival error and are blocked when collision safety cannot find a valid destination.
+- Jump calculations include territorial warnings, stellar hazards, atmosphere restrictions, and minimum reserve power after arrival.
+- Autopilot can use approved jump legs inside recorded interplanetary routes.
 
 ---
 
@@ -695,10 +768,14 @@ Statuses are evidence-based and move forward only after code/content review and 
     - 15 material finishes: futuristic, metallic, rusty, industrial, carbon, chrome, matte, glossy, etc.
     - Finish is cosmetic only and preserved on save.
 
-18. **Grid Weapons**
-    - Small turret block for rovers/ships.
-    - Missile launcher block.
-    - Railgun block (late-tier).
+18. **Grid Weapons & Automated Turret Defense**
+    - Light gun, heavy ballistic, flamethrower, mortar, giant-shell, anti-air, missile, and late-tier energy/relic turret blocks.
+    - Small and large grid variants where mass, recoil, ammunition, and power requirements allow.
+    - Target-class priorities for mythical creatures, flyers, Ghouls, corrupted Crusaders, vehicles, missiles, and bosses.
+    - Factory ammunition chains for cartridges, magazines, propellant, explosive shells, flame fuel, guidance parts, and special planetary ammunition.
+    - Provider/requester logistics, belts, item pipes, drones, and docks automate turret replenishment.
+    - Turret UI exposes reserve stock, accepted ammunition, firing arc, engagement range, priority, and conserve-ammo rules.
+    - Missile launcher and railgun remain high-tier grid weapon options.
 
 19. **Grid Building Improvements**
     - **Sloped blocks** for aerodynamic ships and rovers.
@@ -813,6 +890,13 @@ Statuses are evidence-based and move forward only after code/content review and 
      - Player bases and landing pads.
    - Click a body to set navigation target.
    - Optional trajectory trails for all orbiting bodies.
+
+8. **Grid Route Recorder, Calculator & Autopilot**
+   - Manually calculate distance, travel time, required thrust, power/fuel cost, and reserve margin to a selected body or waypoint.
+   - Uses live ship mass, cargo, batteries, fuel, hydrogen, generation, efficiency, and damage state.
+   - Record piloted paths between planets, stations, bases, mines, and docks.
+   - Autopilot follows validated routes, avoids hazards, manages braking reserves, and performs configured cargo/charging/refueling stops.
+   - Route safety reacts to weather, gravity, territory, pollution signatures, hostile encounters, and changed ship contents.
 
 #### Improved Features
 
@@ -1185,7 +1269,14 @@ Statuses are evidence-based and move forward only after code/content review and 
     - Experimental travel to distant star systems.
     - Endgame expansion hook.
 
-18. **Planetary Forge / World Builder**
+18. **Coordinate Jump Drive**
+    - Charged faster-than-light grid block for known beacons, destinations, and validated safe coordinates.
+    - Range and energy cost scale with grid mass, cargo, installed drives, damage, gravity depth, and desired accuracy.
+    - Destination preview reports charge, cooldown, arrival error, obstruction, territorial risk, and reserve power.
+    - Can be included as approved legs in recorded Autopilot routes.
+    - Safety prevents jumps into occupied volumes, prohibited gravity depths, or destinations without a valid arrival corridor.
+
+19. **Planetary Forge / World Builder**
     - Late-megastructure that lets the player **craft a new planet or moon**.
     - Costs an immense amount of resources and sustained gigawatts of power.
     - The player chooses the new body’s type (barren, ice, volcanic, etc.) and a **limited, non-overpowered resource signature**.
@@ -1341,7 +1432,9 @@ This rule applies to:
     - Per-block overrides are optional and documented.
 
 12. **Top-Left World Inspection Overlay**
-    - Shows the name and type of the block, machine, item, creature, vehicle part, or world object under the crosshair.
+    - Shows the name and type of the block, machine, item, creature, vehicle part, voxel material, or world object under the crosshair.
+    - Terrain inspection reads the active voxel world and displays the actual material, hardness, and required mining tier instead of the world bootstrap object name.
+    - Hovering inventory items displays name, category, stack size, total mass, and tool durability.
     - Displays relevant integrity, power, operating state, inventory throughput, conveyor/chute occupancy, distance, faction, hazard, or creature disposition.
     - Uses animated fade/slide transitions and never captures pointer input.
     - Future definition interfaces can provide richer custom rows without coupling the overlay to every system.
@@ -1430,8 +1523,9 @@ For each version, these are the high-level Unity tasks you will perform manually
 3. Add biofuel chain farming machines.
 4. Create vehicle bay prefab.
 5. Create personal weapon prefabs (sword, pistol, rifle, shotgun, grenade launcher).
-6. Create grid weapon prefabs (turret, missile launcher, railgun).
-7. Create bomb / explosive charge / remote-detonated charge prefabs.
+6. Create grid/base defense prefabs: light gun, heavy ballistic, flamethrower, mortar, giant-shell, anti-air, missile launcher, and railgun.
+7. Author ammunition items, magazines, shell/fuel recipes, special planetary ammunition, turret buffers, and automated requester/provider replenishment routes.
+8. Create bomb / explosive charge / remote-detonated charge prefabs.
 8. Create shape variant prefabs: slope, half block, half slope, corner, inverted slope for light and heavy armor.
 9. Implement the shape variant wheel UI, reusing the build hammer wheel.
 10. Improve small-grid snap and maritime grid buoyancy blocks.
@@ -1459,8 +1553,10 @@ For each version, these are the high-level Unity tasks you will perform manually
 6. Add camera block that feeds render texture to screens.
 7. Add trajectory camera rig and predicted path renderer.
 8. Build star map UI with orbit lines and body labels.
-9. Configure input bindings for trajectory toggle and star map.
-10. **Run setup wizard step (non-destructive)**
+9. Build route recording, waypoint editing, destination calculation, ship capability report, and Autopilot controls.
+10. Add cargo-stop actions for docking, loading, unloading, charging, refueling, waiting, and return trips.
+11. Configure input bindings for trajectory toggle, star map, route calculation, and Autopilot override.
+12. **Run setup wizard step (non-destructive)**
     - Step 19 for trains, drones, screens, and trajectory blocks.
 
 ### For 4.9.0 (Living Worlds)
@@ -1517,8 +1613,9 @@ For each version, these are the high-level Unity tasks you will perform manually
 12. Build cockpit heat indicator UI.
 13. Build player heat UI with green/yellow/red indicator.
 14. Implement atmospheric entry heat simulation.
-15. Build empire dashboard UI.
-16. **Run setup wizard step (non-destructive)**
+15. Build coordinate Jump Drive prefab, charge/range calculator, safe-arrival validation, destination UI, and Autopilot route integration.
+16. Build empire dashboard UI.
+17. **Run setup wizard step (non-destructive)**
     - Step 22 for planetary bases, exo-alloys, nuclear, radiation, and heat systems.
 
 ### For 5.2.0 (Architect Era)
@@ -1546,6 +1643,44 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.5.0-dev] Defense & Autopilot Roadmap, Hammer Wheel & Inspection Upgrade
+
+**Type:** MINOR — new Hammer wheel UI system plus expanded inspection and construction workflows
+
+**Roadmap Added:**
+- Light gun, heavy ballistic, flamethrower, mortar, giant-shell, anti-air, missile, and energy/relic defensive turrets.
+- Factory ammunition production for casings, propellant, projectiles, magazines, shells, flame fuel, guidance components, and special payloads.
+- Automated ammunition replenishment through provider/requester chests, belts, pipes, drones, and docks.
+- Special ammunition for cryogenic, volcanic, acid-rain, vacuum, Ghoul, naval-boss, and Basilisk-class threats.
+- Manual grid route calculation reporting distance, time, thrust, power/fuel requirement, and reserve margin from live ship contents and condition.
+- Recorded interplanetary routes, cargo-stop actions, route editing, and full Grid Autopilot behavior.
+- Rogue-territory avoidance and intervention rules for automated ships.
+- Coordinate Jump Drive with charge, mass-scaled range, cooldown, arrival error, safe-volume checks, gravity restrictions, and Autopilot route legs.
+- Paginated/scrollable Building Hammer wheel requirements for future Orbital Station construction families.
+
+**Runtime Added / Improved:**
+- Building Hammer wheel rebuilt as an eight-segment paginated donut matching the conveyor wheel visual language.
+- Mouse-wheel page scrolling, future-family page capacity, selected/hovered segment feedback, cost colors, center Upgrade Mode, and subtle parallax.
+- Escape reliably closes the wheel and exits the selected Hammer build family before the Pause menu can open.
+- Tiered construction now places through the standard Build action (`RMB` by default) instead of Mine (`LMB`).
+- Player interaction routing yields RMB exclusively to active Hammer placement.
+- Tiered building materials now use generated premium wood grain, stone aggregate, brushed iron, and plated steel textures with tier-specific metallic/smoothness values.
+- Existing custom prefab materials remain untouched; only missing or known setup-generated flat materials are upgraded.
+- World Inspection now resolves actual active-world voxel material, hardness, and mining tier instead of showing the world bootstrap object name.
+- Hovering interactive inventory slots displays item name, category, stack capacity, total mass, and durability.
+
+**Changed:**
+- Step 5 material creation is idempotent and preserves existing materials.
+- Hammer page architecture reserves capacity for research-unlocked Orbital Station families.
+- Updated runtime and roadmap version to `5.5.0-dev` under Semantic Versioning because the Hammer wheel is a new UI/build-selection system.
+
+**Roadmap Status:**
+- Hammer wheel, RMB placement, Escape exit, premium tier materials, and inspection upgrades: **WORKING ON** — awaiting Unity validation.
+- Turret automation, Grid Autopilot, route calculator, and Jump Drive: planned for their documented progression eras.
+- Step 5 prerequisite repair remains **WORKING ON** until setup validation is reported.
+
+---
 
 ### [5.4.0-dev] Pollution & Planetary Ecology Roadmap + World Inspection Overlay
 

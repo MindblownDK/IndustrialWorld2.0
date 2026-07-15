@@ -3,7 +3,7 @@
 // Tiered construction build system:
 //   * Holding a "BuildToken" item (one per family) shows a Wood-tier ghost preview.
 //   * Ghost snaps to the nearest BuildSocket within range; falls back to grid snap.
-//   * LMB places at Wood tier, consuming definition.placeCost from the player inventory.
+//   * RMB places at Wood tier, consuming definition.placeCost from the player inventory.
 //   * Toggle grid-vs-free with the BuildToggleGrid keybind (default G).
 //   * The Hammer tool (separate) handles upgrade / rotate / destroy.
 
@@ -118,8 +118,8 @@ namespace VoxelEngine.Building.Tiered
             _ghost.transform.SetPositionAndRotation(_ghostPos, _ghostRot);
             ApplyGhostMaterial(_ghost, _ghostValid ? _matValid : _matInvalid);
 
-            // Place on LMB.
-            if (_ghostValid && GameSettings.WasPressed(InputAction.Mine))
+            // Place on the standard build action (RMB by default).
+            if (_ghostValid && GameSettings.WasPressed(InputAction.Build))
             {
                 if (CanAfford(def.placeCost))
                 {

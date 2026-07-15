@@ -4,8 +4,10 @@ using UnityEngine;
 using UnityEngine.UIElements;
 using VoxelEngine.Building;
 using VoxelEngine.Building.Tiered;
+using VoxelEngine.Core;
 using VoxelEngine.GridSystem;
 using VoxelEngine.Items;
+using VoxelEngine.Materials;
 using VoxelEngine.Power;
 using VoxelEngine.Simulation;
 using T = VoxelEngine.UI.UITheme;
@@ -32,6 +34,7 @@ namespace VoxelEngine.UI
         private static Label _healthLabel;
         private static float _nextProbe;
         private static string _lastSignature;
+        private static ItemStack _hoveredItem;
         private static bool _visible;
 
         private struct TargetInfo
@@ -158,9 +161,37 @@ namespace VoxelEngine.UI
             healthTrack.Add(_healthFill);
         }
 
+        public static void BindInventoryItem(VisualElement element, ItemStack stack)
+        {
+            if (element == null || stack == null || stack.IsEmpty || stack.item == null) return;
+            var snapshot = stack.Clone();
+            void Activate()
+            {
+                _hoveredItem = snapshot;
+                ShowInventoryItem(snapshot);
+            }
+            element.RegisterCallback<PointerEnterEvent>(_ => Activate());
+            element.RegisterCallback<PointerMoveEvent>(_ => Activate());
+            element.RegisterCallback<PointerLeaveEvent>(_ =>
+            {
+                if (_hoveredItem == snapshot) _hoveredItem = null;
+                Hide();
+            });
+        }
+
+        public static void ClearInventoryHover()
+        {
+            _hoveredItem = null;
+        }
+
         public static void Tick()
         {
             if (_card == null || _card.parent == null) return;
+            if (_hoveredItem != null && !_hoveredItem.IsEmpty)
+            {
+                ShowInventoryItem(_hoveredItem);
+                return;
+            }
             if (UIState.IsBlocking)
             {
                 Hide();
@@ -279,12 +310,51 @@ namespace VoxelEngine.UI
                 }
             }
 
+            var world = ActiveWorld.Current;
+            if (world != null)
+            {
+                Vector3 samplePoint = hit.point - hit.normal.normalized * 0.15f;
+                Vector3Int voxelPosition = world.WorldToVoxel(samplePoint);
+                var voxel = world.GetVoxelWorld(voxelPosition);
+                if (voxel.material != (byte)MaterialId.Air)
+                {
+                    var definition = world.MaterialRegistry?.Get(voxel.material);
+                    var materialId = (MaterialId)voxel.material;
+                    info.title = definition != null && !string.IsNullOrWhiteSpace(definition.displayName)
+                        ? definition.displayName
+                        : materialId.ToString();
+                    info.detail = "VOXEL MATERIAL";
+                    info.status = definition != null
+                        ? $"Hardness: {definition.hardness:0.0} · Mining tier: {definition.miningTier}"
+                        : $"Material ID: {(byte)materialId}";
+                    return true;
+                }
+            }
+
             string fallback = hit.collider.transform.root.name;
             if (string.IsNullOrWhiteSpace(fallback)) return false;
             info.title = fallback.Replace("(Clone)", string.Empty).Trim();
             info.detail = "WORLD OBJECT";
             info.status = $"Distance: {hit.distance:0.0} m";
             return true;
+        }
+
+        private static void ShowInventoryItem(ItemStack stack)
+        {
+            if (stack == null || stack.IsEmpty || stack.item == null) return;
+            string detail = string.IsNullOrWhiteSpace(stack.item.category)
+                ? "INVENTORY ITEM"
+                : stack.item.category.ToUpperInvariant();
+            string status = $"Stack: {stack.count}/{Mathf.Max(1, stack.item.maxStack)} · Mass: {stack.item.massPerUnit * stack.count:0.##}";
+            if (stack.item is ToolItem tool && tool.maxDurability > 0)
+                status += $" · Durability: {Mathf.Max(0, stack.durability)}/{tool.maxDurability}";
+            Show(new TargetInfo
+            {
+                title = stack.item.displayName,
+                detail = detail,
+                status = status,
+                showHealth = false
+            });
         }
 
         private static void ApplyPlacedHealth(PlacedBlock placed, ref TargetInfo info)
