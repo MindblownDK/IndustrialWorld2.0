@@ -149,6 +149,12 @@ namespace VoxelEngine.Persistence
                     entry.hasExplicitConveyorShape = true;
                     entry.conveyorShape = (int)conveyor.shape;
                 }
+                var chute = pb.GetComponentInChildren<VoxelEngine.Simulation.ConveyorChute>(true);
+                if (chute != null && chute.shape != VoxelEngine.Simulation.ChuteShape.Straight)
+                {
+                    entry.hasExplicitChuteShape = true;
+                    entry.chuteShape = (int)chute.shape;
+                }
                 save.placedBlocks.Add(entry);
             }
         }
@@ -426,6 +432,12 @@ namespace VoxelEngine.Persistence
                 {
                     conveyor.SetBuildShape((VoxelEngine.Simulation.ConveyorShape)sb.conveyorShape);
                 }
+                var chute = go.GetComponentInChildren<VoxelEngine.Simulation.ConveyorChute>(true);
+                if (chute != null && sb.hasExplicitChuteShape
+                    && System.Enum.IsDefined(typeof(VoxelEngine.Simulation.ChuteShape), sb.chuteShape))
+                {
+                    chute.SetBuildShape((VoxelEngine.Simulation.ChuteShape)sb.chuteShape);
+                }
                 var windPart = go.GetComponent<VoxelEngine.Power.Wind.WindTurbinePart>();
                 if (windPart != null && sb.windCondition > 0f)
                     windPart.condition = Mathf.Clamp(sb.windCondition, 0f, 100f);
@@ -634,6 +646,8 @@ namespace VoxelEngine.Persistence
             // hasExplicitConveyorShape false and rebuild normal straight/corner topology.
             public bool hasExplicitConveyorShape;
             public int conveyorShape;
+            public bool hasExplicitChuteShape;
+            public int chuteShape;
         }
         [Serializable] private class SavedPlacedTiered
         {

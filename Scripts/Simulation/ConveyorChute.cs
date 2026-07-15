@@ -47,7 +47,9 @@ namespace VoxelEngine.Simulation
         private readonly List<ChuteItem> _items = new(12);
         private readonly List<Transform> _itemVisuals = new(12);
         private readonly List<bool> _visualActive = new(12);
+        private readonly List<GameObject> _authoredVisuals = new(12);
         private MaterialPropertyBlock _itemProperties;
+        private GameObject _runtimeShapeRoot;
         private float _scanTimer;
         private float _pullTimer;
 
@@ -56,7 +58,16 @@ namespace VoxelEngine.Simulation
         private void Awake()
         {
             _itemProperties = new MaterialPropertyBlock();
+            CacheAuthoredVisuals();
             EnsureVisuals();
+        }
+
+        internal void SetBuildShape(ChuteShape buildShape)
+        {
+            if (shape == buildShape) return;
+            shape = buildShape;
+            EnsureVisuals();
+            ScanConnections();
         }
 
         private void OnEnable()
@@ -323,13 +334,66 @@ namespace VoxelEngine.Simulation
             return null;
         }
 
+        private void CacheAuthoredVisuals()
+        {
+            _authoredVisuals.Clear();
+            var children = GetComponentsInChildren<Transform>(true);
+            foreach (var child in children)
+            {
+                if (child == null || child == transform) continue;
+                if (child.name.StartsWith("Generated_", System.StringComparison.Ordinal))
+                    _authoredVisuals.Add(child.gameObject);
+            }
+        }
+
+        private void SetAuthoredVisualsActive(bool active)
+        {
+            for (int i = 0; i < _authoredVisuals.Count; i++)
+            {
+                var visual = _authoredVisuals[i];
+                if (visual != null) visual.SetActive(active);
+            }
+        }
+
         private void EnsureVisuals()
         {
-            if (transform.Find("Generated_SquareRim") != null) return;
-            if (transform.Find("RuntimeFallbackVisuals") != null) return;
+            if (_runtimeShapeRoot != null)
+            {
+                Destroy(_runtimeShapeRoot);
+                _runtimeShapeRoot = null;
+            }
+
+            if (shape == ChuteShape.Straight)
+            {
+                SetAuthoredVisualsActive(true);
+                if (_authoredVisuals.Count > 0)
+                {
+                    var indicatorTransform = transform.Find("Generated_DownArrow");
+                    var indicatorRenderer = indicatorTransform != null ? indicatorTransform.GetComponent<Renderer>() : null;
+                    if (indicatorRenderer != null)
+                        GetComponent<FactoryStatusIndicator>()?.SetRuntimeRenderer(indicatorRenderer);
+                    return;
+                }
+                BuildFallbackVisuals();
+                return;
+            }
+
+            SetAuthoredVisualsActive(false);
+            BuildRuntimeShapeVisuals();
+        }
+
+        private void BuildFallbackVisuals()
+        {
+            var existing = transform.Find("RuntimeFallbackVisuals");
+            if (existing != null)
+            {
+                existing.gameObject.SetActive(true);
+                return;
+            }
 
             var visualRoot = new GameObject("RuntimeFallbackVisuals");
             visualRoot.transform.SetParent(transform, false);
+            _authoredVisuals.Add(visualRoot);
 
             var body = GameObject.CreatePrimitive(PrimitiveType.Cube);
             body.name = "ChuteBody";
@@ -344,6 +408,87 @@ namespace VoxelEngine.Simulation
             channel.transform.localScale = new Vector3(0.45f, 0.95f, 0.45f);
             Destroy(channel.GetComponent<Collider>());
             channel.GetComponent<MeshRenderer>().sharedMaterial = GetFallbackChannelMaterial();
+        }
+
+        private void BuildRuntimeShapeVisuals()
+        {
+            _runtimeShapeRoot = new GameObject(shape == ChuteShape.Corner
+                ? "RuntimeCornerChute"
+                : "RuntimeSpiralChute");
+            _runtimeShapeRoot.transform.SetParent(transform, false);
+
+            int segmentCount = shape == ChuteShape.Spiral ? 22 : 12;
+            Vector3 previous = GetLocalPathPosition(0f);
+            for (int i = 1; i <= segmentCount; i++)
+            {
+                float t = i / (float)segmentCount;
+                Vector3 current = GetLocalPathPosition(t);
+                CreateRuntimeChuteSegment(previous, current, i == segmentCount / 2);
+                previous = current;
+            }
+
+            CreateRuntimeCollar("TopCollar", GetLocalPathPosition(0f));
+            CreateRuntimeCollar("BottomCollar", GetLocalPathPosition(1f));
+        }
+
+        private void CreateRuntimeChuteSegment(Vector3 start, Vector3 end, bool statusSegment)
+        {
+            Vector3 tangent = end - start;
+            float length = tangent.magnitude;
+            if (length < 0.001f) return;
+            Vector3 direction = tangent / length;
+            Vector3 center = (start + end) * 0.5f;
+            Quaternion rotation = Quaternion.FromToRotation(Vector3.forward, direction);
+
+            var channel = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            channel.name = "ChuteChannelSegment";
+            channel.transform.SetParent(_runtimeShapeRoot.transform, false);
+            channel.transform.localPosition = center;
+            channel.transform.localRotation = rotation;
+            channel.transform.localScale = new Vector3(0.56f, 0.07f, length + 0.025f);
+            Destroy(channel.GetComponent<Collider>());
+            channel.GetComponent<MeshRenderer>().sharedMaterial = GetFallbackChannelMaterial();
+
+            Vector3 side = Vector3.Cross(direction, Vector3.up);
+            if (side.sqrMagnitude < 0.01f) side = Vector3.right;
+            side.Normalize();
+            CreateRuntimeRail(center + side * 0.31f, rotation, length);
+            CreateRuntimeRail(center - side * 0.31f, rotation, length);
+
+            if (!statusSegment) return;
+            var status = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            status.name = "Runtime_ChuteStatusLine";
+            status.transform.SetParent(_runtimeShapeRoot.transform, false);
+            status.transform.localPosition = center + Vector3.up * 0.055f;
+            status.transform.localRotation = rotation;
+            status.transform.localScale = new Vector3(0.05f, 0.025f, length + 0.02f);
+            Destroy(status.GetComponent<Collider>());
+            var renderer = status.GetComponent<MeshRenderer>();
+            renderer.sharedMaterial = GetFallbackShellMaterial();
+            GetComponent<FactoryStatusIndicator>()?.SetRuntimeRenderer(renderer);
+        }
+
+        private void CreateRuntimeRail(Vector3 position, Quaternion rotation, float length)
+        {
+            var rail = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            rail.name = "ChuteGuardRail";
+            rail.transform.SetParent(_runtimeShapeRoot.transform, false);
+            rail.transform.localPosition = position;
+            rail.transform.localRotation = rotation;
+            rail.transform.localScale = new Vector3(0.055f, 0.12f, length + 0.03f);
+            Destroy(rail.GetComponent<Collider>());
+            rail.GetComponent<MeshRenderer>().sharedMaterial = GetFallbackShellMaterial();
+        }
+
+        private void CreateRuntimeCollar(string objectName, Vector3 position)
+        {
+            var collar = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            collar.name = objectName;
+            collar.transform.SetParent(_runtimeShapeRoot.transform, false);
+            collar.transform.localPosition = position;
+            collar.transform.localScale = new Vector3(0.38f, 0.045f, 0.38f);
+            Destroy(collar.GetComponent<Collider>());
+            collar.GetComponent<MeshRenderer>().sharedMaterial = GetFallbackShellMaterial();
         }
 
         private void UpdateItemVisuals()
@@ -375,30 +520,34 @@ namespace VoxelEngine.Simulation
 
         private Vector3 GetWorldPosition(float progress)
         {
+            return transform.TransformPoint(GetLocalPathPosition(progress));
+        }
+
+        private Vector3 GetLocalPathPosition(float progress)
+        {
             float t = Mathf.Clamp01(progress);
-            Vector3 localPosition;
             switch (shape)
             {
                 case ChuteShape.Corner:
                     {
-                        Vector3 start = new(0f, 0.85f, -0.3f);
-                        Vector3 control = new(0f, 0.3f, 0f);
-                        Vector3 end = new(0.3f, -0.2f, 0f);
+                        Vector3 start = new(0f, 0.85f, 0f);
+                        Vector3 control = new(0.48f, 0.30f, 0.36f);
+                        Vector3 end = new(0f, -0.2f, 0f);
                         float inverse = 1f - t;
-                        localPosition = inverse * inverse * start + 2f * inverse * t * control + t * t * end;
-                        break;
+                        return inverse * inverse * start + 2f * inverse * t * control + t * t * end;
                     }
                 case ChuteShape.Spiral:
                     {
-                        float angle = t * Mathf.PI * 3f;
-                        localPosition = new Vector3(Mathf.Cos(angle) * 0.22f, Mathf.Lerp(0.85f, -0.2f, t), Mathf.Sin(angle) * 0.22f);
-                        break;
+                        float angle = t * Mathf.PI * 4f;
+                        float radius = Mathf.Sin(t * Mathf.PI) * 0.28f;
+                        return new Vector3(
+                            Mathf.Cos(angle) * radius,
+                            Mathf.Lerp(0.85f, -0.2f, t),
+                            Mathf.Sin(angle) * radius);
                     }
                 default:
-                    localPosition = new Vector3(0f, Mathf.Lerp(0.85f, -0.2f, t), 0f);
-                    break;
+                    return new Vector3(0f, Mathf.Lerp(0.85f, -0.2f, t), 0f);
             }
-            return transform.TransformPoint(localPosition);
         }
 
         private Transform CreateItemVisual()

@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.3.2-dev`
-**Roadmap Version:** `5.3.2-dev`
-**Date:** 2026-07-14
-**Status:** Active Implementation — Precision Vertical Alignment & Wheel Hover Feedback
+**Current Version:** `5.4.0-dev`
+**Roadmap Version:** `5.4.0-dev`
+**Date:** 2026-07-15
+**Status:** Active Implementation — Crusader Mythic Expansion & Chute Shape Wheel
 
 ---
 
@@ -29,7 +29,8 @@ The design goal is a seamless blend of:
 - **Grid-based engineering** — assemble ships, rovers, maritime vessels, and airborne platforms block by block with deep shape customization.
 - **First-person factory logistics** — conveyors, chutes, assemblers, power grids, and resource chains.
 - **Survival exploration** — hostile weather, ruins of a dead civilization, hidden blueprints, dangerous fauna.
-- **Combat & defense** — personal weapons, grid weapons, bombs, static missile batteries, enemy encounters.
+- **Crusader player identity** — every player belongs to an industrial Crusader Order, advancing from stranded initiate to armored stellar architect through heraldry, relics, armor, and engineering.
+- **Combat & defense** — personal weapons, grid weapons, bombs, static missile batteries, and battles against mythical beasts.
 - **Interplanetary factory expansion** — every planet and asteroid field holds unique resources, so space is a natural next step, not a distant finish line.
 - **Atmospheric grandeur** — every planet has a signature sky, and space feels vast, silent, and real.
 
@@ -81,6 +82,10 @@ The design goal is a seamless blend of:
 | Fall damage | ❌ Missing | Player takes no damage from falls |
 | Painting / finishes | ❌ Missing | No block painting or material finishes |
 | Armor crafting/upgrades | 🟡 Early | Needs armor station, jetpack, hazmat, heat/oxygen upgrades |
+| Crusader player identity | ❌ Missing | Player faction, heraldry, armor presentation, and Order progression need implementation |
+| Passive livestock | ❌ Missing | Breedable cows, sheep, and pigs need husbandry, food, and population systems |
+| Mythical enemies / bosses | ❌ Missing | Griffin, Roc, Manticore, Karkadann, Ghouls, Ifrit Djinn, Leviathan, and Basilisk-class encounters are planned |
+| Boss relic loot gates | ❌ Missing | Higher-tier bosses must award relics required by selected late-game research and megastructures |
 | Enemies / hazards | ❌ Missing | World feels safe, low tension |
 | Narrative / context | ❌ Missing | Player lacks long-term purpose |
 | Multiplayer | ❌ Missing | Future consideration |
@@ -173,6 +178,137 @@ Every body in the star system has a unique industrial identity.
 
 ---
 
+## 4.6 Crusader Order, Living Fauna & Mythical Threats
+
+### Player Identity — The Crusader Order
+
+The player characters are **Crusaders**: armored members of an industrial Order tasked with restoring civilization, reclaiming lost worlds, defending settlements, and constructing humanity’s largest machines.
+
+- Character silhouettes progress from rugged field armor to sealed stellar plate.
+- Helmets, shields, tabards, banners, armor finishes, and heraldic colors communicate Order identity.
+- Engineering remains the primary power fantasy; Crusader equipment combines forged armor, advanced machinery, relic technology, and optional holy abilities.
+- Order ranks provide narrative milestones without replacing the research tree.
+- Co-operative players may use different heraldry while remaining members of the same Crusader Order.
+
+### Passive Livestock
+
+Temperate worlds support peaceful, breedable livestock:
+
+| Animal | Core Products | Husbandry Role |
+|--------|---------------|----------------|
+| **Cow** | Meat, hide, optional milk | High food yield, leather/armor material, slower breeding |
+| **Sheep** | Meat, wool | Textile production, insulation, banners, moderate breeding |
+| **Pig** | Meat | Efficient food production, fast breeding, high feed consumption |
+
+Livestock rules:
+
+- Animals require food, water, shelter, and enough enclosure space.
+- Compatible adults can breed after their needs remain satisfied for a configurable period.
+- Population limits prevent uncontrolled simulation growth.
+- Humane harvesting and automated husbandry become optional mid-game factory systems.
+- Weather, temperature, radiation, predators, and starvation can affect health and reproduction.
+
+### Mythical Enemy Roster
+
+#### Aerial Harassers & Skirmishers
+
+1. **Griffin / Gryphon**
+   - Heraldic lion-eagle predator.
+   - Dive-bombs Crusaders, disrupts shield formations, grabs isolated targets, and attempts dangerous drop attacks.
+   - Drops feathers, talons, hide, and a rare Griffin Heart used in aerial equipment.
+
+2. **Roc / Ruc**
+   - Colossal bird of prey from Middle Eastern folklore.
+   - Mini-boss and environmental threat capable of carrying massive prey.
+   - Wing attacks create localized dust or sandstorms, reduce visibility, and push Crusaders toward cliffs or hazards.
+   - Drops Giant Pinions and a Roc Storm Core used by advanced flight and weather-control research.
+
+#### Frontline Brutes & Heavy Hitters
+
+3. **Manticore**
+   - Persian lion-bodied predator with a humanoid face and venomous scorpion tail.
+   - Fires mid-range tail spikes, attacks aggressively, and applies poison that bypasses part of heavy armor protection.
+   - Drops venom glands, tail spikes, and armored hide for toxin-resistant equipment.
+
+4. **Karkadann**
+   - Massive armored horned beast from Arabic and Persian tradition.
+   - Performs committed straight-line charges that trample or skewer targets.
+   - Heavy frontal armor forces flanking, terrain traps, shield timing, or coordinated attacks.
+   - Drops horn fragments and plated hide for high-impact armor and heavy machinery.
+
+#### Ambushers & Spellcasters
+
+5. **Ghouls / Ghul**
+   - Fast desert and ruin-dwelling shape-shifters associated with cemeteries and the dead.
+   - Burrow from sand, rubble, or ruined floors; attack from behind and swarm separated Crusaders.
+   - Can feed on fallen creatures to regenerate unless interrupted.
+   - Drops grave ash, corrupted bone, and rare restoration reagents.
+
+6. **Ifrit Djinn**
+   - High-tier spirit formed from smokeless fire.
+   - Teleports between tactical positions, throws fireballs, and summons fire walls that separate a Crusader formation.
+   - Heats heavy steel armor, creating escalating burn damage unless players cool, disengage, or use heat protection.
+   - Drops an Ifrit Ember required for advanced thermal, fusion, and stellar research.
+
+#### Epic Bosses
+
+7. **Leviathan**
+   - Biblical sea serpent and coastal/orbital-ocean boss.
+   - Attacks ships and maritime platforms with crushing coils, body strikes, and boiling-water breath.
+   - Encounter requires vessel repair, turret management, movement, and protection of critical ship systems.
+   - Drops Leviathan Scales, a Leviathan Heart, and a unique Oceanic Relic Core.
+
+8. **Cockatrice / Basilisk**
+   - Heraldic serpent-tailed terror with petrifying gaze and corrosive attacks.
+   - Players must look away, raise a shield, break line of sight, or interrupt the gaze during telegraphed phases.
+   - Leaves persistent toxic and corrosive trails that reshape safe movement zones.
+   - Drops a Petrified Eye, corrosive gland, and a unique Gaze Relic Core.
+
+### Tiered Loot & Required Boss Progression
+
+- Normal mythical enemies drop common creature materials and a small chance of specialized components.
+- Elite variants drop refined organs, plated hides, magical cores, and blueprint fragments.
+- Mini-bosses drop guaranteed named relic components.
+- Epic bosses drop unique **Boss Relic Cores** plus the highest-tier creature materials.
+- Higher-tier enemies always provide access to higher-tier loot tables; low-tier farming cannot replace boss progression.
+- Selected late-game research requires proof of victory rather than research packs alone.
+- The **Star Builder / Stellar Forge** and **Dyson Sphere** require multiple unique Boss Relic Cores before their final research nodes and construction stages can be completed.
+- Boss relic requirements are deterministic and clearly previewed in the research UI so progression never depends on an undisclosed random drop.
+
+### Dyson Sphere Megastructure
+
+The player can eventually construct a **Dyson Sphere around the system’s sun**, producing an immense amount of energy for interplanetary factories and stellar engineering.
+
+- Constructed in many orbital stages rather than as one instant recipe.
+- Requires autonomous solar collectors, structural frames, heat-resistant materials, orbital logistics, and sustained construction power.
+- Early stages operate as a partial solar swarm; later stages form a complete stellar power network.
+- Output scales with completed coverage and the star’s luminosity.
+- Energy is distributed through beam relays, orbital substations, or late-game transmission infrastructure.
+- Damage, alignment failure, and interrupted logistics can reduce output without deleting completed progress.
+- Final activation requires boss relic research, multi-world resources, and Architect-era technology.
+
+### Star Builder / Stellar Forge
+
+- A late Architect-era megastructure capable of creating or stabilizing a custom star.
+- Requires relic knowledge from multiple epic bosses, immense power, exotic matter, and a completed stellar safety research chain.
+- New stars must obey strict mass, luminosity, system-spacing, and resource-balance limits.
+- The system is additive and cannot erase an existing inhabited star system.
+
+### Orbital Station Building Family
+
+The Building Hammer gains a research-locked **Orbital Station** family with a clean, modular, futuristic habitat aesthetic:
+
+- Pressurized wall, floor, ceiling, and foundation panels.
+- Curved corridor and junction modules.
+- Reinforced windows and observation domes.
+- Airlocks, pressure doors, maintenance hatches, and docking frames.
+- Exterior armor, radiator, solar, cable, and utility attachment surfaces.
+- Pieces are airtight where appropriate and integrate with life support.
+- The family appears in the Hammer wheel only after **Orbital Construction** research is completed.
+- All blocks, recipes, research nodes, and prefab links are authored non-destructively through the Voxel Engine Setup workflow.
+
+---
+
 ## 5. Master Roadmap
 
 | Version | Theme | Scope | Manual Unity Work |
@@ -210,7 +346,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Area | Status | Repository Audit |
 |------|--------|------------------|
 | Conveyor belts | 🛠️ WORKING ON | Vertical geometry, item paths, and colliders now share the horizontal belt-surface height for precise Straight/Ramp transitions. Wheel hover now brightens the complete segment and animates its icon/label. Unity validation is pending. |
-| Conveyor chutes | 🛠️ WORKING ON | Conveyors now snap above or below an aimed chute face; chute-to-conveyor, vertical item-port, and chute-stack snapping remain supported. Corner and spiral authored variants remain. |
+| Conveyor chutes | 🛠️ WORKING ON | The shared Build Wheel now offers Straight, Corner, and Spiral modes for the existing chute item. Corner/spiral runtime channels, rails, collars, moving-item paths, status targeting, placement previews, and additive save restoration await Unity validation. |
 | Basic machines | 🟡 PARTIALLY COMPLETE | Electric Furnace, Crusher, and three Assembler tiers exist. Crusher and Assembler use the centralized simulation tick; shared UI and persistence still need completion. |
 | Storage blocks | 🟡 PARTIALLY COMPLETE | A basic chest and the wider storage system exist. The planned Wooden Crate → Iron Chest → Steel Chest → Provider/Requester progression is not complete. |
 | Power pole, wire, and substation | 🟡 PARTIALLY COMPLETE | Manual wiring, poles, substations, transformers, and high-voltage assets exist. Setup reruns still need full non-destructive balance preservation. |
@@ -219,7 +355,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Item entity system | 🟡 PARTIALLY COMPLETE | Dropped world items exist and conveyors render carried packets. A unified pooled physical-item entity lifecycle is not complete. |
 | Recipe registry refactor | 🟡 PARTIALLY COMPLETE | ScriptableObject crafting and machine recipes exist. Shaped/shapeless/smelting/machine unification and validation remain incomplete. |
 | Centralized simulation tick | 🟡 PARTIALLY COMPLETE | Crusher and Assembler register with `SimulationTickManager`; belts, chutes, and several older machines still run per-frame updates. |
-| Factory persistence | 🟡 PARTIALLY COMPLETE | Placed blocks and selected containers persist. Explicit Ramp/Vertical wheel selections now restore from additive save fields; belt/chute contents plus Crusher/Assembler buffers and progress remain outstanding. |
+| Factory persistence | 🟡 PARTIALLY COMPLETE | Explicit Ramp/Vertical conveyor modes and Corner/Spiral chute modes restore from additive save fields; belt/chute contents plus Crusher/Assembler buffers and progress remain outstanding. |
 | Step 5 tiered setup workflow | 🛠️ WORKING ON | Missing canonical Stone or Step 4 resource references are resolved by item ID and safely recreated when absent; existing wrong-type assets are preserved and reported. Unity validation is pending. |
 | Step 17 setup workflow | ✅ COMPLETED | The separate-variant generation pass was withdrawn before validation. Step 17 remains non-destructive and now documents the contextual conveyor wheel while preserving the three existing tier items and recipes. |
 
@@ -389,7 +525,12 @@ Statuses are evidence-based and move forward only after code/content review and 
 
 ### 6.3 Version 4.7.0 — Power, Vehicles & Combat
 
-**Goal:** Make vehicles and power feel like part of the factory, and give the player tools to survive a dangerous world.
+**Goal:** Make vehicles and power feel like part of the factory, establish the player as an armored Crusader of the industrial Order, and provide the tools needed to survive a dangerous world.
+
+**Crusader identity requirements:**
+- Crusader armor silhouette, sealed helmet, tabard/heraldry slots, Order banners, and rank presentation.
+- Heavy armor must feel protective without removing the need to dodge mythical brute attacks, poison, heat, petrification, or magic.
+- Armor Station upgrades visually and mechanically advance the Crusader from field knight to stellar knight.
 
 #### New Content
 
@@ -658,9 +799,11 @@ Statuses are evidence-based and move forward only after code/content review and 
    - Large, finite ore nodes.
    - Encourage outpost building.
 
-7. **Fauna / Flora**
+7. **Fauna / Flora & Livestock**
    - Passive creatures for atmosphere.
-   - Hostile creatures in deep biomes.
+   - Breedable cows, sheep, and pigs with food, water, shelter, health, reproduction, and population limits.
+   - Livestock supplies renewable meat plus hide, wool, and optional milk production chains.
+   - Hostile mythical creatures occupy deep biomes, ruins, deserts, mountains, coasts, and volcanic zones.
 
 8. **Environmental Radiation Zones**
    - Certain biomes and ruins emit low-level radiation.
@@ -676,11 +819,17 @@ Statuses are evidence-based and move forward only after code/content review and 
     - Airtight variants seal rooms for pressurization.
     - Vents pump oxygen in or out of sealed spaces.
 
-11. **Enemies**
-    - **Wildlife**: territorial beasts that attack if provoked.
-    - **Automated Drones**: remnants of the dead civilization, patrolling ruins.
-    - **Raider Vehicles**: occasional roaming grid vehicles that attack bases (mid/late game).
-    - Enemy AI uses senses: sight, sound, damage events.
+11. **Mythical Enemies & Bosses**
+    - **Aerial:** Griffins and Rocs disrupt formations, carry targets, and create wind hazards.
+    - **Brutes:** Manticores combine venomous ranged pressure with aggression; Karkadanns use armored charges and frontal defense.
+    - **Ambushers:** Ghouls burrow from terrain and regenerate from fallen creatures.
+    - **Spellcasters:** Ifrit Djinn teleport, create fire walls, and heat Crusader armor.
+    - **Epic bosses:** Leviathan maritime encounters and Cockatrice/Basilisk petrification encounters.
+    - **Automated Drones:** remnants of the dead civilization continue patrolling selected ruins.
+    - **Raider Vehicles:** occasional roaming grid vehicles attack established bases in the mid/late game.
+    - Enemy AI uses sight, sound, damage events, formation disruption, telegraphed boss mechanics, and biome-specific navigation.
+    - Enemy tier determines loot tier; named bosses guarantee unique Boss Relic Cores.
+    - Boss relics are required for selected late-game items and research, including the Star Builder and Dyson Sphere.
 
 12. **Weather System**
    - Each planet type has its own climate profile:
@@ -796,11 +945,14 @@ Statuses are evidence-based and move forward only after code/content review and 
    - Crew capsule for player travel.
    - Cargo capsule for item transport.
 
-2. **Space Stations**
-   - Buildable orbital platforms using grid blocks.
-   - Dedicated station hull blocks with internal atmosphere option.
+2. **Space Stations & Orbital Station Hammer Family**
+   - Buildable orbital platforms using grid blocks and a dedicated Building Hammer family.
+   - Researching **Orbital Construction** adds the Orbital Station family to the round Hammer wheel.
+   - Dedicated pressurized foundations, walls, floors, ceilings, curved corridors, junctions, reinforced windows, observation domes, airlocks, and docking frames.
+   - Modular visual language: clean futuristic habitat panels, readable seals, structural ribs, utility channels, and premium negative space.
    - Docking ports for ships and cargo capsules.
-   - Solar arrays, life support, and gravity ring modules.
+   - Solar arrays, radiators, life support, exterior armor, and gravity ring modules.
+   - Airtight pieces integrate with room pressure and oxygen simulation.
    - Stations can be expanded into massive orbital factories.
 
 3. **Asteroid Mining**
@@ -970,6 +1122,46 @@ Statuses are evidence-based and move forward only after code/content review and 
 
 ---
 
+### 6.8 Version 5.2.0 — Architect Era (MAJOR)
+
+**Goal:** Let fully established Crusader Orders reshape stellar systems without trivializing exploration, bosses, or logistics.
+
+#### New Content
+
+1. **Dyson Sphere / Solar Swarm Construction**
+   - Multi-stage megastructure constructed around the system sun.
+   - Partial stages operate as a solar swarm before complete enclosure.
+   - Produces immense scalable energy based on stellar luminosity and completed coverage.
+   - Requires orbital factories, automated launches, heat-resistant materials, beam relays, and multi-world logistics.
+   - Final stages require unique Boss Relic Cores and Architect-era research.
+
+2. **Star Builder / Stellar Forge**
+   - Creates or stabilizes a custom star under strict mass, luminosity, spacing, and safety limits.
+   - Requires exotic matter, massive sustained power, and relic knowledge from multiple epic bosses.
+   - Cannot replace or erase inhabited stellar systems.
+
+3. **Megastructure Control UI**
+   - Star-map construction overlay showing orbital lanes, coverage, delivery status, projected output, structural risk, and missing relic requirements.
+   - Every stage exposes clear material and energy bottlenecks.
+
+4. **Architect Relic Research**
+   - Dedicated research chain consuming guaranteed Griffin/Roc, Ifrit, Leviathan, and Basilisk-class relics where appropriate.
+   - Research UI previews which boss unlocks each requirement.
+   - Relics are progression keys and are not consumed by unrelated routine crafting.
+
+#### Code Improvements
+
+5. **Stellar Megastructure Service**
+   - Distributed stage simulation, construction scheduling, output calculation, damage state, and orbital save data.
+
+6. **Boss Progression Registry**
+   - Tracks first kills, repeat kills, guaranteed relic rewards, unlocked research gates, and multiplayer participation credit.
+
+7. **Save Schema v2**
+   - Persists custom stars, Dyson construction stages, orbital station families, boss progression, and relic-gated research.
+
+---
+
 ## 7. Code & Architecture Improvements (Cross-Cutting)
 
 These improvements run parallel to feature work and raise the quality floor of every release.
@@ -1135,7 +1327,7 @@ For each version, these are the high-level Unity tasks you will perform manually
 10. Improve small-grid snap and maritime grid buoyancy blocks.
 11. Add damage VFX: sparks, smoke, fire, debris.
 12. Set up collision damage thresholds for grids and terrain.
-13. Create player armor models and inventory slots (helmet, chest, legs, boots, backpack, jetpack).
+13. Create Crusader armor models, sealed helmets, tabards/heraldry, Order banners, rank presentation, and inventory slots (helmet, chest, legs, boots, backpack, jetpack).
 14. Create armor station prefab for crafting armor, upgrades, and jetpacks.
 15. Create jetpack prefab with fuel slot and upgrade tiers.
 16. Create hazmat suit and hazmat armor upgrade module prefabs.
@@ -1171,25 +1363,29 @@ For each version, these are the high-level Unity tasks you will perform manually
 6. Create blueprint data core item and research restoration UI.
 7. Author weather VFX and climate profiles per planet type.
 8. Implement water flow materials and simulation settings.
-9. Create enemy prefabs: wildlife, drones, raider vehicles.
-10. Build static missile turret and flak cannon prefabs.
-11. Set up planet-specific skybox / atmosphere shaders.
-12. Fix gravity for players, grids, dropped items, and projectiles.
-13. Implement orbital mechanics and atmospheric drag.
-14. Overhaul space ambiance: starfield, nebulae, sun glare, vacuum audio.
-15. Add environmental radiation zones and heat zones to biomes.
-16. Create sliding airtight door and vent prefabs.
-17. **Run setup wizard step (non-destructive)**
+9. Create passive livestock prefabs and husbandry definitions: cows, sheep, pigs, breeding needs, products, and population limits.
+10. Create mythical enemy prefabs and AI profiles: Griffin, Roc, Manticore, Karkadann, Ghouls, Ifrit Djinn, Leviathan, and Cockatrice/Basilisk.
+11. Author tiered enemy loot tables, guaranteed Boss Relic Cores, boss research gates, and first-kill progression records.
+12. Build static missile turret and flak cannon prefabs.
+13. Set up planet-specific skybox / atmosphere shaders.
+14. Fix gravity for players, grids, dropped items, and projectiles.
+15. Implement orbital mechanics and atmospheric drag.
+16. Overhaul space ambiance: starfield, nebulae, sun glare, vacuum audio.
+17. Add environmental radiation zones and heat zones to biomes.
+18. Create sliding airtight door and vent prefabs.
+19. **Run setup wizard step (non-destructive)**
     - Step 20 for ruins, enemies, weather, water, sky, and life-support systems.
 
 ### For 5.0.0 (Orbital Expansion)
 
 1. Build rocket parts and launch pad prefabs.
 2. Implement orbital station scene/zone.
-3. Create buildable space station grid blocks (hull, docking port, gravity ring, solar array).
-4. Create asteroid field zone and mining ship recipes.
-5. Build star map UI.
-6. **Run setup wizard step (non-destructive)**
+3. Add the research-locked Orbital Station family to the Building Hammer wheel.
+4. Generate pressurized station foundations, walls, floors, ceilings, curved corridors, junctions, windows, domes, airlocks, docking frames, radiators, and utility attachment panels.
+5. Create buildable station grid systems (docking port, gravity ring, solar array, life support).
+6. Create asteroid field zone and mining ship recipes.
+7. Build star map UI.
+8. **Run setup wizard step (non-destructive)**
    - Step 21 for rockets, space stations, and orbital cargo.
 
 ### For 5.1.0 (Interplanetary Age)
@@ -1217,10 +1413,13 @@ For each version, these are the high-level Unity tasks you will perform manually
 1. Design world forge megastructure prefab.
 2. Create custom planet creation UI (body type + resource signature).
 3. Implement resource-signature validation rules.
-4. Add warp gate prototype prefab.
-5. Finalize save schema v2 migration.
-6. **Run setup wizard step (non-destructive)**
-   - Step 23 for world forge and megastructures.
+4. Build staged Dyson solar-swarm and sphere construction prefabs, orbital lanes, beam relays, and control UI.
+5. Build the Star Builder / Stellar Forge megastructure and stellar safety UI.
+6. Author Boss Relic Core items and relic-gated Architect research nodes.
+7. Add warp gate prototype prefab.
+8. Finalize save schema v2 migration for boss progression, relics, custom stars, and Dyson construction stages.
+9. **Run setup wizard step (non-destructive)**
+   - Step 23 for world forge, Star Builder, Dyson Sphere, boss relic gates, and megastructures.
 
 ---
 
@@ -1234,6 +1433,44 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.4.0-dev] Crusader Mythic Expansion & Chute Shape Wheel
+
+**Type:** MINOR — new save-compatible chute build modes plus major roadmap content expansion
+
+**Roadmap Added:**
+- Crusaders as the permanent player identity and members of an industrial Crusader Order.
+- Crusader heraldry, tabards, sealed stellar armor, Order ranks, banners, and armor progression.
+- Breedable cows, sheep, and pigs with food, water, shelter, products, reproduction, and population limits.
+- Mythical enemy roster: Griffin, Roc, Manticore, Karkadann, Ghouls, Ifrit Djinn, Leviathan, and Cockatrice/Basilisk.
+- Tiered enemy loot, guaranteed named relics, Boss Relic Cores, first-kill progression, and late-game relic research gates.
+- Required boss progression for selected late-game technology, including the Star Builder / Stellar Forge and Dyson Sphere.
+- A staged Dyson solar swarm/sphere around the sun that produces immense scalable power.
+- A Star Builder / Stellar Forge with strict stellar safety and balance constraints.
+- A research-locked Orbital Station Building Hammer family with pressurized modular habitat pieces, corridors, windows, domes, airlocks, docking frames, and utility panels.
+- Expanded Living Worlds, Orbital Expansion, Architect Era, setup workflow, and manual validation sections.
+
+**Runtime Added:**
+- The contextual Build Wheel now activates while holding the existing Conveyor Chute item.
+- Chute wheel choices: Straight, Corner, and Spiral.
+- The same segmented donut rendering, blue hover feedback, hold behavior, key rebinding, and mouse parallax are reused.
+- Corner chutes generate a smooth guarded curved channel at runtime.
+- Spiral chutes generate a segmented helical channel with rails and top/bottom collars.
+- Chute item visuals follow the same runtime paths as their selected channel.
+- Selected Corner/Spiral chute shapes persist through additive backward-compatible save fields.
+
+**Changed:**
+- One chute item and recipe owns all three chute shapes; no duplicate chute recipes or items are introduced.
+- The center wheel label and hotbar prompt automatically switch between Conveyor and Chute context.
+- Returning to Straight restores the authored Step 17 chute visuals and status target.
+- Updated runtime and roadmap version to `5.4.0-dev` under Semantic Versioning because this release adds new UI-accessible chute modes.
+
+**Roadmap Status:**
+- Chute Shape Wheel and runtime variants: **WORKING ON** — awaiting Unity validation.
+- Crusader, livestock, mythical enemy, boss relic, Dyson Sphere, Star Builder, and Orbital Station systems: planned for their documented eras.
+- Step 5 prerequisite repair remains **WORKING ON** until setup validation is reported.
+
+---
 
 ### [5.3.2-dev] Precision Vertical Alignment & Wheel Hover Feedback
 

@@ -17,9 +17,9 @@ namespace VoxelEngine.Simulation
     }
 
     /// <summary>
-    /// Contextual hold-to-open radial selector for the three conveyor build modes.
-    /// The held conveyor item supplies the speed tier, so one item/recipe owns every
-    /// shape available at that tier.
+    /// Contextual hold-to-open radial selector shared by conveyors and conveyor
+    /// chutes. The held item chooses the three labels while retaining one item and
+    /// recipe per speed tier or chute family.
     /// </summary>
     public sealed class ConveyorShapeWheel : MonoBehaviour
     {
@@ -37,7 +37,9 @@ namespace VoxelEngine.Simulation
             ConveyorBuildMode.Vertical
         };
 
-        private static readonly string[] Icons = { "→", "↗", "↑" };
+        private static readonly string[] ConveyorIcons = { "→", "↗", "↑" };
+        private static readonly string[] ChuteIcons = { "↓", "↳", "↻" };
+        private static ConveyorBuildMode SelectedChuteMode = ConveyorBuildMode.Straight;
 
         private Inventory _inventory;
         private VisualElement _uiRoot;
@@ -52,6 +54,7 @@ namespace VoxelEngine.Simulation
         private readonly Label[] _segmentNames = new Label[3];
         private int _hoveredSegment = -1;
         private bool _open;
+        private bool _chuteContext;
         private ConveyorSpeed _activeTier;
         private Vector2 _parallax;
 
@@ -65,6 +68,24 @@ namespace VoxelEngine.Simulation
             SelectedByTier[Mathf.Clamp((int)tier, 0, SelectedByTier.Length - 1)] = mode;
         }
 
+        public static ChuteShape GetChuteShape()
+        {
+            return SelectedChuteMode switch
+            {
+                ConveyorBuildMode.Ramp => ChuteShape.Corner,
+                ConveyorBuildMode.Vertical => ChuteShape.Spiral,
+                _ => ChuteShape.Straight
+            };
+        }
+
+        private ConveyorBuildMode CurrentSelection => _chuteContext ? SelectedChuteMode : GetMode(_activeTier);
+
+        private void SelectMode(ConveyorBuildMode mode)
+        {
+            if (_chuteContext) SelectedChuteMode = mode;
+            else SetMode(_activeTier, mode);
+        }
+
         private void Start()
         {
             _inventory = GetComponentInParent<Inventory>();
@@ -74,16 +95,17 @@ namespace VoxelEngine.Simulation
         private void Update()
         {
             if (_inventory == null) _inventory = FindAnyObjectByType<Inventory>();
-            bool holdingConveyor = TryGetHeldConveyor(out var belt);
+            bool holdingShapeItem = TryGetHeldShapeItem(out var belt, out var chute);
 
-            if (!holdingConveyor)
+            if (!holdingShapeItem)
             {
                 if (_open) Close();
                 HidePrompt();
                 return;
             }
 
-            _activeTier = belt.speed;
+            _chuteContext = chute != null;
+            if (belt != null) _activeTier = belt.speed;
             bool wheelHeld = GameSettings.IsHeld(InputAction.BuildWheel);
             if (!_open && !UIState.IsBlocking)
             {
@@ -118,16 +140,20 @@ namespace VoxelEngine.Simulation
             RemoveUi();
         }
 
-        private bool TryGetHeldConveyor(out ConveyorBelt belt)
+        private bool TryGetHeldShapeItem(out ConveyorBelt belt, out ConveyorChute chute)
         {
             belt = null;
+            chute = null;
             if (_inventory == null) return false;
             var stack = _inventory.ActiveStack;
             if (stack == null || stack.IsEmpty || !(stack.item is BlockItem block) || block.placedPrefab == null)
                 return false;
 
             belt = block.placedPrefab.GetComponentInChildren<ConveyorBelt>(true);
-            return belt != null && belt.autoShape && belt.shape == ConveyorShape.Straight;
+            if (belt != null && belt.autoShape && belt.shape == ConveyorShape.Straight) return true;
+            belt = null;
+            chute = block.placedPrefab.GetComponentInChildren<ConveyorChute>(true);
+            return chute != null;
         }
 
         private bool EnsureUiRoot()
@@ -176,7 +202,8 @@ namespace VoxelEngine.Simulation
 
             if (_prompt.parent == null) _uiRoot.Add(_prompt);
             _prompt.style.display = DisplayStyle.Flex;
-            _promptLabel.text = $"[{GameSettings.GetKey(InputAction.BuildWheel)}]  CONVEYOR SHAPE  ·  {GetMode(_activeTier).ToString().ToUpperInvariant()}";
+            string context = _chuteContext ? "CHUTE SHAPE" : "CONVEYOR SHAPE";
+            _promptLabel.text = $"[{GameSettings.GetKey(InputAction.BuildWheel)}]  {context}  ·  {DisplayModeName(CurrentSelection).ToUpperInvariant()}";
         }
 
         private void HidePrompt()
@@ -237,8 +264,9 @@ namespace VoxelEngine.Simulation
             System.Array.Clear(_segmentNames, 0, _segmentNames.Length);
             BuildRing();
             BuildCenterBadge();
+            string[] icons = _chuteContext ? ChuteIcons : ConveyorIcons;
             for (int i = 0; i < Modes.Length; i++)
-                BuildRingLabel(i, Modes[i], Icons[i]);
+                BuildRingLabel(i, Modes[i], icons[i]);
             RefreshSegmentLabels();
         }
 
@@ -258,7 +286,9 @@ namespace VoxelEngine.Simulation
             badge.pickingMode = PickingMode.Ignore;
             _wheelCenter.Add(badge);
 
-            var tier = new Label($"{_activeTier.ToString().ToUpperInvariant()} BELT");
+            var tier = new Label(_chuteContext
+                ? "CONVEYOR CHUTE"
+                : $"{_activeTier.ToString().ToUpperInvariant()} BELT");
             tier.style.fontSize = 10;
             tier.style.letterSpacing = 1.4f;
             tier.style.unityFontStyleAndWeight = FontStyle.Bold;
@@ -266,7 +296,7 @@ namespace VoxelEngine.Simulation
             tier.pickingMode = PickingMode.Ignore;
             badge.Add(tier);
 
-            var selected = new Label(GetMode(_activeTier).ToString().ToUpperInvariant());
+            var selected = new Label(DisplayModeName(CurrentSelection).ToUpperInvariant());
             selected.style.fontSize = 15;
             selected.style.marginTop = 4;
             selected.style.unityFontStyleAndWeight = FontStyle.Bold;
@@ -316,12 +346,24 @@ namespace VoxelEngine.Simulation
                 int segment = SegmentAt(evt.localPosition);
                 if (segment < 0 || segment >= Modes.Length) return;
                 var mode = Modes[segment];
-                SetMode(_activeTier, mode);
+                SelectMode(mode);
                 BuildWheel();
-                BuildFeedbackHud.Show("Conveyor Shape", mode.ToString(), null, UITheme.AccentCyan);
+                string title = _chuteContext ? "Chute Shape" : "Conveyor Shape";
+                BuildFeedbackHud.Show(title, DisplayModeName(mode), null, UITheme.AccentCyan);
                 evt.StopPropagation();
             });
             VoxelEngine.FX.UiAudio.MarkClickable(_ringElement);
+        }
+
+        private string DisplayModeName(ConveyorBuildMode mode)
+        {
+            if (!_chuteContext) return mode.ToString();
+            return mode switch
+            {
+                ConveyorBuildMode.Ramp => "Corner",
+                ConveyorBuildMode.Vertical => "Spiral",
+                _ => "Straight"
+            };
         }
 
         private void BuildRingLabel(int index, ConveyorBuildMode mode, string iconText)
@@ -345,7 +387,7 @@ namespace VoxelEngine.Simulation
             _wheelCenter.Add(labelRoot);
             _segmentLabelRoots[index] = labelRoot;
 
-            bool selected = GetMode(_activeTier) == mode;
+            bool selected = CurrentSelection == mode;
             var icon = new Label(iconText);
             icon.style.fontSize = 24;
             icon.style.unityTextAlign = TextAnchor.MiddleCenter;
@@ -355,7 +397,7 @@ namespace VoxelEngine.Simulation
             labelRoot.Add(icon);
             _segmentIcons[index] = icon;
 
-            var label = new Label(mode.ToString().ToUpperInvariant());
+            var label = new Label(DisplayModeName(mode).ToUpperInvariant());
             label.style.fontSize = 9;
             label.style.marginTop = 1;
             label.style.letterSpacing = 0.8f;
@@ -368,7 +410,7 @@ namespace VoxelEngine.Simulation
 
         private void RefreshSegmentLabels()
         {
-            int selected = (int)GetMode(_activeTier);
+            int selected = (int)CurrentSelection;
             for (int i = 0; i < Modes.Length; i++)
             {
                 var root = _segmentLabelRoots[i];
@@ -423,7 +465,7 @@ namespace VoxelEngine.Simulation
             float center = (size - 1) * 0.5f;
             const float innerRadius = 81f;
             const float outerRadius = 123f;
-            int selected = (int)GetMode(_activeTier);
+            int selected = (int)CurrentSelection;
 
             for (int y = 0; y < size; y++)
             {
