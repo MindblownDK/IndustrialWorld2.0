@@ -7112,6 +7112,33 @@ root =>
             });
             var blockPowerPole = ConfigureBlock(HV_ITEMS, "Block_PowerPole", "Power Pole", "Low-voltage pole for manual wire connections. Supports 6 links over 15 m.", new Color(0.22f, 0.78f, 0.42f), powerPolePrefab, "Power", 260);
 
+            GameObject CreateCompactPowerNodePrefab(string assetName, Color accent, System.Action<GameObject> addNode)
+            {
+                return GetOrCreateStep17Prefab($"{HV_PREFABS}/{assetName}.prefab", assetName, root =>
+                {
+                    var baseMat = GetMaterial(HV_MATS, $"Mat_{assetName}_Base", new Color(0.28f, 0.31f, 0.32f));
+                    var plateMat = GetMaterial(HV_MATS, $"Mat_{assetName}_Plate", new Color(0.52f, 0.55f, 0.56f));
+                    var glowMat = GetMaterial(HV_MATS, $"Mat_{assetName}_Glow", accent, true);
+                    EnsurePrimitive(root, "Generated_WallPlate", PrimitiveType.Cube, new Vector3(0f, 0.18f, -0.02f), new Vector3(0.62f, 0.12f, 0.62f), baseMat, Vector3.zero);
+                    EnsurePrimitive(root, "Generated_ServiceBlock", PrimitiveType.Cube, new Vector3(0f, 0.34f, 0f), new Vector3(0.42f, 0.22f, 0.42f), plateMat, Vector3.zero);
+                    EnsurePrimitive(root, "Generated_TerminalCap", PrimitiveType.Cylinder, new Vector3(0f, 0.50f, 0f), new Vector3(0.18f, 0.08f, 0.18f), glowMat, Vector3.zero);
+                    EnsurePrimitive(root, "Generated_StatusLine", PrimitiveType.Cube, new Vector3(0f, 0.25f, -0.34f), new Vector3(0.42f, 0.035f, 0.035f), glowMat, Vector3.zero);
+                    EnsureRootCollider(root, new Vector3(0.72f, 0.64f, 0.72f), new Vector3(0f, 0.30f, 0f));
+                    addNode?.Invoke(root);
+                });
+            }
+
+            var lvConnectorPrefab = CreateCompactPowerNodePrefab("LVWireConnector", new Color(0.22f, 0.78f, 0.42f), root =>
+                EnsureStep17Component<VoxelEngine.Simulation.LVWireConnectorStation>(root));
+            var hvConnectorPrefab = CreateCompactPowerNodePrefab("HVWireConnector", new Color(0.18f, 0.72f, 0.88f), root =>
+                EnsureStep17Component<VoxelEngine.Simulation.HVWireConnectorStation>(root));
+            var relayPrefab = CreateCompactPowerNodePrefab("PowerRelay", new Color(0.95f, 0.62f, 0.18f), root =>
+                EnsureStep17Component<VoxelEngine.Simulation.PowerRelayStation>(root));
+
+            var blockLVConnector = ConfigureBlock(HV_ITEMS, "Block_LVWireConnector", "LV Wire Connector", "Compact low-voltage wall/foundation connector. Can hold 1 power connection.", new Color(0.22f, 0.78f, 0.42f), lvConnectorPrefab, "Power", 180);
+            var blockHVConnector = ConfigureBlock(HV_ITEMS, "Block_HVWireConnector", "HV Wire Connector", "Compact high-voltage wall/foundation connector. Can hold 1 power connection.", new Color(0.18f, 0.72f, 0.88f), hvConnectorPrefab, "Power", 220);
+            var blockPowerRelay = ConfigureBlock(HV_ITEMS, "Block_PowerRelay", "Power Relay", "Compact wall/foundation relay for tidy bases. Relays power only; does not produce or consume power. Max connections: 8.", new Color(0.95f, 0.62f, 0.18f), relayPrefab, "Power", 220);
+
             var substationPrefab = GetOrCreateStep17Prefab($"{HV_PREFABS}/ElectricalSubstation.prefab", "ElectricalSubstation", root =>
             {
                 var baseMat = GetMaterial(HV_MATS, "Mat_SubstationConcretePad", new Color(0.44f, 0.45f, 0.43f));
@@ -7355,12 +7382,15 @@ root =>
             var hvRecipes = new List<VoxelEngine.Crafting.RecipeDefinition>();
             var recHVWire = CreateRecipe(registry, HV_RECIPES, "Recipe_HV_Wire", "High Voltage Wire", hvWireItem, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 4), (copperWire, 20), (circuit, 2));
             var recPowerPole = CreateRecipe(registry, HV_RECIPES, "Recipe_PowerPole", "Power Pole", blockPowerPole, 1, VoxelEngine.Crafting.StationTier.CraftingBench, false, (ironPlate, 3), (copperWire, 2));
+            var recLVConnector = CreateRecipe(registry, HV_RECIPES, "Recipe_LVWireConnector", "LV Wire Connector", blockLVConnector, 2, VoxelEngine.Crafting.StationTier.CraftingBench, false, (ironPlate, 1), (copperWire, 2));
+            var recHVConnector = CreateRecipe(registry, HV_RECIPES, "Recipe_HVWireConnector", "HV Wire Connector", blockHVConnector, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 2), (copperWire, 6), (circuit, 1));
+            var recPowerRelay = CreateRecipe(registry, HV_RECIPES, "Recipe_PowerRelay", "Power Relay", blockPowerRelay, 1, VoxelEngine.Crafting.StationTier.CraftingBench, false, (ironPlate, 2), (copperWire, 4), (circuit, 1));
             var recSubstation = CreateRecipe(registry, HV_RECIPES, "Recipe_Substation", "Electrical Substation", blockSubstation, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 12), (copperWire, 16), (circuit, 3));
             var recHVTower = CreateRecipe(registry, HV_RECIPES, "Recipe_HVTower", "HV Transmission Tower", blockHVTower, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 20), (copperWire, 8));
             var recStepUp = CreateRecipe(registry, HV_RECIPES, "Recipe_StepUpTransformer", "Step-Up Transformer", blockStepUp, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 24), (copperWire, 16), (circuit, 4));
             var recStepDown = CreateRecipe(registry, HV_RECIPES, "Recipe_StepDownTransformer", "Step-Down Transformer", blockStepDown, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 24), (copperWire, 16), (circuit, 4));
 
-            foreach (var recipe in new[] { recHVWire, recPowerPole, recSubstation, recHVTower, recStepUp, recStepDown })
+            foreach (var recipe in new[] { recHVWire, recPowerPole, recLVConnector, recHVConnector, recPowerRelay, recSubstation, recHVTower, recStepUp, recStepDown })
             {
                 AddRecipeUnique(hvRecipes, recipe);
             }

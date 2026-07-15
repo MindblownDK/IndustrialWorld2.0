@@ -408,6 +408,12 @@ namespace VoxelEngine.Player
                 }
                 if (windTurbine != null) { UI.GameUIController.Instance?.OpenMachine(windTurbine); return; }
 
+                // Factory machines.
+                var crusher = hit.collider.GetComponentInParent<VoxelEngine.Simulation.Crusher>();
+                if (crusher != null) { UI.GameUIController.Instance?.OpenMachine(crusher); return; }
+                var assembler = hit.collider.GetComponentInParent<VoxelEngine.Simulation.Assembler>();
+                if (assembler != null) { UI.GameUIController.Instance?.OpenMachine(assembler); return; }
+
                 // Industrial fluid processors.
                 var oilRefinery = hit.collider.GetComponentInParent<VoxelEngine.Crafting.OilRefinery>();
                 if (oilRefinery != null) { UI.GameUIController.Instance?.OpenMachine(oilRefinery); return; }

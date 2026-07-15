@@ -85,6 +85,7 @@ namespace VoxelEngine.UI
         private VoxelEngine.Simulation.Crusher _openCrusher;
         private VoxelEngine.Simulation.Assembler _openAssembler;
         private IVoltageStation _openVoltageStation;
+        private bool _productionStatsOpen;
         // Containers whose OnChanged should call Refresh; cleared on each panel switch.
         private System.Collections.Generic.List<ItemContainer> _watchedContainers = new();
 
@@ -802,6 +803,7 @@ namespace VoxelEngine.UI
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _openStorageTerminal = null; _openServerRack = null;
             _openCrusher = null; _openAssembler = null;
+            _productionStatsOpen = false;
             _activeQueue    = null;
             _openCoalGen    = null;
             UnwatchAllContainers();
@@ -933,10 +935,26 @@ namespace VoxelEngine.UI
                 }
 
                 // Center panel — crafting screen (toggle-driven,
-                // state persisted). Only when the player toggled it ON and no
-                // workstation/container panel owns the crafting view itself.
-                bool aRightPanelIsOpen =
+                // state persisted). Opening any real machine/container/crafting
+                // surface owns the right side and automatically closes the live
+                // production stats dashboard so stale dashboards never cover the
+                // requested machine UI.
+                bool anyRightTargetOpen =
                     _rightContainer != null || _openFurnace != null || _openElectric != null ||
+                    _openCoalGen != null || _openQuarry != null || _openReactor != null ||
+                    _openTurbine != null || _openPortReactor != null || _openProcessor != null ||
+                    _openReprocessor != null || _openElectrolyser != null || _openHydroEngine != null ||
+                    _openGasTank != null || _openWaterPump != null || _openWindTurbine != null || _openStorageTerminal != null || _openServerRack != null ||
+                    _openPatternTerminal != null || _openCraftTerminal != null || _openImporter != null ||
+                    _openExporter != null || _openDiskManipulator != null || _openNAS != null ||
+                    _openPowerstation != null || _openStorageDrawer != null ||
+                    _openDrawerController != null || _openItemDisplay != null ||
+                    _openCrusher != null || _openAssembler != null;
+                if (_productionStatsOpen && (anyRightTargetOpen || CraftingScreen.Visible))
+                    _productionStatsOpen = false;
+
+                bool aRightPanelIsOpen =
+                    _productionStatsOpen || _rightContainer != null || _openFurnace != null || _openElectric != null ||
                     _openCoalGen != null || _openQuarry != null || _openReactor != null ||
                     _openTurbine != null || _openPortReactor != null || _openProcessor != null ||
                     _openReprocessor != null || _openElectrolyser != null || _openHydroEngine != null ||
@@ -959,7 +977,8 @@ namespace VoxelEngine.UI
                 else _craftPanelWasVisible = false;
 
                 // Right panel — container or station
-                if (_rightContainer != null) BuildRightContainer(_root, _rightContainer);
+                if (_productionStatsOpen) _root.Add(ProductionStatsUI.BuildPanel());
+                else if (_rightContainer != null) BuildRightContainer(_root, _rightContainer);
                 else if (_openFurnace  != null) BuildRightFurnace(_root, _openFurnace);
                 else if (_openElectric != null) BuildRightElectricFurnace(_root, _openElectric);
                 else if (_openCoalGen  != null) BuildRightCoalGenerator(_root, _openCoalGen);
@@ -1095,6 +1114,16 @@ namespace VoxelEngine.UI
             // Refresh()). Here we only render the toggle pill; its open/closed
             // state persists across sessions via CraftingScreen.Visible.
             panel.Add(CraftingScreen.ToggleButton(Refresh));
+
+            var statsBtn = new Button(() => { _productionStatsOpen = !_productionStatsOpen; Refresh(); })
+            { text = _productionStatsOpen ? "📈 Hide Production Stats" : "📈 Production Stats" };
+            statsBtn.style.minHeight = 28;
+            statsBtn.style.fontSize = 11;
+            statsBtn.style.color = Color.white;
+            statsBtn.style.unityFontStyleAndWeight = FontStyle.Bold;
+            statsBtn.style.backgroundColor = new StyleColor(_productionStatsOpen ? UITheme.AccentCyan : new Color(0.12f, 0.18f, 0.24f));
+            SetBorderRadius(statsBtn, 4); ZeroBorder(statsBtn);
+            panel.Add(statsBtn);
 
             // ── Wireless Storage Network (if unlocked) ──
             var transmitters = VoxelEngine.Storage.WirelessTransmitter.GetAllOnline();
@@ -2189,22 +2218,6 @@ namespace VoxelEngine.UI
 
             // Footer hint.
             panel.Add(Spacer(14));
-
-            // ── Port Configuration ────────────────────────────────────
-            // Per-face Input / Output / network-type controls. Only added
-            // when the machine actually carries a PortConfig component, so
-            // future machines without per-face routing simply skip this
-            // block silently.
-            var pcEf = ef.GetComponent<VoxelEngine.Transport.PortConfig>();
-            if (pcEf != null)
-            {
-                // Electric Furnace only uses Power input — restrict the dropdown.
-                panel.Add(VoxelEngine.UI.PortConfigHud.Build(pcEf,
-                    allowedTypes: new[] {
-                        VoxelEngine.Transport.PortNetworkType.Power
-                    }));
-                panel.Add(Spacer(10));
-            }
 
             var hint = new Label("Tip: connect cables from a generator. Insert Speed/Efficiency modules to tune output vs power use.");
             hint.style.color = new StyleColor(new Color(0.6f, 0.6f, 0.65f));

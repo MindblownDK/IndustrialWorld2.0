@@ -249,10 +249,14 @@ namespace VoxelEngine.Simulation
 
             // Consume inputs.
             foreach (var inp in _current.inputs)
+            {
                 inputC.Remove(inp.item, inp.count);
+                ProductionStatsTracker.RecordConsumed(inp.item, inp.count);
+            }
 
             // Produce primary output.
             outputC.Insert(new ItemStack(_current.outputItem, _current.outputCount));
+            ProductionStatsTracker.RecordProduced(_current.outputItem, _current.outputCount);
 
             // Byproduct chance.
             if (_current.byproductItem != null && _current.byproductCount > 0)
@@ -261,6 +265,7 @@ namespace VoxelEngine.Simulation
                 {
                     if (outputC.HasSpace(_current.byproductItem, _current.byproductCount))
                         outputC.Insert(new ItemStack(_current.byproductItem, _current.byproductCount));
+                        ProductionStatsTracker.RecordProduced(_current.byproductItem, _current.byproductCount);
                 }
             }
 

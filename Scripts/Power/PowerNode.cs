@@ -15,6 +15,9 @@ namespace VoxelEngine.Power
     {
         public abstract PowerNodeKind Kind { get; }
 
+        /// <summary>Maximum automatically discovered links. Poles/connectors can override this.</summary>
+        public virtual int MaxAutoConnections => int.MaxValue;
+
         [Tooltip("Distance at which this node will auto-connect to neighbouring nodes/cables.")]
         public float connectRadius = 3.0f;
 

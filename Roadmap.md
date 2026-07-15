@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.10.2-dev`
-**Roadmap Version:** `5.10.2-dev`
+**Current Version:** `5.12.0-dev`
+**Roadmap Version:** `5.12.0-dev`
 **Date:** 2026-07-16
-**Status:** Active Implementation — Production Lines Recipe Repair & Validation
+**Status:** Active Implementation — Machine UI Recovery & Compact Power Relays
 
 ---
 
@@ -502,7 +502,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Conveyor chutes | 🟡 PARTIALLY COMPLETE | Straight vertical transport, snapping, moving-item visuals, inventory endpoints, and save-compatible placement are validated foundations. |
 | Basic machines | 🟡 PARTIALLY COMPLETE | Electric Furnace, Crusher, and three Assembler tiers exist. Crusher/Assembler have recipe-selection UIs, visual animation, centralized simulation ticks, additive buffers/progress/enabled persistence, and Unity smoke validation from Thomas; production statistics and module systems remain. |
 | Storage blocks | 🟡 PARTIALLY COMPLETE | A basic chest and the wider storage system exist. The planned Wooden Crate → Iron Chest → Steel Chest → Provider/Requester progression is not complete. |
-| Power pole, wire, and substation | 🟡 PARTIALLY COMPLETE | Manual wiring, poles, substations, transformers, and high-voltage assets exist. Setup reruns still need full non-destructive balance preservation. |
+| Power pole, wire, and substation | 🟡 PARTIALLY COMPLETE | Manual wiring, poles, substations, transformers, compact LV/HV one-link connectors, and 8-link wall/foundation relays exist. Setup reruns preserve balance while adding missing links. |
 | Grid/static lighting and LED strips | 🟡 PARTIALLY COMPLETE | Grid light, floodlight logic, and static/grid LED assets exist. Configuration UX, power validation, and complete authored variants still need verification. |
 | Shared Machine UI | 🟡 PARTIALLY COMPLETE | Crusher and Assembler panels now expose recipe selection, progress, power, toggles, inventory slots, scrolling, and item-port integration. Remaining work: complete unification across every machine, production statistics, and theme overrides. |
 | Item entity system | 🟡 PARTIALLY COMPLETE | Dropped world items exist and conveyors render carried packets. A unified pooled physical-item entity lifecycle is not complete. |
@@ -611,8 +611,8 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Area | Status | Repository Audit |
 |------|--------|------------------|
 | Assembler Mk.2 / Mk.3 | ✅ COMPLETED | Mk.2 and Mk.3 exist with larger buffers, faster tier multipliers, upgraded visuals, and machine UI binding. |
-| Recipe graph validation | 🛠️ WORKING ON | Validator and non-destructive repair pass are in place. First repair reduced validation from 74 errors to 1; 5.10.2 targets the final large-thruster output and warning noise. |
-| Production-line UI | 🛠️ WORKING ON | Crusher/Assembler UIs and responsive panels exist. Next: production statistics, recipe dependency browser, and theme overrides. |
+| Recipe graph validation | ✅ COMPLETED | Validator and non-destructive repair pass are in place. Thomas validated the graph at 0 errors after repair. Remaining duplicate-output notes are informational/progression warnings. |
+| Production-line UI | 🛠️ WORKING ON | Crusher/Assembler UIs, responsive panels, and first live Production Statistics panel exist. Next: bottleneck hints, recipe dependency browser, and theme overrides. |
 | Advanced processing | 🟡 PARTIALLY COMPLETE | Chemical processing and oil systems exist in code, but ore washing/enrichment and tailing loops are not complete. |
 | UI theme system | ❌ MISSING | Design tokens exist in `UITheme`; theme ScriptableObjects, runtime theme switching, and custom editor remain planned. |
 | Research UI overhaul | ❌ MISSING | Existing research remains functional; spatial pan/zoom canvas is not implemented yet. |
@@ -1674,6 +1674,50 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.12.0-dev] Machine UI Recovery & Compact Power Relays
+
+**Type:** MINOR — new save-compatible power connector blocks plus UI/interaction fixes
+
+**Validated:**
+- Thomas confirmed the recipe graph validator now reports `0` errors and `0` warnings.
+
+**Fixed / Improved:**
+- Crusher and Assembler interaction now opens their machine UI so recipes can be selected.
+- Production Statistics automatically closes when crafting opens or when another right-side UI/machine panel is opened.
+- Coal Generator UI is no longer covered by a stale Production Statistics panel.
+- Electric Furnace no longer shows the old inline power-port UI; it keeps the clickable Item Ports modal workflow.
+- Electric Furnace power consumers can now draw from nearby energy pipes without being blocked by item-port face settings.
+- Electric Furnace hides old world port indicator squares to avoid duplicate port presentation.
+
+**Added:**
+- Added compact `LV Wire Connector` block: wall/foundation mount, max 1 connection.
+- Added compact `HV Wire Connector` block: wall/foundation mount, max 1 connection.
+- Added compact `Power Relay` block: wall/foundation mount, relays power only, max 8 connections.
+- Added max-auto-connection support to power nodes and topology rebuilds.
+- Step 17 generates the new connector/relay prefabs, block items, descriptions, and recipes non-destructively.
+
+---
+
+### [5.11.0-dev] Live Production Statistics Panel
+
+**Type:** MINOR — new save-compatible production visibility UI
+
+**Added:**
+- Added `ProductionStatsTracker`, a save-free runtime tracker for produced/consumed item counts.
+- Crusher, Assembler, and Electric Furnace now report consumed inputs and produced outputs when batches complete.
+- Added a live Production Statistics panel accessible from the inventory panel.
+- Panel shows per-minute produced/consumed/net rates plus session totals for tracked items.
+
+**Validation:**
+- Thomas confirmed the recipe graph is down to `0` errors after the repair workflow.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Recipe graph validation moved to **COMPLETED**.
+- Production-line UI remains **WORKING ON** with live statistics now started.
+- Next targets: bottleneck hints and Recipe Browser dependency view.
+
+---
 
 ### [5.10.2-dev] Final Recipe Error Repair & Duplicate Warning Cleanup
 

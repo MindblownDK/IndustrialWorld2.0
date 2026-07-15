@@ -101,7 +101,13 @@ namespace VoxelEngine.Power
         {
             if (!base.CanLinkTo(other)) return false;
 
-            // Machines with PortConfig need special handling
+            // Consumers can always tap a nearby energy pipe. Item-port configuration
+            // is edited through the Item Ports modal and should not accidentally
+            // block machine power unless a future dedicated power socket system is
+            // explicitly added.
+            if (other is PowerConsumer) return true;
+
+            // Non-consumer machines with PortConfig need special handling.
             var portConfig = other.GetComponent<PortConfig>();
             if (portConfig != null)
             {

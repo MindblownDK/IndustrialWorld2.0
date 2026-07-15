@@ -67,6 +67,8 @@ namespace VoxelEngine.Crafting
             EnsureContainers();
 
             _station = GetComponent<CraftingStation>();
+            var ports = GetComponent<PortConfig>();
+            if (ports != null) ports.showPortIndicators = false;
             _power   = GetComponent<PowerConsumer>();
             if (_power == null) _power = gameObject.AddComponent<PowerConsumer>();
             _power.connectRadius = 1.6f;
@@ -236,7 +238,9 @@ namespace VoxelEngine.Crafting
                 return;
             }
             inputC.Remove(_current.input, _current.inputCount);
+            VoxelEngine.Simulation.ProductionStatsTracker.RecordConsumed(_current.input, _current.inputCount);
             outputC.Insert(new ItemStack(_current.output, _current.outputCount));
+            VoxelEngine.Simulation.ProductionStatsTracker.RecordProduced(_current.output, _current.outputCount);
             _smeltProgress = 0f;
             _current = FindRecipeForInput();
         }

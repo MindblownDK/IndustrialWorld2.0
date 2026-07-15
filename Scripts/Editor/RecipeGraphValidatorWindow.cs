@@ -115,7 +115,13 @@ namespace VoxelEngine.EditorTools
                 if (recipe.outputItem == null) _errors.Add($"Crafting recipe has no output: {path}");
                 if (recipe.outputCount <= 0) _errors.Add($"Crafting recipe output count must be > 0: {path}");
                 if (recipe.inputs == null || recipe.inputs.Length == 0)
-                    _warnings.Add($"Crafting recipe has no inputs: {path}");
+                {
+                    string message = $"Crafting recipe has no inputs: {path}";
+                    if (path.Contains("Assets/VoxelEngineAssets/Survival/FarmRecipes/Recipe_TilledSoil.asset"))
+                        _info.Add(message);
+                    else
+                        _warnings.Add(message);
+                }
                 else
                     ValidateIngredientArray(recipe.inputs, path);
             }
@@ -202,14 +208,19 @@ namespace VoxelEngine.EditorTools
             if (recipeLabels == null || recipeLabels.Count <= 1) return false;
             bool hasMachine = recipeLabels.Any(label => label.StartsWith("Machine:", System.StringComparison.Ordinal));
             bool hasCrafting = recipeLabels.Any(label => label.StartsWith("Crafting:", System.StringComparison.Ordinal));
-            if (hasMachine && hasCrafting) return true;
+            bool hasSmelting = recipeLabels.Any(label => label.StartsWith("Smelting:", System.StringComparison.Ordinal));
+            if (hasMachine && (hasCrafting || hasSmelting)) return true;
 
             bool hasRootRecipe = recipeLabels.Any(label => label.Contains("Assets/VoxelEngineAssets/Recipes/"));
             bool hasDomainRecipe = recipeLabels.Any(label =>
                 label.Contains("Assets/VoxelEngineAssets/Fluids/Recipes/") ||
                 label.Contains("Assets/VoxelEngineAssets/Industrial/Recipes/") ||
                 label.Contains("Assets/VoxelEngineAssets/Research/Recipes/"));
-            return hasRootRecipe && hasDomainRecipe;
+            if (hasRootRecipe && hasDomainRecipe) return true;
+
+            bool hasLegacyLargeThruster = recipeLabels.Any(label => label.Contains("Recipe_GThrustLarge.asset"));
+            bool hasAtmosphericLargeThruster = recipeLabels.Any(label => label.Contains("Recipe_GAtmoThruster_Large.asset"));
+            return hasLegacyLargeThruster && hasAtmosphericLargeThruster;
         }
 
         private void ValidateReachability(

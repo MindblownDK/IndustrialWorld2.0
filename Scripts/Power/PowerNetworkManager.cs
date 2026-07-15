@@ -138,10 +138,15 @@ namespace VoxelEngine.Power
                         // Avoid duplicate add (we'll see each pair twice — once from each side).
                         if (!n.neighbours.Contains(b)) 
                         {
+                            if (n.neighbours.Count >= n.MaxAutoConnections) continue;
+                            if (b.neighbours.Count >= b.MaxAutoConnections) continue;
                             n.neighbours.Add(b);
+                            if (!b.neighbours.Contains(n) && b.neighbours.Count < b.MaxAutoConnections)
+                                b.neighbours.Add(n);
                             
                             // Record connection faces for cables connecting to machines
                             RecordConnectionFace(n, b);
+                            RecordConnectionFace(b, n);
                         }
                     }
                 }
@@ -398,6 +403,7 @@ namespace VoxelEngine.Power
                     {
                         var farCable = axisKvp.Value[i].cable;
                         farCable.neighbours.Remove(machine);
+                        machine.neighbours.Remove(farCable);
                     }
                 }
             }

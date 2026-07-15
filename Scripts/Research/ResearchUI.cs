@@ -1,6 +1,6 @@
 // Assets/Scripts/VoxelEngine/Research/ResearchUI.cs
 //
-// FACTORIO-STYLE RESEARCH WINDOW.
+// INDUSTRIAL RESEARCH WINDOW.
 //
 // Design philosophy (per IndustrialWorld README "AI Agent System Prompt"):
 //   * UI Toolkit only — no Canvas.
