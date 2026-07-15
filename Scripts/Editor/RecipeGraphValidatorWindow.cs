@@ -189,8 +189,27 @@ namespace VoxelEngine.EditorTools
 
             foreach (var pair in byOutput.Where(pair => pair.Value.Count > 1))
             {
-                _warnings.Add($"Multiple recipes output '{pair.Key.displayName}'. Verify this is intentional:\n  - {string.Join("\n  - ", pair.Value)}");
+                string message = $"Multiple recipes output '{pair.Key.displayName}':\n  - {string.Join("\n  - ", pair.Value)}";
+                if (LooksLikeIntentionalProgressionDuplicate(pair.Value))
+                    _info.Add(message);
+                else
+                    _warnings.Add($"{message}\n  Verify this is intentional.");
             }
+        }
+
+        private static bool LooksLikeIntentionalProgressionDuplicate(List<string> recipeLabels)
+        {
+            if (recipeLabels == null || recipeLabels.Count <= 1) return false;
+            bool hasMachine = recipeLabels.Any(label => label.StartsWith("Machine:", System.StringComparison.Ordinal));
+            bool hasCrafting = recipeLabels.Any(label => label.StartsWith("Crafting:", System.StringComparison.Ordinal));
+            if (hasMachine && hasCrafting) return true;
+
+            bool hasRootRecipe = recipeLabels.Any(label => label.Contains("Assets/VoxelEngineAssets/Recipes/"));
+            bool hasDomainRecipe = recipeLabels.Any(label =>
+                label.Contains("Assets/VoxelEngineAssets/Fluids/Recipes/") ||
+                label.Contains("Assets/VoxelEngineAssets/Industrial/Recipes/") ||
+                label.Contains("Assets/VoxelEngineAssets/Research/Recipes/"));
+            return hasRootRecipe && hasDomainRecipe;
         }
 
         private void ValidateReachability(

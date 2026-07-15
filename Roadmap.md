@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.10.1-dev`
-**Roadmap Version:** `5.10.1-dev`
+**Current Version:** `5.10.2-dev`
+**Roadmap Version:** `5.10.2-dev`
 **Date:** 2026-07-16
 **Status:** Active Implementation — Production Lines Recipe Repair & Validation
 
@@ -611,7 +611,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Area | Status | Repository Audit |
 |------|--------|------------------|
 | Assembler Mk.2 / Mk.3 | ✅ COMPLETED | Mk.2 and Mk.3 exist with larger buffers, faster tier multipliers, upgraded visuals, and machine UI binding. |
-| Recipe graph validation | 🛠️ WORKING ON | `Tools > Voxel Engine > Recipe Graph Validator` scans crafting, smelting, and machine recipes and now includes a non-destructive missing-link repair pass. Awaiting rerun validation after repair. |
+| Recipe graph validation | 🛠️ WORKING ON | Validator and non-destructive repair pass are in place. First repair reduced validation from 74 errors to 1; 5.10.2 targets the final large-thruster output and warning noise. |
 | Production-line UI | 🛠️ WORKING ON | Crusher/Assembler UIs and responsive panels exist. Next: production statistics, recipe dependency browser, and theme overrides. |
 | Advanced processing | 🟡 PARTIALLY COMPLETE | Chemical processing and oil systems exist in code, but ore washing/enrichment and tailing loops are not complete. |
 | UI theme system | ❌ MISSING | Design tokens exist in `UITheme`; theme ScriptableObjects, runtime theme switching, and custom editor remain planned. |
@@ -1674,6 +1674,21 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.10.2-dev] Final Recipe Error Repair & Duplicate Warning Cleanup
+
+**Type:** PATCH — editor validation/repair polish
+
+**Fixed / Improved:**
+- Added targeted repair for `Recipe_GThrustLarge.asset` by reconnecting its missing output to the existing large thruster item.
+- Added Crusher stone byproduct repair so Sand is connected when available.
+- Validator now downgrades expected progression duplicates to Info instead of Warnings when duplicates are clearly intentional root/domain recipe mirrors or hand-craft/machine alternatives.
+
+**Validation Result From Previous Pass:**
+- Recipe graph errors reduced from `74` to `1` after `5.10.1-dev` repair.
+- Remaining target for this patch: `Recipe_GThrustLarge.asset` missing output.
+
+---
 
 ### [5.10.1-dev] Recipe Graph Missing-Link Repair
 

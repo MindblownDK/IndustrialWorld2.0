@@ -234,6 +234,13 @@ namespace VoxelEngine.EditorTools
             Repair("Maritime/Recipes/Recipe_MEngineSmall.asset", PathItem("Maritime/Items/MItem_EngineSmall.asset") ?? Item("Crude Engine"), 1, (iron, 6), (ironGear, 4), (copperWire, 4));
             Repair("Maritime/Recipes/Recipe_MHelm.asset", PathItem("Maritime/Items/MItem_Helm.asset") ?? Item("Helm"), 1, (plank, 6), (iron, 2), (ironGear, 2));
 
+            Repair("GridSystem/Recipes/Recipe_GThrustLarge.asset",
+                PathItem("GridSystem/Items/GItem_AtmoThruster_Large.asset") ?? Item("Large Atmospheric Thruster") ?? Item("Large Thruster"),
+                1,
+                (steelPlate ?? steel, 12),
+                (copperWire ?? copper, 16),
+                (circuit, 2));
+
             foreach (var family in new[] { "Foundation", "Wall", "Floor", "Doorway", "Door", "Window", "Stairs", "Roof", "Pillar", "HalfWall" })
                 Repair($"Recipes/Recipe_Tok_{family}.asset", PathItem($"Tiered/Tokens/Token_{family}.asset") ?? Item($"Token_{family}"), 1, (woodLog, 1));
 
@@ -281,6 +288,15 @@ namespace VoxelEngine.EditorTools
             Repair("Factory/MachineRecipes/MachineRecipe_CrushIronOre.asset", (Item("Item_IronOre") ?? Item("Iron Ore"), 1));
             Repair("Factory/MachineRecipes/MachineRecipe_CrushCopperOre.asset", (Item("Item_CopperOre") ?? Item("Copper Ore"), 1));
             Repair("Factory/MachineRecipes/MachineRecipe_CrushStone.asset", (Item("Item_Stone") ?? Item("Stone"), 1));
+
+            var crushStone = AssetDatabase.LoadAssetAtPath<MachineRecipe>($"{Root}/Factory/MachineRecipes/MachineRecipe_CrushStone.asset");
+            var sand = Item("Item_Sand") ?? Item("Sand");
+            if (crushStone != null && crushStone.byproductItem == null && crushStone.byproductCount > 0 && sand != null)
+            {
+                crushStone.byproductItem = sand;
+                EditorUtility.SetDirty(crushStone);
+                repaired++;
+            }
             return repaired;
         }
 
