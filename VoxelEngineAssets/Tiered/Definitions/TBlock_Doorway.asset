@@ -12,12 +12,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f36bfc5b50d54a24593f2613e8d30e7e, type: 3}
   m_Name: TBlock_Doorway
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.Tiered.TieredBlockDefinition
-  family: 0
-  displayName: Foundation
-  woodPrefab: {fileID: 4621637101245430600, guid: c0df4df2d515a4d4384718c516095706, type: 3}
-  stonePrefab: {fileID: 3378730627036097352, guid: 966b8f31a88fab740887664eb13d0d18, type: 3}
-  ironPrefab: {fileID: 7441582144544937383, guid: f007d589a7b39934ca38614f895213d9, type: 3}
-  steelPrefab: {fileID: 2470915817112091397, guid: 39390acf9e909a64d808cbf6f271c7f9, type: 3}
+  family: 2
+  displayName: Doorway
+  woodPrefab: {fileID: 243207223610467860, guid: a2fcec68aff4ab74eab10d42e262e95b, type: 3}
+  stonePrefab: {fileID: 2040316075006192810, guid: bb6ead121bd6b494a833a0c5fc591e3b, type: 3}
+  ironPrefab: {fileID: 1688546854252605191, guid: 1f092354ad9177f4f91f496f5f58cbe8, type: 3}
+  steelPrefab: {fileID: 7072709943616687695, guid: ce4374b41b42ccf41acd6d4b789584a2, type: 3}
   wood:
     hp: 200
     miningTier: 1
@@ -31,10 +31,20 @@ MonoBehaviour:
     hp: 4000
     miningTier: 4
   placeCost:
-    items: []
+    items:
+    - item: {fileID: 11400000, guid: 0757598308dac2d4991806a8e934dd77, type: 2}
+      count: 3
+    - item: {fileID: 11400000, guid: 75b750e48370dfd47856fc40436c0e52, type: 2}
+      count: 2
   woodToStone:
-    items: []
+    items:
+    - item: {fileID: 11400000, guid: 9225024033f905e4187afc15d721e060, type: 2}
+      count: 5
   stoneToIron:
-    items: []
+    items:
+    - item: {fileID: 11400000, guid: 96a60523ff509c84ba84cf35f6084bde, type: 2}
+      count: 3
   ironToSteel:
-    items: []
+    items:
+    - item: {fileID: 11400000, guid: 86caa3d29ca1fcb4ab57c4f35cd925b9, type: 2}
+      count: 3

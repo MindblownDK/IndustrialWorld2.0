@@ -1454,11 +1454,12 @@ namespace VoxelEngine.EditorTools
             var matSteel = GetOrCreateTierMaterial("Mat_Steel_Premium", new Color(0.34f, 0.39f, 0.48f), 3, 0.86f, 0.48f);
             var tierMats = new[] { matWood, matStone, matIron, matSteel };
 
-            // Size-V4 is an exact 25% linear increase over the validated Size-V3
-            // proportions. Costs and tier balance remain untouched.
+            // Size-V5 keeps the exact Size-V4 dimensions while closing the
+            // Foundation deck seams and adding bidirectional stair anchors.
+            // Costs and tier balance remain untouched.
             const float constructionScale = 1.25f;
             const float constructionModuleSize = 3.75f;
-            int migratedSizeV4PrefabCount = 0;
+            int migratedSizeV5PrefabCount = 0;
             Vector3 ScaleConstruction(Vector3 value) => value * constructionScale;
 
             // ---------- Build the 10 families, each with 4 tier prefabs ----------
@@ -1475,7 +1476,9 @@ namespace VoxelEngine.EditorTools
                 {
                     var plank = AddBox(root, material,
                         ScaleConstruction(new Vector3(-1.20f + i * 0.60f, 0.52f, 0f)),
-                        ScaleConstruction(new Vector3(0.58f, 0.15f, 2.82f)));
+                        // Slight plank overlap removes light-leaking seams, while
+                        // the full depth exactly covers the perimeter structure.
+                        ScaleConstruction(new Vector3(0.62f, 0.15f, 3.02f)));
                     plank.name = $"Generated_FoundationDeck_{i}";
                 }
 
@@ -1598,7 +1601,22 @@ namespace VoxelEngine.EditorTools
                         bool emptyPrefab = root.transform.childCount == 0
                             && root.GetComponent<MeshFilter>() == null
                             && root.GetComponentInChildren<MeshRenderer>() == null;
-                        bool hasCurrentGeneratedSize = root.transform.Find("Generated_SizeV4") != null;
+                        bool hasCurrentGeneratedSize = root.transform.Find("Generated_SizeV5") != null;
+                        var sizeV4Marker = root.transform.Find("Generated_SizeV4");
+                        bool requiresSizeV5Geometry = fam == VoxelEngine.Building.Tiered.BuildFamily.Foundation
+                            || fam == VoxelEngine.Building.Tiered.BuildFamily.Doorway
+                            || fam == VoxelEngine.Building.Tiered.BuildFamily.Floor;
+                        if (!hasCurrentGeneratedSize && sizeV4Marker != null && !requiresSizeV5Geometry)
+                        {
+                            // No geometry/socket change is required for this family.
+                            // Advance only the generated marker so authored transforms
+                            // are not needlessly rebuilt during the migration.
+                            sizeV4Marker.name = "Generated_SizeV5";
+                            hasCurrentGeneratedSize = true;
+                            migratedSizeV5PrefabCount++;
+                            Debug.Log($"[VoxelEngineSetupWindow] Step 5 verified unchanged Size-V5 geometry for '{name}' without rebuilding its children.");
+                        }
+
                         bool setupGenerated = false;
                         var renderersBefore = root.GetComponentsInChildren<Renderer>(true);
                         if (!emptyPrefab && !hasCurrentGeneratedSize && renderersBefore.Length > 0)
@@ -1624,15 +1642,15 @@ namespace VoxelEngine.EditorTools
                         {
                             for (int childIndex = root.transform.childCount - 1; childIndex >= 0; childIndex--)
                                 Object.DestroyImmediate(root.transform.GetChild(childIndex).gameObject);
-                            migratedSizeV4PrefabCount++;
-                            Debug.Log($"[VoxelEngineSetupWindow] Step 5 migrated Setup-generated prefab '{name}' to Size-V4 (3.75 m). Custom prefab geometry and balance values were not changed.");
+                            migratedSizeV5PrefabCount++;
+                            Debug.Log($"[VoxelEngineSetupWindow] Step 5 migrated Setup-generated prefab '{name}' to Size-V5 deck/stair geometry. Custom prefab geometry and balance values were not changed.");
                         }
 
                         if (emptyPrefab || setupGenerated)
                         {
                             meshBuilder(root, tierMats[t]);
                             socketBuilder(root);
-                            var marker = new GameObject("Generated_SizeV4");
+                            var marker = new GameObject("Generated_SizeV5");
                             marker.transform.SetParent(root.transform, false);
                         }
 
@@ -1737,6 +1755,9 @@ namespace VoxelEngine.EditorTools
                     AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.East, new Vector3(constructionModuleSize, 0f, 0f), VoxelEngine.Building.Tiered.BuildFamily.Doorway);
                     AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.West, new Vector3(-constructionModuleSize, 0f, 0f), VoxelEngine.Building.Tiered.BuildFamily.Doorway);
                     AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.Center, Vector3.zero, VoxelEngine.Building.Tiered.BuildFamily.Doorway);
+                    // Exterior threshold anchor: stairs snap with their high tread
+                    // at the doorway and descend one complete storey outward.
+                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.Bottom, Vector3.zero, VoxelEngine.Building.Tiered.BuildFamily.Doorway);
                 },
                 Cost((woodLog, 3), (plank, 2)),
                 Cost((stone, 5)),
@@ -1772,6 +1793,12 @@ namespace VoxelEngine.EditorTools
                     AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.South, new Vector3(0f, 0f, -constructionModuleSize), VoxelEngine.Building.Tiered.BuildFamily.Floor);
                     AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.East, new Vector3(constructionModuleSize, 0f, 0f), VoxelEngine.Building.Tiered.BuildFamily.Floor);
                     AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.West, new Vector3(-constructionModuleSize, 0f, 0f), VoxelEngine.Building.Tiered.BuildFamily.Floor);
+                    float halfModule = constructionModuleSize * 0.5f;
+                    float topSurface = 0.25f;
+                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.TopNorth, new Vector3(0f, topSurface, halfModule), VoxelEngine.Building.Tiered.BuildFamily.Floor, 0f);
+                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.TopSouth, new Vector3(0f, topSurface, -halfModule), VoxelEngine.Building.Tiered.BuildFamily.Floor, 180f);
+                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.TopEast, new Vector3(halfModule, topSurface, 0f), VoxelEngine.Building.Tiered.BuildFamily.Floor, 90f);
+                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.TopWest, new Vector3(-halfModule, topSurface, 0f), VoxelEngine.Building.Tiered.BuildFamily.Floor, -90f);
                 },
                 Cost((woodLog, 2), (plank, 2)),
                 Cost((stone, 5)),
@@ -1877,7 +1904,7 @@ namespace VoxelEngine.EditorTools
             var tokDoorway    = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Doorway,    "Doorway",    new Color(0.55f, 0.40f, 0.25f), "A player-sized structural opening with a center socket for a separately placed Door. Select with the Hammer and place with RMB.");
             var tokWindow     = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Window,     "Window",     new Color(0.55f, 0.40f, 0.25f), "A wall with a window opening. Lets light through and lets you peek out. Hold in active hotbar slot to enter build mode. RMB places at Wood tier (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.");
             var tokFloor      = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Floor,      "Floor",      new Color(0.55f, 0.40f, 0.25f), "A 3.75 m floor slab. Place on top of walls/pillars to make second stories. Hold in active hotbar slot to enter build mode. RMB places at Wood tier (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.");
-            var tokStairs     = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Stairs,     "Stairs",     new Color(0.55f, 0.40f, 0.25f), "A staircase that connects two height levels. Place against a foundation edge. Hold in active hotbar slot to enter build mode. RMB places at Wood tier (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.");
+            var tokStairs     = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Stairs,     "Stairs",     new Color(0.55f, 0.40f, 0.25f), "A full-storey staircase. Aim at a Foundation/Floor side or Doorway threshold to snap downward; aim at a top perimeter edge to build upward. RMB places at Wood tier. Press R (or Ctrl+Wheel) to rotate around the anchored tread.");
             var tokRoof       = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Roof,       "Roof",       new Color(0.55f, 0.40f, 0.25f), "A sloped roof slab. Place on top of walls to seal the room. Hold in active hotbar slot to enter build mode. RMB places at Wood tier (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.");
             var tokPillar     = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Pillar,     "Pillar",     new Color(0.55f, 0.40f, 0.25f), "A vertical column. Hosts walls on its sides and floors/roofs on its top. Hold in active hotbar slot to enter build mode. RMB places at Wood tier (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.");
             var tokHalfWall   = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.HalfWall,   "HalfWall",   new Color(0.55f, 0.40f, 0.25f), "A half-height wall for railings and counters. Select with the Hammer and place with RMB.");
@@ -2026,15 +2053,15 @@ namespace VoxelEngine.EditorTools
                 EditorUtility.SetDirty(sys);
             }
 
-            Debug.Log($"[VoxelEngineSetupWindow] Step 5 complete. Size-V4 prefabs migrated={migratedSizeV4PrefabCount}. Existing custom geometry, materials, costs, health, and other balance values were preserved.");
+            Debug.Log($"[VoxelEngineSetupWindow] Step 5 complete. Size-V5 prefabs migrated={migratedSizeV5PrefabCount}. Existing custom geometry, materials, costs, health, and other balance values were preserved.");
             EditorUtility.DisplayDialog("Voxel Engine",
                 "Tiered building content created!\n\n" +
                 "* 40 prefabs (10 families x 4 tiers) in " + tieredPrefabs + "\n" +
                 "* 10 build tokens + Hammer\n" +
                 "* 11 recipes created or connected in RecipeRegistry\n" +
                 "* TieredBlockRegistry asset created\n" +
-                $"* Size-V4 prefabs migrated this run: {migratedSizeV4PrefabCount}\n" +
-                "* Size-V4 3.75 m geometry, exact Foundation spacing, player-away Doors, and finite late-game Quarry migration verified\n\n" +
+                $"* Size-V5 prefabs migrated this run: {migratedSizeV5PrefabCount}\n" +
+                "* Seamless Foundation deck, bidirectional edge/doorway stairs, player-away Doors, and finite late-game Quarry migration verified\n\n" +
                 "Re-run Step 2 to spawn a player with BuildSystemV2 wired up,\n" +
                 "or manually add the BuildSystemV2 component and assign the registry.",
                 "OK");

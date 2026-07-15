@@ -58,6 +58,8 @@ namespace VoxelEngine.Simulation
         public bool IsOnline => _power != null && _power.IsPowered;
         public float Progress01 => _current == null ? 0f : _processProgress / EffectiveProcessTime(_current);
         public float CurrentWattage { get; private set; }
+        public string CurrentRecipeId => _current != null ? _current.name : string.Empty;
+        public float ProcessProgressSeconds => _processProgress;
         public bool UserEnabled
         {
             get => _userEnabled;
@@ -93,6 +95,29 @@ namespace VoxelEngine.Simulation
             if (inputC   == null) inputC   = new ItemContainer("Input",    INPUT_SLOTS);    else inputC.Resize(INPUT_SLOTS);
             if (outputC  == null) outputC  = new ItemContainer("Outputs",  OUTPUT_SLOTS);   else outputC.Resize(OUTPUT_SLOTS);
             if (upgradeC == null) upgradeC = new ItemContainer("Upgrades", UPGRADE_SLOTS);  else upgradeC.Resize(UPGRADE_SLOTS);
+        }
+
+        /// <summary>Restores additive machine state after its containers are loaded.</summary>
+        public void RestorePersistentState(string recipeId, float progressSeconds, bool userEnabled)
+        {
+            EnsureContainers();
+            _userEnabled = userEnabled;
+            _current = null;
+            if (!string.IsNullOrEmpty(recipeId))
+            {
+                foreach (var recipe in knownRecipes)
+                {
+                    if (recipe != null && recipe.name == recipeId)
+                    {
+                        _current = recipe;
+                        break;
+                    }
+                }
+            }
+            if (_current == null) _current = FindRecipeForInput();
+            _processProgress = _current != null
+                ? Mathf.Clamp(progressSeconds, 0f, EffectiveProcessTime(_current))
+                : 0f;
         }
 
         // ── Simulation Tick ───────────────────────────────────────────

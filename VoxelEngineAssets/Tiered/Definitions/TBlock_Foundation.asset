@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.Tiered.TieredBlockDefinition
   family: 0
   displayName: Foundation
-  woodPrefab: {fileID: 3012739016770973455, guid: a82c6d80c50ddbd42ad64122c973e323, type: 3}
-  stonePrefab: {fileID: 7687836166910553788, guid: 7b8399fa8f6b23a458351cc480b45688, type: 3}
-  ironPrefab: {fileID: 6260838260680572953, guid: 4f69044dc27b29745bbf7aa2ce41fd2d, type: 3}
-  steelPrefab: {fileID: 235088808467605541, guid: c95d3ee4ec634424180ce0ced5cb1080, type: 3}
+  woodPrefab: {fileID: 9215220330613659794, guid: 08b4cd914dff739458c1f9fc2bc662fe, type: 3}
+  stonePrefab: {fileID: 1229431135833879366, guid: e4d9cb1d13b80c247be967e8dbbed3c9, type: 3}
+  ironPrefab: {fileID: 5215640688273303018, guid: 38e8f4a61150b7b429097447c706f1f3, type: 3}
+  steelPrefab: {fileID: 277787198058047878, guid: 01e9a18fff6b7e74c8dc84b8aa49b3e3, type: 3}
   wood:
     hp: 200
     miningTier: 1
@@ -31,10 +31,18 @@ MonoBehaviour:
     hp: 4000
     miningTier: 4
   placeCost:
-    items: []
+    items:
+    - item: {fileID: 11400000, guid: 0757598308dac2d4991806a8e934dd77, type: 2}
+      count: 4
   woodToStone:
-    items: []
+    items:
+    - item: {fileID: 11400000, guid: 9225024033f905e4187afc15d721e060, type: 2}
+      count: 8
   stoneToIron:
-    items: []
+    items:
+    - item: {fileID: 11400000, guid: 96a60523ff509c84ba84cf35f6084bde, type: 2}
+      count: 4
   ironToSteel:
-    items: []
+    items:
+    - item: {fileID: 11400000, guid: 86caa3d29ca1fcb4ab57c4f35cd925b9, type: 2}
+      count: 4

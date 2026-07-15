@@ -12,13 +12,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2f77f4bc409371e40a23eef251913dd5, type: 3}
   m_Name: Token_Pillar
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.Tiered.BuildToken
-  itemId: iron_ore
-  displayName: Iron Ore
-  description: 
+  itemId: build_pillar
+  displayName: Pillar (Build)
+  description: A vertical column. Hosts walls on its sides and floors/roofs on its
+    top. Hold in active hotbar slot to enter build mode. RMB places at Wood tier
+    (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap
+    with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.
   icon: {fileID: 0}
-  iconTint: {r: 1, g: 1, b: 1, a: 1}
-  maxStack: 999
+  iconTint: {r: 0.55, g: 0.4, b: 0.25, a: 1}
+  maxStack: 99
   massPerUnit: 1
   category: Misc
   viewmodelPrefab: {fileID: 0}
-  family: 0
+  family: 7

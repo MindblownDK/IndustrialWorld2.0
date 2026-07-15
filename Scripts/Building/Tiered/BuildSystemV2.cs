@@ -171,6 +171,13 @@ namespace VoxelEngine.Building.Tiered
 
             if (bestSocket != null)
             {
+                if (def.family == BuildFamily.Stairs &&
+                    TryComputeStairTransform(hit, bestSocket, out _ghostPos, out _ghostRot))
+                {
+                    _ghostValid = ValidateOverlap(_ghostPos, def.family);
+                    return;
+                }
+
                 _ghostPos = bestSocket.transform.position;
                 // Preserve the host/socket basis exactly. Reconstructing from world
                 // Euler yaw introduced small rotational drift on spherical surfaces.
@@ -193,6 +200,59 @@ namespace VoxelEngine.Building.Tiered
                 : raw;
             _ghostRot = GravityProvider.GetSurfaceRotation(_ghostPos, _ghostYaw);
             _ghostValid = ValidateOverlap(_ghostPos, def.family);
+        }
+
+        private bool TryComputeStairTransform(
+            RaycastHit hit,
+            BuildSocket socket,
+            out Vector3 position,
+            out Quaternion rotation)
+        {
+            position = Vector3.zero;
+            rotation = Quaternion.identity;
+            if (socket == null) return false;
+
+            bool perimeterSocket = socket.side == SocketSide.TopNorth
+                || socket.side == SocketSide.TopSouth
+                || socket.side == SocketSide.TopEast
+                || socket.side == SocketSide.TopWest;
+            var host = socket.GetComponentInParent<PlacedTieredBlock>();
+            bool doorwayThreshold = host != null
+                && host.definition != null
+                && host.definition.family == BuildFamily.Doorway
+                && socket.side == SocketSide.Bottom;
+            if (!perimeterSocket && !doorwayThreshold) return false;
+
+            Vector3 up = socket.transform.up.normalized;
+            // Side-face aiming deliberately chooses a descending staircase whose
+            // upper tread meets the selected edge. Aiming at the horizontal top
+            // chooses the opposite, upward-growing orientation. Door thresholds
+            // always place the useful exterior staircase down from the doorway.
+            bool descending = doorwayThreshold
+                || Mathf.Abs(Vector3.Dot(hit.normal.normalized, up)) < 0.55f;
+
+            Quaternion baseRotation = descending
+                ? Quaternion.AngleAxis(180f, up) * socket.transform.rotation
+                : socket.transform.rotation;
+            rotation = Quaternion.AngleAxis(_ghostYaw, up) * baseRotation;
+
+            Vector3 stairForward = rotation * Vector3.forward;
+            float halfRun = gridSize * 0.5f;
+            if (descending)
+            {
+                // The high edge is local +Z. Keep that edge on the socket while
+                // moving the stair root one complete storey below the threshold.
+                position = socket.transform.position
+                    - stairForward * halfRun
+                    - up * gridSize;
+            }
+            else
+            {
+                // The low edge is local -Z. Keep it on the selected top edge and
+                // let the staircase rise outward to the next storey.
+                position = socket.transform.position + stairForward * halfRun;
+            }
+            return true;
         }
 
         private bool ValidateOverlap(Vector3 pos, BuildFamily family)

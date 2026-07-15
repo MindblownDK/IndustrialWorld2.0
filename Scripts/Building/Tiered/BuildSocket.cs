@@ -37,15 +37,14 @@ namespace VoxelEngine.Building.Tiered
         /// </summary>
         public static bool AreCompatible(BuildFamily host, SocketSide side, BuildFamily incoming)
         {
-            // Foundations stack on top of foundations and bind walls on their edges.
+            // Foundations bind neighboring decks, wall-like perimeter pieces, and stairs.
             if (host == BuildFamily.Foundation)
             {
                 switch (side)
                 {
                     case SocketSide.Top:
                         return incoming == BuildFamily.Pillar
-                            || incoming == BuildFamily.Floor
-                            || incoming == BuildFamily.Stairs;
+                            || incoming == BuildFamily.Floor;
                     case SocketSide.TopNorth:
                     case SocketSide.TopSouth:
                     case SocketSide.TopEast:
@@ -53,7 +52,8 @@ namespace VoxelEngine.Building.Tiered
                         return incoming == BuildFamily.Wall
                             || incoming == BuildFamily.Doorway
                             || incoming == BuildFamily.Window
-                            || incoming == BuildFamily.HalfWall;
+                            || incoming == BuildFamily.HalfWall
+                            || incoming == BuildFamily.Stairs;
                     case SocketSide.North:
                     case SocketSide.South:
                     case SocketSide.East:
@@ -67,10 +67,14 @@ namespace VoxelEngine.Building.Tiered
                 }
             }
 
-            // Walls/doorways/windows accept floors/roofs on top, and other walls horizontally.
+            // Doorways accept their separate Door at centre and a descending
+            // staircase at the exterior threshold.
             if (host == BuildFamily.Doorway && side == SocketSide.Center)
                 return incoming == BuildFamily.Door;
+            if (host == BuildFamily.Doorway && side == SocketSide.Bottom)
+                return incoming == BuildFamily.Stairs;
 
+            // Walls/doorways/windows accept floors/roofs on top, and other walls horizontally.
             if (host == BuildFamily.Wall || host == BuildFamily.Doorway ||
                 host == BuildFamily.Window || host == BuildFamily.HalfWall)
             {
@@ -95,7 +99,8 @@ namespace VoxelEngine.Building.Tiered
                 return incoming == BuildFamily.Wall || incoming == BuildFamily.HalfWall;
             }
 
-            // Floors accept walls and pillars on top, more floors on the side.
+            // Floors accept walls and pillars on top, stairs on their perimeter,
+            // and more floors one complete module to the side.
             if (host == BuildFamily.Floor)
             {
                 if (side == SocketSide.Top)
@@ -104,6 +109,9 @@ namespace VoxelEngine.Building.Tiered
                            incoming == BuildFamily.Pillar ||
                            incoming == BuildFamily.Doorway ||
                            incoming == BuildFamily.Window;
+                if (side == SocketSide.TopNorth || side == SocketSide.TopSouth ||
+                    side == SocketSide.TopEast || side == SocketSide.TopWest)
+                    return incoming == BuildFamily.Stairs;
                 return incoming == BuildFamily.Floor;
             }
 

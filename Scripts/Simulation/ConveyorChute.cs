@@ -53,6 +53,23 @@ namespace VoxelEngine.Simulation
 
         public IReadOnlyList<ChuteItem> Items => _items;
 
+        /// <summary>Restores persisted chute packets and refreshes their pooled visuals.</summary>
+        public void RestoreItems(IEnumerable<ChuteItem> savedItems)
+        {
+            _items.Clear();
+            if (savedItems != null)
+            {
+                foreach (var saved in savedItems)
+                {
+                    if (saved.item == null || saved.count <= 0 || _items.Count >= maxItems) continue;
+                    var restored = saved;
+                    restored.slideProgress = Mathf.Clamp01(restored.slideProgress);
+                    _items.Add(restored);
+                }
+            }
+            UpdateItemVisuals();
+        }
+
         private void Awake()
         {
             _itemProperties = new MaterialPropertyBlock();

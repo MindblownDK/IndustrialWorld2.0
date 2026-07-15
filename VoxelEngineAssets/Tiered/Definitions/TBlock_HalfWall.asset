@@ -12,12 +12,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f36bfc5b50d54a24593f2613e8d30e7e, type: 3}
   m_Name: TBlock_HalfWall
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.Tiered.TieredBlockDefinition
-  family: 0
-  displayName: Foundation
-  woodPrefab: {fileID: 2316464808383063343, guid: 2f5a47a62e3131f41b925a335a307807, type: 3}
-  stonePrefab: {fileID: 2099352941240156018, guid: 0b697d09ac3febb49abfd00253054ade, type: 3}
-  ironPrefab: {fileID: 5363249826787602689, guid: 1593d934dc4eef443860fb15ea3a51cf, type: 3}
-  steelPrefab: {fileID: 2401624027448982402, guid: 12052cbfd365e3e4c87d7d53d1b722cd, type: 3}
+  family: 8
+  displayName: HalfWall
+  woodPrefab: {fileID: 195096870549910122, guid: 753daab2ab1688745be9c40fae5dfe1a, type: 3}
+  stonePrefab: {fileID: 4540172624691428458, guid: be29006a17a627348874051d147e0a51, type: 3}
+  ironPrefab: {fileID: 7179306624775099924, guid: a662e99262567f545bdc9efc06f0c4e6, type: 3}
+  steelPrefab: {fileID: 5809216737836998303, guid: 64d755386aad8f141b56cb5e4955e592, type: 3}
   wood:
     hp: 200
     miningTier: 1
@@ -31,10 +31,20 @@ MonoBehaviour:
     hp: 4000
     miningTier: 4
   placeCost:
-    items: []
+    items:
+    - item: {fileID: 11400000, guid: 0757598308dac2d4991806a8e934dd77, type: 2}
+      count: 1
+    - item: {fileID: 11400000, guid: 75b750e48370dfd47856fc40436c0e52, type: 2}
+      count: 1
   woodToStone:
-    items: []
+    items:
+    - item: {fileID: 11400000, guid: 9225024033f905e4187afc15d721e060, type: 2}
+      count: 2
   stoneToIron:
-    items: []
+    items:
+    - item: {fileID: 11400000, guid: 96a60523ff509c84ba84cf35f6084bde, type: 2}
+      count: 1
   ironToSteel:
-    items: []
+    items:
+    - item: {fileID: 11400000, guid: 86caa3d29ca1fcb4ab57c4f35cd925b9, type: 2}
+      count: 1

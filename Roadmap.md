@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.7.2-dev`
-**Roadmap Version:** `5.7.2-dev`
+**Current Version:** `5.8.0-dev`
+**Roadmap Version:** `5.8.0-dev`
 **Date:** 2026-07-15
-**Status:** Active Implementation — Size-V4 Foundation Spacing, Player-Away Doors & Construction Scale
+**Status:** Active Implementation — Seamless Foundations, Bidirectional Stairs & Factory Persistence
 
 ---
 
@@ -49,7 +49,7 @@ The design goal is a seamless blend of:
 | Small grid | 🟡 Basic | Needs improvement and usability |
 | Power (wind, hydrogen) | ✅ Mature | Modular turbines are excellent |
 | Fluids / gases | ✅ Good | Pipe-gated transfer in 2.20.0 |
-| Building (static + tiered) | 🛠️ Working On | 3.75 m Size-V4 modules, full-module Foundation neighbor sockets, player-away Door swing, separate Door/Doorway families, paginated Hammer wheel, and premium tier materials await validation |
+| Building (static + tiered) | 🛠️ Working On | 3.75 m spacing, scale, rotation, and player-away Doors are Unity-validated. Size-V5 closes Foundation deck seams and adds upward/downward Stair anchors at Foundation/Floor edges and Doorway thresholds; final validation is pending. |
 | Advanced Quarry | 🛠️ Working On | Unbreakable bedrock generation removed; late Tier-5 quarry uses a finite configurable 64-layer default depth |
 | Sky / atmosphere / space rendering | 🟡 Basic | Needs planet-specific skies and proper space ambiance |
 | Gravity / orbits | 🟡 Buggy | Player and grids sometimes fall; orbits not realistic |
@@ -500,7 +500,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 |------|--------|------------------|
 | Conveyor belts | 🛠️ WORKING ON | Vertical geometry, item paths, and colliders now share the horizontal belt-surface height for precise Straight/Ramp transitions. Wheel hover now brightens the complete segment and animates its icon/label. Unity validation is pending. |
 | Conveyor chutes | 🟡 PARTIALLY COMPLETE | Straight vertical transport, snapping, moving-item visuals, inventory endpoints, and save-compatible placement are validated foundations. |
-| Basic machines | 🟡 PARTIALLY COMPLETE | Electric Furnace, Crusher, and three Assembler tiers exist. Crusher and Assembler use the centralized simulation tick; shared UI and persistence still need completion. |
+| Basic machines | 🟡 PARTIALLY COMPLETE | Electric Furnace, Crusher, and three Assembler tiers exist. Crusher and Assembler use the centralized simulation tick; their buffers, active recipe, progress, and enabled state now persist additively. Shared UI still needs completion and persistence awaits Unity validation. |
 | Storage blocks | 🟡 PARTIALLY COMPLETE | A basic chest and the wider storage system exist. The planned Wooden Crate → Iron Chest → Steel Chest → Provider/Requester progression is not complete. |
 | Power pole, wire, and substation | 🟡 PARTIALLY COMPLETE | Manual wiring, poles, substations, transformers, and high-voltage assets exist. Setup reruns still need full non-destructive balance preservation. |
 | Grid/static lighting and LED strips | 🟡 PARTIALLY COMPLETE | Grid light, floodlight logic, and static/grid LED assets exist. Configuration UX, power validation, and complete authored variants still need verification. |
@@ -508,8 +508,8 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Item entity system | 🟡 PARTIALLY COMPLETE | Dropped world items exist and conveyors render carried packets. A unified pooled physical-item entity lifecycle is not complete. |
 | Recipe registry refactor | 🟡 PARTIALLY COMPLETE | ScriptableObject crafting and machine recipes exist. Shaped/shapeless/smelting/machine unification and validation remain incomplete. |
 | Centralized simulation tick | 🟡 PARTIALLY COMPLETE | Crusher and Assembler register with `SimulationTickManager`; belts, chutes, and several older machines still run per-frame updates. |
-| Factory persistence | 🟡 PARTIALLY COMPLETE | Explicit Ramp/Vertical conveyor modes restore from additive save fields; belt/chute contents plus Crusher/Assembler buffers and progress remain outstanding. |
-| Step 5 tiered setup workflow | 🛠️ WORKING ON | Missing canonical resources are repaired safely; generated Size-V3 prefabs migrate to 3.75 m Size-V4 geometry with exact full-module Foundation spacing while custom prefabs, materials, and balance values remain preserved. Unity validation is pending. |
+| Factory persistence | 🛠️ WORKING ON | Additive save fields now preserve explicit Conveyor shapes, Conveyor/Chute item packets and path progress, plus Crusher/Assembler input-output-upgrade buffers, active recipe, process progress, and enabled state. Legacy saves remain compatible; Unity save/reload validation is pending. |
+| Step 5 tiered setup workflow | 🛠️ WORKING ON | Generated Size-V4 prefabs migrate to Size-V5 seamless Foundation decks and Stair anchors. Missing resources are repaired safely while custom prefabs, materials, recipes, and balance values remain preserved. Unity two-run validation is pending. |
 | Step 17 setup workflow | ✅ COMPLETED | The separate-variant generation pass was withdrawn before validation. Step 17 remains non-destructive and now documents the contextual conveyor wheel while preserving the three existing tier items and recipes. |
 
 > **Completion gate:** This section becomes **✅ COMPLETED** only after Step 17 is non-destructive, all listed variants are authored through the setup wizard, factory runtime state persists, and the Unity validation checklist passes.
@@ -566,6 +566,8 @@ Statuses are evidence-based and move forward only after code/content review and 
    - Standard construction module is 3.75 meters wide/tall, an exact 25% increase over Size-V3 so Crusaders fit comfortably through rooms and openings.
    - Foundation, Wall, Doorway, Window, Floor, Stairs, Roof, Pillar, Half Wall, and Door families each retain four material tiers.
    - Foundation neighbor sockets target a full 3.75 m center-to-center offset; wall-like top sockets remain on the true perimeter edge and all lateral roots stay level.
+   - Foundation deck planks overlap subtly and extend across the full perimeter structure so no seams expose or undersized top surface remains.
+   - Stairs anchor at Foundation/Floor perimeter edges and Doorway thresholds: side-face aiming descends from the selected level, while top-face aiming rises outward.
    - Doorway is an empty structural opening; Door is a separate placeable family that snaps into the Doorway center socket.
    - Each Door evaluates the interacting player's side every time it opens and swings away from that player.
    - Hammer wheel uses paginated donut pages with labels inset from the ring edge.
@@ -1660,6 +1662,36 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.8.0-dev] Seamless Foundations, Bidirectional Stairs & Factory State Persistence
+
+**Type:** MINOR — new save-compatible factory runtime persistence plus construction snapping/visual fixes
+
+**Validated:**
+- Thomas confirmed the `3.75 m` Size-V4 construction scale, exact Foundation neighbor spacing, and player-away Door swing work correctly in Unity.
+
+**Fixed / Improved:**
+- Foundation deck planks now overlap subtly and cover the complete perimeter structure, removing top seams and visible lower-frame overflow.
+- Foundation top-center no longer captures Stairs; four directional perimeter sockets choose the intended edge.
+- Aiming at a Foundation or Floor side with Stairs anchors the upper tread at that edge and extends the staircase down one complete storey.
+- Aiming at the horizontal top perimeter places the opposite upward-rising orientation.
+- Doorways now expose a dedicated exterior threshold Stair anchor so a descending staircase can lead directly up to the opening.
+- Stair rotation keeps the anchored high/low tread fixed while rotating around the selected socket.
+- Step 5 migrates recognized Setup-generated prefabs to `Generated_SizeV5`, while preserving custom geometry, materials, recipes, health, costs, and balance tuning.
+
+**Roadmap Continued — Factory Persistence:**
+- Conveyor item identity, packet count, path progress, and lateral visual position now save and restore.
+- Chute item identity, packet count, and slide progress now save and restore.
+- Crusher and Assembler input, output, and upgrade buffers now save and restore.
+- Crusher and Assembler active recipe, process progress, and player-enabled state now save and restore.
+- All fields are additive; legacy saves load with empty transport state and default machine behavior.
+
+**Roadmap Status:**
+- Size-V4 scale, Foundation spacing, and player-away Doors: **✅ COMPLETED**.
+- Seamless Foundation deck and bidirectional Stair snapping: **🛠️ WORKING ON** — Unity validation pending.
+- Factory persistence: **🛠️ WORKING ON** — Unity save/reload validation pending.
+
+---
 
 ### [5.7.2-dev] 25% Larger Construction, Exact Foundation Spacing & Player-Away Doors
 

@@ -12,13 +12,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2f77f4bc409371e40a23eef251913dd5, type: 3}
   m_Name: Token_Stairs
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.Tiered.BuildToken
-  itemId: iron_ore
-  displayName: Iron Ore
-  description: 
+  itemId: build_stairs
+  displayName: Stairs (Build)
+  description: A full-storey staircase. Aim at a Foundation/Floor side or Doorway
+    threshold to snap downward; aim at a top perimeter edge to build upward. RMB
+    places at Wood tier. Press R (or Ctrl+Wheel) to rotate around the anchored tread.
   icon: {fileID: 0}
-  iconTint: {r: 1, g: 1, b: 1, a: 1}
-  maxStack: 999
+  iconTint: {r: 0.55, g: 0.4, b: 0.25, a: 1}
+  maxStack: 99
   massPerUnit: 1
   category: Misc
   viewmodelPrefab: {fileID: 0}
-  family: 0
+  family: 5

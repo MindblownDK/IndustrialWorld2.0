@@ -1,7 +1,7 @@
 // Assets/Scripts/VoxelEngine/Persistence/WorldStatePersistence.cs
 //
-// Saves the dynamic world state (player + placed blocks + their containers) to a JSON
-// sidecar next to the world's region files.
+// Saves dynamic world state (player, placed blocks, containers, transport packets,
+// and active factory processing) to a JSON sidecar next to the world's region files.
 //
 // Strategy:
 //   - Placed blocks are identified at spawn time by their BlockItem (so we can reconstruct
@@ -75,13 +75,23 @@ namespace VoxelEngine.Persistence
             _itemById.Clear(); _blockById.Clear(); _tieredById.Clear();
             // Runtime-safe asset cache: rely on Resources-visible assets only.
             // This avoids hard dependencies on editor-only assemblies from the runtime asmdef.
-            foreach (var it in Resources.LoadAll<ItemDefinition>(""))
+            void CacheItem(ItemDefinition item)
             {
-                if (!string.IsNullOrEmpty(it.itemId)) _itemById[it.itemId] = it;
-                if (it is BlockItem bi && !string.IsNullOrEmpty(bi.itemId)) _blockById[bi.itemId] = bi;
+                if (item == null || string.IsNullOrEmpty(item.itemId)) return;
+                _itemById[item.itemId] = item;
+                if (item is BlockItem block) _blockById[item.itemId] = block;
             }
+
+            foreach (var item in Resources.LoadAll<ItemDefinition>("")) CacheItem(item);
+            // Setup-generated content is frequently referenced by scene registries
+            // without living under a Resources folder. Include every loaded asset so
+            // editor and player builds resolve the same stable item IDs.
+            foreach (var item in Resources.FindObjectsOfTypeAll<ItemDefinition>()) CacheItem(item);
+
             foreach (var def in Resources.LoadAll<TieredBlockDefinition>(""))
                 _tieredById[def.family.ToString()] = def;
+            foreach (var def in Resources.FindObjectsOfTypeAll<TieredBlockDefinition>())
+                if (def != null) _tieredById[def.family.ToString()] = def;
         }
 
         // ============================================================
@@ -149,7 +159,65 @@ namespace VoxelEngine.Persistence
                     entry.hasExplicitConveyorShape = true;
                     entry.conveyorShape = (int)conveyor.shape;
                 }
+                CaptureFactoryRuntime(pb.gameObject, entry);
                 save.placedBlocks.Add(entry);
+            }
+        }
+
+        private static void CaptureFactoryRuntime(GameObject go, SavedPlacedBlock entry)
+        {
+            var belt = go.GetComponentInChildren<VoxelEngine.Simulation.ConveyorBelt>(true);
+            if (belt != null)
+            {
+                foreach (var item in belt.Items)
+                {
+                    if (item.item == null || item.count <= 0) continue;
+                    entry.conveyorItems.Add(new SavedTransportItem
+                    {
+                        itemId = item.item.itemId,
+                        count = item.count,
+                        progress = Mathf.Clamp01(item.progress),
+                        lateralOffset = item.lateralOffset
+                    });
+                }
+            }
+
+            var chute = go.GetComponentInChildren<VoxelEngine.Simulation.ConveyorChute>(true);
+            if (chute != null)
+            {
+                foreach (var item in chute.Items)
+                {
+                    if (item.item == null || item.count <= 0) continue;
+                    entry.chuteItems.Add(new SavedTransportItem
+                    {
+                        itemId = item.item.itemId,
+                        count = item.count,
+                        progress = Mathf.Clamp01(item.slideProgress)
+                    });
+                }
+            }
+
+            var crusher = go.GetComponentInChildren<VoxelEngine.Simulation.Crusher>(true);
+            if (crusher != null)
+            {
+                entry.machine = new SavedMachineState
+                {
+                    recipeId = crusher.CurrentRecipeId,
+                    progressSeconds = crusher.ProcessProgressSeconds,
+                    userEnabled = crusher.UserEnabled
+                };
+                return;
+            }
+
+            var assembler = go.GetComponentInChildren<VoxelEngine.Simulation.Assembler>(true);
+            if (assembler != null)
+            {
+                entry.machine = new SavedMachineState
+                {
+                    recipeId = assembler.CurrentRecipeId,
+                    progressSeconds = assembler.ProcessProgressSeconds,
+                    userEnabled = assembler.UserEnabled
+                };
             }
         }
 
@@ -268,6 +336,14 @@ namespace VoxelEngine.Persistence
                 AttachPortSnapshot(go, sc);
                 return sc;
             }
+
+            var crusher = go.GetComponentInChildren<VoxelEngine.Simulation.Crusher>();
+            if (crusher != null)
+                return SerializeMulti(crusher.inputC, crusher.outputC, crusher.upgradeC);
+
+            var assembler = go.GetComponentInChildren<VoxelEngine.Simulation.Assembler>();
+            if (assembler != null)
+                return SerializeMulti(assembler.inputC, assembler.outputC, assembler.upgradeC);
 
             return null;
         }
@@ -436,6 +512,67 @@ namespace VoxelEngine.Persistence
                     tex.overrideTexture  = blockItem.texture;
                 }
                 if (sb.container != null) RestoreContainer(go, sb.container);
+                RestoreFactoryRuntime(go, sb);
+            }
+        }
+
+        private void RestoreFactoryRuntime(GameObject go, SavedPlacedBlock saved)
+        {
+            var belt = go.GetComponentInChildren<VoxelEngine.Simulation.ConveyorBelt>(true);
+            if (belt != null && saved.conveyorItems != null)
+            {
+                var restored = new List<VoxelEngine.Simulation.ConveyorItem>();
+                foreach (var item in saved.conveyorItems)
+                {
+                    if (item == null || string.IsNullOrEmpty(item.itemId) || item.count <= 0) continue;
+                    if (!_itemById.TryGetValue(item.itemId, out var definition)) continue;
+                    restored.Add(new VoxelEngine.Simulation.ConveyorItem
+                    {
+                        item = definition,
+                        count = item.count,
+                        progress = Mathf.Clamp01(item.progress),
+                        lateralOffset = item.lateralOffset
+                    });
+                }
+                belt.RestoreItems(restored);
+            }
+
+            var chute = go.GetComponentInChildren<VoxelEngine.Simulation.ConveyorChute>(true);
+            if (chute != null && saved.chuteItems != null)
+            {
+                var restored = new List<VoxelEngine.Simulation.ChuteItem>();
+                foreach (var item in saved.chuteItems)
+                {
+                    if (item == null || string.IsNullOrEmpty(item.itemId) || item.count <= 0) continue;
+                    if (!_itemById.TryGetValue(item.itemId, out var definition)) continue;
+                    restored.Add(new VoxelEngine.Simulation.ChuteItem
+                    {
+                        item = definition,
+                        count = item.count,
+                        slideProgress = Mathf.Clamp01(item.progress)
+                    });
+                }
+                chute.RestoreItems(restored);
+            }
+
+            if (saved.machine == null) return;
+            var crusher = go.GetComponentInChildren<VoxelEngine.Simulation.Crusher>(true);
+            if (crusher != null)
+            {
+                crusher.RestorePersistentState(
+                    saved.machine.recipeId,
+                    saved.machine.progressSeconds,
+                    saved.machine.userEnabled);
+                return;
+            }
+
+            var assembler = go.GetComponentInChildren<VoxelEngine.Simulation.Assembler>(true);
+            if (assembler != null)
+            {
+                assembler.RestorePersistentState(
+                    saved.machine.recipeId,
+                    saved.machine.progressSeconds,
+                    saved.machine.userEnabled);
             }
         }
 
@@ -505,6 +642,17 @@ namespace VoxelEngine.Persistence
                 RestorePortSnapshot(go, sc);
                 return;
             }
+
+            var crusher = go.GetComponentInChildren<VoxelEngine.Simulation.Crusher>();
+            if (crusher != null)
+            {
+                DeserializeMulti(sc, crusher.inputC, crusher.outputC, crusher.upgradeC);
+                return;
+            }
+
+            var assembler = go.GetComponentInChildren<VoxelEngine.Simulation.Assembler>();
+            if (assembler != null)
+                DeserializeMulti(sc, assembler.inputC, assembler.outputC, assembler.upgradeC);
         }
 
         private void RestoreDrawer(VoxelEngine.Storage.StorageDrawer drawer, SavedContainer sc)
@@ -634,6 +782,24 @@ namespace VoxelEngine.Persistence
             // hasExplicitConveyorShape false and rebuild normal straight/corner topology.
             public bool hasExplicitConveyorShape;
             public int conveyorShape;
+            // Additive Factory Foundations runtime state. Legacy saves leave these
+            // collections empty and machines resume from their restored containers.
+            public List<SavedTransportItem> conveyorItems = new();
+            public List<SavedTransportItem> chuteItems = new();
+            public SavedMachineState machine;
+        }
+        [Serializable] private class SavedTransportItem
+        {
+            public string itemId;
+            public int count;
+            public float progress;
+            public float lateralOffset;
+        }
+        [Serializable] private class SavedMachineState
+        {
+            public string recipeId;
+            public float progressSeconds;
+            public bool userEnabled;
         }
         [Serializable] private class SavedPlacedTiered
         {

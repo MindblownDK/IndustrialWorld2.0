@@ -83,6 +83,27 @@ namespace VoxelEngine.Simulation
         /// <summary>Read-only view of items currently on this belt.</summary>
         public IReadOnlyList<ConveyorItem> Items => _items;
 
+        /// <summary>
+        /// Restores save-compatible item packets without triggering transfers.
+        /// Invalid items are skipped and progress is clamped to the visible path.
+        /// </summary>
+        public void RestoreItems(IEnumerable<ConveyorItem> savedItems)
+        {
+            _items.Clear();
+            if (savedItems != null)
+            {
+                foreach (var saved in savedItems)
+                {
+                    if (saved.item == null || saved.count <= 0 || _items.Count >= maxItems) continue;
+                    var restored = saved;
+                    restored.progress = Mathf.Clamp01(restored.progress);
+                    restored.lateralOffset = Mathf.Clamp(restored.lateralOffset, -0.20f, 0.20f);
+                    _items.Add(restored);
+                }
+            }
+            if (_visuals != null) _visuals.UpdateVisuals(_items);
+        }
+
         /// <summary>Items per second throughput for the current speed tier.</summary>
         public float ItemsPerSecond => speed switch
         {
