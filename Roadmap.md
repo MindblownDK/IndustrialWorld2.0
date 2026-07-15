@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.12.0-dev`
-**Roadmap Version:** `5.12.0-dev`
+**Current Version:** `5.12.1-dev`
+**Roadmap Version:** `5.12.1-dev`
 **Date:** 2026-07-16
 **Status:** Active Implementation — Machine UI Recovery & Compact Power Relays
 
@@ -1674,6 +1674,22 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.12.1-dev] Step 17 Missing Script Repair
+
+**Type:** PATCH — Unity prefab serialization and setup repair fixes
+
+**Fixed / Improved:**
+- Split machine animator MonoBehaviours into one class per file so Unity can serialize `AssemblerMotionAnimator`, `CrusherMotionAnimator`, and `FunnelMotionAnimator` reliably.
+- Split compact voltage station MonoBehaviours into matching files/classes for `LvWireConnectorStation`, `HvWireConnectorStation`, and `PowerRelayStation`.
+- Step 17 now strips missing script references from loaded prefabs before saving, then re-adds required components. This prevents Unity's “cannot save prefab with missing script” errors.
+- Step 17 now adds `CoalGeneratorFuel` to the Coal Generator prefab so right-clicking opens the coal generator fuel UI.
+- Step 17 connector/relay prefabs now use the corrected component class names.
+
+**Manual Validation Required:**
+- Run Step 17 again without deleting folders. Existing missing scripts should be removed automatically and prefabs should save normally.
+
+---
 
 ### [5.12.0-dev] Machine UI Recovery & Compact Power Relays
 

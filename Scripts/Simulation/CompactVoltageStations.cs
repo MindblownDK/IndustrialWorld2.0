@@ -19,37 +19,4 @@ namespace VoxelEngine.Simulation
             wireWidth = isHighVoltage ? 0.05f : 0.03f;
         }
     }
-
-    public sealed class LVWireConnectorStation : CompactVoltageStation
-    {
-        protected override void Awake()
-        {
-            maxConnections = 1;
-            wireReach = 15f;
-            isHighVoltage = false;
-            base.Awake();
-        }
-    }
-
-    public sealed class HVWireConnectorStation : CompactVoltageStation
-    {
-        protected override void Awake()
-        {
-            maxConnections = 1;
-            wireReach = 150f;
-            isHighVoltage = true;
-            base.Awake();
-        }
-    }
-
-    public sealed class PowerRelayStation : CompactVoltageStation
-    {
-        protected override void Awake()
-        {
-            maxConnections = 8;
-            wireReach = 25f;
-            isHighVoltage = false;
-            base.Awake();
-        }
-    }
 }

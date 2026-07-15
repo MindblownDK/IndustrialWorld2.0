@@ -470,8 +470,8 @@ GameObject:
   - component: {fileID: 2759145318756391394}
   - component: {fileID: 1766811161819624356}
   - component: {fileID: 8100793832759377396}
-  - component: {fileID: 1097942902437402128}
   - component: {fileID: 422244562768896995}
+  - component: {fileID: 2244587351124386327}
   m_Layer: 0
   m_Name: Assembler_Mk3
   m_TagString: Untagged
@@ -602,23 +602,6 @@ MonoBehaviour:
   pulseLightName: Generated_AssemblerStatusLight
   pulseAmplitude: 0.25
   pulseFrequency: 1.8
---- !u!114 &1097942902437402128
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4015845228635256654}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 0}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Simulation.AssemblerMotionAnimator
-  gantryChildName: Generated_Gantry
-  pressHeadChildName: Generated_PressHead
-  workPieceChildName: Generated_WorkPiece
-  gantryTravel: 1.518
-  pressTravel: 0.18
 --- !u!114 &422244562768896995
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -641,6 +624,23 @@ MonoBehaviour:
   blockedColor: {r: 0.95, g: 0.18, b: 0.14, a: 1}
   offlineColor: {r: 0.18, g: 0.72, b: 0.88, a: 1}
   disabledColor: {r: 0.25, g: 0.26, b: 0.28, a: 1}
+--- !u!114 &2244587351124386327
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4015845228635256654}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: df20017e02c047b5af4e5a1bc6caf0ed, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Simulation.AssemblerMotionAnimator
+  gantryChildName: Generated_Gantry
+  pressHeadChildName: Generated_PressHead
+  workPieceChildName: Generated_WorkPiece
+  gantryTravel: 1.518
+  pressTravel: 0.18
 --- !u!1 &4508897674068677279
 GameObject:
   m_ObjectHideFlags: 0

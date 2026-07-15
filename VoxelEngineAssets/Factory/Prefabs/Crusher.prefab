@@ -192,9 +192,9 @@ GameObject:
   - component: {fileID: 6371408141985938279}
   - component: {fileID: 7195256250794738879}
   - component: {fileID: 2784910139748613108}
-  - component: {fileID: 7858498538809867690}
   - component: {fileID: 8715788289558360436}
   - component: {fileID: 8268883890445079689}
+  - component: {fileID: 7388663160337927860}
   m_Layer: 0
   m_Name: Crusher
   m_TagString: Untagged
@@ -299,24 +299,6 @@ MonoBehaviour:
     _minSize: 1
   baseWattsPerSecond: 250
   idleWattsPerSecond: 8
---- !u!114 &7858498538809867690
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2388326994572086950}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 0}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Simulation.CrusherMotionAnimator
-  leftJawChildName: Generated_LeftJaw
-  rightJawChildName: Generated_RightJaw
-  fallingItemChildName: Generated_FallingItem
-  crushedItemChildName: Generated_CrushedItem
-  jawTravel: 0.16
-  shakeDegrees: 2.5
 --- !u!114 &8715788289558360436
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -361,6 +343,24 @@ MonoBehaviour:
   blockedColor: {r: 0.95, g: 0.18, b: 0.14, a: 1}
   offlineColor: {r: 0.18, g: 0.72, b: 0.88, a: 1}
   disabledColor: {r: 0.25, g: 0.26, b: 0.28, a: 1}
+--- !u!114 &7388663160337927860
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2388326994572086950}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4f4e8b661e754b418a83c0453843ce14, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Simulation.CrusherMotionAnimator
+  leftJawChildName: Generated_LeftJaw
+  rightJawChildName: Generated_RightJaw
+  fallingItemChildName: Generated_FallingItem
+  crushedItemChildName: Generated_CrushedItem
+  jawTravel: 0.16
+  shakeDegrees: 2.5
 --- !u!1 &2545221655311104799
 GameObject:
   m_ObjectHideFlags: 0

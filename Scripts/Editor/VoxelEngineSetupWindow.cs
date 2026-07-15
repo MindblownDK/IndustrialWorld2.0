@@ -2165,6 +2165,13 @@ namespace VoxelEngine.EditorTools
                     }
                     var node = EnsureComponent<T>(root);
                     configure?.Invoke(node);
+                    if (assetName == "Generator_Coal")
+                    {
+                        var fuel = root.GetComponent<VoxelEngine.Power.CoalGeneratorFuel>();
+                        if (fuel == null) fuel = root.AddComponent<VoxelEngine.Power.CoalGeneratorFuel>();
+                        var ports = root.GetComponent<VoxelEngine.Transport.PortConfig>();
+                        if (ports != null) ports.showPortIndicators = false;
+                    }
                     if (root.GetComponent<Collider>() == null) root.AddComponent<BoxCollider>();
                 });
             }
@@ -6187,6 +6194,19 @@ root =>
                 return created;
             }
 
+            void StripMissingScriptsRecursive(GameObject root, string contextPath)
+            {
+                if (root == null) return;
+                int removed = 0;
+                foreach (var transform in root.GetComponentsInChildren<Transform>(true))
+                    removed += GameObjectUtility.RemoveMonoBehavioursWithMissingScript(transform.gameObject);
+                if (removed > 0)
+                {
+                    repairedLinkCount += removed;
+                    Debug.Log($"[VoxelEngineSetupWindow] Step 17 removed {removed} missing script reference(s) from '{contextPath}' before saving.");
+                }
+            }
+
             GameObject GetOrCreateStep17Prefab(string path, string name, System.Action<GameObject> ensureMissingContent)
             {
                 var mainAsset = AssetDatabase.LoadMainAssetAtPath(path);
@@ -6220,7 +6240,9 @@ root =>
                         root = new GameObject(name);
                     }
 
+                    StripMissingScriptsRecursive(root, path);
                     ensureMissingContent?.Invoke(root);
+                    StripMissingScriptsRecursive(root, path);
                     var saved = PrefabUtility.SaveAsPrefabAsset(root, path);
                     if (saved == null)
                     {
@@ -7057,6 +7079,12 @@ root =>
                 });
             });
             var blockElectricFurnace = ConfigureBlock(FAC_ITEMS, "Block_ElectricFurnace", "Electric Furnace", "Powered smelter that uses electricity instead of fuel and supports upgrade modules.", new Color(1.0f, 0.42f, 0.12f), electricFurnacePrefab, "Factory", 460);
+            if (blockElectricFurnace != null && electricFurnacePrefab != null && blockElectricFurnace.placedPrefab != electricFurnacePrefab)
+            {
+                blockElectricFurnace.placedPrefab = electricFurnacePrefab;
+                EditorUtility.SetDirty(blockElectricFurnace);
+                repairedLinkCount++;
+            }
 
             ConfigureMachineDefinition("MachineDef_Crusher", "crusher", "Crusher", "Crushes stone and ores for higher-yield factory processing.", VoxelEngine.Simulation.MachineCategory.Crusher, 250f, 8f, 1f, 1, 4, 2, new Color(0.28f, 0.29f, 0.32f), new Color(0.92f, 0.45f, 0.12f), crusherPrefab);
             ConfigureMachineDefinition("MachineDef_AssemblerMk1", "assembler_mk1", "Assembler Mk.1", "Crafts component recipes from buffered inputs.", VoxelEngine.Simulation.MachineCategory.Assembler, 300f, 10f, 1f, 4, 4, 2, new Color(0.24f, 0.27f, 0.31f), new Color(0.18f, 0.72f, 0.88f), assemblerMk1Prefab);
@@ -7129,9 +7157,9 @@ root =>
             }
 
             var lvConnectorPrefab = CreateCompactPowerNodePrefab("LVWireConnector", new Color(0.22f, 0.78f, 0.42f), root =>
-                EnsureStep17Component<VoxelEngine.Simulation.LVWireConnectorStation>(root));
+                EnsureStep17Component<VoxelEngine.Simulation.LvWireConnectorStation>(root));
             var hvConnectorPrefab = CreateCompactPowerNodePrefab("HVWireConnector", new Color(0.18f, 0.72f, 0.88f), root =>
-                EnsureStep17Component<VoxelEngine.Simulation.HVWireConnectorStation>(root));
+                EnsureStep17Component<VoxelEngine.Simulation.HvWireConnectorStation>(root));
             var relayPrefab = CreateCompactPowerNodePrefab("PowerRelay", new Color(0.95f, 0.62f, 0.18f), root =>
                 EnsureStep17Component<VoxelEngine.Simulation.PowerRelayStation>(root));
 
