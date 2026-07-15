@@ -78,7 +78,7 @@ namespace VoxelEngine.Simulation
 
             if (!holdingConveyor)
             {
-                if (_open) Close();
+                if (_open) Close(selectHovered: false);
                 HidePrompt();
                 return;
             }
@@ -93,7 +93,7 @@ namespace VoxelEngine.Simulation
             else if (_open)
             {
                 HidePrompt();
-                if (!wheelHeld) Close();
+                if (!wheelHeld) Close(selectHovered: true);
                 else
                 {
                     if (_wheelOverlay == null || _wheelOverlay.parent == null) BuildWheel();
@@ -108,13 +108,13 @@ namespace VoxelEngine.Simulation
 
         private void OnDisable()
         {
-            if (_open) Close();
+            if (_open) Close(selectHovered: false);
             RemoveUi();
         }
 
         private void OnDestroy()
         {
-            if (_open) Close();
+            if (_open) Close(selectHovered: false);
             RemoveUi();
         }
 
@@ -193,9 +193,10 @@ namespace VoxelEngine.Simulation
             BuildWheel();
         }
 
-        private void Close()
+        private void Close(bool selectHovered = false)
         {
             if (!_open) return;
+            if (selectHovered) SelectHoveredSegment();
             _open = false;
             UIState.PopBlock();
             if (_wheelOverlay != null) _wheelOverlay.RemoveFromHierarchy();
@@ -228,8 +229,10 @@ namespace VoxelEngine.Simulation
             _wheelCenter.style.width = 390;
             _wheelCenter.style.height = 390;
             _wheelCenter.style.position = Position.Relative;
-            _wheelCenter.style.transitionProperty = new System.Collections.Generic.List<StylePropertyName> { "translate" };
+            _wheelCenter.style.transitionProperty = new System.Collections.Generic.List<StylePropertyName> { "translate", "scale" };
             _wheelCenter.style.transitionDuration = new System.Collections.Generic.List<TimeValue> { new(0.08f, TimeUnit.Second) };
+            float safeScale = Mathf.Clamp(Mathf.Min(Screen.width, Screen.height) / 460f, 0.68f, 1f);
+            _wheelCenter.style.scale = new StyleScale(new Scale(new Vector3(safeScale, safeScale, 1f)));
             _wheelOverlay.Add(_wheelCenter);
 
             System.Array.Clear(_segmentLabelRoots, 0, _segmentLabelRoots.Length);
@@ -315,13 +318,25 @@ namespace VoxelEngine.Simulation
                 if (evt.button != 0) return;
                 int segment = SegmentAt(evt.localPosition);
                 if (segment < 0 || segment >= Modes.Length) return;
-                var mode = Modes[segment];
-                SetMode(_activeTier, mode);
-                BuildWheel();
-                BuildFeedbackHud.Show("Conveyor Shape", mode.ToString(), null, UITheme.AccentCyan);
+                SelectSegment(segment);
                 evt.StopPropagation();
             });
             VoxelEngine.FX.UiAudio.MarkClickable(_ringElement);
+        }
+
+        private void SelectHoveredSegment()
+        {
+            if (_hoveredSegment < 0 || _hoveredSegment >= Modes.Length) return;
+            SelectSegment(_hoveredSegment);
+        }
+
+        private void SelectSegment(int segment)
+        {
+            if (segment < 0 || segment >= Modes.Length) return;
+            var mode = Modes[segment];
+            SetMode(_activeTier, mode);
+            BuildFeedbackHud.Show("Conveyor Shape", mode.ToString(), null, UITheme.AccentCyan);
+            if (_open) BuildWheel();
         }
 
         private void BuildRingLabel(int index, ConveyorBuildMode mode, string iconText)
@@ -338,6 +353,7 @@ namespace VoxelEngine.Simulation
             labelRoot.style.height = 54;
             labelRoot.style.alignItems = Align.Center;
             labelRoot.style.justifyContent = Justify.Center;
+            labelRoot.style.overflow = Overflow.Hidden;
             labelRoot.pickingMode = PickingMode.Ignore;
             UITheme.Radius(labelRoot, 30f);
             labelRoot.style.transitionProperty = new System.Collections.Generic.List<StylePropertyName> { "scale", "background-color" };
@@ -384,7 +400,7 @@ namespace VoxelEngine.Simulation
                 icon.style.color = new StyleColor(foreground);
                 label.style.color = new StyleColor(foreground);
                 root.style.scale = new StyleScale(new Scale(isHovered
-                    ? new Vector3(1.12f, 1.12f, 1f)
+                    ? new Vector3(1.04f, 1.04f, 1f)
                     : Vector3.one));
                 root.style.backgroundColor = new StyleColor(isHovered
                     ? new Color(0.10f, 0.68f, 0.92f, 0.18f)

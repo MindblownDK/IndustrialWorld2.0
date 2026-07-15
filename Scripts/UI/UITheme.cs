@@ -85,12 +85,12 @@ namespace VoxelEngine.UI
         {
             var p = Panel();
             p.style.position = Position.Absolute;
-            p.style.top      = 24;
-            p.style.bottom   = 92;
-            p.style.right    = 18;
-            p.style.width    = new StyleLength(new Length(30f, LengthUnit.Percent));
-            p.style.minWidth = 320;
-            p.style.maxWidth = 520;
+            p.style.top      = 12;
+            p.style.bottom   = 72;
+            p.style.right    = 12;
+            p.style.width    = new StyleLength(new Length(34f, LengthUnit.Percent));
+            p.style.minWidth = 260;
+            p.style.maxWidth = new StyleLength(new Length(46f, LengthUnit.Percent));
             p.style.overflow = Overflow.Hidden;
             return p;
         }

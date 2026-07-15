@@ -42,6 +42,7 @@ namespace VoxelEngine.Building.Tiered
         private int _page;
         private int _hoveredSegment = -1;
         private bool _open;
+        private bool _wasWheelHeld;
         private Vector2 _parallax;
         private float _nextPageInput;
 
@@ -76,7 +77,8 @@ namespace VoxelEngine.Building.Tiered
             if (!holdingHammer)
             {
                 ActiveFamily = null;
-                if (_open) Close();
+                _wasWheelHeld = false;
+                if (_open) Close(selectHovered: false);
                 return;
             }
 
@@ -87,10 +89,10 @@ namespace VoxelEngine.Building.Tiered
                 return;
             }
 
-            if (GameSettings.WasPressed(InputAction.BuildWheel))
-            {
-                if (_open) Close(); else Open();
-            }
+            bool wheelHeld = GameSettings.IsHeld(InputAction.BuildWheel);
+            if (wheelHeld && !_open) Open();
+            if (!wheelHeld && _wasWheelHeld && _open) Close(selectHovered: true);
+            _wasWheelHeld = wheelHeld;
 
             if (!_open) return;
             HandlePageScroll();
@@ -99,13 +101,13 @@ namespace VoxelEngine.Building.Tiered
 
         private void OnDisable()
         {
-            if (_open) Close();
+            if (_open) Close(selectHovered: false);
             ReleaseRingTexture();
         }
 
         private void OnDestroy()
         {
-            if (_open) Close();
+            if (_open) Close(selectHovered: false);
             ReleaseRingTexture();
             if (Instance == this) Instance = null;
         }
@@ -119,9 +121,10 @@ namespace VoxelEngine.Building.Tiered
             Build();
         }
 
-        public void Close()
+        public void Close(bool selectHovered = false)
         {
             if (!_open) return;
+            if (selectHovered) SelectHoveredSegment();
             _open = false;
             VoxelEngine.UI.UIState.PopBlock();
             Hide();
@@ -130,7 +133,7 @@ namespace VoxelEngine.Building.Tiered
         public void ExitBuildMode()
         {
             ActiveFamily = null;
-            if (_open) Close();
+            if (_open) Close(selectHovered: false);
             VoxelEngine.UI.BuildFeedbackHud.Show("Building Hammer", "Build mode closed", null, T.TextMuted);
         }
 
@@ -158,8 +161,10 @@ namespace VoxelEngine.Building.Tiered
             _wheelCenter.style.width = 520;
             _wheelCenter.style.height = 520;
             _wheelCenter.style.position = Position.Relative;
-            _wheelCenter.style.transitionProperty = new System.Collections.Generic.List<StylePropertyName> { "translate" };
+            _wheelCenter.style.transitionProperty = new System.Collections.Generic.List<StylePropertyName> { "translate", "scale" };
             _wheelCenter.style.transitionDuration = new System.Collections.Generic.List<TimeValue> { new(0.08f, TimeUnit.Second) };
+            float safeScale = Mathf.Clamp(Mathf.Min(Screen.width, Screen.height) / 600f, 0.58f, 1f);
+            _wheelCenter.style.scale = new StyleScale(new Scale(new Vector3(safeScale, safeScale, 1f)));
             _root.Add(_wheelCenter);
 
             System.Array.Clear(_segmentLabels, 0, _segmentLabels.Length);
@@ -287,6 +292,7 @@ namespace VoxelEngine.Building.Tiered
             root.style.height = 62;
             root.style.alignItems = Align.Center;
             root.style.justifyContent = Justify.Center;
+            root.style.overflow = Overflow.Hidden;
             root.pickingMode = PickingMode.Ignore;
             root.style.transitionProperty = new System.Collections.Generic.List<StylePropertyName> { "scale", "background-color" };
             root.style.transitionDuration = new System.Collections.Generic.List<TimeValue> { new(0.10f, TimeUnit.Second), new(0.10f, TimeUnit.Second) };
@@ -340,7 +346,7 @@ namespace VoxelEngine.Building.Tiered
                 if (icon != null) icon.style.color = new StyleColor(foreground);
                 if (name != null) name.style.color = new StyleColor(foreground);
                 if (cost != null) cost.style.color = new StyleColor(CanAffordFamily(Families[index]) ? T.AccentGreen : T.AccentRed);
-                root.style.scale = new StyleScale(new Scale(hovered ? new Vector3(1.10f, 1.10f, 1f) : Vector3.one));
+                root.style.scale = new StyleScale(new Scale(hovered ? new Vector3(1.035f, 1.035f, 1f) : Vector3.one));
                 root.style.backgroundColor = new StyleColor(hovered ? new Color(T.AccentCyan.r, T.AccentCyan.g, T.AccentCyan.b, 0.16f) : Color.clear);
             }
         }
@@ -366,7 +372,14 @@ namespace VoxelEngine.Building.Tiered
             return index >= 0 && index < Families.Length ? index : -1;
         }
 
-        private void SelectFamily(int familyIndex)
+        private void SelectHoveredSegment()
+        {
+            int familyIndex = FamilyIndex(_hoveredSegment);
+            if (familyIndex < 0) return;
+            SelectFamily(familyIndex, closeAfterSelect: false);
+        }
+
+        private void SelectFamily(int familyIndex, bool closeAfterSelect = true)
         {
             var family = Families[familyIndex];
             ActiveFamily = family;
@@ -374,7 +387,7 @@ namespace VoxelEngine.Building.Tiered
             VoxelEngine.UI.BuildFeedbackHud.Show($"Build: {family}", cost, null,
                 CanAffordFamily(family) ? T.AccentCyan : T.AccentRed);
             Build();
-            _root.schedule.Execute(Close).ExecuteLater(140);
+            if (closeAfterSelect) _root.schedule.Execute(() => Close(selectHovered: false)).ExecuteLater(140);
         }
 
         private void HandlePageScroll()

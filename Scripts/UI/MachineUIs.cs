@@ -144,6 +144,12 @@ namespace VoxelEngine.UI
             p.Add(BuildHeader(icon, title, status, statusColor, accent));
             p.Add(T.AccentDivider(accent));
 
+            var content = new ScrollView(ScrollViewMode.Vertical);
+            content.style.flexGrow = 1;
+            content.style.marginTop = 6;
+            T.StyleScroller(content);
+            p.Add(content);
+
             var top = new VisualElement();
             top.style.flexDirection = FlexDirection.Row;
             top.style.alignItems = Align.Center;
@@ -153,15 +159,15 @@ namespace VoxelEngine.UI
             toggle.style.marginRight = 8;
             top.Add(toggle);
             top.Add(T.StatRow("⚡", "Power", $"{machine.CurrentWattage:0} W", machine.IsOnline ? T.AccentGold : T.TextMuted));
-            p.Add(top);
+            content.Add(top);
 
             string recipeName = selectedRecipe != null ? selectedRecipe.GetName() : "Auto / waiting for input";
-            p.Add(T.StatRow("⏱", "Recipe", recipeName, selectedRecipe != null ? accent : T.TextMuted));
+            content.Add(T.StatRow("⏱", "Recipe", recipeName, selectedRecipe != null ? accent : T.TextMuted));
             var (progressBar, _) = T.ProgressBar(machine.Progress01, accent, 9, false);
-            p.Add(progressBar);
-            p.Add(T.Divider());
+            content.Add(progressBar);
+            content.Add(T.Divider());
 
-            p.Add(T.Subtitle("Recipe Selection"));
+            content.Add(T.Subtitle("Recipe Selection"));
             var recipeList = new ScrollView(ScrollViewMode.Vertical);
             recipeList.style.maxHeight = 168;
             recipeList.style.marginBottom = 8;
@@ -174,11 +180,12 @@ namespace VoxelEngine.UI
                     recipeList.Add(MachineRecipeCard(recipe, recipe == selectedRecipe, accent, () => selectRecipe?.Invoke(recipe)));
                 }
             }
-            p.Add(recipeList);
+            content.Add(recipeList);
 
-            p.Add(T.Subtitle("Inventory"));
+            content.Add(T.Subtitle("Inventory"));
             var slotRow = new VisualElement();
             slotRow.style.flexDirection = FlexDirection.Row;
+            slotRow.style.flexWrap = Wrap.Wrap;
             slotRow.style.justifyContent = Justify.Center;
             slotRow.style.marginTop = 5;
             slotRow.Add(T.SlotCard("Inputs", SlotGrid(input, slot)));
@@ -189,9 +196,9 @@ namespace VoxelEngine.UI
                 slotRow.Add(T.Spacer(10));
                 slotRow.Add(T.SlotCard("Upgrades", SlotGrid(upgrades, slot)));
             }
-            p.Add(slotRow);
-            p.Add(T.Spacer(8));
-            p.Add(T.Muted(hint));
+            content.Add(slotRow);
+            content.Add(T.Spacer(8));
+            content.Add(T.Muted(hint));
             return p;
         }
 

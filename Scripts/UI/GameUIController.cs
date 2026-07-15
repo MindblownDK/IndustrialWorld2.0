@@ -896,7 +896,7 @@ namespace VoxelEngine.UI
 
                     // Left gutter reserves room for the inventory panel; the terminal fills the rest.
                     var gutter = new VisualElement();
-                    gutter.style.width = 492; gutter.style.flexShrink = 0;
+                    gutter.style.width = new StyleLength(new Length(34f, LengthUnit.Percent)); gutter.style.maxWidth = 492; gutter.style.flexShrink = 1;
                     gutter.pickingMode = PickingMode.Ignore;
                     overlay.Add(gutter);
 
@@ -913,9 +913,9 @@ namespace VoxelEngine.UI
                     // screen's right edge instead of stretching across big monitors.
                     card.style.flexGrow = 0;
                     card.style.flexShrink = 0;
-                    card.style.width = 1180;
+                    card.style.width = new StyleLength(new Length(64f, LengthUnit.Percent));
                     card.style.maxWidth = 1180;
-                    card.style.minWidth = 720;
+                    card.style.minWidth = 420;
                     // Explicit height too (root is now a definite full-screen size) so the
                     // terminal never collapses to its title bar.
                     card.style.height = new StyleLength(new Length(96, LengthUnit.Percent));
@@ -1065,11 +1065,11 @@ namespace VoxelEngine.UI
         {
             var panel = MakePanel();
             panel.style.position = Position.Absolute;
-            panel.style.top = 24; panel.style.bottom = 92;
-            panel.style.left = 28;
-            panel.style.width = new StyleLength(new Length(30f, LengthUnit.Percent));
-            panel.style.minWidth = 280;
-            panel.style.maxWidth = 440;
+            panel.style.top = 12; panel.style.bottom = 72;
+            panel.style.left = 12;
+            panel.style.width = new StyleLength(new Length(32f, LengthUnit.Percent));
+            panel.style.minWidth = 240;
+            panel.style.maxWidth = new StyleLength(new Length(42f, LengthUnit.Percent));
             root.Add(panel);
 
             panel.Add(MakeTitle("Inventory"));

@@ -57,7 +57,14 @@ namespace VoxelEngine.Building
 
         private void Update()
         {
-            if (VoxelEngine.UI.UIState.IsBlocking) { HoldingBlock = false; HeldBlockName = string.Empty; HideGhost(); return; }
+            bool buildWheelHeld = GameSettings.IsHeld(InputAction.BuildWheel);
+            if (VoxelEngine.UI.UIState.IsBlocking && !buildWheelHeld)
+            {
+                HoldingBlock = false;
+                HeldBlockName = string.Empty;
+                HideGhost();
+                return;
+            }
 
             // Toggle grid mode.
             if (GameSettings.WasPressed(InputAction.BuildToggleGrid))

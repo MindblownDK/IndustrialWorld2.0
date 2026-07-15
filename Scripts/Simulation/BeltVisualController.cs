@@ -65,7 +65,18 @@ namespace VoxelEngine.Simulation
 
         public void RebuildMesh()
         {
-            if (_belt == null || !isActiveAndEnabled || !gameObject.activeInHierarchy) return;
+            RebuildMeshInternal(allowDisabledPreview: false);
+        }
+
+        public void RebuildPreviewMesh()
+        {
+            RebuildMeshInternal(allowDisabledPreview: true);
+        }
+
+        private void RebuildMeshInternal(bool allowDisabledPreview)
+        {
+            if (_belt == null || !gameObject.activeInHierarchy) return;
+            if (!allowDisabledPreview && !isActiveAndEnabled) return;
 
             ReleaseGeneratedMesh();
             ReleaseRuntimeMaterials();

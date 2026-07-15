@@ -174,8 +174,11 @@ namespace VoxelEngine.Simulation
             UpdateTravelDirection();
             ApplyColliderShape();
             ScanConnections();
-            if (_visuals != null && isActiveAndEnabled && gameObject.activeInHierarchy)
-                _visuals.RebuildMesh();
+            if (_visuals != null && gameObject.activeInHierarchy)
+            {
+                if (isActiveAndEnabled) _visuals.RebuildMesh();
+                else _visuals.RebuildPreviewMesh();
+            }
         }
 
         private void NotifyNearbyBelts()
@@ -438,8 +441,11 @@ namespace VoxelEngine.Simulation
             UpdateTravelDirection();
             ApplyColliderShape();
             ScanConnections();
-            if (_visuals != null && isActiveAndEnabled && gameObject.activeInHierarchy)
-                _visuals.RebuildMesh();
+            if (_visuals != null && gameObject.activeInHierarchy)
+            {
+                if (isActiveAndEnabled) _visuals.RebuildMesh();
+                else _visuals.RebuildPreviewMesh();
+            }
         }
 
         private ConveyorBelt FindAdjacentBelt(Vector3 expectedCenter)

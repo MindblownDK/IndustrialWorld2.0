@@ -53,7 +53,8 @@ namespace VoxelEngine.Building.Tiered
 
         private void Update()
         {
-            if (VoxelEngine.UI.UIState.IsBlocking) { HideGhost(); return; }
+            bool buildWheelHeld = GameSettings.IsHeld(InputAction.BuildWheel);
+            if (VoxelEngine.UI.UIState.IsBlocking && !buildWheelHeld) { HideGhost(); return; }
 
             // Toggle grid mode.
             if (GameSettings.WasPressed(InputAction.BuildToggleGrid))
