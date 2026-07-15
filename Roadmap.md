@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.7.0-dev`
-**Roadmap Version:** `5.7.0-dev`
+**Current Version:** `5.7.1-dev`
+**Roadmap Version:** `5.7.1-dev`
 **Date:** 2026-07-15
-**Status:** Active Implementation — Player-Scale Construction, Separate Doors & UI Authoring Repair
+**Status:** Active Implementation — Size-V3 Edge Snapping, Door Fit & Wheel/UI Refinement
 
 ---
 
@@ -49,7 +49,7 @@ The design goal is a seamless blend of:
 | Small grid | 🟡 Basic | Needs improvement and usability |
 | Power (wind, hydrogen) | ✅ Mature | Modular turbines are excellent |
 | Fluids / gases | ✅ Good | Pipe-gated transfer in 2.20.0 |
-| Building (static + tiered) | 🛠️ Working On | 2.5 m player-scale modules, edge sockets, separate Door/Doorway families, paginated Hammer wheel, and premium tier materials await validation |
+| Building (static + tiered) | 🛠️ Working On | 3.0 m player-scale modules, edge sockets, separate Door/Doorway families, paginated Hammer wheel, and premium tier materials await validation |
 | Advanced Quarry | 🛠️ Working On | Unbreakable bedrock generation removed; late Tier-5 quarry uses a finite configurable 64-layer default depth |
 | Sky / atmosphere / space rendering | 🟡 Basic | Needs planet-specific skies and proper space ambiance |
 | Gravity / orbits | 🟡 Buggy | Player and grids sometimes fall; orbits not realistic |
@@ -563,7 +563,7 @@ Statuses are evidence-based and move forward only after code/content review and 
    - Snap to grid edges and static building surfaces.
 
 10. **Player-Scale Hammer Construction**
-   - Standard construction module is 2.5 meters wide/tall so Crusaders fit comfortably through rooms and openings.
+   - Standard construction module is 3.0 meters wide/tall so Crusaders fit comfortably through rooms and openings.
    - Foundation, Wall, Doorway, Window, Floor, Stairs, Roof, Pillar, Half Wall, and Door families each retain four material tiers.
    - Lateral sockets sit on true outer edges and share the host root height, preventing pieces from snapping inside or above their neighbor.
    - Doorway is an empty structural opening; Door is a separate placeable family that snaps into the Doorway center socket.
@@ -1660,6 +1660,27 @@ For each version, these are the high-level Unity tasks you will perform manually
 
 ## 11. Changelog
 
+### [5.7.1-dev] Size-V3 Edge Snapping, Door Fit & Wheel/UI Refinement
+
+**Type:** PATCH — construction scale, socket orientation, door fit, wheel interaction, and UI authoring fixes
+
+**Fixed / Improved:**
+- Construction module increased to `3.0 m` and rebuilt as Size-V3 player-scale geometry.
+- Added dedicated Foundation top-edge sockets for Wall, Doorway, Window, and Half Wall placement; the center Top socket no longer accepts wall-like pieces.
+- Socket snapping now preserves the exact host/socket quaternion instead of reconstructing world Euler yaw, eliminating slight rotational drift on planetary surfaces.
+- Lateral sockets use true ±1.50 m edges at root height; wall-like and floor-like neighbors remain level.
+- Door enlarged to closely fill the player-sized Doorway opening while preserving a small movement gap.
+- Doorway remains empty; Door remains a separate family on the adjacent Hammer page and opens toward local interior space.
+- Hammer wheel labels/icons moved farther inward and full-wheel pointer coordinates are used for reliable inner-edge selection.
+- Door is positioned directly beside Doorway on the first Hammer page; remaining families continue on the scrollable second page.
+- Conveyor wheel labels narrowed and inset from the ring edge.
+- Step 3 explicitly repairs shared PanelSettings scaling/atlas quality, assigns the shared asset to every Game-scene UIDocument, and runtime systems continue preserving Inspector edits.
+
+**Roadmap Status:**
+- Size-V3 snapping, orientation, Door/Doorway fit, wheel selection, and UI fit: **WORKING ON** — awaiting Unity validation.
+
+---
+
 ### [5.7.0-dev] Player-Scale Construction, Separate Doors & UI Authoring Repair
 
 **Type:** MINOR — new Door building family plus construction-scale and shared UI authoring changes
@@ -1672,7 +1693,7 @@ For each version, these are the high-level Unity tasks you will perform manually
 - Foundation expanded to a 2.5 m raised deck with larger planks, perimeter beams, legs, and braces.
 - Walls, Doorways, Windows, Floors, Stairs, Roofs, Pillars, and Half Walls rebuilt at player-appropriate dimensions.
 - Lateral sockets moved to ±1.25 m outer edges at the host root height, fixing sockets embedded inside blocks and vertical drift between neighboring pieces.
-- Step 5 detects known setup-generated prefabs, replaces their legacy geometry with Size-V2 geometry, and leaves imported/custom prefabs untouched.
+- Step 5 detects known setup-generated prefabs, replaces their legacy geometry with Size-V3 geometry, and leaves imported/custom prefabs untouched.
 - Hammer wheel icons/labels moved inward; conveyor-wheel labels narrowed and inset from the outer rim.
 - Step 3 now explicitly authors shared MenuPanelSettings quality/fit values, including Match Width/Height and 256 px atlas subtextures.
 - Runtime controllers continue respecting developer-authored PanelSettings without overwriting them.
@@ -1683,7 +1704,7 @@ For each version, these are the high-level Unity tasks you will perform manually
 - A Door can be selected independently, snapped into a Doorway, and toggled with RMB after placement.
 
 **Roadmap Status:**
-- Player-scale Size-V2 construction, separate Door family, edge sockets, wheel spacing, and Step 3 UI authoring: **WORKING ON** — awaiting Unity validation.
+- Player-scale Size-V3 construction, separate Door family, edge sockets, wheel spacing, and Step 3 UI authoring: **WORKING ON** — awaiting Unity validation.
 
 ---
 

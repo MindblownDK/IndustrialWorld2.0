@@ -27,9 +27,9 @@ namespace VoxelEngine.Building.Tiered
 
         [Header("Tuning")]
         public float reach = 8f;
-        public float socketSnapRadius = 2.2f;     // metres around aim point to search for sockets
+        public float socketSnapRadius = 2.6f;     // metres around aim point to search for sockets
         public bool  gridSnap = true;
-        public float gridSize = 2.5f;
+        public float gridSize = 3.0f;
         public float ghostAlpha = 0.55f;
         public float yawStep = 90f;
 
@@ -172,10 +172,10 @@ namespace VoxelEngine.Building.Tiered
             if (bestSocket != null)
             {
                 _ghostPos = bestSocket.transform.position;
-                // Match the socket's yaw so the piece faces correctly out of its host,
-                // but keep the piece's +Y aligned with the local planet surface normal.
-                float baseYaw = bestSocket.transform.eulerAngles.y;
-                _ghostRot = GravityProvider.GetSurfaceRotation(_ghostPos, baseYaw + _ghostYaw);
+                // Preserve the host/socket basis exactly. Reconstructing from world
+                // Euler yaw introduced small rotational drift on spherical surfaces.
+                Vector3 socketUp = bestSocket.transform.up;
+                _ghostRot = Quaternion.AngleAxis(_ghostYaw, socketUp) * bestSocket.transform.rotation;
                 _ghostValid = ValidateOverlap(_ghostPos, def.family);
                 return;
             }

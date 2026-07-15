@@ -27,5 +27,9 @@ namespace VoxelEngine.Building.Tiered
     /// <summary>
     /// Side of a 1-meter cell where a build can attach. Used by BuildSocket.
     /// </summary>
-    public enum SocketSide { Top, Bottom, North, South, East, West, Center }
+    public enum SocketSide
+    {
+        Top, Bottom, North, South, East, West, Center,
+        TopNorth, TopSouth, TopEast, TopWest
+    }
 }

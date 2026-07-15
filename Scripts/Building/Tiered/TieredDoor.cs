@@ -23,7 +23,10 @@ namespace VoxelEngine.Building.Tiered
         private void Update()
         {
             if (doorPivot == null) return;
-            Quaternion target = _closedRotation * Quaternion.Euler(0f, _open ? openAngle : 0f, 0f);
+            // Doorway sockets orient local forward toward the exterior; positive
+            // local yaw swings the free edge toward local back (the interior).
+            float inwardAngle = Mathf.Abs(openAngle);
+            Quaternion target = _closedRotation * Quaternion.Euler(0f, _open ? inwardAngle : 0f, 0f);
             doorPivot.localRotation = Quaternion.Slerp(
                 doorPivot.localRotation,
                 target,

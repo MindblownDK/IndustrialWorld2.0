@@ -22,14 +22,14 @@ namespace VoxelEngine.Building.Tiered
         private static readonly BuildFamily[] Families =
         {
             BuildFamily.Foundation, BuildFamily.Wall, BuildFamily.Floor,
-            BuildFamily.Doorway, BuildFamily.Window, BuildFamily.Stairs,
-            BuildFamily.Roof, BuildFamily.Pillar, BuildFamily.HalfWall,
-            BuildFamily.Door
+            BuildFamily.Doorway, BuildFamily.Door, BuildFamily.Window,
+            BuildFamily.Stairs, BuildFamily.Roof, BuildFamily.Pillar,
+            BuildFamily.HalfWall
         };
 
         private static readonly string[] Icons =
         {
-            "▣", "▥", "▤", "⊡", "☐", "⟋", "⌂", "▏", "▤", "▯"
+            "▣", "▥", "▤", "⊡", "▯", "☐", "⟋", "⌂", "▏", "▤"
         };
 
         private const int PageSize = 8;
@@ -216,15 +216,15 @@ namespace VoxelEngine.Building.Tiered
         {
             var disc = new VisualElement();
             disc.style.position = Position.Absolute;
-            disc.style.left = 105;
-            disc.style.top = 105;
-            disc.style.width = 310;
-            disc.style.height = 310;
+            disc.style.left = 115;
+            disc.style.top = 115;
+            disc.style.width = 290;
+            disc.style.height = 290;
             disc.style.alignItems = Align.Center;
             disc.style.justifyContent = Justify.Center;
             disc.style.backgroundColor = new StyleColor(new Color(0.025f, 0.035f, 0.055f, 0.99f));
             disc.pickingMode = PickingMode.Position;
-            T.Radius(disc, 155f);
+            T.Radius(disc, 145f);
             T.Border(disc, 2f, T.BorderBright);
             _wheelCenter.Add(disc);
 

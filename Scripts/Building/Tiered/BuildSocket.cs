@@ -43,14 +43,17 @@ namespace VoxelEngine.Building.Tiered
                 switch (side)
                 {
                     case SocketSide.Top:
-                        // On top of a foundation we can place: another foundation, a floor (above), pillars, walls.
-                        return incoming == BuildFamily.Wall      ||
-                               incoming == BuildFamily.Doorway   ||
-                               incoming == BuildFamily.Window    ||
-                               incoming == BuildFamily.HalfWall  ||
-                               incoming == BuildFamily.Pillar    ||
-                               incoming == BuildFamily.Floor     ||
-                               incoming == BuildFamily.Stairs;
+                        return incoming == BuildFamily.Pillar
+                            || incoming == BuildFamily.Floor
+                            || incoming == BuildFamily.Stairs;
+                    case SocketSide.TopNorth:
+                    case SocketSide.TopSouth:
+                    case SocketSide.TopEast:
+                    case SocketSide.TopWest:
+                        return incoming == BuildFamily.Wall
+                            || incoming == BuildFamily.Doorway
+                            || incoming == BuildFamily.Window
+                            || incoming == BuildFamily.HalfWall;
                     case SocketSide.North:
                     case SocketSide.South:
                     case SocketSide.East:

@@ -1041,10 +1041,10 @@ namespace VoxelEngine.UI
             var panel = MakePanel();
             panel.style.position = Position.Absolute;
             panel.style.top = 24; panel.style.bottom = 92;
-            panel.style.left = 18;
+            panel.style.left = 28;
             panel.style.width = new StyleLength(new Length(30f, LengthUnit.Percent));
-            panel.style.minWidth = 320;
-            panel.style.maxWidth = 460;
+            panel.style.minWidth = 280;
+            panel.style.maxWidth = 440;
             root.Add(panel);
 
             panel.Add(MakeTitle("Inventory"));
