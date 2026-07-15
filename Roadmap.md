@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.2.0-dev`
-**Roadmap Version:** `5.2.0-dev`
+**Current Version:** `5.3.1-dev`
+**Roadmap Version:** `5.3.1-dev`
 **Date:** 2026-07-14
-**Status:** Active Implementation — Full-Tier Ramp & Vertical Conveyor Variants
+**Status:** Active Implementation — Donut Wheel Polish & Vertical Transition Fixes
 
 ---
 
@@ -209,7 +209,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 
 | Area | Status | Repository Audit |
 |------|--------|------------------|
-| Conveyor belts | 🛠️ WORKING ON | Step 17 now generates explicit Ramp Up, Ramp Down, Vertical Up, and Vertical Down blocks for Basic, Fast, and Express tiers. Runtime sockets, item paths, snapping, arrows, rails, rollers, and status lines support every new shape; Unity validation is pending. |
+| Conveyor belts | 🛠️ WORKING ON | The three-mode selector now renders as a true segmented donut wheel. Ramp frames hug the belt, arrows are flush/emissive, and exact orthogonal sockets allow Straight/Ramp ↔ Vertical placement and item transfer. Unity validation is pending. |
 | Conveyor chutes | 🛠️ WORKING ON | Conveyors now snap above or below an aimed chute face; chute-to-conveyor, vertical item-port, and chute-stack snapping remain supported. Corner and spiral authored variants remain. |
 | Basic machines | 🟡 PARTIALLY COMPLETE | Electric Furnace, Crusher, and three Assembler tiers exist. Crusher and Assembler use the centralized simulation tick; shared UI and persistence still need completion. |
 | Storage blocks | 🟡 PARTIALLY COMPLETE | A basic chest and the wider storage system exist. The planned Wooden Crate → Iron Chest → Steel Chest → Provider/Requester progression is not complete. |
@@ -219,8 +219,9 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Item entity system | 🟡 PARTIALLY COMPLETE | Dropped world items exist and conveyors render carried packets. A unified pooled physical-item entity lifecycle is not complete. |
 | Recipe registry refactor | 🟡 PARTIALLY COMPLETE | ScriptableObject crafting and machine recipes exist. Shaped/shapeless/smelting/machine unification and validation remain incomplete. |
 | Centralized simulation tick | 🟡 PARTIALLY COMPLETE | Crusher and Assembler register with `SimulationTickManager`; belts, chutes, and several older machines still run per-frame updates. |
-| Factory persistence | 🟡 PARTIALLY COMPLETE | Placed blocks and selected containers persist. Belt/chute contents plus Crusher/Assembler buffers and progress are not yet serialized. |
-| Step 17 setup workflow | 🛠️ WORKING ON | The validated non-destructive foundation remains intact; the 5.2.0 generation pass for twelve ramp/vertical prefabs, items, recipes, and research links is awaiting two-run Unity validation. |
+| Factory persistence | 🟡 PARTIALLY COMPLETE | Placed blocks and selected containers persist. Explicit Ramp/Vertical wheel selections now restore from additive save fields; belt/chute contents plus Crusher/Assembler buffers and progress remain outstanding. |
+| Step 5 tiered setup workflow | 🛠️ WORKING ON | Missing canonical Stone or Step 4 resource references are resolved by item ID and safely recreated when absent; existing wrong-type assets are preserved and reported. Unity validation is pending. |
+| Step 17 setup workflow | ✅ COMPLETED | The separate-variant generation pass was withdrawn before validation. Step 17 remains non-destructive and now documents the contextual conveyor wheel while preserving the three existing tier items and recipes. |
 
 > **Completion gate:** This section becomes **✅ COMPLETED** only after Step 17 is non-destructive, all listed variants are authored through the setup wizard, factory runtime state persists, and the Unity validation checklist passes.
 
@@ -1234,7 +1235,68 @@ For each version, these are the high-level Unity tasks you will perform manually
 
 ## 11. Changelog
 
+### [5.3.1-dev] Donut Wheel Polish & Vertical Transition Fixes
+
+**Type:** PATCH — UI presentation, conveyor visual polish, snapping, and transfer fixes
+
+**Added:**
+- A true three-segment donut rendering for Straight, Ramp, and Vertical modes.
+- Angular segment hit-testing, narrow segment gaps, a full dark center disc, and tier/mode labels integrated into the ring.
+- Selected cyan, hovered pale-cyan, and idle light-industrial segment states.
+- Bright emissive runtime arrow material shared by adaptive Straight, Corner, Ramp, and Vertical arrows.
+- Exact orthogonal transition support when either connected belt is Vertical.
+
+**Fixed:**
+- The conveyor wheel no longer reads as three floating cards around a center badge.
+- Ramp belt surfaces now sit on a sloped underbed instead of floating above a flat frame.
+- Ramp supports follow the low and high ends of the slope.
+- Ramp arrows are aligned to the belt plane rather than hovering horizontally above it.
+- Vertical Down arrows are larger, brighter, and oriented as a visible downward chevron.
+- Vertical Up arrows sit flush against the conveyor face.
+- Vertical mode snaps its input socket directly onto Straight or Ramp output sockets.
+- Straight and Ramp conveyors can hand items into Vertical conveyors through exact matched sockets.
+- Vertical conveyors can hand items back into Straight or Ramp conveyors through exact matched sockets.
+
+**Changed:**
+- The subtle mouse-follow animation remains active on the complete donut wheel.
+- Updated the runtime and roadmap version to `5.3.1-dev`.
+
+**Roadmap Status:**
+- Conveyor wheel/transition polish: **WORKING ON** — awaiting Unity validation.
+- Step 5 prerequisite repair remains **WORKING ON** until setup validation is reported.
+
+---
+
+### [5.3.0-dev] Contextual Conveyor Shape Wheel & Step 5 Repair
+
+**Type:** MINOR — new save-compatible radial build UI and conveyor mode selection
+
+**Added:**
+- A contextual hold-to-open conveyor wheel using the existing rebindable `Build Wheel` action (`B` by default).
+- Per-tier Straight, Ramp, and Vertical selections for the existing Basic, Fast, and Express conveyor items.
+- A prompt above the hotbar showing the current key and selected conveyor mode.
+- Mouse-click radial selection with hover scaling, animated color states, and subtle mouse-follow parallax.
+- Aim-based Up/Down resolution for Ramp and Vertical placement.
+- Additive persistence for explicitly selected Ramp/Vertical shapes; legacy saves remain compatible.
+
+**Changed:**
+- The separate twelve-item/twelve-recipe variant plan from `5.2.0-dev` is superseded before setup validation.
+- Step 17 no longer generates separate conveyor variant prefabs, items, recipes, materials, or research entries.
+- One conveyor item and recipe per speed tier now provides every supported shape.
+- The same contextual `Build Wheel` binding is shared safely with the Hammer wheel because each wheel only activates for its own held item.
+- Step 5 now resolves prerequisite resources by canonical path or item ID and creates only missing canonical assets instead of incorrectly demanding another Step 4 run.
+- Updated the runtime and roadmap version to `5.3.0-dev` under Semantic Versioning because this release adds a new UI/build-selection system.
+
+**Roadmap Status:**
+- Conveyor Shape Wheel: **WORKING ON** — awaiting Unity interaction validation.
+- Step 5 prerequisite repair: **WORKING ON** — awaiting Unity setup validation.
+- Step 17 base factory setup: **COMPLETED**.
+
+---
+
 ### [5.2.0-dev] Full-Tier Ramp & Vertical Conveyor Variants
+
+**Superseded by `5.3.0-dev` before Unity setup validation; separate variant assets are no longer generated.**
 
 **Type:** MINOR — new save-compatible conveyor blocks, recipes, prefabs, and placement behavior
 

@@ -30,6 +30,7 @@ namespace VoxelEngine.Simulation
         private Material _beltMaterial;
         private Material _railMaterial;
         private Material _frameMaterial;
+        private Material _arrowMaterial;
         private Material _authoredSharedMaterial;
         private bool _usingAuthoredStraight;
         private float _uvOffset;
@@ -175,6 +176,13 @@ namespace VoxelEngine.Simulation
                 1f);
             _frameMaterial = new Material(GetSharedRailMaterial()) { color = frameColor };
             if (_frameMaterial.HasProperty(BaseColorId)) _frameMaterial.SetColor(BaseColorId, frameColor);
+
+            Color arrowColor = Color.Lerp(railColor, Color.white, 0.24f);
+            _arrowMaterial = new Material(GetSharedRailMaterial()) { color = arrowColor };
+            if (_arrowMaterial.HasProperty(BaseColorId)) _arrowMaterial.SetColor(BaseColorId, arrowColor);
+            _arrowMaterial.EnableKeyword("_EMISSION");
+            if (_arrowMaterial.HasProperty("_EmissionColor"))
+                _arrowMaterial.SetColor("_EmissionColor", arrowColor * 1.35f);
         }
 
         private void BuildStraightMesh()
@@ -310,7 +318,7 @@ namespace VoxelEngine.Simulation
             arrow.transform.localRotation = Quaternion.LookRotation(direction, Vector3.up);
             arrow.transform.localScale = scale;
             Destroy(arrow.GetComponent<Collider>());
-            arrow.GetComponent<MeshRenderer>().sharedMaterial = _railMaterial;
+            arrow.GetComponent<MeshRenderer>().sharedMaterial = _arrowMaterial;
         }
 
         private void CreateHorizontalBeltSegment(Vector3 direction, Vector3 center, float length)
@@ -356,14 +364,64 @@ namespace VoxelEngine.Simulation
             Quaternion rotation = Quaternion.Euler(angle, 0f, 0f);
             CreateRail(new Vector3(0.45f, 1.04f, 0f), new Vector3(0.06f, 0.10f, 1.414f), rotation);
             CreateRail(new Vector3(-0.45f, 1.04f, 0f), new Vector3(0.06f, 0.10f, 1.414f), rotation);
-            BuildSupportFrame();
+            BuildRampFrame(up, angle);
 
             Vector3 travel = up
                 ? new Vector3(0f, 1f, 1f).normalized
                 : new Vector3(0f, -1f, 1f).normalized;
-            Vector3 end = up ? new Vector3(0f, 1f, 0.5f) : new Vector3(0f, 0f, 0.5f);
-            CreateDirectionArrow(end, Vector3.forward);
+            CreateRampDirectionArrow(up, angle);
             CreateDynamicStatusLine(new Vector3(0f, 0.5f, 0f), travel, 0.52f);
+        }
+
+        private void BuildRampFrame(bool up, float angle)
+        {
+            var underbed = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            underbed.name = "RampUnderbed";
+            underbed.transform.SetParent(_meshRoot.transform, false);
+            underbed.transform.localPosition = new Vector3(0f, 0.93f, 0.035f);
+            underbed.transform.localRotation = Quaternion.Euler(angle, 0f, 0f);
+            underbed.transform.localScale = new Vector3(0.96f, 0.12f, 1.43f);
+            Destroy(underbed.GetComponent<Collider>());
+            underbed.GetComponent<MeshRenderer>().sharedMaterial = _frameMaterial;
+
+            float lowZ = up ? -0.42f : 0.42f;
+            float highZ = -lowZ;
+            CreateRampSupport("RampLowSupport", new Vector3(0f, 0.23f, lowZ), new Vector3(0.84f, 0.46f, 0.10f));
+            CreateRampSupport("RampHighSupport", new Vector3(0f, 0.73f, highZ), new Vector3(0.84f, 1.46f, 0.10f));
+        }
+
+        private void CreateRampSupport(string objectName, Vector3 position, Vector3 scale)
+        {
+            var support = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            support.name = objectName;
+            support.transform.SetParent(_meshRoot.transform, false);
+            support.transform.localPosition = position;
+            support.transform.localScale = scale;
+            Destroy(support.GetComponent<Collider>());
+            support.GetComponent<MeshRenderer>().sharedMaterial = _frameMaterial;
+        }
+
+        private void CreateRampDirectionArrow(bool up, float angle)
+        {
+            Vector3 start = up ? new Vector3(0f, 0.52f, -0.5f) : new Vector3(0f, 1.52f, -0.5f);
+            Vector3 end = up ? new Vector3(0f, 1.52f, 0.5f) : new Vector3(0f, 0.52f, 0.5f);
+            Vector3 point = Vector3.Lerp(start, end, 0.68f);
+            Vector3 surfaceNormal = Quaternion.Euler(angle, 0f, 0f) * Vector3.up;
+            point += surfaceNormal * 0.035f;
+            CreateRampArrowPart(point + Vector3.left * 0.07f, angle, 35f);
+            CreateRampArrowPart(point + Vector3.right * 0.07f, angle, -35f);
+        }
+
+        private void CreateRampArrowPart(Vector3 position, float xAngle, float yAngle)
+        {
+            var arrow = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            arrow.name = "RampDirectionArrow";
+            arrow.transform.SetParent(_meshRoot.transform, false);
+            arrow.transform.localPosition = position;
+            arrow.transform.localRotation = Quaternion.Euler(xAngle, yAngle, 0f);
+            arrow.transform.localScale = new Vector3(0.055f, 0.025f, 0.19f);
+            Destroy(arrow.GetComponent<Collider>());
+            arrow.GetComponent<MeshRenderer>().sharedMaterial = _arrowMaterial;
         }
 
         private void BuildVerticalMesh(bool up)
@@ -407,10 +465,11 @@ namespace VoxelEngine.Simulation
 
         private void CreateVerticalArrow(bool up)
         {
-            float direction = up ? 1f : -1f;
-            float centerY = up ? 0.68f : 0.32f;
-            CreateVerticalArrowPart(new Vector3(-0.07f, centerY, -0.055f), direction * -35f);
-            CreateVerticalArrowPart(new Vector3(0.07f, centerY, -0.055f), direction * 35f);
+            float centerY = up ? 0.62f : 0.38f;
+            float leftAngle = up ? -35f : 35f;
+            float rightAngle = -leftAngle;
+            CreateVerticalArrowPart(new Vector3(-0.065f, centerY, -0.060f), leftAngle);
+            CreateVerticalArrowPart(new Vector3(0.065f, centerY, -0.060f), rightAngle);
         }
 
         private void CreateVerticalArrowPart(Vector3 position, float zAngle)
@@ -420,9 +479,9 @@ namespace VoxelEngine.Simulation
             arrow.transform.SetParent(_meshRoot.transform, false);
             arrow.transform.localPosition = position;
             arrow.transform.localRotation = Quaternion.Euler(0f, 0f, zAngle);
-            arrow.transform.localScale = new Vector3(0.05f, 0.20f, 0.025f);
+            arrow.transform.localScale = new Vector3(0.06f, 0.23f, 0.025f);
             Destroy(arrow.GetComponent<Collider>());
-            arrow.GetComponent<MeshRenderer>().sharedMaterial = _railMaterial;
+            arrow.GetComponent<MeshRenderer>().sharedMaterial = _arrowMaterial;
         }
 
         private void CreateVerticalStatusLine()
@@ -517,11 +576,13 @@ namespace VoxelEngine.Simulation
             if (_beltMaterial != null) Destroy(_beltMaterial);
             if (_railMaterial != null) Destroy(_railMaterial);
             if (_frameMaterial != null) Destroy(_frameMaterial);
+            if (_arrowMaterial != null) Destroy(_arrowMaterial);
 
             _beltRenderer = null;
             _beltMaterial = null;
             _railMaterial = null;
             _frameMaterial = null;
+            _arrowMaterial = null;
             _authoredSharedMaterial = null;
             _usingAuthoredStraight = false;
         }

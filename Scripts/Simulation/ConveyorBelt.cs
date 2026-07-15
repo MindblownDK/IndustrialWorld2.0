@@ -460,13 +460,15 @@ namespace VoxelEngine.Simulation
             return null;
         }
 
-        private static bool IsSocketCompatible(MonoBehaviour behaviour, Vector3 localSocket, Vector3 expectedOutwardDirection, bool provider)
+        private bool IsSocketCompatible(MonoBehaviour behaviour, Vector3 localSocket, Vector3 expectedOutwardDirection, bool provider)
         {
             Vector3 candidateDirection;
             Vector3 candidateSocket;
+            ConveyorBelt candidateBelt = null;
 
             if (behaviour is ConveyorBelt belt)
             {
+                candidateBelt = belt;
                 candidateDirection = provider ? belt.GetExitDirection() : belt.GetEntryDirection();
                 candidateSocket = provider ? belt.GetExitSocketPosition() : belt.GetEntrySocketPosition();
             }
@@ -490,8 +492,21 @@ namespace VoxelEngine.Simulation
                 return true;
             }
 
-            if (Vector3.Dot(candidateDirection, expectedOutwardDirection.normalized) < 0.85f) return false;
+            float alignment = Vector3.Dot(candidateDirection, expectedOutwardDirection.normalized);
+            if (alignment < 0.85f)
+            {
+                bool verticalTransition = candidateBelt != null
+                    && IsVerticalShape(shape) != IsVerticalShape(candidateBelt.shape)
+                    && Mathf.Abs(alignment) < 0.20f;
+                if (!verticalTransition) return false;
+            }
             return (candidateSocket - localSocket).sqrMagnitude <= SocketToleranceSqr;
+        }
+
+        private static bool IsVerticalShape(ConveyorShape conveyorShape)
+        {
+            return conveyorShape == ConveyorShape.VerticalUp
+                || conveyorShape == ConveyorShape.VerticalDown;
         }
 
         private bool TryHandOff(ref ConveyorItem ci)

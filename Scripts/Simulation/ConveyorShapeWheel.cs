@@ -45,6 +45,9 @@ namespace VoxelEngine.Simulation
         private Label _promptLabel;
         private VisualElement _wheelOverlay;
         private VisualElement _wheelCenter;
+        private VisualElement _ringElement;
+        private Texture2D _ringTexture;
+        private int _hoveredSegment = -1;
         private bool _open;
         private ConveyorSpeed _activeTier;
         private Vector2 _parallax;
@@ -193,8 +196,11 @@ namespace VoxelEngine.Simulation
             _open = false;
             UIState.PopBlock();
             if (_wheelOverlay != null) _wheelOverlay.RemoveFromHierarchy();
+            ReleaseRingTexture();
             _wheelOverlay = null;
             _wheelCenter = null;
+            _ringElement = null;
+            _hoveredSegment = -1;
             ShowPrompt();
         }
 
@@ -223,32 +229,24 @@ namespace VoxelEngine.Simulation
             _wheelCenter.style.transitionDuration = new System.Collections.Generic.List<TimeValue> { new(0.08f, TimeUnit.Second) };
             _wheelOverlay.Add(_wheelCenter);
 
+            BuildRing();
             BuildCenterBadge();
-            float radius = 126f;
-            float center = 195f;
             for (int i = 0; i < Modes.Length; i++)
-            {
-                float angle = (-90f + i * 120f) * Mathf.Deg2Rad;
-                var card = BuildModeCard(Modes[i], Icons[i]);
-                card.style.position = Position.Absolute;
-                card.style.left = center + Mathf.Cos(angle) * radius - 58f;
-                card.style.top = center + Mathf.Sin(angle) * radius - 42f;
-                _wheelCenter.Add(card);
-            }
+                BuildRingLabel(i, Modes[i], Icons[i]);
         }
 
         private void BuildCenterBadge()
         {
             var badge = new VisualElement();
             badge.style.position = Position.Absolute;
-            badge.style.left = 130;
-            badge.style.top = 130;
-            badge.style.width = 130;
-            badge.style.height = 130;
+            badge.style.left = 85;
+            badge.style.top = 85;
+            badge.style.width = 220;
+            badge.style.height = 220;
             badge.style.alignItems = Align.Center;
             badge.style.justifyContent = Justify.Center;
             badge.style.backgroundColor = new StyleColor(new Color(0.035f, 0.05f, 0.075f, 0.98f));
-            UITheme.Radius(badge, 65f);
+            UITheme.Radius(badge, 110f);
             UITheme.Border(badge, 2f, UITheme.BorderBright);
             badge.pickingMode = PickingMode.Ignore;
             _wheelCenter.Add(badge);
@@ -278,62 +276,154 @@ namespace VoxelEngine.Simulation
             badge.Add(hint);
         }
 
-        private VisualElement BuildModeCard(ConveyorBuildMode mode, string iconText)
+        private void BuildRing()
         {
-            bool selected = GetMode(_activeTier) == mode;
-            var card = new VisualElement();
-            card.style.width = 116;
-            card.style.height = 84;
-            card.style.alignItems = Align.Center;
-            card.style.justifyContent = Justify.Center;
-            card.style.backgroundColor = new StyleColor(selected
-                ? new Color(UITheme.AccentCyan.r, UITheme.AccentCyan.g, UITheme.AccentCyan.b, 0.24f)
-                : new Color(0.045f, 0.06f, 0.085f, 0.97f));
-            UITheme.Radius(card, 14f);
-            UITheme.Border(card, selected ? 2f : 1f, selected ? UITheme.AccentCyan : UITheme.BorderDim);
+            _ringElement = new VisualElement { name = "ConveyorShapeRing" };
+            _ringElement.style.position = Position.Absolute;
+            _ringElement.style.left = 15;
+            _ringElement.style.top = 15;
+            _ringElement.style.width = 360;
+            _ringElement.style.height = 360;
+            _ringElement.pickingMode = PickingMode.Position;
+            _wheelCenter.Add(_ringElement);
+            RefreshRingTexture();
 
-            var icon = new Label(iconText);
-            icon.style.fontSize = 25;
-            icon.style.color = new StyleColor(selected ? UITheme.AccentCyan : UITheme.TextPrimary);
-            icon.pickingMode = PickingMode.Ignore;
-            card.Add(icon);
-
-            var label = new Label(mode.ToString().ToUpperInvariant());
-            label.style.fontSize = 10;
-            label.style.marginTop = 3;
-            label.style.letterSpacing = 1f;
-            label.style.unityFontStyleAndWeight = FontStyle.Bold;
-            label.style.color = new StyleColor(UITheme.TextPrimary);
-            label.pickingMode = PickingMode.Ignore;
-            card.Add(label);
-
-            card.style.transitionProperty = new System.Collections.Generic.List<StylePropertyName> { "scale", "background-color" };
-            card.style.transitionDuration = new System.Collections.Generic.List<TimeValue> { new(0.10f, TimeUnit.Second), new(0.10f, TimeUnit.Second) };
-            card.RegisterCallback<PointerEnterEvent>(_ =>
+            _ringElement.RegisterCallback<PointerMoveEvent>(evt =>
             {
-                card.style.scale = new StyleScale(new Scale(new Vector3(1.06f, 1.06f, 1f)));
-                card.style.backgroundColor = new StyleColor(new Color(UITheme.AccentCyan.r, UITheme.AccentCyan.g, UITheme.AccentCyan.b, 0.20f));
-                UITheme.Border(card, 2f, UITheme.AccentCyan);
+                int segment = SegmentAt(evt.localPosition);
+                if (segment == _hoveredSegment) return;
+                _hoveredSegment = segment;
+                RefreshRingTexture();
             });
-            card.RegisterCallback<PointerLeaveEvent>(_ =>
+            _ringElement.RegisterCallback<PointerLeaveEvent>(_ =>
             {
-                card.style.scale = new StyleScale(new Scale(Vector3.one));
-                if (!selected)
-                {
-                    card.style.backgroundColor = new StyleColor(new Color(0.045f, 0.06f, 0.085f, 0.97f));
-                    UITheme.Border(card, 1f, UITheme.BorderDim);
-                }
+                if (_hoveredSegment < 0) return;
+                _hoveredSegment = -1;
+                RefreshRingTexture();
             });
-            card.RegisterCallback<PointerDownEvent>(evt =>
+            _ringElement.RegisterCallback<PointerDownEvent>(evt =>
             {
                 if (evt.button != 0) return;
+                int segment = SegmentAt(evt.localPosition);
+                if (segment < 0 || segment >= Modes.Length) return;
+                var mode = Modes[segment];
                 SetMode(_activeTier, mode);
                 BuildWheel();
                 BuildFeedbackHud.Show("Conveyor Shape", mode.ToString(), null, UITheme.AccentCyan);
                 evt.StopPropagation();
             });
-            VoxelEngine.FX.UiAudio.MarkClickable(card);
-            return card;
+            VoxelEngine.FX.UiAudio.MarkClickable(_ringElement);
+        }
+
+        private void BuildRingLabel(int index, ConveyorBuildMode mode, string iconText)
+        {
+            const float center = 195f;
+            const float radius = 138f;
+            float angle = (-90f + index * 120f) * Mathf.Deg2Rad;
+
+            var labelRoot = new VisualElement();
+            labelRoot.style.position = Position.Absolute;
+            labelRoot.style.left = center + Mathf.Cos(angle) * radius - 44f;
+            labelRoot.style.top = center + Mathf.Sin(angle) * radius - 30f;
+            labelRoot.style.width = 88;
+            labelRoot.style.height = 60;
+            labelRoot.style.alignItems = Align.Center;
+            labelRoot.style.justifyContent = Justify.Center;
+            labelRoot.pickingMode = PickingMode.Ignore;
+            _wheelCenter.Add(labelRoot);
+
+            bool selected = GetMode(_activeTier) == mode;
+            var icon = new Label(iconText);
+            icon.style.fontSize = 24;
+            icon.style.unityTextAlign = TextAnchor.MiddleCenter;
+            icon.style.color = new StyleColor(selected ? Color.white : new Color(0.16f, 0.18f, 0.20f));
+            icon.style.unityFontStyleAndWeight = FontStyle.Bold;
+            icon.pickingMode = PickingMode.Ignore;
+            labelRoot.Add(icon);
+
+            var label = new Label(mode.ToString().ToUpperInvariant());
+            label.style.fontSize = 9;
+            label.style.marginTop = 1;
+            label.style.letterSpacing = 0.8f;
+            label.style.unityFontStyleAndWeight = FontStyle.Bold;
+            label.style.color = new StyleColor(selected ? Color.white : new Color(0.20f, 0.22f, 0.24f));
+            label.pickingMode = PickingMode.Ignore;
+            labelRoot.Add(label);
+        }
+
+        private int SegmentAt(Vector2 localPosition)
+        {
+            Vector2 delta = localPosition - new Vector2(180f, 180f);
+            float radius = delta.magnitude;
+            if (radius < 115f || radius > 173f) return -1;
+
+            float angle = Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg;
+            float normalized = Mathf.Repeat(angle + 150f, 360f);
+            float withinSegment = normalized % 120f;
+            if (withinSegment < 3.5f || withinSegment > 116.5f) return -1;
+            return Mathf.Clamp(Mathf.FloorToInt(normalized / 120f), 0, Modes.Length - 1);
+        }
+
+        private void RefreshRingTexture()
+        {
+            const int size = 256;
+            if (_ringTexture == null)
+            {
+                _ringTexture = new Texture2D(size, size, TextureFormat.RGBA32, false)
+                {
+                    name = "ConveyorShapeWheelRing",
+                    wrapMode = TextureWrapMode.Clamp,
+                    filterMode = FilterMode.Bilinear,
+                    hideFlags = HideFlags.HideAndDontSave
+                };
+            }
+
+            var pixels = new Color32[size * size];
+            float center = (size - 1) * 0.5f;
+            const float innerRadius = 81f;
+            const float outerRadius = 123f;
+            int selected = (int)GetMode(_activeTier);
+
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float dx = x - center;
+                    float dy = center - y;
+                    float radius = Mathf.Sqrt(dx * dx + dy * dy);
+                    if (radius < innerRadius || radius > outerRadius) continue;
+
+                    float angle = Mathf.Atan2(dy, dx) * Mathf.Rad2Deg;
+                    float normalized = Mathf.Repeat(angle + 150f, 360f);
+                    float withinSegment = normalized % 120f;
+                    if (withinSegment < 3.5f || withinSegment > 116.5f) continue;
+
+                    int segment = Mathf.Clamp(Mathf.FloorToInt(normalized / 120f), 0, Modes.Length - 1);
+                    Color32 color;
+                    if (segment == selected)
+                        color = new Color32(22, 157, 220, 250);
+                    else if (segment == _hoveredSegment)
+                        color = new Color32(178, 224, 238, 250);
+                    else
+                        color = new Color32(220, 218, 211, 246);
+
+                    float edge = Mathf.Min(radius - innerRadius, outerRadius - radius);
+                    color.a = (byte)Mathf.RoundToInt(color.a * Mathf.Clamp01(edge));
+                    pixels[y * size + x] = color;
+                }
+            }
+
+            _ringTexture.SetPixels32(pixels);
+            _ringTexture.Apply(false, false);
+            if (_ringElement != null)
+                _ringElement.style.backgroundImage = new StyleBackground(_ringTexture);
+        }
+
+        private void ReleaseRingTexture()
+        {
+            if (_ringTexture == null) return;
+            Destroy(_ringTexture);
+            _ringTexture = null;
         }
 
         private void UpdateParallax()
@@ -357,9 +447,12 @@ namespace VoxelEngine.Simulation
         {
             if (_prompt != null) _prompt.RemoveFromHierarchy();
             if (_wheelOverlay != null) _wheelOverlay.RemoveFromHierarchy();
+            ReleaseRingTexture();
             _prompt = null;
             _wheelOverlay = null;
             _wheelCenter = null;
+            _ringElement = null;
+            _hoveredSegment = -1;
         }
     }
 }

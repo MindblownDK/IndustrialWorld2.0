@@ -254,16 +254,12 @@ namespace VoxelEngine.Building
                     rot = targetBelt.transform.rotation;
                     return true;
                 }
-                if (placingShape == VoxelEngine.Simulation.ConveyorShape.VerticalUp)
+                if (placingShape == VoxelEngine.Simulation.ConveyorShape.VerticalUp
+                    || placingShape == VoxelEngine.Simulation.ConveyorShape.VerticalDown)
                 {
-                    pos = targetBelt.transform.position + targetBelt.transform.up * factorySpacing;
                     rot = targetBelt.transform.rotation;
-                    return true;
-                }
-                if (placingShape == VoxelEngine.Simulation.ConveyorShape.VerticalDown)
-                {
-                    pos = targetBelt.transform.position - targetBelt.transform.up * factorySpacing;
-                    rot = targetBelt.transform.rotation;
+                    Vector3 localEntry = ConveyorLocalEntryOffset(placingShape);
+                    pos = targetBelt.GetExitSocketPosition() - rot * localEntry;
                     return true;
                 }
 
