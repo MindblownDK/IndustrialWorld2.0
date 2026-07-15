@@ -4,7 +4,7 @@
 **Current Version:** `5.4.0-dev`
 **Roadmap Version:** `5.4.0-dev`
 **Date:** 2026-07-15
-**Status:** Active Implementation — Crusader Mythic Expansion & Chute Shape Wheel
+**Status:** Active Implementation — Pollution, Planetary Ecology & World Inspection Overlay
 
 ---
 
@@ -62,6 +62,7 @@ The design goal is a seamless blend of:
 | Crafting / items / storage | ✅ Exists | Needs deeper recipe chains |
 | Research / tech tree | ✅ Exists | Can be expanded into eras |
 | UI / UX | ✅ Premium | Design system rolling out |
+| Top-left world inspection overlay | 🛠️ Working On | Crosshair target name, category/state, power, item count, and integrity are implemented; Unity validation pending |
 | Farming | 🟡 Early | Good seed, needs integration |
 | Nuclear | 🟡 Present | Could become endgame power |
 | Factory logistics | ❌ Missing | No conveyors, chutes, robots |
@@ -86,6 +87,9 @@ The design goal is a seamless blend of:
 | Passive livestock | ❌ Missing | Breedable cows, sheep, and pigs need husbandry, food, and population systems |
 | Mythical enemies / bosses | ❌ Missing | Griffin, Roc, Manticore, Karkadann, Ghouls, Ifrit Djinn, Leviathan, and Basilisk-class encounters are planned |
 | Boss relic loot gates | ❌ Missing | Higher-tier bosses must award relics required by selected late-game research and megastructures |
+| Pollution / industrial threat | ❌ Missing | Emissions do not yet contaminate regions or attract escalating enemy attacks to their source |
+| Planetary ecology registry | ❌ Missing | Each planet needs themed hostile, passive, elite, and boss populations adapted to local hazards |
+| Rogue space crusaders | ❌ Missing | No territorial hostile Crusader fleets currently pursue players in space |
 | Enemies / hazards | ❌ Missing | World feels safe, low tension |
 | Narrative / context | ❌ Missing | Player lacks long-term purpose |
 | Multiplayer | ❌ Missing | Future consideration |
@@ -309,6 +313,81 @@ The Building Hammer gains a research-locked **Orbital Station** family with a cl
 
 ---
 
+## 4.7 Pollution, Planetary Ecology & Territorial Threats
+
+### Pollution Simulation
+
+Industrial activity creates pollution that spreads outward from its source and changes local threat levels.
+
+#### Pollution Sources
+
+- Solid-fuel generators, combustion engines, furnaces, refineries, chemical plants, mining machines, waste overflow, damaged reactors, rockets, and heavy vehicles emit different pollution types.
+- Emission is measured per simulation tick and accumulated into local world cells or chunks.
+- Each source exposes current output, lifetime output, filtration, and operating-state contributions.
+- Existing machine balance values remain independent; pollution is an additional data-driven stat.
+
+#### Spread, Persistence & Cleanup
+
+- Wind carries airborne pollution downwind and storms can spread or temporarily dilute it.
+- Water and soil can retain contamination longer than open air.
+- Forests, filters, scrubbers, sealed processing, cleaner fuel, and advanced Crusader technology reduce pollution.
+- Dormant regions simulate pollution at a reduced tick rate.
+- Pollution maps and sensors show source intensity, spread direction, local danger, and predicted thresholds.
+
+#### Enemy Attraction
+
+- Pollution creates an industrial scent/energy signature that hostile creatures can track back to the exact source area.
+- Low pollution attracts scouts such as isolated Ghouls, scavengers, or curious predators.
+- Moderate pollution creates packs, ambushes, and repeated attacks on exposed logistics.
+- High pollution creates organized waves, elite mutations, flying attackers, and planet-specific siege creatures.
+- Extreme pollution can awaken regional bosses or provoke territorial factions.
+- More pollution increases enemy count, tier, frequency, and detection distance, with population caps and recovery cooldowns to prevent unbounded spawning.
+- Destroying or filtering the source gradually lowers pressure; enemies already committed to an attack do not disappear instantly.
+
+### Planet-Specific Hostile & Passive Ecology
+
+Each planet owns an `EcologyProfile` defining passive creatures, predators, pollution responders, elites, bosses, resistances, loot, and spawn rules.
+
+| Planet Theme | Passive Life | Standard Threats | Elites / Bosses |
+|--------------|--------------|------------------|-----------------|
+| **Temperate Home World** | Cows, sheep, pigs, deer-like grazers, small heraldic birds | Ghouls formed from fallen Crusaders, Griffins, Manticores | Griffin Matriarch, Elder Manticore |
+| **Barren Moon** | Vacuum-adapted crystal mites, timid regolith burrowers | Dust Wraiths, Lunar Ghouls, armored alien stalkers | Pale Roc, Crater Devourer |
+| **Ice Moon** | Aurora wisps, woolly ice grazers, shell-backed snow crawlers | Frost Wyverns, Ice Burrowers, frozen dead Crusaders | Frost Basilisk, Aurora Queen |
+| **Volcanic World** | Heat-feeding ember beetles, basalt shellbacks | Ifrit Djinn, Magma Manticores, ash ghouls | Ifrit Sultan, Obsidian Karkadann |
+| **Acid-Rain World** | Acid-shelled grazers, glass-wing insects, corrosion-resistant marsh walkers | Corrosive Drakes, Mire Ghouls, Acid Spitters, plated alien hunters | Corrosion Sovereign, Caustic Hydra |
+| **Ocean / Coastal World** | Reef grazers, luminous shoals, gentle shell leviathans | Drowned Crusaders, siren predators, armored reef hunters | Leviathan, Abyssal Broodmother |
+| **Gas-Giant Atmosphere** | Storm rays, balloon grazers, luminous cloud shoals | Ion Djinn, lightning hunters, aerial parasites | Tempest Roc, Sky Leviathan |
+| **Asteroid Belt** | Ore-eating crystal mites, harmless void floaters | Void Ghouls, mining parasites, Rogue Space Crusader patrols | Rogue Crusader Grandmaster, Asteroid Maw |
+| **Dead Core / Anomaly** | Rare anomaly wisps and non-hostile echo creatures | Dead Priests, fallen stellar Crusaders, reality-warped aliens | Hollow Pontiff, Relic Warden |
+
+### Fallen Crusaders, Dead Priests & Ghouls
+
+- Crusaders who die in heavily corrupted, polluted, irradiated, or relic-saturated regions may return as armored Ghouls.
+- Dead Priests retain fragments of ritual knowledge and use corrupted support abilities, fear effects, false healing zones, and relic curses.
+- Fallen Crusaders retain recognizable armor silhouettes, broken heraldry, shields, and damaged weapons.
+- Higher-ranking fallen enemies drop Order insignia, corrupted relics, journals, and restoration research materials.
+- Their presence connects the Crusader Order’s history directly to ruins and late-game corruption.
+
+### Rogue Space Crusaders
+
+- Rogue Crusader Orders control marked orbital territories, abandoned stations, asteroid claims, and forbidden relic sites.
+- Patrol ships issue a warning when the player approaches a territorial boundary.
+- Remaining too close, entering with weapons active, mining claimed resources, or ignoring warnings escalates hostility.
+- Rogue ships pursue, flank, disable engines, board vessels, demand cargo, and retreat for reinforcements when damaged.
+- Reputation, heraldry, treaties, tribute, and recovered Order records can create alternatives to combat.
+- Pollution, reactor signatures, weapon discharge, and high-energy cargo increase the range at which rogue patrols detect a player ship.
+- Named rogue commanders function as space bosses and award navigation keys, station blueprints, Crusader relics, and high-tier ship components.
+
+### Planetary Boss Rules
+
+- Every major planet theme receives at least one signature boss adapted to its gravity, weather, atmosphere, terrain, and dominant hazard.
+- Harsh worlds produce stronger baseline creatures because local life has evolved or mutated to survive acid rain, vacuum, extreme cold, radiation, pressure, or volcanic heat.
+- Planetary hazards remain active during boss encounters and are part of the mechanics rather than background decoration.
+- Boss loot tier scales with planet danger and progression era.
+- Boss Relic Cores remain guaranteed on first kill and feed the late-game research gates documented in Section 4.6.
+
+---
+
 ## 5. Master Roadmap
 
 | Version | Theme | Scope | Manual Unity Work |
@@ -346,7 +425,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Area | Status | Repository Audit |
 |------|--------|------------------|
 | Conveyor belts | 🛠️ WORKING ON | Vertical geometry, item paths, and colliders now share the horizontal belt-surface height for precise Straight/Ramp transitions. Wheel hover now brightens the complete segment and animates its icon/label. Unity validation is pending. |
-| Conveyor chutes | 🛠️ WORKING ON | The shared Build Wheel now offers Straight, Corner, and Spiral modes for the existing chute item. Corner/spiral runtime channels, rails, collars, moving-item paths, status targeting, placement previews, and additive save restoration await Unity validation. |
+| Conveyor chutes | 🟡 PARTIALLY COMPLETE | Straight vertical transport, snapping, moving-item visuals, inventory endpoints, and save-compatible placement are validated foundations. |
 | Basic machines | 🟡 PARTIALLY COMPLETE | Electric Furnace, Crusher, and three Assembler tiers exist. Crusher and Assembler use the centralized simulation tick; shared UI and persistence still need completion. |
 | Storage blocks | 🟡 PARTIALLY COMPLETE | A basic chest and the wider storage system exist. The planned Wooden Crate → Iron Chest → Steel Chest → Provider/Requester progression is not complete. |
 | Power pole, wire, and substation | 🟡 PARTIALLY COMPLETE | Manual wiring, poles, substations, transformers, and high-voltage assets exist. Setup reruns still need full non-destructive balance preservation. |
@@ -355,7 +434,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Item entity system | 🟡 PARTIALLY COMPLETE | Dropped world items exist and conveyors render carried packets. A unified pooled physical-item entity lifecycle is not complete. |
 | Recipe registry refactor | 🟡 PARTIALLY COMPLETE | ScriptableObject crafting and machine recipes exist. Shaped/shapeless/smelting/machine unification and validation remain incomplete. |
 | Centralized simulation tick | 🟡 PARTIALLY COMPLETE | Crusher and Assembler register with `SimulationTickManager`; belts, chutes, and several older machines still run per-frame updates. |
-| Factory persistence | 🟡 PARTIALLY COMPLETE | Explicit Ramp/Vertical conveyor modes and Corner/Spiral chute modes restore from additive save fields; belt/chute contents plus Crusher/Assembler buffers and progress remain outstanding. |
+| Factory persistence | 🟡 PARTIALLY COMPLETE | Explicit Ramp/Vertical conveyor modes restore from additive save fields; belt/chute contents plus Crusher/Assembler buffers and progress remain outstanding. |
 | Step 5 tiered setup workflow | 🛠️ WORKING ON | Missing canonical Stone or Step 4 resource references are resolved by item ID and safely recreated when absent; existing wrong-type assets are preserved and reported. Unity validation is pending. |
 | Step 17 setup workflow | ✅ COMPLETED | The separate-variant generation pass was withdrawn before validation. Step 17 remains non-destructive and now documents the contextual conveyor wheel while preserving the three existing tier items and recipes. |
 
@@ -856,7 +935,20 @@ Statuses are evidence-based and move forward only after code/content review and 
     - Requires power and ammunition.
 
 15. **Prospecting Tools**
-    - Ore detector, terrain scanner, sample drill.
+   - Ore detector, terrain scanner, sample drill.
+
+16. **Pollution & Industrial Threat Director**
+   - Chunk/cell pollution accumulation for air, soil, and water.
+   - Wind-driven spread, persistence, filtration, cleanup, and reduced-rate dormant simulation.
+   - Pollution source inspection, map overlays, warning thresholds, and production statistics integration.
+   - Escalating source-seeking attacks: scouts → packs → elites → siege creatures → awakened regional bosses.
+   - Planet Ecology Profiles choose appropriate passive life, pollution responders, enemy tiers, and bosses.
+
+17. **Planetary Ecology & Territorial Space Factions**
+   - Different hostile and passive populations on every planet theme.
+   - Fallen Crusaders, Dead Priests, and corruption-created Ghouls in suitable ruins and hazard zones.
+   - Rogue Space Crusader territories, warnings, pursuit, boarding, reputation, tribute, and named commander bosses.
+   - Acid-rain and other extreme worlds use stronger hazard-adapted creatures and unique loot.
 
 #### Improved Features
 
@@ -931,6 +1023,18 @@ Statuses are evidence-based and move forward only after code/content review and 
     - Detects sealed rooms using grid blocks and airtight doors.
     - Tracks oxygen level per room.
     - Vents add or remove oxygen.
+
+29. **Pollution Service**
+    - Deterministic chunk/cell emissions, spread, decay, filtration, contamination, source attribution, and reduced-rate distant simulation.
+
+30. **Ecology Registry**
+    - ScriptableObject planet profiles containing passive species, hostile species, resistances, pollution responses, elites, bosses, loot tables, and spawn budgets.
+
+31. **Threat Director**
+    - Converts pollution, progression, biome danger, territory, recent attacks, and cooldowns into fair source-seeking enemy pressure.
+
+32. **Territorial Space AI**
+    - Rogue Crusader borders, warnings, reputation, patrol routes, pursuit, retreat, reinforcements, boarding, and commander encounters.
 
 ---
 
@@ -1236,6 +1340,12 @@ This rule applies to:
     - Hard-coded colors are forbidden; use theme tokens only.
     - Per-block overrides are optional and documented.
 
+12. **Top-Left World Inspection Overlay**
+    - Shows the name and type of the block, machine, item, creature, vehicle part, or world object under the crosshair.
+    - Displays relevant integrity, power, operating state, inventory throughput, conveyor/chute occupancy, distance, faction, hazard, or creature disposition.
+    - Uses animated fade/slide transitions and never captures pointer input.
+    - Future definition interfaces can provide richer custom rows without coupling the overlay to every system.
+
 ---
 
 ## 8. Player Experience Loop (The “Feel” Target)
@@ -1373,8 +1483,11 @@ For each version, these are the high-level Unity tasks you will perform manually
 16. Overhaul space ambiance: starfield, nebulae, sun glare, vacuum audio.
 17. Add environmental radiation zones and heat zones to biomes.
 18. Create sliding airtight door and vent prefabs.
-19. **Run setup wizard step (non-destructive)**
-    - Step 20 for ruins, enemies, weather, water, sky, and life-support systems.
+19. Author pollution values for every emitting machine, vehicle, fuel, waste source, and cleanup system.
+20. Create planet Ecology Profiles with passive mobs, hostiles, elites, bosses, hazard resistances, and loot tiers.
+21. Build Fallen Crusader, Dead Priest, and Rogue Space Crusader prefabs, territories, ships, warnings, and commander encounters.
+22. **Run setup wizard step (non-destructive)**
+    - Step 20 for ruins, livestock, mythical enemies, pollution, ecology profiles, territorial factions, bosses, weather, water, sky, and life-support systems.
 
 ### For 5.0.0 (Orbital Expansion)
 
@@ -1434,40 +1547,41 @@ For each version, these are the high-level Unity tasks you will perform manually
 
 ## 11. Changelog
 
-### [5.4.0-dev] Crusader Mythic Expansion & Chute Shape Wheel
+### [5.4.0-dev] Pollution & Planetary Ecology Roadmap + World Inspection Overlay
 
-**Type:** MINOR — new save-compatible chute build modes plus major roadmap content expansion
+**Type:** MINOR — new save-compatible inspection UI plus major roadmap content expansion
 
 **Roadmap Added:**
-- Crusaders as the permanent player identity and members of an industrial Crusader Order.
-- Crusader heraldry, tabards, sealed stellar armor, Order ranks, banners, and armor progression.
-- Breedable cows, sheep, and pigs with food, water, shelter, products, reproduction, and population limits.
-- Mythical enemy roster: Griffin, Roc, Manticore, Karkadann, Ghouls, Ifrit Djinn, Leviathan, and Cockatrice/Basilisk.
-- Tiered enemy loot, guaranteed named relics, Boss Relic Cores, first-kill progression, and late-game relic research gates.
-- Required boss progression for selected late-game technology, including the Star Builder / Stellar Forge and Dyson Sphere.
-- A staged Dyson solar swarm/sphere around the sun that produces immense scalable power.
-- A Star Builder / Stellar Forge with strict stellar safety and balance constraints.
-- A research-locked Orbital Station Building Hammer family with pressurized modular habitat pieces, corridors, windows, domes, airlocks, docking frames, and utility panels.
-- Expanded Living Worlds, Orbital Expansion, Architect Era, setup workflow, and manual validation sections.
+- Pollution sources, spread, persistence, cleanup, filters, contamination, sensors, and map overlays.
+- Pollution-driven enemy attraction that escalates scouts, packs, elites, siege creatures, and regional bosses at the source.
+- Planet-specific Ecology Profiles for passive mobs, hostiles, elites, bosses, resistances, loot, and spawn budgets.
+- Acid-rain creatures adapted to corrosive conditions and therefore stronger than equivalent temperate creatures.
+- Fallen Crusaders, Dead Priests, corruption-created Ghouls, and relic-linked Order history.
+- Rogue Space Crusader territories, warnings, patrols, pursuit, boarding, reputation, tribute, and commander bosses.
+- Themed passive creatures and signature bosses for temperate, barren, ice, volcanic, acid-rain, oceanic, gas-giant, asteroid, and anomaly worlds.
+- Pollution Service, Ecology Registry, Threat Director, and Territorial Space AI architecture.
+- Expanded Living Worlds and Step 20 setup requirements.
+- Crusader player identity, livestock, mythical enemies, boss relic gates, Dyson Sphere, Star Builder, and Orbital Station Hammer family from Section 4.6.
 
 **Runtime Added:**
-- The contextual Build Wheel now activates while holding the existing Conveyor Chute item.
-- Chute wheel choices: Straight, Corner, and Spiral.
-- The same segmented donut rendering, blue hover feedback, hold behavior, key rebinding, and mouse parallax are reused.
-- Corner chutes generate a smooth guarded curved channel at runtime.
-- Spiral chutes generate a segmented helical channel with rails and top/bottom collars.
-- Chute item visuals follow the same runtime paths as their selected channel.
-- Selected Corner/Spiral chute shapes persist through additive backward-compatible save fields.
+- A premium top-left World Inspection Overlay for the current crosshair target.
+- Target name, category/type, operating state, conveyor/chute occupancy, power demand/output, stack size, distance, and integrity where available.
+- Animated fade and slide transitions with no pointer capture.
+- Context resolution for placed blocks, tiered buildings, grid blocks, machines, conveyors, chutes, dropped items, and generic world objects.
+- Weather HUD moved beneath the inspection surface to prevent overlap.
+
+**Removed:**
+- Experimental Corner/Spiral chute selection, runtime variant generation, and chute-shape save fields.
+- Chutes no longer activate the conveyor-only radial selector.
 
 **Changed:**
-- One chute item and recipe owns all three chute shapes; no duplicate chute recipes or items are introduced.
-- The center wheel label and hotbar prompt automatically switch between Conveyor and Chute context.
-- Returning to Straight restores the authored Step 17 chute visuals and status target.
-- Updated runtime and roadmap version to `5.4.0-dev` under Semantic Versioning because this release adds new UI-accessible chute modes.
+- The Shape Wheel remains exclusive to Basic, Fast, and Express conveyors.
+- Conveyor Chutes return to the validated Straight transport workflow and are marked **PARTIALLY COMPLETE**.
+- Updated runtime and roadmap version to `5.4.0-dev` under Semantic Versioning because this release adds the World Inspection Overlay.
 
 **Roadmap Status:**
-- Chute Shape Wheel and runtime variants: **WORKING ON** — awaiting Unity validation.
-- Crusader, livestock, mythical enemy, boss relic, Dyson Sphere, Star Builder, and Orbital Station systems: planned for their documented eras.
+- World Inspection Overlay: **WORKING ON** — awaiting Unity validation.
+- Pollution, planetary ecology, Rogue Space Crusaders, and themed bosses/passive mobs: planned for Living Worlds and later eras.
 - Step 5 prerequisite repair remains **WORKING ON** until setup validation is reported.
 
 ---

@@ -105,9 +105,6 @@ namespace VoxelEngine.Building
             var ghostBelt = _ghost.GetComponentInChildren<VoxelEngine.Simulation.ConveyorBelt>(true);
             if (ghostBelt != null)
                 ghostBelt.SetBuildShape(ResolveConveyorBuildShape(ghostBelt, hit));
-            var ghostChute = _ghost.GetComponentInChildren<VoxelEngine.Simulation.ConveyorChute>(true);
-            if (ghostChute != null)
-                ghostChute.SetBuildShape(VoxelEngine.Simulation.ConveyorShapeWheel.GetChuteShape());
 
             ComputePlacementPose(hit, block, out Vector3 pos, out Quaternion rot);
             _ghost.transform.SetPositionAndRotation(pos, rot);
@@ -160,9 +157,6 @@ namespace VoxelEngine.Building
             var placedBelt = go.GetComponentInChildren<VoxelEngine.Simulation.ConveyorBelt>(true);
             if (placedBelt != null)
                 placedBelt.SetBuildShape(ResolveConveyorBuildShape(placedBelt, hit));
-            var placedChute = go.GetComponentInChildren<VoxelEngine.Simulation.ConveyorChute>(true);
-            if (placedChute != null)
-                placedChute.SetBuildShape(VoxelEngine.Simulation.ConveyorShapeWheel.GetChuteShape());
 
             // Make sure it has a collider for future raycasts.
             if (go.GetComponentInChildren<Collider>() == null)

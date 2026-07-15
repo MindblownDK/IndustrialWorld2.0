@@ -1,6 +1,6 @@
 // Assets/Scripts/VoxelEngine/Weather/WeatherHud.cs
 //
-// Small weather indicator in the top-left corner showing current weather state.
+// Small weather indicator below the top-left inspection overlay.
 
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -22,7 +22,9 @@ namespace VoxelEngine.Weather
 
             _container = new VisualElement { name = "WeatherHud" };
             _container.style.position = Position.Absolute;
-            _container.style.top = 16;
+            // The persistent target-inspection card owns the top-left anchor.
+            // Weather sits directly beneath it to keep both surfaces readable.
+            _container.style.top = 142;
             _container.style.left = 16;
             _container.style.flexDirection = FlexDirection.Row;
             _container.style.alignItems = Align.Center;

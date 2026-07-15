@@ -190,7 +190,7 @@ namespace VoxelEngine.EditorTools
                 "  • Conveyor Belt (Basic / Fast / Express tiers)\n" +
                 "  • Hold Build Wheel to select Straight / Ramp / Vertical for the held tier\n" +
                 "  • Conveyor direction chevrons + centered status lines\n" +
-                "  • Conveyor Chute with Straight / Corner / Spiral Build Wheel modes\n" +
+                "  • Conveyor Chute (vertical item transport)\n" +
                 "  • Crusher + Assembler Mk.1/Mk.2/Mk.3 machines\n" +
                 "  • MachineDefinition + MachineRecipe ScriptableObjects\n" +
                 "  • VoltageSystemConfig (25 MW LV/HV threshold)\n" +

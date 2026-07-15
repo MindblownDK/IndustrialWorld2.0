@@ -203,6 +203,7 @@ namespace VoxelEngine.UI
             BuildFeedbackHud.Tick();
             VoxelEngine.Weather.WeatherHud.Tick();
             InteractionHud.Tick();
+            WorldInspectionHud.Tick();
             VoxelEngine.GridSystem.GridPilotHud.Tick();
             GrinderHud.Tick();
             BuildCostHud.Tick();
@@ -835,6 +836,7 @@ namespace VoxelEngine.UI
             VoxelEngine.GridSystem.UI.ShipToolHud.EnsureMounted(_root);
             RustStyleHud.EnsureMounted(_root);
             InteractionHud.EnsureMounted(_root);
+            WorldInspectionHud.EnsureMounted(_root);
             BuildFeedbackHud.EnsureMounted(_root);
             VoxelEngine.Weather.WeatherHud.EnsureMounted(_root);
             VoxelEngine.GridSystem.GridPilotHud.EnsureMounted(_root);
