@@ -240,9 +240,9 @@ namespace VoxelEngine.Settings
             if (ps == null) return;
             ps.scaleMode = UnityEngine.UIElements.PanelScaleMode.ScaleWithScreenSize;
             ps.referenceResolution = new Vector2Int(1920, 1080);
-            // Force shrink-fit so fixed premium panels never render half outside
-            // smaller windows or non-16:9 editor game views.
-            ps.screenMatchMode = UnityEngine.UIElements.PanelScreenMatchMode.Shrink;
+            // Balanced width/height scaling keeps text crisp while responsive panel
+            // constraints keep content inside non-16:9 game views.
+            ps.screenMatchMode = UnityEngine.UIElements.PanelScreenMatchMode.MatchWidthOrHeight;
             ps.match = 0.5f;
             ps.referenceDpi = 96;
             ps.fallbackDpi = 96;

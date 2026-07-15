@@ -98,7 +98,7 @@ namespace VoxelEngine.FX
             {
                 case Materials.MaterialId.Stone:
                 case Materials.MaterialId.Clay:
-                case Materials.MaterialId.Bedrock:
+                case Materials.MaterialId.LegacySolidFloor:
                     return Sfx.MineStone;
                 case Materials.MaterialId.Sand:
                     return Sfx.MineSand;

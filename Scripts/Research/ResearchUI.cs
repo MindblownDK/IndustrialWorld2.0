@@ -106,7 +106,6 @@ namespace VoxelEngine.Research
             _doc = GetComponent<UIDocument>();
             if (_doc.panelSettings == null)
                 _doc.panelSettings = Resources.Load<PanelSettings>("MenuPanelSettings");
-            VoxelEngine.Settings.GameSettings.ApplyUiScaleAndFit(_doc.panelSettings);
             _root = _doc.rootVisualElement;
             _root.style.flexGrow = 1;
             HideUI();

@@ -61,12 +61,14 @@ namespace VoxelEngine.Building.Tiered
         private void Start()
         {
             if (inventory == null) inventory = FindAnyObjectByType<Inventory>();
+            if (registry == null) registry = BuildSystemV2.Instance != null ? BuildSystemV2.Instance.registry : null;
             if (registry == null) registry = Resources.Load<TieredBlockRegistry>("TieredBlockRegistry");
         }
 
         private void Update()
         {
             if (inventory == null) inventory = FindAnyObjectByType<Inventory>();
+            if (registry == null && BuildSystemV2.Instance != null) registry = BuildSystemV2.Instance.registry;
             var stack = inventory != null ? inventory.ActiveStack : null;
             bool holdingHammer = stack != null && !stack.IsEmpty && stack.item is Hammer;
 
@@ -163,6 +165,7 @@ namespace VoxelEngine.Building.Tiered
             BuildRing();
             BuildCenterDisc();
             for (int i = 0; i < PageSize; i++) BuildSegmentLabel(i);
+            RegisterWheelPointerEvents();
             RefreshSegmentLabels();
         }
 
@@ -174,35 +177,38 @@ namespace VoxelEngine.Building.Tiered
             _ringElement.style.top = 20;
             _ringElement.style.width = 480;
             _ringElement.style.height = 480;
-            _ringElement.pickingMode = PickingMode.Position;
+            _ringElement.pickingMode = PickingMode.Ignore;
             _wheelCenter.Add(_ringElement);
             RefreshRingTexture();
+        }
 
-            _ringElement.RegisterCallback<PointerMoveEvent>(evt =>
+        private void RegisterWheelPointerEvents()
+        {
+            _wheelCenter.RegisterCallback<PointerMoveEvent>(evt =>
             {
-                int segment = SegmentAt(evt.localPosition);
+                int segment = SegmentAt(_wheelCenter.WorldToLocal(evt.position));
                 if (segment == _hoveredSegment) return;
                 _hoveredSegment = segment;
                 RefreshRingTexture();
                 RefreshSegmentLabels();
             });
-            _ringElement.RegisterCallback<PointerLeaveEvent>(_ =>
+            _wheelCenter.RegisterCallback<PointerLeaveEvent>(_ =>
             {
                 if (_hoveredSegment < 0) return;
                 _hoveredSegment = -1;
                 RefreshRingTexture();
                 RefreshSegmentLabels();
             });
-            _ringElement.RegisterCallback<PointerDownEvent>(evt =>
+            _wheelCenter.RegisterCallback<PointerDownEvent>(evt =>
             {
                 if (evt.button != 0) return;
-                int segment = SegmentAt(evt.localPosition);
+                int segment = SegmentAt(_wheelCenter.WorldToLocal(evt.position));
                 int familyIndex = FamilyIndex(segment);
                 if (familyIndex < 0) return;
                 SelectFamily(familyIndex);
                 evt.StopPropagation();
             });
-            VoxelEngine.FX.UiAudio.MarkClickable(_ringElement);
+            VoxelEngine.FX.UiAudio.MarkClickable(_wheelCenter);
         }
 
         private void BuildCenterDisc()
@@ -297,17 +303,22 @@ namespace VoxelEngine.Building.Tiered
             var name = new Label(Families[index].ToString().ToUpperInvariant());
             name.name = "Name";
             name.style.fontSize = 8;
+            name.style.maxWidth = 78;
             name.style.unityFontStyleAndWeight = FontStyle.Bold;
             name.style.unityTextAlign = TextAnchor.MiddleCenter;
-            name.style.whiteSpace = WhiteSpace.Normal;
+            name.style.whiteSpace = WhiteSpace.NoWrap;
+            name.style.overflow = Overflow.Hidden;
             name.pickingMode = PickingMode.Ignore;
             root.Add(name);
 
             var cost = new Label(GetCostText(Families[index]).Replace("Cost: ", string.Empty));
             cost.name = "Cost";
             cost.style.fontSize = 7;
+            cost.style.maxWidth = 76;
             cost.style.marginTop = 1;
             cost.style.unityTextAlign = TextAnchor.MiddleCenter;
+            cost.style.whiteSpace = WhiteSpace.NoWrap;
+            cost.style.overflow = Overflow.Hidden;
             cost.pickingMode = PickingMode.Ignore;
             root.Add(cost);
         }
@@ -335,9 +346,9 @@ namespace VoxelEngine.Building.Tiered
 
         private int SegmentAt(Vector2 localPosition)
         {
-            Vector2 delta = localPosition - new Vector2(240f, 240f);
+            Vector2 delta = localPosition - new Vector2(260f, 260f);
             float radius = delta.magnitude;
-            if (radius < 155f || radius > 232f) return -1;
+            if (radius < 154f || radius > 232f) return -1;
             float angle = Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg;
             float segmentAngle = 360f / PageSize;
             float normalized = Mathf.Repeat(angle + 90f + segmentAngle * 0.5f, 360f);
@@ -463,7 +474,7 @@ namespace VoxelEngine.Building.Tiered
 
         private string GetCostText(BuildFamily family)
         {
-            if (registry == null) return "Free";
+            if (registry == null) return "Registry unavailable";
             var def = registry.Get(family);
             if (def == null || def.placeCost?.items == null) return "Free";
             var builder = new System.Text.StringBuilder("Cost: ");

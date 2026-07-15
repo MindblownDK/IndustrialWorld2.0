@@ -7,6 +7,7 @@
 //   * Toggle grid-vs-free with the BuildToggleGrid keybind (default G).
 //   * The Hammer tool (separate) handles upgrade / rotate / destroy.
 
+using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.Cosmos;
 using VoxelEngine.Items;
@@ -152,14 +153,16 @@ namespace VoxelEngine.Building.Tiered
             float bestSqr = socketSnapRadius * socketSnapRadius;
 
             var hits = Physics.OverlapSphere(hit.point, socketSnapRadius);
+            var visitedHosts = new HashSet<PlacedTieredBlock>();
             foreach (var col in hits)
             {
-                var sockets = col.GetComponentsInParent<BuildSocket>(true);
+                var host = col != null ? col.GetComponentInParent<PlacedTieredBlock>() : null;
+                if (host == null || host.definition == null || !visitedHosts.Add(host)) continue;
+
+                var sockets = host.GetComponentsInChildren<BuildSocket>(true);
                 foreach (var sock in sockets)
                 {
-                    var host = col.GetComponentInParent<PlacedTieredBlock>();
-                    if (host == null) continue;
-                    if (!BuildSocketCompat.AreCompatible(host.definition.family, sock.side, def.family))
+                    if (sock == null || !BuildSocketCompat.AreCompatible(host.definition.family, sock.side, def.family))
                         continue;
                     float d = (sock.transform.position - hit.point).sqrMagnitude;
                     if (d < bestSqr) { bestSqr = d; bestSocket = sock; }

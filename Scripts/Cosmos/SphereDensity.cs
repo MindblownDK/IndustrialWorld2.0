@@ -222,7 +222,7 @@ namespace VoxelEngine.Cosmos
 
             float coreRadius = prm.radiusWorld * 0.55f;
             if (radius <= coreRadius)
-                return new Voxel(127, (byte)MaterialId.Bedrock, 0);
+                return new Voxel(127, (byte)MaterialId.Stone, 0);
 
             int depth = (int)math.round(surfaceRadius - radius);
 

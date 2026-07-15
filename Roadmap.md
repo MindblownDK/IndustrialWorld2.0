@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.5.0-dev`
-**Roadmap Version:** `5.5.0-dev`
+**Current Version:** `5.6.0-dev`
+**Roadmap Version:** `5.6.0-dev`
 **Date:** 2026-07-15
-**Status:** Active Implementation — Defense & Autopilot Roadmap, Hammer Wheel & Inspection Upgrade
+**Status:** Active Implementation — Finite Quarry, Premium Construction & UI Fit Repair
 
 ---
 
@@ -49,7 +49,8 @@ The design goal is a seamless blend of:
 | Small grid | 🟡 Basic | Needs improvement and usability |
 | Power (wind, hydrogen) | ✅ Mature | Modular turbines are excellent |
 | Fluids / gases | ✅ Good | Pipe-gated transfer in 2.20.0 |
-| Building (static + tiered) | ✅ Good | Tiered base building exists |
+| Building (static + tiered) | 🟡 Improving | RMB placement, socket-level snapping, interactive doors, paginated Hammer wheel, and premium tier materials await validation |
+| Advanced Quarry | 🛠️ Working On | Unbreakable bedrock generation removed; late Tier-5 quarry uses a finite configurable 64-layer default depth |
 | Sky / atmosphere / space rendering | 🟡 Basic | Needs planet-specific skies and proper space ambiance |
 | Gravity / orbits | 🟡 Buggy | Player and grids sometimes fall; orbits not realistic |
 | Space stations | ❌ Missing | No buildable orbital platforms |
@@ -608,7 +609,15 @@ Statuses are evidence-based and move forward only after code/content review and 
    - Byproduct system: crushed ore → washed ore + tailings.
    - Tailings can be processed or stored (pollution hook for future).
 
-4. **Component Items**
+4. **Advanced Finite-Depth Quarry**
+   - Late Tier-5 production research rather than an early mining shortcut.
+   - Expensive Assembler recipe using large quantities of steel, gears, circuits, advanced circuits, and wire.
+   - Configurable finite mining depth with a default limit of 64 voxel layers.
+   - Completes cleanly when the configured depth is reached; no unbreakable bedrock material is required.
+   - Range, Speed, and Efficiency upgrades improve operation without removing the depth limit.
+   - Quarry UI reports current depth, maximum depth, output capacity, power demand, and completion state.
+
+5. **Component Items**
    - Gears, circuits, steel beams, pipes, motors, batteries.
    - Each has a distinct visual icon.
 
@@ -1643,6 +1652,31 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.6.0-dev] Finite Quarry, Premium Construction & UI Fit Repair
+
+**Type:** MINOR — new quarry progression constraints plus construction/UI system upgrades
+
+**Added / Changed:**
+- Removed new-world generation of the unbreakable bedrock floor and planetary bedrock core; legacy material value `20` is retained only for save compatibility and treated as Stone.
+- Quarry now uses a configurable finite depth (`64` layers by default, clamped to `8–256`) and completes at that limit.
+- Advanced Quarrying moved to Tier 5 with higher research cost, longer research time, and substantially more expensive steel/electronics recipe requirements.
+- Hammer wheel registry now resolves from the active `BuildSystemV2`, fixing false `Free` labels when the registry asset is outside Resources.
+- Hammer wheel hit testing moved to the complete wheel container so the full wedge responds, not only its icon/label.
+- Global UI blocking now prevents Hammer-wheel scrolling from changing the player hotbar.
+- Hammer segment labels and costs use clipped no-wrap bounds so text stays inside the ring.
+- Tiered socket discovery now scans sockets on nearby placed hosts, fixing same-level Foundation-to-Foundation snapping.
+- Wooden Foundation rebuilt as a low deck with five planks, perimeter beams, four legs, and front braces.
+- Doorway prefabs now receive an animated hinged door and handle; RMB toggles the door.
+- Step 5 creates premium procedural wood, stone, brushed iron, and plated steel surface textures/materials and migrates only known setup-generated flat materials.
+- MenuPanelSettings now uses Match Width/Height scaling with a larger atlas subtexture limit.
+- Runtime systems no longer overwrite assigned PanelSettings every frame or on startup, allowing Inspector changes to persist.
+- World Inspection resolves actual voxel materials and inventory hover information as introduced in `5.5.0-dev`.
+
+**Roadmap Status:**
+- Finite Quarry, Hammer wheel fixes, same-level snapping, doorway, Foundation visuals, premium materials, and UI fit: **WORKING ON** — awaiting Unity validation.
+
+---
 
 ### [5.5.0-dev] Defense & Autopilot Roadmap, Hammer Wheel & Inspection Upgrade
 

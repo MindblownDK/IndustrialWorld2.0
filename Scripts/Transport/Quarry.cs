@@ -24,6 +24,8 @@ namespace VoxelEngine.Transport
         public float baseMineInterval = 0.5f;
         public int minePerTick = 1;
         [Range(0, 4)] public int quarryTier = 3;
+        [Tooltip("Maximum number of voxel layers this quarry may excavate. The quarry completes when this depth is reached.")]
+        [Range(8, 256)] public int maximumMiningDepth = 64;
 
         [Header("Power")]
         public float basePowerDraw = 500f;
@@ -148,7 +150,7 @@ namespace VoxelEngine.Transport
 
         Vector3Int FD() { var f=transform.forward; float ax=Mathf.Abs(f.x),az=Mathf.Abs(f.z); return ax>=az?new(Mathf.RoundToInt(Mathf.Sign(f.x)),0,0):new(0,0,Mathf.RoundToInt(Mathf.Sign(f.z))); }
         void RecomputeArea() { var fwd=FD(); if(fwd==default)fwd=new(1,0,0); int sy=_org.y,sz=EffSize; var perp=new Vector3Int(fwd.z,0,-fwd.x); int h=sz/2; var s=_org+fwd*(int)forwardOffset-perp*h; var e=s+fwd*sz+perp*sz; AreaMin=new(Mathf.Min(s.x,e.x),sy,Mathf.Min(s.z,e.z)); AreaMax=new(Mathf.Max(s.x,e.x)-1,sy,Mathf.Max(s.z,e.z)-1); AreaX=Mathf.Abs(AreaMax.x-AreaMin.x)+1; AreaZ=Mathf.Abs(AreaMax.z-AreaMin.z)+1; }
-        void CalculateMaxDepth() { MaxDepth=Mathf.Max(1,AreaMin.y-3); }
+        void CalculateMaxDepth() { MaxDepth = Mathf.Clamp(maximumMiningDepth, 8, 256); }
 
         public void EnsureUpgrades() { if(upgradeC==null){upgradeC=new("Upgrades",UPGRADE_SLOTS);upgradeC.OnChanged+=RU;} else upgradeC.Resize(UPGRADE_SLOTS); }
         void RegisterUpgradeListener() { EnsureUpgrades(); upgradeC.OnChanged-=RU; upgradeC.OnChanged+=RU; RU(); }
@@ -236,7 +238,7 @@ namespace VoxelEngine.Transport
         void TkD(){if(!_dr)return;float dy=AreaMin.y-CurrentDepth-0.5f;var tp=new Vector3(AreaMin.x+_cx+0.5f,dy,AreaMin.z+_cz+0.5f);_dr.transform.position=tp;_dr.transform.Rotate(Vector3.up,220f*Time.deltaTime);if(_bm){_bm.transform.position=tp+Vector3.down*0.35f;_bm.transform.Rotate(Vector3.up,-180f*Time.deltaTime);}}
 
         // ═══ MINING ══════════════════════════════════
-        void MO(){if(CurrentDepth>=MaxDepth){Phase=QuarryPhase.Complete;if(_dr)Destroy(_dr);if(_bm)Destroy(_bm);_dr=_bm=null;return;}EnsureOutput();bool sp=false;for(int i=0;i<_out.Size;i++)if(_out.GetSlot(i).IsEmpty){sp=true;break;}if(!sp){IsOutputFull=true;return;}IsOutputFull=false;var t=new Vector3Int(AreaMin.x+_cx,AreaMin.y-CurrentDepth,AreaMin.z+_cz);var v=_w.GetVoxelWorld(t);if(v.material==(byte)MaterialId.Bedrock){AD();return;}if(v.density>VoxelConstants.ISO_LEVEL){var def=_mr?.Get(v.material);if(def==null||!def.isMineable||quarryTier>=def.miningTier){_w.SetVoxelWorld(t,Voxel.Empty);if(def?.dropItem&&def.dropAmount>0)OI(def.dropItem,def.dropAmount);}}AD();}
+        void MO(){if(CurrentDepth>=MaxDepth){Phase=QuarryPhase.Complete;if(_dr)Destroy(_dr);if(_bm)Destroy(_bm);_dr=_bm=null;return;}EnsureOutput();bool sp=false;for(int i=0;i<_out.Size;i++)if(_out.GetSlot(i).IsEmpty){sp=true;break;}if(!sp){IsOutputFull=true;return;}IsOutputFull=false;var t=new Vector3Int(AreaMin.x+_cx,AreaMin.y-CurrentDepth,AreaMin.z+_cz);var v=_w.GetVoxelWorld(t);if(v.material==(byte)MaterialId.LegacySolidFloor)v.material=(byte)MaterialId.Stone;if(v.density>VoxelConstants.ISO_LEVEL){var def=_mr?.Get(v.material);if(def==null||!def.isMineable||quarryTier>=def.miningTier){_w.SetVoxelWorld(t,Voxel.Empty);if(def?.dropItem&&def.dropAmount>0)OI(def.dropItem,def.dropAmount);}}AD();}
         void AD(){_cx++;if(_cx>=AreaX){_cx=0;_cz++;if(_cz>=AreaZ){_cz=0;CurrentDepth++;}}}
         // Mined items go ONLY into the Output container. The shared
         // ItemPortRouting component then ejects them through configured OUTPUT

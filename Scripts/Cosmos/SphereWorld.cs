@@ -309,7 +309,7 @@ namespace VoxelEngine.Cosmos
             // FULL 3D streaming (not the flat-world column model).
             // A sphere is centred on the body's origin, so its surface exists at ALL heights —
             // positive AND negative y. The flat loader (y in [0, WORLD_HEIGHT)) only ever pulls
-            // the bottom slab near the core (solid bedrock → no visible surface mesh) and evicts
+            // the bottom slab near the core (solid interior → no visible surface mesh) and evicts
             // everything as the viewer approaches → the "chunks vanish when I get close" bug.
             // Instead we stream a 3D BALL of chunks around the viewer in every axis.
             _loadCandidates.Clear();

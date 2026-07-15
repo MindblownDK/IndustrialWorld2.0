@@ -51,8 +51,8 @@ namespace VoxelEngine.Generation
 
             float density = surface - wy;
 
-            // Caves: only carve where reasonably deep, not too close to bedrock,
-            // and NOT below sea level (prevents holes in the ocean floor).
+            // Caves: only carve where reasonably deep and not below sea level
+            // (prevents holes in the ocean floor).
             if (wy < surface - 6 && wy > 4 && wy > seaLevel - 5)
             {
                 float cave = NoiseUtility.FBM(new float3(wx, wy * 2f, wz) * 0.045f, 3, 2.1f, 0.55f);
@@ -63,9 +63,6 @@ namespace VoxelEngine.Generation
 
             byte material;
             sbyte densityByte;
-
-            // Bedrock floor (unbreakable bottom layer).
-            if (wy <= 2) { density = 127f; material = (byte)MaterialId.Bedrock; densityByte = 127; voxels[index] = new Voxel(densityByte, material, 0); return; }
 
             // Force solid below sea level to prevent ocean floor holes at biome boundaries.
             if (density <= 0f && wy < seaLevel - 2 && wy < surface - 1)

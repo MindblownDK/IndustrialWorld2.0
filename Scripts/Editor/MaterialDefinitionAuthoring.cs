@@ -29,7 +29,7 @@ namespace VoxelEngine.EditorTools
             registry.Build();
             int created = 0;
 
-            // Every solid, mineable id we care about. Air/bedrock/fluids are skipped.
+            // Every solid, mineable id we care about. Air, legacy floor values, and fluids are skipped.
             var ids = new[]
             {
                 MaterialId.Iron, MaterialId.Copper, MaterialId.Coal, MaterialId.Nickel,

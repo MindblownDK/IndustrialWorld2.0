@@ -1432,6 +1432,69 @@ namespace VoxelEngine.EditorTools
             if (registry == null) { registry = ScriptableObject.CreateInstance<VoxelEngine.Building.Tiered.TieredBlockRegistry>(); AssetDatabase.CreateAsset(registry, registryPath); }
             registry.definitions.RemoveAll(definition => definition == null);
 
+            void BuildPremiumFoundation(GameObject root, Material material)
+            {
+                if (root.transform.Find("Generated_FoundationDeck_0") != null) return;
+
+                for (int i = 0; i < 5; i++)
+                {
+                    var plank = AddBox(root, material,
+                        new Vector3(-0.40f + i * 0.20f, 0.40f, 0f),
+                        new Vector3(0.19f, 0.12f, 0.92f));
+                    plank.name = $"Generated_FoundationDeck_{i}";
+                }
+
+                AddBox(root, material, new Vector3(0f, 0.28f, 0.46f), new Vector3(1.02f, 0.18f, 0.10f)).name = "Generated_FoundationBeamFront";
+                AddBox(root, material, new Vector3(0f, 0.28f, -0.46f), new Vector3(1.02f, 0.18f, 0.10f)).name = "Generated_FoundationBeamBack";
+                AddBox(root, material, new Vector3(0.46f, 0.28f, 0f), new Vector3(0.10f, 0.18f, 0.82f)).name = "Generated_FoundationBeamRight";
+                AddBox(root, material, new Vector3(-0.46f, 0.28f, 0f), new Vector3(0.10f, 0.18f, 0.82f)).name = "Generated_FoundationBeamLeft";
+
+                foreach (var x in new[] { -0.40f, 0.40f })
+                foreach (var z in new[] { -0.40f, 0.40f })
+                {
+                    var leg = AddBox(root, material, new Vector3(x, -0.03f, z), new Vector3(0.15f, 0.68f, 0.15f));
+                    leg.name = $"Generated_FoundationLeg_{(x < 0 ? "L" : "R")}_{(z < 0 ? "B" : "F")}";
+                }
+
+                var braceA = AddBox(root, material, new Vector3(-0.22f, 0.08f, 0.455f), new Vector3(0.08f, 0.58f, 0.07f));
+                braceA.name = "Generated_FoundationBraceA";
+                braceA.transform.localRotation = Quaternion.Euler(0f, 0f, -42f);
+                var braceB = AddBox(root, material, new Vector3(0.22f, 0.08f, 0.455f), new Vector3(0.08f, 0.58f, 0.07f));
+                braceB.name = "Generated_FoundationBraceB";
+                braceB.transform.localRotation = Quaternion.Euler(0f, 0f, 42f);
+            }
+
+            void EnsureTieredDoor(GameObject root, Material material)
+            {
+                var hinge = root.transform.Find("Generated_DoorHinge");
+                if (hinge == null)
+                {
+                    var hingeObject = new GameObject("Generated_DoorHinge");
+                    hingeObject.transform.SetParent(root.transform, false);
+                    hingeObject.transform.localPosition = new Vector3(-0.31f, 0f, 0f);
+                    hinge = hingeObject.transform;
+
+                    var panel = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    panel.name = "Generated_DoorPanel";
+                    panel.transform.SetParent(hinge, false);
+                    panel.transform.localPosition = new Vector3(0.31f, 0.45f, 0f);
+                    panel.transform.localScale = new Vector3(0.58f, 0.86f, 0.075f);
+                    panel.GetComponent<Renderer>().sharedMaterial = material;
+
+                    var handle = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                    handle.name = "Generated_DoorHandle";
+                    handle.transform.SetParent(panel.transform, false);
+                    handle.transform.localPosition = new Vector3(0.36f, 0f, -0.62f);
+                    handle.transform.localScale = Vector3.one * 0.10f;
+                    handle.GetComponent<Renderer>().sharedMaterial = material;
+                    Object.DestroyImmediate(handle.GetComponent<Collider>());
+                }
+
+                var door = root.GetComponent<VoxelEngine.Building.Tiered.TieredDoor>();
+                if (door == null) door = root.AddComponent<VoxelEngine.Building.Tiered.TieredDoor>();
+                door.doorPivot = hinge;
+            }
+
             VoxelEngine.Building.Tiered.TieredBlockDefinition MakeFamily(
                 VoxelEngine.Building.Tiered.BuildFamily fam,
                 string display,
@@ -1465,6 +1528,14 @@ namespace VoxelEngine.EditorTools
                     // Robust Prefab Handling: Load existing or create new
                     var prefab = GetOrCreatePrefab(prefabPath, name, (root) =>
                     {
+                        string legacyMaterialName = t switch
+                        {
+                            0 => "Mat_Wood",
+                            1 => "Mat_Stone",
+                            2 => "Mat_Iron",
+                            _ => "Mat_Steel"
+                        };
+
                         // ONLY build procedural mesh if it's a new or empty object
                         // (Allows users to swap in custom FBXs/meshes manually)
                         if (root.transform.childCount == 0 && root.GetComponent<MeshFilter>() == null && root.GetComponentInChildren<MeshRenderer>() == null)
@@ -1473,15 +1544,37 @@ namespace VoxelEngine.EditorTools
                              socketBuilder(root);
                         }
 
+                        if (fam == VoxelEngine.Building.Tiered.BuildFamily.Foundation
+                            && root.transform.Find("Generated_FoundationDeck_0") == null)
+                        {
+                            bool setupGenerated = true;
+                            foreach (var renderer in root.GetComponentsInChildren<Renderer>(true))
+                            {
+                                var current = renderer.sharedMaterial;
+                                bool knownMaterial = current == null
+                                    || current.name == legacyMaterialName
+                                    || (tierMats[t] != null && current.name == tierMats[t].name);
+                                if (renderer.gameObject.name != "Box" || !knownMaterial)
+                                {
+                                    setupGenerated = false;
+                                    break;
+                                }
+                            }
+                            if (setupGenerated)
+                            {
+                                var oldBoxes = new List<GameObject>();
+                                foreach (var renderer in root.GetComponentsInChildren<Renderer>(true))
+                                    if (renderer.gameObject.name == "Box") oldBoxes.Add(renderer.gameObject);
+                                foreach (var oldBox in oldBoxes) Object.DestroyImmediate(oldBox);
+                                BuildPremiumFoundation(root, tierMats[t]);
+                            }
+                        }
+
+                        if (fam == VoxelEngine.Building.Tiered.BuildFamily.Doorway)
+                            EnsureTieredDoor(root, tierMats[t]);
+
                         // Upgrade only known setup-generated flat materials. Custom
                         // materials and imported meshes remain untouched.
-                        string legacyMaterialName = t switch
-                        {
-                            0 => "Mat_Wood",
-                            1 => "Mat_Stone",
-                            2 => "Mat_Iron",
-                            _ => "Mat_Steel"
-                        };
                         foreach (var renderer in root.GetComponentsInChildren<Renderer>(true))
                         {
                             var current = renderer.sharedMaterial;
@@ -1519,7 +1612,7 @@ namespace VoxelEngine.EditorTools
 
             // FOUNDATION — full 1x1x1 cube. Sockets: top, north, south, east, west.
             MakeFamily(VoxelEngine.Building.Tiered.BuildFamily.Foundation, "Foundation",
-                (root, mat) => { AddBox(root, mat, Vector3.zero, Vector3.one); },
+                (root, mat) => { BuildPremiumFoundation(root, mat); },
                 (root) => {
                     AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.Top,    new Vector3(0, 0.5f, 0),   VoxelEngine.Building.Tiered.BuildFamily.Foundation);
                     AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.North,  new Vector3(0, 0,  0.5f),  VoxelEngine.Building.Tiered.BuildFamily.Foundation);
@@ -1745,6 +1838,69 @@ namespace VoxelEngine.EditorTools
             EnsureTieredRecipe("Recipe_Tok_Pillar", "Pillar Token", tokPillar, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)plank, 2));
             EnsureTieredRecipe("Recipe_Tok_HalfWall", "Half Wall Token", tokHalfWall, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)plank, 2));
 
+            // Apply the finite, late-game Quarry migration through the same tool run.
+            // Only the explicitly requested depth/progression fields are changed.
+            string survivalRoot = ASSET_ROOT + "/Survival";
+            var quarryPrefabAsset = AssetDatabase.LoadAssetAtPath<GameObject>($"{survivalRoot}/MiscPrefabs/Quarry.prefab");
+            if (quarryPrefabAsset != null)
+            {
+                string quarryPrefabPath = AssetDatabase.GetAssetPath(quarryPrefabAsset);
+                var quarryRoot = PrefabUtility.LoadPrefabContents(quarryPrefabPath);
+                var quarryComponent = quarryRoot.GetComponent<VoxelEngine.Transport.Quarry>();
+                if (quarryComponent != null) quarryComponent.maximumMiningDepth = 64;
+                PrefabUtility.SaveAsPrefabAsset(quarryRoot, quarryPrefabPath);
+                PrefabUtility.UnloadPrefabContents(quarryRoot);
+            }
+
+            var quarryBlock = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.BlockItem>($"{survivalRoot}/MiscBlocks/Block_Quarry.asset");
+            if (quarryBlock != null)
+            {
+                quarryBlock.description = "Late-game automated strip-miner. Excavates a 16×16 area to a finite 64-layer maximum depth. Accepts Range, Speed and Efficiency upgrades. Powered, Tier-3 mining.";
+                EditorUtility.SetDirty(quarryBlock);
+            }
+
+            var quarryRecipe = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeDefinition>($"{survivalRoot}/MiscRecipes/Recipe_Quarry.asset");
+            var quarrySteelPlate = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{ASSET_ROOT}/Industrial/Items/Item_SteelPlate.asset");
+            var quarryGear = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{ASSET_ROOT}/Industrial/Items/Item_IronGear.asset");
+            var quarryCircuit = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{ASSET_ROOT}/Industrial/Items/Item_Circuit.asset");
+            var quarryAdvancedCircuit = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{ASSET_ROOT}/Industrial/Items/Item_AdvCircuit.asset");
+            var quarryWire = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{ASSET_ROOT}/Industrial/Items/Item_CopperWire.asset");
+            if (quarryRecipe != null && quarrySteelPlate != null && quarryGear != null
+                && quarryCircuit != null && quarryAdvancedCircuit != null && quarryWire != null)
+            {
+                quarryRecipe.requiredStation = VoxelEngine.Crafting.StationTier.Assembler;
+                quarryRecipe.inputs = new[]
+                {
+                    new VoxelEngine.Crafting.RecipeIngredient { item = quarrySteelPlate, count = 30 },
+                    new VoxelEngine.Crafting.RecipeIngredient { item = quarryGear, count = 16 },
+                    new VoxelEngine.Crafting.RecipeIngredient { item = quarryCircuit, count = 12 },
+                    new VoxelEngine.Crafting.RecipeIngredient { item = quarryAdvancedCircuit, count = 4 },
+                    new VoxelEngine.Crafting.RecipeIngredient { item = quarryWire, count = 20 }
+                };
+                EditorUtility.SetDirty(quarryRecipe);
+            }
+
+            var quarryResearch = AssetDatabase.LoadAssetAtPath<VoxelEngine.Research.ResearchNode>($"{ASSET_ROOT}/Research/Nodes/res_quarrying.asset");
+            var quarrySciT2 = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ScienceItem>($"{itemsFolder}/Item_ScienceT2.asset");
+            var quarrySciT3 = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ScienceItem>($"{itemsFolder}/Item_ScienceT3.asset");
+            if (quarryResearch != null)
+            {
+                quarryResearch.displayName = "Advanced Quarrying";
+                quarryResearch.description = "Late industrial automated mining with a configurable finite excavation depth and Range, Speed, and Efficiency upgrades.";
+                quarryResearch.tier = 5;
+                quarryResearch.researchSeconds = 180f;
+                if (quarrySciT2 != null && quarrySciT3 != null)
+                {
+                    quarryResearch.cost = new[]
+                    {
+                        new VoxelEngine.Research.ResearchNode.ScienceCost { pack = quarrySciT2, count = 60 },
+                        new VoxelEngine.Research.ResearchNode.ScienceCost { pack = quarrySciT3, count = 40 }
+                    };
+                }
+                EditorUtility.SetDirty(quarryResearch);
+            }
+            Debug.Log("[VoxelEngineSetupWindow] Step 5 verified finite Quarry depth and late-game progression without changing power tuning.");
+
             EditorUtility.SetDirty(recipeRegistry);
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
@@ -1762,7 +1918,8 @@ namespace VoxelEngine.EditorTools
                 "* 36 prefabs (9 families x 4 tiers) in " + tieredPrefabs + "\n" +
                 "* 9 build tokens + Hammer\n" +
                 "* 10 new recipes added to RecipeRegistry\n" +
-                "* TieredBlockRegistry asset created\n\n" +
+                "* TieredBlockRegistry asset created\n" +
+                "* Premium tier textures, Foundation, Doorway, and finite late-game Quarry migration verified\n\n" +
                 "Re-run Step 2 to spawn a player with BuildSystemV2 wired up,\n" +
                 "or manually add the BuildSystemV2 component and assign the registry.",
                 "OK");
@@ -3142,11 +3299,11 @@ namespace VoxelEngine.EditorTools
                 prereqs: new[] { nElectricity });
 
             // ─ Quarrying ─
-            var nQuarrying = MakeOrUpdateEnvNode("res_quarrying", "Quarrying",
-                "Industrial-scale automated mining. The Quarry block strip-mines an entire 16×16 area down to bedrock without player input. Upgrade with Range, Speed & Efficiency modules.",
-                tier: 4, col: 6, sub: VoxelEngine.Research.ResearchSubCategory.Production,
-                tint: new Color(0.50f, 0.55f, 0.60f), seconds: 110f,
-                cost: new[] { (sciT2, 30), (sciT3, 18) },
+            var nQuarrying = MakeOrUpdateEnvNode("res_quarrying", "Advanced Quarrying",
+                "Late industrial automated mining. The Quarry excavates a large area to a configurable finite depth, then completes. Upgrade with Range, Speed & Efficiency modules.",
+                tier: 5, col: 6, sub: VoxelEngine.Research.ResearchSubCategory.Production,
+                tint: new Color(0.50f, 0.55f, 0.60f), seconds: 180f,
+                cost: new[] { (sciT2, 60), (sciT3, 40) },
                 unlocks: StorageRecipes("Recipe_Quarry","Recipe_QuarryUpgradeRange","Recipe_QuarryUpgradeSpeed","Recipe_QuarryUpgradeEfficiency"),
                 prereqs: new[] { nSteelAlloy, nItemLogistics });
 
@@ -3707,13 +3864,14 @@ root =>
                     };
                     var q = root.AddComponent<VoxelEngine.Transport.Quarry>();
                     q.defaultSize = 16; q.baseMineInterval = 0.5f; q.quarryTier = 3;
+                    q.maximumMiningDepth = 64;
                     q.forwardOffset = 2f; q.frameBuildInterval = 0.06f;
                     q.frameColor = new Color(0.18f, 0.19f, 0.22f);
                     q.outputSlots = 6;
                     q.EnsureUpgrades();
                 });
             var blockQuarry = MakeBlk(MISC_BLOCKS, "Block_Quarry", "Quarry",
-                "Automated industrial strip-miner. Builds a frame, then digs out the rectangle in front of itself (default 16×16) down to bedrock. Accepts Range, Speed & Efficiency upgrades. Powered (~500 W). Tier-3 mining.",
+                "Late-game automated strip-miner. Builds a frame, then excavates the rectangle in front of itself (default 16×16) to a finite 64-layer maximum depth. Accepts Range, Speed & Efficiency upgrades. Powered (~500 W). Tier-3 mining.",
                 new Color(0.35f, 0.35f, 0.40f), quarryPrefab, "Logistics", hp: 800, miningTier: 3);
 
             // ── Quarry Upgrade items ────────────────────────
@@ -3748,7 +3906,7 @@ root =>
             AssetDatabase.CreateAsset(upgEff, MISC_ITEMS + "/Upgrade_QuarryEfficiency.asset");
 
             // ── Recipes ─────────────────────────────────────
-            AddRecipe(MISC_RECIPES, "Recipe_Quarry", "Quarry", blockQuarry, 1, VoxelEngine.Crafting.StationTier.Assembler, false, ((VoxelEngine.Items.ItemDefinition)steelPlate, 10), ((VoxelEngine.Items.ItemDefinition)ironGear, 8), ((VoxelEngine.Items.ItemDefinition)circuit, 4), ((VoxelEngine.Items.ItemDefinition)copperWire, 6));
+            AddRecipe(MISC_RECIPES, "Recipe_Quarry", "Quarry", blockQuarry, 1, VoxelEngine.Crafting.StationTier.Assembler, false, ((VoxelEngine.Items.ItemDefinition)steelPlate, 30), ((VoxelEngine.Items.ItemDefinition)ironGear, 16), ((VoxelEngine.Items.ItemDefinition)circuit, 12), ((VoxelEngine.Items.ItemDefinition)advCircuit, 4), ((VoxelEngine.Items.ItemDefinition)copperWire, 20));
 
             AddRecipe(MISC_RECIPES, "Recipe_QuarryUpgradeRange", "Range Upgrade", upgRange, 1, VoxelEngine.Crafting.StationTier.Assembler, false, ((VoxelEngine.Items.ItemDefinition)steelPlate, 4), ((VoxelEngine.Items.ItemDefinition)copperWire, 8), ((VoxelEngine.Items.ItemDefinition)ironGear, 4));
 

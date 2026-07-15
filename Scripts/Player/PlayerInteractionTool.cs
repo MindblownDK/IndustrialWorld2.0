@@ -333,6 +333,13 @@ namespace VoxelEngine.Player
                 var droppedItem = hit.collider.GetComponentInParent<VoxelEngine.Items.DroppedItem>();
                 if (droppedItem != null) { droppedItem.TryPickup(inventory); return; }
 
+                var tieredDoor = hit.collider.GetComponentInParent<VoxelEngine.Building.Tiered.TieredDoor>();
+                if (tieredDoor != null)
+                {
+                    tieredDoor.Toggle();
+                    return;
+                }
+
                 // 1) Open container if looking at chest / furnace / crafting bench.
                 var chest = hit.collider.GetComponentInParent<Chest>();
                 if (chest != null) { UI.GameUIController.Instance?.OpenContainer(chest.container, chest); return; }

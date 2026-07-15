@@ -318,8 +318,11 @@ namespace VoxelEngine.UI
                 var voxel = world.GetVoxelWorld(voxelPosition);
                 if (voxel.material != (byte)MaterialId.Air)
                 {
-                    var definition = world.MaterialRegistry?.Get(voxel.material);
-                    var materialId = (MaterialId)voxel.material;
+                    byte materialByte = voxel.material == (byte)MaterialId.LegacySolidFloor
+                        ? (byte)MaterialId.Stone
+                        : voxel.material;
+                    var definition = world.MaterialRegistry?.Get(materialByte);
+                    var materialId = (MaterialId)materialByte;
                     info.title = definition != null && !string.IsNullOrWhiteSpace(definition.displayName)
                         ? definition.displayName
                         : materialId.ToString();

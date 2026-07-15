@@ -76,7 +76,7 @@ namespace VoxelEngine.Materials
                 case MaterialId.Grass:       return new Color(0.38f, 0.55f, 0.22f, 1f);   // natural green
                 case MaterialId.CrudeOil:    return new Color(0.05f, 0.04f, 0.03f, 1f);
                 case MaterialId.Wood:        return new Color(0.40f, 0.28f, 0.18f, 1f);
-                case MaterialId.Bedrock:     return new Color(0.20f, 0.20f, 0.22f, 1f);
+                case MaterialId.LegacySolidFloor:return new Color(0.46f, 0.46f, 0.49f, 1f);
                 default:                     return Color.magenta; // genuine unknown — debug signal
             }
         }

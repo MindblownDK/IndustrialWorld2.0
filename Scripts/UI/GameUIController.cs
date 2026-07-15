@@ -127,7 +127,6 @@ namespace VoxelEngine.UI
             _doc.sortingOrder = 500;
             if (_doc.panelSettings == null)
                 _doc.panelSettings = Resources.Load<PanelSettings>("MenuPanelSettings");
-            VoxelEngine.Settings.GameSettings.ApplyUiScaleAndFit(_doc.panelSettings);
             _root = _doc.rootVisualElement;
             _root.style.flexGrow = 1;
             // Pin the root to a DEFINITE full-screen size so absolutely-positioned children
@@ -195,7 +194,6 @@ namespace VoxelEngine.UI
         private float         _machineRefreshAccum;
         private void Update()
         {
-            if (_doc != null) VoxelEngine.Settings.GameSettings.ApplyUiScaleAndFit(_doc.panelSettings);
             // Live-update the open furnace panel in-place every frame (no rebuild needed).
             TickFurnaceLiveUI();
             PlayerHud.Tick();
@@ -286,7 +284,8 @@ namespace VoxelEngine.UI
             bool rotatingBlock = VoxelEngine.GridSystem.GridBuilder.HoldingGridBlock && (ctrl || shift);
             bool piloting = VoxelEngine.GridSystem.GridCockpit.AnyPilotSeatActive; // control seats own scroll
             // Throttle: at most one slot change per Update, regardless of scroll-unit magnitude.
-            if (!ctrl && !shift && !rotatingBlock && !piloting && !_inventoryOpen && _rightContainer == null && inventory != null && Mathf.Abs(wheel) > 0.01f)
+            if (!ctrl && !shift && !rotatingBlock && !piloting && !UIState.IsBlocking
+                && !_inventoryOpen && _rightContainer == null && inventory != null && Mathf.Abs(wheel) > 0.01f)
             {
                 int dir = wheel > 0 ? -1 : 1; // wheel up = previous slot, wheel down = next
                 int next = inventory.activeHotbarIndex + dir;

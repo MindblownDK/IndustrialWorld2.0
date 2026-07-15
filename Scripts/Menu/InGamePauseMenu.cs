@@ -44,7 +44,6 @@ namespace VoxelEngine.Menu
             _doc.sortingOrder = 1000;
             if (_doc.panelSettings == null)
                 _doc.panelSettings = Resources.Load<PanelSettings>("MenuPanelSettings");
-            VoxelEngine.Settings.GameSettings.ApplyUiScaleAndFit(_doc.panelSettings);
             _root = _doc.rootVisualElement;
             _root.style.flexGrow = 1;
             VoxelEngine.FX.UiAudio.Attach(_root);   // click/hover audio (idempotent)

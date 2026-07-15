@@ -28,7 +28,9 @@ namespace VoxelEngine.Materials
         CrudeOil   = 18,
         Wood       = 19,
 
-        Bedrock    = 20,
+        // Reserved legacy value. New worlds no longer generate an unbreakable
+        // floor material; old value-20 voxels are treated as normal stone.
+        LegacySolidFloor = 20,
         Lithium    = 21,
         Grass      = 22,   // green surface grass (Plains/Forest top layer)
 
