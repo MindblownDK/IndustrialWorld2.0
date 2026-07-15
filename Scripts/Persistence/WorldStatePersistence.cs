@@ -143,6 +143,12 @@ namespace VoxelEngine.Persistence
                 };
                 var windPart = pb.GetComponent<VoxelEngine.Power.Wind.WindTurbinePart>();
                 if (windPart != null) entry.windCondition = Mathf.Max(0.01f, windPart.condition);
+                var conveyor = pb.GetComponentInChildren<VoxelEngine.Simulation.ConveyorBelt>(true);
+                if (conveyor != null && !conveyor.autoShape)
+                {
+                    entry.hasExplicitConveyorShape = true;
+                    entry.conveyorShape = (int)conveyor.shape;
+                }
                 save.placedBlocks.Add(entry);
             }
         }
@@ -414,6 +420,12 @@ namespace VoxelEngine.Persistence
                 var pb = go.GetComponent<PlacedBlock>();
                 if (pb == null) pb = go.AddComponent<PlacedBlock>();
                 pb.Item = blockItem; pb.Hp = sb.hp;
+                var conveyor = go.GetComponentInChildren<VoxelEngine.Simulation.ConveyorBelt>(true);
+                if (conveyor != null && sb.hasExplicitConveyorShape
+                    && System.Enum.IsDefined(typeof(VoxelEngine.Simulation.ConveyorShape), sb.conveyorShape))
+                {
+                    conveyor.SetBuildShape((VoxelEngine.Simulation.ConveyorShape)sb.conveyorShape);
+                }
                 var windPart = go.GetComponent<VoxelEngine.Power.Wind.WindTurbinePart>();
                 if (windPart != null && sb.windCondition > 0f)
                     windPart.condition = Mathf.Clamp(sb.windCondition, 0f, 100f);
@@ -618,6 +630,10 @@ namespace VoxelEngine.Persistence
             // Wind turbine part condition (0..100). 0 = "not set" (legacy saves)
             // and restores as factory-new. Only written for WindTurbinePart blocks.
             public float windCondition;
+            // Additive/backward-compatible conveyor shape state. Legacy saves leave
+            // hasExplicitConveyorShape false and rebuild normal straight/corner topology.
+            public bool hasExplicitConveyorShape;
+            public int conveyorShape;
         }
         [Serializable] private class SavedPlacedTiered
         {

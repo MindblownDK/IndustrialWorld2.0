@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.1.13-dev`
-**Roadmap Version:** `5.1.13-dev`
+**Current Version:** `5.2.0-dev`
+**Roadmap Version:** `5.2.0-dev`
 **Date:** 2026-07-14
-**Status:** Active Implementation — Closed-Loop Corners, Chute-to-Belt Snap & Status Cleanup
+**Status:** Active Implementation — Full-Tier Ramp & Vertical Conveyor Variants
 
 ---
 
@@ -209,7 +209,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 
 | Area | Status | Repository Audit |
 |------|--------|------------------|
-| Conveyor belts | 🛠️ WORKING ON | Closed loops now resolve corners without waiting for neighboring corners to establish their inputs. Step 17 removes the obsolete status square and retains only direction chevrons plus the centered status line. Authored ramp and vertical variants remain. |
+| Conveyor belts | 🛠️ WORKING ON | Step 17 now generates explicit Ramp Up, Ramp Down, Vertical Up, and Vertical Down blocks for Basic, Fast, and Express tiers. Runtime sockets, item paths, snapping, arrows, rails, rollers, and status lines support every new shape; Unity validation is pending. |
 | Conveyor chutes | 🛠️ WORKING ON | Conveyors now snap above or below an aimed chute face; chute-to-conveyor, vertical item-port, and chute-stack snapping remain supported. Corner and spiral authored variants remain. |
 | Basic machines | 🟡 PARTIALLY COMPLETE | Electric Furnace, Crusher, and three Assembler tiers exist. Crusher and Assembler use the centralized simulation tick; shared UI and persistence still need completion. |
 | Storage blocks | 🟡 PARTIALLY COMPLETE | A basic chest and the wider storage system exist. The planned Wooden Crate → Iron Chest → Steel Chest → Provider/Requester progression is not complete. |
@@ -220,7 +220,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Recipe registry refactor | 🟡 PARTIALLY COMPLETE | ScriptableObject crafting and machine recipes exist. Shaped/shapeless/smelting/machine unification and validation remain incomplete. |
 | Centralized simulation tick | 🟡 PARTIALLY COMPLETE | Crusher and Assembler register with `SimulationTickManager`; belts, chutes, and several older machines still run per-frame updates. |
 | Factory persistence | 🟡 PARTIALLY COMPLETE | Placed blocks and selected containers persist. Belt/chute contents plus Crusher/Assembler buffers and progress are not yet serialized. |
-| Step 17 setup workflow | ✅ COMPLETED | Non-destructive create/repair logic preserves existing balance, visual, material, and effect tuning while merging required links. Static checks and the two-run Unity idempotency validation pass. |
+| Step 17 setup workflow | 🛠️ WORKING ON | The validated non-destructive foundation remains intact; the 5.2.0 generation pass for twelve ramp/vertical prefabs, items, recipes, and research links is awaiting two-run Unity validation. |
 
 > **Completion gate:** This section becomes **✅ COMPLETED** only after Step 17 is non-destructive, all listed variants are authored through the setup wizard, factory runtime state persists, and the Unity validation checklist passes.
 
@@ -1233,6 +1233,33 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.2.0-dev] Full-Tier Ramp & Vertical Conveyor Variants
+
+**Type:** MINOR — new save-compatible conveyor blocks, recipes, prefabs, and placement behavior
+
+**Added:**
+- Twelve explicit conveyor variant blocks generated through Step 17:
+  - Basic, Fast, and Express Ramp Up.
+  - Basic, Fast, and Express Ramp Down.
+  - Basic, Fast, and Express Vertical Up.
+  - Basic, Fast, and Express Vertical Down.
+- One non-destructive prefab, item, and recipe per new variant.
+- Research unlock merging for all new variant recipes.
+- Full-height one-block ramp item paths and socket offsets.
+- Vertical conveyor runtime meshes with backplates, rails, rollers, direction chevrons, and centered status lines.
+- Editor-visible authored previews for every variant prefab.
+
+**Changed:**
+- Explicit ramp and vertical prefabs disable automatic horizontal shape conversion.
+- Ramp placement snaps forward from a target belt; Ramp Down also lowers its root by one block so its upper input aligns with the source.
+- Vertical variants stack upward/downward and can snap to configured vertical item ports.
+- Belt connection discovery now uses shape-specific socket positions rather than assuming every socket is half a block from the root.
+- Runtime ramp visuals now rise or descend a complete block over one horizontal cell.
+- Step 17 is marked **WORKING ON** until the new twelve-variant generation pass completes two-run Unity validation.
+- Updated the runtime and roadmap version to `5.2.0-dev` under Semantic Versioning because this release adds new save-compatible blocks and recipes.
+
+---
 
 ### [5.1.13-dev] Closed-Loop Corners, Chute-to-Belt Snap & Status Cleanup
 

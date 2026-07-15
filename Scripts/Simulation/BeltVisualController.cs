@@ -90,6 +90,12 @@ namespace VoxelEngine.Simulation
                 case ConveyorShape.RampDown:
                     BuildRampMesh(false);
                     break;
+                case ConveyorShape.VerticalUp:
+                    BuildVerticalMesh(true);
+                    break;
+                case ConveyorShape.VerticalDown:
+                    BuildVerticalMesh(false);
+                    break;
                 default:
                     BuildStraightMesh();
                     break;
@@ -338,9 +344,9 @@ namespace VoxelEngine.Simulation
             var beltGo = GameObject.CreatePrimitive(PrimitiveType.Cube);
             beltGo.name = "BeltSurface";
             beltGo.transform.SetParent(_meshRoot.transform, false);
-            float angle = up ? -26.5f : 26.5f;
-            beltGo.transform.localPosition = new Vector3(0f, 0.73f, 0f);
-            beltGo.transform.localScale = new Vector3(0.85f, 0.04f, 1.12f);
+            float angle = up ? -45f : 45f;
+            beltGo.transform.localPosition = new Vector3(0f, 1.02f, 0f);
+            beltGo.transform.localScale = new Vector3(0.85f, 0.04f, 1.414f);
             beltGo.transform.localRotation = Quaternion.Euler(angle, 0f, 0f);
             Destroy(beltGo.GetComponent<Collider>());
 
@@ -348,8 +354,88 @@ namespace VoxelEngine.Simulation
             _beltRenderer.sharedMaterial = _beltMaterial;
 
             Quaternion rotation = Quaternion.Euler(angle, 0f, 0f);
-            CreateRail(new Vector3(0.45f, 0.75f, 0f), new Vector3(0.06f, 0.08f, 1.12f), rotation);
-            CreateRail(new Vector3(-0.45f, 0.75f, 0f), new Vector3(0.06f, 0.08f, 1.12f), rotation);
+            CreateRail(new Vector3(0.45f, 1.04f, 0f), new Vector3(0.06f, 0.10f, 1.414f), rotation);
+            CreateRail(new Vector3(-0.45f, 1.04f, 0f), new Vector3(0.06f, 0.10f, 1.414f), rotation);
+            BuildSupportFrame();
+
+            Vector3 travel = up
+                ? new Vector3(0f, 1f, 1f).normalized
+                : new Vector3(0f, -1f, 1f).normalized;
+            Vector3 end = up ? new Vector3(0f, 1f, 0.5f) : new Vector3(0f, 0f, 0.5f);
+            CreateDirectionArrow(end, Vector3.forward);
+            CreateDynamicStatusLine(new Vector3(0f, 0.5f, 0f), travel, 0.52f);
+        }
+
+        private void BuildVerticalMesh(bool up)
+        {
+            var backplate = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            backplate.name = "VerticalBackplate";
+            backplate.transform.SetParent(_meshRoot.transform, false);
+            backplate.transform.localPosition = new Vector3(0f, 0.5f, 0.08f);
+            backplate.transform.localScale = new Vector3(0.96f, 1.10f, 0.12f);
+            Destroy(backplate.GetComponent<Collider>());
+            backplate.GetComponent<MeshRenderer>().sharedMaterial = _frameMaterial;
+
+            var beltGo = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            beltGo.name = "VerticalBeltSurface";
+            beltGo.transform.SetParent(_meshRoot.transform, false);
+            beltGo.transform.localPosition = new Vector3(0f, 0.5f, -0.01f);
+            beltGo.transform.localScale = new Vector3(0.82f, 1.0f, 0.045f);
+            Destroy(beltGo.GetComponent<Collider>());
+            _beltRenderer = beltGo.GetComponent<MeshRenderer>();
+            _beltRenderer.sharedMaterial = _beltMaterial;
+
+            CreateRail(new Vector3(0.45f, 0.5f, 0f), new Vector3(0.06f, 1.08f, 0.08f));
+            CreateRail(new Vector3(-0.45f, 0.5f, 0f), new Vector3(0.06f, 1.08f, 0.08f));
+            CreateVerticalRoller(new Vector3(0f, 0f, -0.04f));
+            CreateVerticalRoller(new Vector3(0f, 1f, -0.04f));
+            CreateVerticalArrow(up);
+            CreateVerticalStatusLine();
+        }
+
+        private void CreateVerticalRoller(Vector3 position)
+        {
+            var roller = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            roller.name = "VerticalRoller";
+            roller.transform.SetParent(_meshRoot.transform, false);
+            roller.transform.localPosition = position;
+            roller.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
+            roller.transform.localScale = new Vector3(0.11f, 0.38f, 0.11f);
+            Destroy(roller.GetComponent<Collider>());
+            roller.GetComponent<MeshRenderer>().sharedMaterial = _railMaterial;
+        }
+
+        private void CreateVerticalArrow(bool up)
+        {
+            float direction = up ? 1f : -1f;
+            float centerY = up ? 0.68f : 0.32f;
+            CreateVerticalArrowPart(new Vector3(-0.07f, centerY, -0.055f), direction * -35f);
+            CreateVerticalArrowPart(new Vector3(0.07f, centerY, -0.055f), direction * 35f);
+        }
+
+        private void CreateVerticalArrowPart(Vector3 position, float zAngle)
+        {
+            var arrow = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            arrow.name = "VerticalDirectionArrow";
+            arrow.transform.SetParent(_meshRoot.transform, false);
+            arrow.transform.localPosition = position;
+            arrow.transform.localRotation = Quaternion.Euler(0f, 0f, zAngle);
+            arrow.transform.localScale = new Vector3(0.05f, 0.20f, 0.025f);
+            Destroy(arrow.GetComponent<Collider>());
+            arrow.GetComponent<MeshRenderer>().sharedMaterial = _railMaterial;
+        }
+
+        private void CreateVerticalStatusLine()
+        {
+            var statusLine = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            statusLine.name = "Runtime_StatusLine";
+            statusLine.transform.SetParent(_meshRoot.transform, false);
+            statusLine.transform.localPosition = new Vector3(0f, 0.5f, -0.055f);
+            statusLine.transform.localScale = new Vector3(0.05f, 0.58f, 0.025f);
+            Destroy(statusLine.GetComponent<Collider>());
+            var renderer = statusLine.GetComponent<MeshRenderer>();
+            renderer.sharedMaterial = _railMaterial;
+            GetComponent<FactoryStatusIndicator>()?.SetRuntimeRenderer(renderer);
         }
 
         private void CreateRail(Vector3 localPosition, Vector3 scale, Quaternion rotation = default)

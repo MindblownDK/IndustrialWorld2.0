@@ -20,7 +20,7 @@ namespace VoxelEngine.Simulation
     public enum ConveyorSpeed { Basic, Fast, Express }
 
     /// <summary>Belt shape variant.</summary>
-    public enum ConveyorShape { Straight, Corner, RampUp, RampDown }
+    public enum ConveyorShape { Straight, Corner, RampUp, RampDown, VerticalUp, VerticalDown }
 
     /// <summary>
     /// A single item riding on the belt, with its travel progress.
@@ -49,6 +49,8 @@ namespace VoxelEngine.Simulation
         [Header("Conveyor Configuration")]
         public ConveyorSpeed speed = ConveyorSpeed.Basic;
         public ConveyorShape shape = ConveyorShape.Straight;
+        [Tooltip("When enabled, horizontal topology may switch this belt between Straight and Corner. Explicit ramp/vertical prefabs disable this.")]
+        public bool autoShape = true;
 
         [Header("Capacity")]
         [Tooltip("Maximum items that can ride this belt segment simultaneously.")]
@@ -134,6 +136,18 @@ namespace VoxelEngine.Simulation
             RefreshNearby();
         }
 
+        internal void SetBuildShape(ConveyorShape buildShape)
+        {
+            bool automatic = buildShape == ConveyorShape.Straight;
+            if (shape == buildShape && autoShape == automatic) return;
+            shape = buildShape;
+            autoShape = automatic;
+            UpdateTravelDirection();
+            ScanConnections();
+            if (_visuals != null && isActiveAndEnabled && gameObject.activeInHierarchy)
+                _visuals.RebuildMesh();
+        }
+
         private void NotifyNearbyBelts()
         {
             var hits = Physics.OverlapSphere(transform.position, 1.5f);
@@ -194,12 +208,17 @@ namespace VoxelEngine.Simulation
             switch (shape)
             {
                 case ConveyorShape.RampUp:
-                    entryDirection = new Vector3(0f, -0.5f, -1f).normalized;
-                    exitDirection = new Vector3(0f, 0.5f, 1f).normalized;
-                    break;
                 case ConveyorShape.RampDown:
-                    entryDirection = new Vector3(0f, 0.5f, -1f).normalized;
-                    exitDirection = new Vector3(0f, -0.5f, 1f).normalized;
+                    entryDirection = Vector3.back;
+                    exitDirection = Vector3.forward;
+                    break;
+                case ConveyorShape.VerticalUp:
+                    entryDirection = Vector3.down;
+                    exitDirection = Vector3.up;
+                    break;
+                case ConveyorShape.VerticalDown:
+                    entryDirection = Vector3.up;
+                    exitDirection = Vector3.down;
                     break;
                 case ConveyorShape.Straight:
                     if (entryDirection.sqrMagnitude < 0.01f || exitDirection.sqrMagnitude < 0.01f
@@ -211,7 +230,14 @@ namespace VoxelEngine.Simulation
                     break;
             }
 
-            travelDirection = (exitDirection - entryDirection).normalized;
+            travelDirection = shape switch
+            {
+                ConveyorShape.RampUp => new Vector3(0f, 1f, 1f).normalized,
+                ConveyorShape.RampDown => new Vector3(0f, -1f, 1f).normalized,
+                ConveyorShape.VerticalUp => Vector3.up,
+                ConveyorShape.VerticalDown => Vector3.down,
+                _ => (exitDirection - entryDirection).normalized
+            };
             if (travelDirection.sqrMagnitude < 0.01f) travelDirection = Vector3.forward;
         }
 
@@ -296,19 +322,26 @@ namespace VoxelEngine.Simulation
         {
             // Find downstream consumer at the exit end of this belt.
             Vector3 worldExitDir = GetExitDirection();
-            Vector3 exitWorld = transform.position + worldExitDir * 1.2f;
-            Vector3 exitSocket = transform.position + worldExitDir * 0.5f;
+            Vector3 exitSocket = GetExitSocketPosition();
+            Vector3 exitWorld = exitSocket + worldExitDir * 0.7f;
             downstreamTarget = FindConsumerAt(exitWorld, exitSocket, -worldExitDir);
 
             // Find upstream provider at the entry end of this belt.
             Vector3 worldEntryDir = GetEntryDirection();
-            Vector3 entryWorld = transform.position + worldEntryDir * 1.2f;
-            Vector3 entrySocket = transform.position + worldEntryDir * 0.5f;
+            Vector3 entrySocket = GetEntrySocketPosition();
+            Vector3 entryWorld = entrySocket + worldEntryDir * 0.7f;
             upstreamSource = FindProviderAt(entryWorld, entrySocket, -worldEntryDir);
         }
 
         public void RefreshShape()
         {
+            if (!autoShape)
+            {
+                UpdateTravelDirection();
+                ScanConnections();
+                return;
+            }
+
             int incomingCount = 0;
             Vector3 incomingDirection = Vector3.back;
 
@@ -385,7 +418,7 @@ namespace VoxelEngine.Simulation
                 if (belt == null || belt == this) continue;
 
                 Vector3 candidateDirection = belt.GetExitDirection();
-                Vector3 candidateSocket = belt.transform.position + candidateDirection * 0.5f;
+                Vector3 candidateSocket = belt.GetExitSocketPosition();
                 if (Vector3.Dot(candidateDirection, expectedOutputDirection.normalized) < 0.9f) continue;
                 if ((candidateSocket - receiverSocket).sqrMagnitude > SocketToleranceSqr) continue;
                 return belt;
@@ -435,7 +468,7 @@ namespace VoxelEngine.Simulation
             if (behaviour is ConveyorBelt belt)
             {
                 candidateDirection = provider ? belt.GetExitDirection() : belt.GetEntryDirection();
-                candidateSocket = belt.transform.position + candidateDirection * 0.5f;
+                candidateSocket = provider ? belt.GetExitSocketPosition() : belt.GetEntrySocketPosition();
             }
             else if (behaviour is Funnel funnel)
             {
@@ -466,7 +499,7 @@ namespace VoxelEngine.Simulation
             if (downstreamTarget == null) return false;
 
             Vector3 exitDirectionWorld = GetExitDirection();
-            Vector3 exitSocket = transform.position + exitDirectionWorld * 0.5f;
+            Vector3 exitSocket = GetExitSocketPosition();
             if (!IsSocketCompatible(downstreamTarget, exitSocket, -exitDirectionWorld, provider: false))
             {
                 downstreamTarget = null;
@@ -491,7 +524,7 @@ namespace VoxelEngine.Simulation
             if (provider == null) return;
 
             Vector3 entryDirectionWorld = GetEntryDirection();
-            Vector3 entrySocket = transform.position + entryDirectionWorld * 0.5f;
+            Vector3 entrySocket = GetEntrySocketPosition();
             if (!IsSocketCompatible(upstreamSource, entrySocket, -entryDirectionWorld, provider: true))
             {
                 upstreamSource = null;
@@ -530,23 +563,51 @@ namespace VoxelEngine.Simulation
             Vector3 localPosition;
             Vector3 localTangent;
 
-            if (shape == ConveyorShape.Corner)
+            switch (shape)
             {
-                Vector3 start = SafeLocalDirection(entryDirection, Vector3.back) * 0.5f;
-                Vector3 end = SafeLocalDirection(exitDirection, Vector3.forward) * 0.5f;
-                Vector3 control = Vector3.zero;
-                float inverse = 1f - t;
-                localPosition = inverse * inverse * start + 2f * inverse * t * control + t * t * end;
-                localTangent = 2f * inverse * (control - start) + 2f * t * (end - control);
-                localPosition.y = 0.52f;
-                localTangent.y = 0f;
-            }
-            else
-            {
-                Vector3 start = SafeLocalDirection(entryDirection, Vector3.back) * 0.5f;
-                Vector3 end = SafeLocalDirection(exitDirection, Vector3.forward) * 0.5f;
-                localPosition = Vector3.Lerp(start, end, t) + Vector3.up * 0.52f;
-                localTangent = end - start;
+                case ConveyorShape.Corner:
+                    {
+                        Vector3 start = SafeLocalDirection(entryDirection, Vector3.back) * 0.5f;
+                        Vector3 end = SafeLocalDirection(exitDirection, Vector3.forward) * 0.5f;
+                        float inverse = 1f - t;
+                        localPosition = inverse * inverse * start + t * t * end;
+                        localTangent = -2f * inverse * start + 2f * t * end;
+                        localPosition.y = 0.52f;
+                        localTangent.y = 0f;
+                        break;
+                    }
+                case ConveyorShape.RampUp:
+                    {
+                        Vector3 start = new(0f, 0.52f, -0.5f);
+                        Vector3 end = new(0f, 1.52f, 0.5f);
+                        localPosition = Vector3.Lerp(start, end, t);
+                        localTangent = end - start;
+                        break;
+                    }
+                case ConveyorShape.RampDown:
+                    {
+                        Vector3 start = new(0f, 1.52f, -0.5f);
+                        Vector3 end = new(0f, 0.52f, 0.5f);
+                        localPosition = Vector3.Lerp(start, end, t);
+                        localTangent = end - start;
+                        break;
+                    }
+                case ConveyorShape.VerticalUp:
+                    localPosition = new Vector3(0f, Mathf.Lerp(0f, 1f, t), 0f);
+                    localTangent = Vector3.up;
+                    break;
+                case ConveyorShape.VerticalDown:
+                    localPosition = new Vector3(0f, Mathf.Lerp(1f, 0f, t), 0f);
+                    localTangent = Vector3.down;
+                    break;
+                default:
+                    {
+                        Vector3 start = SafeLocalDirection(entryDirection, Vector3.back) * 0.5f;
+                        Vector3 end = SafeLocalDirection(exitDirection, Vector3.forward) * 0.5f;
+                        localPosition = Vector3.Lerp(start, end, t) + Vector3.up * 0.52f;
+                        localTangent = end - start;
+                        break;
+                    }
             }
 
             Vector3 localSide = Vector3.Cross(Vector3.up, localTangent.normalized);
@@ -565,6 +626,32 @@ namespace VoxelEngine.Simulation
         public Vector3 GetEntryDirection()
         {
             return transform.TransformDirection(SafeLocalDirection(entryDirection, Vector3.back)).normalized;
+        }
+
+        public Vector3 GetEntrySocketPosition()
+        {
+            Vector3 localOffset = shape switch
+            {
+                ConveyorShape.RampUp => new Vector3(0f, 0f, -0.5f),
+                ConveyorShape.RampDown => new Vector3(0f, 1f, -0.5f),
+                ConveyorShape.VerticalUp => Vector3.zero,
+                ConveyorShape.VerticalDown => Vector3.up,
+                _ => SafeLocalDirection(entryDirection, Vector3.back) * 0.5f
+            };
+            return transform.TransformPoint(localOffset);
+        }
+
+        public Vector3 GetExitSocketPosition()
+        {
+            Vector3 localOffset = shape switch
+            {
+                ConveyorShape.RampUp => new Vector3(0f, 1f, 0.5f),
+                ConveyorShape.RampDown => new Vector3(0f, 0f, 0.5f),
+                ConveyorShape.VerticalUp => Vector3.up,
+                ConveyorShape.VerticalDown => Vector3.zero,
+                _ => SafeLocalDirection(exitDirection, Vector3.forward) * 0.5f
+            };
+            return transform.TransformPoint(localOffset);
         }
 
         private static Vector3 SafeLocalDirection(Vector3 direction, Vector3 fallback)

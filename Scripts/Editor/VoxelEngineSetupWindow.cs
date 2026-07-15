@@ -188,6 +188,7 @@ namespace VoxelEngine.EditorTools
             AddInfo(scroll,
                 "Step 17 builds the FACTORY FOUNDATIONS + HIGH VOLTAGE GRID:\n" +
                 "  • Conveyor Belt (Basic / Fast / Express tiers)\n" +
+                "  • Hold Build Wheel to select Straight / Ramp / Vertical for the held tier\n" +
                 "  • Conveyor direction chevrons + centered status lines\n" +
                 "  • Conveyor Chute (vertical item transport)\n" +
                 "  • Crusher + Assembler Mk.1/Mk.2/Mk.3 machines\n" +
@@ -1276,18 +1277,72 @@ namespace VoxelEngine.EditorTools
             EnsureFolder(tieredMats);
             EnsureFolder(tieredRecipes);
 
-            // ---------- Pull common item references created by Step 1 / Step 4 ----------
-            var stone   = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{ITEM_FOLDER}/Item_Stone.asset");
-            var ironOre = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{ITEM_FOLDER}/Item_Iron.asset");
+            // ---------- Resolve or repair common Step 1 / Step 4 item references ----------
             string itemsFolder = ASSET_ROOT + "/Items";
-            var woodLog     = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{itemsFolder}/Item_WoodLog.asset");
-            var plank       = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{itemsFolder}/Item_WoodenPlank.asset");
-            var ironIngot   = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{itemsFolder}/Item_IronIngot.asset");
-            var steelIngot  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{itemsFolder}/Item_SteelIngot.asset");
-            if (woodLog == null || plank == null || stone == null)
+
+            T ResolveOrCreateTieredItem<T>(
+                string canonicalPath,
+                string itemId,
+                string displayName,
+                Color tint,
+                VoxelEngine.Items.ResourceCategory resourceCategory = VoxelEngine.Items.ResourceCategory.Raw,
+                float fuelSeconds = 0f)
+                where T : VoxelEngine.Items.ItemDefinition
             {
-                EditorUtility.DisplayDialog("Voxel Engine",
-                    "Run Step 4 (Build Crafting Content) first — it creates Wood Log / Plank / Iron Ingot / Steel Ingot which the building system needs.",
+                var canonical = AssetDatabase.LoadAssetAtPath<T>(canonicalPath);
+                if (canonical != null) return canonical;
+
+                foreach (string guid in AssetDatabase.FindAssets("t:ItemDefinition", new[] { ASSET_ROOT }))
+                {
+                    string candidatePath = AssetDatabase.GUIDToAssetPath(guid);
+                    var candidate = AssetDatabase.LoadAssetAtPath<T>(candidatePath);
+                    if (candidate != null && candidate.itemId == itemId) return candidate;
+                }
+
+                var occupied = AssetDatabase.LoadMainAssetAtPath(canonicalPath);
+                if (occupied != null)
+                {
+                    Debug.LogError($"[VoxelEngineSetupWindow] Step 5 preserved '{canonicalPath}' because its type does not match {typeof(T).Name}.");
+                    return null;
+                }
+
+                var created = ScriptableObject.CreateInstance<T>();
+                created.itemId = itemId;
+                created.displayName = displayName;
+                created.description = $"Core {displayName.ToLowerInvariant()} resource used by tiered construction.";
+                created.iconTint = tint;
+                created.maxStack = 999;
+                created.massPerUnit = 1f;
+                created.category = "Resources";
+                if (created is VoxelEngine.Items.ResourceItem resource)
+                {
+                    resource.subcategory = resourceCategory;
+                    resource.fuelSeconds = fuelSeconds;
+                }
+                AssetDatabase.CreateAsset(created, canonicalPath);
+                Debug.Log($"[VoxelEngineSetupWindow] Step 5 repaired missing prerequisite item: {canonicalPath}");
+                return created;
+            }
+
+            var stone = ResolveOrCreateTieredItem<VoxelEngine.Items.ItemDefinition>(
+                $"{itemsFolder}/Item_Stone.asset", "stone", "Stone", new Color(0.55f, 0.55f, 0.58f));
+            var woodLog = ResolveOrCreateTieredItem<VoxelEngine.Items.ResourceItem>(
+                $"{itemsFolder}/Item_WoodLog.asset", "wood_log", "Wood Log", new Color(0.45f, 0.30f, 0.16f),
+                VoxelEngine.Items.ResourceCategory.Fuel, 4f);
+            var plank = ResolveOrCreateTieredItem<VoxelEngine.Items.ResourceItem>(
+                $"{itemsFolder}/Item_WoodenPlank.asset", "wooden_plank", "Wooden Plank", new Color(0.55f, 0.40f, 0.25f),
+                VoxelEngine.Items.ResourceCategory.Fuel, 3f);
+            var ironIngot = ResolveOrCreateTieredItem<VoxelEngine.Items.ResourceItem>(
+                $"{itemsFolder}/Item_IronIngot.asset", "iron_ingot", "Iron Ingot", new Color(0.78f, 0.78f, 0.82f),
+                VoxelEngine.Items.ResourceCategory.Ingot);
+            var steelIngot = ResolveOrCreateTieredItem<VoxelEngine.Items.ResourceItem>(
+                $"{itemsFolder}/Item_SteelIngot.asset", "steel_ingot", "Steel Ingot", new Color(0.55f, 0.58f, 0.65f),
+                VoxelEngine.Items.ResourceCategory.Ingot);
+
+            if (woodLog == null || plank == null || stone == null || ironIngot == null || steelIngot == null)
+            {
+                EditorUtility.DisplayDialog("Voxel Engine — Step 5",
+                    "Step 5 found an asset-type conflict while repairing its prerequisites. No existing asset was deleted. Check the Console for the exact path.",
                     "OK");
                 return;
             }
@@ -1303,7 +1358,7 @@ namespace VoxelEngine.EditorTools
             string registryPath = $"{tieredFolder}/TieredBlockRegistry.asset";
             var registry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Building.Tiered.TieredBlockRegistry>(registryPath);
             if (registry == null) { registry = ScriptableObject.CreateInstance<VoxelEngine.Building.Tiered.TieredBlockRegistry>(); AssetDatabase.CreateAsset(registry, registryPath); }
-            registry.definitions.Clear();
+            registry.definitions.RemoveAll(definition => definition == null);
 
             VoxelEngine.Building.Tiered.TieredBlockDefinition MakeFamily(
                 VoxelEngine.Building.Tiered.BuildFamily fam,
@@ -1316,14 +1371,18 @@ namespace VoxelEngine.EditorTools
                 VoxelEngine.Building.Tiered.TierCost upIronToSteel)
             {
                 string path = $"{tieredDefs}/TBlock_{display}.asset";
+                bool definitionCreated = AssetDatabase.LoadMainAssetAtPath(path) == null;
                 var def = GetOrCreateAsset<VoxelEngine.Building.Tiered.TieredBlockDefinition>(path);
 
-                def.family = fam;
-                def.displayName = display;
-                def.placeCost     = placeCost;
-                def.woodToStone   = upWoodToStone;
-                def.stoneToIron   = upStoneToIron;
-                def.ironToSteel   = upIronToSteel;
+                if (definitionCreated)
+                {
+                    def.family = fam;
+                    def.displayName = display;
+                    def.placeCost     = placeCost;
+                    def.woodToStone   = upWoodToStone;
+                    def.stoneToIron   = upStoneToIron;
+                    def.ironToSteel   = upIronToSteel;
+                }
 
                 for (int t = 0; t < 4; t++)
                 {
@@ -1510,14 +1569,18 @@ namespace VoxelEngine.EditorTools
                 VoxelEngine.Building.Tiered.BuildFamily fam, string display, Color tint, string description)
             {
                 string path = $"{tieredTokens}/Token_{display}.asset";
+                bool tokenCreated = AssetDatabase.LoadMainAssetAtPath(path) == null;
                 var tok = GetOrCreateAsset<VoxelEngine.Building.Tiered.BuildToken>(path);
 
-                tok.family      = fam;
-                tok.itemId      = "build_" + display.ToLower();
-                tok.displayName = display + " (Build)";
-                tok.description = description;
-                tok.iconTint    = tint;
-                tok.maxStack    = 99;
+                tok.family = fam;
+                if (tokenCreated)
+                {
+                    tok.itemId      = "build_" + display.ToLowerInvariant();
+                    tok.displayName = display + " (Build)";
+                    tok.description = description;
+                    tok.iconTint    = tint;
+                    tok.maxStack    = 99;
+                }
                 EditorUtility.SetDirty(tok);
                 return tok;
             }
@@ -1534,24 +1597,25 @@ namespace VoxelEngine.EditorTools
             // ---------- Hammer tool ----------
             string hammerPath = $"{itemsFolder}/Tool_Hammer.asset";
             var hammer = AssetDatabase.LoadAssetAtPath<VoxelEngine.Building.Tiered.Hammer>(hammerPath);
-            if (hammer == null)
+            bool hammerCreated = hammer == null;
+            if (hammerCreated)
             {
                 hammer = ScriptableObject.CreateInstance<VoxelEngine.Building.Tiered.Hammer>();
                 AssetDatabase.CreateAsset(hammer, hammerPath);
+                hammer.itemId        = "hammer";
+                hammer.displayName   = "Hammer";
+                hammer.toolType      = VoxelEngine.Items.ToolType.Other;
+                hammer.miningTier    = 0;
+                hammer.maxDurability = 500;
+                hammer.strength      = 1f;
+                hammer.fireRate      = 4f;
+                hammer.brushRadius   = 0.1f;
+                hammer.iconTint      = new Color(0.85f, 0.55f, 0.20f);
+                hammer.description   = "Used to upgrade placed buildings to their next tier. " +
+                    "Hold in active hotbar slot, look at a placed wood/stone/iron building, then LMB. " +
+                    "Each upgrade consumes the cost shown on the block. Wood -> Stone -> Iron -> Steel.";
+                EditorUtility.SetDirty(hammer);
             }
-            hammer.itemId        = "hammer";
-            hammer.displayName   = "Hammer";
-            hammer.toolType      = VoxelEngine.Items.ToolType.Other;
-            hammer.miningTier    = 0;
-            hammer.maxDurability = 500;
-            hammer.strength      = 1f;     // hammer doesn't do damage in normal mining; it upgrades.
-            hammer.fireRate      = 4f;
-            hammer.brushRadius   = 0.1f;
-            hammer.iconTint      = new Color(0.85f, 0.55f, 0.20f);
-            hammer.description   = "Used to upgrade placed buildings to their next tier. " +
-                "Hold in active hotbar slot, look at a placed wood/stone/iron building, then LMB. " +
-                "Each upgrade consumes the cost shown on the block. Wood -> Stone -> Iron -> Steel.";
-            EditorUtility.SetDirty(hammer);
 
             // ---------- Add recipes for all 9 build tokens + the hammer (Crafting Bench tier) ----------
             var recipeRegistry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeRegistry>($"{ASSET_ROOT}/RecipeRegistry.asset");
@@ -1562,19 +1626,36 @@ namespace VoxelEngine.EditorTools
                 return;
             }
 
+            VoxelEngine.Crafting.RecipeDefinition EnsureTieredRecipe(
+                string assetName,
+                string displayName,
+                VoxelEngine.Items.ItemDefinition output,
+                int outputCount,
+                VoxelEngine.Crafting.StationTier station,
+                params (VoxelEngine.Items.ItemDefinition item, int n)[] inputs)
+            {
+                var existing = FindRecipeByName(assetName);
+                if (existing != null)
+                {
+                    if (!recipeRegistry.recipes.Contains(existing)) recipeRegistry.recipes.Add(existing);
+                    return existing;
+                }
+                return AddRecipe(assetName, displayName, output, outputCount, station, inputs);
+            }
+
             // Hammer is craftable in inventory (you need it to upgrade anything).
-            AddRecipe("Recipe_Hammer", "Hammer", hammer, 1, VoxelEngine.Crafting.StationTier.None, ((VoxelEngine.Items.ItemDefinition)woodLog, 2), ((VoxelEngine.Items.ItemDefinition)plank, 2));
+            EnsureTieredRecipe("Recipe_Hammer", "Hammer", hammer, 1, VoxelEngine.Crafting.StationTier.None, ((VoxelEngine.Items.ItemDefinition)woodLog, 2), ((VoxelEngine.Items.ItemDefinition)plank, 2));
 
             // Build tokens — all from the Crafting Bench so the player has a small barrier.
-            AddRecipe("Recipe_Tok_Foundation", "Foundation Token", tokFoundation, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)plank, 2));
-            AddRecipe("Recipe_Tok_Wall", "Wall Token", tokWall, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)plank, 2));
-            AddRecipe("Recipe_Tok_Doorway", "Doorway Token", tokDoorway, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)plank, 2));
-            AddRecipe("Recipe_Tok_Window", "Window Token", tokWindow, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)plank, 2));
-            AddRecipe("Recipe_Tok_Floor", "Floor Token", tokFloor, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)plank, 2));
-            AddRecipe("Recipe_Tok_Stairs", "Stairs Token", tokStairs, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)plank, 2));
-            AddRecipe("Recipe_Tok_Roof", "Roof Token", tokRoof, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)plank, 2));
-            AddRecipe("Recipe_Tok_Pillar", "Pillar Token", tokPillar, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)plank, 2));
-            AddRecipe("Recipe_Tok_HalfWall", "Half Wall Token", tokHalfWall, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)plank, 2));
+            EnsureTieredRecipe("Recipe_Tok_Foundation", "Foundation Token", tokFoundation, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)plank, 2));
+            EnsureTieredRecipe("Recipe_Tok_Wall", "Wall Token", tokWall, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)plank, 2));
+            EnsureTieredRecipe("Recipe_Tok_Doorway", "Doorway Token", tokDoorway, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)plank, 2));
+            EnsureTieredRecipe("Recipe_Tok_Window", "Window Token", tokWindow, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)plank, 2));
+            EnsureTieredRecipe("Recipe_Tok_Floor", "Floor Token", tokFloor, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)plank, 2));
+            EnsureTieredRecipe("Recipe_Tok_Stairs", "Stairs Token", tokStairs, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)plank, 2));
+            EnsureTieredRecipe("Recipe_Tok_Roof", "Roof Token", tokRoof, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)plank, 2));
+            EnsureTieredRecipe("Recipe_Tok_Pillar", "Pillar Token", tokPillar, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)plank, 2));
+            EnsureTieredRecipe("Recipe_Tok_HalfWall", "Half Wall Token", tokHalfWall, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)plank, 2));
 
             EditorUtility.SetDirty(recipeRegistry);
             AssetDatabase.SaveAssets();
@@ -5669,6 +5750,23 @@ root =>
             int preservedPrefabCount = 0;
             int repairedLinkCount = 0;
             int removedLegacyVisualCount = 0;
+            int retiredRecipeLinkCount = 0;
+            var retiredConveyorRecipes = new List<VoxelEngine.Crafting.RecipeDefinition>();
+
+            // 5.3.0 replaces the short-lived separate-variant plan with one radial
+            // selector per tier. Retire only registry/research links; preserve any
+            // generated assets on disk so user-authored edits are never deleted.
+            foreach (string tierKey in new[] { "Basic", "Fast", "Express" })
+            {
+                foreach (string shapeKey in new[] { "RampUp", "RampDown", "VerticalUp", "VerticalDown" })
+                {
+                    string path = $"{FAC_RECIPES}/Recipe_Conveyor{tierKey}{shapeKey}.asset";
+                    var retired = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeDefinition>(path);
+                    if (retired == null) continue;
+                    retiredConveyorRecipes.Add(retired);
+                    if (registry.recipes.Remove(retired)) retiredRecipeLinkCount++;
+                }
+            }
 
             T GetOrCreateStep17Asset<T>(string path) where T : ScriptableObject
             {
@@ -6199,7 +6297,7 @@ root =>
                     EnsurePrimitive(root, "Generated_BackLegRight", PrimitiveType.Cube, new Vector3(0.42f, -0.17f, 0.42f), new Vector3(0.06f, 0.58f, 0.06f), frameMat, Vector3.zero);
                     EnsureRootCollider(root, new Vector3(1.22f, 0.68f, 1.12f), new Vector3(0f, 0.14f, 0f));
 
-                    EnsureStep17Component<VoxelEngine.Simulation.ConveyorBelt>(root, belt =>
+                    var straightBelt = EnsureStep17Component<VoxelEngine.Simulation.ConveyorBelt>(root, belt =>
                     {
                         belt.speed = speed;
                         belt.shape = VoxelEngine.Simulation.ConveyorShape.Straight;
@@ -6207,7 +6305,13 @@ root =>
                         belt.entryDirection = Vector3.back;
                         belt.exitDirection = Vector3.forward;
                         belt.travelDirection = Vector3.forward;
+                        belt.autoShape = true;
                     });
+                    if (!straightBelt.autoShape)
+                    {
+                        straightBelt.autoShape = true;
+                        repairedLinkCount++;
+                    }
 
                     EnsureStep17Component<VoxelEngine.Simulation.BeltVisualController>(root, visuals =>
                     {
@@ -6828,6 +6932,20 @@ root =>
                         nFactory.maxRanks = 1;
                     }
                     nFactory.prerequisites = MergeUniqueArray(nFactory.prerequisites, factoryPrerequisites);
+                    if (retiredConveyorRecipes.Count > 0 && nFactory.unlocksRecipes != null)
+                    {
+                        var keptUnlocks = new List<VoxelEngine.Crafting.RecipeDefinition>();
+                        foreach (var unlock in nFactory.unlocksRecipes)
+                        {
+                            if (unlock == null || retiredConveyorRecipes.Contains(unlock))
+                            {
+                                if (unlock != null) retiredRecipeLinkCount++;
+                                continue;
+                            }
+                            keptUnlocks.Add(unlock);
+                        }
+                        nFactory.unlocksRecipes = keptUnlocks.ToArray();
+                    }
                     nFactory.unlocksRecipes = MergeUniqueArray(nFactory.unlocksRecipes, factoryRecipes);
                     EditorUtility.SetDirty(nFactory);
                     if (!tree.nodes.Contains(nFactory))
@@ -6887,9 +7005,10 @@ root =>
                 $"Preserved existing assets/materials: {preservedAssetCount}\n" +
                 $"Preserved existing prefabs: {preservedPrefabCount}\n" +
                 $"Repaired required links: {repairedLinkCount}\n" +
+                $"Retired obsolete variant recipe links: {retiredRecipeLinkCount}\n" +
                 $"Removed obsolete generated visuals: {removedLegacyVisualCount}\n\n" +
                 "Existing health, power, throughput, recipe costs, research costs, custom visual transforms, materials, and effect tuning were preserved.";
-            Debug.Log($"[VoxelEngineSetupWindow] Step 17 complete. Created assets/materials={createdAssetCount}, created prefabs={createdPrefabCount}, created components={createdComponentCount}, preserved assets/materials={preservedAssetCount}, preserved prefabs={preservedPrefabCount}, repaired links={repairedLinkCount}, removed legacy visuals={removedLegacyVisualCount}.");
+            Debug.Log($"[VoxelEngineSetupWindow] Step 17 complete. Created assets/materials={createdAssetCount}, created prefabs={createdPrefabCount}, created components={createdComponentCount}, preserved assets/materials={preservedAssetCount}, preserved prefabs={preservedPrefabCount}, repaired links={repairedLinkCount}, retired variant recipe links={retiredRecipeLinkCount}, removed legacy visuals={removedLegacyVisualCount}.");
             EditorUtility.DisplayDialog("Voxel Engine — Step 17", setupSummary, "OK");
         }
 

@@ -47,6 +47,9 @@ namespace VoxelEngine.Building
             if (Instance != null && Instance != this) { Destroy(this); return; }
             Instance = this;
 
+            if (GetComponent<VoxelEngine.Simulation.ConveyorShapeWheel>() == null)
+                gameObject.AddComponent<VoxelEngine.Simulation.ConveyorShapeWheel>();
+
             // Create translucent ghost materials.
             _ghostMaterialValid   = MakeGhostMaterial(new Color(0.4f, 0.9f, 0.5f, ghostAlpha));
             _ghostMaterialInvalid = MakeGhostMaterial(new Color(0.95f, 0.35f, 0.3f, ghostAlpha));
@@ -99,6 +102,10 @@ namespace VoxelEngine.Building
             }
             _ghost.SetActive(true);
 
+            var ghostBelt = _ghost.GetComponentInChildren<VoxelEngine.Simulation.ConveyorBelt>(true);
+            if (ghostBelt != null)
+                ghostBelt.SetBuildShape(ResolveConveyorBuildShape(ghostBelt, hit));
+
             ComputePlacementPose(hit, block, out Vector3 pos, out Quaternion rot);
             _ghost.transform.SetPositionAndRotation(pos, rot);
 
@@ -147,6 +154,10 @@ namespace VoxelEngine.Building
             var go = Instantiate(block.placedPrefab, pos, rot);
             go.name = block.displayName;
 
+            var placedBelt = go.GetComponentInChildren<VoxelEngine.Simulation.ConveyorBelt>(true);
+            if (placedBelt != null)
+                placedBelt.SetBuildShape(ResolveConveyorBuildShape(placedBelt, hit));
+
             // Make sure it has a collider for future raycasts.
             if (go.GetComponentInChildren<Collider>() == null)
                 go.AddComponent<BoxCollider>();
@@ -177,7 +188,6 @@ namespace VoxelEngine.Building
             // Placement is now final and the collider is registered at its snapped
             // pose, so refresh this belt and its neighbours immediately instead of
             // waiting for the periodic connection scan.
-            var placedBelt = go.GetComponentInChildren<VoxelEngine.Simulation.ConveyorBelt>(true);
             placedBelt?.RefreshTopologyImmediate();
             return true;
         }
@@ -209,14 +219,54 @@ namespace VoxelEngine.Building
             rot = default;
             if (block == null || block.placedPrefab == null || hit.collider == null) return false;
 
-            bool placingBelt = block.placedPrefab.GetComponentInChildren<VoxelEngine.Simulation.ConveyorBelt>(true) != null;
+            var placingBeltComponent = block.placedPrefab.GetComponentInChildren<VoxelEngine.Simulation.ConveyorBelt>(true);
+            bool placingBelt = placingBeltComponent != null;
             bool placingChute = block.placedPrefab.GetComponentInChildren<VoxelEngine.Simulation.ConveyorChute>(true) != null;
             bool placingPowerPipe = block.placedPrefab.GetComponentInChildren<VoxelEngine.Power.PowerCable>(true) != null;
             if (!placingBelt && !placingChute && !placingPowerPipe) return false;
+            var selectedConveyorShape = placingBelt
+                ? ResolveConveyorBuildShape(placingBeltComponent, hit)
+                : VoxelEngine.Simulation.ConveyorShape.Straight;
 
+            float factorySpacing = Mathf.Max(gridSize, 1f);
             var targetBelt = hit.collider.GetComponentInParent<VoxelEngine.Simulation.ConveyorBelt>();
             if (placingBelt && targetBelt != null)
             {
+                var placingShape = selectedConveyorShape;
+                if (!targetBelt.autoShape)
+                {
+                    rot = targetBelt.transform.rotation;
+                    Vector3 localEntry = ConveyorLocalEntryOffset(placingShape);
+                    pos = targetBelt.GetExitSocketPosition() - rot * localEntry;
+                    return true;
+                }
+                if (placingShape == VoxelEngine.Simulation.ConveyorShape.RampUp)
+                {
+                    pos = targetBelt.transform.position + targetBelt.transform.forward * factorySpacing;
+                    rot = targetBelt.transform.rotation;
+                    return true;
+                }
+                if (placingShape == VoxelEngine.Simulation.ConveyorShape.RampDown)
+                {
+                    pos = targetBelt.transform.position
+                        + targetBelt.transform.forward * factorySpacing
+                        - targetBelt.transform.up * factorySpacing;
+                    rot = targetBelt.transform.rotation;
+                    return true;
+                }
+                if (placingShape == VoxelEngine.Simulation.ConveyorShape.VerticalUp)
+                {
+                    pos = targetBelt.transform.position + targetBelt.transform.up * factorySpacing;
+                    rot = targetBelt.transform.rotation;
+                    return true;
+                }
+                if (placingShape == VoxelEngine.Simulation.ConveyorShape.VerticalDown)
+                {
+                    pos = targetBelt.transform.position - targetBelt.transform.up * factorySpacing;
+                    rot = targetBelt.transform.rotation;
+                    return true;
+                }
+
                 Vector3 localHit = targetBelt.transform.InverseTransformPoint(hit.point);
                 Vector3 snapDirection;
                 bool sideSnap = Mathf.Abs(localHit.x) > Mathf.Abs(localHit.z);
@@ -233,7 +283,6 @@ namespace VoxelEngine.Building
                 return true;
             }
 
-            float factorySpacing = Mathf.Max(gridSize, 1f);
             if (placingChute && targetBelt != null)
             {
                 Vector3 beltUp = targetBelt.transform.up;
@@ -245,6 +294,14 @@ namespace VoxelEngine.Building
                 pos = targetBelt.transform.position + beltUp * verticalSign * factorySpacing;
                 rot = targetBelt.transform.rotation;
                 return true;
+            }
+
+            if (placingBelt && (selectedConveyorShape == VoxelEngine.Simulation.ConveyorShape.VerticalUp
+                                || selectedConveyorShape == VoxelEngine.Simulation.ConveyorShape.VerticalDown))
+            {
+                var targetPorts = hit.collider.GetComponentInParent<PortConfig>();
+                if (TryGetVerticalItemPortSnap(targetPorts, hit, factorySpacing, out pos, out rot))
+                    return true;
             }
 
             if (placingChute)
@@ -286,6 +343,53 @@ namespace VoxelEngine.Building
             }
 
             return false;
+        }
+
+        private static VoxelEngine.Simulation.ConveyorShape ResolveConveyorBuildShape(
+            VoxelEngine.Simulation.ConveyorBelt belt,
+            RaycastHit hit)
+        {
+            if (belt == null) return VoxelEngine.Simulation.ConveyorShape.Straight;
+            var mode = VoxelEngine.Simulation.ConveyorShapeWheel.GetMode(belt.speed);
+            if (mode == VoxelEngine.Simulation.ConveyorBuildMode.Straight)
+                return VoxelEngine.Simulation.ConveyorShape.Straight;
+
+            Transform reference = null;
+            var targetBelt = hit.collider != null ? hit.collider.GetComponentInParent<VoxelEngine.Simulation.ConveyorBelt>() : null;
+            if (targetBelt != null) reference = targetBelt.transform;
+            if (reference == null)
+            {
+                var targetChute = hit.collider != null ? hit.collider.GetComponentInParent<VoxelEngine.Simulation.ConveyorChute>() : null;
+                if (targetChute != null) reference = targetChute.transform;
+            }
+            if (reference == null)
+            {
+                var ports = hit.collider != null ? hit.collider.GetComponentInParent<PortConfig>() : null;
+                if (ports != null) reference = ports.transform;
+            }
+
+            Vector3 up = reference != null ? reference.up : GravityProvider.GetUp(hit.point);
+            Vector3 origin = reference != null ? reference.position : hit.point;
+            float normalHeight = Vector3.Dot(hit.normal.normalized, up);
+            float localHeight = Vector3.Dot(hit.point - origin, up);
+            bool upward = normalHeight > 0.45f
+                || (Mathf.Abs(normalHeight) <= 0.45f && localHeight > 0.30f);
+
+            if (mode == VoxelEngine.Simulation.ConveyorBuildMode.Ramp)
+                return upward ? VoxelEngine.Simulation.ConveyorShape.RampUp : VoxelEngine.Simulation.ConveyorShape.RampDown;
+            return upward ? VoxelEngine.Simulation.ConveyorShape.VerticalUp : VoxelEngine.Simulation.ConveyorShape.VerticalDown;
+        }
+
+        private static Vector3 ConveyorLocalEntryOffset(VoxelEngine.Simulation.ConveyorShape shape)
+        {
+            return shape switch
+            {
+                VoxelEngine.Simulation.ConveyorShape.RampUp => new Vector3(0f, 0f, -0.5f),
+                VoxelEngine.Simulation.ConveyorShape.RampDown => new Vector3(0f, 1f, -0.5f),
+                VoxelEngine.Simulation.ConveyorShape.VerticalUp => Vector3.zero,
+                VoxelEngine.Simulation.ConveyorShape.VerticalDown => Vector3.up,
+                _ => Vector3.back * 0.5f
+            };
         }
 
         private static bool TryGetVerticalItemPortSnap(
