@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.7.1-dev`
-**Roadmap Version:** `5.7.1-dev`
+**Current Version:** `5.7.2-dev`
+**Roadmap Version:** `5.7.2-dev`
 **Date:** 2026-07-15
-**Status:** Active Implementation — Size-V3 Edge Snapping, Door Fit & Wheel/UI Refinement
+**Status:** Active Implementation — Size-V4 Foundation Spacing, Player-Away Doors & Construction Scale
 
 ---
 
@@ -49,7 +49,7 @@ The design goal is a seamless blend of:
 | Small grid | 🟡 Basic | Needs improvement and usability |
 | Power (wind, hydrogen) | ✅ Mature | Modular turbines are excellent |
 | Fluids / gases | ✅ Good | Pipe-gated transfer in 2.20.0 |
-| Building (static + tiered) | 🛠️ Working On | 3.0 m player-scale modules, edge sockets, separate Door/Doorway families, paginated Hammer wheel, and premium tier materials await validation |
+| Building (static + tiered) | 🛠️ Working On | 3.75 m Size-V4 modules, full-module Foundation neighbor sockets, player-away Door swing, separate Door/Doorway families, paginated Hammer wheel, and premium tier materials await validation |
 | Advanced Quarry | 🛠️ Working On | Unbreakable bedrock generation removed; late Tier-5 quarry uses a finite configurable 64-layer default depth |
 | Sky / atmosphere / space rendering | 🟡 Basic | Needs planet-specific skies and proper space ambiance |
 | Gravity / orbits | 🟡 Buggy | Player and grids sometimes fall; orbits not realistic |
@@ -509,7 +509,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Recipe registry refactor | 🟡 PARTIALLY COMPLETE | ScriptableObject crafting and machine recipes exist. Shaped/shapeless/smelting/machine unification and validation remain incomplete. |
 | Centralized simulation tick | 🟡 PARTIALLY COMPLETE | Crusher and Assembler register with `SimulationTickManager`; belts, chutes, and several older machines still run per-frame updates. |
 | Factory persistence | 🟡 PARTIALLY COMPLETE | Explicit Ramp/Vertical conveyor modes restore from additive save fields; belt/chute contents plus Crusher/Assembler buffers and progress remain outstanding. |
-| Step 5 tiered setup workflow | 🛠️ WORKING ON | Missing canonical Stone or Step 4 resource references are resolved by item ID and safely recreated when absent; existing wrong-type assets are preserved and reported. Unity validation is pending. |
+| Step 5 tiered setup workflow | 🛠️ WORKING ON | Missing canonical resources are repaired safely; generated Size-V3 prefabs migrate to 3.75 m Size-V4 geometry with exact full-module Foundation spacing while custom prefabs, materials, and balance values remain preserved. Unity validation is pending. |
 | Step 17 setup workflow | ✅ COMPLETED | The separate-variant generation pass was withdrawn before validation. Step 17 remains non-destructive and now documents the contextual conveyor wheel while preserving the three existing tier items and recipes. |
 
 > **Completion gate:** This section becomes **✅ COMPLETED** only after Step 17 is non-destructive, all listed variants are authored through the setup wizard, factory runtime state persists, and the Unity validation checklist passes.
@@ -563,10 +563,11 @@ Statuses are evidence-based and move forward only after code/content review and 
    - Snap to grid edges and static building surfaces.
 
 10. **Player-Scale Hammer Construction**
-   - Standard construction module is 3.0 meters wide/tall so Crusaders fit comfortably through rooms and openings.
+   - Standard construction module is 3.75 meters wide/tall, an exact 25% increase over Size-V3 so Crusaders fit comfortably through rooms and openings.
    - Foundation, Wall, Doorway, Window, Floor, Stairs, Roof, Pillar, Half Wall, and Door families each retain four material tiers.
-   - Lateral sockets sit on true outer edges and share the host root height, preventing pieces from snapping inside or above their neighbor.
+   - Foundation neighbor sockets target a full 3.75 m center-to-center offset; wall-like top sockets remain on the true perimeter edge and all lateral roots stay level.
    - Doorway is an empty structural opening; Door is a separate placeable family that snaps into the Doorway center socket.
+   - Each Door evaluates the interacting player's side every time it opens and swings away from that player.
    - Hammer wheel uses paginated donut pages with labels inset from the ring edge.
 
 #### Improved Features — 🟡 PARTIALLY COMPLETE
@@ -1659,6 +1660,24 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.7.2-dev] 25% Larger Construction, Exact Foundation Spacing & Player-Away Doors
+
+**Type:** PATCH — construction scale, snapping-distance, and directional Door behavior fixes
+
+**Fixed / Improved:**
+- Increased every Setup-generated tiered construction piece by exactly 25%, moving the standard module from `3.0 m` to `3.75 m` while preserving all recipe, tier, health, and material balance values.
+- Corrected Foundation neighbor sockets from a half-module offset to a full `3.75 m` center-to-center offset, preventing adjacent Foundations from occupying the same volume.
+- Updated same-plane Wall, Doorway, Window, Half Wall, and Floor neighbor sockets to use complete module spacing instead of overlapping roots.
+- Kept Wall, Doorway, Window, and Half Wall placement on the Foundation's true upper perimeter at half-module offsets.
+- Increased the tiered construction grid to `3.75 m`, socket search radius to `3.25 m`, and Foundation terrain offset proportionally.
+- Doors now evaluate which side the interacting player is standing on each time they open and swing away from that player; reopening from the opposite side reverses the swing.
+- Step 5 migrates recognized Setup-generated Size-V3 prefabs to the Size-V4 geometry marker while preserving imported/custom prefab geometry, authored materials, recipes, costs, and other balance edits.
+
+**Roadmap Status:**
+- Size-V4 construction, exact Foundation spacing, and player-away Door swing: **WORKING ON** — awaiting Unity validation.
+
+---
 
 ### [5.7.1-dev] Size-V3 Edge Snapping, Door Fit & Wheel/UI Refinement
 

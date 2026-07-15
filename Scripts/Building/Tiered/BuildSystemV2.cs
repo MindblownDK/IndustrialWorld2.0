@@ -27,9 +27,9 @@ namespace VoxelEngine.Building.Tiered
 
         [Header("Tuning")]
         public float reach = 8f;
-        public float socketSnapRadius = 2.6f;     // metres around aim point to search for sockets
+        public float socketSnapRadius = 3.25f;    // metres around aim point to search for sockets
         public bool  gridSnap = true;
-        public float gridSize = 3.0f;
+        public float gridSize = 3.75f;
         public float ghostAlpha = 0.55f;
         public float yawStep = 90f;
 
@@ -182,8 +182,8 @@ namespace VoxelEngine.Building.Tiered
 
             // 2) Fall back to grid snap or free placement on the hit surface.
             // Construction roots represent the bottom/hinge plane, not the center
-            // of a 2.5 m cube, so snap to grid intersections instead of cell centers.
-            float surfaceOffset = def.family == BuildFamily.Foundation ? 0.40f : 0.02f;
+            // of a module, so snap to grid intersections instead of cell centers.
+            float surfaceOffset = def.family == BuildFamily.Foundation ? 0.50f : 0.02f;
             Vector3 raw = hit.point + hit.normal * surfaceOffset;
             _ghostPos = gridSnap
                 ? new Vector3(

@@ -336,7 +336,7 @@ namespace VoxelEngine.Player
                 var tieredDoor = hit.collider.GetComponentInParent<VoxelEngine.Building.Tiered.TieredDoor>();
                 if (tieredDoor != null)
                 {
-                    tieredDoor.Toggle();
+                    tieredDoor.Toggle(transform.position);
                     return;
                 }
 
