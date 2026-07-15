@@ -572,6 +572,23 @@ namespace VoxelEngine.Building
         {
             foreach (var col in root.GetComponentsInChildren<Collider>(true)) col.enabled = false;
             foreach (var rb  in root.GetComponentsInChildren<Rigidbody>(true)) rb.isKinematic = true;
+
+            // Placement previews must never participate in simulation. Instantiating
+            // the real prefab briefly runs OnEnable before colliders are stripped;
+            // disabling logistical/powered behaviours here prevents existing belts
+            // from caching the ghost as a valid consumer and deleting items into it.
+            foreach (var mb in root.GetComponentsInChildren<MonoBehaviour>(true))
+            {
+                if (mb == null) continue;
+                if (mb is VoxelEngine.Simulation.IItemConsumer ||
+                    mb is VoxelEngine.Simulation.IItemProvider ||
+                    mb is VoxelEngine.Simulation.IMachine ||
+                    mb.GetType().Namespace == "VoxelEngine.Simulation")
+                {
+                    mb.enabled = false;
+                }
+            }
+
             ApplyGhostMaterial(root, mat);
         }
         private static void ApplyGhostMaterial(GameObject root, Material mat)

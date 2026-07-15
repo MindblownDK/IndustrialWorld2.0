@@ -6295,7 +6295,23 @@ root =>
                 if (existing != null)
                 {
                     if (existing.GetComponent<MeshFilter>() == null || existing.GetComponent<MeshRenderer>() == null)
+                    {
                         Debug.LogWarning($"[VoxelEngineSetupWindow] Step 17 left custom child '{name}' on '{root.name}' untouched even though it is not generated primitive geometry.");
+                        return existing.gameObject;
+                    }
+
+                    // Generated visual primitives are safe to refresh: this lets the
+                    // setup tool non-destructively upgrade prefab looks while keeping
+                    // hand-authored children and component values intact.
+                    if (name.StartsWith("Generated_", System.StringComparison.Ordinal))
+                    {
+                        existing.localPosition = localPosition;
+                        existing.localRotation = Quaternion.Euler(localEuler);
+                        existing.localScale = localScale;
+                        var existingRenderer = existing.GetComponent<Renderer>();
+                        if (existingRenderer != null && material != null) existingRenderer.sharedMaterial = material;
+                        repairedLinkCount++;
+                    }
                     return existing.gameObject;
                 }
 
@@ -6347,7 +6363,16 @@ root =>
             BoxCollider EnsureRootCollider(GameObject root, Vector3 size, Vector3 center)
             {
                 var existing = root.GetComponent<BoxCollider>();
-                if (existing != null) return existing;
+                if (existing != null)
+                {
+                    if (existing.size != size || existing.center != center)
+                    {
+                        existing.size = size;
+                        existing.center = center;
+                        repairedLinkCount++;
+                    }
+                    return existing;
+                }
 
                 var collider = root.AddComponent<BoxCollider>();
                 collider.size = size;
@@ -6431,6 +6456,11 @@ root =>
                     item.placedPrefab = prefab;
                     repairedLinkCount++;
                     Debug.Log($"[VoxelEngineSetupWindow] Step 17 connected block item '{path}' to '{AssetDatabase.GetAssetPath(prefab)}'.");
+                }
+                if (gridSize.HasValue && item.gridSize != gridSize.Value)
+                {
+                    item.gridSize = gridSize.Value;
+                    repairedLinkCount++;
                 }
                 EditorUtility.SetDirty(item);
                 return item;
@@ -6784,16 +6814,21 @@ root =>
                 var rimMat = GetMaterial(FAC_MATS, "Mat_FunnelPortRims", new Color(0.38f, 0.40f, 0.40f));
                 var beltAccentMat = GetMaterial(FAC_MATS, "Mat_FunnelBeltPort", new Color(0.18f, 0.72f, 0.88f), true);
                 var inventoryAccentMat = GetMaterial(FAC_MATS, "Mat_FunnelInventoryPort", new Color(0.95f, 0.62f, 0.18f), true);
-                EnsurePrimitive(root, "Generated_CenterHousing", PrimitiveType.Cube, new Vector3(0f, 0.36f, 0f), new Vector3(0.74f, 0.56f, 0.46f), shellMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_BeltPortRim", PrimitiveType.Cube, new Vector3(0f, 0.36f, 0.34f), new Vector3(0.86f, 0.46f, 0.08f), rimMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_BeltMouth", PrimitiveType.Cube, new Vector3(0f, 0.36f, 0.40f), new Vector3(0.62f, 0.30f, 0.06f), darkMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_InventoryPortRim", PrimitiveType.Cube, new Vector3(0f, 0.36f, -0.34f), new Vector3(0.72f, 0.38f, 0.08f), rimMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_InventoryMouth", PrimitiveType.Cube, new Vector3(0f, 0.36f, -0.40f), new Vector3(0.50f, 0.24f, 0.06f), darkMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_BeltAccent", PrimitiveType.Cube, new Vector3(0f, 0.64f, 0.405f), new Vector3(0.54f, 0.035f, 0.035f), beltAccentMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_InventoryAccent", PrimitiveType.Cube, new Vector3(0f, 0.60f, -0.405f), new Vector3(0.44f, 0.035f, 0.035f), inventoryAccentMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_DirectionalGate", PrimitiveType.Cube, new Vector3(0f, 0.36f, 0f), new Vector3(0.56f, 0.035f, 0.10f), inventoryAccentMat, Vector3.zero);
-                EnsureLight(root, "Generated_FunnelPulse", new Vector3(0f, 0.66f, 0.08f), LightType.Point, new Color(0.95f, 0.62f, 0.18f), 1.0f, 3f);
-                EnsureRootCollider(root, new Vector3(0.95f, 0.72f, 1.0f), new Vector3(0f, 0.35f, 0f));
+                EnsurePrimitive(root, "Generated_CenterHousing", PrimitiveType.Cube, new Vector3(0f, 0.42f, 0f), new Vector3(0.88f, 0.66f, 0.54f), shellMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_AndesiteTopBand", PrimitiveType.Cube, new Vector3(0f, 0.78f, 0f), new Vector3(0.98f, 0.10f, 0.62f), rimMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_LeftBracket", PrimitiveType.Cube, new Vector3(-0.50f, 0.42f, 0f), new Vector3(0.08f, 0.58f, 0.54f), rimMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_RightBracket", PrimitiveType.Cube, new Vector3(0.50f, 0.42f, 0f), new Vector3(0.08f, 0.58f, 0.54f), rimMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_BeltPortRim", PrimitiveType.Cube, new Vector3(0f, 0.42f, 0.40f), new Vector3(0.98f, 0.54f, 0.08f), rimMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_BeltMouth", PrimitiveType.Cube, new Vector3(0f, 0.42f, 0.455f), new Vector3(0.70f, 0.34f, 0.06f), darkMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_InventoryPortRim", PrimitiveType.Cube, new Vector3(0f, 0.42f, -0.40f), new Vector3(0.82f, 0.44f, 0.08f), rimMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_InventoryMouth", PrimitiveType.Cube, new Vector3(0f, 0.42f, -0.455f), new Vector3(0.56f, 0.28f, 0.06f), darkMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_BeltAccent", PrimitiveType.Cube, new Vector3(0f, 0.74f, 0.465f), new Vector3(0.58f, 0.035f, 0.035f), beltAccentMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_InventoryAccent", PrimitiveType.Cube, new Vector3(0f, 0.70f, -0.465f), new Vector3(0.48f, 0.035f, 0.035f), inventoryAccentMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_Flap", PrimitiveType.Cube, new Vector3(0f, 0.48f, 0.495f), new Vector3(0.62f, 0.04f, 0.14f), inventoryAccentMat, new Vector3(-18f, 0f, 0f));
+                EnsurePrimitive(root, "Generated_DirectionalGate", PrimitiveType.Cube, new Vector3(0f, 0.42f, 0f), new Vector3(0.58f, 0.035f, 0.10f), inventoryAccentMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_ItemPacket", PrimitiveType.Cube, new Vector3(0f, 0.46f, 0f), new Vector3(0.12f, 0.12f, 0.12f), beltAccentMat, Vector3.zero);
+                EnsureLight(root, "Generated_FunnelPulse", new Vector3(0f, 0.76f, 0.08f), LightType.Point, new Color(0.95f, 0.62f, 0.18f), 1.0f, 3f);
+                EnsureRootCollider(root, new Vector3(1.05f, 0.88f, 1.1f), new Vector3(0f, 0.42f, 0f));
                 EnsureStep17Component<VoxelEngine.Simulation.Funnel>(root, funnel =>
                 {
                     funnel.mode = VoxelEngine.Simulation.FunnelMode.Import;
@@ -6816,6 +6851,13 @@ root =>
                     animator.pulseLightName = "Generated_FunnelPulse";
                     animator.pulseAmplitude = 0.30f;
                     animator.pulseFrequency = 2.4f;
+                });
+                EnsureStep17Component<VoxelEngine.Simulation.FunnelMotionAnimator>(root, animator =>
+                {
+                    animator.flapChildName = "Generated_Flap";
+                    animator.itemChildName = "Generated_ItemPacket";
+                    animator.beltMouthChildName = "Generated_BeltMouth";
+                    animator.inventoryMouthChildName = "Generated_InventoryMouth";
                 });
                 EnsureStep17Component<VoxelEngine.Simulation.FactoryStatusIndicator>(root, indicator =>
                 {
@@ -6845,11 +6887,19 @@ root =>
                 var baseMat = GetMaterial(FAC_MATS, "Mat_CrusherBase", new Color(0.28f, 0.29f, 0.32f));
                 var jawMat = GetMaterial(FAC_MATS, "Mat_CrusherJaw", new Color(0.55f, 0.56f, 0.60f));
                 var accentMat = GetMaterial(FAC_MATS, "Mat_CrusherAccent", new Color(0.92f, 0.45f, 0.12f), true);
-                EnsurePrimitive(root, "Generated_Base", PrimitiveType.Cube, new Vector3(0f, 0.35f, 0f), new Vector3(1.15f, 0.7f, 1.15f), baseMat, Vector3.zero);
-                EnsurePrimitive(root, "Generated_LeftJaw", PrimitiveType.Cube, new Vector3(-0.25f, 0.78f, 0f), new Vector3(0.22f, 0.28f, 0.9f), jawMat, new Vector3(0f, 0f, 12f));
-                EnsurePrimitive(root, "Generated_RightJaw", PrimitiveType.Cube, new Vector3(0.25f, 0.78f, 0f), new Vector3(0.22f, 0.28f, 0.9f), jawMat, new Vector3(0f, 0f, -12f));
-                EnsurePrimitive(root, "Generated_StatusStrip", PrimitiveType.Cube, new Vector3(0f, 0.44f, -0.59f), new Vector3(0.55f, 0.05f, 0.04f), accentMat, Vector3.zero);
-                EnsureRootCollider(root, new Vector3(1.2f, 1.1f, 1.2f), new Vector3(0f, 0.5f, 0f));
+                EnsurePrimitive(root, "Generated_Base", PrimitiveType.Cube, new Vector3(0f, 0.28f, 0f), new Vector3(2.45f, 0.56f, 1.85f), baseMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_LeftWall", PrimitiveType.Cube, new Vector3(-1.08f, 1.12f, 0f), new Vector3(0.24f, 1.65f, 1.72f), baseMat, new Vector3(0f, 0f, -4f));
+                EnsurePrimitive(root, "Generated_RightWall", PrimitiveType.Cube, new Vector3(1.08f, 1.12f, 0f), new Vector3(0.24f, 1.65f, 1.72f), baseMat, new Vector3(0f, 0f, 4f));
+                EnsurePrimitive(root, "Generated_TopFeedHopper", PrimitiveType.Cube, new Vector3(0f, 2.05f, -0.10f), new Vector3(1.82f, 0.36f, 1.52f), jawMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_HopperMouth", PrimitiveType.Cube, new Vector3(0f, 2.20f, -0.10f), new Vector3(1.26f, 0.08f, 1.02f), accentMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_LeftJaw", PrimitiveType.Cube, new Vector3(-0.46f, 1.15f, 0f), new Vector3(0.34f, 0.90f, 1.35f), jawMat, new Vector3(0f, 0f, 10f));
+                EnsurePrimitive(root, "Generated_RightJaw", PrimitiveType.Cube, new Vector3(0.46f, 1.15f, 0f), new Vector3(0.34f, 0.90f, 1.35f), jawMat, new Vector3(0f, 0f, -10f));
+                EnsurePrimitive(root, "Generated_OutputTray", PrimitiveType.Cube, new Vector3(0f, 0.58f, 1.10f), new Vector3(1.45f, 0.16f, 0.70f), baseMat, new Vector3(-7f, 0f, 0f));
+                EnsurePrimitive(root, "Generated_Flywheel", PrimitiveType.Cylinder, new Vector3(1.34f, 0.92f, -0.70f), new Vector3(0.46f, 0.12f, 0.46f), accentMat, new Vector3(90f, 0f, 0f));
+                EnsurePrimitive(root, "Generated_StatusStrip", PrimitiveType.Cube, new Vector3(0f, 0.54f, -0.94f), new Vector3(0.88f, 0.06f, 0.04f), accentMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_FallingItem", PrimitiveType.Cube, new Vector3(0f, 1.92f, -0.10f), new Vector3(0.18f, 0.18f, 0.18f), accentMat, Vector3.zero);
+                EnsurePrimitive(root, "Generated_CrushedItem", PrimitiveType.Cube, new Vector3(0f, 0.78f, 0.58f), new Vector3(0.22f, 0.06f, 0.22f), accentMat, Vector3.zero);
+                EnsureRootCollider(root, new Vector3(2.7f, 2.45f, 2.35f), new Vector3(0f, 1.10f, 0.05f));
                 var crusher = EnsureStep17Component<VoxelEngine.Simulation.Crusher>(root, createdCrusher =>
                 {
                     createdCrusher.baseWattsPerSecond = 250f;
@@ -6857,6 +6907,19 @@ root =>
                 });
                 crusher.knownRecipes = MergeUniqueList(crusher.knownRecipes, crusherRecipes);
                 EnsureStep17Component<VoxelEngine.Power.PowerConsumer>(root, power => power.connectRadius = 1.6f);
+                EnsureStep17Component<VoxelEngine.Simulation.CrusherMotionAnimator>(root, animator =>
+                {
+                    animator.leftJawChildName = "Generated_LeftJaw";
+                    animator.rightJawChildName = "Generated_RightJaw";
+                    animator.fallingItemChildName = "Generated_FallingItem";
+                    animator.crushedItemChildName = "Generated_CrushedItem";
+                });
+                EnsureStep17Component<VoxelEngine.Simulation.FactoryPartAnimator>(root, animator =>
+                {
+                    animator.rotatingChildName = "Generated_Flywheel";
+                    animator.rotationAxis = Vector3.forward;
+                    animator.rotationDegreesPerSecond = 220f;
+                });
                 EnsureStep17Component<VoxelEngine.Simulation.FactoryStatusIndicator>(root, indicator =>
                 {
                     indicator.rendererChildName = "Generated_StatusStrip";
@@ -6864,27 +6927,27 @@ root =>
                     indicator.activeColor = new Color(0.22f, 0.78f, 0.42f);
                 });
             });
-            var blockCrusher = ConfigureBlock(FAC_ITEMS, "Block_Crusher", "Crusher", "Powered machine that crushes stone and ores into higher-yield outputs.", new Color(0.92f, 0.45f, 0.12f), crusherPrefab, "Factory", 450);
+            var blockCrusher = ConfigureBlock(FAC_ITEMS, "Block_Crusher", "Crusher", "Large top-fed powered machine that crushes stone and ores into higher-yield outputs.", new Color(0.92f, 0.45f, 0.12f), crusherPrefab, "Factory", 450, 2, new Vector3Int(3, 2, 2));
 
             GameObject CreateAssemblerPrefab(string assetName, VoxelEngine.Simulation.AssemblerTier tier, Color accent, float activeWatts, float idleWatts)
             {
                 float width = tier switch
                 {
-                    VoxelEngine.Simulation.AssemblerTier.Mk2 => 1.75f,
-                    VoxelEngine.Simulation.AssemblerTier.Mk3 => 2.35f,
-                    _ => 1.25f
+                    VoxelEngine.Simulation.AssemblerTier.Mk2 => 2.65f,
+                    VoxelEngine.Simulation.AssemblerTier.Mk3 => 3.45f,
+                    _ => 1.95f
                 };
                 float depth = tier switch
                 {
-                    VoxelEngine.Simulation.AssemblerTier.Mk2 => 1.45f,
-                    VoxelEngine.Simulation.AssemblerTier.Mk3 => 1.75f,
-                    _ => 1.15f
+                    VoxelEngine.Simulation.AssemblerTier.Mk2 => 2.05f,
+                    VoxelEngine.Simulation.AssemblerTier.Mk3 => 2.55f,
+                    _ => 1.65f
                 };
                 float height = tier switch
                 {
-                    VoxelEngine.Simulation.AssemblerTier.Mk2 => 1.25f,
-                    VoxelEngine.Simulation.AssemblerTier.Mk3 => 1.55f,
-                    _ => 0.95f
+                    VoxelEngine.Simulation.AssemblerTier.Mk2 => 1.75f,
+                    VoxelEngine.Simulation.AssemblerTier.Mk3 => 2.15f,
+                    _ => 1.35f
                 };
 
                 return GetOrCreateStep17Prefab($"{FAC_PREFABS}/{assetName}.prefab", assetName, root =>
@@ -6894,13 +6957,18 @@ root =>
                     var railMat = GetMaterial(FAC_MATS, "Mat_AssemblerRails", new Color(0.46f, 0.48f, 0.48f));
                     var panelMat = GetMaterial(FAC_MATS, $"Mat_{assetName}_Panel", accent, true);
                     EnsurePrimitive(root, "Generated_MainCabinet", PrimitiveType.Cube, new Vector3(0f, height * 0.5f, 0f), new Vector3(width, height, depth), baseMat, Vector3.zero);
-                    EnsurePrimitive(root, "Generated_InputBed", PrimitiveType.Cube, new Vector3(0f, 0.22f, -depth * 0.72f), new Vector3(width * 0.85f, 0.18f, 0.58f), railMat, Vector3.zero);
-                    EnsurePrimitive(root, "Generated_OutputBed", PrimitiveType.Cube, new Vector3(0f, 0.22f, depth * 0.72f), new Vector3(width * 0.85f, 0.18f, 0.58f), railMat, Vector3.zero);
-                    EnsurePrimitive(root, "Generated_WorkWindow", PrimitiveType.Cube, new Vector3(0f, height * 0.60f, -depth * 0.52f), new Vector3(width * 0.62f, height * 0.34f, 0.045f), darkMat, Vector3.zero);
-                    EnsurePrimitive(root, "Generated_StatusPanel", PrimitiveType.Cube, new Vector3(width * 0.38f, height * 0.52f, -depth * 0.56f), new Vector3(0.18f, height * 0.30f, 0.05f), panelMat, Vector3.zero);
-                    EnsurePrimitive(root, "Generated_TopServiceRail", PrimitiveType.Cube, new Vector3(0f, height + 0.08f, 0f), new Vector3(width * 0.88f, 0.08f, depth * 0.80f), railMat, Vector3.zero);
-                    EnsurePrimitive(root, "Generated_LeftFoot", PrimitiveType.Cube, new Vector3(-width * 0.38f, -0.09f, -depth * 0.35f), new Vector3(0.08f, 0.38f, 0.08f), railMat, Vector3.zero);
-                    EnsurePrimitive(root, "Generated_RightFoot", PrimitiveType.Cube, new Vector3(width * 0.38f, -0.09f, -depth * 0.35f), new Vector3(0.08f, 0.38f, 0.08f), railMat, Vector3.zero);
+                    EnsurePrimitive(root, "Generated_InputBed", PrimitiveType.Cube, new Vector3(0f, 0.24f, -depth * 0.72f), new Vector3(width * 0.92f, 0.18f, 0.62f), railMat, Vector3.zero);
+                    EnsurePrimitive(root, "Generated_OutputBed", PrimitiveType.Cube, new Vector3(0f, 0.24f, depth * 0.72f), new Vector3(width * 0.92f, 0.18f, 0.62f), railMat, Vector3.zero);
+                    EnsurePrimitive(root, "Generated_WorkWindow", PrimitiveType.Cube, new Vector3(0f, height * 0.60f, -depth * 0.52f), new Vector3(width * 0.66f, height * 0.36f, 0.045f), darkMat, Vector3.zero);
+                    EnsurePrimitive(root, "Generated_StatusPanel", PrimitiveType.Cube, new Vector3(width * 0.39f, height * 0.54f, -depth * 0.56f), new Vector3(0.22f, height * 0.34f, 0.05f), panelMat, Vector3.zero);
+                    EnsurePrimitive(root, "Generated_TopServiceRail", PrimitiveType.Cube, new Vector3(0f, height + 0.10f, 0f), new Vector3(width * 0.92f, 0.08f, depth * 0.82f), railMat, Vector3.zero);
+                    EnsurePrimitive(root, "Generated_Gantry", PrimitiveType.Cube, new Vector3(0f, height + 0.22f, -depth * 0.05f), new Vector3(width * 0.20f, 0.12f, depth * 0.78f), panelMat, Vector3.zero);
+                    EnsurePrimitive(root, "Generated_PressHead", PrimitiveType.Cube, new Vector3(0f, height * 0.70f, -depth * 0.10f), new Vector3(width * 0.30f, height * 0.18f, depth * 0.30f), darkMat, Vector3.zero);
+                    EnsurePrimitive(root, "Generated_WorkPiece", PrimitiveType.Cube, new Vector3(0f, 0.46f, -depth * 0.12f), new Vector3(0.22f, 0.12f, 0.22f), panelMat, Vector3.zero);
+                    EnsurePrimitive(root, "Generated_LeftFoot", PrimitiveType.Cube, new Vector3(-width * 0.38f, -0.10f, -depth * 0.35f), new Vector3(0.10f, 0.42f, 0.10f), railMat, Vector3.zero);
+                    EnsurePrimitive(root, "Generated_RightFoot", PrimitiveType.Cube, new Vector3(width * 0.38f, -0.10f, -depth * 0.35f), new Vector3(0.10f, 0.42f, 0.10f), railMat, Vector3.zero);
+                    EnsurePrimitive(root, "Generated_BackLeftFoot", PrimitiveType.Cube, new Vector3(-width * 0.38f, -0.10f, depth * 0.35f), new Vector3(0.10f, 0.42f, 0.10f), railMat, Vector3.zero);
+                    EnsurePrimitive(root, "Generated_BackRightFoot", PrimitiveType.Cube, new Vector3(width * 0.38f, -0.10f, depth * 0.35f), new Vector3(0.10f, 0.42f, 0.10f), railMat, Vector3.zero);
                     EnsureLight(root, "Generated_AssemblerStatusLight", new Vector3(width * 0.38f, height * 0.62f, -depth * 0.62f), LightType.Point, accent, 0.9f, 3f);
                     EnsureRootCollider(root, new Vector3(width + 0.12f, height + 0.25f, depth + 0.65f), new Vector3(0f, height * 0.5f, 0f));
                     var assembler = EnsureStep17Component<VoxelEngine.Simulation.Assembler>(root, createdAssembler =>
@@ -6926,6 +6994,13 @@ root =>
                         animator.pulseAmplitude = 0.25f;
                         animator.pulseFrequency = 1.8f;
                     });
+                    EnsureStep17Component<VoxelEngine.Simulation.AssemblerMotionAnimator>(root, animator =>
+                    {
+                        animator.gantryChildName = "Generated_Gantry";
+                        animator.pressHeadChildName = "Generated_PressHead";
+                        animator.workPieceChildName = "Generated_WorkPiece";
+                        animator.gantryTravel = width * 0.44f;
+                    });
                     EnsureStep17Component<VoxelEngine.Simulation.FactoryStatusIndicator>(root, indicator =>
                     {
                         indicator.rendererChildName = "Generated_StatusPanel";
@@ -6941,9 +7016,9 @@ root =>
             var assemblerMk2Prefab = CreateAssemblerPrefab("Assembler_Mk2", VoxelEngine.Simulation.AssemblerTier.Mk2, new Color(0.92f, 0.60f, 0.12f), 450f, 15f);
             var assemblerMk3Prefab = CreateAssemblerPrefab("Assembler_Mk3", VoxelEngine.Simulation.AssemblerTier.Mk3, new Color(0.72f, 0.42f, 0.95f), 700f, 22f);
 
-            var blockAssemblerMk1 = ConfigureBlock(FAC_ITEMS, "Block_AssemblerMk1", "Assembler Mk.1", "Powered machine that crafts component recipes from buffered inputs.", new Color(0.18f, 0.72f, 0.88f), assemblerMk1Prefab, "Factory", 420, 1, Vector3Int.one);
-            var blockAssemblerMk2 = ConfigureBlock(FAC_ITEMS, "Block_AssemblerMk2", "Assembler Mk.2", "Larger, faster assembler with expanded input, output, and upgrade capacity.", new Color(0.92f, 0.60f, 0.12f), assemblerMk2Prefab, "Factory", 560, 1, new Vector3Int(2, 1, 2));
-            var blockAssemblerMk3 = ConfigureBlock(FAC_ITEMS, "Block_AssemblerMk3", "Assembler Mk.3", "Large high-throughput assembler for dense late-factory production lines.", new Color(0.72f, 0.42f, 0.95f), assemblerMk3Prefab, "Factory", 720, 2, new Vector3Int(3, 2, 2));
+            var blockAssemblerMk1 = ConfigureBlock(FAC_ITEMS, "Block_AssemblerMk1", "Assembler Mk.1", "Powered machine that crafts component recipes from buffered inputs.", new Color(0.18f, 0.72f, 0.88f), assemblerMk1Prefab, "Factory", 420, 1, new Vector3Int(2, 1, 2));
+            var blockAssemblerMk2 = ConfigureBlock(FAC_ITEMS, "Block_AssemblerMk2", "Assembler Mk.2", "Larger, faster assembler with expanded input, output, and upgrade capacity.", new Color(0.92f, 0.60f, 0.12f), assemblerMk2Prefab, "Factory", 560, 1, new Vector3Int(3, 2, 2));
+            var blockAssemblerMk3 = ConfigureBlock(FAC_ITEMS, "Block_AssemblerMk3", "Assembler Mk.3", "Large high-throughput assembler for dense late-factory production lines.", new Color(0.72f, 0.42f, 0.95f), assemblerMk3Prefab, "Factory", 720, 2, new Vector3Int(4, 2, 3));
 
             var smeltIron = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.SmeltingRecipe>($"{ASSET_ROOT}/Recipes/Smelt_Iron.asset");
             var smeltCopper = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.SmeltingRecipe>($"{ASSET_ROOT}/Recipes/Smelt_Copper.asset");

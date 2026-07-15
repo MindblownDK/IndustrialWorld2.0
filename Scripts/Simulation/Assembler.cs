@@ -51,6 +51,7 @@ namespace VoxelEngine.Simulation
         // ── Runtime ───────────────────────────────────────────────────
 
         private MachineRecipe _current;
+        private MachineRecipe _selectedRecipe;
         private float _processProgress;
         private PowerConsumer _power;
         private bool _userEnabled = true;
@@ -64,7 +65,8 @@ namespace VoxelEngine.Simulation
         public bool IsOnline => _power != null && _power.IsPowered;
         public float Progress01 => _current == null ? 0f : _processProgress / EffectiveProcessTime(_current);
         public float CurrentWattage { get; private set; }
-        public string CurrentRecipeId => _current != null ? _current.name : string.Empty;
+        public string CurrentRecipeId => _current != null ? _current.name : (_selectedRecipe != null ? _selectedRecipe.name : string.Empty);
+        public MachineRecipe CurrentRecipe => _current != null ? _current : _selectedRecipe;
         public float ProcessProgressSeconds => _processProgress;
         public bool UserEnabled
         {
@@ -95,7 +97,7 @@ namespace VoxelEngine.Simulation
             SimulationTickManager.Instance?.Unregister(this);
         }
 
-        private void EnsureContainers()
+        public void EnsureContainers()
         {
             int inSlots  = InputSlots;
             int outSlots = OutputSlots;
@@ -123,6 +125,7 @@ namespace VoxelEngine.Simulation
                     }
                 }
             }
+            _selectedRecipe = _current;
             if (_current == null) _current = FindRecipeForInputs();
             _processProgress = _current != null
                 ? Mathf.Clamp(progressSeconds, 0f, EffectiveProcessTime(_current))
@@ -161,7 +164,16 @@ namespace VoxelEngine.Simulation
                 CompleteOneBatch();
         }
 
-        private float EffectiveProcessTime(MachineRecipe r) => r.processSeconds;
+        private float EffectiveProcessTime(MachineRecipe r) => r != null ? Mathf.Max(0.05f, r.processSeconds) : 0.05f;
+
+        public void SelectRecipe(MachineRecipe recipe)
+        {
+            if (recipe != null && !knownRecipes.Contains(recipe)) return;
+            if (_selectedRecipe == recipe) return;
+            _selectedRecipe = recipe;
+            _current = null;
+            _processProgress = 0f;
+        }
 
         // ── IItemConsumer ─────────────────────────────────────────────
 
@@ -217,6 +229,9 @@ namespace VoxelEngine.Simulation
 
         private MachineRecipe FindRecipeForInputs()
         {
+            if (_selectedRecipe != null && HasAllInputs(_selectedRecipe))
+                return _selectedRecipe;
+
             foreach (var r in knownRecipes)
             {
                 if (r == null || r.inputs == null || r.inputs.Length == 0) continue;

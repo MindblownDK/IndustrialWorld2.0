@@ -152,6 +152,15 @@ namespace VoxelEngine.Building.Tiered
             BuildSocket bestSocket = null;
             float bestSqr = socketSnapRadius * socketSnapRadius;
 
+            var directHost = hit.collider != null ? hit.collider.GetComponentInParent<PlacedTieredBlock>() : null;
+            if (def.family == BuildFamily.Stairs &&
+                directHost != null && directHost.definition != null && directHost.definition.family == BuildFamily.Stairs &&
+                TryComputeStairChainTransform(hit, directHost, out _ghostPos, out _ghostRot))
+            {
+                _ghostValid = ValidateOverlap(_ghostPos, def.family);
+                return;
+            }
+
             var hits = Physics.OverlapSphere(hit.point, socketSnapRadius);
             var visitedHosts = new HashSet<PlacedTieredBlock>();
             foreach (var col in hits)
@@ -200,6 +209,27 @@ namespace VoxelEngine.Building.Tiered
                 : raw;
             _ghostRot = GravityProvider.GetSurfaceRotation(_ghostPos, _ghostYaw);
             _ghostValid = ValidateOverlap(_ghostPos, def.family);
+        }
+
+        private bool TryComputeStairChainTransform(
+            RaycastHit hit,
+            PlacedTieredBlock host,
+            out Vector3 position,
+            out Quaternion rotation)
+        {
+            position = Vector3.zero;
+            rotation = Quaternion.identity;
+            if (host == null) return false;
+
+            Vector3 up = host.transform.up.normalized;
+            Vector3 localHit = host.transform.InverseTransformPoint(hit.point);
+            bool chainUpward = localHit.z >= 0f || Vector3.Dot(hit.normal.normalized, up) > 0.45f;
+
+            rotation = Quaternion.AngleAxis(_ghostYaw, up) * host.transform.rotation;
+            Vector3 forward = rotation * Vector3.forward;
+            Vector3 vertical = up * gridSize;
+            position = host.transform.position + (chainUpward ? forward * gridSize + vertical : -forward * gridSize - vertical);
+            return true;
         }
 
         private bool TryComputeStairTransform(

@@ -12,6 +12,7 @@ using VoxelEngine.Gas;
 using VoxelEngine.Items;
 using VoxelEngine.Nuclear;
 using VoxelEngine.Transport;
+using VoxelEngine.Simulation;
 using T = VoxelEngine.UI.UITheme;
 
 namespace VoxelEngine.UI
@@ -74,6 +75,208 @@ namespace VoxelEngine.UI
             row.pickingMode = PickingMode.Ignore;
             foreach (var g in gauges) row.Add(g);
             return row;
+        }
+
+
+
+        // ════════════════════════════════════════════════════════════
+        //                   CRUSHER / ASSEMBLERS
+        // ════════════════════════════════════════════════════════════
+        public static VisualElement CrusherPanel(Crusher crusher, SlotBuilder slot)
+        {
+            crusher.EnsureContainers();
+            return ProcessingMachinePanel(
+                crusher,
+                "▣",
+                "Crusher",
+                crusher.CurrentRecipe,
+                crusher.knownRecipes,
+                crusher.inputC,
+                crusher.outputC,
+                crusher.upgradeC,
+                slot,
+                recipe => crusher.SelectRecipe(recipe),
+                T.AccentOrange,
+                "Top-fed crusher. Inputs arrive from above; outputs can be pulled from the output buffer.");
+        }
+
+        public static VisualElement AssemblerPanel(Assembler assembler, SlotBuilder slot)
+        {
+            assembler.EnsureContainers();
+            Color accent = assembler.tier switch
+            {
+                AssemblerTier.Mk2 => T.AccentGold,
+                AssemblerTier.Mk3 => T.AccentPurple,
+                _ => T.AccentCyan
+            };
+            return ProcessingMachinePanel(
+                assembler,
+                "⚙",
+                assembler.MachineName,
+                assembler.CurrentRecipe,
+                assembler.knownRecipes,
+                assembler.inputC,
+                assembler.outputC,
+                assembler.upgradeC,
+                slot,
+                recipe => assembler.SelectRecipe(recipe),
+                accent,
+                "Select a recipe, load matching inputs, then route outputs with belts or funnels.");
+        }
+
+        private static VisualElement ProcessingMachinePanel(
+            IMachine machine,
+            string icon,
+            string title,
+            MachineRecipe selectedRecipe,
+            System.Collections.Generic.List<MachineRecipe> recipes,
+            ItemContainer input,
+            ItemContainer output,
+            ItemContainer upgrades,
+            SlotBuilder slot,
+            System.Action<MachineRecipe> selectRecipe,
+            Color accent,
+            string hint)
+        {
+            var p = T.MachinePanel();
+            string status = !machine.UserEnabled ? "DISABLED" : !machine.IsOnline ? "NO POWER" : machine.IsActive ? "RUNNING" : "IDLE";
+            Color statusColor = !machine.UserEnabled || !machine.IsOnline ? T.AccentRed : machine.IsActive ? T.AccentGreen : T.TextMuted;
+            p.Add(BuildHeader(icon, title, status, statusColor, accent));
+            p.Add(T.AccentDivider(accent));
+
+            var top = new VisualElement();
+            top.style.flexDirection = FlexDirection.Row;
+            top.style.alignItems = Align.Center;
+            top.style.marginBottom = 8;
+            var toggle = T.SmallButton(machine.UserEnabled ? "Enabled" : "Disabled", () => machine.UserEnabled = !machine.UserEnabled,
+                machine.UserEnabled ? T.AccentGreen : T.AccentRed);
+            toggle.style.marginRight = 8;
+            top.Add(toggle);
+            top.Add(T.StatRow("⚡", "Power", $"{machine.CurrentWattage:0} W", machine.IsOnline ? T.AccentGold : T.TextMuted));
+            p.Add(top);
+
+            string recipeName = selectedRecipe != null ? selectedRecipe.GetName() : "Auto / waiting for input";
+            p.Add(T.StatRow("⏱", "Recipe", recipeName, selectedRecipe != null ? accent : T.TextMuted));
+            var (progressBar, _) = T.ProgressBar(machine.Progress01, accent, 9, false);
+            p.Add(progressBar);
+            p.Add(T.Divider());
+
+            p.Add(T.Subtitle("Recipe Selection"));
+            var recipeList = new ScrollView(ScrollViewMode.Vertical);
+            recipeList.style.maxHeight = 168;
+            recipeList.style.marginBottom = 8;
+            T.StyleScroller(recipeList);
+            if (recipes != null)
+            {
+                foreach (var recipe in recipes)
+                {
+                    if (recipe == null) continue;
+                    recipeList.Add(MachineRecipeCard(recipe, recipe == selectedRecipe, accent, () => selectRecipe?.Invoke(recipe)));
+                }
+            }
+            p.Add(recipeList);
+
+            p.Add(T.Subtitle("Inventory"));
+            var slotRow = new VisualElement();
+            slotRow.style.flexDirection = FlexDirection.Row;
+            slotRow.style.justifyContent = Justify.Center;
+            slotRow.style.marginTop = 5;
+            slotRow.Add(T.SlotCard("Inputs", SlotGrid(input, slot)));
+            slotRow.Add(T.Spacer(10));
+            slotRow.Add(T.SlotCard("Outputs", SlotGrid(output, slot)));
+            if (upgrades != null && upgrades.Size > 0)
+            {
+                slotRow.Add(T.Spacer(10));
+                slotRow.Add(T.SlotCard("Upgrades", SlotGrid(upgrades, slot)));
+            }
+            p.Add(slotRow);
+            p.Add(T.Spacer(8));
+            p.Add(T.Muted(hint));
+            return p;
+        }
+
+        private static VisualElement SlotGrid(ItemContainer container, SlotBuilder slot)
+        {
+            var grid = T.SlotGrid();
+            if (container == null || slot == null) return grid;
+            for (int i = 0; i < container.Size; i++)
+                grid.Add(slot(container, i, container.GetSlot(i), false, true));
+            return grid;
+        }
+
+        private static VisualElement MachineRecipeCard(MachineRecipe recipe, bool selected, Color accent, System.Action onClick)
+        {
+            var card = T.Card();
+            card.style.marginBottom = 5;
+            card.style.flexDirection = FlexDirection.Row;
+            card.style.alignItems = Align.Center;
+            if (selected) T.Border(card, 1, accent);
+
+            var dot = new VisualElement();
+            dot.style.width = 8;
+            dot.style.height = 8;
+            dot.style.marginRight = 8;
+            dot.style.backgroundColor = new StyleColor(selected ? accent : T.TextMuted);
+            T.Radius(dot, 4);
+            dot.pickingMode = PickingMode.Ignore;
+            card.Add(dot);
+
+            var column = new VisualElement();
+            column.style.flexGrow = 1;
+            column.pickingMode = PickingMode.Ignore;
+            var name = new Label(recipe.GetName());
+            name.style.color = new StyleColor(selected ? T.TextAccent : T.TextPrimary);
+            name.style.fontSize = 12;
+            name.style.unityFontStyleAndWeight = FontStyle.Bold;
+            name.pickingMode = PickingMode.Ignore;
+            column.Add(name);
+            var inputs = new Label($"In: {RecipeInputs(recipe)}") { pickingMode = PickingMode.Ignore };
+            inputs.style.color = new StyleColor(T.TextSecondary);
+            inputs.style.fontSize = 10;
+            column.Add(inputs);
+            var outputs = new Label($"Out: {RecipeOutputs(recipe)}") { pickingMode = PickingMode.Ignore };
+            outputs.style.color = new StyleColor(T.TextMuted);
+            outputs.style.fontSize = 10;
+            column.Add(outputs);
+            card.Add(column);
+
+            var time = new Label($"{recipe.processSeconds:0.#}s");
+            time.style.color = new StyleColor(T.TextMuted);
+            time.style.fontSize = 10;
+            time.style.unityFontStyleAndWeight = FontStyle.Bold;
+            time.pickingMode = PickingMode.Ignore;
+            card.Add(time);
+
+            card.RegisterCallback<ClickEvent>(_ =>
+            {
+                onClick?.Invoke();
+                GameUIController.Instance?.RequestRefresh();
+            });
+            card.RegisterCallback<PointerEnterEvent>(_ => card.style.backgroundColor = new StyleColor(T.BgHover));
+            card.RegisterCallback<PointerLeaveEvent>(_ => card.style.backgroundColor = new StyleColor(T.BgCard));
+            return card;
+        }
+
+        private static string RecipeInputs(MachineRecipe recipe)
+        {
+            if (recipe == null || recipe.inputs == null || recipe.inputs.Length == 0) return "—";
+            var parts = new System.Text.StringBuilder();
+            for (int i = 0; i < recipe.inputs.Length; i++)
+            {
+                if (i > 0) parts.Append(" + ");
+                var input = recipe.inputs[i];
+                parts.Append(input.item != null ? $"{input.count}x {input.item.displayName}" : "?");
+            }
+            return parts.ToString();
+        }
+
+        private static string RecipeOutputs(MachineRecipe recipe)
+        {
+            if (recipe == null || recipe.outputItem == null) return "—";
+            string text = $"{recipe.outputCount}x {recipe.outputItem.displayName}";
+            if (recipe.byproductItem != null && recipe.byproductCount > 0)
+                text += $" + {recipe.byproductCount}x {recipe.byproductItem.displayName}";
+            return text;
         }
 
         // ════════════════════════════════════════════════════════════

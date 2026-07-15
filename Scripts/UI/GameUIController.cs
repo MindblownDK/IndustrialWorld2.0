@@ -82,6 +82,8 @@ namespace VoxelEngine.UI
         private VoxelEngine.Storage.StorageDrawer      _openStorageDrawer;
         private VoxelEngine.Storage.StorageDrawerController _openDrawerController;
         private VoxelEngine.Storage.StorageItemDisplayBlock _openItemDisplay;
+        private VoxelEngine.Simulation.Crusher _openCrusher;
+        private VoxelEngine.Simulation.Assembler _openAssembler;
         private IVoltageStation _openVoltageStation;
         // Containers whose OnChanged should call Refresh; cleared on each panel switch.
         private System.Collections.Generic.List<ItemContainer> _watchedContainers = new();
@@ -524,6 +526,7 @@ namespace VoxelEngine.UI
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
+            _openCrusher = null; _openAssembler = null;
             UnwatchAllContainers();
             if (c is ItemContainer ic) WatchContainer(ic);
             UnlockCursor();
@@ -543,6 +546,7 @@ namespace VoxelEngine.UI
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
+            _openCrusher = null; _openAssembler = null;
             _openStation    = f.GetComponent<CraftingStation>();
             _inventoryOpen  = true;
             UnwatchAllContainers();
@@ -565,6 +569,7 @@ namespace VoxelEngine.UI
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
+            _openCrusher = null; _openAssembler = null;
             _openStation    = ef.GetComponent<CraftingStation>();
             _inventoryOpen  = true;
             UnwatchAllContainers();
@@ -586,6 +591,7 @@ namespace VoxelEngine.UI
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
+            _openCrusher = null; _openAssembler = null;
             _inventoryOpen  = true;
             UnwatchAllContainers();
             if (fuel != null) { fuel.EnsureContainers(); WatchContainer(fuel.fuelC); }
@@ -603,6 +609,7 @@ namespace VoxelEngine.UI
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
+            _openCrusher = null; _openAssembler = null;
             _inventoryOpen  = true;
             UnwatchAllContainers();
             if (quarry != null) { quarry.EnsureOutputPublic(); quarry.EnsureUpgrades(); WatchContainer(quarry.Output); WatchContainer(quarry.upgradeC); }
@@ -624,6 +631,7 @@ namespace VoxelEngine.UI
             _openImporter = null; _openExporter = null;
             _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
+            _openCrusher = null; _openAssembler = null;
             _openVoltageStation = null;
             _inventoryOpen = true;
             UnwatchAllContainers();
@@ -655,6 +663,12 @@ namespace VoxelEngine.UI
                 case VoxelEngine.Gas.GasTank gt: _openGasTank = gt; break;
                 case VoxelEngine.Fluids.WaterPump wp: _openWaterPump = wp; wp.ScanSource(); break;
                 case VoxelEngine.Power.Wind.WindTurbineController wt: _openWindTurbine = wt; break;
+                case VoxelEngine.Simulation.Crusher crusher:
+                    _openCrusher = crusher; crusher.EnsureContainers();
+                    WatchContainer(crusher.inputC); WatchContainer(crusher.outputC); WatchContainer(crusher.upgradeC); break;
+                case VoxelEngine.Simulation.Assembler assembler:
+                    _openAssembler = assembler; assembler.EnsureContainers();
+                    WatchContainer(assembler.inputC); WatchContainer(assembler.outputC); WatchContainer(assembler.upgradeC); break;
                 case VoxelEngine.Crafting.OilRefinery orf:
                     _openOilRefinery = orf; orf.EnsureContainers();
                     WatchContainer(orf.inputC); WatchContainer(orf.outputC); WatchContainer(orf.upgradeC); break;
@@ -724,6 +738,7 @@ namespace VoxelEngine.UI
             _openImporter = null; _openExporter = null;
             _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
+            _openCrusher = null; _openAssembler = null;
             _openGridTerminal = grid; _terminalTab = -1;
             _inventoryOpen = true;
             UnwatchAllContainers();
@@ -747,6 +762,7 @@ namespace VoxelEngine.UI
             _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
+            _openCrusher = null; _openAssembler = null;
             _inventoryOpen  = true;
             // Lazy-create a queue on the station so progress survives panel closure/reopen.
             _activeQueue    = st.GetComponent<CraftQueue>();
@@ -778,6 +794,7 @@ namespace VoxelEngine.UI
             _openPowerstation= null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _openStorageTerminal = null; _openServerRack = null;
+            _openCrusher = null; _openAssembler = null;
             _activeQueue    = null;
             _openCoalGen    = null;
             UnwatchAllContainers();
@@ -802,6 +819,11 @@ namespace VoxelEngine.UI
         {
             foreach (var c in _watchedContainers) { if (c != null) c.OnChanged -= Refresh; }
             _watchedContainers.Clear();
+        }
+
+        public void RequestRefresh()
+        {
+            Refresh();
         }
 
         private void Refresh()
@@ -915,7 +937,8 @@ namespace VoxelEngine.UI
                     _openPatternTerminal != null || _openCraftTerminal != null || _openImporter != null ||
                     _openExporter != null || _openDiskManipulator != null || _openNAS != null ||
                     _openPowerstation != null || _openStorageDrawer != null ||
-                    _openDrawerController != null || _openItemDisplay != null;
+                    _openDrawerController != null || _openItemDisplay != null ||
+                    _openCrusher != null || _openAssembler != null;
                 // The station pane (_openStation) renders its OWN crafting list on
                 // the right, so we suppress the center panel only in that case.
                 // For every other right panel (chest / furnace / storage terminal)
@@ -959,6 +982,8 @@ namespace VoxelEngine.UI
                 else if (_openGridBlock        != null) { var mp = VoxelEngine.GridSystem.UI.GridBlockUI.BuildPanel(_openGridBlock, BuildSlot); _root.Add(mp); if (_openGridBlock is VoxelEngine.Transport.IItemPortHost) AppendItemPorts(mp, _openGridBlock); }
                 else if (_openOilRefinery      != null) { var mp = VoxelEngine.Crafting.ProcessorUI.OilRefineryPanel(_openOilRefinery, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openOilRefinery); }
                 else if (_openChemPlant        != null) { var mp = VoxelEngine.Crafting.ProcessorUI.ChemicalPlantPanel(_openChemPlant, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openChemPlant); }
+                else if (_openCrusher          != null) { var mp = MachineUIs.CrusherPanel(_openCrusher, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openCrusher); }
+                else if (_openAssembler        != null) { var mp = MachineUIs.AssemblerPanel(_openAssembler, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openAssembler); }
                 else if (_openVoltageStation   != null) _root.Add(VoxelEngine.Simulation.VoltageStationUI.BuildPanel(_openVoltageStation));
                 else if (_openStation  != null) BuildRightStationCrafting(_root, _openStation);
             }
