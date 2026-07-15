@@ -23,12 +23,13 @@ namespace VoxelEngine.Building.Tiered
         {
             BuildFamily.Foundation, BuildFamily.Wall, BuildFamily.Floor,
             BuildFamily.Doorway, BuildFamily.Window, BuildFamily.Stairs,
-            BuildFamily.Roof, BuildFamily.Pillar, BuildFamily.HalfWall
+            BuildFamily.Roof, BuildFamily.Pillar, BuildFamily.HalfWall,
+            BuildFamily.Door
         };
 
         private static readonly string[] Icons =
         {
-            "▣", "▥", "▤", "⊡", "☐", "⟋", "⌂", "▏", "▤"
+            "▣", "▥", "▤", "⊡", "☐", "⟋", "⌂", "▏", "▤", "▯"
         };
 
         private const int PageSize = 8;
@@ -276,14 +277,14 @@ namespace VoxelEngine.Building.Tiered
             if (index < 0) return;
 
             const float center = 260f;
-            const float radius = 203f;
+            const float radius = 190f;
             float angle = (-90f + segment * (360f / PageSize)) * Mathf.Deg2Rad;
             var root = new VisualElement();
             root.style.position = Position.Absolute;
-            root.style.left = center + Mathf.Cos(angle) * radius - 42f;
-            root.style.top = center + Mathf.Sin(angle) * radius - 34f;
-            root.style.width = 84;
-            root.style.height = 68;
+            root.style.left = center + Mathf.Cos(angle) * radius - 37f;
+            root.style.top = center + Mathf.Sin(angle) * radius - 31f;
+            root.style.width = 74;
+            root.style.height = 62;
             root.style.alignItems = Align.Center;
             root.style.justifyContent = Justify.Center;
             root.pickingMode = PickingMode.Ignore;
@@ -303,7 +304,7 @@ namespace VoxelEngine.Building.Tiered
             var name = new Label(Families[index].ToString().ToUpperInvariant());
             name.name = "Name";
             name.style.fontSize = 8;
-            name.style.maxWidth = 78;
+            name.style.maxWidth = 68;
             name.style.unityFontStyleAndWeight = FontStyle.Bold;
             name.style.unityTextAlign = TextAnchor.MiddleCenter;
             name.style.whiteSpace = WhiteSpace.NoWrap;
@@ -314,7 +315,7 @@ namespace VoxelEngine.Building.Tiered
             var cost = new Label(GetCostText(Families[index]).Replace("Cost: ", string.Empty));
             cost.name = "Cost";
             cost.style.fontSize = 7;
-            cost.style.maxWidth = 76;
+            cost.style.maxWidth = 68;
             cost.style.marginTop = 1;
             cost.style.unityTextAlign = TextAnchor.MiddleCenter;
             cost.style.whiteSpace = WhiteSpace.NoWrap;

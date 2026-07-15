@@ -114,7 +114,7 @@ namespace VoxelEngine.EditorTools
             AddWizardButton(scroll, "2. Spawn Player + UI in Scene", SpawnManagerAndPlayer, 40);
             AddWizardButton(scroll, "3. Build Main Menu Scene", BuildMainMenuScene, 40);
             AddWizardButton(scroll, "4. Build Crafting Content (recipes, tools, stations, blocks)", BuildBaseCraftingContent, 40);
-            AddWizardButton(scroll, "5. Build Tiered Building Content (tiered construction: 9 families x 4 tiers + Hammer)", BuildTieredContent, 40);
+            AddWizardButton(scroll, "5. Build Tiered Building Content (10 player-scale families x 4 tiers + Hammer)", BuildTieredContent, 40);
             AddWizardButton(scroll, "6. Build Power Content (4 wire tiers + Generator + Battery + Light)", BuildPowerContent, 40);
             AddWizardButton(scroll, "7. Build Research Content (Tech tree + Science packs + Research Lab)", BuildResearchContent, 40);
             AddWizardButton(scroll, "8. Build Fluid Content (Water bucket, tank, pump, pipes)", BuildFluidContent, 40);
@@ -717,6 +717,23 @@ namespace VoxelEngine.EditorTools
                 panelSettings.match = 0.5f;
                 AssetDatabase.CreateAsset(panelSettings, panelSettingsPath);
             }
+            // Step 3 is the explicit authoring point for shared UI scaling. Runtime
+            // controllers no longer overwrite these values, so Inspector edits made
+            // after this step remain under developer control.
+            panelSettings.scaleMode = UnityEngine.UIElements.PanelScaleMode.ScaleWithScreenSize;
+            panelSettings.referenceResolution = new Vector2Int(1920, 1080);
+            panelSettings.screenMatchMode = UnityEngine.UIElements.PanelScreenMatchMode.MatchWidthOrHeight;
+            panelSettings.match = 0.5f;
+            panelSettings.scale = 1f;
+            panelSettings.referenceDpi = 96f;
+            panelSettings.fallbackDpi = 96f;
+            EditorUtility.SetDirty(panelSettings);
+
+            var serializedPanelSettings = new SerializedObject(panelSettings);
+            var maxSubTexture = serializedPanelSettings.FindProperty("m_DynamicAtlasSettings.m_MaxSubTextureSize");
+            if (maxSubTexture != null) maxSubTexture.intValue = 256;
+            serializedPanelSettings.ApplyModifiedPropertiesWithoutUndo();
+
             string[] themeCandidates =
             {
                 "Assets/UI Toolkit/UnityThemes/UnityDefaultRuntimeTheme.tss",
@@ -1439,29 +1456,29 @@ namespace VoxelEngine.EditorTools
                 for (int i = 0; i < 5; i++)
                 {
                     var plank = AddBox(root, material,
-                        new Vector3(-0.40f + i * 0.20f, 0.40f, 0f),
-                        new Vector3(0.19f, 0.12f, 0.92f));
+                        new Vector3(-1.0f + i * 0.50f, 0.48f, 0f),
+                        new Vector3(0.48f, 0.14f, 2.34f));
                     plank.name = $"Generated_FoundationDeck_{i}";
                 }
 
-                AddBox(root, material, new Vector3(0f, 0.28f, 0.46f), new Vector3(1.02f, 0.18f, 0.10f)).name = "Generated_FoundationBeamFront";
-                AddBox(root, material, new Vector3(0f, 0.28f, -0.46f), new Vector3(1.02f, 0.18f, 0.10f)).name = "Generated_FoundationBeamBack";
-                AddBox(root, material, new Vector3(0.46f, 0.28f, 0f), new Vector3(0.10f, 0.18f, 0.82f)).name = "Generated_FoundationBeamRight";
-                AddBox(root, material, new Vector3(-0.46f, 0.28f, 0f), new Vector3(0.10f, 0.18f, 0.82f)).name = "Generated_FoundationBeamLeft";
+                AddBox(root, material, new Vector3(0f, 0.32f, 1.18f), new Vector3(2.52f, 0.22f, 0.14f)).name = "Generated_FoundationBeamFront";
+                AddBox(root, material, new Vector3(0f, 0.32f, -1.18f), new Vector3(2.52f, 0.22f, 0.14f)).name = "Generated_FoundationBeamBack";
+                AddBox(root, material, new Vector3(1.18f, 0.32f, 0f), new Vector3(0.14f, 0.22f, 2.22f)).name = "Generated_FoundationBeamRight";
+                AddBox(root, material, new Vector3(-1.18f, 0.32f, 0f), new Vector3(0.14f, 0.22f, 2.22f)).name = "Generated_FoundationBeamLeft";
 
-                foreach (var x in new[] { -0.40f, 0.40f })
-                foreach (var z in new[] { -0.40f, 0.40f })
+                foreach (var x in new[] { -1.02f, 1.02f })
+                foreach (var z in new[] { -1.02f, 1.02f })
                 {
-                    var leg = AddBox(root, material, new Vector3(x, -0.03f, z), new Vector3(0.15f, 0.68f, 0.15f));
+                    var leg = AddBox(root, material, new Vector3(x, -0.02f, z), new Vector3(0.22f, 0.78f, 0.22f));
                     leg.name = $"Generated_FoundationLeg_{(x < 0 ? "L" : "R")}_{(z < 0 ? "B" : "F")}";
                 }
 
-                var braceA = AddBox(root, material, new Vector3(-0.22f, 0.08f, 0.455f), new Vector3(0.08f, 0.58f, 0.07f));
+                var braceA = AddBox(root, material, new Vector3(-0.55f, 0.10f, 1.17f), new Vector3(0.10f, 1.25f, 0.09f));
                 braceA.name = "Generated_FoundationBraceA";
-                braceA.transform.localRotation = Quaternion.Euler(0f, 0f, -42f);
-                var braceB = AddBox(root, material, new Vector3(0.22f, 0.08f, 0.455f), new Vector3(0.08f, 0.58f, 0.07f));
+                braceA.transform.localRotation = Quaternion.Euler(0f, 0f, -55f);
+                var braceB = AddBox(root, material, new Vector3(0.55f, 0.10f, 1.17f), new Vector3(0.10f, 1.25f, 0.09f));
                 braceB.name = "Generated_FoundationBraceB";
-                braceB.transform.localRotation = Quaternion.Euler(0f, 0f, 42f);
+                braceB.transform.localRotation = Quaternion.Euler(0f, 0f, 55f);
             }
 
             void EnsureTieredDoor(GameObject root, Material material)
@@ -1471,14 +1488,14 @@ namespace VoxelEngine.EditorTools
                 {
                     var hingeObject = new GameObject("Generated_DoorHinge");
                     hingeObject.transform.SetParent(root.transform, false);
-                    hingeObject.transform.localPosition = new Vector3(-0.31f, 0f, 0f);
+                    hingeObject.transform.localPosition = new Vector3(-0.68f, 0f, 0f);
                     hinge = hingeObject.transform;
 
                     var panel = GameObject.CreatePrimitive(PrimitiveType.Cube);
                     panel.name = "Generated_DoorPanel";
                     panel.transform.SetParent(hinge, false);
-                    panel.transform.localPosition = new Vector3(0.31f, 0.45f, 0f);
-                    panel.transform.localScale = new Vector3(0.58f, 0.86f, 0.075f);
+                    panel.transform.localPosition = new Vector3(0.68f, 1.10f, 0f);
+                    panel.transform.localScale = new Vector3(1.30f, 2.16f, 0.11f);
                     panel.GetComponent<Renderer>().sharedMaterial = material;
 
                     var handle = GameObject.CreatePrimitive(PrimitiveType.Sphere);
@@ -1536,41 +1553,53 @@ namespace VoxelEngine.EditorTools
                             _ => "Mat_Steel"
                         };
 
-                        // ONLY build procedural mesh if it's a new or empty object
-                        // (Allows users to swap in custom FBXs/meshes manually)
-                        if (root.transform.childCount == 0 && root.GetComponent<MeshFilter>() == null && root.GetComponentInChildren<MeshRenderer>() == null)
+                        bool emptyPrefab = root.transform.childCount == 0
+                            && root.GetComponent<MeshFilter>() == null
+                            && root.GetComponentInChildren<MeshRenderer>() == null;
+                        bool hasSizeV2 = root.transform.Find("Generated_SizeV2") != null;
+                        bool setupGenerated = false;
+                        var renderersBefore = root.GetComponentsInChildren<Renderer>(true);
+                        if (!emptyPrefab && !hasSizeV2 && renderersBefore.Length > 0)
                         {
-                             meshBuilder(root, tierMats[t]);
-                             socketBuilder(root);
-                        }
-
-                        if (fam == VoxelEngine.Building.Tiered.BuildFamily.Foundation
-                            && root.transform.Find("Generated_FoundationDeck_0") == null)
-                        {
-                            bool setupGenerated = true;
-                            foreach (var renderer in root.GetComponentsInChildren<Renderer>(true))
+                            setupGenerated = true;
+                            foreach (var renderer in renderersBefore)
                             {
+                                string objectName = renderer.gameObject.name;
                                 var current = renderer.sharedMaterial;
                                 bool knownMaterial = current == null
                                     || current.name == legacyMaterialName
                                     || (tierMats[t] != null && current.name == tierMats[t].name);
-                                if (renderer.gameObject.name != "Box" || !knownMaterial)
+                                if ((!objectName.StartsWith("Generated_", System.StringComparison.Ordinal)
+                                     && objectName != "Box") || !knownMaterial)
                                 {
                                     setupGenerated = false;
                                     break;
                                 }
                             }
-                            if (setupGenerated)
-                            {
-                                var oldBoxes = new List<GameObject>();
-                                foreach (var renderer in root.GetComponentsInChildren<Renderer>(true))
-                                    if (renderer.gameObject.name == "Box") oldBoxes.Add(renderer.gameObject);
-                                foreach (var oldBox in oldBoxes) Object.DestroyImmediate(oldBox);
-                                BuildPremiumFoundation(root, tierMats[t]);
-                            }
+                        }
+
+                        if (setupGenerated)
+                        {
+                            for (int childIndex = root.transform.childCount - 1; childIndex >= 0; childIndex--)
+                                Object.DestroyImmediate(root.transform.GetChild(childIndex).gameObject);
+                        }
+
+                        if (emptyPrefab || setupGenerated)
+                        {
+                            meshBuilder(root, tierMats[t]);
+                            socketBuilder(root);
+                            var marker = new GameObject("Generated_SizeV2");
+                            marker.transform.SetParent(root.transform, false);
                         }
 
                         if (fam == VoxelEngine.Building.Tiered.BuildFamily.Doorway)
+                        {
+                            var embeddedDoor = root.transform.Find("Generated_DoorHinge");
+                            if (embeddedDoor != null) Object.DestroyImmediate(embeddedDoor.gameObject);
+                            var embeddedDoorLogic = root.GetComponent<VoxelEngine.Building.Tiered.TieredDoor>();
+                            if (embeddedDoorLogic != null) Object.DestroyImmediate(embeddedDoorLogic);
+                        }
+                        if (fam == VoxelEngine.Building.Tiered.BuildFamily.Door)
                             EnsureTieredDoor(root, tierMats[t]);
 
                         // Upgrade only known setup-generated flat materials. Custom
@@ -1614,11 +1643,11 @@ namespace VoxelEngine.EditorTools
             MakeFamily(VoxelEngine.Building.Tiered.BuildFamily.Foundation, "Foundation",
                 (root, mat) => { BuildPremiumFoundation(root, mat); },
                 (root) => {
-                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.Top,    new Vector3(0, 0.5f, 0),   VoxelEngine.Building.Tiered.BuildFamily.Foundation);
-                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.North,  new Vector3(0, 0,  0.5f),  VoxelEngine.Building.Tiered.BuildFamily.Foundation);
-                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.South,  new Vector3(0, 0, -0.5f),  VoxelEngine.Building.Tiered.BuildFamily.Foundation);
-                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.East,   new Vector3( 0.5f, 0, 0),  VoxelEngine.Building.Tiered.BuildFamily.Foundation);
-                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.West,   new Vector3(-0.5f, 0, 0),  VoxelEngine.Building.Tiered.BuildFamily.Foundation);
+                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.Top,    new Vector3(0, 0.55f, 0),    VoxelEngine.Building.Tiered.BuildFamily.Foundation);
+                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.North,  new Vector3(0, 0,  1.25f),  VoxelEngine.Building.Tiered.BuildFamily.Foundation);
+                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.South,  new Vector3(0, 0, -1.25f),  VoxelEngine.Building.Tiered.BuildFamily.Foundation);
+                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.East,   new Vector3( 1.25f, 0, 0),  VoxelEngine.Building.Tiered.BuildFamily.Foundation);
+                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.West,   new Vector3(-1.25f, 0, 0),  VoxelEngine.Building.Tiered.BuildFamily.Foundation);
                 },
                 Cost((woodLog, 4)),
                 Cost((stone, 8)),
@@ -1626,11 +1655,13 @@ namespace VoxelEngine.EditorTools
                 Cost((steelIngot, 4))
             );
 
-            // WALL — 1.0 x 1.0 x 0.2.
+            // WALL — 2.5 x 2.5 x 0.22.
             MakeFamily(VoxelEngine.Building.Tiered.BuildFamily.Wall, "Wall",
-                (root, mat) => { AddBox(root, mat, new Vector3(0, 0.5f, 0), new Vector3(1f, 1f, 0.2f)); },
+                (root, mat) => { AddBox(root, mat, new Vector3(0, 1.25f, 0), new Vector3(2.5f, 2.5f, 0.22f)); },
                 (root) => {
-                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.Top, new Vector3(0, 1f, 0), VoxelEngine.Building.Tiered.BuildFamily.Wall);
+                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.Top, new Vector3(0, 2.5f, 0), VoxelEngine.Building.Tiered.BuildFamily.Wall);
+                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.East, new Vector3(1.25f, 0f, 0), VoxelEngine.Building.Tiered.BuildFamily.Wall);
+                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.West, new Vector3(-1.25f, 0f, 0), VoxelEngine.Building.Tiered.BuildFamily.Wall);
                 },
                 Cost((woodLog, 2), (plank, 2)),
                 Cost((stone, 4)),
@@ -1641,12 +1672,15 @@ namespace VoxelEngine.EditorTools
             // DOORWAY — wall with a 0.5x0.7 hole. We build it from 3 boxes (top + 2 sides).
             MakeFamily(VoxelEngine.Building.Tiered.BuildFamily.Doorway, "Doorway",
                 (root, mat) => {
-                    AddBox(root, mat, new Vector3(-0.4f, 0.5f, 0), new Vector3(0.2f, 1f,   0.2f)); // left jamb
-                    AddBox(root, mat, new Vector3( 0.4f, 0.5f, 0), new Vector3(0.2f, 1f,   0.2f)); // right jamb
-                    AddBox(root, mat, new Vector3(0,    0.875f, 0), new Vector3(1f,  0.25f, 0.2f)); // lintel
+                    AddBox(root, mat, new Vector3(-1.0f, 1.25f, 0), new Vector3(0.50f, 2.5f, 0.22f));
+                    AddBox(root, mat, new Vector3( 1.0f, 1.25f, 0), new Vector3(0.50f, 2.5f, 0.22f));
+                    AddBox(root, mat, new Vector3(0f, 2.35f, 0), new Vector3(1.50f, 0.30f, 0.22f));
                 },
                 (root) => {
-                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.Top, new Vector3(0, 1f, 0), VoxelEngine.Building.Tiered.BuildFamily.Doorway);
+                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.Top, new Vector3(0, 2.5f, 0), VoxelEngine.Building.Tiered.BuildFamily.Doorway);
+                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.East, new Vector3(1.25f, 0f, 0), VoxelEngine.Building.Tiered.BuildFamily.Doorway);
+                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.West, new Vector3(-1.25f, 0f, 0), VoxelEngine.Building.Tiered.BuildFamily.Doorway);
+                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.Center, Vector3.zero, VoxelEngine.Building.Tiered.BuildFamily.Doorway);
                 },
                 Cost((woodLog, 3), (plank, 2)),
                 Cost((stone, 5)),
@@ -1657,13 +1691,15 @@ namespace VoxelEngine.EditorTools
             // WINDOW — wall with a 0.5x0.4 mid-height hole.
             MakeFamily(VoxelEngine.Building.Tiered.BuildFamily.Window, "Window",
                 (root, mat) => {
-                    AddBox(root, mat, new Vector3(-0.4f, 0.5f, 0), new Vector3(0.2f, 1f,   0.2f));
-                    AddBox(root, mat, new Vector3( 0.4f, 0.5f, 0), new Vector3(0.2f, 1f,   0.2f));
-                    AddBox(root, mat, new Vector3(0,    0.85f, 0), new Vector3(1f,   0.3f, 0.2f));
-                    AddBox(root, mat, new Vector3(0,    0.15f, 0), new Vector3(1f,   0.3f, 0.2f));
+                    AddBox(root, mat, new Vector3(-1.03f, 1.25f, 0), new Vector3(0.44f, 2.5f, 0.22f));
+                    AddBox(root, mat, new Vector3( 1.03f, 1.25f, 0), new Vector3(0.44f, 2.5f, 0.22f));
+                    AddBox(root, mat, new Vector3(0f, 2.22f, 0), new Vector3(1.62f, 0.56f, 0.22f));
+                    AddBox(root, mat, new Vector3(0f, 0.28f, 0), new Vector3(1.62f, 0.56f, 0.22f));
                 },
                 (root) => {
-                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.Top, new Vector3(0, 1f, 0), VoxelEngine.Building.Tiered.BuildFamily.Window);
+                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.Top, new Vector3(0, 2.5f, 0), VoxelEngine.Building.Tiered.BuildFamily.Window);
+                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.East, new Vector3(1.25f, 0f, 0), VoxelEngine.Building.Tiered.BuildFamily.Window);
+                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.West, new Vector3(-1.25f, 0f, 0), VoxelEngine.Building.Tiered.BuildFamily.Window);
                 },
                 Cost((woodLog, 2), (plank, 3)),
                 Cost((stone, 4)),
@@ -1673,9 +1709,13 @@ namespace VoxelEngine.EditorTools
 
             // FLOOR — 1.0 x 0.2 x 1.0 slab.
             MakeFamily(VoxelEngine.Building.Tiered.BuildFamily.Floor, "Floor",
-                (root, mat) => { AddBox(root, mat, new Vector3(0, 0.1f, 0), new Vector3(1f, 0.2f, 1f)); },
+                (root, mat) => { AddBox(root, mat, new Vector3(0, 0.10f, 0), new Vector3(2.5f, 0.20f, 2.5f)); },
                 (root) => {
-                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.Top, new Vector3(0, 0.2f, 0), VoxelEngine.Building.Tiered.BuildFamily.Floor);
+                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.Top, new Vector3(0, 0.20f, 0), VoxelEngine.Building.Tiered.BuildFamily.Floor);
+                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.North, new Vector3(0, 0f, 1.25f), VoxelEngine.Building.Tiered.BuildFamily.Floor);
+                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.South, new Vector3(0, 0f, -1.25f), VoxelEngine.Building.Tiered.BuildFamily.Floor);
+                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.East, new Vector3(1.25f, 0f, 0), VoxelEngine.Building.Tiered.BuildFamily.Floor);
+                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.West, new Vector3(-1.25f, 0f, 0), VoxelEngine.Building.Tiered.BuildFamily.Floor);
                 },
                 Cost((woodLog, 2), (plank, 2)),
                 Cost((stone, 5)),
@@ -1686,12 +1726,11 @@ namespace VoxelEngine.EditorTools
             // STAIRS — wedge built from 4 stacked boxes.
             MakeFamily(VoxelEngine.Building.Tiered.BuildFamily.Stairs, "Stairs",
                 (root, mat) => {
-                    for (int i = 0; i < 4; i++)
+                    for (int i = 0; i < 10; i++)
                     {
-                        float h = 0.25f * (i + 1);
                         AddBox(root, mat,
-                            new Vector3(0, 0.125f * (i + 1), -0.375f + 0.25f * i),
-                            new Vector3(1f, 0.25f, 0.25f));
+                            new Vector3(0f, 0.125f + i * 0.25f, -1.125f + i * 0.25f),
+                            new Vector3(2.5f, 0.25f, 0.25f));
                     }
                 },
                 (root) => { /* stairs don't typically host other pieces */ },
@@ -1701,11 +1740,11 @@ namespace VoxelEngine.EditorTools
                 Cost((steelIngot, 3))
             );
 
-            // ROOF — 1x0.2x1 slab with sloped top (approximated by a tilted box).
+            // ROOF — 2.5x0.2x2.5 slab with sloped top (approximated by a tilted box).
             MakeFamily(VoxelEngine.Building.Tiered.BuildFamily.Roof, "Roof",
                 (root, mat) => {
-                    var go = AddBox(root, mat, new Vector3(0, 0.5f, 0), new Vector3(1f, 0.2f, 1f));
-                    go.transform.localEulerAngles = new Vector3(20f, 0, 0);
+                    var go = AddBox(root, mat, new Vector3(0, 0.55f, 0), new Vector3(2.5f, 0.22f, 2.65f));
+                    go.transform.localEulerAngles = new Vector3(24f, 0, 0);
                 },
                 (root) => { /* peak */ },
                 Cost((woodLog, 3), (plank, 2)),
@@ -1716,13 +1755,13 @@ namespace VoxelEngine.EditorTools
 
             // PILLAR — 0.25 x 1.0 x 0.25 column.
             MakeFamily(VoxelEngine.Building.Tiered.BuildFamily.Pillar, "Pillar",
-                (root, mat) => { AddBox(root, mat, new Vector3(0, 0.5f, 0), new Vector3(0.25f, 1f, 0.25f)); },
+                (root, mat) => { AddBox(root, mat, new Vector3(0, 1.25f, 0), new Vector3(0.38f, 2.5f, 0.38f)); },
                 (root) => {
-                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.Top,   new Vector3(0,  1f, 0), VoxelEngine.Building.Tiered.BuildFamily.Pillar);
-                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.North, new Vector3(0,  0.5f,  0.5f), VoxelEngine.Building.Tiered.BuildFamily.Pillar);
-                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.South, new Vector3(0,  0.5f, -0.5f), VoxelEngine.Building.Tiered.BuildFamily.Pillar);
-                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.East,  new Vector3( 0.5f, 0.5f, 0),  VoxelEngine.Building.Tiered.BuildFamily.Pillar);
-                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.West,  new Vector3(-0.5f, 0.5f, 0),  VoxelEngine.Building.Tiered.BuildFamily.Pillar);
+                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.Top,   new Vector3(0, 2.5f, 0), VoxelEngine.Building.Tiered.BuildFamily.Pillar);
+                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.North, new Vector3(0, 0f, 1.25f), VoxelEngine.Building.Tiered.BuildFamily.Pillar);
+                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.South, new Vector3(0, 0f, -1.25f), VoxelEngine.Building.Tiered.BuildFamily.Pillar);
+                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.East,  new Vector3(1.25f, 0f, 0), VoxelEngine.Building.Tiered.BuildFamily.Pillar);
+                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.West,  new Vector3(-1.25f, 0f, 0), VoxelEngine.Building.Tiered.BuildFamily.Pillar);
                 },
                 Cost((woodLog, 1), (plank, 1)),
                 Cost((stone, 3)),
@@ -1732,14 +1771,25 @@ namespace VoxelEngine.EditorTools
 
             // HALF WALL — 1 x 0.5 x 0.2.
             MakeFamily(VoxelEngine.Building.Tiered.BuildFamily.HalfWall, "HalfWall",
-                (root, mat) => { AddBox(root, mat, new Vector3(0, 0.25f, 0), new Vector3(1f, 0.5f, 0.2f)); },
+                (root, mat) => { AddBox(root, mat, new Vector3(0, 0.625f, 0), new Vector3(2.5f, 1.25f, 0.22f)); },
                 (root) => {
-                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.Top, new Vector3(0, 0.5f, 0), VoxelEngine.Building.Tiered.BuildFamily.HalfWall);
+                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.Top, new Vector3(0, 1.25f, 0), VoxelEngine.Building.Tiered.BuildFamily.HalfWall);
+                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.East, new Vector3(1.25f, 0f, 0), VoxelEngine.Building.Tiered.BuildFamily.HalfWall);
+                    AddSocket(root, VoxelEngine.Building.Tiered.SocketSide.West, new Vector3(-1.25f, 0f, 0), VoxelEngine.Building.Tiered.BuildFamily.HalfWall);
                 },
                 Cost((woodLog, 1), (plank, 1)),
                 Cost((stone, 2)),
                 Cost((ironIngot, 1)),
                 Cost((steelIngot, 1))
+            );
+
+            MakeFamily(VoxelEngine.Building.Tiered.BuildFamily.Door, "Door",
+                (root, mat) => { EnsureTieredDoor(root, mat); },
+                (root) => { },
+                Cost((plank, 4), (woodLog, 1)),
+                Cost((stone, 4)),
+                Cost((ironIngot, 3)),
+                Cost((steelIngot, 3))
             );
 
             EditorUtility.SetDirty(registry);
@@ -1765,15 +1815,16 @@ namespace VoxelEngine.EditorTools
                 EditorUtility.SetDirty(tok);
                 return tok;
             }
-            var tokFoundation = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Foundation, "Foundation", new Color(0.55f, 0.40f, 0.25f), "The base of every building. Place on flat ground first; everything else snaps to its top and edges. Hold in active hotbar slot to enter build mode. LMB places at Wood tier (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.");
-            var tokWall       = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Wall,       "Wall",       new Color(0.55f, 0.40f, 0.25f), "A solid 1x1m wall panel. Snaps to foundation top edges. Hold in active hotbar slot to enter build mode. LMB places at Wood tier (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.");
-            var tokDoorway    = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Doorway,    "Doorway",    new Color(0.55f, 0.40f, 0.25f), "A wall with a doorway opening. Walk through it; place a door later (coming soon). Hold in active hotbar slot to enter build mode. LMB places at Wood tier (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.");
-            var tokWindow     = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Window,     "Window",     new Color(0.55f, 0.40f, 0.25f), "A wall with a window opening. Lets light through and lets you peek out. Hold in active hotbar slot to enter build mode. LMB places at Wood tier (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.");
-            var tokFloor      = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Floor,      "Floor",      new Color(0.55f, 0.40f, 0.25f), "A 1x1m floor slab. Place on top of walls/pillars to make second stories. Hold in active hotbar slot to enter build mode. LMB places at Wood tier (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.");
-            var tokStairs     = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Stairs,     "Stairs",     new Color(0.55f, 0.40f, 0.25f), "A staircase that connects two height levels. Place against a foundation edge. Hold in active hotbar slot to enter build mode. LMB places at Wood tier (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.");
-            var tokRoof       = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Roof,       "Roof",       new Color(0.55f, 0.40f, 0.25f), "A sloped roof slab. Place on top of walls to seal the room. Hold in active hotbar slot to enter build mode. LMB places at Wood tier (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.");
-            var tokPillar     = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Pillar,     "Pillar",     new Color(0.55f, 0.40f, 0.25f), "A vertical column. Hosts walls on its sides and floors/roofs on its top. Hold in active hotbar slot to enter build mode. LMB places at Wood tier (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.");
-            var tokHalfWall   = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.HalfWall,   "HalfWall",   new Color(0.55f, 0.40f, 0.25f), "A half-height wall (waist height). Useful for railings and counters. Hold in active hotbar slot to enter build mode. LMB places at Wood tier (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.");
+            var tokFoundation = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Foundation, "Foundation", new Color(0.55f, 0.40f, 0.25f), "The base of every building. Place on flat ground first; everything else snaps to its top and edges. Hold in active hotbar slot to enter build mode. RMB places at Wood tier (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.");
+            var tokWall       = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Wall,       "Wall",       new Color(0.55f, 0.40f, 0.25f), "A solid 2.5m wall panel. Snaps to foundation top edges. Hold in active hotbar slot to enter build mode. RMB places at Wood tier (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.");
+            var tokDoorway    = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Doorway,    "Doorway",    new Color(0.55f, 0.40f, 0.25f), "A wall with a doorway opening. Walk through it; place a door later (coming soon). Hold in active hotbar slot to enter build mode. RMB places at Wood tier (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.");
+            var tokWindow     = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Window,     "Window",     new Color(0.55f, 0.40f, 0.25f), "A wall with a window opening. Lets light through and lets you peek out. Hold in active hotbar slot to enter build mode. RMB places at Wood tier (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.");
+            var tokFloor      = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Floor,      "Floor",      new Color(0.55f, 0.40f, 0.25f), "A 2.5m floor slab. Place on top of walls/pillars to make second stories. Hold in active hotbar slot to enter build mode. RMB places at Wood tier (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.");
+            var tokStairs     = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Stairs,     "Stairs",     new Color(0.55f, 0.40f, 0.25f), "A staircase that connects two height levels. Place against a foundation edge. Hold in active hotbar slot to enter build mode. RMB places at Wood tier (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.");
+            var tokRoof       = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Roof,       "Roof",       new Color(0.55f, 0.40f, 0.25f), "A sloped roof slab. Place on top of walls to seal the room. Hold in active hotbar slot to enter build mode. RMB places at Wood tier (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.");
+            var tokPillar     = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Pillar,     "Pillar",     new Color(0.55f, 0.40f, 0.25f), "A vertical column. Hosts walls on its sides and floors/roofs on its top. Hold in active hotbar slot to enter build mode. RMB places at Wood tier (consumes resources). Use the Hammer to upgrade placed pieces. Toggle grid-snap with G. Press R (or Ctrl+Wheel) to rotate the ghost 90 degrees.");
+            var tokHalfWall   = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.HalfWall,   "HalfWall",   new Color(0.55f, 0.40f, 0.25f), "A half-height wall for railings and counters. Select with the Hammer and place with RMB.");
+            var tokDoor       = MakeToken(VoxelEngine.Building.Tiered.BuildFamily.Door,       "Door",       new Color(0.48f, 0.34f, 0.22f), "A separate hinged door that snaps into a Doorway center socket. Place with RMB and toggle with RMB when not building.");
 
             // ---------- Hammer tool ----------
             string hammerPath = $"{itemsFolder}/Tool_Hammer.asset";
@@ -1837,6 +1888,7 @@ namespace VoxelEngine.EditorTools
             EnsureTieredRecipe("Recipe_Tok_Roof", "Roof Token", tokRoof, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)plank, 2));
             EnsureTieredRecipe("Recipe_Tok_Pillar", "Pillar Token", tokPillar, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)plank, 2));
             EnsureTieredRecipe("Recipe_Tok_HalfWall", "Half Wall Token", tokHalfWall, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)plank, 2));
+            EnsureTieredRecipe("Recipe_Tok_Door", "Door Token", tokDoor, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)plank, 4), ((VoxelEngine.Items.ItemDefinition)woodLog, 1));
 
             // Apply the finite, late-game Quarry migration through the same tool run.
             // Only the explicitly requested depth/progression fields are changed.
@@ -1910,14 +1962,16 @@ namespace VoxelEngine.EditorTools
             foreach (var sys in systems)
             {
                 sys.registry = registry;
+                sys.gridSize = 2.5f;
+                sys.socketSnapRadius = 2.2f;
                 EditorUtility.SetDirty(sys);
             }
 
             EditorUtility.DisplayDialog("Voxel Engine",
                 "Tiered building content created!\n\n" +
-                "* 36 prefabs (9 families x 4 tiers) in " + tieredPrefabs + "\n" +
-                "* 9 build tokens + Hammer\n" +
-                "* 10 new recipes added to RecipeRegistry\n" +
+                "* 40 prefabs (10 families x 4 tiers) in " + tieredPrefabs + "\n" +
+                "* 10 build tokens + Hammer\n" +
+                "* 11 recipes created or connected in RecipeRegistry\n" +
                 "* TieredBlockRegistry asset created\n" +
                 "* Premium tier textures, Foundation, Doorway, and finite late-game Quarry migration verified\n\n" +
                 "Re-run Step 2 to spawn a player with BuildSystemV2 wired up,\n" +

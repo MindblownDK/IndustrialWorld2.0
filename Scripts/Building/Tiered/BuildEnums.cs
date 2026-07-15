@@ -20,7 +20,8 @@ namespace VoxelEngine.Building.Tiered
         Stairs     = 5,
         Roof       = 6,
         Pillar     = 7,
-        HalfWall   = 8
+        HalfWall   = 8,
+        Door       = 9
     }
 
     /// <summary>

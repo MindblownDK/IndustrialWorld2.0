@@ -65,6 +65,9 @@ namespace VoxelEngine.Building.Tiered
             }
 
             // Walls/doorways/windows accept floors/roofs on top, and other walls horizontally.
+            if (host == BuildFamily.Doorway && side == SocketSide.Center)
+                return incoming == BuildFamily.Door;
+
             if (host == BuildFamily.Wall || host == BuildFamily.Doorway ||
                 host == BuildFamily.Window || host == BuildFamily.HalfWall)
             {
@@ -74,6 +77,11 @@ namespace VoxelEngine.Building.Tiered
                            incoming == BuildFamily.Wall     ||
                            incoming == BuildFamily.Doorway  ||
                            incoming == BuildFamily.Window;
+                if (side == SocketSide.East || side == SocketSide.West)
+                    return incoming == BuildFamily.Wall
+                        || incoming == BuildFamily.Doorway
+                        || incoming == BuildFamily.Window
+                        || incoming == BuildFamily.HalfWall;
             }
 
             // Pillars accept floors on top, walls to all sides.

@@ -327,15 +327,15 @@ namespace VoxelEngine.Simulation
         private void BuildRingLabel(int index, ConveyorBuildMode mode, string iconText)
         {
             const float center = 195f;
-            const float radius = 138f;
+            const float radius = 136f;
             float angle = (-90f + index * 120f) * Mathf.Deg2Rad;
 
             var labelRoot = new VisualElement();
             labelRoot.style.position = Position.Absolute;
-            labelRoot.style.left = center + Mathf.Cos(angle) * radius - 44f;
-            labelRoot.style.top = center + Mathf.Sin(angle) * radius - 30f;
-            labelRoot.style.width = 88;
-            labelRoot.style.height = 60;
+            labelRoot.style.left = center + Mathf.Cos(angle) * radius - 35f;
+            labelRoot.style.top = center + Mathf.Sin(angle) * radius - 27f;
+            labelRoot.style.width = 70;
+            labelRoot.style.height = 54;
             labelRoot.style.alignItems = Align.Center;
             labelRoot.style.justifyContent = Justify.Center;
             labelRoot.pickingMode = PickingMode.Ignore;

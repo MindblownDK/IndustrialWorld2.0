@@ -27,9 +27,9 @@ namespace VoxelEngine.Building.Tiered
 
         [Header("Tuning")]
         public float reach = 8f;
-        public float socketSnapRadius = 1.4f;     // metres around aim point to search for sockets
+        public float socketSnapRadius = 2.2f;     // metres around aim point to search for sockets
         public bool  gridSnap = true;
-        public float gridSize = 1f;
+        public float gridSize = 2.5f;
         public float ghostAlpha = 0.55f;
         public float yawStep = 90f;
 
@@ -181,13 +181,16 @@ namespace VoxelEngine.Building.Tiered
             }
 
             // 2) Fall back to grid snap or free placement on the hit surface.
-            Vector3 raw = hit.point + hit.normal * (gridSize * 0.5f);
+            // Construction roots represent the bottom/hinge plane, not the center
+            // of a 2.5 m cube, so snap to grid intersections instead of cell centers.
+            float surfaceOffset = def.family == BuildFamily.Foundation ? 0.40f : 0.02f;
+            Vector3 raw = hit.point + hit.normal * surfaceOffset;
             _ghostPos = gridSnap
                 ? new Vector3(
-                    Mathf.Floor(raw.x / gridSize) * gridSize + gridSize * 0.5f,
-                    Mathf.Floor(raw.y / gridSize) * gridSize + gridSize * 0.5f,
-                    Mathf.Floor(raw.z / gridSize) * gridSize + gridSize * 0.5f)
-                : hit.point + hit.normal * 0.01f;
+                    Mathf.Round(raw.x / gridSize) * gridSize,
+                    Mathf.Round(raw.y / gridSize) * gridSize,
+                    Mathf.Round(raw.z / gridSize) * gridSize)
+                : raw;
             _ghostRot = GravityProvider.GetSurfaceRotation(_ghostPos, _ghostYaw);
             _ghostValid = ValidateOverlap(_ghostPos, def.family);
         }

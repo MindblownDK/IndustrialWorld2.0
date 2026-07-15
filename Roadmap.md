@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.6.0-dev`
-**Roadmap Version:** `5.6.0-dev`
+**Current Version:** `5.7.0-dev`
+**Roadmap Version:** `5.7.0-dev`
 **Date:** 2026-07-15
-**Status:** Active Implementation — Finite Quarry, Premium Construction & UI Fit Repair
+**Status:** Active Implementation — Player-Scale Construction, Separate Doors & UI Authoring Repair
 
 ---
 
@@ -49,7 +49,7 @@ The design goal is a seamless blend of:
 | Small grid | 🟡 Basic | Needs improvement and usability |
 | Power (wind, hydrogen) | ✅ Mature | Modular turbines are excellent |
 | Fluids / gases | ✅ Good | Pipe-gated transfer in 2.20.0 |
-| Building (static + tiered) | 🟡 Improving | RMB placement, socket-level snapping, interactive doors, paginated Hammer wheel, and premium tier materials await validation |
+| Building (static + tiered) | 🛠️ Working On | 2.5 m player-scale modules, edge sockets, separate Door/Doorway families, paginated Hammer wheel, and premium tier materials await validation |
 | Advanced Quarry | 🛠️ Working On | Unbreakable bedrock generation removed; late Tier-5 quarry uses a finite configurable 64-layer default depth |
 | Sky / atmosphere / space rendering | 🟡 Basic | Needs planet-specific skies and proper space ambiance |
 | Gravity / orbits | 🟡 Buggy | Player and grids sometimes fall; orbits not realistic |
@@ -62,7 +62,7 @@ The design goal is a seamless blend of:
 | Player armor slots | ❌ Missing | No equipable armor system |
 | Crafting / items / storage | ✅ Exists | Needs deeper recipe chains |
 | Research / tech tree | ✅ Exists | Can be expanded into eras |
-| UI / UX | ✅ Premium | Design system rolling out |
+| UI / UX | 🛠️ Improving | Shared PanelSettings fit/quality authoring, responsive layouts, and wheel polish are under active validation |
 | Top-left world inspection overlay | 🛠️ Working On | Crosshair targets, active voxel materials, mining requirements, power, occupancy, integrity, and inventory-item hover details are implemented; Unity validation pending |
 | Building Hammer wheel & placement | 🛠️ Working On | Segmented paginated donut wheel, scroll pages, RMB placement, Escape exit, and premium procedural tier materials are implemented; Unity validation pending |
 | Farming | 🟡 Early | Good seed, needs integration |
@@ -561,6 +561,13 @@ Statuses are evidence-based and move forward only after code/content review and 
    - Thin, flexible light strip for accent lighting.
    - Configurable color, brightness, and blink/pulse patterns.
    - Snap to grid edges and static building surfaces.
+
+10. **Player-Scale Hammer Construction**
+   - Standard construction module is 2.5 meters wide/tall so Crusaders fit comfortably through rooms and openings.
+   - Foundation, Wall, Doorway, Window, Floor, Stairs, Roof, Pillar, Half Wall, and Door families each retain four material tiers.
+   - Lateral sockets sit on true outer edges and share the host root height, preventing pieces from snapping inside or above their neighbor.
+   - Doorway is an empty structural opening; Door is a separate placeable family that snaps into the Doorway center socket.
+   - Hammer wheel uses paginated donut pages with labels inset from the ring edge.
 
 #### Improved Features — 🟡 PARTIALLY COMPLETE
 
@@ -1652,6 +1659,33 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.7.0-dev] Player-Scale Construction, Separate Doors & UI Authoring Repair
+
+**Type:** MINOR — new Door building family plus construction-scale and shared UI authoring changes
+
+**Added / Changed:**
+- Appended `Door` as the tenth Build Family without reordering serialized family values.
+- Doorway remains an empty structural opening and gains a center socket dedicated to the separate Door family.
+- Door prefabs include a hinged panel, handle, collider, smooth animation, four material tiers, token, recipe, and Hammer-wheel entry.
+- Standard Hammer construction grid increased from `1 m` to `2.5 m`; socket search radius increased to `2.2 m`.
+- Foundation expanded to a 2.5 m raised deck with larger planks, perimeter beams, legs, and braces.
+- Walls, Doorways, Windows, Floors, Stairs, Roofs, Pillars, and Half Walls rebuilt at player-appropriate dimensions.
+- Lateral sockets moved to ±1.25 m outer edges at the host root height, fixing sockets embedded inside blocks and vertical drift between neighboring pieces.
+- Step 5 detects known setup-generated prefabs, replaces their legacy geometry with Size-V2 geometry, and leaves imported/custom prefabs untouched.
+- Hammer wheel icons/labels moved inward; conveyor-wheel labels narrowed and inset from the outer rim.
+- Step 3 now explicitly authors shared MenuPanelSettings quality/fit values, including Match Width/Height and 256 px atlas subtextures.
+- Runtime controllers continue respecting developer-authored PanelSettings without overwriting them.
+
+**Fixed:**
+- Doorway segment selection benefits from full-wedge Hammer hit testing.
+- Side-by-side Foundations, Walls, Doorways, Windows, Floors, Pillars, and Half Walls snap on the same level.
+- A Door can be selected independently, snapped into a Doorway, and toggled with RMB after placement.
+
+**Roadmap Status:**
+- Player-scale Size-V2 construction, separate Door family, edge sockets, wheel spacing, and Step 3 UI authoring: **WORKING ON** — awaiting Unity validation.
+
+---
 
 ### [5.6.0-dev] Finite Quarry, Premium Construction & UI Fit Repair
 
