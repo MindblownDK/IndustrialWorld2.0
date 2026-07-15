@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.8.0-dev`
-**Roadmap Version:** `5.8.0-dev`
-**Date:** 2026-07-15
-**Status:** Active Implementation — Seamless Foundations, Bidirectional Stairs & Factory Persistence
+**Current Version:** `5.10.0-dev`
+**Roadmap Version:** `5.10.0-dev`
+**Date:** 2026-07-16
+**Status:** Active Implementation — Production Lines & Recipe Graph Validation
 
 ---
 
@@ -54,7 +54,7 @@ The design goal is a seamless blend of:
 | Sky / atmosphere / space rendering | 🟡 Basic | Needs planet-specific skies and proper space ambiance |
 | Gravity / orbits | 🟡 Buggy | Player and grids sometimes fall; orbits not realistic |
 | Space stations | ❌ Missing | No buildable orbital platforms |
-| Conveyor logistics | ❌ Missing | No conveyors, chutes, robots |
+| Conveyor logistics | 🟡 Good | Conveyors, ramps, vertical belts, chutes, contextual shape wheel, ghost previews, and persistence exist. Remaining work: pooled item entities, more chute variants, and final long-run throughput validation. |
 | Grid screens / displays | ❌ Missing | No configurable digital panels |
 | Grid lighting | ❌ Missing | No flood lights or block lights |
 | Sloped / armored grid blocks | ❌ Missing | Only cube blocks exist; need shape variants |
@@ -62,12 +62,12 @@ The design goal is a seamless blend of:
 | Player armor slots | ❌ Missing | No equipable armor system |
 | Crafting / items / storage | ✅ Exists | Needs deeper recipe chains |
 | Research / tech tree | ✅ Exists | Can be expanded into eras |
-| UI / UX | 🛠️ Improving | Shared PanelSettings fit/quality authoring, responsive layouts, and wheel polish are under active validation |
+| UI / UX | 🛠️ Improving | Runtime crisp UI scaling, responsive machine panels, build-wheel fit, and recipe validation tooling are active; broad screen-size validation remains required. |
 | Top-left world inspection overlay | 🛠️ Working On | Crosshair targets, active voxel materials, mining requirements, power, occupancy, integrity, and inventory-item hover details are implemented; Unity validation pending |
-| Building Hammer wheel & placement | 🛠️ Working On | Segmented paginated donut wheel, scroll pages, RMB placement, Escape exit, and premium procedural tier materials are implemented; Unity validation pending |
+| Building Hammer wheel & placement | 🟡 Good | Segmented paginated donut wheel, hold-release selection, scroll pages, RMB placement, Escape exit, stair chaining, and premium procedural tier materials are implemented; broad validation pending. |
 | Farming | 🟡 Early | Good seed, needs integration |
 | Nuclear | 🟡 Present | Could become endgame power |
-| Factory logistics | ❌ Missing | No conveyors, chutes, robots |
+| Factory logistics | 🛠️ Working On | Belts, chutes, Crusher, Electric Furnace, Assembler Mk.1–Mk.3, machine UIs, and visual animations are implemented; production-line validation and statistics are next. |
 | Progression / game loop | ❌ Weak | No clear early→mid→endgame arc |
 | Ruins / exploration rewards | ❌ Missing | No dead-civilization POIs or blueprint gating |
 | Water simulation | 🟡 Basic | Needs realistic flow, level, and physics |
@@ -500,17 +500,17 @@ Statuses are evidence-based and move forward only after code/content review and 
 |------|--------|------------------|
 | Conveyor belts | 🛠️ WORKING ON | Vertical geometry, item paths, and colliders now share the horizontal belt-surface height for precise Straight/Ramp transitions. Wheel hover now brightens the complete segment and animates its icon/label. Unity validation is pending. |
 | Conveyor chutes | 🟡 PARTIALLY COMPLETE | Straight vertical transport, snapping, moving-item visuals, inventory endpoints, and save-compatible placement are validated foundations. |
-| Basic machines | 🟡 PARTIALLY COMPLETE | Electric Furnace, Crusher, and three Assembler tiers exist. Crusher and Assembler use the centralized simulation tick; their buffers, active recipe, progress, and enabled state now persist additively. Shared UI still needs completion and persistence awaits Unity validation. |
+| Basic machines | 🟡 PARTIALLY COMPLETE | Electric Furnace, Crusher, and three Assembler tiers exist. Crusher/Assembler have recipe-selection UIs, visual animation, centralized simulation ticks, additive buffers/progress/enabled persistence, and Unity smoke validation from Thomas; production statistics and module systems remain. |
 | Storage blocks | 🟡 PARTIALLY COMPLETE | A basic chest and the wider storage system exist. The planned Wooden Crate → Iron Chest → Steel Chest → Provider/Requester progression is not complete. |
 | Power pole, wire, and substation | 🟡 PARTIALLY COMPLETE | Manual wiring, poles, substations, transformers, and high-voltage assets exist. Setup reruns still need full non-destructive balance preservation. |
 | Grid/static lighting and LED strips | 🟡 PARTIALLY COMPLETE | Grid light, floodlight logic, and static/grid LED assets exist. Configuration UX, power validation, and complete authored variants still need verification. |
-| Shared Machine UI | 🟡 PARTIALLY COMPLETE | Item Ports overlays remain mounted while live logistics changes container contents, retain Escape handling, and refresh the underlying inventory after closing. Shared inventory slots, recipe identity, transition polish, and final machine binding remain incomplete. |
+| Shared Machine UI | 🟡 PARTIALLY COMPLETE | Crusher and Assembler panels now expose recipe selection, progress, power, toggles, inventory slots, scrolling, and item-port integration. Remaining work: complete unification across every machine, production statistics, and theme overrides. |
 | Item entity system | 🟡 PARTIALLY COMPLETE | Dropped world items exist and conveyors render carried packets. A unified pooled physical-item entity lifecycle is not complete. |
 | Recipe registry refactor | 🟡 PARTIALLY COMPLETE | ScriptableObject crafting and machine recipes exist. Shaped/shapeless/smelting/machine unification and validation remain incomplete. |
 | Centralized simulation tick | 🟡 PARTIALLY COMPLETE | Crusher and Assembler register with `SimulationTickManager`; belts, chutes, and several older machines still run per-frame updates. |
 | Factory persistence | 🛠️ WORKING ON | Additive save fields now preserve explicit Conveyor shapes, Conveyor/Chute item packets and path progress, plus Crusher/Assembler input-output-upgrade buffers, active recipe, process progress, and enabled state. Legacy saves remain compatible; Unity save/reload validation is pending. |
 | Step 5 tiered setup workflow | 🛠️ WORKING ON | Generated Size-V4 prefabs migrate to Size-V5 seamless Foundation decks and Stair anchors. Missing resources are repaired safely while custom prefabs, materials, recipes, and balance values remain preserved. Unity two-run validation is pending. |
-| Step 17 setup workflow | ✅ COMPLETED | The separate-variant generation pass was withdrawn before validation. Step 17 remains non-destructive and now documents the contextual conveyor wheel while preserving the three existing tier items and recipes. |
+| Step 17 setup workflow | ✅ COMPLETED | Step 17 remains non-destructive, refreshes generated visuals/colliders safely, preserves balance values, and connects upgraded Funnel/Crusher/Assembler prefabs plus contextual conveyor shape workflow. |
 
 > **Completion gate:** This section becomes **✅ COMPLETED** only after Step 17 is non-destructive, all listed variants are authored through the setup wizard, factory runtime state persists, and the Unity validation checklist passes.
 
@@ -602,9 +602,20 @@ Statuses are evidence-based and move forward only after code/content review and 
 
 ---
 
-### 6.2 Version 4.6.0 — Production Lines & UI Revolution
+### 6.2 Version 4.6.0 — Production Lines & UI Revolution — 🛠️ WORKING ON
 
 **Goal:** Reward the player for designing clean production lines, and make every UI feel premium and personalizable.
+
+#### Execution Status
+
+| Area | Status | Repository Audit |
+|------|--------|------------------|
+| Assembler Mk.2 / Mk.3 | ✅ COMPLETED | Mk.2 and Mk.3 exist with larger buffers, faster tier multipliers, upgraded visuals, and machine UI binding. |
+| Recipe graph validation | ✅ COMPLETED | `Tools > Voxel Engine > Recipe Graph Validator` scans crafting, smelting, and machine recipes without mutating assets, reporting missing references, invalid counts, duplicate outputs, base-resource assumptions, and dependency cycles. |
+| Production-line UI | 🛠️ WORKING ON | Crusher/Assembler UIs and responsive panels exist. Next: production statistics, recipe dependency browser, and theme overrides. |
+| Advanced processing | 🟡 PARTIALLY COMPLETE | Chemical processing and oil systems exist in code, but ore washing/enrichment and tailing loops are not complete. |
+| UI theme system | ❌ MISSING | Design tokens exist in `UITheme`; theme ScriptableObjects, runtime theme switching, and custom editor remain planned. |
+| Research UI overhaul | ❌ MISSING | Existing research remains functional; spatial pan/zoom canvas is not implemented yet. |
 
 #### New Content
 
@@ -1654,14 +1665,80 @@ For each version, these are the high-level Unity tasks you will perform manually
 
 ## 10. Suggested Immediate Next Steps
 
-1. **Merge this roadmap into `Dev`** as `Roadmap.md`.
-2. **Open a planning issue / discussion** for 4.5.0 conveyor design.
-3. **Begin 4.5.0 implementation** with the conveyor belt system — it is the highest-impact factory feature.
-4. **Create a feature branch** `feature/4.5.0-conveyor-foundation` from `Dev`.
+1. **Validate `5.10.0-dev` in Unity** by opening the Recipe Graph Validator and scanning the project.
+2. **Address any validator errors first** — missing output/input references and invalid counts block clean production-line progression.
+3. **Continue 4.6.0 Production Lines** with the Production Statistics Panel: item/min tracking, machine throughput, and bottleneck hints.
+4. **Then implement Recipe Browser dependency view** using the validated recipe graph as the data source.
+5. **Keep UI fit validation active** at 1280×720, 1366×768, 1920×1080, and ultrawide resolutions before adding larger panels.
 
 ---
 
 ## 11. Changelog
+
+### [5.10.0-dev] Production Lines Kickoff & Recipe Graph Validator
+
+**Type:** MINOR — new save-compatible editor tooling for production-line validation
+
+**Added:**
+- Added `Tools > Voxel Engine > Recipe Graph Validator`.
+- Validator scans crafting recipes, smelting recipes, and machine recipes without modifying assets.
+- Reports missing outputs, missing inputs, invalid counts, zero/negative processing times, suspicious byproduct settings, duplicate outputs, input-only base resources, and potential dependency cycles.
+- Copyable markdown report makes it easy to paste validation results into planning notes or issues.
+
+**Roadmap Continued — 4.6.0 Production Lines & UI Revolution:**
+- Marked 4.6.0 as **WORKING ON**.
+- Marked Recipe Graph Validation as **COMPLETED**.
+- Next recommended implementation target is the Production Statistics Panel, followed by the Recipe Browser dependency view.
+
+**Roadmap Status:**
+- Current version and roadmap version synchronized to `5.10.0-dev`.
+- Factory Foundations remain active for final polish/validation, but new feature work has moved into Production Lines.
+
+---
+
+### [5.9.2-dev] Crisp Responsive UI & Conveyor Ramp Corner Fix
+
+**Type:** PATCH — responsive UI/text-quality fixes and conveyor topology polish
+
+**Fixed / Improved:**
+- Runtime UI documents force crisp constant-pixel scaling to avoid low-quality scaled text.
+- Shared PanelSettings setup now authors constant-pixel UI scaling.
+- Center crafting, inventory, machine, and large terminal panels use safer responsive widths and margins.
+- Conveyor shape wheel hover updates selected shape immediately so the ghost preview changes while the wheel is open.
+- Straight conveyors detect ramp/vertical downstream neighbours by socket position, improving corner/turn inference beside slope pieces.
+
+---
+
+### [5.9.1-dev] Responsive Build Wheels & Conveyor Ghost Preview Fix
+
+**Type:** PATCH — wheel interaction, ghost-preview, and responsive-panel polish
+
+**Fixed / Improved:**
+- Conveyor ghosts remain visible while holding the build wheel key and can rebuild disabled preview meshes.
+- Releasing the build wheel key over a conveyor shape selects it.
+- Hammer wheel supports hold-release selection.
+- Wheel labels clip hover backgrounds so rings no longer spill out of button bounds.
+- Machine panels scroll internally and slot rows wrap to avoid horizontal overflow.
+
+---
+
+### [5.9.0-dev] Factory Placement, Machine UI & Visual Polish
+
+**Type:** MINOR — save-compatible machine UI, visual animation, and placement fixes
+
+**Added / Improved:**
+- Added Crusher and Assembler Mk.1–Mk.3 UI panels with recipe selection, power state, progress, enabled toggle, slots, and item-port integration.
+- Added runtime recipe selection support for Crusher and Assembler.
+- Added new generated visual animation components for Funnel, Crusher, and Assembler machines.
+- Upgraded Funnel, Crusher, and Assembler generated prefab visuals through the non-destructive Step 17 workflow.
+- Crusher is larger, top-fed, and includes falling/crushing item animation.
+- Assemblers are larger and include gantry/press/work-piece animation.
+
+**Fixed:**
+- Build ghosts no longer participate in logistics, preventing conveyor items from being deleted into ghost consumers.
+- Stairs can chain onto other stairs.
+
+---
 
 ### [5.8.0-dev] Seamless Foundations, Bidirectional Stairs & Factory State Persistence
 
