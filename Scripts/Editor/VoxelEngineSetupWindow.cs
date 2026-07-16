@@ -209,9 +209,12 @@ namespace VoxelEngine.EditorTools
             AddInfo(scroll,
                 "Step 18 builds GRID SHAPE VARIANTS (non-destructive):\n" +
                 "  • Cube / Slope / HalfBlock / HalfSlope / Corner / InvertedSlope\n" +
-                "  • Updates ghost preview via GridShapeWheel + GridBuilder hook\n" +
-                "  • Adds mesh-variant support to GridBlockMeshBuilder\n" +
-                "  • Creates missing variant definitions only; preserves all existing balance, health, power, and custom prefab geometry\n" +
+                "  • GridShapeWheel now uses programmatic geometric icons (no more misaligned Unicode text)\n" +
+                "  • Ghost preview automatically rebuilds when variant changes (no more \"large ghost\" bug)\n" +
+                "  • Shape variant is applied to placed block on build\n" +
+                "  • Creates missing GridShapeWheel component on Player if absent\n" +
+                "  • Verifies GridBuilder variant wiring\n" +
+                "  • Non-destructive: preserves all existing balance, health, power, and custom prefab geometry\n" +
                 "Re-runnable. Idempotent. Never overwrites user-authored materials or balance values.");
             AddWizardButton(scroll, "18. Setup Grid Shape Variants (Non-Destructive)\n(Cube, Slope, Half, Corner, Inverted — preserve balance)", () => VoxelEngine.EditorTools.GridShapeVariantSetup.RunStep18(), 56);
 

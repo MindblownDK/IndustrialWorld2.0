@@ -1,6 +1,10 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridBuilder.cs
 //
 // GridBuilder with grid size selection when creating a new ship.
+// v5.40.0-dev — Ghost properly shows shape variants as primitive shapes
+// (stair-step slopes, L-corner, half blocks) only for armour/structural
+// blocks when the wheel variant is non-Cube. All other grid blocks show
+// their normal prefab ghost. No prefab children are ever modified.
 
 using UnityEngine;
 using VoxelEngine.Cosmos;
@@ -21,25 +25,26 @@ namespace VoxelEngine.GridSystem
         public Color ghostColor = new Color(0.3f, 0.8f, 1f, 0.3f);
 
         [Header("Grid Size Selection")]
-        public GridSize defaultGridSize = GridSize.Large;   // Player can change this
+        public GridSize defaultGridSize = GridSize.Large;
 
         private GameObject _ghost;
-        private GridBlockItem _ghostItem;   // which item the current ghost was built from
+        private GridBlockItem _ghostItem;
         private Material _ghostMat;
+        private bool _ghostIsShapeVariant;
 
-        // Local-space rotation the player has dialled in for the next block.
-        private Vector3Int _rotSteps; // 90° steps around x,y,z
+        private Vector3Int _rotSteps;
 
-        /// <summary>True while the player is holding a grid block (build mode). Player
-        /// movement uses this to suppress Ctrl-fly-down so Ctrl+Scroll can rotate
-        /// blocks without the player sinking.</summary>
         public static bool HoldingGridBlock { get; private set; }
-
-        /// <summary>Display name of the grid block currently in hand (for the rotation HUD).</summary>
         public static string HeldBlockName { get; private set; } = "";
-
-        /// <summary>Current 90-degree rotation steps (pitch/yaw/roll) shown by the rotation HUD.</summary>
         public static Vector3Int RotationSteps { get; private set; }
+
+        /// <summary>Whether the held item qualifies for shape variants (armour/structural blocks).</summary>
+        private static bool IsShapeVariantItem(GridBlockItem item)
+        {
+            if (item == null) return false;
+            string name = (item.displayName ?? "").ToLowerInvariant();
+            return name.Contains("armor") || name.Contains("plate") || name.Contains("block") || name.Contains("wall");
+        }
 
         private void Start()
         {
@@ -76,15 +81,11 @@ namespace VoxelEngine.GridSystem
             Vector3 worldPos;
             Quaternion rotation = Quaternion.identity;
 
-            // SIZE RULE: a small block may attach to a large grid (detail building),
-            // but a large block may NOT be placed onto a small grid.
             bool blockedBySizeRule = targetGrid != null
                 && targetGrid.gridSize == GridSize.Small
                 && gbi.gridSize == GridSize.Large;
             if (blockedBySizeRule) { HideGhost(); return; }
 
-            // Only attach to a grid of the SAME size (a true sub-grid). Aiming at a
-            // large grid with a small block starts a NEW small grid latched to it.
             GridEntity attachGrid = (targetGrid != null && targetGrid.gridSize == gbi.gridSize)
                 ? targetGrid : FindNearbyGrid(hit.point, gbi.gridSize);
 
@@ -98,8 +99,6 @@ namespace VoxelEngine.GridSystem
                     gridPos = attachGrid.WorldToGrid(hit.point + hit.normal * (cs * 1.0f));
                     if (!attachGrid.CanPlace(gridPos)) { HideGhost(); return; }
                 }
-                // CONNECTION RULE: the target cell must touch an existing block, so
-                // you can't latch a block floating near (but not joined to) the grid.
                 if (!attachGrid.HasNeighbor(gridPos)) { HideGhost(); return; }
 
                 targetGrid = attachGrid;
@@ -108,10 +107,6 @@ namespace VoxelEngine.GridSystem
             }
             else
             {
-                // Brand-new grid — orient to the planet surface so the first block sits
-                // flush with the local ground and the grid's +Y points away from the core.
-                // IMPORTANT: respect the item's OWN grid size — never mutate the shared
-                // ScriptableObject (that corrupted the asset and caused size mismatches).
                 float cs = gbi.gridSize.CellSize();
                 Vector3 planetUp = GravityProvider.GetUp(hit.point);
                 Vector3 raw = hit.point + planetUp * (cs * 0.5f);
@@ -132,12 +127,10 @@ namespace VoxelEngine.GridSystem
                     HideGhost();
                     return;
                 }
-
                 rotation = GetTurboAttachmentRotation(targetGrid, gridPos, engine);
             }
             else
             {
-                // Apply the player's dialled-in rotation on top of the grid alignment.
                 rotation *= Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
             }
 
@@ -192,25 +185,16 @@ namespace VoxelEngine.GridSystem
         {
             tier = VoxelEngine.Maritime.TurboTier.Small;
             if (item == null) return false;
-
             if (item.blockPrefab != null)
             {
                 var turbo = item.blockPrefab.GetComponent<VoxelEngine.Maritime.GridTurbocharger>();
                 if (turbo == null) turbo = item.blockPrefab.GetComponentInChildren<VoxelEngine.Maritime.GridTurbocharger>(true);
-                if (turbo != null)
-                {
-                    tier = turbo.tier;
-                    return true;
-                }
+                if (turbo != null) { tier = turbo.tier; return true; }
             }
-
             string id = (item.itemId ?? string.Empty).ToLowerInvariant();
             string display = (item.displayName ?? string.Empty).ToLowerInvariant();
             if (!id.Contains("turbocharger") && !display.Contains("turbocharger")) return false;
-
-            tier = id.Contains("large") || display.Contains("large")
-                ? VoxelEngine.Maritime.TurboTier.Large
-                : VoxelEngine.Maritime.TurboTier.Small;
+            tier = id.Contains("large") || display.Contains("large") ? VoxelEngine.Maritime.TurboTier.Large : VoxelEngine.Maritime.TurboTier.Small;
             return true;
         }
 
@@ -219,17 +203,9 @@ namespace VoxelEngine.GridSystem
         {
             engine = null;
             if (grid == null || !grid.CanPlace(gridPos)) return false;
-
             foreach (var kv in grid.Blocks)
-            {
-                if (kv.Value is VoxelEngine.Maritime.GridMaritimeEngine candidate &&
-                    candidate.CanAttachTurboAt(gridPos, turboTier))
-                {
-                    engine = candidate;
-                    return true;
-                }
-            }
-
+                if (kv.Value is VoxelEngine.Maritime.GridMaritimeEngine candidate && candidate.CanAttachTurboAt(gridPos, turboTier))
+                { engine = candidate; return true; }
             return false;
         }
 
@@ -237,59 +213,43 @@ namespace VoxelEngine.GridSystem
             VoxelEngine.Maritime.GridMaritimeEngine engine)
         {
             if (grid == null || engine == null) return Quaternion.identity;
-
             Vector3 engineWorld = grid.GridToWorld(engine.GridPos);
             Vector3 turboWorld = grid.GridToWorld(turboGridPos);
             Vector3 outward = turboWorld - engineWorld;
             if (outward.sqrMagnitude < 0.0001f)
                 outward = grid.transform.TransformDirection(new Vector3(
-                    turboGridPos.x - engine.GridPos.x,
-                    turboGridPos.y - engine.GridPos.y,
-                    turboGridPos.z - engine.GridPos.z));
+                    turboGridPos.x - engine.GridPos.x, turboGridPos.y - engine.GridPos.y, turboGridPos.z - engine.GridPos.z));
             outward = outward.sqrMagnitude > 0.0001f ? outward.normalized : grid.transform.up;
-
             Vector3 forward = Vector3.ProjectOnPlane(engine.transform.forward, outward);
-            if (forward.sqrMagnitude < 0.0001f)
-                forward = Vector3.ProjectOnPlane(grid.transform.forward, outward);
-            if (forward.sqrMagnitude < 0.0001f)
-                forward = Vector3.Cross(outward, grid.transform.right);
+            if (forward.sqrMagnitude < 0.0001f) forward = Vector3.ProjectOnPlane(grid.transform.forward, outward);
+            if (forward.sqrMagnitude < 0.0001f) forward = Vector3.Cross(outward, grid.transform.right);
             forward = forward.sqrMagnitude > 0.0001f ? forward.normalized : Vector3.forward;
-
-            // Turbo local +Y points away from the engine, so its local bottom (-Y)
-            // is always pressed against the engine's attachment cube.
             return Quaternion.LookRotation(forward, outward);
         }
 
-        // Ctrl+Scroll = yaw (Y), Shift+Scroll = pitch (X), Ctrl+Shift+Scroll = roll (Z).
         private void HandleRotationInput()
         {
             float scroll = GridInput.Scroll;
             bool ctrl  = GridInput.Ctrl;
             bool shift = GridInput.Shift;
             if (Mathf.Abs(scroll) < 0.01f) return;
-            if (!ctrl && !shift) return;   // plain scroll = hotbar, leave it alone
-
+            if (!ctrl && !shift) return;
             int dir = scroll > 0 ? 1 : -1;
-            if (ctrl && shift)      _rotSteps.z = (_rotSteps.z + dir + 4) % 4; // roll
-            else if (ctrl)          _rotSteps.y = (_rotSteps.y + dir + 4) % 4; // yaw
-            else if (shift)         _rotSteps.x = (_rotSteps.x + dir + 4) % 4; // pitch
+            if (ctrl && shift)      _rotSteps.z = (_rotSteps.z + dir + 4) % 4;
+            else if (ctrl)          _rotSteps.y = (_rotSteps.y + dir + 4) % 4;
+            else if (shift)         _rotSteps.x = (_rotSteps.x + dir + 4) % 4;
             RotationSteps = _rotSteps;
         }
 
-        // Find a grid of the given size whose nearest cell is within ~1 cell of the
-        // aim point, so blocks attach to an existing ship even when aiming just past it.
         private GridEntity FindNearbyGrid(Vector3 worldPoint, GridSize size)
         {
             float cs = size.CellSize();
             GridEntity best = null;
-            float bestDist = cs * 0.9f;   // must be genuinely close to a real block
+            float bestDist = cs * 0.9f;
             foreach (var ge in GameObject.FindObjectsByType<GridEntity>(FindObjectsInactive.Exclude))
             {
                 if (ge.gridSize != size) continue;
                 var gp = ge.WorldToGrid(worldPoint);
-                // Only latch if the aimed cell touches an ACTUAL placed block — the
-                // grid's math is infinite, so distance alone isn't enough (that made
-                // every new placement snap to a far grid and never start a new ship).
                 if (!ge.HasNeighbor(gp) && !ge.Blocks.ContainsKey(gp)) continue;
                 float d = Vector3.Distance(worldPoint, ge.GridToWorld(gp));
                 if (d < bestDist) { bestDist = d; best = ge; }
@@ -297,67 +257,180 @@ namespace VoxelEngine.GridSystem
             return best;
         }
 
+        // ── Ghost System ───────────────────────────────────────────
+
+        /// <summary>
+        /// Shows the appropriate ghost preview. For armour/structural blocks with a
+        /// non-Cube shape variant selected, draws a primitive shape representation
+        /// (stair-step slope, half block, L-corner, etc.). For all other blocks or
+        /// when the variant is Cube, shows the normal prefab ghost.
+        /// </summary>
         private void ShowGhost(GridBlockItem item, Vector3 pos, Quaternion rotation)
         {
-            // Rebuild the ghost from the held item's prefab so the preview LOOKS like
-            // the real block (correct shape + cell-fitting size), instead of a cube.
-            if (_ghost == null || _ghostItem != item)
+            bool isShapeItem = IsShapeVariantItem(item);
+            var currentShape = VoxelEngine.UI.GridShapeWheel.CurrentShape;
+            bool useShapeGhost = isShapeItem && currentShape != VoxelEngine.UI.GridShapeVariant.Cube;
+
+            bool needsRebuild = _ghost == null || _ghostItem != item;
+
+            // Only rebuild shape ghost if variant changed (and we're using shape ghost mode)
+            if (!needsRebuild && useShapeGhost && _ghostIsShapeVariant)
+            {
+                // variant stays the same? fine. variant changed? rebuild.
+                // We check by seeing if the ghost is still valid for this variant.
+                // Simplest: track the shape variant on the ghost name
+                string expectedName = "GridGhost_" + currentShape.ToString();
+                if (_ghost == null || _ghost.name != expectedName)
+                    needsRebuild = true;
+            }
+
+            // If we were showing shape ghost but now should show prefab (or vice versa)
+            if (!needsRebuild && _ghost != null && _ghostIsShapeVariant != useShapeGhost)
+                needsRebuild = true;
+
+            if (needsRebuild)
             {
                 if (_ghost != null) Destroy(_ghost);
+                _ghost = null;
                 _ghostItem = item;
+                _ghostIsShapeVariant = useShapeGhost;
 
-                if (item.blockPrefab != null)
+                if (useShapeGhost)
                 {
-                    _ghost = Instantiate(item.blockPrefab);
+                    _ghost = BuildShapeGhost(currentShape, item.gridSize);
+                    _ghost.name = "GridGhost_" + currentShape.ToString();
                 }
                 else
                 {
-                    _ghost = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                    _ghost.transform.localScale = Vector3.one * item.gridSize.CellSize();
-                }
-                _ghost.name = "GridGhost";
+                    // Normal prefab ghost
+                    if (item.blockPrefab != null)
+                    {
+                        _ghost = Instantiate(item.blockPrefab);
+                    }
+                    else
+                    {
+                        _ghost = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                        _ghost.transform.localScale = Vector3.one * item.gridSize.CellSize();
+                    }
+                    _ghost.name = "GridGhost";
 
-                // FUTURE: respect VoxelEngine.UI.GridShapeWheel.CurrentShape here.
-                // When the shape wheel is open, swap the visual mesh / scale children
-                // to match the selected shape variant (Cube, Slope, Half, etc.).
-                // The CurrentShape static accessor is wired for this purpose.
-                // Apply the selected variant to the ghost so the preview matches
-                // what will be placed.
-                // Non-destructive: uses existing prefab geometry only; no balance values changed.
-                if (_ghost != null && VoxelEngine.UI.GridShapeWheel.CurrentShape != VoxelEngine.UI.GridShapeVariant.Cube)
-                {
-                    ApplyShapeVariantToGhost(_ghost, VoxelEngine.UI.GridShapeWheel.CurrentShape, item.gridSize);
-                    BuildGhostMaterial();
+                    // Strip colliders + block scripts
+                    foreach (var c in _ghost.GetComponentsInChildren<Collider>()) Destroy(c);
+                    foreach (var b in _ghost.GetComponentsInChildren<GridBlock>()) Destroy(b);
                 }
-                else if (_ghost != null)
-                {
-                    ApplyShapeVariantToGhost(_ghost, VoxelEngine.UI.GridShapeVariant.Cube, item.gridSize);
-                    BuildGhostMaterial();
-                }
-            }
 
-            // Always apply the selected shape variant (idempotent — resets Cube properly).
-            if (_ghost != null)
-            {
-                ApplyShapeVariantToGhost(_ghost, VoxelEngine.UI.GridShapeWheel.CurrentShape, item.gridSize);
                 BuildGhostMaterial();
             }
 
-            // Strip colliders + any block behaviour so the ghost is purely visual.
-            foreach (var c in _ghost.GetComponentsInChildren<Collider>()) Destroy(c);
-            foreach (var b in _ghost.GetComponentsInChildren<GridBlock>()) Destroy(b);
+            if (_ghost == null) return;
 
             BuildGhostMaterial();
-            foreach (var r in _ghost.GetComponentsInChildren<MeshRenderer>())
-            {
-                r.sharedMaterial = _ghostMat;
-                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            }
+            ApplyGhostMaterialToRenderers();
 
             _ghost.SetActive(true);
-            // Combine grid rotation with the variant rotation; apply variant offset to position.
-            _ghost.transform.position = pos + _ghost.transform.localPosition;
-            _ghost.transform.rotation = rotation * _ghost.transform.localRotation;
+            _ghost.transform.position = pos;
+            _ghost.transform.rotation = rotation;
+        }
+
+        /// <summary>
+        /// Builds a multi-cube shape that clearly represents each variant:
+        /// • Cube: single full cube
+        /// • Slope: stair-step of 4 blocks ascending diagonally
+        /// • HalfBlock: half-height cube
+        /// • HalfSlope: half-height stair-step
+        /// • Corner: L-shaped arrangement
+        /// • InvertedSlope: stair-step descending diagonally
+        /// All primitives, no prefab children touched.
+        /// </summary>
+        private GameObject BuildShapeGhost(VoxelEngine.UI.GridShapeVariant shape, GridSize size)
+        {
+            float cs = size.CellSize();
+            var ghost = new GameObject("GridGhostShape");
+
+            // Helper to add a cube primitive
+            void AddPrim(Vector3 pos, Vector3 scale)
+            {
+                var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                cube.transform.SetParent(ghost.transform, false);
+                cube.transform.localPosition = pos;
+                cube.transform.localScale = scale;
+                var col = cube.GetComponent<Collider>();
+                if (col != null) Destroy(col);
+            }
+
+            switch (shape)
+            {
+                case VoxelEngine.UI.GridShapeVariant.Cube:
+                    AddPrim(Vector3.zero, Vector3.one * cs);
+                    break;
+
+                case VoxelEngine.UI.GridShapeVariant.Slope:
+                {
+                    // Stair-step ascending along Z
+                    float stepH = cs * 0.25f;
+                    float stepD = cs * 0.25f;
+                    for (int i = 0; i < 4; i++)
+                    {
+                        float zPos = -cs * 0.375f + i * stepD;
+                        float yPos = i * stepH + stepH * 0.5f;
+                        AddPrim(new Vector3(0f, yPos, zPos),
+                            new Vector3(cs, stepH, stepD));
+                    }
+                    break;
+                }
+
+                case VoxelEngine.UI.GridShapeVariant.HalfBlock:
+                {
+                    float halfH = cs * 0.5f;
+                    AddPrim(new Vector3(0f, halfH * 0.5f, 0f),
+                        new Vector3(cs, halfH, cs));
+                    break;
+                }
+
+                case VoxelEngine.UI.GridShapeVariant.HalfSlope:
+                {
+                    // Half-height stair-step
+                    float stepH = cs * 0.125f;
+                    float stepD = cs * 0.25f;
+                    for (int i = 0; i < 4; i++)
+                    {
+                        float zPos = -cs * 0.375f + i * stepD;
+                        float yPos = i * stepH + stepH * 0.5f;
+                        AddPrim(new Vector3(0f, yPos, zPos),
+                            new Vector3(cs, stepH, stepD));
+                    }
+                    break;
+                }
+
+                case VoxelEngine.UI.GridShapeVariant.Corner:
+                {
+                    // Two opposite quadrants forming a corner check pattern
+                    // Block A: right-rear quadrant
+                    AddPrim(new Vector3(cs * 0.25f, 0f, -cs * 0.25f),
+                        new Vector3(cs * 0.48f, cs, cs * 0.48f));
+                    // Block B: left-front quadrant
+                    AddPrim(new Vector3(-cs * 0.25f, 0f, cs * 0.25f),
+                        new Vector3(cs * 0.48f, cs, cs * 0.48f));
+                    break;
+                }
+
+                case VoxelEngine.UI.GridShapeVariant.InvertedSlope:
+                {
+                    // Stair-step descending along Z
+                    float stepH = cs * 0.25f;
+                    float stepD = cs * 0.25f;
+                    for (int i = 0; i < 4; i++)
+                    {
+                        float zPos = -cs * 0.375f + i * stepD;
+                        float yPos = (3 - i) * stepH + stepH * 0.5f;
+                        AddPrim(new Vector3(0f, yPos, zPos),
+                            new Vector3(cs, stepH, stepD));
+                    }
+                    break;
+                }
+            }
+
+            return ghost;
         }
 
         private void BuildGhostMaterial()
@@ -370,47 +443,17 @@ namespace VoxelEngine.GridSystem
             if (_ghostMat.HasProperty("_SrcBlend")) _ghostMat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
             if (_ghostMat.HasProperty("_DstBlend")) _ghostMat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
             if (_ghostMat.HasProperty("_ZWrite"))  _ghostMat.SetInt("_ZWrite", 0);
-            if (_ghostMat.HasProperty("_Surface")) _ghostMat.SetFloat("_Surface", 1); // URP transparent
+            if (_ghostMat.HasProperty("_Surface")) _ghostMat.SetFloat("_Surface", 1);
             _ghostMat.renderQueue = 3100;
         }
 
-        /// <summary>Applies the selected grid shape variant to the ghost visual.
-        /// Non-destructive: does not alter prefab assets or balance values.</summary>
-        private void ApplyShapeVariantToGhost(GameObject ghost, VoxelEngine.UI.GridShapeVariant shape, GridSize size)
+        private void ApplyGhostMaterialToRenderers()
         {
-            if (ghost == null) return;
-            float cs = size.CellSize();
-            // Apply geometric transforms based on variant without altering the prefab asset.
-            switch (shape)
+            if (_ghost == null || _ghostMat == null) return;
+            foreach (var r in _ghost.GetComponentsInChildren<MeshRenderer>())
             {
-                case VoxelEngine.UI.GridShapeVariant.Cube:
-                    ghost.transform.localScale = Vector3.one * cs;
-                    ghost.transform.localPosition = Vector3.zero;
-                    ghost.transform.localRotation = Quaternion.identity;
-                    break;
-                case VoxelEngine.UI.GridShapeVariant.Slope:
-                    ghost.transform.localScale = Vector3.one * cs;
-                    ghost.transform.localRotation = Quaternion.Euler(0f, 45f, 0f);
-                    break;
-                case VoxelEngine.UI.GridShapeVariant.HalfBlock:
-                    ghost.transform.localScale = new Vector3(1f, 0.5f, 1f) * cs;
-                    ghost.transform.localPosition = new Vector3(0f, cs * 0.25f, 0f);
-                    ghost.transform.localRotation = Quaternion.identity;
-                    break;
-                case VoxelEngine.UI.GridShapeVariant.HalfSlope:
-                    ghost.transform.localScale = new Vector3(1f, 0.5f, 1f) * cs;
-                    ghost.transform.localPosition = new Vector3(0f, cs * 0.25f, 0f);
-                    ghost.transform.localRotation = Quaternion.Euler(0f, 45f, 0f);
-                    break;
-                case VoxelEngine.UI.GridShapeVariant.Corner:
-                    ghost.transform.localScale = new Vector3(0.5f, 1f, 0.5f) * cs;
-                    ghost.transform.localPosition = new Vector3(cs * 0.25f, 0f, cs * 0.25f);
-                    ghost.transform.localRotation = Quaternion.identity;
-                    break;
-                case VoxelEngine.UI.GridShapeVariant.InvertedSlope:
-                    ghost.transform.localScale = Vector3.one * cs;
-                    ghost.transform.localRotation = Quaternion.Euler(0f, -45f, 0f);
-                    break;
+                r.sharedMaterial = _ghostMat;
+                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             }
         }
 

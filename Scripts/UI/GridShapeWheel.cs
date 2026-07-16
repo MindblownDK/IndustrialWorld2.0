@@ -2,7 +2,11 @@
 //
 // Contextual radial wheel for grid block shape variants (Cube, Slope, Half, etc.).
 // Reuses the same premium visual language as the HammerBuildWheel and ConveyorShapeWheel.
-// Activated when holding a grid armor / structural block item.
+// Activated when holding a grid armour / structural block item.
+//
+// v5.40.0-dev — Clean wheel: each segment shows a short variant label positioned
+// directly on the ring surface. Icon colour matches the premium cream-on-dark
+// palette of the other wheels — no garish multi-colour dots.
 
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -36,7 +40,9 @@ namespace VoxelEngine.UI
             GridShapeVariant.InvertedSlope
         };
 
-        private static readonly string[] Icons = { "■", "▱", "▭", "▯", "▱", "▱" };
+        private static readonly string[] ShortLabels = { "FULL", "SLOPE", "HALF", "H-SL", "CORNER", "INV" };
+        /// <summary>Even shorter single-char icons rendered via the ring texture's gap area.</summary>
+        private static readonly string[] IconText = { "\u25A0", "\u25B2", "\u25AE", "\u25B4", "\u25A2", "\u25BC" };
 
         private static GridShapeVariant _current = GridShapeVariant.Cube;
 
@@ -48,7 +54,7 @@ namespace VoxelEngine.UI
         private VisualElement _wheelCenter;
         private VisualElement _ringElement;
         private Texture2D _ringTexture;
-        private readonly VisualElement[] _segmentLabelRoots = new VisualElement[6];
+        private readonly VisualElement[] _segmentRoots = new VisualElement[6];
         private readonly Label[] _segmentIcons = new Label[6];
         private readonly Label[] _segmentNames = new Label[6];
         private int _hoveredSegment = -1;
@@ -91,7 +97,6 @@ namespace VoxelEngine.UI
             if (stack == null || stack.IsEmpty || !(stack.item is GridBlockItem gbi))
                 return false;
 
-            // Only show for structural/armor-like blocks (simple heuristic)
             string name = (gbi.displayName ?? "").ToLowerInvariant();
             if (name.Contains("armor") || name.Contains("plate") || name.Contains("block") || name.Contains("wall"))
             {
@@ -161,13 +166,13 @@ namespace VoxelEngine.UI
             _wheelCenter.style.scale = new StyleScale(new Scale(new Vector3(safeScale, safeScale, 1f)));
             _wheelOverlay.Add(_wheelCenter);
 
-            System.Array.Clear(_segmentLabelRoots, 0, _segmentLabelRoots.Length);
+            System.Array.Clear(_segmentRoots, 0, _segmentRoots.Length);
             System.Array.Clear(_segmentIcons, 0, _segmentIcons.Length);
             System.Array.Clear(_segmentNames, 0, _segmentNames.Length);
             BuildRing();
             BuildCenterBadge();
             for (int i = 0; i < Variants.Length; i++)
-                BuildRingLabel(i, Variants[i], Icons[i]);
+                BuildSegment(i, Variants[i], IconText[i], ShortLabels[i]);
             RefreshSegmentLabels();
         }
 
@@ -188,16 +193,26 @@ namespace VoxelEngine.UI
             _wheelCenter.Add(badge);
 
             var title = new Label("SHAPE VARIANT");
-            title.style.fontSize = 11;
+            title.style.fontSize = 10;
             title.style.letterSpacing = 1.4f;
             title.style.unityFontStyleAndWeight = FontStyle.Bold;
             title.style.color = new StyleColor(UITheme.TextMuted);
             title.pickingMode = PickingMode.Ignore;
             badge.Add(title);
 
+            var icon = new Label(IconText[(int)_current]);
+            icon.name = "GSW_CenterIcon";
+            icon.style.fontSize = 28;
+            icon.style.marginTop = 4;
+            icon.style.unityFontStyleAndWeight = FontStyle.Bold;
+            icon.style.color = new StyleColor(UITheme.AccentCyan);
+            icon.pickingMode = PickingMode.Ignore;
+            badge.Add(icon);
+
             var selected = new Label(_current.ToString().ToUpperInvariant());
-            selected.style.fontSize = 16;
-            selected.style.marginTop = 4;
+            selected.name = "GSW_SelectedLabel";
+            selected.style.fontSize = 14;
+            selected.style.marginTop = 2;
             selected.style.unityFontStyleAndWeight = FontStyle.Bold;
             selected.style.color = new StyleColor(UITheme.AccentCyan);
             selected.pickingMode = PickingMode.Ignore;
@@ -205,7 +220,7 @@ namespace VoxelEngine.UI
 
             var hint = new Label("HOLD TO SELECT");
             hint.style.fontSize = 8;
-            hint.style.marginTop = 5;
+            hint.style.marginTop = 4;
             hint.style.letterSpacing = 1f;
             hint.style.color = new StyleColor(UITheme.TextMuted);
             hint.pickingMode = PickingMode.Ignore;
@@ -260,52 +275,66 @@ namespace VoxelEngine.UI
         {
             if (segment < 0 || segment >= Variants.Length) return;
             _current = Variants[segment];
+            UpdateCenterBadge();
             BuildFeedbackHud.Show("Grid Shape", _current.ToString(), null, UITheme.AccentCyan);
-            if (_open) BuildWheel();
+            if (_open) RefreshSegmentLabels();
+            RefreshRingTexture();
         }
 
-        private void BuildRingLabel(int index, GridShapeVariant variant, string iconText)
+        private void UpdateCenterBadge()
+        {
+            if (_wheelCenter == null) return;
+            var iconLabel = _wheelCenter.Q("GSW_CenterIcon") as Label;
+            if (iconLabel != null) iconLabel.text = IconText[(int)_current];
+            var nameLabel = _wheelCenter.Q("GSW_SelectedLabel") as Label;
+            if (nameLabel != null) nameLabel.text = _current.ToString().ToUpperInvariant();
+        }
+
+        /// <summary>Build a segment label overlaid on the ring surface.</summary>
+        private void BuildSegment(int index, GridShapeVariant variant, string iconText, string labelText)
         {
             const float center = 198f;
-            const float radius = 145f;
-            float angle = (-90f + index * (360f / Variants.Length)) * Mathf.Deg2Rad;
+            const float labelRadius = 140f;
+            float angleRad = (-90f + index * (360f / Variants.Length)) * Mathf.Deg2Rad;
 
-            var labelRoot = new VisualElement();
-            labelRoot.style.position = Position.Absolute;
-            labelRoot.style.left = center + Mathf.Cos(angle) * radius - 65f;
-            labelRoot.style.top = center + Mathf.Sin(angle) * radius - 42f;
-            labelRoot.style.width = 130;
-            labelRoot.style.height = 85;
-            labelRoot.style.alignItems = Align.Center;
-            labelRoot.style.justifyContent = Justify.Center;
-            labelRoot.style.overflow = Overflow.Visible;
-            labelRoot.pickingMode = PickingMode.Ignore;
-            UITheme.Radius(labelRoot, 32f);
-            labelRoot.style.transitionProperty = new System.Collections.Generic.List<StylePropertyName> { "scale", "background-color" };
-            labelRoot.style.transitionDuration = new System.Collections.Generic.List<TimeValue> { new(0.10f, TimeUnit.Second), new(0.10f, TimeUnit.Second) };
-            _wheelCenter.Add(labelRoot);
-            _segmentLabelRoots[index] = labelRoot;
+            // Container sits right on the ring surface
+            var segmentRoot = new VisualElement();
+            segmentRoot.style.position = Position.Absolute;
+            segmentRoot.style.left = center + Mathf.Cos(angleRad) * labelRadius - 36f;
+            segmentRoot.style.top = center + Mathf.Sin(angleRad) * labelRadius - 28f;
+            segmentRoot.style.width = 72;
+            segmentRoot.style.height = 56;
+            segmentRoot.style.alignItems = Align.Center;
+            segmentRoot.style.justifyContent = Justify.Center;
+            segmentRoot.style.overflow = Overflow.Visible;
+            segmentRoot.pickingMode = PickingMode.Ignore;
+            UITheme.Radius(segmentRoot, 14f);
+            segmentRoot.style.transitionProperty = new System.Collections.Generic.List<StylePropertyName> { "scale", "background-color" };
+            segmentRoot.style.transitionDuration = new System.Collections.Generic.List<TimeValue> { new(0.10f, TimeUnit.Second), new(0.10f, TimeUnit.Second) };
+            _wheelCenter.Add(segmentRoot);
+            _segmentRoots[index] = segmentRoot;
 
-            bool selected = _current == variant;
+            // Icon character
             var icon = new Label(iconText);
             icon.style.fontSize = 18;
             icon.style.unityTextAlign = TextAnchor.MiddleCenter;
-            icon.style.color = new StyleColor(selected ? Color.white : new Color(0.16f, 0.18f, 0.20f));
+            icon.style.color = new StyleColor(new Color(0.40f, 0.42f, 0.44f));
             icon.style.unityFontStyleAndWeight = FontStyle.Bold;
+            icon.style.marginBottom = 1;
             icon.pickingMode = PickingMode.Ignore;
-            labelRoot.Add(icon);
+            segmentRoot.Add(icon);
             _segmentIcons[index] = icon;
 
-            var label = new Label(variant.ToString().ToUpperInvariant());
-            label.style.fontSize = 6;
-            label.style.marginTop = 1;
-            label.style.letterSpacing = 0.4f;
+            // Label
+            var label = new Label(labelText);
+            label.style.fontSize = 7;
+            label.style.letterSpacing = 0.3f;
             label.style.unityFontStyleAndWeight = FontStyle.Bold;
-            label.style.color = new StyleColor(selected ? Color.white : new Color(0.20f, 0.22f, 0.24f));
+            label.style.color = new StyleColor(new Color(0.35f, 0.37f, 0.40f));
             label.style.whiteSpace = WhiteSpace.Normal;
             label.style.unityTextAlign = TextAnchor.MiddleCenter;
             label.pickingMode = PickingMode.Ignore;
-            labelRoot.Add(label);
+            segmentRoot.Add(label);
             _segmentNames[index] = label;
         }
 
@@ -313,23 +342,26 @@ namespace VoxelEngine.UI
         {
             for (int i = 0; i < Variants.Length; i++)
             {
-                var root = _segmentLabelRoots[i];
+                var root = _segmentRoots[i];
                 var icon = _segmentIcons[i];
                 var label = _segmentNames[i];
                 if (root == null || icon == null || label == null) continue;
 
                 bool isSelected = Variants[i] == _current;
                 bool isHovered = i == _hoveredSegment;
-                Color foreground = isSelected
+
+                Color fgColor = isSelected
                     ? Color.white
-                    : (isHovered ? new Color(0.04f, 0.62f, 0.88f) : new Color(0.16f, 0.18f, 0.20f));
-                icon.style.color = new StyleColor(foreground);
-                label.style.color = new StyleColor(foreground);
+                    : (isHovered ? new Color(0.10f, 0.72f, 0.94f) : new Color(0.40f, 0.42f, 0.44f));
+
+                icon.style.color = new StyleColor(fgColor);
+                label.style.color = new StyleColor(isHovered ? new Color(0.10f, 0.72f, 0.94f) : new Color(0.35f, 0.37f, 0.40f));
+
                 root.style.scale = new StyleScale(new Scale(isHovered
-                    ? new Vector3(1.04f, 1.04f, 1f)
+                    ? new Vector3(1.06f, 1.06f, 1f)
                     : Vector3.one));
                 root.style.backgroundColor = new StyleColor(isHovered
-                    ? new Color(0.10f, 0.68f, 0.92f, 0.18f)
+                    ? new Color(0.10f, 0.68f, 0.92f, 0.15f)
                     : Color.clear);
             }
         }
