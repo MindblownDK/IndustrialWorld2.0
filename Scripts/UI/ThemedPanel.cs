@@ -40,8 +40,15 @@ namespace VoxelEngine.UI
         protected virtual void OnEnable()
         {
             UIThemeManager.OnThemeChanged += ApplyTheme;
-            // Delay one frame so UIDocument has created its panel
-            Invoke(nameof(ApplyTheme), 0.05f);
+            // Delay so UIDocument creates its panel, then apply
+            if (isActiveAndEnabled)
+                StartCoroutine(DelayedApply());
+        }
+
+        private System.Collections.IEnumerator DelayedApply()
+        {
+            yield return new WaitForSeconds(0.05f);
+            ApplyTheme();
         }
 
         protected virtual void OnDisable()
@@ -49,7 +56,7 @@ namespace VoxelEngine.UI
             UIThemeManager.OnThemeChanged -= ApplyTheme;
         }
 
-        protected virtual void ApplyTheme()
+        public virtual void ApplyTheme()
         {
             if (Document == null) Document = GetComponent<UIDocument>();
             var root = Root;
@@ -93,11 +100,17 @@ namespace VoxelEngine.UI
         private void OnEnable()
         {
             UIThemeManager.OnThemeChanged += Apply;
-            Invoke(nameof(Apply), 0.05f);
+            if (isActiveAndEnabled)
+                StartCoroutine(DelayedApply());
+        }
+        private System.Collections.IEnumerator DelayedApply()
+        {
+            yield return new WaitForSeconds(0.05f);
+            Apply();
         }
         private void OnDisable() => UIThemeManager.OnThemeChanged -= Apply;
 
-        private void Apply()
+        public void Apply()
         {
             if (_doc == null) _doc = GetComponent<UIDocument>();
             var root = _doc != null ? _doc.rootVisualElement : null;

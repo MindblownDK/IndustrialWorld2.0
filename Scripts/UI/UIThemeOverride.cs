@@ -35,13 +35,8 @@ namespace VoxelEngine.UI
         public static Color ResolveAccent(Component owner, Color fallback)
         {
             if (owner == null) return fallback;
-            var theme = owner.GetComponent<UIThemeOverride>();
-            if (theme != null && theme.overrideAccent) return theme.accentColor;
-            // Also check MachineDefinition custom accent
-            if (owner is Simulation.Crusher c && c.Definition != null && c.Definition.useCustomAccent)
-                return c.Definition.uiAccentOverride;
-            if (owner is Simulation.Assembler a && a.Definition != null && a.Definition.useCustomAccent)
-                return a.Definition.uiAccentOverride;
+            var ov = owner.GetComponent<UIThemeOverride>();
+            if (ov != null && ov.overrideAccent) return ov.accentColor;
             return fallback;
         }
 
@@ -50,10 +45,6 @@ namespace VoxelEngine.UI
             if (owner == null) return fallback;
             var ov = owner.GetComponent<UIThemeOverride>();
             if (ov != null && ov.overrideTheme) return ov.themeOverride;
-            if (owner is Simulation.Crusher c2 && c2.Definition != null && c2.Definition.useCustomAccent && c2.Definition.themeOverride != BuiltInUITheme.IndustrialSteel)
-                return c2.Definition.themeOverride;
-            if (owner is Simulation.Assembler a2 && a2.Definition != null && a2.Definition.useCustomAccent)
-                return a2.Definition.themeOverride;
             return fallback;
         }
 
@@ -81,7 +72,6 @@ namespace VoxelEngine.UI
 
             themeOverride = theme;
             accentColor = accent;
-            // Do NOT auto-enable overrides unless this is fresh — wizard should only enable when creating.
         }
     }
 }

@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.38.0-dev`
-**Roadmap Version:** `5.38.0-dev`
+**Current Version:** `5.38.1-dev`
+**Roadmap Version:** `5.38.1-dev`
 **Date:** 2026-07-16
-**Status:** Active Implementation — UI Theme System Completion
+**Status:** Active Implementation — UI Theme System Completion + Compile Fix
 
 ---
 
@@ -1674,6 +1674,19 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.38.1-dev] Theme System Compile Fix
+
+**Type:** PATCH — fix compile errors in theme override and applier
+
+**Fixed:**
+- Fixed `UIThemeOverride.cs` CS1061 errors: removed invalid `Crusher.Definition` / `Assembler.Definition` references (machines don't expose Definition property). Now uses only `UIThemeOverride` component for accent/theme resolution.
+- Fixed `UIThemeApplier.cs` SetProperty reflection path to avoid CS1061 on `IStyle.SetProperty` — now uses TryGetMethod with safe fallback, no hard dependency on Unity's internal SetProperty extension.
+- Removed hard `style.SetProperty` calls from `UITheme.Panel()` and `AccentDivider()` that caused compile errors on older UI Toolkit versions; USS vars now injected solely via `UIThemeApplier.ApplyThemeToRoot()` which is safe.
+- `ThemedPanel` and `ThemedDocument` now use coroutine `DelayedApply` instead of string-based `Invoke(nameof(...))` to support protected methods.
+- Bumped version to 5.38.1-dev (PATCH — no save/API touch).
+
+---
 
 ### [5.38.0-dev] Complete UI Theme System — USS Variables, ThemedPanel & Custom Editor
 

@@ -80,9 +80,6 @@ namespace VoxelEngine.UI
             float glow = UIThemeManager.AccentGlow;
             Border(v, 1, new Color(accent.r, accent.g, accent.b, 0.35f + glow * 0.4f));
             v.AddToClassList("themed-panel");
-            // USS variable injection for panels that use var(--theme-*) in USS files
-            v.style.SetProperty(UIThemeApplier.VarAccent, $"rgba({Mathf.RoundToInt(accent.r*255)},{Mathf.RoundToInt(accent.g*255)},{Mathf.RoundToInt(accent.b*255)},{1f:0.###})");
-            v.style.SetProperty(UIThemeApplier.VarPanel, $"rgba({Mathf.RoundToInt(UIThemeManager.PanelColor.r*255)},{Mathf.RoundToInt(UIThemeManager.PanelColor.g*255)},{Mathf.RoundToInt(UIThemeManager.PanelColor.b*255)},{UIThemeManager.PanelOpacity:0.###})");
             return v;
         }
 
@@ -596,7 +593,6 @@ namespace VoxelEngine.UI
             d.style.backgroundColor = new StyleColor(new Color(c.r, c.g, c.b, 0.20f + glow * 0.25f));
             Radius(d, 1);
             d.AddToClassList("themed-accent-divider");
-            d.style.SetProperty(UIThemeApplier.VarGlow, glow.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture));
             return d;
         }
 
