@@ -768,6 +768,9 @@ namespace VoxelEngine.EditorTools
             }
             const string themeFolder = ASSET_ROOT + "/UI/Themes";
             EnsureFolder(themeFolder);
+            const string themeDbFolder = ASSET_ROOT + "/UI";
+            EnsureFolder(themeDbFolder);
+
             void EnsureBuiltInTheme(string assetName, VoxelEngine.UI.BuiltInUITheme themeId, string display, Color accent, Color panel, Color text)
             {
                 string path = $"{themeFolder}/{assetName}.asset";
@@ -787,6 +790,18 @@ namespace VoxelEngine.EditorTools
                 if (created) themeDef.text = text;
                 if (created) themeDef.panelOpacity = panel.a;
                 if (created) themeDef.cornerRadius = 12f;
+                // New fields — non-destructive: only set when default/zero
+                if (themeDef.border == default) themeDef.border = new Color(accent.r, accent.g, accent.b, 0.55f);
+                if (themeDef.background == default) themeDef.background = new Color(0.04f, 0.045f, 0.06f, 1f);
+                if (themeDef.borderThickness <= 0.01f) themeDef.borderThickness = 1f;
+                if (themeDef.accentGlow <= 0.001f) themeDef.accentGlow = 0.28f;
+                if (themeDef.backgroundDim <= 0.001f) themeDef.backgroundDim = 0.55f;
+                if (themeDef.animationSpeed <= 0.01f) themeDef.animationSpeed = 1f;
+                if (themeDef.baseFontSize <= 0.1f) themeDef.baseFontSize = 12f;
+                if (string.IsNullOrWhiteSpace(themeDef.description))
+                    themeDef.description = VoxelEngine.UI.UIThemeManager.DescriptionFor(themeId);
+                if (themeDef.transitionCurve == null || themeDef.transitionCurve.keys.Length == 0)
+                    themeDef.transitionCurve = AnimationCurve.EaseInOut(0, 0, 1, 1);
                 EditorUtility.SetDirty(themeDef);
             }
 
@@ -800,6 +815,28 @@ namespace VoxelEngine.EditorTools
             EnsureBuiltInTheme("Theme_CorporateClean", VoxelEngine.UI.BuiltInUITheme.CorporateClean, "Corporate Clean", new Color(0.28f, 0.52f, 0.88f), new Color(0.86f, 0.88f, 0.92f, 0.96f), new Color(0.08f, 0.10f, 0.14f));
             EnsureBuiltInTheme("Theme_RustBelt", VoxelEngine.UI.BuiltInUITheme.RustBelt, "Rust Belt", new Color(0.88f, 0.42f, 0.18f), new Color(0.11f, 0.075f, 0.055f, 0.97f), new Color(0.98f, 0.86f, 0.74f));
             EnsureBuiltInTheme("Theme_VoidBlack", VoxelEngine.UI.BuiltInUITheme.VoidBlack, "Void Black", new Color(0.62f, 0.42f, 1.00f), new Color(0.015f, 0.016f, 0.024f, 0.98f), new Color(0.92f, 0.90f, 1.00f));
+
+            // Ensure UIThemeDatabase asset exists (non-destructive)
+            string dbPath = $"{ASSET_ROOT}/UI/UIThemeDatabase.asset";
+            var db = AssetDatabase.LoadAssetAtPath<VoxelEngine.UI.UIThemeDatabase>(dbPath);
+            bool dbCreated = db == null;
+            if (dbCreated)
+            {
+                db = ScriptableObject.CreateInstance<VoxelEngine.UI.UIThemeDatabase>();
+                AssetDatabase.CreateAsset(db, dbPath);
+                Debug.Log($"[Wizard] Step 3 created theme database: {dbPath}");
+            }
+            db.themes.Clear();
+            foreach (var guid in AssetDatabase.FindAssets("t:UIThemeDefinition", new[] { themeFolder }))
+            {
+                var p = AssetDatabase.GUIDToAssetPath(guid);
+                var d = AssetDatabase.LoadAssetAtPath<VoxelEngine.UI.UIThemeDefinition>(p);
+                if (d != null && !db.themes.Contains(d)) db.themes.Add(d);
+            }
+            // Sort by enum order for consistency
+            db.themes.Sort((a, b) => ((int)a.builtInTheme).CompareTo((int)b.builtInTheme));
+            EditorUtility.SetDirty(db);
+            Debug.Log($"[Wizard] Step 3 updated theme database with {db.themes.Count} themes ({(dbCreated ? "created" : "updated")}).");
             AssetDatabase.SaveAssets();
 
             foreach (var sceneRoot in currentScene.GetRootGameObjects())

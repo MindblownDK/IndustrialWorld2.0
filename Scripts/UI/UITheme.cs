@@ -66,7 +66,7 @@ namespace VoxelEngine.UI
 
         // ── Panel Builders ────────────────────────────────────────────────
 
-        /// <summary>Primary content panel with teal-glow border and inset shadow feel.</summary>
+        /// <summary>Primary content panel with theme-reactive glow border and inset shadow feel. Uses ThemedPanel tokens.</summary>
         public static VisualElement Panel()
         {
             var v = new VisualElement();
@@ -77,7 +77,12 @@ namespace VoxelEngine.UI
             v.style.backgroundColor = new StyleColor(UIThemeManager.PanelColor);
             Radius(v, UIThemeManager.CornerRadius);
             Color accent = UIThemeManager.Accent;
-            Border(v, 1, new Color(accent.r, accent.g, accent.b, 0.55f));
+            float glow = UIThemeManager.AccentGlow;
+            Border(v, 1, new Color(accent.r, accent.g, accent.b, 0.35f + glow * 0.4f));
+            v.AddToClassList("themed-panel");
+            // USS variable injection for panels that use var(--theme-*) in USS files
+            v.style.SetProperty(UIThemeApplier.VarAccent, $"rgba({Mathf.RoundToInt(accent.r*255)},{Mathf.RoundToInt(accent.g*255)},{Mathf.RoundToInt(accent.b*255)},{1f:0.###})");
+            v.style.SetProperty(UIThemeApplier.VarPanel, $"rgba({Mathf.RoundToInt(UIThemeManager.PanelColor.r*255)},{Mathf.RoundToInt(UIThemeManager.PanelColor.g*255)},{Mathf.RoundToInt(UIThemeManager.PanelColor.b*255)},{UIThemeManager.PanelOpacity:0.###})");
             return v;
         }
 
@@ -112,7 +117,7 @@ namespace VoxelEngine.UI
 
         // ── Typography ────────────────────────────────────────────────────
 
-        /// <summary>Panel title — 18px bold, bright white.</summary>
+        /// <summary>Panel title — 18px bold, theme-reactive.</summary>
         public static Label Title(string text)
         {
             var l = new Label(text);
@@ -122,20 +127,22 @@ namespace VoxelEngine.UI
             l.style.letterSpacing               = 1.5f;
             l.style.minHeight                   = 26;
             l.pickingMode = PickingMode.Ignore;
+            l.AddToClassList("themed-title");
             return l;
         }
 
-        /// <summary>Section subtitle — 12px semi-bold cyan, spaced caps feel.</summary>
+        /// <summary>Section subtitle — themed accent, spaced caps feel.</summary>
         public static Label Subtitle(string text)
         {
             var l = new Label(text.ToUpper());
-            l.style.color                   = new StyleColor(AccentCyan);
+            l.style.color                   = new StyleColor(UIThemeManager.Accent);
             l.style.fontSize                = 10;
             l.style.unityFontStyleAndWeight = FontStyle.Bold;
             l.style.letterSpacing           = 1.8f;
             l.style.minHeight               = 20;
             l.style.marginTop               = 4;
             l.pickingMode = PickingMode.Ignore;
+            l.AddToClassList("themed-subtitle");
             return l;
         }
 
@@ -575,7 +582,7 @@ namespace VoxelEngine.UI
             return d;
         }
 
-        /// <summary>Accent-coloured 2px divider — used beneath panel headers.</summary>
+        /// <summary>Accent-coloured divider — uses theme glow token and reactive USS var.</summary>
         public static VisualElement AccentDivider(Color? color = null)
         {
             var d = new VisualElement();
@@ -585,8 +592,11 @@ namespace VoxelEngine.UI
             d.pickingMode = PickingMode.Ignore;
 
             Color c = color ?? UIThemeManager.Accent;
-            d.style.backgroundColor = new StyleColor(new Color(c.r, c.g, c.b, 0.30f));
+            float glow = UIThemeManager.AccentGlow;
+            d.style.backgroundColor = new StyleColor(new Color(c.r, c.g, c.b, 0.20f + glow * 0.25f));
             Radius(d, 1);
+            d.AddToClassList("themed-accent-divider");
+            d.style.SetProperty(UIThemeApplier.VarGlow, glow.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture));
             return d;
         }
 

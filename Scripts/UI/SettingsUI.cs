@@ -117,7 +117,7 @@ namespace VoxelEngine.UI
             }
         }
 
-        /// <summary>Interface theming and production-planner presentation.</summary>
+        /// <summary>Interface theming and production-planner presentation — now full custom editor.</summary>
         public static void InterfaceTab(VisualElement p, Action rebuild)
         {
             p.Add(SectionLabel("Global UI Theme"));
@@ -130,9 +130,12 @@ namespace VoxelEngine.UI
                 if (themes[i] == UIThemeManager.Current) selected = i;
             }
             p.Add(Segmented(labels, selected, i => { UIThemeManager.Current = themes[i]; rebuild?.Invoke(); }));
-            p.Add(Hint("This starts the theme pipeline with persistent theme selection. Production planning panels already use themed accent colors."));
+            p.Add(Hint(UIThemeManager.DescriptionFor(UIThemeManager.Current)));
             p.Add(ThemePreview());
-            p.Add(ToggleRow("Custom Accent", "Override the current theme accent with a custom RGB color.",
+
+            p.Add(T.Divider());
+            p.Add(SectionLabel("Custom Accent Override"));
+            p.Add(ToggleRow("Enable Custom Accent", "Override the current theme accent with your own RGB color. Reactive — no reload needed.",
                 UIThemeManager.CustomAccentEnabled,
                 on => { UIThemeManager.CustomAccentEnabled = on; rebuild?.Invoke(); }));
             if (UIThemeManager.CustomAccentEnabled)
@@ -141,30 +144,67 @@ namespace VoxelEngine.UI
                 p.Add(FloatSliderRow("Accent Red", 0f, 1f, c.r, "0.00", "", v => { var color = UIThemeManager.CustomAccent; color.r = v; UIThemeManager.CustomAccent = color; }));
                 p.Add(FloatSliderRow("Accent Green", 0f, 1f, c.g, "0.00", "", v => { var color = UIThemeManager.CustomAccent; color.g = v; UIThemeManager.CustomAccent = color; }));
                 p.Add(FloatSliderRow("Accent Blue", 0f, 1f, c.b, "0.00", "", v => { var color = UIThemeManager.CustomAccent; color.b = v; UIThemeManager.CustomAccent = color; }));
+
+                var chipRow = new VisualElement();
+                chipRow.style.flexDirection = FlexDirection.Row;
+                chipRow.style.flexWrap = Wrap.Wrap;
+                chipRow.style.marginTop = 6;
+                Color[] presets = new[]
+                {
+                    T.AccentCyan, T.AccentTeal, T.AccentGold, T.AccentAmber,
+                    T.AccentGreen, T.AccentOrange, T.AccentPurple, T.AccentBlue,
+                    new Color(0.95f,0.24f,0.85f), new Color(0.40f,0.52f,0.92f), new Color(0.58f,0.68f,0.36f)
+                };
+                foreach (var pc in presets)
+                {
+                    var chip = new VisualElement();
+                    chip.style.width = 26; chip.style.height = 26;
+                    chip.style.marginRight = 5; chip.style.marginBottom = 5;
+                    chip.style.backgroundColor = new StyleColor(pc);
+                    T.Radius(chip, 5);
+                    T.Border(chip, 1, new Color(1,1,1,0.12f));
+                    Color cap = pc;
+                    chip.RegisterCallback<ClickEvent>(_ => { UIThemeManager.CustomAccent = cap; rebuild?.Invoke(); });
+                    chipRow.Add(chip);
+                }
+                p.Add(chipRow);
             }
+
             p.Add(T.Divider());
             p.Add(SectionLabel("Advanced Theme Shape"));
-            p.Add(FloatSliderRow("Panel Opacity", 0.45f, 1f, UIThemeManager.PanelOpacity, "0.00", "", v => UIThemeManager.PanelOpacity = v));
-            p.Add(FloatSliderRow("Corner Radius", 2f, 24f, UIThemeManager.CornerRadius, "0", " px", v => UIThemeManager.CornerRadius = v));
+            p.Add(FloatSliderRow($"Panel Opacity — {UIThemeManager.PanelOpacity:0.00}", 0.45f, 1f, UIThemeManager.PanelOpacity, "0.00", "", v => UIThemeManager.PanelOpacity = v));
+            p.Add(FloatSliderRow($"Corner Radius — {UIThemeManager.CornerRadius:0}px", 2f, 24f, UIThemeManager.CornerRadius, "0", " px", v => UIThemeManager.CornerRadius = v));
+
+            p.Add(T.Divider());
+            p.Add(SectionLabel("Effects & Motion"));
+            p.Add(FloatSliderRow($"Accent Glow — {UIThemeManager.AccentGlow:0.00}", 0f, 1f, UIThemeManager.AccentGlow, "0.00", "", v => UIThemeManager.AccentGlow = v));
+            p.Add(FloatSliderRow($"Animation Speed — {UIThemeManager.AnimationSpeed:0.00}x", 0.2f, 3f, UIThemeManager.AnimationSpeed, "0.00", " x", v => UIThemeManager.AnimationSpeed = v));
+            p.Add(Hint("Glow controls border emissive intensity. Animation speed scales all UI transition durations via USS variables (--theme-glow)."));
+
+            p.Add(T.Divider());
+            p.Add(SectionLabel("Share & Manage"));
             var toolRow = new VisualElement();
             toolRow.style.flexDirection = FlexDirection.Row;
             toolRow.style.flexWrap = Wrap.Wrap;
             toolRow.style.marginTop = 8;
             toolRow.Add(T.SmallButton("Copy Theme Code", () => GUIUtility.systemCopyBuffer = UIThemeManager.ExportThemeCode(), T.AccentGreen));
             toolRow.Add(T.SmallButton("Import Clipboard", () => { if (UIThemeManager.TryImportThemeCode(GUIUtility.systemCopyBuffer)) rebuild?.Invoke(); }, T.AccentCyan));
-            toolRow.Add(T.SmallButton("Reset Interface Theme", () =>
+            toolRow.Add(T.SmallButton("Reset to Default", () =>
             {
-                UIThemeManager.Current = BuiltInUITheme.IndustrialSteel;
-                UIThemeManager.CustomAccentEnabled = false;
-                UIThemeManager.CustomAccent = UITheme.AccentCyan;
-                UIThemeManager.PanelOpacity = 0.97f;
-                UIThemeManager.CornerRadius = UITheme.PanelRadius;
+                UIThemeManager.ResetToDefault();
                 rebuild?.Invoke();
             }, T.AccentRed));
             p.Add(toolRow);
-            p.Add(T.Divider());
 
-            p.Add(SectionLabel("Production Panel Accent"));
+            var code = new Label($"Code: {UIThemeManager.ExportThemeCode()}");
+            code.style.color = new StyleColor(T.TextMuted);
+            code.style.fontSize = 8;
+            code.style.whiteSpace = WhiteSpace.Normal;
+            code.style.marginTop = 6;
+            p.Add(code);
+
+            p.Add(T.Divider());
+            p.Add(SectionLabel("Production Panel Accent (Separate)"));
             var prodLabels = new List<string> { "Steel", "Amber", "Cyan", "Violet" };
             int prodIndex = ProductionPanelThemeState.Current switch
             {
@@ -178,7 +218,11 @@ namespace VoxelEngine.UI
                 while ((int)ProductionPanelThemeState.Current != i) ProductionPanelThemeState.Next();
                 rebuild?.Invoke();
             }));
-            p.Add(Hint("Overrides Recipe Browser and Production Statistics accent colors without affecting gameplay."));
+            p.Add(Hint("Overrides Recipe Browser and Production Statistics accent colors without affecting gameplay. Global theme still controls all base panels."));
+
+            p.Add(T.Divider());
+            p.Add(SectionLabel("Premium Editor"));
+            p.Add(Hint("All panels derive from ThemedPanel base class. ThemeManager loads ThemeDefinition ScriptableObjects, applies USS variables (--theme-accent, --theme-panel, --theme-radius, --theme-glow) reactively via OnThemeChanged — no scene reload required. Per-block overrides (ThemeOverride, AccentColorOverride, IconStyleOverride) are authored via Step 17 non-destructively."));
         }
 
         private static VisualElement ThemePreview()
@@ -188,16 +232,47 @@ namespace VoxelEngine.UI
             preview.style.marginBottom = 8;
             preview.style.borderLeftWidth = 4;
             preview.style.borderLeftColor = new StyleColor(UIThemeManager.Accent);
+            preview.AddToClassList("themed-panel");
+            var titleRow = new VisualElement();
+            titleRow.style.flexDirection = FlexDirection.Row;
+            titleRow.style.alignItems = Align.Center;
+            var dot = new VisualElement();
+            dot.style.width = 10; dot.style.height = 10;
+            dot.style.backgroundColor = new StyleColor(UIThemeManager.Accent);
+            T.Radius(dot, 5);
+            dot.style.marginRight = 8;
+            titleRow.Add(dot);
             var title = new Label(UIThemeManager.CurrentLabel);
             title.style.color = new StyleColor(UIThemeManager.TextColor);
             title.style.fontSize = 13;
             title.style.unityFontStyleAndWeight = FontStyle.Bold;
-            preview.Add(title);
-            var body = new Label("Preview · accent, panel border, and text tone update immediately.");
+            title.style.flexGrow = 1;
+            titleRow.Add(title);
+            var (pill, _) = T.StatusPill("LIVE REACTIVE", UIThemeManager.Accent);
+            titleRow.Add(pill);
+            preview.Add(titleRow);
+
+            var body = new Label($"Preview · accent, panel border, text tone, glow ({UIThemeManager.AccentGlow:0.00}) and radius ({UIThemeManager.CornerRadius:0}px) update immediately via USS variables.");
             body.style.color = new StyleColor(UIThemeManager.TextColor);
             body.style.fontSize = 10;
             body.style.whiteSpace = WhiteSpace.Normal;
+            body.style.marginTop = 6;
             preview.Add(body);
+
+            var sampleRow = new VisualElement();
+            sampleRow.style.flexDirection = FlexDirection.Row;
+            sampleRow.style.marginTop = 8;
+            sampleRow.Add(T.SmallButton("Action", () => {}, UIThemeManager.Accent));
+            sampleRow.style.flexWrap = Wrap.Wrap;
+            var spacer = T.Spacer(6);
+            sampleRow.Add(spacer);
+            sampleRow.Add(T.SmallButton("Secondary", () => {}, T.TextMuted));
+            preview.Add(sampleRow);
+
+            var divider = T.AccentDivider(UIThemeManager.Accent);
+            divider.AddToClassList("themed-accent-divider");
+            preview.Add(divider);
+
             return preview;
         }
 

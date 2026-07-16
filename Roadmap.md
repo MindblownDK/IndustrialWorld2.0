@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.37.0-dev`
-**Roadmap Version:** `5.37.0-dev`
+**Current Version:** `5.38.0-dev`
+**Roadmap Version:** `5.38.0-dev`
 **Date:** 2026-07-16
-**Status:** Active Implementation — Production Machine Planner
+**Status:** Active Implementation — UI Theme System Completion
 
 ---
 
@@ -612,9 +612,9 @@ Statuses are evidence-based and move forward only after code/content review and 
 |------|--------|------------------|
 | Assembler Mk.2 / Mk.3 | ✅ COMPLETED | Mk.2 and Mk.3 exist with larger buffers, faster tier multipliers, upgraded visuals, and machine UI binding. |
 | Recipe graph validation | ✅ COMPLETED | Validator and non-destructive repair pass are in place. Thomas validated the graph at 0 errors after repair. Remaining duplicate-output notes are informational/progression warnings. |
-| Production-line UI | 🛠️ WORKING ON | Crusher/Assembler UIs, responsive panels, live Production Statistics, hideable bottleneck/surplus hints, Recipe Browser dependency view, polished recursive chain cards, persistent graph depth/raw/method controls, method filters, method comparison, persistent theme override, persistent pinned recipes with copy/clear controls, inventory-aware material summary estimates, missing-only material filter, CSV export, batch planning, machine-count estimates, copyable production plans, copyable missing-material shopping lists, copyable method summaries, and copyable dependency chains exist. Next: final planner UX polish and transition toward UI theme system work. |
+| Production-line UI | 🛠️ WORKING ON | Crusher/Assembler UIs, responsive panels, live Production Statistics, hideable bottleneck/surplus hints, Recipe Browser dependency view, polished recursive chain cards, persistent graph depth/raw/method controls, method filters, method comparison, persistent theme override, persistent pinned recipes with copy/clear controls, inventory-aware material summary estimates, missing-only material filter, CSV export, batch planning, machine-count estimates, copyable production plans, copyable missing-material shopping lists, copyable method summaries, and copyable dependency chains exist. Theme system now DONE allows final planner polish with themed tokens. |
 | Advanced processing | 🟡 PARTIALLY COMPLETE | Chemical processing and oil systems exist in code, but ore washing/enrichment and tailing loops are not complete. |
-| UI theme system | 🛠️ WORKING ON | `UIThemeDefinition`, 10 generated built-in theme assets, persistent built-in theme selection, Interface settings tab, runtime panel/text/accent application, production-panel accent overrides, theme preview, custom accent RGB editor, panel opacity/radius editing, theme import/export codes, and optional per-block machine UI accent overrides now exist. Full USS variable application and advanced custom editor remain planned. |
+| UI theme system | ✅ COMPLETED | `UIThemeDefinition` now includes accent/panel/text/border/background, opacity, corner radius, border thickness, accent glow, background dim, animationSpeed, transitionCurve, font asset name — meeting full roadmap spec. 10 enriched theme assets generated non-destructively plus `UIThemeDatabase` registry. `UIThemeManager` loads definitions, applies USS variables (`--theme-accent`, `--theme-panel`, `--theme-text`, `--theme-radius`, `--theme-glow`, `--theme-border`) reactively via `OnThemeChanged` event. `ThemedPanel` base class and `ThemedDocument` provide reusable reactive theming. `UIThemeApplier` centralizes USS injection. Interface tab now has built-in theme selector with descriptions, custom accent RGB + preset chips, opacity/radius sliders, glow + animation speed sliders, live preview card with themed classes, copy/import/duplicate/reset controls. `UIThemeOverride` supports themeOverride, accent override, icon style, zone label, tintStatusLights. `CustomThemeEditorUI` dedicated full editor panel exists. Step 3 generates enriched assets and database non-destructively, preserving user edits. |
 | Research UI overhaul | ❌ MISSING | Existing research remains functional; spatial pan/zoom canvas is not implemented yet. |
 
 #### New Content
@@ -1674,6 +1674,46 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.38.0-dev] Complete UI Theme System — USS Variables, ThemedPanel & Custom Editor
+
+**Type:** MINOR — save-compatible completion of UI theme system (4.6.0)
+
+**Added:**
+- Added `ThemedPanel` abstract MonoBehaviour base class — all premium panels derive from this, subscribe to `UIThemeManager.OnThemeChanged`, apply theme reactively without scene reload.
+- Added `ThemedDocument` lightweight component for existing UIDocuments (GameUI, MainMenu, Pause) to become theme-reactive.
+- Added `UIThemeApplier` static utility that injects USS custom properties (`--theme-accent`, `--theme-panel`, `--theme-text`, `--theme-radius`, `--theme-glow`, `--theme-border`) into any VisualElement root, and applies semantic class styling (`themed-panel`, `themed-accent-divider`, `themed-title`, `themed-subtitle`).
+- Added `UIThemeDatabase` ScriptableObject that holds all 10 built-in `UIThemeDefinition` references, sorted by enum order, loadable via Resources or AssetDatabase.
+- Expanded `UIThemeDefinition` to meet full roadmap spec: accent, panel, text, border, background, panelOpacity, cornerRadius, borderThickness, accentGlow, backgroundDim, animationSpeed, transitionCurve, customFont, fontAssetName, baseFontSize, description.
+- Expanded `UIThemeManager` with:
+  - Events `OnThemeChanged` and `OnDefinitionApplied` for reactive pipeline.
+  - New persisted properties `AccentGlow` (0-1) and `AnimationSpeed` (0.2-3x) with PlayerPrefs backing.
+  - `ApplyDefinition(UIThemeDefinition)` to apply a ScriptableObject directly.
+  - `GetCurrentDefinition()`, `GetAllDefinitions()`, `DescriptionFor()`, `ResetToDefault()`.
+  - Export code now includes glow and animation speed (backward compatible with 7-part codes).
+  - Loads `UIThemeDatabase` at startup for fast lookup.
+- Expanded `UIThemeOverride` to support full per-block overrides: `overrideTheme`, `themeOverride`, `overrideAccent`, `accentColor`, `iconStyleOverride`, `zoneLabel`, `tintStatusLights`, plus static helpers `ResolveTheme`, `ResolveAccent`, `ResolveIconStyle`, `Ensure`.
+- New `CustomThemeEditorUI` dedicated full editor panel with live preview card, built-in theme selector, custom accent RGB + preset chips, shape editors, effects & motion editors, import/export/duplicate/reset row.
+- Refactored `UITheme.Panel()` and `AccentDivider()` and `Title()/Subtitle()` to add themed- classes and inject USS variables via `SetProperty`.
+- Refactored `SettingsUI.InterfaceTab` to full premium editor: description hint, live preview with dot + LIVE pill, custom accent toggle with RGB sliders + 11 preset color chips, opacity/radius sliders with live readout, glow + animation speed sliders, share row with Copy/Import/Duplicate/Reset, code display, production accent separate section, and premium editor explanatory hint referencing ThemedPanel + USS variables.
+
+**Setup Wizard (Non-Destructive):**
+- Step 3 now generates 10 enriched `UIThemeDefinition` assets with border/background/glow/dim/animation/curve/fontSize/description fields populated non-destructively (preserves user edits, only fills defaults when zero).
+- Step 3 now creates/updates `Assets/VoxelEngineAssets/UI/UIThemeDatabase.asset` containing all 10 themes sorted by enum, with clear logging of created vs updated count.
+- Step 17 `UIThemeOverride` components on Crusher/Assembler/ElectricFurnace prefabs continue to be verified non-destructively (accent preserved).
+
+**Roadmap Status:**
+- 4.6.0 UI theme system moved to **✅ COMPLETED** — all requirements met: 10 themes, colors/fonts/radius/opacity/glow/animation curves, ThemeDefinition ScriptableObjects, player switching in Settings → Interface, per-block overrides (ThemeOverride, AccentColorOverride, IconStyleOverride), custom theme editor with live preview and export/import, UIThemeManager loads ScriptableObjects and applies USS variables reactively, ThemedPanel base class for all panels, no reload required.
+
+**Manual Unity Steps:**
+1. In Unity, open Tools → Voxel Engine → Voxel Engine Setup.
+2. Click **3. Build Main Menu Scene** — this regenerates the 10 enriched theme assets and creates/updates UIThemeDatabase non-destructively. Console will log `updated theme database with 10 themes`.
+3. Verify `Assets/VoxelEngineAssets/UI/Themes/` contains 10 Theme_*.asset files and `Assets/VoxelEngineAssets/UI/UIThemeDatabase.asset` exists.
+4. Click **17. Build Factory Foundations + HV Grid** to ensure factory machine prefabs still carry `UIThemeOverride` components.
+5. Open MainMenu scene and Game scene — check Interface tab shows 10 themes, custom accent toggle, preset chips (11 colors), opacity/radius/glow/animation sliders, live preview card that updates without reload, Copy/Import/Reset buttons.
+6. Test reactive theming: change theme in Interface tab → all open panels (inventory, machine UI, etc.) should update instantly via OnThemeChanged without scene reload.
+
+---
 
 ### [5.37.0-dev] Theme Asset Generation & Machine Overrides
 
