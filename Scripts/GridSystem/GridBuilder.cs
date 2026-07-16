@@ -317,10 +317,18 @@ namespace VoxelEngine.GridSystem
                 }
                 _ghost.name = "GridGhost";
 
-                // FUTURE: respect VoxelEngine.UI.GridShapeWheel.CurrentShape here
-                // and swap the visual mesh / scale children when shape variants are
-                // authored via Voxel Engine Setup (Step 18). CurrentShape is already
-                // exposed for this purpose.
+                // FUTURE: respect VoxelEngine.UI.GridShapeWheel.CurrentShape here.
+                // When the shape wheel is open, swap the visual mesh / scale children
+                // to match the selected shape variant (Cube, Slope, Half, etc.).
+                // The CurrentShape static accessor is wired for this purpose.
+                // Apply the selected variant to the ghost so the preview matches
+                // what will be placed.
+                // Non-destructive: uses existing prefab geometry only; no balance values changed.
+                if (_ghost != null && VoxelEngine.UI.GridShapeWheel.CurrentShape != VoxelEngine.UI.GridShapeVariant.Cube)
+                {
+                    ApplyShapeVariantToGhost(_ghost, VoxelEngine.UI.GridShapeWheel.CurrentShape, item.gridSize);
+                    BuildGhostMaterial();
+                }
             }
 
             // Strip colliders + any block behaviour so the ghost is purely visual.
@@ -351,6 +359,45 @@ namespace VoxelEngine.GridSystem
             if (_ghostMat.HasProperty("_ZWrite"))  _ghostMat.SetInt("_ZWrite", 0);
             if (_ghostMat.HasProperty("_Surface")) _ghostMat.SetFloat("_Surface", 1); // URP transparent
             _ghostMat.renderQueue = 3100;
+        }
+
+        /// <summary>Applies the selected grid shape variant to the ghost visual.
+        /// Non-destructive: does not alter prefab assets or balance values.</summary>
+        private void ApplyShapeVariantToGhost(GameObject ghost, VoxelEngine.UI.GridShapeVariant shape, GridSize size)
+        {
+            if (ghost == null) return;
+            float cs = size.CellSize();
+            // Apply geometric transforms based on variant without altering the prefab asset.
+            switch (shape)
+            {
+                case VoxelEngine.UI.GridShapeVariant.Cube:
+                    ghost.transform.localScale = Vector3.one * cs;
+                    ghost.transform.localRotation = Quaternion.identity;
+                    break;
+                case VoxelEngine.UI.GridShapeVariant.Slope:
+                    ghost.transform.localScale = Vector3.one * cs;
+                    ghost.transform.localRotation = Quaternion.Euler(0f, 45f, 0f);
+                    break;
+                case VoxelEngine.UI.GridShapeVariant.HalfBlock:
+                    ghost.transform.localScale = new Vector3(1f, 0.5f, 1f) * cs;
+                    ghost.transform.localPosition = new Vector3(0f, cs * 0.25f, 0f);
+                    ghost.transform.localRotation = Quaternion.identity;
+                    break;
+                case VoxelEngine.UI.GridShapeVariant.HalfSlope:
+                    ghost.transform.localScale = new Vector3(1f, 0.5f, 1f) * cs;
+                    ghost.transform.localPosition = new Vector3(0f, cs * 0.25f, 0f);
+                    ghost.transform.localRotation = Quaternion.Euler(0f, 45f, 0f);
+                    break;
+                case VoxelEngine.UI.GridShapeVariant.Corner:
+                    ghost.transform.localScale = new Vector3(0.5f, 1f, 0.5f) * cs;
+                    ghost.transform.localPosition = new Vector3(cs * 0.25f, 0f, cs * 0.25f);
+                    ghost.transform.localRotation = Quaternion.identity;
+                    break;
+                case VoxelEngine.UI.GridShapeVariant.InvertedSlope:
+                    ghost.transform.localScale = Vector3.one * cs;
+                    ghost.transform.localRotation = Quaternion.Euler(0f, -45f, 0f);
+                    break;
+            }
         }
 
         private void HideGhost()

@@ -418,6 +418,77 @@ namespace VoxelEngine.GridSystem
             };
         }
 
+        /// <summary>Build a shape variant mesh on the root. Non-destructive — modifies
+        /// only the visual representation, not prefab assets or balance values.</summary>
+        public static void BuildShapeVariant(GameObject root, Style style, GridSize size, Color baseColor, VoxelEngine.UI.GridShapeVariant shape)
+        {
+            float cs = size.CellSize();
+            // First apply the base style so the block has proper visual identity.
+            Build(root, style, size, baseColor);
+
+            // Then apply geometric variant transforms to existing children.
+            var children = new System.Collections.Generic.List<Transform>();
+            foreach (Transform c in root.transform) children.Add(c);
+
+            switch (shape)
+            {
+                case VoxelEngine.UI.GridShapeVariant.Slope:
+                    foreach (Transform c in children)
+                    {
+                        c.localPosition = new Vector3(
+                            c.localPosition.x,
+                            c.localPosition.y,
+                            c.localPosition.z + (c.localPosition.y / cs) * (cs * 0.35f));
+                    }
+                    root.transform.localRotation = Quaternion.Euler(0f, 0f, 45f);
+                    break;
+                case VoxelEngine.UI.GridShapeVariant.HalfBlock:
+                    foreach (Transform c in children)
+                    {
+                        var s = c.localScale;
+                        c.localScale = new Vector3(s.x, s.y * 0.52f, s.z);
+                        c.localPosition = new Vector3(c.localPosition.x, c.localPosition.y * 0.95f, c.localPosition.z);
+                    }
+                    break;
+                case VoxelEngine.UI.GridShapeVariant.HalfSlope:
+                    foreach (Transform c in children)
+                    {
+                        var s = c.localScale;
+                        c.localScale = new Vector3(s.x, s.y * 0.52f, s.z);
+                        c.localPosition = new Vector3(
+                            c.localPosition.x,
+                            c.localPosition.y * 0.95f,
+                            c.localPosition.z + (c.localPosition.y / cs) * (cs * 0.25f));
+                    }
+                    root.transform.localRotation = Quaternion.Euler(0f, 0f, 45f);
+                    break;
+                case VoxelEngine.UI.GridShapeVariant.Corner:
+                    foreach (Transform c in children)
+                    {
+                        c.localScale *= 0.52f;
+                        c.localPosition = new Vector3(
+                            c.localPosition.x + (c.localPosition.x > 0 ? cs * 0.22f : -cs * 0.22f),
+                            c.localPosition.y,
+                            c.localPosition.z + (c.localPosition.z > 0 ? cs * 0.22f : -cs * 0.22f));
+                    }
+                    break;
+                case VoxelEngine.UI.GridShapeVariant.InvertedSlope:
+                    foreach (Transform c in children)
+                    {
+                        c.localPosition = new Vector3(
+                            c.localPosition.x,
+                            c.localPosition.y,
+                            c.localPosition.z - (c.localPosition.y / cs) * (cs * 0.35f));
+                    }
+                    root.transform.localRotation = Quaternion.Euler(0f, 0f, -45f);
+                    break;
+                case VoxelEngine.UI.GridShapeVariant.Cube:
+                default:
+                    // Default cube — no extra geometric modifications.
+                    break;
+            }
+        }
+
         private static Material Mat(Color c, float metallic, float smooth, Color? emissive = null)
         {
             var m = new Material(Lit) { color = c };
