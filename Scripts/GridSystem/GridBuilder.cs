@@ -329,6 +329,18 @@ namespace VoxelEngine.GridSystem
                     ApplyShapeVariantToGhost(_ghost, VoxelEngine.UI.GridShapeWheel.CurrentShape, item.gridSize);
                     BuildGhostMaterial();
                 }
+                else if (_ghost != null)
+                {
+                    ApplyShapeVariantToGhost(_ghost, VoxelEngine.UI.GridShapeVariant.Cube, item.gridSize);
+                    BuildGhostMaterial();
+                }
+            }
+
+            // Always apply the selected shape variant (idempotent — resets Cube properly).
+            if (_ghost != null)
+            {
+                ApplyShapeVariantToGhost(_ghost, VoxelEngine.UI.GridShapeWheel.CurrentShape, item.gridSize);
+                BuildGhostMaterial();
             }
 
             // Strip colliders + any block behaviour so the ghost is purely visual.
@@ -343,8 +355,9 @@ namespace VoxelEngine.GridSystem
             }
 
             _ghost.SetActive(true);
-            _ghost.transform.position = pos;
-            _ghost.transform.rotation = rotation;
+            // Combine grid rotation with the variant rotation; apply variant offset to position.
+            _ghost.transform.position = pos + _ghost.transform.localPosition;
+            _ghost.transform.rotation = rotation * _ghost.transform.localRotation;
         }
 
         private void BuildGhostMaterial()
@@ -372,6 +385,7 @@ namespace VoxelEngine.GridSystem
             {
                 case VoxelEngine.UI.GridShapeVariant.Cube:
                     ghost.transform.localScale = Vector3.one * cs;
+                    ghost.transform.localPosition = Vector3.zero;
                     ghost.transform.localRotation = Quaternion.identity;
                     break;
                 case VoxelEngine.UI.GridShapeVariant.Slope:

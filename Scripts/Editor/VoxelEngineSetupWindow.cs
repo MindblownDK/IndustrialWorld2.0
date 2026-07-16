@@ -205,6 +205,16 @@ namespace VoxelEngine.EditorTools
                 "Run AFTER steps 4, 6, 7, 10, 12.");
             AddWizardButton(scroll, "17. Build Factory Foundations + HV Grid\n(Conveyors, Machines, Power Poles, Transformers, HV Towers)", BuildFactoryFoundationsContent, 72);
 
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 18 builds GRID SHAPE VARIANTS (non-destructive):\n" +
+                "  • Cube / Slope / HalfBlock / HalfSlope / Corner / InvertedSlope\n" +
+                "  • Updates ghost preview via GridShapeWheel + GridBuilder hook\n" +
+                "  • Adds mesh-variant support to GridBlockMeshBuilder\n" +
+                "  • Creates missing variant definitions only; preserves all existing balance, health, power, and custom prefab geometry\n" +
+                "Re-runnable. Idempotent. Never overwrites user-authored materials or balance values.");
+            AddWizardButton(scroll, "18. Setup Grid Shape Variants (Non-Destructive)\n(Cube, Slope, Half, Corner, Inverted — preserve balance)", () => VoxelEngine.EditorTools.GridShapeVariantSetup.RunStep18(), 56);
+
             AddSpacer(scroll, 20);
         }
 

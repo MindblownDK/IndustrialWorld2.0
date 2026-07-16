@@ -154,6 +154,7 @@ namespace VoxelEngine.UI
             _wheelCenter.style.width = 420;
             _wheelCenter.style.height = 420;
             _wheelCenter.style.position = Position.Relative;
+            _wheelCenter.style.overflow = Overflow.Visible;
             _wheelCenter.style.transitionProperty = new System.Collections.Generic.List<StylePropertyName> { "translate", "scale" };
             _wheelCenter.style.transitionDuration = new System.Collections.Generic.List<TimeValue> { new(0.08f, TimeUnit.Second) };
             float safeScale = Mathf.Clamp(Mathf.Min(Screen.width, Screen.height) / 500f, 0.64f, 1f);
@@ -271,10 +272,10 @@ namespace VoxelEngine.UI
 
             var labelRoot = new VisualElement();
             labelRoot.style.position = Position.Absolute;
-            labelRoot.style.left = center + Mathf.Cos(angle) * radius - 38f;
-            labelRoot.style.top = center + Mathf.Sin(angle) * radius - 30f;
-            labelRoot.style.width = 76;
-            labelRoot.style.height = 60;
+            labelRoot.style.left = center + Mathf.Cos(angle) * radius - 65f;
+            labelRoot.style.top = center + Mathf.Sin(angle) * radius - 42f;
+            labelRoot.style.width = 130;
+            labelRoot.style.height = 85;
             labelRoot.style.alignItems = Align.Center;
             labelRoot.style.justifyContent = Justify.Center;
             labelRoot.style.overflow = Overflow.Visible;
@@ -287,7 +288,7 @@ namespace VoxelEngine.UI
 
             bool selected = _current == variant;
             var icon = new Label(iconText);
-            icon.style.fontSize = 26;
+            icon.style.fontSize = 18;
             icon.style.unityTextAlign = TextAnchor.MiddleCenter;
             icon.style.color = new StyleColor(selected ? Color.white : new Color(0.16f, 0.18f, 0.20f));
             icon.style.unityFontStyleAndWeight = FontStyle.Bold;
@@ -296,12 +297,13 @@ namespace VoxelEngine.UI
             _segmentIcons[index] = icon;
 
             var label = new Label(variant.ToString().ToUpperInvariant());
-            label.style.fontSize = 8;
+            label.style.fontSize = 6;
             label.style.marginTop = 1;
-            label.style.letterSpacing = 0.6f;
+            label.style.letterSpacing = 0.4f;
             label.style.unityFontStyleAndWeight = FontStyle.Bold;
             label.style.color = new StyleColor(selected ? Color.white : new Color(0.20f, 0.22f, 0.24f));
-            label.style.whiteSpace = WhiteSpace.NoWrap;
+            label.style.whiteSpace = WhiteSpace.Normal;
+            label.style.unityTextAlign = TextAnchor.MiddleCenter;
             label.pickingMode = PickingMode.Ignore;
             labelRoot.Add(label);
             _segmentNames[index] = label;
