@@ -33,8 +33,14 @@ namespace VoxelEngine.UI
     public static class UIThemeManager
     {
         private const string ThemeKey = "IndustrialWorld.UITheme";
+        private const string CustomAccentEnabledKey = "IndustrialWorld.UITheme.CustomAccentEnabled";
+        private const string CustomAccentRKey = "IndustrialWorld.UITheme.CustomAccentR";
+        private const string CustomAccentGKey = "IndustrialWorld.UITheme.CustomAccentG";
+        private const string CustomAccentBKey = "IndustrialWorld.UITheme.CustomAccentB";
         private static bool _loaded;
         private static BuiltInUITheme _current = BuiltInUITheme.IndustrialSteel;
+        private static bool _customAccentEnabled;
+        private static Color _customAccent = UITheme.AccentCyan;
 
         public static BuiltInUITheme Current
         {
@@ -48,7 +54,17 @@ namespace VoxelEngine.UI
         }
 
         public static string CurrentLabel => Label(Current);
-        public static Color Accent => AccentFor(Current);
+        public static bool CustomAccentEnabled
+        {
+            get { EnsureLoaded(); return _customAccentEnabled; }
+            set { EnsureLoaded(); _customAccentEnabled = value; SaveCustomAccent(); }
+        }
+        public static Color CustomAccent
+        {
+            get { EnsureLoaded(); return _customAccent; }
+            set { EnsureLoaded(); _customAccent = value; SaveCustomAccent(); }
+        }
+        public static Color Accent => CustomAccentEnabled ? CustomAccent : AccentFor(Current);
         public static Color PanelColor => PanelFor(Current);
         public static Color TextColor => TextFor(Current);
 
@@ -111,6 +127,21 @@ namespace VoxelEngine.UI
             _current = System.Enum.IsDefined(typeof(BuiltInUITheme), saved)
                 ? (BuiltInUITheme)saved
                 : BuiltInUITheme.IndustrialSteel;
+            _customAccentEnabled = PlayerPrefs.GetInt(CustomAccentEnabledKey, 0) != 0;
+            _customAccent = new Color(
+                PlayerPrefs.GetFloat(CustomAccentRKey, UITheme.AccentCyan.r),
+                PlayerPrefs.GetFloat(CustomAccentGKey, UITheme.AccentCyan.g),
+                PlayerPrefs.GetFloat(CustomAccentBKey, UITheme.AccentCyan.b),
+                1f);
+        }
+
+        private static void SaveCustomAccent()
+        {
+            PlayerPrefs.SetInt(CustomAccentEnabledKey, _customAccentEnabled ? 1 : 0);
+            PlayerPrefs.SetFloat(CustomAccentRKey, _customAccent.r);
+            PlayerPrefs.SetFloat(CustomAccentGKey, _customAccent.g);
+            PlayerPrefs.SetFloat(CustomAccentBKey, _customAccent.b);
+            PlayerPrefs.Save();
         }
     }
 }

@@ -132,7 +132,23 @@ namespace VoxelEngine.UI
             p.Add(Segmented(labels, selected, i => { UIThemeManager.Current = themes[i]; rebuild?.Invoke(); }));
             p.Add(Hint("This starts the theme pipeline with persistent theme selection. Production planning panels already use themed accent colors."));
             p.Add(ThemePreview());
-            p.Add(T.SmallButton("Reset Interface Theme", () => { UIThemeManager.Current = BuiltInUITheme.IndustrialSteel; rebuild?.Invoke(); }, T.AccentRed));
+            p.Add(ToggleRow("Custom Accent", "Override the current theme accent with a custom RGB color.",
+                UIThemeManager.CustomAccentEnabled,
+                on => { UIThemeManager.CustomAccentEnabled = on; rebuild?.Invoke(); }));
+            if (UIThemeManager.CustomAccentEnabled)
+            {
+                var c = UIThemeManager.CustomAccent;
+                p.Add(FloatSliderRow("Accent Red", 0f, 1f, c.r, "0.00", "", v => { var color = UIThemeManager.CustomAccent; color.r = v; UIThemeManager.CustomAccent = color; }));
+                p.Add(FloatSliderRow("Accent Green", 0f, 1f, c.g, "0.00", "", v => { var color = UIThemeManager.CustomAccent; color.g = v; UIThemeManager.CustomAccent = color; }));
+                p.Add(FloatSliderRow("Accent Blue", 0f, 1f, c.b, "0.00", "", v => { var color = UIThemeManager.CustomAccent; color.b = v; UIThemeManager.CustomAccent = color; }));
+            }
+            p.Add(T.SmallButton("Reset Interface Theme", () =>
+            {
+                UIThemeManager.Current = BuiltInUITheme.IndustrialSteel;
+                UIThemeManager.CustomAccentEnabled = false;
+                UIThemeManager.CustomAccent = UITheme.AccentCyan;
+                rebuild?.Invoke();
+            }, T.AccentRed));
             p.Add(T.Divider());
 
             p.Add(SectionLabel("Production Panel Accent"));
