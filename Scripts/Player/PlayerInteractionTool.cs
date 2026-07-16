@@ -460,6 +460,13 @@ namespace VoxelEngine.Player
                     return;
                 }
 
+                // Grid Screen Block: right-click opens the screen config panel.
+                if (!holdingGridBlock && gridBlock is VoxelEngine.GridSystem.GridScreenBlock screenBlock)
+                {
+                    VoxelEngine.GridSystem.UI.GridScreenConfigUI.Instance?.Open(screenBlock);
+                    return;
+                }
+
                 // Storage system.
                 var storageDrawerController = hit.collider.GetComponentInParent<VoxelEngine.Storage.StorageDrawerController>();
                 if (storageDrawerController != null && IsFrontHit(storageDrawerController.transform, hit)) { UI.GameUIController.Instance?.OpenMachine(storageDrawerController); return; }

@@ -628,6 +628,30 @@ namespace VoxelEngine.GridSystem.UI
                     wrap.Add(bar);
                 }
 
+                // Screen config button
+                if (block is VoxelEngine.GridSystem.GridScreenBlock screenBlock)
+                {
+                    var screenBar = new VisualElement();
+                    screenBar.style.flexDirection = FlexDirection.Row;
+                    screenBar.style.alignItems = Align.Center;
+                    screenBar.style.marginBottom = 8;
+
+                    var configBtn = T.SmallButton("CONFIGURE SCREEN", () =>
+                    {
+                        VoxelEngine.GridSystem.UI.GridScreenConfigUI.Instance?.OpenForScreen(screenBlock);
+                    }, T.AccentCyan);
+                    configBtn.style.marginRight = 10;
+                    screenBar.Add(configBtn);
+
+                    var srcLbl = new Label("Source: " + (screenBlock.ResolveProvider()?.SourceName ?? "none"));
+                    srcLbl.style.color = T.TextSecondary;
+                    srcLbl.style.fontSize = 11;
+                    srcLbl.style.flexGrow = 1;
+                    screenBar.Add(srcLbl);
+
+                    wrap.Add(screenBar);
+                }
+
                 var panel = GridBlockUI.BuildPanel(block, slot);
                 NormalizePanelForTerminal(panel, maxWidth: 760);
                 wrap.Add(panel);
@@ -854,6 +878,7 @@ namespace VoxelEngine.GridSystem.UI
             if (block is GridCockpit) return "Cockpits";
             if (block is GridBeacon) return "Beacons";
             if (block is GridOreDetector) return "Ore Detectors";
+            if (block is GridScreenBlock) return "Screens";
             return block.GetType().Name;
         }
 

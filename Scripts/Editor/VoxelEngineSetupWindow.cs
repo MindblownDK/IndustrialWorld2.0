@@ -669,6 +669,20 @@ namespace VoxelEngine.EditorTools
             if (shapeWheelGo.GetComponent<VoxelEngine.UI.GridShapeWheel>() == null)
                 shapeWheelGo.gameObject.AddComponent<VoxelEngine.UI.GridShapeWheel>();
 
+            // Grid Screen Config UI (right-click panel for configuring screen data sources).
+            var screenConfigGo = playerGo.transform.Find("GridScreenConfigUI");
+            if (screenConfigGo == null)
+            {
+                screenConfigGo = new GameObject("GridScreenConfigUI").transform;
+                screenConfigGo.SetParent(playerGo.transform, false);
+            }
+            var screenConfigDoc = screenConfigGo.GetComponent<UnityEngine.UIElements.UIDocument>();
+            if (screenConfigDoc == null) screenConfigDoc = screenConfigGo.gameObject.AddComponent<UnityEngine.UIElements.UIDocument>();
+            screenConfigDoc.sortingOrder = 620;
+            screenConfigDoc.panelSettings = panelSettings;
+            if (screenConfigGo.GetComponent<VoxelEngine.GridSystem.UI.GridScreenConfigUI>() == null)
+                screenConfigGo.gameObject.AddComponent<VoxelEngine.GridSystem.UI.GridScreenConfigUI>();
+
             // Link viewer on whichever world exists. No manager is created here.
             if (flatWorld != null) flatWorld.viewer = playerGo.transform;
             if (sphereWorld != null) sphereWorld.viewer = playerGo.transform;

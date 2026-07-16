@@ -87,6 +87,14 @@ namespace VoxelEngine.EditorTools
                 screen.transform.localPosition = new Vector3(0, 0, -screenScale.z * 0.02f);
                 screen.GetComponent<Renderer>().sharedMaterial = screenOff;
 
+                // Solid back panel (dark, fills the full cell so screens are never see-through)
+                var back = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                back.name = "Generated_BackPanel";
+                back.transform.SetParent(root.transform, false);
+                back.transform.localScale = screenScale * 0.98f;
+                back.transform.localPosition = new Vector3(0, 0, screenScale.z * 0.02f);
+                back.GetComponent<Renderer>().sharedMaterial = frameMat;
+
                 // Glow strip at bottom
                 var glow = GameObject.CreatePrimitive(PrimitiveType.Cube);
                 glow.name = "Generated_GlowStrip";
