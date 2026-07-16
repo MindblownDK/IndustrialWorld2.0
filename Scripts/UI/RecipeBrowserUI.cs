@@ -6,6 +6,7 @@
 
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using UnityEngine;
 using UnityEngine.UIElements;
 using VoxelEngine.Crafting;
@@ -30,9 +31,16 @@ namespace VoxelEngine.UI
         private static string _search = string.Empty;
         private static string _selectedOutputKey;
         private enum ChainPreference { Auto, AIAssembler, AssemblerStation }
+        private const string PrefSelectedOutput = "IndustrialWorld.RecipeBrowser.SelectedOutput";
+        private const string PrefChainDepth = "IndustrialWorld.RecipeBrowser.ChainDepth";
+        private const string PrefShowRaw = "IndustrialWorld.RecipeBrowser.ShowRaw";
+        private const string PrefPreference = "IndustrialWorld.RecipeBrowser.Preference";
+        private const string PrefPlanBatches = "IndustrialWorld.RecipeBrowser.PlanBatches";
+        private static bool _settingsLoaded;
         private static int _chainDepth = 4;
         private static bool _showRawInputs = true;
         private static ChainPreference _chainPreference = ChainPreference.Auto;
+        private static int _planBatches = 1;
         private static System.Action _refreshCurrentDetails;
 
         public static VisualElement BuildPanel(RecipeRegistry registry)
@@ -43,6 +51,7 @@ namespace VoxelEngine.UI
             panel.style.width = new StyleLength(new Length(54f, LengthUnit.Percent));
             panel.style.maxWidth = new StyleLength(new Length(62f, LengthUnit.Percent));
 
+            EnsureSettingsLoaded();
             var entries = BuildEntries(registry);
             if (string.IsNullOrEmpty(_selectedOutputKey) && entries.Count > 0) _selectedOutputKey = OutputKey(entries[0].Output);
 
@@ -68,6 +77,28 @@ namespace VoxelEngine.UI
             body.Add(detailsHost);
             RefreshDetails();
             return panel;
+        }
+
+        private static void EnsureSettingsLoaded()
+        {
+            if (_settingsLoaded) return;
+            _settingsLoaded = true;
+            _selectedOutputKey = PlayerPrefs.GetString(PrefSelectedOutput, _selectedOutputKey ?? string.Empty);
+            _chainDepth = Mathf.Clamp(PlayerPrefs.GetInt(PrefChainDepth, _chainDepth), 1, 8);
+            _showRawInputs = PlayerPrefs.GetInt(PrefShowRaw, _showRawInputs ? 1 : 0) != 0;
+            int pref = PlayerPrefs.GetInt(PrefPreference, (int)_chainPreference);
+            _chainPreference = System.Enum.IsDefined(typeof(ChainPreference), pref) ? (ChainPreference)pref : ChainPreference.Auto;
+            _planBatches = Mathf.Clamp(PlayerPrefs.GetInt(PrefPlanBatches, _planBatches), 1, 999);
+        }
+
+        private static void SaveSettings()
+        {
+            PlayerPrefs.SetString(PrefSelectedOutput, _selectedOutputKey ?? string.Empty);
+            PlayerPrefs.SetInt(PrefChainDepth, _chainDepth);
+            PlayerPrefs.SetInt(PrefShowRaw, _showRawInputs ? 1 : 0);
+            PlayerPrefs.SetInt(PrefPreference, (int)_chainPreference);
+            PlayerPrefs.SetInt(PrefPlanBatches, _planBatches);
+            PlayerPrefs.Save();
         }
 
         private static VisualElement Header()
@@ -166,6 +197,7 @@ namespace VoxelEngine.UI
             card.RegisterCallback<ClickEvent>(_ =>
             {
                 _selectedOutputKey = outputKey;
+                SaveSettings();
                 refreshDetails?.Invoke();
             });
             return card;
@@ -281,26 +313,92 @@ namespace VoxelEngine.UI
             card.style.borderLeftWidth = 4;
             card.style.borderLeftColor = new StyleColor(T.AccentGold);
 
-            var summary = new Dictionary<string, MaterialNeed>();
-            BuildMaterialSummaryRecursive(outputKey, entries, requiredCount: 1, depth: 0, summary, new HashSet<string>());
+            var header = new VisualElement();
+            header.style.flexDirection = FlexDirection.Row;
+            header.style.alignItems = Align.Center;
+            header.style.marginBottom = 8;
+            card.Add(header);
 
-            if (summary.Count == 0)
+            var title = new Label("Material Summary");
+            title.style.flexGrow = 1;
+            title.style.color = new StyleColor(T.AccentGold);
+            title.style.fontSize = 13;
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            header.Add(title);
+
+            var summaryBody = new VisualElement();
+            Button batchButton = null;
+
+            Dictionary<string, MaterialNeed> BuildSummary()
             {
-                card.Add(T.Muted("No base materials found for the selected path."));
-                return card;
+                var summary = new Dictionary<string, MaterialNeed>();
+                BuildMaterialSummaryRecursive(outputKey, entries, requiredCount: _planBatches, depth: 0, summary, new HashSet<string>());
+                return summary;
             }
 
-            var top = new Label("Approximate base requirements for one selected output batch.");
-            top.style.color = new StyleColor(T.TextMuted);
-            top.style.fontSize = 9;
-            top.style.whiteSpace = WhiteSpace.Normal;
-            top.style.marginBottom = 8;
-            card.Add(top);
+            void RefreshSummaryOnly()
+            {
+                summaryBody.Clear();
+                batchButton.text = $"{_planBatches} batch{(_planBatches == 1 ? "" : "es")}";
+                var summary = BuildSummary();
+                if (summary.Count == 0)
+                {
+                    summaryBody.Add(T.Muted("No base materials found for the selected path."));
+                    return;
+                }
 
-            foreach (var need in summary.Values.OrderByDescending(n => n.Raw).ThenBy(n => n.Item != null ? n.Item.displayName : string.Empty))
-                card.Add(MaterialLine(need));
+                var top = new Label($"Approximate base requirements for {_planBatches} selected output batch{(_planBatches == 1 ? "" : "es")}.");
+                top.style.color = new StyleColor(T.TextMuted);
+                top.style.fontSize = 9;
+                top.style.whiteSpace = WhiteSpace.Normal;
+                top.style.marginBottom = 8;
+                summaryBody.Add(top);
 
+                foreach (var need in summary.Values.OrderByDescending(n => n.Raw).ThenBy(n => n.Item != null ? n.Item.displayName : string.Empty))
+                    summaryBody.Add(MaterialLine(need));
+            }
+
+            header.Add(T.SmallButton("−", () =>
+            {
+                _planBatches = Mathf.Max(1, _planBatches - 1);
+                SaveSettings();
+                RefreshSummaryOnly();
+            }, T.TextMuted));
+            batchButton = T.SmallButton($"{_planBatches} batch{(_planBatches == 1 ? "" : "es")}", () =>
+            {
+                _planBatches = 1;
+                SaveSettings();
+                RefreshSummaryOnly();
+            }, T.AccentGold);
+            header.Add(batchButton);
+            header.Add(T.SmallButton("+", () =>
+            {
+                _planBatches = Mathf.Min(999, _planBatches + 1);
+                SaveSettings();
+                RefreshSummaryOnly();
+            }, T.TextMuted));
+            header.Add(T.SmallButton("Copy Plan", () =>
+            {
+                GUIUtility.systemCopyBuffer = BuildPlanText(outputKey, entries, BuildSummary());
+            }, T.AccentGreen));
+
+            card.Add(summaryBody);
+            RefreshSummaryOnly();
             return card;
+        }
+
+        private static string BuildPlanText(string outputKey, List<RecipeEntry> entries, Dictionary<string, MaterialNeed> summary)
+        {
+            var selected = entries.FirstOrDefault(entry => OutputKey(entry.Output) == outputKey)?.Output;
+            var builder = new StringBuilder();
+            builder.AppendLine($"Production Plan: {(selected != null ? selected.displayName : outputKey)}");
+            builder.AppendLine($"Batches: {_planBatches}");
+            builder.AppendLine($"Preference: {_chainPreference}");
+            builder.AppendLine($"Depth: {_chainDepth}");
+            builder.AppendLine("Materials:");
+            foreach (var need in summary.Values.OrderByDescending(n => n.Raw).ThenBy(n => n.Item != null ? n.Item.displayName : string.Empty))
+                builder.AppendLine($"- {need.Count}x {(need.Item != null ? need.Item.displayName : "Unknown")} ({(need.Raw ? "RAW" : "ITEM")})");
+            return builder.ToString();
         }
 
         private static VisualElement MaterialLine(MaterialNeed need)
@@ -419,6 +517,7 @@ namespace VoxelEngine.UI
             rawButton = T.SmallButton(_showRawInputs ? "Hide Raw" : "Show Raw", () =>
             {
                 _showRawInputs = !_showRawInputs;
+                SaveSettings();
                 RefreshControls();
                 RefreshTreeOnly();
             }, T.TextMuted);
@@ -438,6 +537,7 @@ namespace VoxelEngine.UI
                     ChainPreference.AIAssembler => ChainPreference.AssemblerStation,
                     _ => ChainPreference.Auto
                 };
+                SaveSettings();
                 preferenceButton.text = PreferenceLabel();
                 RefreshTreeOnly();
             }, T.AccentGold);
@@ -445,12 +545,14 @@ namespace VoxelEngine.UI
             header.Add(T.SmallButton("−", () =>
             {
                 _chainDepth = Mathf.Max(1, _chainDepth - 1);
+                SaveSettings();
                 RefreshControls();
                 RefreshTreeOnly();
             }, T.TextMuted));
             depthButton = T.SmallButton($"Depth {_chainDepth}", () =>
             {
                 _chainDepth = 4;
+                SaveSettings();
                 RefreshControls();
                 RefreshTreeOnly();
             }, T.AccentPurple);
@@ -458,6 +560,7 @@ namespace VoxelEngine.UI
             header.Add(T.SmallButton("+", () =>
             {
                 _chainDepth = Mathf.Min(8, _chainDepth + 1);
+                SaveSettings();
                 RefreshControls();
                 RefreshTreeOnly();
             }, T.TextMuted));
@@ -678,6 +781,7 @@ namespace VoxelEngine.UI
                 row.RegisterCallback<ClickEvent>(_ =>
                 {
                     _selectedOutputKey = OutputKey(item);
+                    SaveSettings();
                     _refreshCurrentDetails?.Invoke();
                 });
             return row;

@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.20.0-dev`
-**Roadmap Version:** `5.20.0-dev`
+**Current Version:** `5.22.0-dev`
+**Roadmap Version:** `5.22.0-dev`
 **Date:** 2026-07-16
-**Status:** Active Implementation — Recipe Material Summary
+**Status:** Active Implementation — Persistent Recipe Planner Controls
 
 ---
 
@@ -612,7 +612,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 |------|--------|------------------|
 | Assembler Mk.2 / Mk.3 | ✅ COMPLETED | Mk.2 and Mk.3 exist with larger buffers, faster tier multipliers, upgraded visuals, and machine UI binding. |
 | Recipe graph validation | ✅ COMPLETED | Validator and non-destructive repair pass are in place. Thomas validated the graph at 0 errors after repair. Remaining duplicate-output notes are informational/progression warnings. |
-| Production-line UI | 🛠️ WORKING ON | Crusher/Assembler UIs, responsive panels, live Production Statistics, hideable bottleneck/surplus hints, Recipe Browser dependency view, polished recursive chain cards, graph depth/raw toggles, persistent theme override, recipe method preference, persistent pinned recipes, and material summary estimates exist. Next: graph export/production planning controls. |
+| Production-line UI | 🛠️ WORKING ON | Crusher/Assembler UIs, responsive panels, live Production Statistics, hideable bottleneck/surplus hints, Recipe Browser dependency view, polished recursive chain cards, persistent graph depth/raw/method controls, persistent theme override, persistent pinned recipes, material summary estimates, batch planning, and copyable production plans exist. Next: richer graph controls and production planner UX. |
 | Advanced processing | 🟡 PARTIALLY COMPLETE | Chemical processing and oil systems exist in code, but ore washing/enrichment and tailing loops are not complete. |
 | UI theme system | ❌ MISSING | Design tokens exist in `UITheme`; theme ScriptableObjects, runtime theme switching, and custom editor remain planned. |
 | Research UI overhaul | ❌ MISSING | Existing research remains functional; spatial pan/zoom canvas is not implemented yet. |
@@ -1674,6 +1674,40 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.22.0-dev] Persistent Recipe Planner Controls
+
+**Type:** MINOR — new save-compatible local planner preference persistence
+
+**Added / Improved:**
+- Recipe Browser now persists selected recipe target locally.
+- Dependency Chain depth persists locally.
+- Show Raw / Hide Raw preference persists locally.
+- Chain method preference persists locally: Auto, Prefer AI, or Prefer Station.
+- Material Summary batch count persists locally.
+- All persistence uses PlayerPrefs and does not touch save schema.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Planner persistence is now started.
+- Next target: richer graph controls and production planner UX.
+
+---
+
+### [5.21.0-dev] Production Plan Controls
+
+**Type:** MINOR — new save-compatible production planning controls
+
+**Added / Improved:**
+- Material Summary now supports batch planning with `−`, batch count reset, and `+` controls.
+- Material totals update locally without rebuilding the whole Recipe Browser panel.
+- Added `Copy Plan` to copy a plain-text production plan to the clipboard.
+- Copied plans include selected output, batch count, chain preference, depth, and grouped material requirements.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Graph export / production planning controls are now started.
+- Next target: richer graph controls and planner persistence.
+
+---
 
 ### [5.20.0-dev] Recipe Material Summary
 
