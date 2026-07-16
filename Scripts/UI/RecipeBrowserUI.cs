@@ -37,6 +37,7 @@ namespace VoxelEngine.UI
         private const string PrefShowRaw = "IndustrialWorld.RecipeBrowser.ShowRaw";
         private const string PrefPreference = "IndustrialWorld.RecipeBrowser.Preference";
         private const string PrefPlanBatches = "IndustrialWorld.RecipeBrowser.PlanBatches";
+        private const string PrefTargetPerMinute = "IndustrialWorld.RecipeBrowser.TargetPerMinute";
         private const string PrefListFilter = "IndustrialWorld.RecipeBrowser.ListFilter";
         private static bool _settingsLoaded;
         private static int _chainDepth = 4;
@@ -44,6 +45,7 @@ namespace VoxelEngine.UI
         private static ChainPreference _chainPreference = ChainPreference.Auto;
         private static RecipeListFilter _listFilter = RecipeListFilter.All;
         private static int _planBatches = 1;
+        private static int _targetPerMinute = 60;
         private static System.Action _refreshCurrentDetails;
 
         public static VisualElement BuildPanel(RecipeRegistry registry)
@@ -92,6 +94,7 @@ namespace VoxelEngine.UI
             int pref = PlayerPrefs.GetInt(PrefPreference, (int)_chainPreference);
             _chainPreference = System.Enum.IsDefined(typeof(ChainPreference), pref) ? (ChainPreference)pref : ChainPreference.Auto;
             _planBatches = Mathf.Clamp(PlayerPrefs.GetInt(PrefPlanBatches, _planBatches), 1, 999);
+            _targetPerMinute = Mathf.Clamp(PlayerPrefs.GetInt(PrefTargetPerMinute, _targetPerMinute), 1, 9999);
             int listFilter = PlayerPrefs.GetInt(PrefListFilter, (int)_listFilter);
             _listFilter = System.Enum.IsDefined(typeof(RecipeListFilter), listFilter) ? (RecipeListFilter)listFilter : RecipeListFilter.All;
         }
@@ -103,6 +106,7 @@ namespace VoxelEngine.UI
             PlayerPrefs.SetInt(PrefShowRaw, _showRawInputs ? 1 : 0);
             PlayerPrefs.SetInt(PrefPreference, (int)_chainPreference);
             PlayerPrefs.SetInt(PrefPlanBatches, _planBatches);
+            PlayerPrefs.SetInt(PrefTargetPerMinute, _targetPerMinute);
             PlayerPrefs.SetInt(PrefListFilter, (int)_listFilter);
             PlayerPrefs.Save();
         }
@@ -456,11 +460,15 @@ namespace VoxelEngine.UI
                 summaryBody.Clear();
                 batchButton.text = $"{_planBatches} batch{(_planBatches == 1 ? "" : "es")}";
                 var summary = BuildSummary();
+                targetLabel.text = $"Target: {_targetPerMinute}/min";
                 if (summary.Count == 0)
                 {
                     summaryBody.Add(T.Muted("No base materials found for the selected path."));
                     return;
                 }
+
+                var machineEstimate = BuildMachineEstimate(outputKey, entries);
+                if (machineEstimate != null) summaryBody.Add(machineEstimate);
 
                 var top = new Label($"Approximate base requirements for {_planBatches} selected output batch{(_planBatches == 1 ? "" : "es")}.");
                 top.style.color = new StyleColor(T.TextMuted);
@@ -497,8 +505,58 @@ namespace VoxelEngine.UI
                 GUIUtility.systemCopyBuffer = BuildPlanText(outputKey, entries, BuildSummary());
             }, T.AccentGreen));
 
+            var targetRow = new VisualElement();
+            targetRow.style.flexDirection = FlexDirection.Row;
+            targetRow.style.alignItems = Align.Center;
+            targetRow.style.marginBottom = 8;
+            var targetLabel = new Label();
+            targetLabel.style.flexGrow = 1;
+            targetLabel.style.fontSize = 10;
+            targetLabel.style.color = new StyleColor(T.TextSecondary);
+            targetRow.Add(targetLabel);
+            targetRow.Add(T.SmallButton("−", () =>
+            {
+                _targetPerMinute = Mathf.Max(1, _targetPerMinute - 10);
+                SaveSettings();
+                RefreshSummaryOnly();
+            }, T.TextMuted));
+            targetRow.Add(T.SmallButton("+", () =>
+            {
+                _targetPerMinute = Mathf.Min(9999, _targetPerMinute + 10);
+                SaveSettings();
+                RefreshSummaryOnly();
+            }, T.TextMuted));
+            card.Add(targetRow);
+
             card.Add(summaryBody);
             RefreshSummaryOnly();
+            return card;
+        }
+
+        private static VisualElement BuildMachineEstimate(string outputKey, List<RecipeEntry> entries)
+        {
+            var recipe = SelectPreferredRecipe(entries
+                .Where(entry => OutputKey(entry.Output) == outputKey)
+                .OrderBy(entry => entry.Inputs.Count)
+                .ThenBy(entry => entry.Seconds)
+                .ToList());
+            if (recipe == null || recipe.Seconds <= 0f || recipe.OutputCount <= 0) return null;
+
+            float perMachinePerMinute = recipe.OutputCount * 60f / Mathf.Max(0.01f, recipe.Seconds);
+            int machines = Mathf.Max(1, Mathf.CeilToInt(_targetPerMinute / perMachinePerMinute));
+            var card = T.Card();
+            card.style.marginBottom = 8;
+            card.style.paddingTop = 7;
+            card.style.paddingBottom = 7;
+            card.style.borderLeftWidth = 3;
+            card.style.borderLeftColor = new StyleColor(T.AccentCyan);
+
+            var label = new Label($"Planner: {machines} × {recipe.Kind} for ~{_targetPerMinute}/min  ({perMachinePerMinute:0.#}/min each)");
+            label.style.color = new StyleColor(T.TextPrimary);
+            label.style.fontSize = 10;
+            label.style.whiteSpace = WhiteSpace.Normal;
+            label.style.unityFontStyleAndWeight = FontStyle.Bold;
+            card.Add(label);
             return card;
         }
 
@@ -508,6 +566,7 @@ namespace VoxelEngine.UI
             var builder = new StringBuilder();
             builder.AppendLine($"Production Plan: {(selected != null ? selected.displayName : outputKey)}");
             builder.AppendLine($"Batches: {_planBatches}");
+            builder.AppendLine($"Target/min: {_targetPerMinute}");
             builder.AppendLine($"Preference: {_chainPreference}");
             builder.AppendLine($"Depth: {_chainDepth}");
             builder.AppendLine("Materials:");
