@@ -152,6 +152,21 @@ namespace VoxelEngine.Power
                 }
             }
 
+            // Manual wire links are intentional long-range topology edges. Add them
+            // after automatic proximity discovery so compact one-wire connectors can
+            // still auto-tap a nearby generator/consumer AND keep their one manual
+            // wire span to another station.
+            foreach (var n in snapshot)
+            {
+                if (n.manualLinks == null) continue;
+                foreach (var linked in n.manualLinks)
+                {
+                    if (linked == null || linked == n || !snapshot.Contains(linked)) continue;
+                    if (!n.neighbours.Contains(linked)) n.neighbours.Add(linked);
+                    if (!linked.neighbours.Contains(n)) linked.neighbours.Add(n);
+                }
+            }
+
             // === Secondary pass: prune cable→machine links that are shadowed by a closer cable ===
             // If a machine is connected to multiple cables on the same axis, only the closest
             // cable should keep the link. Others should drop it to avoid redundant visual arms.

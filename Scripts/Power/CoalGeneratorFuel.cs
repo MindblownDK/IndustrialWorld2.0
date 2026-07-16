@@ -29,7 +29,10 @@ namespace VoxelEngine.Power
         /// </summary>
         public bool userEnabled = true;
 
-        public bool IsBurning => userEnabled && fuelRemaining > 0f;
+        public bool IsBurning => userEnabled && fuelRemaining > 0f && !IsPausedByFullBattery;
+        public bool IsPausedByFullBattery { get; private set; }
+        public float BatteryFill01 { get; private set; }
+        public bool HasNetworkBattery { get; private set; }
         public float FuelProgress01 => fuelMaxDuration > 0 ? Mathf.Clamp01(fuelRemaining / fuelMaxDuration) : 0f;
 
         private PowerGenerator _gen;
@@ -113,6 +116,32 @@ namespace VoxelEngine.Power
             return _portContainers;
         }
 
+        private void RefreshBatteryPauseState()
+        {
+            IsPausedByFullBattery = false;
+            HasNetworkBattery = false;
+            BatteryFill01 = 0f;
+            if (_gen == null || _gen.network == null) return;
+
+            float capacity = 0f;
+            float charge = 0f;
+            foreach (var node in _gen.network.nodes)
+            {
+                if (node is PowerBattery battery)
+                {
+                    HasNetworkBattery = true;
+                    capacity += Mathf.Max(0f, battery.capacityWattHours);
+                    charge += Mathf.Clamp(battery.charge, 0f, Mathf.Max(0f, battery.capacityWattHours));
+                }
+            }
+
+            BatteryFill01 = capacity > 0f ? Mathf.Clamp01(charge / capacity) : 0f;
+            // Pause at full reserve even if idle consumers exist. The battery will
+            // supply the next bit of demand, drop below full, and wake the generator
+            // on a later tick only when stored power is actually being used.
+            IsPausedByFullBattery = HasNetworkBattery && BatteryFill01 >= 0.999f;
+        }
+
         private void Update()
         {
             EnsureContainers();
@@ -125,9 +154,19 @@ namespace VoxelEngine.Power
                 return;
             }
 
-            // Burn down current fuel.
+            RefreshBatteryPauseState();
+
+            // Burn down current fuel. If the connected battery reserve is full
+            // and no consumer is requesting power, pause fuel burn until demand
+            // appears again.
             if (fuelRemaining > 0f)
             {
+                if (IsPausedByFullBattery)
+                {
+                    _gen.isOn = false;
+                    return;
+                }
+
                 fuelRemaining -= Time.deltaTime;
                 _gen.isOn = true;
             }

@@ -2023,6 +2023,16 @@ namespace VoxelEngine.UI
             status.style.fontSize = 11;
             panel.Add(status);
 
+            string batteryText = f.HasNetworkBattery
+                ? (f.IsPausedByFullBattery ? $"🔋 Battery full · fuel paused ({f.BatteryFill01 * 100f:0}%)" : $"🔋 Battery reserve {f.BatteryFill01 * 100f:0}%")
+                : "🔋 No battery on this power network";
+            var battery = new Label(batteryText);
+            battery.style.color = new StyleColor(f.IsPausedByFullBattery ? UITheme.AccentGreen : UITheme.TextSecondary);
+            battery.style.fontSize = 11;
+            battery.style.unityFontStyleAndWeight = FontStyle.Bold;
+            battery.style.marginTop = 4;
+            panel.Add(battery);
+
             panel.Add(MakeDivider());
 
             var hint = new Label("Tip: place Coal in the fuel slot to start producing power. " +

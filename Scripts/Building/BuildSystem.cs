@@ -230,7 +230,8 @@ namespace VoxelEngine.Building
             bool placingBelt = placingBeltComponent != null;
             bool placingChute = block.placedPrefab.GetComponentInChildren<VoxelEngine.Simulation.ConveyorChute>(true) != null;
             bool placingPowerPipe = block.placedPrefab.GetComponentInChildren<VoxelEngine.Power.PowerCable>(true) != null;
-            if (!placingBelt && !placingChute && !placingPowerPipe) return false;
+            bool placingCompactPower = block.placedPrefab.GetComponentInChildren<VoxelEngine.Simulation.CompactVoltageStation>(true) != null;
+            if (!placingBelt && !placingChute && !placingPowerPipe && !placingCompactPower) return false;
             var selectedConveyorShape = placingBelt
                 ? ResolveConveyorBuildShape(placingBeltComponent, hit)
                 : VoxelEngine.Simulation.ConveyorShape.Straight;
@@ -330,6 +331,21 @@ namespace VoxelEngine.Building
                 float verticalSign = localHit.y < 0f ? -1f : 1f;
                 pos = targetChute.transform.position + targetChute.transform.up * verticalSign * factorySpacing;
                 rot = targetChute.transform.rotation;
+                return true;
+            }
+
+            var targetPowerNode = hit.collider.GetComponentInParent<VoxelEngine.Power.PowerNode>();
+            if (placingCompactPower && targetPowerNode != null)
+            {
+                Vector3 normal = hit.normal.sqrMagnitude > 0.001f ? hit.normal.normalized : (hit.point - targetPowerNode.transform.position).normalized;
+                if (normal.sqrMagnitude < 0.001f) normal = targetPowerNode.transform.forward;
+                float spacing = Mathf.Max(gridSize, 1f);
+                pos = targetPowerNode.transform.position + normal * spacing;
+                Vector3 up = VoxelEngine.Cosmos.GravityProvider.GetUp(pos);
+                Vector3 forward = Vector3.ProjectOnPlane(-normal, up);
+                if (forward.sqrMagnitude < 0.001f) forward = Vector3.ProjectOnPlane(targetPowerNode.transform.forward, up);
+                if (forward.sqrMagnitude < 0.001f) forward = Vector3.forward;
+                rot = Quaternion.LookRotation(forward.normalized, up) * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
                 return true;
             }
 

@@ -60,9 +60,10 @@ namespace VoxelEngine.Simulation
                 return;
             }
 
-            if (WasPrimaryPressed())
+            bool secondaryPressed = WasSecondaryPressed();
+            if (WasPrimaryPressed() || secondaryPressed)
             {
-                HandleClick(isHV, isLV);
+                HandleClick(isHV, isLV, cancelIfNoStation: secondaryPressed);
             }
 
             if (WasCancelPressed())
@@ -76,9 +77,18 @@ namespace VoxelEngine.Simulation
         private static bool WasPrimaryPressed()
         {
 #if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
-            return Mouse.current != null && (Mouse.current.leftButton.wasPressedThisFrame || Mouse.current.rightButton.wasPressedThisFrame);
+            return Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame;
 #else
-            return Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1);
+            return Input.GetMouseButtonDown(0);
+#endif
+        }
+
+        private static bool WasSecondaryPressed()
+        {
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
+            return Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame;
+#else
+            return Input.GetMouseButtonDown(1);
 #endif
         }
 
@@ -91,7 +101,7 @@ namespace VoxelEngine.Simulation
 #endif
         }
 
-        private void HandleClick(bool holdingHV, bool holdingLV)
+        private void HandleClick(bool holdingHV, bool holdingLV, bool cancelIfNoStation)
         {
             Ray ray = playerCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
             bool hasLayerMask = stationLayer.value != 0;
@@ -138,6 +148,16 @@ namespace VoxelEngine.Simulation
                         _previewLine.enabled = false;
                     }
                 }
+                else if (cancelIfNoStation)
+                {
+                    CancelConnection();
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Wire Cancelled", "No connector or relay targeted.", null, Color.gray);
+                }
+            }
+            else if (cancelIfNoStation)
+            {
+                CancelConnection();
+                VoxelEngine.UI.BuildFeedbackHud.Show("Wire Cancelled", "No connector or relay targeted.", null, Color.gray);
             }
         }
 

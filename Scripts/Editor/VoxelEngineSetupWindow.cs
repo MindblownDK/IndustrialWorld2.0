@@ -7221,8 +7221,8 @@ root =>
             var hvRelayPrefab = CreateCompactPowerNodePrefab("HVPowerRelay", new Color(0.18f, 0.72f, 0.88f), root =>
                 EnsureStep17Component<VoxelEngine.Simulation.HvPowerRelayStation>(root));
 
-            var blockLVConnector = ConfigureBlock(HV_ITEMS, "Block_LVWireConnector", "LV Wire Connector", "Compact low-voltage wall/foundation connector. Can hold 1 power connection.", new Color(0.22f, 0.78f, 0.42f), lvConnectorPrefab, "Power", 180);
-            var blockHVConnector = ConfigureBlock(HV_ITEMS, "Block_HVWireConnector", "HV Wire Connector", "Compact high-voltage wall/foundation connector. Can hold 1 power connection.", new Color(0.18f, 0.72f, 0.88f), hvConnectorPrefab, "Power", 220);
+            var blockLVConnector = ConfigureBlock(HV_ITEMS, "Block_LVWireConnector", "LV Wire Connector", "Compact low-voltage wall/foundation connector. Can hold 1 wire connection. Max capacity: 100 kW.", new Color(0.22f, 0.78f, 0.42f), lvConnectorPrefab, "Power", 180);
+            var blockHVConnector = ConfigureBlock(HV_ITEMS, "Block_HVWireConnector", "HV Wire Connector", "Compact high-voltage wall/foundation connector. Can hold 1 wire connection. Max capacity: Infinite.", new Color(0.18f, 0.72f, 0.88f), hvConnectorPrefab, "Power", 220);
             var blockLVPowerRelay = ConfigureBlock(HV_ITEMS, "Block_LVPowerRelay", "LV Power Relay", "Compact low-voltage wall/foundation relay for tidy bases. Relays power only; does not produce or consume power. Max connections: 8. Max capacity: 100 kW.", new Color(0.95f, 0.62f, 0.18f), lvRelayPrefab, "Power", 220);
             var blockHVPowerRelay = ConfigureBlock(HV_ITEMS, "Block_HVPowerRelay", "HV Power Relay", "Compact high-voltage wall/foundation relay for long-range grids. Relays power only; does not produce or consume power. Max connections: 8. Max capacity: Infinite.", new Color(0.18f, 0.72f, 0.88f), hvRelayPrefab, "Power", 240);
 

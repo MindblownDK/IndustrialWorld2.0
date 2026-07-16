@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.12.7-dev`
-**Roadmap Version:** `5.12.7-dev`
+**Current Version:** `5.12.8-dev`
+**Roadmap Version:** `5.12.8-dev`
 **Date:** 2026-07-16
 **Status:** Active Implementation — Machine UI Recovery & Compact Power Relays
 
@@ -1674,6 +1674,21 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.12.8-dev] Wire Cancel, Connector Snapping & Generator Battery Pause
+
+**Type:** PATCH — wire UX, connector placement, and generator fuel economy
+
+**Fixed / Improved:**
+- Right-clicking while holding a manual LV/HV wire now cancels the wire placement if no connector/relay/station is targeted.
+- Manual wire links are now injected into power topology regardless of distance, so connector-to-connector wire spans actually join the same power network.
+- Compact connectors can auto-tap a nearby generator/consumer while keeping one manual wire span.
+- Compact wire connectors snap to nearby electrical objects so placement aligns to the object face/grid instead of looking offset.
+- Coal Generator UI now shows a battery reserve icon/line.
+- Coal Generator pauses fuel burn when connected batteries are full and no power is being used, then resumes when demand returns.
+- LV connector/grid capacity descriptions show `100 kW`; HV connector/grid capacity descriptions show `Infinite`.
+
+---
 
 ### [5.12.7-dev] Manual Wire Attachment & LV/HV Relay Split
 
