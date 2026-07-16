@@ -333,7 +333,7 @@ namespace VoxelEngine.UI
 
             // While the search field has keyboard focus, don't react to hotkey-style keys
             // — the player is typing into the search box.
-            bool typing = _searchHasFocus || PortConfigHud.IsAnyDropdownOpen;
+            bool typing = _searchHasFocus || RecipeBrowserUI.IsSearchFocused || PortConfigHud.IsAnyDropdownOpen;
 
             // Toggle inventory / ship terminal — but NOT while typing in a search/name field.
             bool weAreOpen = _inventoryOpen || _rightContainer != null || _openGridTerminal != null;

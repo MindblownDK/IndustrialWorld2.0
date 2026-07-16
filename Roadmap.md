@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.26.0-dev`
-**Roadmap Version:** `5.26.0-dev`
+**Current Version:** `5.27.0-dev`
+**Roadmap Version:** `5.27.0-dev`
 **Date:** 2026-07-16
 **Status:** Active Implementation — Production Machine Planner
 
@@ -1674,6 +1674,21 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.27.0-dev] Production Planner UX Polish
+
+**Type:** MINOR — new save-compatible planner UX refinements
+
+**Fixed / Improved:**
+- Added a `Reset` control for target/minute, returning the planner target to 60/min.
+- Moved `Used By` below Dependency Chain and Material Summary so planning information appears before downstream usage.
+- Recipe Browser search now reports focus to GameUI, preventing inventory/research/hotkey UI closures while typing into the search field.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Production planner UX polish continues with target reset, better section order, and safer search focus handling.
+- Next target: richer graph controls and persistent planner refinements.
+
+---
 
 ### [5.26.0-dev] Recipe Method Comparison
 

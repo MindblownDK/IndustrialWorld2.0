@@ -30,6 +30,7 @@ namespace VoxelEngine.UI
 
         private static string _search = string.Empty;
         private static string _selectedOutputKey;
+        public static bool IsSearchFocused { get; private set; }
         private enum ChainPreference { Auto, AIAssembler, AssemblerStation }
         private enum RecipeListFilter { All, Hand, Station, AIAssembler, Smelting }
         private const string PrefSelectedOutput = "IndustrialWorld.RecipeBrowser.SelectedOutput";
@@ -140,6 +141,8 @@ namespace VoxelEngine.UI
 
             var search = new TextField { value = _search ?? string.Empty };
             search.style.marginBottom = 8;
+            search.RegisterCallback<FocusInEvent>(_ => IsSearchFocused = true);
+            search.RegisterCallback<FocusOutEvent>(_ => IsSearchFocused = false);
             left.Add(search);
 
             var filterBar = new VisualElement();
@@ -298,13 +301,6 @@ namespace VoxelEngine.UI
                 right.Add(BuildMethodComparison(makers));
             }
 
-            var usedBy = entries.Where(entry => entry.Inputs.Any(input => OutputKey(input.item) == _selectedOutputKey)).ToList();
-            right.Add(T.Spacer(8));
-            right.Add(SectionTitle("Used By", T.AccentCyan));
-            if (usedBy.Count == 0) right.Add(T.Muted("No known recipe consumes this item."));
-            foreach (var use in usedBy)
-                right.Add(RecipeDetailCard(use, compact: true));
-
             right.Add(T.Spacer(8));
             right.Add(SectionTitle("Immediate Inputs", T.AccentOrange));
             var inputItems = makers.SelectMany(m => m.Inputs).Where(i => i.item != null).ToList();
@@ -319,6 +315,13 @@ namespace VoxelEngine.UI
             right.Add(T.Spacer(8));
             right.Add(SectionTitle("Material Summary", T.AccentGold));
             right.Add(BuildMaterialSummary(_selectedOutputKey, entries));
+
+            var usedBy = entries.Where(entry => entry.Inputs.Any(input => OutputKey(input.item) == _selectedOutputKey)).ToList();
+            right.Add(T.Spacer(8));
+            right.Add(SectionTitle("Used By", T.AccentCyan));
+            if (usedBy.Count == 0) right.Add(T.Muted("No known recipe consumes this item."));
+            foreach (var use in usedBy)
+                right.Add(RecipeDetailCard(use, compact: true));
 
             return right;
         }
@@ -604,6 +607,12 @@ namespace VoxelEngine.UI
             targetLabel.style.fontSize = 10;
             targetLabel.style.color = new StyleColor(T.TextSecondary);
             targetRow.Add(targetLabel);
+            targetRow.Add(T.SmallButton("Reset", () =>
+            {
+                _targetPerMinute = 60;
+                SaveSettings();
+                RefreshSummaryOnly();
+            }, T.AccentPurple));
             targetRow.Add(T.SmallButton("−", () =>
             {
                 _targetPerMinute = Mathf.Max(1, _targetPerMinute - 10);
