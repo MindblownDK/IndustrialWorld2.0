@@ -131,6 +131,8 @@ namespace VoxelEngine.UI
             }
             p.Add(Segmented(labels, selected, i => { UIThemeManager.Current = themes[i]; rebuild?.Invoke(); }));
             p.Add(Hint("This starts the theme pipeline with persistent theme selection. Production planning panels already use themed accent colors."));
+            p.Add(ThemePreview());
+            p.Add(T.SmallButton("Reset Interface Theme", () => { UIThemeManager.Current = BuiltInUITheme.IndustrialSteel; rebuild?.Invoke(); }, T.AccentRed));
             p.Add(T.Divider());
 
             p.Add(SectionLabel("Production Panel Accent"));
@@ -148,6 +150,26 @@ namespace VoxelEngine.UI
                 rebuild?.Invoke();
             }));
             p.Add(Hint("Overrides Recipe Browser and Production Statistics accent colors without affecting gameplay."));
+        }
+
+        private static VisualElement ThemePreview()
+        {
+            var preview = T.Card();
+            preview.style.marginTop = 8;
+            preview.style.marginBottom = 8;
+            preview.style.borderLeftWidth = 4;
+            preview.style.borderLeftColor = new StyleColor(UIThemeManager.Accent);
+            var title = new Label(UIThemeManager.CurrentLabel);
+            title.style.color = new StyleColor(UIThemeManager.TextColor);
+            title.style.fontSize = 13;
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            preview.Add(title);
+            var body = new Label("Preview · accent, panel border, and text tone update immediately.");
+            body.style.color = new StyleColor(UIThemeManager.TextColor);
+            body.style.fontSize = 10;
+            body.style.whiteSpace = WhiteSpace.Normal;
+            preview.Add(body);
+            return preview;
         }
 
         /// <summary>Saving — autosave cadence chooser.</summary>

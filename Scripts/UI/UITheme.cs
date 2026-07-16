@@ -74,9 +74,10 @@ namespace VoxelEngine.UI
             v.style.paddingBottom = PanelPaddingV;
             v.style.paddingLeft   = PanelPaddingH;
             v.style.paddingRight  = PanelPaddingH;
-            v.style.backgroundColor = new StyleColor(BgPanel);
+            v.style.backgroundColor = new StyleColor(UIThemeManager.PanelColor);
             Radius(v, PanelRadius);
-            Border(v, 1, BorderBright);
+            Color accent = UIThemeManager.Accent;
+            Border(v, 1, new Color(accent.r, accent.g, accent.b, 0.55f));
             return v;
         }
 
@@ -115,7 +116,7 @@ namespace VoxelEngine.UI
         public static Label Title(string text)
         {
             var l = new Label(text);
-            l.style.color                       = new StyleColor(TextPrimary);
+            l.style.color                       = new StyleColor(UIThemeManager.TextColor);
             l.style.fontSize                    = 17;
             l.style.unityFontStyleAndWeight     = FontStyle.Bold;
             l.style.letterSpacing               = 1.5f;
@@ -583,7 +584,7 @@ namespace VoxelEngine.UI
             d.style.marginBottom    = 10;
             d.pickingMode = PickingMode.Ignore;
 
-            Color c = color ?? AccentCyan;
+            Color c = color ?? UIThemeManager.Accent;
             d.style.backgroundColor = new StyleColor(new Color(c.r, c.g, c.b, 0.30f));
             Radius(d, 1);
             return d;

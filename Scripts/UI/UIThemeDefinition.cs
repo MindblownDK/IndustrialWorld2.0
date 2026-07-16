@@ -49,6 +49,8 @@ namespace VoxelEngine.UI
 
         public static string CurrentLabel => Label(Current);
         public static Color Accent => AccentFor(Current);
+        public static Color PanelColor => PanelFor(Current);
+        public static Color TextColor => TextFor(Current);
 
         public static void Next()
         {
@@ -68,6 +70,23 @@ namespace VoxelEngine.UI
             BuiltInUITheme.RustBelt => "Rust Belt",
             BuiltInUITheme.VoidBlack => "Void Black",
             _ => "Industrial Steel"
+        };
+
+
+        public static Color PanelFor(BuiltInUITheme theme) => theme switch
+        {
+            BuiltInUITheme.CorporateClean => new Color(0.86f, 0.88f, 0.92f, 0.96f),
+            BuiltInUITheme.VoidBlack => new Color(0.015f, 0.016f, 0.024f, 0.98f),
+            BuiltInUITheme.ArcticFrost => new Color(0.07f, 0.10f, 0.13f, 0.96f),
+            BuiltInUITheme.RustBelt => new Color(0.11f, 0.075f, 0.055f, 0.97f),
+            BuiltInUITheme.MilitaryOlive => new Color(0.07f, 0.085f, 0.065f, 0.97f),
+            _ => UITheme.BgPanel
+        };
+
+        public static Color TextFor(BuiltInUITheme theme) => theme switch
+        {
+            BuiltInUITheme.CorporateClean => new Color(0.08f, 0.10f, 0.14f, 1f),
+            _ => UITheme.TextPrimary
         };
 
         public static Color AccentFor(BuiltInUITheme theme) => theme switch

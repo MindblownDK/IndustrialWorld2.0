@@ -96,7 +96,7 @@ namespace VoxelEngine.UI
                 crusher.upgradeC,
                 slot,
                 recipe => crusher.SelectRecipe(recipe),
-                T.AccentOrange,
+                UIThemeOverride.ResolveAccent(crusher, T.AccentOrange),
                 "Top-fed crusher. Inputs arrive from above; outputs can be pulled from the output buffer.");
         }
 
@@ -109,6 +109,7 @@ namespace VoxelEngine.UI
                 AssemblerTier.Mk3 => T.AccentPurple,
                 _ => T.AccentCyan
             };
+            accent = UIThemeOverride.ResolveAccent(assembler, accent);
             return ProcessingMachinePanel(
                 assembler,
                 "⚙",
