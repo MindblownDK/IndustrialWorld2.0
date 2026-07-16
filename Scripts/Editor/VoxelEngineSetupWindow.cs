@@ -766,6 +766,40 @@ namespace VoxelEngine.EditorTools
             {
                 Debug.LogWarning("[Wizard] UnityDefaultRuntimeTheme.tss not found - menu will be unstyled.");
             }
+            const string themeFolder = ASSET_ROOT + "/UI/Themes";
+            EnsureFolder(themeFolder);
+            void EnsureBuiltInTheme(string assetName, VoxelEngine.UI.BuiltInUITheme themeId, string display, Color accent, Color panel, Color text)
+            {
+                string path = $"{themeFolder}/{assetName}.asset";
+                bool created = AssetDatabase.LoadMainAssetAtPath(path) == null;
+                var themeDef = AssetDatabase.LoadAssetAtPath<VoxelEngine.UI.UIThemeDefinition>(path);
+                if (themeDef == null)
+                {
+                    themeDef = ScriptableObject.CreateInstance<VoxelEngine.UI.UIThemeDefinition>();
+                    AssetDatabase.CreateAsset(themeDef, path);
+                    created = true;
+                }
+
+                if (created || string.IsNullOrWhiteSpace(themeDef.displayName)) themeDef.displayName = display;
+                if (created) themeDef.builtInTheme = themeId;
+                if (created) themeDef.accent = accent;
+                if (created) themeDef.panel = panel;
+                if (created) themeDef.text = text;
+                if (created) themeDef.panelOpacity = panel.a;
+                if (created) themeDef.cornerRadius = 12f;
+                EditorUtility.SetDirty(themeDef);
+            }
+
+            EnsureBuiltInTheme("Theme_IndustrialSteel", VoxelEngine.UI.BuiltInUITheme.IndustrialSteel, "Industrial Steel", new Color(0.18f, 0.72f, 0.88f), new Color(0.08f, 0.088f, 0.12f, 0.97f), new Color(0.92f, 0.94f, 0.97f));
+            EnsureBuiltInTheme("Theme_MidnightOperator", VoxelEngine.UI.BuiltInUITheme.MidnightOperator, "Midnight Operator", new Color(0.40f, 0.52f, 0.92f), new Color(0.035f, 0.040f, 0.060f, 0.98f), new Color(0.90f, 0.92f, 0.98f));
+            EnsureBuiltInTheme("Theme_HazardAmber", VoxelEngine.UI.BuiltInUITheme.HazardAmber, "Hazard Amber", new Color(0.88f, 0.72f, 0.22f), new Color(0.10f, 0.085f, 0.045f, 0.97f), new Color(0.98f, 0.94f, 0.82f));
+            EnsureBuiltInTheme("Theme_ArcticFrost", VoxelEngine.UI.BuiltInUITheme.ArcticFrost, "Arctic Frost", new Color(0.50f, 0.82f, 1.00f), new Color(0.07f, 0.10f, 0.13f, 0.96f), new Color(0.90f, 0.97f, 1.00f));
+            EnsureBuiltInTheme("Theme_BioLuminescent", VoxelEngine.UI.BuiltInUITheme.BioLuminescent, "Bio-Luminescent", new Color(0.22f, 0.95f, 0.62f), new Color(0.035f, 0.070f, 0.055f, 0.97f), new Color(0.86f, 1.00f, 0.92f));
+            EnsureBuiltInTheme("Theme_MilitaryOlive", VoxelEngine.UI.BuiltInUITheme.MilitaryOlive, "Military Olive", new Color(0.58f, 0.68f, 0.36f), new Color(0.07f, 0.085f, 0.065f, 0.97f), new Color(0.88f, 0.92f, 0.78f));
+            EnsureBuiltInTheme("Theme_NeonCyber", VoxelEngine.UI.BuiltInUITheme.NeonCyber, "Neon Cyber", new Color(0.95f, 0.24f, 0.85f), new Color(0.055f, 0.035f, 0.075f, 0.97f), new Color(0.96f, 0.90f, 1.00f));
+            EnsureBuiltInTheme("Theme_CorporateClean", VoxelEngine.UI.BuiltInUITheme.CorporateClean, "Corporate Clean", new Color(0.28f, 0.52f, 0.88f), new Color(0.86f, 0.88f, 0.92f, 0.96f), new Color(0.08f, 0.10f, 0.14f));
+            EnsureBuiltInTheme("Theme_RustBelt", VoxelEngine.UI.BuiltInUITheme.RustBelt, "Rust Belt", new Color(0.88f, 0.42f, 0.18f), new Color(0.11f, 0.075f, 0.055f, 0.97f), new Color(0.98f, 0.86f, 0.74f));
+            EnsureBuiltInTheme("Theme_VoidBlack", VoxelEngine.UI.BuiltInUITheme.VoidBlack, "Void Black", new Color(0.62f, 0.42f, 1.00f), new Color(0.015f, 0.016f, 0.024f, 0.98f), new Color(0.92f, 0.90f, 1.00f));
             AssetDatabase.SaveAssets();
 
             foreach (var sceneRoot in currentScene.GetRootGameObjects())
@@ -6977,6 +7011,11 @@ root =>
                 });
                 crusher.knownRecipes = MergeUniqueList(crusher.knownRecipes, crusherRecipes);
                 EnsureStep17Component<VoxelEngine.Power.PowerConsumer>(root, power => power.connectRadius = 1.6f);
+                EnsureStep17Component<VoxelEngine.UI.UIThemeOverride>(root, theme =>
+                {
+                    theme.overrideAccent = false;
+                    theme.accentColor = new Color(0.92f, 0.45f, 0.12f);
+                });
                 EnsureStep17Component<VoxelEngine.Simulation.CrusherMotionAnimator>(root, animator =>
                 {
                     animator.leftJawChildName = "Generated_LeftJaw";
@@ -7050,6 +7089,11 @@ root =>
                     assembler.knownRecipes = MergeUniqueList(assembler.knownRecipes, assemblerRecipes);
                     EnsureStep17Component<VoxelEngine.Power.PowerConsumer>(root, power =>
                         power.connectRadius = Mathf.Max(1.6f, width * 0.9f));
+                    EnsureStep17Component<VoxelEngine.UI.UIThemeOverride>(root, theme =>
+                    {
+                        theme.overrideAccent = false;
+                        theme.accentColor = accent;
+                    });
                     EnsureStep17Component<VoxelEngine.Simulation.FactoryPartAnimator>(root, animator =>
                     {
                         animator.rotatingChildName = "Generated_TopServiceRail";
@@ -7118,6 +7162,11 @@ root =>
                 });
                 furnace.knownRecipes = MergeUniqueList(furnace.knownRecipes, smeltingRecipes);
                 EnsureStep17Component<VoxelEngine.Power.PowerConsumer>(root, power => power.connectRadius = 1.6f);
+                EnsureStep17Component<VoxelEngine.UI.UIThemeOverride>(root, theme =>
+                {
+                    theme.overrideAccent = false;
+                    theme.accentColor = new Color(1.0f, 0.42f, 0.12f);
+                });
                 EnsureStep17Component<VoxelEngine.Simulation.FactoryStatusIndicator>(root, indicator =>
                 {
                     indicator.rendererChildName = "Generated_HeaterWindow";
