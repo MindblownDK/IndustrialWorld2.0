@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.25.0-dev`
-**Roadmap Version:** `5.25.0-dev`
+**Current Version:** `5.25.1-dev`
+**Roadmap Version:** `5.25.1-dev`
 **Date:** 2026-07-16
 **Status:** Active Implementation — Production Machine Planner
 
@@ -1674,6 +1674,16 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.25.1-dev] Production Planner Compile Fix
+
+**Type:** PATCH — UI compile fix
+
+**Fixed:**
+- Fixed `CS0841` / `CS0165` in `RecipeBrowserUI.cs` by declaring the target-per-minute label before local refresh callbacks use it.
+- Production planner controls compile again while keeping the target/minute live update behavior.
+
+---
 
 ### [5.25.0-dev] Production Machine Planner
 

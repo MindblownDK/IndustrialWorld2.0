@@ -447,6 +447,7 @@ namespace VoxelEngine.UI
 
             var summaryBody = new VisualElement();
             Button batchButton = null;
+            Label targetLabel = null;
 
             Dictionary<string, MaterialNeed> BuildSummary()
             {
@@ -509,7 +510,7 @@ namespace VoxelEngine.UI
             targetRow.style.flexDirection = FlexDirection.Row;
             targetRow.style.alignItems = Align.Center;
             targetRow.style.marginBottom = 8;
-            var targetLabel = new Label();
+            targetLabel = new Label();
             targetLabel.style.flexGrow = 1;
             targetLabel.style.fontSize = 10;
             targetLabel.style.color = new StyleColor(T.TextSecondary);
