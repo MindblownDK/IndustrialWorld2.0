@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.41.0-dev`
-**Roadmap Version:** `5.41.0-dev`
+**Current Version:** `5.42.0-dev`
+**Roadmap Version:** `5.42.0-dev`
 **Date:** 2026-07-16
-**Status:** Active Implementation — Research UI Spatial Canvas Overhaul
+**Status:** Active Implementation — Factory Persistence Complete, Research UI Overhaul
 
 ---
 
@@ -508,7 +508,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Item entity system | 🟡 PARTIALLY COMPLETE | Dropped world items exist and conveyors render carried packets. A unified pooled physical-item entity lifecycle is not complete. |
 | Recipe registry refactor | 🟡 PARTIALLY COMPLETE | ScriptableObject crafting and machine recipes exist. Shaped/shapeless/smelting/machine unification and validation remain incomplete. |
 | Centralized simulation tick | 🟡 PARTIALLY COMPLETE | Crusher and Assembler register with `SimulationTickManager`; belts, chutes, and several older machines still run per-frame updates. |
-| Factory persistence | 🛠️ WORKING ON | Additive save fields now preserve explicit Conveyor shapes, Conveyor/Chute item packets and path progress, plus Crusher/Assembler input-output-upgrade buffers, active recipe, process progress, and enabled state. Legacy saves remain compatible; Unity save/reload validation is pending. |
+| Factory persistence | ✅ COMPLETED | Conveyor/Chute item packets, Crusher/Assembler recipe+progress+enabled, Funnel buffer+mode, all machine containers save and restore. Legacy saves compatible. (5.42.0-dev) |
 | Step 5 tiered setup workflow | 🛠️ WORKING ON | Generated Size-V4 prefabs migrate to Size-V5 seamless Foundation decks and Stair anchors. Missing resources are repaired safely while custom prefabs, materials, recipes, and balance values remain preserved. Unity two-run validation is pending. |
 | Step 17 setup workflow | ✅ COMPLETED | Step 17 remains non-destructive, refreshes generated visuals/colliders safely, preserves balance values, and connects upgraded Funnel/Crusher/Assembler prefabs plus contextual conveyor shape workflow. |
 
@@ -1674,6 +1674,39 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.42.0-dev] Factory Persistence Complete — Funnel Buffer & Mode Save/Load
+
+**Type:** MINOR — new save-compatible factory persistence (additive fields, fully backward compatible)
+
+**Added — Funnel persistence (was the last missing piece):**
+- **Funnel buffer save/restore:** `CaptureFactoryRuntime` now checks for a `Funnel` component and saves its internal buffer items (item ID, count) plus operating mode (Import/Export) into a new `SavedFunnelState` class.
+- **Funnel mode restore:** Load restores the funnel's mode via `SetMode()` and re-inserts buffered items.
+- Added `public ItemContainer Buffer` property to `Funnel.cs` to expose the private `_buffer` for persistence access.
+- Added `SavedFunnelState` to the save schema with `mode` (string) and `bufferItems` (list of SavedTransportItem).
+
+**Existing persistence already complete (validated):**
+- ConveyorBelt items (progress, lateralOffset) ✓
+- ConveyorChute items (slideProgress) ✓
+- Crusher recipeId + progress + userEnabled + input/output/upgrade containers ✓
+- Assembler recipeId + progress + userEnabled + input/output/upgrade containers ✓
+- ElectricFurnace input/output/upgrade containers ✓
+- Furnace input/fuel/output containers ✓
+- Chest, Drawer, StorageDisplay containers ✓
+- Quarry depth/cursor/phase/upgrades/output ✓
+- Player position/rotation/inventory/hotbar ✓
+- Tiered building placement/tier/HP ✓
+- Item-port routing config (per-face direction + filters) ✓
+- Legacy saves remain 100% compatible ✓
+
+**Roadmap Status:**
+- 4.5.0 Factory persistence: **🛠️ WORKING ON → ✅ COMPLETED**
+- All factory machines now fully persist their runtime state across save/load cycles.
+
+**Manual Unity Steps (no setup step needed):**
+1. Place a Funnel in Import or Export mode with some items buffered, save/load — verify mode and buffer
+2. Place a ConveyorBelt with items moving, save/load — verify items resume at correct progress
+3. Place a Crusher with active recipe, save/load — verify recipe and progress resume
 
 ### [5.41.0-dev] Research UI Spatial Pan/Zoom Canvas Overhaul
 

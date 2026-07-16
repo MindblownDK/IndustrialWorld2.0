@@ -84,6 +84,13 @@ namespace VoxelEngine.Simulation
             }
         }
 
+        /// <summary>Internal buffer for save/load access.</summary>
+        public ItemContainer Buffer
+        {
+            get { EnsureBuffer(); return _buffer; }
+        }
+
+
         // ── Lifecycle ─────────────────────────────────────────────────
 
         private void Awake()

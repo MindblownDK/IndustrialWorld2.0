@@ -219,6 +219,31 @@ namespace VoxelEngine.Persistence
                     userEnabled = assembler.UserEnabled
                 };
             }
+
+            var funnel = go.GetComponentInChildren<VoxelEngine.Simulation.Funnel>(true);
+            if (funnel != null)
+            {
+                var fs = new SavedFunnelState
+                {
+                    mode = funnel.Mode.ToString()
+                };
+                var buf = funnel.Buffer;
+                if (buf != null)
+                {
+                    for (int i = 0; i < buf.Size; i++)
+                    {
+                        var slot = buf.GetSlot(i);
+                        if (slot == null || slot.IsEmpty || slot.item == null) continue;
+                        fs.bufferItems.Add(new SavedTransportItem
+                        {
+                            itemId = slot.item.itemId,
+                            count = slot.count,
+                            progress = 0f
+                        });
+                    }
+                }
+                entry.funnelState = fs;
+            }
         }
 
         private void SavePlacedTiered(SaveData save)
@@ -574,6 +599,33 @@ namespace VoxelEngine.Persistence
                     saved.machine.progressSeconds,
                     saved.machine.userEnabled);
             }
+
+            var funnel = go.GetComponentInChildren<VoxelEngine.Simulation.Funnel>(true);
+            if (funnel != null && saved.funnelState != null)
+            {
+                // Restore mode
+                if (saved.funnelState.mode == "Export")
+                    funnel.SetMode(VoxelEngine.Simulation.FunnelMode.Export);
+                else
+                    funnel.SetMode(VoxelEngine.Simulation.FunnelMode.Import);
+
+                // Restore buffered items
+                if (saved.funnelState.bufferItems != null && saved.funnelState.bufferItems.Count > 0)
+                {
+                    var buf = funnel.Buffer;
+                    if (buf != null)
+                    {
+                        for (int si = 0; si < buf.Size; si++)
+                            buf.SetSlot(si, new ItemStack());
+                        foreach (var item in saved.funnelState.bufferItems)
+                        {
+                            if (item == null || string.IsNullOrEmpty(item.itemId) || item.count <= 0) continue;
+                            if (!_itemById.TryGetValue(item.itemId, out var definition)) continue;
+                            buf.Insert(new ItemStack(definition, item.count));
+                        }
+                    }
+                }
+            }
         }
 
         private void RestorePlacedTiered(SaveData save)
@@ -787,6 +839,13 @@ namespace VoxelEngine.Persistence
             public List<SavedTransportItem> conveyorItems = new();
             public List<SavedTransportItem> chuteItems = new();
             public SavedMachineState machine;
+            // Funnel state (mode + buffered items). Null for non-funnel blocks.
+            public SavedFunnelState funnelState;
+        }
+        [Serializable] private class SavedFunnelState
+        {
+            public string mode; // "Import" or "Export"
+            public List<SavedTransportItem> bufferItems = new();
         }
         [Serializable] private class SavedTransportItem
         {
