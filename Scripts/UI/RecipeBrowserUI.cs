@@ -45,7 +45,7 @@ namespace VoxelEngine.UI
             if (string.IsNullOrEmpty(_selectedOutputKey) && entries.Count > 0) _selectedOutputKey = OutputKey(entries[0].Output);
 
             panel.Add(Header());
-            panel.Add(T.AccentDivider(T.AccentGold));
+            panel.Add(T.AccentDivider(ProductionPanelThemeState.Accent));
 
             var body = new VisualElement();
             body.style.flexDirection = FlexDirection.Row;
@@ -74,11 +74,16 @@ namespace VoxelEngine.UI
             row.style.flexDirection = FlexDirection.Row;
             row.style.alignItems = Align.Center;
             row.style.marginBottom = 8;
-            row.Add(T.IconBadge("⌁", T.AccentGold));
+            row.Add(T.IconBadge("R", ProductionPanelThemeState.Accent));
             var title = T.Title("Recipe Browser");
             title.style.flexGrow = 1;
             row.Add(title);
-            var (pill, _) = T.StatusPill("GRAPH", T.AccentGold);
+            row.Add(T.SmallButton($"Theme: {ProductionPanelThemeState.Label}", () =>
+            {
+                ProductionPanelThemeState.Next();
+                GameUIController.Instance?.RequestRefresh();
+            }, ProductionPanelThemeState.Accent));
+            var (pill, _) = T.StatusPill("GRAPH", ProductionPanelThemeState.Accent);
             row.Add(pill);
             return row;
         }
@@ -269,10 +274,50 @@ namespace VoxelEngine.UI
             title.style.fontSize = 13;
             title.style.unityFontStyleAndWeight = FontStyle.Bold;
             header.Add(title);
-            header.Add(T.SmallButton(_showRawInputs ? "Hide Raw" : "Show Raw", () => { _showRawInputs = !_showRawInputs; _refreshCurrentDetails?.Invoke(); }, T.TextMuted));
-            header.Add(T.SmallButton("−", () => { _chainDepth = Mathf.Max(1, _chainDepth - 1); _refreshCurrentDetails?.Invoke(); }, T.TextMuted));
-            header.Add(T.SmallButton($"Depth {_chainDepth}", () => { _chainDepth = 4; _refreshCurrentDetails?.Invoke(); }, T.AccentPurple));
-            header.Add(T.SmallButton("+", () => { _chainDepth = Mathf.Min(8, _chainDepth + 1); _refreshCurrentDetails?.Invoke(); }, T.TextMuted));
+
+            var tree = new VisualElement();
+
+            void RefreshTreeOnly()
+            {
+                tree.Clear();
+                var visited = new HashSet<string>();
+                AddDependencyNode(tree, outputKey, entries, depth: 0, path: visited);
+            }
+
+            Button rawButton = null;
+            Button depthButton = null;
+            void RefreshControls()
+            {
+                if (rawButton != null) rawButton.text = _showRawInputs ? "Hide Raw" : "Show Raw";
+                if (depthButton != null) depthButton.text = $"Depth {_chainDepth}";
+            }
+
+            rawButton = T.SmallButton(_showRawInputs ? "Hide Raw" : "Show Raw", () =>
+            {
+                _showRawInputs = !_showRawInputs;
+                RefreshControls();
+                RefreshTreeOnly();
+            }, T.TextMuted);
+            header.Add(rawButton);
+            header.Add(T.SmallButton("−", () =>
+            {
+                _chainDepth = Mathf.Max(1, _chainDepth - 1);
+                RefreshControls();
+                RefreshTreeOnly();
+            }, T.TextMuted));
+            depthButton = T.SmallButton($"Depth {_chainDepth}", () =>
+            {
+                _chainDepth = 4;
+                RefreshControls();
+                RefreshTreeOnly();
+            }, T.AccentPurple);
+            header.Add(depthButton);
+            header.Add(T.SmallButton("+", () =>
+            {
+                _chainDepth = Mathf.Min(8, _chainDepth + 1);
+                RefreshControls();
+                RefreshTreeOnly();
+            }, T.TextMuted));
             card.Add(header);
 
             var hint = new Label("Shows the preferred shortest recipe path. Click craftable nodes to focus them.");
@@ -282,10 +327,9 @@ namespace VoxelEngine.UI
             hint.style.marginBottom = 8;
             card.Add(hint);
 
-            var tree = new VisualElement();
             tree.style.marginTop = 2;
             card.Add(tree);
-            AddDependencyNode(tree, outputKey, entries, depth: 0, path: new HashSet<string>());
+            RefreshTreeOnly();
             return card;
         }
 

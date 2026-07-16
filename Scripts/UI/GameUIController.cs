@@ -1152,7 +1152,7 @@ namespace VoxelEngine.UI
                 if (_recipeBrowserOpen) _productionStatsOpen = false;
                 Refresh();
             })
-            { text = _recipeBrowserOpen ? "⌁ Hide Recipe Browser" : "⌁ Recipe Browser" };
+            { text = _recipeBrowserOpen ? "Hide Recipe Browser" : "Recipe Browser" };
             recipeBrowserBtn.style.minHeight = 28;
             recipeBrowserBtn.style.fontSize = 11;
             recipeBrowserBtn.style.color = Color.white;

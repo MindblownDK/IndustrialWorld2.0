@@ -23,7 +23,7 @@ namespace VoxelEngine.UI
             panel.style.maxWidth = new StyleLength(new Length(62f, LengthUnit.Percent));
 
             panel.Add(Header());
-            panel.Add(T.AccentDivider(T.AccentCyan));
+            panel.Add(T.AccentDivider(ProductionPanelThemeState.Accent));
 
             var scroll = new ScrollView(ScrollViewMode.Vertical);
             scroll.style.flexGrow = 1;
@@ -57,10 +57,15 @@ namespace VoxelEngine.UI
             row.style.flexDirection = FlexDirection.Row;
             row.style.alignItems = Align.Center;
             row.style.marginBottom = 8;
-            row.Add(T.IconBadge("📈", T.AccentCyan));
+            row.Add(T.IconBadge("P", ProductionPanelThemeState.Accent));
             var title = T.Title("Production Statistics");
             title.style.flexGrow = 1;
             row.Add(title);
+            row.Add(T.SmallButton($"Theme: {ProductionPanelThemeState.Label}", () =>
+            {
+                ProductionPanelThemeState.Next();
+                GameUIController.Instance?.RequestRefresh();
+            }, ProductionPanelThemeState.Accent));
             var (pill, _) = T.StatusPill("LIVE", T.AccentGreen);
             row.Add(pill);
             return row;

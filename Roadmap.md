@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.16.0-dev`
-**Roadmap Version:** `5.16.0-dev`
+**Current Version:** `5.17.0-dev`
+**Roadmap Version:** `5.17.0-dev`
 **Date:** 2026-07-16
-**Status:** Active Implementation — Recipe Browser Graph Controls
+**Status:** Active Implementation — Production Panel Theme Overrides
 
 ---
 
@@ -612,7 +612,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 |------|--------|------------------|
 | Assembler Mk.2 / Mk.3 | ✅ COMPLETED | Mk.2 and Mk.3 exist with larger buffers, faster tier multipliers, upgraded visuals, and machine UI binding. |
 | Recipe graph validation | ✅ COMPLETED | Validator and non-destructive repair pass are in place. Thomas validated the graph at 0 errors after repair. Remaining duplicate-output notes are informational/progression warnings. |
-| Production-line UI | 🛠️ WORKING ON | Crusher/Assembler UIs, responsive panels, live Production Statistics, hideable bottleneck/surplus hints, Recipe Browser dependency view, polished recursive chain cards, and graph depth/raw toggles exist. Next: theme overrides and richer recipe controls. |
+| Production-line UI | 🛠️ WORKING ON | Crusher/Assembler UIs, responsive panels, live Production Statistics, hideable bottleneck/surplus hints, Recipe Browser dependency view, polished recursive chain cards, graph depth/raw toggles, and first production panel theme overrides exist. Next: richer graph controls and persistent theme settings. |
 | Advanced processing | 🟡 PARTIALLY COMPLETE | Chemical processing and oil systems exist in code, but ore washing/enrichment and tailing loops are not complete. |
 | UI theme system | ❌ MISSING | Design tokens exist in `UITheme`; theme ScriptableObjects, runtime theme switching, and custom editor remain planned. |
 | Research UI overhaul | ❌ MISSING | Existing research remains functional; spatial pan/zoom canvas is not implemented yet. |
@@ -1674,6 +1674,25 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.17.0-dev] Production Panel Theme Overrides
+
+**Type:** MINOR — new save-compatible UI theme override starter
+
+**Fixed / Improved:**
+- Dependency Chain controls now refresh only the chain content, preserving the current scroll position when toggling raw inputs or changing chain depth.
+- Recipe Browser icon no longer uses a glyph that can render as a square on unsupported fonts.
+
+**Added:**
+- Added a lightweight production panel theme override state.
+- Production Statistics and Recipe Browser now include a `Theme` button cycling Steel, Amber, Cyan, and Violet accent styles.
+- This starts the roadmap theme-override work without touching save data.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Theme overrides for production panels are now started.
+- Next target: richer graph controls and persistent theme settings.
+
+---
 
 ### [5.16.0-dev] Polished Recipe Chain Graph Controls
 
