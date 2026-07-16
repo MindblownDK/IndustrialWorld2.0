@@ -246,8 +246,15 @@ namespace VoxelEngine.Player
             }
 
             // ---------- RMB ----------
-            // If holding a placeable block (cable, pipe, etc), RMB places it directly.
             var heldForPlace = inventory.ActiveStack;
+            if (buildDown && !heldForPlace.IsEmpty && heldForPlace.item != null)
+            {
+                string heldId = heldForPlace.item.itemId ?? string.Empty;
+                if (heldId == "hv_wire" || heldId.EndsWith("_lv_wire", System.StringComparison.OrdinalIgnoreCase))
+                    return; // HighVoltageWireTool owns manual wire clicks.
+            }
+
+            // If holding a placeable block (cable, pipe, etc), RMB places it directly.
             if (buildDown && !heldForPlace.IsEmpty && heldForPlace.item is BlockItem heldBlock)
             {
                 if (Time.time >= _nextHit && TryPlaceStaticPipeOnGrid(heldBlock, hit))

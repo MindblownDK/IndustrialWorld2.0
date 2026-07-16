@@ -28,7 +28,7 @@ namespace VoxelEngine.Simulation
             p.Add(T.Spacer(10));
 
             // Progress bar for load
-            float load01 = station.MaxCapacity > 0 ? station.TotalConsumed / station.MaxCapacity : 0f;
+            float load01 = float.IsInfinity(station.MaxCapacity) ? 0f : (station.MaxCapacity > 0 ? station.TotalConsumed / station.MaxCapacity : 0f);
             p.Add(T.Muted("System Load"));
             var (bar, _) = T.ProgressBar(load01, load01 > 0.9f ? T.AccentRed : T.AccentGreen, 12, true);
             p.Add(bar);

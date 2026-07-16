@@ -76,9 +76,9 @@ namespace VoxelEngine.Simulation
         private static bool WasPrimaryPressed()
         {
 #if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
-            return Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame;
+            return Mouse.current != null && (Mouse.current.leftButton.wasPressedThisFrame || Mouse.current.rightButton.wasPressedThisFrame);
 #else
-            return Input.GetMouseButtonDown(0);
+            return Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1);
 #endif
         }
 
@@ -94,7 +94,15 @@ namespace VoxelEngine.Simulation
         private void HandleClick(bool holdingHV, bool holdingLV)
         {
             Ray ray = playerCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
-            if (Physics.Raycast(ray, out RaycastHit hit, reach, stationLayer))
+            bool hasLayerMask = stationLayer.value != 0;
+            RaycastHit hit;
+            bool hitSomething = hasLayerMask
+                ? Physics.Raycast(ray, out hit, reach, stationLayer)
+                : Physics.Raycast(ray, out hit, reach);
+            if (!hitSomething && hasLayerMask)
+                hitSomething = Physics.Raycast(ray, out hit, reach);
+
+            if (hitSomething)
             {
                 var station = hit.collider.GetComponentInParent<IVoltageStation>();
                 if (station != null)

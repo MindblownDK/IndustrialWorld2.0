@@ -11,6 +11,7 @@ GameObject:
   - component: {fileID: 1970740020355175656}
   - component: {fileID: 5358406470595783710}
   - component: {fileID: 543191311530683244}
+  - component: {fileID: 1169671186919701385}
   m_Layer: 0
   m_Name: LVWireConnector
   m_TagString: Untagged
@@ -78,6 +79,25 @@ MonoBehaviour:
   wireMaterial: {fileID: 0}
   maxThroughputWatts: 50000
   conversionLoss: 0.02
+--- !u!114 &1169671186919701385
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3774842153196195801}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d3d2e85f25fd4702984fa79b6aec6ae4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Simulation.CompactPowerNode
+  connectRadius: 3
+  requireGridAlignedNeighbours: 0
+  gridSize: 1
+  connectionBlockingLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  maxAutoConnections: 1
 --- !u!1 &4260126970533608428
 GameObject:
   m_ObjectHideFlags: 0

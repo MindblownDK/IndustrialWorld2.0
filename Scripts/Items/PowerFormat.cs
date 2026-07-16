@@ -14,7 +14,7 @@ namespace VoxelEngine.Items
 {
     public static class PowerFormat
     {
-        public static string Watts(float w) => Scale(w, "W");
+        public static string Watts(float w) => float.IsPositiveInfinity(w) ? "Infinite" : Scale(w, "W");
         public static string WattHours(float wh) => Scale(wh, "Wh");
         /// <summary>Force in newtons: N / kN / MN.</summary>
         public static string Newtons(float n) => Scale(n, "N");

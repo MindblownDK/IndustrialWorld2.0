@@ -17,7 +17,7 @@ namespace VoxelEngine.Simulation
         // IVoltageStation implementation
         public override float TotalProduced => network != null ? network.producedThisTick : 0f;
         public override float TotalConsumed => network != null ? network.consumedThisTick : 0f;
-        public override float MaxCapacity => network != null ? network.bottleneckWatts : 0f;
+        public override float MaxCapacity => float.PositiveInfinity;
 
         private PowerNetwork network => _powerNode != null ? _powerNode.network : null;
         private PowerNode _powerNode;

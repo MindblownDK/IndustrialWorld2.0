@@ -18,7 +18,7 @@ namespace VoxelEngine.Simulation
         // IVoltageStation implementation (via VoltageStationBase)
         public override float TotalProduced => _powerNode != null && _powerNode.network != null ? _powerNode.network.producedThisTick : 0f;
         public override float TotalConsumed => _powerNode != null && _powerNode.network != null ? _powerNode.network.consumedThisTick : 0f;
-        public override float MaxCapacity => _powerNode != null && _powerNode.network != null ? _powerNode.network.bottleneckWatts : 0f;
+        public override float MaxCapacity => 100000f;
 
         protected override void Awake()
         {
