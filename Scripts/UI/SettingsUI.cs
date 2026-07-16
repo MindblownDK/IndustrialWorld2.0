@@ -129,18 +129,36 @@ namespace VoxelEngine.UI
                 labels.Add(UIThemeManager.Label(themes[i]));
                 if (themes[i] == UIThemeManager.Current) selected = i;
             }
-            p.Add(Segmented(labels, selected, i => { UIThemeManager.Current = themes[i]; rebuild?.Invoke(); }));
-            p.Add(Hint(UIThemeManager.DescriptionFor(UIThemeManager.Current)));
-            p.Add(ThemePreview());
+            // Theme switching is reactive via OnThemeChanged - no full UI rebuild needed to avoid scroll jump.
+            p.Add(Segmented(labels, selected, i => { UIThemeManager.Current = themes[i]; }));
+            var themeDescLabel = Hint(UIThemeManager.DescriptionFor(UIThemeManager.Current));
+            p.Add(themeDescLabel);
+            var previewHolder = new VisualElement();
+            previewHolder.Add(ThemePreview());
+            p.Add(previewHolder);
+
+            // Helper to refresh preview in-place without rebuilding whole settings tab (prevents scroll jump)
+            void RefreshPreview()
+            {
+                previewHolder.Clear();
+                previewHolder.Add(ThemePreview());
+                themeDescLabel.text = UIThemeManager.DescriptionFor(UIThemeManager.Current);
+            }
 
             p.Add(T.Divider());
             p.Add(SectionLabel("Custom Accent Override"));
             p.Add(ToggleRow("Enable Custom Accent", "Override the current theme accent with your own RGB color. Reactive — no reload needed.",
                 UIThemeManager.CustomAccentEnabled,
-                on => { UIThemeManager.CustomAccentEnabled = on; rebuild?.Invoke(); }));
+                on =>
+                {
+                    UIThemeManager.CustomAccentEnabled = on;
+                    // Need to show/hide RGB sliders, so rebuild this tab but preserve scroll via menu controllers
+                    rebuild?.Invoke();
+                }));
             if (UIThemeManager.CustomAccentEnabled)
             {
                 var c = UIThemeManager.CustomAccent;
+                // RGB sliders are reactive - no rebuild on each drag to keep scroll position stable
                 p.Add(FloatSliderRow("Accent Red", 0f, 1f, c.r, "0.00", "", v => { var color = UIThemeManager.CustomAccent; color.r = v; UIThemeManager.CustomAccent = color; }));
                 p.Add(FloatSliderRow("Accent Green", 0f, 1f, c.g, "0.00", "", v => { var color = UIThemeManager.CustomAccent; color.g = v; UIThemeManager.CustomAccent = color; }));
                 p.Add(FloatSliderRow("Accent Blue", 0f, 1f, c.b, "0.00", "", v => { var color = UIThemeManager.CustomAccent; color.b = v; UIThemeManager.CustomAccent = color; }));
@@ -164,7 +182,7 @@ namespace VoxelEngine.UI
                     T.Radius(chip, 5);
                     T.Border(chip, 1, new Color(1,1,1,0.12f));
                     Color cap = pc;
-                    chip.RegisterCallback<ClickEvent>(_ => { UIThemeManager.CustomAccent = cap; rebuild?.Invoke(); });
+                    chip.RegisterCallback<ClickEvent>(_ => { UIThemeManager.CustomAccent = cap; RefreshPreview(); });
                     chipRow.Add(chip);
                 }
                 p.Add(chipRow);
@@ -172,14 +190,14 @@ namespace VoxelEngine.UI
 
             p.Add(T.Divider());
             p.Add(SectionLabel("Advanced Theme Shape"));
-            p.Add(FloatSliderRow($"Panel Opacity — {UIThemeManager.PanelOpacity:0.00}", 0.45f, 1f, UIThemeManager.PanelOpacity, "0.00", "", v => UIThemeManager.PanelOpacity = v));
-            p.Add(FloatSliderRow($"Corner Radius — {UIThemeManager.CornerRadius:0}px", 2f, 24f, UIThemeManager.CornerRadius, "0", " px", v => UIThemeManager.CornerRadius = v));
+            p.Add(FloatSliderRow($"Panel Opacity", 0.45f, 1f, UIThemeManager.PanelOpacity, "0.00", "", v => UIThemeManager.PanelOpacity = v));
+            p.Add(FloatSliderRow($"Corner Radius", 2f, 24f, UIThemeManager.CornerRadius, "0", " px", v => UIThemeManager.CornerRadius = v));
 
             p.Add(T.Divider());
             p.Add(SectionLabel("Effects & Motion"));
-            p.Add(FloatSliderRow($"Accent Glow — {UIThemeManager.AccentGlow:0.00}", 0f, 1f, UIThemeManager.AccentGlow, "0.00", "", v => UIThemeManager.AccentGlow = v));
-            p.Add(FloatSliderRow($"Animation Speed — {UIThemeManager.AnimationSpeed:0.00}x", 0.2f, 3f, UIThemeManager.AnimationSpeed, "0.00", " x", v => UIThemeManager.AnimationSpeed = v));
-            p.Add(Hint("Glow controls border emissive intensity. Animation speed scales all UI transition durations via USS variables (--theme-glow)."));
+            p.Add(FloatSliderRow($"Accent Glow", 0f, 1f, UIThemeManager.AccentGlow, "0.00", "", v => UIThemeManager.AccentGlow = v));
+            p.Add(FloatSliderRow($"Animation Speed", 0.2f, 3f, UIThemeManager.AnimationSpeed, "0.00", " x", v => UIThemeManager.AnimationSpeed = v));
+            p.Add(Hint("Glow controls border emissive intensity. Animation speed scales UI transition durations."));
 
             p.Add(T.Divider());
             p.Add(SectionLabel("Share & Manage"));
@@ -204,7 +222,7 @@ namespace VoxelEngine.UI
             p.Add(code);
 
             p.Add(T.Divider());
-            p.Add(SectionLabel("Production Panel Accent (Separate)"));
+            p.Add(SectionLabel("Production Panel Accent"));
             var prodLabels = new List<string> { "Steel", "Amber", "Cyan", "Violet" };
             int prodIndex = ProductionPanelThemeState.Current switch
             {
@@ -216,13 +234,10 @@ namespace VoxelEngine.UI
             p.Add(Segmented(prodLabels, prodIndex, i =>
             {
                 while ((int)ProductionPanelThemeState.Current != i) ProductionPanelThemeState.Next();
+                // production accent change needs rebuild to update browser panels, but preserve scroll via menu logic
                 rebuild?.Invoke();
             }));
-            p.Add(Hint("Overrides Recipe Browser and Production Statistics accent colors without affecting gameplay. Global theme still controls all base panels."));
-
-            p.Add(T.Divider());
-            p.Add(SectionLabel("Premium Editor"));
-            p.Add(Hint("All panels derive from ThemedPanel base class. ThemeManager loads ThemeDefinition ScriptableObjects, applies USS variables (--theme-accent, --theme-panel, --theme-radius, --theme-glow) reactively via OnThemeChanged — no scene reload required. Per-block overrides (ThemeOverride, AccentColorOverride, IconStyleOverride) are authored via Step 17 non-destructively."));
+            p.Add(Hint("Overrides Recipe Browser and Production Statistics accent colors without affecting gameplay."));
         }
 
         private static VisualElement ThemePreview()

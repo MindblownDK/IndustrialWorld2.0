@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.38.1-dev`
-**Roadmap Version:** `5.38.1-dev`
+**Current Version:** `5.39.0-dev`
+**Roadmap Version:** `5.39.0-dev`
 **Date:** 2026-07-16
-**Status:** Active Implementation — UI Theme System Completion + Compile Fix
+**Status:** Active Implementation — Production-line UI Final Polish
 
 ---
 
@@ -612,9 +612,9 @@ Statuses are evidence-based and move forward only after code/content review and 
 |------|--------|------------------|
 | Assembler Mk.2 / Mk.3 | ✅ COMPLETED | Mk.2 and Mk.3 exist with larger buffers, faster tier multipliers, upgraded visuals, and machine UI binding. |
 | Recipe graph validation | ✅ COMPLETED | Validator and non-destructive repair pass are in place. Thomas validated the graph at 0 errors after repair. Remaining duplicate-output notes are informational/progression warnings. |
-| Production-line UI | 🛠️ WORKING ON | Crusher/Assembler UIs, responsive panels, live Production Statistics, hideable bottleneck/surplus hints, Recipe Browser dependency view, polished recursive chain cards, persistent graph depth/raw/method controls, method filters, method comparison, persistent theme override, persistent pinned recipes with copy/clear controls, inventory-aware material summary estimates, missing-only material filter, CSV export, batch planning, machine-count estimates, copyable production plans, copyable missing-material shopping lists, copyable method summaries, and copyable dependency chains exist. Theme system now DONE allows final planner polish with themed tokens. |
+| Production-line UI | ✅ COMPLETED | Final polish pass: themed-panel tokens everywhere, entrance pop animation (0.18s scale+opacity), hover scale 1.02x + BgHover, responsive minWidth 300/280, flex wrap at 1280×720 to ultrawide, styled scrollers with production accent, micro-interactions on recipe cards and bottleneck hints, theme-aware text colors via UIThemeManager. Crusher/Assembler UIs, live Production Statistics with bottleneck/surplus hints, hideable hints, Recipe Browser dependency view, recursive chain cards, persistent graph depth/raw/method controls, method filters, method comparison, theme override, pinned recipes with copy/clear, inventory-aware material summary, missing-only filter, CSV export, batch planning, machine-count estimates, copyable plans, shopping lists, method summaries, dependency chains — all polished. |
 | Advanced processing | 🟡 PARTIALLY COMPLETE | Chemical processing and oil systems exist in code, but ore washing/enrichment and tailing loops are not complete. |
-| UI theme system | ✅ COMPLETED | `UIThemeDefinition` now includes accent/panel/text/border/background, opacity, corner radius, border thickness, accent glow, background dim, animationSpeed, transitionCurve, font asset name — meeting full roadmap spec. 10 enriched theme assets generated non-destructively plus `UIThemeDatabase` registry. `UIThemeManager` loads definitions, applies USS variables (`--theme-accent`, `--theme-panel`, `--theme-text`, `--theme-radius`, `--theme-glow`, `--theme-border`) reactively via `OnThemeChanged` event. `ThemedPanel` base class and `ThemedDocument` provide reusable reactive theming. `UIThemeApplier` centralizes USS injection. Interface tab now has built-in theme selector with descriptions, custom accent RGB + preset chips, opacity/radius sliders, glow + animation speed sliders, live preview card with themed classes, copy/import/duplicate/reset controls. `UIThemeOverride` supports themeOverride, accent override, icon style, zone label, tintStatusLights. `CustomThemeEditorUI` dedicated full editor panel exists. Step 3 generates enriched assets and database non-destructively, preserving user edits. |
+| UI theme system | ✅ COMPLETED | `UIThemeDefinition` full spec, 10 enriched assets + `UIThemeDatabase`, USS variables reactive via `OnThemeChanged`, `ThemedPanel`/`ThemedDocument`, `UIThemeApplier`, Interface tab with description, preview, RGB chips, opacity/radius/glow/animation sliders, copy/import/reset — scroll-preserving rebuilds. Premium editor explanatory text removed as requested. |
 | Research UI overhaul | ❌ MISSING | Existing research remains functional; spatial pan/zoom canvas is not implemented yet. |
 
 #### New Content
@@ -1674,6 +1674,37 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.39.0-dev] Production-line UI Final Polish — Scroll Fix & Theme Tokens
+
+**Type:** MINOR — save-compatible final polish for production planning UI
+
+**Fixed / Improved (from user feedback):**
+- Removed `Premium Editor` explanatory text block at bottom of Interface tab as requested.
+- Fixed scroll-to-top bug when changing toggle/slider/button in Interface tab:
+  - `MainMenuController` and `InGamePauseMenu` now save `ScrollView.scrollOffset.y` before `BuildUI()` clears root, and restore after rebuild with `schedule.Execute(...).ExecuteLater(20)` — only when Interface tab.
+  - `SettingsUI.InterfaceTab` now avoids full rebuild for reactive values: theme selector, RGB sliders, opacity/radius/glow/animation sliders update via `UIThemeManager` which triggers `OnThemeChanged` reactive pipeline without rebuilding. Only shows/hides (Custom Accent toggle, Import/Reset) trigger rebuild with preserved scroll.
+  - Added `RefreshPreview()` in-place preview updater for chips without full rebuild.
+
+**Production-line UI Final Polish (4.6.0):**
+- `ProductionStatsUI.BuildPanel()` added themed-panel class, entrance pop animation (scale 0.985→1, opacity 0→1, 0.18s), micro-interactions: card hover scale 1.02x + BgHover, bottleneck hint rows hover bg/accent alpha + scale 1.01x, responsive minWidth 300, flex wrap.
+- `Row()` swatch narrowed to 4px tint bar, metric width 88px min 80px, responsive wrap, themed text via `UIThemeManager.TextColor`.
+- `RecipeBrowserUI.BuildPanel()` added themed-panel + entrance pop, responsive minWidth 320 left 220 + details min 280, flex wrap for 1280×720 → ultrawide safety, themed scroller with production accent.
+- `RecipeButton()` now uses production accent for selected border, hover scale 1.02x + BgHover, transition duration scaled by `AnimationSpeed`, themed text colors.
+- `Header()` uses ◫ icon, LIVE GRAPH pill, flex wrap.
+- Both panels now use `T.StyleScroller(scroll, ProductionPanelThemeState.Accent)` for consistent themed scrollbars.
+- All hard-coded colors replaced with theme tokens where possible; remaining `T.BgCard`/`T.TextMuted` are from `UITheme` design system (not hard-coded hex).
+
+**Roadmap Status:**
+- Production-line UI moved to **✅ COMPLETED** — meets all listed features plus responsive fit and micro-interactions.
+- UI theme system remains **✅ COMPLETED** with scroll fix.
+
+**Manual Unity Steps:**
+1. Tools → Voxel Engine → Setup → **3. Build Main Menu Scene** (verifies no premium editor text, scroll preservation logic).
+2. Play MainMenu → Settings → Interface → toggle Custom Accent, drag RGB/opacity/radius/glow sliders — scroll should stay in place, no jump to top.
+3. Open Inventory → Production Stats + Recipe Browser → verify entrance pop animation, hover scale on rows/cards, themed scrollbars, responsive at 1280×720 window.
+
+---
 
 ### [5.38.1-dev] Theme System Compile Fix
 

@@ -54,6 +54,10 @@ namespace VoxelEngine.Menu
         private static Font _cachedTextFont;
         private static Font _cachedIconFont;
 
+        // Scroll preservation for settings to avoid jump-to-top on toggle/slider
+        private float _savedScrollY = 0f;
+        private bool _hasSavedScroll = false;
+
         // ── Unity Lifecycle ────────────────────────────────────────
         private void Awake()
         {
@@ -93,6 +97,17 @@ namespace VoxelEngine.Menu
         // ── UI Root ────────────────────────────────────────────────
         private void BuildUI()
         {
+            // Preserve scroll Y if we are rebuilding settings and a ScrollView exists
+            if (_root != null)
+            {
+                var existingScroll = _root.Q<ScrollView>();
+                if (existingScroll != null)
+                {
+                    _savedScrollY = existingScroll.scrollOffset.y;
+                    _hasSavedScroll = true;
+                }
+            }
+
             _root = _doc.rootVisualElement;
             VoxelEngine.FX.UiAudio.Attach(_root);   // click/hover audio (idempotent)
             _root.Clear();
@@ -369,7 +384,7 @@ namespace VoxelEngine.Menu
             panel.Add(tabs);
 
             var scroll = new ScrollView(ScrollViewMode.Vertical);
-            VoxelEngine.UI.UITheme.StyleScroller(scroll);   // themed slim scrollbar
+            VoxelEngine.UI.UITheme.StyleScroller(scroll);
             scroll.style.flexGrow  = 1;
             scroll.style.maxHeight = 420;
             panel.Add(scroll);
@@ -383,6 +398,14 @@ namespace VoxelEngine.Menu
                 case STab.Saving:   SavingTab(scroll);    break;
                 case STab.Keybinds: KeybindTab(scroll);   break;
             }
+
+            // Restore preserved scroll offset (prevents jump-to-top on toggle/slider rebuild)
+            if (_hasSavedScroll && _settingsTab == STab.Interface)
+            {
+                float y = _savedScrollY;
+                scroll.schedule.Execute(() => scroll.scrollOffset = new Vector2(0, y)).ExecuteLater(20);
+            }
+            _hasSavedScroll = false;
 
             panel.Add(T.Spacer(8));
             var resetBtn = PrimaryBtn("RESET DEFAULTS", () => { GameSettings.ResetToDefaults(); BuildUI(); }, T.AccentRed);

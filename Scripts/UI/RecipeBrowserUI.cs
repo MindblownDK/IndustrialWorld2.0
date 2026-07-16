@@ -70,6 +70,18 @@ namespace VoxelEngine.UI
             panel.style.right = 12;
             panel.style.width = new StyleLength(new Length(54f, LengthUnit.Percent));
             panel.style.maxWidth = new StyleLength(new Length(62f, LengthUnit.Percent));
+            panel.style.minWidth = 320;
+            panel.AddToClassList("themed-panel");
+            // Premium entrance pop — matches ProductionStats
+            panel.style.opacity = 0f;
+            panel.style.scale = new StyleScale(new Scale(new Vector3(0.985f, 0.985f, 1f)));
+            panel.schedule.Execute(() =>
+            {
+                panel.style.transitionProperty = new List<StylePropertyName> { "opacity", "scale" };
+                panel.style.transitionDuration = new List<TimeValue> { new TimeValue(0.18f, TimeUnit.Second), new TimeValue(0.18f, TimeUnit.Second) };
+                panel.style.opacity = 1f;
+                panel.style.scale = new StyleScale(new Scale(Vector3.one));
+            }).ExecuteLater(20);
 
             EnsureSettingsLoaded();
             var entries = BuildEntries(registry);
@@ -82,10 +94,13 @@ namespace VoxelEngine.UI
             body.style.flexDirection = FlexDirection.Row;
             body.style.flexGrow = 1;
             body.style.marginTop = 8;
+            // Responsive: wrap on narrow screens (720p) so left list stays readable
+            body.style.flexWrap = Wrap.Wrap;
             panel.Add(body);
 
             var detailsHost = new VisualElement();
             detailsHost.style.flexGrow = 1;
+            detailsHost.style.minWidth = 280;
             void RefreshDetails()
             {
                 detailsHost.Clear();
@@ -138,17 +153,20 @@ namespace VoxelEngine.UI
             var row = new VisualElement();
             row.style.flexDirection = FlexDirection.Row;
             row.style.alignItems = Align.Center;
+            row.style.flexWrap = Wrap.Wrap;
             row.style.marginBottom = 8;
-            row.Add(T.IconBadge("R", ProductionPanelThemeState.Accent));
+            row.Add(T.IconBadge("◫", ProductionPanelThemeState.Accent));
             var title = T.Title("Recipe Browser");
             title.style.flexGrow = 1;
+            title.AddToClassList("themed-title");
             row.Add(title);
             row.Add(T.SmallButton($"Theme: {ProductionPanelThemeState.Label}", () =>
             {
                 ProductionPanelThemeState.Next();
                 GameUIController.Instance?.RequestRefresh();
             }, ProductionPanelThemeState.Accent));
-            var (pill, _) = T.StatusPill("GRAPH", ProductionPanelThemeState.Accent);
+            var (pill, _) = T.StatusPill("LIVE GRAPH", ProductionPanelThemeState.Accent);
+            pill.style.marginLeft = 6;
             row.Add(pill);
             return row;
         }
@@ -295,10 +313,25 @@ namespace VoxelEngine.UI
             card.style.paddingTop = 8;
             card.style.paddingBottom = 8;
             card.style.borderLeftWidth = 3;
-            card.style.borderLeftColor = new StyleColor(selected ? T.AccentGold : T.BorderDim);
+            card.style.borderLeftColor = new StyleColor(selected ? ProductionPanelThemeState.Accent : T.BorderDim);
+            card.AddToClassList("themed-panel");
+            // Micro-interaction: hover scale + bg shift, transition matches theme speed
+            card.style.transitionProperty = new List<StylePropertyName> { "scale", "background-color", "border-left-color" };
+            card.style.transitionDuration = new List<TimeValue> { new TimeValue(0.10f * UIThemeManager.AnimationSpeed, TimeUnit.Second), new TimeValue(0.10f, TimeUnit.Second), new TimeValue(0.10f, TimeUnit.Second) };
+            Color baseBg = T.BgCard;
+            card.RegisterCallback<PointerEnterEvent>(_ =>
+            {
+                if (!selected) card.style.backgroundColor = new StyleColor(T.BgHover);
+                card.style.scale = new StyleScale(new Scale(new Vector3(1.02f, 1.02f, 1f)));
+            });
+            card.RegisterCallback<PointerLeaveEvent>(_ =>
+            {
+                card.style.backgroundColor = new StyleColor(baseBg);
+                card.style.scale = new StyleScale(new Scale(Vector3.one));
+            });
 
             var name = new Label(output != null ? output.displayName : "Unknown Output");
-            name.style.color = new StyleColor(selected ? T.TextAccent : T.TextPrimary);
+            name.style.color = new StyleColor(selected ? ProductionPanelThemeState.Accent : UIThemeManager.TextColor);
             name.style.fontSize = 12;
             name.style.unityFontStyleAndWeight = FontStyle.Bold;
             card.Add(name);

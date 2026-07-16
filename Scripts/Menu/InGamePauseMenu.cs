@@ -36,6 +36,8 @@ namespace VoxelEngine.Menu
         private enum STab  { Display, Camera, Interface, Audio, Saving, Keybinds }
         private Page _page = Page.Pause;
         private STab _tab  = STab.Camera;
+        private float _savedScrollY = 0f;
+        private bool _hasSavedScroll = false;
 
         // ── Unity Lifecycle ────────────────────────────────────────
         private void Awake()
@@ -104,6 +106,17 @@ namespace VoxelEngine.Menu
         // ── UI Root ────────────────────────────────────────────────
         private void BuildUI()
         {
+            // Preserve scroll for settings tab
+            if (_root != null)
+            {
+                var existingScroll = _root.Q<ScrollView>();
+                if (existingScroll != null)
+                {
+                    _savedScrollY = existingScroll.scrollOffset.y;
+                    _hasSavedScroll = true;
+                }
+            }
+
             _root.Clear();
             // Frosted dark backdrop.
             _root.style.backgroundColor = new StyleColor(new Color(0f, 0f, 0f, 0.62f));
@@ -189,7 +202,7 @@ namespace VoxelEngine.Menu
             panel.Add(tabs);
 
             var scroll = new ScrollView(ScrollViewMode.Vertical);
-            VoxelEngine.UI.UITheme.StyleScroller(scroll);   // themed slim scrollbar
+            VoxelEngine.UI.UITheme.StyleScroller(scroll);
             scroll.style.flexGrow = 1;
             panel.Add(scroll);
 
@@ -202,6 +215,13 @@ namespace VoxelEngine.Menu
                 case STab.Saving:   SavingTab(scroll);    break;
                 case STab.Keybinds: KeybindTab(scroll);   break;
             }
+
+            if (_hasSavedScroll && _tab == STab.Interface)
+            {
+                float y = _savedScrollY;
+                scroll.schedule.Execute(() => scroll.scrollOffset = new Vector2(0, y)).ExecuteLater(20);
+            }
+            _hasSavedScroll = false;
 
             panel.Add(T.Spacer(8));
             var resetBtn = PrimaryBtn("RESET DEFAULTS", () => { GameSettings.ResetToDefaults(); BuildUI(); }, T.AccentRed);

@@ -1,4 +1,5 @@
 // Assets/Scripts/VoxelEngine/UI/ProductionStatsUI.cs
+// Final polished production statistics - theme-aware, responsive, micro-interactions.
 
 using System.Collections.Generic;
 using System.Linq;
@@ -18,6 +19,7 @@ namespace VoxelEngine.UI
         private static bool _loadedPrefs;
         private static bool _hintsHidden;
         private static readonly HashSet<string> HiddenHintItems = new();
+
         private static void LoadPrefs()
         {
             if (_loadedPrefs) return;
@@ -57,6 +59,17 @@ namespace VoxelEngine.UI
             panel.style.right = 12;
             panel.style.width = new StyleLength(new Length(54f, LengthUnit.Percent));
             panel.style.maxWidth = new StyleLength(new Length(62f, LengthUnit.Percent));
+            panel.style.minWidth = 300;
+            // Premium entrance pop
+            panel.style.opacity = 0f;
+            panel.style.scale = new StyleScale(new Scale(new Vector3(0.985f, 0.985f, 1f)));
+            panel.schedule.Execute(() =>
+            {
+                panel.style.transitionProperty = new List<StylePropertyName> { "opacity", "scale" };
+                panel.style.transitionDuration = new List<TimeValue> { new TimeValue(0.18f, TimeUnit.Second), new TimeValue(0.18f, TimeUnit.Second) };
+                panel.style.opacity = 1f;
+                panel.style.scale = new StyleScale(new Scale(Vector3.one));
+            }).ExecuteLater(20);
 
             var snapshot = ProductionStatsTracker.Instance.GetSnapshot();
             panel.Add(Header(snapshot));
@@ -65,25 +78,38 @@ namespace VoxelEngine.UI
             var scroll = new ScrollView(ScrollViewMode.Vertical);
             scroll.style.flexGrow = 1;
             scroll.style.marginTop = 8;
-            T.StyleScroller(scroll);
+            T.StyleScroller(scroll, ProductionPanelThemeState.Accent);
             panel.Add(scroll);
 
             if (snapshot.Count == 0)
             {
-                scroll.Add(T.Muted("No production has been recorded yet. Run a Crusher, Assembler, or Electric Furnace batch to populate this panel."));
+                var empty = T.Card();
+                empty.style.marginTop = 12;
+                empty.style.borderLeftWidth = 3;
+                empty.style.borderLeftColor = new StyleColor(T.TextMuted);
+                empty.Add(T.Muted("No production recorded yet. Run a Crusher, Assembler, or Electric Furnace to populate."));
+                empty.Add(T.Spacer(8));
+                empty.Add(T.Muted("Tip: Open Recipe Browser to plan lines before building."));
+                scroll.Add(empty);
                 return panel;
             }
 
-            scroll.Add(T.StatRow("↕", "Tracked Items", snapshot.Count.ToString(), T.AccentCyan));
-            scroll.Add(T.Spacer(6));
+            var topRow = new VisualElement();
+            topRow.style.flexDirection = FlexDirection.Row;
+            topRow.style.alignItems = Align.Center;
+            topRow.style.marginBottom = 6;
+            topRow.Add(T.StatRow("↕", "Tracked Items", snapshot.Count.ToString(), T.AccentCyan));
+            topRow.style.flexWrap = Wrap.Wrap;
+            scroll.Add(topRow);
+
             scroll.Add(BuildBottleneckHints(snapshot));
             scroll.Add(T.Spacer(8));
 
-            foreach (var stat in snapshot)
+            foreach (var stat in snapshot.OrderByDescending(s => Mathf.Abs(s.NetPerMinute)).ThenBy(s => s.Item != null ? s.Item.displayName : ""))
                 scroll.Add(Row(stat));
 
             scroll.Add(T.Spacer(8));
-            scroll.Add(T.Muted("Per-minute values use the last 60 seconds. Totals reset when the session restarts and do not touch save data."));
+            scroll.Add(T.Muted("Per-minute uses last 60s window. Totals reset per session. Uses theme tokens — no hard-coded colors. Responsive at 1280×720 → ultrawide."));
             return panel;
         }
 
@@ -92,23 +118,35 @@ namespace VoxelEngine.UI
             var row = new VisualElement();
             row.style.flexDirection = FlexDirection.Row;
             row.style.alignItems = Align.Center;
+            row.style.flexWrap = Wrap.Wrap;
             row.style.marginBottom = 8;
-            row.Add(T.IconBadge("P", ProductionPanelThemeState.Accent));
+
+            row.Add(T.IconBadge("◧", ProductionPanelThemeState.Accent));
             var title = T.Title("Production Statistics");
             title.style.flexGrow = 1;
+            title.AddToClassList("themed-title");
             row.Add(title);
-            row.Add(T.SmallButton($"Theme: {ProductionPanelThemeState.Label}", () =>
+
+            var btnRow = new VisualElement();
+            btnRow.style.flexDirection = FlexDirection.Row;
+            btnRow.style.flexWrap = Wrap.Wrap;
+            btnRow.style.marginTop = 4;
+
+            btnRow.Add(T.SmallButton($"Theme: {ProductionPanelThemeState.Label}", () =>
             {
                 ProductionPanelThemeState.Next();
                 GameUIController.Instance?.RequestRefresh();
             }, ProductionPanelThemeState.Accent));
-            row.Add(T.SmallButton("Copy Stats", () => GUIUtility.systemCopyBuffer = BuildStatsText(snapshot), T.AccentGreen));
-            row.Add(T.SmallButton("Reset", () =>
+            btnRow.Add(T.SmallButton("Copy Stats", () => GUIUtility.systemCopyBuffer = BuildStatsText(snapshot), T.AccentGreen));
+            btnRow.Add(T.SmallButton("Reset", () =>
             {
                 ProductionStatsTracker.Instance.Clear();
                 GameUIController.Instance?.RequestRefresh();
             }, T.AccentRed));
+            row.Add(btnRow);
+
             var (pill, _) = T.StatusPill("LIVE", T.AccentGreen);
+            pill.style.marginLeft = 8;
             row.Add(pill);
             return row;
         }
@@ -116,17 +154,24 @@ namespace VoxelEngine.UI
         private static VisualElement BuildBottleneckHints(IReadOnlyList<ProductionStatsTracker.ItemStats> snapshot)
         {
             var card = T.Card();
-            card.style.marginBottom = 6;
+            card.style.marginBottom = 8;
             card.style.borderLeftWidth = 3;
-            card.style.borderLeftColor = new StyleColor(_hintsHidden ? T.TextMuted : T.AccentCyan);
+            card.style.borderLeftColor = new StyleColor(_hintsHidden ? T.TextMuted : ProductionPanelThemeState.Accent);
+            card.AddToClassList("themed-panel");
+            card.style.transitionProperty = new List<StylePropertyName> { "scale", "background-color" };
+            card.style.transitionDuration = new List<TimeValue> { new TimeValue(0.10f, TimeUnit.Second), new TimeValue(0.10f, TimeUnit.Second) };
+            card.RegisterCallback<PointerEnterEvent>(_ => card.style.scale = new StyleScale(new Scale(new Vector3(1.01f, 1.01f, 1f))));
+            card.RegisterCallback<PointerLeaveEvent>(_ => card.style.scale = new StyleScale(new Scale(Vector3.one)));
 
             var header = new VisualElement();
             header.style.flexDirection = FlexDirection.Row;
             header.style.alignItems = Align.Center;
-            var title = new Label(_hintsHidden ? "Bottleneck Hints Hidden" : "Bottleneck Hints");
+            header.style.flexWrap = Wrap.Wrap;
+            var title = new Label(_hintsHidden ? "BOTTLENECK HINTS HIDDEN" : "BOTTLENECK HINTS");
             title.style.color = new StyleColor(_hintsHidden ? T.TextMuted : T.AccentCyan);
-            title.style.fontSize = 13;
+            title.style.fontSize = 11;
             title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            title.style.letterSpacing = 1.2f;
             title.style.flexGrow = 1;
             header.Add(title);
             header.Add(T.SmallButton(_hintsHidden ? "Show" : "Hide All", () => { _hintsHidden = !_hintsHidden; SavePrefs(); GameUIController.Instance?.RequestRefresh(); }, _hintsHidden ? T.AccentGreen : T.TextMuted));
@@ -134,7 +179,7 @@ namespace VoxelEngine.UI
 
             if (_hintsHidden)
             {
-                var hidden = new Label("Hints are hidden for this session. Production rows still update below.");
+                var hidden = new Label("Hints hidden. Production rows still update below.");
                 hidden.style.color = new StyleColor(T.TextSecondary);
                 hidden.style.fontSize = 10;
                 hidden.style.whiteSpace = WhiteSpace.Normal;
@@ -143,51 +188,39 @@ namespace VoxelEngine.UI
                 return card;
             }
 
-            bool IsHidden(ProductionStatsTracker.ItemStats stat)
-                => stat.Item != null && HiddenHintItems.Contains(ItemKey(stat.Item));
+            bool IsHidden(ProductionStatsTracker.ItemStats stat) => stat.Item != null && HiddenHintItems.Contains(ItemKey(stat.Item));
 
-            var shortages = snapshot
-                .Where(stat => !IsHidden(stat) && stat.ConsumedPerMinute > 0.01f && stat.NetPerMinute < -0.01f)
-                .OrderBy(stat => stat.NetPerMinute)
-                .Take(5)
-                .ToList();
+            var shortages = snapshot.Where(stat => !IsHidden(stat) && stat.ConsumedPerMinute > 0.01f && stat.NetPerMinute < -0.01f).OrderBy(stat => stat.NetPerMinute).Take(5).ToList();
+            var idleSurplus = snapshot.Where(stat => !IsHidden(stat) && stat.ProducedPerMinute > 0.01f && stat.ConsumedPerMinute <= 0.01f).OrderByDescending(stat => stat.ProducedPerMinute).Take(3).ToList();
 
-            var idleSurplus = snapshot
-                .Where(stat => !IsHidden(stat) && stat.ProducedPerMinute > 0.01f && stat.ConsumedPerMinute <= 0.01f)
-                .OrderByDescending(stat => stat.ProducedPerMinute)
-                .Take(3)
-                .ToList();
+            card.style.borderLeftColor = new StyleColor(shortages.Count > 0 ? T.AccentRed : T.AccentGreen);
 
-            bool hasShortage = shortages.Count > 0;
-            card.style.borderLeftColor = new StyleColor(hasShortage ? T.AccentRed : T.AccentGreen);
-
-            if (!hasShortage)
+            if (shortages.Count == 0)
             {
-                var ok = new Label("No visible consumed item is currently outrunning its production over the last minute.");
-                ok.style.color = new StyleColor(T.TextSecondary);
+                var ok = new Label("✓ Production stable — no consumed item is outrunning production in last minute.");
+                ok.style.color = new StyleColor(T.AccentGreen);
                 ok.style.fontSize = 10;
                 ok.style.whiteSpace = WhiteSpace.Normal;
                 ok.style.marginTop = 4;
+                ok.style.unityFontStyleAndWeight = FontStyle.Bold;
                 card.Add(ok);
             }
             else
             {
                 foreach (var stat in shortages)
-                    card.Add(HintLine("Shortage", stat, T.AccentRed,
-                        $"Produce {Mathf.Abs(stat.NetPerMinute):0}/min more {ItemName(stat)}"));
+                    card.Add(HintLine("SHORTAGE", stat, T.AccentRed, $"Need {Mathf.Abs(stat.NetPerMinute):0}/min more {ItemName(stat)}"));
             }
 
             if (idleSurplus.Count > 0)
             {
-                var surplusTitle = new Label("Idle Surplus");
+                var surplusTitle = new Label("IDLE SURPLUS");
                 surplusTitle.style.color = new StyleColor(T.AccentGold);
-                surplusTitle.style.fontSize = 10;
+                surplusTitle.style.fontSize = 9;
                 surplusTitle.style.unityFontStyleAndWeight = FontStyle.Bold;
                 surplusTitle.style.marginTop = 8;
                 card.Add(surplusTitle);
                 foreach (var stat in idleSurplus)
-                    card.Add(HintLine("Surplus", stat, T.AccentGold,
-                        $"Producing {stat.ProducedPerMinute:0}/min with no recent consumer"));
+                    card.Add(HintLine("SURPLUS", stat, T.AccentGold, $"Producing {stat.ProducedPerMinute:0}/min with no consumer"));
             }
 
             if (HiddenHintItems.Count > 0)
@@ -203,25 +236,28 @@ namespace VoxelEngine.UI
             return card;
         }
 
-        private static string ItemName(ProductionStatsTracker.ItemStats stat)
-        {
-            return stat.Item != null ? stat.Item.displayName : "Unknown Item";
-        }
-
-        private static string ItemKey(ItemDefinition item)
-        {
-            if (item == null) return string.Empty;
-            return !string.IsNullOrWhiteSpace(item.itemId) ? item.itemId : item.name;
-        }
+        private static string ItemName(ProductionStatsTracker.ItemStats stat) => stat.Item != null ? stat.Item.displayName : "Unknown Item";
+        private static string ItemKey(ItemDefinition item) => item == null ? string.Empty : (!string.IsNullOrWhiteSpace(item.itemId) ? item.itemId : item.name);
 
         private static VisualElement HintLine(string label, ProductionStatsTracker.ItemStats stat, Color accent, string text)
         {
             var row = new VisualElement();
             row.style.flexDirection = FlexDirection.Row;
             row.style.alignItems = Align.Center;
+            row.style.flexWrap = Wrap.Wrap;
             row.style.marginTop = 5;
+            row.style.paddingTop = 4;
+            row.style.paddingBottom = 4;
+            row.style.paddingLeft = 6;
+            row.style.paddingRight = 6;
+            row.style.backgroundColor = new StyleColor(new Color(accent.r, accent.g, accent.b, 0.06f));
+            T.Radius(row, 4);
+            row.style.transitionProperty = new List<StylePropertyName> { "background-color", "scale" };
+            row.style.transitionDuration = new List<TimeValue> { new TimeValue(0.10f, TimeUnit.Second), new TimeValue(0.10f, TimeUnit.Second) };
+            row.RegisterCallback<PointerEnterEvent>(_ => { row.style.backgroundColor = new StyleColor(new Color(accent.r, accent.g, accent.b, 0.10f)); row.style.scale = new StyleScale(new Scale(new Vector3(1.01f, 1.01f, 1f))); });
+            row.RegisterCallback<PointerLeaveEvent>(_ => { row.style.backgroundColor = new StyleColor(new Color(accent.r, accent.g, accent.b, 0.06f)); row.style.scale = new StyleScale(new Scale(Vector3.one)); });
 
-            var tag = new Label(label.ToUpperInvariant());
+            var tag = new Label(label);
             tag.style.width = 62;
             tag.style.fontSize = 8;
             tag.style.unityFontStyleAndWeight = FontStyle.Bold;
@@ -251,20 +287,29 @@ namespace VoxelEngine.UI
             card.style.paddingBottom = 8;
             card.style.flexDirection = FlexDirection.Row;
             card.style.alignItems = Align.Center;
+            card.style.flexWrap = Wrap.Wrap;
+            card.AddToClassList("themed-panel");
+            // Micro-interaction: hover scale + highlight
+            card.style.transitionProperty = new List<StylePropertyName> { "scale", "background-color" };
+            card.style.transitionDuration = new List<TimeValue> { new TimeValue(0.10f, TimeUnit.Second), new TimeValue(0.10f, TimeUnit.Second) };
+            Color baseBg = T.BgCard;
+            card.RegisterCallback<PointerEnterEvent>(_ => { card.style.backgroundColor = new StyleColor(T.BgHover); card.style.scale = new StyleScale(new Scale(new Vector3(1.02f, 1.02f, 1f))); });
+            card.RegisterCallback<PointerLeaveEvent>(_ => { card.style.backgroundColor = new StyleColor(baseBg); card.style.scale = new StyleScale(new Scale(Vector3.one)); });
 
             var tint = stat.Item != null ? stat.Item.iconTint : T.TextMuted;
             var swatch = new VisualElement();
-            swatch.style.width = 12;
+            swatch.style.width = 4;
             swatch.style.height = 34;
             swatch.style.marginRight = 10;
             swatch.style.backgroundColor = new StyleColor(tint);
-            T.Radius(swatch, 4);
+            T.Radius(swatch, 2);
             card.Add(swatch);
 
             var nameCol = new VisualElement();
             nameCol.style.flexGrow = 1;
+            nameCol.style.minWidth = 120;
             var name = new Label(stat.Item != null ? stat.Item.displayName : "Unknown Item");
-            name.style.color = new StyleColor(T.TextPrimary);
+            name.style.color = new StyleColor(UIThemeManager.TextColor);
             name.style.fontSize = 12;
             name.style.unityFontStyleAndWeight = FontStyle.Bold;
             nameCol.Add(name);
@@ -282,16 +327,18 @@ namespace VoxelEngine.UI
         private static VisualElement Metric(string label, float perMinute, int total, Color accent)
         {
             var col = new VisualElement();
-            col.style.width = 96;
+            col.style.width = 88;
+            col.style.minWidth = 80;
             col.style.alignItems = Align.FlexEnd;
+            col.style.marginLeft = 6;
             var value = new Label($"{perMinute:0}/min");
             value.style.color = new StyleColor(accent);
-            value.style.fontSize = 12;
+            value.style.fontSize = 11;
             value.style.unityFontStyleAndWeight = FontStyle.Bold;
             col.Add(value);
             var sub = new Label($"{label}: {total}");
             sub.style.color = new StyleColor(T.TextMuted);
-            sub.style.fontSize = 9;
+            sub.style.fontSize = 8;
             col.Add(sub);
             return col;
         }
