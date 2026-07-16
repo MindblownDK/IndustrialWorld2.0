@@ -31,15 +31,18 @@ namespace VoxelEngine.UI
         private static string _search = string.Empty;
         private static string _selectedOutputKey;
         private enum ChainPreference { Auto, AIAssembler, AssemblerStation }
+        private enum RecipeListFilter { All, Hand, Station, AIAssembler, Smelting }
         private const string PrefSelectedOutput = "IndustrialWorld.RecipeBrowser.SelectedOutput";
         private const string PrefChainDepth = "IndustrialWorld.RecipeBrowser.ChainDepth";
         private const string PrefShowRaw = "IndustrialWorld.RecipeBrowser.ShowRaw";
         private const string PrefPreference = "IndustrialWorld.RecipeBrowser.Preference";
         private const string PrefPlanBatches = "IndustrialWorld.RecipeBrowser.PlanBatches";
+        private const string PrefListFilter = "IndustrialWorld.RecipeBrowser.ListFilter";
         private static bool _settingsLoaded;
         private static int _chainDepth = 4;
         private static bool _showRawInputs = true;
         private static ChainPreference _chainPreference = ChainPreference.Auto;
+        private static RecipeListFilter _listFilter = RecipeListFilter.All;
         private static int _planBatches = 1;
         private static System.Action _refreshCurrentDetails;
 
@@ -89,6 +92,8 @@ namespace VoxelEngine.UI
             int pref = PlayerPrefs.GetInt(PrefPreference, (int)_chainPreference);
             _chainPreference = System.Enum.IsDefined(typeof(ChainPreference), pref) ? (ChainPreference)pref : ChainPreference.Auto;
             _planBatches = Mathf.Clamp(PlayerPrefs.GetInt(PrefPlanBatches, _planBatches), 1, 999);
+            int listFilter = PlayerPrefs.GetInt(PrefListFilter, (int)_listFilter);
+            _listFilter = System.Enum.IsDefined(typeof(RecipeListFilter), listFilter) ? (RecipeListFilter)listFilter : RecipeListFilter.All;
         }
 
         private static void SaveSettings()
@@ -98,6 +103,7 @@ namespace VoxelEngine.UI
             PlayerPrefs.SetInt(PrefShowRaw, _showRawInputs ? 1 : 0);
             PlayerPrefs.SetInt(PrefPreference, (int)_chainPreference);
             PlayerPrefs.SetInt(PrefPlanBatches, _planBatches);
+            PlayerPrefs.SetInt(PrefListFilter, (int)_listFilter);
             PlayerPrefs.Save();
         }
 
@@ -132,25 +138,56 @@ namespace VoxelEngine.UI
             search.style.marginBottom = 8;
             left.Add(search);
 
+            var filterBar = new VisualElement();
+            filterBar.style.flexDirection = FlexDirection.Row;
+            filterBar.style.flexWrap = Wrap.Wrap;
+            filterBar.style.marginBottom = 8;
+            left.Add(filterBar);
+
+            var resultLabel = new Label();
+            resultLabel.style.color = new StyleColor(T.TextMuted);
+            resultLabel.style.fontSize = 9;
+            resultLabel.style.marginBottom = 5;
+            left.Add(resultLabel);
+
             var scroll = new ScrollView(ScrollViewMode.Vertical);
             scroll.style.flexGrow = 1;
             T.StyleScroller(scroll);
             left.Add(scroll);
 
+            void RefreshFilterBar()
+            {
+                filterBar.Clear();
+                AddFilterButton(filterBar, RecipeListFilter.All, "All", PopulateList);
+                AddFilterButton(filterBar, RecipeListFilter.Hand, "Hand", PopulateList);
+                AddFilterButton(filterBar, RecipeListFilter.Station, "Station", PopulateList);
+                AddFilterButton(filterBar, RecipeListFilter.AIAssembler, "AI", PopulateList);
+                AddFilterButton(filterBar, RecipeListFilter.Smelting, "Smelt", PopulateList);
+                if (!string.IsNullOrEmpty(_search))
+                    filterBar.Add(T.SmallButton("Clear", () => { _search = string.Empty; search.value = string.Empty; PopulateList(); }, T.TextMuted));
+            }
+
             void PopulateList()
             {
                 scroll.Clear();
                 string query = (_search ?? string.Empty).Trim().ToLowerInvariant();
-                var filtered = entries.Where(entry =>
+                var filteredEntries = entries.Where(entry => MatchesFilter(entry))
+                    .Where(entry =>
                         string.IsNullOrEmpty(query)
                         || (entry.Output != null && entry.Output.displayName.ToLowerInvariant().Contains(query))
                         || entry.Name.ToLowerInvariant().Contains(query)
                         || entry.Kind.ToLowerInvariant().Contains(query))
                     .Where(entry => entry.Output != null)
+                    .ToList();
+
+                var filtered = filteredEntries
                     .GroupBy(entry => OutputKey(entry.Output))
                     .Select(group => new { Key = group.Key, Output = group.First().Output, Count = group.Count(), Kinds = string.Join(", ", group.Select(e => e.Kind).Distinct()) })
                     .OrderBy(group => group.Output.displayName)
                     .ToList();
+
+                resultLabel.text = $"{filtered.Count} item{(filtered.Count == 1 ? "" : "s")} · {filteredEntries.Count} recipe method{(filteredEntries.Count == 1 ? "" : "s")}";
+                RefreshFilterBar();
 
                 foreach (var group in filtered)
                     scroll.Add(RecipeButton(group.Key, group.Output, group.Count, group.Kinds, () =>
@@ -160,7 +197,7 @@ namespace VoxelEngine.UI
                     }));
 
                 if (filtered.Count == 0)
-                    scroll.Add(T.Muted("No recipes match the current search."));
+                    scroll.Add(T.Muted("No recipes match the current search/filter."));
             }
 
             search.RegisterValueChangedCallback(evt =>
@@ -170,6 +207,29 @@ namespace VoxelEngine.UI
             });
             PopulateList();
             return left;
+        }
+
+        private static void AddFilterButton(VisualElement parent, RecipeListFilter filter, string label, System.Action refresh)
+        {
+            bool selected = _listFilter == filter;
+            parent.Add(T.SmallButton(label, () =>
+            {
+                _listFilter = filter;
+                SaveSettings();
+                refresh?.Invoke();
+            }, selected ? ProductionPanelThemeState.Accent : T.TextMuted));
+        }
+
+        private static bool MatchesFilter(RecipeEntry entry)
+        {
+            return _listFilter switch
+            {
+                RecipeListFilter.Hand => entry.Kind == "Hand Crafting",
+                RecipeListFilter.Station => entry.Kind == "Crafting Bench" || entry.Kind == "Assembler Station",
+                RecipeListFilter.AIAssembler => entry.Kind == "AI-assembler",
+                RecipeListFilter.Smelting => entry.Kind == "Smelting",
+                _ => true
+            };
         }
 
         private static VisualElement RecipeButton(string outputKey, ItemDefinition output, int recipeCount, string kinds, System.Action refreshDetails)
