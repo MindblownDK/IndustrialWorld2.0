@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.14.1-dev`
-**Roadmap Version:** `5.14.1-dev`
+**Current Version:** `5.14.3-dev`
+**Roadmap Version:** `5.14.3-dev`
 **Date:** 2026-07-16
 **Status:** Active Implementation — Recipe Browser Dependency View
 
@@ -1674,6 +1674,32 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.14.3-dev] Recipe Browser Grouping & Labels
+
+**Type:** PATCH — recipe browser grouping/readability fix
+
+**Fixed / Improved:**
+- Recipe Browser now groups production targets by player-facing item name, so duplicate item assets with different internal ids but the same visible item appear under one row.
+- Copper LV Wire and similar duplicated setup-era items now appear as one production target with all methods under Made By.
+- Station-tier recipes now show `Assembler Station` instead of `Assembler` to avoid confusion with the factory Assembler machines.
+- Machine assembling recipes now show `Factory Assembler`.
+- Recipe de-duplication keys now use the same player-facing item grouping for inputs.
+
+---
+
+### [5.14.2-dev] Recipe Browser Polish & GameUI Panel Guard
+
+**Type:** PATCH — UI polish and null-panel safety fix
+
+**Fixed / Improved:**
+- Recipe Browser left list now groups by output item, so duplicated alternate recipes no longer appear as repeated selectable rows.
+- `None:` recipe labels are now shown as `Hand Crafting:` in Made By sections.
+- Recipe Browser entries are de-duplicated by kind/name/output/input signature.
+- Scrollbar thumbs now stay inside the scrollbar track.
+- GameUI now guards against a temporarily missing UI Toolkit panel, fixing the `RuntimePanelUtils.ScreenToPanel` NullReference when selecting/clicking the GameUI object in the Hierarchy.
+
+---
 
 ### [5.14.1-dev] Recipe Browser Interaction Fix
 

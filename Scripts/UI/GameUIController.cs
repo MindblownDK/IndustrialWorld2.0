@@ -203,8 +203,18 @@ namespace VoxelEngine.UI
         private float         _furnaceTickAccum;
         private float         _recipeRefreshAccum;
         private float         _machineRefreshAccum;
+        private bool HasLivePanel()
+        {
+            if (_doc == null) _doc = GetComponent<UIDocument>();
+            if (_doc == null) return false;
+            if (_root == null || _root != _doc.rootVisualElement) _root = _doc.rootVisualElement;
+            return _root != null && _root.panel != null;
+        }
+
         private void Update()
         {
+            if (!HasLivePanel()) return;
+
             // Live-update the open furnace panel in-place every frame (no rebuild needed).
             TickFurnaceLiveUI();
             PlayerHud.Tick();
@@ -376,7 +386,7 @@ namespace VoxelEngine.UI
             else                Tooltip.Hide();
 
             // Drag follow — convert screen-pixel cursor to panel coordinates.
-            if (_dragSource.active && _dragGhost != null)
+            if (_dragSource.active && _dragGhost != null && HasLivePanel())
             {
                 Vector2 panelPos = RuntimePanelUtils.ScreenToPanel(_root.panel, new Vector2(mp.x, Screen.height - mp.y));
                 _dragGhost.style.left = panelPos.x - 24;
@@ -2925,6 +2935,7 @@ namespace VoxelEngine.UI
 #else
             Vector2 sp = Input.mousePosition;
 #endif
+            if (!HasLivePanel()) return false;
             Vector2 panelPos = RuntimePanelUtils.ScreenToPanel(_root.panel,
                 new Vector2(sp.x, Screen.height - sp.y));
             var picked = _root.panel.Pick(panelPos);
@@ -2954,6 +2965,7 @@ namespace VoxelEngine.UI
             bool    shiftHeld    = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
 #endif
             // Convert screen pixels -> panel coords (UI uses Y-down origin).
+            if (!HasLivePanel()) return;
             Vector2 panelPos = RuntimePanelUtils.ScreenToPanel(_root.panel,
                 new Vector2(screenPos.x, Screen.height - screenPos.y));
 
@@ -3289,6 +3301,7 @@ namespace VoxelEngine.UI
 #else
             Vector2 screenPos = Input.mousePosition;
 #endif
+            if (!HasLivePanel()) return;
             Vector2 panelPos = RuntimePanelUtils.ScreenToPanel(_root.panel,
                 new Vector2(screenPos.x, Screen.height - screenPos.y));
 
@@ -3350,6 +3363,7 @@ namespace VoxelEngine.UI
 #else
             Vector2 screenPos = Input.mousePosition;
 #endif
+            if (!HasLivePanel()) return;
             Vector2 panelPos = RuntimePanelUtils.ScreenToPanel(_root.panel,
                 new Vector2(screenPos.x, Screen.height - screenPos.y));
             var hovered = FindSlotAt(panelPos);

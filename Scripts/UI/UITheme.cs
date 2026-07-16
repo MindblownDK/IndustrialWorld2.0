@@ -787,8 +787,22 @@ namespace VoxelEngine.UI
                 dragger.style.backgroundColor = new StyleColor(thumbCol);
                 Radius(dragger, 3f);
                 Border(dragger, 0, Color.clear);
-                if (vertical) { dragger.style.left = 2; dragger.style.width  = 6; dragger.style.minHeight = 24; }
-                else          { dragger.style.top  = 2; dragger.style.height = 6; dragger.style.minWidth  = 24; }
+                if (vertical)
+                {
+                    dragger.style.left = 2;
+                    dragger.style.right = 2;
+                    dragger.style.width = StyleKeyword.Auto;
+                    dragger.style.minHeight = 24;
+                    dragger.style.maxWidth = 6;
+                }
+                else
+                {
+                    dragger.style.top = 2;
+                    dragger.style.bottom = 2;
+                    dragger.style.height = StyleKeyword.Auto;
+                    dragger.style.minWidth = 24;
+                    dragger.style.maxHeight = 6;
+                }
 
                 Color hover  = new(thumbCol.r * 1.35f, thumbCol.g * 1.35f, thumbCol.b * 1.35f);
                 Color active = AccentCyan;

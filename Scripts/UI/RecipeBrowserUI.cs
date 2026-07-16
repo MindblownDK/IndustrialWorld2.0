@@ -28,7 +28,7 @@ namespace VoxelEngine.UI
         }
 
         private static string _search = string.Empty;
-        private static ItemDefinition _selectedOutput;
+        private static string _selectedOutputKey;
         private static System.Action _refreshCurrentDetails;
 
         public static VisualElement BuildPanel(RecipeRegistry registry)
@@ -40,7 +40,7 @@ namespace VoxelEngine.UI
             panel.style.maxWidth = new StyleLength(new Length(62f, LengthUnit.Percent));
 
             var entries = BuildEntries(registry);
-            if (_selectedOutput == null && entries.Count > 0) _selectedOutput = entries[0].Output;
+            if (string.IsNullOrEmpty(_selectedOutputKey) && entries.Count > 0) _selectedOutputKey = OutputKey(entries[0].Output);
 
             panel.Add(Header());
             panel.Add(T.AccentDivider(T.AccentGold));
@@ -106,12 +106,14 @@ namespace VoxelEngine.UI
                         || (entry.Output != null && entry.Output.displayName.ToLowerInvariant().Contains(query))
                         || entry.Name.ToLowerInvariant().Contains(query)
                         || entry.Kind.ToLowerInvariant().Contains(query))
-                    .OrderBy(entry => entry.Output != null ? entry.Output.displayName : entry.Name)
-                    .ThenBy(entry => entry.Kind)
+                    .Where(entry => entry.Output != null)
+                    .GroupBy(entry => OutputKey(entry.Output))
+                    .Select(group => new { Key = group.Key, Output = group.First().Output, Count = group.Count(), Kinds = string.Join(", ", group.Select(e => e.Kind).Distinct()) })
+                    .OrderBy(group => group.Output.displayName)
                     .ToList();
 
-                foreach (var entry in filtered)
-                    scroll.Add(RecipeButton(entry, () =>
+                foreach (var group in filtered)
+                    scroll.Add(RecipeButton(group.Key, group.Output, group.Count, group.Kinds, () =>
                     {
                         refreshDetails?.Invoke();
                         PopulateList();
@@ -130,9 +132,9 @@ namespace VoxelEngine.UI
             return left;
         }
 
-        private static VisualElement RecipeButton(RecipeEntry entry, System.Action refreshDetails)
+        private static VisualElement RecipeButton(string outputKey, ItemDefinition output, int recipeCount, string kinds, System.Action refreshDetails)
         {
-            bool selected = entry.Output != null && entry.Output == _selectedOutput;
+            bool selected = !string.IsNullOrEmpty(outputKey) && outputKey == _selectedOutputKey;
             var card = T.Card();
             card.style.marginBottom = 5;
             card.style.paddingTop = 8;
@@ -140,20 +142,21 @@ namespace VoxelEngine.UI
             card.style.borderLeftWidth = 3;
             card.style.borderLeftColor = new StyleColor(selected ? T.AccentGold : T.BorderDim);
 
-            var name = new Label(entry.Output != null ? entry.Output.displayName : entry.Name);
+            var name = new Label(output != null ? output.displayName : "Unknown Output");
             name.style.color = new StyleColor(selected ? T.TextAccent : T.TextPrimary);
             name.style.fontSize = 12;
             name.style.unityFontStyleAndWeight = FontStyle.Bold;
             card.Add(name);
 
-            var meta = new Label($"{entry.Kind} · {entry.OutputCount}x · {entry.Seconds:0.#}s");
+            var meta = new Label(recipeCount == 1 ? kinds : $"{recipeCount} ways · {kinds}");
             meta.style.color = new StyleColor(T.TextMuted);
             meta.style.fontSize = 9;
+            meta.style.whiteSpace = WhiteSpace.Normal;
             card.Add(meta);
 
             card.RegisterCallback<ClickEvent>(_ =>
             {
-                _selectedOutput = entry.Output;
+                _selectedOutputKey = outputKey;
                 refreshDetails?.Invoke();
             });
             return card;
@@ -165,22 +168,23 @@ namespace VoxelEngine.UI
             right.style.flexGrow = 1;
             T.StyleScroller(right);
 
-            if (_selectedOutput == null)
+            if (string.IsNullOrEmpty(_selectedOutputKey))
             {
                 right.Add(T.Muted("Select a recipe to inspect its dependency chain."));
                 return right;
             }
 
-            string selectedName = _selectedOutput.displayName;
+            var selectedItem = entries.FirstOrDefault(entry => OutputKey(entry.Output) == _selectedOutputKey)?.Output;
+            string selectedName = selectedItem != null ? selectedItem.displayName : _selectedOutputKey;
             right.Add(T.Subtitle(selectedName));
             right.Add(T.Spacer(4));
 
-            var makers = entries.Where(entry => entry.Output == _selectedOutput).ToList();
+            var makers = entries.Where(entry => OutputKey(entry.Output) == _selectedOutputKey).ToList();
             right.Add(SectionTitle("Made By", T.AccentGreen));
             foreach (var maker in makers)
                 right.Add(RecipeDetailCard(maker));
 
-            var usedBy = entries.Where(entry => entry.Inputs.Any(input => input.item == _selectedOutput)).ToList();
+            var usedBy = entries.Where(entry => entry.Inputs.Any(input => OutputKey(input.item) == _selectedOutputKey)).ToList();
             right.Add(T.Spacer(8));
             right.Add(SectionTitle("Used By", T.AccentCyan));
             if (usedBy.Count == 0) right.Add(T.Muted("No known recipe consumes this item."));
@@ -192,7 +196,7 @@ namespace VoxelEngine.UI
             var inputItems = makers.SelectMany(m => m.Inputs).Where(i => i.item != null).ToList();
             if (inputItems.Count == 0) right.Add(T.Muted("This recipe has no listed inputs."));
             foreach (var input in inputItems)
-                right.Add(InputLine(input.item, input.count, entries.Any(e => e.Output == input.item)));
+                right.Add(InputLine(input.item, input.count, entries.Any(e => OutputKey(e.Output) == OutputKey(input.item))));
 
             return right;
         }
@@ -265,10 +269,37 @@ namespace VoxelEngine.UI
             if (craftable)
                 row.RegisterCallback<ClickEvent>(_ =>
                 {
-                    _selectedOutput = item;
+                    _selectedOutputKey = OutputKey(item);
                     _refreshCurrentDetails?.Invoke();
                 });
             return row;
+        }
+
+        private static string RecipeKind(StationTier station)
+        {
+            return station switch
+            {
+                StationTier.None => "Hand Crafting",
+                StationTier.Assembler => "Assembler Station",
+                StationTier.CraftingBench => "Crafting Bench",
+                _ => station.ToString()
+            };
+        }
+
+        private static string MachineKind(MachineRecipeType type)
+        {
+            return type == MachineRecipeType.Assembling ? "Factory Assembler" : type.ToString();
+        }
+
+        private static string OutputKey(ItemDefinition item)
+        {
+            if (item == null) return string.Empty;
+            // Display name is intentional here: older setup passes produced duplicate
+            // assets with different itemIds but the same player-facing item. The
+            // browser groups those as one production target.
+            if (!string.IsNullOrWhiteSpace(item.displayName)) return item.displayName.Trim().ToLowerInvariant();
+            if (!string.IsNullOrWhiteSpace(item.itemId)) return item.itemId.Trim().ToLowerInvariant();
+            return item.name.Trim().ToLowerInvariant();
         }
 
         private static List<RecipeEntry> BuildEntries(RecipeRegistry registry)
@@ -282,7 +313,7 @@ namespace VoxelEngine.UI
                     if (recipe == null || recipe.outputItem == null) continue;
                     var entry = new RecipeEntry
                     {
-                        Kind = recipe.requiredStation.ToString(),
+                        Kind = RecipeKind(recipe.requiredStation),
                         Name = recipe.GetName(),
                         Output = recipe.outputItem,
                         OutputCount = recipe.outputCount,
@@ -300,7 +331,7 @@ namespace VoxelEngine.UI
                 if (recipe == null || recipe.outputItem == null) continue;
                 var entry = new RecipeEntry
                 {
-                    Kind = recipe.recipeType.ToString(),
+                    Kind = MachineKind(recipe.recipeType),
                     Name = recipe.GetName(),
                     Output = recipe.outputItem,
                     OutputCount = recipe.outputCount,
@@ -327,7 +358,20 @@ namespace VoxelEngine.UI
                 entries.Add(entry);
             }
 
-            return entries;
+            return entries
+                .Where(entry => entry.Output != null)
+                .GroupBy(EntryKey)
+                .Select(group => group.First())
+                .ToList();
+        }
+
+        private static string EntryKey(RecipeEntry entry)
+        {
+            string inputs = string.Join("+", entry.Inputs
+                .Where(input => input.item != null)
+                .OrderBy(input => OutputKey(input.item))
+                .Select(input => $"{OutputKey(input.item)}:{input.count}"));
+            return $"{entry.Kind}|{entry.Name}|{OutputKey(entry.Output)}|{entry.OutputCount}|{inputs}";
         }
     }
 }
