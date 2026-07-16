@@ -1,69 +1,58 @@
-// Assets/Scripts/VoxelEngine/Simulation/ConveyorShapeWheel.cs
+// Assets/Scripts/VoxelEngine/UI/GridShapeWheel.cs
+//
+// Contextual radial wheel for grid block shape variants (Cube, Slope, Half, etc.).
+// Reuses the same premium visual language as the HammerBuildWheel and ConveyorShapeWheel.
+// Activated when holding a grid armor / structural block item.
 
 using UnityEngine;
 using UnityEngine.UIElements;
+using VoxelEngine.GridSystem;
 using VoxelEngine.Items;
 using VoxelEngine.Settings;
 using VoxelEngine.UI;
 using InputAction = VoxelEngine.Settings.InputAction;
 
-namespace VoxelEngine.Simulation
+namespace VoxelEngine.UI
 {
-    public enum ConveyorBuildMode
+    public enum GridShapeVariant
     {
-        Straight,
-        Ramp,
-        Vertical
+        Cube,
+        Slope,
+        HalfBlock,
+        HalfSlope,
+        Corner,
+        InvertedSlope
     }
 
-    /// <summary>
-    /// Contextual hold-to-open radial selector for the three conveyor build modes.
-    /// The held conveyor item supplies the speed tier, so one item and recipe own
-    /// every conveyor shape available at that tier.
-    /// </summary>
-    public sealed class ConveyorShapeWheel : MonoBehaviour
+    public sealed class GridShapeWheel : MonoBehaviour
     {
-        private static readonly ConveyorBuildMode[] SelectedByTier =
+        private static readonly GridShapeVariant[] Variants =
         {
-            ConveyorBuildMode.Straight,
-            ConveyorBuildMode.Straight,
-            ConveyorBuildMode.Straight
+            GridShapeVariant.Cube,
+            GridShapeVariant.Slope,
+            GridShapeVariant.HalfBlock,
+            GridShapeVariant.HalfSlope,
+            GridShapeVariant.Corner,
+            GridShapeVariant.InvertedSlope
         };
 
-        private static readonly ConveyorBuildMode[] Modes =
-        {
-            ConveyorBuildMode.Straight,
-            ConveyorBuildMode.Ramp,
-            ConveyorBuildMode.Vertical
-        };
+        private static readonly string[] Icons = { "■", "▱", "▭", "▯", "▱", "▱" };
 
-        private static readonly string[] Icons = { "→", "↗", "↑" };
+        private static GridShapeVariant _current = GridShapeVariant.Cube;
+
+        public static GridShapeVariant CurrentShape => _current;
 
         private Inventory _inventory;
         private VisualElement _uiRoot;
-        private VisualElement _prompt;
-        private Label _promptLabel;
         private VisualElement _wheelOverlay;
         private VisualElement _wheelCenter;
         private VisualElement _ringElement;
         private Texture2D _ringTexture;
-        private readonly VisualElement[] _segmentLabelRoots = new VisualElement[3];
-        private readonly Label[] _segmentIcons = new Label[3];
-        private readonly Label[] _segmentNames = new Label[3];
+        private readonly VisualElement[] _segmentLabelRoots = new VisualElement[6];
+        private readonly Label[] _segmentIcons = new Label[6];
+        private readonly Label[] _segmentNames = new Label[6];
         private int _hoveredSegment = -1;
         private bool _open;
-        private ConveyorSpeed _activeTier;
-        private Vector2 _parallax;
-
-        public static ConveyorBuildMode GetMode(ConveyorSpeed tier)
-        {
-            return SelectedByTier[Mathf.Clamp((int)tier, 0, SelectedByTier.Length - 1)];
-        }
-
-        private static void SetMode(ConveyorSpeed tier, ConveyorBuildMode mode)
-        {
-            SelectedByTier[Mathf.Clamp((int)tier, 0, SelectedByTier.Length - 1)] = mode;
-        }
 
         private void Start()
         {
@@ -74,121 +63,48 @@ namespace VoxelEngine.Simulation
         private void Update()
         {
             if (_inventory == null) _inventory = FindAnyObjectByType<Inventory>();
-            bool holdingConveyor = TryGetHeldConveyor(out var belt);
+            bool holdingGridArmor = TryGetHeldGridArmor(out _);
 
-            if (!holdingConveyor)
+            if (!holdingGridArmor)
             {
                 if (_open) Close(selectHovered: false);
-                HidePrompt();
                 return;
             }
 
-            _activeTier = belt.speed;
             bool wheelHeld = GameSettings.IsHeld(InputAction.BuildWheel);
             if (!_open && !UIState.IsBlocking)
             {
-                ShowPrompt();
                 if (wheelHeld) Open();
             }
             else if (_open)
             {
-                HidePrompt();
                 if (!wheelHeld) Close(selectHovered: true);
-                else
-                {
-                    if (_wheelOverlay == null || _wheelOverlay.parent == null) BuildWheel();
-                    UpdateParallax();
-                }
-            }
-            else
-            {
-                HidePrompt();
+                else UpdateParallax();
             }
         }
 
-        private void OnDisable()
+        private bool TryGetHeldGridArmor(out GridBlockItem item)
         {
-            if (_open) Close(selectHovered: false);
-            RemoveUi();
-        }
-
-        private void OnDestroy()
-        {
-            if (_open) Close(selectHovered: false);
-            RemoveUi();
-        }
-
-        private bool TryGetHeldConveyor(out ConveyorBelt belt)
-        {
-            belt = null;
+            item = null;
             if (_inventory == null) return false;
             var stack = _inventory.ActiveStack;
-            if (stack == null || stack.IsEmpty || !(stack.item is BlockItem block) || block.placedPrefab == null)
+            if (stack == null || stack.IsEmpty || !(stack.item is GridBlockItem gbi))
                 return false;
 
-            belt = block.placedPrefab.GetComponentInChildren<ConveyorBelt>(true);
-            return belt != null && belt.autoShape && belt.shape == ConveyorShape.Straight;
-        }
-
-        private bool EnsureUiRoot()
-        {
-            if (_uiRoot != null && _uiRoot.panel != null) return true;
-            var controller = GameUIController.Instance;
-            var document = controller != null ? controller.GetComponent<UIDocument>() : FindAnyObjectByType<UIDocument>();
-            if (document == null) return false;
-            _uiRoot = document.rootVisualElement;
-            return _uiRoot != null;
-        }
-
-        private void ShowPrompt()
-        {
-            if (!EnsureUiRoot()) return;
-            if (_prompt == null)
+            // Only show for structural/armor-like blocks (simple heuristic)
+            string name = (gbi.displayName ?? "").ToLowerInvariant();
+            if (name.Contains("armor") || name.Contains("plate") || name.Contains("block") || name.Contains("wall"))
             {
-                _prompt = new VisualElement { name = "ConveyorShapePrompt" };
-                _prompt.style.position = Position.Absolute;
-                _prompt.style.left = 0;
-                _prompt.style.right = 0;
-                _prompt.style.bottom = 82;
-                _prompt.style.alignItems = Align.Center;
-                _prompt.pickingMode = PickingMode.Ignore;
-
-                var pill = new VisualElement();
-                pill.style.height = 30;
-                pill.style.paddingLeft = 12;
-                pill.style.paddingRight = 12;
-                pill.style.flexDirection = FlexDirection.Row;
-                pill.style.alignItems = Align.Center;
-                pill.style.justifyContent = Justify.Center;
-                pill.style.backgroundColor = new StyleColor(new Color(0.035f, 0.045f, 0.065f, 0.94f));
-                UITheme.Radius(pill, 15f);
-                UITheme.Border(pill, 1f, UITheme.BorderBright);
-                _prompt.Add(pill);
-
-                _promptLabel = new Label();
-                _promptLabel.style.fontSize = 11;
-                _promptLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
-                _promptLabel.style.color = new StyleColor(UITheme.TextPrimary);
-                _promptLabel.style.letterSpacing = 0.5f;
-                _promptLabel.pickingMode = PickingMode.Ignore;
-                pill.Add(_promptLabel);
+                item = gbi;
+                return true;
             }
-
-            if (_prompt.parent == null) _uiRoot.Add(_prompt);
-            _prompt.style.display = DisplayStyle.Flex;
-            _promptLabel.text = $"[{GameSettings.GetKey(InputAction.BuildWheel)}]  CONVEYOR SHAPE  ·  {GetMode(_activeTier).ToString().ToUpperInvariant()}";
-        }
-
-        private void HidePrompt()
-        {
-            if (_prompt != null) _prompt.style.display = DisplayStyle.None;
+            return false;
         }
 
         private void Open()
         {
             if (_open || !EnsureUiRoot()) return;
             _open = true;
-            _parallax = Vector2.zero;
             UIState.PushBlock();
             BuildWheel();
         }
@@ -205,7 +121,16 @@ namespace VoxelEngine.Simulation
             _wheelCenter = null;
             _ringElement = null;
             _hoveredSegment = -1;
-            ShowPrompt();
+        }
+
+        private bool EnsureUiRoot()
+        {
+            if (_uiRoot != null && _uiRoot.panel != null) return true;
+            var controller = GameUIController.Instance;
+            var document = controller != null ? controller.GetComponent<UIDocument>() : FindAnyObjectByType<UIDocument>();
+            if (document == null) return false;
+            _uiRoot = document.rootVisualElement;
+            return _uiRoot != null;
         }
 
         private void BuildWheel()
@@ -213,7 +138,7 @@ namespace VoxelEngine.Simulation
             if (!EnsureUiRoot()) return;
             if (_wheelOverlay != null) _wheelOverlay.RemoveFromHierarchy();
 
-            _wheelOverlay = new VisualElement { name = "ConveyorShapeWheel" };
+            _wheelOverlay = new VisualElement { name = "GridShapeWheel" };
             _wheelOverlay.style.position = Position.Absolute;
             _wheelOverlay.style.left = 0;
             _wheelOverlay.style.top = 0;
@@ -226,12 +151,12 @@ namespace VoxelEngine.Simulation
             _uiRoot.Add(_wheelOverlay);
 
             _wheelCenter = new VisualElement();
-            _wheelCenter.style.width = 440;
-            _wheelCenter.style.height = 440;
+            _wheelCenter.style.width = 420;
+            _wheelCenter.style.height = 420;
             _wheelCenter.style.position = Position.Relative;
             _wheelCenter.style.transitionProperty = new System.Collections.Generic.List<StylePropertyName> { "translate", "scale" };
             _wheelCenter.style.transitionDuration = new System.Collections.Generic.List<TimeValue> { new(0.08f, TimeUnit.Second) };
-            float safeScale = Mathf.Clamp(Mathf.Min(Screen.width, Screen.height) / 520f, 0.62f, 1f);
+            float safeScale = Mathf.Clamp(Mathf.Min(Screen.width, Screen.height) / 500f, 0.64f, 1f);
             _wheelCenter.style.scale = new StyleScale(new Scale(new Vector3(safeScale, safeScale, 1f)));
             _wheelOverlay.Add(_wheelCenter);
 
@@ -240,8 +165,8 @@ namespace VoxelEngine.Simulation
             System.Array.Clear(_segmentNames, 0, _segmentNames.Length);
             BuildRing();
             BuildCenterBadge();
-            for (int i = 0; i < Modes.Length; i++)
-                BuildRingLabel(i, Modes[i], Icons[i]);
+            for (int i = 0; i < Variants.Length; i++)
+                BuildRingLabel(i, Variants[i], Icons[i]);
             RefreshSegmentLabels();
         }
 
@@ -249,28 +174,28 @@ namespace VoxelEngine.Simulation
         {
             var badge = new VisualElement();
             badge.style.position = Position.Absolute;
-            badge.style.left = 85;
-            badge.style.top = 85;
-            badge.style.width = 220;
-            badge.style.height = 220;
+            badge.style.left = 75;
+            badge.style.top = 75;
+            badge.style.width = 270;
+            badge.style.height = 270;
             badge.style.alignItems = Align.Center;
             badge.style.justifyContent = Justify.Center;
             badge.style.backgroundColor = new StyleColor(new Color(0.035f, 0.05f, 0.075f, 0.98f));
-            UITheme.Radius(badge, 110f);
+            UITheme.Radius(badge, 135f);
             UITheme.Border(badge, 2f, UITheme.BorderBright);
             badge.pickingMode = PickingMode.Ignore;
             _wheelCenter.Add(badge);
 
-            var tier = new Label($"{_activeTier.ToString().ToUpperInvariant()} BELT");
-            tier.style.fontSize = 10;
-            tier.style.letterSpacing = 1.4f;
-            tier.style.unityFontStyleAndWeight = FontStyle.Bold;
-            tier.style.color = new StyleColor(UITheme.TextMuted);
-            tier.pickingMode = PickingMode.Ignore;
-            badge.Add(tier);
+            var title = new Label("SHAPE VARIANT");
+            title.style.fontSize = 11;
+            title.style.letterSpacing = 1.4f;
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            title.style.color = new StyleColor(UITheme.TextMuted);
+            title.pickingMode = PickingMode.Ignore;
+            badge.Add(title);
 
-            var selected = new Label(GetMode(_activeTier).ToString().ToUpperInvariant());
-            selected.style.fontSize = 15;
+            var selected = new Label(_current.ToString().ToUpperInvariant());
+            selected.style.fontSize = 16;
             selected.style.marginTop = 4;
             selected.style.unityFontStyleAndWeight = FontStyle.Bold;
             selected.style.color = new StyleColor(UITheme.AccentCyan);
@@ -288,12 +213,12 @@ namespace VoxelEngine.Simulation
 
         private void BuildRing()
         {
-            _ringElement = new VisualElement { name = "ConveyorShapeRing" };
+            _ringElement = new VisualElement { name = "GridShapeRing" };
             _ringElement.style.position = Position.Absolute;
-            _ringElement.style.left = 15;
-            _ringElement.style.top = 15;
-            _ringElement.style.width = 360;
-            _ringElement.style.height = 360;
+            _ringElement.style.left = 12;
+            _ringElement.style.top = 12;
+            _ringElement.style.width = 396;
+            _ringElement.style.height = 396;
             _ringElement.pickingMode = PickingMode.Position;
             _wheelCenter.Add(_ringElement);
             RefreshRingTexture();
@@ -303,8 +228,6 @@ namespace VoxelEngine.Simulation
                 int segment = SegmentAt(evt.localPosition);
                 if (segment == _hoveredSegment) return;
                 _hoveredSegment = segment;
-                if (segment >= 0 && segment < Modes.Length)
-                    SetMode(_activeTier, Modes[segment]);
                 RefreshRingTexture();
                 RefreshSegmentLabels();
             });
@@ -319,7 +242,7 @@ namespace VoxelEngine.Simulation
             {
                 if (evt.button != 0) return;
                 int segment = SegmentAt(evt.localPosition);
-                if (segment < 0 || segment >= Modes.Length) return;
+                if (segment < 0 || segment >= Variants.Length) return;
                 SelectSegment(segment);
                 evt.StopPropagation();
             });
@@ -328,24 +251,23 @@ namespace VoxelEngine.Simulation
 
         private void SelectHoveredSegment()
         {
-            if (_hoveredSegment < 0 || _hoveredSegment >= Modes.Length) return;
+            if (_hoveredSegment < 0 || _hoveredSegment >= Variants.Length) return;
             SelectSegment(_hoveredSegment);
         }
 
         private void SelectSegment(int segment)
         {
-            if (segment < 0 || segment >= Modes.Length) return;
-            var mode = Modes[segment];
-            SetMode(_activeTier, mode);
-            BuildFeedbackHud.Show("Conveyor Shape", mode.ToString(), null, UITheme.AccentCyan);
+            if (segment < 0 || segment >= Variants.Length) return;
+            _current = Variants[segment];
+            BuildFeedbackHud.Show("Grid Shape", _current.ToString(), null, UITheme.AccentCyan);
             if (_open) BuildWheel();
         }
 
-        private void BuildRingLabel(int index, ConveyorBuildMode mode, string iconText)
+        private void BuildRingLabel(int index, GridShapeVariant variant, string iconText)
         {
-            const float center = 195f;
-            const float radius = 142f;
-            float angle = (-90f + index * 120f) * Mathf.Deg2Rad;
+            const float center = 198f;
+            const float radius = 145f;
+            float angle = (-90f + index * (360f / Variants.Length)) * Mathf.Deg2Rad;
 
             var labelRoot = new VisualElement();
             labelRoot.style.position = Position.Absolute;
@@ -363,7 +285,7 @@ namespace VoxelEngine.Simulation
             _wheelCenter.Add(labelRoot);
             _segmentLabelRoots[index] = labelRoot;
 
-            bool selected = GetMode(_activeTier) == mode;
+            bool selected = _current == variant;
             var icon = new Label(iconText);
             icon.style.fontSize = 26;
             icon.style.unityTextAlign = TextAnchor.MiddleCenter;
@@ -373,10 +295,10 @@ namespace VoxelEngine.Simulation
             labelRoot.Add(icon);
             _segmentIcons[index] = icon;
 
-            var label = new Label(mode.ToString().ToUpperInvariant());
-            label.style.fontSize = 9;
+            var label = new Label(variant.ToString().ToUpperInvariant());
+            label.style.fontSize = 8;
             label.style.marginTop = 1;
-            label.style.letterSpacing = 0.8f;
+            label.style.letterSpacing = 0.6f;
             label.style.unityFontStyleAndWeight = FontStyle.Bold;
             label.style.color = new StyleColor(selected ? Color.white : new Color(0.20f, 0.22f, 0.24f));
             label.style.whiteSpace = WhiteSpace.NoWrap;
@@ -387,15 +309,14 @@ namespace VoxelEngine.Simulation
 
         private void RefreshSegmentLabels()
         {
-            int selected = (int)GetMode(_activeTier);
-            for (int i = 0; i < Modes.Length; i++)
+            for (int i = 0; i < Variants.Length; i++)
             {
                 var root = _segmentLabelRoots[i];
                 var icon = _segmentIcons[i];
                 var label = _segmentNames[i];
                 if (root == null || icon == null || label == null) continue;
 
-                bool isSelected = i == selected;
+                bool isSelected = Variants[i] == _current;
                 bool isHovered = i == _hoveredSegment;
                 Color foreground = isSelected
                     ? Color.white
@@ -413,15 +334,16 @@ namespace VoxelEngine.Simulation
 
         private int SegmentAt(Vector2 localPosition)
         {
-            Vector2 delta = localPosition - new Vector2(180f, 180f);
+            Vector2 delta = localPosition - new Vector2(198f, 198f);
             float radius = delta.magnitude;
-            if (radius < 115f || radius > 173f) return -1;
+            if (radius < 118f || radius > 172f) return -1;
 
             float angle = Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg;
-            float normalized = Mathf.Repeat(angle + 150f, 360f);
-            float withinSegment = normalized % 120f;
-            if (withinSegment < 3.5f || withinSegment > 116.5f) return -1;
-            return Mathf.Clamp(Mathf.FloorToInt(normalized / 120f), 0, Modes.Length - 1);
+            float normalized = Mathf.Repeat(angle + 90f, 360f);
+            float segmentAngle = 360f / Variants.Length;
+            float within = normalized % segmentAngle;
+            if (within < 4f || within > segmentAngle - 4f) return -1;
+            return Mathf.Clamp(Mathf.FloorToInt(normalized / segmentAngle), 0, Variants.Length - 1);
         }
 
         private void RefreshRingTexture()
@@ -431,7 +353,7 @@ namespace VoxelEngine.Simulation
             {
                 _ringTexture = new Texture2D(size, size, TextureFormat.RGBA32, false)
                 {
-                    name = "ConveyorShapeWheelRing",
+                    name = "GridShapeWheelRing",
                     wrapMode = TextureWrapMode.Clamp,
                     filterMode = FilterMode.Bilinear,
                     hideFlags = HideFlags.HideAndDontSave
@@ -442,7 +364,8 @@ namespace VoxelEngine.Simulation
             float center = (size - 1) * 0.5f;
             const float innerRadius = 78f;
             const float outerRadius = 128f;
-            int selected = (int)GetMode(_activeTier);
+            int selected = (int)_current;
+            float segmentAngle = 360f / Variants.Length;
 
             for (int y = 0; y < size; y++)
             {
@@ -450,38 +373,26 @@ namespace VoxelEngine.Simulation
                 {
                     float dx = x - center;
                     float dy = center - y;
-                    float radius = Mathf.Sqrt(dx * dx + dy * dy);
-                    if (radius < innerRadius || radius > outerRadius) continue;
+                    float r = Mathf.Sqrt(dx * dx + dy * dy);
+                    if (r < innerRadius || r > outerRadius) continue;
 
                     float angle = Mathf.Atan2(dy, dx) * Mathf.Rad2Deg;
-                    float normalized = Mathf.Repeat(angle + 150f, 360f);
-                    float withinSegment = normalized % 120f;
-                    if (withinSegment < 3.5f || withinSegment > 116.5f) continue;
+                    float normalized = Mathf.Repeat(angle + 90f, 360f);
+                    float within = normalized % segmentAngle;
+                    if (within < 4f || within > segmentAngle - 4f) continue;
 
-                    int segment = Mathf.Clamp(Mathf.FloorToInt(normalized / 120f), 0, Modes.Length - 1);
-                    bool isSelected = segment == selected;
-                    bool isHovered = segment == _hoveredSegment;
-
-                    // Premium cream/off-white ring + cyan/red accents (matching hammer wheel reference style)
-                    Color32 baseCream = new Color32(245, 242, 232, 255);
-                    Color32 hoverCream = new Color32(255, 250, 235, 255);
-                    Color32 selectedCyan = new Color32(22, 157, 220, 255);
-                    Color32 hoverAccent = new Color32(70, 188, 232, 255);
-
+                    int seg = Mathf.Clamp(Mathf.FloorToInt(normalized / segmentAngle), 0, Variants.Length - 1);
                     Color32 color;
-                    if (isSelected)
-                        color = selectedCyan;
-                    else if (isHovered)
-                        color = hoverAccent;
+                    if (seg == selected)
+                        color = new Color32(22, 157, 220, 250);
+                    else if (seg == _hoveredSegment)
+                        color = new Color32(70, 188, 232, 252);
                     else
-                        color = baseCream;
+                        color = new Color32(245, 242, 232, 255); // premium cream
 
-                    float edge = Mathf.Min(radius - innerRadius, outerRadius - radius);
-                    float alphaFade = Mathf.Clamp01(edge / 8f);
-                    color.a = (byte)Mathf.RoundToInt(255 * alphaFade * (isSelected || isHovered ? 1f : 0.96f));
-
+                    float edge = Mathf.Min(r - innerRadius, outerRadius - r);
+                    color.a = (byte)Mathf.RoundToInt(color.a * Mathf.Clamp01(edge / 8f));
                     if (edge < 4f) color = new Color32(180, 175, 160, (byte)(color.a * 0.7f));
-
                     pixels[y * size + x] = color;
                 }
             }
@@ -509,23 +420,10 @@ namespace VoxelEngine.Simulation
             Vector2 position = Input.mousePosition;
 #endif
             Vector2 fromCenter = position - new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
-            Vector2 target = Vector2.ClampMagnitude(fromCenter * 0.035f, 18f);
-            _parallax = Vector2.Lerp(_parallax, target, 1f - Mathf.Exp(-10f * Time.unscaledDeltaTime));
+            Vector2 target = Vector2.ClampMagnitude(fromCenter * 0.035f, 16f);
             _wheelCenter.style.translate = new StyleTranslate(new Translate(
-                new Length(_parallax.x, LengthUnit.Pixel),
-                new Length(-_parallax.y, LengthUnit.Pixel), 0f));
-        }
-
-        private void RemoveUi()
-        {
-            if (_prompt != null) _prompt.RemoveFromHierarchy();
-            if (_wheelOverlay != null) _wheelOverlay.RemoveFromHierarchy();
-            ReleaseRingTexture();
-            _prompt = null;
-            _wheelOverlay = null;
-            _wheelCenter = null;
-            _ringElement = null;
-            _hoveredSegment = -1;
+                new Length(target.x, LengthUnit.Pixel),
+                new Length(-target.y, LengthUnit.Pixel), 0f));
         }
     }
 }

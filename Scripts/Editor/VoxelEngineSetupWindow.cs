@@ -627,6 +627,21 @@ namespace VoxelEngine.EditorTools
             wheel.registry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Building.Tiered.TieredBlockRegistry>(
                 $"{ASSET_ROOT}/Tiered/TieredBlockRegistry.asset");
 
+            // Grid Shape Variant wheel (premium radial selector for armor/grid blocks).
+            // Non-destructive: only added if missing.
+            var shapeWheelGo = playerGo.transform.Find("GridShapeWheel");
+            if (shapeWheelGo == null)
+            {
+                shapeWheelGo = new GameObject("GridShapeWheel").transform;
+                shapeWheelGo.SetParent(playerGo.transform, false);
+            }
+            var shapeDoc = shapeWheelGo.GetComponent<UnityEngine.UIElements.UIDocument>();
+            if (shapeDoc == null) shapeDoc = shapeWheelGo.gameObject.AddComponent<UnityEngine.UIElements.UIDocument>();
+            shapeDoc.sortingOrder = 610;
+            shapeDoc.panelSettings = panelSettings;
+            if (shapeWheelGo.GetComponent<VoxelEngine.UI.GridShapeWheel>() == null)
+                shapeWheelGo.gameObject.AddComponent<VoxelEngine.UI.GridShapeWheel>();
+
             // Link viewer on whichever world exists. No manager is created here.
             if (flatWorld != null) flatWorld.viewer = playerGo.transform;
             if (sphereWorld != null) sphereWorld.viewer = playerGo.transform;

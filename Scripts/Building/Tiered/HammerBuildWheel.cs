@@ -241,31 +241,34 @@ namespace VoxelEngine.Building.Tiered
             _wheelCenter.Add(disc);
 
             var icon = new Label("⌁");
-            icon.style.fontSize = 34;
+            icon.style.fontSize = 38;
             icon.style.color = new StyleColor(ActiveFamily.HasValue ? T.AccentCyan : T.AccentGold);
             icon.pickingMode = PickingMode.Ignore;
             disc.Add(icon);
 
             var title = new Label(ActiveFamily.HasValue ? ActiveFamily.Value.ToString().ToUpperInvariant() : "UPGRADE MODE");
-            title.style.fontSize = 16;
-            title.style.marginTop = 5;
+            title.style.fontSize = 17;
+            title.style.marginTop = 4;
             title.style.unityFontStyleAndWeight = FontStyle.Bold;
             title.style.color = new StyleColor(T.TextPrimary);
+            title.style.whiteSpace = WhiteSpace.NoWrap;
             title.pickingMode = PickingMode.Ignore;
             disc.Add(title);
 
             var page = new Label($"PAGE {_page + 1}/{PageCount}  ·  SCROLL TO BROWSE");
-            page.style.fontSize = 9;
-            page.style.marginTop = 7;
+            page.style.fontSize = 10;
+            page.style.marginTop = 6;
             page.style.letterSpacing = 1f;
             page.style.color = new StyleColor(T.TextMuted);
+            page.style.whiteSpace = WhiteSpace.NoWrap;
             page.pickingMode = PickingMode.Ignore;
             disc.Add(page);
 
             var hint = new Label("CLICK CENTER FOR UPGRADE MODE");
-            hint.style.fontSize = 8;
-            hint.style.marginTop = 5;
+            hint.style.fontSize = 9;
+            hint.style.marginTop = 4;
             hint.style.color = new StyleColor(T.TextMuted);
+            hint.style.whiteSpace = WhiteSpace.NoWrap;
             hint.pickingMode = PickingMode.Ignore;
             disc.Add(hint);
 
@@ -289,27 +292,27 @@ namespace VoxelEngine.Building.Tiered
             if (index < 0) return;
 
             const float center = 260f;
-            const float radius = 190f;
+            const float radius = 195f;
             float angle = (-90f + segment * (360f / PageSize)) * Mathf.Deg2Rad;
             var root = new VisualElement();
             root.style.position = Position.Absolute;
-            root.style.left = center + Mathf.Cos(angle) * radius - 37f;
-            root.style.top = center + Mathf.Sin(angle) * radius - 31f;
-            root.style.width = 74;
-            root.style.height = 62;
+            root.style.left = center + Mathf.Cos(angle) * radius - 40f;
+            root.style.top = center + Mathf.Sin(angle) * radius - 34f;
+            root.style.width = 80;
+            root.style.height = 68;
             root.style.alignItems = Align.Center;
             root.style.justifyContent = Justify.Center;
-            root.style.overflow = Overflow.Hidden;
+            root.style.overflow = Overflow.Visible;
             root.pickingMode = PickingMode.Ignore;
             root.style.transitionProperty = new System.Collections.Generic.List<StylePropertyName> { "scale", "background-color" };
             root.style.transitionDuration = new System.Collections.Generic.List<TimeValue> { new(0.10f, TimeUnit.Second), new(0.10f, TimeUnit.Second) };
-            T.Radius(root, 28f);
+            T.Radius(root, 30f);
             _wheelCenter.Add(root);
             _segmentLabels[segment] = root;
 
             var icon = new Label(Icons[index]);
             icon.name = "Icon";
-            icon.style.fontSize = 20;
+            icon.style.fontSize = 22;
             icon.style.unityFontStyleAndWeight = FontStyle.Bold;
             icon.pickingMode = PickingMode.Ignore;
             root.Add(icon);
@@ -317,22 +320,22 @@ namespace VoxelEngine.Building.Tiered
             var name = new Label(Families[index].ToString().ToUpperInvariant());
             name.name = "Name";
             name.style.fontSize = 8;
-            name.style.maxWidth = 68;
+            name.style.maxWidth = 76;
             name.style.unityFontStyleAndWeight = FontStyle.Bold;
             name.style.unityTextAlign = TextAnchor.MiddleCenter;
             name.style.whiteSpace = WhiteSpace.NoWrap;
-            name.style.overflow = Overflow.Hidden;
+            name.style.overflow = Overflow.Visible;
             name.pickingMode = PickingMode.Ignore;
             root.Add(name);
 
             var cost = new Label(GetCostText(Families[index]).Replace("Cost: ", string.Empty));
             cost.name = "Cost";
             cost.style.fontSize = 7;
-            cost.style.maxWidth = 68;
+            cost.style.maxWidth = 76;
             cost.style.marginTop = 1;
             cost.style.unityTextAlign = TextAnchor.MiddleCenter;
             cost.style.whiteSpace = WhiteSpace.NoWrap;
-            cost.style.overflow = Overflow.Hidden;
+            cost.style.overflow = Overflow.Visible;
             cost.pickingMode = PickingMode.Ignore;
             root.Add(cost);
         }

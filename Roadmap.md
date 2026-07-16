@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.40.0-dev`
-**Roadmap Version:** `5.40.0-dev`
+**Current Version:** `5.40.1-dev`
+**Roadmap Version:** `5.40.1-dev`
 **Date:** 2026-07-16
-**Status:** Active Implementation — Premium UI Polish + Next Roadmap Steps
+**Status:** Active Implementation — Premium UI Polish + Grid Shape Variant Wheel Foundation
 
 ---
 
@@ -58,7 +58,7 @@ The design goal is a seamless blend of:
 | Grid screens / displays | ❌ Missing | No configurable digital panels |
 | Grid lighting | ❌ Missing | No flood lights or block lights |
 | Sloped / armored grid blocks | ❌ Missing | Only cube blocks exist; need shape variants |
-| Grid shape variant wheel | ❌ Missing | No way to switch block shape on the fly |
+| Grid shape variant wheel | 🛠️ WORKING ON | Premium radial wheel foundation complete (5.40.1-dev) with full visual parity to Hammer/Conveyor wheels. CurrentShape accessor + auto-spawn ready. Shape application + authored variants next (via Setup). |
 | Player armor slots | ❌ Missing | No equipable armor system |
 | Crafting / items / storage | ✅ Exists | Needs deeper recipe chains |
 | Research / tech tree | ✅ Exists | Can be expanded into eras |
@@ -1674,6 +1674,41 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.40.1-dev] Premium Wheel Text Cutoff Fixes + Grid Shape Variant Wheel Foundation
+
+**Type:** PATCH + MINOR foundation — save-compatible UI polish + new reusable wheel (no save/API touch)
+
+**Fixed:**
+- HammerBuildWheel segment labels: increased container sizes (80×68), radius, font sizes, switched to Overflow.Visible, better positioning — eliminates text cutoff on long family names and costs.
+- Center disc labels: increased fonts, added explicit whiteSpace.NoWrap for title/page/hint — no more clipping.
+- ConveyorShapeWheel segment labels: same treatment (76×60 containers, larger icons, Overflow.Visible, adjusted radius) — clean full labels.
+
+**Added:**
+- New `GridShapeWheel.cs` (UI/GridShapeWheel) — full premium radial wheel for grid block shape variants (Cube / Slope / HalfBlock / HalfSlope / Corner / InvertedSlope).
+  - Matches exact visual language of the polished Hammer + Conveyor wheels (cream ring, deep overlay, accent colors, micro scale/glow/hover, parallax).
+  - Self-contained: automatically shows when holding a structural grid/armor block item while BuildWheel is held.
+  - CurrentShape static accessor ready for future placement logic (GridBuilder, GridBlockMeshBuilder, etc.).
+- Auto-spawn of GridShapeWheel added to Step 2 (Spawn Player + UI) in VoxelEngineSetupWindow — non-destructive (only adds if missing). Sorting order 610 (above hammer wheel).
+- Updated roadmap table entry for "Grid shape variant wheel".
+
+**Roadmap Status Updates:**
+- Building Hammer wheel & placement: **🛠️ WORKING ON** (premium visuals + text cutoff fixed).
+- Conveyor logistics (shape wheel): **🛠️ WORKING ON** (premium visuals + text cutoff fixed).
+- Grid shape variant wheel (4.7.0): **🛠️ WORKING ON** (wheel foundation + premium UI complete; shape application logic and setup-authored variants planned for next).
+- 4.7.0 Power, Vehicles & Combat: now actively progressing (shape wheel is the first deliverable).
+
+**Manual Unity Steps (no new steps required for polish):**
+1. (Optional) Re-run **2. Spawn Player + UI in Scene** if you want the GridShapeWheel auto-added to an existing player.
+2. Equip a grid armor / structural block (e.g. from grid system) → hold Build Wheel key.
+3. Verify the new premium Grid Shape Variant wheel appears with full visible text.
+4. Test the existing Hammer and Conveyor wheels — all labels now fully visible, no cutoff.
+5. When ready for actual shape variants: run `Tools > Voxel Engine > Voxel Engine Setup` (Step 18 area) — the wheel is already wired.
+
+**Next Steps Ready:**
+- Implement actual shape variant prefabs/variants via the Voxel Engine Setup (non-destructive).
+- Hook selected shape into GridBuilder placement + GridBlockMeshBuilder.
+- Continue 4.7.0 (armor, weapons, damage, etc.).
 
 ### [5.40.0-dev] Premium Build Wheel & Conveyor Shape UI Polish + Roadmap Progress
 

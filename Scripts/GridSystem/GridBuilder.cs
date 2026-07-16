@@ -317,6 +317,12 @@ namespace VoxelEngine.GridSystem
                 }
                 _ghost.name = "GridGhost";
 
+                // FUTURE: respect VoxelEngine.UI.GridShapeWheel.CurrentShape here
+                // and swap the visual mesh / scale children when shape variants are
+                // authored via Voxel Engine Setup (Step 18). CurrentShape is already
+                // exposed for this purpose.
+            }
+
                 // Strip colliders + any block behaviour so the ghost is purely visual.
                 foreach (var c in _ghost.GetComponentsInChildren<Collider>()) Destroy(c);
                 foreach (var b in _ghost.GetComponentsInChildren<GridBlock>()) Destroy(b);
