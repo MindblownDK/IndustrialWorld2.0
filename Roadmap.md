@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.15.0-dev`
-**Roadmap Version:** `5.15.0-dev`
+**Current Version:** `5.16.0-dev`
+**Roadmap Version:** `5.16.0-dev`
 **Date:** 2026-07-16
-**Status:** Active Implementation — Recipe Browser Dependency Chain
+**Status:** Active Implementation — Recipe Browser Graph Controls
 
 ---
 
@@ -612,7 +612,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 |------|--------|------------------|
 | Assembler Mk.2 / Mk.3 | ✅ COMPLETED | Mk.2 and Mk.3 exist with larger buffers, faster tier multipliers, upgraded visuals, and machine UI binding. |
 | Recipe graph validation | ✅ COMPLETED | Validator and non-destructive repair pass are in place. Thomas validated the graph at 0 errors after repair. Remaining duplicate-output notes are informational/progression warnings. |
-| Production-line UI | 🛠️ WORKING ON | Crusher/Assembler UIs, responsive panels, live Production Statistics, hideable bottleneck/surplus hints, Recipe Browser dependency view, and recursive dependency chain visualization exist. Next: theme overrides and deeper graph controls. |
+| Production-line UI | 🛠️ WORKING ON | Crusher/Assembler UIs, responsive panels, live Production Statistics, hideable bottleneck/surplus hints, Recipe Browser dependency view, polished recursive chain cards, and graph depth/raw toggles exist. Next: theme overrides and richer recipe controls. |
 | Advanced processing | 🟡 PARTIALLY COMPLETE | Chemical processing and oil systems exist in code, but ore washing/enrichment and tailing loops are not complete. |
 | UI theme system | ❌ MISSING | Design tokens exist in `UITheme`; theme ScriptableObjects, runtime theme switching, and custom editor remain planned. |
 | Research UI overhaul | ❌ MISSING | Existing research remains functional; spatial pan/zoom canvas is not implemented yet. |
@@ -1674,6 +1674,23 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.16.0-dev] Polished Recipe Chain Graph Controls
+
+**Type:** MINOR — new save-compatible recipe graph control/polish
+
+**Changed:**
+- Dependency Chain was rebuilt from plain text into stacked visual cards with colored side bars, method badges, item tint dots, and per-node metadata.
+- Added chain controls for depth adjustment and raw-input visibility.
+- Chain nodes can be clicked to focus that recipe target.
+- Raw inputs now display as compact RAW cards instead of plain indented text.
+- Continued use of `AI-assembler` naming for factory machine assembling recipes.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Richer recipe graph controls are now started.
+- Next target: theme overrides for production panels.
+
+---
 
 ### [5.15.0-dev] Recipe Dependency Chain View
 

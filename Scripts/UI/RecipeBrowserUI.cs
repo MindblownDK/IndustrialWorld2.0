@@ -29,6 +29,8 @@ namespace VoxelEngine.UI
 
         private static string _search = string.Empty;
         private static string _selectedOutputKey;
+        private static int _chainDepth = 4;
+        private static bool _showRawInputs = true;
         private static System.Action _refreshCurrentDetails;
 
         public static VisualElement BuildPanel(RecipeRegistry registry)
@@ -254,48 +256,176 @@ namespace VoxelEngine.UI
         {
             var card = T.Card();
             card.style.marginBottom = 6;
-            var visited = new HashSet<string>();
-            AddDependencyNode(card, outputKey, entries, depth: 0, visited);
+            card.style.paddingTop = 10;
+            card.style.paddingBottom = 10;
+
+            var header = new VisualElement();
+            header.style.flexDirection = FlexDirection.Row;
+            header.style.alignItems = Align.Center;
+            header.style.marginBottom = 8;
+            var title = new Label("Dependency Chain");
+            title.style.flexGrow = 1;
+            title.style.color = new StyleColor(T.AccentPurple);
+            title.style.fontSize = 13;
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            header.Add(title);
+            header.Add(T.SmallButton(_showRawInputs ? "Hide Raw" : "Show Raw", () => { _showRawInputs = !_showRawInputs; _refreshCurrentDetails?.Invoke(); }, T.TextMuted));
+            header.Add(T.SmallButton("−", () => { _chainDepth = Mathf.Max(1, _chainDepth - 1); _refreshCurrentDetails?.Invoke(); }, T.TextMuted));
+            header.Add(T.SmallButton($"Depth {_chainDepth}", () => { _chainDepth = 4; _refreshCurrentDetails?.Invoke(); }, T.AccentPurple));
+            header.Add(T.SmallButton("+", () => { _chainDepth = Mathf.Min(8, _chainDepth + 1); _refreshCurrentDetails?.Invoke(); }, T.TextMuted));
+            card.Add(header);
+
+            var hint = new Label("Shows the preferred shortest recipe path. Click craftable nodes to focus them.");
+            hint.style.color = new StyleColor(T.TextMuted);
+            hint.style.fontSize = 9;
+            hint.style.whiteSpace = WhiteSpace.Normal;
+            hint.style.marginBottom = 8;
+            card.Add(hint);
+
+            var tree = new VisualElement();
+            tree.style.marginTop = 2;
+            card.Add(tree);
+            AddDependencyNode(tree, outputKey, entries, depth: 0, path: new HashSet<string>());
             return card;
         }
 
-        private static void AddDependencyNode(VisualElement parent, string outputKey, List<RecipeEntry> entries, int depth, HashSet<string> visited)
+        private static void AddDependencyNode(VisualElement parent, string outputKey, List<RecipeEntry> entries, int depth, HashSet<string> path)
         {
-            if (string.IsNullOrEmpty(outputKey) || depth > 4) return;
+            if (string.IsNullOrEmpty(outputKey) || depth > _chainDepth) return;
+
             var recipe = entries
                 .Where(entry => OutputKey(entry.Output) == outputKey)
                 .OrderBy(entry => entry.Inputs.Count)
                 .ThenBy(entry => entry.Seconds)
                 .FirstOrDefault();
 
-            string indent = new string(' ', depth * 2);
             if (recipe == null)
             {
-                var raw = new Label($"{indent}• {outputKey}  (raw / no recipe)");
-                raw.style.color = new StyleColor(T.TextMuted);
-                raw.style.fontSize = 10;
-                parent.Add(raw);
+                if (_showRawInputs)
+                    parent.Add(RawNode(outputKey, depth));
                 return;
             }
 
             string key = OutputKey(recipe.Output);
-            var line = new Label($"{indent}• {recipe.Output.displayName}  ←  {recipe.Kind}");
-            line.style.color = new StyleColor(depth == 0 ? T.TextPrimary : T.TextSecondary);
-            line.style.fontSize = depth == 0 ? 11 : 10;
-            line.style.unityFontStyleAndWeight = depth == 0 ? FontStyle.Bold : FontStyle.Normal;
-            parent.Add(line);
+            var node = T.Card();
+            node.style.marginLeft = depth * 16;
+            node.style.marginBottom = 6;
+            node.style.paddingTop = 8;
+            node.style.paddingBottom = 8;
+            node.style.borderLeftWidth = 4;
+            node.style.borderLeftColor = new StyleColor(depth == 0 ? T.AccentPurple : T.AccentCyan);
+            node.style.backgroundColor = new StyleColor(depth == 0 ? new Color(0.08f, 0.09f, 0.13f, 0.98f) : T.BgCard);
 
-            if (!visited.Add(key))
+            var top = new VisualElement();
+            top.style.flexDirection = FlexDirection.Row;
+            top.style.alignItems = Align.Center;
+            node.Add(top);
+
+            var iconDot = new VisualElement();
+            iconDot.style.width = 10;
+            iconDot.style.height = 10;
+            iconDot.style.marginRight = 8;
+            iconDot.style.backgroundColor = new StyleColor(recipe.Output != null ? recipe.Output.iconTint : T.AccentCyan);
+            T.Radius(iconDot, 5);
+            top.Add(iconDot);
+
+            var name = new Label(recipe.Output != null ? recipe.Output.displayName : recipe.Name);
+            name.style.flexGrow = 1;
+            name.style.color = new StyleColor(depth == 0 ? T.TextPrimary : T.TextSecondary);
+            name.style.fontSize = depth == 0 ? 12 : 11;
+            name.style.unityFontStyleAndWeight = FontStyle.Bold;
+            top.Add(name);
+
+            var method = new Label(recipe.Kind);
+            method.style.fontSize = 8;
+            method.style.unityFontStyleAndWeight = FontStyle.Bold;
+            method.style.color = new StyleColor(T.AccentGold);
+            method.style.backgroundColor = new StyleColor(new Color(T.AccentGold.r, T.AccentGold.g, T.AccentGold.b, 0.14f));
+            method.style.paddingLeft = 6;
+            method.style.paddingRight = 6;
+            method.style.paddingTop = 2;
+            method.style.paddingBottom = 2;
+            T.Radius(method, 5);
+            top.Add(method);
+
+            var meta = new Label($"Output {recipe.OutputCount}x · {recipe.Seconds:0.#}s · {recipe.Inputs.Count} input{(recipe.Inputs.Count == 1 ? "" : "s")}");
+            meta.style.color = new StyleColor(T.TextMuted);
+            meta.style.fontSize = 9;
+            meta.style.marginTop = 3;
+            node.Add(meta);
+
+            node.RegisterCallback<ClickEvent>(_ =>
             {
-                var cycle = new Label($"{indent}  ↳ already shown");
-                cycle.style.color = new StyleColor(T.TextMuted);
-                cycle.style.fontSize = 9;
-                parent.Add(cycle);
+                _selectedOutputKey = key;
+                _refreshCurrentDetails?.Invoke();
+            });
+            parent.Add(node);
+
+            if (path.Contains(key))
+            {
+                var loop = new Label("↳ already in this chain");
+                loop.style.marginLeft = depth * 16 + 16;
+                loop.style.color = new StyleColor(T.TextMuted);
+                loop.style.fontSize = 9;
+                parent.Add(loop);
                 return;
             }
 
+            var nextPath = new HashSet<string>(path) { key };
             foreach (var input in recipe.Inputs.Where(input => input.item != null))
-                AddDependencyNode(parent, OutputKey(input.item), entries, depth + 1, visited);
+            {
+                string inputKey = OutputKey(input.item);
+                bool craftable = entries.Any(entry => OutputKey(entry.Output) == inputKey);
+                if (craftable)
+                    AddDependencyNode(parent, inputKey, entries, depth + 1, nextPath);
+                else if (_showRawInputs)
+                    parent.Add(RawInputNode(input.item, input.count, depth + 1));
+            }
+        }
+
+        private static VisualElement RawNode(string outputKey, int depth)
+        {
+            var row = T.Card();
+            row.style.marginLeft = depth * 16;
+            row.style.marginBottom = 5;
+            row.style.paddingTop = 6;
+            row.style.paddingBottom = 6;
+            row.style.borderLeftWidth = 4;
+            row.style.borderLeftColor = new StyleColor(T.TextMuted);
+            var label = new Label($"RAW · {outputKey}");
+            label.style.color = new StyleColor(T.TextMuted);
+            label.style.fontSize = 10;
+            row.Add(label);
+            return row;
+        }
+
+        private static VisualElement RawInputNode(ItemDefinition item, int count, int depth)
+        {
+            var row = T.Card();
+            row.style.marginLeft = depth * 16;
+            row.style.marginBottom = 5;
+            row.style.paddingTop = 6;
+            row.style.paddingBottom = 6;
+            row.style.borderLeftWidth = 4;
+            row.style.borderLeftColor = new StyleColor(T.TextMuted);
+
+            var line = new VisualElement();
+            line.style.flexDirection = FlexDirection.Row;
+            line.style.alignItems = Align.Center;
+            row.Add(line);
+
+            var badge = new Label("RAW");
+            badge.style.width = 42;
+            badge.style.fontSize = 8;
+            badge.style.unityFontStyleAndWeight = FontStyle.Bold;
+            badge.style.color = new StyleColor(T.TextMuted);
+            line.Add(badge);
+
+            var label = new Label($"{count}x {(item != null ? item.displayName : "Unknown")}");
+            label.style.color = new StyleColor(T.TextSecondary);
+            label.style.fontSize = 10;
+            line.Add(label);
+            return row;
         }
 
         private static VisualElement InputLine(ItemDefinition item, int count, bool craftable)
