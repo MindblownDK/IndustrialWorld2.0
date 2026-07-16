@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.23.0-dev`
-**Roadmap Version:** `5.23.0-dev`
+**Current Version:** `5.24.0-dev`
+**Roadmap Version:** `5.24.0-dev`
 **Date:** 2026-07-16
-**Status:** Active Implementation — Recipe Browser Method Filters
+**Status:** Active Implementation — Recipe Graph Export Polish
 
 ---
 
@@ -612,7 +612,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 |------|--------|------------------|
 | Assembler Mk.2 / Mk.3 | ✅ COMPLETED | Mk.2 and Mk.3 exist with larger buffers, faster tier multipliers, upgraded visuals, and machine UI binding. |
 | Recipe graph validation | ✅ COMPLETED | Validator and non-destructive repair pass are in place. Thomas validated the graph at 0 errors after repair. Remaining duplicate-output notes are informational/progression warnings. |
-| Production-line UI | 🛠️ WORKING ON | Crusher/Assembler UIs, responsive panels, live Production Statistics, hideable bottleneck/surplus hints, Recipe Browser dependency view, polished recursive chain cards, persistent graph depth/raw/method controls, method filters, persistent theme override, persistent pinned recipes, material summary estimates, batch planning, and copyable production plans exist. Next: production planner UX and graph export polish. |
+| Production-line UI | 🛠️ WORKING ON | Crusher/Assembler UIs, responsive panels, live Production Statistics, hideable bottleneck/surplus hints, Recipe Browser dependency view, polished recursive chain cards, persistent graph depth/raw/method controls, method filters, persistent theme override, persistent pinned recipes, material summary estimates, batch planning, copyable production plans, copyable method summaries, and copyable dependency chains exist. Next: production planner UX polish. |
 | Advanced processing | 🟡 PARTIALLY COMPLETE | Chemical processing and oil systems exist in code, but ore washing/enrichment and tailing loops are not complete. |
 | UI theme system | ❌ MISSING | Design tokens exist in `UITheme`; theme ScriptableObjects, runtime theme switching, and custom editor remain planned. |
 | Research UI overhaul | ❌ MISSING | Existing research remains functional; spatial pan/zoom canvas is not implemented yet. |
@@ -1674,6 +1674,22 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.24.0-dev] Recipe Graph Export Polish
+
+**Type:** MINOR — new save-compatible recipe graph export controls
+
+**Added:**
+- Recipe Browser details now has `Copy Methods`, exporting every known way to make the selected item as readable text.
+- Dependency Chain now has `Copy Chain`, exporting the currently selected dependency path as readable text.
+- Exported chain text respects current depth, raw-input visibility, and method preference.
+- Existing `Copy Plan` remains available for material shopping lists.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Graph export polish is now started.
+- Next target: production planner UX polish.
+
+---
 
 ### [5.23.0-dev] Recipe Browser Method Filters
 

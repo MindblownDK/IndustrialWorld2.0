@@ -357,6 +357,61 @@ namespace VoxelEngine.UI
             return card;
         }
 
+        private static string BuildMethodsText(string selectedName, List<RecipeEntry> makers)
+        {
+            var builder = new StringBuilder();
+            builder.AppendLine($"Recipe Methods: {selectedName}");
+            foreach (var maker in makers)
+            {
+                builder.AppendLine($"- {maker.Kind}: {maker.Name}");
+                builder.AppendLine($"  Output: {maker.OutputCount}x {(maker.Output != null ? maker.Output.displayName : "?")} · {maker.Seconds:0.#}s");
+                string inputs = maker.Inputs.Count == 0
+                    ? "—"
+                    : string.Join(" + ", maker.Inputs.Select(input => $"{input.count}x {(input.item != null ? input.item.displayName : "?")}"));
+                builder.AppendLine($"  Inputs: {inputs}");
+            }
+            return builder.ToString();
+        }
+
+        private static string BuildChainText(string outputKey, List<RecipeEntry> entries)
+        {
+            var builder = new StringBuilder();
+            var selected = entries.FirstOrDefault(entry => OutputKey(entry.Output) == outputKey)?.Output;
+            builder.AppendLine($"Dependency Chain: {(selected != null ? selected.displayName : outputKey)}");
+            builder.AppendLine($"Preference: {_chainPreference}");
+            builder.AppendLine($"Depth: {_chainDepth}");
+            BuildChainTextRecursive(builder, outputKey, entries, 0, new HashSet<string>());
+            return builder.ToString();
+        }
+
+        private static void BuildChainTextRecursive(StringBuilder builder, string outputKey, List<RecipeEntry> entries, int depth, HashSet<string> path)
+        {
+            if (string.IsNullOrEmpty(outputKey) || depth > _chainDepth) return;
+            var recipe = SelectPreferredRecipe(entries
+                .Where(entry => OutputKey(entry.Output) == outputKey)
+                .OrderBy(entry => entry.Inputs.Count)
+                .ThenBy(entry => entry.Seconds)
+                .ToList());
+            string indent = new string(' ', depth * 2);
+            if (recipe == null)
+            {
+                if (_showRawInputs) builder.AppendLine($"{indent}- {outputKey} (RAW)");
+                return;
+            }
+
+            string key = OutputKey(recipe.Output);
+            builder.AppendLine($"{indent}- {recipe.Output.displayName} <- {recipe.Kind} ({recipe.OutputCount}x, {recipe.Seconds:0.#}s)");
+            if (!path.Add(key))
+            {
+                builder.AppendLine($"{indent}  already shown");
+                return;
+            }
+
+            var nextPath = new HashSet<string>(path);
+            foreach (var input in recipe.Inputs.Where(input => input.item != null))
+                BuildChainTextRecursive(builder, OutputKey(input.item), entries, depth + 1, nextPath);
+        }
+
         private sealed class MaterialNeed
         {
             public ItemDefinition Item;
@@ -556,6 +611,10 @@ namespace VoxelEngine.UI
             title.style.fontSize = 13;
             title.style.unityFontStyleAndWeight = FontStyle.Bold;
             header.Add(title);
+            header.Add(T.SmallButton("Copy Chain", () =>
+            {
+                GUIUtility.systemCopyBuffer = BuildChainText(outputKey, entries);
+            }, T.AccentGreen));
 
             var tree = new VisualElement();
 
