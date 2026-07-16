@@ -994,7 +994,7 @@ namespace VoxelEngine.UI
 
                 // Right panel — container or station
                 if (_productionStatsOpen) _root.Add(ProductionStatsUI.BuildPanel());
-                else if (_recipeBrowserOpen) _root.Add(RecipeBrowserUI.BuildPanel(recipeRegistry));
+                else if (_recipeBrowserOpen) _root.Add(RecipeBrowserUI.BuildPanel(recipeRegistry, inventory));
                 else if (_rightContainer != null) BuildRightContainer(_root, _rightContainer);
                 else if (_openFurnace  != null) BuildRightFurnace(_root, _openFurnace);
                 else if (_openElectric != null) BuildRightElectricFurnace(_root, _openElectric);

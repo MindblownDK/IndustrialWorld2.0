@@ -49,7 +49,7 @@ namespace VoxelEngine.UI
         private static int _targetPerMinute = 60;
         private static System.Action _refreshCurrentDetails;
 
-        public static VisualElement BuildPanel(RecipeRegistry registry)
+        public static VisualElement BuildPanel(RecipeRegistry registry, Inventory inventory = null)
         {
             var panel = T.MachinePanel();
             panel.style.left = new StyleLength(new Length(34f, LengthUnit.Percent));
@@ -75,7 +75,7 @@ namespace VoxelEngine.UI
             void RefreshDetails()
             {
                 detailsHost.Clear();
-                detailsHost.Add(BuildDetails(entries));
+                detailsHost.Add(BuildDetails(entries, inventory));
             }
             _refreshCurrentDetails = RefreshDetails;
 
@@ -270,7 +270,7 @@ namespace VoxelEngine.UI
             return card;
         }
 
-        private static VisualElement BuildDetails(List<RecipeEntry> entries)
+        private static VisualElement BuildDetails(List<RecipeEntry> entries, Inventory inventory)
         {
             var right = new ScrollView(ScrollViewMode.Vertical);
             right.style.flexGrow = 1;
@@ -314,7 +314,7 @@ namespace VoxelEngine.UI
 
             right.Add(T.Spacer(8));
             right.Add(SectionTitle("Material Summary", T.AccentGold));
-            right.Add(BuildMaterialSummary(_selectedOutputKey, entries));
+            right.Add(BuildMaterialSummary(_selectedOutputKey, entries, inventory));
 
             var usedBy = entries.Where(entry => entry.Inputs.Any(input => OutputKey(input.item) == _selectedOutputKey)).ToList();
             right.Add(T.Spacer(8));
@@ -512,10 +512,11 @@ namespace VoxelEngine.UI
         {
             public ItemDefinition Item;
             public int Count;
+            public int Have;
             public bool Raw;
         }
 
-        private static VisualElement BuildMaterialSummary(string outputKey, List<RecipeEntry> entries)
+        private static VisualElement BuildMaterialSummary(string outputKey, List<RecipeEntry> entries, Inventory inventory)
         {
             var card = T.Card();
             card.style.marginBottom = 6;
@@ -553,6 +554,7 @@ namespace VoxelEngine.UI
                 summaryBody.Clear();
                 batchButton.text = $"{_planBatches} batch{(_planBatches == 1 ? "" : "es")}";
                 var summary = BuildSummary();
+                ApplyInventoryCoverage(summary, inventory);
                 targetLabel.text = $"Target: {_targetPerMinute}/min";
                 if (summary.Count == 0)
                 {
@@ -595,7 +597,9 @@ namespace VoxelEngine.UI
             }, T.TextMuted));
             header.Add(T.SmallButton("Copy Plan", () =>
             {
-                GUIUtility.systemCopyBuffer = BuildPlanText(outputKey, entries, BuildSummary());
+                var summary = BuildSummary();
+                ApplyInventoryCoverage(summary, inventory);
+                GUIUtility.systemCopyBuffer = BuildPlanText(outputKey, entries, summary);
             }, T.AccentGreen));
 
             var targetRow = new VisualElement();
@@ -670,7 +674,7 @@ namespace VoxelEngine.UI
             builder.AppendLine($"Depth: {_chainDepth}");
             builder.AppendLine("Materials:");
             foreach (var need in summary.Values.OrderByDescending(n => n.Raw).ThenBy(n => n.Item != null ? n.Item.displayName : string.Empty))
-                builder.AppendLine($"- {need.Count}x {(need.Item != null ? need.Item.displayName : "Unknown")} ({(need.Raw ? "RAW" : "ITEM")})");
+                builder.AppendLine($"- {need.Count}x {(need.Item != null ? need.Item.displayName : "Unknown")} ({(need.Raw ? "RAW" : "ITEM")}) · Have {need.Have} · Missing {Mathf.Max(0, need.Count - need.Have)}");
             return builder.ToString();
         }
 
@@ -696,12 +700,37 @@ namespace VoxelEngine.UI
             T.Radius(swatch, 5);
             row.Add(swatch);
 
+            int missing = Mathf.Max(0, need.Count - need.Have);
             var label = new Label($"{need.Count}x {(need.Item != null ? need.Item.displayName : "Unknown")}");
             label.style.flexGrow = 1;
             label.style.color = new StyleColor(T.TextSecondary);
             label.style.fontSize = 10;
             row.Add(label);
+
+            if (need.Have > 0)
+            {
+                var have = new Label(missing <= 0 ? $"Have {need.Have}" : $"Have {need.Have} · Missing {missing}");
+                have.style.color = new StyleColor(missing <= 0 ? T.AccentGreen : T.AccentRed);
+                have.style.fontSize = 9;
+                have.style.unityFontStyleAndWeight = FontStyle.Bold;
+                row.Add(have);
+            }
+            else
+            {
+                var miss = new Label($"Missing {missing}");
+                miss.style.color = new StyleColor(T.AccentRed);
+                miss.style.fontSize = 9;
+                miss.style.unityFontStyleAndWeight = FontStyle.Bold;
+                row.Add(miss);
+            }
             return row;
+        }
+
+        private static void ApplyInventoryCoverage(Dictionary<string, MaterialNeed> summary, Inventory inventory)
+        {
+            if (summary == null || inventory == null || inventory.container == null) return;
+            foreach (var need in summary.Values)
+                if (need.Item != null) need.Have = inventory.container.CountOf(need.Item);
         }
 
         private static void BuildMaterialSummaryRecursive(
