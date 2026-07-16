@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.14.0-dev`
-**Roadmap Version:** `5.14.0-dev`
+**Current Version:** `5.14.1-dev`
+**Roadmap Version:** `5.14.1-dev`
 **Date:** 2026-07-16
 **Status:** Active Implementation — Recipe Browser Dependency View
 
@@ -1674,6 +1674,18 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.14.1-dev] Recipe Browser Interaction Fix
+
+**Type:** PATCH — UI interaction/focus fix
+
+**Fixed:**
+- Recipe Browser search no longer rebuilds the entire inventory UI on each typed character, so the search field keeps focus while typing.
+- Selecting a recipe now updates the details panel immediately.
+- Recipe list selection highlight refreshes locally without closing/reopening the browser.
+- Clicking craftable inputs inside the details panel now jumps to that input's recipe without closing the UI.
+
+---
 
 ### [5.14.0-dev] Recipe Browser Dependency View & Hideable Bottleneck Hints
 

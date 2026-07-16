@@ -29,6 +29,7 @@ namespace VoxelEngine.UI
 
         private static string _search = string.Empty;
         private static ItemDefinition _selectedOutput;
+        private static System.Action _refreshCurrentDetails;
 
         public static VisualElement BuildPanel(RecipeRegistry registry)
         {
@@ -50,8 +51,18 @@ namespace VoxelEngine.UI
             body.style.marginTop = 8;
             panel.Add(body);
 
-            body.Add(BuildRecipeList(entries));
-            body.Add(BuildDetails(entries));
+            var detailsHost = new VisualElement();
+            detailsHost.style.flexGrow = 1;
+            void RefreshDetails()
+            {
+                detailsHost.Clear();
+                detailsHost.Add(BuildDetails(entries));
+            }
+            _refreshCurrentDetails = RefreshDetails;
+
+            body.Add(BuildRecipeList(entries, RefreshDetails));
+            body.Add(detailsHost);
+            RefreshDetails();
             return panel;
         }
 
@@ -70,7 +81,7 @@ namespace VoxelEngine.UI
             return row;
         }
 
-        private static VisualElement BuildRecipeList(List<RecipeEntry> entries)
+        private static VisualElement BuildRecipeList(List<RecipeEntry> entries, System.Action refreshDetails)
         {
             var left = new VisualElement();
             left.style.width = new StyleLength(new Length(38f, LengthUnit.Percent));
@@ -79,11 +90,6 @@ namespace VoxelEngine.UI
 
             var search = new TextField { value = _search ?? string.Empty };
             search.style.marginBottom = 8;
-            search.RegisterValueChangedCallback(evt =>
-            {
-                _search = evt.newValue ?? string.Empty;
-                GameUIController.Instance?.RequestRefresh();
-            });
             left.Add(search);
 
             var scroll = new ScrollView(ScrollViewMode.Vertical);
@@ -91,26 +97,40 @@ namespace VoxelEngine.UI
             T.StyleScroller(scroll);
             left.Add(scroll);
 
-            string query = (_search ?? string.Empty).Trim().ToLowerInvariant();
-            var filtered = entries.Where(entry =>
-                    string.IsNullOrEmpty(query)
-                    || (entry.Output != null && entry.Output.displayName.ToLowerInvariant().Contains(query))
-                    || entry.Name.ToLowerInvariant().Contains(query)
-                    || entry.Kind.ToLowerInvariant().Contains(query))
-                .OrderBy(entry => entry.Output != null ? entry.Output.displayName : entry.Name)
-                .ThenBy(entry => entry.Kind)
-                .ToList();
+            void PopulateList()
+            {
+                scroll.Clear();
+                string query = (_search ?? string.Empty).Trim().ToLowerInvariant();
+                var filtered = entries.Where(entry =>
+                        string.IsNullOrEmpty(query)
+                        || (entry.Output != null && entry.Output.displayName.ToLowerInvariant().Contains(query))
+                        || entry.Name.ToLowerInvariant().Contains(query)
+                        || entry.Kind.ToLowerInvariant().Contains(query))
+                    .OrderBy(entry => entry.Output != null ? entry.Output.displayName : entry.Name)
+                    .ThenBy(entry => entry.Kind)
+                    .ToList();
 
-            foreach (var entry in filtered)
-                scroll.Add(RecipeButton(entry));
+                foreach (var entry in filtered)
+                    scroll.Add(RecipeButton(entry, () =>
+                    {
+                        refreshDetails?.Invoke();
+                        PopulateList();
+                    }));
 
-            if (filtered.Count == 0)
-                scroll.Add(T.Muted("No recipes match the current search."));
+                if (filtered.Count == 0)
+                    scroll.Add(T.Muted("No recipes match the current search."));
+            }
 
+            search.RegisterValueChangedCallback(evt =>
+            {
+                _search = evt.newValue ?? string.Empty;
+                PopulateList();
+            });
+            PopulateList();
             return left;
         }
 
-        private static VisualElement RecipeButton(RecipeEntry entry)
+        private static VisualElement RecipeButton(RecipeEntry entry, System.Action refreshDetails)
         {
             bool selected = entry.Output != null && entry.Output == _selectedOutput;
             var card = T.Card();
@@ -131,7 +151,11 @@ namespace VoxelEngine.UI
             meta.style.fontSize = 9;
             card.Add(meta);
 
-            card.RegisterCallback<ClickEvent>(_ => _selectedOutput = entry.Output);
+            card.RegisterCallback<ClickEvent>(_ =>
+            {
+                _selectedOutput = entry.Output;
+                refreshDetails?.Invoke();
+            });
             return card;
         }
 
@@ -239,7 +263,11 @@ namespace VoxelEngine.UI
             row.Add(label);
 
             if (craftable)
-                row.RegisterCallback<ClickEvent>(_ => _selectedOutput = item);
+                row.RegisterCallback<ClickEvent>(_ =>
+                {
+                    _selectedOutput = item;
+                    _refreshCurrentDetails?.Invoke();
+                });
             return row;
         }
 
