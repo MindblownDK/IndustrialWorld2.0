@@ -2176,10 +2176,10 @@ namespace VoxelEngine.EditorTools
                 });
             }
 
-            var prefabPipeCu = MakePowerPrefabInternal<VoxelEngine.Power.PowerCable>("Pipe_Copper", pipeCopper.tint, new Vector3(0.25f, 0.25f, 1f), c => { c.wire = pipeCopper; });
-            var prefabPipeFe = MakePowerPrefabInternal<VoxelEngine.Power.PowerCable>("Pipe_Iron", pipeIron.tint, new Vector3(0.25f, 0.25f, 1f), c => { c.wire = pipeIron; });
-            var prefabPipeAu = MakePowerPrefabInternal<VoxelEngine.Power.PowerCable>("Pipe_Gold", pipeGold.tint, new Vector3(0.25f, 0.25f, 1f), c => { c.wire = pipeGold; });
-            var prefabPipeSc = MakePowerPrefabInternal<VoxelEngine.Power.PowerCable>("Pipe_Superconductor", pipeSuper.tint, new Vector3(0.25f, 0.25f, 1f), c => { c.wire = pipeSuper; });
+            var prefabPipeCu = MakePowerPrefabInternal<VoxelEngine.Power.PowerCable>("EnergyPipe_Copper", pipeCopper.tint, new Vector3(0.25f, 0.25f, 1f), c => { c.wire = pipeCopper; });
+            var prefabPipeFe = MakePowerPrefabInternal<VoxelEngine.Power.PowerCable>("EnergyPipe_Iron", pipeIron.tint, new Vector3(0.25f, 0.25f, 1f), c => { c.wire = pipeIron; });
+            var prefabPipeAu = MakePowerPrefabInternal<VoxelEngine.Power.PowerCable>("EnergyPipe_Gold", pipeGold.tint, new Vector3(0.25f, 0.25f, 1f), c => { c.wire = pipeGold; });
+            var prefabPipeSc = MakePowerPrefabInternal<VoxelEngine.Power.PowerCable>("EnergyPipe_Superconductor", pipeSuper.tint, new Vector3(0.25f, 0.25f, 1f), c => { c.wire = pipeSuper; });
 
             var genPrefab = MakePowerPrefabInternal<VoxelEngine.Power.PowerGenerator>("Generator_Coal", new Color(0.30f, 0.30f, 0.32f), new Vector3(1.5f, 1.5f, 1.5f), g => { g.wattsPerSecond = 800f; g.isOn = false; g.connectRadius = 1.8f; });
             var batPrefab = MakePowerPrefabInternal<VoxelEngine.Power.PowerBattery>("Battery_Basic", new Color(0.20f, 0.50f, 0.85f), new Vector3(0.8f, 1.2f, 0.8f), b => { b.capacityWattHours = 10000f; b.ioRate = 200f; b.connectRadius = 1.5f; });
@@ -2206,10 +2206,10 @@ namespace VoxelEngine.EditorTools
                 return b;
             }
 
-            var blockPipeCu = MakePowerBlockInternal("Block_Pipe_Copper", "Copper Electrical Pipe", pipeCopper.tint, prefabPipeCu, "High-capacity electrical pipe. Carries up to 10,000 W.");
-            var blockPipeFe = MakePowerBlockInternal("Block_Pipe_Iron", "Iron Electrical Pipe", pipeIron.tint, prefabPipeFe, "Reinforced electrical pipe. Carries up to 30,000 W.");
-            var blockPipeAu = MakePowerBlockInternal("Block_Pipe_Gold", "Gold Electrical Pipe", pipeGold.tint, prefabPipeAu, "Premium electrical pipe. Carries up to 50,000 W.");
-            var blockPipeSc = MakePowerBlockInternal("Block_Pipe_Super", "Superconductor Electrical Pipe", pipeSuper.tint, prefabPipeSc, "Near-zero resistance pipe. Unlimited power transfer.");
+            var blockPipeCu = MakePowerBlockInternal("Block_EnergyPipe_Copper", "Copper Energy Pipe", pipeCopper.tint, prefabPipeCu, "High-capacity energy pipe. Carries up to 10,000 W.");
+            var blockPipeFe = MakePowerBlockInternal("Block_EnergyPipe_Iron", "Iron Energy Pipe", pipeIron.tint, prefabPipeFe, "Reinforced energy pipe. Carries up to 30,000 W.");
+            var blockPipeAu = MakePowerBlockInternal("Block_EnergyPipe_Gold", "Gold Energy Pipe", pipeGold.tint, prefabPipeAu, "Premium energy pipe. Carries up to 50,000 W.");
+            var blockPipeSc = MakePowerBlockInternal("Block_EnergyPipe_Superconductor", "Superconductor Energy Pipe", pipeSuper.tint, prefabPipeSc, "Near-zero resistance energy pipe. Unlimited power transfer.");
 
             var blockGen   = MakePowerBlockInternal("Block_Gen_Coal", "Coal Generator", new Color(0.30f,0.30f,0.32f), genPrefab, "Burns coal to produce 800 W of electricity.", hp: 600);
             var blockBat   = MakePowerBlockInternal("Block_Battery", "Battery", new Color(0.20f,0.50f,0.85f), batPrefab, "Stores up to 10000 Wh.", hp: 400);
@@ -2226,10 +2226,10 @@ namespace VoxelEngine.EditorTools
 
             if (registrySO != null)
             {
-                AddRecipe(registrySO, recipesFolder, "Recipe_Pipe_Copper", "Copper Electrical Pipe", blockPipeCu, 4, VoxelEngine.Crafting.StationTier.CraftingBench, true, ((VoxelEngine.Items.ItemDefinition)copperIngot, 2), ((VoxelEngine.Items.ItemDefinition)ironIngot, 1));
-                AddRecipe(registrySO, recipesFolder, "Recipe_Pipe_Iron", "Iron Electrical Pipe", blockPipeFe, 4, VoxelEngine.Crafting.StationTier.CraftingBench, true, ((VoxelEngine.Items.ItemDefinition)ironIngot, 4));
-                AddRecipe(registrySO, recipesFolder, "Recipe_Pipe_Gold", "Gold Electrical Pipe", blockPipeAu, 4, VoxelEngine.Crafting.StationTier.Assembler, true, ((VoxelEngine.Items.ItemDefinition)goldOre != null ? goldOre : ironIngot, 2), ((VoxelEngine.Items.ItemDefinition)ironIngot, 2));
-                AddRecipe(registrySO, recipesFolder, "Recipe_Pipe_Super", "Superconductor Pipe", blockPipeSc, 4, VoxelEngine.Crafting.StationTier.Assembler, true, ((VoxelEngine.Items.ItemDefinition)steelIngot, 4), ((VoxelEngine.Items.ItemDefinition)goldOre != null ? goldOre : ironIngot, 2));
+                AddRecipe(registrySO, recipesFolder, "Recipe_EnergyPipe_Copper", "Copper Energy Pipe", blockPipeCu, 4, VoxelEngine.Crafting.StationTier.CraftingBench, true, ((VoxelEngine.Items.ItemDefinition)copperIngot, 2), ((VoxelEngine.Items.ItemDefinition)ironIngot, 1));
+                AddRecipe(registrySO, recipesFolder, "Recipe_EnergyPipe_Iron", "Iron Energy Pipe", blockPipeFe, 4, VoxelEngine.Crafting.StationTier.CraftingBench, true, ((VoxelEngine.Items.ItemDefinition)ironIngot, 4));
+                AddRecipe(registrySO, recipesFolder, "Recipe_EnergyPipe_Gold", "Gold Energy Pipe", blockPipeAu, 4, VoxelEngine.Crafting.StationTier.Assembler, true, ((VoxelEngine.Items.ItemDefinition)goldOre != null ? goldOre : ironIngot, 2), ((VoxelEngine.Items.ItemDefinition)ironIngot, 2));
+                AddRecipe(registrySO, recipesFolder, "Recipe_EnergyPipe_Super", "Superconductor Energy Pipe", blockPipeSc, 4, VoxelEngine.Crafting.StationTier.Assembler, true, ((VoxelEngine.Items.ItemDefinition)steelIngot, 4), ((VoxelEngine.Items.ItemDefinition)goldOre != null ? goldOre : ironIngot, 2));
 
                 AddRecipe(registrySO, recipesFolder, "Recipe_Generator", "Coal Generator", blockGen, 1, VoxelEngine.Crafting.StationTier.CraftingBench, true, ((VoxelEngine.Items.ItemDefinition)ironIngot, 4), ((VoxelEngine.Items.ItemDefinition)stone, 4));
                 AddRecipe(registrySO, recipesFolder, "Recipe_Battery", "Battery", blockBat, 1, VoxelEngine.Crafting.StationTier.Assembler, true, ((VoxelEngine.Items.ItemDefinition)copperIngot, 4), ((VoxelEngine.Items.ItemDefinition)ironIngot, 2), ((VoxelEngine.Items.ItemDefinition)lithium, 2));
@@ -2363,10 +2363,10 @@ namespace VoxelEngine.EditorTools
             var recGenerator = FindRecipe("Recipe_Generator");
             var recBattery   = FindRecipe("Recipe_Battery");
             var recAssembler = FindRecipe("Recipe_Assembler");
-            var recPipeCu   = FindRecipe("Recipe_Pipe_Copper");
-            var recPipeFe   = FindRecipe("Recipe_Pipe_Iron");
-            var recPipeAu   = FindRecipe("Recipe_Pipe_Gold");
-            var recPipeSc   = FindRecipe("Recipe_Pipe_Super");
+            var recPipeCu   = FindRecipe("Recipe_EnergyPipe_Copper");
+            var recPipeFe   = FindRecipe("Recipe_EnergyPipe_Iron");
+            var recPipeAu   = FindRecipe("Recipe_EnergyPipe_Gold");
+            var recPipeSc   = FindRecipe("Recipe_EnergyPipe_Super");
             var recWireLV    = FindRecipe("Recipe_Wire_Cu_LV");
             var recWireAuLV  = FindRecipe("Recipe_Wire_Au_LV");
             var recWireGrLV  = FindRecipe("Recipe_Wire_Gr_LV");
@@ -2423,7 +2423,7 @@ namespace VoxelEngine.EditorTools
                 new[] { nStoneWorking });
 
             var nElectricity = MakeNode("res_electricity", "Electricity",
-                "Generate and store electric power. Unlocks the Coal Generator, Copper LV Wire, and early Electrical Pipes.",
+                "Generate and store electric power. Unlocks the Coal Generator, Copper LV Wire, and early Energy Pipes.",
                 2, 1, 40f, new[] { (sciT1, 10), (sciT2, 5) },
                 new[] { recGenerator, recWireLV, recPipeCu, recPipeFe },
                 new[] { nStoneWorking });
@@ -6673,6 +6673,30 @@ root =>
             void AddRecipeUnique(List<VoxelEngine.Crafting.RecipeDefinition> list, VoxelEngine.Crafting.RecipeDefinition recipe)
             {
                 if (recipe != null && !list.Contains(recipe)) list.Add(recipe);
+            }
+
+            // Step 17 also repairs the legacy coal-generator prefab because it is
+            // the first power source players meet and its UI depends on the
+            // CoalGeneratorFuel companion component being present.
+            var repairedCoalGeneratorPrefab = GetOrCreateStep17Prefab($"{ASSET_ROOT}/Power/Prefabs/Generator_Coal.prefab", "Generator_Coal", root =>
+            {
+                var generator = EnsureStep17Component<VoxelEngine.Power.PowerGenerator>(root, g =>
+                {
+                    g.wattsPerSecond = 800f;
+                    g.isOn = false;
+                    g.connectRadius = 1.8f;
+                });
+                var fuel = EnsureStep17Component<VoxelEngine.Power.CoalGeneratorFuel>(root);
+                var ports = root.GetComponent<VoxelEngine.Transport.PortConfig>();
+                if (ports != null) ports.showPortIndicators = false;
+                EnsureRootCollider(root, new Vector3(1.5f, 1.5f, 1.5f), Vector3.zero);
+            });
+            var legacyCoalBlock = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.BlockItem>($"{ASSET_ROOT}/Power/Blocks/Block_Gen_Coal.asset");
+            if (legacyCoalBlock != null && repairedCoalGeneratorPrefab != null && legacyCoalBlock.placedPrefab != repairedCoalGeneratorPrefab)
+            {
+                legacyCoalBlock.placedPrefab = repairedCoalGeneratorPrefab;
+                EditorUtility.SetDirty(legacyCoalBlock);
+                repairedLinkCount++;
             }
 
             // ── Data assets ──

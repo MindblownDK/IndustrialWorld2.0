@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.12.1-dev`
-**Roadmap Version:** `5.12.1-dev`
+**Current Version:** `5.12.2-dev`
+**Roadmap Version:** `5.12.2-dev`
 **Date:** 2026-07-16
 **Status:** Active Implementation — Machine UI Recovery & Compact Power Relays
 
@@ -1674,6 +1674,26 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.12.2-dev] Prefab Script Compatibility & Energy Pipe Rename
+
+**Type:** PATCH — setup resilience, coal-generator repair, and power visual fixes
+
+**Fixed / Improved:**
+- Restored `MachineVisualAnimators` as a compatibility MonoBehaviour so old Funnel prefabs can load and be repaired instead of blocking prefab saves.
+- Step 17 now repairs the legacy Coal Generator prefab by adding `CoalGeneratorFuel` and reconnecting the legacy Coal Generator block item to the repaired prefab.
+- Power cable visuals now build from local-space neighbour positions, fixing arms/wires pointing in the wrong world direction on rotated or wall-mounted placement.
+- Renamed future generated electrical pipe content to Energy Pipe naming:
+  - Copper Energy Pipe
+  - Iron Energy Pipe
+  - Gold Energy Pipe
+  - Superconductor Energy Pipe
+- Updated energy-pipe recipes and research lookup keys to the new names.
+
+**Manual Validation Required:**
+- Let Unity recompile, run Step 17 without deleting folders, then verify Funnel saves, Coal Generator UI opens, and energy pipe visuals connect in the correct direction.
+
+---
 
 ### [5.12.1-dev] Step 17 Missing Script Repair
 

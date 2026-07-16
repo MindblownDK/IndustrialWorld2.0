@@ -164,23 +164,26 @@ namespace VoxelEngine.Power
             {
                 if (nb == null) continue;
 
-                // If we have a recorded face for this neighbour, use the face point
+                // IndustrialPipeMesh builds under this cable's local transform.
+                // Convert every target point into local space first so cables on
+                // rotated surfaces or wall-mounted relays grow arms in the correct
+                // visible direction instead of following world axes.
                 if (_neighbourFaces.TryGetValue(nb, out var face) && face != CubeFace.PosX)
                 {
                     var portConfig = nb.GetComponent<PortConfig>();
                     if (portConfig != null)
                     {
-                        _neighbourPositionsBuf.Add(portConfig.FaceWorldPoint(face));
+                        _neighbourPositionsBuf.Add(transform.InverseTransformPoint(portConfig.FaceWorldPoint(face)));
                         continue;
                     }
                 }
 
-                _neighbourPositionsBuf.Add(nb.transform.position);
+                _neighbourPositionsBuf.Add(transform.InverseTransformPoint(nb.transform.position));
             }
 
             GridCableVisuals.Rebuild(
                 _visualRoot,
-                transform.position,
+                Vector3.zero,
                 _neighbourPositionsBuf,
                 gridSize > 0 ? gridSize : 1f,
                 coreSize,

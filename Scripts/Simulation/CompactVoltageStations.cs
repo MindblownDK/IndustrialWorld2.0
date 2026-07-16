@@ -3,6 +3,10 @@ using VoxelEngine.Power;
 
 namespace VoxelEngine.Simulation
 {
+    // Compatibility MonoBehaviour for old prefabs that briefly referenced this
+    // multi-class script before station classes were split into matching files.
+    public sealed class CompactVoltageStations : MonoBehaviour { }
+
     public abstract class CompactVoltageStation : VoltageStationBase
     {
         private PowerNode _powerNode;
