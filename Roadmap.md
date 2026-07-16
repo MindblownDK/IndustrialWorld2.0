@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.30.0-dev`
-**Roadmap Version:** `5.30.0-dev`
+**Current Version:** `5.30.1-dev`
+**Roadmap Version:** `5.30.1-dev`
 **Date:** 2026-07-16
 **Status:** Active Implementation — Production Machine Planner
 
@@ -1674,6 +1674,17 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.30.1-dev] Planner Export Compile Fix
+
+**Type:** PATCH — UI compile fix
+
+**Fixed:**
+- Fixed CSV quote escaping in `RecipeBrowserUI.cs`.
+- Fixed newline escaping in `RecipePinHud.cs`.
+- Planner export and pinned recipe copy features now compile correctly.
+
+---
 
 ### [5.30.0-dev] Planner Export & Pin UX Polish
 

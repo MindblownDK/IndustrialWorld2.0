@@ -713,9 +713,9 @@ namespace VoxelEngine.UI
             builder.AppendLine("Item,Required,Have,Missing,Type");
             foreach (var need in summary.Values.OrderByDescending(n => n.Raw).ThenBy(n => n.Item != null ? n.Item.displayName : string.Empty))
             {
-                string name = (need.Item != null ? need.Item.displayName : "Unknown").Replace(""", """");
+                string name = (need.Item != null ? need.Item.displayName : "Unknown").Replace("\"", "\"\"");
                 int missing = Mathf.Max(0, need.Count - need.Have);
-                builder.AppendLine($""{name}",{need.Count},{need.Have},{missing},{(need.Raw ? "RAW" : "ITEM")}");
+                builder.AppendLine($"\"{name}\",{need.Count},{need.Have},{missing},{(need.Raw ? "RAW" : "ITEM")}");
             }
             return builder.ToString();
         }

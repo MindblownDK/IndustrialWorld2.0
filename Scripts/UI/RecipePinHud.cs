@@ -167,8 +167,7 @@ namespace VoxelEngine.UI
                 lines.Add($"- {pin.OutputCount}x {pin.OutputName} via {pin.Method}");
                 if (pin.Inputs.Count > 0) lines.Add($"  Inputs: {string.Join(" + ", pin.Inputs)}");
             }
-            return string.Join("
-", lines);
+            return string.Join("\n", lines);
         }
 
         private static VisualElement Card(Pin pin)
