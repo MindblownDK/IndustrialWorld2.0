@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.12.2-dev`
-**Roadmap Version:** `5.12.2-dev`
+**Current Version:** `5.12.4-dev`
+**Roadmap Version:** `5.12.4-dev`
 **Date:** 2026-07-16
 **Status:** Active Implementation — Machine UI Recovery & Compact Power Relays
 
@@ -1674,6 +1674,30 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.12.4-dev] Step 17 Compile Fix
+
+**Type:** PATCH — editor compile fix
+
+**Fixed:**
+- Fixed `CS0103` in `VoxelEngineSetupWindow.cs` caused by using Step 17's local `repairedLinkCount` variable inside an older power setup helper scope.
+- Legacy energy-pipe migration still repairs display names, descriptions, prefab links, and stackable placement settings; it simply no longer increments an out-of-scope counter.
+
+---
+
+### [5.12.3-dev] Energy Pipe Placement & UI Cleanup Repair
+
+**Type:** PATCH — setup identity repair, placement snapping, and UI cleanup
+
+**Fixed / Improved:**
+- Step 17 now repairs generated block item identity fields every run so failed setup-created items no longer display default names like Iron Ore.
+- Legacy and new Energy Pipe block items are marked stackable/thin so adjacent pipe placement validates and pipes can snap next to each other.
+- Legacy electrical pipe block assets are migrated to Energy Pipe display names and reconnected to the generated Energy Pipe prefabs.
+- Coal Generator inline port-configuration UI was removed; it now uses the same clickable Item Ports modal workflow style.
+- Existing placed legacy coal generators can receive `CoalGeneratorFuel` at interaction time if the prefab was old.
+- Energy pipe visual arms now use local-space targets so rotated pipe networks and wall-mounted relays draw in the correct direction.
+
+---
 
 ### [5.12.2-dev] Prefab Script Compatibility & Energy Pipe Rename
 

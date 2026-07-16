@@ -2198,7 +2198,7 @@ namespace VoxelEngine.EditorTools
                 b.massPerUnit  = 3f;
                 b.placedPrefab = prefab;
                 b.gridSize     = Vector3Int.one;
-                b.allowStacking= false;
+                b.allowStacking= prefab != null && prefab.GetComponent<VoxelEngine.Power.PowerCable>() != null;
                 b.blockHealth  = hp;
                 b.miningTier   = 1;
                 b.category     = "Power";
@@ -2210,6 +2210,23 @@ namespace VoxelEngine.EditorTools
             var blockPipeFe = MakePowerBlockInternal("Block_EnergyPipe_Iron", "Iron Energy Pipe", pipeIron.tint, prefabPipeFe, "Reinforced energy pipe. Carries up to 30,000 W.");
             var blockPipeAu = MakePowerBlockInternal("Block_EnergyPipe_Gold", "Gold Energy Pipe", pipeGold.tint, prefabPipeAu, "Premium energy pipe. Carries up to 50,000 W.");
             var blockPipeSc = MakePowerBlockInternal("Block_EnergyPipe_Superconductor", "Superconductor Energy Pipe", pipeSuper.tint, prefabPipeSc, "Near-zero resistance energy pipe. Unlimited power transfer.");
+
+            void MigrateLegacyEnergyPipeBlock(string oldAssetName, string display, string description, Color tint, GameObject prefab)
+            {
+                var legacy = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.BlockItem>($"{blocksFolder}/{oldAssetName}.asset");
+                if (legacy == null) return;
+                legacy.displayName = display;
+                legacy.description = description;
+                legacy.iconTint = tint;
+                legacy.category = "Power";
+                legacy.allowStacking = true;
+                if (prefab != null) legacy.placedPrefab = prefab;
+                EditorUtility.SetDirty(legacy);
+            }
+            MigrateLegacyEnergyPipeBlock("Block_Pipe_Copper", "Copper Energy Pipe", "High-capacity energy pipe. Carries up to 10,000 W.", pipeCopper.tint, prefabPipeCu);
+            MigrateLegacyEnergyPipeBlock("Block_Pipe_Iron", "Iron Energy Pipe", "Reinforced energy pipe. Carries up to 30,000 W.", pipeIron.tint, prefabPipeFe);
+            MigrateLegacyEnergyPipeBlock("Block_Pipe_Gold", "Gold Energy Pipe", "Premium energy pipe. Carries up to 50,000 W.", pipeGold.tint, prefabPipeAu);
+            MigrateLegacyEnergyPipeBlock("Block_Pipe_Super", "Superconductor Energy Pipe", "Near-zero resistance energy pipe. Unlimited power transfer.", pipeSuper.tint, prefabPipeSc);
 
             var blockGen   = MakePowerBlockInternal("Block_Gen_Coal", "Coal Generator", new Color(0.30f,0.30f,0.32f), genPrefab, "Burns coal to produce 800 W of electricity.", hp: 600);
             var blockBat   = MakePowerBlockInternal("Block_Battery", "Battery", new Color(0.20f,0.50f,0.85f), batPrefab, "Stores up to 10000 Wh.", hp: 400);
@@ -3029,7 +3046,7 @@ namespace VoxelEngine.EditorTools
                 b.massPerUnit  = 8f;
                 b.placedPrefab = prefab;
                 b.gridSize     = Vector3Int.one;
-                b.allowStacking= false;
+                b.allowStacking= prefab != null && prefab.GetComponent<VoxelEngine.Power.PowerCable>() != null;
                 b.blockHealth  = hp;
                 b.miningTier   = 2;
                 b.category     = uiCategory;
@@ -6458,19 +6475,23 @@ root =>
                 var item = GetOrCreateStep17Asset<VoxelEngine.Items.BlockItem>(path);
                 if (item == null) return null;
 
+                // Identity fields are safe to repair on every setup run. This fixes
+                // old assets that were created during failed setup passes and kept
+                // the ItemDefinition defaults (for example displaying as Iron Ore).
+                if (item.itemId != assetName.ToLowerInvariant()) { item.itemId = assetName.ToLowerInvariant(); repairedLinkCount++; }
+                if (item.displayName != display) { item.displayName = display; repairedLinkCount++; }
+                if (item.description != description) { item.description = description; repairedLinkCount++; }
+                if (item.category != category) { item.category = category; repairedLinkCount++; }
+                item.iconTint = tint;
+
                 if (created)
                 {
-                    item.itemId = assetName.ToLowerInvariant();
-                    item.displayName = display;
-                    item.description = description;
-                    item.iconTint = tint;
                     item.maxStack = 99;
                     item.massPerUnit = 4f;
                     item.gridSize = gridSize ?? Vector3Int.one;
                     item.allowStacking = true;
                     item.blockHealth = health;
                     item.miningTier = miningTier;
-                    item.category = category;
                 }
 
                 if (prefab != null && item.placedPrefab != prefab)

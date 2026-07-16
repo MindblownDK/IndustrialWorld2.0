@@ -2025,29 +2025,6 @@ namespace VoxelEngine.UI
 
             panel.Add(MakeDivider());
 
-            // ── Port Configuration ────────────────────────────────────
-            // Restored: every machine with a PortConfig component now
-            // displays the 6-face grid so the player can flip individual
-            // faces between Input / Output / None and select per-face
-            // network type (Power vs Data vs Fluid vs Gas). Hooked into
-            // the wrench via Shift+RMB as well — the two UIs stay in sync.
-            var pc = f.GetComponent<VoxelEngine.Transport.PortConfig>();
-            if (pc != null)
-            {
-                // Coal Generator only deals with Power — restrict the dropdown so
-                // the player never accidentally picks Fluid/Gas/Data on this machine.
-                var portUi = VoxelEngine.UI.PortConfigHud.Build(pc,
-                    onChanged: () =>
-                    {
-                        pillLbl.text = f.IsBurning ? "RUNNING" : "OFFLINE";
-                    },
-                    allowedTypes: new[] {
-                        VoxelEngine.Transport.PortNetworkType.Power
-                    });
-                panel.Add(portUi);
-                panel.Add(MakeDivider());
-            }
-
             var hint = new Label("Tip: place Coal in the fuel slot to start producing power. " +
                                  "Wood logs and planks also work but burn faster.");
             hint.style.color = new StyleColor(new Color(0.6f, 0.6f, 0.65f));

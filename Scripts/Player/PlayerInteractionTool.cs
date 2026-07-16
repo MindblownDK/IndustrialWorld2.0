@@ -374,6 +374,14 @@ namespace VoxelEngine.Player
 
                 var coalGen = hit.collider.GetComponentInParent<VoxelEngine.Power.CoalGeneratorFuel>();
                 if (coalGen != null) { UI.GameUIController.Instance?.OpenCoalGenerator(coalGen); return; }
+                var legacyCoalPower = hit.collider.GetComponentInParent<VoxelEngine.Power.PowerGenerator>();
+                if (legacyCoalPower != null && legacyCoalPower.gameObject.name.ToLowerInvariant().Contains("coal"))
+                {
+                    coalGen = legacyCoalPower.GetComponent<VoxelEngine.Power.CoalGeneratorFuel>();
+                    if (coalGen == null) coalGen = legacyCoalPower.gameObject.AddComponent<VoxelEngine.Power.CoalGeneratorFuel>();
+                    UI.GameUIController.Instance?.OpenCoalGenerator(coalGen);
+                    return;
+                }
 
                 var quarry = hit.collider.GetComponentInParent<VoxelEngine.Transport.Quarry>();
                 if (quarry != null) { UI.GameUIController.Instance?.OpenQuarry(quarry); return; }

@@ -1,6 +1,6 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
---- !u!1 &2730566610513939242
+--- !u!1 &1809550261325363337
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -8,62 +8,61 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 8113916868709023088}
-  - component: {fileID: 1894827558844903256}
-  - component: {fileID: 20413642458784669}
-  - component: {fileID: 5661485971018343632}
-  - component: {fileID: 5695361302610132630}
-  - component: {fileID: 3340819941145823862}
+  - component: {fileID: 2317798270091519300}
+  - component: {fileID: 7652082296458891953}
+  - component: {fileID: 1399700292543287532}
   m_Layer: 0
-  m_Name: Generator_Coal
+  m_Name: EnergyPipe_Gold
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &8113916868709023088
+--- !u!4 &2317798270091519300
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2730566610513939242}
+  m_GameObject: {fileID: 1809550261325363337}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
-  - {fileID: 3568932536708249501}
+  - {fileID: 2201320968488730636}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1894827558844903256
+--- !u!114 &7652082296458891953
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2730566610513939242}
+  m_GameObject: {fileID: 1809550261325363337}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1482c2065bf1c5945a5515c3d878688a, type: 3}
+  m_Script: {fileID: 11500000, guid: 1fa79bb178d394846a8a1c5f36b1dbd6, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Power.PowerGenerator
-  connectRadius: 1.8
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Power.PowerCable
+  connectRadius: 3
   requireGridAlignedNeighbours: 0
   gridSize: 1
   connectionBlockingLayers:
     serializedVersion: 2
     m_Bits: 4294967295
-  wattsPerSecond: 800
-  isOn: 0
---- !u!65 &20413642458784669
+  wire: {fileID: 11400000, guid: 582e94aafd2302346b36bec4a678cee9, type: 2}
+  coreSize: 0.35
+  armThickness: 0.28
+  showUnusedFaceCaps: 0
+--- !u!65 &1399700292543287532
 BoxCollider:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2730566610513939242}
+  m_GameObject: {fileID: 1809550261325363337}
   m_Material: {fileID: 0}
   m_IncludeLayers:
     serializedVersion: 2
@@ -76,83 +75,9 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 1.5, y: 1.5, z: 1.5}
+  m_Size: {x: 1, y: 1, z: 1}
   m_Center: {x: 0, y: 0, z: 0}
---- !u!114 &5661485971018343632
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2730566610513939242}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 04cec34cc4f1e1d47a08090bcd4f29aa, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.PortConfig
-  ports:
-  - face: 0
-    direction: 2
-    networkType: 0
-    enabled: 1
-  - face: 1
-    direction: 0
-    networkType: 0
-    enabled: 1
-  - face: 2
-    direction: 0
-    networkType: 0
-    enabled: 1
-  - face: 3
-    direction: 0
-    networkType: 0
-    enabled: 1
-  - face: 4
-    direction: 0
-    networkType: 0
-    enabled: 1
-  - face: 5
-    direction: 0
-    networkType: 0
-    enabled: 1
-  portIndicatorSize: 0.4
-  showPortIndicators: 0
---- !u!114 &5695361302610132630
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2730566610513939242}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9eacd68ef9a141ae95f225d895db1c7b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.ItemPortRouting
-  pushInterval: 0.5
-  pushPerTick: 8
-  pipeConnectRadius: 1.6
-  distribution: 0
---- !u!114 &3340819941145823862
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2730566610513939242}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 079528771c48c424189abce6c88862e2, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Power.CoalGeneratorFuel
-  fuelC:
-    _name: Container
-    _slots: []
-    _minSize: 1
-  fuelRemaining: 0
-  fuelMaxDuration: 0
-  userEnabled: 1
---- !u!1 &5179494236818197979
+--- !u!1 &7969465179886228579
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -160,9 +85,9 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 3568932536708249501}
-  - component: {fileID: 6947951920863922486}
-  - component: {fileID: 5022150486457253046}
+  - component: {fileID: 2201320968488730636}
+  - component: {fileID: 6633651450528838839}
+  - component: {fileID: 8917083037422390044}
   m_Layer: 0
   m_Name: Cube
   m_TagString: Untagged
@@ -170,36 +95,36 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &3568932536708249501
+--- !u!4 &2201320968488730636
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5179494236818197979}
+  m_GameObject: {fileID: 7969465179886228579}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1.5, y: 1.5, z: 1.5}
+  m_LocalScale: {x: 0.25, y: 0.25, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 8113916868709023088}
+  m_Father: {fileID: 2317798270091519300}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!33 &6947951920863922486
+--- !u!33 &6633651450528838839
 MeshFilter:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5179494236818197979}
+  m_GameObject: {fileID: 7969465179886228579}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
---- !u!23 &5022150486457253046
+--- !u!23 &8917083037422390044
 MeshRenderer:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5179494236818197979}
+  m_GameObject: {fileID: 7969465179886228579}
   m_Enabled: 1
   m_CastShadows: 1
   m_ReceiveShadows: 1
@@ -218,7 +143,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 07942e840cc8e1c408699189b68a5d29, type: 2}
+  - {fileID: 2100000, guid: 1b577a3ad7ab09345926610da957d174, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
