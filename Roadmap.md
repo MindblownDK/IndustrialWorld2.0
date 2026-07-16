@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.13.0-dev`
-**Roadmap Version:** `5.13.0-dev`
+**Current Version:** `5.14.0-dev`
+**Roadmap Version:** `5.14.0-dev`
 **Date:** 2026-07-16
-**Status:** Active Implementation — Production Statistics Bottleneck Hints
+**Status:** Active Implementation — Recipe Browser Dependency View
 
 ---
 
@@ -612,7 +612,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 |------|--------|------------------|
 | Assembler Mk.2 / Mk.3 | ✅ COMPLETED | Mk.2 and Mk.3 exist with larger buffers, faster tier multipliers, upgraded visuals, and machine UI binding. |
 | Recipe graph validation | ✅ COMPLETED | Validator and non-destructive repair pass are in place. Thomas validated the graph at 0 errors after repair. Remaining duplicate-output notes are informational/progression warnings. |
-| Production-line UI | 🛠️ WORKING ON | Crusher/Assembler UIs, responsive panels, live Production Statistics, and bottleneck/surplus hints exist. Next: recipe dependency browser and theme overrides. |
+| Production-line UI | 🛠️ WORKING ON | Crusher/Assembler UIs, responsive panels, live Production Statistics, hideable bottleneck/surplus hints, and the first Recipe Browser dependency view exist. Next: deeper chain visualization and theme overrides. |
 | Advanced processing | 🟡 PARTIALLY COMPLETE | Chemical processing and oil systems exist in code, but ore washing/enrichment and tailing loops are not complete. |
 | UI theme system | ❌ MISSING | Design tokens exist in `UITheme`; theme ScriptableObjects, runtime theme switching, and custom editor remain planned. |
 | Research UI overhaul | ❌ MISSING | Existing research remains functional; spatial pan/zoom canvas is not implemented yet. |
@@ -1674,6 +1674,29 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.14.0-dev] Recipe Browser Dependency View & Hideable Bottleneck Hints
+
+**Type:** MINOR — new save-compatible production planning UI
+
+**Added:**
+- Added Recipe Browser panel accessible from the inventory panel.
+- Recipe Browser lists crafting, smelting, and machine recipes from the validated recipe graph.
+- Selecting a recipe output shows Made By, Used By, and Immediate Inputs sections.
+- Craftable input rows can be clicked to jump to that input's recipe.
+- Added search support for recipe/output names and recipe kinds.
+
+**Improved:**
+- Bottleneck Hints can now be hidden globally for the current session.
+- Individual item bottleneck/surplus hints can be hidden.
+- Hidden item hints can be restored with Unhide All Items.
+- Opening Recipe Browser and Production Statistics is mutually exclusive so panels do not overlap.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Recipe Browser dependency view is now started.
+- Next target: deeper multi-step chain visualization and theme-overridden production panels.
+
+---
 
 ### [5.13.0-dev] Production Bottleneck Hints
 

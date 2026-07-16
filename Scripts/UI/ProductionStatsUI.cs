@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using UnityEngine.UIElements;
+using VoxelEngine.Items;
 using VoxelEngine.Simulation;
 using T = VoxelEngine.UI.UITheme;
 
@@ -11,6 +12,8 @@ namespace VoxelEngine.UI
 {
     public static class ProductionStatsUI
     {
+        private static bool _hintsHidden;
+        private static readonly HashSet<string> HiddenHintItems = new();
         public static VisualElement BuildPanel()
         {
             var panel = T.MachinePanel();
@@ -68,15 +71,42 @@ namespace VoxelEngine.UI
             var card = T.Card();
             card.style.marginBottom = 6;
             card.style.borderLeftWidth = 3;
+            card.style.borderLeftColor = new StyleColor(_hintsHidden ? T.TextMuted : T.AccentCyan);
+
+            var header = new VisualElement();
+            header.style.flexDirection = FlexDirection.Row;
+            header.style.alignItems = Align.Center;
+            var title = new Label(_hintsHidden ? "Bottleneck Hints Hidden" : "Bottleneck Hints");
+            title.style.color = new StyleColor(_hintsHidden ? T.TextMuted : T.AccentCyan);
+            title.style.fontSize = 13;
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            title.style.flexGrow = 1;
+            header.Add(title);
+            header.Add(T.SmallButton(_hintsHidden ? "Show" : "Hide All", () => _hintsHidden = !_hintsHidden, _hintsHidden ? T.AccentGreen : T.TextMuted));
+            card.Add(header);
+
+            if (_hintsHidden)
+            {
+                var hidden = new Label("Hints are hidden for this session. Production rows still update below.");
+                hidden.style.color = new StyleColor(T.TextSecondary);
+                hidden.style.fontSize = 10;
+                hidden.style.whiteSpace = WhiteSpace.Normal;
+                hidden.style.marginTop = 5;
+                card.Add(hidden);
+                return card;
+            }
+
+            bool IsHidden(ProductionStatsTracker.ItemStats stat)
+                => stat.Item != null && HiddenHintItems.Contains(ItemKey(stat.Item));
 
             var shortages = snapshot
-                .Where(stat => stat.ConsumedPerMinute > 0.01f && stat.NetPerMinute < -0.01f)
+                .Where(stat => !IsHidden(stat) && stat.ConsumedPerMinute > 0.01f && stat.NetPerMinute < -0.01f)
                 .OrderBy(stat => stat.NetPerMinute)
                 .Take(5)
                 .ToList();
 
             var idleSurplus = snapshot
-                .Where(stat => stat.ProducedPerMinute > 0.01f && stat.ConsumedPerMinute <= 0.01f)
+                .Where(stat => !IsHidden(stat) && stat.ProducedPerMinute > 0.01f && stat.ConsumedPerMinute <= 0.01f)
                 .OrderByDescending(stat => stat.ProducedPerMinute)
                 .Take(3)
                 .ToList();
@@ -84,15 +114,9 @@ namespace VoxelEngine.UI
             bool hasShortage = shortages.Count > 0;
             card.style.borderLeftColor = new StyleColor(hasShortage ? T.AccentRed : T.AccentGreen);
 
-            var title = new Label(hasShortage ? "⚠ Bottleneck Hints" : "✓ Production Stable");
-            title.style.color = new StyleColor(hasShortage ? T.AccentRed : T.AccentGreen);
-            title.style.fontSize = 13;
-            title.style.unityFontStyleAndWeight = FontStyle.Bold;
-            card.Add(title);
-
             if (!hasShortage)
             {
-                var ok = new Label("No consumed item is currently outrunning its production over the last minute.");
+                var ok = new Label("No visible consumed item is currently outrunning its production over the last minute.");
                 ok.style.color = new StyleColor(T.TextSecondary);
                 ok.style.fontSize = 10;
                 ok.style.whiteSpace = WhiteSpace.Normal;
@@ -119,12 +143,28 @@ namespace VoxelEngine.UI
                         $"Producing {stat.ProducedPerMinute:0}/min with no recent consumer"));
             }
 
+            if (HiddenHintItems.Count > 0)
+            {
+                var restore = new VisualElement();
+                restore.style.flexDirection = FlexDirection.Row;
+                restore.style.flexWrap = Wrap.Wrap;
+                restore.style.marginTop = 8;
+                restore.Add(T.SmallButton("Unhide All Items", () => HiddenHintItems.Clear(), T.AccentGreen));
+                card.Add(restore);
+            }
+
             return card;
         }
 
         private static string ItemName(ProductionStatsTracker.ItemStats stat)
         {
             return stat.Item != null ? stat.Item.displayName : "Unknown Item";
+        }
+
+        private static string ItemKey(ItemDefinition item)
+        {
+            if (item == null) return string.Empty;
+            return !string.IsNullOrWhiteSpace(item.itemId) ? item.itemId : item.name;
         }
 
         private static VisualElement HintLine(string label, ProductionStatsTracker.ItemStats stat, Color accent, string text)
@@ -147,6 +187,9 @@ namespace VoxelEngine.UI
             body.style.color = new StyleColor(T.TextSecondary);
             body.style.whiteSpace = WhiteSpace.Normal;
             row.Add(body);
+
+            if (stat.Item != null)
+                row.Add(T.SmallButton("Hide", () => HiddenHintItems.Add(ItemKey(stat.Item)), T.TextMuted));
             return row;
         }
 

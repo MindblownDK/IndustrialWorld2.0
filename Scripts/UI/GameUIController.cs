@@ -86,6 +86,7 @@ namespace VoxelEngine.UI
         private VoxelEngine.Simulation.Assembler _openAssembler;
         private IVoltageStation _openVoltageStation;
         private bool _productionStatsOpen;
+        private bool _recipeBrowserOpen;
         // Containers whose OnChanged should call Refresh; cleared on each panel switch.
         private System.Collections.Generic.List<ItemContainer> _watchedContainers = new();
 
@@ -804,6 +805,7 @@ namespace VoxelEngine.UI
             _openStorageTerminal = null; _openServerRack = null;
             _openCrusher = null; _openAssembler = null;
             _productionStatsOpen = false;
+            _recipeBrowserOpen = false;
             _activeQueue    = null;
             _openCoalGen    = null;
             UnwatchAllContainers();
@@ -950,11 +952,14 @@ namespace VoxelEngine.UI
                     _openPowerstation != null || _openStorageDrawer != null ||
                     _openDrawerController != null || _openItemDisplay != null ||
                     _openCrusher != null || _openAssembler != null;
-                if (_productionStatsOpen && (anyRightTargetOpen || CraftingScreen.Visible))
+                if ((anyRightTargetOpen || CraftingScreen.Visible) && (_productionStatsOpen || _recipeBrowserOpen))
+                {
                     _productionStatsOpen = false;
+                    _recipeBrowserOpen = false;
+                }
 
                 bool aRightPanelIsOpen =
-                    _productionStatsOpen || _rightContainer != null || _openFurnace != null || _openElectric != null ||
+                    _productionStatsOpen || _recipeBrowserOpen || _rightContainer != null || _openFurnace != null || _openElectric != null ||
                     _openCoalGen != null || _openQuarry != null || _openReactor != null ||
                     _openTurbine != null || _openPortReactor != null || _openProcessor != null ||
                     _openReprocessor != null || _openElectrolyser != null || _openHydroEngine != null ||
@@ -978,6 +983,7 @@ namespace VoxelEngine.UI
 
                 // Right panel — container or station
                 if (_productionStatsOpen) _root.Add(ProductionStatsUI.BuildPanel());
+                else if (_recipeBrowserOpen) _root.Add(RecipeBrowserUI.BuildPanel(recipeRegistry));
                 else if (_rightContainer != null) BuildRightContainer(_root, _rightContainer);
                 else if (_openFurnace  != null) BuildRightFurnace(_root, _openFurnace);
                 else if (_openElectric != null) BuildRightElectricFurnace(_root, _openElectric);
@@ -1115,7 +1121,12 @@ namespace VoxelEngine.UI
             // state persists across sessions via CraftingScreen.Visible.
             panel.Add(CraftingScreen.ToggleButton(Refresh));
 
-            var statsBtn = new Button(() => { _productionStatsOpen = !_productionStatsOpen; Refresh(); })
+            var statsBtn = new Button(() =>
+            {
+                _productionStatsOpen = !_productionStatsOpen;
+                if (_productionStatsOpen) _recipeBrowserOpen = false;
+                Refresh();
+            })
             { text = _productionStatsOpen ? "📈 Hide Production Stats" : "📈 Production Stats" };
             statsBtn.style.minHeight = 28;
             statsBtn.style.fontSize = 11;
@@ -1124,6 +1135,21 @@ namespace VoxelEngine.UI
             statsBtn.style.backgroundColor = new StyleColor(_productionStatsOpen ? UITheme.AccentCyan : new Color(0.12f, 0.18f, 0.24f));
             SetBorderRadius(statsBtn, 4); ZeroBorder(statsBtn);
             panel.Add(statsBtn);
+
+            var recipeBrowserBtn = new Button(() =>
+            {
+                _recipeBrowserOpen = !_recipeBrowserOpen;
+                if (_recipeBrowserOpen) _productionStatsOpen = false;
+                Refresh();
+            })
+            { text = _recipeBrowserOpen ? "⌁ Hide Recipe Browser" : "⌁ Recipe Browser" };
+            recipeBrowserBtn.style.minHeight = 28;
+            recipeBrowserBtn.style.fontSize = 11;
+            recipeBrowserBtn.style.color = Color.white;
+            recipeBrowserBtn.style.unityFontStyleAndWeight = FontStyle.Bold;
+            recipeBrowserBtn.style.backgroundColor = new StyleColor(_recipeBrowserOpen ? UITheme.AccentGold : new Color(0.14f, 0.14f, 0.20f));
+            SetBorderRadius(recipeBrowserBtn, 4); ZeroBorder(recipeBrowserBtn);
+            panel.Add(recipeBrowserBtn);
 
             // ── Wireless Storage Network (if unlocked) ──
             var transmitters = VoxelEngine.Storage.WirelessTransmitter.GetAllOnline();
