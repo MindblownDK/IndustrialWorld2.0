@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.40.1-dev`
-**Roadmap Version:** `5.40.1-dev`
+**Current Version:** `5.41.0-dev`
+**Roadmap Version:** `5.41.0-dev`
 **Date:** 2026-07-16
 **Status:** Active Implementation — Premium UI Polish + Grid Shape Variant Wheel Foundation
 
@@ -58,7 +58,7 @@ The design goal is a seamless blend of:
 | Grid screens / displays | ❌ Missing | No configurable digital panels |
 | Grid lighting | ❌ Missing | No flood lights or block lights |
 | Sloped / armored grid blocks | ❌ Missing | Only cube blocks exist; need shape variants |
-| Grid shape variant wheel | 🛠️ WORKING ON | Premium radial wheel foundation complete (5.40.1-dev) with full visual parity to Hammer/Conveyor wheels. CurrentShape accessor + auto-spawn ready. Shape application + authored variants next (via Setup). |
+| Grid shape variant wheel | 🛠️ WORKING ON | Premium radial wheel foundation complete (5.40.1-dev) with full visual parity to Hammer/Conveyor wheels. CurrentShape accessor + auto-spawn ready. Compile error in GridBuilder fixed. Shape application + authored variants next (via Setup Step 18). |
 | Player armor slots | ❌ Missing | No equipable armor system |
 | Crafting / items / storage | ✅ Exists | Needs deeper recipe chains |
 | Research / tech tree | ✅ Exists | Can be expanded into eras |
@@ -1674,6 +1674,23 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.41.0-dev] GridBuilder Compile Fix + Shape Wheel Integration Readiness
+
+**Type:** PATCH — save-compatible bugfix (no save schema, balance, or API touch)
+
+**Fixed:**
+- GridBuilder.cs: Invalid token / type / tuple errors (CS1519, CS1031, CS8124, CS1026, CS1022) caused by misplaced closing brace in ShowGhost method — statements for collider stripping, material build, and positioning were incorrectly placed at class scope.
+- Restored correct nesting and indentation so ghost rebuild logic, cleanup, and transform application execute every frame.
+- GridShapeWheel.CurrentShape hook comment and GridBlockMeshBuilder remain ready for shape variants.
+
+**Roadmap Status:**
+- Grid shape variant wheel (4.7.0): **🛠️ WORKING ON** (foundation complete + compile error fixed; next step is non-destructive authored variants via Setup).
+
+**Manual Unity Steps (correct Voxel Engine Setup workflow):**
+1. Tools > Voxel Engine > Voxel Engine Setup → run **2. Spawn Player + UI in Scene** (non-destructive; ensures GridShapeWheel UIDocument at 610 is present).
+2. Equip grid armor/structural block → hold Build Wheel key — verify no errors and premium shape wheel shows.
+3. When authoring variants: use the next appropriate Setup step (Step 18 area) — non-destructive.
 
 ### [5.40.1-dev] Premium Wheel Text Cutoff Fixes + Grid Shape Variant Wheel Foundation
 

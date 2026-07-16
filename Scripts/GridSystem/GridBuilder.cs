@@ -323,16 +323,15 @@ namespace VoxelEngine.GridSystem
                 // exposed for this purpose.
             }
 
-                // Strip colliders + any block behaviour so the ghost is purely visual.
-                foreach (var c in _ghost.GetComponentsInChildren<Collider>()) Destroy(c);
-                foreach (var b in _ghost.GetComponentsInChildren<GridBlock>()) Destroy(b);
+            // Strip colliders + any block behaviour so the ghost is purely visual.
+            foreach (var c in _ghost.GetComponentsInChildren<Collider>()) Destroy(c);
+            foreach (var b in _ghost.GetComponentsInChildren<GridBlock>()) Destroy(b);
 
-                BuildGhostMaterial();
-                foreach (var r in _ghost.GetComponentsInChildren<MeshRenderer>())
-                {
-                    r.sharedMaterial = _ghostMat;
-                    r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                }
+            BuildGhostMaterial();
+            foreach (var r in _ghost.GetComponentsInChildren<MeshRenderer>())
+            {
+                r.sharedMaterial = _ghostMat;
+                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             }
 
             _ghost.SetActive(true);
