@@ -19,7 +19,6 @@ namespace VoxelEngine.EditorTools
     /// </summary>
     public static class GridShapeVariantSetup
     {
-        [MenuItem("Tools/Voxel Engine/Voxel Engine Setup/18. Setup Grid Shape Variants (Non-Destructive)")]
         public static void RunStep18()
         {
             Debug.Log("[VoxelEngineSetupWindow] Step 18 — Grid Shape Variants setup started.");

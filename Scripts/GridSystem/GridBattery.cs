@@ -1,6 +1,7 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridBattery.cs
 //
 // Grid battery — stores and releases power for the ship grid.
+// v5.43.0-dev — Implements IGridDataProvider for screen display.
 
 using UnityEngine;
 
@@ -13,7 +14,7 @@ namespace VoxelEngine.GridSystem
         Discharge
     }
 
-    public class GridBattery : GridBlock
+    public class GridBattery : GridBlock, IGridDataProvider
     {
         [Header("Battery")]
         public float capacityWh = 1000f;
@@ -24,14 +25,9 @@ namespace VoxelEngine.GridSystem
 
         public float Fill01 => capacityWh > 0 ? Mathf.Clamp01(storedWh / capacityWh) : 0;
 
-        /// <summary>Max watts this battery could supply RIGHT NOW (0 when empty/disabled/recharging).
-        /// GridEntity.UpdatePower() sums these and uses them to cover any generation deficit,
-        /// so the battery never lags a frame behind a new load.</summary>
         public float AvailableDischargeWatts =>
             (Enabled && mode != GridBatteryMode.Recharge && storedWh > 0f) ? maxDischargeRate : 0f;
 
-        // Battery contribution is folded into the grid's generation by GridEntity (so it can be
-        // capped to the actual deficit). Returning 0 here prevents double-counting.
         public override float PowerOutput => 0f;
 
         private void Update()
@@ -50,11 +46,17 @@ namespace VoxelEngine.GridSystem
             }
             else if (canDischarge && gridHasLoad && surplus <= 0.01f && storedWh > 0f)
             {
-                // Drain only while the grid actually has load. This prevents idle ships from
-                // slowly emptying batteries just because generated/consumed power are both zero.
                 float discharge = maxDischargeRate * Time.deltaTime / 3600f;
                 storedWh = Mathf.Max(0, storedWh - discharge);
             }
+        }
+
+        // -- IGridDataProvider -----------------------------------------
+        public string SourceName => blockName;
+        public string DataCategory => "Power";
+        public string GetDisplayData()
+        {
+            return $"POWER\n{Fill01 * 100f:0}%\n{storedWh / 1000f:0.00}/{capacityWh / 1000f:0.00} kWh\n{mode}\nRate: {maxDischargeRate / 1000f:0.0} kW";
         }
     }
 }

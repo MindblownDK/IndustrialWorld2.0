@@ -55,7 +55,7 @@ The design goal is a seamless blend of:
 | Gravity / orbits | 🟡 Buggy | Player and grids sometimes fall; orbits not realistic |
 | Space stations | ❌ Missing | No buildable orbital platforms |
 | Conveyor logistics | 🟡 Good | Conveyors, ramps, vertical belts, chutes, contextual shape wheel, ghost previews, and persistence exist. Remaining work: pooled item entities, more chute variants, and final long-run throughput validation. |
-| Grid screens / displays | ❌ Missing | No configurable digital panels |
+| Grid screens / displays | 🛠️ WORKING ON | Configurable 1x1/2x2/4x4/Wide digital screens with IGridDataProvider interface, battery/cargo/gas data sources, and screen config UI (5.43.0-dev) |
 | Grid lighting | ❌ Missing | No flood lights or block lights |
 | Sloped / armored grid blocks | ❌ Missing | Only cube blocks exist; need shape variants |
 | Grid shape variant wheel | 🛠️ WORKING ON | Premium radial wheel foundation complete (5.40.1-dev) with full visual parity to Hammer/Conveyor wheels. CurrentShape accessor + auto-spawn ready. Compile error in GridBuilder fixed. Shape application + authored variants next (via Setup Step 18). |

@@ -206,6 +206,7 @@ namespace VoxelEngine.EditorTools
             AddWizardButton(scroll, "17. Build Factory Foundations + HV Grid\n(Conveyors, Machines, Power Poles, Transformers, HV Towers)", BuildFactoryFoundationsContent, 72);
 
             AddSpacer(scroll, 6);
+
             AddInfo(scroll,
                 "Step 18 builds GRID SHAPE VARIANTS (non-destructive):\n" +
                 "  • Cube / Slope / HalfBlock / HalfSlope / Corner / InvertedSlope\n" +
@@ -217,6 +218,19 @@ namespace VoxelEngine.EditorTools
                 "  • Non-destructive: preserves all existing balance, health, power, and custom prefab geometry\n" +
                 "Re-runnable. Idempotent. Never overwrites user-authored materials or balance values.");
             AddWizardButton(scroll, "18. Setup Grid Shape Variants (Non-Destructive)\n(Cube, Slope, Half, Corner, Inverted — preserve balance)", () => VoxelEngine.EditorTools.GridShapeVariantSetup.RunStep18(), 56);
+
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 19 builds GRID SCREENS & DATA PROVIDERS (non-destructive):\n" +
+                "  • GridScreenBlock.cs — configurable 1x1/2x2/4x4/Wide digital screens\n" +
+                "  • IGridDataProvider interface — Battery, Cargo, Gas tank data sources\n" +
+                "  • GridScreenConfigUI — right-click config panel for source + display mode\n" +
+                "  • Auto-links to nearest data source on placement\n" +
+                "  • Creates missing Screen/DataProvider components on existing prefabs\n" +
+                "  • Non-destructive: preserves all existing balance and custom geometry\n" +
+                "Re-runnable. Idempotent. Never overwrites user-authored values.\n" +
+                "Run Step 12 (Grid System) first to have grid blocks to attach screens to.");
+            AddWizardButton(scroll, "19. Setup Grid Screens & Displays (Non-Destructive)\n(Adds screen blocks + data provider interfaces)", () => VoxelEngine.EditorTools.GridScreenSetup.RunStep19(), 56);
 
             AddSpacer(scroll, 20);
         }

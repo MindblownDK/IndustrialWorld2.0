@@ -1,16 +1,14 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridCargoContainer.cs
 //
-// Storage block for ships/vehicles. Holds items like a chest, but capacity is
-// limited by MASS (kg) rather than a fixed slot count — a Small container holds
-// 100 t, a Large holds 1 000 t. Its current content mass feeds the grid's total
-// mass so a loaded ship flies heavier.
+// Storage block for ships/vehicles.
+// v5.43.0-dev — Implements IGridDataProvider for screen display.
 
 using UnityEngine;
 using VoxelEngine.Items;
 
 namespace VoxelEngine.GridSystem
 {
-    public class GridCargoContainer : GridBlock, IGridItemStore
+    public class GridCargoContainer : GridBlock, IGridItemStore, IGridDataProvider
     {
         [Header("Cargo")]
         [Tooltip("How many visual slots the UI exposes (mass is the real limit).")]
@@ -19,21 +17,17 @@ namespace VoxelEngine.GridSystem
         [Tooltip("Maximum cargo mass in kilograms. Small = 100 000 kg, Large = 1 000 000 kg.")]
         public float maxMassKg = 100_000f;
 
-        [Tooltip("Optional item/category filter. Empty accepts everything. Matches item id, display name, or category.")]
+        [Tooltip("Optional item/category filter. Empty accepts everything.")]
         public string itemFilter = "";
 
         public ItemContainer container;
 
-        /// <summary>Current mass (kg) of stored items.</summary>
         public float CurrentMassKg => MassUtil.ContainerMass(container);
-
-        /// <summary>0..1 fill fraction by mass.</summary>
         public float Fill01 => maxMassKg <= 0f ? 0f : Mathf.Clamp01(CurrentMassKg / maxMassKg);
 
-        // Stored items add their mass to the ship.
         public override float ContentMass => CurrentMassKg;
 
-        // ── IGridItemStore ──────────────────────────────────────────────────────
+        // -- IGridItemStore ---------------------------------------------
         public ItemContainer ItemStore => container;
         public string StoreLabel => blockName == "Armor Block" ? "Cargo Container" : blockName;
 
@@ -43,10 +37,7 @@ namespace VoxelEngine.GridSystem
             if (blockName == "Armor Block") blockName = "Cargo Container";
             if (container == null) container = new ItemContainer("Cargo", slots);
             else container.Resize(slots);
-
             ApplyFilter();
-
-            // Register with the grid item network so the master terminal & pipes see us.
             if (Grid != null && GridItemNetwork.Instance != null)
                 GridItemNetwork.Instance.RegisterContainer(Grid, this);
         }
@@ -70,11 +61,10 @@ namespace VoxelEngine.GridSystem
             container.AcceptFilter = MaxAcceptable;
         }
 
-        /// <summary>How many of <paramref name="item"/> fit before hitting the mass cap and optional filter.</summary>
         private int MaxAcceptable(ItemDefinition item, int wanted)
         {
             if (!MatchesFilter(item)) return 0;
-            if (item == null || item.massPerUnit <= 0f) return wanted; // weightless → no cap
+            if (item == null || item.massPerUnit <= 0f) return wanted;
             float free = maxMassKg - CurrentMassKg;
             if (free <= 0f) return 0;
             return Mathf.Clamp(Mathf.FloorToInt(free / item.massPerUnit), 0, wanted);
@@ -96,8 +86,24 @@ namespace VoxelEngine.GridSystem
                 && value.IndexOf(query, System.StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
-        /// <summary>True if adding this stack would stay within the mass cap.</summary>
         public bool CanAcceptMass(ItemDefinition item, int count)
             => MatchesFilter(item) && CurrentMassKg + MassUtil.StackMass(item, count) <= maxMassKg;
+
+        // -- IGridDataProvider -----------------------------------------
+        public string SourceName => blockName;
+        public string DataCategory => "Inventory";
+        public string GetDisplayData()
+        {
+            int itemCount = 0;
+            if (container != null)
+            {
+                for (int i = 0; i < container.Size; i++)
+                {
+                    var s = container.GetSlot(i);
+                    if (s != null && !s.IsEmpty) itemCount++;
+                }
+            }
+            return $"CARGO\n{Fill01 * 100f:0}% full\n{CurrentMassKg / 1000f:0.0} / {maxMassKg / 1000f:0.0} t\n{itemCount} item types";
+        }
     }
 }
