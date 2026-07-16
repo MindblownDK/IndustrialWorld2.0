@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.14.3-dev`
-**Roadmap Version:** `5.14.3-dev`
+**Current Version:** `5.15.0-dev`
+**Roadmap Version:** `5.15.0-dev`
 **Date:** 2026-07-16
-**Status:** Active Implementation — Recipe Browser Dependency View
+**Status:** Active Implementation — Recipe Browser Dependency Chain
 
 ---
 
@@ -612,7 +612,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 |------|--------|------------------|
 | Assembler Mk.2 / Mk.3 | ✅ COMPLETED | Mk.2 and Mk.3 exist with larger buffers, faster tier multipliers, upgraded visuals, and machine UI binding. |
 | Recipe graph validation | ✅ COMPLETED | Validator and non-destructive repair pass are in place. Thomas validated the graph at 0 errors after repair. Remaining duplicate-output notes are informational/progression warnings. |
-| Production-line UI | 🛠️ WORKING ON | Crusher/Assembler UIs, responsive panels, live Production Statistics, hideable bottleneck/surplus hints, and the first Recipe Browser dependency view exist. Next: deeper chain visualization and theme overrides. |
+| Production-line UI | 🛠️ WORKING ON | Crusher/Assembler UIs, responsive panels, live Production Statistics, hideable bottleneck/surplus hints, Recipe Browser dependency view, and recursive dependency chain visualization exist. Next: theme overrides and deeper graph controls. |
 | Advanced processing | 🟡 PARTIALLY COMPLETE | Chemical processing and oil systems exist in code, but ore washing/enrichment and tailing loops are not complete. |
 | UI theme system | ❌ MISSING | Design tokens exist in `UITheme`; theme ScriptableObjects, runtime theme switching, and custom editor remain planned. |
 | Research UI overhaul | ❌ MISSING | Existing research remains functional; spatial pan/zoom canvas is not implemented yet. |
@@ -1674,6 +1674,22 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.15.0-dev] Recipe Dependency Chain View
+
+**Type:** MINOR — new save-compatible recipe planning visualization
+
+**Added / Improved:**
+- Added a recursive Dependency Chain section to the Recipe Browser details panel.
+- The chain shows the selected item, the preferred immediate recipe, and nested craftable inputs down to several levels.
+- Cycle protection prevents repeated recipes from endlessly expanding.
+- Machine assembling recipes now display as `AI-assembler` as requested.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Deeper recipe chain visualization is now started.
+- Next target: theme overrides and richer graph controls.
+
+---
 
 ### [5.14.3-dev] Recipe Browser Grouping & Labels
 

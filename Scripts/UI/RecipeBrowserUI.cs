@@ -198,6 +198,10 @@ namespace VoxelEngine.UI
             foreach (var input in inputItems)
                 right.Add(InputLine(input.item, input.count, entries.Any(e => OutputKey(e.Output) == OutputKey(input.item))));
 
+            right.Add(T.Spacer(8));
+            right.Add(SectionTitle("Dependency Chain", T.AccentPurple));
+            right.Add(BuildDependencyTree(_selectedOutputKey, entries));
+
             return right;
         }
 
@@ -246,6 +250,54 @@ namespace VoxelEngine.UI
             return card;
         }
 
+        private static VisualElement BuildDependencyTree(string outputKey, List<RecipeEntry> entries)
+        {
+            var card = T.Card();
+            card.style.marginBottom = 6;
+            var visited = new HashSet<string>();
+            AddDependencyNode(card, outputKey, entries, depth: 0, visited);
+            return card;
+        }
+
+        private static void AddDependencyNode(VisualElement parent, string outputKey, List<RecipeEntry> entries, int depth, HashSet<string> visited)
+        {
+            if (string.IsNullOrEmpty(outputKey) || depth > 4) return;
+            var recipe = entries
+                .Where(entry => OutputKey(entry.Output) == outputKey)
+                .OrderBy(entry => entry.Inputs.Count)
+                .ThenBy(entry => entry.Seconds)
+                .FirstOrDefault();
+
+            string indent = new string(' ', depth * 2);
+            if (recipe == null)
+            {
+                var raw = new Label($"{indent}• {outputKey}  (raw / no recipe)");
+                raw.style.color = new StyleColor(T.TextMuted);
+                raw.style.fontSize = 10;
+                parent.Add(raw);
+                return;
+            }
+
+            string key = OutputKey(recipe.Output);
+            var line = new Label($"{indent}• {recipe.Output.displayName}  ←  {recipe.Kind}");
+            line.style.color = new StyleColor(depth == 0 ? T.TextPrimary : T.TextSecondary);
+            line.style.fontSize = depth == 0 ? 11 : 10;
+            line.style.unityFontStyleAndWeight = depth == 0 ? FontStyle.Bold : FontStyle.Normal;
+            parent.Add(line);
+
+            if (!visited.Add(key))
+            {
+                var cycle = new Label($"{indent}  ↳ already shown");
+                cycle.style.color = new StyleColor(T.TextMuted);
+                cycle.style.fontSize = 9;
+                parent.Add(cycle);
+                return;
+            }
+
+            foreach (var input in recipe.Inputs.Where(input => input.item != null))
+                AddDependencyNode(parent, OutputKey(input.item), entries, depth + 1, visited);
+        }
+
         private static VisualElement InputLine(ItemDefinition item, int count, bool craftable)
         {
             var row = new VisualElement();
@@ -288,7 +340,7 @@ namespace VoxelEngine.UI
 
         private static string MachineKind(MachineRecipeType type)
         {
-            return type == MachineRecipeType.Assembling ? "Factory Assembler" : type.ToString();
+            return type == MachineRecipeType.Assembling ? "AI-assembler" : type.ToString();
         }
 
         private static string OutputKey(ItemDefinition item)
