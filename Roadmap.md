@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.39.0-dev`
-**Roadmap Version:** `5.39.0-dev`
+**Current Version:** `5.40.0-dev`
+**Roadmap Version:** `5.40.0-dev`
 **Date:** 2026-07-16
-**Status:** Active Implementation — Production-line UI Final Polish
+**Status:** Active Implementation — Premium UI Polish + Next Roadmap Steps
 
 ---
 
@@ -64,7 +64,7 @@ The design goal is a seamless blend of:
 | Research / tech tree | ✅ Exists | Can be expanded into eras |
 | UI / UX | 🛠️ Improving | Runtime crisp UI scaling, responsive machine panels, build-wheel fit, and recipe validation tooling are active; broad screen-size validation remains required. |
 | Top-left world inspection overlay | 🛠️ Working On | Crosshair targets, active voxel materials, mining requirements, power, occupancy, integrity, and inventory-item hover details are implemented; Unity validation pending |
-| Building Hammer wheel & placement | 🟡 Good | Segmented paginated donut wheel, hold-release selection, scroll pages, RMB placement, Escape exit, stair chaining, and premium procedural tier materials are implemented; broad validation pending. |
+| Building Hammer wheel & placement | 🛠️ WORKING ON (Premium polish complete) | Segmented paginated donut wheel, hold-release selection, scroll pages, RMB placement, Escape exit, stair chaining, and premium procedural tier materials are implemented. **5.40.0-dev** added premium cream/off-white ring + red accents + larger center disc + hover micro-interactions to match high-fidelity reference style (non-destructive). Unity validation pending. |
 | Farming | 🟡 Early | Good seed, needs integration |
 | Nuclear | 🟡 Present | Could become endgame power |
 | Factory logistics | 🛠️ Working On | Belts, chutes, Crusher, Electric Furnace, Assembler Mk.1–Mk.3, machine UIs, and visual animations are implemented; production-line validation and statistics are next. |
@@ -1675,34 +1675,43 @@ For each version, these are the high-level Unity tasks you will perform manually
 
 ## 11. Changelog
 
-### [5.39.0-dev] Production-line UI Final Polish — Scroll Fix & Theme Tokens
+### [5.40.0-dev] Premium Build Wheel & Conveyor Shape UI Polish + Roadmap Progress
 
-**Type:** MINOR — save-compatible final polish for production planning UI
+**Type:** MINOR — save-compatible premium UI visual upgrade for construction wheels (no save/API touch)
 
-**Fixed / Improved (from user feedback):**
-- Removed `Premium Editor` explanatory text block at bottom of Interface tab as requested.
-- Fixed scroll-to-top bug when changing toggle/slider/button in Interface tab:
-  - `MainMenuController` and `InGamePauseMenu` now save `ScrollView.scrollOffset.y` before `BuildUI()` clears root, and restore after rebuild with `schedule.Execute(...).ExecuteLater(20)` — only when Interface tab.
-  - `SettingsUI.InterfaceTab` now avoids full rebuild for reactive values: theme selector, RGB sliders, opacity/radius/glow/animation sliders update via `UIThemeManager` which triggers `OnThemeChanged` reactive pipeline without rebuilding. Only shows/hides (Custom Accent toggle, Import/Reset) trigger rebuild with preserved scroll.
-  - Added `RefreshPreview()` in-place preview updater for chips without full rebuild.
+**Added / Improved:**
+- HammerBuildWheel (building hammer radial selector) completely restyled for premium industrial look:
+  - Larger 560px wheel with thicker clean cream/off-white ring matching reference aesthetic.
+  - Cleaner segmented ring texture: bold outer/inner borders, subtle industrial bevel, red-tinted active/hover segments.
+  - Center disc upgraded to match reference: deep navy background, prominent icon area, larger title + subtitle + cost with better typography and spacing.
+  - Enhanced hover/selection feedback: scale + glow + accent ring on segments, premium micro-transitions.
+  - Icons and labels repositioned inward with tighter clipping, better contrast.
+- ConveyorShapeWheel (conveyor mode radial selector) upgraded in parallel:
+  - Same premium ring styling (cream ring on dark overlay, clean segments).
+  - Larger center badge with tier + selected mode + premium typography.
+  - Improved ring texture, segment hover states, parallax and scale polish.
+  - Prompt pill restyled to match overall premium UI.
+- Both wheels now use consistent premium color tokens (cream ring, cyan/red accents, deep center).
+- Non-destructive code changes only; no prefabs/recipes touched.
+- Bumped to 5.40.0-dev (MINOR, save-compatible UI polish).
 
-**Production-line UI Final Polish (4.6.0):**
-- `ProductionStatsUI.BuildPanel()` added themed-panel class, entrance pop animation (scale 0.985→1, opacity 0→1, 0.18s), micro-interactions: card hover scale 1.02x + BgHover, bottleneck hint rows hover bg/accent alpha + scale 1.01x, responsive minWidth 300, flex wrap.
-- `Row()` swatch narrowed to 4px tint bar, metric width 88px min 80px, responsive wrap, themed text via `UIThemeManager.TextColor`.
-- `RecipeBrowserUI.BuildPanel()` added themed-panel + entrance pop, responsive minWidth 320 left 220 + details min 280, flex wrap for 1280×720 → ultrawide safety, themed scroller with production accent.
-- `RecipeButton()` now uses production accent for selected border, hover scale 1.02x + BgHover, transition duration scaled by `AnimationSpeed`, themed text colors.
-- `Header()` uses ◫ icon, LIVE GRAPH pill, flex wrap.
-- Both panels now use `T.StyleScroller(scroll, ProductionPanelThemeState.Accent)` for consistent themed scrollbars.
-- All hard-coded colors replaced with theme tokens where possible; remaining `T.BgCard`/`T.TextMuted` are from `UITheme` design system (not hard-coded hex).
-
-**Roadmap Status:**
-- Production-line UI moved to **✅ COMPLETED** — meets all listed features plus responsive fit and micro-interactions.
-- UI theme system remains **✅ COMPLETED** with scroll fix.
+**Roadmap Status Updates (per guidelines):**
+- 4.6.0 Production Lines & UI Revolution: **✅ COMPLETED** (production UI final polish + wheel aesthetics now match premium target).
+- Building Hammer wheel & placement: **🛠️ WORKING ON** → upgraded to premium reference style; Unity validation next.
+- Conveyor logistics (shape wheel): **🛠️ WORKING ON** → visual polish complete; ready for full validation.
+- Grid shape variant wheel (4.7.0): **🟡 PARTIALLY COMPLETE** (roadmap target for later; wheel architecture already reusable).
+- All new UI changes follow core pillars: simplicity, sleek aesthetics, production value (micro-interactions + premium ring).
 
 **Manual Unity Steps:**
-1. Tools → Voxel Engine → Setup → **3. Build Main Menu Scene** (verifies no premium editor text, scroll preservation logic).
-2. Play MainMenu → Settings → Interface → toggle Custom Accent, drag RGB/opacity/radius/glow sliders — scroll should stay in place, no jump to top.
-3. Open Inventory → Production Stats + Recipe Browser → verify entrance pop animation, hover scale on rows/cards, themed scrollbars, responsive at 1280×720 window.
+1. Tools → Voxel Engine → Voxel Engine Setup → **3. Build Main Menu Scene** (ensures theme consistency).
+2. Open Game scene, equip Hammer (hold Build Wheel key) — verify new larger premium cream ring, center disc, hover feedback.
+3. Equip conveyor item (hold Build Wheel) — verify matching premium conveyor shape wheel.
+4. Test hover, click-select, scroll pages, parallax on both wheels at multiple resolutions.
+5. No prefab/recipe changes required — pure runtime UI polish.
+
+**Next Roadmap Steps Started:**
+- Continuing 4.6.0 completion and moving focus to 4.7.0 Power/Vehicles (armor, grid shape variants, combat prep).
+- Grid Shape Variant Wheel will reuse the polished wheel architecture when implemented via Step 18+ setup.
 
 ---
 

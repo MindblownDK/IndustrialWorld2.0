@@ -221,17 +221,17 @@ namespace VoxelEngine.Simulation
             _wheelOverlay.style.bottom = 0;
             _wheelOverlay.style.alignItems = Align.Center;
             _wheelOverlay.style.justifyContent = Justify.Center;
-            _wheelOverlay.style.backgroundColor = new StyleColor(new Color(0.01f, 0.015f, 0.025f, 0.58f));
+            _wheelOverlay.style.backgroundColor = new StyleColor(new Color(0.01f, 0.012f, 0.018f, 0.82f));
             _wheelOverlay.pickingMode = PickingMode.Position;
             _uiRoot.Add(_wheelOverlay);
 
             _wheelCenter = new VisualElement();
-            _wheelCenter.style.width = 390;
-            _wheelCenter.style.height = 390;
+            _wheelCenter.style.width = 440;
+            _wheelCenter.style.height = 440;
             _wheelCenter.style.position = Position.Relative;
             _wheelCenter.style.transitionProperty = new System.Collections.Generic.List<StylePropertyName> { "translate", "scale" };
             _wheelCenter.style.transitionDuration = new System.Collections.Generic.List<TimeValue> { new(0.08f, TimeUnit.Second) };
-            float safeScale = Mathf.Clamp(Mathf.Min(Screen.width, Screen.height) / 460f, 0.68f, 1f);
+            float safeScale = Mathf.Clamp(Mathf.Min(Screen.width, Screen.height) / 520f, 0.62f, 1f);
             _wheelCenter.style.scale = new StyleScale(new Scale(new Vector3(safeScale, safeScale, 1f)));
             _wheelOverlay.Add(_wheelCenter);
 
@@ -439,8 +439,8 @@ namespace VoxelEngine.Simulation
 
             var pixels = new Color32[size * size];
             float center = (size - 1) * 0.5f;
-            const float innerRadius = 81f;
-            const float outerRadius = 123f;
+            const float innerRadius = 78f;
+            const float outerRadius = 128f;
             int selected = (int)GetMode(_activeTier);
 
             for (int y = 0; y < size; y++)
@@ -458,16 +458,29 @@ namespace VoxelEngine.Simulation
                     if (withinSegment < 3.5f || withinSegment > 116.5f) continue;
 
                     int segment = Mathf.Clamp(Mathf.FloorToInt(normalized / 120f), 0, Modes.Length - 1);
+                    bool isSelected = segment == selected;
+                    bool isHovered = segment == _hoveredSegment;
+
+                    // Premium cream/off-white ring + cyan/red accents (matching hammer wheel reference style)
+                    Color32 baseCream = new Color32(245, 242, 232, 255);
+                    Color32 hoverCream = new Color32(255, 250, 235, 255);
+                    Color32 selectedCyan = new Color32(22, 157, 220, 255);
+                    Color32 hoverAccent = new Color32(70, 188, 232, 255);
+
                     Color32 color;
-                    if (segment == selected)
-                        color = new Color32(22, 157, 220, 250);
-                    else if (segment == _hoveredSegment)
-                        color = new Color32(70, 188, 232, 252);
+                    if (isSelected)
+                        color = selectedCyan;
+                    else if (isHovered)
+                        color = hoverAccent;
                     else
-                        color = new Color32(220, 218, 211, 246);
+                        color = baseCream;
 
                     float edge = Mathf.Min(radius - innerRadius, outerRadius - radius);
-                    color.a = (byte)Mathf.RoundToInt(color.a * Mathf.Clamp01(edge));
+                    float alphaFade = Mathf.Clamp01(edge / 8f);
+                    color.a = (byte)Mathf.RoundToInt(255 * alphaFade * (isSelected || isHovered ? 1f : 0.96f));
+
+                    if (edge < 4f) color = new Color32(180, 175, 160, (byte)(color.a * 0.7f));
+
                     pixels[y * size + x] = color;
                 }
             }
