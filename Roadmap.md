@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.17.0-dev`
-**Roadmap Version:** `5.17.0-dev`
+**Current Version:** `5.18.0-dev`
+**Roadmap Version:** `5.18.0-dev`
 **Date:** 2026-07-16
-**Status:** Active Implementation — Production Panel Theme Overrides
+**Status:** Active Implementation — Recipe Pin HUD & Graph Preferences
 
 ---
 
@@ -612,7 +612,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 |------|--------|------------------|
 | Assembler Mk.2 / Mk.3 | ✅ COMPLETED | Mk.2 and Mk.3 exist with larger buffers, faster tier multipliers, upgraded visuals, and machine UI binding. |
 | Recipe graph validation | ✅ COMPLETED | Validator and non-destructive repair pass are in place. Thomas validated the graph at 0 errors after repair. Remaining duplicate-output notes are informational/progression warnings. |
-| Production-line UI | 🛠️ WORKING ON | Crusher/Assembler UIs, responsive panels, live Production Statistics, hideable bottleneck/surplus hints, Recipe Browser dependency view, polished recursive chain cards, graph depth/raw toggles, and first production panel theme overrides exist. Next: richer graph controls and persistent theme settings. |
+| Production-line UI | 🛠️ WORKING ON | Crusher/Assembler UIs, responsive panels, live Production Statistics, hideable bottleneck/surplus hints, Recipe Browser dependency view, polished recursive chain cards, graph depth/raw toggles, first theme overrides, recipe method preference, and pinned recipes exist. Next: persistent theme/pin settings and richer graph controls. |
 | Advanced processing | 🟡 PARTIALLY COMPLETE | Chemical processing and oil systems exist in code, but ore washing/enrichment and tailing loops are not complete. |
 | UI theme system | ❌ MISSING | Design tokens exist in `UITheme`; theme ScriptableObjects, runtime theme switching, and custom editor remain planned. |
 | Research UI overhaul | ❌ MISSING | Existing research remains functional; spatial pan/zoom canvas is not implemented yet. |
@@ -1675,6 +1675,27 @@ For each version, these are the high-level Unity tasks you will perform manually
 
 ## 11. Changelog
 
+### [5.18.0-dev] Recipe Pin HUD & Graph Preferences
+
+**Type:** MINOR — new save-compatible recipe planning HUD and graph preference controls
+
+**Fixed / Improved:**
+- Dependency Chain controls now update button text and tree content locally when raw inputs/depth/method preference changes.
+- Smelting recipe display names now show clean labels such as `Smelting: Copper` instead of asset names like `Smelt_Copper`.
+- Added method preference cycling for dependency chains: Auto, Prefer AI, and Prefer Station. This lets players choose between AI-assembler and Assembler Station paths when both exist.
+
+**Added:**
+- Added Recipe Pin HUD on the center-right side of the screen.
+- Recipes can be pinned from Recipe Browser details.
+- Up to 4 pinned recipes are shown at once. Pinning a fifth removes the oldest pin.
+- Pinned recipe cards show output, method, and required inputs.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Recipe planning HUD is now started.
+- Next target: persistent theme/pin settings and richer graph controls.
+
+---
+
 ### [5.17.0-dev] Production Panel Theme Overrides
 
 **Type:** MINOR — new save-compatible UI theme override starter
@@ -1735,7 +1756,7 @@ For each version, these are the high-level Unity tasks you will perform manually
 - Recipe Browser now groups production targets by player-facing item name, so duplicate item assets with different internal ids but the same visible item appear under one row.
 - Copper LV Wire and similar duplicated setup-era items now appear as one production target with all methods under Made By.
 - Station-tier recipes now show `Assembler Station` instead of `Assembler` to avoid confusion with the factory Assembler machines.
-- Machine assembling recipes now show `Factory Assembler`.
+- Machine assembling recipes were initially separated from station recipes; later releases renamed this label to `AI-assembler`.
 - Recipe de-duplication keys now use the same player-facing item grouping for inputs.
 
 ---

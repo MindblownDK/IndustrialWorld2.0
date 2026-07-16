@@ -29,8 +29,10 @@ namespace VoxelEngine.UI
 
         private static string _search = string.Empty;
         private static string _selectedOutputKey;
+        private enum ChainPreference { Auto, AIAssembler, AssemblerStation }
         private static int _chainDepth = 4;
         private static bool _showRawInputs = true;
+        private static ChainPreference _chainPreference = ChainPreference.Auto;
         private static System.Action _refreshCurrentDetails;
 
         public static VisualElement BuildPanel(RecipeRegistry registry)
@@ -187,6 +189,8 @@ namespace VoxelEngine.UI
             right.Add(T.Spacer(4));
 
             var makers = entries.Where(entry => OutputKey(entry.Output) == _selectedOutputKey).ToList();
+            if (makers.Count > 0) right.Add(PinButton(makers[0]));
+
             right.Add(SectionTitle("Made By", T.AccentGreen));
             foreach (var maker in makers)
                 right.Add(RecipeDetailCard(maker));
@@ -299,6 +303,25 @@ namespace VoxelEngine.UI
                 RefreshTreeOnly();
             }, T.TextMuted);
             header.Add(rawButton);
+            Button preferenceButton = null;
+            string PreferenceLabel() => _chainPreference switch
+            {
+                ChainPreference.AIAssembler => "Prefer AI",
+                ChainPreference.AssemblerStation => "Prefer Station",
+                _ => "Auto"
+            };
+            preferenceButton = T.SmallButton(PreferenceLabel(), () =>
+            {
+                _chainPreference = _chainPreference switch
+                {
+                    ChainPreference.Auto => ChainPreference.AIAssembler,
+                    ChainPreference.AIAssembler => ChainPreference.AssemblerStation,
+                    _ => ChainPreference.Auto
+                };
+                preferenceButton.text = PreferenceLabel();
+                RefreshTreeOnly();
+            }, T.AccentGold);
+            header.Add(preferenceButton);
             header.Add(T.SmallButton("−", () =>
             {
                 _chainDepth = Mathf.Max(1, _chainDepth - 1);
@@ -337,11 +360,12 @@ namespace VoxelEngine.UI
         {
             if (string.IsNullOrEmpty(outputKey) || depth > _chainDepth) return;
 
-            var recipe = entries
+            var candidates = entries
                 .Where(entry => OutputKey(entry.Output) == outputKey)
                 .OrderBy(entry => entry.Inputs.Count)
                 .ThenBy(entry => entry.Seconds)
-                .FirstOrDefault();
+                .ToList();
+            var recipe = SelectPreferredRecipe(candidates);
 
             if (recipe == null)
             {
@@ -472,6 +496,44 @@ namespace VoxelEngine.UI
             return row;
         }
 
+        private static RecipeEntry SelectPreferredRecipe(List<RecipeEntry> candidates)
+        {
+            if (candidates == null || candidates.Count == 0) return null;
+            string wanted = _chainPreference switch
+            {
+                ChainPreference.AIAssembler => "AI-assembler",
+                ChainPreference.AssemblerStation => "Assembler Station",
+                _ => string.Empty
+            };
+            if (!string.IsNullOrEmpty(wanted))
+            {
+                var preferred = candidates.FirstOrDefault(entry => entry.Kind == wanted);
+                if (preferred != null) return preferred;
+            }
+            return candidates[0];
+        }
+
+        private static VisualElement PinButton(RecipeEntry entry)
+        {
+            string key = OutputKey(entry.Output);
+            bool pinned = RecipePinHud.IsPinned(key);
+            return T.SmallButton(pinned ? "Unpin Recipe" : "Pin Recipe", () =>
+            {
+                var pin = new RecipePinHud.Pin
+                {
+                    Key = key,
+                    OutputName = entry.Output != null ? entry.Output.displayName : entry.Name,
+                    Tint = entry.Output != null ? entry.Output.iconTint : T.AccentGold,
+                    OutputCount = entry.OutputCount,
+                    Method = entry.Kind
+                };
+                foreach (var input in entry.Inputs.Where(input => input.item != null))
+                    pin.Inputs.Add($"{input.count}x {input.item.displayName}");
+                RecipePinHud.Toggle(pin);
+                _refreshCurrentDetails?.Invoke();
+            }, pinned ? T.AccentRed : T.AccentGreen);
+        }
+
         private static VisualElement InputLine(ItemDefinition item, int count, bool craftable)
         {
             var row = new VisualElement();
@@ -499,6 +561,17 @@ namespace VoxelEngine.UI
                     _refreshCurrentDetails?.Invoke();
                 });
             return row;
+        }
+
+        private static string CleanSmeltingName(SmeltingRecipe recipe)
+        {
+            if (recipe == null) return "Smelting";
+            if (recipe.output != null)
+            {
+                string name = recipe.output.displayName;
+                return name.EndsWith(" Ingot") ? name.Substring(0, name.Length - " Ingot".Length) : name;
+            }
+            return recipe.name.Replace("Smelt_", string.Empty).Replace("_", " ");
         }
 
         private static string RecipeKind(StationTier station)
@@ -575,7 +648,7 @@ namespace VoxelEngine.UI
                 var entry = new RecipeEntry
                 {
                     Kind = "Smelting",
-                    Name = recipe.name,
+                    Name = CleanSmeltingName(recipe),
                     Output = recipe.output,
                     OutputCount = recipe.outputCount,
                     Seconds = recipe.smeltSeconds

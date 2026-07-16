@@ -872,6 +872,7 @@ namespace VoxelEngine.UI
             // (Re)mount the tooltip overlay; it lives at the root and is invisible until hovered.
             Tooltip.EnsureMounted(_root);
             PlayerHud.EnsureMounted(_root);
+            RecipePinHud.EnsureMounted(_root);
             ResearchHud.EnsureMounted(_root);
             UpgradePromptHud.EnsureMounted(_root);
 
