@@ -37,10 +37,14 @@ namespace VoxelEngine.UI
         private const string CustomAccentRKey = "IndustrialWorld.UITheme.CustomAccentR";
         private const string CustomAccentGKey = "IndustrialWorld.UITheme.CustomAccentG";
         private const string CustomAccentBKey = "IndustrialWorld.UITheme.CustomAccentB";
+        private const string PanelOpacityKey = "IndustrialWorld.UITheme.PanelOpacity";
+        private const string CornerRadiusKey = "IndustrialWorld.UITheme.CornerRadius";
         private static bool _loaded;
         private static BuiltInUITheme _current = BuiltInUITheme.IndustrialSteel;
         private static bool _customAccentEnabled;
         private static Color _customAccent = UITheme.AccentCyan;
+        private static float _panelOpacity = 0.97f;
+        private static float _cornerRadius = UITheme.PanelRadius;
 
         public static BuiltInUITheme Current
         {
@@ -65,7 +69,25 @@ namespace VoxelEngine.UI
             set { EnsureLoaded(); _customAccent = value; SaveCustomAccent(); }
         }
         public static Color Accent => CustomAccentEnabled ? CustomAccent : AccentFor(Current);
-        public static Color PanelColor => PanelFor(Current);
+        public static float PanelOpacity
+        {
+            get { EnsureLoaded(); return _panelOpacity; }
+            set { EnsureLoaded(); _panelOpacity = Mathf.Clamp(value, 0.45f, 1f); SaveAdvancedTheme(); }
+        }
+        public static float CornerRadius
+        {
+            get { EnsureLoaded(); return _cornerRadius; }
+            set { EnsureLoaded(); _cornerRadius = Mathf.Clamp(value, 2f, 24f); SaveAdvancedTheme(); }
+        }
+        public static Color PanelColor
+        {
+            get
+            {
+                Color c = PanelFor(Current);
+                c.a = PanelOpacity;
+                return c;
+            }
+        }
         public static Color TextColor => TextFor(Current);
 
         public static void Next()
@@ -133,6 +155,8 @@ namespace VoxelEngine.UI
                 PlayerPrefs.GetFloat(CustomAccentGKey, UITheme.AccentCyan.g),
                 PlayerPrefs.GetFloat(CustomAccentBKey, UITheme.AccentCyan.b),
                 1f);
+            _panelOpacity = Mathf.Clamp(PlayerPrefs.GetFloat(PanelOpacityKey, _panelOpacity), 0.45f, 1f);
+            _cornerRadius = Mathf.Clamp(PlayerPrefs.GetFloat(CornerRadiusKey, _cornerRadius), 2f, 24f);
         }
 
         private static void SaveCustomAccent()
@@ -141,7 +165,46 @@ namespace VoxelEngine.UI
             PlayerPrefs.SetFloat(CustomAccentRKey, _customAccent.r);
             PlayerPrefs.SetFloat(CustomAccentGKey, _customAccent.g);
             PlayerPrefs.SetFloat(CustomAccentBKey, _customAccent.b);
+            SaveAdvancedTheme();
+        }
+
+        private static void SaveAdvancedTheme()
+        {
+            PlayerPrefs.SetFloat(PanelOpacityKey, _panelOpacity);
+            PlayerPrefs.SetFloat(CornerRadiusKey, _cornerRadius);
             PlayerPrefs.Save();
+        }
+
+        public static string ExportThemeCode()
+        {
+            EnsureLoaded();
+            return string.Join("|", (int)Current, CustomAccentEnabled ? 1 : 0,
+                CustomAccent.r.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
+                CustomAccent.g.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
+                CustomAccent.b.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
+                PanelOpacity.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
+                CornerRadius.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        public static bool TryImportThemeCode(string code)
+        {
+            if (string.IsNullOrWhiteSpace(code)) return false;
+            var parts = code.Split('|');
+            if (parts.Length < 7) return false;
+            if (!int.TryParse(parts[0], out int theme) || !System.Enum.IsDefined(typeof(BuiltInUITheme), theme)) return false;
+            bool enabled = parts[1] == "1" || parts[1].Equals("true", System.StringComparison.OrdinalIgnoreCase);
+            bool okR = float.TryParse(parts[2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float r);
+            bool okG = float.TryParse(parts[3], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float g);
+            bool okB = float.TryParse(parts[4], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float b);
+            bool okO = float.TryParse(parts[5], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float opacity);
+            bool okC = float.TryParse(parts[6], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float radius);
+            if (!okR || !okG || !okB || !okO || !okC) return false;
+            Current = (BuiltInUITheme)theme;
+            CustomAccentEnabled = enabled;
+            CustomAccent = new Color(Mathf.Clamp01(r), Mathf.Clamp01(g), Mathf.Clamp01(b), 1f);
+            PanelOpacity = opacity;
+            CornerRadius = radius;
+            return true;
         }
     }
 }

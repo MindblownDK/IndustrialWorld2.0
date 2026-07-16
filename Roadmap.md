@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.35.0-dev`
-**Roadmap Version:** `5.35.0-dev`
+**Current Version:** `5.36.0-dev`
+**Roadmap Version:** `5.36.0-dev`
 **Date:** 2026-07-16
 **Status:** Active Implementation — Production Machine Planner
 
@@ -614,7 +614,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Recipe graph validation | ✅ COMPLETED | Validator and non-destructive repair pass are in place. Thomas validated the graph at 0 errors after repair. Remaining duplicate-output notes are informational/progression warnings. |
 | Production-line UI | 🛠️ WORKING ON | Crusher/Assembler UIs, responsive panels, live Production Statistics, hideable bottleneck/surplus hints, Recipe Browser dependency view, polished recursive chain cards, persistent graph depth/raw/method controls, method filters, method comparison, persistent theme override, persistent pinned recipes with copy/clear controls, inventory-aware material summary estimates, missing-only material filter, CSV export, batch planning, machine-count estimates, copyable production plans, copyable missing-material shopping lists, copyable method summaries, and copyable dependency chains exist. Next: final planner UX polish and transition toward UI theme system work. |
 | Advanced processing | 🟡 PARTIALLY COMPLETE | Chemical processing and oil systems exist in code, but ore washing/enrichment and tailing loops are not complete. |
-| UI theme system | 🛠️ WORKING ON | `UIThemeDefinition`, persistent built-in theme selection, Interface settings tab, runtime panel/text/accent application, production-panel accent overrides, theme preview, custom accent RGB editor, and optional per-block UI accent overrides now exist. Full USS variable application and advanced custom editor remain planned. |
+| UI theme system | 🛠️ WORKING ON | `UIThemeDefinition`, persistent built-in theme selection, Interface settings tab, runtime panel/text/accent application, production-panel accent overrides, theme preview, custom accent RGB editor, panel opacity/radius editing, theme import/export codes, and optional per-block UI accent overrides now exist. Full USS variable application and advanced custom editor remain planned. |
 | Research UI overhaul | ❌ MISSING | Existing research remains functional; spatial pan/zoom canvas is not implemented yet. |
 
 #### New Content
@@ -1674,6 +1674,24 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.36.0-dev] Advanced Theme Shape & Import Export
+
+**Type:** MINOR — new save-compatible custom theme editor controls
+
+**Added / Improved:**
+- Interface settings now include advanced theme shape controls for Panel Opacity and Corner Radius.
+- Panel opacity and corner radius persist locally through PlayerPrefs.
+- Runtime panels now use the custom corner radius.
+- Added `Copy Theme Code` for sharing current theme settings as a compact string.
+- Added `Import Clipboard` to apply a copied theme code.
+- Reset Interface Theme now resets built-in theme, custom accent, opacity, and radius.
+
+**Roadmap Continued — 4.6.0 UI Theme System:**
+- Advanced custom theme editing is now started with shape controls and import/export.
+- Next targets: USS variable application and deeper per-block overrides.
+
+---
 
 ### [5.35.0-dev] Custom Theme Accent Editor
 

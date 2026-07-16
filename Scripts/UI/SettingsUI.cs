@@ -142,13 +142,26 @@ namespace VoxelEngine.UI
                 p.Add(FloatSliderRow("Accent Green", 0f, 1f, c.g, "0.00", "", v => { var color = UIThemeManager.CustomAccent; color.g = v; UIThemeManager.CustomAccent = color; }));
                 p.Add(FloatSliderRow("Accent Blue", 0f, 1f, c.b, "0.00", "", v => { var color = UIThemeManager.CustomAccent; color.b = v; UIThemeManager.CustomAccent = color; }));
             }
-            p.Add(T.SmallButton("Reset Interface Theme", () =>
+            p.Add(T.Divider());
+            p.Add(SectionLabel("Advanced Theme Shape"));
+            p.Add(FloatSliderRow("Panel Opacity", 0.45f, 1f, UIThemeManager.PanelOpacity, "0.00", "", v => UIThemeManager.PanelOpacity = v));
+            p.Add(FloatSliderRow("Corner Radius", 2f, 24f, UIThemeManager.CornerRadius, "0", " px", v => UIThemeManager.CornerRadius = v));
+            var toolRow = new VisualElement();
+            toolRow.style.flexDirection = FlexDirection.Row;
+            toolRow.style.flexWrap = Wrap.Wrap;
+            toolRow.style.marginTop = 8;
+            toolRow.Add(T.SmallButton("Copy Theme Code", () => GUIUtility.systemCopyBuffer = UIThemeManager.ExportThemeCode(), T.AccentGreen));
+            toolRow.Add(T.SmallButton("Import Clipboard", () => { if (UIThemeManager.TryImportThemeCode(GUIUtility.systemCopyBuffer)) rebuild?.Invoke(); }, T.AccentCyan));
+            toolRow.Add(T.SmallButton("Reset Interface Theme", () =>
             {
                 UIThemeManager.Current = BuiltInUITheme.IndustrialSteel;
                 UIThemeManager.CustomAccentEnabled = false;
                 UIThemeManager.CustomAccent = UITheme.AccentCyan;
+                UIThemeManager.PanelOpacity = 0.97f;
+                UIThemeManager.CornerRadius = UITheme.PanelRadius;
                 rebuild?.Invoke();
             }, T.AccentRed));
+            p.Add(toolRow);
             p.Add(T.Divider());
 
             p.Add(SectionLabel("Production Panel Accent"));

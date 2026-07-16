@@ -75,7 +75,7 @@ namespace VoxelEngine.UI
             v.style.paddingLeft   = PanelPaddingH;
             v.style.paddingRight  = PanelPaddingH;
             v.style.backgroundColor = new StyleColor(UIThemeManager.PanelColor);
-            Radius(v, PanelRadius);
+            Radius(v, UIThemeManager.CornerRadius);
             Color accent = UIThemeManager.Accent;
             Border(v, 1, new Color(accent.r, accent.g, accent.b, 0.55f));
             return v;

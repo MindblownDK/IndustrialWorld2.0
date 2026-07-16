@@ -9,6 +9,7 @@
 
 using UnityEngine;
 using VoxelEngine.Items;
+using VoxelEngine.UI;
 
 namespace VoxelEngine.Simulation
 {
@@ -55,6 +56,12 @@ namespace VoxelEngine.Simulation
         public int upgradeSlots = 4;
 
         [Header("Visual")]
+        [Tooltip("Optional per-machine UI theme override. IndustrialSteel means use the global theme unless useCustomAccent is enabled.")]
+        public BuiltInUITheme themeOverride = BuiltInUITheme.IndustrialSteel;
+        [Tooltip("When true, uiAccentOverride is used for this machine's UI accent.")]
+        public bool useCustomAccent;
+        public Color uiAccentOverride = new(0.18f, 0.72f, 0.88f, 1f);
+
         [Tooltip("Primary colour for the block mesh and UI accents.")]
         public Color primaryColor = new(0.35f, 0.40f, 0.48f, 1f);
         [Tooltip("Emissive colour for status LEDs when active.")]
