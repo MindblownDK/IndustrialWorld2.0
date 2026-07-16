@@ -39,6 +39,7 @@ namespace VoxelEngine.UI
         private const string PrefPreference = "IndustrialWorld.RecipeBrowser.Preference";
         private const string PrefPlanBatches = "IndustrialWorld.RecipeBrowser.PlanBatches";
         private const string PrefTargetPerMinute = "IndustrialWorld.RecipeBrowser.TargetPerMinute";
+        private const string PrefShowOnlyMissing = "IndustrialWorld.RecipeBrowser.ShowOnlyMissing";
         private const string PrefListFilter = "IndustrialWorld.RecipeBrowser.ListFilter";
         private static bool _settingsLoaded;
         private static int _chainDepth = 4;
@@ -47,6 +48,7 @@ namespace VoxelEngine.UI
         private static RecipeListFilter _listFilter = RecipeListFilter.All;
         private static int _planBatches = 1;
         private static int _targetPerMinute = 60;
+        private static bool _showOnlyMissingMaterials;
         private static System.Action _refreshCurrentDetails;
 
         public static VisualElement BuildPanel(RecipeRegistry registry, Inventory inventory = null)
@@ -96,6 +98,7 @@ namespace VoxelEngine.UI
             _chainPreference = System.Enum.IsDefined(typeof(ChainPreference), pref) ? (ChainPreference)pref : ChainPreference.Auto;
             _planBatches = Mathf.Clamp(PlayerPrefs.GetInt(PrefPlanBatches, _planBatches), 1, 999);
             _targetPerMinute = Mathf.Clamp(PlayerPrefs.GetInt(PrefTargetPerMinute, _targetPerMinute), 1, 9999);
+            _showOnlyMissingMaterials = PlayerPrefs.GetInt(PrefShowOnlyMissing, _showOnlyMissingMaterials ? 1 : 0) != 0;
             int listFilter = PlayerPrefs.GetInt(PrefListFilter, (int)_listFilter);
             _listFilter = System.Enum.IsDefined(typeof(RecipeListFilter), listFilter) ? (RecipeListFilter)listFilter : RecipeListFilter.All;
         }
@@ -108,6 +111,7 @@ namespace VoxelEngine.UI
             PlayerPrefs.SetInt(PrefPreference, (int)_chainPreference);
             PlayerPrefs.SetInt(PrefPlanBatches, _planBatches);
             PlayerPrefs.SetInt(PrefTargetPerMinute, _targetPerMinute);
+            PlayerPrefs.SetInt(PrefShowOnlyMissing, _showOnlyMissingMaterials ? 1 : 0);
             PlayerPrefs.SetInt(PrefListFilter, (int)_listFilter);
             PlayerPrefs.Save();
         }
@@ -565,6 +569,18 @@ namespace VoxelEngine.UI
                 var machineEstimate = BuildMachineEstimate(outputKey, entries);
                 if (machineEstimate != null) summaryBody.Add(machineEstimate);
 
+                int missingTypes = summary.Values.Count(need => Mathf.Max(0, need.Count - need.Have) > 0);
+                int missingTotal = summary.Values.Sum(need => Mathf.Max(0, need.Count - need.Have));
+                var coverage = new Label(missingTypes == 0
+                    ? "Inventory Coverage: Ready to craft from carried materials."
+                    : $"Inventory Coverage: {missingTypes} missing item type{(missingTypes == 1 ? "" : "s")} · {missingTotal} total missing units.");
+                coverage.style.color = new StyleColor(missingTypes == 0 ? T.AccentGreen : T.AccentRed);
+                coverage.style.fontSize = 10;
+                coverage.style.unityFontStyleAndWeight = FontStyle.Bold;
+                coverage.style.whiteSpace = WhiteSpace.Normal;
+                coverage.style.marginBottom = 6;
+                summaryBody.Add(coverage);
+
                 var top = new Label($"Approximate base requirements for {_planBatches} selected output batch{(_planBatches == 1 ? "" : "es")}.");
                 top.style.color = new StyleColor(T.TextMuted);
                 top.style.fontSize = 9;
@@ -572,7 +588,14 @@ namespace VoxelEngine.UI
                 top.style.marginBottom = 8;
                 summaryBody.Add(top);
 
-                foreach (var need in summary.Values.OrderByDescending(n => n.Raw).ThenBy(n => n.Item != null ? n.Item.displayName : string.Empty))
+                var visibleNeeds = summary.Values
+                    .Where(need => !_showOnlyMissingMaterials || Mathf.Max(0, need.Count - need.Have) > 0)
+                    .OrderByDescending(n => n.Raw)
+                    .ThenBy(n => n.Item != null ? n.Item.displayName : string.Empty)
+                    .ToList();
+                if (visibleNeeds.Count == 0 && _showOnlyMissingMaterials)
+                    summaryBody.Add(T.Muted("No missing materials for the current inventory."));
+                foreach (var need in visibleNeeds)
                     summaryBody.Add(MaterialLine(need));
             }
 
@@ -601,6 +624,18 @@ namespace VoxelEngine.UI
                 ApplyInventoryCoverage(summary, inventory);
                 GUIUtility.systemCopyBuffer = BuildPlanText(outputKey, entries, summary);
             }, T.AccentGreen));
+            header.Add(T.SmallButton("Copy Missing", () =>
+            {
+                var summary = BuildSummary();
+                ApplyInventoryCoverage(summary, inventory);
+                GUIUtility.systemCopyBuffer = BuildMissingText(outputKey, entries, summary);
+            }, T.AccentOrange));
+            header.Add(T.SmallButton("Copy CSV", () =>
+            {
+                var summary = BuildSummary();
+                ApplyInventoryCoverage(summary, inventory);
+                GUIUtility.systemCopyBuffer = BuildMaterialsCsv(summary);
+            }, T.AccentCyan));
 
             var targetRow = new VisualElement();
             targetRow.style.flexDirection = FlexDirection.Row;
@@ -611,6 +646,15 @@ namespace VoxelEngine.UI
             targetLabel.style.fontSize = 10;
             targetLabel.style.color = new StyleColor(T.TextSecondary);
             targetRow.Add(targetLabel);
+            Button missingToggle = null;
+            missingToggle = T.SmallButton(_showOnlyMissingMaterials ? "Show All" : "Missing Only", () =>
+            {
+                _showOnlyMissingMaterials = !_showOnlyMissingMaterials;
+                SaveSettings();
+                missingToggle.text = _showOnlyMissingMaterials ? "Show All" : "Missing Only";
+                RefreshSummaryOnly();
+            }, _showOnlyMissingMaterials ? T.AccentGreen : T.TextMuted);
+            targetRow.Add(missingToggle);
             targetRow.Add(T.SmallButton("Reset", () =>
             {
                 _targetPerMinute = 60;
@@ -661,6 +705,42 @@ namespace VoxelEngine.UI
             label.style.unityFontStyleAndWeight = FontStyle.Bold;
             card.Add(label);
             return card;
+        }
+
+        private static string BuildMaterialsCsv(Dictionary<string, MaterialNeed> summary)
+        {
+            var builder = new StringBuilder();
+            builder.AppendLine("Item,Required,Have,Missing,Type");
+            foreach (var need in summary.Values.OrderByDescending(n => n.Raw).ThenBy(n => n.Item != null ? n.Item.displayName : string.Empty))
+            {
+                string name = (need.Item != null ? need.Item.displayName : "Unknown").Replace(""", """");
+                int missing = Mathf.Max(0, need.Count - need.Have);
+                builder.AppendLine($""{name}",{need.Count},{need.Have},{missing},{(need.Raw ? "RAW" : "ITEM")}");
+            }
+            return builder.ToString();
+        }
+
+        private static string BuildMissingText(string outputKey, List<RecipeEntry> entries, Dictionary<string, MaterialNeed> summary)
+        {
+            var selected = entries.FirstOrDefault(entry => OutputKey(entry.Output) == outputKey)?.Output;
+            var builder = new StringBuilder();
+            builder.AppendLine($"Missing Materials: {(selected != null ? selected.displayName : outputKey)}");
+            builder.AppendLine($"Batches: {_planBatches}");
+            builder.AppendLine($"Target/min: {_targetPerMinute}");
+            var missing = summary.Values
+                .Select(need => new { Need = need, Missing = Mathf.Max(0, need.Count - need.Have) })
+                .Where(x => x.Missing > 0)
+                .OrderByDescending(x => x.Need.Raw)
+                .ThenBy(x => x.Need.Item != null ? x.Need.Item.displayName : string.Empty)
+                .ToList();
+            if (missing.Count == 0)
+            {
+                builder.AppendLine("- None. You have all listed materials in inventory.");
+                return builder.ToString();
+            }
+            foreach (var entry in missing)
+                builder.AppendLine($"- {entry.Missing}x {(entry.Need.Item != null ? entry.Need.Item.displayName : "Unknown")}");
+            return builder.ToString();
         }
 
         private static string BuildPlanText(string outputKey, List<RecipeEntry> entries, Dictionary<string, MaterialNeed> summary)

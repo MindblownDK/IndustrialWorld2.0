@@ -140,7 +140,35 @@ namespace VoxelEngine.UI
             if (_root == null || _list == null) return;
             _root.style.display = Pins.Count > 0 ? DisplayStyle.Flex : DisplayStyle.None;
             _list.Clear();
+            if (Pins.Count == 0) return;
+
+            var tools = new VisualElement();
+            tools.style.flexDirection = FlexDirection.Row;
+            tools.style.marginBottom = 6;
+            tools.Add(T.SmallButton("Copy Pins", () => GUIUtility.systemCopyBuffer = BuildPinsText(), T.AccentGreen));
+            tools.Add(T.SmallButton("Clear", ClearAll, T.AccentRed));
+            _list.Add(tools);
+
             foreach (var pin in Pins.ToList()) _list.Add(Card(pin));
+        }
+
+        private static void ClearAll()
+        {
+            Pins.Clear();
+            SavePins();
+            Rebuild();
+        }
+
+        private static string BuildPinsText()
+        {
+            var lines = new List<string> { "Pinned Recipes:" };
+            foreach (var pin in Pins)
+            {
+                lines.Add($"- {pin.OutputCount}x {pin.OutputName} via {pin.Method}");
+                if (pin.Inputs.Count > 0) lines.Add($"  Inputs: {string.Join(" + ", pin.Inputs)}");
+            }
+            return string.Join("
+", lines);
         }
 
         private static VisualElement Card(Pin pin)

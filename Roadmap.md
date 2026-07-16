@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.28.0-dev`
-**Roadmap Version:** `5.28.0-dev`
+**Current Version:** `5.30.0-dev`
+**Roadmap Version:** `5.30.0-dev`
 **Date:** 2026-07-16
 **Status:** Active Implementation — Production Machine Planner
 
@@ -612,7 +612,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 |------|--------|------------------|
 | Assembler Mk.2 / Mk.3 | ✅ COMPLETED | Mk.2 and Mk.3 exist with larger buffers, faster tier multipliers, upgraded visuals, and machine UI binding. |
 | Recipe graph validation | ✅ COMPLETED | Validator and non-destructive repair pass are in place. Thomas validated the graph at 0 errors after repair. Remaining duplicate-output notes are informational/progression warnings. |
-| Production-line UI | 🛠️ WORKING ON | Crusher/Assembler UIs, responsive panels, live Production Statistics, hideable bottleneck/surplus hints, Recipe Browser dependency view, polished recursive chain cards, persistent graph depth/raw/method controls, method filters, method comparison, persistent theme override, persistent pinned recipes, inventory-aware material summary estimates, batch planning, machine-count estimates, copyable production plans, copyable method summaries, and copyable dependency chains exist. Next: planner UX polish and graph export polish. |
+| Production-line UI | 🛠️ WORKING ON | Crusher/Assembler UIs, responsive panels, live Production Statistics, hideable bottleneck/surplus hints, Recipe Browser dependency view, polished recursive chain cards, persistent graph depth/raw/method controls, method filters, method comparison, persistent theme override, persistent pinned recipes with copy/clear controls, inventory-aware material summary estimates, missing-only material filter, CSV export, batch planning, machine-count estimates, copyable production plans, copyable missing-material shopping lists, copyable method summaries, and copyable dependency chains exist. Next: final planner UX polish and transition toward UI theme system work. |
 | Advanced processing | 🟡 PARTIALLY COMPLETE | Chemical processing and oil systems exist in code, but ore washing/enrichment and tailing loops are not complete. |
 | UI theme system | ❌ MISSING | Design tokens exist in `UITheme`; theme ScriptableObjects, runtime theme switching, and custom editor remain planned. |
 | Research UI overhaul | ❌ MISSING | Existing research remains functional; spatial pan/zoom canvas is not implemented yet. |
@@ -1674,6 +1674,39 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.30.0-dev] Planner Export & Pin UX Polish
+
+**Type:** MINOR — new save-compatible planner export and pin HUD quality-of-life controls
+
+**Added / Improved:**
+- Material Summary now has a Missing Only / Show All toggle.
+- Missing-only material filtering persists locally with the other planner settings.
+- Added `Copy CSV`, exporting material summary as CSV with item, required, have, missing, and type columns.
+- Pinned Recipe HUD now has `Copy Pins` to copy all pinned recipe cards as readable text.
+- Pinned Recipe HUD now has `Clear` to remove all pinned recipes at once and persist the cleared state.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Planner export and pin UX polish now includes CSV and pinned-list controls.
+- Next target: final planner UX polish and transition toward broader UI theme system work.
+
+---
+
+### [5.29.0-dev] Production Shopping List Export
+
+**Type:** MINOR — new save-compatible production planner export aid
+
+**Added / Improved:**
+- Material Summary now shows an Inventory Coverage line summarizing missing item types and total missing units.
+- Added `Copy Missing`, exporting only currently missing materials as a shopping list.
+- `Copy Missing` respects current batch count, method preference, depth, and inventory coverage.
+- `Copy Plan` continues exporting the full plan with Have/Missing counts.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Graph export polish now includes missing-material shopping lists.
+- Next target: planner UX polish and graph export polish.
+
+---
 
 ### [5.28.0-dev] Inventory-Aware Production Planner
 
