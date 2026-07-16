@@ -4,7 +4,7 @@
 **Current Version:** `5.41.0-dev`
 **Roadmap Version:** `5.41.0-dev`
 **Date:** 2026-07-16
-**Status:** Active Implementation — Premium UI Polish + Grid Shape Variant Wheel Foundation
+**Status:** Active Implementation — Research UI Spatial Canvas Overhaul
 
 ---
 
@@ -74,7 +74,7 @@ The design goal is a seamless blend of:
 | Weather system | ❌ Missing | No storms, wind variation, planetary climate |
 | Camera / trajectory tools | 🟡 Basic | Needs zoom-to-trajectory and orbit map |
 | UI theming | 🟡 Early | Design system exists, needs 10+ themes and per-block overrides |
-| Research UI | 🟡 Functional | Needs visual overhaul and better UX |
+| Research UI | 🛠️ WORKING ON | Spatial pan/zoom canvas with era labels, glowing connectors, zoom controls, and bottom detail panel (5.41.0-dev) |
 | Damage / destruction | ❌ Missing | Grids and static blocks are indestructible |
 :-|:--|:--|
 | Weapons / combat | ❌ Missing | No swords, guns, missiles, turrets |
@@ -615,7 +615,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Production-line UI | ✅ COMPLETED | Final polish pass: themed-panel tokens everywhere, entrance pop animation (0.18s scale+opacity), hover scale 1.02x + BgHover, responsive minWidth 300/280, flex wrap at 1280×720 to ultrawide, styled scrollers with production accent, micro-interactions on recipe cards and bottleneck hints, theme-aware text colors via UIThemeManager. Crusher/Assembler UIs, live Production Statistics with bottleneck/surplus hints, hideable hints, Recipe Browser dependency view, recursive chain cards, persistent graph depth/raw/method controls, method filters, method comparison, theme override, pinned recipes with copy/clear, inventory-aware material summary, missing-only filter, CSV export, batch planning, machine-count estimates, copyable plans, shopping lists, method summaries, dependency chains — all polished. |
 | Advanced processing | 🟡 PARTIALLY COMPLETE | Chemical processing and oil systems exist in code, but ore washing/enrichment and tailing loops are not complete. |
 | UI theme system | ✅ COMPLETED | `UIThemeDefinition` full spec, 10 enriched assets + `UIThemeDatabase`, USS variables reactive via `OnThemeChanged`, `ThemedPanel`/`ThemedDocument`, `UIThemeApplier`, Interface tab with description, preview, RGB chips, opacity/radius/glow/animation sliders, copy/import/reset — scroll-preserving rebuilds. Premium editor explanatory text removed as requested. |
-| Research UI overhaul | ❌ MISSING | Existing research remains functional; spatial pan/zoom canvas is not implemented yet. |
+| Research UI overhaul | 🛠️ WORKING ON | Spatial pan/zoom canvas with era labels, zoom controls, breathing glow on ready nodes, pulsing connector lines, bottom details panel with unlock previews, search, and Space-to-research shortcut (5.41.0-dev) |
 
 #### New Content
 
@@ -1674,6 +1674,35 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.41.0-dev] Research UI Spatial Pan/Zoom Canvas Overhaul
+
+**Type:** MINOR — new save-compatible UI overhaul (no save/API/balance touch)
+
+**Added / Changed — ResearchUI.cs completely rebuilt:**
+- **Spatial pan/zoom canvas** replaces the old fixed-size tier-column layout. The tree surface now scales via `_canvas.style.scale` with a responsive Zoom slider (− / + / reset buttons) ranging from 35% to 200%.
+- **Zoom controls** in the header bar: [−] [Zoom %] [+] [Reset] buttons with premium dark styling.
+- **Breathing glow effect** on available (ready-but-not-started) research nodes — a subtle pulsing cyan halo that cycles opacity at 1.8 Hz, drawing the player's eye to what they can research next.
+- **Pulsing connector lines** — bezier prerequisite arrows between nodes now pulse cyan when the prerequisite is met and the target node is ready. Completed paths show a solid green line.
+- **Era label** in the header auto-updates based on the highest tier researched (shows "Era 1: Mechanized" through "Era 7: Architect").
+- **Bottom details panel** replaces the old right-side panel — collapsible, shows node name, tier, cost pills with have/need counts, description, action buttons (Research Now / Start at Lab / Cancel), and unlock preview (up to 4 recipe names).
+- **Spacebar shortcut** — pressing SPACE researches the selected node (instant-research from inventory or starts lab research).
+- **Increased card size** to 190×110 with compact cost icons (12px swatches) for better readability.
+- **Cleaner layout** — panel is now 94% width × 92% height (max 1400×860) for better responsiveness.
+- **Node card glow/shadow** — cards have breathing outer glow when available, and subtle hover scale (1.03x) with micro-transitions.
+- Added optional `eraLabel` field to `ResearchNode.cs` for future era categorization.
+
+**Roadmap Status:**
+- 4.6.0 Research UI overhaul: **❌ MISSING → 🛠️ WORKING ON** (spatial canvas complete; power-user polish and era-based grouping next)
+
+**Manual Unity Steps (no setup step needed):**
+1. Open the game scene and press the Research key (default `T`)
+2. Verify the new spatial canvas with zoom controls appears
+3. Click a research node — verify bottom details panel updates
+4. Press SPACE on an available node — verify research starts
+5. Use [+] and [−] zoom buttons — verify canvas scales smoothly
+6. Hover a ready node — verify the breathing glow is visible
+7. Try the category filters on the left — verify tree re-filters
 
 ### [5.41.0-dev] GridBuilder Compile Fix + Shape Wheel Integration Readiness
 

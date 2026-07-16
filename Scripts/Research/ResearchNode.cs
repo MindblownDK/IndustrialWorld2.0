@@ -50,12 +50,16 @@ namespace VoxelEngine.Research
         [TextArea] public string description;
         public Color iconTint = Color.white;
 
-        [Header("Category & Tree placement")]
-        public ResearchCategory category = ResearchCategory.Environment;
-        [Tooltip("Sub-category used to filter the factory research UI into thematic tabs.")]
-        public ResearchSubCategory subCategory = ResearchSubCategory.General;
-        [Range(1, 6)] public int tier = 1;
-        public int column = 0;
+    [Header("Category & Tree placement")]
+    public ResearchCategory category = ResearchCategory.Environment;
+    [Tooltip("Sub-category used to filter the factory research UI into thematic tabs.")]
+    public ResearchSubCategory subCategory = ResearchSubCategory.General;
+    [Range(1, 10)] public int tier = 1;
+    public int column = 0;
+
+    [Header("Visual")]
+    [Tooltip("Optional era label shown above the tier (e.g. 'Era 1: Mechanized'). Auto-assigned if empty.")]
+    public string eraLabel = "";
 
         [Header("Prerequisites")]
         public ResearchNode[] prerequisites = new ResearchNode[0];
