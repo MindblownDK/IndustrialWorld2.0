@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.25.1-dev`
-**Roadmap Version:** `5.25.1-dev`
+**Current Version:** `5.26.0-dev`
+**Roadmap Version:** `5.26.0-dev`
 **Date:** 2026-07-16
 **Status:** Active Implementation — Production Machine Planner
 
@@ -612,7 +612,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 |------|--------|------------------|
 | Assembler Mk.2 / Mk.3 | ✅ COMPLETED | Mk.2 and Mk.3 exist with larger buffers, faster tier multipliers, upgraded visuals, and machine UI binding. |
 | Recipe graph validation | ✅ COMPLETED | Validator and non-destructive repair pass are in place. Thomas validated the graph at 0 errors after repair. Remaining duplicate-output notes are informational/progression warnings. |
-| Production-line UI | 🛠️ WORKING ON | Crusher/Assembler UIs, responsive panels, live Production Statistics, hideable bottleneck/surplus hints, Recipe Browser dependency view, polished recursive chain cards, persistent graph depth/raw/method controls, method filters, persistent theme override, persistent pinned recipes, material summary estimates, batch planning, machine-count estimates, copyable production plans, copyable method summaries, and copyable dependency chains exist. Next: production planner UX polish. |
+| Production-line UI | 🛠️ WORKING ON | Crusher/Assembler UIs, responsive panels, live Production Statistics, hideable bottleneck/surplus hints, Recipe Browser dependency view, polished recursive chain cards, persistent graph depth/raw/method controls, method filters, method comparison, persistent theme override, persistent pinned recipes, material summary estimates, batch planning, machine-count estimates, copyable production plans, copyable method summaries, and copyable dependency chains exist. Next: planner UX polish and graph export polish. |
 | Advanced processing | 🟡 PARTIALLY COMPLETE | Chemical processing and oil systems exist in code, but ore washing/enrichment and tailing loops are not complete. |
 | UI theme system | ❌ MISSING | Design tokens exist in `UITheme`; theme ScriptableObjects, runtime theme switching, and custom editor remain planned. |
 | Research UI overhaul | ❌ MISSING | Existing research remains functional; spatial pan/zoom canvas is not implemented yet. |
@@ -1674,6 +1674,22 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.26.0-dev] Recipe Method Comparison
+
+**Type:** MINOR — new save-compatible recipe planner comparison UI
+
+**Added:**
+- Recipe Browser now shows a Method Comparison section when an item has multiple production methods.
+- Method Comparison displays per-method output/minute and estimated machine count for the current target/minute.
+- Added Prefer buttons for supported alternate paths, allowing players to steer Dependency Chain and Material Summary toward AI-assembler or Assembler Station methods.
+- Preferred method selection persists through the existing planner preference system.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Production planner UX polish now includes method comparison.
+- Next target: planner UX polish and graph export polish.
+
+---
 
 ### [5.25.1-dev] Production Planner Compile Fix
 

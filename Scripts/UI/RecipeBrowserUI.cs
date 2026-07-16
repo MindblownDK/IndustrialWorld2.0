@@ -291,6 +291,13 @@ namespace VoxelEngine.UI
             foreach (var maker in makers)
                 right.Add(RecipeDetailCard(maker));
 
+            if (makers.Count > 1)
+            {
+                right.Add(T.Spacer(8));
+                right.Add(SectionTitle("Method Comparison", T.AccentGold));
+                right.Add(BuildMethodComparison(makers));
+            }
+
             var usedBy = entries.Where(entry => entry.Inputs.Any(input => OutputKey(input.item) == _selectedOutputKey)).ToList();
             right.Add(T.Spacer(8));
             right.Add(SectionTitle("Used By", T.AccentCyan));
@@ -326,6 +333,88 @@ namespace VoxelEngine.UI
             label.style.marginTop = 6;
             label.style.marginBottom = 4;
             return label;
+        }
+
+        private static VisualElement BuildMethodComparison(List<RecipeEntry> makers)
+        {
+            var card = T.Card();
+            card.style.marginBottom = 6;
+            card.style.paddingTop = 8;
+            card.style.paddingBottom = 8;
+            card.style.borderLeftWidth = 4;
+            card.style.borderLeftColor = new StyleColor(T.AccentGold);
+
+            var help = new Label($"Target: {_targetPerMinute}/min · Click Prefer to steer Dependency Chain + Material Summary.");
+            help.style.color = new StyleColor(T.TextMuted);
+            help.style.fontSize = 9;
+            help.style.whiteSpace = WhiteSpace.Normal;
+            help.style.marginBottom = 6;
+            card.Add(help);
+
+            foreach (var maker in makers.OrderByDescending(m => OutputPerMinute(m)).ThenBy(m => m.Kind))
+                card.Add(MethodRow(maker));
+
+            return card;
+        }
+
+        private static VisualElement MethodRow(RecipeEntry maker)
+        {
+            var row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.style.marginBottom = 5;
+            row.style.paddingTop = 5;
+            row.style.paddingBottom = 5;
+            row.style.paddingLeft = 6;
+            row.style.paddingRight = 6;
+            row.style.backgroundColor = new StyleColor(new Color(1f, 1f, 1f, 0.035f));
+            T.Radius(row, 6);
+
+            var method = new Label(maker.Kind);
+            method.style.width = 118;
+            method.style.color = new StyleColor(T.TextPrimary);
+            method.style.fontSize = 10;
+            method.style.unityFontStyleAndWeight = FontStyle.Bold;
+            row.Add(method);
+
+            float rate = OutputPerMinute(maker);
+            int machines = rate > 0.001f ? Mathf.Max(1, Mathf.CeilToInt(_targetPerMinute / rate)) : 0;
+
+            var stats = new Label(rate > 0f ? $"{rate:0.#}/min each · {machines} needed" : "Instant/manual method");
+            stats.style.flexGrow = 1;
+            stats.style.color = new StyleColor(T.TextSecondary);
+            stats.style.fontSize = 10;
+            row.Add(stats);
+
+            var prefer = PreferenceForKind(maker.Kind);
+            bool active = prefer.HasValue && _chainPreference == prefer.Value;
+            if (prefer.HasValue)
+            {
+                row.Add(T.SmallButton(active ? "Preferred" : "Prefer", () =>
+                {
+                    _chainPreference = prefer.Value;
+                    SaveSettings();
+                    _refreshCurrentDetails?.Invoke();
+                }, active ? T.AccentGreen : T.AccentGold));
+            }
+
+            return row;
+        }
+
+        private static float OutputPerMinute(RecipeEntry maker)
+        {
+            if (maker == null || maker.OutputCount <= 0 || maker.Seconds <= 0f) return 0f;
+            return maker.OutputCount * 60f / Mathf.Max(0.01f, maker.Seconds);
+        }
+
+        private static ChainPreference? PreferenceForKind(string kind)
+        {
+            return kind switch
+            {
+                "AI-assembler" => ChainPreference.AIAssembler,
+                "Assembler Station" => ChainPreference.AssemblerStation,
+                _ => null
+            };
         }
 
         private static VisualElement RecipeDetailCard(RecipeEntry entry, bool compact = false)
