@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.12.8-dev`
-**Roadmap Version:** `5.12.8-dev`
+**Current Version:** `5.13.0-dev`
+**Roadmap Version:** `5.13.0-dev`
 **Date:** 2026-07-16
-**Status:** Active Implementation — Machine UI Recovery & Compact Power Relays
+**Status:** Active Implementation — Production Statistics Bottleneck Hints
 
 ---
 
@@ -612,7 +612,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 |------|--------|------------------|
 | Assembler Mk.2 / Mk.3 | ✅ COMPLETED | Mk.2 and Mk.3 exist with larger buffers, faster tier multipliers, upgraded visuals, and machine UI binding. |
 | Recipe graph validation | ✅ COMPLETED | Validator and non-destructive repair pass are in place. Thomas validated the graph at 0 errors after repair. Remaining duplicate-output notes are informational/progression warnings. |
-| Production-line UI | 🛠️ WORKING ON | Crusher/Assembler UIs, responsive panels, and first live Production Statistics panel exist. Next: bottleneck hints, recipe dependency browser, and theme overrides. |
+| Production-line UI | 🛠️ WORKING ON | Crusher/Assembler UIs, responsive panels, live Production Statistics, and bottleneck/surplus hints exist. Next: recipe dependency browser and theme overrides. |
 | Advanced processing | 🟡 PARTIALLY COMPLETE | Chemical processing and oil systems exist in code, but ore washing/enrichment and tailing loops are not complete. |
 | UI theme system | ❌ MISSING | Design tokens exist in `UITheme`; theme ScriptableObjects, runtime theme switching, and custom editor remain planned. |
 | Research UI overhaul | ❌ MISSING | Existing research remains functional; spatial pan/zoom canvas is not implemented yet. |
@@ -1674,6 +1674,22 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.13.0-dev] Production Bottleneck Hints
+
+**Type:** MINOR — new save-compatible production-line insight UI
+
+**Added:**
+- Production Statistics now includes a Bottleneck Hints card.
+- Items consumed faster than they are produced are listed as shortages with the extra production per minute needed.
+- Items being produced with no recent consumer are listed as idle surplus.
+- Stable production displays a green “Production Stable” message.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Production-line UI remains **WORKING ON** with bottleneck hints now started.
+- Next target: Recipe Browser dependency view.
+
+---
 
 ### [5.12.8-dev] Wire Cancel, Connector Snapping & Generator Battery Pause
 

@@ -1,5 +1,7 @@
 // Assets/Scripts/VoxelEngine/UI/ProductionStatsUI.cs
 
+using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.UIElements;
 using VoxelEngine.Simulation;
@@ -35,6 +37,8 @@ namespace VoxelEngine.UI
 
             scroll.Add(T.StatRow("↕", "Tracked Items", snapshot.Count.ToString(), T.AccentCyan));
             scroll.Add(T.Spacer(6));
+            scroll.Add(BuildBottleneckHints(snapshot));
+            scroll.Add(T.Spacer(8));
 
             foreach (var stat in snapshot)
                 scroll.Add(Row(stat));
@@ -56,6 +60,93 @@ namespace VoxelEngine.UI
             row.Add(title);
             var (pill, _) = T.StatusPill("LIVE", T.AccentGreen);
             row.Add(pill);
+            return row;
+        }
+
+        private static VisualElement BuildBottleneckHints(IReadOnlyList<ProductionStatsTracker.ItemStats> snapshot)
+        {
+            var card = T.Card();
+            card.style.marginBottom = 6;
+            card.style.borderLeftWidth = 3;
+
+            var shortages = snapshot
+                .Where(stat => stat.ConsumedPerMinute > 0.01f && stat.NetPerMinute < -0.01f)
+                .OrderBy(stat => stat.NetPerMinute)
+                .Take(5)
+                .ToList();
+
+            var idleSurplus = snapshot
+                .Where(stat => stat.ProducedPerMinute > 0.01f && stat.ConsumedPerMinute <= 0.01f)
+                .OrderByDescending(stat => stat.ProducedPerMinute)
+                .Take(3)
+                .ToList();
+
+            bool hasShortage = shortages.Count > 0;
+            card.style.borderLeftColor = new StyleColor(hasShortage ? T.AccentRed : T.AccentGreen);
+
+            var title = new Label(hasShortage ? "⚠ Bottleneck Hints" : "✓ Production Stable");
+            title.style.color = new StyleColor(hasShortage ? T.AccentRed : T.AccentGreen);
+            title.style.fontSize = 13;
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            card.Add(title);
+
+            if (!hasShortage)
+            {
+                var ok = new Label("No consumed item is currently outrunning its production over the last minute.");
+                ok.style.color = new StyleColor(T.TextSecondary);
+                ok.style.fontSize = 10;
+                ok.style.whiteSpace = WhiteSpace.Normal;
+                ok.style.marginTop = 4;
+                card.Add(ok);
+            }
+            else
+            {
+                foreach (var stat in shortages)
+                    card.Add(HintLine("Shortage", stat, T.AccentRed,
+                        $"Produce {Mathf.Abs(stat.NetPerMinute):0}/min more {ItemName(stat)}"));
+            }
+
+            if (idleSurplus.Count > 0)
+            {
+                var surplusTitle = new Label("Idle Surplus");
+                surplusTitle.style.color = new StyleColor(T.AccentGold);
+                surplusTitle.style.fontSize = 10;
+                surplusTitle.style.unityFontStyleAndWeight = FontStyle.Bold;
+                surplusTitle.style.marginTop = 8;
+                card.Add(surplusTitle);
+                foreach (var stat in idleSurplus)
+                    card.Add(HintLine("Surplus", stat, T.AccentGold,
+                        $"Producing {stat.ProducedPerMinute:0}/min with no recent consumer"));
+            }
+
+            return card;
+        }
+
+        private static string ItemName(ProductionStatsTracker.ItemStats stat)
+        {
+            return stat.Item != null ? stat.Item.displayName : "Unknown Item";
+        }
+
+        private static VisualElement HintLine(string label, ProductionStatsTracker.ItemStats stat, Color accent, string text)
+        {
+            var row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.style.marginTop = 5;
+
+            var tag = new Label(label.ToUpperInvariant());
+            tag.style.width = 62;
+            tag.style.fontSize = 8;
+            tag.style.unityFontStyleAndWeight = FontStyle.Bold;
+            tag.style.color = new StyleColor(accent);
+            row.Add(tag);
+
+            var body = new Label(text);
+            body.style.flexGrow = 1;
+            body.style.fontSize = 10;
+            body.style.color = new StyleColor(T.TextSecondary);
+            body.style.whiteSpace = WhiteSpace.Normal;
+            row.Add(body);
             return row;
         }
 
