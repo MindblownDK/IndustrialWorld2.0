@@ -82,6 +82,13 @@ namespace VoxelEngine.Simulation
             TrimOldEvents();
         }
 
+        public void Clear()
+        {
+            _events.Clear();
+            _producedTotals.Clear();
+            _consumedTotals.Clear();
+        }
+
         public IReadOnlyList<ItemStats> GetSnapshot()
         {
             TrimOldEvents();

@@ -433,6 +433,26 @@ namespace VoxelEngine.UI
             Refresh();
         }
 
+        public void OpenRecipeBrowserFor(ItemDefinition item)
+        {
+            if (!_inventoryOpen) UIState.PushBlock();
+            RecipeBrowserUI.FocusItem(item);
+            _inventoryOpen = true;
+            _recipeBrowserOpen = true;
+            _productionStatsOpen = false;
+            CraftingScreen.Visible = false;
+            _rightContainer = null; _openChest = null;
+            _openFurnace = null; _openElectric = null; _openCoalGen = null; _openStation = null; _openQuarry = null;
+            _openReactor = null; _openTurbine = null; _openPortReactor = null; _openProcessor = null; _openReprocessor = null;
+            _openElectrolyser = null; _openHydroEngine = null; _openGasTank = null; _openWaterPump = null; _openWindTurbine = null;
+            _openGridBlock = null; _openGridTerminal = null; _openOilRefinery = null; _openChemPlant = null;
+            _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null; _openCraftTerminal = null;
+            _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
+            _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null; _openCrusher = null; _openAssembler = null;
+            UnlockCursor();
+            Refresh();
+        }
+
         // Cached synthetic terminal so we don't allocate one each frame.
         private VoxelEngine.Storage.StorageTerminal _wirelessTerminalProxy;
 

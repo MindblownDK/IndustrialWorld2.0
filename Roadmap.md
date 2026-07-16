@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.30.1-dev`
-**Roadmap Version:** `5.30.1-dev`
+**Current Version:** `5.33.0-dev`
+**Roadmap Version:** `5.33.0-dev`
 **Date:** 2026-07-16
 **Status:** Active Implementation — Production Machine Planner
 
@@ -614,7 +614,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Recipe graph validation | ✅ COMPLETED | Validator and non-destructive repair pass are in place. Thomas validated the graph at 0 errors after repair. Remaining duplicate-output notes are informational/progression warnings. |
 | Production-line UI | 🛠️ WORKING ON | Crusher/Assembler UIs, responsive panels, live Production Statistics, hideable bottleneck/surplus hints, Recipe Browser dependency view, polished recursive chain cards, persistent graph depth/raw/method controls, method filters, method comparison, persistent theme override, persistent pinned recipes with copy/clear controls, inventory-aware material summary estimates, missing-only material filter, CSV export, batch planning, machine-count estimates, copyable production plans, copyable missing-material shopping lists, copyable method summaries, and copyable dependency chains exist. Next: final planner UX polish and transition toward UI theme system work. |
 | Advanced processing | 🟡 PARTIALLY COMPLETE | Chemical processing and oil systems exist in code, but ore washing/enrichment and tailing loops are not complete. |
-| UI theme system | ❌ MISSING | Design tokens exist in `UITheme`; theme ScriptableObjects, runtime theme switching, and custom editor remain planned. |
+| UI theme system | 🛠️ WORKING ON | `UIThemeDefinition`, persistent built-in theme selection, Interface settings tab, and production-panel accent overrides now exist. Full USS variable application and custom editor remain planned. |
 | Research UI overhaul | ❌ MISSING | Existing research remains functional; spatial pan/zoom canvas is not implemented yet. |
 
 #### New Content
@@ -1674,6 +1674,58 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.33.0-dev] UI Theme System Starter
+
+**Type:** MINOR — new save-compatible interface/theme settings foundation
+
+**Added:**
+- Added `UIThemeDefinition` ScriptableObject type for authored theme assets.
+- Added `BuiltInUITheme` with ten roadmap themes: Industrial Steel, Midnight Operator, Hazard Amber, Arctic Frost, Bio-Luminescent, Military Olive, Neon Cyber, Corporate Clean, Rust Belt, and Void Black.
+- Added `UIThemeManager` with persistent PlayerPrefs-backed theme selection and accent lookup.
+- Added an `Interface` tab to both Main Menu settings and in-game Pause settings.
+- Interface tab lets players choose the global UI theme and production panel accent override.
+- Existing production Recipe Browser and Production Statistics panels continue using production accent overrides.
+
+**Roadmap Continued — 4.6.0 UI Theme System:**
+- Broader UI theme system work is now started.
+- Next targets: USS variable application, per-block UI overrides, and custom theme editor.
+
+---
+
+### [5.32.0-dev] Recipe Browser Craftability Filters
+
+**Type:** MINOR — new save-compatible recipe browser filtering/sorting controls
+
+**Added:**
+- Added `Have Mats` filter to Recipe Browser.
+- Have Mats filters visible recipes down to methods craftable from the player's current carried inventory.
+- Added sort toggle between `Sort: Name` and `Sort: Methods`.
+- Recipe Browser result counts continue showing visible output items and recipe methods after filters are applied.
+- Craftability and sort preferences persist locally through PlayerPrefs.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Recipe browser now supports craftability filtering and sorting.
+- Next target: final planner UX polish and transition toward broader UI theme system work.
+
+---
+
+### [5.31.0-dev] Production Stats Actions & Planner Polish
+
+**Type:** MINOR — new save-compatible production statistics controls and planner navigation
+
+**Added / Improved:**
+- Production Statistics now has `Copy Stats`, exporting current production/consumption/net rates as text.
+- Production Statistics now has `Reset`, clearing the current session's production tracker.
+- Bottleneck hint visibility and hidden hint items now persist locally through PlayerPrefs.
+- Bottleneck/surplus hint rows now include `View`, opening Recipe Browser focused on that item.
+- Material Summary keeps Missing Only and CSV export from the previous planner export pass.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Final planner UX polish continues with cross-panel navigation and stats export/reset actions.
+- Next target: transition toward broader UI theme system work.
+
+---
 
 ### [5.30.1-dev] Planner Export Compile Fix
 

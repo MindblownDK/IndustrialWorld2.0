@@ -47,7 +47,7 @@ namespace VoxelEngine.Menu
         private int _selectedSpawnPlanet = 0;  // which planet the player will spawn on
 
         // Settings tabs.
-        private enum STab { Display, Camera, Audio, Saving, Keybinds }
+        private enum STab { Display, Camera, Interface, Audio, Saving, Keybinds }
         private STab _settingsTab = STab.Display;
 
         // ── Cached fonts (loaded once per scene-load) ──────────────
@@ -362,6 +362,7 @@ namespace VoxelEngine.Menu
             tabs.style.marginBottom  = 12;
             tabs.Add(TabBtn("Display",  STab.Display));
             tabs.Add(TabBtn("Camera",   STab.Camera));
+            tabs.Add(TabBtn("Interface", STab.Interface));
             tabs.Add(TabBtn("Audio",    STab.Audio));
             tabs.Add(TabBtn("Saving",   STab.Saving));
             tabs.Add(TabBtn("Keybinds", STab.Keybinds));
@@ -377,6 +378,7 @@ namespace VoxelEngine.Menu
             {
                 case STab.Display:  DisplayTab(scroll);  break;
                 case STab.Camera:   CameraTab(scroll);   break;
+                case STab.Interface: SettingsUI.InterfaceTab(scroll, BuildUI); break;
                 case STab.Audio:    AudioTab(scroll);     break;
                 case STab.Saving:   SavingTab(scroll);    break;
                 case STab.Keybinds: KeybindTab(scroll);   break;

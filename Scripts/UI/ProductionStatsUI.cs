@@ -2,6 +2,7 @@
 
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using UnityEngine;
 using UnityEngine.UIElements;
 using VoxelEngine.Items;
@@ -12,17 +13,53 @@ namespace VoxelEngine.UI
 {
     public static class ProductionStatsUI
     {
+        private const string PrefHintsHidden = "IndustrialWorld.ProductionStats.HintsHidden";
+        private const string PrefHiddenItems = "IndustrialWorld.ProductionStats.HiddenItems";
+        private static bool _loadedPrefs;
         private static bool _hintsHidden;
         private static readonly HashSet<string> HiddenHintItems = new();
+        private static void LoadPrefs()
+        {
+            if (_loadedPrefs) return;
+            _loadedPrefs = true;
+            _hintsHidden = PlayerPrefs.GetInt(PrefHintsHidden, 0) != 0;
+            HiddenHintItems.Clear();
+            string hidden = PlayerPrefs.GetString(PrefHiddenItems, string.Empty);
+            if (!string.IsNullOrWhiteSpace(hidden))
+                foreach (var item in hidden.Split('|'))
+                    if (!string.IsNullOrWhiteSpace(item)) HiddenHintItems.Add(item);
+        }
+
+        private static void SavePrefs()
+        {
+            PlayerPrefs.SetInt(PrefHintsHidden, _hintsHidden ? 1 : 0);
+            PlayerPrefs.SetString(PrefHiddenItems, string.Join("|", HiddenHintItems));
+            PlayerPrefs.Save();
+        }
+
+        private static string BuildStatsText(IReadOnlyList<ProductionStatsTracker.ItemStats> snapshot)
+        {
+            var builder = new StringBuilder();
+            builder.AppendLine("Production Statistics");
+            foreach (var stat in snapshot)
+            {
+                string name = stat.Item != null ? stat.Item.displayName : "Unknown";
+                builder.AppendLine($"- {name}: +{stat.ProducedPerMinute:0}/min, -{stat.ConsumedPerMinute:0}/min, net {stat.NetPerMinute:+0;-0;0}/min, total {stat.NetTotal:+0;-0;0}");
+            }
+            return builder.ToString();
+        }
+
         public static VisualElement BuildPanel()
         {
+            LoadPrefs();
             var panel = T.MachinePanel();
             panel.style.left = new StyleLength(new Length(34f, LengthUnit.Percent));
             panel.style.right = 12;
             panel.style.width = new StyleLength(new Length(54f, LengthUnit.Percent));
             panel.style.maxWidth = new StyleLength(new Length(62f, LengthUnit.Percent));
 
-            panel.Add(Header());
+            var snapshot = ProductionStatsTracker.Instance.GetSnapshot();
+            panel.Add(Header(snapshot));
             panel.Add(T.AccentDivider(ProductionPanelThemeState.Accent));
 
             var scroll = new ScrollView(ScrollViewMode.Vertical);
@@ -31,7 +68,6 @@ namespace VoxelEngine.UI
             T.StyleScroller(scroll);
             panel.Add(scroll);
 
-            var snapshot = ProductionStatsTracker.Instance.GetSnapshot();
             if (snapshot.Count == 0)
             {
                 scroll.Add(T.Muted("No production has been recorded yet. Run a Crusher, Assembler, or Electric Furnace batch to populate this panel."));
@@ -51,7 +87,7 @@ namespace VoxelEngine.UI
             return panel;
         }
 
-        private static VisualElement Header()
+        private static VisualElement Header(IReadOnlyList<ProductionStatsTracker.ItemStats> snapshot)
         {
             var row = new VisualElement();
             row.style.flexDirection = FlexDirection.Row;
@@ -66,6 +102,12 @@ namespace VoxelEngine.UI
                 ProductionPanelThemeState.Next();
                 GameUIController.Instance?.RequestRefresh();
             }, ProductionPanelThemeState.Accent));
+            row.Add(T.SmallButton("Copy Stats", () => GUIUtility.systemCopyBuffer = BuildStatsText(snapshot), T.AccentGreen));
+            row.Add(T.SmallButton("Reset", () =>
+            {
+                ProductionStatsTracker.Instance.Clear();
+                GameUIController.Instance?.RequestRefresh();
+            }, T.AccentRed));
             var (pill, _) = T.StatusPill("LIVE", T.AccentGreen);
             row.Add(pill);
             return row;
@@ -87,7 +129,7 @@ namespace VoxelEngine.UI
             title.style.unityFontStyleAndWeight = FontStyle.Bold;
             title.style.flexGrow = 1;
             header.Add(title);
-            header.Add(T.SmallButton(_hintsHidden ? "Show" : "Hide All", () => _hintsHidden = !_hintsHidden, _hintsHidden ? T.AccentGreen : T.TextMuted));
+            header.Add(T.SmallButton(_hintsHidden ? "Show" : "Hide All", () => { _hintsHidden = !_hintsHidden; SavePrefs(); GameUIController.Instance?.RequestRefresh(); }, _hintsHidden ? T.AccentGreen : T.TextMuted));
             card.Add(header);
 
             if (_hintsHidden)
@@ -154,7 +196,7 @@ namespace VoxelEngine.UI
                 restore.style.flexDirection = FlexDirection.Row;
                 restore.style.flexWrap = Wrap.Wrap;
                 restore.style.marginTop = 8;
-                restore.Add(T.SmallButton("Unhide All Items", () => HiddenHintItems.Clear(), T.AccentGreen));
+                restore.Add(T.SmallButton("Unhide All Items", () => { HiddenHintItems.Clear(); SavePrefs(); GameUIController.Instance?.RequestRefresh(); }, T.AccentGreen));
                 card.Add(restore);
             }
 
@@ -194,7 +236,10 @@ namespace VoxelEngine.UI
             row.Add(body);
 
             if (stat.Item != null)
-                row.Add(T.SmallButton("Hide", () => HiddenHintItems.Add(ItemKey(stat.Item)), T.TextMuted));
+            {
+                row.Add(T.SmallButton("View", () => GameUIController.Instance?.OpenRecipeBrowserFor(stat.Item), T.AccentCyan));
+                row.Add(T.SmallButton("Hide", () => { HiddenHintItems.Add(ItemKey(stat.Item)); SavePrefs(); GameUIController.Instance?.RequestRefresh(); }, T.TextMuted));
+            }
             return row;
         }
 

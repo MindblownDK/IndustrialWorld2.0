@@ -117,6 +117,39 @@ namespace VoxelEngine.UI
             }
         }
 
+        /// <summary>Interface theming and production-planner presentation.</summary>
+        public static void InterfaceTab(VisualElement p, Action rebuild)
+        {
+            p.Add(SectionLabel("Global UI Theme"));
+            var themes = (BuiltInUITheme[])Enum.GetValues(typeof(BuiltInUITheme));
+            var labels = new List<string>();
+            int selected = 0;
+            for (int i = 0; i < themes.Length; i++)
+            {
+                labels.Add(UIThemeManager.Label(themes[i]));
+                if (themes[i] == UIThemeManager.Current) selected = i;
+            }
+            p.Add(Segmented(labels, selected, i => { UIThemeManager.Current = themes[i]; rebuild?.Invoke(); }));
+            p.Add(Hint("This starts the theme pipeline with persistent theme selection. Production planning panels already use themed accent colors."));
+            p.Add(T.Divider());
+
+            p.Add(SectionLabel("Production Panel Accent"));
+            var prodLabels = new List<string> { "Steel", "Amber", "Cyan", "Violet" };
+            int prodIndex = ProductionPanelThemeState.Current switch
+            {
+                ProductionPanelTheme.AmberFactory => 1,
+                ProductionPanelTheme.CyanLogistics => 2,
+                ProductionPanelTheme.VioletResearch => 3,
+                _ => 0
+            };
+            p.Add(Segmented(prodLabels, prodIndex, i =>
+            {
+                while ((int)ProductionPanelThemeState.Current != i) ProductionPanelThemeState.Next();
+                rebuild?.Invoke();
+            }));
+            p.Add(Hint("Overrides Recipe Browser and Production Statistics accent colors without affecting gameplay."));
+        }
+
         /// <summary>Saving — autosave cadence chooser.</summary>
         public static void SavingTab(VisualElement p, Action rebuild)
         {
