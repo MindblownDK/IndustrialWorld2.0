@@ -213,6 +213,10 @@ namespace VoxelEngine.UI
             right.Add(SectionTitle("Dependency Chain", T.AccentPurple));
             right.Add(BuildDependencyTree(_selectedOutputKey, entries));
 
+            right.Add(T.Spacer(8));
+            right.Add(SectionTitle("Material Summary", T.AccentGold));
+            right.Add(BuildMaterialSummary(_selectedOutputKey, entries));
+
             return right;
         }
 
@@ -259,6 +263,122 @@ namespace VoxelEngine.UI
             }
 
             return card;
+        }
+
+        private sealed class MaterialNeed
+        {
+            public ItemDefinition Item;
+            public int Count;
+            public bool Raw;
+        }
+
+        private static VisualElement BuildMaterialSummary(string outputKey, List<RecipeEntry> entries)
+        {
+            var card = T.Card();
+            card.style.marginBottom = 6;
+            card.style.paddingTop = 10;
+            card.style.paddingBottom = 10;
+            card.style.borderLeftWidth = 4;
+            card.style.borderLeftColor = new StyleColor(T.AccentGold);
+
+            var summary = new Dictionary<string, MaterialNeed>();
+            BuildMaterialSummaryRecursive(outputKey, entries, requiredCount: 1, depth: 0, summary, new HashSet<string>());
+
+            if (summary.Count == 0)
+            {
+                card.Add(T.Muted("No base materials found for the selected path."));
+                return card;
+            }
+
+            var top = new Label("Approximate base requirements for one selected output batch.");
+            top.style.color = new StyleColor(T.TextMuted);
+            top.style.fontSize = 9;
+            top.style.whiteSpace = WhiteSpace.Normal;
+            top.style.marginBottom = 8;
+            card.Add(top);
+
+            foreach (var need in summary.Values.OrderByDescending(n => n.Raw).ThenBy(n => n.Item != null ? n.Item.displayName : string.Empty))
+                card.Add(MaterialLine(need));
+
+            return card;
+        }
+
+        private static VisualElement MaterialLine(MaterialNeed need)
+        {
+            var row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.style.marginBottom = 4;
+
+            var tag = new Label(need.Raw ? "RAW" : "ITEM");
+            tag.style.width = 44;
+            tag.style.fontSize = 8;
+            tag.style.unityFontStyleAndWeight = FontStyle.Bold;
+            tag.style.color = new StyleColor(need.Raw ? T.TextMuted : T.AccentCyan);
+            row.Add(tag);
+
+            var swatch = new VisualElement();
+            swatch.style.width = 9;
+            swatch.style.height = 9;
+            swatch.style.marginRight = 7;
+            swatch.style.backgroundColor = new StyleColor(need.Item != null ? need.Item.iconTint : T.TextMuted);
+            T.Radius(swatch, 5);
+            row.Add(swatch);
+
+            var label = new Label($"{need.Count}x {(need.Item != null ? need.Item.displayName : "Unknown")}");
+            label.style.flexGrow = 1;
+            label.style.color = new StyleColor(T.TextSecondary);
+            label.style.fontSize = 10;
+            row.Add(label);
+            return row;
+        }
+
+        private static void BuildMaterialSummaryRecursive(
+            string outputKey,
+            List<RecipeEntry> entries,
+            int requiredCount,
+            int depth,
+            Dictionary<string, MaterialNeed> summary,
+            HashSet<string> path)
+        {
+            if (string.IsNullOrEmpty(outputKey) || requiredCount <= 0 || depth > _chainDepth + 1) return;
+            var candidates = entries
+                .Where(entry => OutputKey(entry.Output) == outputKey)
+                .OrderBy(entry => entry.Inputs.Count)
+                .ThenBy(entry => entry.Seconds)
+                .ToList();
+            var recipe = SelectPreferredRecipe(candidates);
+            if (recipe == null || recipe.Inputs.Count == 0 || path.Contains(outputKey))
+            {
+                var item = entries.FirstOrDefault(entry => OutputKey(entry.Output) == outputKey)?.Output;
+                AddNeed(summary, outputKey, item, requiredCount, raw: true);
+                return;
+            }
+
+            var nextPath = new HashSet<string>(path) { outputKey };
+            int batches = Mathf.Max(1, Mathf.CeilToInt(requiredCount / (float)Mathf.Max(1, recipe.OutputCount)));
+            foreach (var input in recipe.Inputs.Where(input => input.item != null && input.count > 0))
+            {
+                string inputKey = OutputKey(input.item);
+                bool craftable = entries.Any(entry => OutputKey(entry.Output) == inputKey);
+                int needed = input.count * batches;
+                if (craftable)
+                    BuildMaterialSummaryRecursive(inputKey, entries, needed, depth + 1, summary, nextPath);
+                else
+                    AddNeed(summary, inputKey, input.item, needed, raw: true);
+            }
+        }
+
+        private static void AddNeed(Dictionary<string, MaterialNeed> summary, string key, ItemDefinition item, int count, bool raw)
+        {
+            if (string.IsNullOrEmpty(key) || count <= 0) return;
+            if (!summary.TryGetValue(key, out var need))
+            {
+                need = new MaterialNeed { Item = item, Raw = raw };
+                summary[key] = need;
+            }
+            need.Count += count;
+            need.Raw &= raw;
         }
 
         private static VisualElement BuildDependencyTree(string outputKey, List<RecipeEntry> entries)

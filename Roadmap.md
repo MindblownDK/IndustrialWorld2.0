@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.19.0-dev`
-**Roadmap Version:** `5.19.0-dev`
+**Current Version:** `5.20.0-dev`
+**Roadmap Version:** `5.20.0-dev`
 **Date:** 2026-07-16
-**Status:** Active Implementation — Persistent Production UI Settings
+**Status:** Active Implementation — Recipe Material Summary
 
 ---
 
@@ -612,7 +612,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 |------|--------|------------------|
 | Assembler Mk.2 / Mk.3 | ✅ COMPLETED | Mk.2 and Mk.3 exist with larger buffers, faster tier multipliers, upgraded visuals, and machine UI binding. |
 | Recipe graph validation | ✅ COMPLETED | Validator and non-destructive repair pass are in place. Thomas validated the graph at 0 errors after repair. Remaining duplicate-output notes are informational/progression warnings. |
-| Production-line UI | 🛠️ WORKING ON | Crusher/Assembler UIs, responsive panels, live Production Statistics, hideable bottleneck/surplus hints, Recipe Browser dependency view, polished recursive chain cards, graph depth/raw toggles, persistent theme override, recipe method preference, and persistent pinned recipes exist. Next: richer graph controls. |
+| Production-line UI | 🛠️ WORKING ON | Crusher/Assembler UIs, responsive panels, live Production Statistics, hideable bottleneck/surplus hints, Recipe Browser dependency view, polished recursive chain cards, graph depth/raw toggles, persistent theme override, recipe method preference, persistent pinned recipes, and material summary estimates exist. Next: graph export/production planning controls. |
 | Advanced processing | 🟡 PARTIALLY COMPLETE | Chemical processing and oil systems exist in code, but ore washing/enrichment and tailing loops are not complete. |
 | UI theme system | ❌ MISSING | Design tokens exist in `UITheme`; theme ScriptableObjects, runtime theme switching, and custom editor remain planned. |
 | Research UI overhaul | ❌ MISSING | Existing research remains functional; spatial pan/zoom canvas is not implemented yet. |
@@ -1674,6 +1674,22 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.20.0-dev] Recipe Material Summary
+
+**Type:** MINOR — new save-compatible recipe planning summary
+
+**Added:**
+- Recipe Browser details now include a Material Summary section.
+- Material Summary recursively follows the selected dependency path and estimates base/raw input requirements for one selected output batch.
+- Summary respects the current dependency chain depth and recipe method preference.
+- Materials are grouped by item with counts and raw/item tags.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Richer recipe graph controls continue with material summary planning.
+- Next target: graph export / production planning controls.
+
+---
 
 ### [5.19.0-dev] Persistent Production UI Settings
 
