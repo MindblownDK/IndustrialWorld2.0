@@ -1,23 +1,37 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridCameraBlock.cs
 //
-// A camera block that captures live video and feeds it to nearby GridScreenBlocks.
-// Place on a grid, right-click to configure which screen(s) display the feed.
-// v5.48.0-dev — Camera feed for grid screens.
+// A camera block that captures live video and feeds it to linked GridScreenBlocks.
+// Place on a grid, right-click a screen, choose Camera mode, and select the camera source.
+// v5.51.0-dev — Live RenderTexture feed + camera status LED states.
 
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace VoxelEngine.GridSystem
 {
-    public class GridCameraBlock : GridBlock, IGridDataProvider
+    public class GridCameraBlock : GridBlock, IGridCameraFeedProvider
     {
         [Header("Camera")]
         public float fieldOfView = 70f;
         public float cameraRange = 100f;
-        public Vector3 cameraOffset = new Vector3(0f, 0.3f, 0f);
+        public Vector3 cameraOffset = new Vector3(0f, 0.58f, -2.40f);
         public Vector3 cameraRotation = Vector3.zero;
+        [Tooltip("Generated camera prefabs place the lens on local -Z. Keep this enabled so the feed looks out through the lens.")]
+        public bool lensLooksAlongNegativeZ = true;
+        [Range(128, 2048)] public int feedResolution = 512;
+        [Range(1, 10)] public int renderIntervalFrames = 2;
 
+        [Header("Status LED")]
+        public Color feedInUseColor = new Color(0.18f, 0.95f, 0.38f);
+        public Color onlineIdleColor = new Color(1.00f, 0.74f, 0.18f);
+        public Color offlineColor = new Color(0.95f, 0.12f, 0.08f);
+
+        private readonly Dictionary<int, int> _feedConsumers = new();
         private Camera _captureCamera;
         private RenderTexture _renderTexture;
+        private Renderer _statusLedRenderer;
+        private Light _statusLedLight;
+        private MaterialPropertyBlock _ledPropertyBlock;
         private bool _initialized;
 
         public RenderTexture FeedTexture
@@ -29,60 +43,159 @@ namespace VoxelEngine.GridSystem
             }
         }
 
-        public string SourceName => blockName;
-        public string DataCategory => "Camera";
-        public string GetDisplayData()
+        public bool IsOnline => Enabled && Grid != null && Grid.HasPower;
+        public bool IsFeedInUse
         {
-            return $"CAMERA\nFeed: {(int)(fieldOfView)}°\n{cameraRange}m range\n{(Enabled && Grid != null && Grid.HasPower ? "ACTIVE" : "OFFLINE")}";
+            get
+            {
+                PruneExpiredConsumers();
+                return _feedConsumers.Count > 0;
+            }
         }
 
-        // Power draw for camera
+        public string SourceName => string.IsNullOrWhiteSpace(blockName) ? "Camera" : blockName;
+        public string DataCategory => "Camera";
+
+        public string GetDisplayData()
+        {
+            string state = !IsOnline ? "OFFLINE" : IsFeedInUse ? "LIVE FEED" : "ONLINE / IDLE";
+            return $"CAMERA\n{state}\nFOV {(int)fieldOfView}°\nRange {(int)cameraRange}m";
+        }
+
         public override float PowerDraw => Enabled ? 30f : 0f;
+
+        private void Awake()
+        {
+            CacheStatusLed();
+        }
+
+        private void Start()
+        {
+            CacheStatusLed();
+            UpdateStatusLed();
+        }
+
+        public void RegisterFeedConsumer(GridScreenBlock screen)
+        {
+            if (screen == null) return;
+            _feedConsumers[screen.GetInstanceID()] = Time.frameCount;
+        }
 
         private void InitializeCamera()
         {
             _initialized = true;
 
-            // Create render texture
-            _renderTexture = new RenderTexture(256, 256, 24, RenderTextureFormat.ARGB32)
+            int resolution = Mathf.Clamp(feedResolution, 128, 2048);
+            _renderTexture = new RenderTexture(resolution, resolution, 24, RenderTextureFormat.ARGB32)
             {
                 name = "CameraBlock_Feed",
                 autoGenerateMips = false,
-                wrapMode = TextureWrapMode.Clamp
+                useMipMap = false,
+                wrapMode = TextureWrapMode.Clamp,
+                antiAliasing = 1
             };
             _renderTexture.Create();
 
-            // Create a hidden camera
             var camGo = new GameObject("CameraBlock_FeedCamera");
             camGo.transform.SetParent(transform, false);
             camGo.transform.localPosition = cameraOffset;
-            camGo.transform.localRotation = Quaternion.Euler(cameraRotation);
+            Quaternion localRotation = Quaternion.Euler(cameraRotation);
+            if (lensLooksAlongNegativeZ)
+                localRotation *= Quaternion.Euler(0f, 180f, 0f);
+            camGo.transform.localRotation = localRotation;
             camGo.hideFlags = HideFlags.HideAndDontSave;
 
             _captureCamera = camGo.AddComponent<Camera>();
-            _captureCamera.fieldOfView = fieldOfView;
-            _captureCamera.farClipPlane = cameraRange;
-            _captureCamera.nearClipPlane = 0.1f;
+            _captureCamera.fieldOfView = Mathf.Clamp(fieldOfView, 10f, 140f);
+            _captureCamera.farClipPlane = Mathf.Max(5f, cameraRange);
+            _captureCamera.nearClipPlane = 0.05f;
             _captureCamera.targetTexture = _renderTexture;
-            _captureCamera.cullingMask = ~0; // render everything
-            _captureCamera.enabled = false; // we render manually
+            _captureCamera.cullingMask = ~0;
+            _captureCamera.enabled = false;
         }
 
         private void Update()
         {
-            if (!Enabled || Grid == null || !Grid.HasPower)
+            PruneExpiredConsumers();
+            UpdateStatusLed();
+
+            if (!IsOnline)
             {
                 if (_captureCamera != null) _captureCamera.enabled = false;
                 return;
             }
 
+            if (!IsFeedInUse)
+                return;
+
             if (!_initialized) InitializeCamera();
             if (_captureCamera == null) return;
 
-            // Manually render the camera every few frames for performance
-            if (Time.frameCount % 3 == 0)
-            {
+            _captureCamera.fieldOfView = Mathf.Clamp(fieldOfView, 10f, 140f);
+            _captureCamera.farClipPlane = Mathf.Max(5f, cameraRange);
+
+            int interval = Mathf.Clamp(renderIntervalFrames, 1, 10);
+            if (interval == 1 || Time.frameCount % interval == 0)
                 _captureCamera.Render();
+        }
+
+        private void PruneExpiredConsumers()
+        {
+            if (_feedConsumers.Count == 0) return;
+
+            int staleBeforeFrame = Time.frameCount - 8;
+            s_expiredConsumerIds.Clear();
+            foreach (var kv in _feedConsumers)
+            {
+                if (kv.Value < staleBeforeFrame)
+                    s_expiredConsumerIds.Add(kv.Key);
+            }
+
+            for (int i = 0; i < s_expiredConsumerIds.Count; i++)
+                _feedConsumers.Remove(s_expiredConsumerIds[i]);
+        }
+
+        private static readonly List<int> s_expiredConsumerIds = new();
+
+        private void CacheStatusLed()
+        {
+            if (_statusLedRenderer == null)
+            {
+                Transform led = transform.Find("Generated_StatusLED");
+                if (led != null) _statusLedRenderer = led.GetComponent<Renderer>();
+            }
+
+            if (_statusLedLight == null)
+            {
+                Transform light = transform.Find("Generated_StatusLED_Light");
+                if (light != null) _statusLedLight = light.GetComponent<Light>();
+            }
+
+            _ledPropertyBlock ??= new MaterialPropertyBlock();
+        }
+
+        private void UpdateStatusLed()
+        {
+            CacheStatusLed();
+
+            Color stateColor = !IsOnline ? offlineColor : IsFeedInUse ? feedInUseColor : onlineIdleColor;
+            float pulse = !IsOnline ? 0.65f : IsFeedInUse ? 1.0f + Mathf.Sin(Time.realtimeSinceStartup * 4.5f) * 0.10f : 0.82f;
+            Color emission = stateColor * Mathf.Max(0.1f, pulse);
+
+            if (_statusLedRenderer != null)
+            {
+                _statusLedRenderer.GetPropertyBlock(_ledPropertyBlock);
+                _ledPropertyBlock.SetColor("_Color", stateColor);
+                _ledPropertyBlock.SetColor("_BaseColor", stateColor);
+                _ledPropertyBlock.SetColor("_EmissionColor", emission);
+                _statusLedRenderer.SetPropertyBlock(_ledPropertyBlock);
+            }
+
+            if (_statusLedLight != null)
+            {
+                _statusLedLight.enabled = true;
+                _statusLedLight.color = stateColor;
+                _statusLedLight.intensity = !IsOnline ? 0.45f : IsFeedInUse ? 1.65f : 0.95f;
             }
         }
 
@@ -93,6 +206,7 @@ namespace VoxelEngine.GridSystem
                 _renderTexture.Release();
                 Destroy(_renderTexture);
             }
+
             if (_captureCamera != null)
                 Destroy(_captureCamera.gameObject);
         }
@@ -101,6 +215,8 @@ namespace VoxelEngine.GridSystem
         {
             base.OnPlaced();
             blockName = "Camera";
+            CacheStatusLed();
+            UpdateStatusLed();
         }
     }
 }

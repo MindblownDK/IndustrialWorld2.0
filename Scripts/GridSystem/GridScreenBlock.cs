@@ -1,7 +1,7 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridScreenBlock.cs
 //
 // Premium configurable digital screen for large grid ships.
-// v5.47.0-dev — Multi-source: one screen can show data from any number of providers.
+// v5.51.0-dev — Adds true live camera-feed rendering on the screen surface.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -12,7 +12,7 @@ namespace VoxelEngine.GridSystem
 {
     public enum ScreenDataMode
     {
-        Summary, Power, Inventory, Speed, System, Bars, Custom
+        Summary, Power, Inventory, Speed, System, Bars, Custom, Camera
     }
 
     public enum ScreenSize
@@ -59,6 +59,10 @@ namespace VoxelEngine.GridSystem
         private readonly List<IGridDataProvider> _cachedProviders = new();
         private readonly Dictionary<Vector3Int, int> _lastChecked = new();
         private TextMesh _screenText, _titleText, _statusText;
+        private Renderer _screenSurfaceRenderer;
+        private Material _screenSurfaceBaseMaterial;
+        private Material _cameraFeedMaterial;
+        private bool _cameraFeedVisible;
         private bool _initialized;
         private PowerConsumer _power;
 
@@ -106,6 +110,7 @@ namespace VoxelEngine.GridSystem
                 if (!Enabled) return "DISABLED";
                 if (!IsPowered) return "OFFLINE";
                 if (dataMode == ScreenDataMode.Custom) return string.IsNullOrEmpty(customText) ? "(empty)" : customText;
+                if (dataMode == ScreenDataMode.Camera) return CameraStatusDisplay();
 
                 var sources = ResolveAllProviders();
                 if (sources.Count == 0) return "ONLINE\nNO DATA\nRight-click to configure";
@@ -157,6 +162,29 @@ namespace VoxelEngine.GridSystem
             ScreenSize.Medium => 6, ScreenSize.Large => 10,
             ScreenSize.ExtraLarge => 16, _ => 3
         };
+
+        private IGridCameraFeedProvider ResolveCameraProvider()
+        {
+            var sources = ResolveAllProviders();
+            for (int i = 0; i < sources.Count; i++)
+            {
+                if (sources[i] is IGridCameraFeedProvider cameraProvider)
+                    return cameraProvider;
+            }
+            return null;
+        }
+
+        private string CameraStatusDisplay()
+        {
+            var cameraProvider = ResolveCameraProvider();
+            if (cameraProvider == null)
+                return "CAMERA\nNO CAMERA SOURCE\nRight-click to configure";
+
+            if (!cameraProvider.IsOnline)
+                return "CAMERA\nSOURCE OFFLINE";
+
+            return "CAMERA\n" + (cameraProvider.IsFeedInUse ? "LIVE FEED" : "READY") + "\n" + cameraProvider.SourceName;
+        }
 
         // ── Formatting ────────────────────────────────────────────────
         private string FormatSection(string raw, string section, int max)
@@ -253,7 +281,12 @@ namespace VoxelEngine.GridSystem
             if (!_initialized) { EnsureDisplay(); return; }
             if (_screenText == null) return;
 
-            string text = FormattedDisplay;
+            IGridCameraFeedProvider cameraProvider = dataMode == ScreenDataMode.Camera ? ResolveCameraProvider() : null;
+            bool showCameraFeed = IsPowered && cameraProvider != null && cameraProvider.IsOnline;
+            ApplyCameraFeed(cameraProvider, showCameraFeed);
+            SetMainTextVisible(!showCameraFeed);
+
+            string text = showCameraFeed ? string.Empty : FormattedDisplay;
             if (_screenText.text != text) _screenText.text = text;
 
             if (_power != null) _power.wattsPerSecond = Enabled ? PowerDraw : 0f;
@@ -274,6 +307,20 @@ namespace VoxelEngine.GridSystem
                 if (_titleText != null) _titleText.color = w;
                 if (_statusText != null) { _statusText.text = "NO PWR"; _statusText.color = w; }
             }
+            else if (showCameraFeed)
+            {
+                Color live = new Color(0.18f, 0.95f, 0.38f);
+                if (_titleText != null)
+                {
+                    _titleText.text = "CAMERA  " + cameraProvider.SourceName;
+                    _titleText.color = new Color(live.r, live.g, live.b, 0.92f);
+                }
+                if (_statusText != null)
+                {
+                    _statusText.text = "LIVE";
+                    _statusText.color = new Color(live.r, live.g, live.b, 0.95f);
+                }
+            }
             else if (!HasAnySource)
             {
                 Color i = new Color(0.40f, 0.44f, 0.52f);
@@ -291,7 +338,7 @@ namespace VoxelEngine.GridSystem
                     _titleText.text = sources.Count + " source" + (sources.Count != 1 ? "s" : "");
                     _titleText.color = new Color(textColor.r * 0.7f, textColor.g * 0.7f, textColor.b * 0.7f, 0.8f);
                 }
-                if (_statusText != null) { _statusText.text = "LIVE"; _statusText.color = new Color(textColor.r * 0.5f, textColor.g * 0.5f, textColor.b * 0.5f); }
+                if (_statusText != null) { _statusText.text = dataMode == ScreenDataMode.Camera ? "CAM" : "LIVE"; _statusText.color = new Color(textColor.r * 0.5f, textColor.g * 0.5f, textColor.b * 0.5f); }
             }
 
             if (_titleText != null) _titleText.transform.localPosition = new Vector3(0, dh * 0.38f, 0);
@@ -322,6 +369,10 @@ namespace VoxelEngine.GridSystem
 
             var (dw, dh) = DisplayArea();
             float charSize = CharHeight() / 24f;
+
+            _screenSurfaceRenderer = surface.GetComponent<Renderer>();
+            if (_screenSurfaceRenderer != null && _screenSurfaceBaseMaterial == null)
+                _screenSurfaceBaseMaterial = _screenSurfaceRenderer.sharedMaterial;
 
             var root = new GameObject("DisplayRoot");
             root.transform.SetParent(surface, false);
@@ -357,6 +408,59 @@ namespace VoxelEngine.GridSystem
             _statusText.color = new Color(0.30f, 0.35f, 0.45f);
             _statusText.anchor = TextAnchor.LowerRight; _statusText.alignment = TextAlignment.Right;
             MakeTextOpaque(_statusText);
+        }
+
+        private void ApplyCameraFeed(IGridCameraFeedProvider cameraProvider, bool showFeed)
+        {
+            if (_screenSurfaceRenderer == null)
+            {
+                Transform surface = transform.Find("Generated_ScreenSurface");
+                if (surface != null)
+                    _screenSurfaceRenderer = surface.GetComponent<Renderer>();
+                if (_screenSurfaceRenderer != null && _screenSurfaceBaseMaterial == null)
+                    _screenSurfaceBaseMaterial = _screenSurfaceRenderer.sharedMaterial;
+            }
+
+            if (_screenSurfaceRenderer == null) return;
+
+            if (!showFeed || cameraProvider == null)
+            {
+                if (_cameraFeedVisible && _screenSurfaceBaseMaterial != null)
+                    _screenSurfaceRenderer.sharedMaterial = _screenSurfaceBaseMaterial;
+                _cameraFeedVisible = false;
+                return;
+            }
+
+            cameraProvider.RegisterFeedConsumer(this);
+            var feedTexture = cameraProvider.FeedTexture;
+            if (feedTexture == null)
+                return;
+
+            if (_cameraFeedMaterial == null)
+            {
+                var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+                _cameraFeedMaterial = new Material(shader) { name = "ScreenCameraFeed_Runtime" };
+                if (_cameraFeedMaterial.HasProperty("_Metallic")) _cameraFeedMaterial.SetFloat("_Metallic", 0f);
+                if (_cameraFeedMaterial.HasProperty("_Smoothness")) _cameraFeedMaterial.SetFloat("_Smoothness", 0.88f);
+                _cameraFeedMaterial.EnableKeyword("_EMISSION");
+            }
+
+            if (_cameraFeedMaterial.HasProperty("_BaseMap")) _cameraFeedMaterial.SetTexture("_BaseMap", feedTexture);
+            if (_cameraFeedMaterial.HasProperty("_MainTex")) _cameraFeedMaterial.SetTexture("_MainTex", feedTexture);
+            if (_cameraFeedMaterial.HasProperty("_BaseColor")) _cameraFeedMaterial.SetColor("_BaseColor", Color.white);
+            if (_cameraFeedMaterial.HasProperty("_Color")) _cameraFeedMaterial.SetColor("_Color", Color.white);
+            if (_cameraFeedMaterial.HasProperty("_EmissionColor")) _cameraFeedMaterial.SetColor("_EmissionColor", new Color(0.16f, 0.75f, 0.92f) * 0.45f);
+
+            if (_screenSurfaceRenderer.sharedMaterial != _cameraFeedMaterial)
+                _screenSurfaceRenderer.sharedMaterial = _cameraFeedMaterial;
+            _cameraFeedVisible = true;
+        }
+
+        private void SetMainTextVisible(bool visible)
+        {
+            if (_screenText == null) return;
+            var renderer = _screenText.GetComponent<MeshRenderer>();
+            if (renderer != null) renderer.enabled = visible;
         }
 
         /// <summary>Ensures TextMesh uses a material with ZWrite On so text doesn't show through walls/terrain.</summary>
@@ -465,6 +569,12 @@ namespace VoxelEngine.GridSystem
                 if (kv.Value != null && kv.Value != this && kv.Value is IGridDataProvider p)
                     list.Add((kv.Key, p));
             return list;
+        }
+
+        private void OnDestroy()
+        {
+            if (_cameraFeedMaterial != null)
+                Destroy(_cameraFeedMaterial);
         }
 
         public override void OnPlaced()

@@ -1,7 +1,7 @@
 // Assets/Scripts/VoxelEngine/GridSystem/UI/GridScreenConfigUI.cs
 //
 // Configuration panel for GridScreenBlock.
-// v5.48.0-dev — Auto-create on scene if missing. Custom text color. Live toggling.
+// v5.51.0-dev — Adds Camera display mode selection for linked live feeds.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -165,7 +165,7 @@ namespace VoxelEngine.GridSystem.UI
 
             if (sources.Count == 0)
             {
-                var noSrc = new Label("No data sources on this grid. Place batteries, cargo, or gas tanks first.");
+                var noSrc = new Label("No data sources on this grid. Place batteries, cargo, gas tanks, or cameras first.");
                 noSrc.style.color = new Color(0.60f, 0.64f, 0.72f);
                 noSrc.style.fontSize = 11; noSrc.style.whiteSpace = WhiteSpace.Normal;
                 _panel.Add(noSrc);

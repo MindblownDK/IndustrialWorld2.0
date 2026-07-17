@@ -1,7 +1,9 @@
 // Assets/Scripts/VoxelEngine/GridSystem/IGridDataProvider.cs
 //
 // Interface for any grid block that can expose live data to attached screens.
-// v5.43.0-dev — Grid Screens & Displays.
+// v5.51.0-dev — Adds optional live camera feed provider support for screen render textures.
+
+using UnityEngine;
 
 namespace VoxelEngine.GridSystem
 {
@@ -19,5 +21,18 @@ namespace VoxelEngine.GridSystem
 
         /// <summary>Live data lines to display on the screen.</summary>
         string GetDisplayData();
+    }
+
+    /// <summary>
+    /// Optional extension for data providers that can expose a live camera render texture.
+    /// Screens use this only in Camera display mode, preserving the lightweight text-data path
+    /// for every other provider type.
+    /// </summary>
+    public interface IGridCameraFeedProvider : IGridDataProvider
+    {
+        RenderTexture FeedTexture { get; }
+        bool IsOnline { get; }
+        bool IsFeedInUse { get; }
+        void RegisterFeedConsumer(GridScreenBlock screen);
     }
 }

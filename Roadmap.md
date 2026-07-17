@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.42.0-dev`
-**Roadmap Version:** `5.42.0-dev`
-**Date:** 2026-07-16
-**Status:** Active Implementation — Factory Persistence Complete, Research UI Overhaul
+**Current Version:** `5.51.0-dev`
+**Roadmap Version:** `5.51.0-dev`
+**Date:** 2026-07-17
+**Status:** Active Implementation — Live Camera Feed to Grid Screens
 
 ---
 
@@ -55,7 +55,7 @@ The design goal is a seamless blend of:
 | Gravity / orbits | 🟡 Buggy | Player and grids sometimes fall; orbits not realistic |
 | Space stations | ❌ Missing | No buildable orbital platforms |
 | Conveyor logistics | 🟡 Good | Conveyors, ramps, vertical belts, chutes, contextual shape wheel, ghost previews, and persistence exist. Remaining work: pooled item entities, more chute variants, and final long-run throughput validation. |
-| Grid screens / displays | ✅ COMPLETED | All sizes, live text+power states, right-click+terminal config, custom text+custom colors+border+font, visual bar charts, multi-source, camera feeds, persistence, camera block (5.50.0-dev) |
+| Grid screens / displays | 🛠️ WORKING ON | Live text+power states, right-click+terminal config, custom text+custom colors+border+font, visual bar charts, multi-source, camera-feed foundations, persistence, and camera block exist. **5.51.0-dev** adds true RenderTexture feed rendering on screen surfaces plus the premium camera prefab/status LED setup; Unity Step 19 validation pending. |
 | Grid lighting | ❌ Missing | No flood lights or block lights |
 | Sloped / armored grid blocks | ❌ Missing | Only cube blocks exist; need shape variants |
 | Grid shape variant wheel | 🟡 PARTIALLY COMPLETE | Premium radial wheel foundation complete (5.40.1-dev) with full visual parity to Hammer/Conveyor wheels. CurrentShape accessor + auto-spawn ready. Compile error in GridBuilder fixed. Shape application + authored variants next (via Setup Step 18). |
@@ -869,9 +869,17 @@ Statuses are evidence-based and move forward only after code/content review and 
 
 ---
 
-### 6.4 Version 4.8.0 — Logistics 2.0, Screens & Trajectory
+### 6.4 Version 4.8.0 — Logistics 2.0, Screens & Trajectory — 🛠️ WORKING ON
 
 **Goal:** Solve base spaghetti with satisfying long-distance logistics, and give the player powerful camera tools for grids and space.
+
+#### Execution Status
+
+| Area | Status | Repository Audit |
+|------|--------|------------------|
+| Configurable grid screens / displays | 🛠️ WORKING ON | Text/power/data modes, multi-source selection, styling, persistence, and terminal/right-click config exist. Live camera feed rendering and premium camera prefab refresh are implemented in 5.51.0-dev; Step 19 + Unity validation pending before returning this area to completed. |
+| Camera block live feed | 🛠️ WORKING ON | `GridCameraBlock` now exposes a live RenderTexture through `IGridCameraFeedProvider`; `GridScreenBlock` Camera mode applies it directly to the screen surface. Camera LED states are green when a feed is used, yellow when online and idle, and red when offline. |
+| Trajectory camera / orbit tools | 🟡 PARTIALLY COMPLETE | Roadmap design exists; final trajectory/orbit-map implementation and validation remain future work. |
 
 #### New Content
 
@@ -1674,6 +1682,41 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.51.0-dev] Live Camera Screen Feed + Premium Camera Prefab
+
+**Type:** MINOR — save-compatible screen/camera feature (no save schema migration; Camera display mode is appended and old screen configs remain parse-compatible)
+
+**Added / Changed:**
+- Added optional `IGridCameraFeedProvider` for live camera sources without changing the lightweight text data-provider path.
+- Added `ScreenDataMode.Camera` so configurable grid screens can switch from text/data modes to a live camera feed mode.
+- `GridScreenBlock` now resolves the linked camera source, registers itself as an active feed consumer, applies the camera RenderTexture directly to `Generated_ScreenSurface`, hides the center text overlay while the feed is live, and keeps a clean `CAMERA / LIVE` title/status overlay.
+- `GridCameraBlock` now renders only when at least one powered screen is actively consuming the feed, with configurable feed resolution and render interval for performance.
+- Camera feed orientation now looks out through the generated lens (`lensLooksAlongNegativeZ`) instead of capturing from the block body.
+- Camera status LED behavior added: **green** when at least one screen is using the feed, **yellow** when the camera is online but idle, and **red** when the camera is offline/no grid power.
+- `GridScreenConfigUI` now exposes Camera mode automatically and updates the no-source hint to include cameras.
+
+**Setup Wizard (Non-Destructive):**
+- Step 19 now refreshes generated screen visuals and the camera prefab while preserving custom non-generated child objects.
+- Step 19 now repairs required item/prefab/recipe/registry links without resetting existing stack sizes, mass, hit points, recipe costs, crafting times, unlock flags, or authored tuning.
+- Camera prefab remade through Step 19 with a boxy warm-alloy housing, dark lens stack, bolted front flange, side mount ears, lower rail, glass highlight, and physical status LED/light inspired by Thomas's reference image.
+
+**Roadmap Status:**
+- 4.8.0 Logistics 2.0, Screens & Trajectory: **🛠️ WORKING ON**.
+- Grid screens / displays: **✅ COMPLETED → 🛠️ WORKING ON** while the new live camera feed and Step 19 premium camera prefab await Unity validation.
+- Camera block live feed: **🛠️ WORKING ON** (runtime code + setup authoring complete; manual validation pending).
+
+**Manual Unity Steps:**
+1. Open the project on the `Dev` branch and let Unity finish compiling.
+2. Go to `Tools > Voxel Engine > Voxel Engine Setup`.
+3. Run **19. Setup Grid Screens & Displays (Non-Destructive)**. Run it a second time to confirm idempotency and check the Console for preserved/repaired logs.
+4. Inspect `VoxelEngineAssets/GridSystem/Prefabs/CameraBlock.prefab` — confirm the new warm-alloy camera body, lens stack, mount ears, bolts, and status LED/light are present.
+5. In a test scene, place a powered grid with a Camera Block and any Screen block.
+6. Right-click the screen → select the Camera source → choose **Camera** display mode.
+7. Verify the screen surface shows the live camera view. The camera LED should be **green** while the screen is using the feed.
+8. Switch the screen away from Camera mode or clear the source — the powered camera LED should turn **yellow** after a short moment.
+9. Disable camera/grid power — the camera LED should turn **red**, and the screen should show camera offline text.
+10. Re-test existing text/data screen modes to confirm Summary, Power, Inventory, Bars, Custom text, color, border, and font settings still work.
 
 ### [5.42.0-dev] Factory Persistence Complete — Funnel Buffer & Mode Save/Load
 
