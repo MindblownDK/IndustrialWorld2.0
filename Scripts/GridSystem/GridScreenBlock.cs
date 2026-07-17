@@ -671,7 +671,7 @@ namespace VoxelEngine.GridSystem
                 IGridDataProvider provider = null;
                 if (Grid.Blocks.TryGetValue(pos, out var block))
                 {
-                    provider = block as IGridDataProvider;
+                    provider = ResolveProviderComponent(block);
                     if (provider != null)
                     {
                         int currentId = block.GetInstanceID();
@@ -739,12 +739,28 @@ namespace VoxelEngine.GridSystem
             IGridDataProvider best = null; Vector3Int bp = default; float bd = float.MaxValue;
             foreach (var kv in Grid.Blocks)
             {
-                if (kv.Value == null || kv.Value == this || !(kv.Value is IGridDataProvider p)) continue;
+                if (kv.Value == null || kv.Value == this) continue;
+                if (VoxelEngine.GridSystem.UI.GridMasterTerminal.IsHiddenFromScreenConfig(kv.Value)) continue;
+                var provider = ResolveProviderComponent(kv.Value);
+                if (provider == null) continue;
                 float d = Vector3.Distance(kv.Value.transform.position, transform.position);
-                if (d < bd) { bd = d; best = p; bp = kv.Key; }
+                if (d < bd) { bd = d; best = provider; bp = kv.Key; }
             }
             if (best != null)
                 ToggleSource(bp, (best as GridBlock)?.GetInstanceID() ?? 0);
+        }
+
+        private static IGridDataProvider ResolveProviderComponent(GridBlock block)
+        {
+            if (block == null) return null;
+            if (block is IGridDataProvider direct) return direct;
+            var behaviours = block.GetComponents<MonoBehaviour>();
+            for (int i = 0; i < behaviours.Length; i++)
+            {
+                if (behaviours[i] is IGridDataProvider provider)
+                    return provider;
+            }
+            return null;
         }
 
         public List<(Vector3Int pos, IGridDataProvider provider)> GetAvailableSources()
@@ -752,8 +768,13 @@ namespace VoxelEngine.GridSystem
             var list = new List<(Vector3Int, IGridDataProvider)>();
             if (Grid == null) return list;
             foreach (var kv in Grid.Blocks)
-                if (kv.Value != null && kv.Value != this && kv.Value is IGridDataProvider p)
-                    list.Add((kv.Key, p));
+            {
+                if (kv.Value == null || kv.Value == this) continue;
+                if (VoxelEngine.GridSystem.UI.GridMasterTerminal.IsHiddenFromScreenConfig(kv.Value)) continue;
+                var provider = ResolveProviderComponent(kv.Value);
+                if (provider != null)
+                    list.Add((kv.Key, provider));
+            }
             return list;
         }
 

@@ -703,6 +703,11 @@ namespace VoxelEngine.GridSystem.UI
             toggleRow.Add(T.SmallButton("Pulse", () => { strip.SetMode(VoxelEngine.Simulation.LEDMode.Pulse); VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel(); }, strip.mode == VoxelEngine.Simulation.LEDMode.Pulse ? T.AccentCyan : T.BgSlot));
             toggleRow.Add(T.SmallButton("Blink", () => { strip.SetMode(VoxelEngine.Simulation.LEDMode.Blink); VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel(); }, strip.mode == VoxelEngine.Simulation.LEDMode.Blink ? T.AccentAmber : T.BgSlot));
             toggleRow.Add(T.SmallButton("Chase", () => { strip.SetMode(VoxelEngine.Simulation.LEDMode.Chase); VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel(); }, strip.mode == VoxelEngine.Simulation.LEDMode.Chase ? T.AccentTeal : T.BgSlot));
+            toggleRow.Add(T.SmallButton(strip.showSegments ? "Segments: ON" : "Clean Strip", () =>
+            {
+                strip.SetSegmented(!strip.showSegments);
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, strip.showSegments ? T.AccentCyan : T.BgSlot));
             p.Add(toggleRow);
             p.Add(T.Spacer(6));
 
@@ -710,6 +715,18 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(SliderRow("Brightness", strip.brightness, 0f, 5f, v => strip.brightness = v, "0", "5"));
             p.Add(SliderRow("Length", strip.stripLength, 0.25f, 10f, v => strip.SetLength(v), "0.25m", "10m"));
             p.Add(SliderRow("Segments", strip.segmentCount, 2f, 32f, v => { strip.segmentCount = Mathf.RoundToInt(v); strip.SetLength(strip.stripLength); }, "2", "32"));
+
+            p.Add(GridUIHelpers.SectionTitle("Motion Activation"));
+            var motionRow = Row();
+            motionRow.Add(T.SmallButton(strip.motionActivated ? "Motion: ON" : "Motion: OFF", () =>
+            {
+                strip.SetMotionActivated(!strip.motionActivated);
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, strip.motionActivated ? T.AccentGreen : T.BgSlot));
+            motionRow.Add(T.Muted("Turns on when a player is nearby."));
+            p.Add(motionRow);
+            p.Add(SliderRow("Sensor Radius", strip.motionRadius, 1f, 20f, v => strip.motionRadius = v, "1m", "20m"));
+            p.Add(SliderRow("Hold Time", strip.motionGraceSeconds, 0.25f, 10f, v => strip.motionGraceSeconds = v, "0.25s", "10s"));
 
             p.Add(GridUIHelpers.SectionTitle("Color"));
             var colorRow = Row();
@@ -777,6 +794,18 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(SliderRow("Intensity", light.intensity, 0f, 15f, v => light.SetIntensity(v), "0", "15"));
             p.Add(SliderRow("Range", light.range, 2f, 120f, v => light.SetRange(v), "2m", "120m"));
             p.Add(SliderRow("Cone", light.spotAngle, 10f, 120f, v => light.spotAngle = v, "10°", "120°"));
+
+            p.Add(GridUIHelpers.SectionTitle("Motion Activation"));
+            var motionRow = Row();
+            motionRow.Add(T.SmallButton(light.motionActivated ? "Motion: ON" : "Motion: OFF", () =>
+            {
+                light.SetMotionActivated(!light.motionActivated);
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, light.motionActivated ? T.AccentGreen : T.BgSlot));
+            motionRow.Add(T.Muted("Turns on when a player is nearby."));
+            p.Add(motionRow);
+            p.Add(SliderRow("Sensor Radius", light.motionRadius, 1f, 30f, v => light.motionRadius = v, "1m", "30m"));
+            p.Add(SliderRow("Hold Time", light.motionGraceSeconds, 0.25f, 10f, v => light.motionGraceSeconds = v, "0.25s", "10s"));
 
             p.Add(GridUIHelpers.SectionTitle("Color"));
             var colorRow = Row();

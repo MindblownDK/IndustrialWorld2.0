@@ -5,7 +5,7 @@
 // ║  Small spotlight / floodlight for grid vehicles and bases.      ║
 // ║  Configurable color, intensity, range. Toggles with grid power. ║
 // ╚══════════════════════════════════════════════════════════════════╝
-// v5.52.0-dev — Power-state hardening + grid screen data provider.
+// v5.57.0-dev — Motion activation option for player-sensitive spotlights.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -36,6 +36,14 @@ namespace VoxelEngine.Simulation
         [Tooltip("Type of light — Spot (focused beam) or Point (omni).")]
         public LightType lightType = LightType.Spot;
 
+        [Header("Motion Activation")]
+        [Tooltip("Only turn on when a player is near this spotlight.")]
+        public bool motionActivated;
+        [Tooltip("Player detection radius in meters.")]
+        public float motionRadius = 8f;
+        [Tooltip("Seconds to stay on after the last player detection.")]
+        public float motionGraceSeconds = 2.5f;
+
         [Header("Power")]
         [Tooltip("Power consumed while the light is enabled.")]
         public float wattsDraw = 25f;
@@ -46,12 +54,17 @@ namespace VoxelEngine.Simulation
         private Renderer _indicatorRenderer;
         private MaterialPropertyBlock _indicatorBlock;
         private bool _lastOnState;
+        private float _motionCheckTimer;
+        private float _lastMotionTime = -999f;
 
         /// <summary>Power consumed while the light is enabled. It is still counted when the
         /// grid is under-powered so total current loss remains visible in Power displays.</summary>
         public override float PowerDraw => Enabled ? Mathf.Max(0f, wattsDraw) : 0f;
 
-        public bool IsOnline => Enabled && Grid != null && Grid.HasPower;
+        public bool HasGridPower => Enabled && Grid != null && Grid.HasPower;
+        public bool MotionSatisfied => !motionActivated || Time.time - _lastMotionTime <= Mathf.Max(0.1f, motionGraceSeconds);
+        public bool IsIlluminating => HasGridPower && MotionSatisfied;
+        public bool IsOnline => IsIlluminating;
 
         // ── IGridDataProvider ─────────────────────────────────────────
         public string SourceName => string.IsNullOrWhiteSpace(blockName) || blockName == "Armor Block"
@@ -62,7 +75,7 @@ namespace VoxelEngine.Simulation
 
         public string GetDisplayData()
         {
-            string state = !Enabled ? "DISABLED" : Grid == null ? "UNPLACED" : Grid.HasPower ? "ONLINE" : "NO POWER";
+            string state = !Enabled ? "DISABLED" : Grid == null ? "UNPLACED" : !Grid.HasPower ? "NO POWER" : motionActivated && !MotionSatisfied ? "MOTION STANDBY" : "ONLINE";
             return "LIGHT\n" + state + "\n" +
                    "Draw " + FormatWatts(PowerDraw) + "\n" +
                    "Range " + range.ToString("0.#") + "m\n" +
@@ -146,9 +159,10 @@ namespace VoxelEngine.Simulation
         {
             if (_lights.Count == 0) CreateLight();
 
+            TickMotionSensor();
             ApplyLightSettings();
 
-            bool shouldBeOn = IsOnline;
+            bool shouldBeOn = IsIlluminating;
             for (int i = 0; i < _lights.Count; i++)
             {
                 if (_lights[i] != null) _lights[i].enabled = shouldBeOn;
@@ -161,6 +175,26 @@ namespace VoxelEngine.Simulation
             else
             {
                 UpdateIndicator(shouldBeOn);
+            }
+        }
+
+        private void TickMotionSensor()
+        {
+            if (!motionActivated) return;
+            _motionCheckTimer -= Time.deltaTime;
+            if (_motionCheckTimer > 0f) return;
+            _motionCheckTimer = 0.20f;
+
+            var players = Object.FindObjectsByType<VoxelEngine.Player.PlayerController>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            float radiusSqr = Mathf.Max(0.1f, motionRadius) * Mathf.Max(0.1f, motionRadius);
+            for (int i = 0; i < players.Length; i++)
+            {
+                if (players[i] == null) continue;
+                if ((players[i].transform.position - transform.position).sqrMagnitude <= radiusSqr)
+                {
+                    _lastMotionTime = Time.time;
+                    return;
+                }
             }
         }
 
@@ -195,6 +229,12 @@ namespace VoxelEngine.Simulation
             _indicatorBlock.SetColor("_BaseColor", indicatorColor);
             _indicatorBlock.SetColor("_EmissionColor", indicatorColor * emissionStrength);
             _indicatorRenderer.SetPropertyBlock(_indicatorBlock);
+        }
+
+        public void SetMotionActivated(bool activated)
+        {
+            motionActivated = activated;
+            if (!activated) _lastMotionTime = Time.time;
         }
 
         /// <summary>Change the light colour at runtime.</summary>

@@ -33,6 +33,7 @@ namespace VoxelEngine.GridSystem.UI
             public string groupNameDraft = "New Group";
             public bool hideOnCreate;
             public bool showHidden;
+            public bool showDataTypes;
             public bool showPowerUsage;
             public int lastSelectedIndex = -1;
         }
@@ -282,6 +283,11 @@ namespace VoxelEngine.GridSystem.UI
             lbl.style.color = new StyleColor(new Color(0.55f, 0.6f, 0.68f));
             lbl.style.flexGrow = 1;
             header.Add(lbl);
+            header.Add(T.SmallButton(state.showDataTypes ? "Hide Types" : "Show Types", () =>
+            {
+                state.showDataTypes = !state.showDataTypes;
+                RefreshTerminal();
+            }, state.showDataTypes ? T.AccentCyan : T.AccentDim));
             header.Add(T.SmallButton(state.showHidden ? "Hide Hidden" : "Show Hidden", () =>
             {
                 state.showHidden = !state.showHidden;
@@ -299,7 +305,8 @@ namespace VoxelEngine.GridSystem.UI
             PersistScroll(list, "blocklist");
 
             list.Add(TabButton("All Storage", tab == -1, () => onSelectTab(-1), null));
-            list.Add(BuildDataTypeControls(blocks));
+            if (state.showDataTypes)
+                list.Add(BuildDataTypeControls(blocks));
 
             var grouped = new HashSet<GridBlock>();
             if (state.groups.Count > 0)
@@ -595,8 +602,15 @@ namespace VoxelEngine.GridSystem.UI
             }
         }
 
+        public static bool IsHiddenFromScreenConfig(GridBlock block)
+        {
+            if (block == null || block.Grid == null) return false;
+            return IsHidden(GetState(block.Grid), block);
+        }
+
         private static bool IsHidden(TerminalState state, GridBlock block)
         {
+            if (state == null || block == null) return false;
             if (state.hiddenBlocks.Contains(block)) return true;
             foreach (var group in state.groups)
                 if (group.hidden && group.blocks.Contains(block)) return true;

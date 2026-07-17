@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.55.0-dev`
-**Roadmap Version:** `5.55.0-dev`
+**Current Version:** `5.57.0-dev`
+**Roadmap Version:** `5.57.0-dev`
 **Date:** 2026-07-17
-**Status:** Active Implementation — Ship Control Data-Type Toggles + LED Strip Config
+**Status:** Active Implementation — Collapsible Data Types + Motion Lighting
 
 ---
 
@@ -56,7 +56,7 @@ The design goal is a seamless blend of:
 | Space stations | ❌ Missing | No buildable orbital platforms |
 | Conveyor logistics | 🟡 Good | Conveyors, ramps, vertical belts, chutes, contextual shape wheel, ghost previews, and persistence exist. Remaining work: pooled item entities, more chute variants, and final long-run throughput validation. |
 | Grid screens / displays | ✅ COMPLETED | All sizes, live text+power states, right-click+terminal config, custom text+custom colors+border+font, visual bar charts, multi-source, live camera feeds, power gain/loss/net mode, persistence, and camera block are validated by Thomas. (5.51.3-dev) |
-| Grid lighting | 🛠️ WORKING ON | Small/large single and dual spotlights, large-grid LED strip, premium segmented LED visuals, screen data provider, right-click spotlight config UI, **5.55.0-dev** ship-control data-type toggles, and LED strip config UI exist. Unity validation and persistence for tuned light settings remain pending. |
+| Grid lighting | 🛠️ WORKING ON | Small/large single and dual spotlights, large-grid LED strip, premium segmented/clean LED visuals, spotlight/LED screen data providers, right-click spotlight config UI, collapsible ship-control data-type toggles, LED strip config UI, visible chase animation, and motion-activated lighting exist. Unity validation and persistence for tuned light settings remain pending. |
 | Sloped / armored grid blocks | ❌ Missing | Only cube blocks exist; need shape variants |
 | Grid shape variant wheel | 🟡 PARTIALLY COMPLETE | Premium radial wheel foundation complete (5.40.1-dev) with full visual parity to Hammer/Conveyor wheels. CurrentShape accessor + auto-spawn ready. Compile error in GridBuilder fixed. Shape application + authored variants next (via Setup Step 18). |
 | Player armor slots | ❌ Missing | No equipable armor system |
@@ -503,7 +503,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Basic machines | 🟡 PARTIALLY COMPLETE | Electric Furnace, Crusher, and three Assembler tiers exist. Crusher/Assembler have recipe-selection UIs, visual animation, centralized simulation ticks, additive buffers/progress/enabled persistence, and Unity smoke validation from Thomas; production statistics and module systems remain. |
 | Storage blocks | 🟡 PARTIALLY COMPLETE | A basic chest and the wider storage system exist. The planned Wooden Crate → Iron Chest → Steel Chest → Provider/Requester progression is not complete. |
 | Power pole, wire, and substation | 🟡 PARTIALLY COMPLETE | Manual wiring, poles, substations, transformers, compact LV/HV one-link connectors, and 8-link wall/foundation relays exist. Setup reruns preserve balance while adding missing links. |
-| Grid/static lighting and LED strips | 🛠️ WORKING ON | Grid light, floodlight logic, static/grid LED assets, small/large spotlight variants, dual-output spotlights, large-grid LED strip, premium segmented LED visuals, right-click/grid-terminal spotlight config UI, data-type toggles, and LED strip config UI now exist (5.55.0-dev). Runtime setting persistence and Unity validation pending. |
+| Grid/static lighting and LED strips | 🛠️ WORKING ON | Grid light, floodlight logic, static/grid LED assets, small/large spotlight variants, dual-output spotlights, large-grid LED strip, premium segmented LED visuals, right-click/grid-terminal spotlight config UI, data-type toggles, LED strip config UI, LED strip screen data sources, clean/segmented strip toggle, visible chase animation, and **5.57.0-dev** motion-activated lighting now exist. Runtime setting persistence and Unity validation pending. |
 | Shared Machine UI | 🟡 PARTIALLY COMPLETE | Crusher and Assembler panels now expose recipe selection, progress, power, toggles, inventory slots, scrolling, and item-port integration. Remaining work: complete unification across every machine, production statistics, and theme overrides. |
 | Item entity system | 🟡 PARTIALLY COMPLETE | Dropped world items exist and conveyors render carried packets. A unified pooled physical-item entity lifecycle is not complete. |
 | Recipe registry refactor | 🟡 PARTIALLY COMPLETE | ScriptableObject crafting and machine recipes exist. Shaped/shapeless/smelting/machine unification and validation remain incomplete. |
@@ -1682,6 +1682,64 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.57.0-dev] Collapsible Data Types + Motion-Activated Lighting
+
+**Type:** MINOR — save-compatible lighting/control UX feature (no save schema migration)
+
+**Added / Improved:**
+- Ship Control `DATA TYPES` is now hidden/collapsed by default.
+- Added a `Show Types` / `Hide Types` button in the terminal block-list header.
+- Blocks hidden through Ship Control no longer appear in Screen Config source lists. Existing linked sources remain functional, but hidden blocks are not offered as new selectable screen sources.
+- LED strips now support a player-facing **Segments: ON / Clean Strip** toggle.
+- LED strip `Chase` mode now visibly chases across diode segments instead of looking static.
+- LED strip point lighting is distributed along the strip instead of using one center point light, reducing the brighter-middle hotspot.
+- LED strips now support **Motion Activation**:
+  - Motion ON/OFF
+  - Sensor radius
+  - Hold time after last detection
+- Grid spotlights now also support **Motion Activation** with radius and hold time controls.
+- Motion activation turns the light on when a player is nearby, enabling motion-sensitive ship/base lighting.
+
+**Door Note:**
+- Grid doors are not yet authored as grid blocks in the current repository, so the motion-sensor UI was added to lights first. The same motion-activation pattern is ready to be applied when grid doors/airtight doors are added in the later life-support/building pass.
+
+**Roadmap Status:**
+- Grid lighting remains **🛠️ WORKING ON** while Thomas validates collapsed data types, hidden source filtering, clean/segmented LED mode, chase animation, and motion activation.
+- Next planned implementation target remains runtime persistence for tuned spotlight/LED settings, then corner-to-corner LED strip placement.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Open Ship Control Terminal and confirm `DATA TYPES` is hidden by default.
+3. Click `Show Types`; confirm the data-type ON/OFF controls appear. Click `Hide Types`; confirm they collapse.
+4. Hide a block/group in Ship Control, then open Screen Config and confirm that hidden block is not offered as a new source.
+5. Open an LED strip config panel and toggle `Segments: ON` / `Clean Strip`.
+6. Set LED strip mode to `Chase` and confirm the lit segment travels along the strip.
+7. Confirm LED strip brightness is no longer concentrated at only the middle.
+8. Enable Motion on an LED strip or spotlight, walk out of radius and back in, and confirm it turns off/on based on player proximity.
+
+### [5.56.0-dev] LED Strip Screen Data Provider + Component Source Resolution
+
+**Type:** MINOR — save-compatible screen/data UX feature (no save schema migration)
+
+**Added / Improved:**
+- `LEDStrip` now implements `IGridDataProvider`, so LED strips can be selected as screen data sources.
+- LED strip screen data reports state, mode, draw, length, and brightness.
+- `GridScreenBlock` data-source resolution now supports provider components attached to a `GridBlock`, not only `GridBlock` subclasses.
+- Screen auto-link and available source lists now find component-based providers such as LED strips.
+- This keeps future utility components lightweight: they can expose screen data without needing a new `GridBlock` subclass.
+
+**Roadmap Status:**
+- Ship Control data-type toggles and LED config from 5.55.0-dev remain ready for Thomas validation.
+- Grid/static lighting remains **🛠️ WORKING ON**. Next planned implementation target: runtime persistence for tuned spotlight/LED settings, then corner-to-corner LED placement.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Place a grid LED strip and a screen on the same grid.
+3. Right-click the screen and verify the LED strip appears as a selectable Light source.
+4. Select the LED strip and use Mixed/Summary or System display mode.
+5. Confirm the screen reports LED strip state, mode, draw, length, and brightness.
+6. Change the LED strip mode/brightness/length from its config panel and confirm the screen data updates live.
 
 ### [5.55.0-dev] Ship Control Data-Type Toggles + LED Strip Configuration UI
 

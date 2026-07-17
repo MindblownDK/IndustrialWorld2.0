@@ -4,8 +4,9 @@
 // ║  INDUSTRIAL WORLD — LED STRIP LIGHT                             ║
 // ║  Thin configurable accent light strip for grids/static surfaces. ║
 // ╚══════════════════════════════════════════════════════════════════╝
-// v5.53.0-dev — Premium segmented strip visuals + configurable runtime length.
+// v5.57.0-dev — segmented/clean modes, visible chase animation, and motion activation.
 
+using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.GridSystem;
 
@@ -16,9 +17,9 @@ namespace VoxelEngine.Simulation
 
     /// <summary>
     /// Thin light strip that snaps to grid edges and static surfaces.
-    /// Supports multiple animation modes for accent and signal lighting.
+    /// Supports clean/segmented visuals, animation modes, and optional motion activation.
     /// </summary>
-    public class LEDStrip : MonoBehaviour
+    public class LEDStrip : MonoBehaviour, IGridDataProvider
     {
         [Header("LED Configuration")]
         public Color stripColor = new(0.18f, 0.72f, 0.88f);
@@ -28,28 +29,68 @@ namespace VoxelEngine.Simulation
         [Range(2, 32)] public int segmentCount = 8;
         [Tooltip("Width of the lit diffuser bar in meters.")]
         public float stripWidth = 0.08f;
+        [Tooltip("When enabled, individual diode segments are visible. When disabled, the strip is one clean continuous diffuser.")]
+        public bool showSegments = true;
 
         [Header("Animation")]
         public LEDMode mode = LEDMode.Static;
         [Tooltip("Speed of the animation (pulses/blinks per second).")]
         public float animSpeed = 2f;
 
+        [Header("Motion Activation")]
+        [Tooltip("Only turn on when a player is near this strip.")]
+        public bool motionActivated;
+        [Tooltip("Player detection radius in meters.")]
+        public float motionRadius = 6f;
+        [Tooltip("Seconds to stay on after the last player detection.")]
+        public float motionGraceSeconds = 2.5f;
+
         [Header("Power")]
         [Tooltip("Power draw in watts. Grid variants also expose this through their generated grid block item balance.")]
         public float wattsDraw = 5f;
 
-        private Light _light;
+        private readonly List<Light> _lights = new();
         private MeshRenderer _stripRenderer;
         private Material _stripMaterial;
         private Material _backingMaterial;
         private MaterialPropertyBlock _diodeBlock;
-        private readonly System.Collections.Generic.List<Renderer> _diodes = new();
+        private readonly List<Renderer> _diodes = new();
         private float _animTime;
         private bool _enabled = true;
         private GridBlock _gridBlock;
+        private float _motionCheckTimer;
+        private float _lastMotionTime = -999f;
 
         private bool HasGridPower => _gridBlock == null || (_gridBlock.Enabled && _gridBlock.Grid != null && _gridBlock.Grid.HasPower);
-        private bool ShouldBeLit => _enabled && HasGridPower;
+        private bool MotionSatisfied => !motionActivated || Time.time - _lastMotionTime <= Mathf.Max(0.1f, motionGraceSeconds);
+        private bool ShouldBeLit => _enabled && HasGridPower && MotionSatisfied;
+
+        public string SourceName
+        {
+            get
+            {
+                _gridBlock ??= GetComponent<GridBlock>();
+                if (_gridBlock != null && !string.IsNullOrWhiteSpace(_gridBlock.blockName) && _gridBlock.blockName != "Armor Block")
+                    return _gridBlock.blockName;
+                return "LED Strip";
+            }
+        }
+
+        public string DataCategory => "Light";
+
+        public string GetDisplayData()
+        {
+            _gridBlock ??= GetComponent<GridBlock>();
+            string state = !_enabled || (_gridBlock != null && !_gridBlock.Enabled) ? "OFF"
+                : !HasGridPower ? "NO POWER"
+                : motionActivated && !MotionSatisfied ? "MOTION STANDBY"
+                : "ON";
+            return "LED STRIP\n" + state + "\n" +
+                   "Mode " + mode + (showSegments ? " Seg" : " Clean") + "\n" +
+                   "Draw " + FormatWatts(wattsDraw) + "\n" +
+                   "Length " + stripLength.ToString("0.##") + "m\n" +
+                   "Brightness " + brightness.ToString("0.##");
+        }
 
         private void Awake()
         {
@@ -60,6 +101,7 @@ namespace VoxelEngine.Simulation
         private void Update()
         {
             _gridBlock ??= GetComponent<GridBlock>();
+            TickMotionSensor();
 
             float intensity = ShouldBeLit ? brightness : 0f;
             if (ShouldBeLit)
@@ -74,13 +116,33 @@ namespace VoxelEngine.Simulation
                         intensity *= Mathf.Sin(_animTime * Mathf.PI * 2f) > 0f ? 1f : 0f;
                         break;
                     case LEDMode.Chase:
-                        if (_stripMaterial != null && _stripMaterial.HasProperty("_ChaseOffset"))
-                            _stripMaterial.SetFloat("_ChaseOffset", _animTime % 1f);
+                        // Per-diode chase is applied in ApplyEmission(). Keep the diffuser low but visible.
+                        intensity *= showSegments ? 0.35f : (0.55f + 0.45f * Mathf.Sin(_animTime * Mathf.PI * 2f));
                         break;
                 }
             }
 
             ApplyEmission(intensity);
+        }
+
+        private void TickMotionSensor()
+        {
+            if (!motionActivated) return;
+            _motionCheckTimer -= Time.deltaTime;
+            if (_motionCheckTimer > 0f) return;
+            _motionCheckTimer = 0.20f;
+
+            var players = Object.FindObjectsByType<VoxelEngine.Player.PlayerController>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            float radiusSqr = Mathf.Max(0.1f, motionRadius) * Mathf.Max(0.1f, motionRadius);
+            for (int i = 0; i < players.Length; i++)
+            {
+                if (players[i] == null) continue;
+                if ((players[i].transform.position - transform.position).sqrMagnitude <= radiusSqr)
+                {
+                    _lastMotionTime = Time.time;
+                    return;
+                }
+            }
         }
 
         private void BuildStripVisuals()
@@ -136,7 +198,7 @@ namespace VoxelEngine.Simulation
             _stripRenderer.material = _stripMaterial;
 
             BuildDiodes();
-            BuildLight();
+            BuildLights();
         }
 
         private void BuildDiodes()
@@ -147,6 +209,12 @@ namespace VoxelEngine.Simulation
                 var child = transform.GetChild(i);
                 if (child != null && child.name.StartsWith("Generated_LEDDiode_", System.StringComparison.Ordinal))
                     Destroy(child.gameObject);
+            }
+
+            if (!showSegments)
+            {
+                _diodeBlock ??= new MaterialPropertyBlock();
+                return;
             }
 
             var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
@@ -175,31 +243,48 @@ namespace VoxelEngine.Simulation
             _diodeBlock ??= new MaterialPropertyBlock();
         }
 
-        private void BuildLight()
+        private void BuildLights()
         {
-            var lightTransform = transform.Find("LEDLight");
-            GameObject lightGo = lightTransform == null ? new GameObject("LEDLight") : lightTransform.gameObject;
-            lightGo.transform.SetParent(transform, false);
-            lightGo.transform.localPosition = Vector3.up * 0.10f;
+            _lights.Clear();
+            for (int i = transform.childCount - 1; i >= 0; i--)
+            {
+                var child = transform.GetChild(i);
+                if (child == null) continue;
+                if (child.name.StartsWith("Generated_LEDPoint_", System.StringComparison.Ordinal) || child.name == "LEDLight")
+                    Destroy(child.gameObject);
+            }
 
-            _light = lightGo.GetComponent<Light>();
-            if (_light == null) _light = lightGo.AddComponent<Light>();
-            _light.type = LightType.Point;
-            _light.color = stripColor;
-            _light.intensity = brightness;
-            _light.range = Mathf.Max(2f, stripLength * 1.75f);
-            _light.shadows = LightShadows.None;
+            int lightCount = Mathf.Clamp(Mathf.CeilToInt(stripLength / 1.75f), 1, 6);
+            float usable = Mathf.Max(0.05f, stripLength * 0.82f);
+            for (int i = 0; i < lightCount; i++)
+            {
+                float t = lightCount == 1 ? 0.5f : i / (float)(lightCount - 1);
+                float x = Mathf.Lerp(-usable * 0.5f, usable * 0.5f, t);
+                var lightGo = new GameObject("Generated_LEDPoint_" + i);
+                lightGo.transform.SetParent(transform, false);
+                lightGo.transform.localPosition = new Vector3(x, 0.10f, 0f);
+                var light = lightGo.AddComponent<Light>();
+                light.type = LightType.Point;
+                light.color = stripColor;
+                light.intensity = brightness / lightCount;
+                light.range = Mathf.Max(1.35f, stripLength * 0.62f);
+                light.shadows = LightShadows.None;
+                _lights.Add(light);
+            }
         }
 
         private void ApplyEmission(float intensity)
         {
             Color emission = stripColor * intensity * 0.8f;
-            if (_light != null)
+            int lightCount = Mathf.Max(1, _lights.Count);
+            for (int i = 0; i < _lights.Count; i++)
             {
-                _light.enabled = intensity > 0.001f;
-                _light.intensity = intensity;
-                _light.color = stripColor;
-                _light.range = Mathf.Max(2f, stripLength * 1.75f);
+                var light = _lights[i];
+                if (light == null) continue;
+                light.enabled = intensity > 0.001f;
+                light.intensity = intensity / lightCount;
+                light.color = stripColor;
+                light.range = Mathf.Max(1.35f, stripLength * 0.62f);
             }
 
             if (_stripMaterial != null)
@@ -210,14 +295,24 @@ namespace VoxelEngine.Simulation
             }
 
             _diodeBlock ??= new MaterialPropertyBlock();
+            int count = Mathf.Max(1, _diodes.Count);
+            float chase = Mathf.Repeat(_animTime, 1f);
             for (int i = 0; i < _diodes.Count; i++)
             {
                 var renderer = _diodes[i];
                 if (renderer == null) continue;
+                float diodeIntensity = intensity;
+                if (mode == LEDMode.Chase && ShouldBeLit)
+                {
+                    float t = count == 1 ? 0f : i / (float)(count - 1);
+                    float distance = Mathf.Abs(Mathf.DeltaAngle(t * 360f, chase * 360f)) / 180f;
+                    diodeIntensity = brightness * Mathf.Clamp01(1f - distance * 3.2f);
+                }
+                Color diodeEmission = stripColor * diodeIntensity * 1.35f;
                 renderer.GetPropertyBlock(_diodeBlock);
                 _diodeBlock.SetColor("_Color", stripColor);
                 _diodeBlock.SetColor("_BaseColor", stripColor);
-                _diodeBlock.SetColor("_EmissionColor", emission * 1.4f);
+                _diodeBlock.SetColor("_EmissionColor", diodeEmission);
                 renderer.SetPropertyBlock(_diodeBlock);
             }
         }
@@ -234,6 +329,18 @@ namespace VoxelEngine.Simulation
             _animTime = 0f;
         }
 
+        public void SetSegmented(bool segmented)
+        {
+            showSegments = segmented;
+            BuildDiodes();
+        }
+
+        public void SetMotionActivated(bool activated)
+        {
+            motionActivated = activated;
+            if (!activated) _lastMotionTime = Time.time;
+        }
+
         public void SetLength(float meters)
         {
             stripLength = Mathf.Max(0.25f, meters);
@@ -244,6 +351,14 @@ namespace VoxelEngine.Simulation
         {
             _enabled = enabled;
             ApplyEmission(ShouldBeLit ? brightness : 0f);
+        }
+
+        private static string FormatWatts(float watts)
+        {
+            float abs = Mathf.Abs(watts);
+            if (abs >= 1000000f) return (watts / 1000000f).ToString("0.##") + " MW";
+            if (abs >= 1000f) return (watts / 1000f).ToString("0.#") + " kW";
+            return watts.ToString("0") + " W";
         }
     }
 }
