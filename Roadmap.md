@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.54.0-dev`
-**Roadmap Version:** `5.54.0-dev`
+**Current Version:** `5.55.0-dev`
+**Roadmap Version:** `5.55.0-dev`
 **Date:** 2026-07-17
-**Status:** Active Implementation — Grid Spotlight Configuration UI
+**Status:** Active Implementation — Ship Control Data-Type Toggles + LED Strip Config
 
 ---
 
@@ -56,7 +56,7 @@ The design goal is a seamless blend of:
 | Space stations | ❌ Missing | No buildable orbital platforms |
 | Conveyor logistics | 🟡 Good | Conveyors, ramps, vertical belts, chutes, contextual shape wheel, ghost previews, and persistence exist. Remaining work: pooled item entities, more chute variants, and final long-run throughput validation. |
 | Grid screens / displays | ✅ COMPLETED | All sizes, live text+power states, right-click+terminal config, custom text+custom colors+border+font, visual bar charts, multi-source, live camera feeds, power gain/loss/net mode, persistence, and camera block are validated by Thomas. (5.51.3-dev) |
-| Grid lighting | 🛠️ WORKING ON | Small/large single and dual spotlights, large-grid LED strip, premium segmented LED visuals, screen data provider, and **5.54.0-dev** right-click spotlight config UI exist. Unity validation and persistence for tuned light settings remain pending. |
+| Grid lighting | 🛠️ WORKING ON | Small/large single and dual spotlights, large-grid LED strip, premium segmented LED visuals, screen data provider, right-click spotlight config UI, **5.55.0-dev** ship-control data-type toggles, and LED strip config UI exist. Unity validation and persistence for tuned light settings remain pending. |
 | Sloped / armored grid blocks | ❌ Missing | Only cube blocks exist; need shape variants |
 | Grid shape variant wheel | 🟡 PARTIALLY COMPLETE | Premium radial wheel foundation complete (5.40.1-dev) with full visual parity to Hammer/Conveyor wheels. CurrentShape accessor + auto-spawn ready. Compile error in GridBuilder fixed. Shape application + authored variants next (via Setup Step 18). |
 | Player armor slots | ❌ Missing | No equipable armor system |
@@ -503,7 +503,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Basic machines | 🟡 PARTIALLY COMPLETE | Electric Furnace, Crusher, and three Assembler tiers exist. Crusher/Assembler have recipe-selection UIs, visual animation, centralized simulation ticks, additive buffers/progress/enabled persistence, and Unity smoke validation from Thomas; production statistics and module systems remain. |
 | Storage blocks | 🟡 PARTIALLY COMPLETE | A basic chest and the wider storage system exist. The planned Wooden Crate → Iron Chest → Steel Chest → Provider/Requester progression is not complete. |
 | Power pole, wire, and substation | 🟡 PARTIALLY COMPLETE | Manual wiring, poles, substations, transformers, compact LV/HV one-link connectors, and 8-link wall/foundation relays exist. Setup reruns preserve balance while adding missing links. |
-| Grid/static lighting and LED strips | 🛠️ WORKING ON | Grid light, floodlight logic, static/grid LED assets, small/large spotlight variants, dual-output spotlights, large-grid LED strip, premium segmented LED visuals, and right-click/grid-terminal spotlight config UI now exist (5.54.0-dev). Runtime setting persistence and Unity validation pending. |
+| Grid/static lighting and LED strips | 🛠️ WORKING ON | Grid light, floodlight logic, static/grid LED assets, small/large spotlight variants, dual-output spotlights, large-grid LED strip, premium segmented LED visuals, right-click/grid-terminal spotlight config UI, data-type toggles, and LED strip config UI now exist (5.55.0-dev). Runtime setting persistence and Unity validation pending. |
 | Shared Machine UI | 🟡 PARTIALLY COMPLETE | Crusher and Assembler panels now expose recipe selection, progress, power, toggles, inventory slots, scrolling, and item-port integration. Remaining work: complete unification across every machine, production statistics, and theme overrides. |
 | Item entity system | 🟡 PARTIALLY COMPLETE | Dropped world items exist and conveyors render carried packets. A unified pooled physical-item entity lifecycle is not complete. |
 | Recipe registry refactor | 🟡 PARTIALLY COMPLETE | ScriptableObject crafting and machine recipes exist. Shaped/shapeless/smelting/machine unification and validation remain incomplete. |
@@ -1682,6 +1682,38 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.55.0-dev] Ship Control Data-Type Toggles + LED Strip Configuration UI
+
+**Type:** MINOR — save-compatible terminal/lighting UX feature (no save schema migration)
+
+**Added / Improved:**
+- Ship Control Terminal now includes a **DATA TYPES** section in the left block list.
+- Each data type row shows enabled count / total count and provides **ON** / **OFF** buttons.
+- The selected block details page now also shows its data type and has **TYPE ON** / **TYPE OFF** controls for that whole category.
+- Spotlights are categorized as **Spotlights**, so the player can disable/enable all spotlight blocks as a single data type.
+- LED strip grid blocks are categorized as **LED Strips** and also support type-wide ON/OFF controls.
+- Added dedicated right-click/grid-terminal LED strip config panel:
+  - On / Off
+  - Static / Pulse / Blink / Chase animation mode
+  - Brightness
+  - Runtime Length
+  - Segment count
+  - Color presets
+- LED strip config uses the existing runtime `SetLength(float meters)` foundation, preparing for the future corner-to-corner placement tool.
+
+**Roadmap Status:**
+- Grid lighting remains **🛠️ WORKING ON** while Thomas validates data-type toggles and LED strip config.
+- Grid/static lighting and LED strips remain **🛠️ WORKING ON**; next planned step is persistence for tuned spotlight/LED settings, then corner-to-corner LED placement.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Open Ship Control Terminal.
+3. In **DATA TYPES**, click **OFF** beside **Spotlights** and confirm every spotlight disables.
+4. Click **ON** beside **Spotlights** and confirm every spotlight enables.
+5. Select an individual spotlight and test **TYPE OFF** / **TYPE ON** from its details panel.
+6. Place/select a grid LED strip, right-click it, and verify the LED strip config panel opens.
+7. Change LED color, brightness, length, segments, and animation mode; confirm it updates live.
 
 ### [5.54.0-dev] Grid Spotlight Right-Click Configuration UI
 

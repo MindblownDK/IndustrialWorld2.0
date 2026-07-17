@@ -23,6 +23,9 @@ namespace VoxelEngine.GridSystem.UI
             var maritimePanel = VoxelEngine.Maritime.MaritimeBlockUI.BuildPanel(block);
             if (maritimePanel != null) return maritimePanel;
 
+            var ledStrip = block != null ? block.GetComponent<VoxelEngine.Simulation.LEDStrip>() : null;
+            if (ledStrip != null) return LEDStripPanel(ledStrip, block);
+
             switch (block)
             {
                 case GridLiquidTank lt:     return LiquidTankPanel(lt);
@@ -664,6 +667,77 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(T.Muted("Configure per-face Input / Output + item filters below."));
             // The port-config UI (direction + filters) is appended by GameUIController.
             return p;
+        }
+
+        // ── GRID LED STRIP ───────────────────────────────────────────────────────
+        private static VisualElement LEDStripPanel(VoxelEngine.Simulation.LEDStrip strip, GridBlock block)
+        {
+            var p = T.MachinePanel();
+            string name = block != null && !string.IsNullOrWhiteSpace(block.blockName) && block.blockName != "Armor Block"
+                ? block.blockName
+                : "Grid LED Strip";
+            bool online = block == null || (block.Enabled && block.Grid != null && block.Grid.HasPower);
+            string state = block != null && !block.Enabled ? "OFF" : online ? "ON" : "NO POWER";
+            Color stateColor = block != null && !block.Enabled ? T.AccentDim : online ? T.AccentGreen : T.AccentRed;
+            var (hdr, _, _, _) = T.HeaderRow("▰ " + name, state, stateColor);
+            p.Add(hdr);
+            p.Add(T.AccentDivider(strip.stripColor));
+
+            p.Add(T.StatRow("⚡", "Power Use", PowerFormat.Watts(strip.wattsDraw), T.AccentGold));
+            p.Add(T.StatRow("📏", "Length", $"{strip.stripLength:0.##} m", T.AccentCyan));
+            p.Add(T.StatRow("🔆", "Brightness", $"{strip.brightness:0.##}", T.AccentAmber));
+            p.Add(T.StatRow("◫", "Segments", strip.segmentCount.ToString(), T.TextSecondary));
+            p.Add(T.Spacer(6));
+
+            var toggleRow = Row();
+            if (block != null)
+            {
+                toggleRow.Add(T.SmallButton(block.Enabled ? "Turn OFF" : "Turn ON", () =>
+                {
+                    block.Enabled = !block.Enabled;
+                    strip.SetEnabled(block.Enabled);
+                    VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+                }, block.Enabled ? T.AccentRed : T.AccentGreen));
+            }
+            toggleRow.Add(T.SmallButton("Static", () => { strip.SetMode(VoxelEngine.Simulation.LEDMode.Static); VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel(); }, strip.mode == VoxelEngine.Simulation.LEDMode.Static ? T.AccentGreen : T.BgSlot));
+            toggleRow.Add(T.SmallButton("Pulse", () => { strip.SetMode(VoxelEngine.Simulation.LEDMode.Pulse); VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel(); }, strip.mode == VoxelEngine.Simulation.LEDMode.Pulse ? T.AccentCyan : T.BgSlot));
+            toggleRow.Add(T.SmallButton("Blink", () => { strip.SetMode(VoxelEngine.Simulation.LEDMode.Blink); VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel(); }, strip.mode == VoxelEngine.Simulation.LEDMode.Blink ? T.AccentAmber : T.BgSlot));
+            toggleRow.Add(T.SmallButton("Chase", () => { strip.SetMode(VoxelEngine.Simulation.LEDMode.Chase); VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel(); }, strip.mode == VoxelEngine.Simulation.LEDMode.Chase ? T.AccentTeal : T.BgSlot));
+            p.Add(toggleRow);
+            p.Add(T.Spacer(6));
+
+            p.Add(GridUIHelpers.SectionTitle("Strip Tuning"));
+            p.Add(SliderRow("Brightness", strip.brightness, 0f, 5f, v => strip.brightness = v, "0", "5"));
+            p.Add(SliderRow("Length", strip.stripLength, 0.25f, 10f, v => strip.SetLength(v), "0.25m", "10m"));
+            p.Add(SliderRow("Segments", strip.segmentCount, 2f, 32f, v => { strip.segmentCount = Mathf.RoundToInt(v); strip.SetLength(strip.stripLength); }, "2", "32"));
+
+            p.Add(GridUIHelpers.SectionTitle("Color"));
+            var colorRow = Row();
+            colorRow.style.flexWrap = Wrap.Wrap;
+            AddLedColorButton(colorRow, strip, "Cyan", T.AccentCyan);
+            AddLedColorButton(colorRow, strip, "Blue", new Color(0.25f, 0.48f, 1f));
+            AddLedColorButton(colorRow, strip, "Green", T.AccentGreen);
+            AddLedColorButton(colorRow, strip, "Amber", T.AccentAmber);
+            AddLedColorButton(colorRow, strip, "Red", T.AccentRed);
+            AddLedColorButton(colorRow, strip, "White", Color.white);
+            AddLedColorButton(colorRow, strip, "Violet", new Color(0.72f, 0.42f, 0.95f));
+            p.Add(colorRow);
+
+            p.Add(T.Spacer(4));
+            p.Add(T.Muted("Length changes are live now; corner-to-corner placement will use this same runtime length foundation in the next build-tool pass."));
+            return p;
+        }
+
+        private static void AddLedColorButton(VisualElement row, VoxelEngine.Simulation.LEDStrip strip, string label, Color color)
+        {
+            var btn = T.SmallButton(label, () =>
+            {
+                strip.SetColor(color);
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, color);
+            btn.style.marginRight = 4;
+            btn.style.marginBottom = 4;
+            row.Add(btn);
         }
 
         // ── GRID SPOTLIGHT / LIGHT ───────────────────────────────────────────────

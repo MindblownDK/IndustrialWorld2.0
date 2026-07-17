@@ -299,6 +299,7 @@ namespace VoxelEngine.GridSystem.UI
             PersistScroll(list, "blocklist");
 
             list.Add(TabButton("All Storage", tab == -1, () => onSelectTab(-1), null));
+            list.Add(BuildDataTypeControls(blocks));
 
             var grouped = new HashSet<GridBlock>();
             if (state.groups.Count > 0)
@@ -325,6 +326,76 @@ namespace VoxelEngine.GridSystem.UI
 
             col.Add(list);
             return col;
+        }
+
+        private static VisualElement BuildDataTypeControls(List<GridBlock> blocks)
+        {
+            var box = T.Card();
+            box.style.marginTop = 6;
+            box.style.marginBottom = 6;
+            box.style.flexShrink = 0;
+
+            var title = new Label("DATA TYPES");
+            title.style.fontSize = 9;
+            title.style.letterSpacing = 1.2f;
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            title.style.color = new StyleColor(T.TextMuted);
+            title.style.marginBottom = 5;
+            box.Add(title);
+
+            var categories = new List<string>();
+            for (int i = 0; i < blocks.Count; i++)
+            {
+                string cat = CategoryName(blocks[i]);
+                if (!categories.Contains(cat)) categories.Add(cat);
+            }
+            categories.Sort(string.CompareOrdinal);
+
+            for (int i = 0; i < categories.Count; i++)
+            {
+                string category = categories[i];
+                int count = 0;
+                int enabled = 0;
+                for (int b = 0; b < blocks.Count; b++)
+                {
+                    if (CategoryName(blocks[b]) != category) continue;
+                    count++;
+                    if (blocks[b].Enabled) enabled++;
+                }
+
+                var row = new VisualElement();
+                row.style.flexDirection = FlexDirection.Row;
+                row.style.alignItems = Align.Center;
+                row.style.marginBottom = 3;
+
+                var label = new Label($"{category}  {enabled}/{count}");
+                label.style.flexGrow = 1;
+                label.style.fontSize = 10;
+                label.style.unityFontStyleAndWeight = FontStyle.Bold;
+                label.style.color = new StyleColor(enabled > 0 ? T.TextSecondary : T.AccentDim);
+                row.Add(label);
+
+                row.Add(T.SmallButton("ON", () => SetCategoryEnabled(blocks, category, true), enabled == count && count > 0 ? T.AccentGreen : T.BgSlot));
+                row.Add(T.SmallButton("OFF", () => SetCategoryEnabled(blocks, category, false), enabled == 0 ? T.AccentRed : T.BgSlot));
+                box.Add(row);
+            }
+
+            var hint = T.Muted("Use data type toggles to enable/disable all blocks of one kind, like every spotlight.");
+            hint.style.marginTop = 4;
+            box.Add(hint);
+            return box;
+        }
+
+        private static void SetCategoryEnabled(List<GridBlock> blocks, string category, bool enabled)
+        {
+            if (blocks == null || string.IsNullOrEmpty(category)) return;
+            for (int i = 0; i < blocks.Count; i++)
+            {
+                var block = blocks[i];
+                if (block != null && CategoryName(block) == category)
+                    block.Enabled = enabled;
+            }
+            RefreshTerminal();
         }
 
         private static VisualElement BuildSelectionTools(TerminalState state)
@@ -626,6 +697,29 @@ namespace VoxelEngine.GridSystem.UI
                     status.style.color = new StyleColor(block.Enabled ? T.AccentGreen : new Color(0.6f, 0.6f, 0.65f));
                     bar.Add(status);
                     wrap.Add(bar);
+
+                    string dataType = CategoryName(block);
+                    int typeCount = 0;
+                    int typeEnabled = 0;
+                    for (int i = 0; i < blocks.Count; i++)
+                    {
+                        if (CategoryName(blocks[i]) != dataType) continue;
+                        typeCount++;
+                        if (blocks[i].Enabled) typeEnabled++;
+                    }
+                    var typeBar = new VisualElement();
+                    typeBar.style.flexDirection = FlexDirection.Row;
+                    typeBar.style.alignItems = Align.Center;
+                    typeBar.style.marginBottom = 8;
+                    var typeLabel = new Label($"DATA TYPE: {dataType}  ({typeEnabled}/{typeCount} ON)");
+                    typeLabel.style.flexGrow = 1;
+                    typeLabel.style.fontSize = 10;
+                    typeLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+                    typeLabel.style.color = new StyleColor(T.TextSecondary);
+                    typeBar.Add(typeLabel);
+                    typeBar.Add(T.SmallButton("TYPE ON", () => SetCategoryEnabled(blocks, dataType, true), T.AccentGreen));
+                    typeBar.Add(T.SmallButton("TYPE OFF", () => SetCategoryEnabled(blocks, dataType, false), T.AccentRed));
+                    wrap.Add(typeBar);
                 }
 
                 // Screen config button
@@ -839,6 +933,7 @@ namespace VoxelEngine.GridSystem.UI
             if (block is GridBeacon beacon) return beacon.IsActive ? "Active" : "Off";
             if (block is GridOreDetector detector) return $"{detector.DetectedOres.Count} ores";
             if (block is VoxelEngine.Simulation.GridLightBlock light) return light.IsOnline ? "On" : "Off";
+            if (block.GetComponent<VoxelEngine.Simulation.LEDStrip>() != null) return block.Enabled ? "On" : "Off";
             if (block.PowerDraw > 0.01f) return PowerFormat.Watts(block.PowerDraw);
             if (block.PowerOutput > 0.01f) return PowerFormat.Watts(block.PowerOutput);
             return "Online";
@@ -879,7 +974,8 @@ namespace VoxelEngine.GridSystem.UI
             if (block is GridCockpit) return "Cockpits";
             if (block is GridBeacon) return "Beacons";
             if (block is GridOreDetector) return "Ore Detectors";
-            if (block is VoxelEngine.Simulation.GridLightBlock) return "Grid Lighting";
+            if (block is VoxelEngine.Simulation.GridLightBlock) return "Spotlights";
+            if (block.GetComponent<VoxelEngine.Simulation.LEDStrip>() != null) return "LED Strips";
             if (block is GridScreenBlock) return "Screens";
             return block.GetType().Name;
         }
