@@ -4,7 +4,7 @@
 // ║  INDUSTRIAL WORLD — LED STRIP LIGHT                             ║
 // ║  Thin configurable accent light strip for grids/static surfaces. ║
 // ╚══════════════════════════════════════════════════════════════════╝
-// v5.57.0-dev — segmented/clean modes, visible chase animation, and motion activation.
+// v5.59.3-dev — even emissive lighting, clean-strip chase, and motion wake chase.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -46,6 +46,8 @@ namespace VoxelEngine.Simulation
         public float motionRadius = 6f;
         [Tooltip("Seconds to stay on after the last player detection.")]
         public float motionGraceSeconds = 2.5f;
+        [Tooltip("When motion turns the strip on, run one start-to-end chase pass before staying solid.")]
+        public bool motionChaseOnActivation;
 
         [Header("Power")]
         [Tooltip("Power draw in watts. Grid variants also expose this through their generated grid block item balance.")]
@@ -53,8 +55,10 @@ namespace VoxelEngine.Simulation
 
         private readonly List<Light> _lights = new();
         private MeshRenderer _stripRenderer;
+        private Renderer _chaseRenderer;
         private Material _stripMaterial;
         private Material _backingMaterial;
+        private Material _chaseMaterial;
         private MaterialPropertyBlock _diodeBlock;
         private readonly List<Renderer> _diodes = new();
         private float _animTime;
@@ -62,10 +66,14 @@ namespace VoxelEngine.Simulation
         private GridBlock _gridBlock;
         private float _motionCheckTimer;
         private float _lastMotionTime = -999f;
+        private bool _wasLit;
+        private bool _motionChaseActive;
+        private float _motionChaseStartTime;
 
         private bool HasGridPower => _gridBlock == null || (_gridBlock.Enabled && _gridBlock.Grid != null && _gridBlock.Grid.HasPower);
         private bool MotionSatisfied => !motionActivated || Time.time - _lastMotionTime <= Mathf.Max(0.1f, motionGraceSeconds);
         private bool ShouldBeLit => _enabled && HasGridPower && MotionSatisfied;
+        private float MotionChaseDuration => 1f / Mathf.Max(0.1f, animSpeed);
 
         public string SourceName
         {
@@ -92,6 +100,7 @@ namespace VoxelEngine.Simulation
                    "Draw " + FormatWatts(wattsDraw) + "\n" +
                    "Length " + stripLength.ToString("0.##") + "m\n" +
                    "Brightness " + brightness.ToString("0.##") + "\n" +
+                   (motionChaseOnActivation ? "Motion Chase" : motionActivated ? "Motion Sensor" : "Manual") + "\n" +
                    (stripOffset.sqrMagnitude > 0.0001f ? "Stretched" : "Standard");
         }
 
@@ -106,8 +115,18 @@ namespace VoxelEngine.Simulation
             _gridBlock ??= GetComponent<GridBlock>();
             TickMotionSensor();
 
-            float intensity = ShouldBeLit ? brightness : 0f;
-            if (ShouldBeLit)
+            bool lit = ShouldBeLit;
+            if (lit && !_wasLit && motionActivated && motionChaseOnActivation)
+            {
+                _motionChaseActive = true;
+                _motionChaseStartTime = Time.time;
+                _animTime = 0f;
+            }
+            if (!lit) _motionChaseActive = false;
+            _wasLit = lit;
+
+            float intensity = lit ? brightness : 0f;
+            if (lit)
             {
                 _animTime += Time.deltaTime * animSpeed;
                 switch (mode)
@@ -119,13 +138,23 @@ namespace VoxelEngine.Simulation
                         intensity *= Mathf.Sin(_animTime * Mathf.PI * 2f) > 0f ? 1f : 0f;
                         break;
                     case LEDMode.Chase:
-                        // Per-diode chase is applied in ApplyEmission(). Keep the diffuser low but visible.
-                        intensity *= showSegments ? 0.35f : (0.55f + 0.45f * Mathf.Sin(_animTime * Mathf.PI * 2f));
+                        // Chase is applied by a moving pulse/diode pass. Keep the base diffuser steady.
+                        intensity *= 0.28f;
                         break;
                 }
             }
 
-            ApplyEmission(intensity);
+            bool oneShot = _motionChaseActive;
+            float oneShotPhase = 1f;
+            if (_motionChaseActive)
+            {
+                oneShotPhase = Mathf.Clamp01((Time.time - _motionChaseStartTime) / MotionChaseDuration);
+                if (oneShotPhase >= 1f)
+                    _motionChaseActive = false;
+                intensity = brightness;
+            }
+
+            ApplyEmission(intensity, oneShot, oneShotPhase);
         }
 
         private void TickMotionSensor()
@@ -203,6 +232,7 @@ namespace VoxelEngine.Simulation
 
             UpdateInteractionCollider(diffuserLocalPosition);
             BuildDiodes();
+            BuildChasePulse();
             BuildLights();
         }
 
@@ -256,9 +286,34 @@ namespace VoxelEngine.Simulation
             _diodeBlock ??= new MaterialPropertyBlock();
         }
 
+        private void BuildChasePulse()
+        {
+            var pulse = transform.Find("Generated_LEDChasePulse")?.gameObject;
+            if (pulse == null)
+            {
+                pulse = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                pulse.name = "Generated_LEDChasePulse";
+                pulse.transform.SetParent(transform, false);
+                var collider = pulse.GetComponent<Collider>();
+                if (collider != null) Destroy(collider);
+            }
+
+            var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+            _chaseMaterial = new Material(shader) { name = "LEDStripChasePulse_Runtime" };
+            _chaseMaterial.EnableKeyword("_EMISSION");
+            _chaseRenderer = pulse.GetComponent<Renderer>();
+            if (_chaseRenderer != null)
+            {
+                _chaseRenderer.sharedMaterial = _chaseMaterial;
+                _chaseRenderer.enabled = false;
+            }
+        }
+
         private void BuildLights()
         {
             _lights.Clear();
+            // Remove point lights from LED strips. Their local hotspots made every few cells
+            // brighter than the rest; the strip now uses one continuous emissive surface.
             for (int i = transform.childCount - 1; i >= 0; i--)
             {
                 var child = transform.GetChild(i);
@@ -266,39 +321,11 @@ namespace VoxelEngine.Simulation
                 if (child.name.StartsWith("Generated_LEDPoint_", System.StringComparison.Ordinal) || child.name == "LEDLight")
                     Destroy(child.gameObject);
             }
-
-            int lightCount = Mathf.Clamp(Mathf.CeilToInt(stripLength / 1.75f), 1, 6);
-            float usable = Mathf.Max(0.05f, stripLength * 0.82f);
-            for (int i = 0; i < lightCount; i++)
-            {
-                float t = lightCount == 1 ? 0.5f : i / (float)(lightCount - 1);
-                float x = Mathf.Lerp(-usable * 0.5f, usable * 0.5f, t);
-                var lightGo = new GameObject("Generated_LEDPoint_" + i);
-                lightGo.transform.SetParent(transform, false);
-                lightGo.transform.localPosition = stripOffset + new Vector3(x, 0.045f, 0f);
-                var light = lightGo.AddComponent<Light>();
-                light.type = LightType.Point;
-                light.color = stripColor;
-                light.intensity = brightness / lightCount;
-                light.range = Mathf.Max(1.35f, stripLength * 0.62f);
-                light.shadows = LightShadows.None;
-                _lights.Add(light);
-            }
         }
 
-        private void ApplyEmission(float intensity)
+        private void ApplyEmission(float intensity, bool oneShotChase = false, float oneShotPhase = 1f)
         {
             Color emission = stripColor * intensity * 0.8f;
-            int lightCount = Mathf.Max(1, _lights.Count);
-            for (int i = 0; i < _lights.Count; i++)
-            {
-                var light = _lights[i];
-                if (light == null) continue;
-                light.enabled = intensity > 0.001f;
-                light.intensity = intensity / lightCount;
-                light.color = stripColor;
-                light.range = Mathf.Max(1.35f, stripLength * 0.62f);
-            }
 
             if (_stripMaterial != null)
             {
@@ -310,12 +337,21 @@ namespace VoxelEngine.Simulation
             _diodeBlock ??= new MaterialPropertyBlock();
             int count = Mathf.Max(1, _diodes.Count);
             float chase = Mathf.Repeat(_animTime, 1f);
+            bool continuousChase = mode == LEDMode.Chase && ShouldBeLit;
+            bool showChase = continuousChase || oneShotChase;
+            float chasePhase = oneShotChase ? Mathf.Clamp01(oneShotPhase) : chase;
+
             for (int i = 0; i < _diodes.Count; i++)
             {
                 var renderer = _diodes[i];
                 if (renderer == null) continue;
                 float diodeIntensity = intensity;
-                if (mode == LEDMode.Chase && ShouldBeLit)
+                if (oneShotChase && ShouldBeLit)
+                {
+                    float t = count == 1 ? 0f : i / (float)(count - 1);
+                    diodeIntensity = t <= chasePhase ? brightness : 0f;
+                }
+                else if (continuousChase)
                 {
                     float t = count == 1 ? 0f : i / (float)(count - 1);
                     float distance = Mathf.Abs(Mathf.DeltaAngle(t * 360f, chase * 360f)) / 180f;
@@ -327,6 +363,41 @@ namespace VoxelEngine.Simulation
                 _diodeBlock.SetColor("_BaseColor", stripColor);
                 _diodeBlock.SetColor("_EmissionColor", diodeEmission);
                 renderer.SetPropertyBlock(_diodeBlock);
+            }
+
+            UpdateCleanChasePulse(showChase, chasePhase, oneShotChase);
+        }
+
+        private void UpdateCleanChasePulse(bool active, float phase, bool oneShot)
+        {
+            if (_chaseRenderer == null) return;
+            bool visible = active && !showSegments && ShouldBeLit && brightness > 0.001f;
+            _chaseRenderer.enabled = visible;
+            if (!visible) return;
+
+            float usable = Mathf.Max(0.05f, stripLength * 0.92f);
+            float width = Mathf.Clamp(stripWidth * 0.86f, 0.02f, stripWidth);
+            if (oneShot)
+            {
+                float fillLength = Mathf.Max(0.025f, usable * Mathf.Clamp01(phase));
+                float center = -usable * 0.5f + fillLength * 0.5f;
+                _chaseRenderer.transform.localPosition = stripOffset + new Vector3(center, 0.034f, 0f);
+                _chaseRenderer.transform.localScale = new Vector3(fillLength, 0.014f, width);
+            }
+            else
+            {
+                float pulseLength = Mathf.Clamp(stripLength * 0.18f, 0.08f, Mathf.Max(0.09f, stripLength * 0.45f));
+                float x = Mathf.Lerp(-usable * 0.5f, usable * 0.5f, Mathf.Repeat(phase, 1f));
+                _chaseRenderer.transform.localPosition = stripOffset + new Vector3(x, 0.034f, 0f);
+                _chaseRenderer.transform.localScale = new Vector3(pulseLength, 0.014f, width);
+            }
+
+            Color pulseColor = stripColor * Mathf.Max(1.0f, brightness * 1.45f);
+            if (_chaseMaterial != null)
+            {
+                _chaseMaterial.color = stripColor;
+                if (_chaseMaterial.HasProperty("_BaseColor")) _chaseMaterial.SetColor("_BaseColor", stripColor);
+                if (_chaseMaterial.HasProperty("_EmissionColor")) _chaseMaterial.SetColor("_EmissionColor", pulseColor);
             }
         }
 

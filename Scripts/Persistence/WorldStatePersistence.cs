@@ -319,6 +319,7 @@ namespace VoxelEngine.Persistence
                 cfg.ledMode = ledStrip.mode.ToString();
                 cfg.ledAnimSpeed = ledStrip.animSpeed;
                 cfg.ledMotionActivated = ledStrip.motionActivated;
+                cfg.ledMotionChaseOnActivation = ledStrip.motionChaseOnActivation;
                 cfg.ledMotionRadius = ledStrip.motionRadius;
                 cfg.ledMotionGraceSeconds = ledStrip.motionGraceSeconds;
                 cfg.ledWattsDraw = ledStrip.wattsDraw;
@@ -785,6 +786,7 @@ namespace VoxelEngine.Persistence
                     }
                     if (cfg.ledAnimSpeed > 0f) ledStrip.animSpeed = cfg.ledAnimSpeed;
                     ledStrip.motionActivated = cfg.ledMotionActivated;
+                    ledStrip.motionChaseOnActivation = cfg.ledMotionChaseOnActivation;
                     if (cfg.ledMotionRadius > 0f) ledStrip.motionRadius = cfg.ledMotionRadius;
                     if (cfg.ledMotionGraceSeconds > 0f) ledStrip.motionGraceSeconds = cfg.ledMotionGraceSeconds;
                     if (cfg.ledWattsDraw > 0f) ledStrip.wattsDraw = cfg.ledWattsDraw;
@@ -1062,6 +1064,7 @@ namespace VoxelEngine.Persistence
             public string ledMode;
             public float ledAnimSpeed;
             public bool ledMotionActivated;
+            public bool ledMotionChaseOnActivation;
             public float ledMotionRadius;
             public float ledMotionGraceSeconds;
             public float ledWattsDraw;

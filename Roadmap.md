@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.59.2-dev`
-**Roadmap Version:** `5.59.2-dev`
+**Current Version:** `5.59.3-dev`
+**Roadmap Version:** `5.59.3-dev`
 **Date:** 2026-07-17
-**Status:** Active Implementation — LED Strip Face/Edge Snap + Cost Polish
+**Status:** Active Implementation — LED Strip Edge Snap + Even Chase Polish
 
 ---
 
@@ -1682,6 +1682,29 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.59.3-dev] LED Strip Edge Snap + Even Chase Polish
+
+**Type:** PATCH — LED strip placement/visual polish (no save schema break; additive persistence remains backward compatible)
+
+**Fixed / Improved:**
+- Edge snapping now uses the actual first clicked block face hit position instead of the new placement cell center, so edge/center detection is based on where the player clicked on the mounted face.
+- LED stretch ghost uses the same surface and lateral edge offset as final placement, making preview and placement match more closely.
+- LED strips no longer create point lights along the strip, removing the bright hotspots/light icons every few segments. The strip now uses an even emissive diffuser for clean visual brightness.
+- Clean Strip + Chase mode no longer blinks; it now uses a moving emissive chase pulse along the continuous strip.
+- Added **Wake Chase** option to LED strip motion activation: when motion turns the strip on, it runs one start-to-end chase/fill pass, then stays solid until motion expires.
+- Wake Chase setting is persisted through `SavedLightingConfig`.
+
+**Roadmap Status:**
+- Corner-to-corner LED strip placement remains **🛠️ WORKING ON** pending Thomas validation of edge snap, matching ghost, even brightness, clean-strip chase, and wake chase.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Place a stretched LED strip by first-clicking near a face edge; confirm it snaps to that edge.
+3. Confirm the cyan ghost is on the same face/edge as the final placed strip.
+4. Confirm LED brightness is even and no every-third light hotspot remains.
+5. Set LED strip to Clean Strip + Chase and confirm a chase pulse moves along the strip instead of blinking.
+6. Enable Motion + Wake Chase, walk into sensor range, and confirm one chase pass runs from start to end before the strip stays solid.
 
 ### [5.59.2-dev] LED Strip Face/Edge Snap + Cost Polish
 

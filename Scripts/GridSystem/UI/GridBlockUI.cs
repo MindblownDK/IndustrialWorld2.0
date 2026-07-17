@@ -723,6 +723,11 @@ namespace VoxelEngine.GridSystem.UI
                 strip.SetMotionActivated(!strip.motionActivated);
                 VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
             }, strip.motionActivated ? T.AccentGreen : T.BgSlot));
+            motionRow.Add(T.SmallButton(strip.motionChaseOnActivation ? "Wake Chase: ON" : "Wake Chase: OFF", () =>
+            {
+                strip.motionChaseOnActivation = !strip.motionChaseOnActivation;
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, strip.motionChaseOnActivation ? T.AccentCyan : T.BgSlot));
             motionRow.Add(T.Muted("Turns on when a player is nearby."));
             p.Add(motionRow);
             p.Add(SliderRow("Sensor Radius", strip.motionRadius, 1f, 20f, v => strip.motionRadius = v, "1m", "20m"));

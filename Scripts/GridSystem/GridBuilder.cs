@@ -36,7 +36,7 @@ namespace VoxelEngine.GridSystem
         private GridEntity _ledStretchGrid;
         private Vector3Int _ledStretchStart;
         private Vector3Int _ledStretchMountAxis;
-        private Vector3 _ledStretchStartHitOffset;
+        private Vector3 _ledStretchStartSurfaceOffset;
         private int _lastLedStripCost = 1;
         private GridBlockItem _ledStretchItem;
         private GameObject _ledStretchGhost;
@@ -148,7 +148,7 @@ namespace VoxelEngine.GridSystem
 
             if (IsLedStripItem(gbi))
             {
-                if (HandleLedStripStretch(gbi, targetGrid, gridPos, worldPos, rotation, hit.normal, hit.point))
+                if (HandleLedStripStretch(gbi, targetGrid, gridPos, worldPos, rotation, hit))
                     inventory.container.Remove(gbi, Mathf.Max(1, _lastLedStripCost));
                 return;
             }
@@ -211,7 +211,7 @@ namespace VoxelEngine.GridSystem
             return id.Contains("ledstrip") || id.Contains("led_strip") || name.Contains("led strip");
         }
 
-        private bool HandleLedStripStretch(GridBlockItem item, GridEntity grid, Vector3Int gridPos, Vector3 worldPos, Quaternion rotation, Vector3 hitNormal, Vector3 hitPoint)
+        private bool HandleLedStripStretch(GridBlockItem item, GridEntity grid, Vector3Int gridPos, Vector3 worldPos, Quaternion rotation, RaycastHit hit)
         {
             if (_ledStretchArmed && (_ledStretchItem != item || _ledStretchGrid == null))
                 CancelLedStretch(false);
@@ -231,8 +231,8 @@ namespace VoxelEngine.GridSystem
                 _ledStretchArmed = true;
                 _ledStretchGrid = grid;
                 _ledStretchStart = gridPos;
-                _ledStretchMountAxis = SnapMountAxis(grid, hitNormal);
-                _ledStretchStartHitOffset = grid.transform.InverseTransformPoint(hitPoint) - new Vector3(gridPos.x, gridPos.y, gridPos.z) * grid.gridSize.CellSize();
+                _ledStretchMountAxis = SnapMountAxis(grid, hit.normal);
+                _ledStretchStartSurfaceOffset = ComputeSurfaceHitOffset(grid, gridPos, _ledStretchMountAxis, hit);
                 _ledStretchItem = item;
                 VoxelEngine.UI.BuildFeedbackHud.Show("LED Strip", "First corner set. Aim second corner and right-click.", item.icon, item.iconTint);
                 return false;
@@ -264,7 +264,7 @@ namespace VoxelEngine.GridSystem
             Vector3 startWorld = _ledStretchGrid.GridToWorld(_ledStretchStart);
             Vector3 endWorld = _ledStretchGrid.GridToWorld(end);
             float surfaceOffset = -cs * 0.5f + Mathf.Max(0.0025f, cs * 0.004f);
-            float lateralOffset = ComputeLedLateralOffset(localDir, _ledStretchMountAxis, _ledStretchStartHitOffset, cs, item.gridSize == GridSize.Large ? 0.18f : 0.045f);
+            float lateralOffset = ComputeLedLateralOffset(localDir, _ledStretchMountAxis, _ledStretchStartSurfaceOffset, cs, item.gridSize == GridSize.Large ? 0.18f : 0.045f);
             Vector3 ledLocalOffset = new Vector3(centerDistance * 0.5f, surfaceOffset, lateralOffset);
             int cellsNeeded = LedCellsNeeded(_ledStretchStart, end);
 
@@ -332,6 +332,17 @@ namespace VoxelEngine.GridSystem
             Vector3 forward = Vector3.Cross(right, up);
             if (forward.sqrMagnitude < 0.0001f) forward = Vector3.forward;
             return Quaternion.LookRotation(forward.normalized, up.normalized);
+        }
+
+        private static Vector3 ComputeSurfaceHitOffset(GridEntity grid, Vector3Int placementPos, Vector3Int mountAxis, RaycastHit hit)
+        {
+            if (grid == null) return Vector3.zero;
+            float cs = grid.gridSize.CellSize();
+            var hitBlock = hit.collider != null ? hit.collider.GetComponentInParent<GridBlock>() : null;
+            Vector3Int surfaceCell = hitBlock != null && hitBlock.Grid == grid
+                ? hitBlock.GridPos
+                : placementPos - mountAxis;
+            return grid.transform.InverseTransformPoint(hit.point) - new Vector3(surfaceCell.x, surfaceCell.y, surfaceCell.z) * cs;
         }
 
         private static float ComputeLedLateralOffset(Vector3 localDirection, Vector3Int mountAxis, Vector3 hitOffset, float cellSize, float stripWidth)
