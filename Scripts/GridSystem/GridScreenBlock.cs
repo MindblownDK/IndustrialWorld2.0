@@ -1,7 +1,7 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridScreenBlock.cs
 //
 // Premium configurable digital screen for large grid ships.
-// v5.51.1-dev — Camera feed visibility + live border/font appearance refresh.
+// v5.51.2-dev — Camera feed quad, power gain/loss, and primary camera source isolation.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -62,6 +62,7 @@ namespace VoxelEngine.GridSystem
         private Renderer _screenSurfaceRenderer;
         private Renderer _glowStripRenderer;
         private readonly List<Renderer> _cornerDotRenderers = new();
+        private Renderer _cameraFeedQuadRenderer;
         private Material _screenSurfaceBaseMaterial;
         private Material _cameraFeedMaterial;
         private MaterialPropertyBlock _appearanceBlock;
@@ -115,6 +116,7 @@ namespace VoxelEngine.GridSystem
                 if (!IsPowered) return "OFFLINE";
                 if (dataMode == ScreenDataMode.Custom) return string.IsNullOrEmpty(customText) ? "(empty)" : customText;
                 if (dataMode == ScreenDataMode.Camera) return CameraStatusDisplay();
+                if (dataMode == ScreenDataMode.Power) return PowerDisplay();
 
                 var sources = ResolveAllProviders();
                 if (sources.Count == 0) return "ONLINE\nNO DATA\nRight-click to configure";
@@ -170,7 +172,9 @@ namespace VoxelEngine.GridSystem
         private IGridCameraFeedProvider ResolveCameraProvider()
         {
             var sources = ResolveAllProviders();
-            for (int i = 0; i < sources.Count; i++)
+            // Use the most recently selected camera when multiple camera sources are present,
+            // so two cameras never fight for the same screen.
+            for (int i = sources.Count - 1; i >= 0; i--)
             {
                 if (sources[i] is IGridCameraFeedProvider cameraProvider)
                     return cameraProvider;
@@ -188,6 +192,29 @@ namespace VoxelEngine.GridSystem
                 return "CAMERA\nSOURCE OFFLINE";
 
             return "CAMERA\n" + (cameraProvider.IsFeedInUse ? "LIVE FEED" : "READY") + "\n" + cameraProvider.SourceName;
+        }
+
+        private string PowerDisplay()
+        {
+            if (Grid == null)
+                return "POWER\nNO GRID";
+
+            float gain = Mathf.Max(0f, Grid.PowerGenerated);
+            float loss = Mathf.Max(0f, Grid.PowerConsumed);
+            float net = gain - loss;
+            string state = net >= -0.1f ? "STABLE" : "DEFICIT";
+            return "POWER " + state + "\n" +
+                   "Gain +" + FormatWatts(gain) + "\n" +
+                   "Loss -" + FormatWatts(loss) + "\n" +
+                   "Net " + (net >= 0f ? "+" : "") + FormatWatts(net);
+        }
+
+        private static string FormatWatts(float watts)
+        {
+            float abs = Mathf.Abs(watts);
+            if (abs >= 1000000f) return (watts / 1000000f).ToString("0.##") + " MW";
+            if (abs >= 1000f) return (watts / 1000f).ToString("0.#") + " kW";
+            return watts.ToString("0") + " W";
         }
 
         // ── Formatting ────────────────────────────────────────────────
@@ -528,6 +555,8 @@ namespace VoxelEngine.GridSystem
             {
                 if (_cameraFeedVisible && _screenSurfaceBaseMaterial != null)
                     _screenSurfaceRenderer.sharedMaterial = _screenSurfaceBaseMaterial;
+                if (_cameraFeedQuadRenderer != null)
+                    _cameraFeedQuadRenderer.enabled = false;
                 _cameraFeedVisible = false;
                 return;
             }
@@ -555,10 +584,43 @@ namespace VoxelEngine.GridSystem
             if (_cameraFeedMaterial.HasProperty("_BaseColor")) _cameraFeedMaterial.SetColor("_BaseColor", Color.white);
             if (_cameraFeedMaterial.HasProperty("_Color")) _cameraFeedMaterial.SetColor("_Color", Color.white);
             if (_cameraFeedMaterial.HasProperty("_EmissionColor")) _cameraFeedMaterial.SetColor("_EmissionColor", new Color(0.16f, 0.75f, 0.92f) * 0.45f);
+            if (_cameraFeedMaterial.HasProperty("_Cull")) _cameraFeedMaterial.SetFloat("_Cull", 0f);
 
             if (_screenSurfaceRenderer.sharedMaterial != _cameraFeedMaterial)
                 _screenSurfaceRenderer.sharedMaterial = _cameraFeedMaterial;
+
+            EnsureCameraFeedQuad();
+            if (_cameraFeedQuadRenderer != null)
+            {
+                _cameraFeedQuadRenderer.enabled = true;
+                _cameraFeedQuadRenderer.sharedMaterial = _cameraFeedMaterial;
+            }
             _cameraFeedVisible = true;
+        }
+
+        private void EnsureCameraFeedQuad()
+        {
+            if (_cameraFeedQuadRenderer != null) return;
+
+            Transform existing = transform.Find("CameraFeedQuad_Runtime");
+            GameObject quad = existing != null ? existing.gameObject : GameObject.CreatePrimitive(PrimitiveType.Quad);
+            quad.name = "CameraFeedQuad_Runtime";
+            quad.transform.SetParent(transform, false);
+            var (dw, dh) = DisplayArea();
+            quad.transform.localPosition = new Vector3(0f, 0f, -0.24f);
+            quad.transform.localRotation = Quaternion.identity;
+            quad.transform.localScale = new Vector3(dw * 0.96f, dh * 0.96f, 1f);
+
+            var collider = quad.GetComponent<Collider>();
+            if (collider != null) Destroy(collider);
+
+            _cameraFeedQuadRenderer = quad.GetComponent<Renderer>();
+            if (_cameraFeedQuadRenderer != null)
+            {
+                _cameraFeedQuadRenderer.enabled = false;
+                _cameraFeedQuadRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                _cameraFeedQuadRenderer.receiveShadows = false;
+            }
         }
 
         private void SetMainTextVisible(bool visible)
@@ -640,6 +702,15 @@ namespace VoxelEngine.GridSystem
                 dataSourcePositions.Add(pos);
                 dataSourceInstanceIds.Add(instanceId);
             }
+        }
+
+        public void SetPrimarySource(Vector3Int pos, int instanceId)
+        {
+            if (!_migrated) MigrateLegacy();
+            dataSourcePositions.Clear();
+            dataSourceInstanceIds.Clear();
+            dataSourcePositions.Add(pos);
+            dataSourceInstanceIds.Add(instanceId);
         }
 
         public void ClearSources()

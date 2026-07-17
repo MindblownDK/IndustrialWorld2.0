@@ -1,7 +1,7 @@
 // Assets/Scripts/VoxelEngine/GridSystem/UI/GridScreenConfigUI.cs
 //
 // Configuration panel for GridScreenBlock.
-// v5.51.1-dev — Live appearance button refresh + readable custom text input.
+// v5.51.3-dev — Unity-safe frontmost config panel and primary camera source selection.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -41,6 +41,7 @@ namespace VoxelEngine.GridSystem.UI
             if (Instance != null && Instance != this) { Destroy(this); return; }
             Instance = this;
             _doc = GetComponent<UIDocument>();
+            BringDocumentToFront();
             if (_doc.panelSettings == null)
             {
                 var settings = Resources.Load<PanelSettings>("MenuPanelSettings");
@@ -71,8 +72,12 @@ namespace VoxelEngine.GridSystem.UI
             if (_open) Close();
             _target = screen;
             _open = true;
+            BringDocumentToFront();
             _root.Clear();
             _root.style.display = DisplayStyle.Flex;
+            _root.style.position = Position.Absolute;
+            _root.style.left = 0; _root.style.right = 0; _root.style.top = 0; _root.style.bottom = 0;
+            _root.BringToFront();
             _root.pickingMode = PickingMode.Position;
             _root.style.backgroundColor = new StyleColor(new Color(0.02f, 0.025f, 0.04f, 0.75f));
             _root.style.alignItems = Align.Center;
@@ -96,6 +101,17 @@ namespace VoxelEngine.GridSystem.UI
         }
 
         public void OpenForScreen(GridScreenBlock screen) { Open(screen); }
+
+        private void BringDocumentToFront()
+        {
+            if (_doc == null) return;
+            try
+            {
+                var sortingOrderProperty = typeof(UIDocument).GetProperty("sortingOrder");
+                sortingOrderProperty?.SetValue(_doc, 30000, null);
+            }
+            catch { /* Older UI Toolkit versions can ignore sorting order; root BringToFront still applies inside this document. */ }
+        }
 
         private void Build()
         {
@@ -184,9 +200,19 @@ namespace VoxelEngine.GridSystem.UI
                     int instId = (provider as GridBlock)?.GetInstanceID() ?? 0;
                     bool isOn = _target.HasSource(pos);
 
+                    bool isCameraSource = provider is IGridCameraFeedProvider;
                     var btn = MakeToggleButton(isOn, provider.SourceName, provider.DataCategory, () =>
                     {
-                        _target.ToggleSource(idx, instId);
+                        if (isCameraSource)
+                        {
+                            _target.SetPrimarySource(idx, instId);
+                            _target.dataMode = ScreenDataMode.Camera;
+                            RefreshModeHighlights();
+                        }
+                        else
+                        {
+                            _target.ToggleSource(idx, instId);
+                        }
                         RefreshHighlights();
                         if (_sourceCount != null)
                             _sourceCount.text = _target.SourceCount + " source(s)";

@@ -2,7 +2,7 @@
 //
 // A camera block that captures live video and feeds it to linked GridScreenBlocks.
 // Place on a grid, right-click a screen, choose Camera mode, and select the camera source.
-// v5.51.1-dev — Forces live feed rendering when screens sample the texture.
+// v5.51.2-dev — Unique feed camera/texture and camera identity normalization.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -56,7 +56,7 @@ namespace VoxelEngine.GridSystem
             }
         }
 
-        public string SourceName => string.IsNullOrWhiteSpace(blockName) ? "Camera" : blockName;
+        public string SourceName => IsBadCameraName(blockName) ? "Camera Block" : blockName;
         public string DataCategory => "Camera";
 
         public string GetDisplayData()
@@ -69,13 +69,32 @@ namespace VoxelEngine.GridSystem
 
         private void Awake()
         {
+            NormalizeCameraIdentityAndDefaults();
             CacheStatusLed();
         }
 
         private void Start()
         {
+            NormalizeCameraIdentityAndDefaults();
             CacheStatusLed();
             UpdateStatusLed();
+        }
+
+        private void NormalizeCameraIdentityAndDefaults()
+        {
+            if (IsBadCameraName(blockName))
+                blockName = "Camera Block";
+
+            if (cameraOffset == Vector3.zero || Vector3.Distance(cameraOffset, new Vector3(0f, 0.3f, 0f)) < 0.001f)
+                cameraOffset = new Vector3(0f, 0.58f, -2.40f);
+        }
+
+        private static bool IsBadCameraName(string value)
+        {
+            return string.IsNullOrWhiteSpace(value)
+                   || value == "Armor Block"
+                   || value == "Iron Ore"
+                   || value == "iron_ore";
         }
 
         public void RegisterFeedConsumer(GridScreenBlock screen)
@@ -91,7 +110,7 @@ namespace VoxelEngine.GridSystem
             int resolution = Mathf.Clamp(feedResolution, 128, 2048);
             _renderTexture = new RenderTexture(resolution, resolution, 24, RenderTextureFormat.ARGB32)
             {
-                name = "CameraBlock_Feed",
+                name = "CameraBlock_Feed_" + GetInstanceID(),
                 autoGenerateMips = false,
                 useMipMap = false,
                 wrapMode = TextureWrapMode.Clamp,
@@ -99,7 +118,7 @@ namespace VoxelEngine.GridSystem
             };
             _renderTexture.Create();
 
-            var camGo = new GameObject("CameraBlock_FeedCamera");
+            var camGo = new GameObject("CameraBlock_FeedCamera_" + GetInstanceID());
             camGo.transform.SetParent(transform, false);
             camGo.transform.localPosition = cameraOffset;
             Quaternion localRotation = Quaternion.Euler(cameraRotation);
@@ -238,7 +257,8 @@ namespace VoxelEngine.GridSystem
         public override void OnPlaced()
         {
             base.OnPlaced();
-            blockName = "Camera";
+            blockName = "Camera Block";
+            NormalizeCameraIdentityAndDefaults();
             CacheStatusLed();
             UpdateStatusLed();
         }

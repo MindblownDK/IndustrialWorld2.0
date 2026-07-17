@@ -11,7 +11,7 @@ namespace VoxelEngine.EditorTools
     /// Non-destructive Step 19 setup for Grid Screens & Data Providers.
     /// Generates premium screen block prefabs (Small, Medium, Large, Wide)
     /// with GridScreenBlock components, materials, items, recipes, and the camera block.
-    /// v5.51.0-dev refreshes only generated screen/camera visuals and required links;
+    /// v5.51.2-dev refreshes only generated screen/camera visuals and required links;
     /// existing balance values, custom child objects, recipes, and authored tuning are preserved.
     /// </summary>
     public static class GridScreenSetup
@@ -351,7 +351,7 @@ namespace VoxelEngine.EditorTools
             var camBlock = camRoot.GetComponent<GridCameraBlock>();
             bool newCameraComponent = camBlock == null;
             if (newCameraComponent) camBlock = camRoot.AddComponent<GridCameraBlock>();
-            if (string.IsNullOrWhiteSpace(camBlock.blockName) || camBlock.blockName == "Armor Block") camBlock.blockName = "Camera Block";
+            if (IsDefaultItemIdentity(camBlock.blockName) || camBlock.blockName == "Armor Block") camBlock.blockName = "Camera Block";
             if (camBlock.BlockMass <= 0f) camBlock.BlockMass = 50f;
             if (camBlock.maxHP <= 0f) camBlock.maxHP = 80f;
             if (camBlock.fieldOfView <= 1f) camBlock.fieldOfView = 70f;
@@ -384,9 +384,10 @@ namespace VoxelEngine.EditorTools
             }
             else preserved++;
 
-            if (string.IsNullOrWhiteSpace(camItem.itemId)) camItem.itemId = "camera_block";
-            if (string.IsNullOrWhiteSpace(camItem.displayName)) camItem.displayName = "Camera Block";
-            if (string.IsNullOrWhiteSpace(camItem.description)) camItem.description = "Security camera. Captures live video for linked screens.";
+            if (IsDefaultItemIdentity(camItem.itemId)) camItem.itemId = "camera_block";
+            if (IsDefaultItemIdentity(camItem.displayName)) camItem.displayName = "Camera Block";
+            if (string.IsNullOrWhiteSpace(camItem.description) || camItem.description == "Security camera. Captures live video for linked screens.")
+                camItem.description = "Premium grid camera block. Streams a live view to linked screens, draws 30 W when enabled, and uses a status LED: green = feed in use, yellow = online idle, red = offline.";
             if (newCamItem) camItem.iconTint = new Color(0.72f, 0.62f, 0.34f);
             if (camItem.maxStack <= 0) camItem.maxStack = 99;
             if (camItem.massPerUnit <= 0f) camItem.massPerUnit = 1f;
@@ -447,6 +448,13 @@ namespace VoxelEngine.EditorTools
                 $"Items + Recipes added to GridSystem/ScreenItems and ScreenRecipes\n\n" +
                 $"Non-destructive — no balance values were modified.",
                 "OK");
+        }
+
+        private static bool IsDefaultItemIdentity(string value)
+        {
+            return string.IsNullOrWhiteSpace(value)
+                   || value == "Iron Ore"
+                   || value == "iron_ore";
         }
 
         private static void EnsureFolder(string path)

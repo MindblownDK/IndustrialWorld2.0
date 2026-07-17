@@ -441,6 +441,13 @@ namespace VoxelEngine.Player
                 // place the block instead (so you can build on existing blocks).
                 bool holdingGridBlock = IsHoldingGridBlock();
                 var gridBlock = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
+                // Cockpit / control seats: right-click enters directly when not holding a grid block.
+                if (!holdingGridBlock && gridBlock is VoxelEngine.GridSystem.GridCockpit cockpit)
+                {
+                    var pc = GetComponentInParent<VoxelEngine.Player.PlayerController>();
+                    if (pc != null && cockpit.Pilot == null) cockpit.Enter(pc);
+                    return;
+                }
                 // Helm / Ship Console: right-click enters the control seat.
                 if (!holdingGridBlock && gridBlock is VoxelEngine.Maritime.GridHelm helm)
                 {
@@ -491,8 +498,6 @@ namespace VoxelEngine.Player
                 var powerstation = hit.collider.GetComponentInParent<VoxelEngine.Storage.Powerstation>();
                 if (powerstation != null) { UI.GameUIController.Instance?.OpenMachine(powerstation); return; }
 
-                // Grid cockpit — removed old RMB enter logic (now on H).
-                
                 var electric = hit.collider.GetComponentInParent<ElectricFurnace>();
                 if (electric != null) { UI.GameUIController.Instance?.OpenElectricFurnace(electric); return; }
 

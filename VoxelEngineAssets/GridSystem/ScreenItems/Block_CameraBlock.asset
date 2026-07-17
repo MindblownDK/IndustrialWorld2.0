@@ -12,9 +12,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e230da79876505a41b25678102c74c13, type: 3}
   m_Name: Block_CameraBlock
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.GridSystem.GridBlockItem
-  itemId: iron_ore
-  displayName: Iron Ore
-  description: Security camera. Captures live video for linked screens.
+  itemId: camera_block
+  displayName: Camera Block
+  description: 'Premium grid camera block. Streams a live view to linked screens,
+    draws 30 W when enabled, and uses a status LED: green = feed in use, yellow =
+    online idle, red = offline.'
   icon: {fileID: 0}
   iconTint: {r: 0.72, g: 0.62, b: 0.34, a: 1}
   maxStack: 999
@@ -22,6 +24,6 @@ MonoBehaviour:
   category: Misc
   viewmodelPrefab: {fileID: 0}
   gridSize: 1
-  blockPrefab: {fileID: 8985627511522752853, guid: 00812ecb4b40e184b97fb055d58addf3, type: 3}
+  blockPrefab: {fileID: 7368435044275521223, guid: 00812ecb4b40e184b97fb055d58addf3, type: 3}
   blockMass: 100
   blockHP: 200

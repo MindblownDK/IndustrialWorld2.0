@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.51.1-dev`
-**Roadmap Version:** `5.51.1-dev`
+**Current Version:** `5.51.3-dev`
+**Roadmap Version:** `5.51.3-dev`
 **Date:** 2026-07-17
-**Status:** Active Implementation — Camera Feed Validation Fixes
+**Status:** Active Implementation — Screen Config Compile Fix
 
 ---
 
@@ -55,7 +55,7 @@ The design goal is a seamless blend of:
 | Gravity / orbits | 🟡 Buggy | Player and grids sometimes fall; orbits not realistic |
 | Space stations | ❌ Missing | No buildable orbital platforms |
 | Conveyor logistics | 🟡 Good | Conveyors, ramps, vertical belts, chutes, contextual shape wheel, ghost previews, and persistence exist. Remaining work: pooled item entities, more chute variants, and final long-run throughput validation. |
-| Grid screens / displays | 🛠️ WORKING ON | Live text+power states, right-click+terminal config, custom text+custom colors+border+font, visual bar charts, multi-source, camera-feed foundations, persistence, and camera block exist. **5.51.1-dev** fixes feed visibility, live border/font refresh, and custom-text input readability; Unity validation pending. |
+| Grid screens / displays | 🛠️ WORKING ON | Live text+power states, right-click+terminal config, custom text+custom colors+border+font, visual bar charts, multi-source, camera-feed foundations, persistence, and camera block exist. **5.51.2-dev** restores right-click cockpit entry, brings screen config above ship control, repairs camera identity, adds power gain/loss, and hardens camera feed isolation; Unity validation pending. |
 | Grid lighting | ❌ Missing | No flood lights or block lights |
 | Sloped / armored grid blocks | ❌ Missing | Only cube blocks exist; need shape variants |
 | Grid shape variant wheel | 🟡 PARTIALLY COMPLETE | Premium radial wheel foundation complete (5.40.1-dev) with full visual parity to Hammer/Conveyor wheels. CurrentShape accessor + auto-spawn ready. Compile error in GridBuilder fixed. Shape application + authored variants next (via Setup Step 18). |
@@ -877,7 +877,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 
 | Area | Status | Repository Audit |
 |------|--------|------------------|
-| Configurable grid screens / displays | 🛠️ WORKING ON | Text/power/data modes, multi-source selection, styling, persistence, and terminal/right-click config exist. Live camera feed rendering and premium camera prefab refresh are implemented; 5.51.1-dev fixes feed visibility plus live border/font refresh. Step 19 + Unity validation pending before returning this area to completed. |
+| Configurable grid screens / displays | 🛠️ WORKING ON | Text/power/data modes, multi-source selection, styling, persistence, and terminal/right-click config exist. Live camera feed rendering and premium camera prefab refresh are implemented; 5.51.2-dev fixes feed visibility, screen config layering, power gain/loss display, and camera identity. Step 19 + Unity validation pending before returning this area to completed. |
 | Camera block live feed | 🛠️ WORKING ON | `GridCameraBlock` now exposes a live RenderTexture through `IGridCameraFeedProvider`; `GridScreenBlock` Camera mode applies it directly to the screen surface. Camera LED states are green when a feed is used, yellow when online and idle, and red when offline. |
 | Trajectory camera / orbit tools | 🟡 PARTIALLY COMPLETE | Roadmap design exists; final trajectory/orbit-map implementation and validation remain future work. |
 
@@ -1682,6 +1682,51 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.51.3-dev] Screen Config UI Toolkit Compile Fix
+
+**Type:** PATCH — compile fix only (no save schema, recipe, balance, or runtime behavior design changes)
+
+**Fixed:**
+- Fixed `CS1061` in `GridScreenConfigUI.cs` caused by using `IStyle.zIndex`, which is not available in this Unity UI Toolkit version.
+- Replaced root z-index assignment with `VisualElement.BringToFront()` and kept the high `UIDocument.sortingOrder` reflection path for supported Unity versions.
+- Updated the frontmost-panel fallback comment so it matches the Unity-safe implementation.
+
+**Roadmap Status:**
+- Grid screens / displays remain **🛠️ WORKING ON** pending Thomas's Unity validation after compile succeeds.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Confirm the `GridScreenConfigUI.cs` compile error is gone.
+3. Re-test opening Screen Config from Ship Control / grid terminal and confirm it still appears in front.
+
+### [5.51.2-dev] Cockpit Right-Click + Screen Config Layering + Camera Feed Isolation
+
+**Type:** PATCH — interaction/UI/camera-feed fixes (no save schema, no recipe balance changes, no breaking API change)
+
+**Fixed / Improved:**
+- Restored right-click entry for `GridCockpit` when the player is not holding a grid block. Existing Helm / Ship Control Console right-click entry remains intact.
+- Screen Config UI now forces itself to the front with a high UIDocument sorting order and root z-index, so opening screen config from the ship control terminal no longer appears behind the ship control UI.
+- Camera identity repair now treats default `Iron Ore` / `iron_ore` item identity as invalid for camera blocks. Runtime camera source names normalize to `Camera Block`, and Step 19 repairs the camera item name/description non-destructively.
+- Camera item description upgraded to: live screen stream, 30 W draw, and green/yellow/red LED state explanation.
+- Power display mode now shows grid-wide current gain, current loss, and net power using W/kW/MW formatting.
+- Camera display mode now uses the most recently selected camera source if multiple camera sources exist. Selecting a camera source in Screen Config makes it the screen's primary source and switches the screen to Camera mode, preventing multiple cameras from interfering with the same screen.
+- Each camera feed now uses a unique hidden runtime camera and unique RenderTexture name based on instance id.
+- Screen camera feed now also uses a dedicated runtime quad in front of the screen surface with culling disabled, making the live video path independent of cube-face UV/culling quirks.
+
+**Roadmap Status:**
+- Grid screens / displays remain **🛠️ WORKING ON** until Thomas validates live feed, screen config layering, power mode, and camera identity in Unity.
+- Camera block live feed remains **🛠️ WORKING ON** pending this validation pass.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Run `Tools > Voxel Engine > Voxel Engine Setup` → **19. Setup Grid Screens & Displays (Non-Destructive)** once to repair the Camera Block item name/description if it still appears as Iron Ore in inventory/crafting.
+3. Right-click a Cockpit with empty hands or a non-grid item equipped — confirm you enter the cockpit.
+4. Right-click a Helm / Ship Control Console — confirm control-seat entry still works.
+5. Open Ship Control / grid terminal, open a screen config from that UI, and confirm Screen Config appears in front.
+6. Set screen mode to Power and confirm it shows Gain, Loss, and Net.
+7. Link Camera A to a screen, then add Camera B and select it in Screen Config — confirm the selected camera owns that screen and feeds do not mix.
+8. Confirm the live camera feed is visible on the screen, not black.
 
 ### [5.51.1-dev] Camera Feed Visibility + Screen Appearance Live Update Fixes
 
