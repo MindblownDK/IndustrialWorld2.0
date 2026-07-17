@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.59.1-dev`
-**Roadmap Version:** `5.59.1-dev`
+**Current Version:** `5.59.2-dev`
+**Roadmap Version:** `5.59.2-dev`
 **Date:** 2026-07-17
-**Status:** Active Implementation — Surface-Snapped LED Strip Placement Polish
+**Status:** Active Implementation — LED Strip Face/Edge Snap + Cost Polish
 
 ---
 
@@ -1682,6 +1682,30 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.59.2-dev] LED Strip Face/Edge Snap + Cost Polish
+
+**Type:** PATCH — LED strip placement polish and balance behavior (no save schema break)
+
+**Fixed / Improved:**
+- LED strip visuals are now positioned closer to the mounted block face so they sit flush instead of hovering.
+- LED strip placement now uses the first clicked face position to snap laterally to either the face center or the nearest face edge.
+- Stretch ghost now uses the exact same surface/edge offset as final placement, so preview better matches the actual placed strip.
+- LED strip cost now scales by occupied length: a 3-cell strip requires and consumes 3 LED strip items.
+- If the player does not have enough LED strip items for the selected length, placement is blocked with a clear feedback message.
+- Full-length collider remains active so right-click config works from the middle/end of stretched strips.
+
+**Roadmap Status:**
+- Corner-to-corner LED strip placement remains **🛠️ WORKING ON** pending Thomas validation of edge snapping, closer surface placement, and length-based item cost.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Equip a grid LED strip and test top-face center placement; confirm it sits closer/flush to the block.
+3. Aim near a top-face edge before first click, place a stretched strip, and confirm it snaps to that edge.
+4. Repeat on side faces.
+5. Place a 3-cell strip and confirm it consumes 3 LED strip items.
+6. Try placing a strip longer than your available LED strip count and confirm placement is blocked.
+7. Confirm the ghost preview matches final placement height/edge offset.
 
 ### [5.59.1-dev] Surface-Snapped LED Strip Placement Polish
 

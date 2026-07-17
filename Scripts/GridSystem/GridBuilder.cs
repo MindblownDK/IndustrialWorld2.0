@@ -36,6 +36,8 @@ namespace VoxelEngine.GridSystem
         private GridEntity _ledStretchGrid;
         private Vector3Int _ledStretchStart;
         private Vector3Int _ledStretchMountAxis;
+        private Vector3 _ledStretchStartHitOffset;
+        private int _lastLedStripCost = 1;
         private GridBlockItem _ledStretchItem;
         private GameObject _ledStretchGhost;
         private Material _ledStretchGhostMat;
@@ -146,8 +148,8 @@ namespace VoxelEngine.GridSystem
 
             if (IsLedStripItem(gbi))
             {
-                if (HandleLedStripStretch(gbi, targetGrid, gridPos, worldPos, rotation, hit.normal))
-                    inventory.container.Remove(gbi, 1);
+                if (HandleLedStripStretch(gbi, targetGrid, gridPos, worldPos, rotation, hit.normal, hit.point))
+                    inventory.container.Remove(gbi, Mathf.Max(1, _lastLedStripCost));
                 return;
             }
             CancelLedStretch(false);
@@ -209,7 +211,7 @@ namespace VoxelEngine.GridSystem
             return id.Contains("ledstrip") || id.Contains("led_strip") || name.Contains("led strip");
         }
 
-        private bool HandleLedStripStretch(GridBlockItem item, GridEntity grid, Vector3Int gridPos, Vector3 worldPos, Quaternion rotation, Vector3 hitNormal)
+        private bool HandleLedStripStretch(GridBlockItem item, GridEntity grid, Vector3Int gridPos, Vector3 worldPos, Quaternion rotation, Vector3 hitNormal, Vector3 hitPoint)
         {
             if (_ledStretchArmed && (_ledStretchItem != item || _ledStretchGrid == null))
                 CancelLedStretch(false);
@@ -230,6 +232,7 @@ namespace VoxelEngine.GridSystem
                 _ledStretchGrid = grid;
                 _ledStretchStart = gridPos;
                 _ledStretchMountAxis = SnapMountAxis(grid, hitNormal);
+                _ledStretchStartHitOffset = grid.transform.InverseTransformPoint(hitPoint) - new Vector3(gridPos.x, gridPos.y, gridPos.z) * grid.gridSize.CellSize();
                 _ledStretchItem = item;
                 VoxelEngine.UI.BuildFeedbackHud.Show("LED Strip", "First corner set. Aim second corner and right-click.", item.icon, item.iconTint);
                 return false;
@@ -260,14 +263,24 @@ namespace VoxelEngine.GridSystem
             Quaternion stripRotation = BuildLedSurfaceRotation(_ledStretchGrid, localDir, _ledStretchMountAxis);
             Vector3 startWorld = _ledStretchGrid.GridToWorld(_ledStretchStart);
             Vector3 endWorld = _ledStretchGrid.GridToWorld(end);
+            float surfaceOffset = -cs * 0.5f + Mathf.Max(0.0025f, cs * 0.004f);
+            float lateralOffset = ComputeLedLateralOffset(localDir, _ledStretchMountAxis, _ledStretchStartHitOffset, cs, item.gridSize == GridSize.Large ? 0.18f : 0.045f);
+            Vector3 ledLocalOffset = new Vector3(centerDistance * 0.5f, surfaceOffset, lateralOffset);
+            int cellsNeeded = LedCellsNeeded(_ledStretchStart, end);
 
             HideGhost();
-            ShowLedStretchGhost(startWorld, endWorld, length, stripRotation, item.gridSize);
+            ShowLedStretchGhost(startWorld, length, stripRotation, item.gridSize, ledLocalOffset);
 
             if (!GameSettings.WasPressed(InputAction.Build)) return false;
 
-            float surfaceOffset = -cs * 0.5f + Mathf.Max(0.012f, cs * 0.015f);
-            if (!TryPlaceLedStrip(item, _ledStretchGrid, _ledStretchStart, stripRotation, length, new Vector3(centerDistance * 0.5f, surfaceOffset, 0f)))
+            if (inventory == null || inventory.container == null || inventory.container.CountOf(item) < cellsNeeded)
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show("Need More LED Strips", $"Requires {cellsNeeded} items for this length", item.icon, Color.red);
+                return false;
+            }
+
+            _lastLedStripCost = cellsNeeded;
+            if (!TryPlaceLedStrip(item, _ledStretchGrid, _ledStretchStart, stripRotation, length, ledLocalOffset))
                 return false;
 
             CancelLedStretch(false);
@@ -321,6 +334,24 @@ namespace VoxelEngine.GridSystem
             return Quaternion.LookRotation(forward.normalized, up.normalized);
         }
 
+        private static float ComputeLedLateralOffset(Vector3 localDirection, Vector3Int mountAxis, Vector3 hitOffset, float cellSize, float stripWidth)
+        {
+            Vector3 normal = new Vector3(mountAxis.x, mountAxis.y, mountAxis.z).normalized;
+            Vector3 lateral = Vector3.Cross(localDirection.normalized, normal);
+            if (lateral.sqrMagnitude < 0.0001f) return 0f;
+            float raw = Vector3.Dot(hitOffset, lateral.normalized);
+            float edgeThreshold = cellSize * 0.24f;
+            float edgeOffset = Mathf.Max(0f, cellSize * 0.5f - stripWidth * 0.5f - 0.006f);
+            if (Mathf.Abs(raw) < edgeThreshold) return 0f;
+            return Mathf.Sign(raw) * edgeOffset;
+        }
+
+        private static int LedCellsNeeded(Vector3Int start, Vector3Int end)
+        {
+            Vector3Int d = end - start;
+            return Mathf.Max(1, Mathf.Max(Mathf.Abs(d.x), Mathf.Abs(d.y), Mathf.Abs(d.z)) + 1);
+        }
+
         private bool TryPlaceLedStrip(GridBlockItem item, GridEntity grid, Vector3Int startPos, Quaternion rotation, float length, Vector3 localOffset)
         {
             if (item == null || grid == null) return false;
@@ -351,7 +382,7 @@ namespace VoxelEngine.GridSystem
             }
 
             grid.AddBlock(startPos, block);
-            VoxelEngine.UI.BuildFeedbackHud.ShowBlockPlaced(item.displayName, item, 1);
+            VoxelEngine.UI.BuildFeedbackHud.ShowBlockPlaced(item.displayName, item, Mathf.Max(1, _lastLedStripCost));
             return true;
         }
 
@@ -631,7 +662,7 @@ namespace VoxelEngine.GridSystem
             }
         }
 
-        private void ShowLedStretchGhost(Vector3 startWorld, Vector3 endWorld, float length, Quaternion rotation, GridSize size)
+        private void ShowLedStretchGhost(Vector3 startWorld, float length, Quaternion rotation, GridSize size, Vector3 localOffset)
         {
             if (_ledStretchGhost == null)
             {
@@ -654,7 +685,7 @@ namespace VoxelEngine.GridSystem
 
             float width = size == GridSize.Large ? 0.18f : 0.045f;
             _ledStretchGhost.SetActive(true);
-            _ledStretchGhost.transform.position = (startWorld + endWorld) * 0.5f;
+            _ledStretchGhost.transform.position = startWorld + rotation * (localOffset + new Vector3(0f, width * 0.5f, 0f));
             _ledStretchGhost.transform.rotation = rotation;
             _ledStretchGhost.transform.localScale = new Vector3(length, width, width);
             var renderer = _ledStretchGhost.GetComponent<Renderer>();
