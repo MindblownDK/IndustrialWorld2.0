@@ -838,6 +838,7 @@ namespace VoxelEngine.GridSystem.UI
             if (block is GridSolarPanel solar) return PowerFormat.Watts(solar.CurrentOutput);
             if (block is GridBeacon beacon) return beacon.IsActive ? "Active" : "Off";
             if (block is GridOreDetector detector) return $"{detector.DetectedOres.Count} ores";
+            if (block is VoxelEngine.Simulation.GridLightBlock light) return light.IsOnline ? "On" : "Off";
             if (block.PowerDraw > 0.01f) return PowerFormat.Watts(block.PowerDraw);
             if (block.PowerOutput > 0.01f) return PowerFormat.Watts(block.PowerOutput);
             return "Online";
@@ -878,6 +879,7 @@ namespace VoxelEngine.GridSystem.UI
             if (block is GridCockpit) return "Cockpits";
             if (block is GridBeacon) return "Beacons";
             if (block is GridOreDetector) return "Ore Detectors";
+            if (block is VoxelEngine.Simulation.GridLightBlock) return "Grid Lighting";
             if (block is GridScreenBlock) return "Screens";
             return block.GetType().Name;
         }

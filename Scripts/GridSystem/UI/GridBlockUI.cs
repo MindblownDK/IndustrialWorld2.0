@@ -43,6 +43,7 @@ namespace VoxelEngine.GridSystem.UI
                 case GridElectricFurnace ef: return FurnacePanel(ef, slot);
                 case GridBeacon bc:         return BeaconPanel(bc);
                 case GridOreDetector od:    return OreDetectorPanel(od);
+                case VoxelEngine.Simulation.GridLightBlock gl: return GridLightPanel(gl);
                 default:                    return GenericPanel(block);
             }
         }
@@ -663,6 +664,73 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(T.Muted("Configure per-face Input / Output + item filters below."));
             // The port-config UI (direction + filters) is appended by GameUIController.
             return p;
+        }
+
+        // ── GRID SPOTLIGHT / LIGHT ───────────────────────────────────────────────
+        private static VisualElement GridLightPanel(VoxelEngine.Simulation.GridLightBlock light)
+        {
+            var p = T.MachinePanel();
+            string state = !light.Enabled ? "OFF" : light.IsOnline ? "ON" : "NO POWER";
+            Color stateColor = !light.Enabled ? T.AccentDim : light.IsOnline ? T.AccentGreen : T.AccentRed;
+            var (hdr, _, _, _) = T.HeaderRow("💡 " + light.SourceName, state, stateColor);
+            p.Add(hdr);
+            p.Add(T.AccentDivider(light.lightColor));
+
+            p.Add(T.StatRow("⚡", "Power Use", PowerFormat.Watts(light.PowerDraw), T.AccentGold));
+            p.Add(T.StatRow("📏", "Range", $"{light.range:0.#} m", T.AccentCyan));
+            p.Add(T.StatRow("🔆", "Intensity", $"{light.intensity:0.#}", T.AccentAmber));
+            p.Add(T.StatRow("◰", "Cone", $"{light.spotAngle:0}°", T.TextSecondary));
+            p.Add(T.Spacer(6));
+
+            var toggleRow = Row();
+            toggleRow.Add(T.SmallButton(light.Enabled ? "Turn OFF" : "Turn ON", () =>
+            {
+                light.Enabled = !light.Enabled;
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, light.Enabled ? T.AccentRed : T.AccentGreen));
+            toggleRow.Add(T.SmallButton("Reset Defaults", () =>
+            {
+                light.SetColor(Color.white);
+                light.SetIntensity(light.Grid != null && light.Grid.gridSize == VoxelEngine.GridSystem.GridSize.Large ? 9.5f : 4.8f);
+                light.SetRange(light.Grid != null && light.Grid.gridSize == VoxelEngine.GridSystem.GridSize.Large ? 78f : 34f);
+                light.spotAngle = 42f;
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, T.BgSlot));
+            p.Add(toggleRow);
+            p.Add(T.Spacer(6));
+
+            p.Add(GridUIHelpers.SectionTitle("Beam Tuning"));
+            p.Add(SliderRow("Intensity", light.intensity, 0f, 15f, v => light.SetIntensity(v), "0", "15"));
+            p.Add(SliderRow("Range", light.range, 2f, 120f, v => light.SetRange(v), "2m", "120m"));
+            p.Add(SliderRow("Cone", light.spotAngle, 10f, 120f, v => light.spotAngle = v, "10°", "120°"));
+
+            p.Add(GridUIHelpers.SectionTitle("Color"));
+            var colorRow = Row();
+            colorRow.style.flexWrap = Wrap.Wrap;
+            AddColorButton(colorRow, light, "White", Color.white);
+            AddColorButton(colorRow, light, "Warm", new Color(1f, 0.82f, 0.55f));
+            AddColorButton(colorRow, light, "Cyan", T.AccentCyan);
+            AddColorButton(colorRow, light, "Blue", new Color(0.25f, 0.48f, 1f));
+            AddColorButton(colorRow, light, "Green", T.AccentGreen);
+            AddColorButton(colorRow, light, "Amber", T.AccentAmber);
+            AddColorButton(colorRow, light, "Red", T.AccentRed);
+            p.Add(colorRow);
+
+            p.Add(T.Spacer(4));
+            p.Add(T.Muted("Right-click a spotlight to open this config. Settings apply live to all beams in dual-output lights."));
+            return p;
+        }
+
+        private static void AddColorButton(VisualElement row, VoxelEngine.Simulation.GridLightBlock light, string label, Color color)
+        {
+            var btn = T.SmallButton(label, () =>
+            {
+                light.SetColor(color);
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, color);
+            btn.style.marginRight = 4;
+            btn.style.marginBottom = 4;
+            row.Add(btn);
         }
 
         // ── FALLBACK ────────────────────────────────────────────────────────────

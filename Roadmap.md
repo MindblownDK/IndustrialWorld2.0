@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.53.0-dev`
-**Roadmap Version:** `5.53.0-dev`
+**Current Version:** `5.54.0-dev`
+**Roadmap Version:** `5.54.0-dev`
 **Date:** 2026-07-17
-**Status:** Active Implementation — Large Grid Lighting + LED Strip Variants
+**Status:** Active Implementation — Grid Spotlight Configuration UI
 
 ---
 
@@ -56,7 +56,7 @@ The design goal is a seamless blend of:
 | Space stations | ❌ Missing | No buildable orbital platforms |
 | Conveyor logistics | 🟡 Good | Conveyors, ramps, vertical belts, chutes, contextual shape wheel, ghost previews, and persistence exist. Remaining work: pooled item entities, more chute variants, and final long-run throughput validation. |
 | Grid screens / displays | ✅ COMPLETED | All sizes, live text+power states, right-click+terminal config, custom text+custom colors+border+font, visual bar charts, multi-source, live camera feeds, power gain/loss/net mode, persistence, and camera block are validated by Thomas. (5.51.3-dev) |
-| Grid lighting | 🛠️ WORKING ON | Grid Light Block, LED strips, static lighting setup, and lighting UI foundations exist. **5.53.0-dev** adds small/large single and dual spotlight setup variants, large-grid LED strip, premium segmented LED visuals, and screen text depth hardening; Unity Step 17 validation pending. |
+| Grid lighting | 🛠️ WORKING ON | Small/large single and dual spotlights, large-grid LED strip, premium segmented LED visuals, screen data provider, and **5.54.0-dev** right-click spotlight config UI exist. Unity validation and persistence for tuned light settings remain pending. |
 | Sloped / armored grid blocks | ❌ Missing | Only cube blocks exist; need shape variants |
 | Grid shape variant wheel | 🟡 PARTIALLY COMPLETE | Premium radial wheel foundation complete (5.40.1-dev) with full visual parity to Hammer/Conveyor wheels. CurrentShape accessor + auto-spawn ready. Compile error in GridBuilder fixed. Shape application + authored variants next (via Setup Step 18). |
 | Player armor slots | ❌ Missing | No equipable armor system |
@@ -503,7 +503,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Basic machines | 🟡 PARTIALLY COMPLETE | Electric Furnace, Crusher, and three Assembler tiers exist. Crusher/Assembler have recipe-selection UIs, visual animation, centralized simulation ticks, additive buffers/progress/enabled persistence, and Unity smoke validation from Thomas; production statistics and module systems remain. |
 | Storage blocks | 🟡 PARTIALLY COMPLETE | A basic chest and the wider storage system exist. The planned Wooden Crate → Iron Chest → Steel Chest → Provider/Requester progression is not complete. |
 | Power pole, wire, and substation | 🟡 PARTIALLY COMPLETE | Manual wiring, poles, substations, transformers, compact LV/HV one-link connectors, and 8-link wall/foundation relays exist. Setup reruns preserve balance while adding missing links. |
-| Grid/static lighting and LED strips | 🛠️ WORKING ON | Grid light, floodlight logic, static/grid LED assets, small/large spotlight variants, dual-output spotlights, large-grid LED strip, and premium segmented LED visuals now exist in setup code (5.53.0-dev). Step 17 generation, persistence/config UX, and Unity validation pending. |
+| Grid/static lighting and LED strips | 🛠️ WORKING ON | Grid light, floodlight logic, static/grid LED assets, small/large spotlight variants, dual-output spotlights, large-grid LED strip, premium segmented LED visuals, and right-click/grid-terminal spotlight config UI now exist (5.54.0-dev). Runtime setting persistence and Unity validation pending. |
 | Shared Machine UI | 🟡 PARTIALLY COMPLETE | Crusher and Assembler panels now expose recipe selection, progress, power, toggles, inventory slots, scrolling, and item-port integration. Remaining work: complete unification across every machine, production statistics, and theme overrides. |
 | Item entity system | 🟡 PARTIALLY COMPLETE | Dropped world items exist and conveyors render carried packets. A unified pooled physical-item entity lifecycle is not complete. |
 | Recipe registry refactor | 🟡 PARTIALLY COMPLETE | ScriptableObject crafting and machine recipes exist. Shaped/shapeless/smelting/machine unification and validation remain incomplete. |
@@ -1682,6 +1682,37 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.54.0-dev] Grid Spotlight Right-Click Configuration UI
+
+**Type:** MINOR — new save-compatible grid lighting configuration UI (no save schema migration; tuned light setting persistence remains future work)
+
+**Added / Improved:**
+- Right-clicking a `GridLightBlock` / grid spotlight now opens its configuration panel when the player is not holding a grid block.
+- Added a dedicated `GridLightPanel` in `GridBlockUI` instead of falling back to the generic `INFO` panel.
+- Grid spotlight config now exposes live controls for:
+  - On / Off
+  - Intensity
+  - Range
+  - Cone angle
+  - Color presets: White, Warm, Cyan, Blue, Green, Amber, Red
+  - Reset Defaults
+- The panel header now reports actual light state: `ON`, `OFF`, or `NO POWER` instead of generic `INFO`.
+- Ship/grid terminal block state labels now show grid lights as `On` / `Off`.
+- Grid lights are categorized under **Grid Lighting** in the ship/grid terminal.
+- Dual-output spotlights use the same config and apply changes to all beam lights through the existing multi-light control path.
+
+**Roadmap Status:**
+- Grid lighting remains **🛠️ WORKING ON** while Thomas validates right-click config and terminal labels.
+- Grid/static lighting and LED strips remain **🛠️ WORKING ON**; runtime persistence for customized light settings is still pending.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Place any grid spotlight and right-click it with empty hands / non-grid item equipped.
+3. Confirm the spotlight config panel opens.
+4. Change Intensity, Range, Cone, and Color; confirm the light updates live.
+5. Open the Ship/Grid Control panel and select a spotlight. Confirm it shows `ON`, `OFF`, or `NO POWER` instead of generic `INFO`.
+6. Test a dual spotlight and confirm both beams change together.
 
 ### [5.53.0-dev] Large Grid Spotlights + Premium Segmented LED Strip Variants
 

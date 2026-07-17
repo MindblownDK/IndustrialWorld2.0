@@ -926,7 +926,8 @@ namespace VoxelEngine.Player
                 || b is VoxelEngine.GridSystem.GridHydrogenEngine
                 || b is VoxelEngine.GridSystem.GridElectricFurnace
                 || b is VoxelEngine.GridSystem.GridBeacon
-                || b is VoxelEngine.GridSystem.GridOreDetector;
+                || b is VoxelEngine.GridSystem.GridOreDetector
+                || b is VoxelEngine.Simulation.GridLightBlock;
         }
     }
 }
