@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.57.1-dev`
-**Roadmap Version:** `5.57.1-dev`
+**Current Version:** `5.57.2-dev`
+**Roadmap Version:** `5.57.2-dev`
 **Date:** 2026-07-17
-**Status:** Active Implementation — Grid Screen Config Singleton + Power Relay Missing Script Fix
+**Status:** Active Implementation — Screen Config Access + Data-Type Visibility Fix
 
 ---
 
@@ -1682,6 +1682,30 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.57.2-dev] Screen Config Access + Data-Type Visibility Fix
+
+**Type:** PATCH — runtime UI/filter fix only (no save schema, recipe, or balance changes)
+
+**Fixed:**
+- Screen Config right-click now uses a guaranteed `GridScreenConfigUI.Instance` path, so the config UI is created/found before opening instead of silently doing nothing when the singleton was null.
+- `GridScreenConfigUI` now ensures a `UIDocument` exists on its GameObject during Awake, preventing misconfigured objects from failing to mount.
+- Grid Screen right-click handling now runs before generic grid-block UI handling, so screens always open Screen Config first.
+- Ship Control data type controls no longer enable/disable actual blocks.
+- Data type controls now only show/hide that category from Screen Config source lists.
+- Selected-block data type controls were renamed to `TYPE SHOW` / `TYPE HIDE` and now only affect Screen Config visibility.
+- Hidden data types are included in `IsHiddenFromScreenConfig()`, so categories like Spotlights can be hidden from the Screen Config picker without turning off the lights.
+
+**Roadmap Status:**
+- Grid lighting remains **🛠️ WORKING ON**; this patch corrects the intended data-type behavior before the next validation pass.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Right-click a grid screen and confirm Screen Config opens.
+3. In Ship Control, click `Show Types`, then `Hide` for Spotlights. Confirm the spotlights stay powered/working.
+4. Open Screen Config and confirm Spotlights are not offered as selectable sources.
+5. Click `Show` for Spotlights and confirm they appear again in Screen Config.
+6. Confirm the screen no longer stays black because the config can be opened and display mode/source can be changed.
 
 ### [5.57.1-dev] Grid Screen Config Singleton + Power Relay Missing Script Fix
 

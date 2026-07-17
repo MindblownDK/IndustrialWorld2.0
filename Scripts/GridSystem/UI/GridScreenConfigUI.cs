@@ -14,7 +14,16 @@ namespace VoxelEngine.GridSystem.UI
 {
     public class GridScreenConfigUI : MonoBehaviour
     {
-        public static GridScreenConfigUI Instance { get; private set; }
+        private static GridScreenConfigUI _instance;
+        public static GridScreenConfigUI Instance
+        {
+            get
+            {
+                EnsureInstance();
+                return _instance;
+            }
+            private set => _instance = value;
+        }
 
         private UIDocument _doc;
         private VisualElement _root, _panel;
@@ -30,12 +39,12 @@ namespace VoxelEngine.GridSystem.UI
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void EnsureInstance()
         {
-            if (Instance != null) return;
+            if (_instance != null) return;
 
             var existing = Object.FindAnyObjectByType<GridScreenConfigUI>(FindObjectsInactive.Include);
             if (existing != null)
             {
-                Instance = existing;
+                _instance = existing;
                 return;
             }
 
@@ -46,17 +55,17 @@ namespace VoxelEngine.GridSystem.UI
 
         private void Awake()
         {
-            if (Instance != null && Instance != this)
+            if (_instance != null && _instance != this)
             {
                 // Prefer the scene/player-authored object over a runtime-generated root singleton.
                 // Destroying only the component made Unity remove the script from the configured
                 // object, so duplicates are handled at GameObject level instead.
                 bool thisLooksSceneAuthored = transform.parent != null;
-                bool existingLooksRuntimeGenerated = Instance != null && Instance.transform.parent == null;
+                bool existingLooksRuntimeGenerated = _instance.transform.parent == null;
                 if (thisLooksSceneAuthored && existingLooksRuntimeGenerated)
                 {
-                    Destroy(Instance.gameObject);
-                    Instance = this;
+                    Destroy(_instance.gameObject);
+                    _instance = this;
                 }
                 else
                 {
@@ -66,10 +75,11 @@ namespace VoxelEngine.GridSystem.UI
             }
             else
             {
-                Instance = this;
+                _instance = this;
             }
 
             _doc = GetComponent<UIDocument>();
+            if (_doc == null) _doc = gameObject.AddComponent<UIDocument>();
             BringDocumentToFront();
             if (_doc.panelSettings == null)
             {
@@ -131,6 +141,11 @@ namespace VoxelEngine.GridSystem.UI
         }
 
         public void OpenForScreen(GridScreenBlock screen) { Open(screen); }
+
+        private void OnDestroy()
+        {
+            if (_instance == this) _instance = null;
+        }
 
         private void BringDocumentToFront()
         {

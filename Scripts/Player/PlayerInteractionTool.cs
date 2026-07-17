@@ -461,16 +461,17 @@ namespace VoxelEngine.Player
                     if (pc != null) console.Enter(pc);
                     return;
                 }
-                if (!holdingGridBlock && gridBlock != null && GridBlockHasUI(gridBlock))
+
+                // Grid Screen Block: right-click opens the screen config panel before any generic grid UI path.
+                if (!holdingGridBlock && gridBlock is VoxelEngine.GridSystem.GridScreenBlock screenBlock)
                 {
-                    UI.GameUIController.Instance?.OpenMachine(gridBlock);
+                    VoxelEngine.GridSystem.UI.GridScreenConfigUI.Instance.Open(screenBlock);
                     return;
                 }
 
-                // Grid Screen Block: right-click opens the screen config panel.
-                if (!holdingGridBlock && gridBlock is VoxelEngine.GridSystem.GridScreenBlock screenBlock)
+                if (!holdingGridBlock && gridBlock != null && GridBlockHasUI(gridBlock))
                 {
-                    VoxelEngine.GridSystem.UI.GridScreenConfigUI.Instance?.Open(screenBlock);
+                    UI.GameUIController.Instance?.OpenMachine(gridBlock);
                     return;
                 }
 
