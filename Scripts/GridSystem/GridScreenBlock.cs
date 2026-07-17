@@ -1,7 +1,7 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridScreenBlock.cs
 //
 // Premium configurable digital screen for large grid ships.
-// v5.51.2-dev — Camera feed quad, power gain/loss, and primary camera source isolation.
+// v5.57.3-dev — Screen text depth fix without self-occluding the display.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -410,7 +410,9 @@ namespace VoxelEngine.GridSystem
 
             var root = new GameObject("DisplayRoot");
             root.transform.SetParent(surface, false);
-            root.transform.localPosition = new Vector3(0, 0, -0.015f);
+            // Keep text in front of the physical screen surface. After enabling depth testing,
+            // the old tiny offset could sit inside the screen cube and be self-occluded.
+            root.transform.localPosition = new Vector3(0, 0, -0.12f);
 
             var tObj = new GameObject("ScreenTitleText");
             tObj.transform.SetParent(root.transform, false);
@@ -638,20 +640,16 @@ namespace VoxelEngine.GridSystem
             if (renderer == null) return;
 
             var source = renderer.sharedMaterial;
-            Texture mainTexture = source != null ? source.mainTexture : null;
-            Shader shader = Shader.Find("Unlit/Transparent Cutout")
-                ?? Shader.Find("Legacy Shaders/Transparent/Cutout/Diffuse")
-                ?? (source != null ? source.shader : null)
-                ?? Shader.Find("Standard");
-            if (shader == null) return;
+            if (source == null) return;
 
-            var mat = new Material(shader) { name = "ScreenText_DepthTest" };
-            if (mainTexture != null) mat.mainTexture = mainTexture;
-            if (mat.HasProperty("_MainTex") && mainTexture != null) mat.SetTexture("_MainTex", mainTexture);
-            if (mat.HasProperty("_Cutoff")) mat.SetFloat("_Cutoff", 0.18f);
-            if (mat.HasProperty("_ZWrite")) mat.SetInt("_ZWrite", 1);
+            // Preserve Unity's working TextMesh font shader/material so glyph alpha stays visible.
+            // Only change depth behavior; swapping to a generic cutout shader made some screens black.
+            var mat = new Material(source) { name = "ScreenText_DepthTest" };
+            if (mat.HasProperty("_Color")) mat.SetColor("_Color", Color.white);
             if (mat.HasProperty("_ZTest")) mat.SetInt("_ZTest", (int)UnityEngine.Rendering.CompareFunction.LessEqual);
-            mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.AlphaTest;
+            if (mat.HasProperty("unity_GUIZTestMode")) mat.SetInt("unity_GUIZTestMode", (int)UnityEngine.Rendering.CompareFunction.LessEqual);
+            if (mat.HasProperty("_ZWrite")) mat.SetInt("_ZWrite", 0);
+            mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
             renderer.sharedMaterial = mat;
             renderer.sortingOrder = 0;
         }

@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.57.2-dev`
-**Roadmap Version:** `5.57.2-dev`
+**Current Version:** `5.57.3-dev`
+**Roadmap Version:** `5.57.3-dev`
 **Date:** 2026-07-17
-**Status:** Active Implementation — Screen Config Access + Data-Type Visibility Fix
+**Status:** Active Implementation — Grid Screen Black Display Fix
 
 ---
 
@@ -1682,6 +1682,26 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.57.3-dev] Grid Screen Black Display Fix
+
+**Type:** PATCH — visual bug fix only (no save schema, recipe, or balance changes)
+
+**Fixed:**
+- Fixed grid screens appearing black after the depth-test text pass.
+- Screen text is now positioned farther in front of the physical screen surface, preventing the screen's own surface mesh from occluding the text when depth testing is enabled.
+- `MakeTextOpaque()` now preserves Unity's working TextMesh font material/shader and only changes depth-test settings, instead of swapping to a generic cutout shader that could make glyphs invisible/black.
+- Text still uses depth testing against world geometry, so the previous "text visible through ground/blocks" issue remains addressed without self-occluding the display.
+
+**Roadmap Status:**
+- Grid screens remain **✅ COMPLETED** once Thomas validates screen text/feed visibility again.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Enter Play Mode and look at a grid screen in any text mode such as Custom, Power, or Summary.
+3. Confirm text is visible again and no longer just black.
+4. Put terrain/blocks between the camera/player and the screen and confirm text no longer renders through occluders.
+5. Re-test Camera mode if needed; Screen Config should now open from 5.57.2-dev and text fallback/status should be visible.
 
 ### [5.57.2-dev] Screen Config Access + Data-Type Visibility Fix
 
