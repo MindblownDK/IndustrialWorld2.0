@@ -312,6 +312,9 @@ namespace VoxelEngine.Persistence
                 cfg.ledLength = ledStrip.stripLength;
                 cfg.ledSegmentCount = ledStrip.segmentCount;
                 cfg.ledStripWidth = ledStrip.stripWidth;
+                cfg.ledOffsetX = ledStrip.stripOffset.x;
+                cfg.ledOffsetY = ledStrip.stripOffset.y;
+                cfg.ledOffsetZ = ledStrip.stripOffset.z;
                 cfg.ledShowSegments = ledStrip.showSegments;
                 cfg.ledMode = ledStrip.mode.ToString();
                 cfg.ledAnimSpeed = ledStrip.animSpeed;
@@ -774,6 +777,7 @@ namespace VoxelEngine.Persistence
                     ledStrip.brightness = cfg.ledBrightness > 0f ? cfg.ledBrightness : ledStrip.brightness;
                     ledStrip.segmentCount = cfg.ledSegmentCount > 0 ? cfg.ledSegmentCount : ledStrip.segmentCount;
                     ledStrip.stripWidth = cfg.ledStripWidth > 0f ? cfg.ledStripWidth : ledStrip.stripWidth;
+                    ledStrip.stripOffset = new Vector3(cfg.ledOffsetX, cfg.ledOffsetY, cfg.ledOffsetZ);
                     ledStrip.showSegments = cfg.ledShowSegments;
                     if (!string.IsNullOrEmpty(cfg.ledMode))
                     {
@@ -1051,6 +1055,9 @@ namespace VoxelEngine.Persistence
             public float ledLength;
             public int ledSegmentCount;
             public float ledStripWidth;
+            public float ledOffsetX;
+            public float ledOffsetY;
+            public float ledOffsetZ;
             public bool ledShowSegments;
             public string ledMode;
             public float ledAnimSpeed;

@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.58.0-dev`
-**Roadmap Version:** `5.58.0-dev`
+**Current Version:** `5.59.0-dev`
+**Roadmap Version:** `5.59.0-dev`
 **Date:** 2026-07-17
-**Status:** Active Implementation — Lighting Runtime Persistence
+**Status:** Active Implementation — Corner-to-Corner LED Strip Placement Foundation
 
 ---
 
@@ -1683,6 +1683,35 @@ For each version, these are the high-level Unity tasks you will perform manually
 
 ## 11. Changelog
 
+### [5.59.0-dev] Corner-to-Corner LED Strip Placement Foundation
+
+**Type:** MINOR — new save-compatible build interaction for LED strips (no save schema break; additive LED offset fields remain backward compatible)
+
+**Added / Improved:**
+- GridBuilder now recognizes grid LED strip items and switches them into a two-click corner placement workflow:
+  1. Right-click first grid corner/cell to anchor the strip.
+  2. Aim a second grid corner/cell on the same grid and right-click again to place a stretched LED strip.
+- Placement snaps the second point to the dominant grid axis from the first point, producing straight X/Y/Z strips rather than diagonal/ambiguous strips.
+- Added a premium cyan stretch ghost between first and second point so the player sees the final strip length before confirming.
+- Final LED strip uses `LEDStrip.SetStretch(length, offset)` so it visually spans from the first selected point toward the second selected point.
+- Stretched LED strips persist their local visual offset through the existing `SavedLightingConfig` path.
+- Standard one-cell LED strip placement remains possible by clicking the same cell twice.
+
+**Known Scope / Next Polish:**
+- This is the placement foundation. The stretched LED strip is anchored as one grid block at the first selected cell while its visuals extend toward the second point. Full multi-cell occupancy/reservation validation is planned as a follow-up so very long strips can reserve every crossed grid cell if desired.
+
+**Roadmap Status:**
+- Grid/static lighting and LED strips remain **🛠️ WORKING ON** pending Thomas's Unity validation of corner placement, ghost preview, and save/load of stretched strips.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Equip a Small or Large Grid LED Strip item.
+3. Aim at an existing grid and right-click once to set the first corner.
+4. Aim along the grid X/Y/Z direction and confirm the cyan stretch ghost follows the second point.
+5. Right-click again to place the stretched LED strip.
+6. Repeat by clicking the same cell twice to place a short/default strip.
+7. Save/reload and confirm stretched strip length/offset restores.
+
 ### [5.58.0-dev] Lighting Runtime Persistence + Screen Restore Guard Fix
 
 **Type:** MINOR — additive save-compatible persistence fields for placed lighting config (legacy saves remain compatible)
@@ -1720,7 +1749,7 @@ For each version, these are the high-level Unity tasks you will perform manually
 
 **Roadmap Status:**
 - Grid/static lighting and LED strips remain **🛠️ WORKING ON** pending Unity save/load validation.
-- Next target after validation: corner-to-corner LED strip placement workflow.
+- Corner-to-corner LED strip placement foundation is implemented in 5.59.0-dev; next target is visual polish/occupancy validation for stretched strips.
 
 **Manual Unity Steps:**
 1. Let Unity recompile.

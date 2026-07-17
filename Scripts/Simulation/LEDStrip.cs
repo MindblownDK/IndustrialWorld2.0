@@ -29,6 +29,8 @@ namespace VoxelEngine.Simulation
         [Range(2, 32)] public int segmentCount = 8;
         [Tooltip("Width of the lit diffuser bar in meters.")]
         public float stripWidth = 0.08f;
+        [Tooltip("Local-space visual offset from the grid block anchor. Used by corner-to-corner placement so the strip can extend from its first selected corner.")]
+        public Vector3 stripOffset = Vector3.zero;
         [Tooltip("When enabled, individual diode segments are visible. When disabled, the strip is one clean continuous diffuser.")]
         public bool showSegments = true;
 
@@ -89,7 +91,8 @@ namespace VoxelEngine.Simulation
                    "Mode " + mode + (showSegments ? " Seg" : " Clean") + "\n" +
                    "Draw " + FormatWatts(wattsDraw) + "\n" +
                    "Length " + stripLength.ToString("0.##") + "m\n" +
-                   "Brightness " + brightness.ToString("0.##");
+                   "Brightness " + brightness.ToString("0.##") + "\n" +
+                   (stripOffset.sqrMagnitude > 0.0001f ? "Stretched" : "Standard");
         }
 
         private void Awake()
@@ -158,7 +161,7 @@ namespace VoxelEngine.Simulation
                 backing.name = "Generated_LEDBackplate";
                 backing.transform.SetParent(transform, false);
             }
-            backing.transform.localPosition = new Vector3(0f, 0.012f, 0f);
+            backing.transform.localPosition = stripOffset + new Vector3(0f, 0.012f, 0f);
             backing.transform.localScale = new Vector3(stripLength + 0.12f, 0.045f, stripWidth + 0.08f);
             var backingCol = backing.GetComponent<Collider>();
             if (backingCol != null) Destroy(backingCol);
@@ -180,7 +183,7 @@ namespace VoxelEngine.Simulation
                 strip.name = "LEDStripMesh";
                 strip.transform.SetParent(transform, false);
             }
-            strip.transform.localPosition = new Vector3(0f, 0.055f, 0f);
+            strip.transform.localPosition = stripOffset + new Vector3(0f, 0.055f, 0f);
             strip.transform.localScale = new Vector3(stripLength, 0.018f, stripWidth);
             var col = strip.GetComponent<Collider>();
             if (col != null) Destroy(col);
@@ -229,7 +232,7 @@ namespace VoxelEngine.Simulation
                 var diode = GameObject.CreatePrimitive(PrimitiveType.Cube);
                 diode.name = "Generated_LEDDiode_" + i;
                 diode.transform.SetParent(transform, false);
-                diode.transform.localPosition = new Vector3(x, 0.079f, 0f);
+                diode.transform.localPosition = stripOffset + new Vector3(x, 0.079f, 0f);
                 diode.transform.localScale = new Vector3(Mathf.Min(0.08f, stripLength / safeCount * 0.35f), 0.012f, stripWidth * 0.82f);
                 var collider = diode.GetComponent<Collider>();
                 if (collider != null) Destroy(collider);
@@ -262,7 +265,7 @@ namespace VoxelEngine.Simulation
                 float x = Mathf.Lerp(-usable * 0.5f, usable * 0.5f, t);
                 var lightGo = new GameObject("Generated_LEDPoint_" + i);
                 lightGo.transform.SetParent(transform, false);
-                lightGo.transform.localPosition = new Vector3(x, 0.10f, 0f);
+                lightGo.transform.localPosition = stripOffset + new Vector3(x, 0.10f, 0f);
                 var light = lightGo.AddComponent<Light>();
                 light.type = LightType.Point;
                 light.color = stripColor;
@@ -344,6 +347,13 @@ namespace VoxelEngine.Simulation
         public void SetLength(float meters)
         {
             stripLength = Mathf.Max(0.25f, meters);
+            BuildStripVisuals();
+        }
+
+        public void SetStretch(float meters, Vector3 localOffset)
+        {
+            stripLength = Mathf.Max(0.25f, meters);
+            stripOffset = localOffset;
             BuildStripVisuals();
         }
 
