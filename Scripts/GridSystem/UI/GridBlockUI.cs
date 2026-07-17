@@ -46,6 +46,7 @@ namespace VoxelEngine.GridSystem.UI
                 case GridElectricFurnace ef: return FurnacePanel(ef, slot);
                 case GridBeacon bc:         return BeaconPanel(bc);
                 case GridOreDetector od:    return OreDetectorPanel(od);
+                case GridSlidingDoor door:  return SlidingDoorPanel(door);
                 case VoxelEngine.Simulation.GridLightBlock gl: return GridLightPanel(gl);
                 default:                    return GenericPanel(block);
             }
@@ -666,6 +667,48 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(T.Spacer(6));
             p.Add(T.Muted("Configure per-face Input / Output + item filters below."));
             // The port-config UI (direction + filters) is appended by GameUIController.
+            return p;
+        }
+
+        // ── GRID SLIDING DOOR ────────────────────────────────────────────────────
+        private static VisualElement SlidingDoorPanel(GridSlidingDoor door)
+        {
+            var p = T.MachinePanel();
+            string state = !door.Enabled ? "OFF" : !door.HasPower ? "NO POWER" : door.IsOpen ? "OPEN" : "CLOSED";
+            Color stateColor = !door.Enabled ? T.AccentDim : !door.HasPower ? T.AccentRed : door.IsOpen ? T.AccentGreen : T.AccentAmber;
+            var (hdr, _, _, _) = T.HeaderRow("▣ " + door.SourceName, state, stateColor);
+            p.Add(hdr);
+            p.Add(T.AccentDivider(T.AccentCyan));
+
+            p.Add(T.StatRow("⚡", "Power Use", PowerFormat.Watts(door.PowerDraw), T.AccentGold));
+            p.Add(T.StatRow("⇆", "Slide", $"{door.slideDistance:0.##} m", T.AccentCyan));
+            p.Add(T.StatRow("◎", "Motion Radius", $"{door.motionRadius:0.#} m", T.AccentAmber));
+            p.Add(T.Spacer(6));
+
+            var row = Row();
+            row.Add(T.SmallButton(door.Enabled ? "Turn OFF" : "Turn ON", () =>
+            {
+                door.Enabled = !door.Enabled;
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, door.Enabled ? T.AccentRed : T.AccentGreen));
+            row.Add(T.SmallButton(door.IsOpen ? "Close" : "Open", () =>
+            {
+                door.Toggle();
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, door.IsOpen ? T.AccentAmber : T.AccentGreen));
+            row.Add(T.SmallButton(door.motionActivated ? "Motion: ON" : "Motion: OFF", () =>
+            {
+                door.SetMotionActivated(!door.motionActivated);
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, door.motionActivated ? T.AccentGreen : T.BgSlot));
+            p.Add(row);
+            p.Add(T.Spacer(6));
+
+            p.Add(GridUIHelpers.SectionTitle("Door Tuning"));
+            p.Add(SliderRow("Motion Radius", door.motionRadius, 1f, 20f, v => door.motionRadius = v, "1m", "20m"));
+            p.Add(SliderRow("Hold Time", door.motionGraceSeconds, 0.25f, 10f, v => door.motionGraceSeconds = v, "0.25s", "10s"));
+            p.Add(SliderRow("Slide Speed", door.slideSpeed, 1f, 20f, v => door.slideSpeed = v, "1", "20"));
+            p.Add(T.Muted("Motion mode opens the door when a player is nearby and closes after the hold time."));
             return p;
         }
 

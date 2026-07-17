@@ -7652,6 +7652,47 @@ root =>
             var gridLEDStripItem = ConfigureGridItem(GRID_ITEMS, "GItem_LEDStrip", "Small Grid LED Strip", "Small-grid segmented LED strip with individual diode elements, pulse/blink/chase modes, and configurable runtime length.", new Color(0.18f, 0.72f, 0.88f), gridLEDStripPrefab, VoxelEngine.GridSystem.GridSize.Small, 25f, 90f);
             var largeGridLEDStripItem = ConfigureGridItem(GRID_ITEMS, "GItem_LargeGridLEDStrip", "Large Grid LED Strip", "Large-grid segmented LED strip with individual diode elements, higher output, pulse/blink/chase modes, and configurable runtime length.", new Color(0.18f, 0.72f, 0.88f), largeGridLEDStripPrefab, VoxelEngine.GridSystem.GridSize.Large, 90f, 180f);
 
+            GameObject CreateGridDoorPrefab(string assetName, bool largeGrid)
+            {
+                return GetOrCreateStep17Prefab($"{GRID_PREFABS}/{assetName}.prefab", assetName, root =>
+                {
+                    float scale = largeGrid ? 2.5f : 1f;
+                    var frameMat = GetMaterial(GRID_MATS, largeGrid ? "Mat_LargeGridDoorFrame" : "Mat_SmallGridDoorFrame", new Color(0.14f, 0.16f, 0.18f));
+                    var panelMat = GetMaterial(GRID_MATS, largeGrid ? "Mat_LargeGridDoorPanel" : "Mat_SmallGridDoorPanel", new Color(0.42f, 0.47f, 0.50f));
+                    var glassMat = GetMaterial(GRID_MATS, "Mat_GridDoorGlassGlow", new Color(0.18f, 0.72f, 0.88f), true);
+                    var statusMat = GetMaterial(GRID_MATS, "Mat_GridDoorStatus", new Color(0.22f, 0.78f, 0.42f), true);
+
+                    EnsurePrimitive(root, "Generated_FrameTop", PrimitiveType.Cube, new Vector3(0f, 0.44f * scale, 0f), new Vector3(1.06f * scale, 0.08f * scale, 0.16f * scale), frameMat, Vector3.zero);
+                    EnsurePrimitive(root, "Generated_FrameBottom", PrimitiveType.Cube, new Vector3(0f, -0.44f * scale, 0f), new Vector3(1.06f * scale, 0.08f * scale, 0.16f * scale), frameMat, Vector3.zero);
+                    EnsurePrimitive(root, "Generated_FrameLeft", PrimitiveType.Cube, new Vector3(-0.54f * scale, 0f, 0f), new Vector3(0.08f * scale, 0.92f * scale, 0.16f * scale), frameMat, Vector3.zero);
+                    EnsurePrimitive(root, "Generated_FrameRight", PrimitiveType.Cube, new Vector3(0.54f * scale, 0f, 0f), new Vector3(0.08f * scale, 0.92f * scale, 0.16f * scale), frameMat, Vector3.zero);
+                    EnsurePrimitive(root, "Generated_LeftPanel", PrimitiveType.Cube, new Vector3(-0.22f * scale, 0f, -0.02f * scale), new Vector3(0.42f * scale, 0.78f * scale, 0.08f * scale), panelMat, Vector3.zero);
+                    EnsurePrimitive(root, "Generated_RightPanel", PrimitiveType.Cube, new Vector3(0.22f * scale, 0f, -0.02f * scale), new Vector3(0.42f * scale, 0.78f * scale, 0.08f * scale), panelMat, Vector3.zero);
+                    EnsurePrimitive(root, "Generated_LeftWindow", PrimitiveType.Cube, new Vector3(-0.22f * scale, 0.10f * scale, -0.07f * scale), new Vector3(0.26f * scale, 0.26f * scale, 0.018f * scale), glassMat, Vector3.zero);
+                    EnsurePrimitive(root, "Generated_RightWindow", PrimitiveType.Cube, new Vector3(0.22f * scale, 0.10f * scale, -0.07f * scale), new Vector3(0.26f * scale, 0.26f * scale, 0.018f * scale), glassMat, Vector3.zero);
+                    EnsurePrimitive(root, "Generated_StatusLine", PrimitiveType.Cube, new Vector3(0f, -0.36f * scale, -0.08f * scale), new Vector3(0.52f * scale, 0.025f * scale, 0.018f * scale), statusMat, Vector3.zero);
+                    EnsureRootCollider(root, new Vector3(1.16f * scale, 1.02f * scale, 0.22f * scale), Vector3.zero);
+                    EnsureStep17Component<VoxelEngine.GridSystem.GridSlidingDoor>(root, door =>
+                    {
+                        door.blockName = largeGrid ? "Large Grid Sliding Door" : "Small Grid Sliding Door";
+                        door.BlockMass = largeGrid ? 360f : 85f;
+                        door.maxHP = largeGrid ? 420f : 160f;
+                        door.slideDistance = 0.34f * scale;
+                        door.slideSpeed = 8f;
+                        door.motionActivated = true;
+                        door.motionRadius = largeGrid ? 7.5f : 4.0f;
+                        door.motionGraceSeconds = 1.5f;
+                        door.idleWatts = largeGrid ? 4f : 2f;
+                        door.movingWatts = largeGrid ? 35f : 14f;
+                    });
+                });
+            }
+
+            var smallGridDoorPrefab = CreateGridDoorPrefab("GridSlidingDoor_Small", false);
+            var largeGridDoorPrefab = CreateGridDoorPrefab("GridSlidingDoor_Large", true);
+            var smallGridDoorItem = ConfigureGridItem(GRID_ITEMS, "GItem_SmallGridSlidingDoor", "Small Grid Sliding Door", "Compact powered sliding door for small grids. Supports manual controls and motion activation.", new Color(0.18f, 0.72f, 0.88f), smallGridDoorPrefab, VoxelEngine.GridSystem.GridSize.Small, 85f, 160f);
+            var largeGridDoorItem = ConfigureGridItem(GRID_ITEMS, "GItem_LargeGridSlidingDoor", "Large Grid Sliding Door", "Large powered sliding door for ships and stations. Supports manual controls and motion activation.", new Color(0.18f, 0.72f, 0.88f), largeGridDoorPrefab, VoxelEngine.GridSystem.GridSize.Large, 360f, 420f);
+
             // ── Recipes ──
             var factoryRecipes = new List<VoxelEngine.Crafting.RecipeDefinition>();
             var recConveyorBasic = CreateRecipe(registry, FAC_RECIPES, "Recipe_ConveyorBasic", "Basic Conveyor Belt", blockConveyorBasic, 2, VoxelEngine.Crafting.StationTier.CraftingBench, false, (ironPlate, 2), (ironGear, 1));
@@ -7671,13 +7712,15 @@ root =>
             var recLEDStrip = CreateRecipe(registry, FAC_RECIPES, "Recipe_LEDStripFactory", "LED Strip", blockLEDStrip, 2, VoxelEngine.Crafting.StationTier.CraftingBench, false, (copperWire, 4), (glass, 1));
             var recGridLEDStrip = CreateRecipe(registry, GRID_RECIPES, "Recipe_GLEDStrip", "Small Grid LED Strip", gridLEDStripItem, 2, VoxelEngine.Crafting.StationTier.CraftingBench, false, (copperWire, 4), (glass, 1));
             var recLargeGridLEDStrip = CreateRecipe(registry, GRID_RECIPES, "Recipe_LargeGridLEDStrip", "Large Grid LED Strip", largeGridLEDStripItem, 1, VoxelEngine.Crafting.StationTier.CraftingBench, false, (copperWire, 8), (glass, 2), (ironPlate, 1));
+            var recSmallGridDoor = CreateRecipe(registry, GRID_RECIPES, "Recipe_SmallGridSlidingDoor", "Small Grid Sliding Door", smallGridDoorItem, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (ironPlate, 2), (copperWire, 4), (glass, 1), (circuit, 1));
+            var recLargeGridDoor = CreateRecipe(registry, GRID_RECIPES, "Recipe_LargeGridSlidingDoor", "Large Grid Sliding Door", largeGridDoorItem, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 4), (copperWire, 8), (glass, 3), (circuit, 2));
 
             foreach (var recipe in new[]
             {
                 recConveyorBasic, recConveyorFast, recConveyorExpress, recChute, recFunnel,
                 recCrusher, recAssemblerMk1, recAssemblerMk2, recAssemblerMk3, recElectricFurnace,
                 recGridLight, recLargeGridSpotlight, recSmallDualSpotlight, recLargeDualSpotlight,
-                recLEDStrip, recGridLEDStrip, recLargeGridLEDStrip
+                recLEDStrip, recGridLEDStrip, recLargeGridLEDStrip, recSmallGridDoor, recLargeGridDoor
             })
             {
                 AddRecipeUnique(factoryRecipes, recipe);

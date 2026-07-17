@@ -984,6 +984,7 @@ namespace VoxelEngine.GridSystem.UI
             if (block is GridSolarPanel solar) return PowerFormat.Watts(solar.CurrentOutput);
             if (block is GridBeacon beacon) return beacon.IsActive ? "Active" : "Off";
             if (block is GridOreDetector detector) return $"{detector.DetectedOres.Count} ores";
+            if (block is GridSlidingDoor door) return door.IsOpen ? "Open" : "Closed";
             if (block is VoxelEngine.Simulation.GridLightBlock light) return light.IsOnline ? "On" : "Off";
             if (block.GetComponent<VoxelEngine.Simulation.LEDStrip>() != null) return block.Enabled ? "On" : "Off";
             if (block.PowerDraw > 0.01f) return PowerFormat.Watts(block.PowerDraw);
@@ -1026,6 +1027,7 @@ namespace VoxelEngine.GridSystem.UI
             if (block is GridCockpit) return "Cockpits";
             if (block is GridBeacon) return "Beacons";
             if (block is GridOreDetector) return "Ore Detectors";
+            if (block is GridSlidingDoor) return "Grid Doors";
             if (block is VoxelEngine.Simulation.GridLightBlock) return "Spotlights";
             if (block.GetComponent<VoxelEngine.Simulation.LEDStrip>() != null) return "LED Strips";
             if (block is GridScreenBlock) return "Screens";

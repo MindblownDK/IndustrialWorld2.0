@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.60.0-dev`
-**Roadmap Version:** `5.60.0-dev`
+**Current Version:** `5.61.0-dev`
+**Roadmap Version:** `5.61.0-dev`
 **Date:** 2026-07-17
-**Status:** Active Implementation — LED Strip Path Reservation + End Cap Polish
+**Status:** Active Implementation — Motion-Activated Grid Sliding Doors
 
 ---
 
@@ -1682,6 +1682,42 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.61.0-dev] Motion-Activated Grid Sliding Doors
+
+**Type:** MINOR — new save-compatible grid door block foundation generated through Step 17 (no save schema break)
+
+**Added:**
+- Added `GridSlidingDoor`, a powered grid block with manual and motion-activated open/close behavior.
+- Added Step 17 generated prefabs/items/recipes for:
+  - **Small Grid Sliding Door**
+  - **Large Grid Sliding Door**
+- Door prefabs include a dark frame, split sliding panels, glowing window panels, and a status strip.
+- Door settings include:
+  - manual open/close
+  - motion activation toggle
+  - motion radius
+  - hold time
+  - slide speed
+  - idle and moving power draw
+- Added dedicated `GridSlidingDoor` UI panel in `GridBlockUI`.
+- Grid doors now appear in Ship Control as **Grid Doors** with state labels `Open` / `Closed`.
+- Grid doors implement `IGridDataProvider`, so they can be selected as screen data sources.
+
+**Roadmap Status:**
+- Grid doors / motion activation foundation started as an early slice of the later airtight/life-support door roadmap.
+- Full airtight/pressure integration remains future work.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Run `Tools > Voxel Engine > Voxel Engine Setup` → **17. Build Factory Foundations + HV Grid**.
+3. Verify generated prefabs/items exist:
+   - `GridSlidingDoor_Small` / Small Grid Sliding Door
+   - `GridSlidingDoor_Large` / Large Grid Sliding Door
+4. Place a small/large grid door and confirm the panels slide open/closed from its config panel.
+5. Enable Motion and walk into/out of range to confirm automatic opening/closing.
+6. Open Ship Control and confirm doors are grouped under **Grid Doors**.
+7. Select the door as a screen data source and confirm it reports state/motion/power.
 
 ### [5.60.0-dev] LED Strip Path Reservation + End Cap Polish
 
