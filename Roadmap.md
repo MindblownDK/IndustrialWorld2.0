@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.51.0-dev`
-**Roadmap Version:** `5.51.0-dev`
+**Current Version:** `5.51.1-dev`
+**Roadmap Version:** `5.51.1-dev`
 **Date:** 2026-07-17
-**Status:** Active Implementation — Live Camera Feed to Grid Screens
+**Status:** Active Implementation — Camera Feed Validation Fixes
 
 ---
 
@@ -55,7 +55,7 @@ The design goal is a seamless blend of:
 | Gravity / orbits | 🟡 Buggy | Player and grids sometimes fall; orbits not realistic |
 | Space stations | ❌ Missing | No buildable orbital platforms |
 | Conveyor logistics | 🟡 Good | Conveyors, ramps, vertical belts, chutes, contextual shape wheel, ghost previews, and persistence exist. Remaining work: pooled item entities, more chute variants, and final long-run throughput validation. |
-| Grid screens / displays | 🛠️ WORKING ON | Live text+power states, right-click+terminal config, custom text+custom colors+border+font, visual bar charts, multi-source, camera-feed foundations, persistence, and camera block exist. **5.51.0-dev** adds true RenderTexture feed rendering on screen surfaces plus the premium camera prefab/status LED setup; Unity Step 19 validation pending. |
+| Grid screens / displays | 🛠️ WORKING ON | Live text+power states, right-click+terminal config, custom text+custom colors+border+font, visual bar charts, multi-source, camera-feed foundations, persistence, and camera block exist. **5.51.1-dev** fixes feed visibility, live border/font refresh, and custom-text input readability; Unity validation pending. |
 | Grid lighting | ❌ Missing | No flood lights or block lights |
 | Sloped / armored grid blocks | ❌ Missing | Only cube blocks exist; need shape variants |
 | Grid shape variant wheel | 🟡 PARTIALLY COMPLETE | Premium radial wheel foundation complete (5.40.1-dev) with full visual parity to Hammer/Conveyor wheels. CurrentShape accessor + auto-spawn ready. Compile error in GridBuilder fixed. Shape application + authored variants next (via Setup Step 18). |
@@ -877,7 +877,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 
 | Area | Status | Repository Audit |
 |------|--------|------------------|
-| Configurable grid screens / displays | 🛠️ WORKING ON | Text/power/data modes, multi-source selection, styling, persistence, and terminal/right-click config exist. Live camera feed rendering and premium camera prefab refresh are implemented in 5.51.0-dev; Step 19 + Unity validation pending before returning this area to completed. |
+| Configurable grid screens / displays | 🛠️ WORKING ON | Text/power/data modes, multi-source selection, styling, persistence, and terminal/right-click config exist. Live camera feed rendering and premium camera prefab refresh are implemented; 5.51.1-dev fixes feed visibility plus live border/font refresh. Step 19 + Unity validation pending before returning this area to completed. |
 | Camera block live feed | 🛠️ WORKING ON | `GridCameraBlock` now exposes a live RenderTexture through `IGridCameraFeedProvider`; `GridScreenBlock` Camera mode applies it directly to the screen surface. Camera LED states are green when a feed is used, yellow when online and idle, and red when offline. |
 | Trajectory camera / orbit tools | 🟡 PARTIALLY COMPLETE | Roadmap design exists; final trajectory/orbit-map implementation and validation remain future work. |
 
@@ -1682,6 +1682,31 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.51.1-dev] Camera Feed Visibility + Screen Appearance Live Update Fixes
+
+**Type:** PATCH — bug fixes and UI polish only (no save schema, recipe, balance, or API-breaking changes)
+
+**Fixed:**
+- Fixed camera screens appearing black by enabling the capture camera while a screen samples the feed texture and by using an unlit runtime screen-feed material so the video does not depend on scene lighting.
+- Camera feed now prepares the capture camera immediately on texture access, removing the disabled-camera/stale black texture case.
+- Screen `Border` setting now live-updates generated glow strips and corner dots while the config panel is open.
+- Screen `Font` setting now live-updates the screen TextMesh style, size, character scale, and spacing while the config panel is open.
+- Border and Font buttons now refresh their active-highlight state immediately when clicked.
+- Custom Text input styling now forces a dark editor field with bright readable text across the TextField internals, fixing white-on-white unreadable input.
+
+**Roadmap Status:**
+- Grid screens / displays remain **🛠️ WORKING ON** until Thomas validates live feed, appearance controls, and custom text in Unity.
+- Camera block live feed remains **🛠️ WORKING ON** pending this Unity validation pass.
+
+**Manual Unity Steps:**
+1. Let Unity recompile; no setup rerun is required for this patch.
+2. Use your existing test grid with a powered Camera Block and Screen.
+3. Right-click the screen → select the camera source → choose **Camera** display mode.
+4. Confirm the screen now shows live video instead of black.
+5. Change Border between None / Thin / Thick / Glow and confirm the screen updates immediately.
+6. Change Font between Default / Mono / LCD / Terminal and confirm the screen text updates immediately.
+7. Switch to Custom mode, edit the Custom Text field, and confirm the input text is readable.
 
 ### [5.51.0-dev] Live Camera Screen Feed + Premium Camera Prefab
 

@@ -1,7 +1,7 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridScreenBlock.cs
 //
 // Premium configurable digital screen for large grid ships.
-// v5.51.0-dev — Adds true live camera-feed rendering on the screen surface.
+// v5.51.1-dev — Camera feed visibility + live border/font appearance refresh.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -60,8 +60,12 @@ namespace VoxelEngine.GridSystem
         private readonly Dictionary<Vector3Int, int> _lastChecked = new();
         private TextMesh _screenText, _titleText, _statusText;
         private Renderer _screenSurfaceRenderer;
+        private Renderer _glowStripRenderer;
+        private readonly List<Renderer> _cornerDotRenderers = new();
         private Material _screenSurfaceBaseMaterial;
         private Material _cameraFeedMaterial;
+        private MaterialPropertyBlock _appearanceBlock;
+        private float _baseCharSize;
         private bool _cameraFeedVisible;
         private bool _initialized;
         private PowerConsumer _power;
@@ -285,6 +289,7 @@ namespace VoxelEngine.GridSystem
             bool showCameraFeed = IsPowered && cameraProvider != null && cameraProvider.IsOnline;
             ApplyCameraFeed(cameraProvider, showCameraFeed);
             SetMainTextVisible(!showCameraFeed);
+            ApplyLiveAppearance(showCameraFeed);
 
             string text = showCameraFeed ? string.Empty : FormattedDisplay;
             if (_screenText.text != text) _screenText.text = text;
@@ -369,10 +374,12 @@ namespace VoxelEngine.GridSystem
 
             var (dw, dh) = DisplayArea();
             float charSize = CharHeight() / 24f;
+            _baseCharSize = charSize;
 
             _screenSurfaceRenderer = surface.GetComponent<Renderer>();
             if (_screenSurfaceRenderer != null && _screenSurfaceBaseMaterial == null)
                 _screenSurfaceBaseMaterial = _screenSurfaceRenderer.sharedMaterial;
+            CacheAppearanceRenderers();
 
             var root = new GameObject("DisplayRoot");
             root.transform.SetParent(surface, false);
@@ -410,6 +417,100 @@ namespace VoxelEngine.GridSystem
             MakeTextOpaque(_statusText);
         }
 
+        private void CacheAppearanceRenderers()
+        {
+            Transform glow = transform.Find("Generated_GlowStrip");
+            if (glow != null) _glowStripRenderer = glow.GetComponent<Renderer>();
+
+            _cornerDotRenderers.Clear();
+            var renderers = GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                if (renderers[i] != null && renderers[i].name == "Generated_CornerDot")
+                    _cornerDotRenderers.Add(renderers[i]);
+            }
+
+            _appearanceBlock ??= new MaterialPropertyBlock();
+        }
+
+        private void ApplyLiveAppearance(bool cameraFeedVisible)
+        {
+            if (_glowStripRenderer == null && _cornerDotRenderers.Count == 0)
+                CacheAppearanceRenderers();
+
+            int safeBorderStyle = Mathf.Clamp(borderStyle, 0, 3);
+            bool borderVisible = safeBorderStyle > 0;
+            Color accent = cameraFeedVisible ? new Color(0.18f, 0.95f, 0.38f) : textColor;
+            float pulse = cameraFeedVisible ? 1.05f + Mathf.Sin(Time.realtimeSinceStartup * 4.5f) * 0.12f : 0.75f + Mathf.Sin(Time.realtimeSinceStartup * 1.8f) * 0.10f;
+            float strength = safeBorderStyle == 1 ? 0.35f : safeBorderStyle == 2 ? 0.75f : 1.25f;
+            Color baseColor = new Color(accent.r, accent.g, accent.b, borderVisible ? 1f : 0f);
+            Color emission = accent * Mathf.Max(0.05f, strength * pulse);
+
+            ApplyRendererAccent(_glowStripRenderer, borderVisible, baseColor, emission);
+            for (int i = 0; i < _cornerDotRenderers.Count; i++)
+                ApplyRendererAccent(_cornerDotRenderers[i], borderVisible && safeBorderStyle >= 2, baseColor, emission);
+
+            ApplyFontStyle();
+        }
+
+        private void ApplyRendererAccent(Renderer renderer, bool visible, Color baseColor, Color emission)
+        {
+            if (renderer == null) return;
+            renderer.enabled = visible;
+            if (!visible) return;
+            _appearanceBlock ??= new MaterialPropertyBlock();
+            renderer.GetPropertyBlock(_appearanceBlock);
+            _appearanceBlock.SetColor("_Color", baseColor);
+            _appearanceBlock.SetColor("_BaseColor", baseColor);
+            _appearanceBlock.SetColor("_EmissionColor", emission);
+            renderer.SetPropertyBlock(_appearanceBlock);
+        }
+
+        private void ApplyFontStyle()
+        {
+            float baseSize = _baseCharSize > 0f ? _baseCharSize : CharHeight() / 24f;
+            int safeFontStyle = Mathf.Clamp(fontStyle, 0, 3);
+            int displayFontSize = safeFontStyle switch
+            {
+                1 => 22,
+                2 => 26,
+                3 => 22,
+                _ => 24
+            };
+            float charScale = safeFontStyle switch
+            {
+                1 => 0.92f,
+                2 => 0.95f,
+                3 => 0.86f,
+                _ => 1f
+            };
+            FontStyle displayStyle = safeFontStyle switch
+            {
+                2 => FontStyle.Bold,
+                3 => FontStyle.Bold,
+                _ => FontStyle.Normal
+            };
+            float lineSpacing = safeFontStyle switch
+            {
+                1 => 0.85f,
+                2 => 0.80f,
+                3 => 0.90f,
+                _ => 1.00f
+            };
+
+            if (_screenText != null)
+            {
+                _screenText.fontSize = displayFontSize;
+                _screenText.characterSize = baseSize * charScale;
+                _screenText.fontStyle = displayStyle;
+                _screenText.lineSpacing = lineSpacing;
+            }
+            if (_titleText != null)
+                _titleText.fontStyle = safeFontStyle == 0 ? FontStyle.Bold : displayStyle;
+            if (_statusText != null)
+                _statusText.fontStyle = safeFontStyle == 0 ? FontStyle.Normal : displayStyle;
+        }
+
         private void ApplyCameraFeed(IGridCameraFeedProvider cameraProvider, bool showFeed)
         {
             if (_screenSurfaceRenderer == null)
@@ -438,13 +539,17 @@ namespace VoxelEngine.GridSystem
 
             if (_cameraFeedMaterial == null)
             {
-                var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+                var shader = Shader.Find("Universal Render Pipeline/Unlit")
+                    ?? Shader.Find("Unlit/Texture")
+                    ?? Shader.Find("Universal Render Pipeline/Lit")
+                    ?? Shader.Find("Standard");
                 _cameraFeedMaterial = new Material(shader) { name = "ScreenCameraFeed_Runtime" };
                 if (_cameraFeedMaterial.HasProperty("_Metallic")) _cameraFeedMaterial.SetFloat("_Metallic", 0f);
                 if (_cameraFeedMaterial.HasProperty("_Smoothness")) _cameraFeedMaterial.SetFloat("_Smoothness", 0.88f);
                 _cameraFeedMaterial.EnableKeyword("_EMISSION");
             }
 
+            _cameraFeedMaterial.mainTexture = feedTexture;
             if (_cameraFeedMaterial.HasProperty("_BaseMap")) _cameraFeedMaterial.SetTexture("_BaseMap", feedTexture);
             if (_cameraFeedMaterial.HasProperty("_MainTex")) _cameraFeedMaterial.SetTexture("_MainTex", feedTexture);
             if (_cameraFeedMaterial.HasProperty("_BaseColor")) _cameraFeedMaterial.SetColor("_BaseColor", Color.white);

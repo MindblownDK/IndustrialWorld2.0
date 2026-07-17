@@ -2,7 +2,7 @@
 //
 // A camera block that captures live video and feeds it to linked GridScreenBlocks.
 // Place on a grid, right-click a screen, choose Camera mode, and select the camera source.
-// v5.51.0-dev — Live RenderTexture feed + camera status LED states.
+// v5.51.1-dev — Forces live feed rendering when screens sample the texture.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -32,6 +32,7 @@ namespace VoxelEngine.GridSystem
         private Renderer _statusLedRenderer;
         private Light _statusLedLight;
         private MaterialPropertyBlock _ledPropertyBlock;
+        private int _lastRenderedFrame = -1000;
         private bool _initialized;
 
         public RenderTexture FeedTexture
@@ -39,6 +40,8 @@ namespace VoxelEngine.GridSystem
             get
             {
                 if (!_initialized) InitializeCamera();
+                if (IsOnline && _captureCamera != null && _lastRenderedFrame != Time.frameCount)
+                    RenderFeed();
                 return _renderTexture;
             }
         }
@@ -111,6 +114,8 @@ namespace VoxelEngine.GridSystem
             _captureCamera.nearClipPlane = 0.05f;
             _captureCamera.targetTexture = _renderTexture;
             _captureCamera.cullingMask = ~0;
+            _captureCamera.clearFlags = CameraClearFlags.Skybox;
+            _captureCamera.allowHDR = false;
             _captureCamera.enabled = false;
         }
 
@@ -126,17 +131,36 @@ namespace VoxelEngine.GridSystem
             }
 
             if (!IsFeedInUse)
+            {
+                if (_captureCamera != null) _captureCamera.enabled = false;
                 return;
+            }
 
             if (!_initialized) InitializeCamera();
             if (_captureCamera == null) return;
 
-            _captureCamera.fieldOfView = Mathf.Clamp(fieldOfView, 10f, 140f);
-            _captureCamera.farClipPlane = Mathf.Max(5f, cameraRange);
-
             int interval = Mathf.Clamp(renderIntervalFrames, 1, 10);
             if (interval == 1 || Time.frameCount % interval == 0)
-                _captureCamera.Render();
+                RenderFeed();
+        }
+
+        private void RenderFeed()
+        {
+            if (_captureCamera == null) return;
+
+            _captureCamera.transform.localPosition = cameraOffset;
+            Quaternion localRotation = Quaternion.Euler(cameraRotation);
+            if (lensLooksAlongNegativeZ)
+                localRotation *= Quaternion.Euler(0f, 180f, 0f);
+            _captureCamera.transform.localRotation = localRotation;
+
+            _captureCamera.fieldOfView = Mathf.Clamp(fieldOfView, 10f, 140f);
+            _captureCamera.farClipPlane = Mathf.Max(5f, cameraRange);
+            // Keep the capture camera enabled while a screen is sampling it. In URP this is
+            // more reliable than relying only on Camera.Render(), and the target texture
+            // retains its previous frame when the camera is later disabled.
+            _captureCamera.enabled = true;
+            _lastRenderedFrame = Time.frameCount;
         }
 
         private void PruneExpiredConsumers()

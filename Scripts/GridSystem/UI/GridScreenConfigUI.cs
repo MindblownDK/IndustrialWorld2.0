@@ -1,7 +1,7 @@
 // Assets/Scripts/VoxelEngine/GridSystem/UI/GridScreenConfigUI.cs
 //
 // Configuration panel for GridScreenBlock.
-// v5.51.0-dev — Adds Camera display mode selection for linked live feeds.
+// v5.51.1-dev — Live appearance button refresh + readable custom text input.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -23,6 +23,8 @@ namespace VoxelEngine.GridSystem.UI
         private bool _open;
         private readonly List<Button> _sourceBtns = new();
         private readonly List<Button> _modeBtns = new();
+        private readonly List<Button> _borderBtns = new();
+        private readonly List<Button> _fontBtns = new();
 
         // ── Auto-create if missing from scene ─────────────────────────
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -76,7 +78,7 @@ namespace VoxelEngine.GridSystem.UI
             _root.style.alignItems = Align.Center;
             _root.style.justifyContent = Justify.Center;
             UIState.PushBlock();
-            _sourceBtns.Clear(); _modeBtns.Clear();
+            _sourceBtns.Clear(); _modeBtns.Clear(); _borderBtns.Clear(); _fontBtns.Clear();
             Build();
         }
 
@@ -300,7 +302,7 @@ namespace VoxelEngine.GridSystem.UI
             for (int bi = 0; bi < borderNames.Length; bi++)
             {
                 int bv = bi;
-                var bBtn = new Button(() => { _target.borderStyle = bv; RefreshAll(); }) { text = borderNames[bi] };
+                var bBtn = new Button(() => { _target.borderStyle = bv; RefreshAppearanceHighlights(); RefreshAll(); }) { text = borderNames[bi] };
                 bBtn.style.minHeight = 22; bBtn.style.marginRight = 4; bBtn.style.marginBottom = 4;
                 bBtn.style.fontSize = 10; bBtn.style.unityFontStyleAndWeight = FontStyle.Bold;
                 bBtn.style.paddingLeft = 8; bBtn.style.paddingRight = 8;
@@ -309,6 +311,7 @@ namespace VoxelEngine.GridSystem.UI
                 UITheme.Radius(bBtn, 4);
                 bBtn.style.borderLeftWidth = bBtn.style.borderRightWidth = bBtn.style.borderTopWidth = bBtn.style.borderBottomWidth = 0;
                 borderRow.Add(bBtn);
+                _borderBtns.Add(bBtn);
             }
 
             // Font style
@@ -326,7 +329,7 @@ namespace VoxelEngine.GridSystem.UI
             for (int fi = 0; fi < fontNames.Length; fi++)
             {
                 int fv = fi;
-                var fBtn = new Button(() => { _target.fontStyle = fv; RefreshAll(); }) { text = fontNames[fi] };
+                var fBtn = new Button(() => { _target.fontStyle = fv; RefreshAppearanceHighlights(); RefreshAll(); }) { text = fontNames[fi] };
                 fBtn.style.minHeight = 22; fBtn.style.marginRight = 4; fBtn.style.marginBottom = 4;
                 fBtn.style.fontSize = 10; fBtn.style.unityFontStyleAndWeight = FontStyle.Bold;
                 fBtn.style.paddingLeft = 8; fBtn.style.paddingRight = 8;
@@ -335,6 +338,7 @@ namespace VoxelEngine.GridSystem.UI
                 UITheme.Radius(fBtn, 4);
                 fBtn.style.borderLeftWidth = fBtn.style.borderRightWidth = fBtn.style.borderTopWidth = fBtn.style.borderBottomWidth = 0;
                 fontRow.Add(fBtn);
+                _fontBtns.Add(fBtn);
             }
 
             // ── Custom text ──
@@ -446,6 +450,7 @@ namespace VoxelEngine.GridSystem.UI
         {
             RefreshHighlights();
             RefreshModeHighlights();
+            RefreshAppearanceHighlights();
         }
 
         private void RefreshModeHighlights()
@@ -460,6 +465,25 @@ namespace VoxelEngine.GridSystem.UI
             {
                 _previewText.text = _target.FormattedDisplay;
                 _previewText.style.color = new StyleColor(_target.textColor);
+            }
+        }
+
+        private void RefreshAppearanceHighlights()
+        {
+            if (_target == null) return;
+
+            string[] borderNames = { "None", "Thin", "Thick", "Glow" };
+            for (int i = 0; i < _borderBtns.Count; i++)
+            {
+                bool active = i < borderNames.Length && i == Mathf.Clamp(_target.borderStyle, 0, 3);
+                _borderBtns[i].style.backgroundColor = new StyleColor(active ? new Color(0.20f, 0.55f, 0.95f) : new Color(0.12f, 0.14f, 0.18f));
+            }
+
+            string[] fontNames = { "Default", "Mono", "LCD", "Terminal" };
+            for (int i = 0; i < _fontBtns.Count; i++)
+            {
+                bool active = i < fontNames.Length && i == Mathf.Clamp(_target.fontStyle, 0, 3);
+                _fontBtns[i].style.backgroundColor = new StyleColor(active ? new Color(0.20f, 0.55f, 0.95f) : new Color(0.12f, 0.14f, 0.18f));
             }
         }
 
@@ -481,13 +505,17 @@ namespace VoxelEngine.GridSystem.UI
             var f = new TextField();
             f.value = _target.customText; f.multiline = true;
             f.style.minHeight = 40;
-            f.style.backgroundColor = new StyleColor(new Color(0.05f, 0.055f, 0.075f));
+            f.style.backgroundColor = new StyleColor(new Color(0.025f, 0.030f, 0.045f));
             f.style.color = new Color(0.92f, 0.94f, 0.97f);
             f.style.borderLeftWidth = f.style.borderRightWidth =
-            f.style.borderTopWidth = f.style.borderBottomWidth = 0;
+            f.style.borderTopWidth = f.style.borderBottomWidth = 1;
+            f.style.borderLeftColor = f.style.borderRightColor =
+            f.style.borderTopColor = f.style.borderBottomColor = new StyleColor(new Color(0.18f, 0.72f, 0.88f, 0.35f));
             f.style.whiteSpace = WhiteSpace.Normal;
             f.RegisterValueChangedCallback(e => { _target.customText = e.newValue; });
+            f.RegisterCallback<GeometryChangedEvent>(_ => StyleTextInput(f));
             sec.Add(f);
+            f.schedule.Execute(() => StyleTextInput(f));
 
             for (int i = 0; i < _panel.childCount; i++)
             {
@@ -495,6 +523,24 @@ namespace VoxelEngine.GridSystem.UI
                 { _panel.Insert(i, sec); return; }
             }
             _panel.Add(sec);
+        }
+
+        private static void StyleTextInput(TextField field)
+        {
+            if (field == null) return;
+            Color inputBackground = new Color(0.025f, 0.030f, 0.045f, 1f);
+            Color inputText = new Color(0.92f, 0.94f, 0.97f, 1f);
+            StyleTextInputRecursive(field, inputBackground, inputText);
+        }
+
+        private static void StyleTextInputRecursive(VisualElement element, Color background, Color text)
+        {
+            if (element == null) return;
+            element.style.backgroundColor = new StyleColor(background);
+            element.style.color = new StyleColor(text);
+
+            foreach (var child in element.Children())
+                StyleTextInputRecursive(child, background, text);
         }
     }
 }
