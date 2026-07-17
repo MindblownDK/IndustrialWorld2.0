@@ -7,6 +7,7 @@
 // ╚══════════════════════════════════════════════════════════════════╝
 // v5.52.0-dev — Power-state hardening + grid screen data provider.
 
+using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.GridSystem;
 
@@ -41,7 +42,7 @@ namespace VoxelEngine.Simulation
 
         // ── Runtime ───────────────────────────────────────────────────
 
-        private Light _light;
+        private readonly List<Light> _lights = new();
         private Renderer _indicatorRenderer;
         private MaterialPropertyBlock _indicatorBlock;
         private bool _lastOnState;
@@ -78,7 +79,8 @@ namespace VoxelEngine.Simulation
 
         private void CreateLight()
         {
-            if (_light == null)
+            CacheLights();
+            if (_lights.Count == 0)
             {
                 Transform existingLight = transform.Find("GridLight");
                 GameObject lightGo = existingLight != null ? existingLight.gameObject : new GameObject("GridLight");
@@ -86,13 +88,28 @@ namespace VoxelEngine.Simulation
                 lightGo.transform.localPosition = Vector3.forward * 0.3f;
                 lightGo.transform.localRotation = Quaternion.identity;
 
-                _light = lightGo.GetComponent<Light>();
-                if (_light == null) _light = lightGo.AddComponent<Light>();
-                _light.shadows = LightShadows.Soft;
+                var light = lightGo.GetComponent<Light>();
+                if (light == null) light = lightGo.AddComponent<Light>();
+                light.shadows = LightShadows.Soft;
+                _lights.Add(light);
             }
 
             ApplyLightSettings();
             CreateEmissiveIndicator();
+        }
+
+        private void CacheLights()
+        {
+            _lights.Clear();
+            var found = GetComponentsInChildren<Light>(true);
+            for (int i = 0; i < found.Length; i++)
+            {
+                if (found[i] == null) continue;
+                // Status/indicator lights are decorative and should not become beam emitters.
+                if (found[i].name.IndexOf("Status", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                    continue;
+                _lights.Add(found[i]);
+            }
         }
 
         private void CreateEmissiveIndicator()
@@ -127,12 +144,15 @@ namespace VoxelEngine.Simulation
 
         private void Update()
         {
-            if (_light == null) CreateLight();
+            if (_lights.Count == 0) CreateLight();
 
             ApplyLightSettings();
 
             bool shouldBeOn = IsOnline;
-            if (_light != null) _light.enabled = shouldBeOn;
+            for (int i = 0; i < _lights.Count; i++)
+            {
+                if (_lights[i] != null) _lights[i].enabled = shouldBeOn;
+            }
             if (shouldBeOn != _lastOnState)
             {
                 _lastOnState = shouldBeOn;
@@ -146,12 +166,18 @@ namespace VoxelEngine.Simulation
 
         private void ApplyLightSettings()
         {
-            if (_light == null) return;
-            _light.type = lightType;
-            _light.color = lightColor;
-            _light.range = Mathf.Max(0f, range);
-            _light.intensity = Mathf.Max(0f, intensity);
-            _light.spotAngle = Mathf.Clamp(spotAngle, 10f, 170f);
+            if (_lights.Count == 0) return;
+            for (int i = 0; i < _lights.Count; i++)
+            {
+                var light = _lights[i];
+                if (light == null) continue;
+                light.type = lightType;
+                light.color = lightColor;
+                light.range = Mathf.Max(0f, range);
+                light.intensity = Mathf.Max(0f, intensity);
+                light.spotAngle = Mathf.Clamp(spotAngle, 10f, 170f);
+                light.shadows = LightShadows.Soft;
+            }
         }
 
         private void UpdateIndicator(bool online)

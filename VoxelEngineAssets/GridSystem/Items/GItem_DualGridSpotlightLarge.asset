@@ -10,18 +10,19 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e230da79876505a41b25678102c74c13, type: 3}
-  m_Name: GItem_GridLightBlock
+  m_Name: GItem_DualGridSpotlightLarge
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.GridSystem.GridBlockItem
-  itemId: gitem_gridlightblock
-  displayName: Grid Light Block
-  description: Large mounted spotlight for vehicle and base grids.
+  itemId: gitem_dualgridspotlightlarge
+  displayName: Large Dual Grid Spotlight
+  description: Large-grid dual-output flood spotlight with two synchronized beams
+    for broad ship and base illumination, 95 W draw.
   icon: {fileID: 0}
-  iconTint: {r: 1, g: 0.94, b: 0.72, a: 1}
+  iconTint: {r: 1, g: 0.96, b: 0.84, a: 1}
   maxStack: 99
-  massPerUnit: 1
+  massPerUnit: 5.2
   category: Grid
   viewmodelPrefab: {fileID: 0}
-  gridSize: 0
-  blockPrefab: {fileID: 6554189646932360880, guid: d23dce52ea5347f489b9884283df09d9, type: 3}
-  blockMass: 95
-  blockHP: 220
+  gridSize: 1
+  blockPrefab: {fileID: 1194987466243186095, guid: 97e83b7584200b04fb09f1852cb3e35e, type: 3}
+  blockMass: 520
+  blockHP: 640

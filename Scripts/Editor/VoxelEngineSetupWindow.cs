@@ -7532,7 +7532,7 @@ root =>
                 EnsureRootCollider(root, new Vector3(0.95f, 0.62f, 0.82f), new Vector3(0f, 0.08f, -0.10f));
                 EnsureStep17Component<VoxelEngine.Simulation.GridLightBlock>(root, lightBlock =>
                 {
-                    lightBlock.blockName = "Grid Light Block";
+                    lightBlock.blockName = "Small Grid Spotlight";
                     lightBlock.lightColor = Color.white;
                     lightBlock.range = 32f;
                     lightBlock.spotAngle = 42f;
@@ -7540,7 +7540,58 @@ root =>
                     lightBlock.lightType = LightType.Spot;
                 });
             });
-            var gridLightItem = ConfigureGridItem(GRID_ITEMS, "GItem_GridLightBlock", "Grid Light Block", "Large mounted spotlight for vehicle and base grids.", new Color(1f, 0.94f, 0.72f), gridLightPrefab, VoxelEngine.GridSystem.GridSize.Small, 95f, 220f);
+            var gridLightItem = ConfigureGridItem(GRID_ITEMS, "GItem_GridLightBlock", "Small Grid Spotlight", "Compact single-beam spotlight for small grids. Configurable color/range/intensity, draws 25 W when enabled, and switches off automatically without grid power.", new Color(1f, 0.94f, 0.72f), gridLightPrefab, VoxelEngine.GridSystem.GridSize.Small, 95f, 220f);
+
+            GameObject CreateGridSpotlightPrefab(string assetName, bool largeGrid, bool dualOutput)
+            {
+                return GetOrCreateStep17Prefab($"{GRID_PREFABS}/{assetName}.prefab", assetName, root =>
+                {
+                    float scale = largeGrid ? 2.5f : 1f;
+                    float spread = dualOutput ? 0.33f * scale : 0f;
+                    var shellMat = GetMaterial(GRID_MATS, largeGrid ? "Mat_LargeGridSpotlightShell" : "Mat_SmallGridSpotlightShell", new Color(0.56f, 0.61f, 0.52f));
+                    var trimMat = GetMaterial(GRID_MATS, "Mat_GridSpotlightBlackTrim", new Color(0.025f, 0.028f, 0.032f));
+                    var grilleMat = GetMaterial(GRID_MATS, "Mat_GridSpotlightGrille", new Color(0.09f, 0.10f, 0.105f));
+                    var lensMat = GetMaterial(GRID_MATS, "Mat_GridSpotlightHotLens", new Color(1f, 0.96f, 0.84f), true);
+                    var blueStatus = GetMaterial(GRID_MATS, "Mat_GridSpotlightBlueStatus", new Color(0.05f, 0.65f, 1f), true);
+
+                    EnsurePrimitive(root, "Generated_RearBody", PrimitiveType.Cube, new Vector3(0f, 0.00f, 0.08f * scale), new Vector3((dualOutput ? 1.22f : 0.78f) * scale, 0.52f * scale, 0.62f * scale), shellMat, Vector3.zero);
+                    EnsurePrimitive(root, "Generated_TopHandle", PrimitiveType.Cube, new Vector3(0f, 0.34f * scale, 0.07f * scale), new Vector3((dualOutput ? 0.92f : 0.48f) * scale, 0.08f * scale, 0.50f * scale), trimMat, Vector3.zero);
+                    EnsurePrimitive(root, "Generated_BottomMount", PrimitiveType.Cube, new Vector3(0f, -0.34f * scale, 0.10f * scale), new Vector3((dualOutput ? 0.82f : 0.44f) * scale, 0.10f * scale, 0.46f * scale), trimMat, Vector3.zero);
+
+                    int lamps = dualOutput ? 2 : 1;
+                    for (int i = 0; i < lamps; i++)
+                    {
+                        float x = dualOutput ? (i == 0 ? -spread : spread) : 0f;
+                        EnsurePrimitive(root, "Generated_LampCan_" + i, PrimitiveType.Cylinder, new Vector3(x, 0.00f, -0.23f * scale), new Vector3(0.28f * scale, 0.30f * scale, 0.28f * scale), shellMat, new Vector3(90f, 0f, 0f));
+                        EnsurePrimitive(root, "Generated_BlackBezel_" + i, PrimitiveType.Cylinder, new Vector3(x, 0.00f, -0.50f * scale), new Vector3(0.34f * scale, 0.045f * scale, 0.34f * scale), trimMat, new Vector3(90f, 0f, 0f));
+                        EnsurePrimitive(root, "Generated_HotLens_" + i, PrimitiveType.Cylinder, new Vector3(x, 0.00f, -0.555f * scale), new Vector3(0.27f * scale, 0.025f * scale, 0.27f * scale), lensMat, new Vector3(90f, 0f, 0f));
+                        EnsurePrimitive(root, "Generated_GrilleHorizontalA_" + i, PrimitiveType.Cube, new Vector3(x, 0.085f * scale, -0.592f * scale), new Vector3(0.50f * scale, 0.018f * scale, 0.018f * scale), grilleMat, Vector3.zero);
+                        EnsurePrimitive(root, "Generated_GrilleHorizontalB_" + i, PrimitiveType.Cube, new Vector3(x, -0.085f * scale, -0.592f * scale), new Vector3(0.50f * scale, 0.018f * scale, 0.018f * scale), grilleMat, Vector3.zero);
+                        EnsurePrimitive(root, "Generated_GrilleCenter_" + i, PrimitiveType.Cube, new Vector3(x, 0.00f, -0.596f * scale), new Vector3(0.54f * scale, 0.016f * scale, 0.018f * scale), grilleMat, Vector3.zero);
+                        EnsureLight(root, "Generated_Spot_" + i, new Vector3(x, 0.00f, -0.64f * scale), LightType.Spot, Color.white, largeGrid ? 9.5f : 4.8f, largeGrid ? 78f : 34f, dualOutput ? 38f : 42f);
+                    }
+
+                    EnsurePrimitive(root, "Generated_StatusPanel", PrimitiveType.Cube, new Vector3((dualOutput ? 0f : 0.32f * scale), -0.12f * scale, -0.57f * scale), new Vector3(0.10f * scale, 0.06f * scale, 0.018f * scale), blueStatus, Vector3.zero);
+                    EnsureRootCollider(root, new Vector3((dualOutput ? 1.40f : 0.92f) * scale, 0.82f * scale, 0.98f * scale), new Vector3(0f, 0f, -0.10f * scale));
+                    EnsureStep17Component<VoxelEngine.Simulation.GridLightBlock>(root, lightBlock =>
+                    {
+                        lightBlock.blockName = (largeGrid ? "Large" : "Small") + (dualOutput ? " Dual" : "") + " Grid Spotlight";
+                        lightBlock.lightColor = Color.white;
+                        lightBlock.range = largeGrid ? 78f : 34f;
+                        lightBlock.spotAngle = dualOutput ? 38f : 42f;
+                        lightBlock.intensity = largeGrid ? 9.5f : 4.8f;
+                        lightBlock.lightType = LightType.Spot;
+                        lightBlock.wattsDraw = largeGrid ? (dualOutput ? 95f : 65f) : (dualOutput ? 38f : 25f);
+                    });
+                });
+            }
+
+            var largeGridSpotlightPrefab = CreateGridSpotlightPrefab("GridSpotlight_Large", true, false);
+            var smallDualSpotlightPrefab = CreateGridSpotlightPrefab("GridSpotlight_DualSmall", false, true);
+            var largeDualSpotlightPrefab = CreateGridSpotlightPrefab("GridSpotlight_DualLarge", true, true);
+            var largeGridSpotlightItem = ConfigureGridItem(GRID_ITEMS, "GItem_LargeGridSpotlight", "Large Grid Spotlight", "Large-grid single-beam spotlight inspired by rugged industrial searchlights. Long range, configurable color/range/intensity, 65 W draw.", new Color(1f, 0.96f, 0.84f), largeGridSpotlightPrefab, VoxelEngine.GridSystem.GridSize.Large, 420f, 520f);
+            var smallDualSpotlightItem = ConfigureGridItem(GRID_ITEMS, "GItem_DualGridSpotlightSmall", "Small Dual Grid Spotlight", "Compact dual-output spotlight for small grids with two synchronized beams, 38 W draw.", new Color(1f, 0.96f, 0.84f), smallDualSpotlightPrefab, VoxelEngine.GridSystem.GridSize.Small, 130f, 260f);
+            var largeDualSpotlightItem = ConfigureGridItem(GRID_ITEMS, "GItem_DualGridSpotlightLarge", "Large Dual Grid Spotlight", "Large-grid dual-output flood spotlight with two synchronized beams for broad ship and base illumination, 95 W draw.", new Color(1f, 0.96f, 0.84f), largeDualSpotlightPrefab, VoxelEngine.GridSystem.GridSize.Large, 520f, 640f);
 
             GameObject CreateLedStripPrefab(string folder, string matsFolder, string assetName, bool gridVariant)
             {
@@ -7548,40 +7599,54 @@ root =>
                 {
                     var stripMat = GetMaterial(matsFolder, gridVariant ? "Mat_GridLEDStrip" : "Mat_StaticLEDStrip", new Color(0.18f, 0.72f, 0.88f), true);
                     var backingMat = GetMaterial(matsFolder, gridVariant ? "Mat_GridLEDBacking" : "Mat_StaticLEDBacking", new Color(0.08f, 0.09f, 0.10f));
-                    EnsurePrimitive(root, "Generated_Backplate", PrimitiveType.Cube, new Vector3(0f, 0.02f, 0f), new Vector3(1.95f, 0.05f, 0.18f), backingMat, Vector3.zero);
-                    EnsurePrimitive(root, "LEDStripMesh", PrimitiveType.Cube, new Vector3(0f, 0.075f, 0f), new Vector3(1.82f, 0.035f, 0.08f), stripMat, Vector3.zero);
-                    EnsureLight(root, "LEDLight", new Vector3(0f, 0.12f, 0f), LightType.Point, new Color(0.18f, 0.72f, 0.88f), 1.4f, 4f);
-                    EnsureRootCollider(root, new Vector3(2.0f, 0.16f, 0.22f), new Vector3(0f, 0.05f, 0f));
+                    bool largeStrip = assetName.IndexOf("Large", System.StringComparison.OrdinalIgnoreCase) >= 0;
+                    float stripLength = largeStrip ? 4.5f : 1.8f;
+                    float stripWidth = largeStrip ? 0.18f : 0.08f;
+                    EnsurePrimitive(root, "Generated_LEDBackplate", PrimitiveType.Cube, new Vector3(0f, 0.02f, 0f), new Vector3(stripLength + 0.18f, 0.05f, stripWidth + 0.10f), backingMat, Vector3.zero);
+                    EnsurePrimitive(root, "LEDStripMesh", PrimitiveType.Cube, new Vector3(0f, 0.075f, 0f), new Vector3(stripLength, 0.035f, stripWidth), stripMat, Vector3.zero);
+                    int diodeCount = largeStrip ? 18 : 8;
+                    for (int d = 0; d < diodeCount; d++)
+                    {
+                        float t = diodeCount == 1 ? 0.5f : d / (float)(diodeCount - 1);
+                        float x = Mathf.Lerp(-stripLength * 0.46f, stripLength * 0.46f, t);
+                        EnsurePrimitive(root, "Generated_LEDDiode_" + d, PrimitiveType.Cube, new Vector3(x, 0.105f, 0f), new Vector3(Mathf.Min(0.09f, stripLength / diodeCount * 0.40f), 0.018f, stripWidth * 0.82f), stripMat, Vector3.zero);
+                    }
+                    EnsureLight(root, "LEDLight", new Vector3(0f, 0.13f, 0f), LightType.Point, new Color(0.18f, 0.72f, 0.88f), largeStrip ? 2.2f : 1.4f, largeStrip ? 8f : 4f);
+                    EnsureRootCollider(root, new Vector3(stripLength + 0.22f, 0.18f, stripWidth + 0.12f), new Vector3(0f, 0.05f, 0f));
                     if (gridVariant)
                     {
                         EnsureStep17Component<VoxelEngine.GridSystem.GridBlock>(root, gridBlock =>
                         {
-                            gridBlock.blockName = "Grid LED Strip";
-                            gridBlock.BlockMass = 25f;
-                            gridBlock.maxHP = 90f;
+                            gridBlock.blockName = assetName.IndexOf("Large", System.StringComparison.OrdinalIgnoreCase) >= 0 ? "Large Grid LED Strip" : "Small Grid LED Strip";
+                            gridBlock.BlockMass = assetName.IndexOf("Large", System.StringComparison.OrdinalIgnoreCase) >= 0 ? 90f : 25f;
+                            gridBlock.maxHP = assetName.IndexOf("Large", System.StringComparison.OrdinalIgnoreCase) >= 0 ? 180f : 90f;
                         });
                     }
                     EnsureStep17Component<VoxelEngine.Simulation.LEDStrip>(root, strip =>
                     {
                         strip.stripColor = new Color(0.18f, 0.72f, 0.88f);
                         strip.brightness = 1.5f;
-                        strip.stripLength = 1.8f;
+                        strip.stripLength = assetName.IndexOf("Large", System.StringComparison.OrdinalIgnoreCase) >= 0 ? 4.5f : 1.8f;
+                        strip.segmentCount = assetName.IndexOf("Large", System.StringComparison.OrdinalIgnoreCase) >= 0 ? 18 : 8;
+                        strip.stripWidth = assetName.IndexOf("Large", System.StringComparison.OrdinalIgnoreCase) >= 0 ? 0.18f : 0.08f;
                         strip.mode = VoxelEngine.Simulation.LEDMode.Pulse;
                         strip.animSpeed = 1.5f;
-                        strip.wattsDraw = 5f;
+                        strip.wattsDraw = assetName.IndexOf("Large", System.StringComparison.OrdinalIgnoreCase) >= 0 ? 12f : 5f;
                     });
                     EnsureStep17Component<VoxelEngine.Power.PowerConsumer>(root, power =>
                     {
-                        power.wattsPerSecond = 5f;
-                        power.connectRadius = 1.5f;
+                        power.wattsPerSecond = assetName.IndexOf("Large", System.StringComparison.OrdinalIgnoreCase) >= 0 ? 12f : 5f;
+                        power.connectRadius = assetName.IndexOf("Large", System.StringComparison.OrdinalIgnoreCase) >= 0 ? 3.0f : 1.5f;
                     });
                 });
             }
 
             var staticLEDStripPrefab = CreateLedStripPrefab(FAC_PREFABS, FAC_MATS, "LEDStrip_Static", false);
             var gridLEDStripPrefab = CreateLedStripPrefab(GRID_PREFABS, GRID_MATS, "LEDStrip_Grid", true);
-            var blockLEDStrip = ConfigureBlock(FAC_ITEMS, "Block_LEDStripFactory", "LED Strip", "Low-profile accent lighting for factory floors, walls, and machines.", new Color(0.18f, 0.72f, 0.88f), staticLEDStripPrefab, "Factory", 70);
-            var gridLEDStripItem = ConfigureGridItem(GRID_ITEMS, "GItem_LEDStrip", "Grid LED Strip", "Low-profile accent light strip that can be placed directly on grids.", new Color(0.18f, 0.72f, 0.88f), gridLEDStripPrefab, VoxelEngine.GridSystem.GridSize.Small, 25f, 90f);
+            var largeGridLEDStripPrefab = CreateLedStripPrefab(GRID_PREFABS, GRID_MATS, "LEDStrip_LargeGrid", true);
+            var blockLEDStrip = ConfigureBlock(FAC_ITEMS, "Block_LEDStripFactory", "LED Strip", "Segmented low-profile accent lighting for factory floors, walls, and machines. Runtime length is configurable on the LEDStrip component.", new Color(0.18f, 0.72f, 0.88f), staticLEDStripPrefab, "Factory", 70);
+            var gridLEDStripItem = ConfigureGridItem(GRID_ITEMS, "GItem_LEDStrip", "Small Grid LED Strip", "Small-grid segmented LED strip with individual diode elements, pulse/blink/chase modes, and configurable runtime length.", new Color(0.18f, 0.72f, 0.88f), gridLEDStripPrefab, VoxelEngine.GridSystem.GridSize.Small, 25f, 90f);
+            var largeGridLEDStripItem = ConfigureGridItem(GRID_ITEMS, "GItem_LargeGridLEDStrip", "Large Grid LED Strip", "Large-grid segmented LED strip with individual diode elements, higher output, pulse/blink/chase modes, and configurable runtime length.", new Color(0.18f, 0.72f, 0.88f), largeGridLEDStripPrefab, VoxelEngine.GridSystem.GridSize.Large, 90f, 180f);
 
             // ── Recipes ──
             var factoryRecipes = new List<VoxelEngine.Crafting.RecipeDefinition>();
@@ -7595,15 +7660,20 @@ root =>
             var recAssemblerMk2 = CreateRecipe(registry, FAC_RECIPES, "Recipe_AssemblerMk2", "Assembler Mk.2", blockAssemblerMk2, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 8), (ironGear, 6), (circuit, 4), (copperWire, 6));
             var recAssemblerMk3 = CreateRecipe(registry, FAC_RECIPES, "Recipe_AssemblerMk3", "Assembler Mk.3", blockAssemblerMk3, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 14), (ironGear, 10), (advCircuit, 4), (copperWire, 12));
             var recElectricFurnace = CreateRecipe(registry, FAC_RECIPES, "Recipe_ElectricFurnace", "Electric Furnace", blockElectricFurnace, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 4), (circuit, 2), (copperPlate, 2));
-            var recGridLight = CreateRecipe(registry, GRID_RECIPES, "Recipe_GridLightBlock", "Grid Light Block", gridLightItem, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (ironPlate, 1), (copperWire, 2), (glass, 1));
+            var recGridLight = CreateRecipe(registry, GRID_RECIPES, "Recipe_GridLightBlock", "Small Grid Spotlight", gridLightItem, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (ironPlate, 1), (copperWire, 2), (glass, 1));
+            var recLargeGridSpotlight = CreateRecipe(registry, GRID_RECIPES, "Recipe_LargeGridSpotlight", "Large Grid Spotlight", largeGridSpotlightItem, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 3), (copperWire, 6), (glass, 2), (circuit, 1));
+            var recSmallDualSpotlight = CreateRecipe(registry, GRID_RECIPES, "Recipe_DualGridSpotlightSmall", "Small Dual Grid Spotlight", smallDualSpotlightItem, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (ironPlate, 2), (copperWire, 4), (glass, 2), (circuit, 1));
+            var recLargeDualSpotlight = CreateRecipe(registry, GRID_RECIPES, "Recipe_DualGridSpotlightLarge", "Large Dual Grid Spotlight", largeDualSpotlightItem, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 4), (copperWire, 8), (glass, 4), (circuit, 2));
             var recLEDStrip = CreateRecipe(registry, FAC_RECIPES, "Recipe_LEDStripFactory", "LED Strip", blockLEDStrip, 2, VoxelEngine.Crafting.StationTier.CraftingBench, false, (copperWire, 4), (glass, 1));
-            var recGridLEDStrip = CreateRecipe(registry, GRID_RECIPES, "Recipe_GLEDStrip", "Grid LED Strip", gridLEDStripItem, 2, VoxelEngine.Crafting.StationTier.CraftingBench, false, (copperWire, 4), (glass, 1));
+            var recGridLEDStrip = CreateRecipe(registry, GRID_RECIPES, "Recipe_GLEDStrip", "Small Grid LED Strip", gridLEDStripItem, 2, VoxelEngine.Crafting.StationTier.CraftingBench, false, (copperWire, 4), (glass, 1));
+            var recLargeGridLEDStrip = CreateRecipe(registry, GRID_RECIPES, "Recipe_LargeGridLEDStrip", "Large Grid LED Strip", largeGridLEDStripItem, 1, VoxelEngine.Crafting.StationTier.CraftingBench, false, (copperWire, 8), (glass, 2), (ironPlate, 1));
 
             foreach (var recipe in new[]
             {
                 recConveyorBasic, recConveyorFast, recConveyorExpress, recChute, recFunnel,
                 recCrusher, recAssemblerMk1, recAssemblerMk2, recAssemblerMk3, recElectricFurnace,
-                recGridLight, recLEDStrip, recGridLEDStrip
+                recGridLight, recLargeGridSpotlight, recSmallDualSpotlight, recLargeDualSpotlight,
+                recLEDStrip, recGridLEDStrip, recLargeGridLEDStrip
             })
             {
                 AddRecipeUnique(factoryRecipes, recipe);

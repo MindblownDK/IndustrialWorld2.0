@@ -630,20 +630,30 @@ namespace VoxelEngine.GridSystem
             if (renderer != null) renderer.enabled = visible;
         }
 
-        /// <summary>Ensures TextMesh uses a material with ZWrite On so text doesn't show through walls/terrain.</summary>
+        /// <summary>Ensures TextMesh respects depth so screen text cannot render through terrain or blocks.</summary>
         private static void MakeTextOpaque(TextMesh tm)
         {
             if (tm == null) return;
             var renderer = tm.GetComponent<MeshRenderer>();
             if (renderer == null) return;
-            var mat = renderer.sharedMaterial;
-            if (mat == null) return;
-            // Clone so we don't modify the shared asset
-            mat = new Material(mat);
-            mat.name = "ScreenText_ZWrite";
-            mat.SetInt("_ZWrite", 1);
-            mat.renderQueue = 2000; // Opaque queue
+
+            var source = renderer.sharedMaterial;
+            Texture mainTexture = source != null ? source.mainTexture : null;
+            Shader shader = Shader.Find("Unlit/Transparent Cutout")
+                ?? Shader.Find("Legacy Shaders/Transparent/Cutout/Diffuse")
+                ?? (source != null ? source.shader : null)
+                ?? Shader.Find("Standard");
+            if (shader == null) return;
+
+            var mat = new Material(shader) { name = "ScreenText_DepthTest" };
+            if (mainTexture != null) mat.mainTexture = mainTexture;
+            if (mat.HasProperty("_MainTex") && mainTexture != null) mat.SetTexture("_MainTex", mainTexture);
+            if (mat.HasProperty("_Cutoff")) mat.SetFloat("_Cutoff", 0.18f);
+            if (mat.HasProperty("_ZWrite")) mat.SetInt("_ZWrite", 1);
+            if (mat.HasProperty("_ZTest")) mat.SetInt("_ZTest", (int)UnityEngine.Rendering.CompareFunction.LessEqual);
+            mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.AlphaTest;
             renderer.sharedMaterial = mat;
+            renderer.sortingOrder = 0;
         }
 
         // ── Multi-source management ───────────────────────────────────

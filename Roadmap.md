@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.52.0-dev`
-**Roadmap Version:** `5.52.0-dev`
+**Current Version:** `5.53.0-dev`
+**Roadmap Version:** `5.53.0-dev`
 **Date:** 2026-07-17
-**Status:** Active Implementation — Grid Lighting Power-State Polish
+**Status:** Active Implementation — Large Grid Lighting + LED Strip Variants
 
 ---
 
@@ -56,7 +56,7 @@ The design goal is a seamless blend of:
 | Space stations | ❌ Missing | No buildable orbital platforms |
 | Conveyor logistics | 🟡 Good | Conveyors, ramps, vertical belts, chutes, contextual shape wheel, ghost previews, and persistence exist. Remaining work: pooled item entities, more chute variants, and final long-run throughput validation. |
 | Grid screens / displays | ✅ COMPLETED | All sizes, live text+power states, right-click+terminal config, custom text+custom colors+border+font, visual bar charts, multi-source, live camera feeds, power gain/loss/net mode, persistence, and camera block are validated by Thomas. (5.51.3-dev) |
-| Grid lighting | 🟡 PARTIALLY COMPLETE | Grid Light Block, LED strips, static lighting setup, and lighting UI foundations exist. **5.52.0-dev** hardens Grid Light power-state behavior and exposes Grid Light as a screen data provider; broader light configuration UX/persistence validation remains. |
+| Grid lighting | 🛠️ WORKING ON | Grid Light Block, LED strips, static lighting setup, and lighting UI foundations exist. **5.53.0-dev** adds small/large single and dual spotlight setup variants, large-grid LED strip, premium segmented LED visuals, and screen text depth hardening; Unity Step 17 validation pending. |
 | Sloped / armored grid blocks | ❌ Missing | Only cube blocks exist; need shape variants |
 | Grid shape variant wheel | 🟡 PARTIALLY COMPLETE | Premium radial wheel foundation complete (5.40.1-dev) with full visual parity to Hammer/Conveyor wheels. CurrentShape accessor + auto-spawn ready. Compile error in GridBuilder fixed. Shape application + authored variants next (via Setup Step 18). |
 | Player armor slots | ❌ Missing | No equipable armor system |
@@ -503,7 +503,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Basic machines | 🟡 PARTIALLY COMPLETE | Electric Furnace, Crusher, and three Assembler tiers exist. Crusher/Assembler have recipe-selection UIs, visual animation, centralized simulation ticks, additive buffers/progress/enabled persistence, and Unity smoke validation from Thomas; production statistics and module systems remain. |
 | Storage blocks | 🟡 PARTIALLY COMPLETE | A basic chest and the wider storage system exist. The planned Wooden Crate → Iron Chest → Steel Chest → Provider/Requester progression is not complete. |
 | Power pole, wire, and substation | 🟡 PARTIALLY COMPLETE | Manual wiring, poles, substations, transformers, compact LV/HV one-link connectors, and 8-link wall/foundation relays exist. Setup reruns preserve balance while adding missing links. |
-| Grid/static lighting and LED strips | 🟡 PARTIALLY COMPLETE | Grid light, floodlight logic, and static/grid LED assets exist. Grid Light now respects grid power state and can be selected as a screen data source (5.52.0-dev). Configuration UX, persistence, and complete authored variants still need verification. |
+| Grid/static lighting and LED strips | 🛠️ WORKING ON | Grid light, floodlight logic, static/grid LED assets, small/large spotlight variants, dual-output spotlights, large-grid LED strip, and premium segmented LED visuals now exist in setup code (5.53.0-dev). Step 17 generation, persistence/config UX, and Unity validation pending. |
 | Shared Machine UI | 🟡 PARTIALLY COMPLETE | Crusher and Assembler panels now expose recipe selection, progress, power, toggles, inventory slots, scrolling, and item-port integration. Remaining work: complete unification across every machine, production statistics, and theme overrides. |
 | Item entity system | 🟡 PARTIALLY COMPLETE | Dropped world items exist and conveyors render carried packets. A unified pooled physical-item entity lifecycle is not complete. |
 | Recipe registry refactor | 🟡 PARTIALLY COMPLETE | ScriptableObject crafting and machine recipes exist. Shaped/shapeless/smelting/machine unification and validation remain incomplete. |
@@ -1682,6 +1682,44 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.53.0-dev] Large Grid Spotlights + Premium Segmented LED Strip Variants
+
+**Type:** MINOR — new save-compatible grid lighting content/setup plus screen rendering polish (no save schema migration)
+
+**Added / Improved:**
+- Step 17 now generates large-grid lighting content non-destructively through `Tools > Voxel Engine > Voxel Engine Setup`:
+  - **Large Grid Spotlight** — single long-range industrial spotlight.
+  - **Small Dual Grid Spotlight** — compact two-beam spotlight.
+  - **Large Dual Grid Spotlight** — large-grid two-beam flood spotlight.
+  - **Large Grid LED Strip** — larger segmented grid LED strip.
+- Existing small grid spotlight item is renamed to **Small Grid Spotlight** with a clearer description.
+- Spotlights are inspired by Thomas's reference: rugged lamp cans, black bezels, hot lenses, grille bars, body/mount details, and dual-output variants where applicable.
+- `GridLightBlock` now controls every non-status child `Light`, so dual-output prefabs can use two synchronized beam lights without unmanaged stray lights.
+- `LEDStrip` visual generation rebuilt into a more realistic segmented strip:
+  - dark backing rail, lit diffuser, individual diode segments, configurable width/length/segment count.
+  - supports runtime `SetLength(float meters)` as a foundation for future corner-to-corner LED placement.
+  - small and large setup-authored variants use different default lengths/segment counts.
+- Screen TextMesh depth handling hardened: screen text now uses a depth-tested cutout material (`ZTest LessEqual`, `ZWrite On`, alpha-test queue) so text should no longer render through terrain or blocks.
+
+**Roadmap Status:**
+- Grid lighting: **🟡 PARTIALLY COMPLETE → 🛠️ WORKING ON** while the new Step 17 content awaits Unity validation.
+- Grid/static lighting and LED strips: **🟡 PARTIALLY COMPLETE → 🛠️ WORKING ON** for Step 17 generation + validation.
+- LED corner-to-corner placement: **🟡 PARTIALLY COMPLETE foundation** — runtime length is supported; interactive two-corner placement workflow remains a future build-tool step.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Run `Tools > Voxel Engine > Voxel Engine Setup` → **17. Build Factory Foundations + HV Grid**.
+3. Run Step 17 a second time to verify it remains idempotent/non-destructive.
+4. Verify new generated prefabs/items exist:
+   - `GridSpotlight_Large` / Large Grid Spotlight
+   - `GridSpotlight_DualSmall` / Small Dual Grid Spotlight
+   - `GridSpotlight_DualLarge` / Large Dual Grid Spotlight
+   - `LEDStrip_LargeGrid` / Large Grid LED Strip
+5. Place small and large grid variants and confirm sizes match their grid type.
+6. Power the grid and confirm single/dual spotlights turn on/off with grid power.
+7. Place small and large LED strips and confirm the segmented diode strip visuals appear.
+8. Put a screen behind terrain/blocks and confirm screen text no longer shows through occluders.
 
 ### [5.52.0-dev] Grid Light Power-State Hardening + Screen Data Provider
 
