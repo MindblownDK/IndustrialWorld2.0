@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.57.0-dev`
-**Roadmap Version:** `5.57.0-dev`
+**Current Version:** `5.57.1-dev`
+**Roadmap Version:** `5.57.1-dev`
 **Date:** 2026-07-17
-**Status:** Active Implementation — Collapsible Data Types + Motion Lighting
+**Status:** Active Implementation — Grid Screen Config Singleton + Power Relay Missing Script Fix
 
 ---
 
@@ -1682,6 +1682,27 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.57.1-dev] Grid Screen Config Singleton + Power Relay Missing Script Fix
+
+**Type:** PATCH — compile/runtime prefab fix only (no save schema, recipe, or balance changes)
+
+**Fixed:**
+- `GridScreenConfigUI` no longer destroys/removes its own component when a duplicate singleton exists.
+- Runtime singleton handling now prefers the scene/player-authored `GridScreenConfigUI` object over an auto-generated root object.
+- Runtime-generated root `GridScreenConfigUI` is the only variant marked `DontDestroyOnLoad`; player-child/scene-authored objects are left in place.
+- `EnsureInstance()` now first searches for an existing inactive/active `GridScreenConfigUI` before creating a new one.
+- Repaired the missing `CompactPowerNode` script reference on the legacy `VoxelEngineAssets/HighVoltage/Prefabs/PowerRelay.prefab`.
+- Step 17 now also refreshes the legacy `PowerRelay` prefab path non-destructively so old worlds/items are repaired alongside the newer LV/HV relays.
+
+**Roadmap Status:**
+- Grid lighting remains **🛠️ WORKING ON**; this patch clears setup/runtime errors before the next validation pass.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Enter Play Mode and confirm the `GridScreenConfigUI` component remains on its object.
+3. Confirm no `PowerRelay` missing script warning appears.
+4. If the warning persists from an already-open prefab instance, run `Tools > Voxel Engine > Voxel Engine Setup` → **17. Build Factory Foundations + HV Grid** once to refresh the legacy relay prefab.
 
 ### [5.57.0-dev] Collapsible Data Types + Motion-Activated Lighting
 

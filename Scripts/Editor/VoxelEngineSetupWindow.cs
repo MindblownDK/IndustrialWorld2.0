@@ -7355,6 +7355,10 @@ root =>
                 });
             }
 
+            // Legacy compact relay path retained for old worlds/items. Re-saving through this
+            // setup pass repairs missing CompactPowerNode script references non-destructively.
+            var legacyPowerRelayPrefab = CreateCompactPowerNodePrefab("PowerRelay", new Color(0.95f, 0.62f, 0.18f), root =>
+                EnsureStep17Component<VoxelEngine.Simulation.PowerRelayStation>(root));
             var lvConnectorPrefab = CreateCompactPowerNodePrefab("LVWireConnector", new Color(0.22f, 0.78f, 0.42f), root =>
                 EnsureStep17Component<VoxelEngine.Simulation.LvWireConnectorStation>(root));
             var hvConnectorPrefab = CreateCompactPowerNodePrefab("HVWireConnector", new Color(0.18f, 0.72f, 0.88f), root =>

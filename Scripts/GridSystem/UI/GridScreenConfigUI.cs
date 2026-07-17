@@ -1,7 +1,7 @@
 // Assets/Scripts/VoxelEngine/GridSystem/UI/GridScreenConfigUI.cs
 //
 // Configuration panel for GridScreenBlock.
-// v5.51.3-dev — Unity-safe frontmost config panel and primary camera source selection.
+// v5.57.1-dev — Duplicate-safe singleton so scene-authored component is never stripped.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -31,6 +31,14 @@ namespace VoxelEngine.GridSystem.UI
         private static void EnsureInstance()
         {
             if (Instance != null) return;
+
+            var existing = Object.FindAnyObjectByType<GridScreenConfigUI>(FindObjectsInactive.Include);
+            if (existing != null)
+            {
+                Instance = existing;
+                return;
+            }
+
             var go = new GameObject("GridScreenConfigUI");
             go.AddComponent<UnityEngine.UIElements.UIDocument>();
             go.AddComponent<GridScreenConfigUI>();
@@ -38,8 +46,29 @@ namespace VoxelEngine.GridSystem.UI
 
         private void Awake()
         {
-            if (Instance != null && Instance != this) { Destroy(this); return; }
-            Instance = this;
+            if (Instance != null && Instance != this)
+            {
+                // Prefer the scene/player-authored object over a runtime-generated root singleton.
+                // Destroying only the component made Unity remove the script from the configured
+                // object, so duplicates are handled at GameObject level instead.
+                bool thisLooksSceneAuthored = transform.parent != null;
+                bool existingLooksRuntimeGenerated = Instance != null && Instance.transform.parent == null;
+                if (thisLooksSceneAuthored && existingLooksRuntimeGenerated)
+                {
+                    Destroy(Instance.gameObject);
+                    Instance = this;
+                }
+                else
+                {
+                    Destroy(gameObject);
+                    return;
+                }
+            }
+            else
+            {
+                Instance = this;
+            }
+
             _doc = GetComponent<UIDocument>();
             BringDocumentToFront();
             if (_doc.panelSettings == null)
@@ -55,7 +84,8 @@ namespace VoxelEngine.GridSystem.UI
             _root = _doc.rootVisualElement;
             _root.style.flexGrow = 1;
             Hide();
-            DontDestroyOnLoad(gameObject);
+            if (transform.parent == null)
+                DontDestroyOnLoad(gameObject);
         }
 
         private void Update()
