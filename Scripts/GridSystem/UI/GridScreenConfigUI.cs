@@ -1,7 +1,7 @@
 // Assets/Scripts/VoxelEngine/GridSystem/UI/GridScreenConfigUI.cs
 //
 // Configuration panel for GridScreenBlock.
-// v5.47.0-dev — Multi-source toggle: check/uncheck any data source, combining them.
+// v5.48.0-dev — Auto-create on scene if missing. Custom text color. Live toggling.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -24,16 +24,35 @@ namespace VoxelEngine.GridSystem.UI
         private readonly List<Button> _sourceBtns = new();
         private readonly List<Button> _modeBtns = new();
 
+        // ── Auto-create if missing from scene ─────────────────────────
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+        private static void EnsureInstance()
+        {
+            if (Instance != null) return;
+            var go = new GameObject("GridScreenConfigUI");
+            go.AddComponent<UnityEngine.UIElements.UIDocument>();
+            go.AddComponent<GridScreenConfigUI>();
+        }
+
         private void Awake()
         {
             if (Instance != null && Instance != this) { Destroy(this); return; }
             Instance = this;
             _doc = GetComponent<UIDocument>();
             if (_doc.panelSettings == null)
-                _doc.panelSettings = Resources.Load<PanelSettings>("MenuPanelSettings");
+            {
+                var settings = Resources.Load<PanelSettings>("MenuPanelSettings");
+                if (settings != null) _doc.panelSettings = settings;
+            }
+            if (_doc.panelSettings == null)
+            {
+                var existing = FindAnyObjectByType<UIDocument>();
+                if (existing != null) _doc.panelSettings = existing.panelSettings;
+            }
             _root = _doc.rootVisualElement;
             _root.style.flexGrow = 1;
             Hide();
+            DontDestroyOnLoad(gameObject);
         }
 
         private void Update()
@@ -51,6 +70,7 @@ namespace VoxelEngine.GridSystem.UI
             _target = screen;
             _open = true;
             _root.Clear();
+            _root.style.display = DisplayStyle.Flex;
             _root.pickingMode = PickingMode.Position;
             _root.style.backgroundColor = new StyleColor(new Color(0.02f, 0.025f, 0.04f, 0.75f));
             _root.style.alignItems = Align.Center;
@@ -63,6 +83,7 @@ namespace VoxelEngine.GridSystem.UI
         public void Close()
         {
             if (!_open) return;
+            _root.style.display = DisplayStyle.None;
             _open = false; _target = null; UIState.PopBlock(); Hide();
         }
 
@@ -133,7 +154,7 @@ namespace VoxelEngine.GridSystem.UI
             pLbl.style.unityFontStyleAndWeight = FontStyle.Bold; pLbl.style.letterSpacing = 1;
             info.Add(pLbl);
 
-            // ── Data sources (CHECKBOX / TOGGLE style) ──
+            // ── Data sources ──
             var sHdr = new Label("DATA SOURCES  (click to toggle on/off)");
             sHdr.style.color = new Color(0.40f, 0.44f, 0.52f); sHdr.style.fontSize = 9;
             sHdr.style.letterSpacing = 2; sHdr.style.unityFontStyleAndWeight = FontStyle.Bold;
@@ -161,54 +182,17 @@ namespace VoxelEngine.GridSystem.UI
                     int instId = (provider as GridBlock)?.GetInstanceID() ?? 0;
                     bool isOn = _target.HasSource(pos);
 
-                    var btn = new Button(() =>
+                    var btn = MakeToggleButton(isOn, provider.SourceName, provider.DataCategory, () =>
                     {
                         _target.ToggleSource(idx, instId);
                         RefreshHighlights();
                         if (_sourceCount != null)
                             _sourceCount.text = _target.SourceCount + " source(s)";
-                    })
-                    { text = "" };
-
-                    // Build row: [checkbox] + name + category
-                    var row = new VisualElement();
-                    row.style.flexDirection = FlexDirection.Row;
-                    row.style.alignItems = Align.Center;
-                    row.style.paddingLeft = 6;
-
-                    var check = new Label(isOn ? "☑" : "☐");
-                    check.style.color = isOn ? new Color(0.20f, 0.55f, 0.95f) : new Color(0.50f, 0.55f, 0.60f);
-                    check.style.fontSize = 14; check.style.marginRight = 6;
-                    check.style.minWidth = 18;
-                    row.Add(check);
-
-                    var nameL = new Label(provider.SourceName);
-                    nameL.style.color = new Color(0.92f, 0.94f, 0.97f);
-                    nameL.style.fontSize = 11; nameL.style.unityFontStyleAndWeight = FontStyle.Bold;
-                    nameL.style.flexGrow = 1;
-                    row.Add(nameL);
-
-                    var catL = new Label("[" + provider.DataCategory + "]");
-                    catL.style.color = new Color(0.50f, 0.55f, 0.65f);
-                    catL.style.fontSize = 9; catL.style.marginRight = 4;
-                    row.Add(catL);
-
-                    btn.Add(row);
-
-                    btn.style.minHeight = 26; btn.style.marginBottom = 2;
-                    btn.style.unityTextAlign = TextAnchor.MiddleLeft;
-                    btn.style.backgroundColor = new StyleColor(isOn ? new Color(0.12f, 0.18f, 0.28f) : new Color(0.10f, 0.11f, 0.14f));
-                    UITheme.Radius(btn, 4);
-                    btn.style.borderLeftWidth = isOn ? 3f : 0f;
-                    if (isOn) btn.style.borderLeftColor = new StyleColor(new Color(0.20f, 0.55f, 0.95f));
-                    btn.style.borderRightWidth = btn.style.borderTopWidth = btn.style.borderBottomWidth = 0;
-                    _panel.Add(btn); // We add to the panel not scroll so it's cleaner
-                    // Actually add to scroll
+                    });
                     srcScroll.Add(btn);
                     _sourceBtns.Add(btn);
                 }
 
-                // "Clear All" button
                 var clearBtn = new Button(() =>
                 {
                     _target.ClearSources();
@@ -258,6 +242,102 @@ namespace VoxelEngine.GridSystem.UI
                 _modeBtns.Add(mBtn);
             }
             RefreshModeHighlights();
+
+            // ── Text color picker ──
+            var cHdr = new Label("TEXT COLOR");
+            cHdr.style.color = new Color(0.40f, 0.44f, 0.52f); cHdr.style.fontSize = 9;
+            cHdr.style.letterSpacing = 2; cHdr.style.unityFontStyleAndWeight = FontStyle.Bold;
+            cHdr.style.marginTop = 6; cHdr.style.marginBottom = 3;
+            _panel.Add(cHdr);
+
+            var colorRow = new VisualElement();
+            colorRow.style.flexDirection = FlexDirection.Row;
+            colorRow.style.alignItems = Align.Center;
+            _panel.Add(colorRow);
+
+            // Pre-set color chips
+            Color[] presetColors = {
+                new Color(0.18f, 0.72f, 0.88f), // Cyan
+                new Color(0.20f, 0.55f, 0.95f), // Blue
+                new Color(0.22f, 0.78f, 0.42f), // Green
+                new Color(0.95f, 0.65f, 0.20f), // Amber
+                new Color(0.92f, 0.45f, 0.12f), // Orange
+                new Color(0.95f, 0.18f, 0.14f), // Red
+                new Color(0.72f, 0.42f, 0.95f), // Purple
+                Color.white,                     // White
+            };
+
+            foreach (var c in presetColors)
+            {
+                var chip = new Button(() =>
+                {
+                    _target.textColor = c;
+                    RefreshAll();
+                }) { text = "" };
+                chip.style.width = 22; chip.style.height = 22;
+                chip.style.marginRight = 3; chip.style.marginBottom = 3;
+                chip.style.backgroundColor = new StyleColor(c);
+                chip.style.borderLeftWidth = chip.style.borderRightWidth =
+                chip.style.borderTopWidth = chip.style.borderBottomWidth = 1;
+                chip.style.borderLeftColor = chip.style.borderRightColor =
+                chip.style.borderTopColor = chip.style.borderBottomColor = new StyleColor(new Color(0.30f, 0.33f, 0.38f));
+                UITheme.Radius(chip, 4);
+                colorRow.Add(chip);
+            }
+
+            // Border style
+            var bHdr = new Label("BORDER");
+            bHdr.style.color = new Color(0.40f, 0.44f, 0.52f); bHdr.style.fontSize = 9;
+            bHdr.style.letterSpacing = 2; bHdr.style.unityFontStyleAndWeight = FontStyle.Bold;
+            bHdr.style.marginTop = 6; bHdr.style.marginBottom = 3;
+            _panel.Add(bHdr);
+
+            var borderRow = new VisualElement();
+            borderRow.style.flexDirection = FlexDirection.Row;
+            _panel.Add(borderRow);
+
+            string[] borderNames = { "None", "Thin", "Thick", "Glow" };
+            for (int bi = 0; bi < borderNames.Length; bi++)
+            {
+                int bv = bi;
+                var bBtn = new Button(() => { _target.borderStyle = bv; RefreshAll(); }) { text = borderNames[bi] };
+                bBtn.style.minHeight = 22; bBtn.style.marginRight = 4; bBtn.style.marginBottom = 4;
+                bBtn.style.fontSize = 10; bBtn.style.unityFontStyleAndWeight = FontStyle.Bold;
+                bBtn.style.paddingLeft = 8; bBtn.style.paddingRight = 8;
+                bBtn.style.color = new Color(0.92f, 0.94f, 0.97f);
+                bBtn.style.backgroundColor = new StyleColor(bv == _target.borderStyle ? new Color(0.20f, 0.55f, 0.95f) : new Color(0.12f, 0.14f, 0.18f));
+                UITheme.Radius(bBtn, 4);
+                bBtn.style.borderLeftWidth = bBtn.style.borderRightWidth = bBtn.style.borderTopWidth = bBtn.style.borderBottomWidth = 0;
+                borderRow.Add(bBtn);
+            }
+
+            // Font style
+            var fHdr = new Label("FONT");
+            fHdr.style.color = new Color(0.40f, 0.44f, 0.52f); fHdr.style.fontSize = 9;
+            fHdr.style.letterSpacing = 2; fHdr.style.unityFontStyleAndWeight = FontStyle.Bold;
+            fHdr.style.marginTop = 4; fHdr.style.marginBottom = 3;
+            _panel.Add(fHdr);
+
+            var fontRow = new VisualElement();
+            fontRow.style.flexDirection = FlexDirection.Row;
+            _panel.Add(fontRow);
+
+            string[] fontNames = { "Default", "Mono", "LCD", "Terminal" };
+            for (int fi = 0; fi < fontNames.Length; fi++)
+            {
+                int fv = fi;
+                var fBtn = new Button(() => { _target.fontStyle = fv; RefreshAll(); }) { text = fontNames[fi] };
+                fBtn.style.minHeight = 22; fBtn.style.marginRight = 4; fBtn.style.marginBottom = 4;
+                fBtn.style.fontSize = 10; fBtn.style.unityFontStyleAndWeight = FontStyle.Bold;
+                fBtn.style.paddingLeft = 8; fBtn.style.paddingRight = 8;
+                fBtn.style.color = new Color(0.92f, 0.94f, 0.97f);
+                fBtn.style.backgroundColor = new StyleColor(fv == _target.fontStyle ? new Color(0.20f, 0.55f, 0.95f) : new Color(0.12f, 0.14f, 0.18f));
+                UITheme.Radius(fBtn, 4);
+                fBtn.style.borderLeftWidth = fBtn.style.borderRightWidth = fBtn.style.borderTopWidth = fBtn.style.borderBottomWidth = 0;
+                fontRow.Add(fBtn);
+            }
+
+            // ── Custom text ──
             RefreshCustomTextField();
 
             // ── Preview ──
@@ -282,47 +362,90 @@ namespace VoxelEngine.GridSystem.UI
             _previewText.style.color = new StyleColor(_target.textColor);
             _previewText.style.fontSize = 11; _previewText.style.whiteSpace = WhiteSpace.Normal;
             pBox.Add(_previewText);
+
+            RefreshAll();
+        }
+
+        private Button MakeToggleButton(bool isOn, string sourceName, string category, System.Action onClick)
+        {
+            var btn = new Button(onClick) { text = "" };
+            var row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.style.paddingLeft = 6;
+
+            var check = new Label(isOn ? "\u2611" : "\u2610");
+            check.name = "ToggleCheck";
+            check.style.color = isOn ? new Color(0.20f, 0.55f, 0.95f) : new Color(0.50f, 0.55f, 0.60f);
+            check.style.fontSize = 14; check.style.marginRight = 6;
+            check.style.minWidth = 18;
+            row.Add(check);
+
+            var nameL = new Label(sourceName);
+            nameL.name = "SourceName";
+            nameL.style.color = new Color(0.92f, 0.94f, 0.97f);
+            nameL.style.fontSize = 11; nameL.style.unityFontStyleAndWeight = FontStyle.Bold;
+            nameL.style.flexGrow = 1;
+            row.Add(nameL);
+
+            var catL = new Label("[" + category + "]");
+            catL.style.color = new Color(0.50f, 0.55f, 0.65f);
+            catL.style.fontSize = 9; catL.style.marginRight = 4;
+            row.Add(catL);
+
+            btn.Add(row);
+
+            btn.style.minHeight = 26; btn.style.marginBottom = 2;
+            btn.style.unityTextAlign = TextAnchor.MiddleLeft;
+            btn.style.backgroundColor = new StyleColor(isOn ? new Color(0.12f, 0.18f, 0.28f) : new Color(0.10f, 0.11f, 0.14f));
+            UITheme.Radius(btn, 4);
+            btn.style.borderLeftWidth = isOn ? 3f : 0f;
+            if (isOn) btn.style.borderLeftColor = new StyleColor(new Color(0.20f, 0.55f, 0.95f));
+            btn.style.borderRightWidth = btn.style.borderTopWidth = btn.style.borderBottomWidth = 0;
+            return btn;
         }
 
         private void RefreshHighlights()
         {
+            if (_target == null) return;
+
+            // Rebuild source buttons with current state
             foreach (var btn in _sourceBtns)
             {
-                // Determine if this source is selected by parsing checkbox text
-                var check = btn.Q<Label>();
-                if (check == null) continue;
-                bool isOn = check.text == "☑";
-                bool nowOn = false;
+                var check = btn.Q("ToggleCheck") as Label;
+                var nameL = btn.Q("SourceName") as Label;
+                if (check == null || nameL == null) continue;
 
-                // Find which source this button corresponds to and check current state
-                var nameL = btn.Q<Label>();
-                if (nameL != null && _target != null)
+                bool nowOn = false;
+                var sources = _target.GetAvailableSources();
+                foreach (var (pos, p) in sources)
                 {
-                    var sources = _target.GetAvailableSources();
-                    foreach (var (pos, p) in sources)
+                    if (nameL.text == p.SourceName)
                     {
-                        if (nameL.text.Contains(p.SourceName))
-                        {
-                            nowOn = _target.HasSource(pos);
-                            break;
-                        }
+                        nowOn = _target.HasSource(pos);
+                        break;
                     }
                 }
 
-                if (nowOn != isOn)
-                {
-                    check.text = nowOn ? "☑" : "☐";
-                    check.style.color = nowOn ? new Color(0.20f, 0.55f, 0.95f) : new Color(0.50f, 0.55f, 0.60f);
-                    btn.style.backgroundColor = new StyleColor(nowOn ? new Color(0.12f, 0.18f, 0.28f) : new Color(0.10f, 0.11f, 0.14f));
-                    btn.style.borderLeftWidth = nowOn ? 3f : 0f;
-                    if (nowOn) btn.style.borderLeftColor = new StyleColor(new Color(0.20f, 0.55f, 0.95f));
-                }
+                check.text = nowOn ? "\u2611" : "\u2610";
+                check.style.color = nowOn ? new Color(0.20f, 0.55f, 0.95f) : new Color(0.50f, 0.55f, 0.60f);
+                btn.style.backgroundColor = new StyleColor(nowOn ? new Color(0.12f, 0.18f, 0.28f) : new Color(0.10f, 0.11f, 0.14f));
+                btn.style.borderLeftWidth = nowOn ? 3f : 0f;
+                if (nowOn) btn.style.borderLeftColor = new StyleColor(new Color(0.20f, 0.55f, 0.95f));
             }
 
-            if (_sourceCount != null && _target != null)
-                _sourceCount.text = _target.SourceCount + " source(s)";
-            if (_previewText != null && _target != null)
+            if (_sourceCount != null) _sourceCount.text = _target.SourceCount + " source(s)";
+            if (_previewText != null)
+            {
                 _previewText.text = _target.FormattedDisplay;
+                _previewText.style.color = new StyleColor(_target.textColor);
+            }
+        }
+
+        private void RefreshAll()
+        {
+            RefreshHighlights();
+            RefreshModeHighlights();
         }
 
         private void RefreshModeHighlights()
@@ -332,6 +455,11 @@ namespace VoxelEngine.GridSystem.UI
                 string modeName = btn.text == "Mixed" ? "Summary" : btn.text;
                 bool active = modeName == _target.dataMode.ToString();
                 btn.style.backgroundColor = new StyleColor(active ? new Color(0.20f, 0.55f, 0.95f) : new Color(0.12f, 0.14f, 0.18f));
+            }
+            if (_previewText != null)
+            {
+                _previewText.text = _target.FormattedDisplay;
+                _previewText.style.color = new StyleColor(_target.textColor);
             }
         }
 

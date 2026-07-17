@@ -27,6 +27,11 @@ namespace VoxelEngine.GridSystem
         public ScreenDataMode dataMode = ScreenDataMode.Summary;
         public Color textColor = new Color(0.18f, 0.72f, 0.88f);
         public string customText = "CUSTOM DISPLAY";
+        [Header("Appearance")]
+        [Tooltip("Border style: 0=None, 1=Thin, 2=Thick, 3=Glow")]
+        public int borderStyle = 1;
+        [Tooltip("Font style: 0=Default, 1=Monospace, 2=LCD, 3=Terminal")]
+        public int fontStyle = 0;
 
         [Header("Data Sources")]
         public List<Vector3Int> dataSourcePositions = new();
@@ -332,6 +337,7 @@ namespace VoxelEngine.GridSystem
             _titleText.anchor = TextAnchor.UpperCenter;
             _titleText.alignment = TextAlignment.Center;
             _titleText.fontStyle = FontStyle.Bold;
+            MakeTextOpaque(_titleText);
 
             var dObj = new GameObject("ScreenDisplayText");
             dObj.transform.SetParent(root.transform, false);
@@ -340,6 +346,7 @@ namespace VoxelEngine.GridSystem
             _screenText.text = "STARTING"; _screenText.fontSize = 24;
             _screenText.characterSize = charSize; _screenText.color = textColor;
             _screenText.anchor = TextAnchor.MiddleCenter; _screenText.alignment = TextAlignment.Center;
+            MakeTextOpaque(_screenText);
 
             var sObj = new GameObject("ScreenStatusText");
             sObj.transform.SetParent(root.transform, false);
@@ -349,6 +356,23 @@ namespace VoxelEngine.GridSystem
             _statusText.characterSize = charSize;
             _statusText.color = new Color(0.30f, 0.35f, 0.45f);
             _statusText.anchor = TextAnchor.LowerRight; _statusText.alignment = TextAlignment.Right;
+            MakeTextOpaque(_statusText);
+        }
+
+        /// <summary>Ensures TextMesh uses a material with ZWrite On so text doesn't show through walls/terrain.</summary>
+        private static void MakeTextOpaque(TextMesh tm)
+        {
+            if (tm == null) return;
+            var renderer = tm.GetComponent<MeshRenderer>();
+            if (renderer == null) return;
+            var mat = renderer.sharedMaterial;
+            if (mat == null) return;
+            // Clone so we don't modify the shared asset
+            mat = new Material(mat);
+            mat.name = "ScreenText_ZWrite";
+            mat.SetInt("_ZWrite", 1);
+            mat.renderQueue = 2000; // Opaque queue
+            renderer.sharedMaterial = mat;
         }
 
         // ── Multi-source management ───────────────────────────────────

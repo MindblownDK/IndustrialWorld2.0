@@ -244,6 +244,37 @@ namespace VoxelEngine.Persistence
                 }
                 entry.funnelState = fs;
             }
+
+            // Capture screen block config
+            var screenBlock = go.GetComponentInChildren<VoxelEngine.GridSystem.GridScreenBlock>(true);
+            if (screenBlock != null)
+            {
+                var scfg = new SavedScreenConfig();
+                scfg.dataMode = screenBlock.dataMode.ToString();
+                scfg.customText = screenBlock.customText ?? "";
+                scfg.textColorR = screenBlock.textColor.r;
+                scfg.textColorG = screenBlock.textColor.g;
+                scfg.textColorB = screenBlock.textColor.b;
+                scfg.borderStyle = screenBlock.borderStyle;
+                scfg.fontStyle = screenBlock.fontStyle;
+                var xs = new System.Collections.Generic.List<string>();
+                var ys = new System.Collections.Generic.List<string>();
+                var zs = new System.Collections.Generic.List<string>();
+                var ids = new System.Collections.Generic.List<string>();
+                for (int si = 0; si < screenBlock.dataSourcePositions.Count; si++)
+                {
+                    xs.Add(screenBlock.dataSourcePositions[si].x.ToString());
+                    ys.Add(screenBlock.dataSourcePositions[si].y.ToString());
+                    zs.Add(screenBlock.dataSourcePositions[si].z.ToString());
+                    if (si < screenBlock.dataSourceInstanceIds.Count)
+                        ids.Add(screenBlock.dataSourceInstanceIds[si].ToString());
+                }
+                scfg.sourcePositionsX = string.Join(",", xs);
+                scfg.sourcePositionsY = string.Join(",", ys);
+                scfg.sourcePositionsZ = string.Join(",", zs);
+                scfg.sourceInstanceIds = string.Join(",", ids);
+                entry.screenConfig = scfg;
+            }
         }
 
         private void SavePlacedTiered(SaveData save)
@@ -626,6 +657,36 @@ namespace VoxelEngine.Persistence
                     }
                 }
             }
+            // Restore screen block config
+            var screenBlock = go.GetComponentInChildren<VoxelEngine.GridSystem.GridScreenBlock>(true);
+            if (screenBlock != null && saved.screenConfig != null)
+            {
+                var sc = saved.screenConfig;
+                if (!string.IsNullOrEmpty(sc.dataMode))
+                {
+                    try { screenBlock.dataMode = (VoxelEngine.GridSystem.ScreenDataMode)System.Enum.Parse(typeof(VoxelEngine.GridSystem.ScreenDataMode), sc.dataMode); } catch { }
+                }
+                screenBlock.customText = sc.customText ?? "";
+                screenBlock.textColor = new Color(sc.textColorR, sc.textColorG, sc.textColorB);
+                screenBlock.borderStyle = sc.borderStyle;
+                screenBlock.fontStyle = sc.fontStyle;
+                if (!string.IsNullOrEmpty(sc.sourcePositionsX))
+                {
+                    var xs = sc.sourcePositionsX.Split(',');
+                    var ys = sc.sourcePositionsY.Split(',');
+                    var zs = sc.sourcePositionsZ.Split(',');
+                    var ids = sc.sourceInstanceIds.Split(',');
+                    screenBlock.dataSourcePositions.Clear();
+                    screenBlock.dataSourceInstanceIds.Clear();
+                    for (int si = 0; si < xs.Length && si < ys.Length && si < zs.Length; si++)
+                    {
+                        if (int.TryParse(xs[si], out int px) && int.TryParse(ys[si], out int py) && int.TryParse(zs[si], out int pz))
+                            screenBlock.dataSourcePositions.Add(new Vector3Int(px, py, pz));
+                        if (si < ids.Length && int.TryParse(ids[si], out int id))
+                            screenBlock.dataSourceInstanceIds.Add(id);
+                    }
+                }
+            }
         }
 
         private void RestorePlacedTiered(SaveData save)
@@ -841,11 +902,28 @@ namespace VoxelEngine.Persistence
             public SavedMachineState machine;
             // Funnel state (mode + buffered items). Null for non-funnel blocks.
             public SavedFunnelState funnelState;
+            // Screen block config (GridScreenBlock display mode, sources, appearance). Null = no screen data.
+            public SavedScreenConfig screenConfig;
         }
         [Serializable] private class SavedFunnelState
         {
             public string mode; // "Import" or "Export"
-            public List<SavedTransportItem> bufferItems = new();
+            public System.Collections.Generic.List<SavedTransportItem> bufferItems = new System.Collections.Generic.List<SavedTransportItem>();
+        }
+        [Serializable] private class SavedScreenConfig
+        {
+            public string dataMode;
+            public string customText;
+            public float textColorR;
+            public float textColorG;
+            public float textColorB;
+            public int borderStyle;
+            public int fontStyle;
+            // Source positions stored as comma-separated strings for JSON compatibility
+            public string sourcePositionsX;
+            public string sourcePositionsY;
+            public string sourcePositionsZ;
+            public string sourceInstanceIds;
         }
         [Serializable] private class SavedTransportItem
         {
