@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.59.0-dev`
-**Roadmap Version:** `5.59.0-dev`
+**Current Version:** `5.59.1-dev`
+**Roadmap Version:** `5.59.1-dev`
 **Date:** 2026-07-17
-**Status:** Active Implementation — Corner-to-Corner LED Strip Placement Foundation
+**Status:** Active Implementation — Surface-Snapped LED Strip Placement Polish
 
 ---
 
@@ -1683,6 +1683,28 @@ For each version, these are the high-level Unity tasks you will perform manually
 
 ## 11. Changelog
 
+### [5.59.1-dev] Surface-Snapped LED Strip Placement Polish
+
+**Type:** PATCH — LED strip placement/interaction polish (no save schema break; uses existing additive offset fields)
+
+**Fixed / Improved:**
+- Corner-to-corner LED strips now mount onto the targeted block face instead of floating above the grid block.
+- LED strips now build a surface-aware rotation where local strip **Y** follows the selected face normal and local **X** follows the strip direction.
+- Visual strip offset now moves the strip back to the shared face plane (`-cellSize / 2`) so it touches the selected top/side face.
+- Second-corner snapping ignores the mount-normal axis, so top-mounted strips run along top-face X/Z directions and side-mounted strips run along the side-face axes.
+- LED strip interaction collider now covers the whole visual strip length, not only the first anchor cell.
+- Long stretched LED strips can now be right-clicked from anywhere along their visual length to open config.
+
+**Roadmap Status:**
+- Corner-to-corner LED strip placement remains **🛠️ WORKING ON** pending Thomas validation of top/side snapping and full-length interaction.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Equip a grid LED strip and aim at the top face of a block.
+3. Right-click first point, aim along the top face, right-click second point. Confirm it touches the top face instead of floating.
+4. Repeat on a side face. Confirm it snaps to/touches the side.
+5. Right-click the middle/end of a long stretched LED strip and confirm config opens from the whole strip, not only the start.
+
 ### [5.59.0-dev] Corner-to-Corner LED Strip Placement Foundation
 
 **Type:** MINOR — new save-compatible build interaction for LED strips (no save schema break; additive LED offset fields remain backward compatible)
@@ -1749,7 +1771,7 @@ For each version, these are the high-level Unity tasks you will perform manually
 
 **Roadmap Status:**
 - Grid/static lighting and LED strips remain **🛠️ WORKING ON** pending Unity save/load validation.
-- Corner-to-corner LED strip placement foundation is implemented in 5.59.0-dev; next target is visual polish/occupancy validation for stretched strips.
+- Corner-to-corner LED strip placement foundation is implemented; 5.59.1-dev adds surface snapping/touching and full-length interaction collider polish.
 
 **Manual Unity Steps:**
 1. Let Unity recompile.

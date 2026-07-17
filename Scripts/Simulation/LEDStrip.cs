@@ -183,7 +183,8 @@ namespace VoxelEngine.Simulation
                 strip.name = "LEDStripMesh";
                 strip.transform.SetParent(transform, false);
             }
-            strip.transform.localPosition = stripOffset + new Vector3(0f, 0.055f, 0f);
+            Vector3 diffuserLocalPosition = stripOffset + new Vector3(0f, 0.055f, 0f);
+            strip.transform.localPosition = diffuserLocalPosition;
             strip.transform.localScale = new Vector3(stripLength, 0.018f, stripWidth);
             var col = strip.GetComponent<Collider>();
             if (col != null) Destroy(col);
@@ -200,8 +201,17 @@ namespace VoxelEngine.Simulation
             if (_stripMaterial.HasProperty("_Smoothness")) _stripMaterial.SetFloat("_Smoothness", 0.8f);
             _stripRenderer.material = _stripMaterial;
 
+            UpdateInteractionCollider(diffuserLocalPosition);
             BuildDiodes();
             BuildLights();
+        }
+
+        private void UpdateInteractionCollider(Vector3 center)
+        {
+            var box = GetComponent<BoxCollider>();
+            if (box == null) box = gameObject.AddComponent<BoxCollider>();
+            box.center = center;
+            box.size = new Vector3(stripLength + 0.14f, Mathf.Max(0.08f, stripWidth + 0.04f), Mathf.Max(0.08f, stripWidth + 0.08f));
         }
 
         private void BuildDiodes()

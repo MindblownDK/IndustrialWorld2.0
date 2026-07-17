@@ -35,6 +35,7 @@ namespace VoxelEngine.GridSystem
         private bool _ledStretchArmed;
         private GridEntity _ledStretchGrid;
         private Vector3Int _ledStretchStart;
+        private Vector3Int _ledStretchMountAxis;
         private GridBlockItem _ledStretchItem;
         private GameObject _ledStretchGhost;
         private Material _ledStretchGhostMat;
@@ -145,7 +146,7 @@ namespace VoxelEngine.GridSystem
 
             if (IsLedStripItem(gbi))
             {
-                if (HandleLedStripStretch(gbi, targetGrid, gridPos, worldPos, rotation))
+                if (HandleLedStripStretch(gbi, targetGrid, gridPos, worldPos, rotation, hit.normal))
                     inventory.container.Remove(gbi, 1);
                 return;
             }
@@ -208,7 +209,7 @@ namespace VoxelEngine.GridSystem
             return id.Contains("ledstrip") || id.Contains("led_strip") || name.Contains("led strip");
         }
 
-        private bool HandleLedStripStretch(GridBlockItem item, GridEntity grid, Vector3Int gridPos, Vector3 worldPos, Quaternion rotation)
+        private bool HandleLedStripStretch(GridBlockItem item, GridEntity grid, Vector3Int gridPos, Vector3 worldPos, Quaternion rotation, Vector3 hitNormal)
         {
             if (_ledStretchArmed && (_ledStretchItem != item || _ledStretchGrid == null))
                 CancelLedStretch(false);
@@ -228,6 +229,7 @@ namespace VoxelEngine.GridSystem
                 _ledStretchArmed = true;
                 _ledStretchGrid = grid;
                 _ledStretchStart = gridPos;
+                _ledStretchMountAxis = SnapMountAxis(grid, hitNormal);
                 _ledStretchItem = item;
                 VoxelEngine.UI.BuildFeedbackHud.Show("LED Strip", "First corner set. Aim second corner and right-click.", item.icon, item.iconTint);
                 return false;
@@ -242,16 +244,20 @@ namespace VoxelEngine.GridSystem
                 return false;
             }
 
-            Vector3Int end = SnapLedEnd(_ledStretchStart, gridPos);
+            Vector3Int end = SnapLedEnd(_ledStretchStart, gridPos, _ledStretchMountAxis);
             Vector3Int delta = end - _ledStretchStart;
             Vector3 localDir = new Vector3(delta.x, delta.y, delta.z);
-            if (localDir.sqrMagnitude < 0.0001f) localDir = Vector3.right;
+            if (localDir.sqrMagnitude < 0.0001f)
+                localDir = DefaultLedAxis(_ledStretchMountAxis);
+            localDir = Vector3.ProjectOnPlane(localDir, new Vector3(_ledStretchMountAxis.x, _ledStretchMountAxis.y, _ledStretchMountAxis.z));
+            if (localDir.sqrMagnitude < 0.0001f)
+                localDir = DefaultLedAxis(_ledStretchMountAxis);
             localDir.Normalize();
 
             float cs = item.gridSize.CellSize();
             float centerDistance = Vector3.Distance(_ledStretchGrid.GridToWorld(_ledStretchStart), _ledStretchGrid.GridToWorld(end));
             float length = Mathf.Max(cs, centerDistance + cs);
-            Quaternion stripRotation = _ledStretchGrid.transform.rotation * Quaternion.FromToRotation(Vector3.right, localDir);
+            Quaternion stripRotation = BuildLedSurfaceRotation(_ledStretchGrid, localDir, _ledStretchMountAxis);
             Vector3 startWorld = _ledStretchGrid.GridToWorld(_ledStretchStart);
             Vector3 endWorld = _ledStretchGrid.GridToWorld(end);
 
@@ -260,25 +266,62 @@ namespace VoxelEngine.GridSystem
 
             if (!GameSettings.WasPressed(InputAction.Build)) return false;
 
-            if (!TryPlaceLedStrip(item, _ledStretchGrid, _ledStretchStart, stripRotation, length, centerDistance * 0.5f))
+            float surfaceOffset = -cs * 0.5f + Mathf.Max(0.012f, cs * 0.015f);
+            if (!TryPlaceLedStrip(item, _ledStretchGrid, _ledStretchStart, stripRotation, length, new Vector3(centerDistance * 0.5f, surfaceOffset, 0f)))
                 return false;
 
             CancelLedStretch(false);
             return true;
         }
 
-        private static Vector3Int SnapLedEnd(Vector3Int start, Vector3Int rawEnd)
+        private static Vector3Int SnapLedEnd(Vector3Int start, Vector3Int rawEnd, Vector3Int mountAxis)
         {
             Vector3Int d = rawEnd - start;
-            int ax = Mathf.Abs(d.x);
-            int ay = Mathf.Abs(d.y);
-            int az = Mathf.Abs(d.z);
+            int ax = mountAxis.x != 0 ? -1 : Mathf.Abs(d.x);
+            int ay = mountAxis.y != 0 ? -1 : Mathf.Abs(d.y);
+            int az = mountAxis.z != 0 ? -1 : Mathf.Abs(d.z);
             if (ax >= ay && ax >= az) return new Vector3Int(rawEnd.x, start.y, start.z);
             if (ay >= ax && ay >= az) return new Vector3Int(start.x, rawEnd.y, start.z);
-            return new Vector3Int(start.x, start.y, rawEnd.z);
+            if (az >= ax && az >= ay) return new Vector3Int(start.x, start.y, rawEnd.z);
+            Vector3 fallback = DefaultLedAxis(mountAxis);
+            return start + new Vector3Int(Mathf.RoundToInt(fallback.x), Mathf.RoundToInt(fallback.y), Mathf.RoundToInt(fallback.z));
         }
 
-        private bool TryPlaceLedStrip(GridBlockItem item, GridEntity grid, Vector3Int startPos, Quaternion rotation, float length, float localOffsetX)
+        private static Vector3Int SnapMountAxis(GridEntity grid, Vector3 worldNormal)
+        {
+            if (grid == null || worldNormal.sqrMagnitude < 0.0001f) return Vector3Int.up;
+            Vector3 local = grid.transform.InverseTransformDirection(worldNormal.normalized);
+            float ax = Mathf.Abs(local.x);
+            float ay = Mathf.Abs(local.y);
+            float az = Mathf.Abs(local.z);
+            if (ax >= ay && ax >= az) return new Vector3Int(local.x >= 0f ? 1 : -1, 0, 0);
+            if (ay >= ax && ay >= az) return new Vector3Int(0, local.y >= 0f ? 1 : -1, 0);
+            return new Vector3Int(0, 0, local.z >= 0f ? 1 : -1);
+        }
+
+        private static Vector3 DefaultLedAxis(Vector3Int mountAxis)
+        {
+            if (mountAxis.x == 0) return Vector3.right;
+            if (mountAxis.z == 0) return Vector3.forward;
+            return Vector3.up;
+        }
+
+        private static Quaternion BuildLedSurfaceRotation(GridEntity grid, Vector3 localDirection, Vector3Int mountAxis)
+        {
+            Vector3 localNormal = new Vector3(mountAxis.x, mountAxis.y, mountAxis.z);
+            if (localNormal.sqrMagnitude < 0.0001f) localNormal = Vector3.up;
+            if (localDirection.sqrMagnitude < 0.0001f) localDirection = DefaultLedAxis(mountAxis);
+            localDirection = Vector3.ProjectOnPlane(localDirection.normalized, localNormal.normalized);
+            if (localDirection.sqrMagnitude < 0.0001f) localDirection = DefaultLedAxis(mountAxis);
+
+            Vector3 right = grid != null ? grid.transform.TransformDirection(localDirection.normalized) : localDirection.normalized;
+            Vector3 up = grid != null ? grid.transform.TransformDirection(localNormal.normalized) : localNormal.normalized;
+            Vector3 forward = Vector3.Cross(right, up);
+            if (forward.sqrMagnitude < 0.0001f) forward = Vector3.forward;
+            return Quaternion.LookRotation(forward.normalized, up.normalized);
+        }
+
+        private bool TryPlaceLedStrip(GridBlockItem item, GridEntity grid, Vector3Int startPos, Quaternion rotation, float length, Vector3 localOffset)
         {
             if (item == null || grid == null) return false;
             if (!grid.CanPlace(startPos)) return false;
@@ -303,7 +346,7 @@ namespace VoxelEngine.GridSystem
             var strip = block.GetComponentInChildren<VoxelEngine.Simulation.LEDStrip>(true);
             if (strip != null)
             {
-                strip.SetStretch(length, new Vector3(localOffsetX, 0f, 0f));
+                strip.SetStretch(length, localOffset);
                 strip.wattsDraw = Mathf.Max(strip.wattsDraw, Mathf.Lerp(5f, 20f, Mathf.Clamp01(length / 10f)));
             }
 
