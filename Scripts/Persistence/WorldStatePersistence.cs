@@ -275,6 +275,53 @@ namespace VoxelEngine.Persistence
                 scfg.sourceInstanceIds = string.Join(",", ids);
                 entry.screenConfig = scfg;
             }
+
+            CaptureLightingRuntime(go, entry);
+        }
+
+        private static void CaptureLightingRuntime(GameObject go, SavedPlacedBlock entry)
+        {
+            var gridLight = go.GetComponentInChildren<VoxelEngine.Simulation.GridLightBlock>(true);
+            var ledStrip = go.GetComponentInChildren<VoxelEngine.Simulation.LEDStrip>(true);
+            if (gridLight == null && ledStrip == null) return;
+
+            var cfg = new SavedLightingConfig();
+            if (gridLight != null)
+            {
+                cfg.hasGridLight = true;
+                cfg.lightColorR = gridLight.lightColor.r;
+                cfg.lightColorG = gridLight.lightColor.g;
+                cfg.lightColorB = gridLight.lightColor.b;
+                cfg.lightRange = gridLight.range;
+                cfg.lightSpotAngle = gridLight.spotAngle;
+                cfg.lightIntensity = gridLight.intensity;
+                cfg.lightType = gridLight.lightType.ToString();
+                cfg.lightWattsDraw = gridLight.wattsDraw;
+                cfg.lightMotionActivated = gridLight.motionActivated;
+                cfg.lightMotionRadius = gridLight.motionRadius;
+                cfg.lightMotionGraceSeconds = gridLight.motionGraceSeconds;
+            }
+
+            if (ledStrip != null)
+            {
+                cfg.hasLedStrip = true;
+                cfg.ledColorR = ledStrip.stripColor.r;
+                cfg.ledColorG = ledStrip.stripColor.g;
+                cfg.ledColorB = ledStrip.stripColor.b;
+                cfg.ledBrightness = ledStrip.brightness;
+                cfg.ledLength = ledStrip.stripLength;
+                cfg.ledSegmentCount = ledStrip.segmentCount;
+                cfg.ledStripWidth = ledStrip.stripWidth;
+                cfg.ledShowSegments = ledStrip.showSegments;
+                cfg.ledMode = ledStrip.mode.ToString();
+                cfg.ledAnimSpeed = ledStrip.animSpeed;
+                cfg.ledMotionActivated = ledStrip.motionActivated;
+                cfg.ledMotionRadius = ledStrip.motionRadius;
+                cfg.ledMotionGraceSeconds = ledStrip.motionGraceSeconds;
+                cfg.ledWattsDraw = ledStrip.wattsDraw;
+            }
+
+            entry.lightingConfig = cfg;
         }
 
         private void SavePlacedTiered(SaveData save)
@@ -611,24 +658,27 @@ namespace VoxelEngine.Persistence
                 chute.RestoreItems(restored);
             }
 
-            if (saved.machine == null) return;
-            var crusher = go.GetComponentInChildren<VoxelEngine.Simulation.Crusher>(true);
-            if (crusher != null)
+            if (saved.machine != null)
             {
-                crusher.RestorePersistentState(
-                    saved.machine.recipeId,
-                    saved.machine.progressSeconds,
-                    saved.machine.userEnabled);
-                return;
-            }
-
-            var assembler = go.GetComponentInChildren<VoxelEngine.Simulation.Assembler>(true);
-            if (assembler != null)
-            {
-                assembler.RestorePersistentState(
-                    saved.machine.recipeId,
-                    saved.machine.progressSeconds,
-                    saved.machine.userEnabled);
+                var crusher = go.GetComponentInChildren<VoxelEngine.Simulation.Crusher>(true);
+                if (crusher != null)
+                {
+                    crusher.RestorePersistentState(
+                        saved.machine.recipeId,
+                        saved.machine.progressSeconds,
+                        saved.machine.userEnabled);
+                }
+                else
+                {
+                    var assembler = go.GetComponentInChildren<VoxelEngine.Simulation.Assembler>(true);
+                    if (assembler != null)
+                    {
+                        assembler.RestorePersistentState(
+                            saved.machine.recipeId,
+                            saved.machine.progressSeconds,
+                            saved.machine.userEnabled);
+                    }
+                }
             }
 
             var funnel = go.GetComponentInChildren<VoxelEngine.Simulation.Funnel>(true);
@@ -685,6 +735,57 @@ namespace VoxelEngine.Persistence
                         if (si < ids.Length && int.TryParse(ids[si], out int id))
                             screenBlock.dataSourceInstanceIds.Add(id);
                     }
+                }
+            }
+
+            RestoreLightingRuntime(go, saved.lightingConfig);
+        }
+
+        private static void RestoreLightingRuntime(GameObject go, SavedLightingConfig cfg)
+        {
+            if (go == null || cfg == null) return;
+
+            if (cfg.hasGridLight)
+            {
+                var gridLight = go.GetComponentInChildren<VoxelEngine.Simulation.GridLightBlock>(true);
+                if (gridLight != null)
+                {
+                    gridLight.SetColor(new Color(cfg.lightColorR, cfg.lightColorG, cfg.lightColorB));
+                    gridLight.SetRange(cfg.lightRange > 0f ? cfg.lightRange : gridLight.range);
+                    gridLight.SetIntensity(cfg.lightIntensity >= 0f ? cfg.lightIntensity : gridLight.intensity);
+                    gridLight.spotAngle = cfg.lightSpotAngle > 0f ? cfg.lightSpotAngle : gridLight.spotAngle;
+                    if (!string.IsNullOrEmpty(cfg.lightType))
+                    {
+                        try { gridLight.lightType = (LightType)System.Enum.Parse(typeof(LightType), cfg.lightType); } catch { }
+                    }
+                    if (cfg.lightWattsDraw > 0f) gridLight.wattsDraw = cfg.lightWattsDraw;
+                    gridLight.motionActivated = cfg.lightMotionActivated;
+                    if (cfg.lightMotionRadius > 0f) gridLight.motionRadius = cfg.lightMotionRadius;
+                    if (cfg.lightMotionGraceSeconds > 0f) gridLight.motionGraceSeconds = cfg.lightMotionGraceSeconds;
+                }
+            }
+
+            if (cfg.hasLedStrip)
+            {
+                var ledStrip = go.GetComponentInChildren<VoxelEngine.Simulation.LEDStrip>(true);
+                if (ledStrip != null)
+                {
+                    ledStrip.stripColor = new Color(cfg.ledColorR, cfg.ledColorG, cfg.ledColorB);
+                    ledStrip.brightness = cfg.ledBrightness > 0f ? cfg.ledBrightness : ledStrip.brightness;
+                    ledStrip.segmentCount = cfg.ledSegmentCount > 0 ? cfg.ledSegmentCount : ledStrip.segmentCount;
+                    ledStrip.stripWidth = cfg.ledStripWidth > 0f ? cfg.ledStripWidth : ledStrip.stripWidth;
+                    ledStrip.showSegments = cfg.ledShowSegments;
+                    if (!string.IsNullOrEmpty(cfg.ledMode))
+                    {
+                        try { ledStrip.mode = (VoxelEngine.Simulation.LEDMode)System.Enum.Parse(typeof(VoxelEngine.Simulation.LEDMode), cfg.ledMode); } catch { }
+                    }
+                    if (cfg.ledAnimSpeed > 0f) ledStrip.animSpeed = cfg.ledAnimSpeed;
+                    ledStrip.motionActivated = cfg.ledMotionActivated;
+                    if (cfg.ledMotionRadius > 0f) ledStrip.motionRadius = cfg.ledMotionRadius;
+                    if (cfg.ledMotionGraceSeconds > 0f) ledStrip.motionGraceSeconds = cfg.ledMotionGraceSeconds;
+                    if (cfg.ledWattsDraw > 0f) ledStrip.wattsDraw = cfg.ledWattsDraw;
+                    ledStrip.SetLength(cfg.ledLength > 0f ? cfg.ledLength : ledStrip.stripLength);
+                    ledStrip.SetColor(ledStrip.stripColor);
                 }
             }
         }
@@ -904,6 +1005,8 @@ namespace VoxelEngine.Persistence
             public SavedFunnelState funnelState;
             // Screen block config (GridScreenBlock display mode, sources, appearance). Null = no screen data.
             public SavedScreenConfig screenConfig;
+            // Lighting config for GridLightBlock / LEDStrip. Null = not a configurable light.
+            public SavedLightingConfig lightingConfig;
         }
         [Serializable] private class SavedFunnelState
         {
@@ -924,6 +1027,37 @@ namespace VoxelEngine.Persistence
             public string sourcePositionsY;
             public string sourcePositionsZ;
             public string sourceInstanceIds;
+        }
+        [Serializable] private class SavedLightingConfig
+        {
+            public bool hasGridLight;
+            public float lightColorR;
+            public float lightColorG;
+            public float lightColorB;
+            public float lightRange;
+            public float lightSpotAngle;
+            public float lightIntensity;
+            public string lightType;
+            public float lightWattsDraw;
+            public bool lightMotionActivated;
+            public float lightMotionRadius;
+            public float lightMotionGraceSeconds;
+
+            public bool hasLedStrip;
+            public float ledColorR;
+            public float ledColorG;
+            public float ledColorB;
+            public float ledBrightness;
+            public float ledLength;
+            public int ledSegmentCount;
+            public float ledStripWidth;
+            public bool ledShowSegments;
+            public string ledMode;
+            public float ledAnimSpeed;
+            public bool ledMotionActivated;
+            public float ledMotionRadius;
+            public float ledMotionGraceSeconds;
+            public float ledWattsDraw;
         }
         [Serializable] private class SavedTransportItem
         {

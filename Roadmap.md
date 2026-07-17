@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.57.3-dev`
-**Roadmap Version:** `5.57.3-dev`
+**Current Version:** `5.58.0-dev`
+**Roadmap Version:** `5.58.0-dev`
 **Date:** 2026-07-17
-**Status:** Active Implementation — Grid Screen Black Display Fix
+**Status:** Active Implementation — Lighting Runtime Persistence
 
 ---
 
@@ -56,7 +56,7 @@ The design goal is a seamless blend of:
 | Space stations | ❌ Missing | No buildable orbital platforms |
 | Conveyor logistics | 🟡 Good | Conveyors, ramps, vertical belts, chutes, contextual shape wheel, ghost previews, and persistence exist. Remaining work: pooled item entities, more chute variants, and final long-run throughput validation. |
 | Grid screens / displays | ✅ COMPLETED | All sizes, live text+power states, right-click+terminal config, custom text+custom colors+border+font, visual bar charts, multi-source, live camera feeds, power gain/loss/net mode, persistence, and camera block are validated by Thomas. (5.51.3-dev) |
-| Grid lighting | 🛠️ WORKING ON | Small/large single and dual spotlights, large-grid LED strip, premium segmented/clean LED visuals, spotlight/LED screen data providers, right-click spotlight config UI, collapsible ship-control data-type toggles, LED strip config UI, visible chase animation, and motion-activated lighting exist. Unity validation and persistence for tuned light settings remain pending. |
+| Grid lighting | 🛠️ WORKING ON | Small/large single and dual spotlights, large-grid LED strip, premium segmented/clean LED visuals, spotlight/LED screen data providers, right-click spotlight config UI, collapsible ship-control data-type toggles, LED strip config UI, visible chase animation, and motion-activated lighting exist. Unity validation pending; static/placed lighting runtime persistence is implemented in 5.58.0-dev while full movable-grid save persistence remains future work. |
 | Sloped / armored grid blocks | ❌ Missing | Only cube blocks exist; need shape variants |
 | Grid shape variant wheel | 🟡 PARTIALLY COMPLETE | Premium radial wheel foundation complete (5.40.1-dev) with full visual parity to Hammer/Conveyor wheels. CurrentShape accessor + auto-spawn ready. Compile error in GridBuilder fixed. Shape application + authored variants next (via Setup Step 18). |
 | Player armor slots | ❌ Missing | No equipable armor system |
@@ -503,7 +503,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Basic machines | 🟡 PARTIALLY COMPLETE | Electric Furnace, Crusher, and three Assembler tiers exist. Crusher/Assembler have recipe-selection UIs, visual animation, centralized simulation ticks, additive buffers/progress/enabled persistence, and Unity smoke validation from Thomas; production statistics and module systems remain. |
 | Storage blocks | 🟡 PARTIALLY COMPLETE | A basic chest and the wider storage system exist. The planned Wooden Crate → Iron Chest → Steel Chest → Provider/Requester progression is not complete. |
 | Power pole, wire, and substation | 🟡 PARTIALLY COMPLETE | Manual wiring, poles, substations, transformers, compact LV/HV one-link connectors, and 8-link wall/foundation relays exist. Setup reruns preserve balance while adding missing links. |
-| Grid/static lighting and LED strips | 🛠️ WORKING ON | Grid light, floodlight logic, static/grid LED assets, small/large spotlight variants, dual-output spotlights, large-grid LED strip, premium segmented LED visuals, right-click/grid-terminal spotlight config UI, data-type toggles, LED strip config UI, LED strip screen data sources, clean/segmented strip toggle, visible chase animation, and **5.57.0-dev** motion-activated lighting now exist. Runtime setting persistence and Unity validation pending. |
+| Grid/static lighting and LED strips | 🛠️ WORKING ON | Grid light, floodlight logic, static/grid LED assets, small/large spotlight variants, dual-output spotlights, large-grid LED strip, premium segmented LED visuals, right-click/grid-terminal spotlight config UI, data-type toggles, LED strip config UI, LED strip screen data sources, clean/segmented strip toggle, visible chase animation, and **5.57.0-dev** motion-activated lighting now exist. Static/placed runtime setting persistence is implemented in 5.58.0-dev; Unity validation and full movable-grid save persistence remain pending. |
 | Shared Machine UI | 🟡 PARTIALLY COMPLETE | Crusher and Assembler panels now expose recipe selection, progress, power, toggles, inventory slots, scrolling, and item-port integration. Remaining work: complete unification across every machine, production statistics, and theme overrides. |
 | Item entity system | 🟡 PARTIALLY COMPLETE | Dropped world items exist and conveyors render carried packets. A unified pooled physical-item entity lifecycle is not complete. |
 | Recipe registry refactor | 🟡 PARTIALLY COMPLETE | ScriptableObject crafting and machine recipes exist. Shaped/shapeless/smelting/machine unification and validation remain incomplete. |
@@ -1682,6 +1682,53 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.58.0-dev] Lighting Runtime Persistence + Screen Restore Guard Fix
+
+**Type:** MINOR — additive save-compatible persistence fields for placed lighting config (legacy saves remain compatible)
+
+**Added / Fixed:**
+- Added additive `SavedLightingConfig` persistence for placed blocks that contain `GridLightBlock` and/or `LEDStrip`.
+- Placed spotlight/light settings now save and restore:
+  - color
+  - range
+  - cone angle
+  - intensity
+  - light type
+  - watts draw
+  - motion activation
+  - motion radius
+  - motion hold time
+- Placed LED strip settings now save and restore:
+  - color
+  - brightness
+  - length
+  - segment count
+  - strip width
+  - segmented/clean mode
+  - animation mode
+  - animation speed
+  - motion activation
+  - motion radius
+  - motion hold time
+  - watts draw
+- Fixed a persistence restore guard bug where factory runtime restore returned early when `saved.machine == null`, preventing non-machine configs after that point, including screen configs, from restoring on placed blocks.
+- Lighting config restore is additive and null-safe; legacy saves without `lightingConfig` load normally.
+
+**Scope Note:**
+- This pass persists lighting configs for the existing `WorldStatePersistence` placed-block path. Full movable-grid save/load persistence is not present in this repository path yet, so tuned settings on future fully persisted movable grids will need to use the same `SavedLightingConfig` data when grid save serialization is added.
+
+**Roadmap Status:**
+- Grid/static lighting and LED strips remain **🛠️ WORKING ON** pending Unity save/load validation.
+- Next target after validation: corner-to-corner LED strip placement workflow.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Place/configure a static/placeable spotlight or LED strip where WorldStatePersistence tracks placed blocks.
+3. Change color/intensity/range/motion/LED mode/length/segments.
+4. Save and reload the world.
+5. Confirm tuned settings restore.
+6. Re-test any placed screen config save/load, because 5.58.0-dev also fixes the early return that could skip screen config restore on non-machine placed blocks.
 
 ### [5.57.3-dev] Grid Screen Black Display Fix
 
