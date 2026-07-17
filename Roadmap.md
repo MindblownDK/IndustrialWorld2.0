@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.51.3-dev`
-**Roadmap Version:** `5.51.3-dev`
+**Current Version:** `5.52.0-dev`
+**Roadmap Version:** `5.52.0-dev`
 **Date:** 2026-07-17
-**Status:** Active Implementation — Screen Config Compile Fix
+**Status:** Active Implementation — Grid Lighting Power-State Polish
 
 ---
 
@@ -55,8 +55,8 @@ The design goal is a seamless blend of:
 | Gravity / orbits | 🟡 Buggy | Player and grids sometimes fall; orbits not realistic |
 | Space stations | ❌ Missing | No buildable orbital platforms |
 | Conveyor logistics | 🟡 Good | Conveyors, ramps, vertical belts, chutes, contextual shape wheel, ghost previews, and persistence exist. Remaining work: pooled item entities, more chute variants, and final long-run throughput validation. |
-| Grid screens / displays | 🛠️ WORKING ON | Live text+power states, right-click+terminal config, custom text+custom colors+border+font, visual bar charts, multi-source, camera-feed foundations, persistence, and camera block exist. **5.51.2-dev** restores right-click cockpit entry, brings screen config above ship control, repairs camera identity, adds power gain/loss, and hardens camera feed isolation; Unity validation pending. |
-| Grid lighting | ❌ Missing | No flood lights or block lights |
+| Grid screens / displays | ✅ COMPLETED | All sizes, live text+power states, right-click+terminal config, custom text+custom colors+border+font, visual bar charts, multi-source, live camera feeds, power gain/loss/net mode, persistence, and camera block are validated by Thomas. (5.51.3-dev) |
+| Grid lighting | 🟡 PARTIALLY COMPLETE | Grid Light Block, LED strips, static lighting setup, and lighting UI foundations exist. **5.52.0-dev** hardens Grid Light power-state behavior and exposes Grid Light as a screen data provider; broader light configuration UX/persistence validation remains. |
 | Sloped / armored grid blocks | ❌ Missing | Only cube blocks exist; need shape variants |
 | Grid shape variant wheel | 🟡 PARTIALLY COMPLETE | Premium radial wheel foundation complete (5.40.1-dev) with full visual parity to Hammer/Conveyor wheels. CurrentShape accessor + auto-spawn ready. Compile error in GridBuilder fixed. Shape application + authored variants next (via Setup Step 18). |
 | Player armor slots | ❌ Missing | No equipable armor system |
@@ -503,7 +503,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Basic machines | 🟡 PARTIALLY COMPLETE | Electric Furnace, Crusher, and three Assembler tiers exist. Crusher/Assembler have recipe-selection UIs, visual animation, centralized simulation ticks, additive buffers/progress/enabled persistence, and Unity smoke validation from Thomas; production statistics and module systems remain. |
 | Storage blocks | 🟡 PARTIALLY COMPLETE | A basic chest and the wider storage system exist. The planned Wooden Crate → Iron Chest → Steel Chest → Provider/Requester progression is not complete. |
 | Power pole, wire, and substation | 🟡 PARTIALLY COMPLETE | Manual wiring, poles, substations, transformers, compact LV/HV one-link connectors, and 8-link wall/foundation relays exist. Setup reruns preserve balance while adding missing links. |
-| Grid/static lighting and LED strips | 🟡 PARTIALLY COMPLETE | Grid light, floodlight logic, and static/grid LED assets exist. Configuration UX, power validation, and complete authored variants still need verification. |
+| Grid/static lighting and LED strips | 🟡 PARTIALLY COMPLETE | Grid light, floodlight logic, and static/grid LED assets exist. Grid Light now respects grid power state and can be selected as a screen data source (5.52.0-dev). Configuration UX, persistence, and complete authored variants still need verification. |
 | Shared Machine UI | 🟡 PARTIALLY COMPLETE | Crusher and Assembler panels now expose recipe selection, progress, power, toggles, inventory slots, scrolling, and item-port integration. Remaining work: complete unification across every machine, production statistics, and theme overrides. |
 | Item entity system | 🟡 PARTIALLY COMPLETE | Dropped world items exist and conveyors render carried packets. A unified pooled physical-item entity lifecycle is not complete. |
 | Recipe registry refactor | 🟡 PARTIALLY COMPLETE | ScriptableObject crafting and machine recipes exist. Shaped/shapeless/smelting/machine unification and validation remain incomplete. |
@@ -1682,6 +1682,34 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.52.0-dev] Grid Light Power-State Hardening + Screen Data Provider
+
+**Type:** MINOR — save-compatible grid lighting feature/polish (no save schema migration; no recipe or balance reset)
+
+**Added / Improved:**
+- `GridLightBlock` now implements `IGridDataProvider`, so configurable screens can use Grid Lights as a live data source.
+- Grid Light display data reports state, draw, range, and intensity.
+- Grid Light now exposes stable source/category labels: `Grid Light Block` / `Light`.
+- Grid Light now respects actual grid power for illumination: enabled + powered grid = on; unpowered grid = light off with red indicator.
+- Grid Light `PowerDraw` remains counted while enabled even during a deficit, so Power screens continue to show the light in current loss instead of hiding the load.
+- Added `wattsDraw` as an inspector-configurable power draw value while preserving the previous 25 W default.
+- Runtime light/indicator creation is now idempotent and reuses existing generated children where present instead of duplicating them.
+- Runtime indicator now updates live: configured light color when online, red when unpowered, muted grey when disabled.
+
+**Roadmap Status:**
+- Grid screens / displays: **🛠️ WORKING ON → ✅ COMPLETED** after Thomas validated the camera feed/config fixes.
+- Grid lighting: **❌ MISSING → 🟡 PARTIALLY COMPLETE** based on repository audit plus this power/data-provider polish.
+- 4.5.0 Grid/static lighting and LED strips remain **🟡 PARTIALLY COMPLETE** pending full lighting configuration UX and Unity validation.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Place a powered grid with a Grid Light Block and a Screen.
+3. Right-click the screen and select the Grid Light as a data source.
+4. Use Mixed/Summary or System display mode and verify the light reports state, draw, range, and intensity.
+5. Remove/disable grid power and confirm the light turns off and its indicator turns red.
+6. Restore power and confirm the light turns back on and the indicator returns to the configured light color.
+7. Open a Power screen and confirm the light appears in current loss while enabled.
 
 ### [5.51.3-dev] Screen Config UI Toolkit Compile Fix
 
