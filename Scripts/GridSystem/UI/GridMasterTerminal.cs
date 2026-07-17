@@ -643,7 +643,7 @@ namespace VoxelEngine.GridSystem.UI
                     configBtn.style.marginRight = 10;
                     screenBar.Add(configBtn);
 
-                    var srcLbl = new Label("Source: " + (screenBlock.ResolveProvider()?.SourceName ?? "none"));
+                    var srcLbl = new Label("Source: " + (screenBlock.SourceCount > 0 ? screenBlock.SourceCount + " sources" : "none"));
                     srcLbl.style.color = T.TextSecondary;
                     srcLbl.style.fontSize = 11;
                     srcLbl.style.flexGrow = 1;

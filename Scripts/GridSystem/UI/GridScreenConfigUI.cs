@@ -1,7 +1,7 @@
 // Assets/Scripts/VoxelEngine/GridSystem/UI/GridScreenConfigUI.cs
 //
 // Configuration panel for GridScreenBlock.
-// v5.44.0-dev — Fixed: never closes on value changes, live update only.
+// v5.47.0-dev — Multi-source toggle: check/uncheck any data source, combining them.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -17,13 +17,12 @@ namespace VoxelEngine.GridSystem.UI
         public static GridScreenConfigUI Instance { get; private set; }
 
         private UIDocument _doc;
-        private VisualElement _root;
-        private VisualElement _panel;
+        private VisualElement _root, _panel;
         private GridScreenBlock _target;
-        private Label _previewText;
+        private Label _previewText, _sourceCount;
         private bool _open;
-        private List<Button> _sourceBtns = new();
-        private List<Button> _modeBtns = new();
+        private readonly List<Button> _sourceBtns = new();
+        private readonly List<Button> _modeBtns = new();
 
         private void Awake()
         {
@@ -48,7 +47,7 @@ namespace VoxelEngine.GridSystem.UI
         public void Open(GridScreenBlock screen)
         {
             if (screen == null) return;
-            if (_open) { Close(); }
+            if (_open) Close();
             _target = screen;
             _open = true;
             _root.Clear();
@@ -57,18 +56,14 @@ namespace VoxelEngine.GridSystem.UI
             _root.style.alignItems = Align.Center;
             _root.style.justifyContent = Justify.Center;
             UIState.PushBlock();
-            _sourceBtns.Clear();
-            _modeBtns.Clear();
+            _sourceBtns.Clear(); _modeBtns.Clear();
             Build();
         }
 
         public void Close()
         {
             if (!_open) return;
-            _open = false;
-            _target = null;
-            UIState.PopBlock();
-            Hide();
+            _open = false; _target = null; UIState.PopBlock(); Hide();
         }
 
         private void Hide()
@@ -84,11 +79,11 @@ namespace VoxelEngine.GridSystem.UI
             if (_target == null) return;
 
             _panel = new VisualElement();
-            _panel.style.width = 500;
-            _panel.style.maxHeight = new StyleLength(new Length(85f, LengthUnit.Percent));
+            _panel.style.width = 540;
+            _panel.style.maxHeight = new StyleLength(new Length(88f, LengthUnit.Percent));
             _panel.style.backgroundColor = new StyleColor(new Color(0.08f, 0.09f, 0.12f, 0.98f));
-            _panel.style.paddingTop = 16; _panel.style.paddingBottom = 16;
-            _panel.style.paddingLeft = 18; _panel.style.paddingRight = 18;
+            _panel.style.paddingTop = 14; _panel.style.paddingBottom = 14;
+            _panel.style.paddingLeft = 16; _panel.style.paddingRight = 16;
             _panel.style.borderTopWidth = _panel.style.borderBottomWidth =
             _panel.style.borderLeftWidth = _panel.style.borderRightWidth = 1;
             _panel.style.borderTopColor = _panel.style.borderBottomColor =
@@ -97,24 +92,28 @@ namespace VoxelEngine.GridSystem.UI
             _root.Add(_panel);
 
             // ── Header ──
-            var header = new VisualElement();
-            header.style.flexDirection = FlexDirection.Row; header.style.alignItems = Align.Center;
-            header.style.marginBottom = 12;
-            _panel.Add(header);
-
+            var hdr = new VisualElement();
+            hdr.style.flexDirection = FlexDirection.Row; hdr.style.alignItems = Align.Center;
+            hdr.style.marginBottom = 10;
+            _panel.Add(hdr);
             var title = new Label("SCREEN CONFIG");
-            title.style.color = new Color(0.92f, 0.94f, 0.97f); title.style.fontSize = 16;
+            title.style.color = new Color(0.92f, 0.94f, 0.97f); title.style.fontSize = 15;
             title.style.unityFontStyleAndWeight = FontStyle.Bold; title.style.letterSpacing = 2;
             title.style.flexGrow = 1;
-            header.Add(title);
+            hdr.Add(title);
+
+            _sourceCount = new Label(_target.SourceCount + " source(s)");
+            _sourceCount.style.color = new Color(0.40f, 0.44f, 0.52f);
+            _sourceCount.style.fontSize = 10; _sourceCount.style.marginRight = 8;
+            hdr.Add(_sourceCount);
 
             var closeBtn = new Button(Close) { text = "X" };
             closeBtn.style.color = new Color(0.92f, 0.94f, 0.97f); closeBtn.style.fontSize = 14;
             closeBtn.style.unityFontStyleAndWeight = FontStyle.Bold;
             closeBtn.style.backgroundColor = new StyleColor(new Color(0.45f, 0.18f, 0.18f));
-            closeBtn.style.minWidth = 28; closeBtn.style.minHeight = 28;
+            closeBtn.style.minWidth = 26; closeBtn.style.minHeight = 26;
             UITheme.Radius(closeBtn, 4);
-            header.Add(closeBtn);
+            hdr.Add(closeBtn);
 
             // ── Screen info ──
             var info = new VisualElement();
@@ -123,7 +122,7 @@ namespace VoxelEngine.GridSystem.UI
             _panel.Add(info);
 
             var nLbl = new Label(_target.blockName + "  [" + _target.screenSize + "]");
-            nLbl.style.color = new Color(0.92f, 0.94f, 0.97f); nLbl.style.fontSize = 13;
+            nLbl.style.color = new Color(0.92f, 0.94f, 0.97f); nLbl.style.fontSize = 12;
             nLbl.style.unityFontStyleAndWeight = FontStyle.Bold; nLbl.style.flexGrow = 1;
             info.Add(nLbl);
 
@@ -134,45 +133,105 @@ namespace VoxelEngine.GridSystem.UI
             pLbl.style.unityFontStyleAndWeight = FontStyle.Bold; pLbl.style.letterSpacing = 1;
             info.Add(pLbl);
 
-            // ── Data sources ──
-            var sHdr = new Label("DATA SOURCE");
+            // ── Data sources (CHECKBOX / TOGGLE style) ──
+            var sHdr = new Label("DATA SOURCES  (click to toggle on/off)");
             sHdr.style.color = new Color(0.40f, 0.44f, 0.52f); sHdr.style.fontSize = 9;
             sHdr.style.letterSpacing = 2; sHdr.style.unityFontStyleAndWeight = FontStyle.Bold;
-            sHdr.style.marginBottom = 4;
+            sHdr.style.marginBottom = 3;
             _panel.Add(sHdr);
 
             var sources = _target.GetAvailableSources();
-            var srcScroll = new ScrollView(ScrollViewMode.Vertical);
-            srcScroll.style.maxHeight = 120;
-            _panel.Add(srcScroll);
 
-            // "None" button to clear the source
-            var noneBtn = MakeSourceButton("  None", () =>
+            if (sources.Count == 0)
             {
-                _target.SetDataSource(Vector3Int.zero, 0);
-                RefreshSourceHighlights();
-            });
-            srcScroll.Add(noneBtn);
-            _sourceBtns.Add(noneBtn);
-
-            foreach (var (pos, provider) in sources)
-            {
-                var idx = pos; // capture for closure
-                var btn = MakeSourceButton("  " + provider.SourceName + "  [" + provider.DataCategory + "]", () =>
-                {
-                    _target.SetDataSource(idx, (provider as GridBlock)?.GetInstanceID() ?? 0);
-                    RefreshSourceHighlights();
-                });
-                srcScroll.Add(btn);
-                _sourceBtns.Add(btn);
+                var noSrc = new Label("No data sources on this grid. Place batteries, cargo, or gas tanks first.");
+                noSrc.style.color = new Color(0.60f, 0.64f, 0.72f);
+                noSrc.style.fontSize = 11; noSrc.style.whiteSpace = WhiteSpace.Normal;
+                _panel.Add(noSrc);
             }
-            RefreshSourceHighlights();
+            else
+            {
+                var srcScroll = new ScrollView(ScrollViewMode.Vertical);
+                srcScroll.style.maxHeight = 130;
+                _panel.Add(srcScroll);
+
+                foreach (var (pos, provider) in sources)
+                {
+                    var idx = pos;
+                    int instId = (provider as GridBlock)?.GetInstanceID() ?? 0;
+                    bool isOn = _target.HasSource(pos);
+
+                    var btn = new Button(() =>
+                    {
+                        _target.ToggleSource(idx, instId);
+                        RefreshHighlights();
+                        if (_sourceCount != null)
+                            _sourceCount.text = _target.SourceCount + " source(s)";
+                    })
+                    { text = "" };
+
+                    // Build row: [checkbox] + name + category
+                    var row = new VisualElement();
+                    row.style.flexDirection = FlexDirection.Row;
+                    row.style.alignItems = Align.Center;
+                    row.style.paddingLeft = 6;
+
+                    var check = new Label(isOn ? "☑" : "☐");
+                    check.style.color = isOn ? new Color(0.20f, 0.55f, 0.95f) : new Color(0.50f, 0.55f, 0.60f);
+                    check.style.fontSize = 14; check.style.marginRight = 6;
+                    check.style.minWidth = 18;
+                    row.Add(check);
+
+                    var nameL = new Label(provider.SourceName);
+                    nameL.style.color = new Color(0.92f, 0.94f, 0.97f);
+                    nameL.style.fontSize = 11; nameL.style.unityFontStyleAndWeight = FontStyle.Bold;
+                    nameL.style.flexGrow = 1;
+                    row.Add(nameL);
+
+                    var catL = new Label("[" + provider.DataCategory + "]");
+                    catL.style.color = new Color(0.50f, 0.55f, 0.65f);
+                    catL.style.fontSize = 9; catL.style.marginRight = 4;
+                    row.Add(catL);
+
+                    btn.Add(row);
+
+                    btn.style.minHeight = 26; btn.style.marginBottom = 2;
+                    btn.style.unityTextAlign = TextAnchor.MiddleLeft;
+                    btn.style.backgroundColor = new StyleColor(isOn ? new Color(0.12f, 0.18f, 0.28f) : new Color(0.10f, 0.11f, 0.14f));
+                    UITheme.Radius(btn, 4);
+                    btn.style.borderLeftWidth = isOn ? 3f : 0f;
+                    if (isOn) btn.style.borderLeftColor = new StyleColor(new Color(0.20f, 0.55f, 0.95f));
+                    btn.style.borderRightWidth = btn.style.borderTopWidth = btn.style.borderBottomWidth = 0;
+                    _panel.Add(btn); // We add to the panel not scroll so it's cleaner
+                    // Actually add to scroll
+                    srcScroll.Add(btn);
+                    _sourceBtns.Add(btn);
+                }
+
+                // "Clear All" button
+                var clearBtn = new Button(() =>
+                {
+                    _target.ClearSources();
+                    RefreshHighlights();
+                    if (_sourceCount != null)
+                        _sourceCount.text = _target.SourceCount + " source(s)";
+                })
+                { text = "  Clear All" };
+                clearBtn.style.minHeight = 22; clearBtn.style.marginTop = 2;
+                clearBtn.style.fontSize = 9; clearBtn.style.unityFontStyleAndWeight = FontStyle.Bold;
+                clearBtn.style.backgroundColor = new StyleColor(new Color(0.15f, 0.10f, 0.10f));
+                clearBtn.style.color = new Color(0.92f, 0.94f, 0.97f);
+                UITheme.Radius(clearBtn, 4);
+                clearBtn.style.borderLeftWidth = clearBtn.style.borderRightWidth =
+                clearBtn.style.borderTopWidth = clearBtn.style.borderBottomWidth = 0;
+                srcScroll.Add(clearBtn);
+            }
 
             // ── Display mode ──
             var mHdr = new Label("DISPLAY MODE");
             mHdr.style.color = new Color(0.40f, 0.44f, 0.52f); mHdr.style.fontSize = 9;
             mHdr.style.letterSpacing = 2; mHdr.style.unityFontStyleAndWeight = FontStyle.Bold;
-            mHdr.style.marginTop = 8; mHdr.style.marginBottom = 4;
+            mHdr.style.marginTop = 8; mHdr.style.marginBottom = 3;
             _panel.Add(mHdr);
 
             var modeRow = new VisualElement();
@@ -181,14 +240,14 @@ namespace VoxelEngine.GridSystem.UI
 
             foreach (ScreenDataMode mode in System.Enum.GetValues(typeof(ScreenDataMode)))
             {
-                var capturedMode = mode;
+                var captured = mode;
                 var mBtn = new Button(() =>
                 {
-                    _target.dataMode = capturedMode;
+                    _target.dataMode = captured;
                     RefreshModeHighlights();
                     RefreshCustomTextField();
-                }) { text = mode.ToString() };
-                mBtn.style.minHeight = 24; mBtn.style.marginRight = 4; mBtn.style.marginBottom = 4;
+                }) { text = captured == ScreenDataMode.Summary ? "Mixed" : mode.ToString() };
+                mBtn.style.minHeight = 22; mBtn.style.marginRight = 4; mBtn.style.marginBottom = 4;
                 mBtn.style.fontSize = 10; mBtn.style.unityFontStyleAndWeight = FontStyle.Bold;
                 mBtn.style.paddingLeft = 8; mBtn.style.paddingRight = 8;
                 mBtn.style.color = new Color(0.92f, 0.94f, 0.97f);
@@ -199,81 +258,79 @@ namespace VoxelEngine.GridSystem.UI
                 _modeBtns.Add(mBtn);
             }
             RefreshModeHighlights();
-
-            // ── Custom text field ──
-            // This is added lazily — stored as a named element we can remove/re-add
             RefreshCustomTextField();
 
             // ── Preview ──
             var pHdr = new Label("LIVE PREVIEW");
             pHdr.style.color = new Color(0.40f, 0.44f, 0.52f); pHdr.style.fontSize = 9;
             pHdr.style.letterSpacing = 2; pHdr.style.unityFontStyleAndWeight = FontStyle.Bold;
-            pHdr.style.marginTop = 8; pHdr.style.marginBottom = 4;
+            pHdr.style.marginTop = 8; pHdr.style.marginBottom = 3;
             _panel.Add(pHdr);
 
             var pBox = new VisualElement();
             pBox.style.backgroundColor = new StyleColor(new Color(0.025f, 0.03f, 0.045f));
-            pBox.style.paddingTop = 8; pBox.style.paddingBottom = 8;
-            pBox.style.paddingLeft = 10; pBox.style.paddingRight = 10;
+            pBox.style.paddingTop = 6; pBox.style.paddingBottom = 6;
+            pBox.style.paddingLeft = 8; pBox.style.paddingRight = 8;
             pBox.style.borderLeftWidth = pBox.style.borderRightWidth =
             pBox.style.borderTopWidth = pBox.style.borderBottomWidth = 1;
             pBox.style.borderLeftColor = pBox.style.borderRightColor =
             pBox.style.borderTopColor = pBox.style.borderBottomColor = new StyleColor(new Color(0.18f, 0.72f, 0.88f, 0.30f));
-            UITheme.Radius(pBox, 4); pBox.style.minHeight = 36;
+            UITheme.Radius(pBox, 4); pBox.style.minHeight = 30;
             _panel.Add(pBox);
 
             _previewText = new Label(_target.FormattedDisplay);
             _previewText.style.color = new StyleColor(_target.textColor);
             _previewText.style.fontSize = 11; _previewText.style.whiteSpace = WhiteSpace.Normal;
             pBox.Add(_previewText);
-
-            // ── Hint ──
-            var hint = new Label("Changes apply live. Close to finish.");
-            hint.style.color = new Color(0.40f, 0.44f, 0.52f); hint.style.fontSize = 10;
-            hint.style.marginTop = 8; hint.style.whiteSpace = WhiteSpace.Normal;
-            _panel.Add(hint);
         }
 
-        private Button MakeSourceButton(string label, System.Action onClick)
+        private void RefreshHighlights()
         {
-            var btn = new Button(onClick) { text = label };
-            btn.style.minHeight = 26; btn.style.marginBottom = 2;
-            btn.style.fontSize = 11; btn.style.unityFontStyleAndWeight = FontStyle.Bold;
-            btn.style.unityTextAlign = TextAnchor.MiddleLeft; btn.style.paddingLeft = 10;
-            UITheme.Radius(btn, 4);
-            btn.style.borderLeftWidth = btn.style.borderRightWidth =
-            btn.style.borderTopWidth = btn.style.borderBottomWidth = 0;
-            btn.style.color = new Color(0.92f, 0.94f, 0.97f);
-            return btn;
-        }
-
-        private void RefreshSourceHighlights()
-        {
-            bool anySelected = _target.dataSourceGridPos != Vector3Int.zero || _target.dataSourceInstanceId != 0;
             foreach (var btn in _sourceBtns)
             {
-                bool isNone = btn.text.Contains("None");
-                bool selected = isNone ? !anySelected : false;
+                // Determine if this source is selected by parsing checkbox text
+                var check = btn.Q<Label>();
+                if (check == null) continue;
+                bool isOn = check.text == "☑";
+                bool nowOn = false;
 
-                // Check if this button's source matches the target's source
-                if (!isNone)
+                // Find which source this button corresponds to and check current state
+                var nameL = btn.Q<Label>();
+                if (nameL != null && _target != null)
                 {
-                    string srcName = _target.ResolveProvider()?.SourceName ?? "";
-                    if (btn.text.Contains(srcName) && srcName.Length > 0)
-                        selected = true;
+                    var sources = _target.GetAvailableSources();
+                    foreach (var (pos, p) in sources)
+                    {
+                        if (nameL.text.Contains(p.SourceName))
+                        {
+                            nowOn = _target.HasSource(pos);
+                            break;
+                        }
+                    }
                 }
 
-                btn.style.backgroundColor = new StyleColor(selected ? new Color(0.15f, 0.20f, 0.30f) : new Color(0.12f, 0.14f, 0.18f));
-                btn.style.borderLeftWidth = selected ? 3 : 0;
-                if (selected) btn.style.borderLeftColor = new StyleColor(new Color(0.20f, 0.55f, 0.95f));
+                if (nowOn != isOn)
+                {
+                    check.text = nowOn ? "☑" : "☐";
+                    check.style.color = nowOn ? new Color(0.20f, 0.55f, 0.95f) : new Color(0.50f, 0.55f, 0.60f);
+                    btn.style.backgroundColor = new StyleColor(nowOn ? new Color(0.12f, 0.18f, 0.28f) : new Color(0.10f, 0.11f, 0.14f));
+                    btn.style.borderLeftWidth = nowOn ? 3f : 0f;
+                    if (nowOn) btn.style.borderLeftColor = new StyleColor(new Color(0.20f, 0.55f, 0.95f));
+                }
             }
+
+            if (_sourceCount != null && _target != null)
+                _sourceCount.text = _target.SourceCount + " source(s)";
+            if (_previewText != null && _target != null)
+                _previewText.text = _target.FormattedDisplay;
         }
 
         private void RefreshModeHighlights()
         {
             foreach (var btn in _modeBtns)
             {
-                bool active = btn.text == _target.dataMode.ToString();
+                string modeName = btn.text == "Mixed" ? "Summary" : btn.text;
+                bool active = modeName == _target.dataMode.ToString();
                 btn.style.backgroundColor = new StyleColor(active ? new Color(0.20f, 0.55f, 0.95f) : new Color(0.12f, 0.14f, 0.18f));
             }
         }
@@ -281,45 +338,35 @@ namespace VoxelEngine.GridSystem.UI
         private void RefreshCustomTextField()
         {
             if (_panel == null || _target == null) return;
-
-            // Remove old custom text section if present
-            var oldSection = _panel.Q("CustomTextSection");
-            if (oldSection != null) _panel.Remove(oldSection);
+            var old = _panel.Q("CustomTextSection");
+            if (old != null) _panel.Remove(old);
 
             if (_target.dataMode != ScreenDataMode.Custom) return;
 
-            var ctSection = new VisualElement { name = "CustomTextSection" };
+            var sec = new VisualElement { name = "CustomTextSection" };
+            var h = new Label("CUSTOM TEXT");
+            h.style.color = new Color(0.40f, 0.44f, 0.52f); h.style.fontSize = 9;
+            h.style.letterSpacing = 2; h.style.unityFontStyleAndWeight = FontStyle.Bold;
+            h.style.marginTop = 6; h.style.marginBottom = 3;
+            sec.Add(h);
 
-            var ctHdr = new Label("CUSTOM TEXT");
-            ctHdr.style.color = new Color(0.40f, 0.44f, 0.52f); ctHdr.style.fontSize = 9;
-            ctHdr.style.letterSpacing = 2; ctHdr.style.unityFontStyleAndWeight = FontStyle.Bold;
-            ctHdr.style.marginTop = 6; ctHdr.style.marginBottom = 3;
-            ctSection.Add(ctHdr);
+            var f = new TextField();
+            f.value = _target.customText; f.multiline = true;
+            f.style.minHeight = 40;
+            f.style.backgroundColor = new StyleColor(new Color(0.05f, 0.055f, 0.075f));
+            f.style.color = new Color(0.92f, 0.94f, 0.97f);
+            f.style.borderLeftWidth = f.style.borderRightWidth =
+            f.style.borderTopWidth = f.style.borderBottomWidth = 0;
+            f.style.whiteSpace = WhiteSpace.Normal;
+            f.RegisterValueChangedCallback(e => { _target.customText = e.newValue; });
+            sec.Add(f);
 
-            var ctField = new TextField();
-            ctField.value = _target.customText;
-            ctField.multiline = true;
-            ctField.style.minHeight = 50;
-            ctField.style.backgroundColor = new StyleColor(new Color(0.05f, 0.055f, 0.075f));
-            ctField.style.color = new Color(0.92f, 0.94f, 0.97f);
-            ctField.style.borderLeftWidth = ctField.style.borderRightWidth =
-            ctField.style.borderTopWidth = ctField.style.borderBottomWidth = 0;
-            ctField.style.whiteSpace = WhiteSpace.Normal;
-            ctField.RegisterValueChangedCallback(evt => { _target.customText = evt.newValue; });
-            ctSection.Add(ctField);
-
-            // Find the preview header and insert before it
             for (int i = 0; i < _panel.childCount; i++)
             {
-                if (_panel[i] is Label lbl && lbl.text == "LIVE PREVIEW")
-                {
-                    _panel.Insert(i, ctSection);
-                    return;
-                }
+                if (_panel[i] is Label l && l.text == "LIVE PREVIEW")
+                { _panel.Insert(i, sec); return; }
             }
-
-            // Fallback: just add at the end
-            _panel.Add(ctSection);
+            _panel.Add(sec);
         }
     }
 }

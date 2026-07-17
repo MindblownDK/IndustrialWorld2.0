@@ -1,7 +1,7 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridScreenBlock.cs
 //
 // Premium configurable digital screen for large grid ships.
-// v5.44.0-dev — Fixed: text sizing now uses world-space units + proper charSize.
+// v5.47.0-dev — Multi-source: one screen can show data from any number of providers.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -28,9 +28,14 @@ namespace VoxelEngine.GridSystem
         public Color textColor = new Color(0.18f, 0.72f, 0.88f);
         public string customText = "CUSTOM DISPLAY";
 
-        [Header("Data Source")]
-        public Vector3Int dataSourceGridPos;
-        public int dataSourceInstanceId;
+        [Header("Data Sources")]
+        public List<Vector3Int> dataSourcePositions = new();
+        public List<int> dataSourceInstanceIds = new();
+
+        // Legacy single-source fields — migrated into lists on first access
+        public Vector3Int legacyGridPos;
+        public int legacyInstanceId;
+        private bool _migrated;
 
         public override float PowerDraw
         {
@@ -46,15 +51,12 @@ namespace VoxelEngine.GridSystem
             }
         }
 
-        private IGridDataProvider _cachedProvider;
-        private Vector3Int _lastCheckedPos;
-        private TextMesh _screenText;
-        private TextMesh _titleText;
-        private TextMesh _statusText;
+        private readonly List<IGridDataProvider> _cachedProviders = new();
+        private readonly Dictionary<Vector3Int, int> _lastChecked = new();
+        private TextMesh _screenText, _titleText, _statusText;
         private bool _initialized;
         private PowerConsumer _power;
 
-        // ── Display area in world units (fits within the screen surface cube) ──
         private (float w, float h) DisplayArea()
         {
             float cs = 2.5f;
@@ -71,18 +73,24 @@ namespace VoxelEngine.GridSystem
 
         private float CharHeight()
         {
-            // Return a world-unit character height that fits MaxDisplayLines lines
-            // into the display area with 85% fill + padding.
             var (_, h) = DisplayArea();
             int lines = Mathf.Max(1, MaxDisplayLines);
             return (h * 0.85f) / lines;
         }
 
         public bool IsPowered => Enabled && Grid != null && Grid.HasPower;
-        public bool HasDataSource => ResolveProvider() != null || dataMode == ScreenDataMode.Custom;
+        public bool HasAnySource => ResolveAllProviders().Count > 0 || dataMode == ScreenDataMode.Custom;
+        public int SourceCount
+        {
+            get
+            {
+                if (!_migrated) MigrateLegacy();
+                return dataSourcePositions.Count;
+            }
+        }
 
         // ── IGridDataProvider ──────────────────────────────────────────
-        public string SourceName => blockName;
+        public string SourceName => blockName + " (" + SourceCount + " src)";
         public string DataCategory => "Display";
         public string GetDisplayData() => FormattedDisplay;
 
@@ -93,22 +101,49 @@ namespace VoxelEngine.GridSystem
                 if (!Enabled) return "DISABLED";
                 if (!IsPowered) return "OFFLINE";
                 if (dataMode == ScreenDataMode.Custom) return string.IsNullOrEmpty(customText) ? "(empty)" : customText;
-                var provider = ResolveProvider();
-                if (provider == null) return "ONLINE\nNO DATA\nRight-click to configure";
-                string raw = provider.GetDisplayData();
-                if (string.IsNullOrEmpty(raw)) return "--";
+
+                var sources = ResolveAllProviders();
+                if (sources.Count == 0) return "ONLINE\nNO DATA\nRight-click to configure";
+
                 int max = MaxDisplayLines;
-                switch (dataMode)
+                int linesPerSource = Mathf.Max(2, max / sources.Count);
+
+                var result = new System.Text.StringBuilder();
+                for (int s = 0; s < sources.Count; s++)
                 {
-                    case ScreenDataMode.Summary: return TruncateLines(provider.SourceName + "\n" + raw, max);
-                    case ScreenDataMode.Power:   return FormatSection(raw, "POWER", max);
-                    case ScreenDataMode.Inventory: return FormatSection(raw, "CARGO", max);
-                    case ScreenDataMode.Speed:   return FormatSection(raw, "SPEED", max);
-                    case ScreenDataMode.System:  return FormatSection(raw, "SYS", max);
-                    case ScreenDataMode.Bars:    return FormatBars(raw, provider.SourceName, max);
-                    default: return string.IsNullOrEmpty(customText) ? "(empty)" : customText;
+                    var p = sources[s];
+                    string raw = p.GetDisplayData();
+                    if (string.IsNullOrEmpty(raw)) continue;
+
+                    if (s > 0) result.AppendLine("──┘");
+                    int remaining = max - CountLines(result.ToString());
+
+                    switch (dataMode)
+                    {
+                        case ScreenDataMode.Bars:
+                            result.AppendLine(FormatBars(raw, p.SourceName, Mathf.Min(linesPerSource, remaining)));
+                            break;
+                        case ScreenDataMode.Power:
+                        case ScreenDataMode.Inventory:
+                        case ScreenDataMode.Speed:
+                        case ScreenDataMode.System:
+                            result.AppendLine(FormatSection(raw, dataMode.ToString(), Mathf.Min(linesPerSource, remaining)));
+                            break;
+                        default:
+                            result.AppendLine(TruncateLines(p.SourceName + "\n" + raw, Mathf.Min(linesPerSource, remaining)));
+                            break;
+                    }
                 }
+                return result.ToString().Trim();
             }
+        }
+
+        private static int CountLines(string t)
+        {
+            if (string.IsNullOrEmpty(t)) return 0;
+            int c = 1;
+            foreach (char ch in t) if (ch == '\n') c++;
+            return c;
         }
 
         private int MaxDisplayLines => screenSize switch
@@ -118,6 +153,7 @@ namespace VoxelEngine.GridSystem
             ScreenSize.ExtraLarge => 16, _ => 3
         };
 
+        // ── Formatting ────────────────────────────────────────────────
         private string FormatSection(string raw, string section, int max)
         {
             var lines = raw.Split('\n');
@@ -144,77 +180,65 @@ namespace VoxelEngine.GridSystem
             return sb.ToString().Trim();
         }
 
-        /// <summary>Render percentage values from provider data as visual bar charts.</summary>
         private string FormatBars(string raw, string sourceName, int maxLines)
         {
             var result = new System.Text.StringBuilder();
             result.AppendLine("[" + sourceName.ToUpperInvariant() + "]");
-
             var lines = raw.Split('\n');
-            int barsRendered = 0;
-
+            int bars = 0;
             foreach (var l in lines)
             {
                 string t = l.Trim();
                 if (t.Length == 0) continue;
-                if (barsRendered >= maxLines - 1) break;
-
-                // Try to find a percentage value in this line
+                if (bars >= maxLines - 1) break;
                 float pct = ExtractPercentage(t);
-                if (pct >= 0f)
-                {
-                    // Draw a bar
-                    result.AppendLine(" " + BarString(pct));
-                    barsRendered++;
-                }
-                // Also show non-percentage data (like kWh, mode)
-                else if (barsRendered < maxLines - 2)
-                {
-                    result.AppendLine(" " + t);
-                    barsRendered++;
-                }
+                if (pct >= 0f) { result.AppendLine(" " + BarString(pct)); bars++; }
+                else if (bars < maxLines - 2) { result.AppendLine(" " + t); bars++; }
             }
-
-            // Ensure at least one bar filled
-            if (result.ToString().Trim().Length <= sourceName.Length + 4)
-                return raw;
-
+            if (result.ToString().Trim().Length <= sourceName.Length + 4) return raw;
             return result.ToString().Trim();
         }
 
-        /// <summary>Extract a percentage value (e.g. "80%") from a string. Returns -1 if none found.</summary>
         private static float ExtractPercentage(string text)
         {
             if (string.IsNullOrEmpty(text)) return -1f;
             int idx = text.IndexOf('%');
             if (idx < 1) return -1f;
-            // Walk backwards to find the number start
             int start = idx - 1;
-            while (start >= 0 && (char.IsDigit(text[start]) || text[start] == '.' || text[start] == ','))
-                start--;
+            while (start >= 0 && (char.IsDigit(text[start]) || text[start] == '.' || text[start] == ',')) start--;
             start++;
             if (start >= idx) return -1f;
-            string numStr = text.Substring(start, idx - start);
-            if (float.TryParse(numStr, System.Globalization.NumberStyles.Any,
+            if (float.TryParse(text.Substring(start, idx - start), System.Globalization.NumberStyles.Any,
                 System.Globalization.CultureInfo.InvariantCulture, out float val))
                 return Mathf.Clamp01(val / 100f);
             return -1f;
         }
 
-        /// <summary>Render a 0-1 value as a unicode bar (10 characters wide).</summary>
         private static string BarString(float v01)
         {
-            int full = Mathf.FloorToInt(v01 * 10f);
-            full = Mathf.Clamp(full, 0, 10);
-
-            // Use unicode block characters █ ▓ ▒ ░
+            int full = Mathf.Clamp(Mathf.FloorToInt(v01 * 10f), 0, 10);
             var sb = new System.Text.StringBuilder();
-            for (int i = 0; i < full; i++) sb.Append('█');
-            // Fill remaining with light shade
-            for (int i = full; i < 10; i++) sb.Append('░');
-
+            for (int i = 0; i < full; i++) sb.Append('\u2588');
+            for (int i = full; i < 10; i++) sb.Append('\u2591');
             sb.Append(" " + (v01 * 100f).ToString("0") + "%");
             return sb.ToString();
+        }
+
+        // ── Lifecycle ─────────────────────────────────────────────────
+        private void MigrateLegacy()
+        {
+            if (_migrated) return;
+            _migrated = true;
+            if (legacyGridPos != Vector3Int.zero || legacyInstanceId != 0)
+            {
+                if (!dataSourcePositions.Contains(legacyGridPos))
+                {
+                    dataSourcePositions.Add(legacyGridPos);
+                    dataSourceInstanceIds.Add(legacyInstanceId);
+                }
+                legacyGridPos = Vector3Int.zero;
+                legacyInstanceId = 0;
+            }
         }
 
         private void Start() => EnsureDisplay();
@@ -231,55 +255,49 @@ namespace VoxelEngine.GridSystem
 
             var (dw, dh) = DisplayArea();
 
-            // ── State colours ──
             if (!Enabled)
             {
-                Color dim = new Color(0.3f, 0.3f, 0.3f, 0.3f);
-                _screenText.color = dim;
-                if (_titleText != null) _titleText.color = dim;
-                if (_statusText != null) { _statusText.text = "OFF"; _statusText.color = dim; }
+                Color d = new Color(0.3f, 0.3f, 0.3f, 0.3f);
+                _screenText.color = d;
+                if (_titleText != null) _titleText.color = d;
+                if (_statusText != null) { _statusText.text = "OFF"; _statusText.color = d; }
             }
             else if (!IsPowered)
             {
-                Color warn = new Color(0.8f, 0.15f, 0.10f, 0.6f);
-                _screenText.color = warn;
-                if (_titleText != null) _titleText.color = warn;
-                if (_statusText != null) { _statusText.text = "NO PWR"; _statusText.color = warn; }
+                Color w = new Color(0.8f, 0.15f, 0.10f, 0.6f);
+                _screenText.color = w;
+                if (_titleText != null) _titleText.color = w;
+                if (_statusText != null) { _statusText.text = "NO PWR"; _statusText.color = w; }
             }
-            else if (!HasDataSource)
+            else if (!HasAnySource)
             {
-                Color idle = new Color(0.40f, 0.44f, 0.52f);
-                _screenText.color = idle;
-                if (_titleText != null) { _titleText.text = "NO SOURCE"; _titleText.color = idle; }
-                if (_statusText != null) { _statusText.text = "IDLE"; _statusText.color = idle; }
+                Color i = new Color(0.40f, 0.44f, 0.52f);
+                _screenText.color = i;
+                if (_titleText != null) { _titleText.text = "NO SOURCE"; _titleText.color = i; }
+                if (_statusText != null) { _statusText.text = "IDLE"; _statusText.color = i; }
             }
             else
             {
                 float pulse = 0.7f + 0.15f * Mathf.Sin(Time.realtimeSinceStartup * 1.8f);
                 _screenText.color = new Color(textColor.r, textColor.g, textColor.b, pulse);
+                var sources = ResolveAllProviders();
                 if (_titleText != null)
                 {
-                    _titleText.text = (ResolveProvider()?.SourceName ?? "CONNECTED").ToUpperInvariant();
+                    _titleText.text = sources.Count + " source" + (sources.Count != 1 ? "s" : "");
                     _titleText.color = new Color(textColor.r * 0.7f, textColor.g * 0.7f, textColor.b * 0.7f, 0.8f);
                 }
-                if (_statusText != null)
-                {
-                    _statusText.text = "LIVE";
-                    _statusText.color = new Color(textColor.r * 0.5f, textColor.g * 0.5f, textColor.b * 0.5f);
-                }
+                if (_statusText != null) { _statusText.text = "LIVE"; _statusText.color = new Color(textColor.r * 0.5f, textColor.g * 0.5f, textColor.b * 0.5f); }
             }
 
-            // ── Keep text positions relative to current display area ──
-            if (_titleText != null)
-                _titleText.transform.localPosition = new Vector3(0, dh * 0.38f, 0);
-            if (_statusText != null)
-                _statusText.transform.localPosition = new Vector3(dw * 0.42f, -dh * 0.38f, 0);
+            if (_titleText != null) _titleText.transform.localPosition = new Vector3(0, dh * 0.38f, 0);
+            if (_statusText != null) _statusText.transform.localPosition = new Vector3(dw * 0.42f, -dh * 0.38f, 0);
         }
 
         private void EnsureDisplay()
         {
             if (_initialized) return;
             _initialized = true;
+            MigrateLegacy();
 
             _power = GetComponent<PowerConsumer>();
             if (_power == null) _power = gameObject.AddComponent<PowerConsumer>();
@@ -294,75 +312,116 @@ namespace VoxelEngine.GridSystem
                 surface = s.transform;
             }
 
-            // Destroy old display children
             var oldRoot = surface.Find("DisplayRoot");
-            if (oldRoot != null) { DestroyImmediate(oldRoot.gameObject); }
+            if (oldRoot != null) DestroyImmediate(oldRoot.gameObject);
 
             var (dw, dh) = DisplayArea();
-            float charH = CharHeight();
-            // characterSize maps 1 font-unit → this many world units
-            float charSize = charH / 24f; // we target ~24px font
+            float charSize = CharHeight() / 24f;
 
             var root = new GameObject("DisplayRoot");
             root.transform.SetParent(surface, false);
             root.transform.localPosition = new Vector3(0, 0, -0.015f);
 
-            // ── Title ──
             var tObj = new GameObject("ScreenTitleText");
             tObj.transform.SetParent(root.transform, false);
             tObj.transform.localPosition = new Vector3(0, dh * 0.38f, 0);
             _titleText = tObj.AddComponent<TextMesh>();
-            _titleText.text = "NO SOURCE";
-            _titleText.fontSize = 20;
+            _titleText.text = "NO SOURCE"; _titleText.fontSize = 20;
             _titleText.characterSize = charSize;
             _titleText.color = new Color(0.50f, 0.55f, 0.65f);
             _titleText.anchor = TextAnchor.UpperCenter;
             _titleText.alignment = TextAlignment.Center;
             _titleText.fontStyle = FontStyle.Bold;
 
-            // ── Main data ──
             var dObj = new GameObject("ScreenDisplayText");
             dObj.transform.SetParent(root.transform, false);
             dObj.transform.localPosition = Vector3.zero;
             _screenText = dObj.AddComponent<TextMesh>();
-            _screenText.text = "STARTING";
-            _screenText.fontSize = 24;
-            _screenText.characterSize = charSize;
-            _screenText.color = textColor;
-            _screenText.anchor = TextAnchor.MiddleCenter;
-            _screenText.alignment = TextAlignment.Center;
-            _screenText.fontStyle = FontStyle.Normal;
+            _screenText.text = "STARTING"; _screenText.fontSize = 24;
+            _screenText.characterSize = charSize; _screenText.color = textColor;
+            _screenText.anchor = TextAnchor.MiddleCenter; _screenText.alignment = TextAlignment.Center;
 
-            // ── Status ──
             var sObj = new GameObject("ScreenStatusText");
             sObj.transform.SetParent(root.transform, false);
             sObj.transform.localPosition = new Vector3(dw * 0.42f, -dh * 0.38f, 0);
             _statusText = sObj.AddComponent<TextMesh>();
-            _statusText.text = "BOOT";
-            _statusText.fontSize = 12;
+            _statusText.text = "BOOT"; _statusText.fontSize = 12;
             _statusText.characterSize = charSize;
             _statusText.color = new Color(0.30f, 0.35f, 0.45f);
-            _statusText.anchor = TextAnchor.LowerRight;
-            _statusText.alignment = TextAlignment.Right;
+            _statusText.anchor = TextAnchor.LowerRight; _statusText.alignment = TextAlignment.Right;
         }
 
-        public IGridDataProvider ResolveProvider()
+        // ── Multi-source management ───────────────────────────────────
+        public List<IGridDataProvider> ResolveAllProviders()
         {
-            if (Grid == null) return null;
-            if (_lastCheckedPos != dataSourceGridPos || _cachedProvider == null)
+            _cachedProviders.Clear();
+            if (Grid == null) return _cachedProviders;
+            if (!_migrated) MigrateLegacy();
+
+            for (int i = dataSourcePositions.Count - 1; i >= 0; i--)
             {
-                _lastCheckedPos = dataSourceGridPos; _cachedProvider = null;
-                if (Grid.Blocks.TryGetValue(dataSourceGridPos, out var b))
-                { _cachedProvider = b as IGridDataProvider; if (_cachedProvider != null) dataSourceInstanceId = b.GetInstanceID(); }
+                var pos = dataSourcePositions[i];
+                int storedId = i < dataSourceInstanceIds.Count ? dataSourceInstanceIds[i] : 0;
+
+                IGridDataProvider provider = null;
+                if (Grid.Blocks.TryGetValue(pos, out var block))
+                {
+                    provider = block as IGridDataProvider;
+                    if (provider != null)
+                    {
+                        int currentId = block.GetInstanceID();
+                        if (currentId != storedId)
+                        {
+                            // Block was replaced — update instance id
+                            dataSourceInstanceIds[i] = currentId;
+                        }
+                        _cachedProviders.Add(provider);
+                        continue;
+                    }
+                }
+
+                // Source no longer valid — remove it
+                dataSourcePositions.RemoveAt(i);
+                if (i < dataSourceInstanceIds.Count) dataSourceInstanceIds.RemoveAt(i);
             }
-            if (_cachedProvider != null && Grid.Blocks.TryGetValue(dataSourceGridPos, out var c))
-                if (c.GetInstanceID() != dataSourceInstanceId) _cachedProvider = null;
-            return _cachedProvider;
+            return _cachedProviders;
+        }
+
+        public bool HasSource(Vector3Int pos)
+        {
+            if (!_migrated) MigrateLegacy();
+            return dataSourcePositions.Contains(pos);
+        }
+
+        public void ToggleSource(Vector3Int pos, int instanceId)
+        {
+            if (!_migrated) MigrateLegacy();
+            if (dataSourcePositions.Contains(pos))
+            {
+                int idx = dataSourcePositions.IndexOf(pos);
+                dataSourcePositions.RemoveAt(idx);
+                if (idx < dataSourceInstanceIds.Count) dataSourceInstanceIds.RemoveAt(idx);
+            }
+            else
+            {
+                dataSourcePositions.Add(pos);
+                dataSourceInstanceIds.Add(instanceId);
+            }
+        }
+
+        public void ClearSources()
+        {
+            if (!_migrated) MigrateLegacy();
+            dataSourcePositions.Clear();
+            dataSourceInstanceIds.Clear();
         }
 
         public void AutoLinkToNearestProvider()
         {
             if (Grid == null) return;
+            if (!_migrated) MigrateLegacy();
+            if (dataSourcePositions.Count > 0) return; // already has sources
+
             IGridDataProvider best = null; Vector3Int bp = default; float bd = float.MaxValue;
             foreach (var kv in Grid.Blocks)
             {
@@ -370,7 +429,8 @@ namespace VoxelEngine.GridSystem
                 float d = Vector3.Distance(kv.Value.transform.position, transform.position);
                 if (d < bd) { bd = d; best = p; bp = kv.Key; }
             }
-            if (best != null) { dataSourceGridPos = bp; dataSourceInstanceId = (best as GridBlock)?.GetInstanceID() ?? 0; _cachedProvider = best; _lastCheckedPos = bp; }
+            if (best != null)
+                ToggleSource(bp, (best as GridBlock)?.GetInstanceID() ?? 0);
         }
 
         public List<(Vector3Int pos, IGridDataProvider provider)> GetAvailableSources()
@@ -382,8 +442,6 @@ namespace VoxelEngine.GridSystem
                     list.Add((kv.Key, p));
             return list;
         }
-
-        public void SetDataSource(Vector3Int gp, int id) { dataSourceGridPos = gp; dataSourceInstanceId = id; _cachedProvider = null; _lastCheckedPos = gp; }
 
         public override void OnPlaced()
         {
