@@ -208,16 +208,122 @@ namespace VoxelEngine.EditorTools
             CreateScreenPrefab("Screen_ExtraLarge", ScreenSize.ExtraLarge, cs, new Vector3(cs * 7.40f, cs * 7.40f, cs * 0.14f), "Extra Large Screen", 800);
             CreateScreenPrefab("Screen_Large", ScreenSize.Large, cs, new Vector3(cs * 3.70f, cs * 3.70f, cs * 0.12f), "Large Screen", 400);
 
+            // ---- Camera Block Prefab ----
+            string camPrefabPath = PREFABS + "/CameraBlock.prefab";
+            var csCam = cs;
+            var camRoot = new GameObject("CameraBlock");
+
+            // Mounting arm
+            var arm = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            arm.name = "Generated_MountArm";
+            arm.transform.SetParent(camRoot.transform, false);
+            arm.transform.localPosition = new Vector3(0, csCam * 0.15f, 0);
+            arm.transform.localScale = new Vector3(csCam * 0.15f, csCam * 0.30f, csCam * 0.15f);
+            arm.GetComponent<Renderer>().sharedMaterial = frameMat;
+
+            // Camera body (cylindrical housing)
+            var body = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            body.name = "Generated_CameraBody";
+            body.transform.SetParent(camRoot.transform, false);
+            body.transform.localPosition = new Vector3(0, csCam * 0.40f, 0);
+            body.transform.localScale = new Vector3(csCam * 0.35f, csCam * 0.20f, csCam * 0.35f);
+            var bodyMat = GetMat("Mat_CameraBody", new Color(0.08f, 0.09f, 0.11f));
+            body.GetComponent<Renderer>().sharedMaterial = bodyMat;
+
+            // Lens ring (darker rim)
+            // Torus not available as PrimitiveType - use a flat cylinder for the ring
+            var lensRing = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            lensRing.name = "Generated_LensRing";
+            lensRing.transform.SetParent(camRoot.transform, false);
+            lensRing.transform.localPosition = new Vector3(0, csCam * 0.40f, -csCam * 0.08f);
+            lensRing.transform.localScale = new Vector3(csCam * 0.35f, csCam * 0.35f, csCam * 0.12f);
+            lensRing.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            var ringMat = GetMat("Mat_CameraRing", new Color(0.04f, 0.045f, 0.055f));
+            lensRing.GetComponent<Renderer>().sharedMaterial = ringMat;
+            var lrCol = lensRing.GetComponent<Collider>();
+            if (lrCol != null) Object.DestroyImmediate(lrCol);
+
+            // Lens (glassy dome)
+            var lens = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            lens.name = "Generated_Lens";
+            lens.transform.SetParent(camRoot.transform, false);
+            lens.transform.localPosition = new Vector3(0, csCam * 0.40f, -csCam * 0.12f);
+            lens.transform.localScale = new Vector3(csCam * 0.20f, csCam * 0.20f, csCam * 0.10f);
+            var lensMat = GetMat("Mat_CameraLens", new Color(0.12f, 0.25f, 0.45f, 0.85f), true);
+            lensMat.SetFloat("_Surface", 1);
+            lens.GetComponent<Renderer>().sharedMaterial = lensMat;
+
+            // Status LED
+            var led = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            led.name = "Generated_StatusLED";
+            led.transform.SetParent(camRoot.transform, false);
+            led.transform.localPosition = new Vector3(0, csCam * 0.50f, csCam * 0.05f);
+            led.transform.localScale = Vector3.one * csCam * 0.04f;
+            var ledMat = GetMat("Mat_CameraLED", new Color(0.18f, 0.72f, 0.88f), true);
+            led.GetComponent<Renderer>().sharedMaterial = ledMat;
+            var ledCol = led.GetComponent<Collider>();
+            if (ledCol != null) Object.DestroyImmediate(ledCol);
+
+            // Collider
+            var camCol = camRoot.AddComponent<BoxCollider>();
+            camCol.size = new Vector3(csCam * 0.5f, csCam * 0.65f, csCam * 0.5f);
+
+            // GridCameraBlock component
+            var camBlock = camRoot.AddComponent<GridCameraBlock>();
+            camBlock.blockName = "Camera Block";
+            camBlock.BlockMass = 50f;
+            camBlock.maxHP = 80;
+            camBlock.fieldOfView = 70f;
+            camBlock.cameraRange = 100f;
+
+            // GridBlock base
+            // GridCameraBlock inherits from GridBlock - no need for separate component
+            var camPrefab = PrefabUtility.SaveAsPrefabAsset(camRoot, camPrefabPath);
+            Object.DestroyImmediate(camRoot);
+
+            // Item
+            var camItemPath = SCREEN_ITEMS + "/Block_CameraBlock.asset";
+            var camItem = AssetDatabase.LoadAssetAtPath<VoxelEngine.GridSystem.GridBlockItem>(camItemPath);
+            if (camItem == null) { camItem = ScriptableObject.CreateInstance<VoxelEngine.GridSystem.GridBlockItem>(); AssetDatabase.CreateAsset(camItem, camItemPath); created++; }
+            else preserved++;
+            camItem.itemId = "camera_block";
+            camItem.displayName = "Camera Block";
+            camItem.description = "Security camera. Captures live video for linked screens.";
+            camItem.iconTint = new Color(0.08f, 0.10f, 0.14f);
+            camItem.maxStack = 99; camItem.massPerUnit = 1f;
+            camItem.category = "Grid"; camItem.gridSize = GridSize.Large;
+            camItem.blockPrefab = camPrefab; camItem.blockMass = 50f; camItem.blockHP = 80;
+            EditorUtility.SetDirty(camItem);
+
+            // Recipe
+            var camRecipePath = SCREEN_RECIPES + "/Recipe_CameraBlock.asset";
+            var camRecipe = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeDefinition>(camRecipePath);
+            if (camRecipe == null) { camRecipe = ScriptableObject.CreateInstance<VoxelEngine.Crafting.RecipeDefinition>(); AssetDatabase.CreateAsset(camRecipe, camRecipePath); created++; }
+            else preserved++;
+            camRecipe.displayName = "Camera Block";
+            camRecipe.outputItem = camItem; camRecipe.outputCount = 1;
+            camRecipe.requiredStation = VoxelEngine.Crafting.StationTier.Assembler;
+            camRecipe.craftSeconds = 8f; camRecipe.unlockedByDefault = false;
+            camRecipe.inputs = new VoxelEngine.Crafting.RecipeIngredient[] {
+                new VoxelEngine.Crafting.RecipeIngredient { item = ironPlate, count = 4 },
+                new VoxelEngine.Crafting.RecipeIngredient { item = copperWire, count = 8 },
+                new VoxelEngine.Crafting.RecipeIngredient { item = circuit, count = 3 },
+                new VoxelEngine.Crafting.RecipeIngredient { item = glass, count = 2 },
+            };
+            EditorUtility.SetDirty(camRecipe);
+            if (registry != null && !registry.recipes.Contains(camRecipe)) registry.recipes.Add(camRecipe);
+            Debug.Log("[Step 19] + Created camera block prefab: CameraBlock");
+
             if (registry != null) EditorUtility.SetDirty(registry);
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
 
             EditorUtility.DisplayDialog("Voxel Engine — Step 19",
-                $"Grid Screen Prefabs Generated\n\n" +
-                $"• Small Screen (1x1)\n• Wide Screen (2x1)\n• Medium Screen (2x2)\n• Large Screen (4x4)\n• Extra Large Screen (8x8)\n\n" +
+                $"Grid Screens + Camera Generated\n\n" +
+                $"Screens:\n• Small (1x1)\n• Wide (2x1)\n• Medium (2x2)\n• Large (4x4)\n• Extra Large (8x8)\n\n" +
+                $"Camera:\n• Security Camera Block (with lens, LED, mount)\n\n" +
                 $"Created/verified: {created + preserved} assets\n" +
                 $"Items + Recipes added to GridSystem/ScreenItems and ScreenRecipes\n\n" +
-                $"Manual step: Add GridScreenConfigUI component to your GameUI UIDocument.\n" +
                 $"Non-destructive — no balance values were modified.",
                 "OK");
         }

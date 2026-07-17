@@ -221,12 +221,13 @@ namespace VoxelEngine.EditorTools
 
             AddSpacer(scroll, 6);
             AddInfo(scroll,
-                "Step 19 builds GRID SCREENS & DATA PROVIDERS (non-destructive):\n" +
-                "  • GridScreenBlock.cs — configurable 1x1/2x2/4x4/Wide digital screens\n" +
+                "Step 19 builds GRID SCREENS & CAMERA BLOCK (non-destructive):\n" +
+                "  • Screens: Small/Wide/Medium/Large/ExtraLarge (1x1 to 8x8)\n" +
+                "  • Camera Block: Security camera with live video feed for screens\n" +
                 "  • IGridDataProvider interface — Battery, Cargo, Gas tank data sources\n" +
                 "  • GridScreenConfigUI — right-click config panel for source + display mode\n" +
                 "  • Auto-links to nearest data source on placement\n" +
-                "  • Creates missing Screen/DataProvider components on existing prefabs\n" +
+                "  • Creates premium prefabs, items, and recipes\n" +
                 "  • Non-destructive: preserves all existing balance and custom geometry\n" +
                 "Re-runnable. Idempotent. Never overwrites user-authored values.\n" +
                 "Run Step 12 (Grid System) first to have grid blocks to attach screens to.");
