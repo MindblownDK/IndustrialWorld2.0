@@ -244,6 +244,7 @@ namespace VoxelEngine.Simulation
             _stripRenderer.material = _stripMaterial;
 
             UpdateInteractionCollider(diffuserLocalPosition);
+            BuildEndCaps();
             BuildDiodes();
             BuildChasePulse();
             BuildLights();
@@ -255,6 +256,49 @@ namespace VoxelEngine.Simulation
             if (box == null) box = gameObject.AddComponent<BoxCollider>();
             box.center = center;
             box.size = new Vector3(stripLength + 0.14f, Mathf.Max(0.08f, stripWidth + 0.04f), Mathf.Max(0.08f, stripWidth + 0.08f));
+        }
+
+        private void BuildEndCaps()
+        {
+            for (int i = transform.childCount - 1; i >= 0; i--)
+            {
+                var child = transform.GetChild(i);
+                if (child != null && child.name.StartsWith("Generated_LEDEndCap_", System.StringComparison.Ordinal))
+                    Destroy(child.gameObject);
+            }
+
+            var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+            var capMaterial = new Material(shader) { name = "LEDStripEndCap_Runtime", color = new Color(0.025f, 0.028f, 0.032f) };
+            if (capMaterial.HasProperty("_BaseColor")) capMaterial.SetColor("_BaseColor", new Color(0.025f, 0.028f, 0.032f));
+            if (capMaterial.HasProperty("_Metallic")) capMaterial.SetFloat("_Metallic", 0.65f);
+            if (capMaterial.HasProperty("_Smoothness")) capMaterial.SetFloat("_Smoothness", 0.45f);
+
+            float capWidth = Mathf.Max(0.025f, stripWidth + 0.10f);
+            for (int i = 0; i < 2; i++)
+            {
+                float sign = i == 0 ? -1f : 1f;
+                var cap = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                cap.name = "Generated_LEDEndCap_" + i;
+                cap.transform.SetParent(transform, false);
+                cap.transform.localPosition = stripOffset + new Vector3(sign * (stripLength * 0.5f + 0.035f), 0.025f, 0f);
+                cap.transform.localScale = new Vector3(0.035f, 0.055f, capWidth);
+                var collider = cap.GetComponent<Collider>();
+                if (collider != null) Destroy(collider);
+                var renderer = cap.GetComponent<Renderer>();
+                if (renderer != null) renderer.sharedMaterial = capMaterial;
+            }
+        }
+
+        public bool CoversGridCell(Vector3Int gridPos, float cellSize)
+        {
+            _gridBlock ??= GetComponent<GridBlock>();
+            if (_gridBlock == null || _gridBlock.Grid == null) return false;
+            Vector3 local = transform.InverseTransformPoint(_gridBlock.Grid.GridToWorld(gridPos));
+            float halfLength = stripLength * 0.5f + cellSize * 0.45f;
+            float crossTolerance = Mathf.Max(cellSize * 0.55f, stripWidth + 0.08f);
+            return Mathf.Abs(local.x - stripOffset.x) <= halfLength
+                && Mathf.Abs(local.y) <= cellSize * 0.65f
+                && Mathf.Abs(local.z - stripOffset.z) <= crossTolerance;
         }
 
         private void BuildDiodes()

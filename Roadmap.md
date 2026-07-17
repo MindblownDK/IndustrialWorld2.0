@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.59.5-dev`
-**Roadmap Version:** `5.59.5-dev`
+**Current Version:** `5.60.0-dev`
+**Roadmap Version:** `5.60.0-dev`
 **Date:** 2026-07-17
-**Status:** Active Implementation — LED Strip Compile Fix
+**Status:** Active Implementation — LED Strip Path Reservation + End Cap Polish
 
 ---
 
@@ -1683,6 +1683,28 @@ For each version, these are the high-level Unity tasks you will perform manually
 
 ## 11. Changelog
 
+### [5.60.0-dev] LED Strip Path Reservation + End Cap Polish
+
+**Type:** MINOR — save-compatible build interaction validation/polish for LED strips (no save schema break)
+
+**Added / Improved:**
+- Added LED strip path validation before placement. Every crossed grid cell must be clear before a stretched LED strip can be placed.
+- Normal grid block placement now checks existing stretched LED strip paths and blocks placement into cells reserved by an LED strip visual path.
+- `LEDStrip.CoversGridCell()` exposes a lightweight reservation check based on the strip's full visual length, surface offset, and width.
+- Added generated end caps to runtime LED strips so stretched strips read as finished physical strips rather than raw glowing bars.
+- The placement failure message now clearly reports when the LED path is blocked.
+
+**Roadmap Status:**
+- Corner-to-corner LED strip placement remains **🛠️ WORKING ON** pending Thomas validation of path blocking/reservation behavior and endpoint visuals.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Place a long stretched LED strip.
+3. Try placing another grid block into a cell crossed by the strip and confirm placement is blocked.
+4. Try placing an LED strip through already occupied cells and confirm it is blocked with feedback.
+5. Confirm LED strips now show small end caps at both ends.
+6. Save/reload a stretched strip and confirm its path still blocks later placement after reload.
+
 ### [5.59.5-dev] LED Strip Placement Compile Fix
 
 **Type:** PATCH — compile fix only (no save schema, recipe, balance, or feature behavior changes)
@@ -1711,7 +1733,7 @@ For each version, these are the high-level Unity tasks you will perform manually
 - Added group LED effect controls in Ship Control group pages: **Sync FX**, **Chase**, **Pulse**, and **Static** for LED strip groups/categories.
 
 **Roadmap Status:**
-- Corner-to-corner LED strip placement remains **🛠️ WORKING ON** pending Thomas validation of pre-place edge ghost, even segmented brightness, full-length motion activation, clean chase, and grouped sync.
+- Corner-to-corner LED strip placement remains **🛠️ WORKING ON** pending Thomas validation of pre-place edge ghost, path reservation, end caps, even segmented brightness, full-length motion activation, clean chase, and grouped sync.
 
 **Manual Unity Steps:**
 1. Let Unity recompile.

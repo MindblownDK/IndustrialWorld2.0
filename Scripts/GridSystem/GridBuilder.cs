@@ -170,6 +170,12 @@ namespace VoxelEngine.GridSystem
 
         private bool TryPlaceBlock(GridBlockItem item, GridEntity grid, Vector3Int gridPos, Vector3 worldPos, Quaternion rotation)
         {
+            if (grid != null && IsCellReservedByLedStrip(grid, gridPos))
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show("Placement Blocked", "LED strip path reserves this cell", item != null ? item.icon : null, Color.red);
+                return false;
+            }
+
             if (IsTurbochargerItem(item, out var turboTier))
             {
                 if (!TryFindTurboAttachment(grid, gridPos, turboTier, out var engine))
@@ -298,6 +304,11 @@ namespace VoxelEngine.GridSystem
                 VoxelEngine.UI.BuildFeedbackHud.Show("Need More LED Strips", $"Requires {cellsNeeded} items for this length", item.icon, Color.red);
                 return false;
             }
+            if (!IsLedStripPathClear(_ledStretchGrid, _ledStretchStart, end))
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show("LED Path Blocked", "Clear the cells along the strip path first", item.icon, Color.red);
+                return false;
+            }
 
             _lastLedStripCost = cellsNeeded;
             if (!TryPlaceLedStrip(item, _ledStretchGrid, _ledStretchStart, stripRotation, length, ledLocalOffset))
@@ -387,6 +398,7 @@ namespace VoxelEngine.GridSystem
         {
             if (item == null || grid == null) return false;
             if (!grid.CanPlace(startPos)) return false;
+            if (IsCellReservedByLedStrip(grid, startPos)) return false;
 
             GridBlock block;
             if (item.blockPrefab != null)
@@ -415,6 +427,40 @@ namespace VoxelEngine.GridSystem
             grid.AddBlock(startPos, block);
             VoxelEngine.UI.BuildFeedbackHud.ShowBlockPlaced(item.displayName, item, Mathf.Max(1, _lastLedStripCost));
             return true;
+        }
+
+        private bool IsLedStripPathClear(GridEntity grid, Vector3Int start, Vector3Int end)
+        {
+            if (grid == null) return false;
+            Vector3Int d = end - start;
+            int steps = Mathf.Max(Mathf.Abs(d.x), Mathf.Abs(d.y), Mathf.Abs(d.z));
+            Vector3Int step = steps <= 0 ? Vector3Int.zero : new Vector3Int(
+                d.x == 0 ? 0 : d.x / Mathf.Abs(d.x),
+                d.y == 0 ? 0 : d.y / Mathf.Abs(d.y),
+                d.z == 0 ? 0 : d.z / Mathf.Abs(d.z));
+
+            for (int i = 0; i <= steps; i++)
+            {
+                Vector3Int p = start + step * i;
+                if (!grid.CanPlace(p)) return false;
+                if (IsCellReservedByLedStrip(grid, p)) return false;
+            }
+            return true;
+        }
+
+        private bool IsCellReservedByLedStrip(GridEntity grid, Vector3Int gridPos)
+        {
+            if (grid == null) return false;
+            float cellSize = grid.gridSize.CellSize();
+            foreach (var kv in grid.Blocks)
+            {
+                var block = kv.Value;
+                if (block == null) continue;
+                var strip = block.GetComponent<VoxelEngine.Simulation.LEDStrip>();
+                if (strip == null) continue;
+                if (strip.CoversGridCell(gridPos, cellSize)) return true;
+            }
+            return false;
         }
 
         private bool IsTurbochargerItem(GridBlockItem item, out VoxelEngine.Maritime.TurboTier tier)
