@@ -80,6 +80,12 @@ namespace VoxelEngine.GridSystem
             HeldBlockName = gbi.displayName;
             HandleRotationInput();
 
+            if (_ledStretchArmed && IsLedStripItem(gbi) && (GameSettings.WasPressed(InputAction.Mine) || GameSettings.WasPressed(InputAction.Pause)))
+            {
+                CancelLedStretch(true);
+                return;
+            }
+
             var ray = buildCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
             if (!Physics.Raycast(ray, out var hit, reach))
             {
@@ -218,8 +224,22 @@ namespace VoxelEngine.GridSystem
 
             if (!_ledStretchArmed)
             {
-                ShowGhost(item, worldPos, rotation);
-                HideLedStretchGhost();
+                HideGhost();
+                if (grid != null)
+                {
+                    float previewCellSize = item.gridSize.CellSize();
+                    Vector3Int previewMountAxis = SnapMountAxis(grid, hit.normal);
+                    Vector3 previewSurfaceOffset = ComputeSurfaceHitOffset(grid, gridPos, previewMountAxis, hit);
+                    Vector3 previewDir = DefaultLedAxis(previewMountAxis);
+                    Quaternion previewRotation = BuildLedSurfaceRotation(grid, previewDir, previewMountAxis);
+                    float previewSurfaceOffsetY = -previewCellSize * 0.5f + Mathf.Max(0.0025f, previewCellSize * 0.004f);
+                    float previewLateral = ComputeLedLateralOffset(previewDir, previewMountAxis, previewSurfaceOffset, previewCellSize, item.gridSize == GridSize.Large ? 0.18f : 0.045f);
+                    ShowLedStretchGhost(grid.GridToWorld(gridPos), previewCellSize, previewRotation, item.gridSize, new Vector3(0f, previewSurfaceOffsetY, previewLateral));
+                }
+                else
+                {
+                    HideLedStretchGhost();
+                }
 
                 if (!GameSettings.WasPressed(InputAction.Build)) return false;
                 if (grid == null)

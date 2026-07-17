@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.59.3-dev`
-**Roadmap Version:** `5.59.3-dev`
+**Current Version:** `5.59.5-dev`
+**Roadmap Version:** `5.59.5-dev`
 **Date:** 2026-07-17
-**Status:** Active Implementation — LED Strip Edge Snap + Even Chase Polish
+**Status:** Active Implementation — LED Strip Compile Fix
 
 ---
 
@@ -1682,6 +1682,47 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.59.5-dev] LED Strip Placement Compile Fix
+
+**Type:** PATCH — compile fix only (no save schema, recipe, balance, or feature behavior changes)
+
+**Fixed:**
+- Fixed `CS0136` in `GridBuilder.cs` by renaming the LED preview branch local `cs` variable to `previewCellSize`.
+- This removes the local-name collision with the later `cs` variable in the same method scope while preserving all 5.59.4-dev LED strip placement behavior.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Confirm the `GridBuilder.cs(230,27) CS0136` error is gone.
+3. Continue validating LED strip edge ghost/even effects polish from 5.59.4-dev.
+
+### [5.59.4-dev] LED Strip Edge Ghost + Even Effects Polish
+
+**Type:** PATCH — LED strip placement/effect polish (no save schema break)
+
+**Fixed / Improved:**
+- First-click LED preview ghost now uses the same surface/edge snapping logic as final placement, so the starting ghost should snap to face center or face edge before placement.
+- Edge detection now uses the actual clicked mounted face cell and hit point, improving edge-vs-center detection before final placement.
+- Segment mode no longer lights the whole diffuser strongly; the continuous diffuser is dimmed while individual diode segments carry the visible light.
+- Removed runtime point-light hotspots from LED strips; no more every-third segment/icon bright spots.
+- Motion detection now checks distance to the full LED strip segment, not only the anchor/start block, so stretched strips trigger from their whole length.
+- Clean Strip + Chase now uses a clamped moving pulse that stays inside the strip at the start/end instead of running outside the LED.
+- Wake Chase now works in clean-strip mode: one start-to-end fill pass runs, then the strip stays solid while motion remains active.
+- Added group LED effect controls in Ship Control group pages: **Sync FX**, **Chase**, **Pulse**, and **Static** for LED strip groups/categories.
+
+**Roadmap Status:**
+- Corner-to-corner LED strip placement remains **🛠️ WORKING ON** pending Thomas validation of pre-place edge ghost, even segmented brightness, full-length motion activation, clean chase, and grouped sync.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Equip a grid LED strip and aim near the face edge before first click; confirm the start ghost snaps to that edge.
+3. Place the strip and confirm final placement matches the ghost.
+4. Turn Segments ON and confirm the diffuser is not fully lit behind all segments.
+5. Confirm no periodic hotspot/light-icon bright spots remain.
+6. Enable Motion on a long stretched strip and approach from the middle/end; confirm it triggers.
+7. Use Clean Strip + Chase and confirm the pulse stays within the strip bounds.
+8. Enable Motion + Wake Chase with segments off and confirm one fill/chase pass runs, then the strip stays solid.
+9. Create/select a Ship Control group containing multiple LED strips and use Sync FX / Chase / Pulse / Static to confirm group effects start together.
 
 ### [5.59.3-dev] LED Strip Edge Snap + Even Chase Polish
 

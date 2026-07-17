@@ -890,7 +890,50 @@ namespace VoxelEngine.GridSystem.UI
                 row.Add(T.SmallButton("Stockpile", () => SetTankMode(blocks, GridTankMode.Stockpile), T.AccentAmber));
             }
 
+            if (HasLedStrips(blocks))
+            {
+                row.Add(T.SmallButton("Sync FX", () => SyncLedEffects(blocks), T.AccentCyan));
+                row.Add(T.SmallButton("Chase", () => SetLedMode(blocks, VoxelEngine.Simulation.LEDMode.Chase), T.AccentTeal));
+                row.Add(T.SmallButton("Pulse", () => SetLedMode(blocks, VoxelEngine.Simulation.LEDMode.Pulse), T.AccentCyan));
+                row.Add(T.SmallButton("Static", () => SetLedMode(blocks, VoxelEngine.Simulation.LEDMode.Static), T.AccentGreen));
+            }
+
             return row;
+        }
+
+        private static bool HasLedStrips(List<GridBlock> blocks)
+        {
+            if (blocks == null) return false;
+            foreach (var b in blocks)
+                if (b != null && b.GetComponent<VoxelEngine.Simulation.LEDStrip>() != null)
+                    return true;
+            return false;
+        }
+
+        private static void SyncLedEffects(List<GridBlock> blocks)
+        {
+            if (blocks == null) return;
+            foreach (var b in blocks)
+            {
+                var strip = b != null ? b.GetComponent<VoxelEngine.Simulation.LEDStrip>() : null;
+                if (strip != null) strip.SyncEffectPhase(0f);
+            }
+            RefreshTerminal();
+        }
+
+        private static void SetLedMode(List<GridBlock> blocks, VoxelEngine.Simulation.LEDMode mode)
+        {
+            if (blocks == null) return;
+            foreach (var b in blocks)
+            {
+                var strip = b != null ? b.GetComponent<VoxelEngine.Simulation.LEDStrip>() : null;
+                if (strip != null)
+                {
+                    strip.SetMode(mode);
+                    strip.SyncEffectPhase(0f);
+                }
+            }
+            RefreshTerminal();
         }
 
         private static void SetBatteryMode(List<GridBlock> blocks, GridBatteryMode mode)

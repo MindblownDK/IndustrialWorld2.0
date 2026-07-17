@@ -74,6 +74,7 @@ namespace VoxelEngine.Simulation
         private bool MotionSatisfied => !motionActivated || Time.time - _lastMotionTime <= Mathf.Max(0.1f, motionGraceSeconds);
         private bool ShouldBeLit => _enabled && HasGridPower && MotionSatisfied;
         private float MotionChaseDuration => 1f / Mathf.Max(0.1f, animSpeed);
+        private bool ShouldRunContinuousChase => mode == LEDMode.Chase && ShouldBeLit && !(motionActivated && motionChaseOnActivation && !_motionChaseActive);
 
         public string SourceName
         {
@@ -139,7 +140,7 @@ namespace VoxelEngine.Simulation
                         break;
                     case LEDMode.Chase:
                         // Chase is applied by a moving pulse/diode pass. Keep the base diffuser steady.
-                        intensity *= 0.28f;
+                        if (ShouldRunContinuousChase) intensity *= 0.28f;
                         break;
                 }
             }
@@ -169,12 +170,24 @@ namespace VoxelEngine.Simulation
             for (int i = 0; i < players.Length; i++)
             {
                 if (players[i] == null) continue;
-                if ((players[i].transform.position - transform.position).sqrMagnitude <= radiusSqr)
+                if (DistanceSqrToStrip(players[i].transform.position) <= radiusSqr)
                 {
                     _lastMotionTime = Time.time;
                     return;
                 }
             }
+        }
+
+        private float DistanceSqrToStrip(Vector3 worldPosition)
+        {
+            Vector3 a = transform.TransformPoint(stripOffset + new Vector3(-stripLength * 0.5f, 0f, 0f));
+            Vector3 b = transform.TransformPoint(stripOffset + new Vector3(stripLength * 0.5f, 0f, 0f));
+            Vector3 ab = b - a;
+            float lenSqr = ab.sqrMagnitude;
+            if (lenSqr < 0.0001f) return (worldPosition - transform.position).sqrMagnitude;
+            float t = Mathf.Clamp01(Vector3.Dot(worldPosition - a, ab) / lenSqr);
+            Vector3 closest = a + ab * t;
+            return (worldPosition - closest).sqrMagnitude;
         }
 
         private void BuildStripVisuals()
@@ -326,18 +339,19 @@ namespace VoxelEngine.Simulation
         private void ApplyEmission(float intensity, bool oneShotChase = false, float oneShotPhase = 1f)
         {
             Color emission = stripColor * intensity * 0.8f;
+            Color diffuserEmission = showSegments ? stripColor * intensity * 0.06f : emission;
 
             if (_stripMaterial != null)
             {
-                _stripMaterial.color = stripColor * 0.35f;
-                if (_stripMaterial.HasProperty("_BaseColor")) _stripMaterial.SetColor("_BaseColor", stripColor * 0.35f);
-                if (_stripMaterial.HasProperty("_EmissionColor")) _stripMaterial.SetColor("_EmissionColor", emission);
+                _stripMaterial.color = stripColor * (showSegments ? 0.12f : 0.35f);
+                if (_stripMaterial.HasProperty("_BaseColor")) _stripMaterial.SetColor("_BaseColor", stripColor * (showSegments ? 0.12f : 0.35f));
+                if (_stripMaterial.HasProperty("_EmissionColor")) _stripMaterial.SetColor("_EmissionColor", diffuserEmission);
             }
 
             _diodeBlock ??= new MaterialPropertyBlock();
             int count = Mathf.Max(1, _diodes.Count);
             float chase = Mathf.Repeat(_animTime, 1f);
-            bool continuousChase = mode == LEDMode.Chase && ShouldBeLit;
+            bool continuousChase = ShouldRunContinuousChase;
             bool showChase = continuousChase || oneShotChase;
             float chasePhase = oneShotChase ? Mathf.Clamp01(oneShotPhase) : chase;
 
@@ -387,7 +401,10 @@ namespace VoxelEngine.Simulation
             else
             {
                 float pulseLength = Mathf.Clamp(stripLength * 0.18f, 0.08f, Mathf.Max(0.09f, stripLength * 0.45f));
-                float x = Mathf.Lerp(-usable * 0.5f, usable * 0.5f, Mathf.Repeat(phase, 1f));
+                float minX = -usable * 0.5f + pulseLength * 0.5f;
+                float maxX = usable * 0.5f - pulseLength * 0.5f;
+                if (maxX < minX) { minX = 0f; maxX = 0f; }
+                float x = Mathf.Lerp(minX, maxX, Mathf.Repeat(phase, 1f));
                 _chaseRenderer.transform.localPosition = stripOffset + new Vector3(x, 0.034f, 0f);
                 _chaseRenderer.transform.localScale = new Vector3(pulseLength, 0.014f, width);
             }
@@ -411,6 +428,16 @@ namespace VoxelEngine.Simulation
         {
             mode = newMode;
             _animTime = 0f;
+        }
+
+        public void SyncEffectPhase(float phase = 0f)
+        {
+            _animTime = Mathf.Max(0f, phase);
+            if (motionActivated && motionChaseOnActivation && ShouldBeLit)
+            {
+                _motionChaseActive = true;
+                _motionChaseStartTime = Time.time - Mathf.Clamp01(phase) * MotionChaseDuration;
+            }
         }
 
         public void SetSegmented(bool segmented)
