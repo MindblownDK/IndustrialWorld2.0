@@ -20,6 +20,9 @@ namespace VoxelEngine.GridSystem
         [Header("Grid State")]
         public Vector3Int GridPos;
         [System.NonSerialized] public GridEntity Grid;
+        [System.NonSerialized] public bool IsPrecisionAttachment;
+        [System.NonSerialized] public Vector3Int PrecisionGridPos;
+        [System.NonSerialized] public Vector3Int PrecisionHostGridPos;
 
         /// <summary>Master on/off toggle (set from the ship terminal). Functional
         /// blocks should respect this — a disabled block draws no power and does
@@ -54,7 +57,13 @@ namespace VoxelEngine.GridSystem
             currentHP -= amount;
             if (currentHP <= 0)
             {
-                if (Grid != null) Grid.RemoveBlock(GridPos);
+                if (Grid != null)
+                {
+                    if (IsPrecisionAttachment)
+                        Grid.GetComponent<GridPrecisionAttachmentLayer>()?.RemoveBlock(PrecisionGridPos);
+                    else
+                        Grid.RemoveBlock(GridPos);
+                }
                 return true;
             }
             return false;

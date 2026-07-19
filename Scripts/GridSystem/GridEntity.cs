@@ -32,6 +32,7 @@ namespace VoxelEngine.GridSystem
         private readonly Dictionary<Vector3Int, GridBlock> _blocks = new();
         public IReadOnlyDictionary<Vector3Int, GridBlock> Blocks => _blocks;
         public int BlockCount => _blocks.Count;
+        public GridPrecisionAttachmentLayer PrecisionAttachments => GetComponent<GridPrecisionAttachmentLayer>();
 
         // ── Physics ────────────────────────────────────────────────
         private Rigidbody _rb;
@@ -410,6 +411,17 @@ namespace VoxelEngine.GridSystem
                 if (kv.Value == null) continue;
                 mass += Mathf.Max(kv.Value.TotalMass, MinimumRuntimeBlockMass(kv.Value));
             }
+
+            var precisionLayer = PrecisionAttachments;
+            if (precisionLayer != null)
+            {
+                foreach (var kv in precisionLayer.Blocks)
+                {
+                    if (kv.Value == null) continue;
+                    mass += Mathf.Max(1f, kv.Value.TotalMass);
+                }
+            }
+
             TotalMass = mass;
             _rb.mass = Mathf.Max(1f, mass);
         }

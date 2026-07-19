@@ -32,6 +32,7 @@ namespace VoxelEngine.GridSystem
         private GridBlockItem _ghostItem;
         private Material _ghostMat;
         private bool _ghostIsShapeVariant;
+        private GridPrecisionLatticePreview _precisionLattice;
 
         private bool _ledStretchArmed;
         private GridEntity _ledStretchGrid;
@@ -63,14 +64,15 @@ namespace VoxelEngine.GridSystem
 
         private void Update()
         {
-            if (VoxelEngine.UI.UIState.IsBlocking) { HoldingGridBlock = false; HideGhost(); return; }
-            if (inventory == null) { HoldingGridBlock = false; return; }
+            if (VoxelEngine.UI.UIState.IsBlocking) { HoldingGridBlock = false; HideGhost(); HidePrecisionLattice(); return; }
+            if (inventory == null) { HoldingGridBlock = false; HidePrecisionLattice(); return; }
 
             var stack = inventory.ActiveStack;
             if (stack.IsEmpty || !(stack.item is GridBlockItem gbi))
             {
                 HoldingGridBlock = false;
                 HideGhost();
+                HidePrecisionLattice();
                 CancelLedStretch(false);
                 return;
             }
@@ -90,10 +92,20 @@ namespace VoxelEngine.GridSystem
             {
                 HideGhost();
                 HideLedStretchGhost();
+                HidePrecisionLattice();
                 return;
             }
 
             GridEntity targetGrid = hit.collider.GetComponentInParent<GridEntity>();
+            if (targetGrid != null
+                && targetGrid.gridSize == GridSize.Large
+                && gbi.gridSize == GridSize.Small
+                && IsShapeVariantItem(gbi))
+            {
+                HandlePrecisionAttachment(gbi, targetGrid, hit);
+                return;
+            }
+            HidePrecisionLattice();
             Vector3Int gridPos;
             Vector3 worldPos;
             Quaternion rotation = Quaternion.identity;
@@ -173,6 +185,121 @@ namespace VoxelEngine.GridSystem
             {
                 inventory.container.Remove(gbi, 1);
             }
+        }
+
+        private void HandlePrecisionAttachment(GridBlockItem item, GridEntity grid, RaycastHit hit)
+        {
+            if (item == null || grid == null) return;
+
+            Vector3Int faceAxis = SnapMountAxis(grid, hit.normal);
+            Vector3 localNormal = ((Vector3)faceAxis).normalized;
+            var hitBlock = hit.collider != null ? hit.collider.GetComponentInParent<GridBlock>() : null;
+            bool attachingToPrecisionBlock = hitBlock != null
+                && hitBlock.Grid == grid
+                && hitBlock.IsPrecisionAttachment;
+
+            Vector3Int precisionPos;
+            if (attachingToPrecisionBlock)
+            {
+                precisionPos = hitBlock.PrecisionGridPos + faceAxis;
+            }
+            else
+            {
+                float smallCellSize = GridSize.Small.CellSize();
+                Vector3 localCenter = grid.transform.InverseTransformPoint(hit.point)
+                    + localNormal * (smallCellSize * 0.5f);
+                precisionPos = new Vector3Int(
+                    Mathf.RoundToInt(localCenter.x / smallCellSize),
+                    Mathf.RoundToInt(localCenter.y / smallCellSize),
+                    Mathf.RoundToInt(localCenter.z / smallCellSize));
+            }
+
+            Vector3Int largeCell = hitBlock != null && hitBlock.Grid == grid
+                ? (hitBlock.IsPrecisionAttachment ? hitBlock.PrecisionHostGridPos : hitBlock.GridPos)
+                : grid.WorldToGrid(hit.point - hit.normal * 0.02f);
+            ShowPrecisionLattice(grid, largeCell, faceAxis);
+
+            var layer = grid.GetComponent<GridPrecisionAttachmentLayer>();
+            if (layer == null) layer = grid.gameObject.AddComponent<GridPrecisionAttachmentLayer>();
+
+            Vector3 localPosition = (Vector3)precisionPos * GridSize.Small.CellSize();
+            Vector3Int occupiedLargeCell = new(
+                Mathf.RoundToInt(localPosition.x / GridSize.Large.CellSize()),
+                Mathf.RoundToInt(localPosition.y / GridSize.Large.CellSize()),
+                Mathf.RoundToInt(localPosition.z / GridSize.Large.CellSize()));
+
+            bool supported = attachingToPrecisionBlock
+                ? layer.HasNeighbor(precisionPos)
+                : hitBlock != null && hitBlock.Grid == grid;
+            bool valid = supported
+                && layer.CanPlace(precisionPos)
+                && grid.GetBlock(occupiedLargeCell) == null;
+
+            Quaternion rotation = grid.transform.rotation
+                * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
+            Vector3 worldPosition = grid.transform.TransformPoint(localPosition);
+
+            if (valid) ShowGhost(item, worldPosition, rotation);
+            else HideGhost();
+
+            if (!GameSettings.WasPressed(InputAction.Build)) return;
+            if (!valid)
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show(
+                    "Precision Placement Blocked",
+                    supported ? "That small-grid lattice cell is occupied" : "Attach to a large-grid face or another precision block",
+                    item.icon,
+                    Color.red);
+                return;
+            }
+
+            GridBlock block;
+            if (item.blockPrefab != null)
+            {
+                var instance = Instantiate(item.blockPrefab);
+                block = instance.GetComponent<GridBlock>();
+                if (block == null) block = instance.AddComponent<GridBlock>();
+            }
+            else
+            {
+                block = GridBlock.CreateBlock<GridBlock>("Precision Block", GridSize.Small, item.iconTint);
+            }
+
+            block.blockName = item.displayName;
+            block.BlockMass = item.blockMass;
+            block.maxHP = item.blockHP;
+            var shapeVisual = block.GetComponent<GridShapeVariantBlock>();
+            if (shapeVisual == null) shapeVisual = block.gameObject.AddComponent<GridShapeVariantBlock>();
+            shapeVisual.Configure(VoxelEngine.UI.GridShapeWheel.CurrentShape, GridSize.Small);
+
+            Quaternion localRotation = Quaternion.Inverse(grid.transform.rotation) * rotation;
+            if (!layer.AddBlock(precisionPos, largeCell, block, localRotation))
+            {
+                Destroy(block.gameObject);
+                return;
+            }
+
+            inventory.container.Remove(item, 1);
+            VoxelEngine.UI.BuildFeedbackHud.Show(
+                "Precision Attached",
+                $"{item.displayName} · 5×5 large-face lattice",
+                item.icon,
+                item.iconTint);
+        }
+
+        private void ShowPrecisionLattice(GridEntity grid, Vector3Int largeCell, Vector3Int faceAxis)
+        {
+            if (_precisionLattice == null)
+            {
+                var preview = new GameObject("GridPrecisionLatticePreview");
+                _precisionLattice = preview.AddComponent<GridPrecisionLatticePreview>();
+            }
+            _precisionLattice.Show(grid, largeCell, faceAxis);
+        }
+
+        private void HidePrecisionLattice()
+        {
+            if (_precisionLattice != null) _precisionLattice.Hide();
         }
 
         private bool TryPlaceBlock(GridBlockItem item, GridEntity grid, Vector3Int gridPos, Vector3 worldPos, Quaternion rotation)

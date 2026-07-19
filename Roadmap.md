@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.63.2-dev`
-**Roadmap Version:** `5.63.2-dev`
+**Current Version:** `5.64.0-dev`
+**Roadmap Version:** `5.64.0-dev`
 **Date:** 2026-07-19
-**Status:** Active Implementation — Grid Shape Wheel Slice Alignment Fix; Unity Validation Pending
+**Status:** Active Implementation — Precision Small-on-Large Grid Attachments; Unity Validation Pending
 
 ---
 
@@ -47,7 +47,7 @@ The design goal is a seamless blend of:
 | Grid systems (ships/vehicles) | ✅ Mature | Needs lights, screens, armor, sloped blocks |
 | Maritime grid | 🟡 Basic | Needs refinement and feature parity |
 | Small grid | 🟡 Basic | Needs improvement and usability |
-| Unified small/large grid placement | 🛠️ WORKING ON | Roadmap updated in 5.62.3-dev: small and large grids should not remain separate build systems. Players should be able to place small-grid blocks on large-grid structures and large-grid blocks where supported, with a precision placement mode that overlays a small-grid placement lattice on large-grid faces for accurate sub-block placement. |
+| Unified small/large grid placement | 🛠️ WORKING ON | 5.64.0-dev adds the first functional interoperability slice: supported small structural armor blocks automatically use a visible 5×5 precision lattice when aimed at a large-grid face, attach to the moving large grid, support chained small-detail placement, retain shape variants/collision, and contribute mass. Broader small functional blocks, persistence, and validated large-on-small support remain open. |
 | Power (wind, hydrogen) | ✅ Mature | Modular turbines are excellent |
 | Fluids / gases | ✅ Good | Pipe-gated transfer in 2.20.0 |
 | Building (static + tiered) | 🛠️ Working On | 3.75 m spacing, scale, rotation, and player-away Doors are Unity-validated. Size-V5 closes Foundation deck seams and adds upward/downward Stair anchors at Foundation/Floor edges and Doorway thresholds; final validation is pending. |
@@ -59,7 +59,7 @@ The design goal is a seamless blend of:
 | Grid screens / displays | ✅ COMPLETED | All sizes, live text+power states, right-click+terminal config, custom text+custom colors+border+font, visual bar charts, multi-source, live camera feeds, power gain/loss/net mode, persistence, and camera block are validated by Thomas. (5.51.3-dev) |
 | Grid lighting | 🛠️ WORKING ON | Small/large single and dual spotlights, large-grid LED strip, premium segmented/clean LED visuals, spotlight/LED screen data providers, right-click spotlight config UI, collapsible ship-control data-type toggles, LED strip config UI, visible chase animation, and motion-activated lighting exist. Unity validation pending; static/placed lighting runtime persistence is implemented in 5.58.0-dev while full movable-grid save persistence remains future work. |
 | Sloped / armored grid blocks | ❌ Missing | Only cube blocks exist; need shape variants |
-| Grid shape variant wheel | 🛠️ WORKING ON | All six structural variants and textured collision meshes are validated by Thomas. 5.63.2-dev offsets each icon/label by half a segment so content sits in the center of its donut slice instead of on the separator gap. Final wheel alignment validation is pending. |
+| Grid shape variant wheel | ✅ COMPLETED | Thomas validated all six structural variants, textured collision meshes, accurate ghosts, and the corrected radial-wheel slice alignment in 5.63.2-dev. Step 18 remains the non-destructive authoring path. |
 | Player armor slots | ❌ Missing | No equipable armor system |
 | Crafting / items / storage | ✅ Exists | Needs deeper recipe chains |
 | Research / tech tree | ✅ Exists | Can be expanded into eras |
@@ -716,8 +716,8 @@ Statuses are evidence-based and move forward only after code/content review and 
 
 | Area | Status | Repository Audit |
 |------|--------|------------------|
-| Grid shape variants | 🛠️ WORKING ON | Thomas validated all six structural meshes, textures, and placement. The remaining gate is 5.63.2-dev wheel alignment validation after moving each icon/label from its separator angle to the center of its slice. |
-| Unified small/large grid placement | 🛠️ WORKING ON | Requirement and current size-separation constraints are identified; precision lattice attachment and cross-grid support validation remain next. |
+| Grid shape variants | ✅ COMPLETED | Thomas validated all six structural meshes, textures, collision, placement ghosts, selection behavior, and corrected wheel alignment. Step 18 provides the non-destructive setup connection. |
+| Unified small/large grid placement | 🛠️ WORKING ON | Supported small armor blocks now attach to large-grid faces through an automatic 5×5 precision lattice and remain parented to the moving host grid. Chained precision placement and mass contribution are included. Functional small blocks, save persistence, and large-on-small support remain next. |
 | Vehicle power foundations | 🟡 PARTIALLY COMPLETE | Grid batteries, solar, hydrogen engines, reactors, power accounting, docking, and multiple vehicle systems exist; the planned unified power network and full vehicle progression remain incomplete. |
 | Damage, armor, weapons, and life support | 🟡 PARTIALLY COMPLETE | Basic block HP/damage and one grid weapon foundation exist. Full typed damage, player armor, pooled ballistics, hazards, airtight support, and combat content remain open. |
 
@@ -1695,6 +1695,51 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.64.0-dev] Precision Small-on-Large Grid Attachments
+
+**Type:** MINOR — new save-compatible mixed-grid construction foundation (no existing save schema fields changed)
+
+**Validated:**
+- Thomas confirmed all six grid shapes, textured meshes, collision, ghosts, and final wheel slice alignment work correctly.
+- Grid Shape Variants are promoted to **✅ COMPLETED**.
+
+**Added:**
+- Added `GridPrecisionAttachmentLayer`, an additive small-grid occupancy layer hosted directly by a large `GridEntity`.
+- Supported Small Armor Blocks now automatically enter precision placement when aimed at a Large Grid face.
+- Added a cyan 5×5 face lattice matching the exact 0.5 m small-grid subdivisions across a 2.5 m large-grid cell.
+- Precision blocks:
+  - attach directly to the moving large-grid transform;
+  - use the currently selected Cube/Slope/Half/Corner shape;
+  - retain matching generated collision and authored textures;
+  - can chain outward from another precision block;
+  - reject occupied precision cells and large-cell overlap;
+  - contribute their item/block mass to the host grid;
+  - remove through the precision layer when destroyed instead of deleting the host large block.
+- Added clear placement feedback for successful precision attachment and blocked cells.
+- Step 18 now reports that the runtime precision large-face lattice is ready while preserving all existing authored values.
+
+**Scope / Compatibility:**
+- This first interoperability slice intentionally enables supported structural armor details only.
+- Existing large-grid coordinates and save data are untouched.
+- Precision attachment persistence, small functional blocks, combined power/network participation, and validated large-on-small support remain future slices.
+
+**Roadmap Status:**
+- Grid Shape Variants: **✅ COMPLETED**.
+- Unified small/large grid placement: **🛠️ WORKING ON**.
+
+**Manual Unity Steps:**
+1. Let Unity compile the new precision attachment and lattice scripts.
+2. Open `Tools > Voxel Engine > Voxel Engine Setup` and run **18. Setup Grid Shape Variants (Non-Destructive)** once so the Console confirms precision lattice readiness.
+3. Enter Play Mode and create or use a Large Grid with at least one Large Armor Block.
+4. Equip a Small Armor Block and aim at a Large Armor face.
+5. Confirm a cyan 5×5 lattice appears flush over that large face and the small-block ghost snaps between its lines.
+6. Place small Cube, Slope, Half Block, Half Slope, Corner, and Inverted Slope details at different lattice positions.
+7. Place another small block against an already attached precision block to verify chained detail construction.
+8. Attempt to place twice in the same precision cell and against a location occupied by a Large Grid block; confirm placement is blocked with feedback.
+9. Pilot or move the Large Grid and confirm every precision attachment follows it without drifting or creating a separate physics grid.
+10. Damage/remove a precision block and confirm the attached small block is removed without deleting its large host block.
+11. Confirm the host grid mass increases after precision blocks are attached.
 
 ### [5.63.2-dev] Grid Shape Wheel Slice Alignment Fix
 

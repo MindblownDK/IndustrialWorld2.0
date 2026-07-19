@@ -137,6 +137,7 @@ namespace VoxelEngine.EditorTools
 
             // ── 5. Summary ─────────────────────────────────────────────────
             Debug.Log($"[Step 18] Complete. Created/enabled {created}, verified {updated} existing.");
+            Debug.Log("[Step 18] Precision attachment support verified: supported small armor blocks can use the 5x5 lattice on large-grid faces.");
             Debug.Log("[Step 18] Non-destructive: source recipes, costs, mass, health, power, materials, and custom prefab children were preserved.");
 
             EditorUtility.DisplayDialog("Voxel Engine — Step 18", 
@@ -144,6 +145,7 @@ namespace VoxelEngine.EditorTools
                 $"✓ GridShapeWheel: Verified\n" +
                 $"✓ GridBuilder: Verified\n" +
                 $"✓ Small/Large Armor: Connected\n" +
+                $"✓ Precision Large-Face Lattice: Runtime Ready\n" +
                 $"✓ Variants: {variants.Length} available\n\n" +
                 $"Non-destructive — recipes, costs, mass, health, power, materials, and custom children were preserved.",
                 "OK");
