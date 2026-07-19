@@ -293,6 +293,10 @@ namespace VoxelEngine.Building
 
         public bool TryPlace(BlockItem block, RaycastHit hit, Vector3 viewDir)
         {
+            var targetGrid = hit.collider != null ? hit.collider.GetComponentInParent<GridEntity>() : null;
+            if (targetGrid != null && IsUnifiedPipe(block))
+                return TryPlaceUnifiedPipe(block, targetGrid, hit);
+
             ComputePlacementPose(hit, block, out Vector3 pos, out Quaternion rot);
             if (!IsPlacementValid(pos, block)) return false;
 
@@ -334,6 +338,47 @@ namespace VoxelEngine.Building
             // pose, so refresh this belt and its neighbours immediately instead of
             // waiting for the periodic connection scan.
             placedBelt?.RefreshTopologyImmediate();
+            return true;
+        }
+
+        /// <summary>
+        /// Attaches existing pipe items to the unified Detail lattice. The pipe keeps
+        /// its normal static-world behavior everywhere else, while this path gives it
+        /// a real GridBlock address so physics, networks, and persistence move together.
+        /// </summary>
+        private bool TryPlaceUnifiedPipe(BlockItem item, GridEntity grid, RaycastHit hit)
+        {
+            if (item == null || item.placedPrefab == null || grid == null) return false;
+            if (!UnifiedGridTopology.TryGetDetailPlacement(grid, hit,
+                    out var precisionPos, out var hostStructuralPos, out _)) return false;
+
+            var layer = grid.GetComponent<GridPrecisionAttachmentLayer>()
+                ?? grid.gameObject.AddComponent<GridPrecisionAttachmentLayer>();
+            if (!layer.CanPlace(precisionPos)) return false;
+
+            var go = Instantiate(item.placedPrefab);
+            var block = go.GetComponent<GridBlock>() ?? go.AddComponent<GridBlock>();
+            block.SourceItem = item;
+            block.blockName = item.displayName;
+            block.maxHP = item.blockHealth;
+            block.currentHP = item.blockHealth;
+
+            var placed = go.GetComponent<PlacedBlock>() ?? go.AddComponent<PlacedBlock>();
+            placed.Item = item;
+            placed.Hp = item.blockHealth;
+            placed.onGrid = true;
+
+            Quaternion worldRotation = grid.transform.rotation
+                * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
+            Quaternion localRotation = Quaternion.Inverse(grid.transform.rotation) * worldRotation;
+            if (!layer.AddBlock(precisionPos, hostStructuralPos, block, localRotation))
+            {
+                Destroy(go);
+                return false;
+            }
+
+            VoxelEngine.UI.BuildFeedbackHud.Show(
+                "Pipe Attached", $"{item.displayName} · Detail lattice", item.icon, item.iconTint);
             return true;
         }
 

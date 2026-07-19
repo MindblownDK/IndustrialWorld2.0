@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.68.5-dev`
-**Roadmap Version:** `5.68.5-dev`
+**Current Version:** `5.69.0-dev`
+**Roadmap Version:** `5.69.0-dev`
 **Date:** 2026-07-19
-**Status:** Unified Pipe Placement + Networks Completed; Unified Grid Persistence Next
+**Status:** Unified Movable-Grid Persistence Implemented — Unity Validation Pending
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
 ---
@@ -47,8 +47,8 @@ The design goal is a seamless blend of:
 | Cosmos / star system framework | 🟡 Exists | Needs planet-specific resources and interplanetary travel |
 | Grid systems (ships/vehicles) | ✅ Mature | Needs lights, screens, armor, sloped blocks |
 | Maritime grid | 🟡 Basic | Needs refinement and feature parity |
-| Detail-scale grid blocks | 🛠️ WORKING ON | Detail blocks now share the unified Grid with Structural blocks; persistence and complete positional network indexing remain open. |
-| Unified grid placement | 🛠️ WORKING ON | Detail/Structural placement, shape variants, screen sources, and unified Item/Gas/Liquid pipe placement/networks are validated. Pipe workflow is ✅ completed in 5.68.5-dev; unified movable-grid persistence remains the next open gate. |
+| Detail-scale grid blocks | 🟡 PARTIALLY COMPLETE | Detail blocks now share the unified Grid with Structural blocks. Save/restore now covers Structural and Detail addresses; Unity validation and remaining positional network indexing are open. |
+| Unified grid placement | 🟡 PARTIALLY COMPLETE | Detail/Structural placement, shape variants, screen sources, and unified Item/Gas/Liquid pipe placement/networks are validated. **5.69.0-dev** adds additive movable-grid save/restore for Structural and Detail blocks, variants, settings, and attached pipes; Unity validation remains the completion gate. |
 | Power (wind, hydrogen) | ✅ Mature | Modular turbines are excellent |
 | Fluids / gases | ✅ Good | Pipe-gated transfer in 2.20.0 |
 | Building (static + tiered) | 🛠️ Working On | 3.75 m spacing, scale, rotation, and player-away Doors are Unity-validated. Size-V5 closes Foundation deck seams and adds upward/downward Stair anchors at Foundation/Floor edges and Doorway thresholds; final validation is pending. |
@@ -507,7 +507,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Basic machines | 🟡 PARTIALLY COMPLETE | Electric Furnace, Crusher, and three Assembler tiers exist. Crusher/Assembler have recipe-selection UIs, visual animation, centralized simulation ticks, additive buffers/progress/enabled persistence, and Unity smoke validation from Thomas; production statistics and module systems remain. |
 | Storage blocks | 🟡 PARTIALLY COMPLETE | A basic chest and the wider storage system exist. The planned Wooden Crate → Iron Chest → Steel Chest → Provider/Requester progression is not complete. |
 | Power pole, wire, and substation | 🟡 PARTIALLY COMPLETE | Manual wiring, poles, substations, transformers, compact LV/HV one-link connectors, and 8-link wall/foundation relays exist. Setup reruns preserve balance while adding missing links. |
-| Grid/static lighting and LED strips | 🛠️ WORKING ON | Grid light, floodlight logic, static/grid LED assets, small/large spotlight variants, dual-output spotlights, large-grid LED strip, premium segmented LED visuals, right-click/grid-terminal spotlight config UI, data-type toggles, LED strip config UI, LED strip screen data sources, clean/segmented strip toggle, visible chase animation, and **5.57.0-dev** motion-activated lighting now exist. Static/placed runtime setting persistence is implemented in 5.58.0-dev; Unity validation and full movable-grid save persistence remain pending. |
+| Grid/static lighting and LED strips | 🛠️ WORKING ON | Grid light, floodlight logic, static/grid LED assets, small/large spotlight variants, dual-output spotlights, large-grid LED strip, premium segmented LED visuals, right-click/grid-terminal spotlight config UI, data-type toggles, LED strip config UI, LED strip screen data sources, clean/segmented strip toggle, visible chase animation, and **5.57.0-dev** motion-activated lighting now exist. **5.69.0-dev** carries grid-attached light settings through movable-grid save/restore; Unity validation remains pending. |
 | Shared Machine UI | 🟡 PARTIALLY COMPLETE | Crusher and Assembler panels now expose recipe selection, progress, power, toggles, inventory slots, scrolling, and item-port integration. Remaining work: complete unification across every machine, production statistics, and theme overrides. |
 | Item entity system | 🟡 PARTIALLY COMPLETE | Dropped world items exist and conveyors render carried packets. A unified pooled physical-item entity lifecycle is not complete. |
 | Recipe registry refactor | 🟡 PARTIALLY COMPLETE | ScriptableObject crafting and machine recipes exist. Shaped/shapeless/smelting/machine unification and validation remain incomplete. |
@@ -718,7 +718,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Area | Status | Repository Audit |
 |------|--------|------------------|
 | Grid shape variants | ✅ COMPLETED | Thomas validated all six structural meshes, textures, collision, placement ghosts, selection behavior, and corrected wheel alignment. Step 18 provides the non-destructive setup connection. |
-| Unified grid placement | 🛠️ WORKING ON | Thomas validated Detail-on-Structural lattice placement and size-labelled content. Gas/liquid topology and screen data-source addressing now resolve both block scales on one Grid; Unity validation and unified movable-grid persistence remain open. |
+| Unified grid placement | 🟡 PARTIALLY COMPLETE | Thomas validated Detail-on-Structural lattice placement and size-labelled content. Gas/liquid topology and screen data-source addressing now resolve both block scales on one Grid; **5.69.0-dev** adds persistence, pending Unity save/reload validation. |
 | Unified grid screen sources | ✅ COMPLETED | Thomas validated the unified screen/data-source work. Detail providers use precision-safe encoded addresses while legacy Structural addresses remain compatible. |
 | Unified pipe placement and networks | ✅ COMPLETED | Thomas validated existing Item/Gas/Liquid pipe Detail placement, one-to-five-cell Grid/world links, rotation-independent alignment, correct visual direction, midpoint arms, live ghost previews, stable topology, resource-safe ghosts, and wrench disconnect behavior. No duplicate pipe content was introduced. |
 | Vehicle power foundations | 🟡 PARTIALLY COMPLETE | Grid batteries, solar, hydrogen engines, reactors, power accounting, docking, and multiple vehicle systems exist; the planned unified power network and full vehicle progression remain incomplete. |
@@ -1689,8 +1689,8 @@ For each version, these are the high-level Unity tasks you will perform manually
 
 ## 10. Suggested Immediate Next Steps
 
-1. **Implement unified movable-grid persistence** for Structural blocks, precision Detail blocks, shape variants, functional settings, encoded screen sources, and attached pipes.
-2. **Add backward-compatible grid save migration** without changing existing world/chunk formats or requiring a fresh save.
+1. **Validate unified movable-grid persistence in Unity** for Structural blocks, precision Detail blocks, shape variants, functional settings, encoded screen sources, and attached pipes.
+2. **Validate backward-compatible grid save migration** with an existing pre-5.69.0 world state; no chunk/world format changes or fresh save may be required.
 3. **Continue Factory Foundations performance work** with pooled item entities and broader centralized simulation ticking.
 4. **Complete remaining unified Grid positional indexing** where legacy systems still read Structural-only coordinates.
 5. **Keep UI fit validation active** at 1280×720, 1366×768, 1920×1080, and ultrawide resolutions.

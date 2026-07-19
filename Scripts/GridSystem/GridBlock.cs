@@ -20,6 +20,8 @@ namespace VoxelEngine.GridSystem
         [Header("Grid State")]
         public Vector3Int GridPos;
         [System.NonSerialized] public GridEntity Grid;
+        /// <summary>Runtime source used by save/restore to recreate this exact authored block.</summary>
+        [System.NonSerialized] public VoxelEngine.Items.ItemDefinition SourceItem;
         [System.NonSerialized] public bool IsPrecisionAttachment;
         [System.NonSerialized] public Vector3Int PrecisionGridPos;
         [System.NonSerialized] public Vector3Int PrecisionHostGridPos;

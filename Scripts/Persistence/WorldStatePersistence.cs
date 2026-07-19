@@ -23,6 +23,7 @@ using VoxelEngine.Building;
 using VoxelEngine.Building.Tiered;
 using VoxelEngine.Crafting;
 using VoxelEngine.Items;
+using VoxelEngine.GridSystem;
 
 namespace VoxelEngine.Persistence
 {
@@ -34,6 +35,7 @@ namespace VoxelEngine.Persistence
         private Dictionary<string, ItemDefinition>            _itemById   = new();
         private Dictionary<string, BlockItem>                 _blockById  = new();
         private Dictionary<string, TieredBlockDefinition>     _tieredById = new();
+        private Dictionary<string, GridBlockItem>             _gridBlockById = new();
 
         private bool _loaded;
         private float _saveTimer;
@@ -72,7 +74,7 @@ namespace VoxelEngine.Persistence
         // ============================================================
         private void BuildItemCache()
         {
-            _itemById.Clear(); _blockById.Clear(); _tieredById.Clear();
+            _itemById.Clear(); _blockById.Clear(); _tieredById.Clear(); _gridBlockById.Clear();
             // Runtime-safe asset cache: rely on Resources-visible assets only.
             // This avoids hard dependencies on editor-only assemblies from the runtime asmdef.
             void CacheItem(ItemDefinition item)
@@ -80,6 +82,7 @@ namespace VoxelEngine.Persistence
                 if (item == null || string.IsNullOrEmpty(item.itemId)) return;
                 _itemById[item.itemId] = item;
                 if (item is BlockItem block) _blockById[item.itemId] = block;
+                if (item is GridBlockItem gridBlock) _gridBlockById[item.itemId] = gridBlock;
             }
 
             foreach (var item in Resources.LoadAll<ItemDefinition>("")) CacheItem(item);
@@ -107,6 +110,7 @@ namespace VoxelEngine.Persistence
                 SavePlayer(save);
                 SavePlacedBlocks(save);
                 SavePlacedTiered(save);
+                SaveGrids(save);
                 SaveQuarries(save);
                 File.WriteAllText(path, JsonUtility.ToJson(save, prettyPrint: true));
                 Debug.Log($"[WorldState] Saved -> {path}");
@@ -143,6 +147,9 @@ namespace VoxelEngine.Persistence
             foreach (var pb in placed)
             {
                 if (pb == null || pb.Item == null) continue;
+                // Grid-attached legacy blocks (such as unified pipes) belong to the
+                // movable-grid payload and must never also restore as static world blocks.
+                if (pb.GetComponent<GridBlock>()?.Grid != null) continue;
                 var entry = new SavedPlacedBlock
                 {
                     itemId = pb.Item.itemId,
@@ -568,12 +575,218 @@ namespace VoxelEngine.Persistence
 
                 RestorePlacedTiered(save);
                 RestorePlacedBlocks(save);
+                RestoreGrids(save);
                 RestorePlayer(save);
                 RestoreQuarries(save);
-                Debug.Log($"[WorldState] Loaded {save.placedTiered.Count} tiered + {save.placedBlocks.Count} blocks from {path}");
+                Debug.Log($"[WorldState] Loaded {save.placedTiered.Count} tiered + {save.placedBlocks.Count} blocks + {save.grids.Count} movable grids from {path}");
             }
             catch (Exception ex) { Debug.LogError("[WorldState] Load failed: " + ex.Message); }
             _loaded = true;
+        }
+
+        // ============================================================
+        //                    MOVABLE GRID PERSISTENCE
+        // ============================================================
+        // Additive schema: legacy world_state.json files do not contain `grids` and
+        // therefore continue through the normal static-world restore path unchanged.
+        private void SaveGrids(SaveData save)
+        {
+            foreach (var grid in FindObjectsByType<GridEntity>(FindObjectsInactive.Exclude))
+            {
+                if (grid == null || grid.BlockCount == 0) continue;
+
+                var entry = new SavedGrid
+                {
+                    pos = grid.transform.position,
+                    rot = grid.transform.rotation,
+                    gridSize = (int)grid.gridSize,
+                    gravityScale = grid.gravityScale,
+                    dampenersOn = grid.DampenersOn,
+                    hydrogenStored = grid.HydrogenStored,
+                    oxygenStored = grid.OxygenStored
+                };
+                if (grid.Body != null)
+                {
+                    entry.velocity = grid.Body.linearVelocity;
+                    entry.angularVelocity = grid.Body.angularVelocity;
+                }
+
+                foreach (var block in grid.AllBlocks)
+                {
+                    if (block == null) continue;
+                    var sourceItem = ResolveGridSourceItem(block);
+                    if (sourceItem == null || string.IsNullOrEmpty(sourceItem.itemId))
+                    {
+                        Debug.LogWarning($"[WorldState] Skipped grid block '{block.name}' because its source item could not be identified safely.");
+                        continue;
+                    }
+
+                    var savedBlock = new SavedGridBlock
+                    {
+                        itemId = sourceItem.itemId,
+                        localRotation = block.transform.localRotation,
+                        currentHP = block.currentHP,
+                        enabled = block.Enabled,
+                        isPrecision = block.IsPrecisionAttachment,
+                        gridPos = block.GridPos,
+                        precisionPos = block.PrecisionGridPos,
+                        precisionHostPos = block.PrecisionHostGridPos,
+                        container = TryFindContainer(block.gameObject)
+                    };
+
+                    var shape = block.GetComponent<GridShapeVariantBlock>();
+                    if (shape != null)
+                    {
+                        savedBlock.hasShapeVariant = true;
+                        savedBlock.shapeVariant = (int)shape.Variant;
+                    }
+
+                    // Existing machine, screen, and lighting state is deliberately
+                    // stored through the same tested payload used by static blocks.
+                    savedBlock.runtime = new SavedPlacedBlock();
+                    CaptureFactoryRuntime(block.gameObject, savedBlock.runtime);
+                    entry.blocks.Add(savedBlock);
+                }
+                save.grids.Add(entry);
+            }
+        }
+
+        /// <summary>
+        /// New placements retain their source directly. This conservative fallback also
+        /// migrates existing in-memory grids created before 5.69.0 when their authored
+        /// GridBlockItem display name has one unambiguous match.
+        /// </summary>
+        private ItemDefinition ResolveGridSourceItem(GridBlock block)
+        {
+            if (block == null) return null;
+            if (block.SourceItem != null) return block.SourceItem;
+
+            GridBlockItem match = null;
+            foreach (var candidate in _gridBlockById.Values)
+            {
+                if (candidate == null || candidate.displayName != block.blockName) continue;
+                if (match != null)
+                {
+                    // Never guess between two identically named authored items.
+                    return null;
+                }
+                match = candidate;
+            }
+            if (match != null) block.SourceItem = match;
+            return match;
+        }
+
+        private void RestoreGrids(SaveData save)
+        {
+            if (save.grids == null || save.grids.Count == 0) return;
+
+            foreach (var savedGrid in save.grids)
+            {
+                if (savedGrid == null || savedGrid.blocks == null || savedGrid.blocks.Count == 0) continue;
+                if (!System.Enum.IsDefined(typeof(GridSize), savedGrid.gridSize))
+                {
+                    Debug.LogWarning("[WorldState] Skipped a movable grid with an unknown grid size.");
+                    continue;
+                }
+
+                var grid = GridEntity.Create(savedGrid.pos, (GridSize)savedGrid.gridSize);
+                grid.name = "Grid (restored)";
+                grid.transform.rotation = savedGrid.rot;
+                grid.gravityScale = savedGrid.gravityScale > 0f ? savedGrid.gravityScale : grid.gravityScale;
+                grid.DampenersOn = savedGrid.dampenersOn;
+                grid.HydrogenStored = Mathf.Max(0f, savedGrid.hydrogenStored);
+                grid.OxygenStored = Mathf.Max(0f, savedGrid.oxygenStored);
+
+                // Structural blocks must be present before Detail blocks can restore
+                // their host-cell relationship and attached pipe topology.
+                RestoreGridBlocks(grid, savedGrid.blocks, false);
+                RestoreGridBlocks(grid, savedGrid.blocks, true);
+
+                if (grid.Body != null)
+                {
+                    grid.Body.linearVelocity = savedGrid.velocity;
+                    grid.Body.angularVelocity = savedGrid.angularVelocity;
+                }
+                grid.RecalculateMass();
+            }
+        }
+
+        private void RestoreGridBlocks(GridEntity grid, List<SavedGridBlock> blocks, bool precisionPass)
+        {
+            foreach (var saved in blocks)
+            {
+                if (saved == null || saved.isPrecision != precisionPass) continue;
+                if (!_itemById.TryGetValue(saved.itemId, out var sourceItem) || sourceItem == null)
+                {
+                    Debug.LogWarning($"[WorldState] Skipped grid block '{saved.itemId}' because its source item is unavailable.");
+                    continue;
+                }
+
+                GameObject prefab = sourceItem is GridBlockItem gridItem ? gridItem.blockPrefab
+                    : sourceItem is BlockItem placedItem ? placedItem.placedPrefab : null;
+                if (prefab == null)
+                {
+                    Debug.LogWarning($"[WorldState] Skipped grid block '{saved.itemId}' because its prefab is unavailable.");
+                    continue;
+                }
+
+                var go = Instantiate(prefab);
+                var block = go.GetComponent<GridBlock>() ?? go.AddComponent<GridBlock>();
+                block.SourceItem = sourceItem;
+                block.blockName = sourceItem.displayName;
+                if (sourceItem is GridBlockItem authoredGridItem)
+                {
+                    block.BlockMass = authoredGridItem.blockMass;
+                    block.maxHP = authoredGridItem.blockHP;
+                }
+                else if (sourceItem is BlockItem authoredPlacedItem)
+                {
+                    block.maxHP = authoredPlacedItem.blockHealth;
+                }
+                block.currentHP = saved.currentHP > 0f ? saved.currentHP : block.maxHP;
+                block.Enabled = saved.enabled;
+
+                if (sourceItem is BlockItem attachedItem)
+                {
+                    var placed = go.GetComponent<PlacedBlock>() ?? go.AddComponent<PlacedBlock>();
+                    placed.Item = attachedItem;
+                    placed.Hp = Mathf.RoundToInt(block.currentHP);
+                    placed.onGrid = true;
+                }
+
+                if (saved.hasShapeVariant && System.Enum.IsDefined(typeof(VoxelEngine.UI.GridShapeVariant), saved.shapeVariant))
+                {
+                    var shape = block.GetComponent<GridShapeVariantBlock>() ?? block.gameObject.AddComponent<GridShapeVariantBlock>();
+                    shape.Configure((VoxelEngine.UI.GridShapeVariant)saved.shapeVariant,
+                        precisionPass ? GridSize.Small : grid.gridSize);
+                }
+
+                if (precisionPass)
+                {
+                    var layer = grid.GetComponent<GridPrecisionAttachmentLayer>() ?? grid.gameObject.AddComponent<GridPrecisionAttachmentLayer>();
+                    if (!layer.AddBlock(saved.precisionPos, saved.precisionHostPos, block, saved.localRotation))
+                    {
+                        Destroy(go);
+                        continue;
+                    }
+                }
+                else
+                {
+                    if (grid.GetBlock(saved.gridPos) != null)
+                    {
+                        Destroy(go);
+                        continue;
+                    }
+                    block.transform.rotation = grid.transform.rotation * saved.localRotation;
+                    grid.AddBlock(saved.gridPos, block);
+                }
+
+                // OnPlaced initializes defaults, so reapply persisted state afterwards.
+                block.currentHP = saved.currentHP > 0f ? saved.currentHP : block.maxHP;
+                block.Enabled = saved.enabled;
+                if (saved.container != null) RestoreContainer(go, saved.container);
+                if (saved.runtime != null) RestoreFactoryRuntime(go, saved.runtime);
+            }
         }
 
         private void RestorePlayer(SaveData save)
@@ -982,6 +1195,36 @@ namespace VoxelEngine.Persistence
             public List<SavedPlacedBlock>  placedBlocks  = new();
             public List<SavedPlacedTiered> placedTiered = new();
             public List<SavedQuarry>       quarries     = new();
+            // Additive in 5.69.0: omitted by legacy saves and initialized by field default.
+            public List<SavedGrid>          grids        = new();
+        }
+        [Serializable] private class SavedGrid
+        {
+            public Vector3 pos;
+            public Quaternion rot;
+            public Vector3 velocity;
+            public Vector3 angularVelocity;
+            public int gridSize;
+            public float gravityScale;
+            public bool dampenersOn = true;
+            public float hydrogenStored;
+            public float oxygenStored;
+            public List<SavedGridBlock> blocks = new();
+        }
+        [Serializable] private class SavedGridBlock
+        {
+            public string itemId;
+            public Vector3Int gridPos;
+            public bool isPrecision;
+            public Vector3Int precisionPos;
+            public Vector3Int precisionHostPos;
+            public Quaternion localRotation;
+            public float currentHP;
+            public bool enabled = true;
+            public bool hasShapeVariant;
+            public int shapeVariant;
+            public SavedContainer container;
+            public SavedPlacedBlock runtime;
         }
         [Serializable] private class SavedPlayer
         {

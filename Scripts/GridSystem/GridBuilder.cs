@@ -295,6 +295,7 @@ namespace VoxelEngine.GridSystem
             block.blockName = item.displayName;
             block.BlockMass = item.blockMass;
             block.maxHP = item.blockHP;
+            block.SourceItem = item;
             if (IsShapeVariantItem(item))
             {
                 var shapeVisual = block.GetComponent<GridShapeVariantBlock>();
@@ -374,6 +375,7 @@ namespace VoxelEngine.GridSystem
             block.blockName = item.displayName;
             block.BlockMass = item.blockMass;
             block.maxHP = item.blockHP;
+            block.SourceItem = item;
 
             if (IsShapeVariantItem(item))
             {
@@ -669,6 +671,7 @@ namespace VoxelEngine.GridSystem
             block.blockName = item.displayName;
             block.BlockMass = item.blockMass;
             block.maxHP = item.blockHP;
+            block.SourceItem = item;
             var strip = block.GetComponentInChildren<VoxelEngine.Simulation.LEDStrip>(true);
             if (strip != null)
             {

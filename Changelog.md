@@ -1,9 +1,43 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `5.68.5-dev`  
+**Current Version:** `5.69.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [5.69.0-dev] Unified Movable-Grid Persistence
+
+**Type:** MINOR — new save-compatible movable-grid persistence. Existing world/chunk formats remain unchanged; saves without grid data continue to load normally.
+
+**Added:**
+- Added additive `grids` records to `world_state.json` for every non-empty movable Grid.
+- Saved and restored Grid root position, rotation, Grid size, gravity scale, dampener state, hydrogen/oxygen stockpiles, and Rigidbody linear/angular velocity.
+- Saved and restored Structural Grid blocks and 0.5 m Detail attachments in separate restore passes so Detail host-cell relationships remain valid.
+- Preserved item identity, local rotation, health, enabled state, container state, shape variants, machine runtime payloads, screen configuration, and configurable lighting payloads for saved Grid blocks.
+- Grid Builder now records the authored source item when placing Structural, Detail, and stretched LED Grid blocks, providing stable reconstruction after reload.
+- Existing Item, Gas, and Liquid pipe items now attach through the unified Detail lattice when aimed at a movable Grid. Their normal static-world placement remains unchanged.
+- Grid-attached legacy pipe blocks are excluded from the static placed-block save list, preventing duplicate restoration.
+
+**Compatibility / Safety:**
+- `grids` is an additive optional collection. A pre-5.69.0 `world_state.json` has no grid collection and loads through the existing path.
+- No chunk schema, terrain format, item, recipe, research, prefab, mass, HP, power production, throughput, or connection-range values were changed.
+- Blocks with no runtime source item are safely skipped with a descriptive Unity Console warning instead of corrupting the rest of the grid save.
+
+**Roadmap Status:**
+- Unified movable-grid persistence: **🛠️ WORKING ON → 🟡 PARTIALLY COMPLETE** (implementation complete; Unity validation is required before promotion).
+- Unified Grid placement: **🛠️ WORKING ON → 🟡 PARTIALLY COMPLETE**.
+
+**Manual Unity Steps:**
+1. Let Unity compile and confirm the runtime banner reports `5.69.0-dev`.
+2. No Voxel Engine Setup rerun is required: this release creates no new content assets, recipes, research, or prefabs.
+3. Create a movable Grid with multiple Structural blocks, at least two Detail blocks, and a non-Cube shape variant. Add a functional block with a toggle/configuration if available.
+4. Attach Item, Gas, and Liquid pipes to Detail lattice cells on the Grid; also place a matching pipe in the static world to confirm its existing workflow is unchanged.
+5. Change Grid transform/rotation and, if practical, establish non-zero movement. Save, quit/reload the world, and confirm Grid position, orientation, movement state, blocks, Detail addresses, shape variant, health, enabled state, and container/configuration values return correctly.
+6. Confirm each attached pipe moves with the Grid and restores exactly once. Confirm its visual link and functional network reconnect after reload.
+7. Load an existing pre-5.69.0 world and confirm its terrain, static blocks, player inventory, and factory state still load without an error or a fresh-save prompt.
+8. Run the test twice on the same world. Confirm no duplicated Grid blocks, pipes, or static placed blocks appear after the second reload.
 
 ---
 
