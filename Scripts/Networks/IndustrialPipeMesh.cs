@@ -315,15 +315,22 @@ namespace VoxelEngine.Networks
             {
                 for (int j = 0; j < neighbourWorldPositions.Count; j++)
                 {
-                    Vector3 d = neighbourWorldPositions[j] - selfWorld;
-                    if (d.sqrMagnitude < 1e-4f) continue;
+                    Vector3 worldDelta = neighbourWorldPositions[j] - selfWorld;
+                    if (worldDelta.sqrMagnitude < 1e-4f) continue;
 
-                    Vector3 dir = NearestCardinalAxis(d);
+                    // Generated geometry is parent-local. Using the world-space
+                    // direction as a local offset inverted/misrouted arms whenever a
+                    // pipe was rotated on a Grid face or during world placement.
+                    Transform pipeTransform = visualRoot.parent;
+                    Vector3 localDelta = pipeTransform != null
+                        ? pipeTransform.InverseTransformVector(worldDelta)
+                        : worldDelta;
+                    Vector3 dir = NearestCardinalAxis(localDelta);
                     int axisIdx = AxisIndex(dir);
                     if (axisIdx < 0 || axisUsed[axisIdx]) continue;
                     axisUsed[axisIdx] = true;
 
-                    float projected = Mathf.Abs(Vector3.Dot(d, dir));
+                    float projected = Mathf.Abs(Vector3.Dot(localDelta, dir));
                     // Long pipe links may bridge up to five grid cells. Clamp to the
                     // same gameplay limit so visuals never imply a longer connection.
                     float armEnd    = Mathf.Min(projected, gs * 5f);

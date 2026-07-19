@@ -1,0 +1,2690 @@
+# IndustrialWorld — Changelog
+
+**Branch:** `Dev`  
+**Current Version:** `5.68.1-dev`  
+
+All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [5.68.1-dev] Pipe Visual Direction Fix + Roadmap Changelog Split
+
+**Type:** PATCH — pipe visual orientation correction and documentation organization only (no save schema, runtime topology rule, prefab, recipe, item, research, throughput, HP, mass, or power changes)
+
+**Fixed:**
+- Fixed pipe connection arms extending in the opposite direction from the corresponding pipe on rotated Grid faces and rotated world placements.
+- `IndustrialPipeMesh` now converts each world-space neighbor delta into the pipe transform's local space before choosing the cardinal arm axis and calculating length.
+- Five-cell functional connectivity remains unchanged; only generated arm orientation is corrected.
+
+**Documentation:**
+- Moved the complete release history out of `Roadmap.md` into the new root-level `Changelog.md`.
+- Reduced `Roadmap.md` from more than 4,300 lines to roughly 1,700 lines so it focuses on vision, statuses, feature scope, setup steps, and next work.
+- Added a release-notes link beside the Roadmap metadata.
+- Updated README repository links and aligned its active development-branch convention with `Dev`.
+- Replaced the stale Roadmap immediate-next-step list with the current pipe validation, unified persistence, and Factory performance priorities.
+- Added Unity metadata for `Changelog.md`.
+
+**Roadmap Status:**
+- Five-cell pipe links remain **🛠️ WORKING ON** pending Thomas validation of corrected visual direction on Grid and world placement.
+
+**Manual Unity Steps:**
+1. Let Unity recompile; no Voxel Engine Setup rerun is required for this runtime visual-direction patch.
+2. Re-test two pipes on the same Detail row and confirm both arms point toward and meet the corresponding pipe.
+3. Rotate pipes through yaw, pitch, and roll on Grid faces and repeat in world placement.
+4. Confirm one-to-five-cell links point correctly; six-cell and diagonal pairs remain disconnected.
+
+### [5.68.0-dev] Five-Cell Pipe Links
+
+**Type:** MINOR — new save-compatible pipe connection range and matching visual spans (no save schema, duplicate content, recipe cost, throughput, HP, mass, or power changes)
+
+**Validated:**
+- Thomas confirmed the existing Item/Gas/Liquid pipe items now place perfectly through the 0.5 m Detail lattice.
+
+**Added / Changed:**
+- Item, Gas, and Liquid pipes can connect across up to five cells on one cardinal axis without requiring a pipe in every intermediate cell.
+- Detail Grid pipes use their 0.5 m cell size, giving a maximum 2.5 m center-to-center span.
+- Static-world pipes use the 1 m world grid, giving a maximum 5 m center-to-center span.
+- Added shared `PipeAdjacency.IsCardinalLink()` so long links remain strictly X/Y/Z aligned and never connect diagonally.
+- ItemPipeNetwork, GasNetwork, and FluidNetworkManager use the same five-cell functional rule.
+- Industrial pipe arms now extend to the same five-cell maximum, so visual links and actual connectivity cannot disagree.
+- Opposing pipe arms meet at the span midpoint instead of overlapping across the full distance, preventing long-link visual overlap/flicker while endpoint arms still reach machines and tanks.
+- Fluid spatial hashing now covers valid 5 m world spans without requiring an all-pairs scan.
+- Grid-aware network step calculation continues using each attached block's effective physical scale.
+- Step 18 appends the five-cell link capability to existing pipe descriptions without creating new items or changing balance.
+
+**Roadmap Status:**
+- Existing pipe Detail placement is validated.
+- Five-cell Item/Gas/Liquid links remain **🛠️ WORKING ON** pending Thomas's Grid and world-placement validation.
+
+**Manual Unity Steps:**
+1. Let Unity compile; no prefab regeneration is required for runtime connection code.
+2. Run `Tools > Voxel Engine > Voxel Engine Setup` → **18. Setup Grid Shape Variants (Non-Destructive)** once to refresh existing pipe descriptions.
+3. On a Grid, place two existing pipes on the same cardinal line at 1, 2, 3, 4, and 5 Detail-cell distances. Confirm each pair gets a continuous visual arm and functional connection.
+4. Place a pair 6 Detail cells apart and confirm no visual or functional link appears.
+5. Offset one pipe diagonally within the five-cell radius and confirm no link appears.
+6. Repeat for Item, Gas, and Liquid pipes.
+7. In world placement, repeat at 1–5 world-grid cell distances and confirm links; test 6 cells and diagonal offsets as rejection cases.
+
+### [5.67.1-dev] Detail Pipe Placement Compile Fix
+
+**Type:** PATCH — compile correction only (no save schema, runtime design, prefab, recipe, item, research, balance, or visual changes)
+
+**Fixed:**
+- Fixed `CS1061` in `PlayerInteractionTool.cs` where the `GridSize.CellSize()` extension was called from a namespace that did not import its extension namespace.
+- Replaced the extension-call syntax with the fully qualified `GridSizeExt.CellSize(GridSize.Small)` call.
+- Detail pipe size remains exactly `0.5 m`; all 5.67.0-dev placement behavior is unchanged.
+
+**Roadmap Status:**
+- Existing pipe Detail placement remains **🛠️ WORKING ON** pending Unity validation after compilation succeeds.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Confirm `PlayerInteractionTool.cs(606,70) CS1061` is gone.
+3. Continue the existing Item/Gas/Liquid pipe Detail-placement validation from 5.67.0-dev; no Voxel Engine Setup rerun is required for this compile-only patch.
+
+### [5.67.0-dev] Existing Pipes Gain Detail Grid Placement
+
+**Type:** MINOR — new save-compatible placement mode for existing pipe items (no duplicate pipe items/recipes, no save schema migration)
+
+**Validated / Clarified:**
+- Thomas confirmed the rest of the 5.66.0-dev unified Grid work functions correctly, including unified screen sources.
+- The project intentionally has one existing Item Pipe, one existing Gas Pipe family, and one existing Liquid Pipe family. Separate Detail/Grid pipe items are not wanted and are not created.
+
+**Added / Changed:**
+- The existing Item, Gas, and Liquid pipe `BlockItem` assets now automatically switch to 0.5 m Detail placement when aimed at a unified Grid.
+- The same item keeps its existing static-world placement when aimed away from a Grid.
+- BuildSystem now shows the shared cyan 5×5 lattice and a correctly snapped green/red pipe ghost before placement.
+- Grid placement uses `GridPrecisionAttachmentLayer`, so pipes move with the host and occupy real Detail cells.
+- Pipe visuals rebuild at 0.5 m spacing after attachment; colliders are constrained to the Detail cell.
+- Rotation uses the existing unified placement rotation controls.
+- Clicking an occupied Grid lattice cell no longer falls through to static-world placement inside the Grid.
+- Hold-to-place routes through the same Detail placement path.
+- Gas and Liquid pipe visual arms now use unified physical face adjacency for Detail pipes, connected pipes, and compatible endpoints.
+- Breaking a Detail-attached legacy `PlacedBlock` pipe now removes it from precision occupancy instead of leaving a stale occupied cell.
+- Step 18 non-destructively labels existing pipe items/recipes with `· 0.5 m` and adds a description explaining that no separate Grid pipe is required.
+
+**Roadmap Status:**
+- Unified Grid screen sources: **✅ COMPLETED**.
+- Unified pipe placement and networks: **🛠️ WORKING ON** pending Thomas validation.
+- Unified movable-grid persistence remains open.
+
+**Manual Unity Steps:**
+1. Let Unity compile.
+2. Run `Tools > Voxel Engine > Voxel Engine Setup` → **18. Setup Grid Shape Variants (Non-Destructive)** once.
+3. Confirm existing Item Pipe, Gas Pipe, Gas Pipe (Glass), Liquid Pipe, and Liquid Pipe (Glass) names receive `· 0.5 m` exactly once; confirm no duplicate Grid/Detail pipe items are created.
+4. Equip each existing pipe item and aim at a Structural block face. Confirm the cyan 5×5 lattice and 0.5 m ghost appear.
+5. Place multiple pipes across the face and chain pipes from attached pipes. Confirm occupied cells show a red ghost and cannot fall back to static placement.
+6. Aim at terrain away from a Grid and place the same item. Confirm normal static-world pipe placement still works.
+7. Connect existing Gas Pipes from a compatible gas endpoint/tank and confirm visual arms plus transfer follow physical touching faces.
+8. Repeat with existing Liquid Pipes and a compatible liquid endpoint/tank.
+9. Break an attached pipe, then place another pipe in the same Detail cell to confirm occupancy was released.
+
+### [5.66.0-dev] Unified Grid Networks + Screen Sources
+
+**Type:** MINOR — new save-compatible cross-scale topology and screen-address foundation (legacy Structural screen addresses remain compatible)
+
+**Validated:**
+- Thomas confirmed Detail-on-Structural placement, lattice rendering, ghosts, collision, and physical-size labels now work perfectly.
+
+**Added / Improved:**
+- Added `UnifiedGridTopology`, a shared physical adjacency service for the one-Grid architecture.
+- Detail and Structural blocks now detect adjacency by actual touching faces and per-block physical extents rather than assuming every block uses one coordinate step.
+- Gas networks now include Detail and Structural pipes/tanks on the same Grid for pipe detection, available gas, broad fill/draw, and topology-gated transfer.
+- Liquid networks now include both scales and can traverse cross-scale touching pipe runs to compatible tanks.
+- Network traversal uses block references with cycle protection and de-duplicates tanks before transfer.
+- Added precision-safe encoded Grid addresses for screen sources:
+  - existing Structural `GridPos` addresses remain unchanged;
+  - Detail precision coordinates use a reserved encoded address range;
+  - no existing screen source list/schema field is removed.
+- Grid screens now discover Detail data providers, auto-link to the nearest Detail or Structural provider, resolve selected precision sources, and remove stale sources safely.
+- Component-based providers such as Detail LED strips remain supported because address resolution returns the owning Grid block before provider-component lookup.
+- Step 18 now reports unified gas, liquid, tank, and screen-source topology readiness.
+
+**Roadmap Status:**
+- Unified Grid placement remains **🛠️ WORKING ON**.
+- Unified grid networks and screens are **🛠️ WORKING ON** pending Thomas's cross-scale Unity validation.
+- Unified movable-grid persistence remains the primary completion gate.
+
+**Manual Unity Steps:**
+1. Let Unity recompile; no prefab regeneration is required for the runtime topology code.
+2. Run `Tools > Voxel Engine > Voxel Engine Setup` → **18. Setup Grid Shape Variants (Non-Destructive)** once and confirm the unified-topology readiness log.
+3. On one Grid, place a Structural gas pipe/tank and connect a Detail gas pipe or compatible Detail gas block so their physical faces touch.
+4. Confirm gas availability/transfer recognizes the cross-scale connected run and does not cross a visible gap.
+5. Repeat with liquid pipes and a compatible liquid tank.
+6. Place a Grid Screen plus a Detail Spotlight, Detail LED Strip, camera, battery, or other data provider on the same Grid.
+7. Open Screen Config and confirm Detail providers appear alongside Structural providers.
+8. Select a Detail provider, confirm live data appears, clear/reselect it, and verify auto-link can choose the nearest provider across either scale.
+9. Remove a selected Detail source and confirm the screen removes the stale source without errors.
+10. Re-test an existing Structural screen source to confirm legacy source addressing still works.
+
+### [5.65.1-dev] Precision Lattice MeshFilter Fix + Block Size Labels
+
+**Type:** PATCH — runtime placement exception fix and non-destructive naming clarity (no save schema, public API, recipe cost, HP, mass, power, material, or prefab-geometry changes)
+
+**Root Cause / Fixed:**
+- The precision placement branch was reached correctly, but `GridPrecisionLatticePreview.EnsureObjects()` attempted to assign `sharedMesh` through a missing/marshalled-null `MeshFilter`.
+- The exception interrupted `HandlePrecisionAttachment()` before the ghost and build input could complete, which made Detail blocks appear impossible to place on Structural faces.
+- Added mandatory `MeshFilter` and `MeshRenderer` requirements to the lattice preview component.
+- Added eager initialization in `Awake()`.
+- Replaced null-coalescing component lookup with explicit Unity-object validity checks and guaranteed `AddComponent` fallbacks before mesh assignment.
+
+**Added / Improved:**
+- Step 18 now appends the authored physical size to every Grid Block item name and corresponding recipe name:
+  - `Armor Detail Block · 0.5 m`
+  - `Armor Structural Block · 2.5 m`
+- Detail items receive `0.5 m`; Structural items receive `2.5 m`.
+- The pass is idempotent and does not append the size more than once.
+- Existing custom names are preserved and receive only the requested physical-size suffix.
+
+**Roadmap Status:**
+- Unified Grid placement remains **🛠️ WORKING ON** pending Thomas validation that the lattice, ghost, and placement now complete without an exception.
+
+**Manual Unity Steps:**
+1. Let Unity recompile; the old runtime `GridPrecisionLatticePreview` object will be discarded when Play Mode restarts.
+2. Run `Tools > Voxel Engine > Voxel Engine Setup` → **18. Setup Grid Shape Variants (Non-Destructive)** once to append physical sizes to Grid Block items and recipes.
+3. Confirm inventory/crafting names include `0.5 m` or `2.5 m` exactly once.
+4. Enter Play Mode, equip `Armor Detail Block · 0.5 m`, and aim at `Armor Structural Block · 2.5 m`.
+5. Confirm no `MissingComponentException` occurs, the cyan 5×5 lattice appears, the Detail ghost remains visible, and placement succeeds.
+6. Move across all 25 face cells and place several blocks to verify snapping and occupancy.
+
+### [5.65.0-dev] One Grid — Detail + Structural Block Scales
+
+**Type:** MINOR — expanded save-compatible unified-grid construction/runtime foundation (no existing save schema fields removed)
+
+**Direction Confirmed:**
+- There is now one player-facing **Grid**.
+- Blocks retain two physical scales: **Detail** (0.5 m) and **Structural** (2.5 m).
+- Internal legacy scale data remains temporarily for asset compatibility, but players no longer choose or convert between separate grid types.
+
+**Fixed:**
+- Fixed the 5.64.0-dev direct-face validation error that hid the Detail-block ghost while aiming at a Structural armor face and blocked every placement.
+- Direct exposed Structural faces no longer fail a macro-cell overlap test intended only for chained Detail placement.
+
+**Added / Changed:**
+- Precision attachment now accepts every Detail `GridBlockItem`, not only shape-enabled armor.
+- Shape generation is applied only to supported structural armor items; functional Detail blocks retain their authored prefabs.
+- Every newly created construct uses one universal host Grid, including Detail-first construction.
+- Added `GridEntity.AllBlocks` so Detail attachments participate in host power, batteries, gas totals, thrust, gyroscopes, wheels, tool groups, cockpit gauges, terminal controls/storage, production cargo lookup, and grid-center calculation.
+- Added per-block effective scale resolution so attached Detail thrusters, drills, landing gear, detectors, docking ports, beacons, and lighting retain Detail-scale behavior on the universal host.
+- Structural blocks can be placed from Detail construction only when Detail blocks physically reach the Structural face and the Structural volume is clear.
+- Retired destructive runtime grid-size conversion while preserving the old method as a safe serialized-event compatibility shim.
+- Cockpit size-switch buttons are hidden and replaced with `UNIFIED GRID · DETAIL + STRUCTURAL`.
+- Removed player-facing grid-size wording from the basic cockpit log.
+- Step 18 non-destructively migrates legacy player-facing grid-type labels across Grid Block items/recipes to **Detail** and **Structural** wording, including:
+  - `Armor Detail Block`
+  - `Armor Structural Block`
+  Existing custom names without legacy size prefixes and every balance value remain preserved.
+
+**Roadmap Status:**
+- Grid Shape Variants remain **✅ COMPLETED**.
+- Unified Grid placement remains **🛠️ WORKING ON** pending Unity validation and later persistence plus fluid/gas/screen positional indexing.
+
+**Manual Unity Steps:**
+1. Let Unity compile.
+2. Run `Tools > Voxel Engine > Voxel Engine Setup` → **18. Setup Grid Shape Variants (Non-Destructive)** once to apply the safe Detail/Structural armor naming and verify unified-grid support.
+3. Enter Play Mode, equip `Armor Detail Block`, and aim directly at an `Armor Structural Block` face.
+4. Confirm the cyan 5×5 lattice and Detail ghost remain visible while hovering the face.
+5. Place Detail blocks in multiple cells and confirm placement succeeds.
+6. Test a Detail functional block such as a light on the same Grid; confirm it follows the host and contributes to host power simulation.
+7. Start a new construct using a Detail block first, then continue adding Detail blocks; confirm no grid-type choice appears.
+8. Build a Detail support line until it touches a future Structural face, then place a Structural block; confirm placement succeeds only with support and clear volume.
+9. Open the cockpit UI and confirm no Small Grid / Large Grid switch buttons remain; the unified-grid label is shown instead.
+10. Confirm existing recipe costs, HP, mass, power values, materials, and custom prefab content remain unchanged.
+
+### [5.64.0-dev] Precision Small-on-Large Grid Attachments
+
+**Type:** MINOR — new save-compatible mixed-grid construction foundation (no existing save schema fields changed)
+
+**Validated:**
+- Thomas confirmed all six grid shapes, textured meshes, collision, ghosts, and final wheel slice alignment work correctly.
+- Grid Shape Variants are promoted to **✅ COMPLETED**.
+
+**Added:**
+- Added `GridPrecisionAttachmentLayer`, an additive small-grid occupancy layer hosted directly by a large `GridEntity`.
+- Supported Small Armor Blocks now automatically enter precision placement when aimed at a Large Grid face.
+- Added a cyan 5×5 face lattice matching the exact 0.5 m small-grid subdivisions across a 2.5 m large-grid cell.
+- Precision blocks:
+  - attach directly to the moving large-grid transform;
+  - use the currently selected Cube/Slope/Half/Corner shape;
+  - retain matching generated collision and authored textures;
+  - can chain outward from another precision block;
+  - reject occupied precision cells and large-cell overlap;
+  - contribute their item/block mass to the host grid;
+  - remove through the precision layer when destroyed instead of deleting the host large block.
+- Added clear placement feedback for successful precision attachment and blocked cells.
+- Step 18 now reports that the runtime precision large-face lattice is ready while preserving all existing authored values.
+
+**Scope / Compatibility:**
+- This first interoperability slice intentionally enables supported structural armor details only.
+- Existing large-grid coordinates and save data are untouched.
+- Precision attachment persistence, small functional blocks, combined power/network participation, and validated large-on-small support remain future slices.
+
+**Roadmap Status:**
+- Grid Shape Variants: **✅ COMPLETED**.
+- Unified small/large grid placement: **🛠️ WORKING ON**.
+
+**Manual Unity Steps:**
+1. Let Unity compile the new precision attachment and lattice scripts.
+2. Open `Tools > Voxel Engine > Voxel Engine Setup` and run **18. Setup Grid Shape Variants (Non-Destructive)** once so the Console confirms precision lattice readiness.
+3. Enter Play Mode and create or use a Large Grid with at least one Large Armor Block.
+4. Equip a Small Armor Block and aim at a Large Armor face.
+5. Confirm a cyan 5×5 lattice appears flush over that large face and the small-block ghost snaps between its lines.
+6. Place small Cube, Slope, Half Block, Half Slope, Corner, and Inverted Slope details at different lattice positions.
+7. Place another small block against an already attached precision block to verify chained detail construction.
+8. Attempt to place twice in the same precision cell and against a location occupied by a Large Grid block; confirm placement is blocked with feedback.
+9. Pilot or move the Large Grid and confirm every precision attachment follows it without drifting or creating a separate physics grid.
+10. Damage/remove a precision block and confirm the attached small block is removed without deleting its large host block.
+11. Confirm the host grid mass increases after precision blocks are attached.
+
+### [5.63.2-dev] Grid Shape Wheel Slice Alignment Fix
+
+**Type:** PATCH — radial-wheel positioning/readability correction only (no save schema, public API, prefab, recipe, item, research, balance, or runtime mesh changes)
+
+**Validated:**
+- Thomas confirmed the functional grid variants, collision, opacity, and textures now work perfectly.
+
+**Fixed / Improved:**
+- Fixed the actual remaining wheel layout cause: segment content was positioned at each segment's starting angle, which is exactly where the black separator gap is drawn.
+- Added a half-segment angular offset so every icon and label is centered inside its own white/cyan donut slice.
+- Preserved the corrected wheel center, radial distance, compact containers, hover scaling, and selected-segment color.
+- Slightly increased ring icon and label sizes now that they occupy the usable middle of each slice.
+- Center labels now use readable spacing: `HALF BLOCK`, `HALF SLOPE`, and `INVERTED SLOPE`.
+
+**Roadmap Status:**
+- Structural grid meshes/textures are validated.
+- Grid shape variants remain **🛠️ WORKING ON** only until Thomas confirms the corrected wheel slice alignment.
+
+**Manual Unity Steps:**
+1. Let Unity recompile; no Voxel Engine Setup rerun is required for this UI positioning patch.
+2. Equip a Small or Large Armor Block and hold the Build Wheel input.
+3. Confirm FULL, SLOPE, HALF, H-SL, CORNER, and INV each appear centered inside a donut slice rather than over a black separator.
+4. Move the pointer around all six slices and confirm the highlighted cyan slice matches the icon/label shown in that slice.
+5. Release on each segment and confirm the center label reports the expected selected shape.
+
+### [5.63.1-dev] Grid Shape Material + Wheel Fit Fix
+
+**Type:** PATCH — shape rendering and radial-wheel layout corrections only (no save schema, public API, recipe, item cost, mass, HP, or power changes)
+
+**Fixed / Improved:**
+- Corrected triangle winding on Slope, Half Slope, Inverted Slope, and Corner meshes so their visible faces point outward instead of being culled from normal viewing angles.
+- Expanded generated triangles for flat industrial shading with clean hard edges.
+- Added dominant-face UV projection to every generated shape triangle, allowing the existing authored armor material textures to render instead of sampling one texture point across the whole block.
+- Ghost and final placement still share the exact same mesh generator.
+- Reduced the Grid Shape wheel center disc to create proper negative space for segment content.
+- Re-centered all segment labels around the actual 420 px wheel center.
+- Moved labels/icons to the middle of the visible donut band and reduced their containers/font sizes so every variant fits inside its own segment.
+- Increased wheel backdrop opacity slightly so world geometry does not visually compete with the selector.
+
+**Roadmap Status:**
+- Grid shape variants remain **🛠️ WORKING ON** pending Thomas validation of opaque textured faces and corrected wheel fit.
+
+**Manual Unity Steps:**
+1. Let Unity recompile; no setup rerun is required because this patch changes runtime mesh/UV and UI layout code only.
+2. Enter Play Mode and inspect existing newly placed variant blocks. If a block instance was created before recompilation, remove and place it again so its runtime mesh rebuilds.
+3. Place Slope, Half Slope, Corner, and Inverted Slope variants and confirm every exterior face is opaque from normal viewing angles.
+4. Confirm the armor material/texture appears across top, side, and sloped faces rather than as a flat untextured color.
+5. Open the Grid Shape wheel and confirm every icon and label stays inside its own white/cyan donut segment without touching the center disc or segment gaps.
+6. Confirm the darker backdrop makes the wheel readable over nearby grid geometry.
+
+### [5.63.0-dev] Functional Grid Shape Variants
+
+**Type:** MINOR — new save-compatible structural grid placement feature and non-destructive Step 18 authoring (no save schema migration)
+
+**Added / Improved:**
+- Added `GridShapeVariantBlock`, a reusable runtime component that generates closed, convex, cell-aligned structural meshes for:
+  - Cube
+  - Slope
+  - Half Block
+  - Half Slope
+  - Corner
+  - Inverted Slope
+- Shape variants now receive matching convex `MeshCollider` collision instead of retaining a full-cube collider.
+- GridBuilder now applies the selected wheel shape to the placed structural block; the previous implementation changed only the ghost.
+- Ghost previews now use the same mesh generator as final placement, preventing preview/result mismatch.
+- Added an explicit `supportsShapeVariants` capability to `GridBlockItem` so the shape wheel no longer opens for unrelated items merely because their display name contains “block”.
+- Existing armor prefabs remain compatible through a safe `GridArmorBlock` fallback before Step 18 is run.
+- Step 18 now non-destructively:
+  - enables shape variants on supported Small and Large Armor items;
+  - repairs a missing expected prefab link when the prefab exists;
+  - adds `GridShapeVariantBlock` to linked armor prefabs only when missing;
+  - preserves recipes, crafting costs, item mass, block health, power values, materials, and custom prefab children;
+  - remains idempotent on repeated runs.
+- Added an evidence-based 4.7.0 execution table for shape variants, unified grid placement, vehicle power, and combat/life-support foundations.
+- Removed a legacy external-title reference and abbreviation from grid-system code comments to keep shipped code aligned with the repository naming rule.
+
+**Roadmap Status:**
+- Grid shape variants remain **🛠️ WORKING ON** until Step 18 passes two-run setup validation and all six shapes are tested in Unity on both grid sizes.
+- Unified small/large grid placement remains **🛠️ WORKING ON** and is the next implementation slice after shape validation.
+
+**Manual Unity Steps:**
+1. Let Unity compile `GridShapeVariantBlock.cs` and the updated placement/setup scripts.
+2. Open `Tools > Voxel Engine > Voxel Engine Setup`.
+3. Run **18. Setup Grid Shape Variants (Non-Destructive)**.
+4. Run Step 18 a second time. Confirm the second run reports existing links/components as verified and creates no duplicates.
+5. Equip a Small Armor Block and hold the configured Build Wheel input.
+6. Select and place each shape: Cube, Slope, Half Block, Half Slope, Corner, and Inverted Slope.
+7. Confirm the cyan ghost exactly matches the final placed mesh.
+8. Walk and place blocks against each shape to confirm collision follows the visible surface rather than a hidden full cube.
+9. Repeat Steps 5–8 with a Large Armor Block.
+10. Equip unrelated items such as Camera Block, Battery Block, or Camera equipment and confirm the Grid Shape wheel does not open for them.
+11. Re-run existing armor recipes and confirm their costs, mass, HP, materials, and prefab custom children were not reset.
+
+### [5.62.5-dev] Roadmap Execution Status Audit + Runtime Version Sync
+
+**Type:** PATCH — documentation/status correction and runtime version synchronization only (no save schema, public API, prefab, recipe, item, research, or balance changes)
+
+**Fixed / Improved:**
+- Synchronized `GameVersion` with the repository/roadmap version; runtime surfaces now report `5.62.5-dev` instead of the stale `5.50.0-dev`.
+- Added explicit **WORKING ON** / **PARTIALLY COMPLETE** execution markers to every Master Roadmap release row.
+- Documented the evidence rule used for later roadmap sections: existing shared foundations count as partial progress, but no headline feature is treated as complete before its setup workflow and Unity validation pass.
+- Updated the roadmap date and active implementation summary.
+
+**Repository Audit:**
+- Confirmed work is on the case-sensitive `Dev` branch.
+- Confirmed the project contains 467 C# scripts across the voxel world, grid, simulation, crafting, power, persistence, UI, cosmos, weather, water, research, and editor-tooling domains.
+- Confirmed setup Steps 17, 18, and 19 exist for factory/HV content, grid shape variants, and grid screens.
+- Confirmed no external game title appears in shipped C# or authored asset text scanned by the audit.
+- Identified remaining completion blockers already represented by roadmap statuses: pending Unity validation, incomplete unified simulation/pooling, missing combat/life-support headline systems, and later-era content that currently has foundations only.
+
+**Roadmap Status:**
+- Factory Foundations, Production Lines, Power/Vehicles/Combat, and Logistics 2.0 remain **🛠️ WORKING ON**.
+- Living Worlds and later roadmap releases remain **🟡 PARTIALLY COMPLETE** until their named systems, non-destructive setup steps, and Unity validation gates are complete.
+- Large-grid doors remain **🛠️ WORKING ON** pending Thomas's 5.62.4-dev validation pass.
+
+**Manual Unity Steps:**
+1. Open the Unity project containing this repository as its `Assets` folder and let scripts recompile.
+2. Enter Play Mode once and confirm the Console version banner reports `5.62.5-dev`.
+3. No Voxel Engine Setup step is required for this documentation/version synchronization patch because no prefab, item, recipe, or research content changed.
+
+### [5.62.4-dev] Door Panel Detail Animation + Open Distance Fix
+
+**Type:** PATCH — door animation/prefab tuning only (no save schema or recipe balance changes)
+
+**Fixed / Improved:**
+- Door decorative pieces now move with their owning sliding panel instead of staying stuck on the front of the frame.
+  - Single sliding door: diagonal inset, access panel/glow, number stripe move with the panel.
+  - Double sliding door: left access details and right ribs move with their panels.
+  - Vault door: vault slab, bolts, wheel/core, and bars move together.
+- Fixed the vault handle animation foundation: vault core/bars rotate while opening/closing.
+- Increased open slide distance for all large-grid door variants so panels clear the doorway much more completely.
+- Door closed positions are cached once and all moving generated details animate from those cached positions, preventing infinite drift.
+
+**Roadmap Status:**
+- Large-grid doors remain **🛠️ WORKING ON** pending Thomas validation that panels/details move together and doors open fully.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Run `Tools > Voxel Engine > Voxel Engine Setup` → **17. Build Factory Foundations + HV Grid** to refresh door prefab values.
+3. Place the Large Sci-Fi Sliding Door and confirm all front details move with the panel.
+4. Place the Large Double Sliding Door and confirm both panels/details move apart and clear the frame.
+5. Place the Heavy Vault Door and confirm the handle/core rotates and the vault slab opens without leaving front details behind.
+
+### [5.62.3-dev] Door Upright Top-Edge + Vault Animation Fix
+
+**Type:** PATCH — door placement/animation fix plus roadmap addition (no save schema, recipe, or balance changes)
+
+**Fixed:**
+- Fixed single-panel/vault doors sliding away forever. `GridSlidingDoor` now caches closed panel positions once, so one-panel vault doors no longer recache their moving panel as the new closed position every frame.
+- Top/floor-face door placement now mounts the door upright on the nearest top edge instead of trying to place a flat door on the clicked face.
+- Top-edge door placement intentionally bypasses direct face-neighbour validation because the mounted door cell is diagonal from the clicked host cell but visually sits on the top edge.
+- Removed the full central door backfill slab by shrinking the generated `Generated_DoorBackFill` to a tiny compatibility marker. This prevents the vault/sliding doors from looking like two door layers stacked on top of each other when opening, while the enlarged panels/inner seals still close visual gaps.
+
+**Roadmap Added:**
+- Added **Unified small/large grid placement** to the roadmap/current-state snapshot.
+- Goal: small and large grids should not remain separate build systems. Players should be able to attach small-grid detail blocks to large-grid structures, with a precision placement mode that shows a small-grid lattice overlay on large-grid faces for accurate sub-block placement.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Run `Tools > Voxel Engine > Voxel Engine Setup` → **17. Build Factory Foundations + HV Grid** to refresh generated door visuals.
+3. Place a Large Sci-Fi Sliding Door / Large Double Sliding Door / Heavy Vault Door from the top face near an edge. Confirm it stands upright on the edge.
+4. Open/close the Heavy Vault Door and confirm it no longer slides forever and no second full slab remains behind it.
+5. Check that the closed door panels still cover the frame without visible gaps.
+
+### [5.62.2-dev] Door Upright Edge Placement Fix
+
+**Type:** PATCH — grid door placement fix only (no save schema, recipe, or balance changes)
+
+**Fixed:**
+- Grid doors no longer lie flat when the player clicks a floor/top face.
+- If a floor/ceiling face is clicked while placing a door, GridBuilder now selects the nearest horizontal block edge and places the door upright on that edge.
+- Door placement now derives the outward-facing normal from the selected edge and keeps the door's up vector aligned with grid up, so large sliding/vault doors stand vertically like real doors.
+- Side-face placement still works normally and keeps the door mounted on the selected side face.
+
+**Roadmap Status:**
+- Large-grid doors remain **🛠️ WORKING ON** pending Thomas validation of upright edge placement and visuals.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Equip a Large Sci-Fi Sliding Door / Large Double Sliding Door / Heavy Vault Door.
+3. Aim at the top face of a large grid block near an edge and place it.
+4. Confirm the door stands upright on that edge instead of lying flat on the floor.
+5. Place on a side face and confirm side placement still works.
+
+### [5.62.1-dev] Door Gap Fix + Visual Upgrade
+
+**Type:** PATCH — Step 17 prefab visual polish only (no save schema or recipe balance changes)
+
+**Fixed / Improved:**
+- Added a dark generated backfill plate behind every large-grid door variant so no open daylight gaps are visible between panels and frame/seals.
+- Enlarged closed door panels to overlap under the inner frame seals instead of sitting short inside the opening.
+- Tightened the single sliding door panel to fill the whole opening, with a stronger diagonal black inset and access panel.
+- Tightened the double sliding door halves so they overlap at center and under the frame, removing side/center gaps.
+- Tightened the heavy vault slab to fill the sealed opening and keep the vault bars/bolts sitting on top.
+- Added extra guide rails beside the panels to make the sliding/vault assembly look more intentional and premium.
+
+**Roadmap Status:**
+- Large-grid doors remain **🛠️ WORKING ON** pending Thomas validation of the new no-gap visuals.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Run `Tools > Voxel Engine > Voxel Engine Setup` → **17. Build Factory Foundations + HV Grid**.
+3. Inspect/place:
+   - Large Sci-Fi Sliding Door
+   - Large Double Sliding Door
+   - Heavy Vault Door
+4. Confirm the closed panels fill the frame with no visible gaps.
+5. Confirm open/close and motion activation still work.
+
+### [5.62.0-dev] Premium Large Grid Door Variants
+
+**Type:** MINOR — save-compatible large-grid door content refresh through Step 17 (small-grid door recipe removed from registry)
+
+**Added / Changed:**
+- Rebuilt Step 17 grid door generation into large-grid-only door content.
+- Added three large-grid door variants:
+  - **Large Sci-Fi Sliding Door** — single-panel premium sliding door inspired by Thomas's reference.
+  - **Large Double Sliding Door** — two-panel sliding door with synchronized motion activation.
+  - **Heavy Vault Door** — reinforced heavy-duty vault door with very high integrity, slower motion, and higher moving power draw.
+- Removed the small-grid door from Step 17 generation/recipe registration because it is not needed. Existing old assets are left on disk for compatibility, but the setup registry no longer registers the old small-grid recipe.
+- Door prefabs now use layered generated visuals: brushed outer frame, dark inner seal, orange/dark panels, access-glow panels, status strip, vault bolts/bars/core on vault variant.
+- Door visuals/collider are offset toward the mounted face so large-grid doors sit on the block edge/face instead of centered awkwardly in the cell.
+- `GridBuilder` now detects door items and orients them to the clicked grid face before placement, so doors snap/face correctly on block edges.
+
+**Roadmap Status:**
+- Grid doors remain **🛠️ WORKING ON** pending Thomas validation of the new large-only variants, edge snapping, and motion behavior.
+- Airtight/pressure integration remains future work.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Run `Tools > Voxel Engine > Voxel Engine Setup` → **17. Build Factory Foundations + HV Grid**.
+3. Confirm generated items/prefabs:
+   - `GridSlidingDoor_LargeSingle` / Large Sci-Fi Sliding Door
+   - `GridSlidingDoor_LargeDouble` / Large Double Sliding Door
+   - `GridVaultDoor_Heavy` / Heavy Vault Door
+4. Confirm the old small-grid sliding door recipe no longer appears in normal crafting/registry output after setup.
+5. Place each door on the edge/side face of a large grid block and confirm the visual sits on the face and faces outward correctly.
+6. Test open/close and motion activation for all three variants.
+7. Confirm Heavy Vault Door has much higher integrity/health than the sliding doors.
+
+### [5.61.0-dev] Motion-Activated Grid Sliding Doors
+
+**Type:** MINOR — new save-compatible grid door block foundation generated through Step 17 (no save schema break)
+
+**Added:**
+- Added `GridSlidingDoor`, a powered grid block with manual and motion-activated open/close behavior.
+- Added Step 17 generated prefabs/items/recipes for:
+  - **Small Grid Sliding Door**
+  - **Large Grid Sliding Door**
+- Door prefabs include a dark frame, split sliding panels, glowing window panels, and a status strip.
+- Door settings include:
+  - manual open/close
+  - motion activation toggle
+  - motion radius
+  - hold time
+  - slide speed
+  - idle and moving power draw
+- Added dedicated `GridSlidingDoor` UI panel in `GridBlockUI`.
+- Grid doors now appear in Ship Control as **Grid Doors** with state labels `Open` / `Closed`.
+- Grid doors implement `IGridDataProvider`, so they can be selected as screen data sources.
+
+**Roadmap Status:**
+- Grid doors / motion activation foundation started as an early slice of the later airtight/life-support door roadmap.
+- Full airtight/pressure integration remains future work.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Run `Tools > Voxel Engine > Voxel Engine Setup` → **17. Build Factory Foundations + HV Grid**.
+3. Verify generated prefabs/items exist:
+   - `GridSlidingDoor_Small` / Small Grid Sliding Door
+   - `GridSlidingDoor_Large` / Large Grid Sliding Door
+4. Place a small/large grid door and confirm the panels slide open/closed from its config panel.
+5. Enable Motion and walk into/out of range to confirm automatic opening/closing.
+6. Open Ship Control and confirm doors are grouped under **Grid Doors**.
+7. Select the door as a screen data source and confirm it reports state/motion/power.
+
+### [5.60.0-dev] LED Strip Path Reservation + End Cap Polish
+
+**Type:** MINOR — save-compatible build interaction validation/polish for LED strips (no save schema break)
+
+**Added / Improved:**
+- Added LED strip path validation before placement. Every crossed grid cell must be clear before a stretched LED strip can be placed.
+- Normal grid block placement now checks existing stretched LED strip paths and blocks placement into cells reserved by an LED strip visual path.
+- `LEDStrip.CoversGridCell()` exposes a lightweight reservation check based on the strip's full visual length, surface offset, and width.
+- Added generated end caps to runtime LED strips so stretched strips read as finished physical strips rather than raw glowing bars.
+- The placement failure message now clearly reports when the LED path is blocked.
+
+**Roadmap Status:**
+- Corner-to-corner LED strip placement remains **🛠️ WORKING ON** pending Thomas validation of path blocking/reservation behavior and endpoint visuals.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Place a long stretched LED strip.
+3. Try placing another grid block into a cell crossed by the strip and confirm placement is blocked.
+4. Try placing an LED strip through already occupied cells and confirm it is blocked with feedback.
+5. Confirm LED strips now show small end caps at both ends.
+6. Save/reload a stretched strip and confirm its path still blocks later placement after reload.
+
+### [5.59.5-dev] LED Strip Placement Compile Fix
+
+**Type:** PATCH — compile fix only (no save schema, recipe, balance, or feature behavior changes)
+
+**Fixed:**
+- Fixed `CS0136` in `GridBuilder.cs` by renaming the LED preview branch local `cs` variable to `previewCellSize`.
+- This removes the local-name collision with the later `cs` variable in the same method scope while preserving all 5.59.4-dev LED strip placement behavior.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Confirm the `GridBuilder.cs(230,27) CS0136` error is gone.
+3. Continue validating LED strip edge ghost/even effects polish from 5.59.4-dev.
+
+### [5.59.4-dev] LED Strip Edge Ghost + Even Effects Polish
+
+**Type:** PATCH — LED strip placement/effect polish (no save schema break)
+
+**Fixed / Improved:**
+- First-click LED preview ghost now uses the same surface/edge snapping logic as final placement, so the starting ghost should snap to face center or face edge before placement.
+- Edge detection now uses the actual clicked mounted face cell and hit point, improving edge-vs-center detection before final placement.
+- Segment mode no longer lights the whole diffuser strongly; the continuous diffuser is dimmed while individual diode segments carry the visible light.
+- Removed runtime point-light hotspots from LED strips; no more every-third segment/icon bright spots.
+- Motion detection now checks distance to the full LED strip segment, not only the anchor/start block, so stretched strips trigger from their whole length.
+- Clean Strip + Chase now uses a clamped moving pulse that stays inside the strip at the start/end instead of running outside the LED.
+- Wake Chase now works in clean-strip mode: one start-to-end fill pass runs, then the strip stays solid while motion remains active.
+- Added group LED effect controls in Ship Control group pages: **Sync FX**, **Chase**, **Pulse**, and **Static** for LED strip groups/categories.
+
+**Roadmap Status:**
+- Corner-to-corner LED strip placement remains **🛠️ WORKING ON** pending Thomas validation of pre-place edge ghost, path reservation, end caps, even segmented brightness, full-length motion activation, clean chase, and grouped sync.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Equip a grid LED strip and aim near the face edge before first click; confirm the start ghost snaps to that edge.
+3. Place the strip and confirm final placement matches the ghost.
+4. Turn Segments ON and confirm the diffuser is not fully lit behind all segments.
+5. Confirm no periodic hotspot/light-icon bright spots remain.
+6. Enable Motion on a long stretched strip and approach from the middle/end; confirm it triggers.
+7. Use Clean Strip + Chase and confirm the pulse stays within the strip bounds.
+8. Enable Motion + Wake Chase with segments off and confirm one fill/chase pass runs, then the strip stays solid.
+9. Create/select a Ship Control group containing multiple LED strips and use Sync FX / Chase / Pulse / Static to confirm group effects start together.
+
+### [5.59.3-dev] LED Strip Edge Snap + Even Chase Polish
+
+**Type:** PATCH — LED strip placement/visual polish (no save schema break; additive persistence remains backward compatible)
+
+**Fixed / Improved:**
+- Edge snapping now uses the actual first clicked block face hit position instead of the new placement cell center, so edge/center detection is based on where the player clicked on the mounted face.
+- LED stretch ghost uses the same surface and lateral edge offset as final placement, making preview and placement match more closely.
+- LED strips no longer create point lights along the strip, removing the bright hotspots/light icons every few segments. The strip now uses an even emissive diffuser for clean visual brightness.
+- Clean Strip + Chase mode no longer blinks; it now uses a moving emissive chase pulse along the continuous strip.
+- Added **Wake Chase** option to LED strip motion activation: when motion turns the strip on, it runs one start-to-end chase/fill pass, then stays solid until motion expires.
+- Wake Chase setting is persisted through `SavedLightingConfig`.
+
+**Roadmap Status:**
+- Corner-to-corner LED strip placement remains **🛠️ WORKING ON** pending Thomas validation of edge snap, matching ghost, even brightness, clean-strip chase, and wake chase.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Place a stretched LED strip by first-clicking near a face edge; confirm it snaps to that edge.
+3. Confirm the cyan ghost is on the same face/edge as the final placed strip.
+4. Confirm LED brightness is even and no every-third light hotspot remains.
+5. Set LED strip to Clean Strip + Chase and confirm a chase pulse moves along the strip instead of blinking.
+6. Enable Motion + Wake Chase, walk into sensor range, and confirm one chase pass runs from start to end before the strip stays solid.
+
+### [5.59.2-dev] LED Strip Face/Edge Snap + Cost Polish
+
+**Type:** PATCH — LED strip placement polish and balance behavior (no save schema break)
+
+**Fixed / Improved:**
+- LED strip visuals are now positioned closer to the mounted block face so they sit flush instead of hovering.
+- LED strip placement now uses the first clicked face position to snap laterally to either the face center or the nearest face edge.
+- Stretch ghost now uses the exact same surface/edge offset as final placement, so preview better matches the actual placed strip.
+- LED strip cost now scales by occupied length: a 3-cell strip requires and consumes 3 LED strip items.
+- If the player does not have enough LED strip items for the selected length, placement is blocked with a clear feedback message.
+- Full-length collider remains active so right-click config works from the middle/end of stretched strips.
+
+**Roadmap Status:**
+- Corner-to-corner LED strip placement remains **🛠️ WORKING ON** pending Thomas validation of edge snapping, closer surface placement, and length-based item cost.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Equip a grid LED strip and test top-face center placement; confirm it sits closer/flush to the block.
+3. Aim near a top-face edge before first click, place a stretched strip, and confirm it snaps to that edge.
+4. Repeat on side faces.
+5. Place a 3-cell strip and confirm it consumes 3 LED strip items.
+6. Try placing a strip longer than your available LED strip count and confirm placement is blocked.
+7. Confirm the ghost preview matches final placement height/edge offset.
+
+### [5.59.1-dev] Surface-Snapped LED Strip Placement Polish
+
+**Type:** PATCH — LED strip placement/interaction polish (no save schema break; uses existing additive offset fields)
+
+**Fixed / Improved:**
+- Corner-to-corner LED strips now mount onto the targeted block face instead of floating above the grid block.
+- LED strips now build a surface-aware rotation where local strip **Y** follows the selected face normal and local **X** follows the strip direction.
+- Visual strip offset now moves the strip back to the shared face plane (`-cellSize / 2`) so it touches the selected top/side face.
+- Second-corner snapping ignores the mount-normal axis, so top-mounted strips run along top-face X/Z directions and side-mounted strips run along the side-face axes.
+- LED strip interaction collider now covers the whole visual strip length, not only the first anchor cell.
+- Long stretched LED strips can now be right-clicked from anywhere along their visual length to open config.
+
+**Roadmap Status:**
+- Corner-to-corner LED strip placement remains **🛠️ WORKING ON** pending Thomas validation of top/side snapping and full-length interaction.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Equip a grid LED strip and aim at the top face of a block.
+3. Right-click first point, aim along the top face, right-click second point. Confirm it touches the top face instead of floating.
+4. Repeat on a side face. Confirm it snaps to/touches the side.
+5. Right-click the middle/end of a long stretched LED strip and confirm config opens from the whole strip, not only the start.
+
+### [5.59.0-dev] Corner-to-Corner LED Strip Placement Foundation
+
+**Type:** MINOR — new save-compatible build interaction for LED strips (no save schema break; additive LED offset fields remain backward compatible)
+
+**Added / Improved:**
+- GridBuilder now recognizes grid LED strip items and switches them into a two-click corner placement workflow:
+  1. Right-click first grid corner/cell to anchor the strip.
+  2. Aim a second grid corner/cell on the same grid and right-click again to place a stretched LED strip.
+- Placement snaps the second point to the dominant grid axis from the first point, producing straight X/Y/Z strips rather than diagonal/ambiguous strips.
+- Added a premium cyan stretch ghost between first and second point so the player sees the final strip length before confirming.
+- Final LED strip uses `LEDStrip.SetStretch(length, offset)` so it visually spans from the first selected point toward the second selected point.
+- Stretched LED strips persist their local visual offset through the existing `SavedLightingConfig` path.
+- Standard one-cell LED strip placement remains possible by clicking the same cell twice.
+
+**Known Scope / Next Polish:**
+- This is the placement foundation. The stretched LED strip is anchored as one grid block at the first selected cell while its visuals extend toward the second point. Full multi-cell occupancy/reservation validation is planned as a follow-up so very long strips can reserve every crossed grid cell if desired.
+
+**Roadmap Status:**
+- Grid/static lighting and LED strips remain **🛠️ WORKING ON** pending Thomas's Unity validation of corner placement, ghost preview, and save/load of stretched strips.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Equip a Small or Large Grid LED Strip item.
+3. Aim at an existing grid and right-click once to set the first corner.
+4. Aim along the grid X/Y/Z direction and confirm the cyan stretch ghost follows the second point.
+5. Right-click again to place the stretched LED strip.
+6. Repeat by clicking the same cell twice to place a short/default strip.
+7. Save/reload and confirm stretched strip length/offset restores.
+
+### [5.58.0-dev] Lighting Runtime Persistence + Screen Restore Guard Fix
+
+**Type:** MINOR — additive save-compatible persistence fields for placed lighting config (legacy saves remain compatible)
+
+**Added / Fixed:**
+- Added additive `SavedLightingConfig` persistence for placed blocks that contain `GridLightBlock` and/or `LEDStrip`.
+- Placed spotlight/light settings now save and restore:
+  - color
+  - range
+  - cone angle
+  - intensity
+  - light type
+  - watts draw
+  - motion activation
+  - motion radius
+  - motion hold time
+- Placed LED strip settings now save and restore:
+  - color
+  - brightness
+  - length
+  - segment count
+  - strip width
+  - segmented/clean mode
+  - animation mode
+  - animation speed
+  - motion activation
+  - motion radius
+  - motion hold time
+  - watts draw
+- Fixed a persistence restore guard bug where factory runtime restore returned early when `saved.machine == null`, preventing non-machine configs after that point, including screen configs, from restoring on placed blocks.
+- Lighting config restore is additive and null-safe; legacy saves without `lightingConfig` load normally.
+
+**Scope Note:**
+- This pass persists lighting configs for the existing `WorldStatePersistence` placed-block path. Full movable-grid save/load persistence is not present in this repository path yet, so tuned settings on future fully persisted movable grids will need to use the same `SavedLightingConfig` data when grid save serialization is added.
+
+**Roadmap Status:**
+- Grid/static lighting and LED strips remain **🛠️ WORKING ON** pending Unity save/load validation.
+- Corner-to-corner LED strip placement foundation is implemented; 5.59.1-dev adds surface snapping/touching and full-length interaction collider polish.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Place/configure a static/placeable spotlight or LED strip where WorldStatePersistence tracks placed blocks.
+3. Change color/intensity/range/motion/LED mode/length/segments.
+4. Save and reload the world.
+5. Confirm tuned settings restore.
+6. Re-test any placed screen config save/load, because 5.58.0-dev also fixes the early return that could skip screen config restore on non-machine placed blocks.
+
+### [5.57.3-dev] Grid Screen Black Display Fix
+
+**Type:** PATCH — visual bug fix only (no save schema, recipe, or balance changes)
+
+**Fixed:**
+- Fixed grid screens appearing black after the depth-test text pass.
+- Screen text is now positioned farther in front of the physical screen surface, preventing the screen's own surface mesh from occluding the text when depth testing is enabled.
+- `MakeTextOpaque()` now preserves Unity's working TextMesh font material/shader and only changes depth-test settings, instead of swapping to a generic cutout shader that could make glyphs invisible/black.
+- Text still uses depth testing against world geometry, so the previous "text visible through ground/blocks" issue remains addressed without self-occluding the display.
+
+**Roadmap Status:**
+- Grid screens remain **✅ COMPLETED** once Thomas validates screen text/feed visibility again.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Enter Play Mode and look at a grid screen in any text mode such as Custom, Power, or Summary.
+3. Confirm text is visible again and no longer just black.
+4. Put terrain/blocks between the camera/player and the screen and confirm text no longer renders through occluders.
+5. Re-test Camera mode if needed; Screen Config should now open from 5.57.2-dev and text fallback/status should be visible.
+
+### [5.57.2-dev] Screen Config Access + Data-Type Visibility Fix
+
+**Type:** PATCH — runtime UI/filter fix only (no save schema, recipe, or balance changes)
+
+**Fixed:**
+- Screen Config right-click now uses a guaranteed `GridScreenConfigUI.Instance` path, so the config UI is created/found before opening instead of silently doing nothing when the singleton was null.
+- `GridScreenConfigUI` now ensures a `UIDocument` exists on its GameObject during Awake, preventing misconfigured objects from failing to mount.
+- Grid Screen right-click handling now runs before generic grid-block UI handling, so screens always open Screen Config first.
+- Ship Control data type controls no longer enable/disable actual blocks.
+- Data type controls now only show/hide that category from Screen Config source lists.
+- Selected-block data type controls were renamed to `TYPE SHOW` / `TYPE HIDE` and now only affect Screen Config visibility.
+- Hidden data types are included in `IsHiddenFromScreenConfig()`, so categories like Spotlights can be hidden from the Screen Config picker without turning off the lights.
+
+**Roadmap Status:**
+- Grid lighting remains **🛠️ WORKING ON**; this patch corrects the intended data-type behavior before the next validation pass.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Right-click a grid screen and confirm Screen Config opens.
+3. In Ship Control, click `Show Types`, then `Hide` for Spotlights. Confirm the spotlights stay powered/working.
+4. Open Screen Config and confirm Spotlights are not offered as selectable sources.
+5. Click `Show` for Spotlights and confirm they appear again in Screen Config.
+6. Confirm the screen no longer stays black because the config can be opened and display mode/source can be changed.
+
+### [5.57.1-dev] Grid Screen Config Singleton + Power Relay Missing Script Fix
+
+**Type:** PATCH — compile/runtime prefab fix only (no save schema, recipe, or balance changes)
+
+**Fixed:**
+- `GridScreenConfigUI` no longer destroys/removes its own component when a duplicate singleton exists.
+- Runtime singleton handling now prefers the scene/player-authored `GridScreenConfigUI` object over an auto-generated root object.
+- Runtime-generated root `GridScreenConfigUI` is the only variant marked `DontDestroyOnLoad`; player-child/scene-authored objects are left in place.
+- `EnsureInstance()` now first searches for an existing inactive/active `GridScreenConfigUI` before creating a new one.
+- Repaired the missing `CompactPowerNode` script reference on the legacy `VoxelEngineAssets/HighVoltage/Prefabs/PowerRelay.prefab`.
+- Step 17 now also refreshes the legacy `PowerRelay` prefab path non-destructively so old worlds/items are repaired alongside the newer LV/HV relays.
+
+**Roadmap Status:**
+- Grid lighting remains **🛠️ WORKING ON**; this patch clears setup/runtime errors before the next validation pass.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Enter Play Mode and confirm the `GridScreenConfigUI` component remains on its object.
+3. Confirm no `PowerRelay` missing script warning appears.
+4. If the warning persists from an already-open prefab instance, run `Tools > Voxel Engine > Voxel Engine Setup` → **17. Build Factory Foundations + HV Grid** once to refresh the legacy relay prefab.
+
+### [5.57.0-dev] Collapsible Data Types + Motion-Activated Lighting
+
+**Type:** MINOR — save-compatible lighting/control UX feature (no save schema migration)
+
+**Added / Improved:**
+- Ship Control `DATA TYPES` is now hidden/collapsed by default.
+- Added a `Show Types` / `Hide Types` button in the terminal block-list header.
+- Blocks hidden through Ship Control no longer appear in Screen Config source lists. Existing linked sources remain functional, but hidden blocks are not offered as new selectable screen sources.
+- LED strips now support a player-facing **Segments: ON / Clean Strip** toggle.
+- LED strip `Chase` mode now visibly chases across diode segments instead of looking static.
+- LED strip point lighting is distributed along the strip instead of using one center point light, reducing the brighter-middle hotspot.
+- LED strips now support **Motion Activation**:
+  - Motion ON/OFF
+  - Sensor radius
+  - Hold time after last detection
+- Grid spotlights now also support **Motion Activation** with radius and hold time controls.
+- Motion activation turns the light on when a player is nearby, enabling motion-sensitive ship/base lighting.
+
+**Door Note:**
+- Grid doors are not yet authored as grid blocks in the current repository, so the motion-sensor UI was added to lights first. The same motion-activation pattern is ready to be applied when grid doors/airtight doors are added in the later life-support/building pass.
+
+**Roadmap Status:**
+- Grid lighting remains **🛠️ WORKING ON** while Thomas validates collapsed data types, hidden source filtering, clean/segmented LED mode, chase animation, and motion activation.
+- Next planned implementation target remains runtime persistence for tuned spotlight/LED settings, then corner-to-corner LED strip placement.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Open Ship Control Terminal and confirm `DATA TYPES` is hidden by default.
+3. Click `Show Types`; confirm the data-type ON/OFF controls appear. Click `Hide Types`; confirm they collapse.
+4. Hide a block/group in Ship Control, then open Screen Config and confirm that hidden block is not offered as a new source.
+5. Open an LED strip config panel and toggle `Segments: ON` / `Clean Strip`.
+6. Set LED strip mode to `Chase` and confirm the lit segment travels along the strip.
+7. Confirm LED strip brightness is no longer concentrated at only the middle.
+8. Enable Motion on an LED strip or spotlight, walk out of radius and back in, and confirm it turns off/on based on player proximity.
+
+### [5.56.0-dev] LED Strip Screen Data Provider + Component Source Resolution
+
+**Type:** MINOR — save-compatible screen/data UX feature (no save schema migration)
+
+**Added / Improved:**
+- `LEDStrip` now implements `IGridDataProvider`, so LED strips can be selected as screen data sources.
+- LED strip screen data reports state, mode, draw, length, and brightness.
+- `GridScreenBlock` data-source resolution now supports provider components attached to a `GridBlock`, not only `GridBlock` subclasses.
+- Screen auto-link and available source lists now find component-based providers such as LED strips.
+- This keeps future utility components lightweight: they can expose screen data without needing a new `GridBlock` subclass.
+
+**Roadmap Status:**
+- Ship Control data-type toggles and LED config from 5.55.0-dev remain ready for Thomas validation.
+- Grid/static lighting remains **🛠️ WORKING ON**. Next planned implementation target: runtime persistence for tuned spotlight/LED settings, then corner-to-corner LED placement.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Place a grid LED strip and a screen on the same grid.
+3. Right-click the screen and verify the LED strip appears as a selectable Light source.
+4. Select the LED strip and use Mixed/Summary or System display mode.
+5. Confirm the screen reports LED strip state, mode, draw, length, and brightness.
+6. Change the LED strip mode/brightness/length from its config panel and confirm the screen data updates live.
+
+### [5.55.0-dev] Ship Control Data-Type Toggles + LED Strip Configuration UI
+
+**Type:** MINOR — save-compatible terminal/lighting UX feature (no save schema migration)
+
+**Added / Improved:**
+- Ship Control Terminal now includes a **DATA TYPES** section in the left block list.
+- Each data type row shows enabled count / total count and provides **ON** / **OFF** buttons.
+- The selected block details page now also shows its data type and has **TYPE ON** / **TYPE OFF** controls for that whole category.
+- Spotlights are categorized as **Spotlights**, so the player can disable/enable all spotlight blocks as a single data type.
+- LED strip grid blocks are categorized as **LED Strips** and also support type-wide ON/OFF controls.
+- Added dedicated right-click/grid-terminal LED strip config panel:
+  - On / Off
+  - Static / Pulse / Blink / Chase animation mode
+  - Brightness
+  - Runtime Length
+  - Segment count
+  - Color presets
+- LED strip config uses the existing runtime `SetLength(float meters)` foundation, preparing for the future corner-to-corner placement tool.
+
+**Roadmap Status:**
+- Grid lighting remains **🛠️ WORKING ON** while Thomas validates data-type toggles and LED strip config.
+- Grid/static lighting and LED strips remain **🛠️ WORKING ON**; next planned step is persistence for tuned spotlight/LED settings, then corner-to-corner LED placement.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Open Ship Control Terminal.
+3. In **DATA TYPES**, click **OFF** beside **Spotlights** and confirm every spotlight disables.
+4. Click **ON** beside **Spotlights** and confirm every spotlight enables.
+5. Select an individual spotlight and test **TYPE OFF** / **TYPE ON** from its details panel.
+6. Place/select a grid LED strip, right-click it, and verify the LED strip config panel opens.
+7. Change LED color, brightness, length, segments, and animation mode; confirm it updates live.
+
+### [5.54.0-dev] Grid Spotlight Right-Click Configuration UI
+
+**Type:** MINOR — new save-compatible grid lighting configuration UI (no save schema migration; tuned light setting persistence remains future work)
+
+**Added / Improved:**
+- Right-clicking a `GridLightBlock` / grid spotlight now opens its configuration panel when the player is not holding a grid block.
+- Added a dedicated `GridLightPanel` in `GridBlockUI` instead of falling back to the generic `INFO` panel.
+- Grid spotlight config now exposes live controls for:
+  - On / Off
+  - Intensity
+  - Range
+  - Cone angle
+  - Color presets: White, Warm, Cyan, Blue, Green, Amber, Red
+  - Reset Defaults
+- The panel header now reports actual light state: `ON`, `OFF`, or `NO POWER` instead of generic `INFO`.
+- Ship/grid terminal block state labels now show grid lights as `On` / `Off`.
+- Grid lights are categorized under **Grid Lighting** in the ship/grid terminal.
+- Dual-output spotlights use the same config and apply changes to all beam lights through the existing multi-light control path.
+
+**Roadmap Status:**
+- Grid lighting remains **🛠️ WORKING ON** while Thomas validates right-click config and terminal labels.
+- Grid/static lighting and LED strips remain **🛠️ WORKING ON**; runtime persistence for customized light settings is still pending.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Place any grid spotlight and right-click it with empty hands / non-grid item equipped.
+3. Confirm the spotlight config panel opens.
+4. Change Intensity, Range, Cone, and Color; confirm the light updates live.
+5. Open the Ship/Grid Control panel and select a spotlight. Confirm it shows `ON`, `OFF`, or `NO POWER` instead of generic `INFO`.
+6. Test a dual spotlight and confirm both beams change together.
+
+### [5.53.0-dev] Large Grid Spotlights + Premium Segmented LED Strip Variants
+
+**Type:** MINOR — new save-compatible grid lighting content/setup plus screen rendering polish (no save schema migration)
+
+**Added / Improved:**
+- Step 17 now generates large-grid lighting content non-destructively through `Tools > Voxel Engine > Voxel Engine Setup`:
+  - **Large Grid Spotlight** — single long-range industrial spotlight.
+  - **Small Dual Grid Spotlight** — compact two-beam spotlight.
+  - **Large Dual Grid Spotlight** — large-grid two-beam flood spotlight.
+  - **Large Grid LED Strip** — larger segmented grid LED strip.
+- Existing small grid spotlight item is renamed to **Small Grid Spotlight** with a clearer description.
+- Spotlights are inspired by Thomas's reference: rugged lamp cans, black bezels, hot lenses, grille bars, body/mount details, and dual-output variants where applicable.
+- `GridLightBlock` now controls every non-status child `Light`, so dual-output prefabs can use two synchronized beam lights without unmanaged stray lights.
+- `LEDStrip` visual generation rebuilt into a more realistic segmented strip:
+  - dark backing rail, lit diffuser, individual diode segments, configurable width/length/segment count.
+  - supports runtime `SetLength(float meters)` as a foundation for future corner-to-corner LED placement.
+  - small and large setup-authored variants use different default lengths/segment counts.
+- Screen TextMesh depth handling hardened: screen text now uses a depth-tested cutout material (`ZTest LessEqual`, `ZWrite On`, alpha-test queue) so text should no longer render through terrain or blocks.
+
+**Roadmap Status:**
+- Grid lighting: **🟡 PARTIALLY COMPLETE → 🛠️ WORKING ON** while the new Step 17 content awaits Unity validation.
+- Grid/static lighting and LED strips: **🟡 PARTIALLY COMPLETE → 🛠️ WORKING ON** for Step 17 generation + validation.
+- LED corner-to-corner placement: **🟡 PARTIALLY COMPLETE foundation** — runtime length is supported; interactive two-corner placement workflow remains a future build-tool step.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Run `Tools > Voxel Engine > Voxel Engine Setup` → **17. Build Factory Foundations + HV Grid**.
+3. Run Step 17 a second time to verify it remains idempotent/non-destructive.
+4. Verify new generated prefabs/items exist:
+   - `GridSpotlight_Large` / Large Grid Spotlight
+   - `GridSpotlight_DualSmall` / Small Dual Grid Spotlight
+   - `GridSpotlight_DualLarge` / Large Dual Grid Spotlight
+   - `LEDStrip_LargeGrid` / Large Grid LED Strip
+5. Place small and large grid variants and confirm sizes match their grid type.
+6. Power the grid and confirm single/dual spotlights turn on/off with grid power.
+7. Place small and large LED strips and confirm the segmented diode strip visuals appear.
+8. Put a screen behind terrain/blocks and confirm screen text no longer shows through occluders.
+
+### [5.52.0-dev] Grid Light Power-State Hardening + Screen Data Provider
+
+**Type:** MINOR — save-compatible grid lighting feature/polish (no save schema migration; no recipe or balance reset)
+
+**Added / Improved:**
+- `GridLightBlock` now implements `IGridDataProvider`, so configurable screens can use Grid Lights as a live data source.
+- Grid Light display data reports state, draw, range, and intensity.
+- Grid Light now exposes stable source/category labels: `Grid Light Block` / `Light`.
+- Grid Light now respects actual grid power for illumination: enabled + powered grid = on; unpowered grid = light off with red indicator.
+- Grid Light `PowerDraw` remains counted while enabled even during a deficit, so Power screens continue to show the light in current loss instead of hiding the load.
+- Added `wattsDraw` as an inspector-configurable power draw value while preserving the previous 25 W default.
+- Runtime light/indicator creation is now idempotent and reuses existing generated children where present instead of duplicating them.
+- Runtime indicator now updates live: configured light color when online, red when unpowered, muted grey when disabled.
+
+**Roadmap Status:**
+- Grid screens / displays: **🛠️ WORKING ON → ✅ COMPLETED** after Thomas validated the camera feed/config fixes.
+- Grid lighting: **❌ MISSING → 🟡 PARTIALLY COMPLETE** based on repository audit plus this power/data-provider polish.
+- 4.5.0 Grid/static lighting and LED strips remain **🟡 PARTIALLY COMPLETE** pending full lighting configuration UX and Unity validation.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Place a powered grid with a Grid Light Block and a Screen.
+3. Right-click the screen and select the Grid Light as a data source.
+4. Use Mixed/Summary or System display mode and verify the light reports state, draw, range, and intensity.
+5. Remove/disable grid power and confirm the light turns off and its indicator turns red.
+6. Restore power and confirm the light turns back on and the indicator returns to the configured light color.
+7. Open a Power screen and confirm the light appears in current loss while enabled.
+
+### [5.51.3-dev] Screen Config UI Toolkit Compile Fix
+
+**Type:** PATCH — compile fix only (no save schema, recipe, balance, or runtime behavior design changes)
+
+**Fixed:**
+- Fixed `CS1061` in `GridScreenConfigUI.cs` caused by using `IStyle.zIndex`, which is not available in this Unity UI Toolkit version.
+- Replaced root z-index assignment with `VisualElement.BringToFront()` and kept the high `UIDocument.sortingOrder` reflection path for supported Unity versions.
+- Updated the frontmost-panel fallback comment so it matches the Unity-safe implementation.
+
+**Roadmap Status:**
+- Grid screens / displays remain **🛠️ WORKING ON** pending Thomas's Unity validation after compile succeeds.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Confirm the `GridScreenConfigUI.cs` compile error is gone.
+3. Re-test opening Screen Config from Ship Control / grid terminal and confirm it still appears in front.
+
+### [5.51.2-dev] Cockpit Right-Click + Screen Config Layering + Camera Feed Isolation
+
+**Type:** PATCH — interaction/UI/camera-feed fixes (no save schema, no recipe balance changes, no breaking API change)
+
+**Fixed / Improved:**
+- Restored right-click entry for `GridCockpit` when the player is not holding a grid block. Existing Helm / Ship Control Console right-click entry remains intact.
+- Screen Config UI now forces itself to the front with a high UIDocument sorting order and root z-index, so opening screen config from the ship control terminal no longer appears behind the ship control UI.
+- Camera identity repair now treats default `Iron Ore` / `iron_ore` item identity as invalid for camera blocks. Runtime camera source names normalize to `Camera Block`, and Step 19 repairs the camera item name/description non-destructively.
+- Camera item description upgraded to: live screen stream, 30 W draw, and green/yellow/red LED state explanation.
+- Power display mode now shows grid-wide current gain, current loss, and net power using W/kW/MW formatting.
+- Camera display mode now uses the most recently selected camera source if multiple camera sources exist. Selecting a camera source in Screen Config makes it the screen's primary source and switches the screen to Camera mode, preventing multiple cameras from interfering with the same screen.
+- Each camera feed now uses a unique hidden runtime camera and unique RenderTexture name based on instance id.
+- Screen camera feed now also uses a dedicated runtime quad in front of the screen surface with culling disabled, making the live video path independent of cube-face UV/culling quirks.
+
+**Roadmap Status:**
+- Grid screens / displays remain **🛠️ WORKING ON** until Thomas validates live feed, screen config layering, power mode, and camera identity in Unity.
+- Camera block live feed remains **🛠️ WORKING ON** pending this validation pass.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Run `Tools > Voxel Engine > Voxel Engine Setup` → **19. Setup Grid Screens & Displays (Non-Destructive)** once to repair the Camera Block item name/description if it still appears as Iron Ore in inventory/crafting.
+3. Right-click a Cockpit with empty hands or a non-grid item equipped — confirm you enter the cockpit.
+4. Right-click a Helm / Ship Control Console — confirm control-seat entry still works.
+5. Open Ship Control / grid terminal, open a screen config from that UI, and confirm Screen Config appears in front.
+6. Set screen mode to Power and confirm it shows Gain, Loss, and Net.
+7. Link Camera A to a screen, then add Camera B and select it in Screen Config — confirm the selected camera owns that screen and feeds do not mix.
+8. Confirm the live camera feed is visible on the screen, not black.
+
+### [5.51.1-dev] Camera Feed Visibility + Screen Appearance Live Update Fixes
+
+**Type:** PATCH — bug fixes and UI polish only (no save schema, recipe, balance, or API-breaking changes)
+
+**Fixed:**
+- Fixed camera screens appearing black by enabling the capture camera while a screen samples the feed texture and by using an unlit runtime screen-feed material so the video does not depend on scene lighting.
+- Camera feed now prepares the capture camera immediately on texture access, removing the disabled-camera/stale black texture case.
+- Screen `Border` setting now live-updates generated glow strips and corner dots while the config panel is open.
+- Screen `Font` setting now live-updates the screen TextMesh style, size, character scale, and spacing while the config panel is open.
+- Border and Font buttons now refresh their active-highlight state immediately when clicked.
+- Custom Text input styling now forces a dark editor field with bright readable text across the TextField internals, fixing white-on-white unreadable input.
+
+**Roadmap Status:**
+- Grid screens / displays remain **🛠️ WORKING ON** until Thomas validates live feed, appearance controls, and custom text in Unity.
+- Camera block live feed remains **🛠️ WORKING ON** pending this Unity validation pass.
+
+**Manual Unity Steps:**
+1. Let Unity recompile; no setup rerun is required for this patch.
+2. Use your existing test grid with a powered Camera Block and Screen.
+3. Right-click the screen → select the camera source → choose **Camera** display mode.
+4. Confirm the screen now shows live video instead of black.
+5. Change Border between None / Thin / Thick / Glow and confirm the screen updates immediately.
+6. Change Font between Default / Mono / LCD / Terminal and confirm the screen text updates immediately.
+7. Switch to Custom mode, edit the Custom Text field, and confirm the input text is readable.
+
+### [5.51.0-dev] Live Camera Screen Feed + Premium Camera Prefab
+
+**Type:** MINOR — save-compatible screen/camera feature (no save schema migration; Camera display mode is appended and old screen configs remain parse-compatible)
+
+**Added / Changed:**
+- Added optional `IGridCameraFeedProvider` for live camera sources without changing the lightweight text data-provider path.
+- Added `ScreenDataMode.Camera` so configurable grid screens can switch from text/data modes to a live camera feed mode.
+- `GridScreenBlock` now resolves the linked camera source, registers itself as an active feed consumer, applies the camera RenderTexture directly to `Generated_ScreenSurface`, hides the center text overlay while the feed is live, and keeps a clean `CAMERA / LIVE` title/status overlay.
+- `GridCameraBlock` now renders only when at least one powered screen is actively consuming the feed, with configurable feed resolution and render interval for performance.
+- Camera feed orientation now looks out through the generated lens (`lensLooksAlongNegativeZ`) instead of capturing from the block body.
+- Camera status LED behavior added: **green** when at least one screen is using the feed, **yellow** when the camera is online but idle, and **red** when the camera is offline/no grid power.
+- `GridScreenConfigUI` now exposes Camera mode automatically and updates the no-source hint to include cameras.
+
+**Setup Wizard (Non-Destructive):**
+- Step 19 now refreshes generated screen visuals and the camera prefab while preserving custom non-generated child objects.
+- Step 19 now repairs required item/prefab/recipe/registry links without resetting existing stack sizes, mass, hit points, recipe costs, crafting times, unlock flags, or authored tuning.
+- Camera prefab remade through Step 19 with a boxy warm-alloy housing, dark lens stack, bolted front flange, side mount ears, lower rail, glass highlight, and physical status LED/light inspired by Thomas's reference image.
+
+**Roadmap Status:**
+- 4.8.0 Logistics 2.0, Screens & Trajectory: **🛠️ WORKING ON**.
+- Grid screens / displays: **✅ COMPLETED → 🛠️ WORKING ON** while the new live camera feed and Step 19 premium camera prefab await Unity validation.
+- Camera block live feed: **🛠️ WORKING ON** (runtime code + setup authoring complete; manual validation pending).
+
+**Manual Unity Steps:**
+1. Open the project on the `Dev` branch and let Unity finish compiling.
+2. Go to `Tools > Voxel Engine > Voxel Engine Setup`.
+3. Run **19. Setup Grid Screens & Displays (Non-Destructive)**. Run it a second time to confirm idempotency and check the Console for preserved/repaired logs.
+4. Inspect `VoxelEngineAssets/GridSystem/Prefabs/CameraBlock.prefab` — confirm the new warm-alloy camera body, lens stack, mount ears, bolts, and status LED/light are present.
+5. In a test scene, place a powered grid with a Camera Block and any Screen block.
+6. Right-click the screen → select the Camera source → choose **Camera** display mode.
+7. Verify the screen surface shows the live camera view. The camera LED should be **green** while the screen is using the feed.
+8. Switch the screen away from Camera mode or clear the source — the powered camera LED should turn **yellow** after a short moment.
+9. Disable camera/grid power — the camera LED should turn **red**, and the screen should show camera offline text.
+10. Re-test existing text/data screen modes to confirm Summary, Power, Inventory, Bars, Custom text, color, border, and font settings still work.
+
+### [5.42.0-dev] Factory Persistence Complete — Funnel Buffer & Mode Save/Load
+
+**Type:** MINOR — new save-compatible factory persistence (additive fields, fully backward compatible)
+
+**Added — Funnel persistence (was the last missing piece):**
+- **Funnel buffer save/restore:** `CaptureFactoryRuntime` now checks for a `Funnel` component and saves its internal buffer items (item ID, count) plus operating mode (Import/Export) into a new `SavedFunnelState` class.
+- **Funnel mode restore:** Load restores the funnel's mode via `SetMode()` and re-inserts buffered items.
+- Added `public ItemContainer Buffer` property to `Funnel.cs` to expose the private `_buffer` for persistence access.
+- Added `SavedFunnelState` to the save schema with `mode` (string) and `bufferItems` (list of SavedTransportItem).
+
+**Existing persistence already complete (validated):**
+- ConveyorBelt items (progress, lateralOffset) ✓
+- ConveyorChute items (slideProgress) ✓
+- Crusher recipeId + progress + userEnabled + input/output/upgrade containers ✓
+- Assembler recipeId + progress + userEnabled + input/output/upgrade containers ✓
+- ElectricFurnace input/output/upgrade containers ✓
+- Furnace input/fuel/output containers ✓
+- Chest, Drawer, StorageDisplay containers ✓
+- Quarry depth/cursor/phase/upgrades/output ✓
+- Player position/rotation/inventory/hotbar ✓
+- Tiered building placement/tier/HP ✓
+- Item-port routing config (per-face direction + filters) ✓
+- Legacy saves remain 100% compatible ✓
+
+**Roadmap Status:**
+- 4.5.0 Factory persistence: **🛠️ WORKING ON → ✅ COMPLETED**
+- All factory machines now fully persist their runtime state across save/load cycles.
+
+**Manual Unity Steps (no setup step needed):**
+1. Place a Funnel in Import or Export mode with some items buffered, save/load — verify mode and buffer
+2. Place a ConveyorBelt with items moving, save/load — verify items resume at correct progress
+3. Place a Crusher with active recipe, save/load — verify recipe and progress resume
+
+### [5.41.0-dev] Research UI Spatial Pan/Zoom Canvas Overhaul
+
+**Type:** MINOR — new save-compatible UI overhaul (no save/API/balance touch)
+
+**Added / Changed — ResearchUI.cs completely rebuilt:**
+- **Spatial pan/zoom canvas** replaces the old fixed-size tier-column layout. The tree surface now scales via `_canvas.style.scale` with a responsive Zoom slider (− / + / reset buttons) ranging from 35% to 200%.
+- **Zoom controls** in the header bar: [−] [Zoom %] [+] [Reset] buttons with premium dark styling.
+- **Breathing glow effect** on available (ready-but-not-started) research nodes — a subtle pulsing cyan halo that cycles opacity at 1.8 Hz, drawing the player's eye to what they can research next.
+- **Pulsing connector lines** — bezier prerequisite arrows between nodes now pulse cyan when the prerequisite is met and the target node is ready. Completed paths show a solid green line.
+- **Era label** in the header auto-updates based on the highest tier researched (shows "Era 1: Mechanized" through "Era 7: Architect").
+- **Bottom details panel** replaces the old right-side panel — collapsible, shows node name, tier, cost pills with have/need counts, description, action buttons (Research Now / Start at Lab / Cancel), and unlock preview (up to 4 recipe names).
+- **Spacebar shortcut** — pressing SPACE researches the selected node (instant-research from inventory or starts lab research).
+- **Increased card size** to 190×110 with compact cost icons (12px swatches) for better readability.
+- **Cleaner layout** — panel is now 94% width × 92% height (max 1400×860) for better responsiveness.
+- **Node card glow/shadow** — cards have breathing outer glow when available, and subtle hover scale (1.03x) with micro-transitions.
+- Added optional `eraLabel` field to `ResearchNode.cs` for future era categorization.
+
+**Roadmap Status:**
+- 4.6.0 Research UI overhaul: **❌ MISSING → 🛠️ WORKING ON** (spatial canvas complete; power-user polish and era-based grouping next)
+
+**Manual Unity Steps (no setup step needed):**
+1. Open the game scene and press the Research key (default `T`)
+2. Verify the new spatial canvas with zoom controls appears
+3. Click a research node — verify bottom details panel updates
+4. Press SPACE on an available node — verify research starts
+5. Use [+] and [−] zoom buttons — verify canvas scales smoothly
+6. Hover a ready node — verify the breathing glow is visible
+7. Try the category filters on the left — verify tree re-filters
+
+### [5.41.0-dev] GridBuilder Compile Fix + Shape Wheel Integration Readiness
+
+**Type:** PATCH — save-compatible bugfix (no save schema, balance, or API touch)
+
+**Fixed:**
+- GridBuilder.cs: Invalid token / type / tuple errors (CS1519, CS1031, CS8124, CS1026, CS1022) caused by misplaced closing brace in ShowGhost method — statements for collider stripping, material build, and positioning were incorrectly placed at class scope.
+- Restored correct nesting and indentation so ghost rebuild logic, cleanup, and transform application execute every frame.
+- GridShapeWheel.CurrentShape hook comment and GridBlockMeshBuilder remain ready for shape variants.
+
+**Roadmap Status:**
+- Grid shape variant wheel (4.7.0): **🛠️ WORKING ON** (foundation complete + compile error fixed; next step is non-destructive authored variants via Setup).
+
+**Manual Unity Steps (correct Voxel Engine Setup workflow):**
+1. Tools > Voxel Engine > Voxel Engine Setup → run **2. Spawn Player + UI in Scene** (non-destructive; ensures GridShapeWheel UIDocument at 610 is present).
+2. Equip grid armor/structural block → hold Build Wheel key — verify no errors and premium shape wheel shows.
+3. When authoring variants: use the next appropriate Setup step (Step 18 area) — non-destructive.
+
+### [5.40.1-dev] Premium Wheel Text Cutoff Fixes + Grid Shape Variant Wheel Foundation
+
+**Type:** PATCH + MINOR foundation — save-compatible UI polish + new reusable wheel (no save/API touch)
+
+**Fixed:**
+- HammerBuildWheel segment labels: increased container sizes (80×68), radius, font sizes, switched to Overflow.Visible, better positioning — eliminates text cutoff on long family names and costs.
+- Center disc labels: increased fonts, added explicit whiteSpace.NoWrap for title/page/hint — no more clipping.
+- ConveyorShapeWheel segment labels: same treatment (76×60 containers, larger icons, Overflow.Visible, adjusted radius) — clean full labels.
+
+**Added:**
+- New `GridShapeWheel.cs` (UI/GridShapeWheel) — full premium radial wheel for grid block shape variants (Cube / Slope / HalfBlock / HalfSlope / Corner / InvertedSlope).
+  - Matches exact visual language of the polished Hammer + Conveyor wheels (cream ring, deep overlay, accent colors, micro scale/glow/hover, parallax).
+  - Self-contained: automatically shows when holding a structural grid/armor block item while BuildWheel is held.
+  - CurrentShape static accessor ready for future placement logic (GridBuilder, GridBlockMeshBuilder, etc.).
+- Auto-spawn of GridShapeWheel added to Step 2 (Spawn Player + UI) in VoxelEngineSetupWindow — non-destructive (only adds if missing). Sorting order 610 (above hammer wheel).
+- Updated roadmap table entry for "Grid shape variant wheel".
+
+**Roadmap Status Updates:**
+- Building Hammer wheel & placement: **🛠️ WORKING ON** (premium visuals + text cutoff fixed).
+- Conveyor logistics (shape wheel): **🛠️ WORKING ON** (premium visuals + text cutoff fixed).
+- Grid shape variant wheel (4.7.0): **🛠️ WORKING ON** (wheel foundation + premium UI complete; shape application logic and setup-authored variants planned for next).
+- 4.7.0 Power, Vehicles & Combat: now actively progressing (shape wheel is the first deliverable).
+
+**Manual Unity Steps (no new steps required for polish):**
+1. (Optional) Re-run **2. Spawn Player + UI in Scene** if you want the GridShapeWheel auto-added to an existing player.
+2. Equip a grid armor / structural block (e.g. from grid system) → hold Build Wheel key.
+3. Verify the new premium Grid Shape Variant wheel appears with full visible text.
+4. Test the existing Hammer and Conveyor wheels — all labels now fully visible, no cutoff.
+5. When ready for actual shape variants: run `Tools > Voxel Engine > Voxel Engine Setup` (Step 18 area) — the wheel is already wired.
+
+**Next Steps Ready:**
+- Implement actual shape variant prefabs/variants via the Voxel Engine Setup (non-destructive).
+- Hook selected shape into GridBuilder placement + GridBlockMeshBuilder.
+- Continue 4.7.0 (armor, weapons, damage, etc.).
+
+### [5.40.0-dev] Premium Build Wheel & Conveyor Shape UI Polish + Roadmap Progress
+
+**Type:** MINOR — save-compatible premium UI visual upgrade for construction wheels (no save/API touch)
+
+**Added / Improved:**
+- HammerBuildWheel (building hammer radial selector) completely restyled for premium industrial look:
+  - Larger 560px wheel with thicker clean cream/off-white ring matching reference aesthetic.
+  - Cleaner segmented ring texture: bold outer/inner borders, subtle industrial bevel, red-tinted active/hover segments.
+  - Center disc upgraded to match reference: deep navy background, prominent icon area, larger title + subtitle + cost with better typography and spacing.
+  - Enhanced hover/selection feedback: scale + glow + accent ring on segments, premium micro-transitions.
+  - Icons and labels repositioned inward with tighter clipping, better contrast.
+- ConveyorShapeWheel (conveyor mode radial selector) upgraded in parallel:
+  - Same premium ring styling (cream ring on dark overlay, clean segments).
+  - Larger center badge with tier + selected mode + premium typography.
+  - Improved ring texture, segment hover states, parallax and scale polish.
+  - Prompt pill restyled to match overall premium UI.
+- Both wheels now use consistent premium color tokens (cream ring, cyan/red accents, deep center).
+- Non-destructive code changes only; no prefabs/recipes touched.
+- Bumped to 5.40.0-dev (MINOR, save-compatible UI polish).
+
+**Roadmap Status Updates (per guidelines):**
+- 4.6.0 Production Lines & UI Revolution: **✅ COMPLETED** (production UI final polish + wheel aesthetics now match premium target).
+- Building Hammer wheel & placement: **🛠️ WORKING ON** → upgraded to premium reference style; Unity validation next.
+- Conveyor logistics (shape wheel): **🛠️ WORKING ON** → visual polish complete; ready for full validation.
+- Grid shape variant wheel (4.7.0): **🟡 PARTIALLY COMPLETE** (roadmap target for later; wheel architecture already reusable).
+- All new UI changes follow core pillars: simplicity, sleek aesthetics, production value (micro-interactions + premium ring).
+
+**Manual Unity Steps:**
+1. Tools → Voxel Engine → Voxel Engine Setup → **3. Build Main Menu Scene** (ensures theme consistency).
+2. Open Game scene, equip Hammer (hold Build Wheel key) — verify new larger premium cream ring, center disc, hover feedback.
+3. Equip conveyor item (hold Build Wheel) — verify matching premium conveyor shape wheel.
+4. Test hover, click-select, scroll pages, parallax on both wheels at multiple resolutions.
+5. No prefab/recipe changes required — pure runtime UI polish.
+
+**Next Roadmap Steps Started:**
+- Continuing 4.6.0 completion and moving focus to 4.7.0 Power/Vehicles (armor, grid shape variants, combat prep).
+- Grid Shape Variant Wheel will reuse the polished wheel architecture when implemented via Step 18+ setup.
+
+---
+
+### [5.38.1-dev] Theme System Compile Fix
+
+**Type:** PATCH — fix compile errors in theme override and applier
+
+**Fixed:**
+- Fixed `UIThemeOverride.cs` CS1061 errors: removed invalid `Crusher.Definition` / `Assembler.Definition` references (machines don't expose Definition property). Now uses only `UIThemeOverride` component for accent/theme resolution.
+- Fixed `UIThemeApplier.cs` SetProperty reflection path to avoid CS1061 on `IStyle.SetProperty` — now uses TryGetMethod with safe fallback, no hard dependency on Unity's internal SetProperty extension.
+- Removed hard `style.SetProperty` calls from `UITheme.Panel()` and `AccentDivider()` that caused compile errors on older UI Toolkit versions; USS vars now injected solely via `UIThemeApplier.ApplyThemeToRoot()` which is safe.
+- `ThemedPanel` and `ThemedDocument` now use coroutine `DelayedApply` instead of string-based `Invoke(nameof(...))` to support protected methods.
+- Bumped version to 5.38.1-dev (PATCH — no save/API touch).
+
+---
+
+### [5.38.0-dev] Complete UI Theme System — USS Variables, ThemedPanel & Custom Editor
+
+**Type:** MINOR — save-compatible completion of UI theme system (4.6.0)
+
+**Added:**
+- Added `ThemedPanel` abstract MonoBehaviour base class — all premium panels derive from this, subscribe to `UIThemeManager.OnThemeChanged`, apply theme reactively without scene reload.
+- Added `ThemedDocument` lightweight component for existing UIDocuments (GameUI, MainMenu, Pause) to become theme-reactive.
+- Added `UIThemeApplier` static utility that injects USS custom properties (`--theme-accent`, `--theme-panel`, `--theme-text`, `--theme-radius`, `--theme-glow`, `--theme-border`) into any VisualElement root, and applies semantic class styling (`themed-panel`, `themed-accent-divider`, `themed-title`, `themed-subtitle`).
+- Added `UIThemeDatabase` ScriptableObject that holds all 10 built-in `UIThemeDefinition` references, sorted by enum order, loadable via Resources or AssetDatabase.
+- Expanded `UIThemeDefinition` to meet full roadmap spec: accent, panel, text, border, background, panelOpacity, cornerRadius, borderThickness, accentGlow, backgroundDim, animationSpeed, transitionCurve, customFont, fontAssetName, baseFontSize, description.
+- Expanded `UIThemeManager` with:
+  - Events `OnThemeChanged` and `OnDefinitionApplied` for reactive pipeline.
+  - New persisted properties `AccentGlow` (0-1) and `AnimationSpeed` (0.2-3x) with PlayerPrefs backing.
+  - `ApplyDefinition(UIThemeDefinition)` to apply a ScriptableObject directly.
+  - `GetCurrentDefinition()`, `GetAllDefinitions()`, `DescriptionFor()`, `ResetToDefault()`.
+  - Export code now includes glow and animation speed (backward compatible with 7-part codes).
+  - Loads `UIThemeDatabase` at startup for fast lookup.
+- Expanded `UIThemeOverride` to support full per-block overrides: `overrideTheme`, `themeOverride`, `overrideAccent`, `accentColor`, `iconStyleOverride`, `zoneLabel`, `tintStatusLights`, plus static helpers `ResolveTheme`, `ResolveAccent`, `ResolveIconStyle`, `Ensure`.
+- New `CustomThemeEditorUI` dedicated full editor panel with live preview card, built-in theme selector, custom accent RGB + preset chips, shape editors, effects & motion editors, import/export/duplicate/reset row.
+- Refactored `UITheme.Panel()` and `AccentDivider()` and `Title()/Subtitle()` to add themed- classes and inject USS variables via `SetProperty`.
+- Refactored `SettingsUI.InterfaceTab` to full premium editor: description hint, live preview with dot + LIVE pill, custom accent toggle with RGB sliders + 11 preset color chips, opacity/radius sliders with live readout, glow + animation speed sliders, share row with Copy/Import/Duplicate/Reset, code display, production accent separate section, and premium editor explanatory hint referencing ThemedPanel + USS variables.
+
+**Setup Wizard (Non-Destructive):**
+- Step 3 now generates 10 enriched `UIThemeDefinition` assets with border/background/glow/dim/animation/curve/fontSize/description fields populated non-destructively (preserves user edits, only fills defaults when zero).
+- Step 3 now creates/updates `Assets/VoxelEngineAssets/UI/UIThemeDatabase.asset` containing all 10 themes sorted by enum, with clear logging of created vs updated count.
+- Step 17 `UIThemeOverride` components on Crusher/Assembler/ElectricFurnace prefabs continue to be verified non-destructively (accent preserved).
+
+**Roadmap Status:**
+- 4.6.0 UI theme system moved to **✅ COMPLETED** — all requirements met: 10 themes, colors/fonts/radius/opacity/glow/animation curves, ThemeDefinition ScriptableObjects, player switching in Settings → Interface, per-block overrides (ThemeOverride, AccentColorOverride, IconStyleOverride), custom theme editor with live preview and export/import, UIThemeManager loads ScriptableObjects and applies USS variables reactively, ThemedPanel base class for all panels, no reload required.
+
+**Manual Unity Steps:**
+1. In Unity, open Tools → Voxel Engine → Voxel Engine Setup.
+2. Click **3. Build Main Menu Scene** — this regenerates the 10 enriched theme assets and creates/updates UIThemeDatabase non-destructively. Console will log `updated theme database with 10 themes`.
+3. Verify `Assets/VoxelEngineAssets/UI/Themes/` contains 10 Theme_*.asset files and `Assets/VoxelEngineAssets/UI/UIThemeDatabase.asset` exists.
+4. Click **17. Build Factory Foundations + HV Grid** to ensure factory machine prefabs still carry `UIThemeOverride` components.
+5. Open MainMenu scene and Game scene — check Interface tab shows 10 themes, custom accent toggle, preset chips (11 colors), opacity/radius/glow/animation sliders, live preview card that updates without reload, Copy/Import/Reset buttons.
+6. Test reactive theming: change theme in Interface tab → all open panels (inventory, machine UI, etc.) should update instantly via OnThemeChanged without scene reload.
+
+---
+
+### [5.37.0-dev] Theme Asset Generation & Machine Overrides
+
+**Type:** MINOR — new save-compatible setup-authored theme assets and machine override wiring
+
+**Added / Improved:**
+- Step 3 now generates 10 `UIThemeDefinition` assets under `Assets/VoxelEngineAssets/UI/Themes`.
+- Generated theme assets cover all roadmap built-in themes and are created non-destructively.
+- Step 17 now adds optional `UIThemeOverride` components to generated Crusher, Assembler, and Electric Furnace prefabs.
+- Crusher and Assembler UIs already resolve these overrides for per-block accent colors when enabled.
+- This connects the setup workflow to the broader UI theme system without touching gameplay saves.
+
+**Roadmap Continued — 4.6.0 UI Theme System:**
+- Setup-authored theme assets and machine override wiring are now started.
+- Next targets: USS variable application and richer custom theme editor polish.
+
+---
+
+### [5.36.0-dev] Advanced Theme Shape & Import Export
+
+**Type:** MINOR — new save-compatible custom theme editor controls
+
+**Added / Improved:**
+- Interface settings now include advanced theme shape controls for Panel Opacity and Corner Radius.
+- Panel opacity and corner radius persist locally through PlayerPrefs.
+- Runtime panels now use the custom corner radius.
+- Added `Copy Theme Code` for sharing current theme settings as a compact string.
+- Added `Import Clipboard` to apply a copied theme code.
+- Reset Interface Theme now resets built-in theme, custom accent, opacity, and radius.
+
+**Roadmap Continued — 4.6.0 UI Theme System:**
+- Advanced custom theme editing is now started with shape controls and import/export.
+- Next targets: USS variable application and deeper per-block overrides.
+
+---
+
+### [5.35.0-dev] Custom Theme Accent Editor
+
+**Type:** MINOR — new save-compatible custom interface theme control
+
+**Added / Improved:**
+- Added persistent Custom Accent override to `UIThemeManager`.
+- Interface settings now include a Custom Accent toggle.
+- When enabled, players can edit accent RGB sliders directly in the Interface tab.
+- Custom accent is persisted through PlayerPrefs.
+- Reset Interface Theme now resets both built-in theme and custom accent override.
+
+**Roadmap Continued — 4.6.0 UI Theme System:**
+- Custom theme editor work is now started with runtime RGB accent editing.
+- Next targets: USS variable application and advanced custom theme editing.
+
+---
+
+### [5.34.0-dev] Runtime Theme Application & Per-Block Overrides
+
+**Type:** MINOR — new save-compatible UI theme application and override foundation
+
+**Added / Improved:**
+- Global UI theme selection now affects standard panel background, panel border accent, default accent dividers, and title text tone at runtime.
+- Added Interface theme preview card and reset button.
+- Added `UIThemeOverride` MonoBehaviour for optional per-block UI accent overrides.
+- Crusher and Assembler panels now respect `UIThemeOverride` accents when present.
+- This advances the UI theme pipeline from selection-only toward actual runtime visual application.
+
+**Roadmap Continued — 4.6.0 UI Theme System:**
+- Runtime theme application and per-block override foundations are now started.
+- Next targets: USS variable application and custom theme editor.
+
+---
+
+### [5.33.0-dev] UI Theme System Starter
+
+**Type:** MINOR — new save-compatible interface/theme settings foundation
+
+**Added:**
+- Added `UIThemeDefinition` ScriptableObject type for authored theme assets.
+- Added `BuiltInUITheme` with ten roadmap themes: Industrial Steel, Midnight Operator, Hazard Amber, Arctic Frost, Bio-Luminescent, Military Olive, Neon Cyber, Corporate Clean, Rust Belt, and Void Black.
+- Added `UIThemeManager` with persistent PlayerPrefs-backed theme selection and accent lookup.
+- Added an `Interface` tab to both Main Menu settings and in-game Pause settings.
+- Interface tab lets players choose the global UI theme and production panel accent override.
+- Existing production Recipe Browser and Production Statistics panels continue using production accent overrides.
+
+**Roadmap Continued — 4.6.0 UI Theme System:**
+- Broader UI theme system work is now started.
+- Next targets: USS variable application, per-block UI overrides, and custom theme editor.
+
+---
+
+### [5.32.0-dev] Recipe Browser Craftability Filters
+
+**Type:** MINOR — new save-compatible recipe browser filtering/sorting controls
+
+**Added:**
+- Added `Have Mats` filter to Recipe Browser.
+- Have Mats filters visible recipes down to methods craftable from the player's current carried inventory.
+- Added sort toggle between `Sort: Name` and `Sort: Methods`.
+- Recipe Browser result counts continue showing visible output items and recipe methods after filters are applied.
+- Craftability and sort preferences persist locally through PlayerPrefs.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Recipe browser now supports craftability filtering and sorting.
+- Next target: final planner UX polish and transition toward broader UI theme system work.
+
+---
+
+### [5.31.0-dev] Production Stats Actions & Planner Polish
+
+**Type:** MINOR — new save-compatible production statistics controls and planner navigation
+
+**Added / Improved:**
+- Production Statistics now has `Copy Stats`, exporting current production/consumption/net rates as text.
+- Production Statistics now has `Reset`, clearing the current session's production tracker.
+- Bottleneck hint visibility and hidden hint items now persist locally through PlayerPrefs.
+- Bottleneck/surplus hint rows now include `View`, opening Recipe Browser focused on that item.
+- Material Summary keeps Missing Only and CSV export from the previous planner export pass.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Final planner UX polish continues with cross-panel navigation and stats export/reset actions.
+- Next target: transition toward broader UI theme system work.
+
+---
+
+### [5.30.1-dev] Planner Export Compile Fix
+
+**Type:** PATCH — UI compile fix
+
+**Fixed:**
+- Fixed CSV quote escaping in `RecipeBrowserUI.cs`.
+- Fixed newline escaping in `RecipePinHud.cs`.
+- Planner export and pinned recipe copy features now compile correctly.
+
+---
+
+### [5.30.0-dev] Planner Export & Pin UX Polish
+
+**Type:** MINOR — new save-compatible planner export and pin HUD quality-of-life controls
+
+**Added / Improved:**
+- Material Summary now has a Missing Only / Show All toggle.
+- Missing-only material filtering persists locally with the other planner settings.
+- Added `Copy CSV`, exporting material summary as CSV with item, required, have, missing, and type columns.
+- Pinned Recipe HUD now has `Copy Pins` to copy all pinned recipe cards as readable text.
+- Pinned Recipe HUD now has `Clear` to remove all pinned recipes at once and persist the cleared state.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Planner export and pin UX polish now includes CSV and pinned-list controls.
+- Next target: final planner UX polish and transition toward broader UI theme system work.
+
+---
+
+### [5.29.0-dev] Production Shopping List Export
+
+**Type:** MINOR — new save-compatible production planner export aid
+
+**Added / Improved:**
+- Material Summary now shows an Inventory Coverage line summarizing missing item types and total missing units.
+- Added `Copy Missing`, exporting only currently missing materials as a shopping list.
+- `Copy Missing` respects current batch count, method preference, depth, and inventory coverage.
+- `Copy Plan` continues exporting the full plan with Have/Missing counts.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Graph export polish now includes missing-material shopping lists.
+- Next target: planner UX polish and graph export polish.
+
+---
+
+### [5.28.0-dev] Inventory-Aware Production Planner
+
+**Type:** MINOR — new save-compatible production planning UX
+
+**Added / Improved:**
+- Material Summary now compares required materials against the player's current inventory.
+- Each material line shows Have and Missing counts.
+- Copy Plan now includes Have and Missing counts for every material.
+- Recipe Browser now receives the active player inventory so planner coverage can update live.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Production planner UX now includes inventory-aware material coverage.
+- Next target: graph export polish and richer planning controls.
+
+---
+
+### [5.27.0-dev] Production Planner UX Polish
+
+**Type:** MINOR — new save-compatible planner UX refinements
+
+**Fixed / Improved:**
+- Added a `Reset` control for target/minute, returning the planner target to 60/min.
+- Moved `Used By` below Dependency Chain and Material Summary so planning information appears before downstream usage.
+- Recipe Browser search now reports focus to GameUI, preventing inventory/research/hotkey UI closures while typing into the search field.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Production planner UX polish continues with target reset, better section order, and safer search focus handling.
+- Next target: richer graph controls and persistent planner refinements.
+
+---
+
+### [5.26.0-dev] Recipe Method Comparison
+
+**Type:** MINOR — new save-compatible recipe planner comparison UI
+
+**Added:**
+- Recipe Browser now shows a Method Comparison section when an item has multiple production methods.
+- Method Comparison displays per-method output/minute and estimated machine count for the current target/minute.
+- Added Prefer buttons for supported alternate paths, allowing players to steer Dependency Chain and Material Summary toward AI-assembler or Assembler Station methods.
+- Preferred method selection persists through the existing planner preference system.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Production planner UX polish now includes method comparison.
+- Next target: planner UX polish and graph export polish.
+
+---
+
+### [5.25.1-dev] Production Planner Compile Fix
+
+**Type:** PATCH — UI compile fix
+
+**Fixed:**
+- Fixed `CS0841` / `CS0165` in `RecipeBrowserUI.cs` by declaring the target-per-minute label before local refresh callbacks use it.
+- Production planner controls compile again while keeping the target/minute live update behavior.
+
+---
+
+### [5.25.0-dev] Production Machine Planner
+
+**Type:** MINOR — new save-compatible production-rate planning aid
+
+**Added:**
+- Material Summary now includes a target-per-minute planner.
+- Target/minute can be adjusted with `−` and `+` controls.
+- Recipe Browser estimates how many machines are needed for the selected recipe path.
+- Machine estimates respect current method preference, recipe output count, and process time.
+- Target/minute is included in copied production plans.
+- Target/minute persists locally through PlayerPrefs.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Production planner UX polish is now started with machine-count estimates.
+- Next target: richer graph controls and planner persistence polish.
+
+---
+
+### [5.24.0-dev] Recipe Graph Export Polish
+
+**Type:** MINOR — new save-compatible recipe graph export controls
+
+**Added:**
+- Recipe Browser details now has `Copy Methods`, exporting every known way to make the selected item as readable text.
+- Dependency Chain now has `Copy Chain`, exporting the currently selected dependency path as readable text.
+- Exported chain text respects current depth, raw-input visibility, and method preference.
+- Existing `Copy Plan` remains available for material shopping lists.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Graph export polish is now started.
+- Next target: production planner UX polish.
+
+---
+
+### [5.23.0-dev] Recipe Browser Method Filters
+
+**Type:** MINOR — new save-compatible recipe graph filtering controls
+
+**Added:**
+- Recipe Browser now has quick method filters: All, Hand, Station, AI, and Smelt.
+- Filter selection persists locally through PlayerPrefs.
+- Recipe Browser shows result counts for visible items and recipe methods.
+- Clear search control appears when a search term is active.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Richer graph controls now include method filtering.
+- Next target: production planner UX and graph export polish.
+
+---
+
+### [5.22.0-dev] Persistent Recipe Planner Controls
+
+**Type:** MINOR — new save-compatible local planner preference persistence
+
+**Added / Improved:**
+- Recipe Browser now persists selected recipe target locally.
+- Dependency Chain depth persists locally.
+- Show Raw / Hide Raw preference persists locally.
+- Chain method preference persists locally: Auto, Prefer AI, or Prefer Station.
+- Material Summary batch count persists locally.
+- All persistence uses PlayerPrefs and does not touch save schema.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Planner persistence is now started.
+- Next target: richer graph controls and production planner UX.
+
+---
+
+### [5.21.0-dev] Production Plan Controls
+
+**Type:** MINOR — new save-compatible production planning controls
+
+**Added / Improved:**
+- Material Summary now supports batch planning with `−`, batch count reset, and `+` controls.
+- Material totals update locally without rebuilding the whole Recipe Browser panel.
+- Added `Copy Plan` to copy a plain-text production plan to the clipboard.
+- Copied plans include selected output, batch count, chain preference, depth, and grouped material requirements.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Graph export / production planning controls are now started.
+- Next target: richer graph controls and planner persistence.
+
+---
+
+### [5.20.0-dev] Recipe Material Summary
+
+**Type:** MINOR — new save-compatible recipe planning summary
+
+**Added:**
+- Recipe Browser details now include a Material Summary section.
+- Material Summary recursively follows the selected dependency path and estimates base/raw input requirements for one selected output batch.
+- Summary respects the current dependency chain depth and recipe method preference.
+- Materials are grouped by item with counts and raw/item tags.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Richer recipe graph controls continue with material summary planning.
+- Next target: graph export / production planning controls.
+
+---
+
+### [5.19.0-dev] Persistent Production UI Settings
+
+**Type:** MINOR — persistent local UI preference support
+
+**Added / Improved:**
+- Production panel theme selection now persists locally through PlayerPrefs.
+- Recipe pins now persist locally through PlayerPrefs.
+- Pinned recipes are restored automatically when the HUD mounts.
+- Pin removal updates persisted data immediately.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Persistent theme and pin settings are now started.
+- Next target: richer recipe graph controls.
+
+---
+
+### [5.18.0-dev] Recipe Pin HUD & Graph Preferences
+
+**Type:** MINOR — new save-compatible recipe planning HUD and graph preference controls
+
+**Fixed / Improved:**
+- Dependency Chain controls now update button text and tree content locally when raw inputs/depth/method preference changes.
+- Smelting recipe display names now show clean labels such as `Smelting: Copper` instead of asset names like `Smelt_Copper`.
+- Added method preference cycling for dependency chains: Auto, Prefer AI, and Prefer Station. This lets players choose between AI-assembler and Assembler Station paths when both exist.
+
+**Added:**
+- Added Recipe Pin HUD on the center-right side of the screen.
+- Recipes can be pinned from Recipe Browser details.
+- Up to 4 pinned recipes are shown at once. Pinning a fifth removes the oldest pin.
+- Pinned recipe cards show output, method, and required inputs.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Recipe planning HUD is now started.
+- Next target: persistent theme/pin settings and richer graph controls.
+
+---
+
+### [5.17.0-dev] Production Panel Theme Overrides
+
+**Type:** MINOR — new save-compatible UI theme override starter
+
+**Fixed / Improved:**
+- Dependency Chain controls now refresh only the chain content, preserving the current scroll position when toggling raw inputs or changing chain depth.
+- Recipe Browser icon no longer uses a glyph that can render as a square on unsupported fonts.
+
+**Added:**
+- Added a lightweight production panel theme override state.
+- Production Statistics and Recipe Browser now include a `Theme` button cycling Steel, Amber, Cyan, and Violet accent styles.
+- This starts the roadmap theme-override work without touching save data.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Theme overrides for production panels are now started.
+- Next target: richer graph controls and persistent theme settings.
+
+---
+
+### [5.16.0-dev] Polished Recipe Chain Graph Controls
+
+**Type:** MINOR — new save-compatible recipe graph control/polish
+
+**Changed:**
+- Dependency Chain was rebuilt from plain text into stacked visual cards with colored side bars, method badges, item tint dots, and per-node metadata.
+- Added chain controls for depth adjustment and raw-input visibility.
+- Chain nodes can be clicked to focus that recipe target.
+- Raw inputs now display as compact RAW cards instead of plain indented text.
+- Continued use of `AI-assembler` naming for factory machine assembling recipes.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Richer recipe graph controls are now started.
+- Next target: theme overrides for production panels.
+
+---
+
+### [5.15.0-dev] Recipe Dependency Chain View
+
+**Type:** MINOR — new save-compatible recipe planning visualization
+
+**Added / Improved:**
+- Added a recursive Dependency Chain section to the Recipe Browser details panel.
+- The chain shows the selected item, the preferred immediate recipe, and nested craftable inputs down to several levels.
+- Cycle protection prevents repeated recipes from endlessly expanding.
+- Machine assembling recipes now display as `AI-assembler` as requested.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Deeper recipe chain visualization is now started.
+- Next target: theme overrides and richer graph controls.
+
+---
+
+### [5.14.3-dev] Recipe Browser Grouping & Labels
+
+**Type:** PATCH — recipe browser grouping/readability fix
+
+**Fixed / Improved:**
+- Recipe Browser now groups production targets by player-facing item name, so duplicate item assets with different internal ids but the same visible item appear under one row.
+- Copper LV Wire and similar duplicated setup-era items now appear as one production target with all methods under Made By.
+- Station-tier recipes now show `Assembler Station` instead of `Assembler` to avoid confusion with the factory Assembler machines.
+- Machine assembling recipes were initially separated from station recipes; later releases renamed this label to `AI-assembler`.
+- Recipe de-duplication keys now use the same player-facing item grouping for inputs.
+
+---
+
+### [5.14.2-dev] Recipe Browser Polish & GameUI Panel Guard
+
+**Type:** PATCH — UI polish and null-panel safety fix
+
+**Fixed / Improved:**
+- Recipe Browser left list now groups by output item, so duplicated alternate recipes no longer appear as repeated selectable rows.
+- `None:` recipe labels are now shown as `Hand Crafting:` in Made By sections.
+- Recipe Browser entries are de-duplicated by kind/name/output/input signature.
+- Scrollbar thumbs now stay inside the scrollbar track.
+- GameUI now guards against a temporarily missing UI Toolkit panel, fixing the `RuntimePanelUtils.ScreenToPanel` NullReference when selecting/clicking the GameUI object in the Hierarchy.
+
+---
+
+### [5.14.1-dev] Recipe Browser Interaction Fix
+
+**Type:** PATCH — UI interaction/focus fix
+
+**Fixed:**
+- Recipe Browser search no longer rebuilds the entire inventory UI on each typed character, so the search field keeps focus while typing.
+- Selecting a recipe now updates the details panel immediately.
+- Recipe list selection highlight refreshes locally without closing/reopening the browser.
+- Clicking craftable inputs inside the details panel now jumps to that input's recipe without closing the UI.
+
+---
+
+### [5.14.0-dev] Recipe Browser Dependency View & Hideable Bottleneck Hints
+
+**Type:** MINOR — new save-compatible production planning UI
+
+**Added:**
+- Added Recipe Browser panel accessible from the inventory panel.
+- Recipe Browser lists crafting, smelting, and machine recipes from the validated recipe graph.
+- Selecting a recipe output shows Made By, Used By, and Immediate Inputs sections.
+- Craftable input rows can be clicked to jump to that input's recipe.
+- Added search support for recipe/output names and recipe kinds.
+
+**Improved:**
+- Bottleneck Hints can now be hidden globally for the current session.
+- Individual item bottleneck/surplus hints can be hidden.
+- Hidden item hints can be restored with Unhide All Items.
+- Opening Recipe Browser and Production Statistics is mutually exclusive so panels do not overlap.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Recipe Browser dependency view is now started.
+- Next target: deeper multi-step chain visualization and theme-overridden production panels.
+
+---
+
+### [5.13.0-dev] Production Bottleneck Hints
+
+**Type:** MINOR — new save-compatible production-line insight UI
+
+**Added:**
+- Production Statistics now includes a Bottleneck Hints card.
+- Items consumed faster than they are produced are listed as shortages with the extra production per minute needed.
+- Items being produced with no recent consumer are listed as idle surplus.
+- Stable production displays a green “Production Stable” message.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Production-line UI remains **WORKING ON** with bottleneck hints now started.
+- Next target: Recipe Browser dependency view.
+
+---
+
+### [5.12.8-dev] Wire Cancel, Connector Snapping & Generator Battery Pause
+
+**Type:** PATCH — wire UX, connector placement, and generator fuel economy
+
+**Fixed / Improved:**
+- Right-clicking while holding a manual LV/HV wire now cancels the wire placement if no connector/relay/station is targeted.
+- Manual wire links are now injected into power topology regardless of distance, so connector-to-connector wire spans actually join the same power network.
+- Compact connectors can auto-tap a nearby generator/consumer while keeping one manual wire span.
+- Compact wire connectors snap to nearby electrical objects so placement aligns to the object face/grid instead of looking offset.
+- Coal Generator UI now shows a battery reserve icon/line.
+- Coal Generator pauses fuel burn when connected batteries are full and no power is being used, then resumes when demand returns.
+- LV connector/grid capacity descriptions show `100 kW`; HV connector/grid capacity descriptions show `Infinite`.
+
+---
+
+### [5.12.7-dev] Manual Wire Attachment & LV/HV Relay Split
+
+**Type:** PATCH — wire interaction and voltage display fixes
+
+**Fixed / Improved:**
+- Manual LV/HV wire tool now raycasts all objects as a fallback when the station layer mask misses compact connectors/relays.
+- Manual wire linking accepts both left-click and right-click while holding a wire item.
+- Player interaction now yields right-click to the wire tool while holding LV/HV wire, preventing connector/relay clicks from opening the voltage grid panel during wire placement.
+- Added separate LV Power Relay and HV Power Relay generation in Step 17.
+- LV grid max capacity now reports `100 kW` instead of a huge placeholder number.
+- HV grid max capacity now reports `Infinite`.
+- Compact connector/relay runtime node split prevents compact devices from using energy-pipe visuals.
+
+---
+
+### [5.12.6-dev] Compact Connector Visual Fix
+
+**Type:** PATCH — compact power connector visual/runtime fix
+
+**Fixed:**
+- Compact LV/HV connectors and Power Relay no longer use `PowerCable` as their runtime node.
+- Added `CompactPowerNode`, a cable-kind topology node without energy-pipe visuals.
+- Step 17 removes accidental `PowerCable` components from compact connector/relay prefabs and installs `CompactPowerNode` instead.
+- This prevents LV Wire Connector from visually/physically behaving like an Energy Pipe after placement.
+
+---
+
+### [5.12.5-dev] Debug Power Spawn & Manual Wire Clarity
+
+**Type:** PATCH — debug-spawner filtering and setup naming clarity
+
+**Fixed / Improved:**
+- Debug Spawner's “Spawn All POWER Blocks” now spawns only placeable `BlockItem` power blocks, not manual wire resource items. This prevents Copper LV Wire from being confused with LV Wire Connector during testing.
+- LV wire resources are moved to the `Wire` category and receive descriptions explaining they are manual wire-link items, not placeable energy pipe blocks.
+- Step 17 continues repairing generated block item identity every run so connector/crusher/assembler items do not retain default ItemDefinition names.
+
+---
+
+### [5.12.4-dev] Step 17 Compile Fix
+
+**Type:** PATCH — editor compile fix
+
+**Fixed:**
+- Fixed `CS0103` in `VoxelEngineSetupWindow.cs` caused by using Step 17's local `repairedLinkCount` variable inside an older power setup helper scope.
+- Legacy energy-pipe migration still repairs display names, descriptions, prefab links, and stackable placement settings; it simply no longer increments an out-of-scope counter.
+
+---
+
+### [5.12.3-dev] Energy Pipe Placement & UI Cleanup Repair
+
+**Type:** PATCH — setup identity repair, placement snapping, and UI cleanup
+
+**Fixed / Improved:**
+- Step 17 now repairs generated block item identity fields every run so failed setup-created items no longer display default names like Iron Ore.
+- Legacy and new Energy Pipe block items are marked stackable/thin so adjacent pipe placement validates and pipes can snap next to each other.
+- Legacy electrical pipe block assets are migrated to Energy Pipe display names and reconnected to the generated Energy Pipe prefabs.
+- Coal Generator inline port-configuration UI was removed; it now uses the same clickable Item Ports modal workflow style.
+- Existing placed legacy coal generators can receive `CoalGeneratorFuel` at interaction time if the prefab was old.
+- Energy pipe visual arms now use local-space targets so rotated pipe networks and wall-mounted relays draw in the correct direction.
+
+---
+
+### [5.12.2-dev] Prefab Script Compatibility & Energy Pipe Rename
+
+**Type:** PATCH — setup resilience, coal-generator repair, and power visual fixes
+
+**Fixed / Improved:**
+- Restored `MachineVisualAnimators` as a compatibility MonoBehaviour so old Funnel prefabs can load and be repaired instead of blocking prefab saves.
+- Step 17 now repairs the legacy Coal Generator prefab by adding `CoalGeneratorFuel` and reconnecting the legacy Coal Generator block item to the repaired prefab.
+- Power cable visuals now build from local-space neighbour positions, fixing arms/wires pointing in the wrong world direction on rotated or wall-mounted placement.
+- Renamed future generated electrical pipe content to Energy Pipe naming:
+  - Copper Energy Pipe
+  - Iron Energy Pipe
+  - Gold Energy Pipe
+  - Superconductor Energy Pipe
+- Updated energy-pipe recipes and research lookup keys to the new names.
+
+**Manual Validation Required:**
+- Let Unity recompile, run Step 17 without deleting folders, then verify Funnel saves, Coal Generator UI opens, and energy pipe visuals connect in the correct direction.
+
+---
+
+### [5.12.1-dev] Step 17 Missing Script Repair
+
+**Type:** PATCH — Unity prefab serialization and setup repair fixes
+
+**Fixed / Improved:**
+- Split machine animator MonoBehaviours into one class per file so Unity can serialize `AssemblerMotionAnimator`, `CrusherMotionAnimator`, and `FunnelMotionAnimator` reliably.
+- Split compact voltage station MonoBehaviours into matching files/classes for `LvWireConnectorStation`, `HvWireConnectorStation`, and `PowerRelayStation`.
+- Step 17 now strips missing script references from loaded prefabs before saving, then re-adds required components. This prevents Unity's “cannot save prefab with missing script” errors.
+- Step 17 now adds `CoalGeneratorFuel` to the Coal Generator prefab so right-clicking opens the coal generator fuel UI.
+- Step 17 connector/relay prefabs now use the corrected component class names.
+
+**Manual Validation Required:**
+- Run Step 17 again without deleting folders. Existing missing scripts should be removed automatically and prefabs should save normally.
+
+---
+
+### [5.12.0-dev] Machine UI Recovery & Compact Power Relays
+
+**Type:** MINOR — new save-compatible power connector blocks plus UI/interaction fixes
+
+**Validated:**
+- Thomas confirmed the recipe graph validator now reports `0` errors and `0` warnings.
+
+**Fixed / Improved:**
+- Crusher and Assembler interaction now opens their machine UI so recipes can be selected.
+- Production Statistics automatically closes when crafting opens or when another right-side UI/machine panel is opened.
+- Coal Generator UI is no longer covered by a stale Production Statistics panel.
+- Electric Furnace no longer shows the old inline power-port UI; it keeps the clickable Item Ports modal workflow.
+- Electric Furnace power consumers can now draw from nearby energy pipes without being blocked by item-port face settings.
+- Electric Furnace hides old world port indicator squares to avoid duplicate port presentation.
+
+**Added:**
+- Added compact `LV Wire Connector` block: wall/foundation mount, max 1 connection.
+- Added compact `HV Wire Connector` block: wall/foundation mount, max 1 connection.
+- Added compact `Power Relay` block: wall/foundation mount, relays power only, max 8 connections.
+- Added max-auto-connection support to power nodes and topology rebuilds.
+- Step 17 generates the new connector/relay prefabs, block items, descriptions, and recipes non-destructively.
+
+---
+
+### [5.11.0-dev] Live Production Statistics Panel
+
+**Type:** MINOR — new save-compatible production visibility UI
+
+**Added:**
+- Added `ProductionStatsTracker`, a save-free runtime tracker for produced/consumed item counts.
+- Crusher, Assembler, and Electric Furnace now report consumed inputs and produced outputs when batches complete.
+- Added a live Production Statistics panel accessible from the inventory panel.
+- Panel shows per-minute produced/consumed/net rates plus session totals for tracked items.
+
+**Validation:**
+- Thomas confirmed the recipe graph is down to `0` errors after the repair workflow.
+
+**Roadmap Continued — 4.6.0 Production Lines:**
+- Recipe graph validation moved to **COMPLETED**.
+- Production-line UI remains **WORKING ON** with live statistics now started.
+- Next targets: bottleneck hints and Recipe Browser dependency view.
+
+---
+
+### [5.10.2-dev] Final Recipe Error Repair & Duplicate Warning Cleanup
+
+**Type:** PATCH — editor validation/repair polish
+
+**Fixed / Improved:**
+- Added targeted repair for `Recipe_GThrustLarge.asset` by reconnecting its missing output to the existing large thruster item.
+- Added Crusher stone byproduct repair so Sand is connected when available.
+- Validator now downgrades expected progression duplicates to Info instead of Warnings when duplicates are clearly intentional root/domain recipe mirrors or hand-craft/machine alternatives.
+
+**Validation Result From Previous Pass:**
+- Recipe graph errors reduced from `74` to `1` after `5.10.1-dev` repair.
+- Remaining target for this patch: `Recipe_GThrustLarge.asset` missing output.
+
+---
+
+### [5.10.1-dev] Recipe Graph Missing-Link Repair
+
+**Type:** PATCH — editor repair tooling for invalid recipe references
+
+**Added / Improved:**
+- Added `Tools > Voxel Engine > Repair Missing Recipe Links`.
+- Added a `Repair Missing Links` button directly inside the Recipe Graph Validator.
+- Repair pass is non-destructive: it fills missing recipe outputs/inputs, copies valid duplicate recipe links where available, and creates missing base ore resources required by factory recipes.
+- Added targeted repair coverage for early crafting recipes, tiered build-token recipes, science packs, fluid duplicate recipes, maritime recipes, nuclear control rods, smelting recipes, and Crusher ore inputs.
+- Validator automatically rescans after running the repair button.
+
+**Manual Validation Required:**
+- Run the repair once, then run `Scan Project` again and send the new report if any errors remain.
+
+---
+
+### [5.10.0-dev] Production Lines Kickoff & Recipe Graph Validator
+
+**Type:** MINOR — new save-compatible editor tooling for production-line validation
+
+**Added:**
+- Added `Tools > Voxel Engine > Recipe Graph Validator`.
+- Validator scans crafting recipes, smelting recipes, and machine recipes without modifying assets.
+- Reports missing outputs, missing inputs, invalid counts, zero/negative processing times, suspicious byproduct settings, duplicate outputs, input-only base resources, and potential dependency cycles.
+- Copyable markdown report makes it easy to paste validation results into planning notes or issues.
+
+**Roadmap Continued — 4.6.0 Production Lines & UI Revolution:**
+- Marked 4.6.0 as **WORKING ON**.
+- Marked Recipe Graph Validation as **COMPLETED**.
+- Next recommended implementation target is the Production Statistics Panel, followed by the Recipe Browser dependency view.
+
+**Roadmap Status:**
+- Current version and roadmap version synchronized to `5.10.0-dev`.
+- Factory Foundations remain active for final polish/validation, but new feature work has moved into Production Lines.
+
+---
+
+### [5.9.2-dev] Crisp Responsive UI & Conveyor Ramp Corner Fix
+
+**Type:** PATCH — responsive UI/text-quality fixes and conveyor topology polish
+
+**Fixed / Improved:**
+- Runtime UI documents force crisp constant-pixel scaling to avoid low-quality scaled text.
+- Shared PanelSettings setup now authors constant-pixel UI scaling.
+- Center crafting, inventory, machine, and large terminal panels use safer responsive widths and margins.
+- Conveyor shape wheel hover updates selected shape immediately so the ghost preview changes while the wheel is open.
+- Straight conveyors detect ramp/vertical downstream neighbours by socket position, improving corner/turn inference beside slope pieces.
+
+---
+
+### [5.9.1-dev] Responsive Build Wheels & Conveyor Ghost Preview Fix
+
+**Type:** PATCH — wheel interaction, ghost-preview, and responsive-panel polish
+
+**Fixed / Improved:**
+- Conveyor ghosts remain visible while holding the build wheel key and can rebuild disabled preview meshes.
+- Releasing the build wheel key over a conveyor shape selects it.
+- Hammer wheel supports hold-release selection.
+- Wheel labels clip hover backgrounds so rings no longer spill out of button bounds.
+- Machine panels scroll internally and slot rows wrap to avoid horizontal overflow.
+
+---
+
+### [5.9.0-dev] Factory Placement, Machine UI & Visual Polish
+
+**Type:** MINOR — save-compatible machine UI, visual animation, and placement fixes
+
+**Added / Improved:**
+- Added Crusher and Assembler Mk.1–Mk.3 UI panels with recipe selection, power state, progress, enabled toggle, slots, and item-port integration.
+- Added runtime recipe selection support for Crusher and Assembler.
+- Added new generated visual animation components for Funnel, Crusher, and Assembler machines.
+- Upgraded Funnel, Crusher, and Assembler generated prefab visuals through the non-destructive Step 17 workflow.
+- Crusher is larger, top-fed, and includes falling/crushing item animation.
+- Assemblers are larger and include gantry/press/work-piece animation.
+
+**Fixed:**
+- Build ghosts no longer participate in logistics, preventing conveyor items from being deleted into ghost consumers.
+- Stairs can chain onto other stairs.
+
+---
+
+### [5.8.0-dev] Seamless Foundations, Bidirectional Stairs & Factory State Persistence
+
+**Type:** MINOR — new save-compatible factory runtime persistence plus construction snapping/visual fixes
+
+**Validated:**
+- Thomas confirmed the `3.75 m` Size-V4 construction scale, exact Foundation neighbor spacing, and player-away Door swing work correctly in Unity.
+
+**Fixed / Improved:**
+- Foundation deck planks now overlap subtly and cover the complete perimeter structure, removing top seams and visible lower-frame overflow.
+- Foundation top-center no longer captures Stairs; four directional perimeter sockets choose the intended edge.
+- Aiming at a Foundation or Floor side with Stairs anchors the upper tread at that edge and extends the staircase down one complete storey.
+- Aiming at the horizontal top perimeter places the opposite upward-rising orientation.
+- Doorways now expose a dedicated exterior threshold Stair anchor so a descending staircase can lead directly up to the opening.
+- Stair rotation keeps the anchored high/low tread fixed while rotating around the selected socket.
+- Step 5 migrates recognized Setup-generated prefabs to `Generated_SizeV5`, while preserving custom geometry, materials, recipes, health, costs, and balance tuning.
+
+**Roadmap Continued — Factory Persistence:**
+- Conveyor item identity, packet count, path progress, and lateral visual position now save and restore.
+- Chute item identity, packet count, and slide progress now save and restore.
+- Crusher and Assembler input, output, and upgrade buffers now save and restore.
+- Crusher and Assembler active recipe, process progress, and player-enabled state now save and restore.
+- All fields are additive; legacy saves load with empty transport state and default machine behavior.
+
+**Roadmap Status:**
+- Size-V4 scale, Foundation spacing, and player-away Doors: **✅ COMPLETED**.
+- Seamless Foundation deck and bidirectional Stair snapping: **🛠️ WORKING ON** — Unity validation pending.
+- Factory persistence: **🛠️ WORKING ON** — Unity save/reload validation pending.
+
+---
+
+### [5.7.2-dev] 25% Larger Construction, Exact Foundation Spacing & Player-Away Doors
+
+**Type:** PATCH — construction scale, snapping-distance, and directional Door behavior fixes
+
+**Fixed / Improved:**
+- Increased every Setup-generated tiered construction piece by exactly 25%, moving the standard module from `3.0 m` to `3.75 m` while preserving all recipe, tier, health, and material balance values.
+- Corrected Foundation neighbor sockets from a half-module offset to a full `3.75 m` center-to-center offset, preventing adjacent Foundations from occupying the same volume.
+- Updated same-plane Wall, Doorway, Window, Half Wall, and Floor neighbor sockets to use complete module spacing instead of overlapping roots.
+- Kept Wall, Doorway, Window, and Half Wall placement on the Foundation's true upper perimeter at half-module offsets.
+- Increased the tiered construction grid to `3.75 m`, socket search radius to `3.25 m`, and Foundation terrain offset proportionally.
+- Doors now evaluate which side the interacting player is standing on each time they open and swing away from that player; reopening from the opposite side reverses the swing.
+- Step 5 migrates recognized Setup-generated Size-V3 prefabs to the Size-V4 geometry marker while preserving imported/custom prefab geometry, authored materials, recipes, costs, and other balance edits.
+
+**Roadmap Status:**
+- Size-V4 construction, exact Foundation spacing, and player-away Door swing: **WORKING ON** — awaiting Unity validation.
+
+---
+
+### [5.7.1-dev] Size-V3 Edge Snapping, Door Fit & Wheel/UI Refinement
+
+**Type:** PATCH — construction scale, socket orientation, door fit, wheel interaction, and UI authoring fixes
+
+**Fixed / Improved:**
+- Construction module increased to `3.0 m` and rebuilt as Size-V3 player-scale geometry.
+- Added dedicated Foundation top-edge sockets for Wall, Doorway, Window, and Half Wall placement; the center Top socket no longer accepts wall-like pieces.
+- Socket snapping now preserves the exact host/socket quaternion instead of reconstructing world Euler yaw, eliminating slight rotational drift on planetary surfaces.
+- Lateral sockets use true ±1.50 m edges at root height; wall-like and floor-like neighbors remain level.
+- Door enlarged to closely fill the player-sized Doorway opening while preserving a small movement gap.
+- Doorway remains empty; Door remains a separate family on the adjacent Hammer page and opens toward local interior space.
+- Hammer wheel labels/icons moved farther inward and full-wheel pointer coordinates are used for reliable inner-edge selection.
+- Door is positioned directly beside Doorway on the first Hammer page; remaining families continue on the scrollable second page.
+- Conveyor wheel labels narrowed and inset from the ring edge.
+- Step 3 explicitly repairs shared PanelSettings scaling/atlas quality, assigns the shared asset to every Game-scene UIDocument, and runtime systems continue preserving Inspector edits.
+
+**Roadmap Status:**
+- Size-V3 snapping, orientation, Door/Doorway fit, wheel selection, and UI fit: **WORKING ON** — awaiting Unity validation.
+
+---
+
+### [5.7.0-dev] Player-Scale Construction, Separate Doors & UI Authoring Repair
+
+**Type:** MINOR — new Door building family plus construction-scale and shared UI authoring changes
+
+**Added / Changed:**
+- Appended `Door` as the tenth Build Family without reordering serialized family values.
+- Doorway remains an empty structural opening and gains a center socket dedicated to the separate Door family.
+- Door prefabs include a hinged panel, handle, collider, smooth animation, four material tiers, token, recipe, and Hammer-wheel entry.
+- Standard Hammer construction grid increased from `1 m` to `2.5 m`; socket search radius increased to `2.2 m`.
+- Foundation expanded to a 2.5 m raised deck with larger planks, perimeter beams, legs, and braces.
+- Walls, Doorways, Windows, Floors, Stairs, Roofs, Pillars, and Half Walls rebuilt at player-appropriate dimensions.
+- Lateral sockets moved to ±1.25 m outer edges at the host root height, fixing sockets embedded inside blocks and vertical drift between neighboring pieces.
+- Step 5 detects known setup-generated prefabs, replaces their legacy geometry with Size-V3 geometry, and leaves imported/custom prefabs untouched.
+- Hammer wheel icons/labels moved inward; conveyor-wheel labels narrowed and inset from the outer rim.
+- Step 3 now explicitly authors shared MenuPanelSettings quality/fit values, including Match Width/Height and 256 px atlas subtextures.
+- Runtime controllers continue respecting developer-authored PanelSettings without overwriting them.
+
+**Fixed:**
+- Doorway segment selection benefits from full-wedge Hammer hit testing.
+- Side-by-side Foundations, Walls, Doorways, Windows, Floors, Pillars, and Half Walls snap on the same level.
+- A Door can be selected independently, snapped into a Doorway, and toggled with RMB after placement.
+
+**Roadmap Status:**
+- Player-scale Size-V3 construction, separate Door family, edge sockets, wheel spacing, and Step 3 UI authoring: **WORKING ON** — awaiting Unity validation.
+
+---
+
+### [5.6.0-dev] Finite Quarry, Premium Construction & UI Fit Repair
+
+**Type:** MINOR — new quarry progression constraints plus construction/UI system upgrades
+
+**Added / Changed:**
+- Removed new-world generation of the unbreakable bedrock floor and planetary bedrock core; legacy material value `20` is retained only for save compatibility and treated as Stone.
+- Quarry now uses a configurable finite depth (`64` layers by default, clamped to `8–256`) and completes at that limit.
+- Advanced Quarrying moved to Tier 5 with higher research cost, longer research time, and substantially more expensive steel/electronics recipe requirements.
+- Hammer wheel registry now resolves from the active `BuildSystemV2`, fixing false `Free` labels when the registry asset is outside Resources.
+- Hammer wheel hit testing moved to the complete wheel container so the full wedge responds, not only its icon/label.
+- Global UI blocking now prevents Hammer-wheel scrolling from changing the player hotbar.
+- Hammer segment labels and costs use clipped no-wrap bounds so text stays inside the ring.
+- Tiered socket discovery now scans sockets on nearby placed hosts, fixing same-level Foundation-to-Foundation snapping.
+- Wooden Foundation rebuilt as a low deck with five planks, perimeter beams, four legs, and front braces.
+- Doorway prefabs now receive an animated hinged door and handle; RMB toggles the door.
+- Step 5 creates premium procedural wood, stone, brushed iron, and plated steel surface textures/materials and migrates only known setup-generated flat materials.
+- MenuPanelSettings now uses Match Width/Height scaling with a larger atlas subtexture limit.
+- Runtime systems no longer overwrite assigned PanelSettings every frame or on startup, allowing Inspector changes to persist.
+- World Inspection resolves actual voxel materials and inventory hover information as introduced in `5.5.0-dev`.
+
+**Roadmap Status:**
+- Finite Quarry, Hammer wheel fixes, same-level snapping, doorway, Foundation visuals, premium materials, and UI fit: **WORKING ON** — awaiting Unity validation.
+
+---
+
+### [5.5.0-dev] Defense & Autopilot Roadmap, Hammer Wheel & Inspection Upgrade
+
+**Type:** MINOR — new Hammer wheel UI system plus expanded inspection and construction workflows
+
+**Roadmap Added:**
+- Light gun, heavy ballistic, flamethrower, mortar, giant-shell, anti-air, missile, and energy/relic defensive turrets.
+- Factory ammunition production for casings, propellant, projectiles, magazines, shells, flame fuel, guidance components, and special payloads.
+- Automated ammunition replenishment through provider/requester chests, belts, pipes, drones, and docks.
+- Special ammunition for cryogenic, volcanic, acid-rain, vacuum, Ghoul, naval-boss, and Basilisk-class threats.
+- Manual grid route calculation reporting distance, time, thrust, power/fuel requirement, and reserve margin from live ship contents and condition.
+- Recorded interplanetary routes, cargo-stop actions, route editing, and full Grid Autopilot behavior.
+- Rogue-territory avoidance and intervention rules for automated ships.
+- Coordinate Jump Drive with charge, mass-scaled range, cooldown, arrival error, safe-volume checks, gravity restrictions, and Autopilot route legs.
+- Paginated/scrollable Building Hammer wheel requirements for future Orbital Station construction families.
+
+**Runtime Added / Improved:**
+- Building Hammer wheel rebuilt as an eight-segment paginated donut matching the conveyor wheel visual language.
+- Mouse-wheel page scrolling, future-family page capacity, selected/hovered segment feedback, cost colors, center Upgrade Mode, and subtle parallax.
+- Escape reliably closes the wheel and exits the selected Hammer build family before the Pause menu can open.
+- Tiered construction now places through the standard Build action (`RMB` by default) instead of Mine (`LMB`).
+- Player interaction routing yields RMB exclusively to active Hammer placement.
+- Tiered building materials now use generated premium wood grain, stone aggregate, brushed iron, and plated steel textures with tier-specific metallic/smoothness values.
+- Existing custom prefab materials remain untouched; only missing or known setup-generated flat materials are upgraded.
+- World Inspection now resolves actual active-world voxel material, hardness, and mining tier instead of showing the world bootstrap object name.
+- Hovering interactive inventory slots displays item name, category, stack capacity, total mass, and durability.
+
+**Changed:**
+- Step 5 material creation is idempotent and preserves existing materials.
+- Hammer page architecture reserves capacity for research-unlocked Orbital Station families.
+- Updated runtime and roadmap version to `5.5.0-dev` under Semantic Versioning because the Hammer wheel is a new UI/build-selection system.
+
+**Roadmap Status:**
+- Hammer wheel, RMB placement, Escape exit, premium tier materials, and inspection upgrades: **WORKING ON** — awaiting Unity validation.
+- Turret automation, Grid Autopilot, route calculator, and Jump Drive: planned for their documented progression eras.
+- Step 5 prerequisite repair remains **WORKING ON** until setup validation is reported.
+
+---
+
+### [5.4.0-dev] Pollution & Planetary Ecology Roadmap + World Inspection Overlay
+
+**Type:** MINOR — new save-compatible inspection UI plus major roadmap content expansion
+
+**Roadmap Added:**
+- Pollution sources, spread, persistence, cleanup, filters, contamination, sensors, and map overlays.
+- Pollution-driven enemy attraction that escalates scouts, packs, elites, siege creatures, and regional bosses at the source.
+- Planet-specific Ecology Profiles for passive mobs, hostiles, elites, bosses, resistances, loot, and spawn budgets.
+- Acid-rain creatures adapted to corrosive conditions and therefore stronger than equivalent temperate creatures.
+- Fallen Crusaders, Dead Priests, corruption-created Ghouls, and relic-linked Order history.
+- Rogue Space Crusader territories, warnings, patrols, pursuit, boarding, reputation, tribute, and commander bosses.
+- Themed passive creatures and signature bosses for temperate, barren, ice, volcanic, acid-rain, oceanic, gas-giant, asteroid, and anomaly worlds.
+- Pollution Service, Ecology Registry, Threat Director, and Territorial Space AI architecture.
+- Expanded Living Worlds and Step 20 setup requirements.
+- Crusader player identity, livestock, mythical enemies, boss relic gates, Dyson Sphere, Star Builder, and Orbital Station Hammer family from Section 4.6.
+
+**Runtime Added:**
+- A premium top-left World Inspection Overlay for the current crosshair target.
+- Target name, category/type, operating state, conveyor/chute occupancy, power demand/output, stack size, distance, and integrity where available.
+- Animated fade and slide transitions with no pointer capture.
+- Context resolution for placed blocks, tiered buildings, grid blocks, machines, conveyors, chutes, dropped items, and generic world objects.
+- Weather HUD moved beneath the inspection surface to prevent overlap.
+
+**Removed:**
+- Experimental Corner/Spiral chute selection, runtime variant generation, and chute-shape save fields.
+- Chutes no longer activate the conveyor-only radial selector.
+
+**Changed:**
+- The Shape Wheel remains exclusive to Basic, Fast, and Express conveyors.
+- Conveyor Chutes return to the validated Straight transport workflow and are marked **PARTIALLY COMPLETE**.
+- Updated runtime and roadmap version to `5.4.0-dev` under Semantic Versioning because this release adds the World Inspection Overlay.
+
+**Roadmap Status:**
+- World Inspection Overlay: **WORKING ON** — awaiting Unity validation.
+- Pollution, planetary ecology, Rogue Space Crusaders, and themed bosses/passive mobs: planned for Living Worlds and later eras.
+- Step 5 prerequisite repair remains **WORKING ON** until setup validation is reported.
+
+---
+
+### [5.3.2-dev] Precision Vertical Alignment & Wheel Hover Feedback
+
+**Type:** PATCH — snapping precision, collider alignment, and interaction feedback polish
+
+**Fixed:**
+- Vertical item paths now begin/end at the same `0.52 m` belt-surface offset used by Straight and Ramp conveyors.
+- Vertical meshes, rails, rollers, arrows, and status lines are shifted to the same shared surface height.
+- Vertical shape colliders now match the visible upright frame instead of retaining the wide horizontal conveyor collider.
+- Ramp colliders now cover the complete low-to-high sloped assembly.
+- Straight/Ramp ↔ Vertical transitions no longer look vertically offset even when their logical sockets already match.
+
+**Improved:**
+- Hovering a wheel segment now changes the full wedge to a stronger light blue.
+- The hovered segment icon and label turn blue, scale to `1.12x`, and receive a subtle glow backing.
+- Selected segments remain cyan/white while still receiving the hover-scale response.
+
+**Changed:**
+- Collider dimensions update whenever a build shape changes and restore to authored straight values for Straight/Corner mode.
+- Updated the runtime and roadmap version to `5.3.2-dev`.
+
+**Roadmap Status:**
+- Vertical transition alignment and wheel feedback: **WORKING ON** — awaiting Unity validation.
+- Step 5 prerequisite repair remains **WORKING ON** until setup validation is reported.
+
+---
+
+### [5.3.1-dev] Donut Wheel Polish & Vertical Transition Fixes
+
+**Type:** PATCH — UI presentation, conveyor visual polish, snapping, and transfer fixes
+
+**Added:**
+- A true three-segment donut rendering for Straight, Ramp, and Vertical modes.
+- Angular segment hit-testing, narrow segment gaps, a full dark center disc, and tier/mode labels integrated into the ring.
+- Selected cyan, hovered pale-cyan, and idle light-industrial segment states.
+- Bright emissive runtime arrow material shared by adaptive Straight, Corner, Ramp, and Vertical arrows.
+- Exact orthogonal transition support when either connected belt is Vertical.
+
+**Fixed:**
+- The conveyor wheel no longer reads as three floating cards around a center badge.
+- Ramp belt surfaces now sit on a sloped underbed instead of floating above a flat frame.
+- Ramp supports follow the low and high ends of the slope.
+- Ramp arrows are aligned to the belt plane rather than hovering horizontally above it.
+- Vertical Down arrows are larger, brighter, and oriented as a visible downward chevron.
+- Vertical Up arrows sit flush against the conveyor face.
+- Vertical mode snaps its input socket directly onto Straight or Ramp output sockets.
+- Straight and Ramp conveyors can hand items into Vertical conveyors through exact matched sockets.
+- Vertical conveyors can hand items back into Straight or Ramp conveyors through exact matched sockets.
+
+**Changed:**
+- The subtle mouse-follow animation remains active on the complete donut wheel.
+- Updated the runtime and roadmap version to `5.3.1-dev`.
+
+**Roadmap Status:**
+- Conveyor wheel/transition polish: **WORKING ON** — awaiting Unity validation.
+- Step 5 prerequisite repair remains **WORKING ON** until setup validation is reported.
+
+---
+
+### [5.3.0-dev] Contextual Conveyor Shape Wheel & Step 5 Repair
+
+**Type:** MINOR — new save-compatible radial build UI and conveyor mode selection
+
+**Added:**
+- A contextual hold-to-open conveyor wheel using the existing rebindable `Build Wheel` action (`B` by default).
+- Per-tier Straight, Ramp, and Vertical selections for the existing Basic, Fast, and Express conveyor items.
+- A prompt above the hotbar showing the current key and selected conveyor mode.
+- Mouse-click radial selection with hover scaling, animated color states, and subtle mouse-follow parallax.
+- Aim-based Up/Down resolution for Ramp and Vertical placement.
+- Additive persistence for explicitly selected Ramp/Vertical shapes; legacy saves remain compatible.
+
+**Changed:**
+- The separate twelve-item/twelve-recipe variant plan from `5.2.0-dev` is superseded before setup validation.
+- Step 17 no longer generates separate conveyor variant prefabs, items, recipes, materials, or research entries.
+- One conveyor item and recipe per speed tier now provides every supported shape.
+- The same contextual `Build Wheel` binding is shared safely with the Hammer wheel because each wheel only activates for its own held item.
+- Step 5 now resolves prerequisite resources by canonical path or item ID and creates only missing canonical assets instead of incorrectly demanding another Step 4 run.
+- Updated the runtime and roadmap version to `5.3.0-dev` under Semantic Versioning because this release adds a new UI/build-selection system.
+
+**Roadmap Status:**
+- Conveyor Shape Wheel: **WORKING ON** — awaiting Unity interaction validation.
+- Step 5 prerequisite repair: **WORKING ON** — awaiting Unity setup validation.
+- Step 17 base factory setup: **COMPLETED**.
+
+---
+
+### [5.2.0-dev] Full-Tier Ramp & Vertical Conveyor Variants
+
+**Superseded by `5.3.0-dev` before Unity setup validation; separate variant assets are no longer generated.**
+
+**Type:** MINOR — new save-compatible conveyor blocks, recipes, prefabs, and placement behavior
+
+**Added:**
+- Twelve explicit conveyor variant blocks generated through Step 17:
+  - Basic, Fast, and Express Ramp Up.
+  - Basic, Fast, and Express Ramp Down.
+  - Basic, Fast, and Express Vertical Up.
+  - Basic, Fast, and Express Vertical Down.
+- One non-destructive prefab, item, and recipe per new variant.
+- Research unlock merging for all new variant recipes.
+- Full-height one-block ramp item paths and socket offsets.
+- Vertical conveyor runtime meshes with backplates, rails, rollers, direction chevrons, and centered status lines.
+- Editor-visible authored previews for every variant prefab.
+
+**Changed:**
+- Explicit ramp and vertical prefabs disable automatic horizontal shape conversion.
+- Ramp placement snaps forward from a target belt; Ramp Down also lowers its root by one block so its upper input aligns with the source.
+- Vertical variants stack upward/downward and can snap to configured vertical item ports.
+- Belt connection discovery now uses shape-specific socket positions rather than assuming every socket is half a block from the root.
+- Runtime ramp visuals now rise or descend a complete block over one horizontal cell.
+- Step 17 is marked **WORKING ON** until the new twelve-variant generation pass completes two-run Unity validation.
+- Updated the runtime and roadmap version to `5.2.0-dev` under Semantic Versioning because this release adds new save-compatible blocks and recipes.
+
+---
+
+### [5.1.13-dev] Closed-Loop Corners, Chute-to-Belt Snap & Status Cleanup
+
+**Type:** PATCH — topology resolution, reciprocal snapping, and requested visual cleanup (no save/public API change)
+
+**Fixed:**
+- Conveyor loops no longer deadlock while every future corner waits for the next belt to expose a matching input.
+- Shape inference now uses the placed belt rotation as its intended output and only requires an adjacent forward belt while resolving topology.
+- Closed circles resolve each unambiguous side/rear input into the correct corner during the immediate refresh pass.
+- A conveyor aimed at the top or bottom of a chute now snaps to that chute face and inherits its rotation.
+
+**Changed:**
+- Step 17 no longer creates the legacy rotated `Generated_Arrow` status square.
+- Step 17 removes that specific obsolete generated square from existing conveyor prefabs, as explicitly requested.
+- Direction chevrons remain independent from the centered `Generated_StatusLine`.
+- Step 17 reports the number of removed obsolete generated visuals while preserving custom visuals and all balance values.
+- Updated the runtime and roadmap version to `5.1.13-dev`.
+
+---
+
+### [5.1.12-dev] Responsive Corners, Bidirectional Chute Snap & Conveyor Indicators
+
+**Type:** PATCH — placement responsiveness, snapping behavior, and visual communication polish (no save/public API change)
+
+**Added:**
+- Immediate conveyor topology refresh when a conveyor is enabled or finishes placement.
+- A guarded next-frame topology verification pass for newly registered physics colliders.
+- Step 17-generated direction chevrons on every Basic, Fast, and Express conveyor prefab.
+- A dedicated emissive center status line generated and linked non-destructively through Step 17.
+- A dynamic status line for adaptive straight/corner geometry, including safe runtime renderer retargeting.
+
+**Fixed:**
+- Adaptive corners no longer wait for the slower periodic connection scan before changing shape.
+- A chute aimed at the upper conveyor face/upper side now snaps above the conveyor.
+- A chute aimed at the lower face/lower side continues to snap below the conveyor.
+- Runtime status materials are restored and released safely when adaptive geometry changes renderer targets.
+
+**Changed:**
+- Existing conveyor status indicators pointing at the legacy arrow are migrated to `Generated_StatusLine`; balance, colors, materials, and custom tuning remain preserved.
+- Default straight conveyors keep their authored Step 17 visuals, while adaptive geometry uses an equivalent centered live status line.
+- Updated the runtime and roadmap version to `5.1.12-dev`.
+
+---
+
+### [5.1.11-dev] Adaptive Corners, Strict Lane Isolation & Chute Snapping
+
+**Type:** PATCH — transport routing, adaptive visual, snapping, and modal stability fixes (no save/public API change)
+
+**Fixed:**
+- Conveyor handoff and pull operations now revalidate live socket alignment, preventing stale targets from moving items into a neighboring parallel lane.
+- Belt socket tolerance is tighter and shared by discovery, topology inference, pull, and handoff checks.
+- Conveyor shape inference now supports every unambiguous perpendicular input/output pair instead of assuming side-in/forward-out.
+- Ambiguous junctions and loose endpoints remain straight.
+- Item Ports no longer disappear when live logistics changes the open chest inventory.
+- Item Ports keep Escape handling active while chest contents update and rebuild the latest inventory state after closing.
+
+**Added:**
+- Smooth segmented corner-belt geometry that follows the same curve used by transported items.
+- Dynamic corner support base, four legs, endpoint rollers, curved rails, and an output-direction arrow.
+- Chute placement snapping beneath conveyors.
+- Chute placement snapping to configured top/bottom item ports.
+- Bidirectional stacking above or below existing chutes based on the selected chute face.
+
+**Changed:**
+- Straight belts with a non-default inferred axis use matching dynamic geometry; default straight belts continue using their authored Step 17 visuals.
+- Updated the runtime and roadmap version to `5.1.11-dev`.
+
+---
+
+### [5.1.10-dev] Unity-Safe Transport Visual Initialization
+
+**Type:** PATCH — Unity lifecycle compatibility fix (no save/public API change)
+
+**Fixed:**
+- `BeltVisualController` no longer creates a `MaterialPropertyBlock` from a MonoBehaviour field initializer.
+- `ConveyorChute` no longer creates a `MaterialPropertyBlock` from a MonoBehaviour field initializer.
+- Both components now allocate their property block during `Awake`, with a guarded runtime fallback before first use.
+- Asset import workers can deserialize conveyor and chute prefabs without invoking forbidden native object creation from MonoBehaviour constructors.
+
+**Changed:**
+- Updated the runtime and roadmap version to `5.1.10-dev`.
+
+---
+
+### [5.1.9-dev] Directional Conveyor, Chute & Item-Port Fixes
+
+**Type:** PATCH — transport routing and UI-close bug fixes (no save/public API change)
+
+**Fixed:**
+- Parallel conveyor lanes no longer detect each other as side inputs.
+- A conveyor accepts another belt only when the two physical sockets meet and their input/output directions oppose correctly.
+- Rear-fed conveyor lines remain straight instead of changing the first or last segment into an accidental L shape.
+- Side-fed corners require one valid side provider and a valid forward continuation, preventing loose or ambiguous corner conversion.
+- Side conveyors no longer pull from or push into the middle of an unrelated straight belt.
+- Chutes scan immediately when enabled and use a wider nearest-endpoint search above and below.
+- Chutes can transfer between belts, compatible inventory interfaces, and correctly configured item-port faces.
+- Item-port routing and filters are respected when a chute inserts into a configured endpoint.
+- Escape now closes the active item-filter dialog first, then the Item Ports overlay on the next press; each consumes pause input and leaves the underlying inventory open.
+
+**Changed:**
+- Conveyor and chute roadmap audit notes now reflect the directional routing fixes.
+- Updated the runtime and roadmap version to `5.1.9-dev`.
+
+---
+
+### [5.1.8-dev] Conveyor & Chute Runtime Reliability
+
+**Type:** PATCH — transport bug fixes and visual lifecycle polish (no save/public API change)
+
+**Added:**
+- Pooled, color-coded moving item representations inside conveyor chutes.
+- Shared fallback chute materials used only when authored setup visuals are unavailable.
+- Material-property-block item coloring for belts and chutes without per-item material allocation.
+
+**Fixed:**
+- Authored conveyor and chute visuals are no longer duplicated at runtime.
+- Straight conveyors reuse their detailed Step 17 prefab visuals; runtime meshes are reserved for dynamic corner/ramp shapes.
+- Conveyor corner items now follow their configured input/output directions.
+- Conveyor and chute extraction now returns the full amount removed across multiple item packets.
+- Connection discovery now finds the correct provider/consumer component even when another component appears first on the target object.
+- Chute connection scans now follow the chute's local up axis for spherical-world placement.
+- Factory status indicators now preserve authored light intensity instead of resetting it to `1`.
+- Runtime status materials are released when their object is destroyed.
+
+**Changed:**
+- Step 17 is marked **COMPLETED** after successful two-run Unity validation.
+- Conveyor belts and conveyor chutes are marked **WORKING ON** while authored shape variants remain outstanding.
+- Updated the runtime and roadmap version to `5.1.8-dev`.
+
+---
+
+### [5.1.7-dev] Non-Destructive Step 17 Factory Setup Hardening
+
+**Type:** PATCH — editor setup safety fix (no save/runtime API change)
+
+**Added:**
+- Step 17-specific non-destructive asset and prefab creation helpers.
+- Additive recipe, research prerequisite, research unlock, and machine-recipe link merging.
+- Clear setup summary logging for created assets, created prefabs/components, preserved content, and repaired links.
+- Conflict handling that leaves wrong-type or unreadable existing assets untouched instead of deleting them.
+
+**Changed:**
+- Existing materials retain their authored colors, emission, shader properties, and other tuning.
+- Existing generated or custom prefab children retain their transforms, meshes, materials, and effects.
+- Existing component values are initialized only when the component is newly added.
+- Existing item health, mass, stack limits, grid values, power draw, throughput, connection limits, processing speeds, recipe costs, crafting times, and research costs are preserved.
+- Required prefab, registry, machine-recipe, research-tree, prerequisite, and unlock links are repaired additively without removing custom entries.
+- Legacy duplicate assets are no longer automatically deleted by Step 17.
+- Updated the runtime and roadmap version to `5.1.7-dev`.
+
+**Validation:**
+- Static non-destructive-path checks passed.
+- Source brace, whitespace, conflict-marker, version, and external-title checks passed.
+- Unity two-run idempotency validation remains required and is documented in the delivery instructions.
+
+---
+
+### [5.1.6-dev] Factory Foundations Audit & Roadmap Execution Tracking
+
+**Type:** PATCH — documentation/status alignment and version synchronization (no save/API touch)
+
+**Added:**
+- A three-state roadmap execution convention: **WORKING ON**, **PARTIALLY COMPLETE**, and **COMPLETED**.
+- A repository-backed execution status table for Factory Foundations.
+- A clear completion gate for the 4.5.0 section.
+
+**Changed:**
+- Marked Factory Foundations as **WORKING ON**.
+- Marked its New Content, Improved Features, and Code Improvements groups as **PARTIALLY COMPLETE**.
+- Synchronized the roadmap and runtime version to `5.1.6-dev`.
+- Updated the roadmap date and active implementation status.
+
+**Audit Findings:**
+- Core conveyor, chute, machine, power transmission, and lighting foundations are present.
+- Authored conveyor/chute variants, full shared machine UI, unified ticking, pooled item entities, and factory persistence remain incomplete.
+- Step 17 creates and connects the intended content, but its rerun path still requires hardening so existing balance values are never reset.
+
+**Notes:**
+- No Unity scenes, prefabs, recipes, items, research assets, save schemas, or public runtime APIs were changed.
+- The next implementation priority is the non-destructive Step 17 setup hardening required by Section 7.4.
+
+---
+
+### [4.5.7-dev] Iterated Factory-Forward Roadmap — Radiation, Heat, Oxygen, Airtight Systems & Painting
+
+**Type:** PATCH — roadmap refinement (no save/API touch)
+
+**Added:**
+- **Radiation system** to 5.1.0:
+  - Uranium reactor and thorium reactor (thorium material, more efficient, less rare, late-game unlock).
+  - Radioactive waste system; thorium waste is much less radioactive.
+  - Radiation-sealed containers and radiation sealing blocks.
+  - Radiation damage to players; hazmat suit and geiger counter.
+  - Reactor stays shielded unless waste storage overflows.
+  - Large container-style reactor design.
+- **Heat system** to 5.1.0:
+  - Heat tolerance for every grid block, shown in descriptions.
+  - Heat generation for engines, thrusters, reactors, and exhaust pipes.
+  - Heatshield block, atmospheric entry heat simulation, cockpit heat indicator, player heat UI.
+- **Life support** features:
+  - Space helmet with visor toggle, oxygen tank for chest slot.
+  - Suffocation in space/underwater without helmet/tank.
+  - Airtight sliding doors and vents.
+- **Armor Station** and **Jetpack** to 4.7.0.
+- **Armor upgrades** tiers 1–5 for heat, radiation, oxygen, and fall impact.
+- **Fall damage** and **oxygen underwater** to 4.7.0.
+- **Painting system** to 4.7.0 with 15 material finishes.
+- New cross-cutting services: Life Support Service, Pressure & Airtight Service, Thermal Simulation Service, Painting Service.
+
+**Changed:**
+- Roadmap version bumped from `4.5.6-dev` to `4.5.7-dev`.
+- Updated current state snapshot with radiation, heat, oxygen, airtight, fall damage, painting, and armor crafting.
+- Updated 4.7.0, 4.9.0, and 5.1.0 feature breakdowns and manual Unity steps.
+
+### [4.5.6-dev] Iterated Factory-Forward Roadmap — Power Pole Wire System, Substations & LED Strips
+
+**Type:** PATCH — roadmap refinement (no save/API touch)
+
+**Added:**
+- **Power Pole & Wire System** to 4.5.0:
+  - Player crafts Wire and runs it from poles to machine Cable Inputs.
+  - Generators have Cable Outputs that feed into the network.
+  - Standard power pole supports up to 6 connections.
+  - Electrical Substation relays power over 100+ meters.
+- **LED Strips** to 4.5.0 for accent lighting on grids and static surfaces.
+- New interfaces `IPowerConsumer` and `IPowerProducer` in the simulation namespace.
+
+**Changed:**
+- Roadmap version bumped from `4.5.4-dev` to `4.5.6-dev`.
+- Updated 4.5.0 manual Unity steps to include power poles, substations, wire items, cable sockets, and LED strips.
+
+**Notes:**
+- No code or Unity scenes modified in this deliverable.
+- All future feature work targets the `Dev` branch and follows Semantic Versioning 2.0.0.
+
+---
+
+### [4.5.4-dev] Iterated Factory-Forward Roadmap — Grid Shape Variant Wheel
+
+**Type:** PATCH — roadmap refinement (no save/API touch)
+
+**Added:**
+- **Grid Shape Variant Wheel** to 4.7.0:
+  - When holding a light or heavy armor block, the player can open the same round build wheel used by the build hammer.
+  - Switch between shape variants on the fly: full block, slope, half block, half slope, corner, inverted slope.
+  - Variants share the same recipe/material cost scaled by volume.
+- Added shape variants to grid building improvements: half blocks, half slopes, corners, inverted slopes.
+- Added "Grid shape variant wheel" to current state snapshot.
+- Updated progression curve Era 3 to include shape variants.
+- Updated manual Unity steps for 4.7.0 to include shape variant prefabs and wheel UI.
+
+**Changed:**
+- Roadmap version bumped from `4.5.3-dev` to `4.5.4-dev`.
+- Vision now emphasizes deep shape customization in grid-based engineering.
+
+**Notes:**
+- No code or Unity scenes modified in this deliverable.
+- All future feature work targets the `Dev` branch and follows Semantic Versioning 2.0.0.
+- Game titles are referenced only as genre descriptions; no external game names are written into shipped code or assets.
+
+**Type:** PATCH — roadmap refinement (no save/API touch)
+
+**Added:**
+- **Sky & Space Ambiance** features in 4.9.0:
+  - Planet-specific skies and atmospheres (blue skies, auroras, ash-orange horizons, starfields).
+  - Seamless sky-to-space transition.
+  - Planets render as colored spheres from orbit.
+  - Overhauled space ambiance: black void, stars, nebulae, sun glare, vacuum audio ducking.
+- **Gravity & Orbit Fixes** in 4.9.0:
+  - Consistent gravity for players, grids, dropped items, and projectiles.
+  - Realistic orbital mechanics with velocity + altitude, atmospheric drag, escape velocity.
+- **Space Stations** in 5.0.0:
+  - Buildable orbital platforms with hull, docking ports, gravity rings, solar arrays.
+- **Conveyor Chutes** replacing inserters in 4.5.0.
+- **Grid Lights & Static Flood Lights** in 4.5.0.
+- **Player Armor Slots** in 4.7.0.
+- **Bombs, Explosive Charges, and Nuclear Warheads** in 4.7.0 and 5.1.0.
+- **Grid Building Improvements** in 4.7.0:
+  - Sloped blocks, heavy armor blocks, heavy armor sloped blocks.
+  - Small-grid usability improvements.
+  - Maritime grid improvements (buoyancy, hull blocks, propellers).
+- **Configurable Grid Screens / Displays** in 4.8.0:
+  - Multiple sizes: 1×1, 2×2, 4×4, wide banner.
+  - Display text, values, charts, and live camera feeds.
+  - User-friendly data-source picker and styling options.
+- **Camera Block** that feeds render textures to screens.
+- **Nuclear Warheads & Heavy Ordinance** in 5.1.0.
+- **New Voxel Engine Setup Workflow** cross-cutting section:
+  - All prefabs, recipes, items, and research nodes must be generated via `Tools > Voxel Engine > Voxel Engine Setup`.
+  - Non-destructive: create if missing, preserve user edits, never overwrite balance values.
+  - Idempotent, versioned steps, clear console logging.
+- New emotional beats: *first sky, first orbit*.
+
+**Changed:**
+- Roadmap version bumped from `4.5.2-dev` to `4.5.3-dev`.
+- Current game version updated from `4.4.0-dev` to `4.5.1-dev`.
+- Master roadmap table updated:
+  - 4.5.0 → Factory Foundations (conveyors, chutes, lights).
+  - 4.7.0 → Power, Vehicles & Combat (armor, bombs, grid improvements).
+  - 4.8.0 → Logistics 2.0, Screens & Trajectory.
+  - 4.9.0 → Living Worlds (skies, gravity, space ambiance).
+  - 5.0.0 → Orbital Expansion (space stations).
+  - 5.1.0 → Interplanetary Age (nuclear warheads).
+- Vision now emphasizes atmospheric grandeur and awe.
+- Current state snapshot expanded with: sky/space rendering, gravity/orbits, space stations, conveyor logistics, grid screens, grid lighting, sloped/armored blocks, player armor slots.
+- Manual Unity steps expanded for all versions, including non-destructive Voxel Engine Setup steps.
+- All "inserter" references replaced with "chutes".
+
+**Notes:**
+- No code or Unity scenes modified in this deliverable.
+- All future feature work targets the `Dev` branch and follows Semantic Versioning 2.0.0.
+- Game titles are referenced only as genre descriptions; no external game names are written into shipped code or assets.
