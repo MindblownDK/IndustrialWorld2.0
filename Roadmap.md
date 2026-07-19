@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.68.4-dev`
-**Roadmap Version:** `5.68.4-dev`
+**Current Version:** `5.68.5-dev`
+**Roadmap Version:** `5.68.5-dev`
 **Date:** 2026-07-19
-**Status:** Active Implementation — Stable Pipe Topology + Live Ghost Refresh; Unity Validation Pending
+**Status:** Unified Pipe Placement + Networks Completed; Unified Grid Persistence Next
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
 ---
@@ -48,7 +48,7 @@ The design goal is a seamless blend of:
 | Grid systems (ships/vehicles) | ✅ Mature | Needs lights, screens, armor, sloped blocks |
 | Maritime grid | 🟡 Basic | Needs refinement and feature parity |
 | Detail-scale grid blocks | 🛠️ WORKING ON | Detail blocks now share the unified Grid with Structural blocks; persistence and complete positional network indexing remain open. |
-| Unified grid placement | 🛠️ WORKING ON | Detail/Structural placement, screen sources, existing-pipe Detail placement, and rotation-independent alignment are validated by Thomas. 5.68.4-dev suppresses ghost registration before `OnEnable`, preventing topology flicker, and refreshes ghost geometry whenever its snapped position changes. Unified movable-grid persistence remains open. |
+| Unified grid placement | 🛠️ WORKING ON | Detail/Structural placement, shape variants, screen sources, and unified Item/Gas/Liquid pipe placement/networks are validated. Pipe workflow is ✅ completed in 5.68.5-dev; unified movable-grid persistence remains the next open gate. |
 | Power (wind, hydrogen) | ✅ Mature | Modular turbines are excellent |
 | Fluids / gases | ✅ Good | Pipe-gated transfer in 2.20.0 |
 | Building (static + tiered) | 🛠️ Working On | 3.75 m spacing, scale, rotation, and player-away Doors are Unity-validated. Size-V5 closes Foundation deck seams and adds upward/downward Stair anchors at Foundation/Floor edges and Doorway thresholds; final validation is pending. |
@@ -720,7 +720,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Grid shape variants | ✅ COMPLETED | Thomas validated all six structural meshes, textures, collision, placement ghosts, selection behavior, and corrected wheel alignment. Step 18 provides the non-destructive setup connection. |
 | Unified grid placement | 🛠️ WORKING ON | Thomas validated Detail-on-Structural lattice placement and size-labelled content. Gas/liquid topology and screen data-source addressing now resolve both block scales on one Grid; Unity validation and unified movable-grid persistence remain open. |
 | Unified grid screen sources | ✅ COMPLETED | Thomas validated the unified screen/data-source work. Detail providers use precision-safe encoded addresses while legacy Structural addresses remain compatible. |
-| Unified pipe placement and networks | 🛠️ WORKING ON | Visual direction and rotation-independent alignment are validated by Thomas. Ghost construction now suppresses Item/Gas/Liquid/visual registration before Unity invokes `OnEnable`, so existing links do not disconnect/reconnect. Preview arms rebuild on snapped ghost movement and clear immediately when leaving range/alignment. |
+| Unified pipe placement and networks | ✅ COMPLETED | Thomas validated existing Item/Gas/Liquid pipe Detail placement, one-to-five-cell Grid/world links, rotation-independent alignment, correct visual direction, midpoint arms, live ghost previews, stable topology, resource-safe ghosts, and wrench disconnect behavior. No duplicate pipe content was introduced. |
 | Vehicle power foundations | 🟡 PARTIALLY COMPLETE | Grid batteries, solar, hydrogen engines, reactors, power accounting, docking, and multiple vehicle systems exist; the planned unified power network and full vehicle progression remain incomplete. |
 | Damage, armor, weapons, and life support | 🟡 PARTIALLY COMPLETE | Basic block HP/damage and one grid weapon foundation exist. Full typed damage, player armor, pooled ballistics, hazards, airtight support, and combat content remain open. |
 
@@ -1689,10 +1689,10 @@ For each version, these are the high-level Unity tasks you will perform manually
 
 ## 10. Suggested Immediate Next Steps
 
-1. **Validate `5.68.1-dev` pipe visuals** on rotated Detail Grid faces and rotated world placements at one-to-five-cell spans.
-2. **Promote unified pipe placement/networks to Completed** after Item, Gas, and Liquid links pass visual + functional validation.
-3. **Implement unified movable-grid persistence** for Structural blocks, precision Detail blocks, shape variants, functional settings, and encoded screen sources.
-4. **Continue Factory Foundations performance work** with pooled item entities and broader centralized simulation ticking.
+1. **Implement unified movable-grid persistence** for Structural blocks, precision Detail blocks, shape variants, functional settings, encoded screen sources, and attached pipes.
+2. **Add backward-compatible grid save migration** without changing existing world/chunk formats or requiring a fresh save.
+3. **Continue Factory Foundations performance work** with pooled item entities and broader centralized simulation ticking.
+4. **Complete remaining unified Grid positional indexing** where legacy systems still read Structural-only coordinates.
 5. **Keep UI fit validation active** at 1280×720, 1366×768, 1920×1080, and ultrawide resolutions.
 
 ---

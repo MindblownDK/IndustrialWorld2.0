@@ -1,11 +1,33 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `5.68.4-dev`  
+**Current Version:** `5.68.5-dev`  
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
 
 ---
+
+### [5.68.5-dev] Unified Pipe Placement + Networks Completed
+
+**Type:** PATCH — validated roadmap-status promotion and version synchronization only (no save schema, runtime behavior, prefab, item, recipe, research, throughput, HP, mass, power, or visual changes)
+
+**Validated by Thomas:**
+- Existing Item, Gas, and Liquid pipe items use the unified 0.5 m Detail placement workflow without duplicate pipe content.
+- Grid and world pipe links work from one through five cells.
+- Pipe alignment is independent of endpoint rotation.
+- Visual arms point toward corresponding pipes and meet correctly.
+- Ghost links update with snapped movement and clear outside alignment/range.
+- Ghosts do not register with functional networks, interrupt existing topology, receive resources, or void resources.
+- Liquid links persist correctly after placement.
+- Wrench disconnect behavior remains functional.
+
+**Roadmap Status:**
+- Unified pipe placement and networks: **🛠️ WORKING ON → ✅ COMPLETED**.
+- Unified Grid placement remains **🛠️ WORKING ON** because movable-grid persistence is the next completion gate.
+
+**Manual Unity Steps:**
+1. Let Unity recompile and confirm the runtime banner reports `5.68.5-dev`.
+2. No Voxel Engine Setup rerun is required because this release only records validation and synchronizes version/status documentation.
 
 ### [5.68.4-dev] Stable Pipe Topology + Live Ghost Refresh
 
