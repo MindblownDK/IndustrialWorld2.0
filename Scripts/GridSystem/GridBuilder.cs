@@ -147,6 +147,10 @@ namespace VoxelEngine.GridSystem
                 }
                 rotation = GetTurboAttachmentRotation(targetGrid, gridPos, engine);
             }
+            else if (IsDoorItem(gbi) && targetGrid != null)
+            {
+                rotation = BuildDoorSurfaceRotation(targetGrid, hit.normal);
+            }
             else
             {
                 rotation *= Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
@@ -221,6 +225,26 @@ namespace VoxelEngine.GridSystem
             string id = (item.itemId ?? string.Empty).ToLowerInvariant();
             string name = (item.displayName ?? string.Empty).ToLowerInvariant();
             return id.Contains("ledstrip") || id.Contains("led_strip") || name.Contains("led strip");
+        }
+
+        private bool IsDoorItem(GridBlockItem item)
+        {
+            if (item == null) return false;
+            if (item.blockPrefab != null && item.blockPrefab.GetComponentInChildren<GridSlidingDoor>(true) != null)
+                return true;
+            string id = (item.itemId ?? string.Empty).ToLowerInvariant();
+            string name = (item.displayName ?? string.Empty).ToLowerInvariant();
+            return id.Contains("slidingdoor") || id.Contains("vaultdoor") || name.Contains("sliding door") || name.Contains("vault door");
+        }
+
+        private static Quaternion BuildDoorSurfaceRotation(GridEntity grid, Vector3 worldNormal)
+        {
+            if (grid == null) return Quaternion.identity;
+            Vector3 normal = worldNormal.sqrMagnitude > 0.0001f ? worldNormal.normalized : grid.transform.forward;
+            Vector3 up = Vector3.ProjectOnPlane(grid.transform.up, normal);
+            if (up.sqrMagnitude < 0.0001f) up = Vector3.ProjectOnPlane(grid.transform.forward, normal);
+            if (up.sqrMagnitude < 0.0001f) up = Vector3.up;
+            return Quaternion.LookRotation(normal, up.normalized);
         }
 
         private bool HandleLedStripStretch(GridBlockItem item, GridEntity grid, Vector3Int gridPos, Vector3 worldPos, Quaternion rotation, RaycastHit hit)

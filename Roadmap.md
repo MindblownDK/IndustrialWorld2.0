@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.61.0-dev`
-**Roadmap Version:** `5.61.0-dev`
+**Current Version:** `5.62.0-dev`
+**Roadmap Version:** `5.62.0-dev`
 **Date:** 2026-07-17
-**Status:** Active Implementation — Motion-Activated Grid Sliding Doors
+**Status:** Active Implementation — Premium Large Grid Door Variants
 
 ---
 
@@ -1682,6 +1682,37 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.62.0-dev] Premium Large Grid Door Variants
+
+**Type:** MINOR — save-compatible large-grid door content refresh through Step 17 (small-grid door recipe removed from registry)
+
+**Added / Changed:**
+- Rebuilt Step 17 grid door generation into large-grid-only door content.
+- Added three large-grid door variants:
+  - **Large Sci-Fi Sliding Door** — single-panel premium sliding door inspired by Thomas's reference.
+  - **Large Double Sliding Door** — two-panel sliding door with synchronized motion activation.
+  - **Heavy Vault Door** — reinforced heavy-duty vault door with very high integrity, slower motion, and higher moving power draw.
+- Removed the small-grid door from Step 17 generation/recipe registration because it is not needed. Existing old assets are left on disk for compatibility, but the setup registry no longer registers the old small-grid recipe.
+- Door prefabs now use layered generated visuals: brushed outer frame, dark inner seal, orange/dark panels, access-glow panels, status strip, vault bolts/bars/core on vault variant.
+- Door visuals/collider are offset toward the mounted face so large-grid doors sit on the block edge/face instead of centered awkwardly in the cell.
+- `GridBuilder` now detects door items and orients them to the clicked grid face before placement, so doors snap/face correctly on block edges.
+
+**Roadmap Status:**
+- Grid doors remain **🛠️ WORKING ON** pending Thomas validation of the new large-only variants, edge snapping, and motion behavior.
+- Airtight/pressure integration remains future work.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Run `Tools > Voxel Engine > Voxel Engine Setup` → **17. Build Factory Foundations + HV Grid**.
+3. Confirm generated items/prefabs:
+   - `GridSlidingDoor_LargeSingle` / Large Sci-Fi Sliding Door
+   - `GridSlidingDoor_LargeDouble` / Large Double Sliding Door
+   - `GridVaultDoor_Heavy` / Heavy Vault Door
+4. Confirm the old small-grid sliding door recipe no longer appears in normal crafting/registry output after setup.
+5. Place each door on the edge/side face of a large grid block and confirm the visual sits on the face and faces outward correctly.
+6. Test open/close and motion activation for all three variants.
+7. Confirm Heavy Vault Door has much higher integrity/health than the sliding doors.
 
 ### [5.61.0-dev] Motion-Activated Grid Sliding Doors
 
