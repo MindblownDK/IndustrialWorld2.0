@@ -667,7 +667,7 @@ namespace VoxelEngine.GridSystem
                 int storedId = i < dataSourceInstanceIds.Count ? dataSourceInstanceIds[i] : 0;
 
                 IGridDataProvider provider = null;
-                if (Grid.Blocks.TryGetValue(pos, out var block))
+                if (UnifiedGridTopology.TryResolveAddress(Grid, pos, out var block))
                 {
                     provider = ResolveProviderComponent(block);
                     if (provider != null)
@@ -734,18 +734,25 @@ namespace VoxelEngine.GridSystem
             if (!_migrated) MigrateLegacy();
             if (dataSourcePositions.Count > 0) return; // already has sources
 
-            IGridDataProvider best = null; Vector3Int bp = default; float bd = float.MaxValue;
-            foreach (var kv in Grid.Blocks)
+            IGridDataProvider best = null;
+            GridBlock bestBlock = null;
+            Vector3Int bestAddress = default;
+            float bestDistance = float.MaxValue;
+            foreach (var block in Grid.AllBlocks)
             {
-                if (kv.Value == null || kv.Value == this) continue;
-                if (VoxelEngine.GridSystem.UI.GridMasterTerminal.IsHiddenFromScreenConfig(kv.Value)) continue;
-                var provider = ResolveProviderComponent(kv.Value);
+                if (block == null || block == this) continue;
+                if (VoxelEngine.GridSystem.UI.GridMasterTerminal.IsHiddenFromScreenConfig(block)) continue;
+                var provider = ResolveProviderComponent(block);
                 if (provider == null) continue;
-                float d = Vector3.Distance(kv.Value.transform.position, transform.position);
-                if (d < bd) { bd = d; best = provider; bp = kv.Key; }
+                float distance = Vector3.Distance(block.transform.position, transform.position);
+                if (distance >= bestDistance) continue;
+                bestDistance = distance;
+                best = provider;
+                bestBlock = block;
+                bestAddress = UnifiedGridTopology.AddressOf(block);
             }
-            if (best != null)
-                ToggleSource(bp, (best as GridBlock)?.GetInstanceID() ?? 0);
+            if (best != null && bestBlock != null)
+                ToggleSource(bestAddress, bestBlock.GetInstanceID());
         }
 
         private static IGridDataProvider ResolveProviderComponent(GridBlock block)
@@ -765,13 +772,13 @@ namespace VoxelEngine.GridSystem
         {
             var list = new List<(Vector3Int, IGridDataProvider)>();
             if (Grid == null) return list;
-            foreach (var kv in Grid.Blocks)
+            foreach (var block in Grid.AllBlocks)
             {
-                if (kv.Value == null || kv.Value == this) continue;
-                if (VoxelEngine.GridSystem.UI.GridMasterTerminal.IsHiddenFromScreenConfig(kv.Value)) continue;
-                var provider = ResolveProviderComponent(kv.Value);
+                if (block == null || block == this) continue;
+                if (VoxelEngine.GridSystem.UI.GridMasterTerminal.IsHiddenFromScreenConfig(block)) continue;
+                var provider = ResolveProviderComponent(block);
                 if (provider != null)
-                    list.Add((kv.Key, provider));
+                    list.Add((UnifiedGridTopology.AddressOf(block), provider));
             }
             return list;
         }

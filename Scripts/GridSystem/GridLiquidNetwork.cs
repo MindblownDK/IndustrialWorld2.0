@@ -57,8 +57,8 @@ namespace VoxelEngine.GridSystem
         public bool HasPipes(GridEntity grid)
         {
             if (grid == null) return false;
-            foreach (var kv in grid.Blocks)
-                if (IsLiquidPipe(kv.Value)) return true;
+            foreach (var block in grid.AllBlocks)
+                if (IsLiquidPipe(block)) return true;
             return false;
         }
 
@@ -119,38 +119,35 @@ namespace VoxelEngine.GridSystem
             var grid = endpoint != null ? endpoint.Grid : null;
             if (grid == null) yield break;
 
-            var visitedPipes = new HashSet<Vector3Int>();
-            var queue = new Queue<Vector3Int>();
+            var visitedPipes = new HashSet<GridBlock>();
+            var yieldedTanks = new HashSet<GridLiquidTank>();
+            var queue = new Queue<GridBlock>();
 
-            foreach (var dir in Neighbours)
+            foreach (var adjacent in UnifiedGridTopology.AdjacentBlocks(grid, endpoint))
             {
-                var p = endpoint.GridPos + dir;
-                var pipeBlock = grid.GetBlock(p);
-                if (IsLiquidPipe(pipeBlock)
-                    && !VoxelEngine.Networks.WrenchBlacklist.IsBlocked(endpoint.gameObject, pipeBlock.gameObject)
-                    && visitedPipes.Add(p)) queue.Enqueue(p);
+                if (!IsLiquidPipe(adjacent)
+                    || VoxelEngine.Networks.WrenchBlacklist.IsBlocked(endpoint.gameObject, adjacent.gameObject)
+                    || !visitedPipes.Add(adjacent)) continue;
+                queue.Enqueue(adjacent);
             }
 
             while (queue.Count > 0)
             {
-                var pipePos = queue.Dequeue();
-                var pipeBlock = grid.GetBlock(pipePos);
-                foreach (var dir in Neighbours)
+                var pipeBlock = queue.Dequeue();
+                foreach (var adjacent in UnifiedGridTopology.AdjacentBlocks(grid, pipeBlock))
                 {
-                    var pos = pipePos + dir;
-                    var block = grid.GetBlock(pos);
-                    if (IsLiquidPipe(block))
+                    if (IsLiquidPipe(adjacent))
                     {
-                        if (!VoxelEngine.Networks.WrenchBlacklist.IsBlocked(pipeBlock?.gameObject, block.gameObject)
-                            && visitedPipes.Add(pos)) queue.Enqueue(pos);
+                        if (!VoxelEngine.Networks.WrenchBlacklist.IsBlocked(pipeBlock.gameObject, adjacent.gameObject)
+                            && visitedPipes.Add(adjacent)) queue.Enqueue(adjacent);
                         continue;
                     }
 
-                    if (block is GridLiquidTank tank && tank.Enabled && tank.mode != GridTankMode.Stockpile
-                        && !VoxelEngine.Networks.WrenchBlacklist.IsBlocked(pipeBlock?.gameObject, tank.gameObject))
+                    if (adjacent is GridLiquidTank tank && tank.Enabled && tank.mode != GridTankMode.Stockpile
+                        && !VoxelEngine.Networks.WrenchBlacklist.IsBlocked(pipeBlock.gameObject, tank.gameObject))
                     {
                         bool typeOk = tank.liquidType == type || (!requireExistingType && tank.stored <= 0.001f);
-                        if (typeOk) yield return tank;
+                        if (typeOk && yieldedTanks.Add(tank)) yield return tank;
                     }
                 }
             }

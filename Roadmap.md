@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.65.1-dev`
-**Roadmap Version:** `5.65.1-dev`
+**Current Version:** `5.66.0-dev`
+**Roadmap Version:** `5.66.0-dev`
 **Date:** 2026-07-19
-**Status:** Active Implementation — Precision Lattice MeshFilter Fix + Block Size Labels; Unity Validation Pending
+**Status:** Active Implementation — Unified Grid Networks + Screen Sources; Unity Validation Pending
 
 ---
 
@@ -47,7 +47,7 @@ The design goal is a seamless blend of:
 | Grid systems (ships/vehicles) | ✅ Mature | Needs lights, screens, armor, sloped blocks |
 | Maritime grid | 🟡 Basic | Needs refinement and feature parity |
 | Detail-scale grid blocks | 🛠️ WORKING ON | Detail blocks now share the unified Grid with Structural blocks; persistence and complete positional network indexing remain open. |
-| Unified grid placement | 🛠️ WORKING ON | One player-facing Grid uses Detail (0.5 m) and Structural (2.5 m) block scales. 5.65.1-dev fixes the missing `MeshFilter` exception that interrupted lattice generation before the ghost/placement path could complete, and Step 18 now appends each block's physical size to item/recipe names. Persistence plus complete fluid/gas/screen positional indexing remain open. |
+| Unified grid placement | 🛠️ WORKING ON | Detail (0.5 m) and Structural (2.5 m) placement is validated by Thomas. 5.66.0-dev adds physical face-touch topology across both scales for gas/liquid networks and precision-safe encoded screen source addresses. Unified movable-grid persistence remains the primary open gate. |
 | Power (wind, hydrogen) | ✅ Mature | Modular turbines are excellent |
 | Fluids / gases | ✅ Good | Pipe-gated transfer in 2.20.0 |
 | Building (static + tiered) | 🛠️ Working On | 3.75 m spacing, scale, rotation, and player-away Doors are Unity-validated. Size-V5 closes Foundation deck seams and adds upward/downward Stair anchors at Foundation/Floor edges and Doorway thresholds; final validation is pending. |
@@ -717,7 +717,8 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Area | Status | Repository Audit |
 |------|--------|------------------|
 | Grid shape variants | ✅ COMPLETED | Thomas validated all six structural meshes, textures, collision, placement ghosts, selection behavior, and corrected wheel alignment. Step 18 provides the non-destructive setup connection. |
-| Unified grid placement | 🛠️ WORKING ON | One Grid accepts Detail and Structural block scales. The runtime lattice now guarantees its required MeshFilter/MeshRenderer before assigning the preview mesh, clearing the exception that blocked Detail-on-Structural placement. Physical size labels are setup-authored; Unity validation is pending. |
+| Unified grid placement | 🛠️ WORKING ON | Thomas validated Detail-on-Structural lattice placement and size-labelled content. Gas/liquid topology and screen data-source addressing now resolve both block scales on one Grid; Unity validation and unified movable-grid persistence remain open. |
+| Unified grid networks and screens | 🛠️ WORKING ON | Physical face adjacency replaces one-scale coordinate assumptions for gas/liquid pipes and tanks. Screens discover, select, auto-link, and resolve Detail providers through precision-safe encoded addresses while legacy Structural addresses remain compatible. |
 | Vehicle power foundations | 🟡 PARTIALLY COMPLETE | Grid batteries, solar, hydrogen engines, reactors, power accounting, docking, and multiple vehicle systems exist; the planned unified power network and full vehicle progression remain incomplete. |
 | Damage, armor, weapons, and life support | 🟡 PARTIALLY COMPLETE | Basic block HP/damage and one grid weapon foundation exist. Full typed damage, player armor, pooled ballistics, hazards, airtight support, and combat content remain open. |
 
@@ -1695,6 +1696,44 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.66.0-dev] Unified Grid Networks + Screen Sources
+
+**Type:** MINOR — new save-compatible cross-scale topology and screen-address foundation (legacy Structural screen addresses remain compatible)
+
+**Validated:**
+- Thomas confirmed Detail-on-Structural placement, lattice rendering, ghosts, collision, and physical-size labels now work perfectly.
+
+**Added / Improved:**
+- Added `UnifiedGridTopology`, a shared physical adjacency service for the one-Grid architecture.
+- Detail and Structural blocks now detect adjacency by actual touching faces and per-block physical extents rather than assuming every block uses one coordinate step.
+- Gas networks now include Detail and Structural pipes/tanks on the same Grid for pipe detection, available gas, broad fill/draw, and topology-gated transfer.
+- Liquid networks now include both scales and can traverse cross-scale touching pipe runs to compatible tanks.
+- Network traversal uses block references with cycle protection and de-duplicates tanks before transfer.
+- Added precision-safe encoded Grid addresses for screen sources:
+  - existing Structural `GridPos` addresses remain unchanged;
+  - Detail precision coordinates use a reserved encoded address range;
+  - no existing screen source list/schema field is removed.
+- Grid screens now discover Detail data providers, auto-link to the nearest Detail or Structural provider, resolve selected precision sources, and remove stale sources safely.
+- Component-based providers such as Detail LED strips remain supported because address resolution returns the owning Grid block before provider-component lookup.
+- Step 18 now reports unified gas, liquid, tank, and screen-source topology readiness.
+
+**Roadmap Status:**
+- Unified Grid placement remains **🛠️ WORKING ON**.
+- Unified grid networks and screens are **🛠️ WORKING ON** pending Thomas's cross-scale Unity validation.
+- Unified movable-grid persistence remains the primary completion gate.
+
+**Manual Unity Steps:**
+1. Let Unity recompile; no prefab regeneration is required for the runtime topology code.
+2. Run `Tools > Voxel Engine > Voxel Engine Setup` → **18. Setup Grid Shape Variants (Non-Destructive)** once and confirm the unified-topology readiness log.
+3. On one Grid, place a Structural gas pipe/tank and connect a Detail gas pipe or compatible Detail gas block so their physical faces touch.
+4. Confirm gas availability/transfer recognizes the cross-scale connected run and does not cross a visible gap.
+5. Repeat with liquid pipes and a compatible liquid tank.
+6. Place a Grid Screen plus a Detail Spotlight, Detail LED Strip, camera, battery, or other data provider on the same Grid.
+7. Open Screen Config and confirm Detail providers appear alongside Structural providers.
+8. Select a Detail provider, confirm live data appears, clear/reselect it, and verify auto-link can choose the nearest provider across either scale.
+9. Remove a selected Detail source and confirm the screen removes the stale source without errors.
+10. Re-test an existing Structural screen source to confirm legacy source addressing still works.
 
 ### [5.65.1-dev] Precision Lattice MeshFilter Fix + Block Size Labels
 

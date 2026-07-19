@@ -144,6 +144,7 @@ namespace VoxelEngine.EditorTools
             // ── 5. Summary ─────────────────────────────────────────────────
             Debug.Log($"[Step 18] Complete. Created/enabled {created}, verified {updated} existing.");
             Debug.Log("[Step 18] Unified Grid verified: Detail blocks can use the 5x5 lattice on Structural faces.");
+            Debug.Log("[Step 18] Unified topology ready: Detail/Structural gas pipes, liquid pipes, tanks, and screen data sources share one Grid.");
             Debug.Log("[Step 18] Non-destructive: source recipes, costs, mass, health, power, materials, and custom prefab children were preserved.");
 
             EditorUtility.DisplayDialog("Voxel Engine — Step 18", 
