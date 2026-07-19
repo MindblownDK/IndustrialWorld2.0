@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.62.0-dev`
-**Roadmap Version:** `5.62.0-dev`
+**Current Version:** `5.62.1-dev`
+**Roadmap Version:** `5.62.1-dev`
 **Date:** 2026-07-17
-**Status:** Active Implementation — Premium Large Grid Door Variants
+**Status:** Active Implementation — Door Gap Fix + Visual Upgrade
 
 ---
 
@@ -1682,6 +1682,31 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.62.1-dev] Door Gap Fix + Visual Upgrade
+
+**Type:** PATCH — Step 17 prefab visual polish only (no save schema or recipe balance changes)
+
+**Fixed / Improved:**
+- Added a dark generated backfill plate behind every large-grid door variant so no open daylight gaps are visible between panels and frame/seals.
+- Enlarged closed door panels to overlap under the inner frame seals instead of sitting short inside the opening.
+- Tightened the single sliding door panel to fill the whole opening, with a stronger diagonal black inset and access panel.
+- Tightened the double sliding door halves so they overlap at center and under the frame, removing side/center gaps.
+- Tightened the heavy vault slab to fill the sealed opening and keep the vault bars/bolts sitting on top.
+- Added extra guide rails beside the panels to make the sliding/vault assembly look more intentional and premium.
+
+**Roadmap Status:**
+- Large-grid doors remain **🛠️ WORKING ON** pending Thomas validation of the new no-gap visuals.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Run `Tools > Voxel Engine > Voxel Engine Setup` → **17. Build Factory Foundations + HV Grid**.
+3. Inspect/place:
+   - Large Sci-Fi Sliding Door
+   - Large Double Sliding Door
+   - Heavy Vault Door
+4. Confirm the closed panels fill the frame with no visible gaps.
+5. Confirm open/close and motion activation still work.
 
 ### [5.62.0-dev] Premium Large Grid Door Variants
 

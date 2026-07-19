@@ -7681,6 +7681,9 @@ root =>
                     var warnMat = GetMaterial(GRID_MATS, "Mat_DoorWarningWhite", new Color(0.92f, 0.94f, 0.90f), true);
 
                     // Layered industrial frame inspired by the reference bulkhead.
+                    // A dark backfill sits behind every variant so no daylight gaps are visible
+                    // between closed panels and the frame/seals.
+                    EnsurePrimitive(root, "Generated_DoorBackFill", PrimitiveType.Cube, new Vector3(0f, 0f, z - 0.070f * scale), new Vector3(1.08f * scale, 0.92f * scale, 0.040f * scale), frameMat, Vector3.zero);
                     EnsurePrimitive(root, "Generated_OuterFrameTop", PrimitiveType.Cube, new Vector3(0f, 0.48f * scale, z), new Vector3(1.18f * scale, 0.08f * scale, 0.12f * scale), outerMat, Vector3.zero);
                     EnsurePrimitive(root, "Generated_OuterFrameBottom", PrimitiveType.Cube, new Vector3(0f, -0.48f * scale, z), new Vector3(1.18f * scale, 0.08f * scale, 0.12f * scale), outerMat, Vector3.zero);
                     EnsurePrimitive(root, "Generated_OuterFrameLeft", PrimitiveType.Cube, new Vector3(-0.58f * scale, 0f, z), new Vector3(0.08f * scale, 1.04f * scale, 0.12f * scale), outerMat, Vector3.zero);
@@ -7692,7 +7695,7 @@ root =>
 
                     if (vault)
                     {
-                        EnsurePrimitive(root, "Generated_LeftPanel", PrimitiveType.Cube, new Vector3(0f, 0f, z - 0.04f * scale), new Vector3(0.84f * scale, 0.78f * scale, 0.10f * scale), vaultMat, Vector3.zero);
+                        EnsurePrimitive(root, "Generated_LeftPanel", PrimitiveType.Cube, new Vector3(0f, 0f, z - 0.045f * scale), new Vector3(1.04f * scale, 0.90f * scale, 0.12f * scale), vaultMat, Vector3.zero);
                         EnsurePrimitive(root, "Generated_VaultCore", PrimitiveType.Cylinder, new Vector3(-0.06f * scale, 0.02f * scale, z - 0.105f * scale), new Vector3(0.25f * scale, 0.035f * scale, 0.25f * scale), frameMat, new Vector3(90f, 0f, 0f));
                         EnsurePrimitive(root, "Generated_VaultBarH", PrimitiveType.Cube, new Vector3(-0.06f * scale, 0.02f * scale, z - 0.145f * scale), new Vector3(0.58f * scale, 0.035f * scale, 0.025f * scale), frameMat, Vector3.zero);
                         EnsurePrimitive(root, "Generated_VaultBarV", PrimitiveType.Cube, new Vector3(-0.06f * scale, 0.02f * scale, z - 0.150f * scale), new Vector3(0.035f * scale, 0.48f * scale, 0.025f * scale), frameMat, Vector3.zero);
@@ -7701,24 +7704,26 @@ root =>
                     }
                     else if (single)
                     {
-                        EnsurePrimitive(root, "Generated_LeftPanel", PrimitiveType.Cube, new Vector3(-0.02f * scale, 0f, z - 0.04f * scale), new Vector3(0.86f * scale, 0.78f * scale, 0.075f * scale), orangeMat, Vector3.zero);
+                        EnsurePrimitive(root, "Generated_LeftPanel", PrimitiveType.Cube, new Vector3(-0.01f * scale, 0f, z - 0.045f * scale), new Vector3(1.02f * scale, 0.90f * scale, 0.095f * scale), orangeMat, Vector3.zero);
                         EnsurePrimitive(root, "Generated_RightPanel", PrimitiveType.Cube, new Vector3(0.42f * scale, 0f, z - 0.038f * scale), new Vector3(0.001f, 0.001f, 0.001f), orangeMat, Vector3.zero);
-                        EnsurePrimitive(root, "Generated_DarkDiagonalInset", PrimitiveType.Cube, new Vector3(0.20f * scale, -0.02f * scale, z - 0.095f * scale), new Vector3(0.28f * scale, 0.68f * scale, 0.025f * scale), darkPanelMat, new Vector3(0f, 0f, -24f));
+                        EnsurePrimitive(root, "Generated_DarkDiagonalInset", PrimitiveType.Cube, new Vector3(0.25f * scale, -0.02f * scale, z - 0.110f * scale), new Vector3(0.34f * scale, 0.74f * scale, 0.030f * scale), darkPanelMat, new Vector3(0f, 0f, -24f));
                         EnsurePrimitive(root, "Generated_AccessPanel", PrimitiveType.Cube, new Vector3(-0.28f * scale, 0.05f * scale, z - 0.10f * scale), new Vector3(0.20f * scale, 0.28f * scale, 0.025f * scale), frameMat, Vector3.zero);
                         EnsurePrimitive(root, "Generated_AccessGlow", PrimitiveType.Cube, new Vector3(-0.28f * scale, 0.05f * scale, z - 0.13f * scale), new Vector3(0.08f * scale, 0.12f * scale, 0.018f * scale), glassMat, Vector3.zero);
                         EnsurePrimitive(root, "Generated_NumberStripe", PrimitiveType.Cube, new Vector3(-0.05f * scale, -0.24f * scale, z - 0.11f * scale), new Vector3(0.38f * scale, 0.045f * scale, 0.018f * scale), warnMat, Vector3.zero);
                     }
                     else if (dual)
                     {
-                        EnsurePrimitive(root, "Generated_LeftPanel", PrimitiveType.Cube, new Vector3(-0.22f * scale, 0f, z - 0.04f * scale), new Vector3(0.42f * scale, 0.78f * scale, 0.075f * scale), orangeMat, Vector3.zero);
-                        EnsurePrimitive(root, "Generated_RightPanel", PrimitiveType.Cube, new Vector3(0.22f * scale, 0f, z - 0.04f * scale), new Vector3(0.42f * scale, 0.78f * scale, 0.075f * scale), darkPanelMat, Vector3.zero);
-                        EnsurePrimitive(root, "Generated_LeftAccessPanel", PrimitiveType.Cube, new Vector3(-0.28f * scale, 0.06f * scale, z - 0.10f * scale), new Vector3(0.16f * scale, 0.24f * scale, 0.025f * scale), frameMat, Vector3.zero);
-                        EnsurePrimitive(root, "Generated_LeftAccessGlow", PrimitiveType.Cube, new Vector3(-0.28f * scale, 0.06f * scale, z - 0.13f * scale), new Vector3(0.07f * scale, 0.10f * scale, 0.018f * scale), glassMat, Vector3.zero);
-                        EnsurePrimitive(root, "Generated_RightRibA", PrimitiveType.Cube, new Vector3(0.22f * scale, 0.16f * scale, z - 0.10f * scale), new Vector3(0.34f * scale, 0.035f * scale, 0.018f * scale), frameMat, new Vector3(0f, 0f, 24f));
-                        EnsurePrimitive(root, "Generated_RightRibB", PrimitiveType.Cube, new Vector3(0.22f * scale, -0.16f * scale, z - 0.10f * scale), new Vector3(0.34f * scale, 0.035f * scale, 0.018f * scale), frameMat, new Vector3(0f, 0f, -24f));
+                        EnsurePrimitive(root, "Generated_LeftPanel", PrimitiveType.Cube, new Vector3(-0.255f * scale, 0f, z - 0.045f * scale), new Vector3(0.55f * scale, 0.90f * scale, 0.095f * scale), orangeMat, Vector3.zero);
+                        EnsurePrimitive(root, "Generated_RightPanel", PrimitiveType.Cube, new Vector3(0.255f * scale, 0f, z - 0.045f * scale), new Vector3(0.55f * scale, 0.90f * scale, 0.095f * scale), darkPanelMat, Vector3.zero);
+                        EnsurePrimitive(root, "Generated_LeftAccessPanel", PrimitiveType.Cube, new Vector3(-0.30f * scale, 0.06f * scale, z - 0.120f * scale), new Vector3(0.17f * scale, 0.25f * scale, 0.030f * scale), frameMat, Vector3.zero);
+                        EnsurePrimitive(root, "Generated_LeftAccessGlow", PrimitiveType.Cube, new Vector3(-0.30f * scale, 0.06f * scale, z - 0.150f * scale), new Vector3(0.075f * scale, 0.11f * scale, 0.018f * scale), glassMat, Vector3.zero);
+                        EnsurePrimitive(root, "Generated_RightRibA", PrimitiveType.Cube, new Vector3(0.25f * scale, 0.17f * scale, z - 0.120f * scale), new Vector3(0.38f * scale, 0.038f * scale, 0.020f * scale), frameMat, new Vector3(0f, 0f, 24f));
+                        EnsurePrimitive(root, "Generated_RightRibB", PrimitiveType.Cube, new Vector3(0.25f * scale, -0.17f * scale, z - 0.120f * scale), new Vector3(0.38f * scale, 0.038f * scale, 0.020f * scale), frameMat, new Vector3(0f, 0f, -24f));
                     }
 
-                    EnsurePrimitive(root, "Generated_StatusLine", PrimitiveType.Cube, new Vector3(0f, -0.435f * scale, z - 0.095f * scale), new Vector3(0.44f * scale, 0.022f * scale, 0.018f * scale), statusMat, Vector3.zero);
+                    EnsurePrimitive(root, "Generated_LeftGuideRail", PrimitiveType.Cube, new Vector3(-0.505f * scale, 0f, z - 0.105f * scale), new Vector3(0.030f * scale, 0.84f * scale, 0.025f * scale), frameMat, Vector3.zero);
+                    EnsurePrimitive(root, "Generated_RightGuideRail", PrimitiveType.Cube, new Vector3(0.505f * scale, 0f, z - 0.105f * scale), new Vector3(0.030f * scale, 0.84f * scale, 0.025f * scale), frameMat, Vector3.zero);
+                    EnsurePrimitive(root, "Generated_StatusLine", PrimitiveType.Cube, new Vector3(0f, -0.435f * scale, z - 0.130f * scale), new Vector3(0.44f * scale, 0.022f * scale, 0.018f * scale), statusMat, Vector3.zero);
                     EnsureRootCollider(root, new Vector3(1.18f * scale, 1.06f * scale, 0.22f * scale), new Vector3(0f, 0f, z));
                     EnsureStep17Component<VoxelEngine.GridSystem.GridSlidingDoor>(root, door =>
                     {
