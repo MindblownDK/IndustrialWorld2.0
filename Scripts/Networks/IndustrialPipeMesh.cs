@@ -324,7 +324,9 @@ namespace VoxelEngine.Networks
                     axisUsed[axisIdx] = true;
 
                     float projected = Mathf.Abs(Vector3.Dot(d, dir));
-                    float armEnd    = Mathf.Min(projected, gs * 1.5f);
+                    // Long pipe links may bridge up to five grid cells. Clamp to the
+                    // same gameplay limit so visuals never imply a longer connection.
+                    float armEnd    = Mathf.Min(projected, gs * 5f);
                     float startOff  = p.hubRadius - p.capInset * 0.5f;
                     float armLen    = Mathf.Max(0.05f, armEnd - startOff);
                     Vector3 armCentre = dir * (startOff + armLen * 0.5f);

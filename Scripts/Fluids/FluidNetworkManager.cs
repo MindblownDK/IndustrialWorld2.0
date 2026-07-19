@@ -48,8 +48,9 @@ namespace VoxelEngine.Fluids
             var snapshot = new List<FluidNode>(_all);
             snapshot.RemoveAll(n => n == null);
 
-            // O(N) spatial hash.
-            const float CELL = 2f;
+            // O(N) spatial hash. Five metres keeps every valid five-cell world
+            // pipe span inside this cell or one of its immediate neighbours.
+            const float CELL = 5f;
             var hash = new Dictionary<Vector3Int, List<FluidNode>>();
             Vector3Int Cell(Vector3 p) => new Vector3Int(
                 Mathf.FloorToInt(p.x / CELL), Mathf.FloorToInt(p.y / CELL), Mathf.FloorToInt(p.z / CELL));
@@ -72,19 +73,18 @@ namespace VoxelEngine.Fluids
                     foreach (var b in bucket)
                     {
                         if (b == n) continue;
-                        float r = Mathf.Max(rA, b.connectRadius);
                         Vector3 pa = n.transform.position, pb = b.transform.position;
-                        if ((pa - pb).sqrMagnitude > r * r) continue;
 
-                        // STRICT cardinal rule for pipe↔pipe links so visual arms
-                        // never point toward empty air on a different floor. Pipe↔
-                        // tank / pipe↔pump links use the relaxed axis-aligned rule
-                        // so multi-voxel machines whose centres sit off-grid still
-                        // hook up cleanly to an adjacent pipe.
+                        // Pipe↔pipe links may bridge five cardinal cells. Pipe↔tank /
+                        // pipe↔pump links retain the shorter endpoint rule.
                         bool bIsPipe = b.Kind == FluidNodeKind.Pipe;
                         float step = GridStep(n, b);
+                        float range = nIsPipe && bIsPipe
+                            ? Mathf.Max(Mathf.Max(rA, b.connectRadius), step * 5f)
+                            : Mathf.Max(rA, b.connectRadius);
+                        if ((pa - pb).sqrMagnitude > range * range) continue;
                         bool ok = (nIsPipe && bIsPipe)
-                            ? VoxelEngine.Networks.PipeAdjacency.IsCardinalNeighbour(pa, pb, step, step * 0.35f)
+                            ? VoxelEngine.Networks.PipeAdjacency.IsCardinalLink(pa, pb, step, 5f, step * 0.35f)
                             : VoxelEngine.Networks.PipeAdjacency.IsAxisAlignedWithin(pa, pb, step, 2.5f, step * 0.35f);
                         if (!ok) continue;
 

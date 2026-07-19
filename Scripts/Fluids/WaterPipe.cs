@@ -37,7 +37,7 @@ namespace VoxelEngine.Fluids
             if (neighbours != null)
             {
                 foreach (var n in neighbours)
-                    if (n != null) _neighbourPosBuf.Add(n.transform.position);
+                    if (n != null) _neighbourPosBuf.Add(Vector3.Lerp(transform.position, n.transform.position, 0.5f));
             }
 
             // If this normal liquid pipe is attached to a grid, also draw arms to
@@ -54,9 +54,12 @@ namespace VoxelEngine.Fluids
                                  || block is VoxelEngine.GridSystem.GridH2O2Generator
                                  || block is VoxelEngine.GridSystem.GridRefinery
                                  || block is VoxelEngine.GridSystem.GridChemicalPlant;
-                    if (!endpoint && block.GetComponentInChildren<WaterPipe>(true) == null) continue;
+                    bool connectedPipe = block.GetComponentInChildren<WaterPipe>(true) != null;
+                    if (!endpoint && !connectedPipe) continue;
                     if (VoxelEngine.Networks.WrenchBlacklist.IsBlocked(gridBlock.gameObject, block.gameObject)) continue;
-                    _neighbourPosBuf.Add(block.transform.position);
+                    _neighbourPosBuf.Add(connectedPipe
+                        ? Vector3.Lerp(transform.position, block.transform.position, 0.5f)
+                        : block.transform.position);
                 }
             }
             return _neighbourPosBuf;

@@ -54,16 +54,15 @@ namespace VoxelEngine.Gas
             for (int j = i + 1; j < _pipes.Count; j++)
             {
                 var a = _pipes[i]; var b = _pipes[j];
-                float r = Mathf.Max(a.connectRadius, b.connectRadius);
                 Vector3 pa = a.transform.position, pb = b.transform.position;
+                float step = GridStep(a, b);
+                float range = Mathf.Max(Mathf.Max(a.connectRadius, b.connectRadius), step * 5f);
 
                 // Distance gate is cheap, do it first.
-                if ((pa - pb).sqrMagnitude > r * r) continue;
+                if ((pa - pb).sqrMagnitude > range * range) continue;
 
-                // STRICT cardinal-neighbour gate (mirrors the wire renderer). On grids,
-                // pipes are spaced by the grid cell size (2.5m for large grids), not 1m.
-                float step = GridStep(a, b);
-                if (!VoxelEngine.Networks.PipeAdjacency.IsCardinalNeighbour(pa, pb, step, step * 0.35f)) continue;
+                // Pipes may bridge up to five cardinal cells while diagonal links remain invalid.
+                if (!VoxelEngine.Networks.PipeAdjacency.IsCardinalLink(pa, pb, step, 5f, step * 0.35f)) continue;
 
                 // Wrench blacklist — player wrenched these two apart; honour it
                 // until a wrench reconnect or one of them is broken/replaced.

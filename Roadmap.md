@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.67.1-dev`
-**Roadmap Version:** `5.67.1-dev`
+**Current Version:** `5.68.0-dev`
+**Roadmap Version:** `5.68.0-dev`
 **Date:** 2026-07-19
-**Status:** Active Implementation — Detail Pipe Placement Compile Fix; Unity Validation Pending
+**Status:** Active Implementation — Five-Cell Pipe Links; Unity Validation Pending
 
 ---
 
@@ -47,7 +47,7 @@ The design goal is a seamless blend of:
 | Grid systems (ships/vehicles) | ✅ Mature | Needs lights, screens, armor, sloped blocks |
 | Maritime grid | 🟡 Basic | Needs refinement and feature parity |
 | Detail-scale grid blocks | 🛠️ WORKING ON | Detail blocks now share the unified Grid with Structural blocks; persistence and complete positional network indexing remain open. |
-| Unified grid placement | 🛠️ WORKING ON | Detail/Structural placement and unified screen sources are validated by Thomas. 5.67.0-dev keeps one existing item per Item/Gas/Liquid pipe and gives that same pipe automatic 0.5 m Detail lattice placement when aimed at a Grid; no separate Detail or Grid pipe assets are introduced. Unified movable-grid persistence remains open. |
+| Unified grid placement | 🛠️ WORKING ON | Detail/Structural placement, screen sources, and existing-pipe Detail placement are validated by Thomas. 5.68.0-dev lets Item/Gas/Liquid pipes bridge up to five cardinal grid cells with continuous visual and functional links on both the 0.5 m Detail lattice and 1 m world placement grid. Unified movable-grid persistence remains open. |
 | Power (wind, hydrogen) | ✅ Mature | Modular turbines are excellent |
 | Fluids / gases | ✅ Good | Pipe-gated transfer in 2.20.0 |
 | Building (static + tiered) | 🛠️ Working On | 3.75 m spacing, scale, rotation, and player-away Doors are Unity-validated. Size-V5 closes Foundation deck seams and adds upward/downward Stair anchors at Foundation/Floor edges and Doorway thresholds; final validation is pending. |
@@ -719,7 +719,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Grid shape variants | ✅ COMPLETED | Thomas validated all six structural meshes, textures, collision, placement ghosts, selection behavior, and corrected wheel alignment. Step 18 provides the non-destructive setup connection. |
 | Unified grid placement | 🛠️ WORKING ON | Thomas validated Detail-on-Structural lattice placement and size-labelled content. Gas/liquid topology and screen data-source addressing now resolve both block scales on one Grid; Unity validation and unified movable-grid persistence remain open. |
 | Unified grid screen sources | ✅ COMPLETED | Thomas validated the unified screen/data-source work. Detail providers use precision-safe encoded addresses while legacy Structural addresses remain compatible. |
-| Unified pipe placement and networks | 🛠️ WORKING ON | The existing Item, Gas, and Liquid pipe items now place at 0.5 m Detail scale on a Grid using the same 5×5 lattice/ghost workflow; static-world placement remains available from the same item. Physical face adjacency drives mixed block-to-pipe/tank connections. Unity validation pending. |
+| Unified pipe placement and networks | 🛠️ WORKING ON | Thomas validated the existing Item/Gas/Liquid pipe Detail-placement workflow. Pipe-to-pipe links may now span up to five cells along one cardinal axis: 2.5 m on Detail Grids or 5 m in world placement. Functional topology and generated arms share the same limit; final span validation is pending. |
 | Vehicle power foundations | 🟡 PARTIALLY COMPLETE | Grid batteries, solar, hydrogen engines, reactors, power accounting, docking, and multiple vehicle systems exist; the planned unified power network and full vehicle progression remain incomplete. |
 | Damage, armor, weapons, and life support | 🟡 PARTIALLY COMPLETE | Basic block HP/damage and one grid weapon foundation exist. Full typed damage, player armor, pooled ballistics, hazards, airtight support, and combat content remain open. |
 
@@ -1697,6 +1697,38 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.68.0-dev] Five-Cell Pipe Links
+
+**Type:** MINOR — new save-compatible pipe connection range and matching visual spans (no save schema, duplicate content, recipe cost, throughput, HP, mass, or power changes)
+
+**Validated:**
+- Thomas confirmed the existing Item/Gas/Liquid pipe items now place perfectly through the 0.5 m Detail lattice.
+
+**Added / Changed:**
+- Item, Gas, and Liquid pipes can connect across up to five cells on one cardinal axis without requiring a pipe in every intermediate cell.
+- Detail Grid pipes use their 0.5 m cell size, giving a maximum 2.5 m center-to-center span.
+- Static-world pipes use the 1 m world grid, giving a maximum 5 m center-to-center span.
+- Added shared `PipeAdjacency.IsCardinalLink()` so long links remain strictly X/Y/Z aligned and never connect diagonally.
+- ItemPipeNetwork, GasNetwork, and FluidNetworkManager use the same five-cell functional rule.
+- Industrial pipe arms now extend to the same five-cell maximum, so visual links and actual connectivity cannot disagree.
+- Opposing pipe arms meet at the span midpoint instead of overlapping across the full distance, preventing long-link visual overlap/flicker while endpoint arms still reach machines and tanks.
+- Fluid spatial hashing now covers valid 5 m world spans without requiring an all-pairs scan.
+- Grid-aware network step calculation continues using each attached block's effective physical scale.
+- Step 18 appends the five-cell link capability to existing pipe descriptions without creating new items or changing balance.
+
+**Roadmap Status:**
+- Existing pipe Detail placement is validated.
+- Five-cell Item/Gas/Liquid links remain **🛠️ WORKING ON** pending Thomas's Grid and world-placement validation.
+
+**Manual Unity Steps:**
+1. Let Unity compile; no prefab regeneration is required for runtime connection code.
+2. Run `Tools > Voxel Engine > Voxel Engine Setup` → **18. Setup Grid Shape Variants (Non-Destructive)** once to refresh existing pipe descriptions.
+3. On a Grid, place two existing pipes on the same cardinal line at 1, 2, 3, 4, and 5 Detail-cell distances. Confirm each pair gets a continuous visual arm and functional connection.
+4. Place a pair 6 Detail cells apart and confirm no visual or functional link appears.
+5. Offset one pipe diagonally within the five-cell radius and confirm no link appears.
+6. Repeat for Item, Gas, and Liquid pipes.
+7. In world placement, repeat at 1–5 world-grid cell distances and confirm links; test 6 cells and diagonal offsets as rejection cases.
 
 ### [5.67.1-dev] Detail Pipe Placement Compile Fix
 

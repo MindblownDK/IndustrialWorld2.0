@@ -190,6 +190,12 @@ namespace VoxelEngine.EditorTools
                         + "Uses the existing pipe item everywhere. On a Grid it snaps to the 0.5 m Detail lattice; no separate Grid pipe item is required.";
                     itemChanged = true;
                 }
+                if (!item.description.Contains("five grid cells"))
+                {
+                    item.description = item.description.TrimEnd()
+                        + " Pipe links can bridge up to five grid cells in one cardinal direction.";
+                    itemChanged = true;
+                }
                 changedItems.Add(item);
                 if (!itemChanged) continue;
                 EditorUtility.SetDirty(item);

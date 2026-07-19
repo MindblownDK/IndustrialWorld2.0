@@ -183,7 +183,7 @@ namespace VoxelEngine.Transport
         {
             _neighbourPosBuf.Clear();
             foreach (var n in neighbours)
-                if (n != null) _neighbourPosBuf.Add(n.transform.position);
+                if (n != null) _neighbourPosBuf.Add(Vector3.Lerp(transform.position, n.transform.position, 0.5f));
             foreach (var e in _endpointPositions)
                 _neighbourPosBuf.Add(e);
             return _neighbourPosBuf;

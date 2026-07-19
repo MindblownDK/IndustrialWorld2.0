@@ -77,15 +77,14 @@ namespace VoxelEngine.Transport
                 {
                     var a = _pipes[i];
                     var b = _pipes[j];
-                    float maxDist = Mathf.Max(a.connectRadius, b.connectRadius);
                     Vector3 pa = a.transform.position, pb = b.transform.position;
-
+                    float step = GridStep(a, b);
+                    float maxDist = Mathf.Max(Mathf.Max(a.connectRadius, b.connectRadius), step * 5f);
                     if (Vector3.SqrMagnitude(pa - pb) > maxDist * maxDist) continue;
 
-                    // STRICT cardinal-neighbour gate. On grids, pipes are spaced by the
-                    // grid cell size (2.5m for large grids), not the 1m static build grid.
-                    float step = GridStep(a, b);
-                    if (!VoxelEngine.Networks.PipeAdjacency.IsCardinalNeighbour(pa, pb, step, step * 0.35f)) continue;
+                    // Pipes may bridge up to five cardinal cells. Diagonal and
+                    // off-row links remain invalid.
+                    if (!VoxelEngine.Networks.PipeAdjacency.IsCardinalLink(pa, pb, step, 5f, step * 0.35f)) continue;
 
                     // Wrench blacklist — explicit player disconnect persists.
                     if (VoxelEngine.Networks.WrenchBlacklist.IsBlocked(a, b)) continue;

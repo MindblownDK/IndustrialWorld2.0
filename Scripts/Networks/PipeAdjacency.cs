@@ -7,9 +7,9 @@
 // ║  to decide whether two placed pipes should snap into a single    ║
 // ║  network. Without this check, two pipes diagonally 2 m apart     ║
 // ║  on different floors would still be "within radius", so the      ║
-// ║  visual builder grew arms toward empty air. Now pipes only       ║
-// ║  connect when they sit ONE grid step apart on a single axis      ║
-// ║  (±X, ±Y or ±Z) — the exact same rule the wire renderer uses.   ║
+// ║  visual builder grew arms toward empty air. Pipe links remain    ║
+// ║  on one cardinal axis and may use either immediate-neighbour or  ║
+// ║  explicitly bounded multi-cell connection rules.                 ║
 // ╚══════════════════════════════════════════════════════════════════╝
 
 using UnityEngine;
@@ -18,9 +18,8 @@ namespace VoxelEngine.Networks
 {
     /// <summary>
     /// Shared connectivity predicates used by every pipe network to ensure
-    /// pipes only auto-link to true cardinal neighbours — never to diagonal
-    /// or vertically-offset blocks that just happen to be inside the search
-    /// radius. Mirrors the rule already used by PowerCable / DataCable.
+    /// pipes link only along a cardinal axis — never diagonally or merely because
+    /// another pipe happens to be inside a broad search radius.
     /// </summary>
     public static class PipeAdjacency
     {
@@ -67,6 +66,29 @@ namespace VoxelEngine.Networks
 
             // Ensure the OTHER two axes are within tolerance of zero (so pipes
             // on the same row connect even if their Y values differ slightly).
+            float other1 = dominant == 0 ? dy : dx;
+            float other2 = dominant == 2 ? dy : dz;
+            return other1 <= tol && other2 <= tol;
+        }
+
+        /// <summary>
+        /// True when two pipes share one cardinal axis and are no farther apart than
+        /// <paramref name="maxCells"/> cells. Used by long pipe links while retaining
+        /// the same strict no-diagonal rule as immediate neighbours.
+        /// </summary>
+        public static bool IsCardinalLink(Vector3 a, Vector3 b,
+                                           float gridSize = DefaultGridSize,
+                                           float maxCells = 5f,
+                                           float tolerance = DefaultTolerance)
+        {
+            Vector3 d = b - a;
+            float gs = gridSize > 0f ? gridSize : DefaultGridSize;
+            float tol = tolerance > 0f ? tolerance : DefaultTolerance;
+            float dx = Mathf.Abs(d.x), dy = Mathf.Abs(d.y), dz = Mathf.Abs(d.z);
+            float along = Mathf.Max(dx, Mathf.Max(dy, dz));
+            if (along < gs * 0.5f || along > gs * Mathf.Max(1f, maxCells) + tol) return false;
+
+            int dominant = (dx >= dy && dx >= dz) ? 0 : (dy >= dx && dy >= dz) ? 1 : 2;
             float other1 = dominant == 0 ? dy : dx;
             float other2 = dominant == 2 ? dy : dz;
             return other1 <= tol && other2 <= tol;
