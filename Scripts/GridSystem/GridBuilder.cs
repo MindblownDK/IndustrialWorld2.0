@@ -1,6 +1,7 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridBuilder.cs
 //
 // GridBuilder with grid size selection when creating a new ship.
+// v5.62.3-dev — Door top-face edge placement stands upright instead of lying flat.
 // v5.40.0-dev — Ghost properly shows shape variants as primitive shapes
 // (stair-step slopes, L-corner, half blocks) only for armour/structural
 // blocks when the wheel variant is non-Cube. All other grid blocks show
@@ -250,8 +251,10 @@ namespace VoxelEngine.GridSystem
 
             // If the player clicks a floor/ceiling face, choose the nearest horizontal edge
             // and place the door standing upright on that edge instead of lying flat.
+            bool edgeMountedFromTopOrBottom = false;
             if (Mathf.Abs(mountAxis.y) > 0 && hostBlock != null && hostBlock.Grid == grid)
             {
+                int verticalSign = mountAxis.y >= 0 ? 1 : -1;
                 float cellSize = grid.gridSize.CellSize();
                 Vector3 localHit = grid.transform.InverseTransformPoint(hit.point)
                                  - new Vector3(hostBlock.GridPos.x, hostBlock.GridPos.y, hostBlock.GridPos.z) * cellSize;
@@ -261,12 +264,16 @@ namespace VoxelEngine.GridSystem
                 else
                     mountAxis = new Vector3Int(0, 0, localHit.z >= 0f ? 1 : -1);
 
-                gridPos = hostBlock.GridPos + mountAxis;
+                // Top-face clicks mount the door upright on the nearest top edge.
+                // This cell is diagonal from the host cube, so it intentionally bypasses
+                // normal face-neighbour attachment validation below.
+                gridPos = hostBlock.GridPos + mountAxis + new Vector3Int(0, verticalSign, 0);
                 worldPos = grid.GridToWorld(gridPos);
+                edgeMountedFromTopOrBottom = true;
             }
 
             if (!grid.CanPlace(gridPos)) return false;
-            if (!grid.HasNeighbor(gridPos)) return false;
+            if (!edgeMountedFromTopOrBottom && !grid.HasNeighbor(gridPos)) return false;
 
             Vector3 outward = grid.transform.TransformDirection(new Vector3(mountAxis.x, mountAxis.y, mountAxis.z));
             if (outward.sqrMagnitude < 0.0001f) outward = hit.normal;

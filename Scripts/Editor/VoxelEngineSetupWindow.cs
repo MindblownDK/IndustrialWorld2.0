@@ -7683,7 +7683,7 @@ root =>
                     // Layered industrial frame inspired by the reference bulkhead.
                     // A dark backfill sits behind every variant so no daylight gaps are visible
                     // between closed panels and the frame/seals.
-                    EnsurePrimitive(root, "Generated_DoorBackFill", PrimitiveType.Cube, new Vector3(0f, 0f, z - 0.070f * scale), new Vector3(1.08f * scale, 0.92f * scale, 0.040f * scale), frameMat, Vector3.zero);
+                    EnsurePrimitive(root, "Generated_DoorBackFill", PrimitiveType.Cube, new Vector3(0f, 0f, z - 0.070f * scale), new Vector3(0.001f, 0.001f, 0.001f), frameMat, Vector3.zero);
                     EnsurePrimitive(root, "Generated_OuterFrameTop", PrimitiveType.Cube, new Vector3(0f, 0.48f * scale, z), new Vector3(1.18f * scale, 0.08f * scale, 0.12f * scale), outerMat, Vector3.zero);
                     EnsurePrimitive(root, "Generated_OuterFrameBottom", PrimitiveType.Cube, new Vector3(0f, -0.48f * scale, z), new Vector3(1.18f * scale, 0.08f * scale, 0.12f * scale), outerMat, Vector3.zero);
                     EnsurePrimitive(root, "Generated_OuterFrameLeft", PrimitiveType.Cube, new Vector3(-0.58f * scale, 0f, z), new Vector3(0.08f * scale, 1.04f * scale, 0.12f * scale), outerMat, Vector3.zero);
@@ -7730,7 +7730,7 @@ root =>
                         door.blockName = displayName;
                         door.BlockMass = vault ? 1250f : single ? 390f : 460f;
                         door.maxHP = vault ? 2200f : single ? 520f : 620f;
-                        door.slideDistance = vault ? 0.18f * scale : single ? 0.55f * scale : 0.34f * scale;
+                        door.slideDistance = vault ? 1.05f * scale : single ? 1.08f * scale : 0.54f * scale;
                         door.slideSpeed = vault ? 3.5f : 8f;
                         door.motionActivated = !vault;
                         door.motionRadius = vault ? 4.5f : 7.5f;

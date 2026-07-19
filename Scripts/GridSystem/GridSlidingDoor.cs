@@ -1,8 +1,9 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridSlidingDoor.cs
 //
 // Premium sliding door for grid ships/bases. Supports manual and motion activation.
-// v5.61.0-dev — Grid door foundation with motion activation.
+// v5.62.4-dev — Moves decorative panel parts with door panels and rotates vault handles.
 
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace VoxelEngine.GridSystem
@@ -15,6 +16,10 @@ namespace VoxelEngine.GridSystem
         public float slideDistance = 0.42f;
         public float slideSpeed = 8f;
         public bool startsOpen;
+        [Tooltip("If true, decorative panel details with matching generated names move with the main panel.")]
+        public bool autoBindGeneratedPanelDetails = true;
+        [Tooltip("Degrees the vault handle/core rotates while opening.")]
+        public float vaultHandleTurnDegrees = 110f;
 
         [Header("Motion Activation")]
         public bool motionActivated = true;
@@ -25,8 +30,9 @@ namespace VoxelEngine.GridSystem
         public float idleWatts = 2f;
         public float movingWatts = 18f;
 
-        private Vector3 _leftClosed;
-        private Vector3 _rightClosed;
+        private readonly Dictionary<Transform, Vector3> _leftClosed = new();
+        private readonly Dictionary<Transform, Vector3> _rightClosed = new();
+        private readonly Dictionary<Transform, Quaternion> _handleClosed = new();
         private bool _targetOpen;
         private bool _cached;
         private float _motionCheckTimer;
@@ -79,12 +85,68 @@ namespace VoxelEngine.GridSystem
 
         private void CachePanels()
         {
-            if (_cached && leftPanel != null && rightPanel != null) return;
+            // Cache authored closed positions once. Re-caching moving panels every frame made
+            // single-panel/vault doors slide away forever.
+            if (_cached) return;
+
             if (leftPanel == null) leftPanel = transform.Find("Generated_LeftPanel");
             if (rightPanel == null) rightPanel = transform.Find("Generated_RightPanel");
-            if (leftPanel != null) _leftClosed = leftPanel.localPosition;
-            if (rightPanel != null) _rightClosed = rightPanel.localPosition;
-            _cached = leftPanel != null || rightPanel != null;
+
+            _leftClosed.Clear();
+            _rightClosed.Clear();
+            _handleClosed.Clear();
+
+            AddMovingPart(leftPanel, _leftClosed);
+            AddMovingPart(rightPanel, _rightClosed);
+
+            if (autoBindGeneratedPanelDetails)
+            {
+                foreach (Transform child in transform)
+                {
+                    if (child == null) continue;
+                    string n = child.name;
+                    if (IsLeftMovingDetail(n)) AddMovingPart(child, _leftClosed);
+                    else if (IsRightMovingDetail(n)) AddMovingPart(child, _rightClosed);
+                    if (IsVaultHandlePart(n) && !_handleClosed.ContainsKey(child))
+                        _handleClosed.Add(child, child.localRotation);
+                }
+            }
+
+            _cached = _leftClosed.Count > 0 || _rightClosed.Count > 0;
+        }
+
+        private static void AddMovingPart(Transform t, Dictionary<Transform, Vector3> target)
+        {
+            if (t == null || target.ContainsKey(t)) return;
+            if (t.localScale.sqrMagnitude < 0.0001f) return;
+            target.Add(t, t.localPosition);
+        }
+
+        private static bool IsLeftMovingDetail(string n)
+        {
+            return n == "Generated_LeftPanel"
+                || n.StartsWith("Generated_LeftWindow")
+                || n.StartsWith("Generated_DarkDiagonalInset")
+                || n.StartsWith("Generated_AccessPanel")
+                || n.StartsWith("Generated_AccessGlow")
+                || n.StartsWith("Generated_NumberStripe")
+                || n.StartsWith("Generated_LeftAccess")
+                || n.StartsWith("Generated_Vault")
+                || n.StartsWith("Generated_Bolt")
+                || n.StartsWith("Generated_VaultBolt");
+        }
+
+        private static bool IsRightMovingDetail(string n)
+        {
+            return n == "Generated_RightPanel"
+                || n.StartsWith("Generated_RightWindow")
+                || n.StartsWith("Generated_RightRib");
+        }
+
+        private static bool IsVaultHandlePart(string n)
+        {
+            return n.StartsWith("Generated_VaultCore")
+                || n.StartsWith("Generated_VaultBar");
         }
 
         private void TickMotionSensor()
@@ -109,33 +171,45 @@ namespace VoxelEngine.GridSystem
 
         private void AnimatePanels(bool open)
         {
-            Vector3 leftTarget = _leftClosed + Vector3.left * Mathf.Max(0f, slideDistance);
-            Vector3 rightTarget = _rightClosed + Vector3.right * Mathf.Max(0f, slideDistance);
-            if (!open)
-            {
-                leftTarget = _leftClosed;
-                rightTarget = _rightClosed;
-            }
-
             IsMoving = false;
-            if (leftPanel != null)
+            float t = 1f - Mathf.Exp(-slideSpeed * Time.deltaTime);
+            Vector3 leftDelta = Vector3.left * Mathf.Max(0f, slideDistance);
+            Vector3 rightDelta = Vector3.right * Mathf.Max(0f, slideDistance);
+
+            AnimateGroup(_leftClosed, open ? leftDelta : Vector3.zero, t);
+            AnimateGroup(_rightClosed, open ? rightDelta : Vector3.zero, t);
+            AnimateVaultHandles(open, t);
+        }
+
+        private void AnimateGroup(Dictionary<Transform, Vector3> parts, Vector3 delta, float t)
+        {
+            foreach (var kv in parts)
             {
-                leftPanel.localPosition = Vector3.Lerp(leftPanel.localPosition, leftTarget, 1f - Mathf.Exp(-slideSpeed * Time.deltaTime));
-                IsMoving |= (leftPanel.localPosition - leftTarget).sqrMagnitude > 0.0001f;
+                if (kv.Key == null) continue;
+                Vector3 target = kv.Value + delta;
+                kv.Key.localPosition = Vector3.Lerp(kv.Key.localPosition, target, t);
+                IsMoving |= (kv.Key.localPosition - target).sqrMagnitude > 0.0001f;
             }
-            if (rightPanel != null)
+        }
+
+        private void AnimateVaultHandles(bool open, float t)
+        {
+            foreach (var kv in _handleClosed)
             {
-                rightPanel.localPosition = Vector3.Lerp(rightPanel.localPosition, rightTarget, 1f - Mathf.Exp(-slideSpeed * Time.deltaTime));
-                IsMoving |= (rightPanel.localPosition - rightTarget).sqrMagnitude > 0.0001f;
+                if (kv.Key == null) continue;
+                Quaternion target = kv.Value * Quaternion.Euler(0f, 0f, open ? vaultHandleTurnDegrees : 0f);
+                kv.Key.localRotation = Quaternion.Slerp(kv.Key.localRotation, target, t);
+                IsMoving |= Quaternion.Angle(kv.Key.localRotation, target) > 0.1f;
             }
         }
 
         private void ApplyImmediate(bool open)
         {
-            Vector3 leftTarget = _leftClosed + (open ? Vector3.left * Mathf.Max(0f, slideDistance) : Vector3.zero);
-            Vector3 rightTarget = _rightClosed + (open ? Vector3.right * Mathf.Max(0f, slideDistance) : Vector3.zero);
-            if (leftPanel != null) leftPanel.localPosition = leftTarget;
-            if (rightPanel != null) rightPanel.localPosition = rightTarget;
+            Vector3 leftDelta = open ? Vector3.left * Mathf.Max(0f, slideDistance) : Vector3.zero;
+            Vector3 rightDelta = open ? Vector3.right * Mathf.Max(0f, slideDistance) : Vector3.zero;
+            foreach (var kv in _leftClosed) if (kv.Key != null) kv.Key.localPosition = kv.Value + leftDelta;
+            foreach (var kv in _rightClosed) if (kv.Key != null) kv.Key.localPosition = kv.Value + rightDelta;
+            foreach (var kv in _handleClosed) if (kv.Key != null) kv.Key.localRotation = kv.Value * Quaternion.Euler(0f, 0f, open ? vaultHandleTurnDegrees : 0f);
         }
 
         public void Toggle()

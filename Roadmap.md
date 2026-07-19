@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.62.2-dev`
-**Roadmap Version:** `5.62.2-dev`
+**Current Version:** `5.62.4-dev`
+**Roadmap Version:** `5.62.4-dev`
 **Date:** 2026-07-17
-**Status:** Active Implementation — Door Upright Edge Placement Fix
+**Status:** Active Implementation — Door Panel Detail Animation + Open Distance Fix
 
 ---
 
@@ -47,6 +47,7 @@ The design goal is a seamless blend of:
 | Grid systems (ships/vehicles) | ✅ Mature | Needs lights, screens, armor, sloped blocks |
 | Maritime grid | 🟡 Basic | Needs refinement and feature parity |
 | Small grid | 🟡 Basic | Needs improvement and usability |
+| Unified small/large grid placement | 🛠️ WORKING ON | Roadmap updated in 5.62.3-dev: small and large grids should not remain separate build systems. Players should be able to place small-grid blocks on large-grid structures and large-grid blocks where supported, with a precision placement mode that overlays a small-grid placement lattice on large-grid faces for accurate sub-block placement. |
 | Power (wind, hydrogen) | ✅ Mature | Modular turbines are excellent |
 | Fluids / gases | ✅ Good | Pipe-gated transfer in 2.20.0 |
 | Building (static + tiered) | 🛠️ Working On | 3.75 m spacing, scale, rotation, and player-away Doors are Unity-validated. Size-V5 closes Foundation deck seams and adds upward/downward Stair anchors at Foundation/Floor edges and Doorway thresholds; final validation is pending. |
@@ -814,6 +815,7 @@ Statuses are evidence-based and move forward only after code/content review and 
     - **Half blocks**, **half slopes**, **corner pieces**, **inverted slopes**.
     - **Shape Variant Wheel**: when holding a light or heavy armor block, press a key to open the same round build wheel used by the build hammer and pick the desired shape variant.
     - Variants share the same recipe/material cost scaled by volume.
+    - **Unified small/large grid placement:** small and large grid should become one interoperable construction workflow rather than separate systems. Players can attach small-grid detail blocks to large-grid blocks and use a precision placement mode that shows a small-grid lattice overlay on large-grid faces for accurate sub-block placement. Large-grid placement on compatible small-grid structures should be validated by support/clearance rules rather than blocked by system separation.
     - Better snap behavior for small grids.
     - Maritime grid improvements: buoyancy, hull blocks, propellers.
     - All new blocks are authored via `Tools > Voxel Engine > Voxel Engine Setup`.
@@ -1682,6 +1684,50 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.62.4-dev] Door Panel Detail Animation + Open Distance Fix
+
+**Type:** PATCH — door animation/prefab tuning only (no save schema or recipe balance changes)
+
+**Fixed / Improved:**
+- Door decorative pieces now move with their owning sliding panel instead of staying stuck on the front of the frame.
+  - Single sliding door: diagonal inset, access panel/glow, number stripe move with the panel.
+  - Double sliding door: left access details and right ribs move with their panels.
+  - Vault door: vault slab, bolts, wheel/core, and bars move together.
+- Fixed the vault handle animation foundation: vault core/bars rotate while opening/closing.
+- Increased open slide distance for all large-grid door variants so panels clear the doorway much more completely.
+- Door closed positions are cached once and all moving generated details animate from those cached positions, preventing infinite drift.
+
+**Roadmap Status:**
+- Large-grid doors remain **🛠️ WORKING ON** pending Thomas validation that panels/details move together and doors open fully.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Run `Tools > Voxel Engine > Voxel Engine Setup` → **17. Build Factory Foundations + HV Grid** to refresh door prefab values.
+3. Place the Large Sci-Fi Sliding Door and confirm all front details move with the panel.
+4. Place the Large Double Sliding Door and confirm both panels/details move apart and clear the frame.
+5. Place the Heavy Vault Door and confirm the handle/core rotates and the vault slab opens without leaving front details behind.
+
+### [5.62.3-dev] Door Upright Top-Edge + Vault Animation Fix
+
+**Type:** PATCH — door placement/animation fix plus roadmap addition (no save schema, recipe, or balance changes)
+
+**Fixed:**
+- Fixed single-panel/vault doors sliding away forever. `GridSlidingDoor` now caches closed panel positions once, so one-panel vault doors no longer recache their moving panel as the new closed position every frame.
+- Top/floor-face door placement now mounts the door upright on the nearest top edge instead of trying to place a flat door on the clicked face.
+- Top-edge door placement intentionally bypasses direct face-neighbour validation because the mounted door cell is diagonal from the clicked host cell but visually sits on the top edge.
+- Removed the full central door backfill slab by shrinking the generated `Generated_DoorBackFill` to a tiny compatibility marker. This prevents the vault/sliding doors from looking like two door layers stacked on top of each other when opening, while the enlarged panels/inner seals still close visual gaps.
+
+**Roadmap Added:**
+- Added **Unified small/large grid placement** to the roadmap/current-state snapshot.
+- Goal: small and large grids should not remain separate build systems. Players should be able to attach small-grid detail blocks to large-grid structures, with a precision placement mode that shows a small-grid lattice overlay on large-grid faces for accurate sub-block placement.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Run `Tools > Voxel Engine > Voxel Engine Setup` → **17. Build Factory Foundations + HV Grid** to refresh generated door visuals.
+3. Place a Large Sci-Fi Sliding Door / Large Double Sliding Door / Heavy Vault Door from the top face near an edge. Confirm it stands upright on the edge.
+4. Open/close the Heavy Vault Door and confirm it no longer slides forever and no second full slab remains behind it.
+5. Check that the closed door panels still cover the frame without visible gaps.
 
 ### [5.62.2-dev] Door Upright Edge Placement Fix
 
