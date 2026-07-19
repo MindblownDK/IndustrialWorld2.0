@@ -205,7 +205,7 @@ namespace VoxelEngine.UI
             icon.pickingMode = PickingMode.Ignore;
             badge.Add(icon);
 
-            var selected = new Label(_current.ToString().ToUpperInvariant());
+            var selected = new Label(FormatVariantName(_current));
             selected.name = "GSW_SelectedLabel";
             selected.style.fontSize = 14;
             selected.style.marginTop = 2;
@@ -283,7 +283,18 @@ namespace VoxelEngine.UI
             var iconLabel = _wheelCenter.Q("GSW_CenterIcon") as Label;
             if (iconLabel != null) iconLabel.text = IconText[(int)_current];
             var nameLabel = _wheelCenter.Q("GSW_SelectedLabel") as Label;
-            if (nameLabel != null) nameLabel.text = _current.ToString().ToUpperInvariant();
+            if (nameLabel != null) nameLabel.text = FormatVariantName(_current);
+        }
+
+        private static string FormatVariantName(GridShapeVariant variant)
+        {
+            return variant switch
+            {
+                GridShapeVariant.HalfBlock => "HALF BLOCK",
+                GridShapeVariant.HalfSlope => "HALF SLOPE",
+                GridShapeVariant.InvertedSlope => "INVERTED SLOPE",
+                _ => variant.ToString().ToUpperInvariant()
+            };
         }
 
         /// <summary>Build a segment label overlaid on the ring surface.</summary>
@@ -291,7 +302,10 @@ namespace VoxelEngine.UI
         {
             const float center = 210f;
             const float labelRadius = 156f;
-            float angleRad = (-90f + index * (360f / Variants.Length)) * Mathf.Deg2Rad;
+            float segmentAngle = 360f / Variants.Length;
+            // Ring gaps sit on each segment's starting angle. Offset by half a
+            // segment so icon and label land in the visual center of the slice.
+            float angleRad = (-90f + index * segmentAngle + segmentAngle * 0.5f) * Mathf.Deg2Rad;
 
             // Container sits right on the ring surface
             var segmentRoot = new VisualElement();
@@ -312,7 +326,7 @@ namespace VoxelEngine.UI
 
             // Icon character
             var icon = new Label(iconText);
-            icon.style.fontSize = 14;
+            icon.style.fontSize = 15;
             icon.style.unityTextAlign = TextAnchor.MiddleCenter;
             icon.style.color = new StyleColor(new Color(0.40f, 0.42f, 0.44f));
             icon.style.unityFontStyleAndWeight = FontStyle.Bold;
@@ -323,8 +337,8 @@ namespace VoxelEngine.UI
 
             // Label
             var label = new Label(labelText);
-            label.style.fontSize = 6;
-            label.style.letterSpacing = 0.15f;
+            label.style.fontSize = 7;
+            label.style.letterSpacing = 0.2f;
             label.style.unityFontStyleAndWeight = FontStyle.Bold;
             label.style.color = new StyleColor(new Color(0.35f, 0.37f, 0.40f));
             label.style.whiteSpace = WhiteSpace.Normal;

@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.63.1-dev`
-**Roadmap Version:** `5.63.1-dev`
+**Current Version:** `5.63.2-dev`
+**Roadmap Version:** `5.63.2-dev`
 **Date:** 2026-07-19
-**Status:** Active Implementation — Grid Shape Material + Wheel Fit Fix; Unity Validation Pending
+**Status:** Active Implementation — Grid Shape Wheel Slice Alignment Fix; Unity Validation Pending
 
 ---
 
@@ -59,7 +59,7 @@ The design goal is a seamless blend of:
 | Grid screens / displays | ✅ COMPLETED | All sizes, live text+power states, right-click+terminal config, custom text+custom colors+border+font, visual bar charts, multi-source, live camera feeds, power gain/loss/net mode, persistence, and camera block are validated by Thomas. (5.51.3-dev) |
 | Grid lighting | 🛠️ WORKING ON | Small/large single and dual spotlights, large-grid LED strip, premium segmented/clean LED visuals, spotlight/LED screen data providers, right-click spotlight config UI, collapsible ship-control data-type toggles, LED strip config UI, visible chase animation, and motion-activated lighting exist. Unity validation pending; static/placed lighting runtime persistence is implemented in 5.58.0-dev while full movable-grid save persistence remains future work. |
 | Sloped / armored grid blocks | ❌ Missing | Only cube blocks exist; need shape variants |
-| Grid shape variant wheel | 🛠️ WORKING ON | Cube, Slope, Half Block, Half Slope, Corner, and Inverted Slope placement is functional. 5.63.1-dev corrects variant face winding, adds face-projected UVs for authored textures, and fits compact labels/icons inside each radial segment. Step 18 remains non-destructive; final material/wheel validation is pending. |
+| Grid shape variant wheel | 🛠️ WORKING ON | All six structural variants and textured collision meshes are validated by Thomas. 5.63.2-dev offsets each icon/label by half a segment so content sits in the center of its donut slice instead of on the separator gap. Final wheel alignment validation is pending. |
 | Player armor slots | ❌ Missing | No equipable armor system |
 | Crafting / items / storage | ✅ Exists | Needs deeper recipe chains |
 | Research / tech tree | ✅ Exists | Can be expanded into eras |
@@ -716,7 +716,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 
 | Area | Status | Repository Audit |
 |------|--------|------------------|
-| Grid shape variants | 🛠️ WORKING ON | Six structural shapes produce matching meshes, ghosts, convex collision, outward-facing surfaces, and face-projected texture UVs. Wheel labels/icons now fit within their segments. Step 18 remains non-destructive; Unity validation is pending. |
+| Grid shape variants | 🛠️ WORKING ON | Thomas validated all six structural meshes, textures, and placement. The remaining gate is 5.63.2-dev wheel alignment validation after moving each icon/label from its separator angle to the center of its slice. |
 | Unified small/large grid placement | 🛠️ WORKING ON | Requirement and current size-separation constraints are identified; precision lattice attachment and cross-grid support validation remain next. |
 | Vehicle power foundations | 🟡 PARTIALLY COMPLETE | Grid batteries, solar, hydrogen engines, reactors, power accounting, docking, and multiple vehicle systems exist; the planned unified power network and full vehicle progression remain incomplete. |
 | Damage, armor, weapons, and life support | 🟡 PARTIALLY COMPLETE | Basic block HP/damage and one grid weapon foundation exist. Full typed damage, player armor, pooled ballistics, hazards, airtight support, and combat content remain open. |
@@ -1695,6 +1695,31 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.63.2-dev] Grid Shape Wheel Slice Alignment Fix
+
+**Type:** PATCH — radial-wheel positioning/readability correction only (no save schema, public API, prefab, recipe, item, research, balance, or runtime mesh changes)
+
+**Validated:**
+- Thomas confirmed the functional grid variants, collision, opacity, and textures now work perfectly.
+
+**Fixed / Improved:**
+- Fixed the actual remaining wheel layout cause: segment content was positioned at each segment's starting angle, which is exactly where the black separator gap is drawn.
+- Added a half-segment angular offset so every icon and label is centered inside its own white/cyan donut slice.
+- Preserved the corrected wheel center, radial distance, compact containers, hover scaling, and selected-segment color.
+- Slightly increased ring icon and label sizes now that they occupy the usable middle of each slice.
+- Center labels now use readable spacing: `HALF BLOCK`, `HALF SLOPE`, and `INVERTED SLOPE`.
+
+**Roadmap Status:**
+- Structural grid meshes/textures are validated.
+- Grid shape variants remain **🛠️ WORKING ON** only until Thomas confirms the corrected wheel slice alignment.
+
+**Manual Unity Steps:**
+1. Let Unity recompile; no Voxel Engine Setup rerun is required for this UI positioning patch.
+2. Equip a Small or Large Armor Block and hold the Build Wheel input.
+3. Confirm FULL, SLOPE, HALF, H-SL, CORNER, and INV each appear centered inside a donut slice rather than over a black separator.
+4. Move the pointer around all six slices and confirm the highlighted cyan slice matches the icon/label shown in that slice.
+5. Release on each segment and confirm the center label reports the expected selected shape.
 
 ### [5.63.1-dev] Grid Shape Material + Wheel Fit Fix
 
