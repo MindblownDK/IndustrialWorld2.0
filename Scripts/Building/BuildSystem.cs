@@ -38,6 +38,9 @@ namespace VoxelEngine.Building
         private Material   _ghostMaterialInvalid;
         private Vector3Int _rotSteps;
         private GridPrecisionLatticePreview _precisionLattice;
+        private readonly System.Collections.Generic.List<Vector3> _pipeGhostLinks = new(1);
+        private VoxelEngine.Networks.PipeVisualBuilder _pipeGhostVisual;
+        private int _pipeGhostTargetId;
 
         public static bool HoldingBlock { get; private set; }
         public static string HeldBlockName { get; private set; } = string.Empty;
@@ -99,6 +102,9 @@ namespace VoxelEngine.Building
                 _ghost = Instantiate(block.placedPrefab);
                 _ghost.name = "BuildGhost";
                 _ghostItem = block;
+                _pipeGhostVisual = null;
+                _pipeGhostTargetId = 0;
+                _pipeGhostLinks.Clear();
                 StripGhost(_ghost, _ghostMaterialValid);
             }
 
@@ -119,18 +125,15 @@ namespace VoxelEngine.Building
                 ShowPrecisionLattice(targetGrid, hostStructuralPos, faceAxis);
 
                 var pipeVisual = _ghost.GetComponentInChildren<VoxelEngine.Networks.PipeVisualBuilder>(true);
-                if (pipeVisual != null && !Mathf.Approximately(pipeVisual.gridSize, GridSize.Small.CellSize()))
-                {
+                if (pipeVisual != null)
                     pipeVisual.gridSize = GridSize.Small.CellSize();
-                    pipeVisual.ForceRebuild();
-                    ApplyGhostMaterial(_ghost, validPrecision ? _ghostMaterialValid : _ghostMaterialInvalid);
-                }
 
                 Vector3 localPosition = (Vector3)precisionPos * GridSize.Small.CellSize();
                 Vector3 worldPosition = targetGrid.transform.TransformPoint(localPosition);
                 Quaternion worldRotation = targetGrid.transform.rotation
                     * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
                 _ghost.transform.SetPositionAndRotation(worldPosition, worldRotation);
+                ConfigurePipeGhostConnection(block, targetGrid, worldPosition, GridSize.Small.CellSize());
                 ApplyGhostMaterial(_ghost, validPrecision ? _ghostMaterialValid : _ghostMaterialInvalid);
                 return;
             }
@@ -142,6 +145,8 @@ namespace VoxelEngine.Building
 
             ComputePlacementPose(hit, block, out Vector3 pos, out Quaternion rot);
             _ghost.transform.SetPositionAndRotation(pos, rot);
+            if (IsUnifiedPipe(block))
+                ConfigurePipeGhostConnection(block, null, pos, Mathf.Max(0.01f, gridSize));
 
             bool valid = IsPlacementValid(pos, block);
             ApplyGhostMaterial(_ghost, valid ? _ghostMaterialValid : _ghostMaterialInvalid);
@@ -188,6 +193,72 @@ namespace VoxelEngine.Building
             return block.placedPrefab.GetComponentInChildren<VoxelEngine.Transport.ItemPipe>(true) != null
                 || block.placedPrefab.GetComponentInChildren<VoxelEngine.Gas.GasPipe>(true) != null
                 || block.placedPrefab.GetComponentInChildren<VoxelEngine.Fluids.WaterPipe>(true) != null;
+        }
+
+        private System.Collections.Generic.List<Vector3> ProvidePipeGhostLinks() => _pipeGhostLinks;
+
+        private void ConfigurePipeGhostConnection(BlockItem block, GridEntity grid, Vector3 ghostPosition, float cellSize)
+        {
+            if (_ghost == null || block == null) return;
+            var visual = _ghost.GetComponentInChildren<VoxelEngine.Networks.PipeVisualBuilder>(true);
+            if (visual == null) return;
+
+            bool itemPipe = block.placedPrefab.GetComponentInChildren<VoxelEngine.Transport.ItemPipe>(true) != null;
+            bool gasPipe = block.placedPrefab.GetComponentInChildren<VoxelEngine.Gas.GasPipe>(true) != null;
+            bool liquidPipe = block.placedPrefab.GetComponentInChildren<VoxelEngine.Fluids.WaterPipe>(true) != null;
+            MonoBehaviour best = null;
+            float bestDistance = float.MaxValue;
+
+            void Consider(MonoBehaviour candidate)
+            {
+                if (candidate == null || candidate.transform.IsChildOf(_ghost.transform)) return;
+                Vector3 worldDelta = candidate.transform.position - ghostPosition;
+                Vector3 alignmentDelta = grid != null
+                    ? grid.transform.InverseTransformVector(worldDelta)
+                    : worldDelta;
+                if (!VoxelEngine.Networks.PipeAdjacency.IsCardinalLinkDelta(
+                        alignmentDelta, cellSize, 5f, cellSize * 0.35f)) return;
+                float distance = worldDelta.sqrMagnitude;
+                if (distance >= bestDistance) return;
+                bestDistance = distance;
+                best = candidate;
+            }
+
+            if (grid != null)
+            {
+                foreach (var gridBlock in grid.AllBlocks)
+                {
+                    if (gridBlock == null) continue;
+                    if (itemPipe) Consider(gridBlock.GetComponentInChildren<VoxelEngine.Transport.ItemPipe>(true));
+                    else if (gasPipe) Consider(gridBlock.GetComponentInChildren<VoxelEngine.Gas.GasPipe>(true));
+                    else if (liquidPipe) Consider(gridBlock.GetComponentInChildren<VoxelEngine.Fluids.WaterPipe>(true));
+                }
+            }
+            else
+            {
+                var hits = Physics.OverlapSphere(ghostPosition, cellSize * 5f + cellSize * 0.4f);
+                var seen = new System.Collections.Generic.HashSet<int>();
+                foreach (var hit in hits)
+                {
+                    MonoBehaviour candidate = null;
+                    if (itemPipe) candidate = hit.GetComponentInParent<VoxelEngine.Transport.ItemPipe>();
+                    else if (gasPipe) candidate = hit.GetComponentInParent<VoxelEngine.Gas.GasPipe>();
+                    else if (liquidPipe) candidate = hit.GetComponentInParent<VoxelEngine.Fluids.WaterPipe>();
+                    if (candidate != null && seen.Add(candidate.GetInstanceID())) Consider(candidate);
+                }
+            }
+
+            int targetId = best != null ? best.GetInstanceID() : 0;
+            Vector3 targetPosition = best != null ? best.transform.position : default;
+            bool changed = visual != _pipeGhostVisual || targetId != _pipeGhostTargetId
+                || (_pipeGhostLinks.Count > 0 && (targetPosition - _pipeGhostLinks[0]).sqrMagnitude > 0.0001f);
+            _pipeGhostVisual = visual;
+            _pipeGhostTargetId = targetId;
+            _pipeGhostLinks.Clear();
+            if (best != null) _pipeGhostLinks.Add(targetPosition);
+            visual.gridSize = cellSize;
+            visual.neighbourPositionsProvider = ProvidePipeGhostLinks;
+            if (changed) visual.ForceRebuild();
         }
 
         private void ShowPrecisionLattice(GridEntity grid, Vector3Int hostStructuralPos, Vector3Int faceAxis)
@@ -658,6 +729,10 @@ namespace VoxelEngine.Building
                 if (mb is VoxelEngine.Simulation.IItemConsumer ||
                     mb is VoxelEngine.Simulation.IItemProvider ||
                     mb is VoxelEngine.Simulation.IMachine ||
+                    mb is VoxelEngine.Transport.ItemPipe ||
+                    mb is VoxelEngine.Gas.GasPipe ||
+                    mb is VoxelEngine.Fluids.FluidNode ||
+                    mb is VoxelEngine.Networks.PipeVisualBuilder ||
                     mb.GetType().Namespace == "VoxelEngine.Simulation")
                 {
                     mb.enabled = false;

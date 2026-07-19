@@ -1,11 +1,40 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `5.68.2-dev`  
+**Current Version:** `5.68.3-dev`  
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
 
 ---
+
+### [5.68.3-dev] Pipe Ghost Link Preview + Flow Isolation
+
+**Type:** PATCH — placement-preview and ghost-simulation safety corrections only (no save schema, prefab, item, recipe, research, throughput, HP, mass, power, or wrench behavior changes)
+
+**Validated:**
+- Thomas confirmed pipe visual direction and rotation-independent inline connection behavior are correct.
+
+**Fixed / Improved:**
+- Pipe ghosts now draw a complete prospective connection to the nearest compatible inline pipe within five cells on Grid and world placement.
+- Preview matching uses the shared Grid frame for Grid pipes and world axes for world pipes; individual pipe rotation does not affect eligibility.
+- Item ghosts preview Item Pipe links, Gas ghosts preview Gas Pipe links, and Liquid ghosts preview Liquid Pipe links only.
+- Placement ghosts no longer register with ItemPipeNetwork, GasNetwork, or FluidNetworkManager.
+- Disabled ItemPipe, GasPipe, FluidNode, and automatic PipeVisualBuilder ticking during ghost setup; `BuildSystem` explicitly rebuilds the visual-only preview only when its compatible target changes.
+- Prevents items, gas, or liquid from entering a ghost, being consumed by preview buffers, or being voided when the ghost moves/disappears.
+- Removing ghost nodes from fluid topology also prevents a preview node at the target position from masking/interfering with the newly placed Liquid Pipe's real five-cell link.
+- Preview target changes rebuild only when necessary, avoiding per-frame visual reconstruction.
+
+**Roadmap Status:**
+- Pipe ghost-link preview and flow isolation remain **🛠️ WORKING ON** pending Thomas validation.
+- Liquid five-cell post-placement connection requires revalidation after ghost topology isolation.
+
+**Manual Unity Steps:**
+1. Let Unity recompile; no setup rerun is required.
+2. Hold each existing Item/Gas/Liquid pipe near a compatible inline pipe at one-to-five-cell range. Confirm the ghost shows a complete connection before placement.
+3. Move the ghost off-axis, beyond five cells, or onto an occupied cell and confirm the preview link disappears/turns invalid.
+4. Run items/gas/liquid through the existing network while holding and moving a pipe ghost. Confirm no resource enters the ghost and no resource is lost.
+5. Place the Liquid Pipe with four empty cells between endpoints and confirm the real visual/functional connection remains after the ghost moves away.
+6. Repeat for Gas and Item Pipes, then verify wrench disconnect still works.
 
 ### [5.68.2-dev] Rotation-Independent Five-Cell Pipe Links
 
