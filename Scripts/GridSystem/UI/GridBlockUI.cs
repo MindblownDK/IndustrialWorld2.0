@@ -830,8 +830,8 @@ namespace VoxelEngine.GridSystem.UI
             toggleRow.Add(T.SmallButton("Reset Defaults", () =>
             {
                 light.SetColor(Color.white);
-                light.SetIntensity(light.Grid != null && light.Grid.gridSize == VoxelEngine.GridSystem.GridSize.Large ? 9.5f : 4.8f);
-                light.SetRange(light.Grid != null && light.Grid.gridSize == VoxelEngine.GridSystem.GridSize.Large ? 78f : 34f);
+                light.SetIntensity(light.EffectiveGridSize == VoxelEngine.GridSystem.GridSize.Large ? 9.5f : 4.8f);
+                light.SetRange(light.EffectiveGridSize == VoxelEngine.GridSystem.GridSize.Large ? 78f : 34f);
                 light.spotAngle = 42f;
                 VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
             }, T.BgSlot));

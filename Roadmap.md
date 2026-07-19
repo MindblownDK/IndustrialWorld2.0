@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.64.0-dev`
-**Roadmap Version:** `5.64.0-dev`
+**Current Version:** `5.65.0-dev`
+**Roadmap Version:** `5.65.0-dev`
 **Date:** 2026-07-19
-**Status:** Active Implementation — Precision Small-on-Large Grid Attachments; Unity Validation Pending
+**Status:** Active Implementation — One Grid, Detail + Structural Block Scales; Unity Validation Pending
 
 ---
 
@@ -46,8 +46,8 @@ The design goal is a seamless blend of:
 | Cosmos / star system framework | 🟡 Exists | Needs planet-specific resources and interplanetary travel |
 | Grid systems (ships/vehicles) | ✅ Mature | Needs lights, screens, armor, sloped blocks |
 | Maritime grid | 🟡 Basic | Needs refinement and feature parity |
-| Small grid | 🟡 Basic | Needs improvement and usability |
-| Unified small/large grid placement | 🛠️ WORKING ON | 5.64.0-dev adds the first functional interoperability slice: supported small structural armor blocks automatically use a visible 5×5 precision lattice when aimed at a large-grid face, attach to the moving large grid, support chained small-detail placement, retain shape variants/collision, and contribute mass. Broader small functional blocks, persistence, and validated large-on-small support remain open. |
+| Detail-scale grid blocks | 🛠️ WORKING ON | Detail blocks now share the unified Grid with Structural blocks; persistence and complete positional network indexing remain open. |
+| Unified grid placement | 🛠️ WORKING ON | 5.65.0-dev establishes one player-facing Grid with Detail (0.5 m) and Structural (2.5 m) block scales. The direct-face ghost/placement blocker from 5.64.0-dev is fixed; all Detail block items can attach through the 5×5 Structural-face lattice, new Detail-first constructs use the universal host, functional attachments join host power/thrust/tool simulation, legacy grid-size switching UI is retired, and Structural-on-Detail placement requires real face support plus clear volume. Persistence plus complete fluid/gas/screen positional indexing remain open. |
 | Power (wind, hydrogen) | ✅ Mature | Modular turbines are excellent |
 | Fluids / gases | ✅ Good | Pipe-gated transfer in 2.20.0 |
 | Building (static + tiered) | 🛠️ Working On | 3.75 m spacing, scale, rotation, and player-away Doors are Unity-validated. Size-V5 closes Foundation deck seams and adds upward/downward Stair anchors at Foundation/Floor edges and Doorway thresholds; final validation is pending. |
@@ -57,8 +57,8 @@ The design goal is a seamless blend of:
 | Space stations | ❌ Missing | No buildable orbital platforms |
 | Conveyor logistics | 🟡 Good | Conveyors, ramps, vertical belts, chutes, contextual shape wheel, ghost previews, and persistence exist. Remaining work: pooled item entities, more chute variants, and final long-run throughput validation. |
 | Grid screens / displays | ✅ COMPLETED | All sizes, live text+power states, right-click+terminal config, custom text+custom colors+border+font, visual bar charts, multi-source, live camera feeds, power gain/loss/net mode, persistence, and camera block are validated by Thomas. (5.51.3-dev) |
-| Grid lighting | 🛠️ WORKING ON | Small/large single and dual spotlights, large-grid LED strip, premium segmented/clean LED visuals, spotlight/LED screen data providers, right-click spotlight config UI, collapsible ship-control data-type toggles, LED strip config UI, visible chase animation, and motion-activated lighting exist. Unity validation pending; static/placed lighting runtime persistence is implemented in 5.58.0-dev while full movable-grid save persistence remains future work. |
-| Sloped / armored grid blocks | ❌ Missing | Only cube blocks exist; need shape variants |
+| Grid lighting | 🛠️ WORKING ON | Detail/Structural single and dual spotlights, Structural LED strip, premium segmented/clean LED visuals, screen data providers, configuration UI, visible chase animation, and motion activation exist. Static/placed settings persist; unified movable-grid persistence remains future work. |
+| Sloped / armored grid blocks | ✅ COMPLETED | Cube, Slope, Half Block, Half Slope, Corner, and Inverted Slope variants are implemented and validated with textured meshes, collision, ghosts, and rotation. |
 | Grid shape variant wheel | ✅ COMPLETED | Thomas validated all six structural variants, textured collision meshes, accurate ghosts, and the corrected radial-wheel slice alignment in 5.63.2-dev. Step 18 remains the non-destructive authoring path. |
 | Player armor slots | ❌ Missing | No equipable armor system |
 | Crafting / items / storage | ✅ Exists | Needs deeper recipe chains |
@@ -717,7 +717,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Area | Status | Repository Audit |
 |------|--------|------------------|
 | Grid shape variants | ✅ COMPLETED | Thomas validated all six structural meshes, textures, collision, placement ghosts, selection behavior, and corrected wheel alignment. Step 18 provides the non-destructive setup connection. |
-| Unified small/large grid placement | 🛠️ WORKING ON | Supported small armor blocks now attach to large-grid faces through an automatic 5×5 precision lattice and remain parented to the moving host grid. Chained precision placement and mass contribution are included. Functional small blocks, save persistence, and large-on-small support remain next. |
+| Unified grid placement | 🛠️ WORKING ON | One Grid now accepts Detail and Structural block scales. Direct Structural-face attachment, Detail-first construct creation, chained Detail placement, functional power/thrust/tool participation, retired size-switch UI, and support-validated Structural-on-Detail placement are implemented. Persistence and complete fluid/gas/screen positional indexing remain next. |
 | Vehicle power foundations | 🟡 PARTIALLY COMPLETE | Grid batteries, solar, hydrogen engines, reactors, power accounting, docking, and multiple vehicle systems exist; the planned unified power network and full vehicle progression remain incomplete. |
 | Damage, armor, weapons, and life support | 🟡 PARTIALLY COMPLETE | Basic block HP/damage and one grid weapon foundation exist. Full typed damage, player armor, pooled ballistics, hazards, airtight support, and combat content remain open. |
 
@@ -826,7 +826,7 @@ Statuses are evidence-based and move forward only after code/content review and 
     - **Half blocks**, **half slopes**, **corner pieces**, **inverted slopes**.
     - **Shape Variant Wheel**: when holding a light or heavy armor block, press a key to open the same round build wheel used by the build hammer and pick the desired shape variant.
     - Variants share the same recipe/material cost scaled by volume.
-    - **Unified small/large grid placement:** small and large grid should become one interoperable construction workflow rather than separate systems. Players can attach small-grid detail blocks to large-grid blocks and use a precision placement mode that shows a small-grid lattice overlay on large-grid faces for accurate sub-block placement. Large-grid placement on compatible small-grid structures should be validated by support/clearance rules rather than blocked by system separation.
+    - **Unified Grid placement:** there is one player-facing Grid, not separate small-grid and large-grid constructs. Blocks retain **Detail** (0.5 m) and **Structural** (2.5 m) physical scales. Detail blocks use a 5×5 precision lattice on Structural faces, while Structural placement on Detail construction is accepted only when support and clearance rules pass.
     - Better snap behavior for small grids.
     - Maritime grid improvements: buoyancy, hull blocks, propellers.
     - All new blocks are authored via `Tools > Voxel Engine > Voxel Engine Setup`.
@@ -1695,6 +1695,50 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.65.0-dev] One Grid — Detail + Structural Block Scales
+
+**Type:** MINOR — expanded save-compatible unified-grid construction/runtime foundation (no existing save schema fields removed)
+
+**Direction Confirmed:**
+- There is now one player-facing **Grid**.
+- Blocks retain two physical scales: **Detail** (0.5 m) and **Structural** (2.5 m).
+- Internal legacy scale data remains temporarily for asset compatibility, but players no longer choose or convert between separate grid types.
+
+**Fixed:**
+- Fixed the 5.64.0-dev direct-face validation error that hid the Detail-block ghost while aiming at a Structural armor face and blocked every placement.
+- Direct exposed Structural faces no longer fail a macro-cell overlap test intended only for chained Detail placement.
+
+**Added / Changed:**
+- Precision attachment now accepts every Detail `GridBlockItem`, not only shape-enabled armor.
+- Shape generation is applied only to supported structural armor items; functional Detail blocks retain their authored prefabs.
+- Every newly created construct uses one universal host Grid, including Detail-first construction.
+- Added `GridEntity.AllBlocks` so Detail attachments participate in host power, batteries, gas totals, thrust, gyroscopes, wheels, tool groups, cockpit gauges, terminal controls/storage, production cargo lookup, and grid-center calculation.
+- Added per-block effective scale resolution so attached Detail thrusters, drills, landing gear, detectors, docking ports, beacons, and lighting retain Detail-scale behavior on the universal host.
+- Structural blocks can be placed from Detail construction only when Detail blocks physically reach the Structural face and the Structural volume is clear.
+- Retired destructive runtime grid-size conversion while preserving the old method as a safe serialized-event compatibility shim.
+- Cockpit size-switch buttons are hidden and replaced with `UNIFIED GRID · DETAIL + STRUCTURAL`.
+- Removed player-facing grid-size wording from the basic cockpit log.
+- Step 18 non-destructively migrates legacy player-facing grid-type labels across Grid Block items/recipes to **Detail** and **Structural** wording, including:
+  - `Armor Detail Block`
+  - `Armor Structural Block`
+  Existing custom names without legacy size prefixes and every balance value remain preserved.
+
+**Roadmap Status:**
+- Grid Shape Variants remain **✅ COMPLETED**.
+- Unified Grid placement remains **🛠️ WORKING ON** pending Unity validation and later persistence plus fluid/gas/screen positional indexing.
+
+**Manual Unity Steps:**
+1. Let Unity compile.
+2. Run `Tools > Voxel Engine > Voxel Engine Setup` → **18. Setup Grid Shape Variants (Non-Destructive)** once to apply the safe Detail/Structural armor naming and verify unified-grid support.
+3. Enter Play Mode, equip `Armor Detail Block`, and aim directly at an `Armor Structural Block` face.
+4. Confirm the cyan 5×5 lattice and Detail ghost remain visible while hovering the face.
+5. Place Detail blocks in multiple cells and confirm placement succeeds.
+6. Test a Detail functional block such as a light on the same Grid; confirm it follows the host and contributes to host power simulation.
+7. Start a new construct using a Detail block first, then continue adding Detail blocks; confirm no grid-type choice appears.
+8. Build a Detail support line until it touches a future Structural face, then place a Structural block; confirm placement succeeds only with support and clear volume.
+9. Open the cockpit UI and confirm no Small Grid / Large Grid switch buttons remain; the unified-grid label is shown instead.
+10. Confirm existing recipe costs, HP, mass, power values, materials, and custom prefab content remain unchanged.
 
 ### [5.64.0-dev] Precision Small-on-Large Grid Attachments
 

@@ -99,8 +99,7 @@ namespace VoxelEngine.GridSystem
             GridEntity targetGrid = hit.collider.GetComponentInParent<GridEntity>();
             if (targetGrid != null
                 && targetGrid.gridSize == GridSize.Large
-                && gbi.gridSize == GridSize.Small
-                && IsShapeVariantItem(gbi))
+                && gbi.gridSize == GridSize.Small)
             {
                 HandlePrecisionAttachment(gbi, targetGrid, hit);
                 return;
@@ -146,6 +145,28 @@ namespace VoxelEngine.GridSystem
                 gridPos = Vector3Int.zero;
                 targetGrid = null;
                 rotation = GravityProvider.GetSurfaceRotation(worldPos);
+            }
+
+            var targetedBlock = hit.collider != null ? hit.collider.GetComponentInParent<GridBlock>() : null;
+            if (gbi.gridSize == GridSize.Large
+                && targetGrid != null
+                && targetedBlock != null
+                && targetedBlock.IsPrecisionAttachment)
+            {
+                var precision = targetGrid.GetComponent<GridPrecisionAttachmentLayer>();
+                if (precision == null || !precision.CanPlaceStructuralBlock(gridPos))
+                {
+                    HideGhost();
+                    if (GameSettings.WasPressed(InputAction.Build))
+                    {
+                        VoxelEngine.UI.BuildFeedbackHud.Show(
+                            "Needs Structural Support",
+                            "Extend detail blocks to the structural block face and clear its volume",
+                            gbi.icon,
+                            Color.red);
+                    }
+                    return;
+                }
             }
 
             bool placingTurbo = IsTurbochargerItem(gbi, out var turboTier);
@@ -231,9 +252,15 @@ namespace VoxelEngine.GridSystem
             bool supported = attachingToPrecisionBlock
                 ? layer.HasNeighbor(precisionPos)
                 : hitBlock != null && hitBlock.Grid == grid;
+            // A direct face hit is already guaranteed to be on the exposed surface of
+            // the clicked structural block. Only chained detail placement needs the
+            // macro-cell overlap test; applying it to direct hits incorrectly rejected
+            // every valid face cell and hid the ghost.
+            bool overlapsLargeCell = attachingToPrecisionBlock
+                && grid.GetBlock(occupiedLargeCell) != null;
             bool valid = supported
                 && layer.CanPlace(precisionPos)
-                && grid.GetBlock(occupiedLargeCell) == null;
+                && !overlapsLargeCell;
 
             Quaternion rotation = grid.transform.rotation
                 * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
@@ -247,7 +274,7 @@ namespace VoxelEngine.GridSystem
             {
                 VoxelEngine.UI.BuildFeedbackHud.Show(
                     "Precision Placement Blocked",
-                    supported ? "That small-grid lattice cell is occupied" : "Attach to a large-grid face or another precision block",
+                    supported ? "That Detail lattice cell is occupied" : "Attach to a Structural face or another Detail block",
                     item.icon,
                     Color.red);
                 return;
@@ -268,9 +295,12 @@ namespace VoxelEngine.GridSystem
             block.blockName = item.displayName;
             block.BlockMass = item.blockMass;
             block.maxHP = item.blockHP;
-            var shapeVisual = block.GetComponent<GridShapeVariantBlock>();
-            if (shapeVisual == null) shapeVisual = block.gameObject.AddComponent<GridShapeVariantBlock>();
-            shapeVisual.Configure(VoxelEngine.UI.GridShapeWheel.CurrentShape, GridSize.Small);
+            if (IsShapeVariantItem(item))
+            {
+                var shapeVisual = block.GetComponent<GridShapeVariantBlock>();
+                if (shapeVisual == null) shapeVisual = block.gameObject.AddComponent<GridShapeVariantBlock>();
+                shapeVisual.Configure(VoxelEngine.UI.GridShapeWheel.CurrentShape, GridSize.Small);
+            }
 
             Quaternion localRotation = Quaternion.Inverse(grid.transform.rotation) * rotation;
             if (!layer.AddBlock(precisionPos, largeCell, block, localRotation))
@@ -317,9 +347,12 @@ namespace VoxelEngine.GridSystem
                 rotation = GetTurboAttachmentRotation(grid, gridPos, engine);
             }
 
+            bool creatingUnifiedDetailRoot = grid == null && item.gridSize == GridSize.Small;
             if (grid == null)
             {
-                grid = GridEntity.Create(worldPos, item.gridSize);
+                // Every newly created construct uses one universal host grid. Block scale
+                // remains an item property, but the player never creates a separate grid type.
+                grid = GridEntity.Create(worldPos, GridSize.Large);
                 grid.transform.rotation = rotation;
                 gridPos = Vector3Int.zero;
             }
@@ -349,7 +382,22 @@ namespace VoxelEngine.GridSystem
                 shapeVisual.Configure(VoxelEngine.UI.GridShapeWheel.CurrentShape, item.gridSize);
             }
 
-            grid.AddBlock(gridPos, block);
+            if (creatingUnifiedDetailRoot)
+            {
+                var precisionLayer = grid.GetComponent<GridPrecisionAttachmentLayer>();
+                if (precisionLayer == null) precisionLayer = grid.gameObject.AddComponent<GridPrecisionAttachmentLayer>();
+                Quaternion localRotation = Quaternion.Inverse(grid.transform.rotation) * rotation;
+                if (!precisionLayer.AddBlock(Vector3Int.zero, Vector3Int.zero, block, localRotation))
+                {
+                    Destroy(block.gameObject);
+                    Destroy(grid.gameObject);
+                    return false;
+                }
+            }
+            else
+            {
+                grid.AddBlock(gridPos, block);
+            }
 
             VoxelEngine.UI.BuildFeedbackHud.ShowBlockPlaced(item.displayName, item, 1);
             return true;

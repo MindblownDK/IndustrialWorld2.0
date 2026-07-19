@@ -106,7 +106,7 @@ namespace VoxelEngine.GridSystem
         public void TryDock()
         {
             if (IsDocked || Grid == null || Grid.Body == null) return;
-            float cs = Grid.gridSize.CellSize();
+            float cs = EffectiveCellSize;
             if (Physics.Raycast(transform.position, transform.up, out var hit, cs * 1.0f))
             {
                 var otherDock = hit.collider.GetComponentInParent<GridDockingPort>();

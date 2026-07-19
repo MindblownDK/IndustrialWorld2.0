@@ -274,12 +274,12 @@ namespace VoxelEngine.GridSystem
         {
             if (Grid == null) return;
             bool anyLocked = false;
-            foreach (var kv in Grid.Blocks)
-                if (kv.Value is GridLandingGear lg && lg.IsLocked) { anyLocked = true; break; }
+            foreach (var block in Grid.AllBlocks)
+                if (block is GridLandingGear lg && lg.IsLocked) { anyLocked = true; break; }
 
-            foreach (var kv in Grid.Blocks)
+            foreach (var block in Grid.AllBlocks)
             {
-                if (!(kv.Value is GridLandingGear lg)) continue;
+                if (!(block is GridLandingGear lg)) continue;
                 if (anyLocked) lg.Unlock();
                 else           lg.TryLock();
             }

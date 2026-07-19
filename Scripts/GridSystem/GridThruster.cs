@@ -294,6 +294,6 @@ namespace VoxelEngine.GridSystem
         }
 
         // Shorthand
-        private GridSize gridSize => Grid != null ? Grid.gridSize : GridSize.Large;
+        private GridSize gridSize => EffectiveGridSize;
     }
 }

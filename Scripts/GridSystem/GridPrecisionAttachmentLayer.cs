@@ -37,6 +37,33 @@ namespace VoxelEngine.GridSystem
             return block;
         }
 
+        public bool CanPlaceStructuralBlock(Vector3Int largePos)
+        {
+            Vector3 center = (Vector3)largePos * GridSize.Large.CellSize();
+            const float combinedHalfExtent = 1.5f; // 1.25 m structural + 0.25 m detail
+            bool supported = false;
+
+            foreach (var block in _blocks.Values)
+            {
+                if (block == null) continue;
+                Vector3 delta = block.transform.localPosition - center;
+                float ax = Mathf.Abs(delta.x);
+                float ay = Mathf.Abs(delta.y);
+                float az = Mathf.Abs(delta.z);
+
+                if (ax < combinedHalfExtent && ay < combinedHalfExtent && az < combinedHalfExtent)
+                    return false;
+
+                bool touchesFace =
+                    (Mathf.Abs(ax - combinedHalfExtent) < 0.02f && ay <= combinedHalfExtent && az <= combinedHalfExtent)
+                    || (Mathf.Abs(ay - combinedHalfExtent) < 0.02f && ax <= combinedHalfExtent && az <= combinedHalfExtent)
+                    || (Mathf.Abs(az - combinedHalfExtent) < 0.02f && ax <= combinedHalfExtent && ay <= combinedHalfExtent);
+                supported |= touchesFace;
+            }
+
+            return supported;
+        }
+
         public bool AddBlock(Vector3Int precisionPos, Vector3Int hostLargePos, GridBlock block, Quaternion localRotation)
         {
             var grid = Grid;
@@ -74,7 +101,10 @@ namespace VoxelEngine.GridSystem
                 block.OnRemoved();
                 Destroy(block.gameObject);
             }
-            Grid?.RecalculateMass();
+            var grid = Grid;
+            grid?.RecalculateMass();
+            if (_blocks.Count == 0 && grid != null && grid.BlockCount == 0)
+                Destroy(grid.gameObject);
         }
 
         public bool Contains(GridBlock block)

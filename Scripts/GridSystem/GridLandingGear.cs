@@ -77,7 +77,7 @@ namespace VoxelEngine.GridSystem
         {
             if (!Enabled || IsLocked || Grid == null || Grid.Body == null) return false;
 
-            float cs = Grid.gridSize.CellSize();
+            float cs = EffectiveCellSize;
             float reach = cs * 2.5f;
             float probeRadius = Mathf.Max(0.08f, cs * 0.22f);
 

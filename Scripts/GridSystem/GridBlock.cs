@@ -24,6 +24,12 @@ namespace VoxelEngine.GridSystem
         [System.NonSerialized] public Vector3Int PrecisionGridPos;
         [System.NonSerialized] public Vector3Int PrecisionHostGridPos;
 
+        /// <summary>Physical scale of this block inside the unified Grid.</summary>
+        public GridSize EffectiveGridSize => IsPrecisionAttachment
+            ? GridSize.Small
+            : (Grid != null ? Grid.gridSize : GridSize.Large);
+        public float EffectiveCellSize => EffectiveGridSize.CellSize();
+
         /// <summary>Master on/off toggle (set from the ship terminal). Functional
         /// blocks should respect this — a disabled block draws no power and does
         /// no work, matching ship-terminal toggle behavior.</summary>

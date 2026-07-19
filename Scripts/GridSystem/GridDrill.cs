@@ -93,7 +93,7 @@ namespace VoxelEngine.GridSystem
         {
             if (!ResolveVoxelReferences()) return;
 
-            float cs = Grid != null ? Grid.gridSize.CellSize() : 1f;
+            float cs = EffectiveCellSize;
             Vector3 dir = transform.forward.normalized;
             float effectiveRadius = Mathf.Clamp(drillRadius * 1.10f, 0.65f, 1.75f);
             float effectiveReach = Mathf.Clamp(Mathf.Max(drillReach, cs * 1.15f, effectiveRadius * 1.75f), 2.5f, 5.0f);
@@ -148,7 +148,7 @@ namespace VoxelEngine.GridSystem
         private bool TryFindTerrainSurface(Vector3 dir, float effectiveRadius, float effectiveReach, out Vector3 carveAt)
         {
             carveAt = Vector3.zero;
-            float cs = Grid != null ? Grid.gridSize.CellSize() : 1f;
+            float cs = EffectiveCellSize;
             float castRadius = Mathf.Clamp(effectiveRadius * 0.35f, 0.15f, 0.85f);
             float castDistance = effectiveReach + cs;
             Vector3 origin = transform.position + dir * (cs * 0.15f);

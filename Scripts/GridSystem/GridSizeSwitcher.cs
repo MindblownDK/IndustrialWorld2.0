@@ -1,8 +1,8 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridSizeSwitcher.cs
 //
-// Full Small ↔ Large grid switching system.
+// Compatibility shim for scenes that still reference the retired grid-type
+// switcher. Unified constructs accept both detail and structural block scales.
 
-using System.Collections.Generic;
 using UnityEngine;
 
 namespace VoxelEngine.GridSystem
@@ -18,43 +18,13 @@ namespace VoxelEngine.GridSystem
         }
 
         /// <summary>
-        /// Switches an entire grid from one size to another.
+        /// Retained for serialized UnityEvent compatibility. Grid conversion is no
+        /// longer required because both authored block scales share one construct.
         /// </summary>
         public void SwitchGrid(GridEntity grid, GridSize targetSize)
         {
-            if (grid == null || grid.gridSize == targetSize) return;
-
-            List<GridBlock> oldBlocks = new List<GridBlock>(grid.Blocks.Values);
-            Vector3 originalPosition = grid.transform.position;
-
-            Destroy(grid.gameObject);
-
-            GridEntity newGrid = GridEntity.Create(originalPosition, targetSize);
-
-            foreach (var oldBlock in oldBlocks)
-            {
-                Vector3 worldPos = oldBlock.transform.position;
-                Vector3Int newGridPos = newGrid.WorldToGrid(worldPos);
-
-                GridBlock newBlock = GridBlock.CreateBlock<GridBlock>(
-                    oldBlock.blockName,
-                    targetSize,
-                    Color.gray
-                );
-
-                newBlock.blockName = oldBlock.blockName;
-                newBlock.BlockMass = CalculateNewMass(oldBlock.BlockMass, targetSize);
-                newBlock.maxHP = oldBlock.maxHP;
-
-                newGrid.AddBlock(newGridPos, newBlock);
-            }
-
-            Debug.Log($"[GridSizeSwitcher] Grid converted to {targetSize}");
-        }
-
-        private float CalculateNewMass(float oldMass, GridSize newSize)
-        {
-            return newSize == GridSize.Large ? oldMass * 5f : oldMass / 5f;
+            if (grid == null) return;
+            Debug.Log("[UnifiedGrid] Grid-type switching is retired; detail and structural blocks already share this grid.");
         }
     }
 }

@@ -136,8 +136,8 @@ namespace VoxelEngine.GridSystem.UI
         {
             var blocks = new List<GridBlock>();
             if (grid != null)
-                foreach (var kv in grid.Blocks)
-                    if (kv.Value != null && IsTerminalBlock(kv.Value)) blocks.Add(kv.Value);
+                foreach (var block in grid.AllBlocks)
+                    if (block != null && IsTerminalBlock(block)) blocks.Add(block);
             blocks.Sort((a, b) => string.CompareOrdinal(a.blockName, b.blockName));
             return blocks;
         }
@@ -220,9 +220,8 @@ namespace VoxelEngine.GridSystem.UI
             float total = 0f;
             if (grid != null)
             {
-                foreach (var kv in grid.Blocks)
+                foreach (var block in grid.AllBlocks)
                 {
-                    var block = kv.Value;
                     if (block == null) continue;
                     float draw = Mathf.Max(0f, block.PowerDraw);
                     if (draw <= 0.01f) continue;
@@ -1090,9 +1089,8 @@ namespace VoxelEngine.GridSystem.UI
                 entries.Add(new StorageEntry(label, container, MassUtil.ContainerMass(container), maxKg));
             }
 
-            foreach (var kv in grid.Blocks)
+            foreach (var b in grid.AllBlocks)
             {
-                var b = kv.Value;
                 if (b == null) continue;
                 switch (b)
                 {
@@ -1141,8 +1139,8 @@ namespace VoxelEngine.GridSystem.UI
         private static void SetAllEnabled(GridEntity grid, bool on)
         {
             if (grid == null) return;
-            foreach (var kv in grid.Blocks)
-                if (kv.Value != null && HasToggle(kv.Value)) kv.Value.Enabled = on;
+            foreach (var block in grid.AllBlocks)
+                if (block != null && HasToggle(block)) block.Enabled = on;
             RefreshTerminal();
         }
 

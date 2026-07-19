@@ -183,7 +183,7 @@ namespace VoxelEngine.GridSystem
 
         private void CreateDish()
         {
-            float cs = Grid != null ? Grid.gridSize.CellSize() : 2.5f;
+            float cs = EffectiveCellSize;
             _dish = new GameObject("DetectorDish");
             _dish.transform.SetParent(transform, false);
             _dish.transform.localPosition = new Vector3(0, cs * 0.25f, 0);

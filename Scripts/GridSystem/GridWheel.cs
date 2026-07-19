@@ -11,7 +11,7 @@ namespace VoxelEngine.GridSystem
     public class GridWheel : GridBlock
     {
         [Header("Wheel Size")]
-        [Tooltip("Visual wheel diameter in large-grid cells: 2, 3, or 5.")]
+        [Tooltip("Visual wheel diameter in Structural cells: 2, 3, or 5.")]
         public int wheelSizeCells = 3;
 
         [Header("Suspension")]

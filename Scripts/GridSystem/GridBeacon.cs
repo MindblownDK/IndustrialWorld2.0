@@ -63,7 +63,7 @@ namespace VoxelEngine.GridSystem
 
         private void CreateBeam()
         {
-            float cs = Grid != null ? Grid.gridSize.CellSize() : 2.5f;
+            float cs = EffectiveCellSize;
 
             // Vertical beam — a tall thin emissive cylinder.
             _beam = GameObject.CreatePrimitive(PrimitiveType.Cylinder);

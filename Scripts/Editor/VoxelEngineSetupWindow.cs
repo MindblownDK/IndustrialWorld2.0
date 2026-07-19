@@ -5129,7 +5129,7 @@ root =>
             var cockLargePref = MakeGPref<VoxelEngine.GridSystem.GridCockpit>("Cockpit_Large", new Color(0.2f, 0.4f, 0.8f), new Vector3(2f, 2f, 3f),
                 c => { c.idleWatts = 50f; });
             var itemCockSmall = MakeGItem("GItem_CockpitSmall", "Small Cockpit", Color.white, cockSmallPref, VoxelEngine.GridSystem.GridSize.Small, 200, 500);
-            itemCockSmall.description = "Pilot seat and flight control computer for small grids. Requires 50 W idle power; if the cockpit or grid power is offline, flight controls are disabled.";
+            itemCockSmall.description = "Detail-scale pilot seat and flight control computer for the unified Grid. Requires 50 W idle power; if the cockpit or Grid power is offline, flight controls are disabled.";
             EditorUtility.SetDirty(itemCockSmall);
             var itemCockLarge = MakeGItem("GItem_CockpitLarge", "Large Cockpit", Color.white, cockLargePref, VoxelEngine.GridSystem.GridSize.Large, 1500, 2000);
             itemCockLarge.description = "Pilot seat and flight control computer for large ships. Requires 50 W idle power; if the cockpit or grid power is offline, flight controls are disabled.";
@@ -7536,7 +7536,7 @@ root =>
                 EnsureRootCollider(root, new Vector3(0.95f, 0.62f, 0.82f), new Vector3(0f, 0.08f, -0.10f));
                 EnsureStep17Component<VoxelEngine.Simulation.GridLightBlock>(root, lightBlock =>
                 {
-                    lightBlock.blockName = "Small Grid Spotlight";
+                    lightBlock.blockName = "Detail Spotlight";
                     lightBlock.lightColor = Color.white;
                     lightBlock.range = 32f;
                     lightBlock.spotAngle = 42f;
@@ -7544,7 +7544,7 @@ root =>
                     lightBlock.lightType = LightType.Spot;
                 });
             });
-            var gridLightItem = ConfigureGridItem(GRID_ITEMS, "GItem_GridLightBlock", "Small Grid Spotlight", "Compact single-beam spotlight for small grids. Configurable color/range/intensity, draws 25 W when enabled, and switches off automatically without grid power.", new Color(1f, 0.94f, 0.72f), gridLightPrefab, VoxelEngine.GridSystem.GridSize.Small, 95f, 220f);
+            var gridLightItem = ConfigureGridItem(GRID_ITEMS, "GItem_GridLightBlock", "Detail Spotlight", "Compact detail-scale single-beam spotlight for the unified Grid. Configurable color/range/intensity, draws 25 W when enabled, and switches off automatically without grid power.", new Color(1f, 0.94f, 0.72f), gridLightPrefab, VoxelEngine.GridSystem.GridSize.Small, 95f, 220f);
 
             GameObject CreateGridSpotlightPrefab(string assetName, bool largeGrid, bool dualOutput)
             {
@@ -7579,7 +7579,7 @@ root =>
                     EnsureRootCollider(root, new Vector3((dualOutput ? 1.40f : 0.92f) * scale, 0.82f * scale, 0.98f * scale), new Vector3(0f, 0f, -0.10f * scale));
                     EnsureStep17Component<VoxelEngine.Simulation.GridLightBlock>(root, lightBlock =>
                     {
-                        lightBlock.blockName = (largeGrid ? "Large" : "Small") + (dualOutput ? " Dual" : "") + " Grid Spotlight";
+                        lightBlock.blockName = (largeGrid ? "Structural" : "Detail") + (dualOutput ? " Dual" : "") + " Spotlight";
                         lightBlock.lightColor = Color.white;
                         lightBlock.range = largeGrid ? 78f : 34f;
                         lightBlock.spotAngle = dualOutput ? 38f : 42f;
@@ -7593,9 +7593,9 @@ root =>
             var largeGridSpotlightPrefab = CreateGridSpotlightPrefab("GridSpotlight_Large", true, false);
             var smallDualSpotlightPrefab = CreateGridSpotlightPrefab("GridSpotlight_DualSmall", false, true);
             var largeDualSpotlightPrefab = CreateGridSpotlightPrefab("GridSpotlight_DualLarge", true, true);
-            var largeGridSpotlightItem = ConfigureGridItem(GRID_ITEMS, "GItem_LargeGridSpotlight", "Large Grid Spotlight", "Large-grid single-beam spotlight inspired by rugged industrial searchlights. Long range, configurable color/range/intensity, 65 W draw.", new Color(1f, 0.96f, 0.84f), largeGridSpotlightPrefab, VoxelEngine.GridSystem.GridSize.Large, 420f, 520f);
-            var smallDualSpotlightItem = ConfigureGridItem(GRID_ITEMS, "GItem_DualGridSpotlightSmall", "Small Dual Grid Spotlight", "Compact dual-output spotlight for small grids with two synchronized beams, 38 W draw.", new Color(1f, 0.96f, 0.84f), smallDualSpotlightPrefab, VoxelEngine.GridSystem.GridSize.Small, 130f, 260f);
-            var largeDualSpotlightItem = ConfigureGridItem(GRID_ITEMS, "GItem_DualGridSpotlightLarge", "Large Dual Grid Spotlight", "Large-grid dual-output flood spotlight with two synchronized beams for broad ship and base illumination, 95 W draw.", new Color(1f, 0.96f, 0.84f), largeDualSpotlightPrefab, VoxelEngine.GridSystem.GridSize.Large, 520f, 640f);
+            var largeGridSpotlightItem = ConfigureGridItem(GRID_ITEMS, "GItem_LargeGridSpotlight", "Structural Spotlight", "Structural-scale single-beam spotlight inspired by rugged industrial searchlights. Long range, configurable color/range/intensity, 65 W draw.", new Color(1f, 0.96f, 0.84f), largeGridSpotlightPrefab, VoxelEngine.GridSystem.GridSize.Large, 420f, 520f);
+            var smallDualSpotlightItem = ConfigureGridItem(GRID_ITEMS, "GItem_DualGridSpotlightSmall", "Detail Dual Spotlight", "Compact detail-scale dual-output spotlight for the unified Grid with two synchronized beams, 38 W draw.", new Color(1f, 0.96f, 0.84f), smallDualSpotlightPrefab, VoxelEngine.GridSystem.GridSize.Small, 130f, 260f);
+            var largeDualSpotlightItem = ConfigureGridItem(GRID_ITEMS, "GItem_DualGridSpotlightLarge", "Structural Dual Spotlight", "Structural-scale dual-output flood spotlight with two synchronized beams for broad ship and base illumination, 95 W draw.", new Color(1f, 0.96f, 0.84f), largeDualSpotlightPrefab, VoxelEngine.GridSystem.GridSize.Large, 520f, 640f);
 
             GameObject CreateLedStripPrefab(string folder, string matsFolder, string assetName, bool gridVariant)
             {
@@ -7621,7 +7621,7 @@ root =>
                     {
                         EnsureStep17Component<VoxelEngine.GridSystem.GridBlock>(root, gridBlock =>
                         {
-                            gridBlock.blockName = assetName.IndexOf("Large", System.StringComparison.OrdinalIgnoreCase) >= 0 ? "Large Grid LED Strip" : "Small Grid LED Strip";
+                            gridBlock.blockName = assetName.IndexOf("Large", System.StringComparison.OrdinalIgnoreCase) >= 0 ? "Structural LED Strip" : "Detail LED Strip";
                             gridBlock.BlockMass = assetName.IndexOf("Large", System.StringComparison.OrdinalIgnoreCase) >= 0 ? 90f : 25f;
                             gridBlock.maxHP = assetName.IndexOf("Large", System.StringComparison.OrdinalIgnoreCase) >= 0 ? 180f : 90f;
                         });
@@ -7649,8 +7649,8 @@ root =>
             var gridLEDStripPrefab = CreateLedStripPrefab(GRID_PREFABS, GRID_MATS, "LEDStrip_Grid", true);
             var largeGridLEDStripPrefab = CreateLedStripPrefab(GRID_PREFABS, GRID_MATS, "LEDStrip_LargeGrid", true);
             var blockLEDStrip = ConfigureBlock(FAC_ITEMS, "Block_LEDStripFactory", "LED Strip", "Segmented low-profile accent lighting for factory floors, walls, and machines. Runtime length is configurable on the LEDStrip component.", new Color(0.18f, 0.72f, 0.88f), staticLEDStripPrefab, "Factory", 70);
-            var gridLEDStripItem = ConfigureGridItem(GRID_ITEMS, "GItem_LEDStrip", "Small Grid LED Strip", "Small-grid segmented LED strip with individual diode elements, pulse/blink/chase modes, and configurable runtime length.", new Color(0.18f, 0.72f, 0.88f), gridLEDStripPrefab, VoxelEngine.GridSystem.GridSize.Small, 25f, 90f);
-            var largeGridLEDStripItem = ConfigureGridItem(GRID_ITEMS, "GItem_LargeGridLEDStrip", "Large Grid LED Strip", "Large-grid segmented LED strip with individual diode elements, higher output, pulse/blink/chase modes, and configurable runtime length.", new Color(0.18f, 0.72f, 0.88f), largeGridLEDStripPrefab, VoxelEngine.GridSystem.GridSize.Large, 90f, 180f);
+            var gridLEDStripItem = ConfigureGridItem(GRID_ITEMS, "GItem_LEDStrip", "Detail LED Strip", "Detail-scale segmented LED strip with individual diode elements, pulse/blink/chase modes, and configurable runtime length.", new Color(0.18f, 0.72f, 0.88f), gridLEDStripPrefab, VoxelEngine.GridSystem.GridSize.Small, 25f, 90f);
+            var largeGridLEDStripItem = ConfigureGridItem(GRID_ITEMS, "GItem_LargeGridLEDStrip", "Structural LED Strip", "Structural-scale segmented LED strip with individual diode elements, higher output, pulse/blink/chase modes, and configurable runtime length.", new Color(0.18f, 0.72f, 0.88f), largeGridLEDStripPrefab, VoxelEngine.GridSystem.GridSize.Large, 90f, 180f);
 
             GameObject CreateGridDoorPrefab(string assetName, string displayName, string style)
             {
@@ -7741,12 +7741,12 @@ root =>
                 });
             }
 
-            var largeSingleDoorPrefab = CreateGridDoorPrefab("GridSlidingDoor_LargeSingle", "Large Sci-Fi Sliding Door", "Single");
-            var largeDoubleDoorPrefab = CreateGridDoorPrefab("GridSlidingDoor_LargeDouble", "Large Double Sliding Door", "Double");
+            var largeSingleDoorPrefab = CreateGridDoorPrefab("GridSlidingDoor_LargeSingle", "Structural Sci-Fi Sliding Door", "Single");
+            var largeDoubleDoorPrefab = CreateGridDoorPrefab("GridSlidingDoor_LargeDouble", "Structural Double Sliding Door", "Double");
             var heavyVaultDoorPrefab = CreateGridDoorPrefab("GridVaultDoor_Heavy", "Heavy Vault Door", "Vault");
-            var largeSingleDoorItem = ConfigureGridItem(GRID_ITEMS, "GItem_LargeGridSlidingDoor", "Large Sci-Fi Sliding Door", "Large-grid single sliding door inspired by premium sci-fi bulkhead doors. Motion activation supported.", new Color(0.72f, 0.28f, 0.16f), largeSingleDoorPrefab, VoxelEngine.GridSystem.GridSize.Large, 390f, 520f);
-            var largeDoubleDoorItem = ConfigureGridItem(GRID_ITEMS, "GItem_LargeDoubleSlidingDoor", "Large Double Sliding Door", "Large-grid double sliding door with two powered panels and motion activation.", new Color(0.18f, 0.72f, 0.88f), largeDoubleDoorPrefab, VoxelEngine.GridSystem.GridSize.Large, 460f, 620f);
-            var heavyVaultDoorItem = ConfigureGridItem(GRID_ITEMS, "GItem_HeavyVaultDoor", "Heavy Vault Door", "Massive large-grid vault door with reinforced steel, slow powered actuation, and very high integrity.", new Color(0.56f, 0.60f, 0.62f), heavyVaultDoorPrefab, VoxelEngine.GridSystem.GridSize.Large, 1250f, 2200f);
+            var largeSingleDoorItem = ConfigureGridItem(GRID_ITEMS, "GItem_LargeGridSlidingDoor", "Structural Sci-Fi Sliding Door", "Structural-scale single sliding door inspired by premium sci-fi bulkhead doors. Motion activation supported.", new Color(0.72f, 0.28f, 0.16f), largeSingleDoorPrefab, VoxelEngine.GridSystem.GridSize.Large, 390f, 520f);
+            var largeDoubleDoorItem = ConfigureGridItem(GRID_ITEMS, "GItem_LargeDoubleSlidingDoor", "Structural Double Sliding Door", "Structural-scale double sliding door with two powered panels and motion activation.", new Color(0.18f, 0.72f, 0.88f), largeDoubleDoorPrefab, VoxelEngine.GridSystem.GridSize.Large, 460f, 620f);
+            var heavyVaultDoorItem = ConfigureGridItem(GRID_ITEMS, "GItem_HeavyVaultDoor", "Heavy Vault Door", "Massive structural-scale vault door with reinforced steel, slow powered actuation, and very high integrity.", new Color(0.56f, 0.60f, 0.62f), heavyVaultDoorPrefab, VoxelEngine.GridSystem.GridSize.Large, 1250f, 2200f);
 
             // ── Recipes ──
             var factoryRecipes = new List<VoxelEngine.Crafting.RecipeDefinition>();
@@ -7760,15 +7760,15 @@ root =>
             var recAssemblerMk2 = CreateRecipe(registry, FAC_RECIPES, "Recipe_AssemblerMk2", "Assembler Mk.2", blockAssemblerMk2, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 8), (ironGear, 6), (circuit, 4), (copperWire, 6));
             var recAssemblerMk3 = CreateRecipe(registry, FAC_RECIPES, "Recipe_AssemblerMk3", "Assembler Mk.3", blockAssemblerMk3, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 14), (ironGear, 10), (advCircuit, 4), (copperWire, 12));
             var recElectricFurnace = CreateRecipe(registry, FAC_RECIPES, "Recipe_ElectricFurnace", "Electric Furnace", blockElectricFurnace, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 4), (circuit, 2), (copperPlate, 2));
-            var recGridLight = CreateRecipe(registry, GRID_RECIPES, "Recipe_GridLightBlock", "Small Grid Spotlight", gridLightItem, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (ironPlate, 1), (copperWire, 2), (glass, 1));
-            var recLargeGridSpotlight = CreateRecipe(registry, GRID_RECIPES, "Recipe_LargeGridSpotlight", "Large Grid Spotlight", largeGridSpotlightItem, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 3), (copperWire, 6), (glass, 2), (circuit, 1));
-            var recSmallDualSpotlight = CreateRecipe(registry, GRID_RECIPES, "Recipe_DualGridSpotlightSmall", "Small Dual Grid Spotlight", smallDualSpotlightItem, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (ironPlate, 2), (copperWire, 4), (glass, 2), (circuit, 1));
-            var recLargeDualSpotlight = CreateRecipe(registry, GRID_RECIPES, "Recipe_DualGridSpotlightLarge", "Large Dual Grid Spotlight", largeDualSpotlightItem, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 4), (copperWire, 8), (glass, 4), (circuit, 2));
+            var recGridLight = CreateRecipe(registry, GRID_RECIPES, "Recipe_GridLightBlock", "Detail Spotlight", gridLightItem, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (ironPlate, 1), (copperWire, 2), (glass, 1));
+            var recLargeGridSpotlight = CreateRecipe(registry, GRID_RECIPES, "Recipe_LargeGridSpotlight", "Structural Spotlight", largeGridSpotlightItem, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 3), (copperWire, 6), (glass, 2), (circuit, 1));
+            var recSmallDualSpotlight = CreateRecipe(registry, GRID_RECIPES, "Recipe_DualGridSpotlightSmall", "Detail Dual Spotlight", smallDualSpotlightItem, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (ironPlate, 2), (copperWire, 4), (glass, 2), (circuit, 1));
+            var recLargeDualSpotlight = CreateRecipe(registry, GRID_RECIPES, "Recipe_DualGridSpotlightLarge", "Structural Dual Spotlight", largeDualSpotlightItem, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 4), (copperWire, 8), (glass, 4), (circuit, 2));
             var recLEDStrip = CreateRecipe(registry, FAC_RECIPES, "Recipe_LEDStripFactory", "LED Strip", blockLEDStrip, 2, VoxelEngine.Crafting.StationTier.CraftingBench, false, (copperWire, 4), (glass, 1));
-            var recGridLEDStrip = CreateRecipe(registry, GRID_RECIPES, "Recipe_GLEDStrip", "Small Grid LED Strip", gridLEDStripItem, 2, VoxelEngine.Crafting.StationTier.CraftingBench, false, (copperWire, 4), (glass, 1));
-            var recLargeGridLEDStrip = CreateRecipe(registry, GRID_RECIPES, "Recipe_LargeGridLEDStrip", "Large Grid LED Strip", largeGridLEDStripItem, 1, VoxelEngine.Crafting.StationTier.CraftingBench, false, (copperWire, 8), (glass, 2), (ironPlate, 1));
-            var recLargeSingleDoor = CreateRecipe(registry, GRID_RECIPES, "Recipe_LargeGridSlidingDoor", "Large Sci-Fi Sliding Door", largeSingleDoorItem, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 4), (copperWire, 8), (glass, 3), (circuit, 2));
-            var recLargeDoubleDoor = CreateRecipe(registry, GRID_RECIPES, "Recipe_LargeDoubleSlidingDoor", "Large Double Sliding Door", largeDoubleDoorItem, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 5), (copperWire, 10), (glass, 4), (circuit, 2));
+            var recGridLEDStrip = CreateRecipe(registry, GRID_RECIPES, "Recipe_GLEDStrip", "Detail LED Strip", gridLEDStripItem, 2, VoxelEngine.Crafting.StationTier.CraftingBench, false, (copperWire, 4), (glass, 1));
+            var recLargeGridLEDStrip = CreateRecipe(registry, GRID_RECIPES, "Recipe_LargeGridLEDStrip", "Structural LED Strip", largeGridLEDStripItem, 1, VoxelEngine.Crafting.StationTier.CraftingBench, false, (copperWire, 8), (glass, 2), (ironPlate, 1));
+            var recLargeSingleDoor = CreateRecipe(registry, GRID_RECIPES, "Recipe_LargeGridSlidingDoor", "Structural Sci-Fi Sliding Door", largeSingleDoorItem, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 4), (copperWire, 8), (glass, 3), (circuit, 2));
+            var recLargeDoubleDoor = CreateRecipe(registry, GRID_RECIPES, "Recipe_LargeDoubleSlidingDoor", "Structural Double Sliding Door", largeDoubleDoorItem, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 5), (copperWire, 10), (glass, 4), (circuit, 2));
             var recHeavyVaultDoor = CreateRecipe(registry, GRID_RECIPES, "Recipe_HeavyVaultDoor", "Heavy Vault Door", heavyVaultDoorItem, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 16), (copperWire, 12), (glass, 2), (circuit, 4));
             var legacySmallDoorRecipe = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeDefinition>($"{GRID_RECIPES}/Recipe_SmallGridSlidingDoor.asset");
             if (registry != null && legacySmallDoorRecipe != null && registry.recipes.Contains(legacySmallDoorRecipe))

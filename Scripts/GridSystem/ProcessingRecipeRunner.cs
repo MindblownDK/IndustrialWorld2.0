@@ -33,8 +33,8 @@ namespace VoxelEngine.GridSystem
             }
             else
             {
-                foreach (var kv in _grid.Blocks)
-                    if (kv.Value is GridCargoContainer c && c.container != null) list.Add(c.container);
+                foreach (var block in _grid.AllBlocks)
+                    if (block is GridCargoContainer c && c.container != null) list.Add(c.container);
             }
             return list;
         }

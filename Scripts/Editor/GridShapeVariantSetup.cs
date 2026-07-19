@@ -121,10 +121,14 @@ namespace VoxelEngine.EditorTools
             ConfigureStructuralAsset(
                 "Assets/VoxelEngineAssets/GridSystem/Items/GItem_ArmorSmall.asset",
                 "Assets/VoxelEngineAssets/GridSystem/Prefabs/Armor_Small.prefab",
+                "Assets/VoxelEngineAssets/GridSystem/Recipes/Recipe_GArmorSmall.asset",
+                "Armor Detail Block",
                 ref created, ref updated);
             ConfigureStructuralAsset(
                 "Assets/VoxelEngineAssets/GridSystem/Items/GItem_ArmorLarge.asset",
                 "Assets/VoxelEngineAssets/GridSystem/Prefabs/Armor_Large.prefab",
+                "Assets/VoxelEngineAssets/GridSystem/Recipes/Recipe_GArmorLarge.asset",
+                "Armor Structural Block",
                 ref created, ref updated);
 
             // ── 4. Log variant definitions available ───────────────────────
@@ -132,32 +136,110 @@ namespace VoxelEngine.EditorTools
             Debug.Log($"[Step 18] Grid shape variants available ({variants.Length}): " +
                 string.Join(", ", variants));
 
+            MigrateLegacyGridTypeLabels(ref updated);
+
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
 
             // ── 5. Summary ─────────────────────────────────────────────────
             Debug.Log($"[Step 18] Complete. Created/enabled {created}, verified {updated} existing.");
-            Debug.Log("[Step 18] Precision attachment support verified: supported small armor blocks can use the 5x5 lattice on large-grid faces.");
+            Debug.Log("[Step 18] Unified Grid verified: Detail blocks can use the 5x5 lattice on Structural faces.");
             Debug.Log("[Step 18] Non-destructive: source recipes, costs, mass, health, power, materials, and custom prefab children were preserved.");
 
             EditorUtility.DisplayDialog("Voxel Engine — Step 18", 
                 $"Grid Shape Variant Setup Complete\n\n" +
                 $"✓ GridShapeWheel: Verified\n" +
                 $"✓ GridBuilder: Verified\n" +
-                $"✓ Small/Large Armor: Connected\n" +
-                $"✓ Precision Large-Face Lattice: Runtime Ready\n" +
+                $"✓ Detail + Structural Armor: One Grid\n" +
+                $"✓ Precision Structural-Face Lattice: Runtime Ready\n" +
                 $"✓ Variants: {variants.Length} available\n\n" +
                 $"Non-destructive — recipes, costs, mass, health, power, materials, and custom children were preserved.",
                 "OK");
         }
 
-        private static void ConfigureStructuralAsset(string itemPath, string prefabPath, ref int created, ref int updated)
+        private static void MigrateLegacyGridTypeLabels(ref int updated)
+        {
+            string[] itemGuids = AssetDatabase.FindAssets("t:GridBlockItem", new[] { "Assets/VoxelEngineAssets" });
+            foreach (string guid in itemGuids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                var item = AssetDatabase.LoadAssetAtPath<GridBlockItem>(path);
+                if (item == null) continue;
+
+                string display = item.displayName ?? string.Empty;
+                string migrated = display
+                    .Replace("Small Grid ", "Detail ")
+                    .Replace("Large Grid ", "Structural ")
+                    .Replace("Small Dual Grid ", "Detail Dual ")
+                    .Replace("Large Dual Grid ", "Structural Dual ")
+                    .Replace(" Dual Grid ", " Dual ");
+                if (migrated.StartsWith("Small ", System.StringComparison.Ordinal))
+                    migrated = "Detail " + migrated.Substring(6);
+                else if (migrated.StartsWith("Large ", System.StringComparison.Ordinal))
+                    migrated = "Structural " + migrated.Substring(6);
+                string description = item.description ?? string.Empty;
+                string migratedDescription = description
+                    .Replace("small-grid", "detail-scale")
+                    .Replace("large-grid", "structural-scale")
+                    .Replace("Small Grid", "Detail")
+                    .Replace("Large Grid", "Structural");
+
+                if (migrated == display && migratedDescription == description) continue;
+                item.displayName = migrated;
+                item.description = migratedDescription;
+                EditorUtility.SetDirty(item);
+                updated++;
+                Debug.Log($"[Step 18] ✓ Migrated legacy grid-type label on '{path}' to unified Detail/Structural wording.");
+            }
+
+            string[] recipeGuids = AssetDatabase.FindAssets("t:RecipeDefinition", new[] { "Assets/VoxelEngineAssets" });
+            foreach (string guid in recipeGuids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                var recipe = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeDefinition>(path);
+                if (recipe == null || recipe.outputItem == null) continue;
+                string display = recipe.displayName ?? string.Empty;
+                if (!display.Contains("Small Grid") && !display.Contains("Large Grid")
+                    && display != "Small Armor Block" && display != "Large Armor Block") continue;
+                recipe.displayName = recipe.outputItem.displayName;
+                EditorUtility.SetDirty(recipe);
+                updated++;
+            }
+        }
+
+        private static void ConfigureStructuralAsset(
+            string itemPath,
+            string prefabPath,
+            string recipePath,
+            string unifiedDisplayName,
+            ref int created,
+            ref int updated)
         {
             var item = AssetDatabase.LoadAssetAtPath<GridBlockItem>(itemPath);
             if (item == null)
             {
                 Debug.LogWarning($"[Step 18] Missing structural item '{itemPath}'. Run Step 12 first; no replacement asset was created.");
                 return;
+            }
+
+            bool legacyGridName = item.displayName == "Small Armor Block"
+                || item.displayName == "Large Armor Block"
+                || string.IsNullOrWhiteSpace(item.displayName);
+            if (legacyGridName && item.displayName != unifiedDisplayName)
+            {
+                item.displayName = unifiedDisplayName;
+                EditorUtility.SetDirty(item);
+                updated++;
+                Debug.Log($"[Step 18] ✓ Updated legacy grid-type name to '{unifiedDisplayName}'.");
+            }
+
+            var recipe = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeDefinition>(recipePath);
+            if (recipe != null
+                && (recipe.displayName == "Small Armor Block" || recipe.displayName == "Large Armor Block" || string.IsNullOrWhiteSpace(recipe.displayName)))
+            {
+                recipe.displayName = unifiedDisplayName;
+                EditorUtility.SetDirty(recipe);
+                updated++;
             }
 
             if (!item.supportsShapeVariants)

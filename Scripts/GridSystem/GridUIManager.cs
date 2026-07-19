@@ -10,8 +10,7 @@ namespace VoxelEngine.GridSystem
     {
         public static void OpenCockpitUI(GridCockpit cockpit)
         {
-            Debug.Log("[UI] Cockpit UI Opened - Grid Size: " + cockpit.Grid?.gridSize);
-            // TODO: Show actual UI canvas with grid size switch buttons
+            Debug.Log("[UI] Unified Grid cockpit opened");
         }
 
         public static void OpenChemicalPlantUI(GridChemicalPlant plant)

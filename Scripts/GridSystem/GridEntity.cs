@@ -31,8 +31,22 @@ namespace VoxelEngine.GridSystem
         // ── Block storage ──────────────────────────────────────────
         private readonly Dictionary<Vector3Int, GridBlock> _blocks = new();
         public IReadOnlyDictionary<Vector3Int, GridBlock> Blocks => _blocks;
-        public int BlockCount => _blocks.Count;
         public GridPrecisionAttachmentLayer PrecisionAttachments => GetComponent<GridPrecisionAttachmentLayer>();
+        public int BlockCount => _blocks.Count + (PrecisionAttachments != null ? PrecisionAttachments.Count : 0);
+
+        /// <summary>All blocks on the unified construct, regardless of authored block scale.</summary>
+        public IEnumerable<GridBlock> AllBlocks
+        {
+            get
+            {
+                foreach (var block in _blocks.Values)
+                    if (block != null) yield return block;
+                var precision = PrecisionAttachments;
+                if (precision == null) yield break;
+                foreach (var block in precision.Blocks.Values)
+                    if (block != null) yield return block;
+            }
+        }
 
         // ── Physics ────────────────────────────────────────────────
         private Rigidbody _rb;
@@ -69,9 +83,9 @@ namespace VoxelEngine.GridSystem
         public (float fwd, float back, float right, float left, float up, float down) GetThrustByDirection()
         {
             float fwd=0,back=0,right=0,left=0,up=0,down=0;
-            foreach (var kv in _blocks)
+            foreach (var block in AllBlocks)
             {
-                if (!(kv.Value is GridThruster t)) continue;
+                if (!(block is GridThruster t)) continue;
                 // Thruster pushes the ship along its local forward.
                 Vector3 d = transform.InverseTransformDirection(t.transform.forward);
                 if (d.z >  0.5f) fwd   += t.maxThrustN;
@@ -102,10 +116,10 @@ namespace VoxelEngine.GridSystem
         public System.Collections.Generic.List<ToolGroup> GetToolGroups()
         {
             bool hasDrill = false, hasWeapon = false;
-            foreach (var kv in _blocks)
+            foreach (var block in AllBlocks)
             {
-                if (kv.Value is GridDrill)  hasDrill  = true;
-                else if (kv.Value is GridWeapon) hasWeapon = true;
+                if (block is GridDrill)  hasDrill  = true;
+                else if (block is GridWeapon) hasWeapon = true;
             }
             var list = new System.Collections.Generic.List<ToolGroup>();
             if (hasDrill)  list.Add(ToolGroup.Drill);
@@ -141,8 +155,8 @@ namespace VoxelEngine.GridSystem
         public System.Collections.Generic.List<GridBlock> GetFireTools()
         {
             var list = new System.Collections.Generic.List<GridBlock>();
-            foreach (var kv in _blocks)
-                if (kv.Value is GridDrill || kv.Value is GridWeapon) list.Add(kv.Value);
+            foreach (var block in AllBlocks)
+                if (block is GridDrill || block is GridWeapon) list.Add(block);
             return list;
         }
 
@@ -258,9 +272,9 @@ namespace VoxelEngine.GridSystem
             if (gravity.sqrMagnitude < 0.0001f) return false;
 
             Vector3 antiGravity = -gravity.normalized;
-            foreach (var kv in _blocks)
+            foreach (var block in AllBlocks)
             {
-                if (!(kv.Value is GridThruster thruster)) continue;
+                if (!(block is GridThruster thruster)) continue;
                 if (!thruster.Enabled || !thruster.IsOperational) continue;
                 if (Vector3.Dot(thruster.PushDirection.normalized, antiGravity) > 0.35f)
                     return true;
@@ -333,7 +347,7 @@ namespace VoxelEngine.GridSystem
 
             NotifyMaritimeDirty();
 
-            if (_blocks.Count == 0)
+            if (_blocks.Count == 0 && (PrecisionAttachments == null || PrecisionAttachments.Count == 0))
                 Destroy(gameObject);
         }
 
@@ -385,13 +399,11 @@ namespace VoxelEngine.GridSystem
         /// </summary>
         public Vector3 GetGridCenter()
         {
-            if (_blocks.Count == 0) return transform.position;
             Vector3 sum = Vector3.zero;
             int count = 0;
-            foreach (var kv in _blocks)
+            foreach (var block in AllBlocks)
             {
-                if (kv.Value == null) continue;
-                sum += kv.Value.transform.position;
+                sum += block.transform.position;
                 count++;
             }
             return count > 0 ? sum / count : transform.position;
@@ -461,10 +473,9 @@ namespace VoxelEngine.GridSystem
             // ordering flicker where a drill turning on would briefly read HasPower=false
             // (the battery's discharge lagged a frame behind the new load).
             float gen = 0, con = 0, h2Cap = 0, h2Stored = 0, o2Stored = 0, batteryReserve = 0;
-            foreach (var kv in _blocks)
+            foreach (var b in AllBlocks)
             {
-                var b = kv.Value;
-                if (b == null || !b.Enabled) continue;
+                if (!b.Enabled) continue;
                 if (b is GridBattery bat)
                 {
                     batteryReserve += bat.AvailableDischargeWatts; // what it COULD supply this frame
@@ -524,8 +535,8 @@ namespace VoxelEngine.GridSystem
         {
             // Reset all thruster visual/audio fractions; only the ones that actually fire
             // this frame will get a new value below.
-            foreach (var kv in _blocks)
-                if (kv.Value is GridThruster t) t.ThrustFraction = 0f;
+            foreach (var block in AllBlocks)
+                if (block is GridThruster t) t.ThrustFraction = 0f;
 
             if (!IsControlled)
             {
@@ -544,9 +555,9 @@ namespace VoxelEngine.GridSystem
 
             // Accumulate world-space force from the thrusters that push each requested way.
             Vector3 worldForce = Vector3.zero;
-            foreach (var kv in _blocks)
+            foreach (var block in AllBlocks)
             {
-                if (!(kv.Value is GridThruster thruster) || !thruster.IsOperational) continue;
+                if (!(block is GridThruster thruster) || !thruster.IsOperational) continue;
 
                 // The direction this thruster pushes the ship, in the cockpit's local frame.
                 Vector3 pushLocal = frame.InverseTransformDirection(thruster.PushDirection);
@@ -579,8 +590,8 @@ namespace VoxelEngine.GridSystem
             // Rotational authority comes from installed, powered-on gyroscopes.
             // Bigger/heavier ships turn slower; adding more gyros restores authority.
             float gyroTorque = 0f;
-            foreach (var kv in _blocks)
-                if (kv.Value is GridGyroscope gy && gy.Enabled) gyroTorque += gy.torquePower;
+            foreach (var block in AllBlocks)
+                if (block is GridGyroscope gy && gy.Enabled) gyroTorque += gy.torquePower;
             if (gyroTorque > 0f && rotInput.sqrMagnitude > 0.0001f)
             {
                 Vector3 worldTorque = frame.TransformDirection(rotInput);
@@ -629,9 +640,9 @@ namespace VoxelEngine.GridSystem
         // ── Wheels ─────────────────────────────────────────────────
         private void UpdateWheels()
         {
-            foreach (var kv in _blocks)
+            foreach (var block in AllBlocks)
             {
-                if (kv.Value is GridWheel wheel)
+                if (block is GridWheel wheel)
                     wheel.UpdateWheel(this);
             }
         }

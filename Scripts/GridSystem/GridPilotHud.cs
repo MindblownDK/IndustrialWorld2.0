@@ -385,9 +385,9 @@ namespace VoxelEngine.GridSystem
 
             float stored = 0f;
             float capacity = 0f;
-            foreach (var kv in grid.Blocks)
+            foreach (var block in grid.AllBlocks)
             {
-                if (kv.Value is GridBattery battery)
+                if (block is GridBattery battery)
                 {
                     stored += Mathf.Max(0f, battery.storedWh);
                     capacity += Mathf.Max(0f, battery.capacityWh);
