@@ -1,7 +1,7 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridBlockMeshBuilder.cs
 //
-// Builds detailed, recognisable models for grid blocks — inspired by Space
-// Engineers and real machinery. CRITICALLY: every model is authored to FILL its
+// Builds detailed, recognisable models for grid blocks using grounded industrial
+// machinery references. CRITICALLY: every model is authored to FILL its
 // grid cell (footprint == cellSize) so blocks tile seamlessly with no gaps, and
 // the ghost/placement collider always matches. Decorative shaping is done with
 // child primitives scaled relative to the cell, never by resizing the root.

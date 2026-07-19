@@ -52,9 +52,7 @@ namespace VoxelEngine.GridSystem
         /// <summary>Whether the held item qualifies for shape variants (armour/structural blocks).</summary>
         private static bool IsShapeVariantItem(GridBlockItem item)
         {
-            if (item == null) return false;
-            string name = (item.displayName ?? "").ToLowerInvariant();
-            return name.Contains("armor") || name.Contains("plate") || name.Contains("block") || name.Contains("wall");
+            return item != null && item.SupportsShapeVariants;
         }
 
         private void Start()
@@ -216,6 +214,14 @@ namespace VoxelEngine.GridSystem
             block.blockName = item.displayName;
             block.BlockMass = item.blockMass;
             block.maxHP = item.blockHP;
+
+            if (IsShapeVariantItem(item))
+            {
+                var shapeVisual = block.GetComponent<GridShapeVariantBlock>();
+                if (shapeVisual == null) shapeVisual = block.gameObject.AddComponent<GridShapeVariantBlock>();
+                shapeVisual.Configure(VoxelEngine.UI.GridShapeWheel.CurrentShape, item.gridSize);
+            }
+
             grid.AddBlock(gridPos, block);
 
             VoxelEngine.UI.BuildFeedbackHud.ShowBlockPlaced(item.displayName, item, 1);
@@ -697,92 +703,9 @@ namespace VoxelEngine.GridSystem
         /// </summary>
         private GameObject BuildShapeGhost(VoxelEngine.UI.GridShapeVariant shape, GridSize size)
         {
-            float cs = size.CellSize();
             var ghost = new GameObject("GridGhostShape");
-
-            // Helper to add a cube primitive
-            void AddPrim(Vector3 pos, Vector3 scale)
-            {
-                var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                cube.transform.SetParent(ghost.transform, false);
-                cube.transform.localPosition = pos;
-                cube.transform.localScale = scale;
-                var col = cube.GetComponent<Collider>();
-                if (col != null) Destroy(col);
-            }
-
-            switch (shape)
-            {
-                case VoxelEngine.UI.GridShapeVariant.Cube:
-                    AddPrim(Vector3.zero, Vector3.one * cs);
-                    break;
-
-                case VoxelEngine.UI.GridShapeVariant.Slope:
-                {
-                    // Stair-step ascending along Z
-                    float stepH = cs * 0.25f;
-                    float stepD = cs * 0.25f;
-                    for (int i = 0; i < 4; i++)
-                    {
-                        float zPos = -cs * 0.375f + i * stepD;
-                        float yPos = i * stepH + stepH * 0.5f;
-                        AddPrim(new Vector3(0f, yPos, zPos),
-                            new Vector3(cs, stepH, stepD));
-                    }
-                    break;
-                }
-
-                case VoxelEngine.UI.GridShapeVariant.HalfBlock:
-                {
-                    float halfH = cs * 0.5f;
-                    AddPrim(new Vector3(0f, halfH * 0.5f, 0f),
-                        new Vector3(cs, halfH, cs));
-                    break;
-                }
-
-                case VoxelEngine.UI.GridShapeVariant.HalfSlope:
-                {
-                    // Half-height stair-step
-                    float stepH = cs * 0.125f;
-                    float stepD = cs * 0.25f;
-                    for (int i = 0; i < 4; i++)
-                    {
-                        float zPos = -cs * 0.375f + i * stepD;
-                        float yPos = i * stepH + stepH * 0.5f;
-                        AddPrim(new Vector3(0f, yPos, zPos),
-                            new Vector3(cs, stepH, stepD));
-                    }
-                    break;
-                }
-
-                case VoxelEngine.UI.GridShapeVariant.Corner:
-                {
-                    // Two opposite quadrants forming a corner check pattern
-                    // Block A: right-rear quadrant
-                    AddPrim(new Vector3(cs * 0.25f, 0f, -cs * 0.25f),
-                        new Vector3(cs * 0.48f, cs, cs * 0.48f));
-                    // Block B: left-front quadrant
-                    AddPrim(new Vector3(-cs * 0.25f, 0f, cs * 0.25f),
-                        new Vector3(cs * 0.48f, cs, cs * 0.48f));
-                    break;
-                }
-
-                case VoxelEngine.UI.GridShapeVariant.InvertedSlope:
-                {
-                    // Stair-step descending along Z
-                    float stepH = cs * 0.25f;
-                    float stepD = cs * 0.25f;
-                    for (int i = 0; i < 4; i++)
-                    {
-                        float zPos = -cs * 0.375f + i * stepD;
-                        float yPos = (3 - i) * stepH + stepH * 0.5f;
-                        AddPrim(new Vector3(0f, yPos, zPos),
-                            new Vector3(cs, stepH, stepD));
-                    }
-                    break;
-                }
-            }
-
+            var shapeVisual = ghost.AddComponent<GridShapeVariantBlock>();
+            shapeVisual.Configure(shape, size, createCollider: false);
             return ghost;
         }
 

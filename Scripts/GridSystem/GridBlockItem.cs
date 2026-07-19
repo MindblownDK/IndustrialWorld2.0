@@ -21,5 +21,12 @@ namespace VoxelEngine.GridSystem
 
         [Tooltip("Hit points.")]
         public float blockHP = 200f;
+
+        [Header("Shape Variants")]
+        [Tooltip("Allows this structural block to use the Grid Shape wheel. Step 18 enables this non-destructively for supported armor items.")]
+        public bool supportsShapeVariants;
+
+        public bool SupportsShapeVariants => supportsShapeVariants
+            || (blockPrefab != null && blockPrefab.GetComponent<GridArmorBlock>() != null);
     }
 }

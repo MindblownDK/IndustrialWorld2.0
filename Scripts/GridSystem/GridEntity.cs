@@ -308,7 +308,7 @@ namespace VoxelEngine.GridSystem
             // Removed rotation reset - handled by the caller (GridBuilder)
             // block.transform.localRotation = Quaternion.identity;
 
-            if (block.GetComponent<Collider>() == null)
+            if (block.GetComponentInChildren<Collider>(true) == null)
             {
                 var box = block.gameObject.AddComponent<BoxCollider>();
                 box.size = Vector3.one * cs;
@@ -576,7 +576,7 @@ namespace VoxelEngine.GridSystem
                 worldTorque *= gyroTorque * 0.0005f * massFactor;
                 _rb.AddTorque(worldTorque, ForceMode.Acceleration);
             }
-            // Angular damping so the ship stops spinning when you let go (SE-style).
+            // Angular damping lets the ship stop spinning cleanly when the pilot releases input.
             _rb.angularDamping = 3f;
         }
 

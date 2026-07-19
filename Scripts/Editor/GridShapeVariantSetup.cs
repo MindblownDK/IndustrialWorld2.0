@@ -9,13 +9,11 @@ namespace VoxelEngine.EditorTools
 {
     /// <summary>
     /// Non-destructive Step 18 setup for Grid Shape Variants.
-    /// Creates / updates variant item definitions, prefab links, and setup notes
-    /// without removing existing balance, materials, or custom geometry.
+    /// Enables supported structural items, repairs prefab links, and connects the
+    /// runtime shape component without replacing balance, materials, or custom geometry.
     ///
-    /// v5.40.0-dev — Now actually generates the GridShapeWheel component on the
-    /// player prefab if missing, validates the wheel is wired to GameUIController,
-    /// and verifies GridBuilder has the correct shape-variant hooks.
-    /// No balance values are touched.
+    /// v5.63.0-dev — Authors the functional small/large armor shape workflow and
+    /// verifies the GridShapeWheel and GridBuilder scene connections.
     /// </summary>
     public static class GridShapeVariantSetup
     {
@@ -119,22 +117,104 @@ namespace VoxelEngine.EditorTools
                     "Add one to the player GameObject or Camera.");
             }
 
-            // ── 3. Log variant definitions available ───────────────────────
+            // ── 3. Author supported structural assets non-destructively ─────
+            ConfigureStructuralAsset(
+                "Assets/VoxelEngineAssets/GridSystem/Items/GItem_ArmorSmall.asset",
+                "Assets/VoxelEngineAssets/GridSystem/Prefabs/Armor_Small.prefab",
+                ref created, ref updated);
+            ConfigureStructuralAsset(
+                "Assets/VoxelEngineAssets/GridSystem/Items/GItem_ArmorLarge.asset",
+                "Assets/VoxelEngineAssets/GridSystem/Prefabs/Armor_Large.prefab",
+                ref created, ref updated);
+
+            // ── 4. Log variant definitions available ───────────────────────
             var variants = System.Enum.GetNames(typeof(GridShapeVariant));
             Debug.Log($"[Step 18] Grid shape variants available ({variants.Length}): " +
                 string.Join(", ", variants));
 
-            // ── 4. Summary ─────────────────────────────────────────────────
-            Debug.Log($"[Step 18] Complete. Created {created}, verified {updated} existing.");
-            Debug.Log("[Step 18] Non-destructive: no existing prefab, recipe, item, or balance values were modified.");
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
+            // ── 5. Summary ─────────────────────────────────────────────────
+            Debug.Log($"[Step 18] Complete. Created/enabled {created}, verified {updated} existing.");
+            Debug.Log("[Step 18] Non-destructive: source recipes, costs, mass, health, power, materials, and custom prefab children were preserved.");
 
             EditorUtility.DisplayDialog("Voxel Engine — Step 18", 
                 $"Grid Shape Variant Setup Complete\n\n" +
-                $"✓ GridShapeWheel: {(created > 0 ? "Added" : "Verified")}\n" +
+                $"✓ GridShapeWheel: Verified\n" +
                 $"✓ GridBuilder: Verified\n" +
+                $"✓ Small/Large Armor: Connected\n" +
                 $"✓ Variants: {variants.Length} available\n\n" +
-                $"Non-destructive — no balance values were modified.",
+                $"Non-destructive — recipes, costs, mass, health, power, materials, and custom children were preserved.",
                 "OK");
+        }
+
+        private static void ConfigureStructuralAsset(string itemPath, string prefabPath, ref int created, ref int updated)
+        {
+            var item = AssetDatabase.LoadAssetAtPath<GridBlockItem>(itemPath);
+            if (item == null)
+            {
+                Debug.LogWarning($"[Step 18] Missing structural item '{itemPath}'. Run Step 12 first; no replacement asset was created.");
+                return;
+            }
+
+            if (!item.supportsShapeVariants)
+            {
+                item.supportsShapeVariants = true;
+                EditorUtility.SetDirty(item);
+                created++;
+                Debug.Log($"[Step 18] + Enabled shape variants on '{item.displayName}' without changing balance.");
+            }
+            else
+            {
+                updated++;
+                Debug.Log($"[Step 18] ✓ Shape variants already enabled on '{item.displayName}'.");
+            }
+
+            if (item.blockPrefab == null)
+            {
+                var expectedPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+                if (expectedPrefab != null)
+                {
+                    item.blockPrefab = expectedPrefab;
+                    EditorUtility.SetDirty(item);
+                    updated++;
+                    Debug.Log($"[Step 18] ✓ Reconnected missing prefab link for '{item.displayName}'.");
+                }
+                else
+                {
+                    Debug.LogWarning($"[Step 18] Missing prefab '{prefabPath}'. Existing item and balance were left untouched.");
+                    return;
+                }
+            }
+
+            string linkedPrefabPath = AssetDatabase.GetAssetPath(item.blockPrefab);
+            if (string.IsNullOrWhiteSpace(linkedPrefabPath)) linkedPrefabPath = prefabPath;
+            GameObject root = null;
+            try
+            {
+                root = PrefabUtility.LoadPrefabContents(linkedPrefabPath);
+                if (root.GetComponent<GridShapeVariantBlock>() == null)
+                {
+                    root.AddComponent<GridShapeVariantBlock>();
+                    PrefabUtility.SaveAsPrefabAsset(root, linkedPrefabPath);
+                    created++;
+                    Debug.Log($"[Step 18] + Added GridShapeVariantBlock to '{linkedPrefabPath}'. Custom children and tuning were preserved.");
+                }
+                else
+                {
+                    updated++;
+                    Debug.Log($"[Step 18] ✓ GridShapeVariantBlock already connected on '{linkedPrefabPath}'.");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"[Step 18] Could not safely update '{linkedPrefabPath}'. Existing prefab was preserved. {ex.Message}");
+            }
+            finally
+            {
+                if (root != null) PrefabUtility.UnloadPrefabContents(root);
+            }
         }
     }
 }

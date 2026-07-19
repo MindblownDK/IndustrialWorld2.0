@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.62.4-dev`
-**Roadmap Version:** `5.62.4-dev`
-**Date:** 2026-07-17
-**Status:** Active Implementation — Door Panel Detail Animation + Open Distance Fix
+**Current Version:** `5.63.0-dev`
+**Roadmap Version:** `5.63.0-dev`
+**Date:** 2026-07-19
+**Status:** Active Implementation — Functional Grid Shape Variants; Unity Validation Pending
 
 ---
 
@@ -59,7 +59,7 @@ The design goal is a seamless blend of:
 | Grid screens / displays | ✅ COMPLETED | All sizes, live text+power states, right-click+terminal config, custom text+custom colors+border+font, visual bar charts, multi-source, live camera feeds, power gain/loss/net mode, persistence, and camera block are validated by Thomas. (5.51.3-dev) |
 | Grid lighting | 🛠️ WORKING ON | Small/large single and dual spotlights, large-grid LED strip, premium segmented/clean LED visuals, spotlight/LED screen data providers, right-click spotlight config UI, collapsible ship-control data-type toggles, LED strip config UI, visible chase animation, and motion-activated lighting exist. Unity validation pending; static/placed lighting runtime persistence is implemented in 5.58.0-dev while full movable-grid save persistence remains future work. |
 | Sloped / armored grid blocks | ❌ Missing | Only cube blocks exist; need shape variants |
-| Grid shape variant wheel | 🟡 PARTIALLY COMPLETE | Premium radial wheel foundation complete (5.40.1-dev) with full visual parity to Hammer/Conveyor wheels. CurrentShape accessor + auto-spawn ready. Compile error in GridBuilder fixed. Shape application + authored variants next (via Setup Step 18). |
+| Grid shape variant wheel | 🛠️ WORKING ON | Premium radial wheel now places functional Cube, Slope, Half Block, Half Slope, Corner, and Inverted Slope meshes with matching convex collision. Step 18 non-destructively enables supported small/large armor items and connects their runtime shape component while preserving recipes, costs, mass, health, power, materials, and custom children. Unity two-run validation pending. |
 | Player armor slots | ❌ Missing | No equipable armor system |
 | Crafting / items / storage | ✅ Exists | Needs deeper recipe chains |
 | Research / tech tree | ✅ Exists | Can be expanded into eras |
@@ -465,17 +465,19 @@ A late-game **Jump Drive** provides charged, coordinate-based faster-than-light 
 
 ## 5. Master Roadmap
 
-| Version | Theme | Scope | Manual Unity Work |
-|---------|-------|-------|-------------------|
-| **4.5.0** | Factory Foundations | Conveyor belts, chutes, basic machines, grid lights, machine UI | Medium — prefab generation, animation clips |
-| **4.6.0** | Production Lines & UI Revolution | Assemblers, recipe chains, UI theme system, research UI overhaul | Medium — recipes, themes, panels |
-| **4.7.0** | Power, Vehicles & Combat | Engines, batteries, damage, armor slots, bombs, grid weapons, armor blocks | High — combat prefabs, physics |
-| **4.8.0** | Logistics 2.0, Screens & Trajectory | Trains, drones, configurable screens, trajectory camera, orbit map (`M`) | High — train track, camera rigs, panels |
-| **4.9.0** | Living Worlds | Ruins, weather, water flow, enemies, planet skies, gravity/orbit fixes | Very High — worldgen, AI, fluids, rendering |
-| **5.0.0** | Orbital Expansion | Rockets, space stations, asteroid mining, orbital cargo, space ambiance | Very High — new scene/zone system |
-| **5.1.0** | Interplanetary Age | Planetary bases, exo-resources, nuclear fission, nuclear warheads | Very High — empire dashboard |
-| **5.2.0** | Architect Era | World forge, megastructures, fusion, save schema v2 | Very High — new save format |
-| **5.3.0+** | Live Ops | Modding API, multiplayer foundations, seasonal content | TBD |
+| Version | Theme | Execution Status | Scope | Manual Unity Work |
+|---------|-------|------------------|-------|-------------------|
+| **4.5.0** | Factory Foundations | 🛠️ **WORKING ON** | Conveyor belts, chutes, basic machines, grid lights, machine UI | Medium — prefab generation, animation clips |
+| **4.6.0** | Production Lines & UI Revolution | 🛠️ **WORKING ON** | Assemblers, recipe chains, UI theme system, research UI overhaul | Medium — recipes, themes, panels |
+| **4.7.0** | Power, Vehicles & Combat | 🛠️ **WORKING ON** | Engines, batteries, damage, armor slots, bombs, grid weapons, armor blocks | High — combat prefabs, physics |
+| **4.8.0** | Logistics 2.0, Screens & Trajectory | 🛠️ **WORKING ON** | Trains, drones, configurable screens, trajectory camera, orbit map (`M`) | High — train track, camera rigs, panels |
+| **4.9.0** | Living Worlds | 🟡 **PARTIALLY COMPLETE** | Ruins, weather, water flow, enemies, planet skies, gravity/orbit fixes | Very High — worldgen, AI, fluids, rendering |
+| **5.0.0** | Orbital Expansion | 🟡 **PARTIALLY COMPLETE** | Rockets, space stations, asteroid mining, orbital cargo, space ambiance | Very High — new scene/zone system |
+| **5.1.0** | Interplanetary Age | 🟡 **PARTIALLY COMPLETE** | Planetary bases, exo-resources, nuclear fission, nuclear warheads | Very High — empire dashboard |
+| **5.2.0** | Architect Era | 🟡 **PARTIALLY COMPLETE** | World forge, megastructures, fusion, save schema v2 | Very High — new save format |
+| **5.3.0+** | Live Ops | 🟡 **PARTIALLY COMPLETE** | Modding API, multiplayer foundations, seasonal content | TBD |
+
+> **Audit basis (5.62.5-dev):** Active sections have current production work recorded in their detailed status tables. Later sections are marked **PARTIALLY COMPLETE** only because reusable foundations already exist (cosmos, planetary bodies, water/weather, nuclear, research, persistence, and grid systems); their named headline features and completion gates remain open. No section is promoted to **COMPLETED** without setup generation and Thomas's Unity validation.
 
 ### 5.1 Execution Status Convention
 
@@ -706,9 +708,18 @@ Statuses are evidence-based and move forward only after code/content review and 
 
 ---
 
-### 6.3 Version 4.7.0 — Power, Vehicles & Combat
+### 6.3 Version 4.7.0 — Power, Vehicles & Combat — 🛠️ WORKING ON
 
 **Goal:** Make vehicles and power feel like part of the factory, establish the player as an armored Crusader of the industrial Order, and provide the tools needed to survive a dangerous world.
+
+#### Execution Status
+
+| Area | Status | Repository Audit |
+|------|--------|------------------|
+| Grid shape variants | 🛠️ WORKING ON | Six selectable structural shapes now produce matching runtime meshes, accurate ghosts, and convex collision. Step 18 connects small/large armor assets non-destructively; Unity validation is pending. |
+| Unified small/large grid placement | 🛠️ WORKING ON | Requirement and current size-separation constraints are identified; precision lattice attachment and cross-grid support validation remain next. |
+| Vehicle power foundations | 🟡 PARTIALLY COMPLETE | Grid batteries, solar, hydrogen engines, reactors, power accounting, docking, and multiple vehicle systems exist; the planned unified power network and full vehicle progression remain incomplete. |
+| Damage, armor, weapons, and life support | 🟡 PARTIALLY COMPLETE | Basic block HP/damage and one grid weapon foundation exist. Full typed damage, player armor, pooled ballistics, hazards, airtight support, and combat content remain open. |
 
 **Crusader identity requirements:**
 - Crusader armor silhouette, sealed helmet, tabard/heraldry slots, Order banners, and rank presentation.
@@ -1684,6 +1695,76 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.63.0-dev] Functional Grid Shape Variants
+
+**Type:** MINOR — new save-compatible structural grid placement feature and non-destructive Step 18 authoring (no save schema migration)
+
+**Added / Improved:**
+- Added `GridShapeVariantBlock`, a reusable runtime component that generates closed, convex, cell-aligned structural meshes for:
+  - Cube
+  - Slope
+  - Half Block
+  - Half Slope
+  - Corner
+  - Inverted Slope
+- Shape variants now receive matching convex `MeshCollider` collision instead of retaining a full-cube collider.
+- GridBuilder now applies the selected wheel shape to the placed structural block; the previous implementation changed only the ghost.
+- Ghost previews now use the same mesh generator as final placement, preventing preview/result mismatch.
+- Added an explicit `supportsShapeVariants` capability to `GridBlockItem` so the shape wheel no longer opens for unrelated items merely because their display name contains “block”.
+- Existing armor prefabs remain compatible through a safe `GridArmorBlock` fallback before Step 18 is run.
+- Step 18 now non-destructively:
+  - enables shape variants on supported Small and Large Armor items;
+  - repairs a missing expected prefab link when the prefab exists;
+  - adds `GridShapeVariantBlock` to linked armor prefabs only when missing;
+  - preserves recipes, crafting costs, item mass, block health, power values, materials, and custom prefab children;
+  - remains idempotent on repeated runs.
+- Added an evidence-based 4.7.0 execution table for shape variants, unified grid placement, vehicle power, and combat/life-support foundations.
+- Removed a legacy external-title reference and abbreviation from grid-system code comments to keep shipped code aligned with the repository naming rule.
+
+**Roadmap Status:**
+- Grid shape variants remain **🛠️ WORKING ON** until Step 18 passes two-run setup validation and all six shapes are tested in Unity on both grid sizes.
+- Unified small/large grid placement remains **🛠️ WORKING ON** and is the next implementation slice after shape validation.
+
+**Manual Unity Steps:**
+1. Let Unity compile `GridShapeVariantBlock.cs` and the updated placement/setup scripts.
+2. Open `Tools > Voxel Engine > Voxel Engine Setup`.
+3. Run **18. Setup Grid Shape Variants (Non-Destructive)**.
+4. Run Step 18 a second time. Confirm the second run reports existing links/components as verified and creates no duplicates.
+5. Equip a Small Armor Block and hold the configured Build Wheel input.
+6. Select and place each shape: Cube, Slope, Half Block, Half Slope, Corner, and Inverted Slope.
+7. Confirm the cyan ghost exactly matches the final placed mesh.
+8. Walk and place blocks against each shape to confirm collision follows the visible surface rather than a hidden full cube.
+9. Repeat Steps 5–8 with a Large Armor Block.
+10. Equip unrelated items such as Camera Block, Battery Block, or Camera equipment and confirm the Grid Shape wheel does not open for them.
+11. Re-run existing armor recipes and confirm their costs, mass, HP, materials, and prefab custom children were not reset.
+
+### [5.62.5-dev] Roadmap Execution Status Audit + Runtime Version Sync
+
+**Type:** PATCH — documentation/status correction and runtime version synchronization only (no save schema, public API, prefab, recipe, item, research, or balance changes)
+
+**Fixed / Improved:**
+- Synchronized `GameVersion` with the repository/roadmap version; runtime surfaces now report `5.62.5-dev` instead of the stale `5.50.0-dev`.
+- Added explicit **WORKING ON** / **PARTIALLY COMPLETE** execution markers to every Master Roadmap release row.
+- Documented the evidence rule used for later roadmap sections: existing shared foundations count as partial progress, but no headline feature is treated as complete before its setup workflow and Unity validation pass.
+- Updated the roadmap date and active implementation summary.
+
+**Repository Audit:**
+- Confirmed work is on the case-sensitive `Dev` branch.
+- Confirmed the project contains 467 C# scripts across the voxel world, grid, simulation, crafting, power, persistence, UI, cosmos, weather, water, research, and editor-tooling domains.
+- Confirmed setup Steps 17, 18, and 19 exist for factory/HV content, grid shape variants, and grid screens.
+- Confirmed no external game title appears in shipped C# or authored asset text scanned by the audit.
+- Identified remaining completion blockers already represented by roadmap statuses: pending Unity validation, incomplete unified simulation/pooling, missing combat/life-support headline systems, and later-era content that currently has foundations only.
+
+**Roadmap Status:**
+- Factory Foundations, Production Lines, Power/Vehicles/Combat, and Logistics 2.0 remain **🛠️ WORKING ON**.
+- Living Worlds and later roadmap releases remain **🟡 PARTIALLY COMPLETE** until their named systems, non-destructive setup steps, and Unity validation gates are complete.
+- Large-grid doors remain **🛠️ WORKING ON** pending Thomas's 5.62.4-dev validation pass.
+
+**Manual Unity Steps:**
+1. Open the Unity project containing this repository as its `Assets` folder and let scripts recompile.
+2. Enter Play Mode once and confirm the Console version banner reports `5.62.5-dev`.
+3. No Voxel Engine Setup step is required for this documentation/version synchronization patch because no prefab, item, recipe, or research content changed.
 
 ### [5.62.4-dev] Door Panel Detail Animation + Open Distance Fix
 

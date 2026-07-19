@@ -97,13 +97,9 @@ namespace VoxelEngine.UI
             if (stack == null || stack.IsEmpty || !(stack.item is GridBlockItem gbi))
                 return false;
 
-            string name = (gbi.displayName ?? "").ToLowerInvariant();
-            if (name.Contains("armor") || name.Contains("plate") || name.Contains("block") || name.Contains("wall"))
-            {
-                item = gbi;
-                return true;
-            }
-            return false;
+            if (!gbi.SupportsShapeVariants) return false;
+            item = gbi;
+            return true;
         }
 
         private void Open()
