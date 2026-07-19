@@ -31,7 +31,11 @@ namespace VoxelEngine.Building
                             DroppedItem.Spawn(leftover, transform.position + Vector3.up * 0.6f, Vector3.up);
                     }
                 }
-                Destroy(gameObject);
+                var gridBlock = GetComponent<VoxelEngine.GridSystem.GridBlock>();
+                if (gridBlock != null && gridBlock.IsPrecisionAttachment && gridBlock.Grid != null)
+                    gridBlock.Grid.GetComponent<VoxelEngine.GridSystem.GridPrecisionAttachmentLayer>()?.RemoveBlock(gridBlock.PrecisionGridPos);
+                else
+                    Destroy(gameObject);
             }
         }
     }

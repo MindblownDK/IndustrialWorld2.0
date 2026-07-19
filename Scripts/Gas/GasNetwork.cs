@@ -119,10 +119,10 @@ namespace VoxelEngine.Gas
 
         private static float GridStep(GasPipe a, GasPipe b)
         {
-            var ga = a != null ? a.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>()?.Grid : null;
-            var gb = b != null ? b.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>()?.Grid : null;
-            if (ga != null && ga == gb)
-                return VoxelEngine.GridSystem.GridSizeExt.CellSize(ga.gridSize);
+            var blockA = a != null ? a.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>() : null;
+            var blockB = b != null ? b.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>() : null;
+            if (blockA != null && blockB != null && blockA.Grid != null && blockA.Grid == blockB.Grid)
+                return (blockA.EffectiveCellSize + blockB.EffectiveCellSize) * 0.5f;
             return VoxelEngine.Networks.PipeAdjacency.DefaultGridSize;
         }
 

@@ -37,6 +37,7 @@ namespace VoxelEngine.Building
         private Material   _ghostMaterialValid;
         private Material   _ghostMaterialInvalid;
         private Vector3Int _rotSteps;
+        private GridPrecisionLatticePreview _precisionLattice;
 
         public static bool HoldingBlock { get; private set; }
         public static string HeldBlockName { get; private set; } = string.Empty;
@@ -105,9 +106,35 @@ namespace VoxelEngine.Building
             if (!Physics.Raycast(ray, out var hit, reach))
             {
                 _ghost.SetActive(false);
+                HidePrecisionLattice();
                 return;
             }
             _ghost.SetActive(true);
+
+            var targetGrid = hit.collider != null ? hit.collider.GetComponentInParent<GridEntity>() : null;
+            if (targetGrid != null && IsUnifiedPipe(block))
+            {
+                bool validPrecision = UnifiedGridTopology.TryGetDetailPlacement(
+                    targetGrid, hit, out var precisionPos, out var hostStructuralPos, out var faceAxis);
+                ShowPrecisionLattice(targetGrid, hostStructuralPos, faceAxis);
+
+                var pipeVisual = _ghost.GetComponentInChildren<VoxelEngine.Networks.PipeVisualBuilder>(true);
+                if (pipeVisual != null && !Mathf.Approximately(pipeVisual.gridSize, GridSize.Small.CellSize()))
+                {
+                    pipeVisual.gridSize = GridSize.Small.CellSize();
+                    pipeVisual.ForceRebuild();
+                    ApplyGhostMaterial(_ghost, validPrecision ? _ghostMaterialValid : _ghostMaterialInvalid);
+                }
+
+                Vector3 localPosition = (Vector3)precisionPos * GridSize.Small.CellSize();
+                Vector3 worldPosition = targetGrid.transform.TransformPoint(localPosition);
+                Quaternion worldRotation = targetGrid.transform.rotation
+                    * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
+                _ghost.transform.SetPositionAndRotation(worldPosition, worldRotation);
+                ApplyGhostMaterial(_ghost, validPrecision ? _ghostMaterialValid : _ghostMaterialInvalid);
+                return;
+            }
+            HidePrecisionLattice();
 
             var ghostBelt = _ghost.GetComponentInChildren<VoxelEngine.Simulation.ConveyorBelt>(true);
             if (ghostBelt != null)
@@ -135,7 +162,9 @@ namespace VoxelEngine.Building
             HoldingBlock = false;
             HeldBlockName = string.Empty;
             RotationSteps = _rotSteps;
-            if (_ghost != null) { Destroy(_ghost); _ghost = null; _ghostItem = null; } Quarry.HidePlacementPreview();
+            if (_ghost != null) { Destroy(_ghost); _ghost = null; _ghostItem = null; }
+            HidePrecisionLattice();
+            Quarry.HidePlacementPreview();
         }
 
         private void HandleRotationInput()
@@ -151,6 +180,29 @@ namespace VoxelEngine.Building
             else if (ctrl) _rotSteps.y = (_rotSteps.y + dir + 4) % 4;
             else if (shift) _rotSteps.x = (_rotSteps.x + dir + 4) % 4;
             RotationSteps = _rotSteps;
+        }
+
+        private static bool IsUnifiedPipe(BlockItem block)
+        {
+            if (block == null || block.placedPrefab == null) return false;
+            return block.placedPrefab.GetComponentInChildren<VoxelEngine.Transport.ItemPipe>(true) != null
+                || block.placedPrefab.GetComponentInChildren<VoxelEngine.Gas.GasPipe>(true) != null
+                || block.placedPrefab.GetComponentInChildren<VoxelEngine.Fluids.WaterPipe>(true) != null;
+        }
+
+        private void ShowPrecisionLattice(GridEntity grid, Vector3Int hostStructuralPos, Vector3Int faceAxis)
+        {
+            if (_precisionLattice == null)
+            {
+                var preview = new GameObject("PipePrecisionLatticePreview");
+                _precisionLattice = preview.AddComponent<GridPrecisionLatticePreview>();
+            }
+            _precisionLattice.Show(grid, hostStructuralPos, faceAxis);
+        }
+
+        private void HidePrecisionLattice()
+        {
+            if (_precisionLattice != null) _precisionLattice.Hide();
         }
 
         public bool TryPlace(BlockItem block, RaycastHit hit, Vector3 viewDir)

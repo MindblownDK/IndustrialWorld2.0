@@ -47,27 +47,19 @@ namespace VoxelEngine.Fluids
             var grid = gridBlock != null ? gridBlock.Grid : null;
             if (grid != null)
             {
-                AddGridEndpoint(grid, gridBlock, gridBlock.GridPos + Vector3Int.right);
-                AddGridEndpoint(grid, gridBlock, gridBlock.GridPos + Vector3Int.left);
-                AddGridEndpoint(grid, gridBlock, gridBlock.GridPos + Vector3Int.up);
-                AddGridEndpoint(grid, gridBlock, gridBlock.GridPos + Vector3Int.down);
-                AddGridEndpoint(grid, gridBlock, gridBlock.GridPos + new Vector3Int(0, 0, 1));
-                AddGridEndpoint(grid, gridBlock, gridBlock.GridPos + new Vector3Int(0, 0, -1));
+                foreach (var block in VoxelEngine.GridSystem.UnifiedGridTopology.AdjacentBlocks(grid, gridBlock))
+                {
+                    if (block == null || block == gridBlock) continue;
+                    bool endpoint = block is VoxelEngine.GridSystem.GridLiquidTank
+                                 || block is VoxelEngine.GridSystem.GridH2O2Generator
+                                 || block is VoxelEngine.GridSystem.GridRefinery
+                                 || block is VoxelEngine.GridSystem.GridChemicalPlant;
+                    if (!endpoint && block.GetComponentInChildren<WaterPipe>(true) == null) continue;
+                    if (VoxelEngine.Networks.WrenchBlacklist.IsBlocked(gridBlock.gameObject, block.gameObject)) continue;
+                    _neighbourPosBuf.Add(block.transform.position);
+                }
             }
             return _neighbourPosBuf;
-        }
-
-        private void AddGridEndpoint(VoxelEngine.GridSystem.GridEntity grid, VoxelEngine.GridSystem.GridBlock pipeBlock, Vector3Int pos)
-        {
-            var block = grid.GetBlock(pos);
-            if (block == null || block == pipeBlock) return;
-            bool endpoint = block is VoxelEngine.GridSystem.GridLiquidTank
-                         || block is VoxelEngine.GridSystem.GridH2O2Generator
-                         || block is VoxelEngine.GridSystem.GridRefinery
-                         || block is VoxelEngine.GridSystem.GridChemicalPlant;
-            if (!endpoint) return;
-            if (VoxelEngine.Networks.WrenchBlacklist.IsBlocked(pipeBlock.gameObject, block.gameObject)) return;
-            _neighbourPosBuf.Add(grid.GridToWorld(pos));
         }
     }
 }

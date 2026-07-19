@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.66.0-dev`
-**Roadmap Version:** `5.66.0-dev`
+**Current Version:** `5.67.0-dev`
+**Roadmap Version:** `5.67.0-dev`
 **Date:** 2026-07-19
-**Status:** Active Implementation — Unified Grid Networks + Screen Sources; Unity Validation Pending
+**Status:** Active Implementation — Existing Pipes Gain Detail Grid Placement; Unity Validation Pending
 
 ---
 
@@ -47,7 +47,7 @@ The design goal is a seamless blend of:
 | Grid systems (ships/vehicles) | ✅ Mature | Needs lights, screens, armor, sloped blocks |
 | Maritime grid | 🟡 Basic | Needs refinement and feature parity |
 | Detail-scale grid blocks | 🛠️ WORKING ON | Detail blocks now share the unified Grid with Structural blocks; persistence and complete positional network indexing remain open. |
-| Unified grid placement | 🛠️ WORKING ON | Detail (0.5 m) and Structural (2.5 m) placement is validated by Thomas. 5.66.0-dev adds physical face-touch topology across both scales for gas/liquid networks and precision-safe encoded screen source addresses. Unified movable-grid persistence remains the primary open gate. |
+| Unified grid placement | 🛠️ WORKING ON | Detail/Structural placement and unified screen sources are validated by Thomas. 5.67.0-dev keeps one existing item per Item/Gas/Liquid pipe and gives that same pipe automatic 0.5 m Detail lattice placement when aimed at a Grid; no separate Detail or Grid pipe assets are introduced. Unified movable-grid persistence remains open. |
 | Power (wind, hydrogen) | ✅ Mature | Modular turbines are excellent |
 | Fluids / gases | ✅ Good | Pipe-gated transfer in 2.20.0 |
 | Building (static + tiered) | 🛠️ Working On | 3.75 m spacing, scale, rotation, and player-away Doors are Unity-validated. Size-V5 closes Foundation deck seams and adds upward/downward Stair anchors at Foundation/Floor edges and Doorway thresholds; final validation is pending. |
@@ -718,7 +718,8 @@ Statuses are evidence-based and move forward only after code/content review and 
 |------|--------|------------------|
 | Grid shape variants | ✅ COMPLETED | Thomas validated all six structural meshes, textures, collision, placement ghosts, selection behavior, and corrected wheel alignment. Step 18 provides the non-destructive setup connection. |
 | Unified grid placement | 🛠️ WORKING ON | Thomas validated Detail-on-Structural lattice placement and size-labelled content. Gas/liquid topology and screen data-source addressing now resolve both block scales on one Grid; Unity validation and unified movable-grid persistence remain open. |
-| Unified grid networks and screens | 🛠️ WORKING ON | Physical face adjacency replaces one-scale coordinate assumptions for gas/liquid pipes and tanks. Screens discover, select, auto-link, and resolve Detail providers through precision-safe encoded addresses while legacy Structural addresses remain compatible. |
+| Unified grid screen sources | ✅ COMPLETED | Thomas validated the unified screen/data-source work. Detail providers use precision-safe encoded addresses while legacy Structural addresses remain compatible. |
+| Unified pipe placement and networks | 🛠️ WORKING ON | The existing Item, Gas, and Liquid pipe items now place at 0.5 m Detail scale on a Grid using the same 5×5 lattice/ghost workflow; static-world placement remains available from the same item. Physical face adjacency drives mixed block-to-pipe/tank connections. Unity validation pending. |
 | Vehicle power foundations | 🟡 PARTIALLY COMPLETE | Grid batteries, solar, hydrogen engines, reactors, power accounting, docking, and multiple vehicle systems exist; the planned unified power network and full vehicle progression remain incomplete. |
 | Damage, armor, weapons, and life support | 🟡 PARTIALLY COMPLETE | Basic block HP/damage and one grid weapon foundation exist. Full typed damage, player armor, pooled ballistics, hazards, airtight support, and combat content remain open. |
 
@@ -1696,6 +1697,43 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.67.0-dev] Existing Pipes Gain Detail Grid Placement
+
+**Type:** MINOR — new save-compatible placement mode for existing pipe items (no duplicate pipe items/recipes, no save schema migration)
+
+**Validated / Clarified:**
+- Thomas confirmed the rest of the 5.66.0-dev unified Grid work functions correctly, including unified screen sources.
+- The project intentionally has one existing Item Pipe, one existing Gas Pipe family, and one existing Liquid Pipe family. Separate Detail/Grid pipe items are not wanted and are not created.
+
+**Added / Changed:**
+- The existing Item, Gas, and Liquid pipe `BlockItem` assets now automatically switch to 0.5 m Detail placement when aimed at a unified Grid.
+- The same item keeps its existing static-world placement when aimed away from a Grid.
+- BuildSystem now shows the shared cyan 5×5 lattice and a correctly snapped green/red pipe ghost before placement.
+- Grid placement uses `GridPrecisionAttachmentLayer`, so pipes move with the host and occupy real Detail cells.
+- Pipe visuals rebuild at 0.5 m spacing after attachment; colliders are constrained to the Detail cell.
+- Rotation uses the existing unified placement rotation controls.
+- Clicking an occupied Grid lattice cell no longer falls through to static-world placement inside the Grid.
+- Hold-to-place routes through the same Detail placement path.
+- Gas and Liquid pipe visual arms now use unified physical face adjacency for Detail pipes, connected pipes, and compatible endpoints.
+- Breaking a Detail-attached legacy `PlacedBlock` pipe now removes it from precision occupancy instead of leaving a stale occupied cell.
+- Step 18 non-destructively labels existing pipe items/recipes with `· 0.5 m` and adds a description explaining that no separate Grid pipe is required.
+
+**Roadmap Status:**
+- Unified Grid screen sources: **✅ COMPLETED**.
+- Unified pipe placement and networks: **🛠️ WORKING ON** pending Thomas validation.
+- Unified movable-grid persistence remains open.
+
+**Manual Unity Steps:**
+1. Let Unity compile.
+2. Run `Tools > Voxel Engine > Voxel Engine Setup` → **18. Setup Grid Shape Variants (Non-Destructive)** once.
+3. Confirm existing Item Pipe, Gas Pipe, Gas Pipe (Glass), Liquid Pipe, and Liquid Pipe (Glass) names receive `· 0.5 m` exactly once; confirm no duplicate Grid/Detail pipe items are created.
+4. Equip each existing pipe item and aim at a Structural block face. Confirm the cyan 5×5 lattice and 0.5 m ghost appear.
+5. Place multiple pipes across the face and chain pipes from attached pipes. Confirm occupied cells show a red ghost and cannot fall back to static placement.
+6. Aim at terrain away from a Grid and place the same item. Confirm normal static-world pipe placement still works.
+7. Connect existing Gas Pipes from a compatible gas endpoint/tank and confirm visual arms plus transfer follow physical touching faces.
+8. Repeat with existing Liquid Pipes and a compatible liquid endpoint/tank.
+9. Break an attached pipe, then place another pipe in the same Detail cell to confirm occupancy was released.
 
 ### [5.66.0-dev] Unified Grid Networks + Screen Sources
 

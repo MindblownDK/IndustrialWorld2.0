@@ -137,6 +137,7 @@ namespace VoxelEngine.EditorTools
                 string.Join(", ", variants));
 
             MigrateLegacyGridTypeLabels(ref updated);
+            ConfigureUnifiedDetailPipeItems(ref updated);
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
@@ -144,7 +145,7 @@ namespace VoxelEngine.EditorTools
             // ── 5. Summary ─────────────────────────────────────────────────
             Debug.Log($"[Step 18] Complete. Created/enabled {created}, verified {updated} existing.");
             Debug.Log("[Step 18] Unified Grid verified: Detail blocks can use the 5x5 lattice on Structural faces.");
-            Debug.Log("[Step 18] Unified topology ready: Detail/Structural gas pipes, liquid pipes, tanks, and screen data sources share one Grid.");
+            Debug.Log("[Step 18] Unified topology ready: existing Item/Gas/Liquid pipes use 0.5 m Detail placement and connect to compatible Grid endpoints.");
             Debug.Log("[Step 18] Non-destructive: source recipes, costs, mass, health, power, materials, and custom prefab children were preserved.");
 
             EditorUtility.DisplayDialog("Voxel Engine — Step 18", 
@@ -153,9 +154,63 @@ namespace VoxelEngine.EditorTools
                 $"✓ GridBuilder: Verified\n" +
                 $"✓ Detail + Structural Armor: One Grid\n" +
                 $"✓ Precision Structural-Face Lattice: Runtime Ready\n" +
+                $"✓ Existing Pipes: 0.5 m Detail Placement Ready\n" +
                 $"✓ Variants: {variants.Length} available\n\n" +
                 $"Non-destructive — recipes, costs, mass, health, power, materials, and custom children were preserved.",
                 "OK");
+        }
+
+        private static void ConfigureUnifiedDetailPipeItems(ref int updated)
+        {
+            var changedItems = new System.Collections.Generic.HashSet<VoxelEngine.Items.BlockItem>();
+            string[] itemGuids = AssetDatabase.FindAssets("t:BlockItem", new[] { "Assets/VoxelEngineAssets" });
+            foreach (string guid in itemGuids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                var item = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.BlockItem>(path);
+                if (item == null || item.placedPrefab == null) continue;
+                bool pipe = item.placedPrefab.GetComponentInChildren<VoxelEngine.Transport.ItemPipe>(true) != null
+                    || item.placedPrefab.GetComponentInChildren<VoxelEngine.Gas.GasPipe>(true) != null
+                    || item.placedPrefab.GetComponentInChildren<VoxelEngine.Fluids.WaterPipe>(true) != null;
+                if (!pipe) continue;
+
+                bool itemChanged = false;
+                string display = item.displayName ?? string.Empty;
+                if (!display.EndsWith("0.5 m", System.StringComparison.Ordinal))
+                {
+                    item.displayName = display.TrimEnd() + " · 0.5 m";
+                    itemChanged = true;
+                }
+                if (string.IsNullOrWhiteSpace(item.description)
+                    || !item.description.Contains("Detail lattice"))
+                {
+                    string description = (item.description ?? string.Empty).Trim();
+                    item.description = description
+                        + (description.Length > 0 ? "\n\n" : string.Empty)
+                        + "Uses the existing pipe item everywhere. On a Grid it snaps to the 0.5 m Detail lattice; no separate Grid pipe item is required.";
+                    itemChanged = true;
+                }
+                changedItems.Add(item);
+                if (!itemChanged) continue;
+                EditorUtility.SetDirty(item);
+                updated++;
+                Debug.Log($"[Step 18] ✓ Unified pipe '{item.displayName}' uses Detail Grid placement without creating a duplicate item.");
+            }
+
+            if (changedItems.Count == 0) return;
+            string[] recipeGuids = AssetDatabase.FindAssets("t:RecipeDefinition", new[] { "Assets/VoxelEngineAssets" });
+            foreach (string guid in recipeGuids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                var recipe = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeDefinition>(path);
+                if (recipe == null || !(recipe.outputItem is VoxelEngine.Items.BlockItem output)
+                    || !changedItems.Contains(output)) continue;
+                string display = recipe.displayName ?? string.Empty;
+                if (display.EndsWith("0.5 m", System.StringComparison.Ordinal)) continue;
+                recipe.displayName = display.TrimEnd() + " · 0.5 m";
+                EditorUtility.SetDirty(recipe);
+                updated++;
+            }
         }
 
         private static void MigrateLegacyGridTypeLabels(ref int updated)

@@ -74,5 +74,72 @@ namespace VoxelEngine.GridSystem
 
         public static Vector3Int DecodePrecisionAddress(Vector3Int address)
             => new(address.x, address.y - PrecisionAddressMarker, address.z);
+
+        public static bool TryGetDetailPlacement(
+            GridEntity grid,
+            RaycastHit hit,
+            out Vector3Int precisionPos,
+            out Vector3Int hostStructuralPos,
+            out Vector3Int faceAxis)
+        {
+            precisionPos = default;
+            hostStructuralPos = default;
+            faceAxis = default;
+            if (grid == null || hit.collider == null) return false;
+
+            faceAxis = SnapFaceAxis(grid, hit.normal);
+            Vector3 localNormal = ((Vector3)faceAxis).normalized;
+            var hitBlock = hit.collider.GetComponentInParent<GridBlock>();
+            bool chainedDetail = hitBlock != null && hitBlock.Grid == grid && hitBlock.IsPrecisionAttachment;
+
+            if (chainedDetail)
+            {
+                precisionPos = hitBlock.PrecisionGridPos + faceAxis;
+                hostStructuralPos = hitBlock.PrecisionHostGridPos;
+            }
+            else
+            {
+                float detailSize = GridSize.Small.CellSize();
+                Vector3 localCenter = grid.transform.InverseTransformPoint(hit.point)
+                    + localNormal * (detailSize * 0.5f);
+                precisionPos = new Vector3Int(
+                    Mathf.RoundToInt(localCenter.x / detailSize),
+                    Mathf.RoundToInt(localCenter.y / detailSize),
+                    Mathf.RoundToInt(localCenter.z / detailSize));
+                hostStructuralPos = hitBlock != null && hitBlock.Grid == grid
+                    ? hitBlock.GridPos
+                    : grid.WorldToGrid(hit.point - hit.normal * 0.02f);
+            }
+
+            var layer = grid.PrecisionAttachments;
+            bool supported = chainedDetail
+                ? layer != null && layer.HasNeighbor(precisionPos)
+                : hitBlock != null && hitBlock.Grid == grid;
+            if (!supported || (layer != null && !layer.CanPlace(precisionPos))) return false;
+
+            if (chainedDetail)
+            {
+                Vector3 localPosition = (Vector3)precisionPos * GridSize.Small.CellSize();
+                Vector3Int structuralCell = new(
+                    Mathf.RoundToInt(localPosition.x / GridSize.Large.CellSize()),
+                    Mathf.RoundToInt(localPosition.y / GridSize.Large.CellSize()),
+                    Mathf.RoundToInt(localPosition.z / GridSize.Large.CellSize()));
+                if (grid.GetBlock(structuralCell) != null) return false;
+            }
+
+            return true;
+        }
+
+        public static Vector3Int SnapFaceAxis(GridEntity grid, Vector3 worldNormal)
+        {
+            if (grid == null || worldNormal.sqrMagnitude < 0.0001f) return Vector3Int.up;
+            Vector3 local = grid.transform.InverseTransformDirection(worldNormal.normalized);
+            float ax = Mathf.Abs(local.x);
+            float ay = Mathf.Abs(local.y);
+            float az = Mathf.Abs(local.z);
+            if (ax >= ay && ax >= az) return new Vector3Int(local.x >= 0f ? 1 : -1, 0, 0);
+            if (ay >= ax && ay >= az) return new Vector3Int(0, local.y >= 0f ? 1 : -1, 0);
+            return new Vector3Int(0, 0, local.z >= 0f ? 1 : -1);
+        }
     }
 }

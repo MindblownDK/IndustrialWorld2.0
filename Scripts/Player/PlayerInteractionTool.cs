@@ -257,12 +257,19 @@ namespace VoxelEngine.Player
             // If holding a placeable block (cable, pipe, etc), RMB places it directly.
             if (buildDown && !heldForPlace.IsEmpty && heldForPlace.item is BlockItem heldBlock)
             {
+                bool aimingUnifiedPipeAtGrid = IsUnifiedPipeItem(heldBlock)
+                    && hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridEntity>() != null;
                 if (Time.time >= _nextHit && TryPlaceStaticPipeOnGrid(heldBlock, hit))
                 {
                     int taken = inventory.container.Remove(heldBlock, 1);
                     if (taken == 0) TryNetworkConsume(heldBlock, 1);
                     VoxelEngine.UI.BuildFeedbackHud.ShowBlockPlaced(heldBlock.displayName, heldBlock, 1);
                     _nextHit = Time.time + 0.2f;
+                }
+                else if (Time.time >= _nextHit && aimingUnifiedPipeAtGrid)
+                {
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Detail Pipe Blocked", "Choose an empty 0.5 m lattice cell", heldBlock.icon, Color.red);
+                    _nextHit = Time.time + 0.15f;
                 }
                 else if (Time.time >= _nextHit && BuildSystem.Instance != null && BuildSystem.Instance.TryPlace(heldBlock, hit, ray.direction))
                 {
@@ -522,12 +529,21 @@ namespace VoxelEngine.Player
                 var stack = inventory.ActiveStack;
                 if (stack.IsEmpty || !(stack.item is BlockItem block)) return;
                 if (Time.time < _nextHit) return;
-                if (BuildSystem.Instance != null && BuildSystem.Instance.TryPlace(block, hit, ray.direction))
+                bool aimingUnifiedPipeAtGrid = IsUnifiedPipeItem(block)
+                    && hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridEntity>() != null;
+                bool placed = aimingUnifiedPipeAtGrid
+                    ? TryPlaceStaticPipeOnGrid(block, hit)
+                    : BuildSystem.Instance != null && BuildSystem.Instance.TryPlace(block, hit, ray.direction);
+                if (placed)
                 {
                     int taken = inventory.container.Remove(block, 1);
                     if (taken == 0) TryNetworkConsume(block, 1);
                     VoxelEngine.UI.BuildFeedbackHud.ShowBlockPlaced(block.displayName, block, 1);
                     _nextHit = Time.time + 0.2f;
+                }
+                else if (aimingUnifiedPipeAtGrid)
+                {
+                    _nextHit = Time.time + 0.15f;
                 }
             }
         }
@@ -557,50 +573,65 @@ namespace VoxelEngine.Player
         }
 
         /// <summary>
-        /// Unified pipe QoL: if the player uses a normal world pipe item while aiming at a
-        /// grid, place the matching grid pipe block instead of a static world pipe. This lets
-        /// the same pipe items work both in bases and on ships.
+        /// Unified pipe placement: the existing pipe item remains the only item. When aimed
+        /// at a Grid it is attached at Detail scale through the 0.5 m precision lattice;
+        /// elsewhere the same item retains its normal static-world placement.
         /// </summary>
-        private bool TryPlaceStaticPipeOnGrid(BlockItem block, RaycastHit hit)
+        private static bool IsUnifiedPipeItem(BlockItem block)
         {
             if (block == null || block.placedPrefab == null) return false;
+            return block.placedPrefab.GetComponentInChildren<VoxelEngine.Transport.ItemPipe>(true) != null
+                || block.placedPrefab.GetComponentInChildren<VoxelEngine.Gas.GasPipe>(true) != null
+                || block.placedPrefab.GetComponentInChildren<VoxelEngine.Fluids.WaterPipe>(true) != null;
+        }
+
+        private bool TryPlaceStaticPipeOnGrid(BlockItem block, RaycastHit hit)
+        {
+            if (!IsUnifiedPipeItem(block)) return false;
             var targetGrid = hit.collider != null ? hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridEntity>() : null;
-            if (targetGrid == null) return false;
+            if (targetGrid == null || targetGrid.gridSize != VoxelEngine.GridSystem.GridSize.Large) return false;
 
-            bool isUnifiedPipe = block.placedPrefab.GetComponentInChildren<VoxelEngine.Transport.ItemPipe>(true) != null
-                              || block.placedPrefab.GetComponentInChildren<VoxelEngine.Gas.GasPipe>(true) != null
-                              || block.placedPrefab.GetComponentInChildren<VoxelEngine.Fluids.WaterPipe>(true) != null;
-
-            if (!isUnifiedPipe) return false;
-
-            float cs = VoxelEngine.GridSystem.GridSizeExt.CellSize(targetGrid.gridSize);
-            Vector3Int gridPos = targetGrid.WorldToGrid(hit.point + hit.normal * (cs * 0.55f));
-            if (!targetGrid.CanPlace(gridPos))
-                gridPos = targetGrid.WorldToGrid(hit.point + hit.normal * cs);
-            if (!targetGrid.CanPlace(gridPos) || !targetGrid.HasNeighbor(gridPos)) return false;
+            if (!VoxelEngine.GridSystem.UnifiedGridTopology.TryGetDetailPlacement(
+                    targetGrid, hit, out var precisionPos, out var hostStructuralPos, out _))
+                return false;
 
             var go = Instantiate(block.placedPrefab);
             go.name = block.displayName;
-            go.transform.rotation = targetGrid.transform.rotation;
-
             var gridBlock = go.GetComponent<VoxelEngine.GridSystem.GridBlock>();
             if (gridBlock == null) gridBlock = go.AddComponent<VoxelEngine.GridSystem.GridBlock>();
             gridBlock.blockName = block.displayName;
-            gridBlock.BlockMass = Mathf.Max(block.massPerUnit, 80f);
+            gridBlock.BlockMass = Mathf.Max(block.massPerUnit, 5f);
             gridBlock.maxHP = Mathf.Max(block.blockHealth, 100f);
 
-            var collider = go.GetComponent<Collider>();
-            if (collider == null) collider = go.AddComponent<BoxCollider>();
-            if (collider is BoxCollider box) box.size = Vector3.one * cs;
+            float detailSize = VoxelEngine.GridSystem.GridSize.Small.CellSize();
+            foreach (var box in go.GetComponentsInChildren<BoxCollider>(true))
+                box.size = Vector3.Min(box.size, Vector3.one * detailSize);
 
-            targetGrid.AddBlock(gridPos, gridBlock);
+            var layer = targetGrid.GetComponent<VoxelEngine.GridSystem.GridPrecisionAttachmentLayer>();
+            if (layer == null) layer = targetGrid.gameObject.AddComponent<VoxelEngine.GridSystem.GridPrecisionAttachmentLayer>();
+            Quaternion worldRotation = targetGrid.transform.rotation
+                * Quaternion.Euler(VoxelEngine.Building.BuildSystem.RotationSteps.x * 90f,
+                    VoxelEngine.Building.BuildSystem.RotationSteps.y * 90f,
+                    VoxelEngine.Building.BuildSystem.RotationSteps.z * 90f);
+            Quaternion localRotation = Quaternion.Inverse(targetGrid.transform.rotation) * worldRotation;
+            if (!layer.AddBlock(precisionPos, hostStructuralPos, gridBlock, localRotation))
+            {
+                Destroy(go);
+                return false;
+            }
 
-            // The static pipe components registered before the object was parented/moved into
-            // the grid, so force their network/visual graph to rebuild at the final position.
+            var placed = go.GetComponent<VoxelEngine.Building.PlacedBlock>();
+            if (placed != null)
+            {
+                placed.Item = block;
+                placed.Hp = block.blockHealth;
+                placed.onGrid = true;
+            }
+
             var pipeVisual = go.GetComponentInChildren<VoxelEngine.Networks.PipeVisualBuilder>(true);
             if (pipeVisual != null)
             {
-                pipeVisual.gridSize = cs;
+                pipeVisual.gridSize = detailSize;
                 pipeVisual.ForceRebuild();
             }
             VoxelEngine.Transport.ItemPipeNetwork.Instance?.SetDirty();
