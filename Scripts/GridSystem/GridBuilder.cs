@@ -149,7 +149,11 @@ namespace VoxelEngine.GridSystem
             }
             else if (IsDoorItem(gbi) && targetGrid != null)
             {
-                rotation = BuildDoorSurfaceRotation(targetGrid, hit.normal);
+                if (!TryAdjustDoorPlacementToEdge(gbi, targetGrid, hit, ref gridPos, ref worldPos, ref rotation))
+                {
+                    HideGhost();
+                    return;
+                }
             }
             else
             {
@@ -237,10 +241,46 @@ namespace VoxelEngine.GridSystem
             return id.Contains("slidingdoor") || id.Contains("vaultdoor") || name.Contains("sliding door") || name.Contains("vault door");
         }
 
+        private bool TryAdjustDoorPlacementToEdge(GridBlockItem item, GridEntity grid, RaycastHit hit, ref Vector3Int gridPos, ref Vector3 worldPos, ref Quaternion rotation)
+        {
+            if (item == null || grid == null) return false;
+
+            Vector3Int mountAxis = SnapMountAxis(grid, hit.normal);
+            var hostBlock = hit.collider != null ? hit.collider.GetComponentInParent<GridBlock>() : null;
+
+            // If the player clicks a floor/ceiling face, choose the nearest horizontal edge
+            // and place the door standing upright on that edge instead of lying flat.
+            if (Mathf.Abs(mountAxis.y) > 0 && hostBlock != null && hostBlock.Grid == grid)
+            {
+                float cellSize = grid.gridSize.CellSize();
+                Vector3 localHit = grid.transform.InverseTransformPoint(hit.point)
+                                 - new Vector3(hostBlock.GridPos.x, hostBlock.GridPos.y, hostBlock.GridPos.z) * cellSize;
+
+                if (Mathf.Abs(localHit.x) >= Mathf.Abs(localHit.z))
+                    mountAxis = new Vector3Int(localHit.x >= 0f ? 1 : -1, 0, 0);
+                else
+                    mountAxis = new Vector3Int(0, 0, localHit.z >= 0f ? 1 : -1);
+
+                gridPos = hostBlock.GridPos + mountAxis;
+                worldPos = grid.GridToWorld(gridPos);
+            }
+
+            if (!grid.CanPlace(gridPos)) return false;
+            if (!grid.HasNeighbor(gridPos)) return false;
+
+            Vector3 outward = grid.transform.TransformDirection(new Vector3(mountAxis.x, mountAxis.y, mountAxis.z));
+            if (outward.sqrMagnitude < 0.0001f) outward = hit.normal;
+            rotation = BuildDoorSurfaceRotation(grid, outward);
+            return true;
+        }
+
         private static Quaternion BuildDoorSurfaceRotation(GridEntity grid, Vector3 worldNormal)
         {
             if (grid == null) return Quaternion.identity;
             Vector3 normal = worldNormal.sqrMagnitude > 0.0001f ? worldNormal.normalized : grid.transform.forward;
+
+            // Doors must stand upright. Keep their up vector aligned to grid up unless the
+            // clicked normal is almost parallel to it, in which case use grid forward as fallback.
             Vector3 up = Vector3.ProjectOnPlane(grid.transform.up, normal);
             if (up.sqrMagnitude < 0.0001f) up = Vector3.ProjectOnPlane(grid.transform.forward, normal);
             if (up.sqrMagnitude < 0.0001f) up = Vector3.up;

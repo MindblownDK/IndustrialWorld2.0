@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.62.1-dev`
-**Roadmap Version:** `5.62.1-dev`
+**Current Version:** `5.62.2-dev`
+**Roadmap Version:** `5.62.2-dev`
 **Date:** 2026-07-17
-**Status:** Active Implementation — Door Gap Fix + Visual Upgrade
+**Status:** Active Implementation — Door Upright Edge Placement Fix
 
 ---
 
@@ -1682,6 +1682,26 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.62.2-dev] Door Upright Edge Placement Fix
+
+**Type:** PATCH — grid door placement fix only (no save schema, recipe, or balance changes)
+
+**Fixed:**
+- Grid doors no longer lie flat when the player clicks a floor/top face.
+- If a floor/ceiling face is clicked while placing a door, GridBuilder now selects the nearest horizontal block edge and places the door upright on that edge.
+- Door placement now derives the outward-facing normal from the selected edge and keeps the door's up vector aligned with grid up, so large sliding/vault doors stand vertically like real doors.
+- Side-face placement still works normally and keeps the door mounted on the selected side face.
+
+**Roadmap Status:**
+- Large-grid doors remain **🛠️ WORKING ON** pending Thomas validation of upright edge placement and visuals.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Equip a Large Sci-Fi Sliding Door / Large Double Sliding Door / Heavy Vault Door.
+3. Aim at the top face of a large grid block near an edge and place it.
+4. Confirm the door stands upright on that edge instead of lying flat on the floor.
+5. Place on a side face and confirm side placement still works.
 
 ### [5.62.1-dev] Door Gap Fix + Visual Upgrade
 
