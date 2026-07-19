@@ -1,9 +1,33 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `5.69.0-dev`
+**Current Version:** `5.70.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [5.70.0-dev] Pooled World Item Entities
+
+**Type:** MINOR — new save-compatible runtime performance system; no save schema, prefab, item, recipe, research, balance, power, or API change.
+
+**Added:**
+- Added a reusable physical world-item pool with a 24-entity warm capacity.
+- Mining, inventory overflow, pickup, belt loading, and item-expiry paths now reuse dropped-item GameObjects rather than repeatedly creating and destroying them.
+- Reused entities reset stack data, physics velocity, settled state, pickup timing, visible name, and transform state when spawned.
+- The pool persists across scene transitions while inactive entities remain hidden under its dedicated runtime root.
+
+**Roadmap Status:**
+- Unified movable-grid persistence: **🟡 PARTIALLY COMPLETE → ✅ COMPLETED** — validated by Thomas.
+- Item entity system: **🟡 PARTIALLY COMPLETE → 🛠️ WORKING ON** — physical world-item pooling implemented; Unity load validation and conveyor visual pooling remain.
+
+**Manual Unity Steps:**
+1. Let Unity compile and confirm the runtime banner reports `5.70.0-dev`.
+2. No Voxel Engine Setup rerun is required; this release creates no authored content.
+3. Generate more than 24 physical item drops through mining or inventory overflow. Confirm drops remain visible, collectible, and physically settle as before.
+4. Feed world drops into a conveyor and confirm the source drop disappears only after its entire stack enters the belt.
+5. Pick up drops, wait for item expiry, then generate drops again. Confirm no missing colliders, stuck physics, duplicate pickups, or invisible entities.
+6. Repeat after a scene/world transition if your current play flow includes one.
 
 ---
 
@@ -26,7 +50,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 - Blocks with no runtime source item are safely skipped with a descriptive Unity Console warning instead of corrupting the rest of the grid save.
 
 **Roadmap Status:**
-- Unified movable-grid persistence: **🛠️ WORKING ON → 🟡 PARTIALLY COMPLETE** (implementation complete; Unity validation is required before promotion).
+- Unified movable-grid persistence: **🛠️ WORKING ON → 🟡 PARTIALLY COMPLETE** at delivery; subsequently **validated by Thomas and promoted to ✅ COMPLETED in 5.70.0-dev**.
 - Unified Grid placement: **🛠️ WORKING ON → 🟡 PARTIALLY COMPLETE**.
 
 **Manual Unity Steps:**

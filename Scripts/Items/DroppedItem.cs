@@ -2,6 +2,7 @@
 //
 // Physical world-drop item. ALWAYS visible — uses a hardcoded bright material.
 
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -9,6 +10,11 @@ namespace VoxelEngine.Items
 {
     public class DroppedItem : MonoBehaviour
     {
+        private static Material _sharedDropMaterial;
+        private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+        private static readonly int ColorId = Shader.PropertyToID("_Color");
+        private static readonly MaterialPropertyBlock Properties = new();
+
         public ItemStack stack;
         public float lifetime = 300f;
 
@@ -25,8 +31,13 @@ namespace VoxelEngine.Items
         {
             if (stack == null || stack.IsEmpty) return null;
 
-            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            var di = DroppedItemPool.Get();
+            var go = di.gameObject;
             go.name = $"Drop_{stack.item.displayName}";
+            // Active drops belong to the current world scene; only inactive entities
+            // live under the persistent pool root.
+            go.transform.SetParent(null, false);
+            go.SetActive(true);
             // Bigger drop cube (0.5m vs 0.35m) so it's clearly visible at typical
             // player viewing distances. Also lift the spawn just above the toss
             // position so it never embeds in the floor / player capsule.
@@ -34,68 +45,44 @@ namespace VoxelEngine.Items
             go.transform.localScale = Vector3.one * 0.5f;
             go.layer = 0;
 
-            // Force a 100% visible opaque material that works in URP/Standard/HDRP.
+            // Reuse one visible material and apply the item tint with a property block.
+            // Pooling therefore avoids both GameObject churn and per-drop material allocations.
             var mr = go.GetComponent<MeshRenderer>();
             if (mr != null)
             {
                 Color c = stack.item != null ? stack.item.iconTint : Color.white;
-                // Guarantee enough brightness and full opacity.
-                float brightness = c.r + c.g + c.b;
-                if (c.a < 0.5f || brightness < 0.15f)
+                if (c.a < 0.5f || c.r + c.g + c.b < 0.15f)
                     c = new Color(0.72f, 0.72f, 0.78f, 1f);
                 c.a = 1f;
-
-                // Prefer URP Unlit (no lighting math, always visible) then Simple Lit then Standard.
-                string[] preferred = {
-                    "Universal Render Pipeline/Unlit",
-                    "Unlit/Color",
-                    "Universal Render Pipeline/Simple Lit",
-                    "Universal Render Pipeline/Lit",
-                    "Standard"
-                };
-                Shader chosenShader = null;
-                foreach (var sn in preferred)
-                {
-                    chosenShader = Shader.Find(sn);
-                    if (chosenShader != null) break;
-                }
-                if (chosenShader == null)
-                    chosenShader = Shader.Find("Hidden/InternalErrorShader");
-
-                var mat = new Material(chosenShader);
-                // Set every colour property that might exist on this shader.
-                if (mat.HasProperty("_BaseColor"))   mat.SetColor("_BaseColor", c);
-                if (mat.HasProperty("_Color"))       mat.SetColor("_Color", c);
-                if (mat.HasProperty("_UnlitColor"))  mat.SetColor("_UnlitColor", c);
-                // Ensure fully opaque surface mode.
-                if (mat.HasProperty("_Surface"))     mat.SetFloat("_Surface", 0f);   // 0 = Opaque
-                if (mat.HasProperty("_Blend"))       mat.SetFloat("_Blend",   0f);
-                if (mat.HasProperty("_AlphaClip"))   mat.SetFloat("_AlphaClip", 0f);
-                mat.renderQueue = -1; // default opaque queue
-                mr.material             = mat;
-                mr.shadowCastingMode    = ShadowCastingMode.Off;
-                mr.receiveShadows       = false;
-                mr.enabled              = true;
+                mr.sharedMaterial = GetSharedDropMaterial();
+                Properties.Clear();
+                Properties.SetColor(BaseColorId, c);
+                Properties.SetColor(ColorId, c);
+                mr.SetPropertyBlock(Properties);
+                mr.shadowCastingMode = ShadowCastingMode.Off;
+                mr.receiveShadows = false;
+                mr.enabled = true;
             }
 
-            // Rigidbody for physics toss.
-            var rb = go.AddComponent<Rigidbody>();
+            // Reuse the pooled physics and pickup components.
+            var rb = go.GetComponent<Rigidbody>();
             rb.mass = 0.3f;
             rb.linearDamping = 3f;
             rb.angularDamping = 4f;
             rb.interpolation = RigidbodyInterpolation.Interpolate;
+            rb.isKinematic = false;
             rb.linearVelocity = tossDir.normalized * 2.5f + Vector3.up * 3f;
+            rb.angularVelocity = Vector3.zero;
 
-            // Larger trigger for walk-over pickup.
-            var trigger = go.AddComponent<SphereCollider>();
+            var trigger = go.GetComponent<SphereCollider>();
             trigger.isTrigger = true;
             trigger.radius = 2.5f;
 
-            var di = go.AddComponent<DroppedItem>();
             di.stack = stack.Clone();
             di._spawnTime = Time.time;
             di._bobPhase = Random.value * Mathf.PI * 2f;
             di._rb = rb;
+            di._settled = false;
 
             Debug.Log($"[DroppedItem] Spawned {stack.item.displayName} x{stack.count} at {position}");
             return di;
@@ -103,7 +90,7 @@ namespace VoxelEngine.Items
 
         private void Update()
         {
-            if (Time.time - _spawnTime > lifetime) { Destroy(gameObject); return; }
+            if (Time.time - _spawnTime > lifetime) { Despawn(); return; }
 
             if (_rb != null && !_settled && _rb.linearVelocity.sqrMagnitude < 0.1f &&
                 Time.time - _spawnTime > 1.5f)
@@ -145,7 +132,7 @@ namespace VoxelEngine.Items
             UI.BuildFeedbackHud.Show($"Loaded {stack.item.displayName}", $"→ belt x{moved}", stack.item.icon, stack.item.iconTint);
             if (stack.count <= 0)
             {
-                Destroy(gameObject);
+                Despawn();
                 return true;
             }
             return false;
@@ -161,7 +148,7 @@ namespace VoxelEngine.Items
                     $"+{stack.count}", stack.item.icon, new Color(0.30f, 0.75f, 0.40f));
                 FX.AudioManager.PlayUI(FX.SfxLibrary.Get(FX.Sfx.Pickup), 0.45f,
                     UnityEngine.Random.Range(0.97f, 1.06f));
-                Destroy(gameObject);
+                Despawn();
                 return true;
             }
             int picked = stack.count - leftover.count;
@@ -175,5 +162,77 @@ namespace VoxelEngine.Items
             }
             return false;
         }
+        private static Material GetSharedDropMaterial()
+        {
+            if (_sharedDropMaterial != null) return _sharedDropMaterial;
+            Shader shader = Shader.Find("Universal Render Pipeline/Unlit")
+                ?? Shader.Find("Unlit/Color")
+                ?? Shader.Find("Universal Render Pipeline/Simple Lit")
+                ?? Shader.Find("Standard")
+                ?? Shader.Find("Hidden/InternalErrorShader");
+            _sharedDropMaterial = new Material(shader);
+            if (_sharedDropMaterial.HasProperty("_Surface")) _sharedDropMaterial.SetFloat("_Surface", 0f);
+            if (_sharedDropMaterial.HasProperty("_Blend")) _sharedDropMaterial.SetFloat("_Blend", 0f);
+            _sharedDropMaterial.renderQueue = -1;
+            return _sharedDropMaterial;
+        }
+
+        /// <summary>Returns this physical item entity to the shared pool.</summary>
+        private void Despawn()
+        {
+            stack = null;
+            DroppedItemPool.Return(this);
+        }
+
+
     }
+    /// <summary>Reusable physical world-item entities. Pooling avoids allocation and
+    /// destruction spikes when mining, conveyors, or inventory overflow create drops.</summary>
+    internal static class DroppedItemPool
+    {
+        private const int InitialCapacity = 24;
+        private static readonly Stack<DroppedItem> Available = new(InitialCapacity);
+        private static Transform _root;
+
+        public static DroppedItem Get()
+        {
+            EnsureRoot();
+            if (Available.Count > 0) return Available.Pop();
+            return Create();
+        }
+
+        public static void Return(DroppedItem item)
+        {
+            if (item == null) return;
+            EnsureRoot();
+            item.transform.SetParent(_root, false);
+            item.gameObject.SetActive(false);
+            Available.Push(item);
+        }
+
+        private static void EnsureRoot()
+        {
+            if (_root != null) return;
+            var root = new GameObject("DroppedItemPool");
+            Object.DontDestroyOnLoad(root);
+            _root = root.transform;
+            for (int i = 0; i < InitialCapacity; i++) Available.Push(Create());
+        }
+
+        private static DroppedItem Create()
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            go.name = "PooledDrop";
+            go.transform.SetParent(_root, false);
+            go.layer = 0;
+            go.AddComponent<Rigidbody>();
+            var trigger = go.AddComponent<SphereCollider>();
+            trigger.isTrigger = true;
+            trigger.radius = 2.5f;
+            var item = go.AddComponent<DroppedItem>();
+            go.SetActive(false);
+            return item;
+        }
+    }
+
 }

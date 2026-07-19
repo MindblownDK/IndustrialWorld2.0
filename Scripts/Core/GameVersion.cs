@@ -38,7 +38,7 @@ namespace VoxelEngine.Core
     {
         // ── Bump these when you ship ──────────────────────────────────────
         public const int    Major = 5;
-        public const int    Minor = 69;
+        public const int    Minor = 70;
         public const int    Patch = 0;
 
         /// <summary>
