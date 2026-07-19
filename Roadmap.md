@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.68.1-dev`
-**Roadmap Version:** `5.68.1-dev`
+**Current Version:** `5.68.2-dev`
+**Roadmap Version:** `5.68.2-dev`
 **Date:** 2026-07-19
-**Status:** Active Implementation — Pipe Visual Direction Fix; Unity Validation Pending
+**Status:** Active Implementation — Rotation-Independent Five-Cell Pipe Links; Unity Validation Pending
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
 ---
@@ -48,7 +48,7 @@ The design goal is a seamless blend of:
 | Grid systems (ships/vehicles) | ✅ Mature | Needs lights, screens, armor, sloped blocks |
 | Maritime grid | 🟡 Basic | Needs refinement and feature parity |
 | Detail-scale grid blocks | 🛠️ WORKING ON | Detail blocks now share the unified Grid with Structural blocks; persistence and complete positional network indexing remain open. |
-| Unified grid placement | 🛠️ WORKING ON | Detail/Structural placement, screen sources, and existing-pipe Detail placement are validated by Thomas. Five-cell Item/Gas/Liquid links exist on the 0.5 m Detail lattice and 1 m world grid; 5.68.1-dev corrects generated arm direction for rotated pipes. Unified movable-grid persistence remains open. |
+| Unified grid placement | 🛠️ WORKING ON | Detail/Structural placement, screen sources, and existing-pipe Detail placement are validated by Thomas. 5.68.2-dev evaluates pipe alignment in the shared Grid frame instead of either pipe's rotation, allowing four empty cells between endpoints (five-cell center span). Unified movable-grid persistence remains open. |
 | Power (wind, hydrogen) | ✅ Mature | Modular turbines are excellent |
 | Fluids / gases | ✅ Good | Pipe-gated transfer in 2.20.0 |
 | Building (static + tiered) | 🛠️ Working On | 3.75 m spacing, scale, rotation, and player-away Doors are Unity-validated. Size-V5 closes Foundation deck seams and adds upward/downward Stair anchors at Foundation/Floor edges and Doorway thresholds; final validation is pending. |
@@ -720,7 +720,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Grid shape variants | ✅ COMPLETED | Thomas validated all six structural meshes, textures, collision, placement ghosts, selection behavior, and corrected wheel alignment. Step 18 provides the non-destructive setup connection. |
 | Unified grid placement | 🛠️ WORKING ON | Thomas validated Detail-on-Structural lattice placement and size-labelled content. Gas/liquid topology and screen data-source addressing now resolve both block scales on one Grid; Unity validation and unified movable-grid persistence remain open. |
 | Unified grid screen sources | ✅ COMPLETED | Thomas validated the unified screen/data-source work. Detail providers use precision-safe encoded addresses while legacy Structural addresses remain compatible. |
-| Unified pipe placement and networks | 🛠️ WORKING ON | Thomas validated existing-pipe Detail placement. Pipe links span up to five cardinal cells; generated arms now convert world neighbor deltas into pipe-local space so rotated Grid/world pipes point toward their corresponding pipe. Final direction/span validation is pending. |
+| Unified pipe placement and networks | 🛠️ WORKING ON | Visual arm direction is validated by Thomas. Functional alignment now ignores individual pipe rotation: Grid pipes use the host Grid's local axes, world pipes use world-grid axes, and four empty cells between pipes remain a valid five-cell span. Wrench disconnect behavior remains unchanged. |
 | Vehicle power foundations | 🟡 PARTIALLY COMPLETE | Grid batteries, solar, hydrogen engines, reactors, power accounting, docking, and multiple vehicle systems exist; the planned unified power network and full vehicle progression remain incomplete. |
 | Damage, armor, weapons, and life support | 🟡 PARTIALLY COMPLETE | Basic block HP/damage and one grid weapon foundation exist. Full typed damage, player armor, pooled ballistics, hazards, airtight support, and combat content remain open. |
 

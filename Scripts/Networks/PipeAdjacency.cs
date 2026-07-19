@@ -80,8 +80,14 @@ namespace VoxelEngine.Networks
                                            float gridSize = DefaultGridSize,
                                            float maxCells = 5f,
                                            float tolerance = DefaultTolerance)
+            => IsCardinalLinkDelta(b - a, gridSize, maxCells, tolerance);
+
+        public static bool IsCardinalLinkDelta(Vector3 delta,
+                                                float gridSize = DefaultGridSize,
+                                                float maxCells = 5f,
+                                                float tolerance = DefaultTolerance)
         {
-            Vector3 d = b - a;
+            Vector3 d = delta;
             float gs = gridSize > 0f ? gridSize : DefaultGridSize;
             float tol = tolerance > 0f ? tolerance : DefaultTolerance;
             float dx = Mathf.Abs(d.x), dy = Mathf.Abs(d.y), dz = Mathf.Abs(d.z);
@@ -95,18 +101,36 @@ namespace VoxelEngine.Networks
         }
 
         /// <summary>
+        /// Returns B relative to A in the shared Grid's local frame. Pipe object
+        /// rotation is intentionally ignored. World pipes use world-space delta.
+        /// </summary>
+        public static Vector3 ConnectionDelta(Component a, Component b)
+        {
+            if (a == null || b == null) return Vector3.zero;
+            Vector3 worldDelta = b.transform.position - a.transform.position;
+            var blockA = a.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
+            var blockB = b.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
+            if (blockA != null && blockB != null && blockA.Grid != null && blockA.Grid == blockB.Grid)
+                return blockA.Grid.transform.InverseTransformVector(worldDelta);
+            return worldDelta;
+        }
+
+        /// <summary>
         /// Relaxed cardinal check used when one endpoint is a multi-voxel machine
         /// (tank, electrolyser, etc.) whose centre may be 1.5–2.5 m from the pipe.
-        /// We accept any neighbour that lies on a single cardinal AXIS (the other
-        /// two components are near-zero) AND within <paramref name="maxStepsAway"/>
-        /// grid steps. Pipes still self-link strictly via <see cref="IsCardinalNeighbour"/>.
         /// </summary>
         public static bool IsAxisAlignedWithin(Vector3 a, Vector3 b,
                                                 float gridSize = DefaultGridSize,
                                                 float maxStepsAway = 2.5f,
                                                 float tolerance = DefaultTolerance)
+            => IsAxisAlignedWithinDelta(b - a, gridSize, maxStepsAway, tolerance);
+
+        public static bool IsAxisAlignedWithinDelta(Vector3 delta,
+                                                     float gridSize = DefaultGridSize,
+                                                     float maxStepsAway = 2.5f,
+                                                     float tolerance = DefaultTolerance)
         {
-            Vector3 d = b - a;
+            Vector3 d = delta;
             float gs  = gridSize  > 0 ? gridSize  : DefaultGridSize;
             float tol = tolerance > 0 ? tolerance : DefaultTolerance;
             float dx = Mathf.Abs(d.x), dy = Mathf.Abs(d.y), dz = Mathf.Abs(d.z);

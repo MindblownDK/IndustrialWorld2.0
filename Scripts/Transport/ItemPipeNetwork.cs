@@ -82,9 +82,10 @@ namespace VoxelEngine.Transport
                     float maxDist = Mathf.Max(Mathf.Max(a.connectRadius, b.connectRadius), step * 5f);
                     if (Vector3.SqrMagnitude(pa - pb) > maxDist * maxDist) continue;
 
-                    // Pipes may bridge up to five cardinal cells. Diagonal and
-                    // off-row links remain invalid.
-                    if (!VoxelEngine.Networks.PipeAdjacency.IsCardinalLink(pa, pb, step, 5f, step * 0.35f)) continue;
+                    // Evaluate alignment in the shared Grid frame, not either pipe's
+                    // rotation. World pipes continue using world-grid axes.
+                    Vector3 connectionDelta = VoxelEngine.Networks.PipeAdjacency.ConnectionDelta(a, b);
+                    if (!VoxelEngine.Networks.PipeAdjacency.IsCardinalLinkDelta(connectionDelta, step, 5f, step * 0.35f)) continue;
 
                     // Wrench blacklist — explicit player disconnect persists.
                     if (VoxelEngine.Networks.WrenchBlacklist.IsBlocked(a, b)) continue;

@@ -61,8 +61,10 @@ namespace VoxelEngine.Gas
                 // Distance gate is cheap, do it first.
                 if ((pa - pb).sqrMagnitude > range * range) continue;
 
-                // Pipes may bridge up to five cardinal cells while diagonal links remain invalid.
-                if (!VoxelEngine.Networks.PipeAdjacency.IsCardinalLink(pa, pb, step, 5f, step * 0.35f)) continue;
+                // Shared Grid alignment ignores individual pipe rotation. World pipes
+                // continue using world-grid axes.
+                Vector3 connectionDelta = VoxelEngine.Networks.PipeAdjacency.ConnectionDelta(a, b);
+                if (!VoxelEngine.Networks.PipeAdjacency.IsCardinalLinkDelta(connectionDelta, step, 5f, step * 0.35f)) continue;
 
                 // Wrench blacklist — player wrenched these two apart; honour it
                 // until a wrench reconnect or one of them is broken/replaced.

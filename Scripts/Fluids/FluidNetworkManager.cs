@@ -83,9 +83,10 @@ namespace VoxelEngine.Fluids
                             ? Mathf.Max(Mathf.Max(rA, b.connectRadius), step * 5f)
                             : Mathf.Max(rA, b.connectRadius);
                         if ((pa - pb).sqrMagnitude > range * range) continue;
+                        Vector3 connectionDelta = VoxelEngine.Networks.PipeAdjacency.ConnectionDelta(n, b);
                         bool ok = (nIsPipe && bIsPipe)
-                            ? VoxelEngine.Networks.PipeAdjacency.IsCardinalLink(pa, pb, step, 5f, step * 0.35f)
-                            : VoxelEngine.Networks.PipeAdjacency.IsAxisAlignedWithin(pa, pb, step, 2.5f, step * 0.35f);
+                            ? VoxelEngine.Networks.PipeAdjacency.IsCardinalLinkDelta(connectionDelta, step, 5f, step * 0.35f)
+                            : VoxelEngine.Networks.PipeAdjacency.IsAxisAlignedWithinDelta(connectionDelta, step, 2.5f, step * 0.35f);
                         if (!ok) continue;
 
                         // Wrench blacklist — explicit player disconnect persists.

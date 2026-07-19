@@ -1,11 +1,38 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `5.68.1-dev`  
+**Current Version:** `5.68.2-dev`  
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
 
 ---
+
+### [5.68.2-dev] Rotation-Independent Five-Cell Pipe Links
+
+**Type:** PATCH — pipe alignment/connectivity correction only (no save schema, prefab, item, recipe, research, throughput, HP, mass, power, or wrench behavior changes)
+
+**Validated:**
+- Thomas confirmed pipe visual arms now extend in the correct direction.
+
+**Fixed / Improved:**
+- Fixed valid five-cell links failing when four Detail/world cells were empty between the two endpoint pipes.
+- Pipe connectivity no longer uses either pipe object's rotation to decide whether the pair is inline.
+- Pipes on the same Grid now compare positions in the shared host Grid's local coordinate frame.
+- World-placed pipes continue comparing positions against world-grid axes.
+- Added delta-based cardinal predicates for strict one-axis alignment without requiring pipe orientation to match.
+- ItemPipeNetwork, GasNetwork, and FluidNetworkManager now use the shared-frame delta.
+- Five-cell maximum, diagonal rejection, visual direction, and wrench disconnect behavior remain unchanged.
+
+**Roadmap Status:**
+- Rotation-independent five-cell pipe links remain **🛠️ WORKING ON** pending Thomas validation with four empty cells between differently rotated pipes.
+
+**Manual Unity Steps:**
+1. Let Unity recompile; no setup rerun is required.
+2. Place two pipes with four empty Detail cells between them and confirm they connect visually and functionally.
+3. Rotate either endpoint independently through yaw, pitch, and roll; confirm the connection remains.
+4. Repeat in world placement with four empty 1 m cells.
+5. Confirm diagonal pairs and six-cell center spans do not connect.
+6. Use the wrench to disconnect a valid long link and confirm both visual and functional links disappear.
 
 ### [5.68.1-dev] Pipe Visual Direction Fix + Roadmap Changelog Split
 
