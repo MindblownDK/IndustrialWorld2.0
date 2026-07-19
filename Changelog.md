@@ -1,9 +1,32 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `5.70.0-dev`
+**Current Version:** `5.71.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [5.71.0-dev] Shared Conveyor Item Visual Pool
+
+**Type:** MINOR — new runtime performance system; no save schema, prefab, item, recipe, research, balance, power, throughput, or API change.
+
+**Added:**
+- Added a shared, cross-belt pool for carried conveyor item visuals with a 64-visual warm capacity.
+- Belt visuals now acquire pooled item cubes only when their local carried-item capacity grows.
+- Removing or rebuilding a belt returns its carried-item visuals to the shared pool for later use by other belts.
+- Pooled visuals retain the existing shared material and per-item color property-block rendering, with no gameplay or transfer behavior changes.
+
+**Roadmap Status:**
+- Pooled physical world items: **🛠️ WORKING ON → ✅ COMPLETED** — validated by Thomas.
+- Item entity system remains **🛠️ WORKING ON** pending Unity validation of shared conveyor visuals and later simulation-tick expansion.
+
+**Manual Unity Steps:**
+1. Let Unity compile and confirm the runtime banner reports `5.71.0-dev`.
+2. No Voxel Engine Setup rerun is required; this release creates no authored content.
+3. Run a dense multi-belt production line with different item types. Confirm every carried item stays visible, moves correctly, and retains its tint.
+4. Remove or dismantle belts with active and inactive carried-item visuals, then place or reload belts. Confirm no missing visuals, duplicate cubes, collider interference, or Console errors.
+5. Reload the world with belts carrying saved packets and confirm restored conveyor items receive correct visuals.
 
 ---
 
@@ -19,7 +42,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 
 **Roadmap Status:**
 - Unified movable-grid persistence: **🟡 PARTIALLY COMPLETE → ✅ COMPLETED** — validated by Thomas.
-- Item entity system: **🟡 PARTIALLY COMPLETE → 🛠️ WORKING ON** — physical world-item pooling implemented; Unity load validation and conveyor visual pooling remain.
+- Item entity system: **🟡 PARTIALLY COMPLETE → 🛠️ WORKING ON** — physical world-item pooling implemented; subsequently **validated by Thomas and promoted to complete for its scope in 5.71.0-dev**. Conveyor visual pooling remains the active next step.
 
 **Manual Unity Steps:**
 1. Let Unity compile and confirm the runtime banner reports `5.70.0-dev`.

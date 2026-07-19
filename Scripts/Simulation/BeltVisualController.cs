@@ -59,6 +59,7 @@ namespace VoxelEngine.Simulation
 
         private void OnDestroy()
         {
+            ReleaseItemVisuals();
             ReleaseGeneratedMesh();
             ReleaseRuntimeMaterials();
         }
@@ -549,14 +550,15 @@ namespace VoxelEngine.Simulation
 
         private Transform CreateItemVisual()
         {
-            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            go.name = "ConveyorItemVisual";
-            go.transform.SetParent(transform, false);
-            go.transform.localScale = Vector3.one * 0.22f;
-            Destroy(go.GetComponent<Collider>());
-            go.GetComponent<MeshRenderer>().sharedMaterial = GetSharedItemMaterial();
-            go.SetActive(false);
-            return go.transform;
+            return ConveyorItemVisualPool.Get(transform, GetSharedItemMaterial());
+        }
+
+        private void ReleaseItemVisuals()
+        {
+            for (int i = 0; i < _itemVisuals.Count; i++)
+                ConveyorItemVisualPool.Return(_itemVisuals[i]);
+            _itemVisuals.Clear();
+            _visualActive.Clear();
         }
 
         private void UpdateItemVisualColor(Transform visual, ItemDefinition item)
@@ -641,4 +643,54 @@ namespace VoxelEngine.Simulation
             return _sharedItemMaterial;
         }
     }
+    /// <summary>Shared cross-belt pool for carried-item visuals. Belts retain the
+    /// visuals they need while active and return them when removed, avoiding churn
+    /// while large factories are built, dismantled, or reloaded.</summary>
+    internal static class ConveyorItemVisualPool
+    {
+        private const int InitialCapacity = 64;
+        private static readonly Stack<Transform> Available = new(InitialCapacity);
+        private static Transform _root;
+
+        public static Transform Get(Transform parent, Material material)
+        {
+            EnsureRoot();
+            Transform visual = Available.Count > 0 ? Available.Pop() : Create();
+            visual.SetParent(parent, false);
+            visual.localScale = Vector3.one * 0.22f;
+            var renderer = visual.GetComponent<MeshRenderer>();
+            if (renderer != null) renderer.sharedMaterial = material;
+            visual.gameObject.SetActive(false);
+            return visual;
+        }
+
+        public static void Return(Transform visual)
+        {
+            if (visual == null) return;
+            EnsureRoot();
+            visual.gameObject.SetActive(false);
+            visual.SetParent(_root, false);
+            Available.Push(visual);
+        }
+
+        private static void EnsureRoot()
+        {
+            if (_root != null) return;
+            var root = new GameObject("ConveyorItemVisualPool");
+            Object.DontDestroyOnLoad(root);
+            _root = root.transform;
+            for (int i = 0; i < InitialCapacity; i++) Available.Push(Create());
+        }
+
+        private static Transform Create()
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            go.name = "PooledConveyorItemVisual";
+            go.transform.SetParent(_root, false);
+            Object.Destroy(go.GetComponent<Collider>());
+            go.SetActive(false);
+            return go.transform;
+        }
+    }
+
 }

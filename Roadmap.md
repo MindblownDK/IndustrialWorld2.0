@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.70.0-dev`
-**Roadmap Version:** `5.70.0-dev`
+**Current Version:** `5.71.0-dev`
+**Roadmap Version:** `5.71.0-dev`
 **Date:** 2026-07-19
-**Status:** Unified Movable-Grid Persistence Completed; Pooled World Items Working On
+**Status:** Physical World Item Pool Completed; Conveyor Visual Pool Working On
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
 ---
@@ -509,7 +509,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Power pole, wire, and substation | 🟡 PARTIALLY COMPLETE | Manual wiring, poles, substations, transformers, compact LV/HV one-link connectors, and 8-link wall/foundation relays exist. Setup reruns preserve balance while adding missing links. |
 | Grid/static lighting and LED strips | 🛠️ WORKING ON | Grid light, floodlight logic, static/grid LED assets, small/large spotlight variants, dual-output spotlights, large-grid LED strip, premium segmented LED visuals, right-click/grid-terminal spotlight config UI, data-type toggles, LED strip config UI, LED strip screen data sources, clean/segmented strip toggle, visible chase animation, and **5.57.0-dev** motion-activated lighting now exist. **5.69.0-dev** carries grid-attached light settings through movable-grid save/restore; Unity validation remains pending. |
 | Shared Machine UI | 🟡 PARTIALLY COMPLETE | Crusher and Assembler panels now expose recipe selection, progress, power, toggles, inventory slots, scrolling, and item-port integration. Remaining work: complete unification across every machine, production statistics, and theme overrides. |
-| Item entity system | 🛠️ WORKING ON | **5.70.0-dev** introduces a pooled lifecycle for physical dropped world items. Unity throughput and lifecycle validation remain pending; conveyor-carried visual pooling is future work. |
+| Item entity system | 🛠️ WORKING ON | Thomas validated the **5.70.0-dev** pooled physical world-item lifecycle. **5.71.0-dev** adds a shared cross-belt conveyor-carried visual pool; Unity factory load validation remains pending. |
 | Recipe registry refactor | 🟡 PARTIALLY COMPLETE | ScriptableObject crafting and machine recipes exist. Shaped/shapeless/smelting/machine unification and validation remain incomplete. |
 | Centralized simulation tick | 🟡 PARTIALLY COMPLETE | Crusher and Assembler register with `SimulationTickManager`; belts, chutes, and several older machines still run per-frame updates. |
 | Factory persistence | ✅ COMPLETED | Conveyor/Chute item packets, Crusher/Assembler recipe+progress+enabled, Funnel buffer+mode, all machine containers save and restore. Legacy saves compatible. (5.42.0-dev) |
@@ -1689,8 +1689,8 @@ For each version, these are the high-level Unity tasks you will perform manually
 
 ## 10. Suggested Immediate Next Steps
 
-1. **Validate pooled physical world-item entities in Unity** under mining, inventory overflow, belt loading, pickup, and expiry load.
-2. **Continue Factory Foundations performance work** with conveyor-carried visual pooling and broader centralized simulation ticking.
+1. **Validate pooled conveyor-carried visuals in Unity** under dense factory throughput, belt removal/rebuild, and world reload.
+2. **Continue Factory Foundations performance work** with broader centralized simulation ticking.
 3. **Complete remaining unified Grid positional indexing** where legacy systems still read Structural-only coordinates.
 4. **Keep UI fit validation active** at 1280×720, 1366×768, 1920×1080, and ultrawide resolutions.
 
