@@ -13,8 +13,13 @@ MonoBehaviour:
   m_Name: Block_PipeSolid
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Items.BlockItem
   itemId: block_pipesolid
-  displayName: Water Pipe (Solid)
-  description: Carries up to 50 L/s. Place between tanks and pumps to connect them.
+  displayName: "Water Pipe (Solid) \xB7 0.5 m"
+  description: 'Carries up to 50 L/s. Place between tanks and pumps to connect them.
+
+
+    Uses
+    the existing pipe item everywhere. On a Grid it snaps to the 0.5 m Detail lattice;
+    no separate Grid pipe item is required.'
   icon: {fileID: 0}
   iconTint: {r: 0.55, g: 0.3, b: 0.2, a: 1}
   maxStack: 99

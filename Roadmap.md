@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.67.0-dev`
-**Roadmap Version:** `5.67.0-dev`
+**Current Version:** `5.67.1-dev`
+**Roadmap Version:** `5.67.1-dev`
 **Date:** 2026-07-19
-**Status:** Active Implementation — Existing Pipes Gain Detail Grid Placement; Unity Validation Pending
+**Status:** Active Implementation — Detail Pipe Placement Compile Fix; Unity Validation Pending
 
 ---
 
@@ -1697,6 +1697,23 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.67.1-dev] Detail Pipe Placement Compile Fix
+
+**Type:** PATCH — compile correction only (no save schema, runtime design, prefab, recipe, item, research, balance, or visual changes)
+
+**Fixed:**
+- Fixed `CS1061` in `PlayerInteractionTool.cs` where the `GridSize.CellSize()` extension was called from a namespace that did not import its extension namespace.
+- Replaced the extension-call syntax with the fully qualified `GridSizeExt.CellSize(GridSize.Small)` call.
+- Detail pipe size remains exactly `0.5 m`; all 5.67.0-dev placement behavior is unchanged.
+
+**Roadmap Status:**
+- Existing pipe Detail placement remains **🛠️ WORKING ON** pending Unity validation after compilation succeeds.
+
+**Manual Unity Steps:**
+1. Let Unity recompile.
+2. Confirm `PlayerInteractionTool.cs(606,70) CS1061` is gone.
+3. Continue the existing Item/Gas/Liquid pipe Detail-placement validation from 5.67.0-dev; no Voxel Engine Setup rerun is required for this compile-only patch.
 
 ### [5.67.0-dev] Existing Pipes Gain Detail Grid Placement
 

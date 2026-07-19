@@ -603,7 +603,7 @@ namespace VoxelEngine.Player
             gridBlock.BlockMass = Mathf.Max(block.massPerUnit, 5f);
             gridBlock.maxHP = Mathf.Max(block.blockHealth, 100f);
 
-            float detailSize = VoxelEngine.GridSystem.GridSize.Small.CellSize();
+            float detailSize = VoxelEngine.GridSystem.GridSizeExt.CellSize(VoxelEngine.GridSystem.GridSize.Small);
             foreach (var box in go.GetComponentsInChildren<BoxCollider>(true))
                 box.size = Vector3.Min(box.size, Vector3.one * detailSize);
 
