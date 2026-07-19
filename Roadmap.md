@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.63.0-dev`
-**Roadmap Version:** `5.63.0-dev`
+**Current Version:** `5.63.1-dev`
+**Roadmap Version:** `5.63.1-dev`
 **Date:** 2026-07-19
-**Status:** Active Implementation — Functional Grid Shape Variants; Unity Validation Pending
+**Status:** Active Implementation — Grid Shape Material + Wheel Fit Fix; Unity Validation Pending
 
 ---
 
@@ -59,7 +59,7 @@ The design goal is a seamless blend of:
 | Grid screens / displays | ✅ COMPLETED | All sizes, live text+power states, right-click+terminal config, custom text+custom colors+border+font, visual bar charts, multi-source, live camera feeds, power gain/loss/net mode, persistence, and camera block are validated by Thomas. (5.51.3-dev) |
 | Grid lighting | 🛠️ WORKING ON | Small/large single and dual spotlights, large-grid LED strip, premium segmented/clean LED visuals, spotlight/LED screen data providers, right-click spotlight config UI, collapsible ship-control data-type toggles, LED strip config UI, visible chase animation, and motion-activated lighting exist. Unity validation pending; static/placed lighting runtime persistence is implemented in 5.58.0-dev while full movable-grid save persistence remains future work. |
 | Sloped / armored grid blocks | ❌ Missing | Only cube blocks exist; need shape variants |
-| Grid shape variant wheel | 🛠️ WORKING ON | Premium radial wheel now places functional Cube, Slope, Half Block, Half Slope, Corner, and Inverted Slope meshes with matching convex collision. Step 18 non-destructively enables supported small/large armor items and connects their runtime shape component while preserving recipes, costs, mass, health, power, materials, and custom children. Unity two-run validation pending. |
+| Grid shape variant wheel | 🛠️ WORKING ON | Cube, Slope, Half Block, Half Slope, Corner, and Inverted Slope placement is functional. 5.63.1-dev corrects variant face winding, adds face-projected UVs for authored textures, and fits compact labels/icons inside each radial segment. Step 18 remains non-destructive; final material/wheel validation is pending. |
 | Player armor slots | ❌ Missing | No equipable armor system |
 | Crafting / items / storage | ✅ Exists | Needs deeper recipe chains |
 | Research / tech tree | ✅ Exists | Can be expanded into eras |
@@ -716,7 +716,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 
 | Area | Status | Repository Audit |
 |------|--------|------------------|
-| Grid shape variants | 🛠️ WORKING ON | Six selectable structural shapes now produce matching runtime meshes, accurate ghosts, and convex collision. Step 18 connects small/large armor assets non-destructively; Unity validation is pending. |
+| Grid shape variants | 🛠️ WORKING ON | Six structural shapes produce matching meshes, ghosts, convex collision, outward-facing surfaces, and face-projected texture UVs. Wheel labels/icons now fit within their segments. Step 18 remains non-destructive; Unity validation is pending. |
 | Unified small/large grid placement | 🛠️ WORKING ON | Requirement and current size-separation constraints are identified; precision lattice attachment and cross-grid support validation remain next. |
 | Vehicle power foundations | 🟡 PARTIALLY COMPLETE | Grid batteries, solar, hydrogen engines, reactors, power accounting, docking, and multiple vehicle systems exist; the planned unified power network and full vehicle progression remain incomplete. |
 | Damage, armor, weapons, and life support | 🟡 PARTIALLY COMPLETE | Basic block HP/damage and one grid weapon foundation exist. Full typed damage, player armor, pooled ballistics, hazards, airtight support, and combat content remain open. |
@@ -1695,6 +1695,31 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.63.1-dev] Grid Shape Material + Wheel Fit Fix
+
+**Type:** PATCH — shape rendering and radial-wheel layout corrections only (no save schema, public API, recipe, item cost, mass, HP, or power changes)
+
+**Fixed / Improved:**
+- Corrected triangle winding on Slope, Half Slope, Inverted Slope, and Corner meshes so their visible faces point outward instead of being culled from normal viewing angles.
+- Expanded generated triangles for flat industrial shading with clean hard edges.
+- Added dominant-face UV projection to every generated shape triangle, allowing the existing authored armor material textures to render instead of sampling one texture point across the whole block.
+- Ghost and final placement still share the exact same mesh generator.
+- Reduced the Grid Shape wheel center disc to create proper negative space for segment content.
+- Re-centered all segment labels around the actual 420 px wheel center.
+- Moved labels/icons to the middle of the visible donut band and reduced their containers/font sizes so every variant fits inside its own segment.
+- Increased wheel backdrop opacity slightly so world geometry does not visually compete with the selector.
+
+**Roadmap Status:**
+- Grid shape variants remain **🛠️ WORKING ON** pending Thomas validation of opaque textured faces and corrected wheel fit.
+
+**Manual Unity Steps:**
+1. Let Unity recompile; no setup rerun is required because this patch changes runtime mesh/UV and UI layout code only.
+2. Enter Play Mode and inspect existing newly placed variant blocks. If a block instance was created before recompilation, remove and place it again so its runtime mesh rebuilds.
+3. Place Slope, Half Slope, Corner, and Inverted Slope variants and confirm every exterior face is opaque from normal viewing angles.
+4. Confirm the armor material/texture appears across top, side, and sloped faces rather than as a flat untextured color.
+5. Open the Grid Shape wheel and confirm every icon and label stays inside its own white/cyan donut segment without touching the center disc or segment gaps.
+6. Confirm the darker backdrop makes the wheel readable over nearby grid geometry.
 
 ### [5.63.0-dev] Functional Grid Shape Variants
 

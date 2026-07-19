@@ -168,12 +168,77 @@ namespace VoxelEngine.GridSystem
                     break;
             }
 
+            if (shape == GridShapeVariant.Slope
+                || shape == GridShapeVariant.HalfSlope
+                || shape == GridShapeVariant.InvertedSlope
+                || shape == GridShapeVariant.Corner)
+            {
+                ReverseWinding(triangles);
+            }
+
+            ExpandForFlatShading(vertices, triangles, cellSize,
+                out var renderVertices, out var renderTriangles, out var renderUvs);
+
             var mesh = new Mesh();
-            mesh.SetVertices(vertices);
-            mesh.SetTriangles(triangles, 0, true);
+            mesh.SetVertices(renderVertices);
+            mesh.SetTriangles(renderTriangles, 0, true);
+            mesh.SetUVs(0, renderUvs);
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
             return mesh;
+        }
+
+        private static void ReverseWinding(List<int> triangles)
+        {
+            for (int i = 0; i + 2 < triangles.Count; i += 3)
+            {
+                int swap = triangles[i + 1];
+                triangles[i + 1] = triangles[i + 2];
+                triangles[i + 2] = swap;
+            }
+        }
+
+        private static void ExpandForFlatShading(
+            List<Vector3> sourceVertices,
+            List<int> sourceTriangles,
+            float cellSize,
+            out List<Vector3> vertices,
+            out List<int> triangles,
+            out List<Vector2> uvs)
+        {
+            vertices = new List<Vector3>(sourceTriangles.Count);
+            triangles = new List<int>(sourceTriangles.Count);
+            uvs = new List<Vector2>(sourceTriangles.Count);
+            float inverseCellSize = 1f / Mathf.Max(0.01f, cellSize);
+
+            for (int i = 0; i + 2 < sourceTriangles.Count; i += 3)
+            {
+                Vector3 a = sourceVertices[sourceTriangles[i]];
+                Vector3 b = sourceVertices[sourceTriangles[i + 1]];
+                Vector3 c = sourceVertices[sourceTriangles[i + 2]];
+                Vector3 normal = Vector3.Cross(b - a, c - a).normalized;
+                int first = vertices.Count;
+
+                vertices.Add(a);
+                vertices.Add(b);
+                vertices.Add(c);
+                triangles.Add(first);
+                triangles.Add(first + 1);
+                triangles.Add(first + 2);
+                uvs.Add(ProjectUv(a, normal, inverseCellSize));
+                uvs.Add(ProjectUv(b, normal, inverseCellSize));
+                uvs.Add(ProjectUv(c, normal, inverseCellSize));
+            }
+        }
+
+        private static Vector2 ProjectUv(Vector3 point, Vector3 normal, float inverseCellSize)
+        {
+            Vector3 absolute = new(Mathf.Abs(normal.x), Mathf.Abs(normal.y), Mathf.Abs(normal.z));
+            if (absolute.y >= absolute.x && absolute.y >= absolute.z)
+                return new Vector2(point.x, point.z) * inverseCellSize + Vector2.one * 0.5f;
+            if (absolute.x >= absolute.z)
+                return new Vector2(point.z, point.y) * inverseCellSize + Vector2.one * 0.5f;
+            return new Vector2(point.x, point.y) * inverseCellSize + Vector2.one * 0.5f;
         }
 
         private static void AddBox(List<Vector3> v, List<int> t, Vector3 min, Vector3 max)

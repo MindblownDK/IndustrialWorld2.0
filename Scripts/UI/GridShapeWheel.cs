@@ -147,7 +147,7 @@ namespace VoxelEngine.UI
             _wheelOverlay.style.bottom = 0;
             _wheelOverlay.style.alignItems = Align.Center;
             _wheelOverlay.style.justifyContent = Justify.Center;
-            _wheelOverlay.style.backgroundColor = new StyleColor(new Color(0.01f, 0.012f, 0.018f, 0.82f));
+            _wheelOverlay.style.backgroundColor = new StyleColor(new Color(0.01f, 0.012f, 0.018f, 0.92f));
             _wheelOverlay.pickingMode = PickingMode.Position;
             _uiRoot.Add(_wheelOverlay);
 
@@ -176,14 +176,14 @@ namespace VoxelEngine.UI
         {
             var badge = new VisualElement();
             badge.style.position = Position.Absolute;
-            badge.style.left = 75;
-            badge.style.top = 75;
-            badge.style.width = 270;
-            badge.style.height = 270;
+            badge.style.left = 98;
+            badge.style.top = 98;
+            badge.style.width = 224;
+            badge.style.height = 224;
             badge.style.alignItems = Align.Center;
             badge.style.justifyContent = Justify.Center;
             badge.style.backgroundColor = new StyleColor(new Color(0.035f, 0.05f, 0.075f, 0.98f));
-            UITheme.Radius(badge, 135f);
+            UITheme.Radius(badge, 112f);
             UITheme.Border(badge, 2f, UITheme.BorderBright);
             badge.pickingMode = PickingMode.Ignore;
             _wheelCenter.Add(badge);
@@ -289,17 +289,17 @@ namespace VoxelEngine.UI
         /// <summary>Build a segment label overlaid on the ring surface.</summary>
         private void BuildSegment(int index, GridShapeVariant variant, string iconText, string labelText)
         {
-            const float center = 198f;
-            const float labelRadius = 140f;
+            const float center = 210f;
+            const float labelRadius = 156f;
             float angleRad = (-90f + index * (360f / Variants.Length)) * Mathf.Deg2Rad;
 
             // Container sits right on the ring surface
             var segmentRoot = new VisualElement();
             segmentRoot.style.position = Position.Absolute;
-            segmentRoot.style.left = center + Mathf.Cos(angleRad) * labelRadius - 36f;
-            segmentRoot.style.top = center + Mathf.Sin(angleRad) * labelRadius - 28f;
-            segmentRoot.style.width = 72;
-            segmentRoot.style.height = 56;
+            segmentRoot.style.left = center + Mathf.Cos(angleRad) * labelRadius - 29f;
+            segmentRoot.style.top = center + Mathf.Sin(angleRad) * labelRadius - 22f;
+            segmentRoot.style.width = 58;
+            segmentRoot.style.height = 44;
             segmentRoot.style.alignItems = Align.Center;
             segmentRoot.style.justifyContent = Justify.Center;
             segmentRoot.style.overflow = Overflow.Visible;
@@ -312,7 +312,7 @@ namespace VoxelEngine.UI
 
             // Icon character
             var icon = new Label(iconText);
-            icon.style.fontSize = 18;
+            icon.style.fontSize = 14;
             icon.style.unityTextAlign = TextAnchor.MiddleCenter;
             icon.style.color = new StyleColor(new Color(0.40f, 0.42f, 0.44f));
             icon.style.unityFontStyleAndWeight = FontStyle.Bold;
@@ -323,8 +323,8 @@ namespace VoxelEngine.UI
 
             // Label
             var label = new Label(labelText);
-            label.style.fontSize = 7;
-            label.style.letterSpacing = 0.3f;
+            label.style.fontSize = 6;
+            label.style.letterSpacing = 0.15f;
             label.style.unityFontStyleAndWeight = FontStyle.Bold;
             label.style.color = new StyleColor(new Color(0.35f, 0.37f, 0.40f));
             label.style.whiteSpace = WhiteSpace.Normal;
