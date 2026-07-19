@@ -10,12 +10,18 @@ using UnityEngine.Rendering;
 namespace VoxelEngine.GridSystem
 {
     [DisallowMultipleComponent]
+    [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
     public sealed class GridPrecisionLatticePreview : MonoBehaviour
     {
         private MeshFilter _filter;
         private MeshRenderer _renderer;
         private Mesh _mesh;
         private Material _material;
+
+        private void Awake()
+        {
+            EnsureObjects();
+        }
 
         public void Show(GridEntity grid, Vector3Int largeCell, Vector3Int faceAxis)
         {
@@ -81,8 +87,18 @@ namespace VoxelEngine.GridSystem
 
         private void EnsureObjects()
         {
-            if (_filter == null) _filter = GetComponent<MeshFilter>() ?? gameObject.AddComponent<MeshFilter>();
-            if (_renderer == null) _renderer = GetComponent<MeshRenderer>() ?? gameObject.AddComponent<MeshRenderer>();
+            // Do not use ?? with UnityEngine.Object components: destroyed/missing Unity
+            // objects use overloaded null semantics and can leave a marshalled null wrapper.
+            if (!_filter)
+            {
+                _filter = GetComponent<MeshFilter>();
+                if (!_filter) _filter = gameObject.AddComponent<MeshFilter>();
+            }
+            if (!_renderer)
+            {
+                _renderer = GetComponent<MeshRenderer>();
+                if (!_renderer) _renderer = gameObject.AddComponent<MeshRenderer>();
+            }
             if (_mesh == null)
             {
                 _mesh = new Mesh { name = "PrecisionLatticeMesh", hideFlags = HideFlags.HideAndDontSave };

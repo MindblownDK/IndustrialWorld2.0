@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.65.0-dev`
-**Roadmap Version:** `5.65.0-dev`
+**Current Version:** `5.65.1-dev`
+**Roadmap Version:** `5.65.1-dev`
 **Date:** 2026-07-19
-**Status:** Active Implementation — One Grid, Detail + Structural Block Scales; Unity Validation Pending
+**Status:** Active Implementation — Precision Lattice MeshFilter Fix + Block Size Labels; Unity Validation Pending
 
 ---
 
@@ -47,7 +47,7 @@ The design goal is a seamless blend of:
 | Grid systems (ships/vehicles) | ✅ Mature | Needs lights, screens, armor, sloped blocks |
 | Maritime grid | 🟡 Basic | Needs refinement and feature parity |
 | Detail-scale grid blocks | 🛠️ WORKING ON | Detail blocks now share the unified Grid with Structural blocks; persistence and complete positional network indexing remain open. |
-| Unified grid placement | 🛠️ WORKING ON | 5.65.0-dev establishes one player-facing Grid with Detail (0.5 m) and Structural (2.5 m) block scales. The direct-face ghost/placement blocker from 5.64.0-dev is fixed; all Detail block items can attach through the 5×5 Structural-face lattice, new Detail-first constructs use the universal host, functional attachments join host power/thrust/tool simulation, legacy grid-size switching UI is retired, and Structural-on-Detail placement requires real face support plus clear volume. Persistence plus complete fluid/gas/screen positional indexing remain open. |
+| Unified grid placement | 🛠️ WORKING ON | One player-facing Grid uses Detail (0.5 m) and Structural (2.5 m) block scales. 5.65.1-dev fixes the missing `MeshFilter` exception that interrupted lattice generation before the ghost/placement path could complete, and Step 18 now appends each block's physical size to item/recipe names. Persistence plus complete fluid/gas/screen positional indexing remain open. |
 | Power (wind, hydrogen) | ✅ Mature | Modular turbines are excellent |
 | Fluids / gases | ✅ Good | Pipe-gated transfer in 2.20.0 |
 | Building (static + tiered) | 🛠️ Working On | 3.75 m spacing, scale, rotation, and player-away Doors are Unity-validated. Size-V5 closes Foundation deck seams and adds upward/downward Stair anchors at Foundation/Floor edges and Doorway thresholds; final validation is pending. |
@@ -717,7 +717,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Area | Status | Repository Audit |
 |------|--------|------------------|
 | Grid shape variants | ✅ COMPLETED | Thomas validated all six structural meshes, textures, collision, placement ghosts, selection behavior, and corrected wheel alignment. Step 18 provides the non-destructive setup connection. |
-| Unified grid placement | 🛠️ WORKING ON | One Grid now accepts Detail and Structural block scales. Direct Structural-face attachment, Detail-first construct creation, chained Detail placement, functional power/thrust/tool participation, retired size-switch UI, and support-validated Structural-on-Detail placement are implemented. Persistence and complete fluid/gas/screen positional indexing remain next. |
+| Unified grid placement | 🛠️ WORKING ON | One Grid accepts Detail and Structural block scales. The runtime lattice now guarantees its required MeshFilter/MeshRenderer before assigning the preview mesh, clearing the exception that blocked Detail-on-Structural placement. Physical size labels are setup-authored; Unity validation is pending. |
 | Vehicle power foundations | 🟡 PARTIALLY COMPLETE | Grid batteries, solar, hydrogen engines, reactors, power accounting, docking, and multiple vehicle systems exist; the planned unified power network and full vehicle progression remain incomplete. |
 | Damage, armor, weapons, and life support | 🟡 PARTIALLY COMPLETE | Basic block HP/damage and one grid weapon foundation exist. Full typed damage, player armor, pooled ballistics, hazards, airtight support, and combat content remain open. |
 
@@ -1695,6 +1695,36 @@ For each version, these are the high-level Unity tasks you will perform manually
 ---
 
 ## 11. Changelog
+
+### [5.65.1-dev] Precision Lattice MeshFilter Fix + Block Size Labels
+
+**Type:** PATCH — runtime placement exception fix and non-destructive naming clarity (no save schema, public API, recipe cost, HP, mass, power, material, or prefab-geometry changes)
+
+**Root Cause / Fixed:**
+- The precision placement branch was reached correctly, but `GridPrecisionLatticePreview.EnsureObjects()` attempted to assign `sharedMesh` through a missing/marshalled-null `MeshFilter`.
+- The exception interrupted `HandlePrecisionAttachment()` before the ghost and build input could complete, which made Detail blocks appear impossible to place on Structural faces.
+- Added mandatory `MeshFilter` and `MeshRenderer` requirements to the lattice preview component.
+- Added eager initialization in `Awake()`.
+- Replaced null-coalescing component lookup with explicit Unity-object validity checks and guaranteed `AddComponent` fallbacks before mesh assignment.
+
+**Added / Improved:**
+- Step 18 now appends the authored physical size to every Grid Block item name and corresponding recipe name:
+  - `Armor Detail Block · 0.5 m`
+  - `Armor Structural Block · 2.5 m`
+- Detail items receive `0.5 m`; Structural items receive `2.5 m`.
+- The pass is idempotent and does not append the size more than once.
+- Existing custom names are preserved and receive only the requested physical-size suffix.
+
+**Roadmap Status:**
+- Unified Grid placement remains **🛠️ WORKING ON** pending Thomas validation that the lattice, ghost, and placement now complete without an exception.
+
+**Manual Unity Steps:**
+1. Let Unity recompile; the old runtime `GridPrecisionLatticePreview` object will be discarded when Play Mode restarts.
+2. Run `Tools > Voxel Engine > Voxel Engine Setup` → **18. Setup Grid Shape Variants (Non-Destructive)** once to append physical sizes to Grid Block items and recipes.
+3. Confirm inventory/crafting names include `0.5 m` or `2.5 m` exactly once.
+4. Enter Play Mode, equip `Armor Detail Block · 0.5 m`, and aim at `Armor Structural Block · 2.5 m`.
+5. Confirm no `MissingComponentException` occurs, the cyan 5×5 lattice appears, the Detail ghost remains visible, and placement succeeds.
+6. Move across all 25 face cells and place several blocks to verify snapping and occupancy.
 
 ### [5.65.0-dev] One Grid — Detail + Structural Block Scales
 

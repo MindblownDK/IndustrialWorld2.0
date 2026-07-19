@@ -177,6 +177,13 @@ namespace VoxelEngine.EditorTools
                     migrated = "Detail " + migrated.Substring(6);
                 else if (migrated.StartsWith("Large ", System.StringComparison.Ordinal))
                     migrated = "Structural " + migrated.Substring(6);
+                string scaleLabel = item.gridSize == GridSize.Small ? "0.5 m" : "2.5 m";
+                if (!migrated.EndsWith("0.5 m", System.StringComparison.Ordinal)
+                    && !migrated.EndsWith("2.5 m", System.StringComparison.Ordinal))
+                {
+                    migrated = migrated.TrimEnd() + " · " + scaleLabel;
+                }
+
                 string description = item.description ?? string.Empty;
                 string migratedDescription = description
                     .Replace("small-grid", "detail-scale")
@@ -189,7 +196,7 @@ namespace VoxelEngine.EditorTools
                 item.description = migratedDescription;
                 EditorUtility.SetDirty(item);
                 updated++;
-                Debug.Log($"[Step 18] ✓ Migrated legacy grid-type label on '{path}' to unified Detail/Structural wording.");
+                Debug.Log($"[Step 18] ✓ Verified unified Detail/Structural label and physical size on '{path}'.");
             }
 
             string[] recipeGuids = AssetDatabase.FindAssets("t:RecipeDefinition", new[] { "Assets/VoxelEngineAssets" });
@@ -197,11 +204,28 @@ namespace VoxelEngine.EditorTools
             {
                 string path = AssetDatabase.GUIDToAssetPath(guid);
                 var recipe = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeDefinition>(path);
-                if (recipe == null || recipe.outputItem == null) continue;
-                string display = recipe.displayName ?? string.Empty;
-                if (!display.Contains("Small Grid") && !display.Contains("Large Grid")
-                    && display != "Small Armor Block" && display != "Large Armor Block") continue;
-                recipe.displayName = recipe.outputItem.displayName;
+                if (recipe == null || !(recipe.outputItem is GridBlockItem output)) continue;
+                string recipeDisplay = recipe.displayName ?? string.Empty;
+                string migratedRecipe = recipeDisplay
+                    .Replace("Small Grid ", "Detail ")
+                    .Replace("Large Grid ", "Structural ")
+                    .Replace("Small Dual Grid ", "Detail Dual ")
+                    .Replace("Large Dual Grid ", "Structural Dual ")
+                    .Replace(" Dual Grid ", " Dual ");
+                if (migratedRecipe == "Small Armor Block") migratedRecipe = "Armor Detail Block";
+                else if (migratedRecipe == "Large Armor Block") migratedRecipe = "Armor Structural Block";
+                else if (migratedRecipe.StartsWith("Small ", System.StringComparison.Ordinal))
+                    migratedRecipe = "Detail " + migratedRecipe.Substring(6);
+                else if (migratedRecipe.StartsWith("Large ", System.StringComparison.Ordinal))
+                    migratedRecipe = "Structural " + migratedRecipe.Substring(6);
+
+                string scaleLabel = output.gridSize == GridSize.Small ? "0.5 m" : "2.5 m";
+                if (!migratedRecipe.EndsWith("0.5 m", System.StringComparison.Ordinal)
+                    && !migratedRecipe.EndsWith("2.5 m", System.StringComparison.Ordinal))
+                    migratedRecipe = migratedRecipe.TrimEnd() + " · " + scaleLabel;
+
+                if (recipeDisplay == migratedRecipe) continue;
+                recipe.displayName = migratedRecipe;
                 EditorUtility.SetDirty(recipe);
                 updated++;
             }
