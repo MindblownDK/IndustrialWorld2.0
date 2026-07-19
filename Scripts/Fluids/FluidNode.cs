@@ -20,7 +20,12 @@ namespace VoxelEngine.Fluids
         [System.NonSerialized] public FluidNetwork network;
         [System.NonSerialized] public List<FluidNode> neighbours = new();
 
-        protected virtual void OnEnable()  { FluidNetworkManager.EnsureInstance(); FluidNetworkManager.Instance?.Register(this); }
+        protected virtual void OnEnable()
+        {
+            if (VoxelEngine.Building.BuildSystem.IsCreatingGhost) return;
+            FluidNetworkManager.EnsureInstance();
+            FluidNetworkManager.Instance?.Register(this);
+        }
         protected virtual void OnDisable() { FluidNetworkManager.Instance?.Unregister(this); }
     }
 }

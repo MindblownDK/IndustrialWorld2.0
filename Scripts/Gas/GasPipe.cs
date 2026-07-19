@@ -45,7 +45,12 @@ namespace VoxelEngine.Gas
             _visuals.style = VoxelEngine.Networks.PipeStyle.Brass;
         }
 
-        private void OnEnable()  { GasNetwork.EnsureInstance(); GasNetwork.Instance?.Register(this); }
+        private void OnEnable()
+        {
+            if (VoxelEngine.Building.BuildSystem.IsCreatingGhost) return;
+            GasNetwork.EnsureInstance();
+            GasNetwork.Instance?.Register(this);
+        }
         private void OnDisable() => GasNetwork.Instance?.Unregister(this);
 
         /// <summary>

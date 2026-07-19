@@ -152,6 +152,7 @@ namespace VoxelEngine.Networks
         private void OnEnable()
         {
             _lastHash = 0;
+            if (VoxelEngine.Building.BuildSystem.IsCreatingGhost) return;
             _AllBuilders[this] = isGlass;
             // Defer one frame so the parent pipe component's Awake/OnEnable
             // has a chance to set our style/tint fields before we cache

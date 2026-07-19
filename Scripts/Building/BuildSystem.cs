@@ -17,6 +17,7 @@ namespace VoxelEngine.Building
     public class BuildSystem : MonoBehaviour
     {
         public static BuildSystem Instance { get; private set; }
+        public static bool IsCreatingGhost { get; private set; }
 
         [Header("Refs")]
         public Camera shootCamera;
@@ -41,6 +42,7 @@ namespace VoxelEngine.Building
         private readonly System.Collections.Generic.List<Vector3> _pipeGhostLinks = new(1);
         private VoxelEngine.Networks.PipeVisualBuilder _pipeGhostVisual;
         private int _pipeGhostTargetId;
+        private Vector3 _pipeGhostLastPosition = new(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
 
         public static bool HoldingBlock { get; private set; }
         public static string HeldBlockName { get; private set; } = string.Empty;
@@ -99,11 +101,20 @@ namespace VoxelEngine.Building
             if (_ghost == null || _ghostItem != block)
             {
                 if (_ghost != null) Destroy(_ghost);
-                _ghost = Instantiate(block.placedPrefab);
+                try
+                {
+                    IsCreatingGhost = true;
+                    _ghost = Instantiate(block.placedPrefab);
+                }
+                finally
+                {
+                    IsCreatingGhost = false;
+                }
                 _ghost.name = "BuildGhost";
                 _ghostItem = block;
                 _pipeGhostVisual = null;
                 _pipeGhostTargetId = 0;
+                _pipeGhostLastPosition = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
                 _pipeGhostLinks.Clear();
                 StripGhost(_ghost, _ghostMaterialValid);
             }
@@ -250,10 +261,14 @@ namespace VoxelEngine.Building
 
             int targetId = best != null ? best.GetInstanceID() : 0;
             Vector3 targetPosition = best != null ? best.transform.position : default;
+            bool ghostMovedWithTarget = targetId != 0
+                && (ghostPosition - _pipeGhostLastPosition).sqrMagnitude > 0.0001f;
             bool changed = visual != _pipeGhostVisual || targetId != _pipeGhostTargetId
+                || ghostMovedWithTarget
                 || (_pipeGhostLinks.Count > 0 && (targetPosition - _pipeGhostLinks[0]).sqrMagnitude > 0.0001f);
             _pipeGhostVisual = visual;
             _pipeGhostTargetId = targetId;
+            _pipeGhostLastPosition = ghostPosition;
             _pipeGhostLinks.Clear();
             if (best != null) _pipeGhostLinks.Add(targetPosition);
             visual.gridSize = cellSize;

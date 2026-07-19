@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.68.3-dev`
-**Roadmap Version:** `5.68.3-dev`
+**Current Version:** `5.68.4-dev`
+**Roadmap Version:** `5.68.4-dev`
 **Date:** 2026-07-19
-**Status:** Active Implementation — Pipe Ghost Link Preview + Flow Isolation; Unity Validation Pending
+**Status:** Active Implementation — Stable Pipe Topology + Live Ghost Refresh; Unity Validation Pending
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
 ---
@@ -48,7 +48,7 @@ The design goal is a seamless blend of:
 | Grid systems (ships/vehicles) | ✅ Mature | Needs lights, screens, armor, sloped blocks |
 | Maritime grid | 🟡 Basic | Needs refinement and feature parity |
 | Detail-scale grid blocks | 🛠️ WORKING ON | Detail blocks now share the unified Grid with Structural blocks; persistence and complete positional network indexing remain open. |
-| Unified grid placement | 🛠️ WORKING ON | Detail/Structural placement, screen sources, existing-pipe Detail placement, and rotation-independent alignment are validated by Thomas. 5.68.3-dev adds safe five-cell ghost-link previews and prevents Item/Gas/Liquid simulation from registering placement ghosts. Unified movable-grid persistence remains open. |
+| Unified grid placement | 🛠️ WORKING ON | Detail/Structural placement, screen sources, existing-pipe Detail placement, and rotation-independent alignment are validated by Thomas. 5.68.4-dev suppresses ghost registration before `OnEnable`, preventing topology flicker, and refreshes ghost geometry whenever its snapped position changes. Unified movable-grid persistence remains open. |
 | Power (wind, hydrogen) | ✅ Mature | Modular turbines are excellent |
 | Fluids / gases | ✅ Good | Pipe-gated transfer in 2.20.0 |
 | Building (static + tiered) | 🛠️ Working On | 3.75 m spacing, scale, rotation, and player-away Doors are Unity-validated. Size-V5 closes Foundation deck seams and adds upward/downward Stair anchors at Foundation/Floor edges and Doorway thresholds; final validation is pending. |
@@ -720,7 +720,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Grid shape variants | ✅ COMPLETED | Thomas validated all six structural meshes, textures, collision, placement ghosts, selection behavior, and corrected wheel alignment. Step 18 provides the non-destructive setup connection. |
 | Unified grid placement | 🛠️ WORKING ON | Thomas validated Detail-on-Structural lattice placement and size-labelled content. Gas/liquid topology and screen data-source addressing now resolve both block scales on one Grid; Unity validation and unified movable-grid persistence remain open. |
 | Unified grid screen sources | ✅ COMPLETED | Thomas validated the unified screen/data-source work. Detail providers use precision-safe encoded addresses while legacy Structural addresses remain compatible. |
-| Unified pipe placement and networks | 🛠️ WORKING ON | Visual direction and rotation-independent alignment are validated by Thomas. Ghost pipes now show a full prospective link to the nearest compatible inline pipe while remaining completely unregistered from Item/Gas/Liquid simulation, preventing preview flow or voiding. Liquid post-placement links are ready for revalidation without ghost topology interference. |
+| Unified pipe placement and networks | 🛠️ WORKING ON | Visual direction and rotation-independent alignment are validated by Thomas. Ghost construction now suppresses Item/Gas/Liquid/visual registration before Unity invokes `OnEnable`, so existing links do not disconnect/reconnect. Preview arms rebuild on snapped ghost movement and clear immediately when leaving range/alignment. |
 | Vehicle power foundations | 🟡 PARTIALLY COMPLETE | Grid batteries, solar, hydrogen engines, reactors, power accounting, docking, and multiple vehicle systems exist; the planned unified power network and full vehicle progression remain incomplete. |
 | Damage, armor, weapons, and life support | 🟡 PARTIALLY COMPLETE | Basic block HP/damage and one grid weapon foundation exist. Full typed damage, player armor, pooled ballistics, hazards, airtight support, and combat content remain open. |
 

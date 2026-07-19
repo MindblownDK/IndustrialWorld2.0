@@ -1,11 +1,35 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `5.68.3-dev`  
+**Current Version:** `5.68.4-dev`  
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
 
 ---
+
+### [5.68.4-dev] Stable Pipe Topology + Live Ghost Refresh
+
+**Type:** PATCH — placement-preview lifecycle and visual refresh fixes only (no save schema, prefab, item, recipe, research, throughput, HP, mass, power, connection range, or wrench behavior changes)
+
+**Fixed:**
+- Fixed existing pipe links briefly disconnecting when another pipe ghost was created, then reconnecting on the following topology update.
+- Added a scoped `BuildSystem.IsCreatingGhost` guard around ghost instantiation so ItemPipe, GasPipe, FluidNode, and PipeVisualBuilder skip registration during Unity `OnEnable` rather than registering and immediately unregistering.
+- Real pipe network neighbor lists are no longer dirtied by merely equipping or changing a pipe ghost.
+- Fixed the ghost connection arm updating only once near a pipe and retaining a stale short arm after the ghost moved.
+- Ghost preview rebuild detection now includes the snapped ghost world position, not only target identity/position.
+- Preview geometry follows every snapped cell change and clears as soon as the ghost leaves cardinal alignment or five-cell range.
+- Automatic ghost `PipeVisualBuilder` ticking remains disabled; explicit target/position changes drive deterministic preview rebuilds.
+
+**Roadmap Status:**
+- Stable existing topology and live ghost refresh remain **🛠️ WORKING ON** pending Thomas validation.
+
+**Manual Unity Steps:**
+1. Let Unity recompile; no setup rerun is required.
+2. Observe an existing long pipe link, equip another pipe, and move its ghost around. Confirm the existing link never disappears/reappears.
+3. Move the ghost cell-by-cell near a compatible pipe. Confirm the preview arm follows each snapped position.
+4. Move out of line/range and confirm no stale arm/stub remains from the initial preview location.
+5. Place the pipe and confirm the new real connection appears without an intermediate disconnected frame.
+6. Repeat for Item, Gas, and Liquid pipes with resources flowing; confirm no ghost receives or voids resources.
 
 ### [5.68.3-dev] Pipe Ghost Link Preview + Flow Isolation
 

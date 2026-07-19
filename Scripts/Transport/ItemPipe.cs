@@ -107,7 +107,12 @@ namespace VoxelEngine.Transport
             if (_flow == null) _flow = gameObject.AddComponent<ItemFlowVisualizer>();
         }
 
-        private void OnEnable()  { ItemPipeNetwork.EnsureInstance(); ItemPipeNetwork.Instance?.Register(this); }
+        private void OnEnable()
+        {
+            if (VoxelEngine.Building.BuildSystem.IsCreatingGhost) return;
+            ItemPipeNetwork.EnsureInstance();
+            ItemPipeNetwork.Instance?.Register(this);
+        }
         private void OnDisable() => ItemPipeNetwork.Instance?.Unregister(this);
 
         private void Update()
