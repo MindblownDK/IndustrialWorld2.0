@@ -109,7 +109,7 @@ namespace VoxelEngine.Building.Tiered
             }
 
             var ray = shootCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
-            if (!Physics.Raycast(ray, out var hit, reach))
+            if (!TryRaycastIgnoringSelf(ray, out var hit, reach))
             {
                 _ghost.SetActive(false);
                 return;
@@ -143,6 +143,23 @@ namespace VoxelEngine.Building.Tiered
         private void HideGhost()
         {
             if (_ghost != null) { Destroy(_ghost); _ghost = null; _ghostDef = null; }
+        }
+
+        private bool TryRaycastIgnoringSelf(Ray ray, out RaycastHit hit, float maxDistance)
+        {
+            var hits = Physics.RaycastAll(ray, maxDistance, ~0, QueryTriggerInteraction.Ignore);
+            System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+            Transform selfRoot = transform.root;
+            for (int i = 0; i < hits.Length; i++)
+            {
+                var candidate = hits[i];
+                if (candidate.collider == null) continue;
+                if (selfRoot != null && candidate.collider.transform.IsChildOf(selfRoot)) continue;
+                hit = candidate;
+                return true;
+            }
+            hit = default;
+            return false;
         }
 
         // ---------- Snap / placement math ----------

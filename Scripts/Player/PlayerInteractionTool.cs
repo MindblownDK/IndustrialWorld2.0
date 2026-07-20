@@ -84,7 +84,7 @@ namespace VoxelEngine.Player
             if (_wrench != null) _wrench.Tick();
 
             var ray = shootCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
-            bool hasHit = Physics.Raycast(ray, out var hit, reach);
+            bool hasHit = TryRaycastIgnoringSelf(ray, out var hit, reach);
 
             // ── INTERACTION HUD (Context Prompts) ──
             if (hasHit && !VoxelEngine.UI.UIState.IsBlocking)
@@ -548,6 +548,23 @@ namespace VoxelEngine.Player
             }
         }
 
+
+        private bool TryRaycastIgnoringSelf(Ray ray, out RaycastHit hit, float maxDistance)
+        {
+            var hits = Physics.RaycastAll(ray, maxDistance, ~0, QueryTriggerInteraction.Ignore);
+            System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+            Transform selfRoot = transform.root;
+            for (int i = 0; i < hits.Length; i++)
+            {
+                var candidate = hits[i];
+                if (candidate.collider == null) continue;
+                if (selfRoot != null && candidate.collider.transform.IsChildOf(selfRoot)) continue;
+                hit = candidate;
+                return true;
+            }
+            hit = default;
+            return false;
+        }
 
         private static bool IsFrontHit(Transform blockTransform, RaycastHit hit)
         {

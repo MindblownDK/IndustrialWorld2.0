@@ -1,9 +1,39 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.4.10-dev`
+**Current Version:** `6.4.11-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.4.11-dev] Self-Aim Exclusion + Splitter Output Lane Fix
+
+**Type:** PATCH — aiming/raycast and splitter routing corrections only; no save schema break, prefab/item/recipe/research generation, balance, power, or variant-scope change.
+
+**Fixed:**
+- Placement, interaction, grid building, tiered building, and the top-left inspection overlay now ignore the player's own collider/body when raycasting from the camera.
+- Looking steeply downward no longer targets the player instead of the world/object below.
+- Prevents the reported cases where:
+  - the top-left overlay showed the player when aiming down with empty hands,
+  - block placement tried to place onto/into the player,
+  - aiming downward made it hard to click the actual object under the crosshair.
+- Fixed `ConveyorSplitter` output-lane setup:
+  - **Mk.2** now correctly exposes **three** lanes: forward + left + right.
+  - **Mk.1** keeps two lanes but can now fall back to a **left-side** second output if the player built the second belt on the left instead of the preferred right side.
+- This addresses the regression where items could enter a splitter and remain stuck despite outward belts being present.
+
+**Manual Unity Steps:**
+1. Let Unity compile and confirm the runtime banner reports `6.4.11-dev`.
+2. No Voxel Engine Setup rerun is required.
+3. With empty hands, look steeply downward and confirm the top-left overlay no longer reports the player body.
+4. Try placing static blocks, tiered blocks, and grid blocks while looking downward near your feet. Confirm placement targets the ground/object under the crosshair instead of the player.
+5. Re-test a splitter line:
+   - input belt into splitter
+   - outward belts on the intended output sides
+   - confirm items leave the splitter again.
+6. Specifically test **Mk.2** with forward + left + right outputs.
+7. Test **Mk.1** with forward + left outputs and confirm the left fallback works.
 
 ---
 

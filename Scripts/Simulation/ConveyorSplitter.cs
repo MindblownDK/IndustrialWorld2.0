@@ -148,22 +148,28 @@ namespace VoxelEngine.Simulation
             if (_initialized && outputDirections.Count == OutputCount) return;
 
             outputDirections.Clear();
-            outputDirections.Add(Vector3.forward);  // always forward
+            outputDirections.Add(Vector3.forward);
 
-            if (OutputCount >= 3)
-                outputDirections.Add(Vector3.left);
-
-            if (OutputCount >= 4)
+            // Factory scope: one splitter family, no shape variants. Output lanes are:
+            // Mk1 = forward + one side lane (right preferred, left fallback in ScanConnections)
+            // Mk2 = forward + left + right
+            // Mk3 = forward + left + right + back
+            if (OutputCount == 2)
+            {
                 outputDirections.Add(Vector3.right);
-
-            if (OutputCount >= 2 && OutputCount < 3)
-                outputDirections.Add(Vector3.right); // MK1: forward + right
-
-            // For MK3 with 4 outputs, the 4th is backward-wrap (behind the splitter)
-            if (OutputCount >= 4 && outputDirections.Count < 4)
+            }
+            else if (OutputCount == 3)
+            {
+                outputDirections.Add(Vector3.left);
+                outputDirections.Add(Vector3.right);
+            }
+            else if (OutputCount >= 4)
+            {
+                outputDirections.Add(Vector3.left);
+                outputDirections.Add(Vector3.right);
                 outputDirections.Add(Vector3.back);
+            }
 
-            // Trim to exact count
             while (outputDirections.Count > OutputCount)
                 outputDirections.RemoveAt(outputDirections.Count - 1);
 
@@ -187,6 +193,25 @@ namespace VoxelEngine.Simulation
                 Vector3 outputPos = transform.position + worldDir * 0.8f;
                 var consumer = FindConsumerAt(outputPos);
                 outputTargets.Add(consumer);
+            }
+
+            // Mk1 quality-of-life: if the preferred right lane is empty but the player
+            // built the second lane on the left side, adopt that left lane instead of
+            // leaving the splitter half-disconnected.
+            if (OutputCount == 2 && outputTargets.Count >= 2 && outputTargets[1] == null)
+            {
+                Vector3 fallbackDir = transform.TransformDirection(Vector3.left);
+                Vector3 fallbackPos = transform.position + fallbackDir * 0.8f;
+                var fallbackConsumer = FindConsumerAt(fallbackPos);
+                if (fallbackConsumer != null)
+                {
+                    outputDirections[1] = Vector3.left;
+                    outputTargets[1] = fallbackConsumer;
+                }
+                else
+                {
+                    outputDirections[1] = Vector3.right;
+                }
             }
         }
 

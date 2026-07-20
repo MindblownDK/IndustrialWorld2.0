@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.4.10-dev`
-**Roadmap Version:** `6.4.10-dev`
+**Current Version:** `6.4.11-dev`
+**Roadmap Version:** `6.4.11-dev`
 **Date:** 2026-07-20
-**Status:** Splitter Persistence + Factory Inspection Pass — WORKING ON
+**Status:** Self-Aim Exclusion + Splitter Lane Fix — WORKING ON
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
 ---
@@ -56,7 +56,7 @@ The design goal is a seamless blend of:
 | Sky / atmosphere / space rendering | 🟡 Basic | Needs planet-specific skies and proper space ambiance |
 | Gravity / orbits | 🛠️ WORKING ON | Grid gravity now uses radial GravityProvider system (6.4.1-dev). GridBuilder already uses GravityProvider.GetSurfaceRotation for planet-aligned placement. Orbit mechanics and atmospheric drag remain future work. |
 | Space stations | ❌ Missing | No buildable orbital platforms |
-| Conveyor logistics | 🛠️ WORKING ON | Conveyors, ramps, vertical belts, chutes, funnels, conveyor splitters (Mk.1/Mk.2/Mk.3), contextual shape wheel, ghost previews, and persistence exist. 6.4.6-dev improves local follow-up alignment for static chutes/funnels and neighboring factory blocks on spherical terrain through nearby placed-block tangent anchoring, and Thomas validated the placement pass. **6.4.10-dev** adds additive splitter buffer/cursor persistence plus inspection-overlay support for funnels and splitters. **Scope guard:** conveyor shape variants are the only planned factory placement variants; chutes and funnels stay single-variant. Final throughput validation remains. |
+| Conveyor logistics | 🛠️ WORKING ON | Conveyors, ramps, vertical belts, chutes, funnels, conveyor splitters (Mk.1/Mk.2/Mk.3), contextual shape wheel, ghost previews, and persistence exist. 6.4.6-dev improves local follow-up alignment for static chutes/funnels and neighboring factory blocks on spherical terrain through nearby placed-block tangent anchoring, and Thomas validated the placement pass. **6.4.10-dev** adds additive splitter buffer/cursor persistence plus inspection-overlay support for funnels and splitters. **6.4.11-dev** fixes splitter lane setup so Mk.2 correctly exposes forward+left+right outputs and Mk.1 can fall back to a left-side second lane. **Scope guard:** conveyor shape variants are the only planned factory placement variants; chutes and funnels stay single-variant. Final throughput validation remains. |
 | Grid screens / displays | ✅ COMPLETED | All sizes, live text+power states, right-click+terminal config, custom text+custom colors+border+font, visual bar charts, multi-source, live camera feeds, power gain/loss/net mode, persistence, and camera block are validated by Thomas. (5.51.3-dev) |
 | Grid lighting | 🛠️ WORKING ON | Detail/Structural single and dual spotlights, Structural LED strip, premium segmented/clean LED visuals, screen data providers, configuration UI, visible chase animation, and motion activation exist. Static/placed settings persist; unified movable-grid persistence remains future work. |
 | Sloped / armored grid blocks | ✅ COMPLETED | Cube, Slope, Half Block, Half Slope, Corner, and Inverted Slope variants are implemented and validated with textured meshes, collision, ghosts, and rotation. |
@@ -65,7 +65,7 @@ The design goal is a seamless blend of:
 | Crafting / items / storage | ✅ Exists | Needs deeper recipe chains |
 | Research / tech tree | ✅ Exists | Can be expanded into eras |
 | UI / UX | 🛠️ Improving | Runtime crisp UI scaling, responsive machine panels, build-wheel fit, and recipe validation tooling are active; broad screen-size validation remains required. |
-| Top-left world inspection overlay | 🛠️ Working On | Crosshair targets, active voxel materials, mining requirements, power, occupancy, integrity, and inventory-item hover details are implemented. 6.4.10-dev adds dedicated funnel and conveyor-splitter inspection rows with mode/buffer/output details. Unity validation pending |
+| Top-left world inspection overlay | 🛠️ Working On | Crosshair targets, active voxel materials, mining requirements, power, occupancy, integrity, and inventory-item hover details are implemented. 6.4.10-dev adds dedicated funnel and conveyor-splitter inspection rows with mode/buffer/output details, and 6.4.11-dev makes the overlay ignore the player's own body/collider when looking down. Unity validation pending |
 | Building Hammer wheel & placement | 🛠️ WORKING ON (Premium polish complete) | Segmented paginated donut wheel, hold-release selection, scroll pages, RMB placement, Escape exit, stair chaining, and premium procedural tier materials are implemented. **5.40.0-dev** added premium cream/off-white ring + red accents + larger center disc + hover micro-interactions to match high-fidelity reference style (non-destructive). Unity validation pending. |
 | Farming | 🟡 Early | Good seed, needs integration |
 | Nuclear | 🟡 Present | Could become endgame power |
@@ -1728,8 +1728,8 @@ For each version, these are the high-level Unity tasks you will perform manually
 
 ## 10. Suggested Immediate Next Steps
 
-1. **Validate splitter persistence and inspection in Unity** — confirm buffer/cursor save-load works and funnel/splitter inspection rows show the right live values after 6.4.10-dev.
-2. **Validate restored transport flow in Unity** — confirm belt-to-belt transfer, chest↔funnel flow, and dropped-item conveyor loading still work after 6.4.10-dev.
+1. **Validate self-aim exclusion in Unity** — confirm looking down no longer targets the player body for placement, interaction, or the top-left overlay after 6.4.11-dev.
+2. **Validate splitter output routing in Unity** — confirm Mk.1/Mk.2 splitters feed their intended outward belts and no longer trap items when valid outputs exist.
 3. **Complete remaining unified Grid positional indexing** where legacy systems still read Structural-only coordinates.
 4. **Keep factory scope guarded** — conveyor shape variants only; do not add funnel or chute variants.
 
