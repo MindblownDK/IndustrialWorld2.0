@@ -1,9 +1,34 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.4.0-dev`
+**Current Version:** `6.4.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.4.1-dev] Grid Gravity — Radial Planet Support
+
+**Type:** PATCH — runtime gravity correction only; no save schema, prefab, item, recipe, research, or balance change.
+
+**Fixed:**
+- `GridEntity.CurrentGravityAcceleration()` now uses `GravityProvider.GetGravity()` when a celestial body is active, applying proper radial gravity that points toward the planet center with inverse-square falloff.
+- Previously, grids used `Physics.gravity * AtmosphereManager.GetGravityMultiplier()` which only applied flat-world Y-axis gravity — grids fell straight down regardless of planet curvature and ignored the radial gravity system entirely.
+- `AtmosphereManager.GetAirDensity()` now uses `CelestialBody.AirDensityAt()` when a body is active, giving correct altitude-based atmosphere for spherical planets.
+- `AtmosphereManager.GetGravityMultiplier()` now returns the correct ratio based on the active body's surface gravity.
+- `AtmosphereManager.IsInSpace()` now uses `CelestialBody.IsInSpace()` when a body is active.
+
+**Roadmap Status:**
+- Gravity / orbits: **🛠️ WORKING ON** — grid gravity now uses radial system; grid planet-aligned placement was already using GravityProvider in GridBuilder.
+- Voxel world / planet / gravity: **🛠️ WORKING ON** — grid gravity direction fixed; orbit mechanics remain future work.
+
+**Manual Unity Steps:**
+1. Let Unity compile and confirm the runtime banner reports `6.4.1-dev`.
+2. No Voxel Engine Setup rerun is required; this is a runtime-only gravity fix.
+3. On a spherical planet world, place a grid block and confirm it falls toward the planet center (not straight down in world-Y).
+4. Confirm the grid aligns with the planet surface when placed (the GridBuilder already uses GravityProvider.GetSurfaceRotation).
+5. Fly a grid ship around the planet and confirm gravity consistently pulls toward the planet center at all positions.
+6. On a flat world, confirm grids still behave exactly as before (flat-world fallback is unchanged).
 
 ---
 

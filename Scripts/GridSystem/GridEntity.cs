@@ -14,6 +14,7 @@
 
 using System.Collections.Generic;
 using UnityEngine;
+using VoxelEngine.Cosmos;
 using VoxelEngine.Maritime;
 
 namespace VoxelEngine.GridSystem
@@ -253,6 +254,14 @@ namespace VoxelEngine.GridSystem
 
         private Vector3 CurrentGravityAcceleration()
         {
+            // Use the radial gravity system when a celestial body is active.
+            // GravityProvider.GetGravity() returns the proper toward-core vector
+            // with inverse-square falloff for spherical planets.
+            if (GravityProvider.IsRadial)
+            {
+                return GravityProvider.GetGravity(transform.position) * Mathf.Max(0f, gravityScale);
+            }
+            // Flat-world fallback: classic downward gravity with atmosphere falloff.
             return Physics.gravity * AtmosphereManager.GetGravityMultiplier(transform.position) * Mathf.Max(0f, gravityScale);
         }
 

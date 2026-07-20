@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.4.0-dev`
-**Roadmap Version:** `6.4.0-dev`
+**Current Version:** `6.4.1-dev`
+**Roadmap Version:** `6.4.1-dev`
 **Date:** 2026-07-20
 **Status:** Grid Gravity Fix & Simulation Tick Centralization — WORKING ON
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -54,7 +54,7 @@ The design goal is a seamless blend of:
 | Building (static + tiered) | 🛠️ Working On | 3.75 m spacing, scale, rotation, and player-away Doors are Unity-validated. Size-V5 closes Foundation deck seams and adds upward/downward Stair anchors at Foundation/Floor edges and Doorway thresholds; final validation is pending. |
 | Advanced Quarry | 🛠️ Working On | Unbreakable bedrock generation removed; late Tier-5 quarry uses a finite configurable 64-layer default depth |
 | Sky / atmosphere / space rendering | 🟡 Basic | Needs planet-specific skies and proper space ambiance |
-| Gravity / orbits | 🛠️ WORKING ON | Grids fall as if unaffected by gravity; grids do not align with the planet surface on placement. Player gravity partially works but grid-level gravity application and planet-aligned spawn remain broken. |
+| Gravity / orbits | 🛠️ WORKING ON | Grid gravity now uses radial GravityProvider system (6.4.1-dev). GridBuilder already uses GravityProvider.GetSurfaceRotation for planet-aligned placement. Orbit mechanics and atmospheric drag remain future work. |
 | Space stations | ❌ Missing | No buildable orbital platforms |
 | Conveyor logistics | 🛠️ WORKING ON | Conveyors, ramps, vertical belts, chutes, funnels, conveyor splitters (Mk.1/Mk.2/Mk.3), contextual shape wheel, ghost previews, and persistence exist. Pooled item entities validated; more chute variants and final throughput validation remain. |
 | Grid screens / displays | ✅ COMPLETED | All sizes, live text+power states, right-click+terminal config, custom text+custom colors+border+font, visual bar charts, multi-source, live camera feeds, power gain/loss/net mode, persistence, and camera block are validated by Thomas. (5.51.3-dev) |
@@ -1726,10 +1726,9 @@ For each version, these are the high-level Unity tasks you will perform manually
 
 ## 10. Suggested Immediate Next Steps
 
-1. **Fix grid gravity** — grids must be affected by planet gravity and align with the planet surface on placement (4.9.0 gravity/orbit fixes).
-2. **Complete centralized simulation tick migration** — move ConveyorBelt, ConveyorChute, and Funnel from per-frame Update() to SimulationTickManager.
-3. **Validate pooled conveyor-carried visuals in Unity** under dense factory throughput, belt removal/rebuild, and world reload.
-4. **Complete remaining unified Grid positional indexing** where legacy systems still read Structural-only coordinates.
-5. **Keep UI fit validation active** at 1280×720, 1366×768, 1920×1080, and ultrawide resolutions.
+1. **Validate grid gravity in Unity** — confirm grids fall toward planet center on spherical worlds and align with the surface on placement (6.4.1-dev).
+2. **Validate conveyor splitter in dense factories** — confirm round-robin distribution works under load.
+3. **Complete remaining unified Grid positional indexing** where legacy systems still read Structural-only coordinates.
+4. **Keep UI fit validation active** at 1280×720, 1366×768, 1920×1080, and ultrawide resolutions.
 
 ---
