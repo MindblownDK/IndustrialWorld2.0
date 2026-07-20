@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.5.0-dev`
-**Roadmap Version:** `6.5.0-dev`
+**Current Version:** `6.5.1-dev`
+**Roadmap Version:** `6.5.1-dev`
 **Date:** 2026-07-20
-**Status:** Splitter Routing UI + Mk.3 Output Filters — WORKING ON
+**Status:** Splitter/Funnel Usability Pass — WORKING ON
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
 ---
@@ -56,7 +56,7 @@ The design goal is a seamless blend of:
 | Sky / atmosphere / space rendering | 🟡 Basic | Needs planet-specific skies and proper space ambiance |
 | Gravity / orbits | 🛠️ WORKING ON | Grid gravity now uses radial GravityProvider system (6.4.1-dev). GridBuilder already uses GravityProvider.GetSurfaceRotation for planet-aligned placement. Orbit mechanics and atmospheric drag remain future work. |
 | Space stations | ❌ Missing | No buildable orbital platforms |
-| Conveyor logistics | 🛠️ WORKING ON | Conveyors, ramps, vertical belts, chutes, funnels, conveyor splitters (Mk.1/Mk.2/Mk.3), contextual shape wheel, ghost previews, and persistence exist. 6.4.6-dev improves local follow-up alignment for static chutes/funnels and neighboring factory blocks on spherical terrain through nearby placed-block tangent anchoring, and Thomas validated the placement pass. 6.4.10-dev adds additive splitter buffer/cursor persistence plus inspection-overlay support for funnels and splitters. 6.4.11-dev fixes splitter lane setup so Mk.2 correctly exposes forward+left+right outputs and Mk.1 can fall back to a left-side second lane. **6.5.0-dev** adds a splitter configuration UI with Round Robin / Nearest First routing plus Mk.3 per-output item filters that persist across save/load. **Scope guard:** conveyor shape variants are the only planned factory placement variants; chutes and funnels stay single-variant. Final throughput validation remains. |
+| Conveyor logistics | 🛠️ WORKING ON | Conveyors, ramps, vertical belts, chutes, funnels, conveyor splitters (Mk.1/Mk.2/Mk.3), contextual shape wheel, ghost previews, and persistence exist. 6.4.6-dev improves local follow-up alignment for static chutes/funnels and neighboring factory blocks on spherical terrain through nearby placed-block tangent anchoring, and Thomas validated the placement pass. 6.4.10-dev adds additive splitter buffer/cursor persistence plus inspection-overlay support for funnels and splitters. 6.4.11-dev fixes splitter lane setup so Mk.2 correctly exposes forward+left+right outputs and Mk.1 can fall back to a left-side second lane. 6.5.0-dev adds a splitter configuration UI with Round Robin / Nearest First routing plus Mk.3 per-output item filters that persist across save/load. **6.5.1-dev** fixes splitter-panel auto-refresh scrolling, corrects Mk.3 to one input + three outputs, adds ghost/runtime input-output arrows, adds a searchable/drag-capture single-filter dialog matching the existing filter workflow, and adds funnel mode UI plus funnel snap support toward belts/inventory blocks. **Scope guard:** conveyor shape variants are the only planned factory placement variants; chutes and funnels stay single-variant. Final throughput validation remains. |
 | Grid screens / displays | ✅ COMPLETED | All sizes, live text+power states, right-click+terminal config, custom text+custom colors+border+font, visual bar charts, multi-source, live camera feeds, power gain/loss/net mode, persistence, and camera block are validated by Thomas. (5.51.3-dev) |
 | Grid lighting | 🛠️ WORKING ON | Detail/Structural single and dual spotlights, Structural LED strip, premium segmented/clean LED visuals, screen data providers, configuration UI, visible chase animation, and motion activation exist. Static/placed settings persist; unified movable-grid persistence remains future work. |
 | Sloped / armored grid blocks | ✅ COMPLETED | Cube, Slope, Half Block, Half Slope, Corner, and Inverted Slope variants are implemented and validated with textured meshes, collision, ghosts, and rotation. |
@@ -1728,7 +1728,7 @@ For each version, these are the high-level Unity tasks you will perform manually
 
 ## 10. Suggested Immediate Next Steps
 
-1. **Validate splitter routing UI in Unity** — confirm Round Robin / Nearest First switches work and Mk.3 per-output filters route the correct items after 6.5.0-dev.
+1. **Validate splitter and funnel usability in Unity** — confirm splitter UI scroll stays stable, Mk.3 uses one input + three outputs, arrows read clearly on ghost/placed splitters, and funnel mode switching plus snapping now support chest→funnel→belt workflows after 6.5.1-dev.
 2. **Validate splitter persistence in Unity** — confirm routing mode and Mk.3 filter choices persist across save/load.
 3. **Complete remaining unified Grid positional indexing** where legacy systems still read Structural-only coordinates.
 4. **Keep factory scope guarded** — conveyor shape variants only; do not add funnel or chute variants.

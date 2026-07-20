@@ -412,9 +412,10 @@ namespace VoxelEngine.Building
             var placingBeltComponent = block.placedPrefab.GetComponentInChildren<VoxelEngine.Simulation.ConveyorBelt>(true);
             bool placingBelt = placingBeltComponent != null;
             bool placingChute = block.placedPrefab.GetComponentInChildren<VoxelEngine.Simulation.ConveyorChute>(true) != null;
+            bool placingFunnel = block.placedPrefab.GetComponentInChildren<VoxelEngine.Simulation.Funnel>(true) != null;
             bool placingPowerPipe = block.placedPrefab.GetComponentInChildren<VoxelEngine.Power.PowerCable>(true) != null;
             bool placingCompactPower = block.placedPrefab.GetComponentInChildren<VoxelEngine.Simulation.CompactVoltageStation>(true) != null;
-            if (!placingBelt && !placingChute && !placingPowerPipe && !placingCompactPower) return false;
+            if (!placingBelt && !placingChute && !placingFunnel && !placingPowerPipe && !placingCompactPower) return false;
             var selectedConveyorShape = placingBelt
                 ? ResolveConveyorBuildShape(placingBeltComponent, hit)
                 : VoxelEngine.Simulation.ConveyorShape.Straight;
@@ -483,6 +484,13 @@ namespace VoxelEngine.Building
                 return true;
             }
 
+            if (placingFunnel && targetBelt != null)
+            {
+                pos = targetBelt.transform.position - targetBelt.transform.forward * factorySpacing;
+                rot = targetBelt.transform.rotation;
+                return true;
+            }
+
             if (placingBelt && (selectedConveyorShape == VoxelEngine.Simulation.ConveyorShape.VerticalUp
                                 || selectedConveyorShape == VoxelEngine.Simulation.ConveyorShape.VerticalDown))
             {
@@ -514,6 +522,27 @@ namespace VoxelEngine.Building
                 float verticalSign = localHit.y < 0f ? -1f : 1f;
                 pos = targetChute.transform.position + targetChute.transform.up * verticalSign * factorySpacing;
                 rot = targetChute.transform.rotation;
+                return true;
+            }
+
+            var targetFunnel = hit.collider.GetComponentInParent<VoxelEngine.Simulation.Funnel>();
+            if (placingFunnel && TryGetInventoryLikeAnchor(hit, out var inventoryAnchor))
+            {
+                Vector3 outward = SnapOutwardNormal(inventoryAnchor.transform, hit.normal);
+                pos = inventoryAnchor.transform.position + outward * factorySpacing;
+                Vector3 up = GravityProvider.GetUp(pos);
+                Vector3 forward = Vector3.ProjectOnPlane(outward, up);
+                if (forward.sqrMagnitude < 0.001f) forward = Vector3.ProjectOnPlane(inventoryAnchor.transform.forward, up);
+                if (forward.sqrMagnitude < 0.001f) forward = Vector3.forward;
+                rot = Quaternion.LookRotation(forward.normalized, up);
+                return true;
+            }
+
+            if (!placingFunnel && targetFunnel != null && IsInventoryLikePlacement(block))
+            {
+                Vector3 inventoryDir = targetFunnel.transform.TransformDirection(targetFunnel.inventoryDirection.normalized);
+                pos = targetFunnel.transform.position + inventoryDir * factorySpacing;
+                rot = targetFunnel.transform.rotation;
                 return true;
             }
 
@@ -632,6 +661,48 @@ namespace VoxelEngine.Building
             if (ax >= ay && ax >= az) return new Vector3(Mathf.Sign(Mathf.Approximately(local.x, 0f) ? 1f : local.x), 0f, 0f);
             if (ay >= ax && ay >= az) return new Vector3(0f, Mathf.Sign(Mathf.Approximately(local.y, 0f) ? 1f : local.y), 0f);
             return new Vector3(0f, 0f, Mathf.Sign(Mathf.Approximately(local.z, 0f) ? 1f : local.z));
+        }
+
+        private static bool IsInventoryLikePlacement(BlockItem block)
+        {
+            if (block == null || block.placedPrefab == null) return false;
+            var behaviours = block.placedPrefab.GetComponentsInChildren<MonoBehaviour>(true);
+            foreach (var behaviour in behaviours)
+            {
+                if (behaviour == null) continue;
+                if (behaviour is VoxelEngine.Transport.IInventoryInterface
+                    || behaviour is VoxelEngine.Transport.IItemPortHost
+                    || behaviour is VoxelEngine.Building.Chest)
+                    return true;
+            }
+            return false;
+        }
+
+        private static bool TryGetInventoryLikeAnchor(RaycastHit hit, out MonoBehaviour anchor)
+        {
+            anchor = null;
+            if (hit.collider == null) return false;
+            var behaviours = hit.collider.GetComponentsInParent<MonoBehaviour>(true);
+            foreach (var behaviour in behaviours)
+            {
+                if (behaviour == null) continue;
+                if (behaviour is VoxelEngine.Transport.IInventoryInterface
+                    || behaviour is VoxelEngine.Transport.IItemPortHost
+                    || behaviour is VoxelEngine.Building.Chest)
+                {
+                    anchor = behaviour;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static Vector3 SnapOutwardNormal(Transform target, Vector3 hitNormal)
+        {
+            if (target == null) return hitNormal.sqrMagnitude > 0.001f ? hitNormal.normalized : Vector3.forward;
+            Vector3 local = target.InverseTransformDirection(hitNormal.sqrMagnitude > 0.001f ? hitNormal.normalized : target.forward);
+            Vector3 cardinal = NearestLocalCardinal(local);
+            return target.TransformDirection(cardinal).normalized;
         }
 
         private Vector3 ComputePlacementPosition(RaycastHit hit, BlockItem block)

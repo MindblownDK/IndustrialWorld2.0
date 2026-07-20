@@ -125,6 +125,53 @@ namespace VoxelEngine.UI
                 "Select a recipe, load matching inputs, then route outputs with belts or funnels.");
         }
 
+        public static VisualElement FunnelPanel(Funnel funnel)
+        {
+            var p = T.MachinePanel();
+            string status = funnel.BufferedCount >= Mathf.Max(1, funnel.bufferSize)
+                ? "BLOCKED"
+                : funnel.BufferedCount > 0 ? "ACTIVE" : "IDLE";
+            Color statusColor = funnel.BufferedCount >= Mathf.Max(1, funnel.bufferSize)
+                ? T.AccentRed
+                : funnel.BufferedCount > 0 ? T.AccentGreen : T.TextMuted;
+
+            p.Add(BuildHeader("⮃", "Funnel", status, statusColor, T.AccentAmber));
+            p.Add(T.AccentDivider(T.AccentAmber));
+
+            var content = new ScrollView(ScrollViewMode.Vertical);
+            content.style.flexGrow = 1;
+            content.style.marginTop = 6;
+            T.StyleScroller(content);
+            p.Add(content);
+
+            content.Add(T.StatRow("⇄", "Mode", funnel.Mode == FunnelMode.Import ? "Import" : "Export", T.TextPrimary));
+            content.Add(T.StatRow("▣", "Buffered", $"{funnel.BufferedCount}/{Mathf.Max(1, funnel.bufferSize)}", T.AccentAmber));
+            content.Add(T.StatRow("⏱", "Transfer Interval", $"{funnel.transferInterval:0.00}s", T.TextSecondary));
+            content.Add(T.Divider());
+            content.Add(T.Subtitle("Mode"));
+
+            var modeRow = new VisualElement();
+            modeRow.style.flexDirection = FlexDirection.Row;
+            modeRow.style.marginBottom = 8;
+            modeRow.Add(ModeButton("Import", funnel.Mode == FunnelMode.Import, T.AccentAmber, () =>
+            {
+                funnel.SetMode(FunnelMode.Import);
+                GameUIController.Instance?.RequestRefresh();
+            }));
+            var spacer = new VisualElement();
+            spacer.style.width = 8;
+            modeRow.Add(spacer);
+            modeRow.Add(ModeButton("Export", funnel.Mode == FunnelMode.Export, T.AccentCyan, () =>
+            {
+                funnel.SetMode(FunnelMode.Export);
+                GameUIController.Instance?.RequestRefresh();
+            }));
+            content.Add(modeRow);
+
+            content.Add(T.Muted("Import pulls items from the belt side into the inventory side. Export pulls from the inventory side and pushes onto the belt side."));
+            return p;
+        }
+
         public static VisualElement SplitterPanel(ConveyorSplitter splitter, SlotBuilder slot)
         {
             var p = T.MachinePanel();
@@ -207,6 +254,7 @@ namespace VoxelEngine.UI
                     var laneBody = new VisualElement();
                     laneBody.style.flexDirection = FlexDirection.Row;
                     laneBody.style.alignItems = Align.Center;
+                    laneBody.style.flexWrap = Wrap.Wrap;
 
                     var filterSlot = splitter.GetOutputFilterSlot(i);
                     if (filterSlot != null && slot != null)
@@ -220,6 +268,21 @@ namespace VoxelEngine.UI
                     filterText.style.color = new StyleColor(T.TextSecondary);
                     filterText.style.fontSize = 10;
                     laneBody.Add(filterText);
+
+                    var pickBtn = T.SmallButton("Search / Set", () =>
+                    {
+                        var root = laneCard.panel?.visualTree;
+                        if (root != null)
+                        {
+                            ItemFilterDialog.OpenSingle(root,
+                                $"Splitter Output {i + 1} · {splitter.GetOutputLabel(i)}",
+                                () => splitter.GetOutputFilterItem(i),
+                                item => splitter.SetOutputFilterItem(i, item),
+                                () => GameUIController.Instance?.RequestRefresh());
+                        }
+                    }, T.AccentCyan);
+                    pickBtn.style.marginLeft = 8;
+                    laneBody.Add(pickBtn);
 
                     var clearBtn = T.SmallButton("Clear", () =>
                     {

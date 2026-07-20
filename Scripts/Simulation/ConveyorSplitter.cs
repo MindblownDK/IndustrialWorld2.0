@@ -54,6 +54,9 @@ namespace VoxelEngine.Simulation
 
         // ── Runtime ───────────────────────────────────────────────────
 
+        private static Material _inputArrowMaterial;
+        private static Material _outputArrowMaterial;
+
         private readonly List<ConveyorItem> _buffer = new(8);
         private readonly List<ItemDefinition> _outputFilterItems = new(4);
         private readonly List<FilterSlotContainer> _filterSlots = new(4);
@@ -65,7 +68,7 @@ namespace VoxelEngine.Simulation
         /// <summary>Number of output lanes for the current tier.</summary>
         public int OutputCount => tier switch
         {
-            SplitterTier.Mk3 => 4,
+            SplitterTier.Mk3 => 3,
             SplitterTier.Mk2 => 3,
             _ => 2
         };
@@ -137,6 +140,8 @@ namespace VoxelEngine.Simulation
         private void Awake()
         {
             EnsureOutputDirections();
+            EnsureOutputFilterSlots();
+            RefreshDirectionVisuals();
         }
 
         /// <summary>Restores additive runtime state without changing authored tuning.</summary>
@@ -172,6 +177,7 @@ namespace VoxelEngine.Simulation
             EnsureOutputDirections();
             EnsureOutputFilterSlots();
             ScanConnections();
+            RefreshDirectionVisuals();
         }
 
         private void Update()
@@ -271,6 +277,8 @@ namespace VoxelEngine.Simulation
                     outputDirections[1] = Vector3.right;
                 }
             }
+
+            RefreshDirectionVisuals();
         }
 
         private MonoBehaviour FindProviderAt(Vector3 worldPos)
@@ -332,6 +340,85 @@ namespace VoxelEngine.Simulation
 
             while (_filterSlots.Count < OutputCount) _filterSlots.Add(new FilterSlotContainer(this, _filterSlots.Count));
             while (_filterSlots.Count > OutputCount) _filterSlots.RemoveAt(_filterSlots.Count - 1);
+        }
+
+        private void RefreshDirectionVisuals()
+        {
+            var backRim = transform.Find("Generated_OutputRimBack");
+            if (backRim != null) backRim.gameObject.SetActive(OutputCount >= 4);
+
+            var arrowsRoot = transform.Find("Runtime_IOArrows");
+            if (arrowsRoot != null) Destroy(arrowsRoot.gameObject);
+            arrowsRoot = new GameObject("Runtime_IOArrows").transform;
+            arrowsRoot.SetParent(transform, false);
+
+            CreateArrow(arrowsRoot, "Input", inputDirection.normalized, true, GetArrowMaterial(true));
+            for (int i = 0; i < outputDirections.Count; i++)
+                CreateArrow(arrowsRoot, $"Output_{i}", outputDirections[i].normalized, false, GetArrowMaterial(false));
+        }
+
+        private static Material GetArrowMaterial(bool input)
+        {
+            if (input)
+            {
+                if (_inputArrowMaterial == null)
+                {
+                    Color color = new Color(0.95f, 0.62f, 0.18f);
+                    _inputArrowMaterial = new Material(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"));
+                    _inputArrowMaterial.color = color;
+                    if (_inputArrowMaterial.HasProperty("_BaseColor")) _inputArrowMaterial.SetColor("_BaseColor", color);
+                    if (_inputArrowMaterial.HasProperty("_EmissionColor")) { _inputArrowMaterial.EnableKeyword("_EMISSION"); _inputArrowMaterial.SetColor("_EmissionColor", color * 0.8f); }
+                }
+                return _inputArrowMaterial;
+            }
+
+            if (_outputArrowMaterial == null)
+            {
+                Color color = new Color(0.18f, 0.72f, 0.88f);
+                _outputArrowMaterial = new Material(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"));
+                _outputArrowMaterial.color = color;
+                if (_outputArrowMaterial.HasProperty("_BaseColor")) _outputArrowMaterial.SetColor("_BaseColor", color);
+                if (_outputArrowMaterial.HasProperty("_EmissionColor")) { _outputArrowMaterial.EnableKeyword("_EMISSION"); _outputArrowMaterial.SetColor("_EmissionColor", color * 0.8f); }
+            }
+            return _outputArrowMaterial;
+        }
+
+        private void CreateArrow(Transform parent, string name, Vector3 localDirection, bool input, Material mat)
+        {
+            if (localDirection.sqrMagnitude < 0.01f) localDirection = Vector3.forward;
+            localDirection.Normalize();
+            Vector3 basePos = localDirection * 0.42f + Vector3.up * 0.67f;
+            Vector3 inward = input ? -localDirection : localDirection;
+            Vector3 side = Vector3.Cross(Vector3.up, inward).normalized;
+            if (side.sqrMagnitude < 0.01f) side = Vector3.right;
+            Quaternion rot = Quaternion.LookRotation(inward, Vector3.up);
+
+            GameObject stem = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            stem.name = $"Runtime_IOArrow_{name}_Stem";
+            stem.transform.SetParent(parent, false);
+            stem.transform.localPosition = basePos - inward * 0.08f;
+            stem.transform.localRotation = rot;
+            stem.transform.localScale = new Vector3(0.06f, 0.02f, 0.18f);
+            Destroy(stem.GetComponent<Collider>());
+            stem.GetComponent<Renderer>().sharedMaterial = mat;
+
+            GameObject headA = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            headA.name = $"Runtime_IOArrow_{name}_HeadA";
+            headA.transform.SetParent(parent, false);
+            headA.transform.localPosition = basePos + inward * 0.06f + side * 0.045f;
+            headA.transform.localRotation = Quaternion.LookRotation((inward - side * 0.65f).normalized, Vector3.up);
+            headA.transform.localScale = new Vector3(0.045f, 0.02f, 0.12f);
+            Destroy(headA.GetComponent<Collider>());
+            headA.GetComponent<Renderer>().sharedMaterial = mat;
+
+            GameObject headB = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            headB.name = $"Runtime_IOArrow_{name}_HeadB";
+            headB.transform.SetParent(parent, false);
+            headB.transform.localPosition = basePos + inward * 0.06f - side * 0.045f;
+            headB.transform.localRotation = Quaternion.LookRotation((inward + side * 0.65f).normalized, Vector3.up);
+            headB.transform.localScale = new Vector3(0.045f, 0.02f, 0.12f);
+            Destroy(headB.GetComponent<Collider>());
+            headB.GetComponent<Renderer>().sharedMaterial = mat;
         }
 
         private bool OutputAcceptsItem(int outputIndex, ItemDefinition item)

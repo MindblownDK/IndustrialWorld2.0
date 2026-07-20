@@ -1,9 +1,39 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.5.0-dev`
+**Current Version:** `6.5.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.5.1-dev] Splitter/Funnel Usability Pass
+
+**Type:** PATCH — logistics usability, routing correction, and interaction/UI polish only; no save schema break, prefab/item/recipe/research generation reset, balance, power, or factory-variant scope change.
+
+**Fixed / Improved:**
+- **Splitter panel scroll stability:** splitter UI is no longer treated as a live auto-refresh machine panel, so the Mk.3 splitter panel no longer snaps/scrolls itself back upward while the player is reading or configuring it.
+- **Mk.3 lane count correction:** Mk.3 now uses **one input + three outputs**, not four outputs.
+- **Splitter I/O arrows:** all conveyor splitters now generate clear runtime **input/output arrows** that appear on both the placed block and the ghost preview.
+- **Mk.3 filter workflow upgraded:** Mk.3 per-output filters now support the same style of searchable filter workflow as the current block filtering system:
+  - searchable picker dialog
+  - inventory click/drag capture
+  - direct drag/drop onto the filter slot still works
+- **Funnel interaction/UI:** right-clicking a funnel now opens a dedicated funnel panel where the player can switch between **Import** and **Export**.
+- **Funnel snapping:** funnel placement now snaps more intelligently toward belts and inventory-style blocks, and inventory-style blocks can snap onto a funnel's inventory side more cleanly.
+
+**Manual Unity Steps:**
+1. Let Unity compile and confirm the runtime banner reports `6.5.1-dev`.
+2. No Voxel Engine Setup rerun is required.
+3. Open a **Mk.3 splitter** and confirm the panel can scroll normally without jumping back to the top.
+4. Confirm **Mk.3** now behaves as **1 input + 3 outputs**.
+5. Confirm the splitter ghost and placed splitter both show clear input/output arrows.
+6. Open a Mk.3 splitter filter and confirm you can:
+   - set it through the searchable dialog,
+   - click/drag an inventory item into the picker,
+   - still drag directly onto the filter slot.
+7. Right-click a funnel, switch it to **Export**, and test **chest → funnel → belt**.
+8. Re-test funnel snapping against both a belt and a chest/inventory block.
 
 ---
 
