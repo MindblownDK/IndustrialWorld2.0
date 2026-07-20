@@ -66,7 +66,10 @@ namespace VoxelEngine.Persistence
         private void OnApplicationQuit() => SaveAll();
         private void OnDestroy()
         {
-            if (Instance == this) { SaveAll(); Instance = null; }
+            // Do not write during scene teardown: Unity may already have destroyed
+            // the player Inventory, which previously replaced a valid save with a
+            // player-less sidecar whose first block position was read as the spawn.
+            if (Instance == this) Instance = null;
         }
 
         // ============================================================
@@ -107,7 +110,11 @@ namespace VoxelEngine.Persistence
             try
             {
                 var save = new SaveData();
-                SavePlayer(save);
+                if (!SavePlayer(save))
+                {
+                    Debug.LogWarning("[WorldState] Skipped save because the player inventory is unavailable; existing save was preserved.");
+                    return;
+                }
                 SavePlacedBlocks(save);
                 SavePlacedTiered(save);
                 SaveGrids(save);
@@ -140,10 +147,10 @@ namespace VoxelEngine.Persistence
             return Path.Combine(folder, "world_state.json");
         }
 
-        private void SavePlayer(SaveData save)
+        private bool SavePlayer(SaveData save)
         {
-            var inv = FindAnyObjectByType<Inventory>();
-            if (inv == null) return;
+            var inv = FindPlayerInventory();
+            if (inv == null || !IsSafePlayerSavePosition(inv.transform.position)) return false;
             save.player = new SavedPlayer
             {
                 pos = inv.transform.position,
@@ -151,6 +158,23 @@ namespace VoxelEngine.Persistence
                 container = SerializeContainer(inv.container),
                 activeHotbarIndex = inv.activeHotbarIndex
             };
+            return true;
+        }
+
+        private static Inventory FindPlayerInventory()
+        {
+            var player = GameObject.FindGameObjectWithTag("Player");
+            return player != null ? player.GetComponentInChildren<Inventory>() : FindAnyObjectByType<Inventory>();
+        }
+
+        private static bool IsSafePlayerSavePosition(Vector3 pos)
+        {
+            if (float.IsNaN(pos.x) || float.IsNaN(pos.y) || float.IsNaN(pos.z)
+                || float.IsInfinity(pos.x) || float.IsInfinity(pos.y) || float.IsInfinity(pos.z)) return false;
+            var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
+            if (body == null) return Mathf.Abs(pos.x) < 100000f && Mathf.Abs(pos.y) < 100000f && Mathf.Abs(pos.z) < 100000f;
+            float tolerance = Mathf.Max(160f, body.SurfaceRadius * 0.30f);
+            return Mathf.Abs(Vector3.Distance(pos, body.transform.position) - body.SurfaceRadius) <= tolerance;
         }
 
         private void SavePlacedBlocks(SaveData save)

@@ -1,9 +1,27 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.0.0-dev`
+**Current Version:** `6.0.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.0.1-dev] Reliable Player Position Save
+
+**Type:** PATCH — player save lifecycle and recovery correction; no chunk format, item, prefab, recipe, research, balance, power, or API change.
+
+**Fixed:**
+- Save data now captures the player from the tagged player object and refuses to overwrite a valid sidecar when the player Inventory is unavailable during teardown.
+- PlayerSpawner saves once while its valid player transform is still enabled during scene/play-mode exit.
+- Player-position parsing now targets the `player.pos` record specifically; it can no longer mistakenly use a static block's `pos` when a player record is missing.
+- Invalid player coordinates continue to fall back to a normal safe spawn.
+
+**Manual Unity Steps:**
+1. Start a clean V2 world and move a noticeable distance from the initial spawn.
+2. Exit play mode, re-enter, and load that same world.
+3. Confirm the Console reports the saved player position and that the player returns to that location on the planetary surface.
+4. Repeat three times; confirm `world_state.json` and `world_state.json.previous` remain valid.
 
 ---
 

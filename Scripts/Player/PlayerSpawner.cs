@@ -172,6 +172,14 @@ namespace VoxelEngine.Player
             Debug.Log("[PlayerSpawner] Player control enabled at " + transform.position);
         }
 
+        private void OnDisable()
+        {
+            // Save while the player still owns a valid transform and Inventory. This
+            // runs before scene teardown, unlike persistence-manager destruction.
+            if (ReadyForPlayerControl)
+                VoxelEngine.Persistence.WorldStatePersistence.Instance?.SaveAll();
+        }
+
         // ============================================================
         //                     DEATH RESPAWN
         // ============================================================
@@ -211,7 +219,7 @@ namespace VoxelEngine.Player
             {
                 string txt = System.IO.File.ReadAllText(path);
                 // Verbatim string: doubled "" for literal quotes, \{ is a regex-escaped brace.
-                const string pattern = @"""pos""\s*:\s*\{\s*""x""\s*:\s*(-?[0-9.eE+-]+)\s*,\s*""y""\s*:\s*(-?[0-9.eE+-]+)\s*,\s*""z""\s*:\s*(-?[0-9.eE+-]+)";
+                const string pattern = @"""player""\s*:\s*\{\s*""pos""\s*:\s*\{\s*""x""\s*:\s*(-?[0-9.eE+-]+)\s*,\s*""y""\s*:\s*(-?[0-9.eE+-]+)\s*,\s*""z""\s*:\s*(-?[0-9.eE+-]+)";
                 var m = System.Text.RegularExpressions.Regex.Match(txt, pattern);
                 if (!m.Success) return false;
                 float x = float.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);

@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.0.0-dev`
-**Roadmap Version:** `6.0.0-dev`
+**Current Version:** `6.0.1-dev`
+**Roadmap Version:** `6.0.1-dev`
 **Date:** 2026-07-19
 **Status:** Chunk Persistence V2 Working On — Fresh World Required
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -1686,6 +1686,42 @@ For each version, these are the high-level Unity tasks you will perform manually
    - Step 23 for world forge, Star Builder, Dyson Sphere, boss relic gates, and megastructures.
 
 ---
+
+
+## 11. Added Roadmap Requirements — Save Safety, Mobility & Multiplayer
+
+### 11.1 Player Save Safety — 🛠️ WORKING ON
+- Player position must be captured while the player object, Inventory, and valid planetary surface position still exist.
+- A missing player record must never be interpreted as a static block position.
+- Invalid player coordinates must fall back to a safe fresh/bed spawn without overwriting the last known-good save.
+
+### 11.2 Ice Friction — ❌ MISSING
+- Ice surfaces will use low-friction physics for players, static loose blocks, and movable Grids.
+
+### 11.3 Jetpack Families — ❌ MISSING
+- Add two dedicated jetpack equipment slots.
+- Hydrogen boost pack: Shift activates a boost; hydrogen-only flight remains possible with no power draw.
+- Atmospheric jetpack: atmospheric propulsion role.
+- Hybrid jetpack: atmospheric plus ion operation using power only.
+
+### 11.4 Cryobeds, Offline Survival & Oxygen — ❌ MISSING
+- Add static and Grid cryobed items/blocks.
+- An offline player requires an active cryobed or oxygen-rich environment.
+- If oxygen depletes or no valid offline-survival condition exists, the player dies.
+
+### 11.5 Multiplayer — LAST ROADMAP MILESTONE — ❌ MISSING
+- This is the final roadmap milestone after all single-player systems are complete.
+- Support self-hosted server creation on Windows and Linux.
+- Support LAN discovery/connection and direct connection to self-hosted servers.
+- Add player teams with invitations and team-only interaction permissions for Grid blocks and static blocks.
+- Add pirate and merchant NPC roles.
+
+### 11.6 World Management, Autosaves & Item Limits — ❌ MISSING
+- Add three visible autosave slots in the Saves panel, with safe load/restore flow.
+- Add Edit World for non-generation settings only: world name and dropped-item limit.
+- Default maximum active physical dropped items is 90 and must be configurable in both Create World and Edit World.
+- Conveyor packets are separate from physical dropped items, are protected from dropped-item despawn/limits, and must be optimized independently for dense factories.
+- Main-menu world cards: primary Play button; Edit and Saves controls together; Clone and a smaller Delete control stacked beside them.
 
 ## 10. Suggested Immediate Next Steps
 
