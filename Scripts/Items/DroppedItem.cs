@@ -18,6 +18,11 @@ namespace VoxelEngine.Items
         public ItemStack stack;
         public float lifetime = 300f;
 
+        /// <summary>Total item units currently represented by physical world drops.
+        /// Conveyor packets are a separate simulation and never contribute here.</summary>
+        public static int ActivePhysicalItemCount { get; private set; }
+        private int _registeredItemCount;
+
         private float _spawnTime;
         // Longer pickup grace so a player who drops an item can SEE it before
         // walking forward and instantly re-picking it (the previous 0.8s was
@@ -34,6 +39,9 @@ namespace VoxelEngine.Items
         public static DroppedItem Spawn(ItemStack stack, Vector3 position, Vector3 tossDir)
         {
             if (stack == null || stack.IsEmpty) return null;
+
+            int capacity = AvailablePhysicalCapacity();
+            if (capacity <= 0) return null;
 
             var di = DroppedItemPool.Get();
             var go = di.gameObject;
@@ -85,6 +93,9 @@ namespace VoxelEngine.Items
             trigger.radius = 2.5f;
 
             di.stack = stack.Clone();
+            di.stack.count = Mathf.Min(stack.count, capacity);
+            di._registeredItemCount = di.stack.count;
+            ActivePhysicalItemCount += di._registeredItemCount;
             di._spawnTime = Time.time;
             di._bobPhase = Random.value * Mathf.PI * 2f;
             di._rb = rb;
@@ -96,6 +107,17 @@ namespace VoxelEngine.Items
             Debug.Log($"[DroppedItem] Spawned {stack.item.displayName} x{stack.count} at {position}");
             return di;
         }
+
+        public static int MaximumPhysicalItemCount
+        {
+            get
+            {
+                var session = VoxelEngine.Menu.WorldSession.Instance;
+                return session != null ? Mathf.Max(1, session.maxDroppedItems) : 90;
+            }
+        }
+
+        public static int AvailablePhysicalCapacity => Mathf.Max(0, MaximumPhysicalItemCount - ActivePhysicalItemCount);
 
         /// <summary>Marks the inventory that intentionally dropped this stack.
         /// That inventory must leave the pickup trigger before it can collect it again.</summary>
@@ -153,6 +175,8 @@ namespace VoxelEngine.Items
             if (moved <= 0) return false;
 
             stack.count -= moved;
+            _registeredItemCount = Mathf.Max(0, _registeredItemCount - moved);
+            ActivePhysicalItemCount = Mathf.Max(0, ActivePhysicalItemCount - moved);
             UI.BuildFeedbackHud.Show($"Loaded {stack.item.displayName}", $"→ belt x{moved}", stack.item.icon, stack.item.iconTint);
             if (stack.count <= 0)
             {
@@ -182,7 +206,10 @@ namespace VoxelEngine.Items
                     $"+{picked}", stack.item.icon, new Color(0.30f, 0.75f, 0.40f));
                 FX.AudioManager.PlayUI(FX.SfxLibrary.Get(FX.Sfx.Pickup), 0.45f,
                     UnityEngine.Random.Range(0.97f, 1.06f));
+                int removed = stack.count - leftover.count;
                 stack.count = leftover.count;
+                _registeredItemCount = Mathf.Max(0, _registeredItemCount - removed);
+                ActivePhysicalItemCount = Mathf.Max(0, ActivePhysicalItemCount - removed);
             }
             return false;
         }
@@ -204,13 +231,24 @@ namespace VoxelEngine.Items
         /// <summary>Returns this physical item entity to the shared pool.</summary>
         private void Despawn()
         {
+            if (_registeredItemCount > 0)
+                ActivePhysicalItemCount = Mathf.Max(0, ActivePhysicalItemCount - _registeredItemCount);
+            _registeredItemCount = 0;
             stack = null;
             _dropOwner = null;
             _ownerLeftPickupRange = false;
             DroppedItemPool.Return(this);
         }
 
+        private void OnDestroy()
+        {
+            if (_registeredItemCount > 0)
+                ActivePhysicalItemCount = Mathf.Max(0, ActivePhysicalItemCount - _registeredItemCount);
+            _registeredItemCount = 0;
+        }
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetPhysicalItemCount() => ActivePhysicalItemCount = 0;
     }
     /// <summary>Reusable physical world-item entities. Pooling avoids allocation and
     /// destruction spikes when mining, conveyors, or inventory overflow create drops.</summary>

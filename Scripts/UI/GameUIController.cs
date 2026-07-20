@@ -2711,11 +2711,24 @@ namespace VoxelEngine.UI
             }
 
             var dropped = VoxelEngine.Items.DroppedItem.Spawn(stack, spawnPos, tossDir);
-            dropped?.SetDropOwner(inventory);
-            c.SetSlot(idx, new ItemStack());
+            if (dropped == null)
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show("Drop Limit Reached",
+                    $"Physical world limit: {VoxelEngine.Items.DroppedItem.MaximumPhysicalItemCount}",
+                    stack.item.icon, new Color(0.95f, 0.55f, 0.20f));
+                return;
+            }
+
+            dropped.SetDropOwner(inventory);
+            int droppedCount = dropped.stack.count;
+            int remaining = Mathf.Max(0, stack.count - droppedCount);
+            var retained = remaining > 0
+                ? new ItemStack { item = stack.item, count = remaining, durability = stack.durability }
+                : new ItemStack();
+            c.SetSlot(idx, retained);
             VoxelEngine.UI.BuildFeedbackHud.Show(
                 $"Dropped {stack.item.displayName}",
-                $"-{stack.count}",
+                $"-{droppedCount} · {remaining} retained",
                 stack.item.icon,
                 new Color(0.85f, 0.35f, 0.25f));
         }

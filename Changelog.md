@@ -1,9 +1,28 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.1.2-dev`
+**Current Version:** `6.2.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.2.0-dev] Physical Drop Limit Enforcement
+
+**Type:** MINOR — save-compatible physical world-item limit system.
+
+**Added:**
+- Enforced each world's Maximum Dropped Items setting against the total number of item units in physical world drops.
+- Conveyor packets are excluded completely and can never be despawned or blocked by this physical-drop limit.
+- Manual drops now spawn only the available physical capacity and retain every excess item in the original inventory stack.
+- At a limit of 999 with 899 physical items present, dropping 101 items spawns 100 and retains exactly 1 item in the inventory.
+- Added a clear Drop Limit Reached message when no physical capacity remains.
+
+**Manual Unity Steps:**
+1. Set a world limit of 999.
+2. Create 899 physical dropped item units.
+3. Drop a stack of 101 and confirm 100 enter the world while exactly 1 remains in the inventory.
+4. Confirm conveyor packets continue moving regardless of the physical drop count.
 
 ---
 
