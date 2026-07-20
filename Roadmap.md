@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.71.0-dev`
-**Roadmap Version:** `5.71.0-dev`
+**Current Version:** `5.71.1-dev`
+**Roadmap Version:** `5.71.1-dev`
 **Date:** 2026-07-19
-**Status:** Physical World Item Pool Completed; Conveyor Visual Pool Working On
+**Status:** Save-Load Recovery Safeguards Working On; Conveyor Visual Pool Awaiting Validation
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
 ---

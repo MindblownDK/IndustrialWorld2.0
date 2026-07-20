@@ -1,9 +1,28 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `5.71.0-dev`
+**Current Version:** `5.71.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [5.71.1-dev] Save-Load Recovery Safeguards
+
+**Type:** PATCH — save safety, corrupt-position recovery, and serialization-depth fixes. No item, prefab, recipe, research, balance, power, or terrain-generation settings changed.
+
+**Fixed:**
+- Player spawning now rejects non-finite, extreme, or off-surface saved positions before they can make a planetary world stream around an invalid location and leave the player frozen underwater.
+- World-state writes now use a temporary file and atomic replacement, preserving the previous valid `world_state.json` as `world_state.json.previous` before each successful replacement.
+- Added a strict four-level packed-drawer upgrade serialization limit, preventing JsonUtility's depth-limit warnings and cyclic nested payloads from destabilizing world-state loading.
+- Nested drawer data beyond the safe limit is skipped with an explicit Console warning rather than corrupting the entire sidecar load.
+
+**Manual Unity Steps:**
+1. Back up the complete world folder before testing.
+2. Confirm `5.71.1-dev` is shown at startup.
+3. Load a world whose saved player position is invalid and confirm the Console logs that it was ignored, then the player receives a normal fresh/bed spawn instead of a frozen underwater spawn.
+4. Save twice and confirm `world_state.json.previous` exists beside the active world-state file.
+5. Test ordinary inventories and packed drawers; confirm no JsonUtility serialization-depth warnings occur.
 
 ---
 

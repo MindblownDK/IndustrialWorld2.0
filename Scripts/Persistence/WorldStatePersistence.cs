@@ -112,8 +112,20 @@ namespace VoxelEngine.Persistence
                 SavePlacedTiered(save);
                 SaveGrids(save);
                 SaveQuarries(save);
-                File.WriteAllText(path, JsonUtility.ToJson(save, prettyPrint: true));
-                Debug.Log($"[WorldState] Saved -> {path}");
+                string json = JsonUtility.ToJson(save, prettyPrint: true);
+                string temporaryPath = path + ".tmp";
+                string backupPath = path + ".previous";
+                File.WriteAllText(temporaryPath, json);
+                if (File.Exists(path))
+                {
+                    // Windows atomic replacement preserves the last known-good sidecar.
+                    File.Replace(temporaryPath, path, backupPath, ignoreMetadataErrors: true);
+                }
+                else
+                {
+                    File.Move(temporaryPath, path);
+                }
+                Debug.Log($"[WorldState] Saved -> {path} (previous snapshot: {backupPath})");
             }
             catch (Exception ex) { Debug.LogError("[WorldState] Save failed: " + ex.Message); }
         }
@@ -505,7 +517,9 @@ namespace VoxelEngine.Persistence
             return sc;
         }
 
-        private SavedStack SerializeStack(ItemStack s)
+        private const int MaxPackedDrawerSaveDepth = 4;
+
+        private SavedStack SerializeStack(ItemStack s, int depth = 0)
         {
             var saved = new SavedStack
             {
@@ -520,9 +534,11 @@ namespace VoxelEngine.Persistence
                 saved.drawerStoredItemId = payload.storedItem != null ? payload.storedItem.itemId : "";
                 saved.drawerStoredCount = payload.storedCount;
                 saved.drawerInstanceId = payload.instanceId;
-                if (payload.upgrades != null)
+                if (payload.upgrades != null && depth < MaxPackedDrawerSaveDepth)
                     foreach (var up in payload.upgrades)
-                        saved.drawerUpgrades.Add(SerializeStack(up));
+                        saved.drawerUpgrades.Add(SerializeStack(up, depth + 1));
+                else if (payload.upgrades != null && payload.upgrades.Count > 0)
+                    Debug.LogWarning("[WorldState] Packed drawer upgrade nesting exceeded the safe save limit; deeper upgrades were skipped.");
             }
             return saved;
         }
@@ -1127,7 +1143,7 @@ namespace VoxelEngine.Persistence
                 id => _itemById.TryGetValue(id, out var def) ? def : null);
         }
 
-        private ItemStack DeserializeStack(SavedStack e)
+        private ItemStack DeserializeStack(SavedStack e, int depth = 0)
         {
             if (e == null || string.IsNullOrEmpty(e.itemId) || e.count <= 0) return new ItemStack();
 
@@ -1145,9 +1161,9 @@ namespace VoxelEngine.Persistence
                     storedCount = e.drawerStoredCount,
                     upgrades = new List<ItemStack>()
                 };
-                if (e.drawerUpgrades != null)
+                if (e.drawerUpgrades != null && depth < MaxPackedDrawerSaveDepth)
                     foreach (var up in e.drawerUpgrades)
-                        payload.upgrades.Add(DeserializeStack(up));
+                        payload.upgrades.Add(DeserializeStack(up, depth + 1));
                 return VoxelEngine.Storage.StorageDrawer.CreatePackedDrawerStack(baseBlock, payload);
             }
 

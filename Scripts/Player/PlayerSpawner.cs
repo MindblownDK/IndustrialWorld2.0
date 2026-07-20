@@ -218,9 +218,33 @@ namespace VoxelEngine.Player
                 float y = float.Parse(m.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture);
                 float z = float.Parse(m.Groups[3].Value, System.Globalization.CultureInfo.InvariantCulture);
                 pos = new Vector3(x, y, z);
+                if (!IsSafeSavedPosition(pos))
+                {
+                    Debug.LogWarning("[PlayerSpawner] Ignored an invalid saved player position: " + pos);
+                    pos = default;
+                    return false;
+                }
                 return true;
             }
             catch { return false; }
+        }
+
+        /// <summary>Rejects corrupt/legacy coordinates before they can freeze streaming
+        /// around an invalid location. Planet saves must remain close to the active surface.</summary>
+        private static bool IsSafeSavedPosition(Vector3 pos)
+        {
+            if (float.IsNaN(pos.x) || float.IsNaN(pos.y) || float.IsNaN(pos.z)
+                || float.IsInfinity(pos.x) || float.IsInfinity(pos.y) || float.IsInfinity(pos.z))
+                return false;
+
+            var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
+            if (body == null) return Mathf.Abs(pos.x) < 100000f && Mathf.Abs(pos.y) < 100000f && Mathf.Abs(pos.z) < 100000f;
+
+            float radialDistance = Vector3.Distance(pos, body.transform.position);
+            // Terrain varies around the authored surface, but a player far inside or
+            // outside the body cannot stream a valid playable chunk column.
+            float tolerance = Mathf.Max(160f, body.SurfaceRadius * 0.30f);
+            return Mathf.Abs(radialDistance - body.SurfaceRadius) <= tolerance;
         }
 
         private static Vector3Int VoxelCoordOf(Vector3 pos)
