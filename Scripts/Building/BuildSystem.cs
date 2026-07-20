@@ -660,6 +660,15 @@ namespace VoxelEngine.Building
             // Snap to grid. Push from the hit surface along the normal.
             float gs = gridSize;
             Vector3 raw = hit.point + hit.normal * (gs * 0.5f);
+
+            // On spherical planets, world-axis rounding creates visible height drift between
+            // neighboring placed machines/containers/pipes because each placement rounds X/Y/Z
+            // independently instead of following the local tangent plane. If a nearby static
+            // placed block already exists, use it as a local placement anchor so follow-up
+            // placements stay on the same tangent-frame lattice.
+            if (TryGetNearbyPlacedBlockSnap(hit, raw, gs, out var anchoredSnap))
+                return anchoredSnap;
+
             Vector3 snapped = new Vector3(
                 Mathf.Round(raw.x / gs) * gs,
                 Mathf.Round(raw.y / gs) * gs,
@@ -730,6 +739,62 @@ namespace VoxelEngine.Building
             if (ax >= ay && ax >= az) return new Vector3(Mathf.Sign(v.x), 0, 0);
             if (ay >= ax && ay >= az) return new Vector3(0, Mathf.Sign(v.y), 0);
             return new Vector3(0, 0, Mathf.Sign(v.z));
+        }
+
+        private bool TryGetNearbyPlacedBlockSnap(RaycastHit hit, Vector3 raw, float spacing, out Vector3 snapped)
+        {
+            snapped = default;
+            if (!GravityProvider.IsRadial || GravityProvider.ActiveBody == null) return false;
+
+            var anchor = FindStaticPlacementAnchor(hit, spacing);
+            if (anchor == null) return false;
+
+            Vector3 up = anchor.up;
+            if (up.sqrMagnitude < 0.0001f) up = GravityProvider.GetUp(anchor.position);
+            up = up.normalized;
+
+            Vector3 forward = Vector3.ProjectOnPlane(anchor.forward, up);
+            if (forward.sqrMagnitude < 0.0001f)
+                forward = Vector3.ProjectOnPlane(GravityProvider.GetSurfaceRotation(anchor.position) * Vector3.forward, up);
+            if (forward.sqrMagnitude < 0.0001f)
+                forward = Vector3.ProjectOnPlane(Vector3.forward, up);
+            if (forward.sqrMagnitude < 0.0001f)
+                forward = Vector3.ProjectOnPlane(Vector3.right, up);
+            forward = forward.normalized;
+            Vector3 right = Vector3.Cross(forward, up).normalized;
+            forward = Vector3.Cross(up, right).normalized;
+
+            Vector3 delta = raw - anchor.position;
+            float localX = Mathf.Round(Vector3.Dot(delta, right) / spacing) * spacing;
+            float localY = Mathf.Round(Vector3.Dot(delta, up) / spacing) * spacing;
+            float localZ = Mathf.Round(Vector3.Dot(delta, forward) / spacing) * spacing;
+            snapped = anchor.position + right * localX + up * localY + forward * localZ;
+            return true;
+        }
+
+        private Transform FindStaticPlacementAnchor(RaycastHit hit, float spacing)
+        {
+            Transform best = null;
+            float bestDistance = float.MaxValue;
+
+            void Consider(PlacedBlock placed)
+            {
+                if (placed == null) return;
+                if (placed.GetComponentInParent<GridEntity>() != null) return;
+                float distance = (placed.transform.position - hit.point).sqrMagnitude;
+                if (distance >= bestDistance) return;
+                bestDistance = distance;
+                best = placed.transform;
+            }
+
+            Consider(hit.collider != null ? hit.collider.GetComponentInParent<PlacedBlock>() : null);
+            if (best != null) return best;
+
+            float searchRadius = Mathf.Max(spacing * 1.75f, 2f);
+            var overlaps = Physics.OverlapSphere(hit.point, searchRadius, ~0, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < overlaps.Length; i++)
+                Consider(overlaps[i] != null ? overlaps[i].GetComponentInParent<PlacedBlock>() : null);
+            return best;
         }
 
         private bool IsPlacementValid(Vector3 pos, BlockItem block)

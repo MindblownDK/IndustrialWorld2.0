@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.4.5-dev`
-**Roadmap Version:** `6.4.5-dev`
+**Current Version:** `6.4.6-dev`
+**Roadmap Version:** `6.4.6-dev`
 **Date:** 2026-07-20
-**Status:** Grid Gravity Fix & Simulation Tick Centralization — WORKING ON
+**Status:** Placement Stabilization Pass — WORKING ON
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
 ---
@@ -45,18 +45,18 @@ The design goal is a seamless blend of:
 |--------|--------|-------|
 | Voxel world / planet / gravity | 🛠️ WORKING ON | Planet terrain generation exists but grid gravity is broken: grids fall as if unaffected by gravity and do not align with the planet surface when placed. Grid planet-alignment and consistent gravity for all grid types remain open. |
 | Cosmos / star system framework | 🟡 Exists | Needs planet-specific resources and interplanetary travel |
-| Grid systems (ships/vehicles) | 🛠️ WORKING ON | Core grid building works but grids are not affected by gravity and do not align with planet surfaces on placement. Needs lights, screens, armor, sloped blocks, and gravity fix. |
+| Grid systems (ships/vehicles) | 🛠️ WORKING ON | Core grid building works. Radial gravity is in place, and the 6.4.6-dev placement stabilization pass adds terrain-aligned fresh-grid spawn, delayed first-frame physics handoff, and landing-gear auto-lock grace. Broader orbit/vehicle progression work remains. |
 | Maritime grid | 🟡 Basic | Needs refinement and feature parity |
 | Detail-scale grid blocks | 🟡 PARTIALLY COMPLETE | Detail blocks now share the unified Grid with Structural blocks. Save/restore now covers Structural and Detail addresses; Unity validation and remaining positional network indexing are open. |
 | Unified grid placement | 🟡 PARTIALLY COMPLETE | Detail/Structural placement, shape variants, screen sources, and unified Item/Gas/Liquid pipe placement/networks are validated. **5.69.0-dev** adds additive movable-grid save/restore for Structural and Detail blocks, variants, settings, and attached pipes; Thomas validated it in Unity. Remaining positional-indexing work keeps this broader area partially complete. |
 | Power (wind, hydrogen) | ✅ Mature | Modular turbines are excellent |
 | Fluids / gases | ✅ Good | Pipe-gated transfer in 2.20.0 |
-| Building (static + tiered) | 🛠️ Working On | 3.75 m spacing, scale, rotation, and player-away Doors are Unity-validated. Size-V5 closes Foundation deck seams and adds upward/downward Stair anchors at Foundation/Floor edges and Doorway thresholds; final validation is pending. |
+| Building (static + tiered) | 🛠️ Working On | 3.75 m spacing, scale, rotation, and player-away Doors are Unity-validated. 6.4.6-dev adds static placed-block tangent-anchor snapping for cleaner same-level planetary placement and synchronizes tiered overlap validation with the intended 0.45 half-extents. Size-V5 closes Foundation deck seams and adds upward/downward Stair anchors at Foundation/Floor edges and Doorway thresholds; final validation is pending. |
 | Advanced Quarry | 🛠️ Working On | Unbreakable bedrock generation removed; late Tier-5 quarry uses a finite configurable 64-layer default depth |
 | Sky / atmosphere / space rendering | 🟡 Basic | Needs planet-specific skies and proper space ambiance |
 | Gravity / orbits | 🛠️ WORKING ON | Grid gravity now uses radial GravityProvider system (6.4.1-dev). GridBuilder already uses GravityProvider.GetSurfaceRotation for planet-aligned placement. Orbit mechanics and atmospheric drag remain future work. |
 | Space stations | ❌ Missing | No buildable orbital platforms |
-| Conveyor logistics | 🛠️ WORKING ON | Conveyors, ramps, vertical belts, chutes, funnels, conveyor splitters (Mk.1/Mk.2/Mk.3), contextual shape wheel, ghost previews, and persistence exist. Pooled item entities validated; more chute variants and final throughput validation remain. |
+| Conveyor logistics | 🛠️ WORKING ON | Conveyors, ramps, vertical belts, chutes, funnels, conveyor splitters (Mk.1/Mk.2/Mk.3), contextual shape wheel, ghost previews, and persistence exist. 6.4.6-dev improves local follow-up alignment for static chutes/funnels and neighboring factory blocks on spherical terrain through nearby placed-block tangent anchoring. More chute variants and final throughput validation remain. |
 | Grid screens / displays | ✅ COMPLETED | All sizes, live text+power states, right-click+terminal config, custom text+custom colors+border+font, visual bar charts, multi-source, live camera feeds, power gain/loss/net mode, persistence, and camera block are validated by Thomas. (5.51.3-dev) |
 | Grid lighting | 🛠️ WORKING ON | Detail/Structural single and dual spotlights, Structural LED strip, premium segmented/clean LED visuals, screen data providers, configuration UI, visible chase animation, and motion activation exist. Static/placed settings persist; unified movable-grid persistence remains future work. |
 | Sloped / armored grid blocks | ✅ COMPLETED | Cube, Slope, Half Block, Half Slope, Corner, and Inverted Slope variants are implemented and validated with textured meshes, collision, ghosts, and rotation. |
@@ -1726,7 +1726,7 @@ For each version, these are the high-level Unity tasks you will perform manually
 
 ## 10. Suggested Immediate Next Steps
 
-1. **Validate grid gravity in Unity** — confirm grids fall toward planet center on spherical worlds and align with the surface on placement (6.4.1-dev).
+1. **Validate placement stabilization in Unity** — confirm landing gear no longer tilts on first placement and neighboring assemblers/chests/funnels/chutes stay aligned on spherical terrain (6.4.6-dev).
 2. **Validate conveyor splitter in dense factories** — confirm round-robin distribution works under load.
 3. **Complete remaining unified Grid positional indexing** where legacy systems still read Structural-only coordinates.
 4. **Keep UI fit validation active** at 1280×720, 1366×768, 1920×1080, and ultrawide resolutions.

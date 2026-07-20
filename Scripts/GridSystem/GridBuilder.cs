@@ -169,7 +169,7 @@ namespace VoxelEngine.GridSystem
 
                 gridPos = Vector3Int.zero;
                 targetGrid = null;
-                rotation = GravityProvider.GetSurfaceRotation(worldPos);
+                rotation = BuildSurfacePlacementRotation(worldPos, hit.normal);
             }
 
             var targetedBlock = hit.collider != null ? hit.collider.GetComponentInParent<GridBlock>() : null;
@@ -433,11 +433,40 @@ namespace VoxelEngine.GridSystem
 
             VoxelEngine.UI.BuildFeedbackHud.ShowBlockPlaced(item.displayName, item, 1);
 
-            // Re-enable physics now that the grid and block are correctly positioned.
+            // Re-enable physics after the next fixed step so terrain contacts and newly
+            // added colliders are fully settled before the grid starts simulating.
             if (createdNewGrid && grid.Body != null)
-                grid.Body.isKinematic = false;
+                StartCoroutine(ReenableGridPhysicsNextFixed(grid));
 
             return true;
+        }
+
+        private System.Collections.IEnumerator ReenableGridPhysicsNextFixed(GridEntity grid)
+        {
+            yield return new WaitForFixedUpdate();
+            if (grid != null && grid.Body != null)
+                grid.Body.isKinematic = false;
+        }
+
+        private static Quaternion BuildSurfacePlacementRotation(Vector3 position, Vector3 hitNormal)
+        {
+            Vector3 radialUp = GravityProvider.GetUp(position);
+            Vector3 preferredUp = hitNormal.sqrMagnitude > 0.0001f ? hitNormal.normalized : radialUp;
+
+            // Trust terrain/surface normals when they're broadly aligned with planetary up;
+            // otherwise fall back to radial up so odd collider normals can't flip the grid.
+            if (Vector3.Dot(preferredUp, radialUp) < 0.35f)
+                preferredUp = radialUp;
+
+            Vector3 forward = Vector3.ProjectOnPlane(Vector3.forward, preferredUp);
+            if (forward.sqrMagnitude < 0.001f)
+                forward = Vector3.ProjectOnPlane(Vector3.right, preferredUp);
+            if (forward.sqrMagnitude < 0.001f)
+                forward = Vector3.Cross(preferredUp, Vector3.up);
+            if (forward.sqrMagnitude < 0.001f)
+                forward = Vector3.Cross(preferredUp, Vector3.forward);
+            forward.Normalize();
+            return Quaternion.LookRotation(forward, preferredUp);
         }
 
         private bool IsLedStripItem(GridBlockItem item)

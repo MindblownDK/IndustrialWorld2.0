@@ -330,7 +330,7 @@ namespace VoxelEngine.Building.Tiered
             if (Vector3.Distance(pos, transform.position) < 0.6f) return false;
 
             // Don't overlap dynamic rigidbodies.
-            var overlaps = Physics.OverlapBox(pos, Vector3.one * 0.40f, Quaternion.identity);
+            var overlaps = Physics.OverlapBox(pos, Vector3.one * 0.45f, Quaternion.identity);
             foreach (var col in overlaps)
             {
                 if (col == null) continue;

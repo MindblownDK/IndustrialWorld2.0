@@ -1,9 +1,36 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.4.5-dev`
+**Current Version:** `6.4.6-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.4.6-dev] Placement Stabilization — Terrain-Aligned Grid Spawn + Static Anchor Snap
+
+**Type:** PATCH — placement stability and alignment corrections only; no save schema, prefab/item/recipe/research generation, balance, power production, or API change.
+
+**Fixed / Improved:**
+- **Fresh grid spawn on terrain:** new free-placed grids now build their initial rotation from the terrain hit normal when it agrees with planetary up, instead of always forcing purely radial up. This reduces the first-contact lean that was most visible on landing gear placement over uneven planetary terrain.
+- **Fresh grid physics handoff:** newly created grids stay kinematic until the next fixed step after the first block is attached. This gives colliders and parenting one full physics handoff before simulation begins, reducing first-frame settle jitter and unwanted tilt.
+- **Landing gear post-place grace:** `GridLandingGear` now waits briefly before auto-lock can engage after placement, preventing the gear from magnetically freezing a just-spawned grid during its first settle frame. Manual lock still works immediately.
+- **Static placed-block tangent anchor snap:** world-placed factory/build blocks now look for a nearby static `PlacedBlock` on spherical planets and snap relative to that block's local tangent frame instead of rounding world X/Y/Z independently. This keeps adjacent assemblers, chests, funnels, chutes, and similar placed blocks at the same height and greatly improves local alignment for follow-up placements.
+- **Tiered overlap safety synchronized with docs:** `BuildSystemV2.ValidateOverlap` now uses the intended larger overlap half-extents (`0.45`) for tiered-building collision checks.
+
+**Roadmap Status:**
+- Grid systems (ships/vehicles): **🛠️ WORKING ON** — terrain-aligned spawn and landing-gear stabilization pass added; broader gravity/orbit work remains.
+- Building (static + tiered): **🛠️ WORKING ON** — static placed-block tangent anchor snapping added for cleaner same-level placement on planets.
+- Conveyor logistics: **🛠️ WORKING ON** — chutes/funnels and other static factory blocks benefit from the same local anchor snap when chained from existing placements.
+
+**Manual Unity Steps:**
+1. Let Unity compile and confirm the runtime banner reports `6.4.6-dev`.
+2. No Voxel Engine Setup rerun is required; this is a runtime-only placement stabilization patch.
+3. **Landing gear test:** place landing gear on uneven planetary terrain multiple times and confirm the newly created grid no longer tilts/falls into the same biased lean on first placement.
+4. **Manual landing lock test:** immediately press the landing-gear lock input after placement and confirm manual lock still works.
+5. **Assembler level test:** place one assembler, then place two or more additional assemblers near it on planetary terrain. Confirm they snap onto the same local level instead of stair-stepping in height.
+6. **Factory block alignment test:** repeat with chest, funnel, and chute placements near an existing placed block. Confirm local follow-up placements stay aligned.
+7. **Tiered overlap test:** re-test foundations/walls for blocked inside-overlap placement and confirm socket-based adjacent placement still works.
 
 ---
 

@@ -24,9 +24,11 @@ namespace VoxelEngine.GridSystem
         public override float PowerDraw => Enabled ? 5f : 0f;
 
         private const float AutoLockInterval = 0.1f;
+        private const float PlacementAutoLockGrace = 0.20f;
 
         private FixedJoint _joint;
         private float _checkTimer;
+        private float _autoLockGraceTimer;
 
         // Player-requested unlock latch: once the player unlocks (P / UI) we stay unlocked
         // until they choose to lock again — auto-lock will NOT instantly re-grab the surface.
@@ -36,6 +38,7 @@ namespace VoxelEngine.GridSystem
         {
             base.OnPlaced();
             blockName = "Landing Gear";
+            _autoLockGraceTimer = PlacementAutoLockGrace;
         }
 
         private void FixedUpdate()
@@ -43,6 +46,12 @@ namespace VoxelEngine.GridSystem
             if (!Enabled)
             {
                 UnlockInternal(manual: false);
+                return;
+            }
+
+            if (_autoLockGraceTimer > 0f)
+            {
+                _autoLockGraceTimer -= Time.fixedDeltaTime;
                 return;
             }
 
@@ -70,6 +79,7 @@ namespace VoxelEngine.GridSystem
         public void TryLock()
         {
             _manuallyUnlocked = false;
+            _autoLockGraceTimer = 0f;
             TryLockInternal();
         }
 
