@@ -374,12 +374,17 @@ namespace VoxelEngine.GridSystem
             }
 
             bool creatingUnifiedDetailRoot = grid == null && item.gridSize == GridSize.Small;
+            bool createdNewGrid = false;
             if (grid == null)
             {
                 // Every newly created construct uses one universal host grid. Block scale
                 // remains an item property, but the player never creates a separate grid type.
                 grid = GridEntity.Create(worldPos, GridSize.Large);
                 grid.transform.rotation = rotation;
+                // Start kinematic to prevent terrain collision from tilting the grid
+                // during the first physics frame. We enable physics after AddBlock.
+                if (grid.Body != null) grid.Body.isKinematic = true;
+                createdNewGrid = true;
                 gridPos = Vector3Int.zero;
             }
 
@@ -427,6 +432,11 @@ namespace VoxelEngine.GridSystem
             }
 
             VoxelEngine.UI.BuildFeedbackHud.ShowBlockPlaced(item.displayName, item, 1);
+
+            // Re-enable physics now that the grid and block are correctly positioned.
+            if (createdNewGrid && grid.Body != null)
+                grid.Body.isKinematic = false;
+
             return true;
         }
 

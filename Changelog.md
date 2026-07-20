@@ -1,9 +1,28 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.4.3-dev`
+**Current Version:** `6.4.4-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.4.4-dev] Grid Placement Tilting Fix, Building Overlap Prevention
+
+**Type:** PATCH — placement physics and overlap corrections only; no save schema, prefab, item, recipe, research, or balance change.
+
+**Fixed:**
+- **Grid placement tilting:** New grids are now created with `Rigidbody.isKinematic = true` during placement. This prevents the first physics frame's terrain collision from pushing and tilting the grid (especially landing gear with deep colliders). Physics is re-enabled immediately after the block is correctly positioned and parented.
+- **Building overlap prevention:** `BuildSystemV2.ValidateOverlap` now uses a much larger overlap check (`gridSize * 0.45f` half-extents instead of the old `0.40f`), and explicitly blocks placement when a `PlacedTieredBlock` is detected in the overlap volume. This prevents foundations from being placed inside existing foundations, walls inside walls, etc. Socket-snapped stacking (wall on wall, floor on floor) still works because that path bypasses `ValidateOverlap`.
+
+**Manual Unity Steps:**
+1. Let Unity compile and confirm the runtime banner reports `6.4.4-dev`.
+2. No Voxel Engine Setup rerun is required; this is a runtime-only fix.
+3. **Grid tilt test:** Place a landing gear on the planet surface and confirm it doesn't tilt after placement.
+4. **Grid tilt test 2:** Place an armor block or cockpit and confirm it stays aligned with the planet surface.
+5. **Building overlap test:** Try to place a foundation inside an existing foundation — confirm it's blocked with a red ghost.
+6. **Building stacking test:** Place a wall on top of another wall via socket snap — confirm it still works.
+7. **Assembler level test:** Place two assemblers side by side — confirm they're at the same height.
 
 ---
 

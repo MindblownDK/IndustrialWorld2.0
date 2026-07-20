@@ -327,12 +327,29 @@ namespace VoxelEngine.Building.Tiered
             // Don't overlap the player.
             if (Vector3.Distance(pos, transform.position) < 0.6f) return false;
 
-            // Don't overlap dynamic rigidbodies.
-            var overlaps = Physics.OverlapBox(pos, Vector3.one * 0.40f, Quaternion.identity);
+            // Use half the grid size as the overlap check radius so buildings
+            // can't be placed inside each other.
+            float halfSize = gridSize * 0.45f;
+            var overlaps = Physics.OverlapBox(pos, Vector3.one * halfSize, Quaternion.identity);
             foreach (var col in overlaps)
             {
+                if (col == null) continue;
+
+                // Don't overlap dynamic rigidbodies.
                 if (col.attachedRigidbody != null && !col.attachedRigidbody.isKinematic) return false;
-                // Allow stacking onto other tiered blocks (snap will handle exact alignment).
+
+                // Don't overlap existing tiered buildings (foundations, walls, etc.)
+                // Allow the overlap if it's a socket or ghost.
+                var host = col.GetComponentInParent<PlacedTieredBlock>();
+                if (host != null)
+                {
+                    // Allow stacking only when placing the same family on top
+                    // (e.g. wall on wall, floor on floor) via socket snap.
+                    // The socket snap path bypasses ValidateOverlap, so any
+                    // overlap here means the player is trying to place directly
+                    // inside an existing building — block it.
+                    return false;
+                }
             }
             return true;
         }
