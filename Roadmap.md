@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.0.1-dev`
-**Roadmap Version:** `6.0.1-dev`
+**Current Version:** `6.0.2-dev`
+**Roadmap Version:** `6.0.2-dev`
 **Date:** 2026-07-19
 **Status:** Chunk Persistence V2 Working On — Fresh World Required
 **Release Notes:** [`Changelog.md`](Changelog.md)

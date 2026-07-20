@@ -1,9 +1,25 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.0.1-dev`
+**Current Version:** `6.0.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.0.2-dev] Preserve Atmospheric and Space Logout Positions
+
+**Type:** PATCH — player-position validation correction only; no save schema, chunk format, item, prefab, recipe, research, balance, power, or API change.
+
+**Fixed:**
+- Valid player positions in atmosphere, orbit, and deep space are no longer treated as invalid and forced back to a planetary surface spawn.
+- Position safety validation now rejects only non-finite/extreme values and locations buried inside the active planet.
+- Player save and player spawn use the same space-safe validation rule.
+
+**Manual Unity Steps:**
+1. Fly well above the planet surface and exit play mode.
+2. Load the same world and confirm the player returns at the same high-altitude location.
+3. Repeat from a surface location and confirm ordinary surface restoration remains correct.
 
 ---
 

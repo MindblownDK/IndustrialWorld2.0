@@ -173,8 +173,9 @@ namespace VoxelEngine.Persistence
                 || float.IsInfinity(pos.x) || float.IsInfinity(pos.y) || float.IsInfinity(pos.z)) return false;
             var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
             if (body == null) return Mathf.Abs(pos.x) < 100000f && Mathf.Abs(pos.y) < 100000f && Mathf.Abs(pos.z) < 100000f;
-            float tolerance = Mathf.Max(160f, body.SurfaceRadius * 0.30f);
-            return Mathf.Abs(Vector3.Distance(pos, body.transform.position) - body.SurfaceRadius) <= tolerance;
+            // Space and high-atmosphere locations are valid disconnect positions.
+            // Reject only locations buried deep inside the active planetary body.
+            return Vector3.Distance(pos, body.transform.position) >= body.SurfaceRadius * 0.70f;
         }
 
         private void SavePlacedBlocks(SaveData save)

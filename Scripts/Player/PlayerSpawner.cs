@@ -102,8 +102,13 @@ namespace VoxelEngine.Player
                           : Mathf.Max(target.y, 250f);
             SetPosition(new Vector3(target.x, parkY, target.z));
 
-            // Now wait for the chunk column at (target.x, target.z) to be generated AND meshed.
-            yield return WaitForChunkAt(VoxelCoordOf(target), maxWaitSeconds);
+            // A saved high-altitude/space location has no terrain column to wait for.
+            // Waiting there would unnecessarily freeze control before an orbital logout.
+            var activeBody = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
+            bool savedInSpace = hasSavedPos && activeBody != null
+                && Vector3.Distance(target, activeBody.transform.position) > activeBody.SurfaceRadius + 80f;
+            if (!savedInSpace)
+                yield return WaitForChunkAt(VoxelCoordOf(target), maxWaitSeconds);
 
             // For fresh worlds, NOW find the actual top-of-ground position.
             // Skip on spheres — FindFreshSpawnNearby scans in world-space voxel coords which
@@ -122,11 +127,15 @@ namespace VoxelEngine.Player
                 }
             }
 
-            // Snap to actual ground via raycast — keep retrying until we get a real hit,
+            // A saved position is authoritative: it can be on terrain, in atmosphere,
+            // or in space. Ground snapping it would destroy valid sky/orbit logout state.
+            bool snapped = hasSavedPos;
+            if (!hasSavedPos)
+            {
+            // Snap a fresh/bed spawn to actual ground via raycast — keep retrying until we get a real hit,
             // because the mesh collider may take a frame or two to activate after the chunk
             // mesh is uploaded.
             float groundT0 = Time.time;
-            bool snapped = false;
             while (!snapped && Time.time - groundT0 < 5f)
             {
                 // On a sphere, raycast RADIAL-DOWN (toward the body core) instead of world-down.
@@ -157,6 +166,7 @@ namespace VoxelEngine.Player
             {
                 Debug.LogWarning("[PlayerSpawner] Could not raycast to ground after 5s — placing high above target.");
                 SetPosition(new Vector3(target.x, target.y + 5f, target.z));
+            }
             }
 
             // One more frame to let physics settle.
@@ -237,8 +247,8 @@ namespace VoxelEngine.Player
             catch { return false; }
         }
 
-        /// <summary>Rejects corrupt/legacy coordinates before they can freeze streaming
-        /// around an invalid location. Planet saves must remain close to the active surface.</summary>
+        /// <summary>Rejects corrupt coordinates before they can freeze streaming.
+        /// Legitimate high-atmosphere and space positions remain valid.</summary>
         private static bool IsSafeSavedPosition(Vector3 pos)
         {
             if (float.IsNaN(pos.x) || float.IsNaN(pos.y) || float.IsNaN(pos.z)
@@ -249,10 +259,10 @@ namespace VoxelEngine.Player
             if (body == null) return Mathf.Abs(pos.x) < 100000f && Mathf.Abs(pos.y) < 100000f && Mathf.Abs(pos.z) < 100000f;
 
             float radialDistance = Vector3.Distance(pos, body.transform.position);
-            // Terrain varies around the authored surface, but a player far inside or
-            // outside the body cannot stream a valid playable chunk column.
-            float tolerance = Mathf.Max(160f, body.SurfaceRadius * 0.30f);
-            return Mathf.Abs(radialDistance - body.SurfaceRadius) <= tolerance;
+            // A player may legitimately log out in atmosphere, orbit, or deep space.
+            // Only positions inside the solid planetary body are invalid; do not clamp
+            // high-altitude positions back to the surface.
+            return radialDistance >= body.SurfaceRadius * 0.70f;
         }
 
         private static Vector3Int VoxelCoordOf(Vector3 pos)
