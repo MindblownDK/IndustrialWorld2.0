@@ -1,39 +1,46 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.3.0-dev`
+**Current Version:** `6.4.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
 
 ---
 
-### [6.3.0-dev] Centralized Simulation Tick — Transport Blocks
+### [6.4.0-dev] Conveyor Splitter Mk.1/Mk.2/Mk.3
 
-**Type:** MINOR — runtime performance migration; no save schema, prefab, item, recipe, research, balance, power, or API change.
+**Type:** MINOR — new save-compatible factory content (additive prefabs, items, recipes; no save schema break).
 
 **Added:**
-- Added `ITransportTickable` interface — a lightweight simulation-tick contract for transport blocks that do not need the full `IMachine` metadata (recipe, wattage, progress bar, user-enabled).
-- `SimulationTickManager` now supports both `IMachine` (machines) and `ITransportTickable` (transport blocks) with independent registration lists and distance-based culling.
-- Added `RegisterTransport()` / `UnregisterTransport()` methods and `TransportCount` diagnostic.
-
-**Changed:**
-- `ConveyorBelt` now implements `ITransportTickable` and registers with `SimulationTickManager` on `OnEnable()`. The previous per-frame `Update()` method is replaced by `TransportTick(float dt)` called at the centralized tick rate (default 10 Hz).
-- `ConveyorChute` now implements `ITransportTickable` and registers with `SimulationTickManager` on `OnEnable()`. The previous per-frame `Update()` is replaced by `TransportTick(float dt)`.
-- `Funnel` now implements `ITransportTickable` and registers with `SimulationTickManager` on `OnEnable()`. The previous per-frame `Update()` is replaced by `TransportTick(float dt)`.
+- Added `ConveyorSplitter` — a factory block that accepts items from one input direction and distributes them evenly across multiple output belts using round-robin distribution.
+- Added `SplitterTier` enum: Mk1 (2 outputs), Mk2 (3 outputs), Mk3 (4 outputs).
+- Step 17 now generates three splitter prefabs non-destructively:
+  - **Conveyor Splitter Mk.1** — 2 output lanes, 0.25s transfer interval, 8-item buffer.
+  - **Conveyor Splitter Mk.2** — 3 output lanes, 0.20s transfer interval, 10-item buffer.
+  - **Conveyor Splitter Mk.3** — 4 output lanes, 0.15s transfer interval, 12-item buffer.
+- Splitter recipes added to Factory Logistics research unlock.
+- Each splitter auto-scans for upstream providers and downstream consumers on all output directions.
+- Round-robin advances to the next output only after a successful item handoff, ensuring even distribution.
 
 **Roadmap Status:**
-- Centralized simulation tick: **🟡 PARTIALLY COMPLETE → 🛠️ WORKING ON** — ConveyorBelt, ConveyorChute, and Funnel migrated to centralized tick.
-- Conveyor logistics: **🛠️ WORKING ON** — centralized tick migration complete; pooled visual validation remains.
+- Conveyor logistics: **🛠️ WORKING ON** — splitter added; centralized tick migration deferred (transport blocks remain per-frame for now).
+- Centralized simulation tick: **🛠️ WORKING ON** — transport blocks reverted to per-frame Update(); tick migration requires further testing.
 
 **Manual Unity Steps:**
-1. Let Unity compile and confirm the runtime banner reports `6.3.0-dev`.
-2. No Voxel Engine Setup rerun is required; this release creates no authored content.
-3. Place a production line with multiple conveyor belts, at least one chute, and one funnel.
-4. Confirm items still move smoothly on belts at the same visual speed as before.
-5. Confirm chute vertical transport and handoff still work correctly.
-6. Confirm funnel import/export mode still transfers items between belts and inventories.
-7. Open the Console and confirm no errors or warnings related to tick registration.
-8. Test a dense factory (10+ belts in a line) and confirm no item stuttering or missed ticks.
+1. Let Unity compile and confirm the runtime banner reports `6.4.0-dev`.
+2. Run `Tools > Voxel Engine > Voxel Engine Setup` → **17. Build Factory Foundations + HV Grid** once.
+3. Confirm `ConveyorSplitter_Mk1`, `ConveyorSplitter_Mk2`, `ConveyorSplitter_Mk3` prefabs exist.
+4. Confirm Conveyor Splitter Mk.1/Mk.2/Mk.3 items appear in the Factory crafting category.
+5. Place a Conveyor Splitter Mk.1 inline on a belt line with belts on the forward and right output sides.
+6. Feed items into the splitter and confirm they alternate between the two output belts.
+7. Repeat with Mk.2 (3 outputs) and Mk.3 (4 outputs) and confirm round-robin distribution.
+8. Confirm existing conveyor belts, chutes, funnels, and machines still work correctly after this update.
+
+---
+
+### [6.3.0-dev] Centralized Simulation Tick — Transport Blocks
+
+**Superseded by 6.4.0-dev.** Transport blocks reverted to per-frame Update() after testing showed items were not being transported, visuals were missing, and belts showed blocked status. The ITransportTickable interface and SimulationTickManager transport support remain in the codebase for future use.
 
 ---
 

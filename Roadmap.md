@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.3.0-dev`
-**Roadmap Version:** `6.3.0-dev`
+**Current Version:** `6.4.0-dev`
+**Roadmap Version:** `6.4.0-dev`
 **Date:** 2026-07-20
 **Status:** Grid Gravity Fix & Simulation Tick Centralization — WORKING ON
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -56,7 +56,7 @@ The design goal is a seamless blend of:
 | Sky / atmosphere / space rendering | 🟡 Basic | Needs planet-specific skies and proper space ambiance |
 | Gravity / orbits | 🛠️ WORKING ON | Grids fall as if unaffected by gravity; grids do not align with the planet surface on placement. Player gravity partially works but grid-level gravity application and planet-aligned spawn remain broken. |
 | Space stations | ❌ Missing | No buildable orbital platforms |
-| Conveyor logistics | 🛠️ WORKING ON | Conveyors, ramps, vertical belts, chutes, contextual shape wheel, ghost previews, and persistence exist. ConveyorBelt, ConveyorChute, and Funnel still use per-frame Update() and need migration to SimulationTickManager. Pooled item entities validated; more chute variants and final throughput validation remain. |
+| Conveyor logistics | 🛠️ WORKING ON | Conveyors, ramps, vertical belts, chutes, funnels, conveyor splitters (Mk.1/Mk.2/Mk.3), contextual shape wheel, ghost previews, and persistence exist. Pooled item entities validated; more chute variants and final throughput validation remain. |
 | Grid screens / displays | ✅ COMPLETED | All sizes, live text+power states, right-click+terminal config, custom text+custom colors+border+font, visual bar charts, multi-source, live camera feeds, power gain/loss/net mode, persistence, and camera block are validated by Thomas. (5.51.3-dev) |
 | Grid lighting | 🛠️ WORKING ON | Detail/Structural single and dual spotlights, Structural LED strip, premium segmented/clean LED visuals, screen data providers, configuration UI, visible chase animation, and motion activation exist. Static/placed settings persist; unified movable-grid persistence remains future work. |
 | Sloped / armored grid blocks | ✅ COMPLETED | Cube, Slope, Half Block, Half Slope, Corner, and Inverted Slope variants are implemented and validated with textured meshes, collision, ghosts, and rotation. |

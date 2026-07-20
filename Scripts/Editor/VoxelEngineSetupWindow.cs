@@ -7068,6 +7068,65 @@ root =>
             });
             var blockFunnel = ConfigureBlock(FAC_ITEMS, "Block_Funnel", "Funnel", "Directional logistical hopper for loading belts into inventories or unloading inventories onto belts.", new Color(0.95f, 0.62f, 0.18f), funnelPrefab, "Factory", 180);
 
+            // ── Conveyor Splitter prefabs (MK1/MK2/MK3) ──
+            GameObject CreateSplitterPrefab(string assetName, SplitterTier splitterTier, Color accent)
+            {
+                return GetOrCreateStep17Prefab($"{FAC_PREFABS}/{assetName}.prefab", assetName, root =>
+                {
+                    var baseMat = GetMaterial(FAC_MATS, "Mat_SplitterBase", new Color(0.30f, 0.32f, 0.35f));
+                    var darkMat = GetMaterial(FAC_MATS, "Mat_SplitterDark", new Color(0.10f, 0.11f, 0.12f));
+                    var accentMat = GetMaterial(FAC_MATS, $"Mat_{assetName}_Accent", accent, true);
+                    float width = splitterTier == SplitterTier.Mk3 ? 1.35f : splitterTier == SplitterTier.Mk2 ? 1.20f : 1.05f;
+
+                    EnsurePrimitive(root, "Generated_MainBody", PrimitiveType.Cube, new Vector3(0f, 0.30f, 0f), new Vector3(width, 0.50f, width), baseMat, Vector3.zero);
+                    EnsurePrimitive(root, "Generated_TopPlate", PrimitiveType.Cube, new Vector3(0f, 0.58f, 0f), new Vector3(width * 0.92f, 0.06f, width * 0.92f), darkMat, Vector3.zero);
+                    EnsurePrimitive(root, "Generated_InputRim", PrimitiveType.Cube, new Vector3(0f, 0.42f, -width * 0.52f), new Vector3(width * 0.70f, 0.10f, 0.08f), accentMat, Vector3.zero);
+                    EnsurePrimitive(root, "Generated_OutputRimForward", PrimitiveType.Cube, new Vector3(0f, 0.42f, width * 0.52f), new Vector3(width * 0.50f, 0.10f, 0.08f), accentMat, Vector3.zero);
+                    EnsurePrimitive(root, "Generated_OutputRimRight", PrimitiveType.Cube, new Vector3(width * 0.52f, 0.42f, 0f), new Vector3(0.08f, 0.10f, width * 0.50f), accentMat, Vector3.zero);
+                    if (splitterTier >= SplitterTier.Mk2)
+                        EnsurePrimitive(root, "Generated_OutputRimLeft", PrimitiveType.Cube, new Vector3(-width * 0.52f, 0.42f, 0f), new Vector3(0.08f, 0.10f, width * 0.50f), accentMat, Vector3.zero);
+                    if (splitterTier >= SplitterTier.Mk3)
+                        EnsurePrimitive(root, "Generated_OutputRimBack", PrimitiveType.Cube, new Vector3(0f, 0.42f, -width * 0.52f), new Vector3(width * 0.50f, 0.10f, 0.08f), accentMat, Vector3.zero);
+                    EnsurePrimitive(root, "Generated_CenterIndicator", PrimitiveType.Cylinder, new Vector3(0f, 0.64f, 0f), new Vector3(0.15f, 0.04f, 0.15f), accentMat, Vector3.zero);
+                    EnsurePrimitive(root, "Generated_StatusStrip", PrimitiveType.Cube, new Vector3(0f, 0.55f, -width * 0.38f), new Vector3(width * 0.50f, 0.03f, 0.03f), accentMat, Vector3.zero);
+                    EnsureLight(root, "Generated_SplitterLight", new Vector3(0f, 0.70f, 0f), LightType.Point, accent, 0.6f, 2.5f);
+                    EnsureRootCollider(root, new Vector3(width + 0.15f, 0.80f, width + 0.15f), new Vector3(0f, 0.35f, 0f));
+
+                    EnsureStep17Component<VoxelEngine.Simulation.ConveyorSplitter>(root, splitter =>
+                    {
+                        splitter.tier = splitterTier;
+                        splitter.transferInterval = splitterTier switch
+                        {
+                            SplitterTier.Mk3 => 0.15f,
+                            SplitterTier.Mk2 => 0.20f,
+                            _ => 0.25f
+                        };
+                        splitter.bufferSize = splitterTier switch
+                        {
+                            SplitterTier.Mk3 => 12,
+                            SplitterTier.Mk2 => 10,
+                            _ => 8
+                        };
+                    });
+                    EnsureStep17Component<VoxelEngine.Simulation.FactoryStatusIndicator>(root, indicator =>
+                    {
+                        indicator.rendererChildName = "Generated_StatusStrip";
+                        indicator.lightChildName = "Generated_SplitterLight";
+                        indicator.idleColor = accent;
+                        indicator.activeColor = new Color(0.22f, 0.78f, 0.42f);
+                        indicator.blockedColor = new Color(0.95f, 0.18f, 0.14f);
+                    });
+                });
+            }
+
+            var splitterMk1Prefab = CreateSplitterPrefab("ConveyorSplitter_Mk1", SplitterTier.Mk1, new Color(0.22f, 0.78f, 0.42f));
+            var splitterMk2Prefab = CreateSplitterPrefab("ConveyorSplitter_Mk2", SplitterTier.Mk2, new Color(0.18f, 0.72f, 0.88f));
+            var splitterMk3Prefab = CreateSplitterPrefab("ConveyorSplitter_Mk3", SplitterTier.Mk3, new Color(0.72f, 0.42f, 0.95f));
+
+            var blockSplitterMk1 = ConfigureBlock(FAC_ITEMS, "Block_ConveyorSplitterMk1", "Conveyor Splitter Mk.1", "Splits a single belt input into 2 output lanes using round-robin distribution.", new Color(0.22f, 0.78f, 0.42f), splitterMk1Prefab, "Factory", 200);
+            var blockSplitterMk2 = ConfigureBlock(FAC_ITEMS, "Block_ConveyorSplitterMk2", "Conveyor Splitter Mk.2", "Splits a single belt input into 3 output lanes using round-robin distribution.", new Color(0.18f, 0.72f, 0.88f), splitterMk2Prefab, "Factory", 240);
+            var blockSplitterMk3 = ConfigureBlock(FAC_ITEMS, "Block_ConveyorSplitterMk3", "Conveyor Splitter Mk.3", "Splits a single belt input into 4 output lanes using round-robin distribution.", new Color(0.72f, 0.42f, 0.95f), splitterMk3Prefab, "Factory", 300);
+
             // ── Machine recipes and machine prefabs ──
             var crushStone = ConfigureMachineRecipe("MachineRecipe_CrushStone", "Crush Stone", VoxelEngine.Simulation.MachineRecipeType.Crushing, gravel, 2, 3f, false, sand, 1, sand != null ? 0.35f : 0f, (stone, 1));
             var crushIron = ConfigureMachineRecipe("MachineRecipe_CrushIronOre", "Crush Iron Ore", VoxelEngine.Simulation.MachineRecipeType.Crushing, ironIngot, 2, 5f, false, gravel, 1, 0.25f, (ironOre, 1));
@@ -7755,6 +7814,9 @@ root =>
             var recConveyorExpress = CreateRecipe(registry, FAC_RECIPES, "Recipe_ConveyorExpress", "Express Conveyor Belt", blockConveyorExpress, 2, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 2), (ironGear, 3), (copperWire, 6), (circuit, 1));
             var recChute = CreateRecipe(registry, FAC_RECIPES, "Recipe_ConveyorChute", "Conveyor Chute", blockChute, 2, VoxelEngine.Crafting.StationTier.CraftingBench, false, (ironPlate, 2), (ironGear, 1));
             var recFunnel = CreateRecipe(registry, FAC_RECIPES, "Recipe_Funnel", "Funnel", blockFunnel, 1, VoxelEngine.Crafting.StationTier.CraftingBench, false, (ironPlate, 2), (ironGear, 1));
+            var recSplitterMk1 = CreateRecipe(registry, FAC_RECIPES, "Recipe_ConveyorSplitterMk1", "Conveyor Splitter Mk.1", blockSplitterMk1, 1, VoxelEngine.Crafting.StationTier.CraftingBench, false, (ironPlate, 4), (ironGear, 2));
+            var recSplitterMk2 = CreateRecipe(registry, FAC_RECIPES, "Recipe_ConveyorSplitterMk2", "Conveyor Splitter Mk.2", blockSplitterMk2, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (ironPlate, 6), (ironGear, 3), (copperWire, 2));
+            var recSplitterMk3 = CreateRecipe(registry, FAC_RECIPES, "Recipe_ConveyorSplitterMk3", "Conveyor Splitter Mk.3", blockSplitterMk3, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 4), (ironGear, 4), (circuit, 2));
             var recCrusher = CreateRecipe(registry, FAC_RECIPES, "Recipe_Crusher", "Crusher", blockCrusher, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (ironPlate, 6), (ironGear, 4), (circuit, 1));
             var recAssemblerMk1 = CreateRecipe(registry, FAC_RECIPES, "Recipe_AssemblerMk1", "Assembler Mk.1", blockAssemblerMk1, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (ironPlate, 8), (ironGear, 4), (circuit, 2));
             var recAssemblerMk2 = CreateRecipe(registry, FAC_RECIPES, "Recipe_AssemblerMk2", "Assembler Mk.2", blockAssemblerMk2, 1, VoxelEngine.Crafting.StationTier.Assembler, false, (steelPlate, 8), (ironGear, 6), (circuit, 4), (copperWire, 6));
@@ -7780,6 +7842,7 @@ root =>
             foreach (var recipe in new[]
             {
                 recConveyorBasic, recConveyorFast, recConveyorExpress, recChute, recFunnel,
+                recSplitterMk1, recSplitterMk2, recSplitterMk3,
                 recCrusher, recAssemblerMk1, recAssemblerMk2, recAssemblerMk3, recElectricFurnace,
                 recGridLight, recLargeGridSpotlight, recSmallDualSpotlight, recLargeDualSpotlight,
                 recLEDStrip, recGridLEDStrip, recLargeGridLEDStrip, recLargeSingleDoor, recLargeDoubleDoor, recHeavyVaultDoor
