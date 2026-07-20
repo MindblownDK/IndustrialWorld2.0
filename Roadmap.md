@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.0.2-dev`
-**Roadmap Version:** `6.0.2-dev`
+**Current Version:** `6.1.0-dev`
+**Roadmap Version:** `6.1.0-dev`
 **Date:** 2026-07-19
 **Status:** Chunk Persistence V2 Working On — Fresh World Required
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -1716,7 +1716,7 @@ For each version, these are the high-level Unity tasks you will perform manually
 - Add player teams with invitations and team-only interaction permissions for Grid blocks and static blocks.
 - Add pirate and merchant NPC roles.
 
-### 11.6 World Management, Autosaves & Item Limits — ❌ MISSING
+### 11.6 World Management, Autosaves & Item Limits — 🛠️ WORKING ON
 - Add three visible autosave slots in the Saves panel, with safe load/restore flow.
 - Add Edit World for non-generation settings only: world name and dropped-item limit.
 - Default maximum active physical dropped items is 90 and must be configurable in both Create World and Edit World.

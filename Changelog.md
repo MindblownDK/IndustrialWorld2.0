@@ -1,9 +1,30 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.0.2-dev`
+**Current Version:** `6.1.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.1.0-dev] World Drop Limit Foundation
+
+**Type:** MINOR — new save-compatible per-world setting.
+
+**Added:**
+- Added a non-generation `world_settings.json` sidecar for per-world settings.
+- Added a Maximum Dropped Items field to Create World with a default of 90.
+- The value is clamped safely between 1 and 10,000 and loads with its selected world.
+- The setting explicitly applies only to physical world drops; conveyor packets are not included and remain protected from dropped-item despawn/limit policy.
+
+**Roadmap Status:**
+- World Management, Autosaves & Item Limits: **❌ MISSING → 🛠️ WORKING ON**.
+- Edit World controls, three autosave slots, and enforcement/optimization runtime work remain next.
+
+**Manual Unity Steps:**
+1. Open Create World and confirm Maximum Dropped Items defaults to 90.
+2. Create a world with a different value, return to the menu, and load it.
+3. Confirm `world_settings.json` appears in the world folder and preserves the selected number.
 
 ---
 

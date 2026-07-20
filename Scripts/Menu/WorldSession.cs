@@ -19,6 +19,11 @@ namespace VoxelEngine.Menu
         public string worldName = "DefaultWorld";
         public int    seed      = 1337;
 
+        /// <summary>Maximum simultaneous physical world drops. Conveyor packets use
+        /// their own simulation and are deliberately never included in this limit.</summary>
+        public int maxDroppedItems = 90;
+        public const int DefaultMaxDroppedItems = 90;
+
         // Spawn data. The world spawn is computed once on first load; bed spawn is per-bed.
         public Vector3 worldSpawnPoint = new Vector3(0, 200, 0);
         public bool    worldSpawnInitialized = false;
@@ -41,6 +46,8 @@ namespace VoxelEngine.Menu
 
         public string CosmosSidecarPath =>
             Path.Combine(WorldsRoot, worldName, "cosmos.json");
+        public string WorldSettingsPath =>
+            Path.Combine(WorldsRoot, worldName, "world_settings.json");
 
         public string WorldsRoot =>
             Path.Combine(Application.persistentDataPath, "VoxelWorlds");
@@ -156,6 +163,40 @@ namespace VoxelEngine.Menu
                 return true;
             }
             catch { return false; }
+        }
+
+        [Serializable]
+        private class WorldSettingsData
+        {
+            public int maxDroppedItems = DefaultMaxDroppedItems;
+        }
+
+        /// <summary>Non-generation settings only. This sidecar never changes seeds,
+        /// terrain, planets, chunks, or any other world-generation parameter.</summary>
+        public void SaveWorldSettings()
+        {
+            try
+            {
+                Directory.CreateDirectory(Path.Combine(WorldsRoot, worldName));
+                maxDroppedItems = Mathf.Clamp(maxDroppedItems, 1, 10000);
+                File.WriteAllText(WorldSettingsPath, JsonUtility.ToJson(new WorldSettingsData
+                {
+                    maxDroppedItems = maxDroppedItems
+                }, true));
+            }
+            catch (Exception ex) { Debug.LogWarning("[WorldSession] SaveWorldSettings: " + ex.Message); }
+        }
+
+        public void LoadWorldSettings()
+        {
+            maxDroppedItems = DefaultMaxDroppedItems;
+            try
+            {
+                if (!File.Exists(WorldSettingsPath)) return;
+                var data = JsonUtility.FromJson<WorldSettingsData>(File.ReadAllText(WorldSettingsPath));
+                if (data != null) maxDroppedItems = Mathf.Clamp(data.maxDroppedItems, 1, 10000);
+            }
+            catch (Exception ex) { Debug.LogWarning("[WorldSession] LoadWorldSettings: " + ex.Message); }
         }
 
         public void DeleteWorld(string name)

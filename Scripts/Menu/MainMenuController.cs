@@ -37,6 +37,7 @@ namespace VoxelEngine.Menu
         // New-world form values.
         private string _newName           = "MyWorld";
         private int    _newSeed           = 0;
+        private int    _newMaxDroppedItems = WorldSession.DefaultMaxDroppedItems;
 
         // ── Cosmos: solar-system picker + per-planet editable seeds ──
         private List<SolarSystemTemplate> _systemChoices;
@@ -350,6 +351,20 @@ namespace VoxelEngine.Menu
             rndBtn.style.marginLeft = 8;
             seedRow.Add(rndBtn);
             scroll.Add(seedRow);
+            scroll.Add(T.Spacer(12));
+
+            scroll.Add(FormLabel("Maximum Dropped Items"));
+            var maxDropsField = new TextField { value = _newMaxDroppedItems.ToString() };
+            StyleField(maxDropsField);
+            maxDropsField.RegisterValueChangedCallback(e =>
+            {
+                if (int.TryParse(e.newValue, out var parsed))
+                    _newMaxDroppedItems = Mathf.Clamp(parsed, 1, 10000);
+            });
+            scroll.Add(maxDropsField);
+            var maxDropsHelp = T.Muted("Default 90 · applies only to physical world drops. Conveyor packets are protected separately.");
+            maxDropsHelp.style.marginTop = 3;
+            scroll.Add(maxDropsHelp);
             scroll.Add(T.Spacer(16));
 
             // ── Cosmos: solar-system picker + per-planet custom seeds ──
@@ -430,6 +445,7 @@ namespace VoxelEngine.Menu
         {
             _session.worldName  = worldName;
             _session.isNewWorld = false;
+            _session.LoadWorldSettings();
             // Restore this world's per-planet seeds / chosen system into the session so the
             // game-scene bootstrap can apply them to the celestial bodies.
             _session.LoadCosmosSidecar();
@@ -445,6 +461,8 @@ namespace VoxelEngine.Menu
             _session.worldName         = _newName;
             _session.seed              = _newSeed;
             _session.isNewWorld        = true;
+            _session.maxDroppedItems   = Mathf.Clamp(_newMaxDroppedItems, 1, 10000);
+            _session.SaveWorldSettings();
 
             // Persist the cosmos choice (system + per-planet seeds) so the same seeds
             // regenerate the identical world on every subsequent load.
