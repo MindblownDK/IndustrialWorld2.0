@@ -1,9 +1,26 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `5.71.1-dev`
+**Current Version:** `6.0.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.0.0-dev] Chunk Persistence V2 — Planet-Safe Coordinates
+
+**Type:** MAJOR — new chunk persistence format. Existing planetary chunk caches must be regenerated. This is required because the V1 region index could collide when a planetary world used negative vertical chunk coordinates, causing incorrect voxel payloads to restore into unrelated chunks.
+
+**Fixed:**
+- Replaced the V1 finite positive-height region index with a signed vertical V2 index suitable for planetary chunk coordinates.
+- V2 stores each chunk's explicit X/Y/Z coordinate in the region entry and validates it during restore.
+- V1 region entries that show unsafe planet-coordinate layout are rejected and regenerate instead of creating broken terrain geometry.
+- Region writes now use atomic replacement and retain a `.previous` region snapshot, protecting terrain data against interrupted writes.
+
+**Required Recovery:**
+1. Back up the entire world folder.
+2. Start a fresh world or remove the old world folder's `r_*.dat` terrain region files; V1 planetary terrain chunks cannot be safely migrated.
+3. `world_state.json` is separate from terrain chunks and may be retained only after verifying its player position is valid.
 
 ---
 

@@ -37,9 +37,9 @@ namespace VoxelEngine.Core
     public static class GameVersion
     {
         // ── Bump these when you ship ──────────────────────────────────────
-        public const int    Major = 5;
-        public const int    Minor = 71;
-        public const int    Patch = 1;
+        public const int    Major = 6;
+        public const int    Minor = 0;
+        public const int    Patch = 0;
 
         /// <summary>
         /// Channel suffix appended after a hyphen. Use "" for a stable release,

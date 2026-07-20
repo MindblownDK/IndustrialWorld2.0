@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `5.71.1-dev`
-**Roadmap Version:** `5.71.1-dev`
+**Current Version:** `6.0.0-dev`
+**Roadmap Version:** `6.0.0-dev`
 **Date:** 2026-07-19
-**Status:** Save-Load Recovery Safeguards Working On; Conveyor Visual Pool Awaiting Validation
+**Status:** Chunk Persistence V2 Working On — Fresh World Required
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
 ---

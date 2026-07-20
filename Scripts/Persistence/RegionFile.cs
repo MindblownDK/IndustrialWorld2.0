@@ -24,7 +24,12 @@ namespace VoxelEngine.Persistence
     {
         public const int   REGION_SIZE = 16;
         private const uint MAGIC       = 0x52434556; // "VECR"
-        private const int  VERSION     = 1;
+        private const int  VERSION     = 2;
+        // V2 reserves a signed vertical range and writes explicit chunk coordinates.
+        // V1 used WORLD_HEIGHT_CHUNKS as its stride, which collided for planet chunks
+        // with negative vertical coordinates and restored unrelated voxel payloads.
+        private const int  VERTICAL_INDEX_STRIDE = 8192;
+        private const int  VERTICAL_INDEX_OFFSET = 4096;
 
         public static Vector2Int ChunkToRegion(Vector3Int chunkCoord) =>
             new Vector2Int(
@@ -35,13 +40,17 @@ namespace VoxelEngine.Persistence
         {
             int lx = chunkCoord.x - Mathf.FloorToInt(chunkCoord.x / (float)REGION_SIZE) * REGION_SIZE;
             int lz = chunkCoord.z - Mathf.FloorToInt(chunkCoord.z / (float)REGION_SIZE) * REGION_SIZE;
-            return (lx + lz * REGION_SIZE) * VoxelConstants.WORLD_HEIGHT_CHUNKS + chunkCoord.y;
+            int vertical = chunkCoord.y + VERTICAL_INDEX_OFFSET;
+            if (vertical < 0 || vertical >= VERTICAL_INDEX_STRIDE)
+                throw new System.ArgumentOutOfRangeException(nameof(chunkCoord),
+                    "Chunk vertical coordinate exceeds the V2 persistence range.");
+            return (lx + lz * REGION_SIZE) * VERTICAL_INDEX_STRIDE + vertical;
         }
 
         public static Vector3Int FromLocalIndex(Vector2Int region, int localIndex)
         {
-            int cy = localIndex % VoxelConstants.WORLD_HEIGHT_CHUNKS;
-            int rest = localIndex / VoxelConstants.WORLD_HEIGHT_CHUNKS;
+            int cy = localIndex % VERTICAL_INDEX_STRIDE - VERTICAL_INDEX_OFFSET;
+            int rest = localIndex / VERTICAL_INDEX_STRIDE;
             int lx = rest % REGION_SIZE;
             int lz = rest / REGION_SIZE;
             return new Vector3Int(region.x * REGION_SIZE + lx, cy, region.y * REGION_SIZE + lz);
@@ -83,15 +92,22 @@ namespace VoxelEngine.Persistence
                     var compressed = ms.ToArray();
 
                     bw.Write(kv.Key);
+                    bw.Write(data.coord.x);
+                    bw.Write(data.coord.y);
+                    bw.Write(data.coord.z);
                     bw.Write(compressed.Length);
                     bw.Write(crc);
                     bw.Write(compressed);
                 }
             }
 
-            // Atomic replace — power-loss safe.
-            if (File.Exists(path)) File.Delete(path);
-            File.Move(tmp, path);
+            // Atomic replace retains one prior region snapshot. Never delete the live
+            // region before the replacement is ready, otherwise a play-mode stop or
+            // power loss can leave a partially written terrain cache.
+            if (File.Exists(path))
+                File.Replace(tmp, path, path + ".previous", ignoreMetadataErrors: true);
+            else
+                File.Move(tmp, path);
         }
 
         // ------------- READ: load all entries from one region file -------------
@@ -107,12 +123,36 @@ namespace VoxelEngine.Persistence
                 using var br = new BinaryReader(fs);
                 if (br.ReadUInt32() != MAGIC) { Debug.LogWarning($"[RegionFile] Bad magic in {path}"); return result; }
                 int version = br.ReadInt32();
-                if (version != VERSION) { Debug.LogWarning($"[RegionFile] Unknown version {version} in {path}"); return result; }
+                if (version != 1 && version != VERSION)
+                {
+                    Debug.LogWarning($"[RegionFile] Unknown version {version} in {path}");
+                    return result;
+                }
                 int count = br.ReadInt32();
 
                 for (int i = 0; i < count; i++)
                 {
                     int localIndex = br.ReadInt32();
+                    Vector3Int coord;
+                    if (version == VERSION)
+                    {
+                        coord = new Vector3Int(br.ReadInt32(), br.ReadInt32(), br.ReadInt32());
+                    }
+                    else
+                    {
+                        // V1 has no explicit coordinate. It is safe only for its original
+                        // non-negative finite-height layout; planet regions with negative
+                        // vertical chunks must regenerate rather than restore corrupt data.
+                        if (localIndex < 0 || localIndex >= REGION_SIZE * REGION_SIZE * VoxelConstants.WORLD_HEIGHT_CHUNKS)
+                        {
+                            Debug.LogWarning($"[RegionFile] Ignored unsafe V1 planet entry in {path}; it will regenerate in V2.");
+                            return new Dictionary<int, ChunkSaveData>();
+                        }
+                        int oldCy = localIndex % VoxelConstants.WORLD_HEIGHT_CHUNKS;
+                        int oldRest = localIndex / VoxelConstants.WORLD_HEIGHT_CHUNKS;
+                        coord = new Vector3Int(region.x * REGION_SIZE + oldRest % REGION_SIZE,
+                            oldCy, region.y * REGION_SIZE + oldRest / REGION_SIZE);
+                    }
                     int payloadLen = br.ReadInt32();
                     uint crc       = br.ReadUInt32();
                     byte[] compressed = br.ReadBytes(payloadLen);
@@ -132,8 +172,7 @@ namespace VoxelEngine.Persistence
                         Debug.LogWarning($"[RegionFile] Corrupt entry {localIndex} in {path}, skipping.");
                         continue;
                     }
-                    var coord = FromLocalIndex(region, localIndex);
-                    result[localIndex] = new ChunkSaveData { coord = coord, uncompressedVoxelBytes = raw };
+                    result[LocalIndex(coord)] = new ChunkSaveData { coord = coord, uncompressedVoxelBytes = raw };
                 }
             }
             catch (System.Exception ex)
