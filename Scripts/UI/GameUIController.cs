@@ -2710,7 +2710,8 @@ namespace VoxelEngine.UI
                 tossDir  = Vector3.forward;
             }
 
-            VoxelEngine.Items.DroppedItem.Spawn(stack, spawnPos, tossDir);
+            var dropped = VoxelEngine.Items.DroppedItem.Spawn(stack, spawnPos, tossDir);
+            dropped?.SetDropOwner(inventory);
             c.SetSlot(idx, new ItemStack());
             VoxelEngine.UI.BuildFeedbackHud.Show(
                 $"Dropped {stack.item.displayName}",

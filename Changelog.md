@@ -1,9 +1,26 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.1.0-dev`
+**Current Version:** `6.1.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.1.1-dev] Dropped Stack Pickup Protection
+
+**Type:** PATCH — physical dropped-item pickup behavior correction; no save schema, prefab, recipe, research, balance, power, or conveyor behavior change.
+
+**Fixed:**
+- A stack manually dropped from the player inventory no longer immediately re-enters that same inventory through its pickup trigger.
+- The dropping player must leave the stack's pickup radius before they can collect it again; other inventories and conveyors retain their normal interaction behavior.
+- Pooled drop entities reset ownership state before reuse.
+
+**Manual Unity Steps:**
+1. Drop a large stack from the inventory and stand still.
+2. Confirm it remains on the ground rather than disappearing after the pickup delay.
+3. Walk away until outside its pickup radius, then return and confirm it can be collected normally.
+4. Confirm a dropped stack can still enter a conveyor when one accepts it.
 
 ---
 

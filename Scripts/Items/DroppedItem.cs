@@ -26,6 +26,10 @@ namespace VoxelEngine.Items
         private float _bobPhase;
         private Rigidbody _rb;
         private bool _settled;
+        // A manually dropped stack must not immediately re-enter the same inventory
+        // through the large pickup trigger while it is still beside the player.
+        private Inventory _dropOwner;
+        private bool _ownerLeftPickupRange;
 
         public static DroppedItem Spawn(ItemStack stack, Vector3 position, Vector3 tossDir)
         {
@@ -83,9 +87,19 @@ namespace VoxelEngine.Items
             di._bobPhase = Random.value * Mathf.PI * 2f;
             di._rb = rb;
             di._settled = false;
+            di._dropOwner = null;
+            di._ownerLeftPickupRange = false;
 
             Debug.Log($"[DroppedItem] Spawned {stack.item.displayName} x{stack.count} at {position}");
             return di;
+        }
+
+        /// <summary>Marks the inventory that intentionally dropped this stack.
+        /// That inventory must leave the pickup trigger before it can collect it again.</summary>
+        public void SetDropOwner(Inventory owner)
+        {
+            _dropOwner = owner;
+            _ownerLeftPickupRange = owner == null;
         }
 
         private void Update()
@@ -116,7 +130,14 @@ namespace VoxelEngine.Items
             if (belt != null && TryInsertIntoConveyor(belt)) return;
 
             var inv = other.GetComponentInParent<Inventory>();
-            if (inv != null) TryPickup(inv);
+            if (inv != null && (inv != _dropOwner || _ownerLeftPickupRange)) TryPickup(inv);
+        }
+
+        private void OnTriggerExit(Collider other)
+        {
+            if (_dropOwner == null || _ownerLeftPickupRange) return;
+            var inv = other.GetComponentInParent<Inventory>();
+            if (inv == _dropOwner) _ownerLeftPickupRange = true;
         }
 
         private bool TryInsertIntoConveyor(VoxelEngine.Simulation.ConveyorBelt belt)
@@ -181,6 +202,8 @@ namespace VoxelEngine.Items
         private void Despawn()
         {
             stack = null;
+            _dropOwner = null;
+            _ownerLeftPickupRange = false;
             DroppedItemPool.Return(this);
         }
 
