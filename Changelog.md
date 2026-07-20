@@ -1,9 +1,28 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.4.4-dev`
+**Current Version:** `6.4.5-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.4.5-dev] Building Placement — Socket Host Pass-Through Fix
+
+**Type:** PATCH — building overlap validation correction; no save schema, prefab, item, recipe, research, or balance change.
+
+**Fixed:**
+- Socket-snapped placement now passes the socket host to `ValidateOverlap`, so adjacent buildings (foundations next to foundations, walls next to walls) are no longer blocked.
+- Only non-socket fallback placement (direct grid snap with no existing building nearby) blocks placement inside existing tiered buildings.
+- `ValidateOverlap` signature updated with optional `PlacedTieredBlock socketHost` parameter — existing callers are unaffected.
+
+**Manual Unity Steps:**
+1. Let Unity compile and confirm the runtime banner reports `6.4.5-dev`.
+2. No Voxel Engine Setup rerun is required.
+3. Place a foundation, then place another foundation next to it via socket snap — confirm it works.
+4. Build a 3×3 foundation floor — confirm all pieces snap correctly.
+5. Try to place a foundation directly inside an existing foundation (no socket) — confirm blocked.
+6. Build walls on top of foundations — confirm socket stacking still works.
 
 ---
 

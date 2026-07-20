@@ -158,7 +158,7 @@ namespace VoxelEngine.Building.Tiered
                 directHost != null && directHost.definition != null && directHost.definition.family == BuildFamily.Stairs &&
                 TryComputeStairChainTransform(hit, directHost, out _ghostPos, out _ghostRot))
             {
-                _ghostValid = ValidateOverlap(_ghostPos, def.family);
+                _ghostValid = ValidateOverlap(_ghostPos, def.family, directHost);
                 return;
             }
 
@@ -181,10 +181,12 @@ namespace VoxelEngine.Building.Tiered
 
             if (bestSocket != null)
             {
+                var socketHost = bestSocket.GetComponentInParent<PlacedTieredBlock>();
+
                 if (def.family == BuildFamily.Stairs &&
                     TryComputeStairTransform(hit, bestSocket, out _ghostPos, out _ghostRot))
                 {
-                    _ghostValid = ValidateOverlap(_ghostPos, def.family);
+                    _ghostValid = ValidateOverlap(_ghostPos, def.family, socketHost);
                     return;
                 }
 
@@ -193,7 +195,7 @@ namespace VoxelEngine.Building.Tiered
                 // Euler yaw introduced small rotational drift on spherical surfaces.
                 Vector3 socketUp = bestSocket.transform.up;
                 _ghostRot = Quaternion.AngleAxis(_ghostYaw, socketUp) * bestSocket.transform.rotation;
-                _ghostValid = ValidateOverlap(_ghostPos, def.family);
+                _ghostValid = ValidateOverlap(_ghostPos, def.family, socketHost);
                 return;
             }
 
@@ -322,34 +324,23 @@ namespace VoxelEngine.Building.Tiered
             return true;
         }
 
-        private bool ValidateOverlap(Vector3 pos, BuildFamily family)
+        private bool ValidateOverlap(Vector3 pos, BuildFamily family, PlacedTieredBlock socketHost = null)
         {
             // Don't overlap the player.
             if (Vector3.Distance(pos, transform.position) < 0.6f) return false;
 
-            // Use half the grid size as the overlap check radius so buildings
-            // can't be placed inside each other.
-            float halfSize = gridSize * 0.45f;
-            var overlaps = Physics.OverlapBox(pos, Vector3.one * halfSize, Quaternion.identity);
+            // Don't overlap dynamic rigidbodies.
+            var overlaps = Physics.OverlapBox(pos, Vector3.one * 0.40f, Quaternion.identity);
             foreach (var col in overlaps)
             {
                 if (col == null) continue;
-
-                // Don't overlap dynamic rigidbodies.
                 if (col.attachedRigidbody != null && !col.attachedRigidbody.isKinematic) return false;
 
-                // Don't overlap existing tiered buildings (foundations, walls, etc.)
-                // Allow the overlap if it's a socket or ghost.
+                // Block placement inside existing tiered buildings UNLESS we're
+                // socket-snapping to that exact host (adjacent stacking is fine).
                 var host = col.GetComponentInParent<PlacedTieredBlock>();
-                if (host != null)
-                {
-                    // Allow stacking only when placing the same family on top
-                    // (e.g. wall on wall, floor on floor) via socket snap.
-                    // The socket snap path bypasses ValidateOverlap, so any
-                    // overlap here means the player is trying to place directly
-                    // inside an existing building — block it.
+                if (host != null && host != socketHost)
                     return false;
-                }
             }
             return true;
         }
