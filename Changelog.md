@@ -1,9 +1,50 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.4.11-dev`
+**Current Version:** `6.5.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.5.0-dev] Splitter Routing UI + Mk.3 Output Filters
+
+**Type:** MINOR — new save-compatible splitter configuration feature; additive runtime UI/state only, no save schema break, prefab/item/recipe/research generation reset, balance, power, or variant-scope change.
+
+**Added:**
+- Added a dedicated **Conveyor Splitter UI panel** accessible through normal machine interaction.
+- Splitter UI now lets the player choose routing mode:
+  - **Round Robin**
+  - **Nearest First**
+- Added **Mk.3 per-output filter slots**:
+  - drag an inventory item onto an output filter slot to restrict that lane to that item
+  - clear the filter to return the lane to `Any Item`
+- Splitter inspection overlay now includes the active routing mode.
+- Splitter configuration now persists across save/load:
+  - routing mode
+  - per-output filter item choices
+  - existing buffer/cursor persistence remains intact
+
+**Improved:**
+- Added splitter support to `GameUIController.OpenMachine()` and the right-side machine panel flow.
+- Added a filter-slot workflow that reuses the existing UI drag/drop behavior without consuming the dragged inventory item.
+- Nearest First routing now chooses the nearest valid connected output among lanes that both accept the current item and have capacity.
+
+**Compatibility / Safety:**
+- Save additions are additive and legacy-compatible.
+- No Voxel Engine Setup rerun is required.
+- No funnel variants or chute variants were introduced.
+- Factory scope remains conveyor variants only.
+
+**Manual Unity Steps:**
+1. Let Unity compile and confirm the runtime banner reports `6.5.0-dev`.
+2. No Voxel Engine Setup rerun is required.
+3. Right-click a splitter and confirm the new splitter UI opens.
+4. Toggle between **Round Robin** and **Nearest First** and verify the mode label updates.
+5. For **Mk.3**, drag different inventory items onto each output filter slot.
+6. Confirm each filtered output only accepts its allowed item while unfiltered outputs still accept any item.
+7. Save and reload the world; confirm splitter routing mode and Mk.3 output filters persist.
+8. Re-test ordinary splitter throughput to confirm transport still works with no filters and with filters applied.
 
 ---
 

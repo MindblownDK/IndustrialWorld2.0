@@ -294,8 +294,11 @@ namespace VoxelEngine.Persistence
             {
                 var ss = new SavedSplitterState
                 {
-                    roundRobinIndex = splitter.RoundRobinIndex
+                    roundRobinIndex = splitter.RoundRobinIndex,
+                    routingMode = splitter.RoutingMode.ToString()
                 };
+                for (int i = 0; i < splitter.OutputCount; i++)
+                    ss.outputFilterItemIds.Add(splitter.GetOutputFilterItem(i) != null ? splitter.GetOutputFilterItem(i).itemId : string.Empty);
                 var bufferItems = splitter.BufferItems;
                 if (bufferItems != null)
                 {
@@ -1011,7 +1014,25 @@ namespace VoxelEngine.Persistence
                         });
                     }
                 }
-                splitter.RestorePersistentState(restored, saved.splitterState.roundRobinIndex);
+
+                var restoredFilters = new List<ItemDefinition>();
+                if (saved.splitterState.outputFilterItemIds != null)
+                {
+                    foreach (var id in saved.splitterState.outputFilterItemIds)
+                    {
+                        if (string.IsNullOrEmpty(id) || !_itemById.TryGetValue(id, out var definition)) restoredFilters.Add(null);
+                        else restoredFilters.Add(definition);
+                    }
+                }
+
+                var restoredMode = VoxelEngine.Simulation.SplitterRoutingMode.RoundRobin;
+                if (!string.IsNullOrEmpty(saved.splitterState.routingMode))
+                {
+                    try { restoredMode = (VoxelEngine.Simulation.SplitterRoutingMode)System.Enum.Parse(typeof(VoxelEngine.Simulation.SplitterRoutingMode), saved.splitterState.routingMode); }
+                    catch { }
+                }
+
+                splitter.RestorePersistentState(restored, saved.splitterState.roundRobinIndex, restoredMode, restoredFilters);
             }
             // Restore screen block config
             var screenBlock = go.GetComponentInChildren<VoxelEngine.GridSystem.GridScreenBlock>(true);
@@ -1356,6 +1377,8 @@ namespace VoxelEngine.Persistence
         [Serializable] private class SavedSplitterState
         {
             public int roundRobinIndex;
+            public string routingMode;
+            public System.Collections.Generic.List<string> outputFilterItemIds = new System.Collections.Generic.List<string>();
             public System.Collections.Generic.List<SavedTransportItem> bufferItems = new System.Collections.Generic.List<SavedTransportItem>();
         }
         [Serializable] private class SavedScreenConfig

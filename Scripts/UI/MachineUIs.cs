@@ -125,6 +125,119 @@ namespace VoxelEngine.UI
                 "Select a recipe, load matching inputs, then route outputs with belts or funnels.");
         }
 
+        public static VisualElement SplitterPanel(ConveyorSplitter splitter, SlotBuilder slot)
+        {
+            var p = T.MachinePanel();
+            string status = splitter.BufferedCount >= Mathf.Max(1, splitter.bufferSize)
+                ? "BLOCKED"
+                : splitter.BufferedCount > 0 ? "ACTIVE" : "IDLE";
+            Color statusColor = splitter.BufferedCount >= Mathf.Max(1, splitter.bufferSize)
+                ? T.AccentRed
+                : splitter.BufferedCount > 0 ? T.AccentGreen : T.TextMuted;
+            Color accent = splitter.tier switch
+            {
+                SplitterTier.Mk3 => T.AccentPurple,
+                SplitterTier.Mk2 => T.AccentCyan,
+                _ => T.AccentGreen
+            };
+
+            p.Add(BuildHeader("⇄", $"Conveyor Splitter {splitter.tier}", status, statusColor, accent));
+            p.Add(T.AccentDivider(accent));
+
+            var content = new ScrollView(ScrollViewMode.Vertical);
+            content.style.flexGrow = 1;
+            content.style.marginTop = 6;
+            T.StyleScroller(content);
+            p.Add(content);
+
+            content.Add(T.StatRow("▣", "Buffered", $"{splitter.BufferedCount}/{Mathf.Max(1, splitter.bufferSize)}", accent));
+            content.Add(T.StatRow("⇢", "Connected Outputs", $"{splitter.ConnectedOutputCount}/{Mathf.Max(1, splitter.OutputCount)}", T.TextSecondary));
+            content.Add(T.StatRow("⚙", "Routing", splitter.RoutingMode == SplitterRoutingMode.RoundRobin ? "Round Robin" : "Nearest First", T.TextPrimary));
+            content.Add(T.Divider());
+
+            content.Add(T.Subtitle("Routing Mode"));
+            var modeRow = new VisualElement();
+            modeRow.style.flexDirection = FlexDirection.Row;
+            modeRow.style.marginBottom = 8;
+            modeRow.Add(ModeButton("Round Robin", splitter.RoutingMode == SplitterRoutingMode.RoundRobin, T.AccentGreen, () =>
+            {
+                splitter.routingMode = SplitterRoutingMode.RoundRobin;
+                GameUIController.Instance?.RequestRefresh();
+            }));
+            var spacer = new VisualElement();
+            spacer.style.width = 8;
+            modeRow.Add(spacer);
+            modeRow.Add(ModeButton("Nearest First", splitter.RoutingMode == SplitterRoutingMode.NearestFirst, T.AccentCyan, () =>
+            {
+                splitter.routingMode = SplitterRoutingMode.NearestFirst;
+                GameUIController.Instance?.RequestRefresh();
+            }));
+            content.Add(modeRow);
+
+            content.Add(T.Muted("Round Robin rotates evenly across valid outputs. Nearest First always prefers the closest valid connected output."));
+
+            if (splitter.tier == SplitterTier.Mk3)
+            {
+                content.Add(T.Divider());
+                content.Add(T.Subtitle("Mk.3 Output Filters"));
+                content.Add(T.Muted("Drag an inventory item onto a filter slot to restrict that output lane. Empty slot = any item."));
+                content.Add(T.Spacer(6));
+
+                for (int i = 0; i < splitter.OutputCount; i++)
+                {
+                    var laneCard = T.Card();
+                    laneCard.style.marginBottom = 6;
+                    laneCard.style.flexDirection = FlexDirection.Column;
+
+                    var laneHeader = new VisualElement();
+                    laneHeader.style.flexDirection = FlexDirection.Row;
+                    laneHeader.style.alignItems = Align.Center;
+                    var laneTitle = new Label($"OUTPUT {i + 1} · {splitter.GetOutputLabel(i).ToUpperInvariant()}");
+                    laneTitle.style.flexGrow = 1;
+                    laneTitle.style.color = new StyleColor(T.TextPrimary);
+                    laneTitle.style.fontSize = 11;
+                    laneTitle.style.unityFontStyleAndWeight = FontStyle.Bold;
+                    laneHeader.Add(laneTitle);
+                    bool connected = splitter.outputTargets != null && i < splitter.outputTargets.Count && splitter.outputTargets[i] != null;
+                    var (pill, _) = T.StatusPill(connected ? "CONNECTED" : "NO BELT", connected ? T.AccentGreen : T.AccentRed);
+                    laneHeader.Add(pill);
+                    laneCard.Add(laneHeader);
+
+                    laneCard.Add(T.Spacer(4));
+                    var laneBody = new VisualElement();
+                    laneBody.style.flexDirection = FlexDirection.Row;
+                    laneBody.style.alignItems = Align.Center;
+
+                    var filterSlot = splitter.GetOutputFilterSlot(i);
+                    if (filterSlot != null && slot != null)
+                        laneBody.Add(slot(filterSlot, 0, filterSlot.GetSlot(0), false, true));
+
+                    var filterText = new Label(splitter.GetOutputFilterItem(i) != null
+                        ? $"Filter: {splitter.GetOutputFilterItem(i).displayName}"
+                        : "Filter: Any Item");
+                    filterText.style.flexGrow = 1;
+                    filterText.style.marginLeft = 10;
+                    filterText.style.color = new StyleColor(T.TextSecondary);
+                    filterText.style.fontSize = 10;
+                    laneBody.Add(filterText);
+
+                    var clearBtn = T.SmallButton("Clear", () =>
+                    {
+                        splitter.ClearOutputFilter(i);
+                        GameUIController.Instance?.RequestRefresh();
+                    }, T.AccentRed);
+                    clearBtn.style.marginLeft = 8;
+                    laneBody.Add(clearBtn);
+                    laneCard.Add(laneBody);
+                    content.Add(laneCard);
+                }
+            }
+
+            content.Add(T.Divider());
+            content.Add(T.Muted("Use conveyors on the intended output sides. Mk.1 supports a left-side fallback for its second lane if no right-side lane is connected."));
+            return p;
+        }
+
         private static VisualElement ProcessingMachinePanel(
             IMachine machine,
             string icon,
@@ -210,6 +323,14 @@ namespace VoxelEngine.UI
             for (int i = 0; i < container.Size; i++)
                 grid.Add(slot(container, i, container.GetSlot(i), false, true));
             return grid;
+        }
+
+        private static Button ModeButton(string text, bool selected, Color accent, System.Action onClick)
+        {
+            var btn = T.SmallButton(text, onClick, selected ? accent : T.BgSlot);
+            btn.style.minWidth = 120;
+            btn.style.unityFontStyleAndWeight = FontStyle.Bold;
+            return btn;
         }
 
         private static VisualElement MachineRecipeCard(MachineRecipe recipe, bool selected, Color accent, System.Action onClick)

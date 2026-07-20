@@ -266,7 +266,7 @@ namespace VoxelEngine.UI
             {
                 var placed = splitter.GetComponentInParent<PlacedBlock>();
                 info.title = placed?.Item != null ? placed.Item.displayName : $"Conveyor Splitter {splitter.tier}";
-                info.detail = $"SPLITTER · {splitter.tier}".ToUpperInvariant();
+                info.detail = $"SPLITTER · {splitter.tier} · {splitter.RoutingMode}".ToUpperInvariant();
                 info.status = $"Buffered: {splitter.BufferedCount}/{Mathf.Max(1, splitter.bufferSize)} · Outputs: {splitter.ConnectedOutputCount}/{Mathf.Max(1, splitter.OutputCount)}";
                 ApplyPlacedHealth(placed, ref info);
                 return true;

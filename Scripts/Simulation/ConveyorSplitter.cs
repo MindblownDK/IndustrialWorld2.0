@@ -11,11 +11,15 @@
 using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.Items;
+using VoxelEngine.Storage;
 
 namespace VoxelEngine.Simulation
 {
     /// <summary>Splitter tier determines the number of output lanes.</summary>
     public enum SplitterTier { Mk1, Mk2, Mk3 }
+
+    /// <summary>How the splitter chooses among eligible output lanes.</summary>
+    public enum SplitterRoutingMode { RoundRobin, NearestFirst }
 
     /// <summary>
     /// Directional splitter that accepts items from one input belt and
@@ -27,6 +31,9 @@ namespace VoxelEngine.Simulation
     {
         [Header("Splitter Configuration")]
         public SplitterTier tier = SplitterTier.Mk1;
+
+        [Tooltip("How the splitter chooses among valid output lanes.")]
+        public SplitterRoutingMode routingMode = SplitterRoutingMode.RoundRobin;
 
         [Tooltip("Seconds between each transfer attempt.")]
         public float transferInterval = 0.25f;
@@ -48,6 +55,8 @@ namespace VoxelEngine.Simulation
         // ── Runtime ───────────────────────────────────────────────────
 
         private readonly List<ConveyorItem> _buffer = new(8);
+        private readonly List<ItemDefinition> _outputFilterItems = new(4);
+        private readonly List<FilterSlotContainer> _filterSlots = new(4);
         private float _transferTimer;
         private float _scanTimer;
         private int _roundRobinIndex;
@@ -60,6 +69,8 @@ namespace VoxelEngine.Simulation
             SplitterTier.Mk2 => 3,
             _ => 2
         };
+
+        public SplitterRoutingMode RoutingMode => routingMode;
 
         /// <summary>Current buffered conveyor packets inside the splitter.</summary>
         public IReadOnlyList<ConveyorItem> BufferItems => _buffer;
@@ -83,6 +94,44 @@ namespace VoxelEngine.Simulation
         /// <summary>Current round-robin lane index for persistence/debugging.</summary>
         public int RoundRobinIndex => _roundRobinIndex;
 
+        public IItemContainer GetOutputFilterSlot(int outputIndex)
+        {
+            EnsureOutputDirections();
+            EnsureOutputFilterSlots();
+            return outputIndex >= 0 && outputIndex < _filterSlots.Count ? _filterSlots[outputIndex] : null;
+        }
+
+        public ItemDefinition GetOutputFilterItem(int outputIndex)
+        {
+            EnsureOutputFilterSlots();
+            return outputIndex >= 0 && outputIndex < _outputFilterItems.Count ? _outputFilterItems[outputIndex] : null;
+        }
+
+        public void SetOutputFilterItem(int outputIndex, ItemDefinition item)
+        {
+            EnsureOutputFilterSlots();
+            if (outputIndex < 0 || outputIndex >= _outputFilterItems.Count) return;
+            _outputFilterItems[outputIndex] = item;
+            if (outputIndex < _filterSlots.Count) _filterSlots[outputIndex]?.RaiseChanged();
+        }
+
+        public void ClearOutputFilter(int outputIndex)
+        {
+            SetOutputFilterItem(outputIndex, null);
+        }
+
+        public string GetOutputLabel(int outputIndex)
+        {
+            EnsureOutputDirections();
+            if (outputIndex < 0 || outputIndex >= outputDirections.Count) return $"Output {outputIndex + 1}";
+            Vector3 dir = outputDirections[outputIndex];
+            if (Vector3.Dot(dir, Vector3.forward) > 0.9f) return "Forward";
+            if (Vector3.Dot(dir, Vector3.back) > 0.9f) return "Back";
+            if (Vector3.Dot(dir, Vector3.left) > 0.9f) return "Left";
+            if (Vector3.Dot(dir, Vector3.right) > 0.9f) return "Right";
+            return $"Output {outputIndex + 1}";
+        }
+
         // ── Lifecycle ─────────────────────────────────────────────────
 
         private void Awake()
@@ -91,9 +140,10 @@ namespace VoxelEngine.Simulation
         }
 
         /// <summary>Restores additive runtime state without changing authored tuning.</summary>
-        public void RestorePersistentState(IEnumerable<ConveyorItem> savedItems, int roundRobinIndex)
+        public void RestorePersistentState(IEnumerable<ConveyorItem> savedItems, int roundRobinIndex, SplitterRoutingMode restoredMode, IList<ItemDefinition> restoredFilters)
         {
             EnsureOutputDirections();
+            EnsureOutputFilterSlots();
             _buffer.Clear();
             if (savedItems != null)
             {
@@ -106,6 +156,12 @@ namespace VoxelEngine.Simulation
                 }
             }
 
+            routingMode = restoredMode;
+            for (int i = 0; i < _outputFilterItems.Count; i++)
+                _outputFilterItems[i] = restoredFilters != null && i < restoredFilters.Count ? restoredFilters[i] : null;
+            for (int i = 0; i < _filterSlots.Count; i++)
+                _filterSlots[i]?.RaiseChanged();
+
             _roundRobinIndex = OutputCount > 0
                 ? Mathf.Abs(roundRobinIndex) % OutputCount
                 : 0;
@@ -114,6 +170,7 @@ namespace VoxelEngine.Simulation
         private void OnEnable()
         {
             EnsureOutputDirections();
+            EnsureOutputFilterSlots();
             ScanConnections();
         }
 
@@ -127,6 +184,7 @@ namespace VoxelEngine.Simulation
                 _scanTimer = 0f;
                 ScanConnections();
                 EnsureOutputDirections();
+                EnsureOutputFilterSlots();
             }
 
             // Pull from upstream into buffer.
@@ -267,6 +325,29 @@ namespace VoxelEngine.Simulation
 
         // ── Transfer Logic ────────────────────────────────────────────
 
+        private void EnsureOutputFilterSlots()
+        {
+            while (_outputFilterItems.Count < OutputCount) _outputFilterItems.Add(null);
+            while (_outputFilterItems.Count > OutputCount) _outputFilterItems.RemoveAt(_outputFilterItems.Count - 1);
+
+            while (_filterSlots.Count < OutputCount) _filterSlots.Add(new FilterSlotContainer(this, _filterSlots.Count));
+            while (_filterSlots.Count > OutputCount) _filterSlots.RemoveAt(_filterSlots.Count - 1);
+        }
+
+        private bool OutputAcceptsItem(int outputIndex, ItemDefinition item)
+        {
+            ItemDefinition filter = GetOutputFilterItem(outputIndex);
+            return filter == null || filter == item;
+        }
+
+        private float OutputDistanceSqr(int outputIndex)
+        {
+            if (outputIndex < 0 || outputIndex >= outputTargets.Count || outputTargets[outputIndex] == null) return float.MaxValue;
+            Vector3 localDir = outputIndex < outputDirections.Count ? outputDirections[outputIndex] : Vector3.forward;
+            Vector3 outputPos = transform.position + transform.TransformDirection(localDir.normalized) * 0.8f;
+            return (outputTargets[outputIndex].transform.position - outputPos).sqrMagnitude;
+        }
+
         private void PullFromUpstream()
         {
             if (_buffer.Count >= bufferSize || inputSource == null) return;
@@ -295,8 +376,15 @@ namespace VoxelEngine.Simulation
         private void PushToOutputs()
         {
             if (_buffer.Count == 0 || outputTargets.Count == 0) return;
+            if (_buffer[0].item == null) return;
 
-            // Try each output starting from the current round-robin index.
+            if (routingMode == SplitterRoutingMode.NearestFirst)
+            {
+                PushNearestFirst();
+                return;
+            }
+
+            // Round-robin: try each eligible output starting from the current cursor.
             int outputsTried = 0;
             int maxAttempts = outputTargets.Count;
 
@@ -304,29 +392,58 @@ namespace VoxelEngine.Simulation
             {
                 int idx = _roundRobinIndex % outputTargets.Count;
                 var target = outputTargets[idx];
+                var frontItem = _buffer[0];
 
-                if (target != null)
+                if (target is IItemConsumer consumer && OutputAcceptsItem(idx, frontItem.item))
                 {
-                    var consumer = target as IItemConsumer;
-                    if (consumer != null)
+                    int cap = consumer.GetInputCapacity(frontItem.item);
+                    if (cap > 0)
                     {
-                        var frontItem = _buffer[0];
-                        int cap = consumer.GetInputCapacity(frontItem.item);
-                        if (cap > 0)
+                        int sent = consumer.TryInsert(frontItem.item, 1);
+                        if (sent > 0)
                         {
-                            int sent = consumer.TryInsert(frontItem.item, 1);
-                            if (sent > 0)
-                            {
-                                _buffer.RemoveAt(0);
-                                _roundRobinIndex = (idx + 1) % outputTargets.Count;
-                                break; // One item sent, advance round-robin
-                            }
+                            _buffer.RemoveAt(0);
+                            _roundRobinIndex = (idx + 1) % outputTargets.Count;
+                            return;
                         }
                     }
                 }
 
                 _roundRobinIndex = (idx + 1) % outputTargets.Count;
                 outputsTried++;
+            }
+        }
+
+        private void PushNearestFirst()
+        {
+            if (_buffer.Count == 0) return;
+
+            var frontItem = _buffer[0];
+            int bestIndex = -1;
+            float bestDistance = float.MaxValue;
+
+            for (int i = 0; i < outputTargets.Count; i++)
+            {
+                if (!(outputTargets[i] is IItemConsumer consumer)) continue;
+                if (!OutputAcceptsItem(i, frontItem.item)) continue;
+                if (consumer.GetInputCapacity(frontItem.item) <= 0) continue;
+
+                float distance = OutputDistanceSqr(i);
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    bestIndex = i;
+                }
+            }
+
+            if (bestIndex < 0) return;
+            if (outputTargets[bestIndex] is not IItemConsumer bestConsumer) return;
+
+            int moved = bestConsumer.TryInsert(frontItem.item, 1);
+            if (moved > 0)
+            {
+                _buffer.RemoveAt(0);
+                _roundRobinIndex = outputTargets.Count > 0 ? bestIndex % outputTargets.Count : 0;
             }
         }
 
@@ -385,6 +502,54 @@ namespace VoxelEngine.Simulation
                 if (remaining <= 0) break;
             }
             return extracted;
+        }
+
+        [System.Serializable]
+        private sealed class FilterSlotContainer : IItemFilterSlot
+        {
+            private readonly ConveyorSplitter _owner;
+            private readonly int _outputIndex;
+            private readonly List<ItemStack> _slots = new() { new ItemStack() };
+            public string Name => $"Output {_outputIndex + 1} Filter";
+            public IReadOnlyList<ItemStack> Slots { get { Sync(); return _slots; } }
+            public event System.Action OnChanged;
+
+            public FilterSlotContainer(ConveyorSplitter owner, int outputIndex)
+            {
+                _owner = owner;
+                _outputIndex = outputIndex;
+            }
+
+            public ItemStack Insert(ItemStack stack)
+            {
+                if (stack == null || stack.IsEmpty) return null;
+                ApplyFilter(stack.item);
+                return stack;
+            }
+
+            public int Remove(ItemDefinition item, int count)
+            {
+                if (_owner.GetOutputFilterItem(_outputIndex) == item)
+                {
+                    _owner.ClearOutputFilter(_outputIndex);
+                    RaiseChanged();
+                }
+                return 0;
+            }
+
+            public int CountOf(ItemDefinition item) => _owner.GetOutputFilterItem(_outputIndex) == item ? 1 : 0;
+            public void SetSlot(int index, ItemStack stack) => ApplyFilter(stack == null || stack.IsEmpty ? null : stack.item);
+            public void ApplyFilter(ItemDefinition item)
+            {
+                _owner.SetOutputFilterItem(_outputIndex, item);
+            }
+            public ItemStack GetSlot(int index)
+            {
+                var item = _owner.GetOutputFilterItem(_outputIndex);
+                return item != null ? new ItemStack(item, 1) : new ItemStack();
+            }
+            public void RaiseChanged() { Sync(); OnChanged?.Invoke(); }
+            private void Sync() => _slots[0] = GetSlot(0);
         }
     }
 }

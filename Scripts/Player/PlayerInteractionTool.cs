@@ -435,6 +435,8 @@ namespace VoxelEngine.Player
                 if (crusher != null) { UI.GameUIController.Instance?.OpenMachine(crusher); return; }
                 var assembler = hit.collider.GetComponentInParent<VoxelEngine.Simulation.Assembler>();
                 if (assembler != null) { UI.GameUIController.Instance?.OpenMachine(assembler); return; }
+                var splitter = hit.collider.GetComponentInParent<VoxelEngine.Simulation.ConveyorSplitter>();
+                if (splitter != null) { UI.GameUIController.Instance?.OpenMachine(splitter); return; }
 
                 // Industrial fluid processors.
                 var oilRefinery = hit.collider.GetComponentInParent<VoxelEngine.Crafting.OilRefinery>();
