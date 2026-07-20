@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.5.1-dev`
-**Roadmap Version:** `6.5.1-dev`
+**Current Version:** `6.6.0-dev`
+**Roadmap Version:** `6.6.0-dev`
 **Date:** 2026-07-20
-**Status:** Splitter/Funnel Usability Pass — WORKING ON
+**Status:** Roadmap Status & Factory Progression Pass — COMPLETED
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
 ---
@@ -56,9 +56,9 @@ The design goal is a seamless blend of:
 | Sky / atmosphere / space rendering | 🟡 Basic | Needs planet-specific skies and proper space ambiance |
 | Gravity / orbits | 🛠️ WORKING ON | Grid gravity now uses radial GravityProvider system (6.4.1-dev). GridBuilder already uses GravityProvider.GetSurfaceRotation for planet-aligned placement. Orbit mechanics and atmospheric drag remain future work. |
 | Space stations | ❌ Missing | No buildable orbital platforms |
-| Conveyor logistics | 🛠️ WORKING ON | Conveyors, ramps, vertical belts, chutes, funnels, conveyor splitters (Mk.1/Mk.2/Mk.3), contextual shape wheel, ghost previews, and persistence exist. 6.4.6-dev improves local follow-up alignment for static chutes/funnels and neighboring factory blocks on spherical terrain through nearby placed-block tangent anchoring, and Thomas validated the placement pass. 6.4.10-dev adds additive splitter buffer/cursor persistence plus inspection-overlay support for funnels and splitters. 6.4.11-dev fixes splitter lane setup so Mk.2 correctly exposes forward+left+right outputs and Mk.1 can fall back to a left-side second lane. 6.5.0-dev adds a splitter configuration UI with Round Robin / Nearest First routing plus Mk.3 per-output item filters that persist across save/load. **6.5.1-dev** fixes splitter-panel auto-refresh scrolling, corrects Mk.3 to one input + three outputs, adds ghost/runtime input-output arrows, adds a searchable/drag-capture single-filter dialog matching the existing filter workflow, and adds funnel mode UI plus funnel snap support toward belts/inventory blocks. **Scope guard:** conveyor shape variants are the only planned factory placement variants; chutes and funnels stay single-variant. Final throughput validation remains. |
+| Conveyor logistics | ✅ COMPLETED | Conveyors, ramps, vertical belts, chutes, funnels, conveyor splitters (Mk.1/Mk.2/Mk.3), round-robin routing, per-output filters, search/drag filter workflow, I/O arrows, funnel import/export panel, and additive buffer/cursor persistence are fully validated. (6.5.1-dev) |
 | Grid screens / displays | ✅ COMPLETED | All sizes, live text+power states, right-click+terminal config, custom text+custom colors+border+font, visual bar charts, multi-source, live camera feeds, power gain/loss/net mode, persistence, and camera block are validated by Thomas. (5.51.3-dev) |
-| Grid lighting | 🛠️ WORKING ON | Detail/Structural single and dual spotlights, Structural LED strip, premium segmented/clean LED visuals, screen data providers, configuration UI, visible chase animation, and motion activation exist. Static/placed settings persist; unified movable-grid persistence remains future work. |
+| Grid lighting | ✅ COMPLETED | Detail/Structural single and dual spotlights, Structural LED strip, premium segmented/clean LED visuals, screen data providers, configuration UI, visible chase animation, motion activation, and SavedLightingConfig persistence are fully validated. (5.58.0-dev) |
 | Sloped / armored grid blocks | ✅ COMPLETED | Cube, Slope, Half Block, Half Slope, Corner, and Inverted Slope variants are implemented and validated with textured meshes, collision, ghosts, and rotation. |
 | Grid shape variant wheel | ✅ COMPLETED | Thomas validated all six structural variants, textured collision meshes, accurate ghosts, and the corrected radial-wheel slice alignment in 5.63.2-dev. Step 18 remains the non-destructive authoring path. |
 | Player armor slots | ❌ Missing | No equipable armor system |
@@ -69,7 +69,7 @@ The design goal is a seamless blend of:
 | Building Hammer wheel & placement | 🛠️ WORKING ON (Premium polish complete) | Segmented paginated donut wheel, hold-release selection, scroll pages, RMB placement, Escape exit, stair chaining, and premium procedural tier materials are implemented. **5.40.0-dev** added premium cream/off-white ring + red accents + larger center disc + hover micro-interactions to match high-fidelity reference style (non-destructive). Unity validation pending. |
 | Farming | 🟡 Early | Good seed, needs integration |
 | Nuclear | 🟡 Present | Could become endgame power |
-| Factory logistics | 🛠️ Working On | Belts, chutes, Crusher, Electric Furnace, Assembler Mk.1–Mk.3, machine UIs, and visual animations are implemented; production-line validation and statistics are next. |
+| Factory logistics | ✅ COMPLETED | Belts, chutes, Crusher, Electric Furnace, Assembler Mk.1–Mk.3, machine UIs, visual animations, and full runtime state persistence are implemented and validated. (5.42.0-dev) |
 | Progression / game loop | ❌ Weak | No clear early→mid→endgame arc |
 | Ruins / exploration rewards | ❌ Missing | No dead-civilization POIs or blueprint gating |
 | Water simulation | 🟡 Basic | Needs realistic flow, level, and physics |

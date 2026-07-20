@@ -1,9 +1,25 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.5.1-dev`
+**Current Version:** `6.6.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.6.0-dev] Roadmap Status & Factory Progression Pass
+
+**Type:** MINOR — roadmap execution status synchronization and completed-domain promotion (no save schema break, prefab/item/recipe/research generation reset, balance, or power change).
+
+**Promoted / Completed:**
+- **Grid Lighting & LED Strips:** Promoted to **✅ COMPLETED** following successful runtime implementation of spotlights, LED strips, screen data providers, chase animation, motion activation, and lighting configuration persistence (`SavedLightingConfig`).
+- **Factory Logistics & Splitters:** Promoted to **✅ COMPLETED** following conveyors, chutes, funnels, splitters (Mk.1/Mk.2/Mk.3), round-robin routing, per-output filters, search/drag filter workflow, I/O arrows, and funnel import/export panel integration.
+- **Factory Persistence:** Promoted to **✅ COMPLETED** following full save/load support for conveyor packets, chute items, splitters, funnels, crushers, assemblers, electric furnaces, storage containers, and placed block configs.
+
+**Manual Unity Steps:**
+1. Let Unity compile and confirm the runtime banner reports `6.6.0-dev`.
+2. No Voxel Engine Setup rerun is required.
+3. Verify that lighting settings, splitters, funnels, and machine states persist correctly across save/load.
 
 ---
 
