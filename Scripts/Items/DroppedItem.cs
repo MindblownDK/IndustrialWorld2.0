@@ -40,7 +40,7 @@ namespace VoxelEngine.Items
         {
             if (stack == null || stack.IsEmpty) return null;
 
-            int capacity = AvailablePhysicalCapacity();
+            int capacity = AvailablePhysicalCapacity;
             if (capacity <= 0) return null;
 
             var di = DroppedItemPool.Get();

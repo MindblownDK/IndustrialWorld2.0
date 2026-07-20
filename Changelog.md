@@ -1,9 +1,18 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.2.0-dev`
+**Current Version:** `6.2.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.2.1-dev] Physical Drop Limit Compile Fix
+
+**Type:** PATCH — compile correction only.
+
+**Fixed:**
+- Corrected the physical-drop capacity property access in `DroppedItem`; the limit system now compiles.
 
 ---
 
