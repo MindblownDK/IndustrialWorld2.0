@@ -41,7 +41,9 @@ namespace VoxelEngine.Items
             // Active drops belong to the current world scene; only inactive entities
             // live under the persistent pool root.
             go.transform.SetParent(null, false);
-            go.SetActive(true);
+            // Configure the complete reused entity while inactive. Activating it only
+            // after its stack, timer, owner, and physics are reset prevents an old
+            // pooled Update/trigger lifecycle from treating it as expired.
             // Bigger drop cube (0.5m vs 0.35m) so it's clearly visible at typical
             // player viewing distances. Also lift the spawn just above the toss
             // position so it never embeds in the floor / player capsule.
@@ -89,6 +91,7 @@ namespace VoxelEngine.Items
             di._settled = false;
             di._dropOwner = null;
             di._ownerLeftPickupRange = false;
+            go.SetActive(true);
 
             Debug.Log($"[DroppedItem] Spawned {stack.item.displayName} x{stack.count} at {position}");
             return di;

@@ -1,9 +1,24 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.1.1-dev`
+**Current Version:** `6.1.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.1.2-dev] Pooled Drop Activation Order Fix
+
+**Type:** PATCH — pooled physical-item lifecycle correction only.
+
+**Fixed:**
+- Reused physical drops now remain inactive until their position, stack, spawn timer, owner protection, and Rigidbody state are completely reset.
+- Prevents a reused pooled entity from processing an old lifecycle state before its new spawn data is assigned.
+
+**Manual Unity Steps:**
+1. Confirm `6.1.2-dev` at startup.
+2. Drop a stack of 500 items and observe it for at least 10 seconds.
+3. Confirm it remains in the world, then walk away and return to collect it.
 
 ---
 
