@@ -2,9 +2,11 @@
 //
 // ╔══════════════════════════════════════════════════════════════════╗
 // ║  INDUSTRIAL WORLD — CENTRALIZED SIMULATION TICK MANAGER         ║
-// ║  Drives all IMachine blocks on a fixed-interval tick instead    ║
-// ║  of per-frame Update(). Configurable tick rate, auto-register   ║
-// ║  on enable/disable, distance-based culling for performance.     ║
+// ║  Drives all IMachine and ITransportTickable blocks on a fixed-  ║
+// ║  interval tick instead of per-frame Update(). Configurable tick  ║
+// ║  rate, auto-register on enable/disable, distance-based culling  ║
+// ║  for performance. Transport blocks (conveyors, chutes, funnels) ║
+// ║  use the lighter ITransportTickable contract.                    ║
 // ╚══════════════════════════════════════════════════════════════════╝
 
 using System.Collections.Generic;
@@ -13,12 +15,13 @@ using UnityEngine;
 namespace VoxelEngine.Simulation
 {
     /// <summary>
-    /// Centralized tick driver for all <see cref="IMachine"/> implementations.
-    /// Machines register on enable and unregister on disable. Each frame the
-    /// manager accumulates time and fires <see cref="IMachine.SimulationTick"/>
-    /// at a fixed interval, avoiding Update() spam across hundreds of blocks.
+    /// Centralized tick driver for all <see cref="IMachine"/> and
+    /// <see cref="ITransportTickable"/> implementations.
+    /// Blocks register on enable and unregister on disable. Each frame the
+    /// manager accumulates time and fires the appropriate tick callback at
+    /// a fixed interval, avoiding Update() spam across hundreds of blocks.
     ///
-    /// Optional: machines beyond <see cref="simulationRadius"/> meters from the
+    /// Optional: blocks beyond <see cref="simulationRadius"/> meters from the
     /// player are skipped (sleep) for performance.
     /// </summary>
     public class SimulationTickManager : MonoBehaviour
@@ -39,6 +42,11 @@ namespace VoxelEngine.Simulation
         // Registered machines keyed by their MonoBehaviour for distance checks.
         private readonly List<IMachine> _machines = new(256);
         private readonly Dictionary<IMachine, MonoBehaviour> _machineOwners = new(256);
+
+        // Registered transport blocks (conveyors, chutes, funnels).
+        private readonly List<ITransportTickable> _transports = new(512);
+        private readonly Dictionary<ITransportTickable, MonoBehaviour> _transportOwners = new(512);
+
         private float _tickAccum;
         private int _tickCount;
 
@@ -87,6 +95,28 @@ namespace VoxelEngine.Simulation
             _machineOwners.Remove(machine);
         }
 
+        /// <summary>
+        /// Register a transport block for simulation ticks. Call from OnEnable().
+        /// </summary>
+        public void RegisterTransport(ITransportTickable transport, MonoBehaviour owner)
+        {
+            if (transport == null || owner == null) return;
+            if (!_transports.Contains(transport))
+            {
+                _transports.Add(transport);
+                _transportOwners[transport] = owner;
+            }
+        }
+
+        /// <summary>
+        /// Unregister a transport block. Call from OnDisable().
+        /// </summary>
+        public void UnregisterTransport(ITransportTickable transport)
+        {
+            _transports.Remove(transport);
+            _transportOwners.Remove(transport);
+        }
+
         // ── Tick Loop ─────────────────────────────────────────────────
 
         private void Update()
@@ -112,17 +142,16 @@ namespace VoxelEngine.Simulation
             bool hasPlayer = playerPos != Vector3.zero || Camera.main != null;
             float radiusSqr = simulationRadius > 0f ? simulationRadius * simulationRadius : float.MaxValue;
 
+            // ── Tick machines (Crusher, Assembler, etc.) ──
             for (int i = _machines.Count - 1; i >= 0; i--)
             {
                 var machine = _machines[i];
                 if (machine == null)
                 {
-                    // Stale reference — clean up.
                     _machines.RemoveAt(i);
                     continue;
                 }
 
-                // Distance culling: skip machines too far from the player.
                 if (hasPlayer && simulationRadius > 0f)
                 {
                     if (_machineOwners.TryGetValue(machine, out var owner) && owner != null)
@@ -133,6 +162,28 @@ namespace VoxelEngine.Simulation
                 }
 
                 machine.SimulationTick(dt);
+            }
+
+            // ── Tick transports (ConveyorBelt, ConveyorChute, Funnel) ──
+            for (int i = _transports.Count - 1; i >= 0; i--)
+            {
+                var transport = _transports[i];
+                if (transport == null)
+                {
+                    _transports.RemoveAt(i);
+                    continue;
+                }
+
+                if (hasPlayer && simulationRadius > 0f)
+                {
+                    if (_transportOwners.TryGetValue(transport, out var owner) && owner != null)
+                    {
+                        float distSqr = (owner.transform.position - playerPos).sqrMagnitude;
+                        if (distSqr > radiusSqr) continue;
+                    }
+                }
+
+                transport.TransportTick(dt);
             }
         }
 
@@ -147,6 +198,9 @@ namespace VoxelEngine.Simulation
 
         /// <summary>Total registered machines (including sleeping ones).</summary>
         public int MachineCount => _machines.Count;
+
+        /// <summary>Total registered transport blocks (including sleeping ones).</summary>
+        public int TransportCount => _transports.Count;
 
         /// <summary>Total ticks elapsed since scene load.</summary>
         public int TickCount => _tickCount;

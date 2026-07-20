@@ -1,9 +1,39 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.2.1-dev`
+**Current Version:** `6.3.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.3.0-dev] Centralized Simulation Tick — Transport Blocks
+
+**Type:** MINOR — runtime performance migration; no save schema, prefab, item, recipe, research, balance, power, or API change.
+
+**Added:**
+- Added `ITransportTickable` interface — a lightweight simulation-tick contract for transport blocks that do not need the full `IMachine` metadata (recipe, wattage, progress bar, user-enabled).
+- `SimulationTickManager` now supports both `IMachine` (machines) and `ITransportTickable` (transport blocks) with independent registration lists and distance-based culling.
+- Added `RegisterTransport()` / `UnregisterTransport()` methods and `TransportCount` diagnostic.
+
+**Changed:**
+- `ConveyorBelt` now implements `ITransportTickable` and registers with `SimulationTickManager` on `OnEnable()`. The previous per-frame `Update()` method is replaced by `TransportTick(float dt)` called at the centralized tick rate (default 10 Hz).
+- `ConveyorChute` now implements `ITransportTickable` and registers with `SimulationTickManager` on `OnEnable()`. The previous per-frame `Update()` is replaced by `TransportTick(float dt)`.
+- `Funnel` now implements `ITransportTickable` and registers with `SimulationTickManager` on `OnEnable()`. The previous per-frame `Update()` is replaced by `TransportTick(float dt)`.
+
+**Roadmap Status:**
+- Centralized simulation tick: **🟡 PARTIALLY COMPLETE → 🛠️ WORKING ON** — ConveyorBelt, ConveyorChute, and Funnel migrated to centralized tick.
+- Conveyor logistics: **🛠️ WORKING ON** — centralized tick migration complete; pooled visual validation remains.
+
+**Manual Unity Steps:**
+1. Let Unity compile and confirm the runtime banner reports `6.3.0-dev`.
+2. No Voxel Engine Setup rerun is required; this release creates no authored content.
+3. Place a production line with multiple conveyor belts, at least one chute, and one funnel.
+4. Confirm items still move smoothly on belts at the same visual speed as before.
+5. Confirm chute vertical transport and handoff still work correctly.
+6. Confirm funnel import/export mode still transfers items between belts and inventories.
+7. Open the Console and confirm no errors or warnings related to tick registration.
+8. Test a dense factory (10+ belts in a line) and confirm no item stuttering or missed ticks.
 
 ---
 

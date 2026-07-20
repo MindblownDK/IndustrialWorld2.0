@@ -21,7 +21,7 @@ namespace VoxelEngine.Simulation
         public float slideProgress;
     }
 
-    public class ConveyorChute : MonoBehaviour, IItemConsumer, IItemProvider
+    public class ConveyorChute : MonoBehaviour, IItemConsumer, IItemProvider, ITransportTickable
     {
         [Header("Chute Configuration")]
         public ChuteShape shape = ChuteShape.Straight;
@@ -78,13 +78,26 @@ namespace VoxelEngine.Simulation
 
         private void OnEnable()
         {
+            // Register with centralized simulation tick manager.
+            SimulationTickManager.EnsureInstance();
+            SimulationTickManager.Instance?.RegisterTransport(this, this);
+
             ScanConnections();
         }
 
-        private void Update()
+        private void OnDisable()
         {
-            float dt = Time.deltaTime;
+            // Unregister from centralized simulation tick manager.
+            SimulationTickManager.Instance?.UnregisterTransport(this);
+        }
 
+        /// <summary>
+        /// Called by SimulationTickManager at a fixed interval.
+        /// Advances item slide progress, scans connections, pulls from upstream,
+        /// hands off to downstream, and updates pooled visuals.
+        /// </summary>
+        public void TransportTick(float dt)
+        {
             for (int i = _items.Count - 1; i >= 0; i--)
             {
                 var chuteItem = _items[i];

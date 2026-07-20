@@ -36,7 +36,7 @@ namespace VoxelEngine.Simulation
         public float lateralOffset;
     }
 
-    public class ConveyorBelt : MonoBehaviour, IItemConsumer, IItemProvider
+    public class ConveyorBelt : MonoBehaviour, IItemConsumer, IItemProvider, ITransportTickable
     {
         private static readonly Vector3[] LocalSocketDirections =
         {
@@ -137,6 +137,11 @@ namespace VoxelEngine.Simulation
         {
             ConveyorNetwork.EnsureInstance();
             ConveyorNetwork.Instance?.Register(this);
+
+            // Register with centralized simulation tick manager.
+            SimulationTickManager.EnsureInstance();
+            SimulationTickManager.Instance?.RegisterTransport(this, this);
+
             RefreshNearby();
             Invoke(nameof(RefreshNearby), 0.02f);
         }
@@ -145,6 +150,9 @@ namespace VoxelEngine.Simulation
         {
             CancelInvoke(nameof(RefreshNearby));
             ConveyorNetwork.Instance?.Unregister(this);
+
+            // Unregister from centralized simulation tick manager.
+            SimulationTickManager.Instance?.UnregisterTransport(this);
 
             // Do not rebuild this belt's visuals while Unity is disabling the
             // GameObject (ghost hide, scene close, destroy). Creating/parenting
@@ -192,10 +200,14 @@ namespace VoxelEngine.Simulation
             }
         }
 
-        private void Update()
+        /// <summary>
+        /// Called by SimulationTickManager at a fixed interval.
+        /// Advances items along the belt, scans connections, pulls from upstream,
+        /// hands off to downstream, and updates visuals.
+        /// </summary>
+        public void TransportTick(float dt)
         {
             // Advance items along the belt.
-            float dt = Time.deltaTime;
             float moveStep = BeltSpeed * dt;
 
             for (int i = _items.Count - 1; i >= 0; i--)

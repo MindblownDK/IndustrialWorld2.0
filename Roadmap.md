@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.2.1-dev`
-**Roadmap Version:** `6.2.1-dev`
-**Date:** 2026-07-19
-**Status:** Chunk Persistence V2 Working On — Fresh World Required
+**Current Version:** `6.3.0-dev`
+**Roadmap Version:** `6.3.0-dev`
+**Date:** 2026-07-20
+**Status:** Grid Gravity Fix & Simulation Tick Centralization — WORKING ON
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
 ---
@@ -43,9 +43,9 @@ The design goal is a seamless blend of:
 
 | Domain | Status | Notes |
 |--------|--------|-------|
-| Voxel world / planet / gravity | ✅ Mature | Planet-aligned placement added in 4.4.0 |
+| Voxel world / planet / gravity | 🛠️ WORKING ON | Planet terrain generation exists but grid gravity is broken: grids fall as if unaffected by gravity and do not align with the planet surface when placed. Grid planet-alignment and consistent gravity for all grid types remain open. |
 | Cosmos / star system framework | 🟡 Exists | Needs planet-specific resources and interplanetary travel |
-| Grid systems (ships/vehicles) | ✅ Mature | Needs lights, screens, armor, sloped blocks |
+| Grid systems (ships/vehicles) | 🛠️ WORKING ON | Core grid building works but grids are not affected by gravity and do not align with planet surfaces on placement. Needs lights, screens, armor, sloped blocks, and gravity fix. |
 | Maritime grid | 🟡 Basic | Needs refinement and feature parity |
 | Detail-scale grid blocks | 🟡 PARTIALLY COMPLETE | Detail blocks now share the unified Grid with Structural blocks. Save/restore now covers Structural and Detail addresses; Unity validation and remaining positional network indexing are open. |
 | Unified grid placement | 🟡 PARTIALLY COMPLETE | Detail/Structural placement, shape variants, screen sources, and unified Item/Gas/Liquid pipe placement/networks are validated. **5.69.0-dev** adds additive movable-grid save/restore for Structural and Detail blocks, variants, settings, and attached pipes; Thomas validated it in Unity. Remaining positional-indexing work keeps this broader area partially complete. |
@@ -54,9 +54,9 @@ The design goal is a seamless blend of:
 | Building (static + tiered) | 🛠️ Working On | 3.75 m spacing, scale, rotation, and player-away Doors are Unity-validated. Size-V5 closes Foundation deck seams and adds upward/downward Stair anchors at Foundation/Floor edges and Doorway thresholds; final validation is pending. |
 | Advanced Quarry | 🛠️ Working On | Unbreakable bedrock generation removed; late Tier-5 quarry uses a finite configurable 64-layer default depth |
 | Sky / atmosphere / space rendering | 🟡 Basic | Needs planet-specific skies and proper space ambiance |
-| Gravity / orbits | 🟡 Buggy | Player and grids sometimes fall; orbits not realistic |
+| Gravity / orbits | 🛠️ WORKING ON | Grids fall as if unaffected by gravity; grids do not align with the planet surface on placement. Player gravity partially works but grid-level gravity application and planet-aligned spawn remain broken. |
 | Space stations | ❌ Missing | No buildable orbital platforms |
-| Conveyor logistics | 🟡 Good | Conveyors, ramps, vertical belts, chutes, contextual shape wheel, ghost previews, and persistence exist. Remaining work: pooled item entities, more chute variants, and final long-run throughput validation. |
+| Conveyor logistics | 🛠️ WORKING ON | Conveyors, ramps, vertical belts, chutes, contextual shape wheel, ghost previews, and persistence exist. ConveyorBelt, ConveyorChute, and Funnel still use per-frame Update() and need migration to SimulationTickManager. Pooled item entities validated; more chute variants and final throughput validation remain. |
 | Grid screens / displays | ✅ COMPLETED | All sizes, live text+power states, right-click+terminal config, custom text+custom colors+border+font, visual bar charts, multi-source, live camera feeds, power gain/loss/net mode, persistence, and camera block are validated by Thomas. (5.51.3-dev) |
 | Grid lighting | 🛠️ WORKING ON | Detail/Structural single and dual spotlights, Structural LED strip, premium segmented/clean LED visuals, screen data providers, configuration UI, visible chase animation, and motion activation exist. Static/placed settings persist; unified movable-grid persistence remains future work. |
 | Sloped / armored grid blocks | ✅ COMPLETED | Cube, Slope, Half Block, Half Slope, Corner, and Inverted Slope variants are implemented and validated with textured meshes, collision, ghosts, and rotation. |
@@ -511,7 +511,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Shared Machine UI | 🟡 PARTIALLY COMPLETE | Crusher and Assembler panels now expose recipe selection, progress, power, toggles, inventory slots, scrolling, and item-port integration. Remaining work: complete unification across every machine, production statistics, and theme overrides. |
 | Item entity system | 🛠️ WORKING ON | Thomas validated the **5.70.0-dev** pooled physical world-item lifecycle. **5.71.0-dev** adds a shared cross-belt conveyor-carried visual pool; Unity factory load validation remains pending. |
 | Recipe registry refactor | 🟡 PARTIALLY COMPLETE | ScriptableObject crafting and machine recipes exist. Shaped/shapeless/smelting/machine unification and validation remain incomplete. |
-| Centralized simulation tick | 🟡 PARTIALLY COMPLETE | Crusher and Assembler register with `SimulationTickManager`; belts, chutes, and several older machines still run per-frame updates. |
+| Centralized simulation tick | 🛠️ WORKING ON | Crusher and Assembler register with `SimulationTickManager`; ConveyorBelt, ConveyorChute, and Funnel migration to centralized tick is in progress. |
 | Factory persistence | ✅ COMPLETED | Conveyor/Chute item packets, Crusher/Assembler recipe+progress+enabled, Funnel buffer+mode, all machine containers save and restore. Legacy saves compatible. (5.42.0-dev) |
 | Step 5 tiered setup workflow | 🛠️ WORKING ON | Generated Size-V4 prefabs migrate to Size-V5 seamless Foundation decks and Stair anchors. Missing resources are repaired safely while custom prefabs, materials, recipes, and balance values remain preserved. Unity two-run validation is pending. |
 | Step 17 setup workflow | ✅ COMPLETED | Step 17 remains non-destructive, refreshes generated visuals/colliders safely, preserves balance values, and connects upgraded Funnel/Crusher/Assembler prefabs plus contextual conveyor shape workflow. |
@@ -1106,8 +1106,9 @@ Statuses are evidence-based and move forward only after code/content review and 
     - Transition from sky to space is seamless and cinematic.
     - From orbit, planets render as colored spheres matching their atmosphere.
 
-18. **Gravity & Orbit Fixes**
-    - All grids, dropped items, and players experience consistent planetary gravity.
+18. **Gravity & Orbit Fixes** — 🛠️ WORKING ON
+    - Grids are currently not affected by gravity and do not align with the planet surface on placement. This is the primary blocker.
+    - All grids, dropped items, and players must experience consistent planetary gravity.
     - No more falling through the world or zero-gravity bugs on surfaces.
     - Realistic orbital mechanics: velocity + altitude = orbit.
     - Atmospheric drag slows low orbits; escape velocity possible.
@@ -1725,9 +1726,10 @@ For each version, these are the high-level Unity tasks you will perform manually
 
 ## 10. Suggested Immediate Next Steps
 
-1. **Validate pooled conveyor-carried visuals in Unity** under dense factory throughput, belt removal/rebuild, and world reload.
-2. **Continue Factory Foundations performance work** with broader centralized simulation ticking.
-3. **Complete remaining unified Grid positional indexing** where legacy systems still read Structural-only coordinates.
-4. **Keep UI fit validation active** at 1280×720, 1366×768, 1920×1080, and ultrawide resolutions.
+1. **Fix grid gravity** — grids must be affected by planet gravity and align with the planet surface on placement (4.9.0 gravity/orbit fixes).
+2. **Complete centralized simulation tick migration** — move ConveyorBelt, ConveyorChute, and Funnel from per-frame Update() to SimulationTickManager.
+3. **Validate pooled conveyor-carried visuals in Unity** under dense factory throughput, belt removal/rebuild, and world reload.
+4. **Complete remaining unified Grid positional indexing** where legacy systems still read Structural-only coordinates.
+5. **Keep UI fit validation active** at 1280×720, 1366×768, 1920×1080, and ultrawide resolutions.
 
 ---
