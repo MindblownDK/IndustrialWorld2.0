@@ -202,12 +202,48 @@ namespace VoxelEngine.Building.Tiered
             // of a module, so snap to grid intersections instead of cell centers.
             float surfaceOffset = def.family == BuildFamily.Foundation ? 0.50f : 0.02f;
             Vector3 raw = hit.point + hit.normal * surfaceOffset;
-            _ghostPos = gridSnap
-                ? new Vector3(
-                    Mathf.Round(raw.x / gridSize) * gridSize,
-                    Mathf.Round(raw.y / gridSize) * gridSize,
-                    Mathf.Round(raw.z / gridSize) * gridSize)
-                : raw;
+
+            if (gridSnap)
+            {
+                if (GravityProvider.IsRadial && GravityProvider.ActiveBody != null)
+                {
+                    // Spherical planet: snap along the tangent plane so blocks
+                    // follow the curvature and align at consistent heights.
+                    Vector3 planetCenter = GravityProvider.ActiveBody.transform.position;
+                    Vector3 toPoint = raw - planetCenter;
+                    float altitude = toPoint.magnitude;
+                    Vector3 up = toPoint.normalized;
+
+                    // Round altitude to grid increments for consistent storey heights.
+                    float snappedAlt = Mathf.Round(altitude / gridSize) * gridSize;
+
+                    Vector3 fwd = Vector3.Cross(up, Vector3.right);
+                    if (fwd.sqrMagnitude < 0.001f) fwd = Vector3.Cross(up, Vector3.forward);
+                    fwd = fwd.normalized;
+                    Vector3 rgt = Vector3.Cross(fwd, up).normalized;
+
+                    Vector3 tangentOffset = raw - planetCenter - up * Vector3.Dot(toPoint, up);
+                    float localX = Vector3.Dot(tangentOffset, rgt);
+                    float localZ = Vector3.Dot(tangentOffset, fwd);
+
+                    localX = Mathf.Round(localX / gridSize) * gridSize;
+                    localZ = Mathf.Round(localZ / gridSize) * gridSize;
+
+                    _ghostPos = planetCenter + up * snappedAlt + rgt * localX + fwd * localZ;
+                }
+                else
+                {
+                    _ghostPos = new Vector3(
+                        Mathf.Round(raw.x / gridSize) * gridSize,
+                        Mathf.Round(raw.y / gridSize) * gridSize,
+                        Mathf.Round(raw.z / gridSize) * gridSize);
+                }
+            }
+            else
+            {
+                _ghostPos = raw;
+            }
+
             _ghostRot = GravityProvider.GetSurfaceRotation(_ghostPos, _ghostYaw);
             _ghostValid = ValidateOverlap(_ghostPos, def.family);
         }

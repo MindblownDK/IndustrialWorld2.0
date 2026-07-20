@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.4.2-dev`
-**Roadmap Version:** `6.4.2-dev`
+**Current Version:** `6.4.3-dev`
+**Roadmap Version:** `6.4.3-dev`
 **Date:** 2026-07-20
 **Status:** Grid Gravity Fix & Simulation Tick Centralization — WORKING ON
 **Release Notes:** [`Changelog.md`](Changelog.md)

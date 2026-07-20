@@ -1,9 +1,31 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.4.2-dev`
+**Current Version:** `6.4.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.4.3-dev] Placement Fixes — Surface Clearance, Tangent-Plane Grid, Flat-World Removed
+
+**Type:** PATCH — placement and grid-snap corrections only; no save schema, prefab, item, recipe, research, or balance change.
+
+**Fixed:**
+- **Grid block surface clearance:** `GridBuilder` now uses `Mathf.Ceil` instead of `Mathf.Round` for altitude snapping, ensuring blocks always round AWAY from the planet center. This prevents grid blocks (especially landing gear with deep colliders) from being placed inside terrain voxels and getting pushed up by physics.
+- **Static building tangent-plane grid snap:** `BuildSystemV2` fallback placement now uses planet-aligned tangent-plane rounding when a celestial body is active. Previously it used flat-world X/Y/Z independent rounding which broke block alignment on spherical surfaces. Blocks now snap along the planet's tangent plane, ensuring consistent storey heights and clean alignment at any position on the sphere.
+- **Flat-world fallback removed from GridBuilder:** Grid placement always uses the radial planet system. Flat-world X/Y/Z rounding is retained in BuildSystemV2 only as a safety fallback.
+
+**Roadmap Status:**
+- Building (static + tiered): **🛠️ WORKING ON** — tangent-plane grid snap for consistent heights; foundation surface clearance improved.
+
+**Manual Unity Steps:**
+1. Let Unity compile and confirm the runtime banner reports `6.4.3-dev`.
+2. No Voxel Engine Setup rerun is required; this is a runtime-only placement fix.
+3. **Grid blocks:** Place a landing gear on the planet surface and confirm it sits cleanly without tilting or clipping into terrain.
+4. **Static building:** Place foundations on a spherical planet and confirm they align at consistent heights. Place multiple foundations in a line and confirm they form a level floor.
+5. **One-level-lower test:** Place a wall, then aim slightly below it and place another wall — confirm it snaps to the correct height one storey down.
+6. Confirm blocks placed at different positions on the planet (equator, pole, etc.) all align consistently.
 
 ---
 
