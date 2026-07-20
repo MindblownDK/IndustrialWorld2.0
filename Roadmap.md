@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.4.8-dev`
-**Roadmap Version:** `6.4.8-dev`
+**Current Version:** `6.4.9-dev`
+**Roadmap Version:** `6.4.9-dev`
 **Date:** 2026-07-20
-**Status:** Centralized Transport Tick Migration — WORKING ON
+**Status:** Transport Flow Recovery — WORKING ON
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
 ---
@@ -511,7 +511,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Shared Machine UI | 🟡 PARTIALLY COMPLETE | Crusher and Assembler panels now expose recipe selection, progress, power, toggles, inventory slots, scrolling, and item-port integration. Remaining work: complete unification across every machine, production statistics, and theme overrides. |
 | Item entity system | 🛠️ WORKING ON | Thomas validated the **5.70.0-dev** pooled physical world-item lifecycle. **5.71.0-dev** adds a shared cross-belt conveyor-carried visual pool; Unity factory load validation remains pending. |
 | Recipe registry refactor | 🟡 PARTIALLY COMPLETE | ScriptableObject crafting and machine recipes exist. Shaped/shapeless/smelting/machine unification and validation remain incomplete. |
-| Centralized simulation tick | 🛠️ WORKING ON | Crusher and Assembler register with `SimulationTickManager`. **6.4.8-dev** migrates ConveyorBelt, ConveyorChute, and Funnel logic onto centralized transport ticks while keeping per-frame item-visual interpolation for smooth motion. Dense-factory Unity validation remains pending. |
+| Centralized simulation tick | 🛠️ WORKING ON | Crusher and Assembler register with `SimulationTickManager`. A first 6.4.8-dev transport migration caused broken belt-to-belt and chest/funnel flow in Unity, so **6.4.9-dev** restores transport blocks to the previously validated per-frame runtime path while keeping the centralized transport interface groundwork for a later safer migration. |
 | Factory persistence | ✅ COMPLETED | Conveyor/Chute item packets, Crusher/Assembler recipe+progress+enabled, Funnel buffer+mode, all machine containers save and restore. Legacy saves compatible. (5.42.0-dev) |
 | Step 5 tiered setup workflow | 🛠️ WORKING ON | Generated Size-V4 prefabs migrate to Size-V5 seamless Foundation decks and Stair anchors. Missing resources are repaired safely while custom prefabs, materials, recipes, and balance values remain preserved. Unity two-run validation is pending. |
 | Step 17 setup workflow | ✅ COMPLETED | Step 17 remains non-destructive, refreshes generated visuals/colliders safely, preserves balance values, and connects upgraded Funnel/Crusher/Assembler prefabs plus contextual conveyor shape workflow. |
@@ -1728,7 +1728,7 @@ For each version, these are the high-level Unity tasks you will perform manually
 
 ## 10. Suggested Immediate Next Steps
 
-1. **Validate centralized transport ticks in Unity** — confirm belts, chutes, and funnels still move items smoothly and correctly in dense factories after the 6.4.8-dev migration.
+1. **Validate restored transport flow in Unity** — confirm belt-to-belt transfer, chest↔funnel flow, and dropped-item conveyor loading all work again after 6.4.9-dev.
 2. **Validate conveyor splitter in dense factories** — confirm round-robin distribution works under load.
 3. **Complete remaining unified Grid positional indexing** where legacy systems still read Structural-only coordinates.
 4. **Keep factory scope guarded** — conveyor shape variants only; do not add funnel or chute variants.

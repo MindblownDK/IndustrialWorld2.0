@@ -36,7 +36,7 @@ namespace VoxelEngine.Simulation
         public float lateralOffset;
     }
 
-    public class ConveyorBelt : MonoBehaviour, IItemConsumer, IItemProvider, ITransportTickable
+    public class ConveyorBelt : MonoBehaviour, IItemConsumer, IItemProvider
     {
         private static readonly Vector3[] LocalSocketDirections =
         {
@@ -74,7 +74,6 @@ namespace VoxelEngine.Simulation
         // ── Runtime State ─────────────────────────────────────────────
 
         private readonly List<ConveyorItem> _items = new(16);
-        private readonly List<ConveyorItem> _displayItems = new(16);
         private float _scanTimer;
         private BeltVisualController _visuals;
         private BoxCollider _shapeCollider;
@@ -102,7 +101,7 @@ namespace VoxelEngine.Simulation
                     _items.Add(restored);
                 }
             }
-            UpdateVisualState();
+            if (_visuals != null) _visuals.UpdateVisuals(_items);
         }
 
         /// <summary>Items per second throughput for the current speed tier.</summary>
@@ -136,8 +135,6 @@ namespace VoxelEngine.Simulation
 
         private void OnEnable()
         {
-            SimulationTickManager.EnsureInstance();
-            SimulationTickManager.Instance?.RegisterTransport(this, this);
             ConveyorNetwork.EnsureInstance();
             ConveyorNetwork.Instance?.Register(this);
             RefreshNearby();
@@ -147,7 +144,6 @@ namespace VoxelEngine.Simulation
         private void OnDisable()
         {
             CancelInvoke(nameof(RefreshNearby));
-            SimulationTickManager.Instance?.UnregisterTransport(this);
             ConveyorNetwork.Instance?.Unregister(this);
 
             // Do not rebuild this belt's visuals while Unity is disabling the
@@ -198,11 +194,8 @@ namespace VoxelEngine.Simulation
 
         private void Update()
         {
-            UpdateVisualState();
-        }
-
-        public void TransportTick(float dt)
-        {
+            // Advance items along the belt.
+            float dt = Time.deltaTime;
             float moveStep = BeltSpeed * dt;
 
             for (int i = _items.Count - 1; i >= 0; i--)
@@ -235,27 +228,12 @@ namespace VoxelEngine.Simulation
 
             // Pull from upstream if we have capacity.
             if (_items.Count < maxItems && upstreamSource != null)
-                TryPullFromUpstream();
-        }
-
-        private void UpdateVisualState()
-        {
-            if (_visuals == null) return;
-
-            float leadTime = 0f;
-            if (SimulationTickManager.Instance != null)
-                leadTime = Mathf.Min(SimulationTickManager.Instance.TimeSinceLastTick, 0.25f);
-
-            _displayItems.Clear();
-            for (int i = 0; i < _items.Count; i++)
             {
-                var display = _items[i];
-                if (display.progress < 1f)
-                    display.progress = Mathf.Min(1f, display.progress + BeltSpeed * leadTime);
-                _displayItems.Add(display);
+                TryPullFromUpstream();
             }
 
-            _visuals.UpdateVisuals(_displayItems);
+            // Update visuals.
+            if (_visuals != null) _visuals.UpdateVisuals(_items);
         }
 
         private void UpdateTravelDirection()

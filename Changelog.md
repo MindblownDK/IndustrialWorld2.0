@@ -1,34 +1,41 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.4.8-dev`
+**Current Version:** `6.4.9-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
 
 ---
 
-### [6.4.8-dev] Centralized Transport Tick — Belts, Chutes, Funnels
+### [6.4.9-dev] Transport Flow Recovery — Restore Validated Runtime Path
 
-**Type:** PATCH — runtime simulation/performance migration only; no save schema, prefab/item/recipe/research generation, balance, power production, or API change.
+**Type:** PATCH — transport-flow recovery only; no save schema, prefab/item/recipe/research generation, balance, power, or API change.
 
-**Added / Improved:**
-- `ConveyorBelt`, `ConveyorChute`, and `Funnel` now implement `ITransportTickable` and register with `SimulationTickManager`.
-- Belt/chute/funnel transport logic is now driven from the centralized simulation tick instead of per-block runtime logic running fully in `Update()`.
-- Added lightweight timing accessors to `SimulationTickManager` so transport visuals can read the time since the last tick.
-- Belt and chute visuals now keep **per-frame interpolation/prediction** between simulation ticks, so transport motion stays visually smooth while logic runs on the centralized tick.
-- Funnel transport/scan timers now run on the centralized tick path as well.
+**Fixed:**
+- Restored `ConveyorBelt`, `ConveyorChute`, and `Funnel` to the previously validated per-frame transport runtime path after the 6.4.8-dev centralized transport migration caused broken item flow in Unity.
+- Fixes the reported regressions where:
+  - dropped items entered the first conveyor but did not transfer to the second,
+  - conveyors filled up and stayed blocked,
+  - chest-to-funnel transfer stopped working.
+- Keeps the centralized transport interface groundwork in the codebase, but transport blocks no longer register into the shared tick manager in this patch.
+- Existing machine centralization for Crusher and Assembler is unchanged.
 
 **Roadmap Status:**
-- Centralized simulation tick: **🛠️ WORKING ON** — transport migration is now in place; dense-factory Unity validation remains the next gate.
+- Centralized simulation tick: **🛠️ WORKING ON** — machine centralization remains active; transport centralization is deferred until a safer migration pass is validated.
 
 **Manual Unity Steps:**
-1. Let Unity compile and confirm the runtime banner reports `6.4.8-dev`.
+1. Let Unity compile and confirm the runtime banner reports `6.4.9-dev`.
 2. No Voxel Engine Setup rerun is required.
-3. Build a small belt line feeding into a chute and funnel, then into storage/machines.
-4. Confirm items still move smoothly on belts and through chutes — no visible 10 Hz stepping/jumping.
-5. Confirm funnels still import/export correctly in both modes.
-6. Build a denser factory line with multiple belts/chutes/funnels active at once and confirm throughput/connection behavior remains correct.
-7. Re-test save/load of existing conveyor/chute/funnel states to confirm runtime transport resumes normally.
+3. Drop items onto a conveyor line with at least two belts and confirm items transfer belt-to-belt again.
+4. Test chest → funnel → conveyor and conveyor → funnel → chest in both funnel modes.
+5. Confirm conveyors no longer stick at full when a valid downstream path exists.
+6. Re-test chutes in a simple vertical factory chain.
+
+---
+
+### [6.4.8-dev] Centralized Transport Tick — Belts, Chutes, Funnels
+
+**Superseded by 6.4.9-dev.** The first transport centralization pass caused broken item flow in Unity testing, so the transport blocks were returned to their validated per-frame runtime path while the shared-tick groundwork remains for a later safer migration.
 
 ---
 

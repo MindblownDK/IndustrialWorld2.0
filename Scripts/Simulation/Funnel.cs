@@ -28,7 +28,7 @@ namespace VoxelEngine.Simulation
     /// the belt into the inventory. In Export mode it pulls from the inventory
     /// and pushes directly onto the belt.
     /// </summary>
-    public class Funnel : MonoBehaviour, IItemConsumer, IItemProvider, ITransportTickable
+    public class Funnel : MonoBehaviour, IItemConsumer, IItemProvider
     {
         [Header("Funnel Configuration")]
         public FunnelMode mode = FunnelMode.Import;
@@ -96,23 +96,12 @@ namespace VoxelEngine.Simulation
         private void Awake()
         {
             EnsureBuffer();
-            SimulationTickManager.EnsureInstance();
         }
 
-        private void OnEnable()
-        {
-            SimulationTickManager.Instance?.RegisterTransport(this, this);
-            ScanConnections();
-        }
-
-        private void OnDisable()
-        {
-            SimulationTickManager.Instance?.UnregisterTransport(this);
-        }
-
-        public void TransportTick(float dt)
+        private void Update()
         {
             EnsureBuffer();
+            float dt = Time.deltaTime;
 
             _scanTimer += dt;
             if (_scanTimer >= 0.35f)
