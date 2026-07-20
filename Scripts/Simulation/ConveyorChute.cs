@@ -21,7 +21,7 @@ namespace VoxelEngine.Simulation
         public float slideProgress;
     }
 
-    public class ConveyorChute : MonoBehaviour, IItemConsumer, IItemProvider
+    public class ConveyorChute : MonoBehaviour, IItemConsumer, IItemProvider, ITransportTickable
     {
         [Header("Chute Configuration")]
         public ChuteShape shape = ChuteShape.Straight;
@@ -78,13 +78,23 @@ namespace VoxelEngine.Simulation
 
         private void OnEnable()
         {
+            SimulationTickManager.EnsureInstance();
+            SimulationTickManager.Instance?.RegisterTransport(this, this);
             ScanConnections();
+        }
+
+        private void OnDisable()
+        {
+            SimulationTickManager.Instance?.UnregisterTransport(this);
         }
 
         private void Update()
         {
-            float dt = Time.deltaTime;
+            UpdateItemVisuals();
+        }
 
+        public void TransportTick(float dt)
+        {
             for (int i = _items.Count - 1; i >= 0; i--)
             {
                 var chuteItem = _items[i];
@@ -115,8 +125,6 @@ namespace VoxelEngine.Simulation
                 _pullTimer = 0f;
                 TryPullFromUpstream();
             }
-
-            UpdateItemVisuals();
         }
 
         public int GetInputCapacity(ItemDefinition item)
@@ -371,13 +379,20 @@ namespace VoxelEngine.Simulation
                 _visualActive.Add(false);
             }
 
+            float leadTime = 0f;
+            if (SimulationTickManager.Instance != null)
+                leadTime = Mathf.Min(SimulationTickManager.Instance.TimeSinceLastTick, 0.25f);
+
             for (int i = 0; i < _itemVisuals.Count; i++)
             {
                 if (i < _items.Count)
                 {
                     var chuteItem = _items[i];
                     var visual = _itemVisuals[i];
-                    visual.position = GetWorldPosition(chuteItem.slideProgress);
+                    float displayProgress = chuteItem.slideProgress < 1f
+                        ? Mathf.Min(1f, chuteItem.slideProgress + slideSpeed * leadTime)
+                        : 1f;
+                    visual.position = GetWorldPosition(displayProgress);
                     visual.gameObject.SetActive(true);
                     _visualActive[i] = true;
                     SetItemColor(visual, chuteItem.item);

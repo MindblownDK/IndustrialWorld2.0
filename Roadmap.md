@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.4.6-dev`
-**Roadmap Version:** `6.4.6-dev`
+**Current Version:** `6.4.8-dev`
+**Roadmap Version:** `6.4.8-dev`
 **Date:** 2026-07-20
-**Status:** Placement Stabilization Pass — WORKING ON
+**Status:** Centralized Transport Tick Migration — WORKING ON
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
 ---
@@ -45,18 +45,18 @@ The design goal is a seamless blend of:
 |--------|--------|-------|
 | Voxel world / planet / gravity | 🛠️ WORKING ON | Planet terrain generation exists but grid gravity is broken: grids fall as if unaffected by gravity and do not align with the planet surface when placed. Grid planet-alignment and consistent gravity for all grid types remain open. |
 | Cosmos / star system framework | 🟡 Exists | Needs planet-specific resources and interplanetary travel |
-| Grid systems (ships/vehicles) | 🛠️ WORKING ON | Core grid building works. Radial gravity is in place, and the 6.4.6-dev placement stabilization pass adds terrain-aligned fresh-grid spawn, delayed first-frame physics handoff, and landing-gear auto-lock grace. Broader orbit/vehicle progression work remains. |
+| Grid systems (ships/vehicles) | 🛠️ WORKING ON | Core grid building works. Radial gravity is in place, and Thomas validated the 6.4.6-dev placement stabilization pass for terrain-aligned fresh-grid spawn, delayed first-frame physics handoff, and landing-gear auto-lock grace. Broader orbit/vehicle progression work remains. |
 | Maritime grid | 🟡 Basic | Needs refinement and feature parity |
 | Detail-scale grid blocks | 🟡 PARTIALLY COMPLETE | Detail blocks now share the unified Grid with Structural blocks. Save/restore now covers Structural and Detail addresses; Unity validation and remaining positional network indexing are open. |
 | Unified grid placement | 🟡 PARTIALLY COMPLETE | Detail/Structural placement, shape variants, screen sources, and unified Item/Gas/Liquid pipe placement/networks are validated. **5.69.0-dev** adds additive movable-grid save/restore for Structural and Detail blocks, variants, settings, and attached pipes; Thomas validated it in Unity. Remaining positional-indexing work keeps this broader area partially complete. |
 | Power (wind, hydrogen) | ✅ Mature | Modular turbines are excellent |
 | Fluids / gases | ✅ Good | Pipe-gated transfer in 2.20.0 |
-| Building (static + tiered) | 🛠️ Working On | 3.75 m spacing, scale, rotation, and player-away Doors are Unity-validated. 6.4.6-dev adds static placed-block tangent-anchor snapping for cleaner same-level planetary placement and synchronizes tiered overlap validation with the intended 0.45 half-extents. Size-V5 closes Foundation deck seams and adds upward/downward Stair anchors at Foundation/Floor edges and Doorway thresholds; final validation is pending. |
+| Building (static + tiered) | 🛠️ Working On | 3.75 m spacing, scale, rotation, and player-away Doors are Unity-validated. Thomas also validated the 6.4.6-dev static placed-block tangent-anchor snap for cleaner same-level planetary placement. Tiered overlap validation is synchronized with the intended 0.45 half-extents. Size-V5 closes Foundation deck seams and adds upward/downward Stair anchors at Foundation/Floor edges and Doorway thresholds; final validation is pending. |
 | Advanced Quarry | 🛠️ Working On | Unbreakable bedrock generation removed; late Tier-5 quarry uses a finite configurable 64-layer default depth |
 | Sky / atmosphere / space rendering | 🟡 Basic | Needs planet-specific skies and proper space ambiance |
 | Gravity / orbits | 🛠️ WORKING ON | Grid gravity now uses radial GravityProvider system (6.4.1-dev). GridBuilder already uses GravityProvider.GetSurfaceRotation for planet-aligned placement. Orbit mechanics and atmospheric drag remain future work. |
 | Space stations | ❌ Missing | No buildable orbital platforms |
-| Conveyor logistics | 🛠️ WORKING ON | Conveyors, ramps, vertical belts, chutes, funnels, conveyor splitters (Mk.1/Mk.2/Mk.3), contextual shape wheel, ghost previews, and persistence exist. 6.4.6-dev improves local follow-up alignment for static chutes/funnels and neighboring factory blocks on spherical terrain through nearby placed-block tangent anchoring. More chute variants and final throughput validation remain. |
+| Conveyor logistics | 🛠️ WORKING ON | Conveyors, ramps, vertical belts, chutes, funnels, conveyor splitters (Mk.1/Mk.2/Mk.3), contextual shape wheel, ghost previews, and persistence exist. 6.4.6-dev improves local follow-up alignment for static chutes/funnels and neighboring factory blocks on spherical terrain through nearby placed-block tangent anchoring, and Thomas validated the placement pass. **Scope guard:** conveyor shape variants are the only planned factory placement variants; chutes and funnels stay single-variant. Final throughput validation remains. |
 | Grid screens / displays | ✅ COMPLETED | All sizes, live text+power states, right-click+terminal config, custom text+custom colors+border+font, visual bar charts, multi-source, live camera feeds, power gain/loss/net mode, persistence, and camera block are validated by Thomas. (5.51.3-dev) |
 | Grid lighting | 🛠️ WORKING ON | Detail/Structural single and dual spotlights, Structural LED strip, premium segmented/clean LED visuals, screen data providers, configuration UI, visible chase animation, and motion activation exist. Static/placed settings persist; unified movable-grid persistence remains future work. |
 | Sloped / armored grid blocks | ✅ COMPLETED | Cube, Slope, Half Block, Half Slope, Corner, and Inverted Slope variants are implemented and validated with textured meshes, collision, ghosts, and rotation. |
@@ -503,7 +503,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Area | Status | Repository Audit |
 |------|--------|------------------|
 | Conveyor belts | 🛠️ WORKING ON | Vertical geometry, item paths, and colliders now share the horizontal belt-surface height for precise Straight/Ramp transitions. Wheel hover now brightens the complete segment and animates its icon/label. Unity validation is pending. |
-| Conveyor chutes | 🟡 PARTIALLY COMPLETE | Straight vertical transport, snapping, moving-item visuals, inventory endpoints, and save-compatible placement are validated foundations. |
+| Conveyor chutes | 🟡 PARTIALLY COMPLETE | Straight vertical transport, snapping, moving-item visuals, inventory endpoints, and save-compatible placement are validated foundations. Chutes intentionally remain a single authored transport form; no corner, spiral, or other chute variants are planned. |
 | Basic machines | 🟡 PARTIALLY COMPLETE | Electric Furnace, Crusher, and three Assembler tiers exist. Crusher/Assembler have recipe-selection UIs, visual animation, centralized simulation ticks, additive buffers/progress/enabled persistence, and Unity smoke validation from Thomas; production statistics and module systems remain. |
 | Storage blocks | 🟡 PARTIALLY COMPLETE | A basic chest and the wider storage system exist. The planned Wooden Crate → Iron Chest → Steel Chest → Provider/Requester progression is not complete. |
 | Power pole, wire, and substation | 🟡 PARTIALLY COMPLETE | Manual wiring, poles, substations, transformers, compact LV/HV one-link connectors, and 8-link wall/foundation relays exist. Setup reruns preserve balance while adding missing links. |
@@ -511,12 +511,14 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Shared Machine UI | 🟡 PARTIALLY COMPLETE | Crusher and Assembler panels now expose recipe selection, progress, power, toggles, inventory slots, scrolling, and item-port integration. Remaining work: complete unification across every machine, production statistics, and theme overrides. |
 | Item entity system | 🛠️ WORKING ON | Thomas validated the **5.70.0-dev** pooled physical world-item lifecycle. **5.71.0-dev** adds a shared cross-belt conveyor-carried visual pool; Unity factory load validation remains pending. |
 | Recipe registry refactor | 🟡 PARTIALLY COMPLETE | ScriptableObject crafting and machine recipes exist. Shaped/shapeless/smelting/machine unification and validation remain incomplete. |
-| Centralized simulation tick | 🛠️ WORKING ON | Crusher and Assembler register with `SimulationTickManager`; ConveyorBelt, ConveyorChute, and Funnel migration to centralized tick is in progress. |
+| Centralized simulation tick | 🛠️ WORKING ON | Crusher and Assembler register with `SimulationTickManager`. **6.4.8-dev** migrates ConveyorBelt, ConveyorChute, and Funnel logic onto centralized transport ticks while keeping per-frame item-visual interpolation for smooth motion. Dense-factory Unity validation remains pending. |
 | Factory persistence | ✅ COMPLETED | Conveyor/Chute item packets, Crusher/Assembler recipe+progress+enabled, Funnel buffer+mode, all machine containers save and restore. Legacy saves compatible. (5.42.0-dev) |
 | Step 5 tiered setup workflow | 🛠️ WORKING ON | Generated Size-V4 prefabs migrate to Size-V5 seamless Foundation decks and Stair anchors. Missing resources are repaired safely while custom prefabs, materials, recipes, and balance values remain preserved. Unity two-run validation is pending. |
 | Step 17 setup workflow | ✅ COMPLETED | Step 17 remains non-destructive, refreshes generated visuals/colliders safely, preserves balance values, and connects upgraded Funnel/Crusher/Assembler prefabs plus contextual conveyor shape workflow. |
 
 > **Completion gate:** This section becomes **✅ COMPLETED** only after Step 17 is non-destructive, all listed variants are authored through the setup wizard, factory runtime state persists, and the Unity validation checklist passes.
+>
+> **Factory scope guard:** Only conveyor belts receive factory placement/shape variants. Funnels and conveyor chutes remain single-variant unless the roadmap is deliberately revised later.
 
 #### New Content — 🟡 PARTIALLY COMPLETE
 
@@ -528,7 +530,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 
 2. **Conveyor Chute**
    - Drops items from one elevation to another.
-   - Straight, corner, and spiral variants.
+   - Single straight transport form only; no chute variants are planned.
    - Items slide visually and audibly.
    - Snap to conveyors and machine outputs.
 
@@ -1535,7 +1537,7 @@ For each version, these are the high-level Unity tasks you will perform manually
    - Basic, fast, express tiers.
    - Add animated belt texture / scrolling UV material.
 2. **Create conveyor chute prefabs**
-   - Straight, corner, spiral variants.
+   - Single straight chute only; do not create chute variants.
    - Sliding item animation and sound.
 3. **Create machine prefabs**
    - Furnace, crusher, assembler.
@@ -1726,9 +1728,9 @@ For each version, these are the high-level Unity tasks you will perform manually
 
 ## 10. Suggested Immediate Next Steps
 
-1. **Validate placement stabilization in Unity** — confirm landing gear no longer tilts on first placement and neighboring assemblers/chests/funnels/chutes stay aligned on spherical terrain (6.4.6-dev).
+1. **Validate centralized transport ticks in Unity** — confirm belts, chutes, and funnels still move items smoothly and correctly in dense factories after the 6.4.8-dev migration.
 2. **Validate conveyor splitter in dense factories** — confirm round-robin distribution works under load.
 3. **Complete remaining unified Grid positional indexing** where legacy systems still read Structural-only coordinates.
-4. **Keep UI fit validation active** at 1280×720, 1366×768, 1920×1080, and ultrawide resolutions.
+4. **Keep factory scope guarded** — conveyor shape variants only; do not add funnel or chute variants.
 
 ---

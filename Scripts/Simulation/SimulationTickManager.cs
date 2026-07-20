@@ -194,7 +194,27 @@ namespace VoxelEngine.Simulation
             return player != null ? player.transform.position : Vector3.zero;
         }
 
-        // ── Diagnostics ───────────────────────────────────────────────
+        // ── Timing / Diagnostics ──────────────────────────────────────
+
+        /// <summary>Configured seconds between simulation ticks.</summary>
+        public float TickIntervalSeconds => tickRate > 0f ? 1f / tickRate : 0f;
+
+        /// <summary>
+        /// Seconds elapsed since the most recent simulation tick. Transport visuals
+        /// can use this as a small interpolation lead without running full logic in Update().
+        /// </summary>
+        public float TimeSinceLastTick => _tickAccum;
+
+        /// <summary>0-1 interpolation alpha since the last simulation tick.</summary>
+        public float TickAlpha01
+        {
+            get
+            {
+                float interval = TickIntervalSeconds;
+                if (interval <= 0f) return 0f;
+                return Mathf.Clamp01(_tickAccum / interval);
+            }
+        }
 
         /// <summary>Total registered machines (including sleeping ones).</summary>
         public int MachineCount => _machines.Count;

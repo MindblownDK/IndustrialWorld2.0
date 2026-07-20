@@ -1,9 +1,54 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.4.6-dev`
+**Current Version:** `6.4.8-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.4.8-dev] Centralized Transport Tick — Belts, Chutes, Funnels
+
+**Type:** PATCH — runtime simulation/performance migration only; no save schema, prefab/item/recipe/research generation, balance, power production, or API change.
+
+**Added / Improved:**
+- `ConveyorBelt`, `ConveyorChute`, and `Funnel` now implement `ITransportTickable` and register with `SimulationTickManager`.
+- Belt/chute/funnel transport logic is now driven from the centralized simulation tick instead of per-block runtime logic running fully in `Update()`.
+- Added lightweight timing accessors to `SimulationTickManager` so transport visuals can read the time since the last tick.
+- Belt and chute visuals now keep **per-frame interpolation/prediction** between simulation ticks, so transport motion stays visually smooth while logic runs on the centralized tick.
+- Funnel transport/scan timers now run on the centralized tick path as well.
+
+**Roadmap Status:**
+- Centralized simulation tick: **🛠️ WORKING ON** — transport migration is now in place; dense-factory Unity validation remains the next gate.
+
+**Manual Unity Steps:**
+1. Let Unity compile and confirm the runtime banner reports `6.4.8-dev`.
+2. No Voxel Engine Setup rerun is required.
+3. Build a small belt line feeding into a chute and funnel, then into storage/machines.
+4. Confirm items still move smoothly on belts and through chutes — no visible 10 Hz stepping/jumping.
+5. Confirm funnels still import/export correctly in both modes.
+6. Build a denser factory line with multiple belts/chutes/funnels active at once and confirm throughput/connection behavior remains correct.
+7. Re-test save/load of existing conveyor/chute/funnel states to confirm runtime transport resumes normally.
+
+---
+
+### [6.4.7-dev] Roadmap Guard — Conveyor Variants Only
+
+**Type:** PATCH — roadmap scope protection and version synchronization only; no save schema, prefab/item/recipe/research generation, balance, power, API, or runtime placement behavior change.
+
+**Changed / Clarified:**
+- Removed planned chute variants from the active roadmap.
+- Factory transport scope is now explicitly guarded in the roadmap: **only conveyor belts receive planned factory placement/shape variants**.
+- Conveyor chutes are documented as a **single straight transport form only**.
+- Funnels are also explicitly kept **single-variant** in the roadmap notes so future setup/content passes do not accidentally create funnel variants.
+- Synced roadmap/version surfaces after Thomas validated the 6.4.6-dev placement pass as working perfectly.
+- Updated immediate-next-step guidance to move on from placement validation and keep focus on factory throughput and remaining roadmap execution.
+
+**Manual Unity Steps:**
+1. Let Unity compile and confirm the runtime banner reports `6.4.7-dev`.
+2. No Voxel Engine Setup rerun is required.
+3. No prefab/item/recipe/research regeneration is required.
+4. Treat factory scope as: **conveyor variants only**; do not author funnel or chute variants in future setup passes.
 
 ---
 
