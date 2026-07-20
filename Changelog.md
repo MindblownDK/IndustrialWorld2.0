@@ -1,9 +1,42 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.4.9-dev`
+**Current Version:** `6.4.10-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.4.10-dev] Splitter Persistence + Funnel/Splitter Inspection
+
+**Type:** PATCH — additive factory runtime persistence and inspection UX only; no save schema break, prefab/item/recipe/research generation, balance, power, or transport-logic behavior change.
+
+**Added / Improved:**
+- Added additive save/load support for `ConveyorSplitter` runtime state:
+  - buffered items
+  - round-robin output cursor
+- Splitter persistence is appended safely to the existing world-state schema; legacy saves without splitter data still load normally.
+- `ConveyorSplitter` now exposes lightweight runtime properties used by persistence and UI inspection:
+  - buffered count
+  - connected output count
+  - round-robin index
+- `FactoryStatusIndicator` now recognizes splitters, so splitter status strips/lights can show Idle / Active / Blocked state instead of falling through to the default state.
+- `WorldInspectionHud` now has dedicated inspection rows for:
+  - **Funnel** — mode + buffered count
+  - **Conveyor Splitter** — tier + buffered count + connected outputs
+
+**Roadmap Status:**
+- Factory persistence remains **✅ COMPLETED** and now includes Conveyor Splitter runtime state.
+- Top-left world inspection overlay remains **🛠️ WORKING ON** with funnel/splitter support added; Unity validation is still pending.
+
+**Manual Unity Steps:**
+1. Let Unity compile and confirm the runtime banner reports `6.4.10-dev`.
+2. No Voxel Engine Setup rerun is required.
+3. Build a splitter line, let it buffer at least a few items, save, reload, and confirm the buffer still exists.
+4. If practical, let the splitter distribute unevenly, save, reload, and confirm distribution continues sensibly instead of always restarting from the same lane.
+5. Aim at a funnel and confirm the top-left inspection overlay shows its mode and buffered item count.
+6. Aim at a splitter and confirm the top-left inspection overlay shows tier, buffered count, and connected outputs.
+7. Re-test ordinary transport flow to confirm 6.4.9-dev behavior remains intact.
 
 ---
 

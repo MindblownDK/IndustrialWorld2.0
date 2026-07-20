@@ -289,6 +289,32 @@ namespace VoxelEngine.Persistence
                 entry.funnelState = fs;
             }
 
+            var splitter = go.GetComponentInChildren<VoxelEngine.Simulation.ConveyorSplitter>(true);
+            if (splitter != null)
+            {
+                var ss = new SavedSplitterState
+                {
+                    roundRobinIndex = splitter.RoundRobinIndex
+                };
+                var bufferItems = splitter.BufferItems;
+                if (bufferItems != null)
+                {
+                    for (int i = 0; i < bufferItems.Count; i++)
+                    {
+                        var packet = bufferItems[i];
+                        if (packet.item == null || packet.count <= 0) continue;
+                        ss.bufferItems.Add(new SavedTransportItem
+                        {
+                            itemId = packet.item.itemId,
+                            count = packet.count,
+                            progress = Mathf.Clamp01(packet.progress),
+                            lateralOffset = packet.lateralOffset
+                        });
+                    }
+                }
+                entry.splitterState = ss;
+            }
+
             // Capture screen block config
             var screenBlock = go.GetComponentInChildren<VoxelEngine.GridSystem.GridScreenBlock>(true);
             if (screenBlock != null)
@@ -965,6 +991,28 @@ namespace VoxelEngine.Persistence
                     }
                 }
             }
+
+            var splitter = go.GetComponentInChildren<VoxelEngine.Simulation.ConveyorSplitter>(true);
+            if (splitter != null && saved.splitterState != null)
+            {
+                var restored = new List<VoxelEngine.Simulation.ConveyorItem>();
+                if (saved.splitterState.bufferItems != null)
+                {
+                    foreach (var item in saved.splitterState.bufferItems)
+                    {
+                        if (item == null || string.IsNullOrEmpty(item.itemId) || item.count <= 0) continue;
+                        if (!_itemById.TryGetValue(item.itemId, out var definition)) continue;
+                        restored.Add(new VoxelEngine.Simulation.ConveyorItem
+                        {
+                            item = definition,
+                            count = item.count,
+                            progress = Mathf.Clamp01(item.progress),
+                            lateralOffset = item.lateralOffset
+                        });
+                    }
+                }
+                splitter.RestorePersistentState(restored, saved.splitterState.roundRobinIndex);
+            }
             // Restore screen block config
             var screenBlock = go.GetComponentInChildren<VoxelEngine.GridSystem.GridScreenBlock>(true);
             if (screenBlock != null && saved.screenConfig != null)
@@ -1293,6 +1341,8 @@ namespace VoxelEngine.Persistence
             public SavedMachineState machine;
             // Funnel state (mode + buffered items). Null for non-funnel blocks.
             public SavedFunnelState funnelState;
+            // Splitter state (buffer + round-robin cursor). Null for non-splitter blocks.
+            public SavedSplitterState splitterState;
             // Screen block config (GridScreenBlock display mode, sources, appearance). Null = no screen data.
             public SavedScreenConfig screenConfig;
             // Lighting config for GridLightBlock / LEDStrip. Null = not a configurable light.
@@ -1301,6 +1351,11 @@ namespace VoxelEngine.Persistence
         [Serializable] private class SavedFunnelState
         {
             public string mode; // "Import" or "Export"
+            public System.Collections.Generic.List<SavedTransportItem> bufferItems = new System.Collections.Generic.List<SavedTransportItem>();
+        }
+        [Serializable] private class SavedSplitterState
+        {
+            public int roundRobinIndex;
             public System.Collections.Generic.List<SavedTransportItem> bufferItems = new System.Collections.Generic.List<SavedTransportItem>();
         }
         [Serializable] private class SavedScreenConfig

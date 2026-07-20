@@ -250,6 +250,28 @@ namespace VoxelEngine.UI
                 return true;
             }
 
+            var funnel = hit.collider.GetComponentInParent<Funnel>();
+            if (funnel != null)
+            {
+                var placed = funnel.GetComponentInParent<PlacedBlock>();
+                info.title = placed?.Item != null ? placed.Item.displayName : "Funnel";
+                info.detail = $"FUNNEL · {funnel.Mode}".ToUpperInvariant();
+                info.status = $"Buffered: {funnel.BufferedCount}/{Mathf.Max(1, funnel.bufferSize)}";
+                ApplyPlacedHealth(placed, ref info);
+                return true;
+            }
+
+            var splitter = hit.collider.GetComponentInParent<ConveyorSplitter>();
+            if (splitter != null)
+            {
+                var placed = splitter.GetComponentInParent<PlacedBlock>();
+                info.title = placed?.Item != null ? placed.Item.displayName : $"Conveyor Splitter {splitter.tier}";
+                info.detail = $"SPLITTER · {splitter.tier}".ToUpperInvariant();
+                info.status = $"Buffered: {splitter.BufferedCount}/{Mathf.Max(1, splitter.bufferSize)} · Outputs: {splitter.ConnectedOutputCount}/{Mathf.Max(1, splitter.OutputCount)}";
+                ApplyPlacedHealth(placed, ref info);
+                return true;
+            }
+
             var gridBlock = hit.collider.GetComponentInParent<GridBlock>();
             if (gridBlock != null)
             {

@@ -48,6 +48,7 @@ namespace VoxelEngine.Simulation
         private ConveyorBelt _belt;
         private ConveyorChute _chute;
         private Funnel _funnel;
+        private ConveyorSplitter _splitter;
 
         private void Awake()
         {
@@ -91,6 +92,7 @@ namespace VoxelEngine.Simulation
             _belt = GetComponent<ConveyorBelt>();
             _chute = GetComponent<ConveyorChute>();
             _funnel = GetComponent<Funnel>();
+            _splitter = GetComponent<ConveyorSplitter>();
         }
 
         private void CacheVisualTargets()
@@ -179,6 +181,13 @@ namespace VoxelEngine.Simulation
             {
                 if (_funnel.BufferedCount >= Mathf.Max(1, _funnel.bufferSize)) return FactoryVisualStatus.Blocked;
                 if (_funnel.BufferedCount > 0) return FactoryVisualStatus.Active;
+                return FactoryVisualStatus.Idle;
+            }
+
+            if (_splitter != null)
+            {
+                if (_splitter.BufferedCount >= Mathf.Max(1, _splitter.bufferSize)) return FactoryVisualStatus.Blocked;
+                if (_splitter.BufferedCount > 0) return FactoryVisualStatus.Active;
                 return FactoryVisualStatus.Idle;
             }
 

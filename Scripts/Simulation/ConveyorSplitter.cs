@@ -61,11 +61,54 @@ namespace VoxelEngine.Simulation
             _ => 2
         };
 
+        /// <summary>Current buffered conveyor packets inside the splitter.</summary>
+        public IReadOnlyList<ConveyorItem> BufferItems => _buffer;
+
+        /// <summary>Number of buffered packets currently waiting inside the splitter.</summary>
+        public int BufferedCount => _buffer.Count;
+
+        /// <summary>How many output lanes are currently connected to consumers.</summary>
+        public int ConnectedOutputCount
+        {
+            get
+            {
+                int count = 0;
+                if (outputTargets == null) return 0;
+                for (int i = 0; i < outputTargets.Count; i++)
+                    if (outputTargets[i] != null) count++;
+                return count;
+            }
+        }
+
+        /// <summary>Current round-robin lane index for persistence/debugging.</summary>
+        public int RoundRobinIndex => _roundRobinIndex;
+
         // ── Lifecycle ─────────────────────────────────────────────────
 
         private void Awake()
         {
             EnsureOutputDirections();
+        }
+
+        /// <summary>Restores additive runtime state without changing authored tuning.</summary>
+        public void RestorePersistentState(IEnumerable<ConveyorItem> savedItems, int roundRobinIndex)
+        {
+            EnsureOutputDirections();
+            _buffer.Clear();
+            if (savedItems != null)
+            {
+                foreach (var saved in savedItems)
+                {
+                    if (saved.item == null || saved.count <= 0 || _buffer.Count >= bufferSize) continue;
+                    var restored = saved;
+                    restored.progress = Mathf.Clamp01(restored.progress);
+                    _buffer.Add(restored);
+                }
+            }
+
+            _roundRobinIndex = OutputCount > 0
+                ? Mathf.Abs(roundRobinIndex) % OutputCount
+                : 0;
         }
 
         private void OnEnable()
