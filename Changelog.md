@@ -1,9 +1,34 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.4.1-dev`
+**Current Version:** `6.4.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.4.2-dev] Planet-Aligned Grid Block Placement
+
+**Type:** PATCH — grid placement snapping correction for spherical planets; no save schema, prefab, item, recipe, research, or balance change.
+
+**Fixed:**
+- Grid block placement on spherical planets now snaps positions along the planet's tangent plane instead of rounding to flat world-X/Y/Z axes.
+- Previously, `GridBuilder` rounded the hit point's world X, Y, and Z independently to cell-size increments, which created a flat-world grid that didn't follow the planet's curvature. Landing gear, armor blocks, and other grid items would appear misaligned on spherical surfaces.
+- New placement logic builds a tangent-plane frame at the surface point (using the planet center as reference), projects the hit offset onto that plane, snaps along the tangent axes, and reconstructs the world position at the correct altitude.
+- Flat-world placement remains unchanged — the old world-axis rounding is used when no celestial body is active.
+- `GravityProvider.GetSurfaceRotation()` continues to provide the correct planet-aligned orientation for the placed grid.
+
+**Roadmap Status:**
+- Gravity / orbits: **🛠️ WORKING ON** — grid gravity (6.4.1-dev) and placement alignment (6.4.2-dev) both use radial system now.
+- Voxel world / planet / gravity: **🛠️ WORKING ON** — grid gravity and placement fixed; orbit mechanics remain future work.
+
+**Manual Unity Steps:**
+1. Let Unity compile and confirm the runtime banner reports `6.4.2-dev`.
+2. No Voxel Engine Setup rerun is required; this is a runtime-only placement fix.
+3. On a spherical planet, place a landing gear or armor block and confirm it snaps flush with the planet surface at any position (equator, pole, etc.).
+4. Place multiple grid blocks in a line and confirm they form a consistent grid that follows the planet's curvature.
+5. On a flat world, confirm grid placement still works exactly as before.
+6. Confirm existing grids that were placed before this fix still load and function correctly.
 
 ---
 

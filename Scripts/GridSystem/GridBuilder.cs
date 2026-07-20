@@ -137,11 +137,47 @@ namespace VoxelEngine.GridSystem
             {
                 float cs = gbi.gridSize.CellSize();
                 Vector3 planetUp = GravityProvider.GetUp(hit.point);
-                Vector3 raw = hit.point + planetUp * (cs * 0.5f);
-                worldPos = new Vector3(
-                    Mathf.Round(raw.x / cs) * cs,
-                    Mathf.Round(raw.y / cs) * cs,
-                    Mathf.Round(raw.z / cs) * cs);
+
+                if (GravityProvider.IsRadial && GravityProvider.ActiveBody != null)
+                {
+                    // Spherical planet: snap position along the planet's tangent plane
+                    // so the grid follows the curvature instead of snapping to world axes.
+                    Vector3 planetCenter = GravityProvider.ActiveBody.transform.position;
+                    Vector3 toPoint = hit.point - planetCenter;
+                    float altitude = toPoint.magnitude;
+                    Vector3 up = toPoint.normalized;
+
+                    // Height above planet center, snapped to grid increments.
+                    float snappedAlt = Mathf.Round(altitude / cs) * cs + cs * 0.5f;
+
+                    // Build a tangent-plane frame at this surface point.
+                    Vector3 forward = Vector3.Cross(up, Vector3.right);
+                    if (forward.sqrMagnitude < 0.001f)
+                        forward = Vector3.Cross(up, Vector3.forward);
+                    forward = forward.normalized;
+                    Vector3 right = Vector3.Cross(forward, up).normalized;
+
+                    // Project the hit point onto the tangent plane (relative to planet center).
+                    Vector3 tangentOffset = hit.point - planetCenter - up * Vector3.Dot(toPoint, up);
+                    float localX = Vector3.Dot(tangentOffset, right);
+                    float localZ = Vector3.Dot(tangentOffset, forward);
+
+                    // Snap along the tangent plane.
+                    localX = Mathf.Round(localX / cs) * cs;
+                    localZ = Mathf.Round(localZ / cs) * cs;
+
+                    worldPos = planetCenter + up * snappedAlt + right * localX + forward * localZ;
+                }
+                else
+                {
+                    // Flat world: snap to world axes.
+                    Vector3 raw = hit.point + planetUp * (cs * 0.5f);
+                    worldPos = new Vector3(
+                        Mathf.Round(raw.x / cs) * cs,
+                        Mathf.Round(raw.y / cs) * cs,
+                        Mathf.Round(raw.z / cs) * cs);
+                }
+
                 gridPos = Vector3Int.zero;
                 targetGrid = null;
                 rotation = GravityProvider.GetSurfaceRotation(worldPos);
