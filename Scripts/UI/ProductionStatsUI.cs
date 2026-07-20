@@ -51,6 +51,18 @@ namespace VoxelEngine.UI
             return builder.ToString();
         }
 
+        private static string BuildCsvText(IReadOnlyList<ProductionStatsTracker.ItemStats> snapshot)
+        {
+            var builder = new StringBuilder();
+            builder.AppendLine("Item,ProducedPerMin,ConsumedPerMin,NetPerMin,ProducedTotal,ConsumedTotal,NetTotal");
+            foreach (var stat in snapshot)
+            {
+                string name = stat.Item != null ? stat.Item.displayName : "Unknown";
+                builder.AppendLine($"\"{name}\",{stat.ProducedPerMinute:0},{stat.ConsumedPerMinute:0},{stat.NetPerMinute:0},{stat.ProducedTotal},{stat.ConsumedTotal},{stat.NetTotal}");
+            }
+            return builder.ToString();
+        }
+
         public static VisualElement BuildPanel()
         {
             LoadPrefs();
@@ -138,6 +150,7 @@ namespace VoxelEngine.UI
                 GameUIController.Instance?.RequestRefresh();
             }, ProductionPanelThemeState.Accent));
             btnRow.Add(T.SmallButton("Copy Stats", () => GUIUtility.systemCopyBuffer = BuildStatsText(snapshot), T.AccentGreen));
+            btnRow.Add(T.SmallButton("Copy CSV", () => GUIUtility.systemCopyBuffer = BuildCsvText(snapshot), T.AccentCyan));
             btnRow.Add(T.SmallButton("Reset", () =>
             {
                 ProductionStatsTracker.Instance.Clear();

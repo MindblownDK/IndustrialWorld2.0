@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.6.1-dev`
-**Roadmap Version:** `6.6.1-dev`
+**Current Version:** `6.8.0-dev`
+**Roadmap Version:** `6.8.0-dev`
 **Date:** 2026-07-20
-**Status:** Block Orientation & Player Spawn Safety Pass — COMPLETED
+**Status:** Vehicle Power & Combat Infrastructure Pass — COMPLETED
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
 ---
@@ -470,7 +470,7 @@ A late-game **Jump Drive** provides charged, coordinate-based faster-than-light 
 |---------|-------|------------------|-------|-------------------|
 | **4.5.0** | Factory Foundations | 🛠️ **WORKING ON** | Conveyor belts, chutes, basic machines, grid lights, machine UI | Medium — prefab generation, animation clips |
 | **4.6.0** | Production Lines & UI Revolution | 🛠️ **WORKING ON** | Assemblers, recipe chains, UI theme system, research UI overhaul | Medium — recipes, themes, panels |
-| **4.7.0** | Power, Vehicles & Combat | 🛠️ **WORKING ON** | Engines, batteries, damage, armor slots, bombs, grid weapons, armor blocks | High — combat prefabs, physics |
+| **4.7.0** | Power, Vehicles & Combat | 🛠️ **WORKING ON** (Infrastructure pass complete) | Engines, batteries, damage, armor slots, bombs, grid weapons, armor blocks | High — combat prefabs, physics |
 | **4.8.0** | Logistics 2.0, Screens & Trajectory | 🛠️ **WORKING ON** | Trains, drones, configurable screens, trajectory camera, orbit map (`M`) | High — train track, camera rigs, panels |
 | **4.9.0** | Living Worlds | 🟡 **PARTIALLY COMPLETE** | Ruins, weather, water flow, enemies, planet skies, gravity/orbit fixes | Very High — worldgen, AI, fluids, rendering |
 | **5.0.0** | Orbital Expansion | 🟡 **PARTIALLY COMPLETE** | Rockets, space stations, asteroid mining, orbital cargo, space ambiance | Very High — new scene/zone system |

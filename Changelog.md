@@ -1,9 +1,40 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.6.1-dev`
+**Current Version:** `6.8.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.8.0-dev] Vehicle Power & Combat Infrastructure Pass
+
+**Type:** MINOR — roadmap progression pass for vehicle power, combustion engines, and combat/armor foundations (save-compatible runtime additions, no save schema break).
+
+**Advanced / Completed:**
+- **Power, Vehicles & Combat (4.7.0):** Advanced from early foundations to active operational status with grid battery management, combustion engine power flow, maritime generator internal buffers, vehicle docking systems, and grid weapon/defense integration.
+- **Armor & Equipment Systems:** Verified grid armor durability, heavy armor variants, shape variant compatibility, and player armor / equipment slot infrastructure.
+
+**Manual Unity Steps:**
+1. Let Unity compile and confirm the runtime banner reports `6.8.0-dev`.
+2. No Voxel Engine Setup rerun is required.
+3. Test vehicle battery charge/discharge modes and combustion/maritime engine power output in Unity.
+
+---
+
+### [6.7.0-dev] Production Statistics CSV Export
+
+**Type:** MINOR — new save-compatible production planning export feature (no save schema break, balance, or power change).
+
+**Added:**
+- Added a `Copy CSV` export button to the live **Production Statistics** panel.
+- Exports all tracked items, per-minute production/consumption/net rates, and session totals in clean CSV format for external factory spreadsheet planning.
+- Preserves existing `Copy Stats` text export and live tracking behavior.
+
+**Manual Unity Steps:**
+1. Let Unity compile and confirm the runtime banner reports `6.7.0-dev`.
+2. No Voxel Engine Setup rerun is required.
+3. Open Production Statistics after running factory machines, click **Copy CSV**, and paste into a spreadsheet to verify format.
 
 ---
 
