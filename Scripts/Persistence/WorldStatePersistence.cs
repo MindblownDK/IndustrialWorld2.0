@@ -191,6 +191,7 @@ namespace VoxelEngine.Persistence
                 {
                     itemId = pb.Item.itemId,
                     pos = pb.transform.position,
+                    rot = pb.transform.rotation,
                     rotY = pb.transform.eulerAngles.y,
                     hp = pb.Hp,
                     container = TryFindContainer(pb.gameObject)
@@ -412,6 +413,7 @@ namespace VoxelEngine.Persistence
                     family = pb.definition.family.ToString(),
                     tier   = (int)pb.tier,
                     pos    = pb.transform.position,
+                    rot    = pb.transform.rotation,
                     rotY   = pb.transform.eulerAngles.y,
                     hp     = pb.hp
                 });
@@ -428,6 +430,7 @@ namespace VoxelEngine.Persistence
                 save.quarries.Add(new SavedQuarry
                 {
                     pos = q.transform.position,
+                    rot = q.transform.rotation,
                     rotY = q.transform.eulerAngles.y,
                     currentDepth = q.CurrentDepth,
                     cursorX = q.CursorX,
@@ -880,7 +883,8 @@ namespace VoxelEngine.Persistence
             foreach (var sb in save.placedBlocks)
             {
                 if (!_blockById.TryGetValue(sb.itemId, out var blockItem) || blockItem.placedPrefab == null) continue;
-                var go = Instantiate(blockItem.placedPrefab, sb.pos, Quaternion.Euler(0, sb.rotY, 0));
+                Quaternion finalRot = (sb.rot.w != 0f || sb.rot.x != 0f || sb.rot.y != 0f || sb.rot.z != 0f) ? sb.rot : Quaternion.Euler(0, sb.rotY, 0);
+                var go = Instantiate(blockItem.placedPrefab, sb.pos, finalRot);
                 go.name = blockItem.displayName + " (restored)";
                 if (go.GetComponentInChildren<Collider>() == null) go.AddComponent<BoxCollider>();
                 var pb = go.GetComponent<PlacedBlock>();
@@ -1126,7 +1130,8 @@ namespace VoxelEngine.Persistence
                 if (!_tieredById.TryGetValue(ps.family, out var def)) continue;
                 var prefab = def.GetPrefab((BuildTier)ps.tier);
                 if (prefab == null) continue;
-                var go = Instantiate(prefab, ps.pos, Quaternion.Euler(0, ps.rotY, 0));
+                Quaternion finalRot = (ps.rot.w != 0f || ps.rot.x != 0f || ps.rot.y != 0f || ps.rot.z != 0f) ? ps.rot : Quaternion.Euler(0, ps.rotY, 0);
+                var go = Instantiate(prefab, ps.pos, finalRot);
                 go.name = $"{def.displayName} ({(BuildTier)ps.tier}, restored)";
                 var pb = go.GetComponent<PlacedTieredBlock>();
                 if (pb == null) pb = go.AddComponent<PlacedTieredBlock>();
@@ -1345,7 +1350,7 @@ namespace VoxelEngine.Persistence
         [Serializable] private class SavedPlacedBlock
         {
             public string itemId;
-            public Vector3 pos; public float rotY;
+            public Vector3 pos; public Quaternion rot; public float rotY;
             public int hp;
             public SavedContainer container;
             // Wind turbine part condition (0..100). 0 = "not set" (legacy saves)
@@ -1447,7 +1452,7 @@ namespace VoxelEngine.Persistence
         [Serializable] private class SavedPlacedTiered
         {
             public string family; public int tier;
-            public Vector3 pos;   public float rotY;
+            public Vector3 pos;   public Quaternion rot; public float rotY;
             public int hp;
         }
         [Serializable] private class SavedContainer
@@ -1470,7 +1475,7 @@ namespace VoxelEngine.Persistence
         }
         [Serializable] private class SavedQuarry
         {
-            public Vector3 pos; public float rotY;
+            public Vector3 pos; public Quaternion rot; public float rotY;
             public int currentDepth; public int cursorX; public int cursorZ;
             public int phase; public int rangeLvl; public int speedLvl; public int effLvl; // upgrade levels
             public SavedContainer outputContainer;

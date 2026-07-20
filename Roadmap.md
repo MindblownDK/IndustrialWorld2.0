@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.6.0-dev`
-**Roadmap Version:** `6.6.0-dev`
+**Current Version:** `6.6.1-dev`
+**Roadmap Version:** `6.6.1-dev`
 **Date:** 2026-07-20
-**Status:** Roadmap Status & Factory Progression Pass — COMPLETED
+**Status:** Block Orientation & Player Spawn Safety Pass — COMPLETED
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
 ---

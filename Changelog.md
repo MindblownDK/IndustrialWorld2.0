@@ -1,9 +1,26 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.6.0-dev`
+**Current Version:** `6.6.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.6.1-dev] Fix Placed Block Orientation and Player Spawn Land/Water Safety
+
+**Type:** PATCH — bug fixes for block orientation persistence and player land/water spawn safety; save-compatible additive rotation restore with legacy fallback.
+
+**Fixed / Improved:**
+- **Placed Block Orientation Persistence:** Static placed blocks (`SavedPlacedBlock`), tiered blocks (`SavedPlacedTiered`), and quarries (`SavedQuarry`) now store and restore full 3D orientation (`Quaternion rot`) instead of only yaw (`rotY`). Blocks loaded from saves now maintain their exact pitch, roll, and heading on spherical planet surfaces instead of resetting towards world origin / X=0. Legacy saves fallback gracefully via `rotY`.
+- **Player Spawn Earth-Sinking Fix:** Adjusted initial spawn surface placement offset from `+ 1.0f` to `+ 0.05f` along surface normal/up, so the character controller's feet rest cleanly on the ground without sinking slightly into the earth.
+- **Player Spawn Water/Land Safety on Sphere Worlds:** Fresh world spawning on spherical planet bodies now scans around temperate latitudes, verifying that candidate surface points are above sea level and consist of solid land rather than water/fluid voxels.
+
+**Manual Unity Steps:**
+1. Let Unity compile and confirm the runtime banner reports `6.6.1-dev`.
+2. No Voxel Engine Setup rerun is required.
+3. Place blocks on a spherical planet surface with non-zero orientation/tilt, save, and reload the world to confirm they preserve their original orientation.
+4. Start a new spherical planet world and confirm the player spawns on land (never in water) and at the correct surface height.
 
 ---
 

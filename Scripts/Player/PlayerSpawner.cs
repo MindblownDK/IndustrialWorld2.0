@@ -70,19 +70,55 @@ namespace VoxelEngine.Player
                 var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
                 if (body != null)
                 {
-                    // Spawn above the body's "north pole" (body-local +Y) so the player starts
-                    // standing upright on the planet surface.
-                    // Spawn at a TEMPERATE latitude (~30° from equator), NOT the freezing pole.
-                    // The pole is the coldest point (latitude climate) → only ice/tundra.
-                    // 30° gives a nice grassy/forest biome. Also spawn closer (8m above surface)
-                    // so chunks load fast and the player doesn't fall while waiting.
+                    // Scan around temperate latitude to find a valid land surface above sea level (not water).
                     Vector3 equator = new Vector3(1f, 0f, 0f);
-                    // Rotate 30° from equator toward the pole to get a temperate climate.
-                    Vector3 surfDir = math.normalizesafe(
-                        equator + body.transform.up * 0.55f, body.transform.up);
-                    target = body.transform.position + surfDir * (body.SurfaceRadius + 8f);
-                    Debug.Log("[PlayerSpawner] Fresh SPHERE world — spawning on " + body.DisplayName +
-                              " surface above north pole.");
+                    bool foundLand = false;
+                    Vector3 bestSpawn = body.transform.position + body.transform.up * (body.SurfaceRadius + 30f);
+
+                    for (int i = 0; i < 16; i++)
+                    {
+                        float angle = i * (360f / 16f);
+                        Vector3 sampleDir = Quaternion.AngleAxis(angle, body.transform.up) * (equator + body.transform.up * 0.55f);
+                        sampleDir = math.normalizesafe(sampleDir, body.transform.up);
+
+                        Vector3 rayFrom = body.transform.position + sampleDir * (body.SurfaceRadius + 250f);
+                        Vector3 rayDir = -sampleDir;
+                        if (Physics.Raycast(rayFrom, rayDir, out var hit, 400f, ~0, QueryTriggerInteraction.Ignore))
+                        {
+                            float hitRadius = Vector3.Distance(hit.point, body.transform.position);
+                            float seaRadius = body.SeaRadius;
+                            if (hitRadius > seaRadius + 3f)
+                            {
+                                var world = VoxelEngine.Core.ActiveWorld.Current;
+                                bool isWater = false;
+                                if (world != null)
+                                {
+                                    var voxelCoord = world.WorldToVoxel(hit.point - sampleDir * 0.5f);
+                                    var v = world.GetVoxelWorld(voxelCoord);
+                                    if (v.material == (byte)VoxelEngine.Materials.MaterialId.WaterVoxel ||
+                                        v.material == (byte)VoxelEngine.Materials.MaterialId.WaterLiquid ||
+                                        v.waterLevel > 0)
+                                    {
+                                        isWater = true;
+                                    }
+                                }
+                                if (!isWater)
+                                {
+                                    bestSpawn = hit.point + sampleDir * 0.05f;
+                                    foundLand = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    if (!foundLand)
+                    {
+                        Vector3 surfDir = math.normalizesafe(equator + body.transform.up * 0.55f, body.transform.up);
+                        bestSpawn = body.transform.position + surfDir * (body.SurfaceRadius + 25f);
+                    }
+                    target = bestSpawn;
+                    Debug.Log("[PlayerSpawner] Fresh SPHERE world — spawning on land surface at " + target);
                 }
                 else
                 {
@@ -156,7 +192,7 @@ namespace VoxelEngine.Player
                 }
                 if (Physics.Raycast(from, dir, out var hit, 300f, ~0, QueryTriggerInteraction.Ignore))
                 {
-                    SetPosition(hit.point + lift * 1.0f);
+                    SetPosition(hit.point + lift * 0.05f);
                     snapped = true;
                     break;
                 }
@@ -164,8 +200,8 @@ namespace VoxelEngine.Player
             }
             if (!snapped)
             {
-                Debug.LogWarning("[PlayerSpawner] Could not raycast to ground after 5s — placing high above target.");
-                SetPosition(new Vector3(target.x, target.y + 5f, target.z));
+                Debug.LogWarning("[PlayerSpawner] Could not raycast to ground after 5s — placing at target surface.");
+                SetPosition(target);
             }
             }
 
@@ -311,10 +347,24 @@ namespace VoxelEngine.Player
         /// </summary>
         private Vector3 SnapToGround(Vector3 target)
         {
-            Vector3 from = new Vector3(target.x, target.y + 100f, target.z);
-            if (Physics.Raycast(from, Vector3.down, out var hit, 300f, ~0, QueryTriggerInteraction.Ignore))
-                return hit.point + Vector3.up * 1.0f;     // stand 1m above hit
-            return target + Vector3.up * 2f;
+            var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
+            Vector3 from, dir, lift;
+            if (body != null)
+            {
+                Vector3 bup = body.UpAt(target);
+                from = target + bup * 100f;
+                dir  = -bup;
+                lift = bup;
+            }
+            else
+            {
+                from = new Vector3(target.x, target.y + 100f, target.z);
+                dir  = Vector3.down;
+                lift = Vector3.up;
+            }
+            if (Physics.Raycast(from, dir, out var hit, 300f, ~0, QueryTriggerInteraction.Ignore))
+                return hit.point + lift * 0.05f;
+            return target + lift * 0.5f;
         }
 
         /// <summary>
@@ -355,7 +405,7 @@ namespace VoxelEngine.Player
                     if (topY < 0) continue;
                     if (topY < seaLevel) continue;
                     // Found a valid spot — return immediately (closest-first scan guarantees this is nearest).
-                    return new Vector3(wx + 0.5f, topY + 2f, wz + 0.5f);
+                    return new Vector3(wx + 0.5f, topY + 0.05f, wz + 0.5f);
                 }
             }
             // Fall back: just above the origin's XZ at sea-level + buffer.
