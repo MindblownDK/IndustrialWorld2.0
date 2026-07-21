@@ -1,9 +1,31 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.9.0-dev`
+**Current Version:** `6.9.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.9.1-dev] Engine Visual Densification + Reference-Inspired Ship Machinery Pass
+
+**Type:** PATCH — visual polish and prefab-regeneration refinement only (no save schema break, no balance reset, no API touch).
+
+**Improved:**
+- Reworked the regenerated **Crude Engine**, **Heavy Fuel Oil Engine**, and **MGO Engine** meshes to feel much more solid and much less hollow.
+- Added heavier body fill, denser housings, deeper front timing cases, thicker superstructure, more side structure, and larger visible flywheel treatment across the ship engines.
+- **MGO Engine** now includes a far more massive upper engine-room silhouette inspired by the supplied reference image: large scavenging deck, raised top housing, side railings/catwalk language, and a heavier front machinery face.
+- **Heavy Fuel Oil Engine** gained a denser top section, added rail/superstructure details, and a larger flywheel treatment.
+- **Crude Engine** gained a more convincing starter-engine massing and flywheel presence.
+- These changes continue using Step 13 regeneration and preserve the non-destructive authoring workflow.
+
+**Manual Unity Steps:**
+1. Let Unity compile and confirm the runtime banner reports `6.9.1-dev`.
+2. Open `Tools > Voxel Engine > Voxel Engine Setup`.
+3. Run **13. Build Maritime Content (Hulls, Engines, Shafts, Propellers, Turbo, Helm + Maritime Research Tree)** once.
+4. Inspect the regenerated **Crude Engine**, **Heavy Fuel Oil Engine**, and **MGO Engine** prefabs in Unity.
+5. Place all three in-world and confirm they now read as dense, solid ship machinery rather than hollow shells.
+6. If you want, send me fresh screenshots from Unity and I can do another art pass focused specifically on silhouette, flywheel scale, or top-deck detail.
 
 ---
 

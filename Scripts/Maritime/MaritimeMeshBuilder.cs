@@ -199,6 +199,10 @@ namespace VoxelEngine.Maritime
             crankPulley.name = "CrankPulley";
             var flywheel = Cyl(r, DarkSteel, new Vector3(-w * 0.48f, -h * 0.02f, 0), w * 0.20f, w * 0.06f);
             flywheel.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
+            var flywheelRing = Cyl(r, Steel, new Vector3(-w * 0.48f, -h * 0.02f, 0), w * 0.26f, w * 0.03f);
+            flywheelRing.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
+            Box(r, Steel, new Vector3(-w * 0.48f, -h * 0.02f, 0), new Vector3(w * 0.36f, cs * 0.03f, cs * 0.05f));
+            Box(r, Steel, new Vector3(-w * 0.48f, -h * 0.02f, 0), new Vector3(cs * 0.05f, w * 0.36f, cs * 0.03f));
 
             // Fuel hatch + chimney.
             Box(r, DarkSteel, new Vector3(0, h * 0.04f, -l * 0.38f), new Vector3(w * 0.42f, h * 0.18f, l * 0.10f));
@@ -243,13 +247,18 @@ namespace VoxelEngine.Maritime
 
             // Top covers + catwalks.
             Box(r, Steel, new Vector3(0, height * 0.56f, 0), new Vector3(width * 0.76f, height * 0.10f, length * 0.86f));
+            Box(r, DarkSteel, new Vector3(0, height * 0.84f, 0), new Vector3(width * 0.64f, height * 0.14f, length * 0.72f));
             Box(r, DarkSteel, new Vector3(width * 0.42f, height * 0.74f, 0), new Vector3(width * 0.12f, height * 0.06f, length * 0.84f));
             Box(r, DarkSteel, new Vector3(-width * 0.42f, height * 0.74f, 0), new Vector3(width * 0.12f, height * 0.06f, length * 0.84f));
             for (int i = 0; i < 5; i++)
             {
                 float z = Mathf.Lerp(-halfL * 0.68f, halfL * 0.68f, i / 4f);
                 Box(r, Brass, new Vector3(0, height * 0.74f, z), new Vector3(width * 0.44f, height * 0.03f, cs * 0.08f));
+                Box(r, Steel, new Vector3(width * 0.46f, height * 0.96f, z), new Vector3(width * 0.03f, height * 0.10f, cs * 0.03f));
+                Box(r, Steel, new Vector3(-width * 0.46f, height * 0.96f, z), new Vector3(width * 0.03f, height * 0.10f, cs * 0.03f));
             }
+            Box(r, Steel, new Vector3(width * 0.46f, height * 1.02f, 0), new Vector3(width * 0.03f, height * 0.016f, length * 0.70f));
+            Box(r, Steel, new Vector3(-width * 0.46f, height * 1.02f, 0), new Vector3(width * 0.03f, height * 0.016f, length * 0.70f));
 
             // Fuel rail and coolant gallery.
             var fuelRail = Cyl(r, Brass, new Vector3(width * 0.18f, height * 0.48f, 0), width * 0.040f, length * 0.86f);
@@ -271,6 +280,10 @@ namespace VoxelEngine.Maritime
             crankPulley.name = "CrankPulley";
             var flywheel = Cyl(r, DarkSteel, new Vector3(-width * 0.56f, -height * 0.02f, halfL * 0.34f), width * 0.19f, width * 0.08f);
             flywheel.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
+            var flywheelRing = Cyl(r, Steel, new Vector3(-width * 0.56f, -height * 0.02f, halfL * 0.34f), width * 0.24f, width * 0.04f);
+            flywheelRing.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
+            Box(r, Steel, new Vector3(-width * 0.56f, -height * 0.02f, halfL * 0.34f), new Vector3(width * 0.42f, cs * 0.04f, cs * 0.07f));
+            Box(r, Steel, new Vector3(-width * 0.56f, -height * 0.02f, halfL * 0.34f), new Vector3(cs * 0.07f, width * 0.42f, cs * 0.04f));
 
             // ── I/O Ports ─────────────────────────────────────────────
             Port(r, "Port_FuelInput", PortFuel, new Vector3(0, -height * 0.12f, -halfL * 0.54f), new Vector3(cs * 0.16f, cs * 0.16f, cs * 0.05f));
@@ -318,8 +331,10 @@ namespace VoxelEngine.Maritime
                 }
             }
 
-            // Upper covers, catwalks, ladders, and side galleries.
+            // Upper covers, scavenging deck, catwalks, ladders, and side galleries.
             Box(r, Steel, new Vector3(0, height * 0.74f, 0), new Vector3(width * 0.82f, height * 0.10f, length * 0.90f));
+            Box(r, DarkSteel, new Vector3(0, height * 1.10f, 0), new Vector3(width * 0.74f, height * 0.22f, length * 0.72f));
+            Box(r, Steel, new Vector3(0, height * 1.34f, 0), new Vector3(width * 0.90f, height * 0.08f, length * 0.86f));
             Box(r, DarkSteel, new Vector3(width * 0.54f, height * 0.98f, 0), new Vector3(width * 0.10f, height * 0.06f, length * 0.88f));
             Box(r, DarkSteel, new Vector3(-width * 0.54f, height * 0.98f, 0), new Vector3(width * 0.10f, height * 0.06f, length * 0.88f));
             for (int i = 0; i < 7; i++)
@@ -329,6 +344,16 @@ namespace VoxelEngine.Maritime
                 Box(r, Steel, new Vector3(width * 0.62f, height * 0.40f, z), new Vector3(width * 0.03f, height * 0.72f, cs * 0.04f));
                 Box(r, Steel, new Vector3(-width * 0.62f, height * 0.40f, z), new Vector3(width * 0.03f, height * 0.72f, cs * 0.04f));
             }
+            for (int i = 0; i < 6; i++)
+            {
+                float z = Mathf.Lerp(-halfL * 0.34f, halfL * 0.34f, i / 5f);
+                Box(r, Steel, new Vector3(width * 0.50f, height * 1.48f, z), new Vector3(width * 0.025f, height * 0.12f, cs * 0.03f));
+                Box(r, Steel, new Vector3(-width * 0.50f, height * 1.48f, z), new Vector3(width * 0.025f, height * 0.12f, cs * 0.03f));
+            }
+            Box(r, Steel, new Vector3(width * 0.50f, height * 1.56f, 0), new Vector3(width * 0.03f, height * 0.018f, length * 0.72f));
+            Box(r, Steel, new Vector3(-width * 0.50f, height * 1.56f, 0), new Vector3(width * 0.03f, height * 0.018f, length * 0.72f));
+            Box(r, Steel, new Vector3(width * 0.44f, height * 1.42f, 0), new Vector3(width * 0.03f, height * 0.018f, length * 0.72f));
+            Box(r, Steel, new Vector3(-width * 0.44f, height * 1.42f, 0), new Vector3(width * 0.03f, height * 0.018f, length * 0.72f));
 
             // Massive fuel, coolant, and lube manifolds.
             var fuelRail = Cyl(r, Brass, new Vector3(0, height * 0.86f, 0), width * 0.035f, length * 0.92f);
@@ -354,7 +379,12 @@ namespace VoxelEngine.Maritime
             crank.name = "CrankPulley";
             var flywheel = Cyl(r, DarkSteel, new Vector3(-width * 0.64f, height * 0.02f, halfL * 0.32f), width * 0.20f, width * 0.10f);
             flywheel.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
+            var flywheelRing = Cyl(r, Steel, new Vector3(-width * 0.64f, height * 0.02f, halfL * 0.32f), width * 0.26f, width * 0.04f);
+            flywheelRing.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
+            Box(r, Steel, new Vector3(-width * 0.64f, height * 0.02f, halfL * 0.32f), new Vector3(width * 0.44f, cs * 0.05f, cs * 0.08f));
+            Box(r, Steel, new Vector3(-width * 0.64f, height * 0.02f, halfL * 0.32f), new Vector3(cs * 0.08f, width * 0.44f, cs * 0.05f));
             Box(r, Steel, new Vector3(0, -height * 0.02f, halfL * 0.54f), new Vector3(width * 0.34f, height * 0.18f, cs * 0.16f));
+            Box(r, DarkSteel, new Vector3(0, height * 0.42f, halfL * 0.56f), new Vector3(width * 0.30f, height * 0.18f, cs * 0.10f));
 
             // Turbo pads / service deck hints so separate turbo prefabs read naturally when mounted.
             Box(r, DarkSteel, new Vector3(width * 0.54f, height * 0.78f, -halfL * 0.18f), new Vector3(width * 0.16f, height * 0.12f, cs * 0.36f));
