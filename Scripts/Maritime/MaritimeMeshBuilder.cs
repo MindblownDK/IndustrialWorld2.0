@@ -16,7 +16,7 @@ namespace VoxelEngine.Maritime
 {
     public static class MaritimeMeshBuilder
     {
-        public const int Version = 14;
+        public const int Version = 15;
         private static Shader Lit => Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
         public static System.Func<Material, string, Material> MaterialPersister;
         private static int _matCounter;
@@ -193,16 +193,17 @@ namespace VoxelEngine.Maritime
                 Box(r, Steel, new Vector3(x, h * 0.22f, l * 0.28f), new Vector3(w * 0.10f, h * 0.10f, l * 0.10f));
             }
 
-            // Flywheel + crank.
-            var crankPulley = Cyl(r, Steel, new Vector3(w * 0.48f, -h * 0.05f, 0), w * 0.16f, w * 0.07f);
-            crankPulley.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
+            // Flywheel + crank at the actual front power take-off.
+            var crankPulley = Cyl(r, Steel, new Vector3(0, -h * 0.05f, l * 0.26f), w * 0.10f, l * 0.18f);
+            crankPulley.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
             crankPulley.name = "CrankPulley";
-            var flywheel = Cyl(r, DarkSteel, new Vector3(-w * 0.48f, -h * 0.02f, 0), w * 0.20f, w * 0.06f);
-            flywheel.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
-            var flywheelRing = Cyl(r, Steel, new Vector3(-w * 0.48f, -h * 0.02f, 0), w * 0.26f, w * 0.03f);
-            flywheelRing.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
-            Box(r, Steel, new Vector3(-w * 0.48f, -h * 0.02f, 0), new Vector3(w * 0.36f, cs * 0.03f, cs * 0.05f));
-            Box(r, Steel, new Vector3(-w * 0.48f, -h * 0.02f, 0), new Vector3(cs * 0.05f, w * 0.36f, cs * 0.03f));
+            var flywheel = Cyl(r, DarkSteel, new Vector3(0, -h * 0.02f, l * 0.48f), w * 0.24f, w * 0.06f);
+            flywheel.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            var flywheelRing = Cyl(r, Steel, new Vector3(0, -h * 0.02f, l * 0.48f), w * 0.30f, w * 0.03f);
+            flywheelRing.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            Box(r, Steel, new Vector3(0, -h * 0.02f, l * 0.48f), new Vector3(w * 0.42f, cs * 0.03f, cs * 0.05f));
+            Box(r, Steel, new Vector3(0, -h * 0.02f, l * 0.48f), new Vector3(cs * 0.05f, w * 0.42f, cs * 0.03f));
+            Box(r, DarkSteel, new Vector3(0, -h * 0.06f, l * 0.36f), new Vector3(w * 0.20f, h * 0.12f, l * 0.18f));
 
             // Fuel hatch + chimney.
             Box(r, DarkSteel, new Vector3(0, h * 0.04f, -l * 0.38f), new Vector3(w * 0.42f, h * 0.18f, l * 0.10f));
@@ -211,9 +212,9 @@ namespace VoxelEngine.Maritime
             Box(r, Steel, new Vector3(0, h * 0.58f, -l * 0.24f), new Vector3(w * 0.20f, h * 0.04f, w * 0.20f));
 
             // ── I/O Ports ─────────────────────────────────────────────
-            Port(r, "Port_FuelInput", PortFuel, new Vector3(0, -h * 0.02f, -l * 0.50f), new Vector3(cs * 0.13f, cs * 0.13f, cs * 0.05f));
-            Port(r, "Port_ExhaustOutput", PortExhaust, new Vector3(0, h * 0.60f, -l * 0.24f), new Vector3(cs * 0.11f, cs * 0.05f, cs * 0.11f));
-            Port(r, "Port_ShaftOutput", PortShaft, new Vector3(0, -h * 0.08f, l * 0.50f), new Vector3(cs * 0.14f, cs * 0.14f, cs * 0.10f), PrimitiveType.Cylinder);
+            Port(r, "Port_FuelInput", PortFuel, new Vector3(-w * 0.44f, h * 0.02f, -l * 0.26f), new Vector3(cs * 0.12f, cs * 0.12f, cs * 0.05f));
+            Port(r, "Port_ExhaustOutput", PortExhaust, new Vector3(0, h * 0.68f, -l * 0.24f), new Vector3(cs * 0.11f, cs * 0.05f, cs * 0.11f));
+            Port(r, "Port_ShaftOutput", PortShaft, new Vector3(0, -h * 0.02f, l * 0.60f), new Vector3(cs * 0.14f, cs * 0.14f, cs * 0.10f), PrimitiveType.Cylinder);
             TurboAttachment(r, 0, cs, Vector3Int.right);
         }
 
@@ -273,23 +274,24 @@ namespace VoxelEngine.Maritime
             maniB.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
             Box(r, Steel, new Vector3(0, height * 0.92f, -halfL * 0.18f), new Vector3(width * 0.66f, height * 0.08f, cs * 0.22f));
 
-            // Front timing case + giant flywheel.
+            // Front timing case + giant flywheel at the actual output face.
             Box(r, CastIron, new Vector3(0, 0, halfL * 0.44f), new Vector3(width * 0.84f, height * 0.48f, cs * 0.36f));
-            var crankPulley = Cyl(r, Steel, new Vector3(width * 0.54f, -height * 0.02f, halfL * 0.34f), width * 0.16f, width * 0.08f);
-            crankPulley.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
+            var crankPulley = Cyl(r, Steel, new Vector3(0, -height * 0.02f, halfL * 0.26f), width * 0.11f, cs * 0.26f);
+            crankPulley.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
             crankPulley.name = "CrankPulley";
-            var flywheel = Cyl(r, DarkSteel, new Vector3(-width * 0.56f, -height * 0.02f, halfL * 0.34f), width * 0.19f, width * 0.08f);
-            flywheel.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
-            var flywheelRing = Cyl(r, Steel, new Vector3(-width * 0.56f, -height * 0.02f, halfL * 0.34f), width * 0.24f, width * 0.04f);
-            flywheelRing.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
-            Box(r, Steel, new Vector3(-width * 0.56f, -height * 0.02f, halfL * 0.34f), new Vector3(width * 0.42f, cs * 0.04f, cs * 0.07f));
-            Box(r, Steel, new Vector3(-width * 0.56f, -height * 0.02f, halfL * 0.34f), new Vector3(cs * 0.07f, width * 0.42f, cs * 0.04f));
+            var flywheel = Cyl(r, DarkSteel, new Vector3(0, -height * 0.02f, halfL * 0.52f), width * 0.24f, width * 0.08f);
+            flywheel.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            var flywheelRing = Cyl(r, Steel, new Vector3(0, -height * 0.02f, halfL * 0.52f), width * 0.30f, width * 0.04f);
+            flywheelRing.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            Box(r, Steel, new Vector3(0, -height * 0.02f, halfL * 0.52f), new Vector3(width * 0.52f, cs * 0.04f, cs * 0.07f));
+            Box(r, Steel, new Vector3(0, -height * 0.02f, halfL * 0.52f), new Vector3(cs * 0.07f, width * 0.52f, cs * 0.04f));
+            Box(r, DarkSteel, new Vector3(0, -height * 0.04f, halfL * 0.36f), new Vector3(width * 0.18f, height * 0.14f, cs * 0.24f));
 
             // ── I/O Ports ─────────────────────────────────────────────
-            Port(r, "Port_FuelInput", PortFuel, new Vector3(0, -height * 0.12f, -halfL * 0.54f), new Vector3(cs * 0.16f, cs * 0.16f, cs * 0.05f));
-            Port(r, "Port_ExhaustOutput", PortExhaust, new Vector3(0, height * 0.96f, -halfL * 0.18f), new Vector3(cs * 0.15f, cs * 0.05f, cs * 0.15f));
-            Port(r, "Port_ShaftOutput", PortShaft, new Vector3(0, -height * 0.04f, halfL * 0.56f), new Vector3(cs * 0.18f, cs * 0.18f, cs * 0.12f), PrimitiveType.Cylinder);
-            Port(r, "Port_CoolantInput", PortCoolant, new Vector3(-width * 0.54f, -height * 0.12f, -halfL * 0.44f), new Vector3(cs * 0.14f, cs * 0.14f, cs * 0.05f));
+            Port(r, "Port_FuelInput", PortFuel, new Vector3(width * 0.56f, -height * 0.02f, -halfL * 0.42f), new Vector3(cs * 0.16f, cs * 0.16f, cs * 0.05f));
+            Port(r, "Port_ExhaustOutput", PortExhaust, new Vector3(0, height * 1.06f, -halfL * 0.24f), new Vector3(cs * 0.15f, cs * 0.05f, cs * 0.15f));
+            Port(r, "Port_ShaftOutput", PortShaft, new Vector3(0, -height * 0.02f, halfL * 0.66f), new Vector3(cs * 0.18f, cs * 0.18f, cs * 0.12f), PrimitiveType.Cylinder);
+            Port(r, "Port_CoolantInput", PortCoolant, new Vector3(-width * 0.58f, -height * 0.08f, -halfL * 0.34f), new Vector3(cs * 0.14f, cs * 0.14f, cs * 0.05f));
             TurboAttachment(r, 0, cs, Vector3Int.right);
             TurboAttachment(r, 1, cs, Vector3Int.left);
         }
@@ -372,19 +374,20 @@ namespace VoxelEngine.Maritime
             maniR.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
             Box(r, DarkSteel, new Vector3(0, height * 1.20f, -halfL * 0.10f), new Vector3(width * 0.74f, height * 0.10f, cs * 0.34f));
 
-            // Front timing house, massive flywheel, and PTO housing.
+            // Front timing house, massive centered flywheel, and PTO housing.
             Box(r, CastIron, new Vector3(0, height * 0.02f, halfL * 0.42f), new Vector3(width * 0.86f, height * 0.46f, cs * 0.52f));
-            var crank = Cyl(r, Steel, new Vector3(width * 0.62f, height * 0.02f, halfL * 0.32f), width * 0.16f, width * 0.08f);
-            crank.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
+            var crank = Cyl(r, Steel, new Vector3(0, height * 0.04f, halfL * 0.22f), width * 0.12f, cs * 0.34f);
+            crank.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
             crank.name = "CrankPulley";
-            var flywheel = Cyl(r, DarkSteel, new Vector3(-width * 0.64f, height * 0.02f, halfL * 0.32f), width * 0.20f, width * 0.10f);
-            flywheel.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
-            var flywheelRing = Cyl(r, Steel, new Vector3(-width * 0.64f, height * 0.02f, halfL * 0.32f), width * 0.26f, width * 0.04f);
-            flywheelRing.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
-            Box(r, Steel, new Vector3(-width * 0.64f, height * 0.02f, halfL * 0.32f), new Vector3(width * 0.44f, cs * 0.05f, cs * 0.08f));
-            Box(r, Steel, new Vector3(-width * 0.64f, height * 0.02f, halfL * 0.32f), new Vector3(cs * 0.08f, width * 0.44f, cs * 0.05f));
+            var flywheel = Cyl(r, DarkSteel, new Vector3(0, height * 0.04f, halfL * 0.58f), width * 0.28f, width * 0.10f);
+            flywheel.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            var flywheelRing = Cyl(r, Steel, new Vector3(0, height * 0.04f, halfL * 0.58f), width * 0.34f, width * 0.04f);
+            flywheelRing.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            Box(r, Steel, new Vector3(0, height * 0.04f, halfL * 0.58f), new Vector3(width * 0.60f, cs * 0.05f, cs * 0.08f));
+            Box(r, Steel, new Vector3(0, height * 0.04f, halfL * 0.58f), new Vector3(cs * 0.08f, width * 0.60f, cs * 0.05f));
             Box(r, Steel, new Vector3(0, -height * 0.02f, halfL * 0.54f), new Vector3(width * 0.34f, height * 0.18f, cs * 0.16f));
             Box(r, DarkSteel, new Vector3(0, height * 0.42f, halfL * 0.56f), new Vector3(width * 0.30f, height * 0.18f, cs * 0.10f));
+            Box(r, Steel, new Vector3(0, height * 0.04f, halfL * 0.42f), new Vector3(width * 0.14f, height * 0.10f, cs * 0.30f));
 
             // Turbo pads / service deck hints so separate turbo prefabs read naturally when mounted.
             Box(r, DarkSteel, new Vector3(width * 0.54f, height * 0.78f, -halfL * 0.18f), new Vector3(width * 0.16f, height * 0.12f, cs * 0.36f));
@@ -393,11 +396,11 @@ namespace VoxelEngine.Maritime
             Box(r, DarkSteel, new Vector3(0, height * 0.66f, -halfL * 0.56f), new Vector3(width * 0.26f, height * 0.18f, cs * 0.18f));
 
             // ── I/O Ports ─────────────────────────────────────────────
-            Port(r, "Port_FuelInput", PortFuel, new Vector3(0, -height * 0.10f, -halfL * 0.58f), new Vector3(cs * 0.18f, cs * 0.18f, cs * 0.06f));
-            Port(r, "Port_ExhaustOutput_L", PortExhaust, new Vector3(width * 0.34f, height * 1.28f, -halfL * 0.12f), new Vector3(cs * 0.18f, cs * 0.06f, cs * 0.18f));
-            Port(r, "Port_ExhaustOutput_R", PortExhaust, new Vector3(-width * 0.34f, height * 1.28f, -halfL * 0.12f), new Vector3(cs * 0.18f, cs * 0.06f, cs * 0.18f));
-            Port(r, "Port_ShaftOutput", PortShaft, new Vector3(0, 0, halfL * 0.60f), new Vector3(cs * 0.22f, cs * 0.22f, cs * 0.14f), PrimitiveType.Cylinder);
-            Port(r, "Port_CoolantInput", PortCoolant, new Vector3(-width * 0.62f, -height * 0.08f, -halfL * 0.46f), new Vector3(cs * 0.16f, cs * 0.16f, cs * 0.06f));
+            Port(r, "Port_FuelInput", PortFuel, new Vector3(width * 0.66f, -height * 0.02f, -halfL * 0.44f), new Vector3(cs * 0.18f, cs * 0.18f, cs * 0.06f));
+            Port(r, "Port_ExhaustOutput_L", PortExhaust, new Vector3(width * 0.26f, height * 1.42f, -halfL * 0.18f), new Vector3(cs * 0.18f, cs * 0.06f, cs * 0.18f));
+            Port(r, "Port_ExhaustOutput_R", PortExhaust, new Vector3(-width * 0.26f, height * 1.42f, -halfL * 0.18f), new Vector3(cs * 0.18f, cs * 0.06f, cs * 0.18f));
+            Port(r, "Port_ShaftOutput", PortShaft, new Vector3(0, height * 0.04f, halfL * 0.72f), new Vector3(cs * 0.22f, cs * 0.22f, cs * 0.14f), PrimitiveType.Cylinder);
+            Port(r, "Port_CoolantInput", PortCoolant, new Vector3(-width * 0.70f, -height * 0.04f, -halfL * 0.34f), new Vector3(cs * 0.16f, cs * 0.16f, cs * 0.06f));
             TurboAttachment(r, 0, cs, Vector3Int.right);
             TurboAttachment(r, 1, cs, Vector3Int.left);
             TurboAttachment(r, 2, cs, Vector3Int.up);

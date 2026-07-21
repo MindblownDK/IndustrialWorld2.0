@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.9.1-dev`
-**Roadmap Version:** `6.9.1-dev`
+**Current Version:** `6.9.2-dev`
+**Roadmap Version:** `6.9.2-dev`
 **Date:** 2026-07-21
 **Status:** Power, Vehicles & Combat (4.7.0) — WORKING ON
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -723,7 +723,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Unified grid placement | 🟡 PARTIALLY COMPLETE | Thomas validated Detail-on-Structural lattice placement and size-labelled content. Gas/liquid topology and screen data-source addressing now resolve both block scales on one Grid; **5.69.0-dev** persistence was Unity-validated by Thomas. Remaining positional-indexing work is open. |
 | Unified grid screen sources | ✅ COMPLETED | Thomas validated the unified screen/data-source work. Detail providers use precision-safe encoded addresses while legacy Structural addresses remain compatible. |
 | Unified pipe placement and networks | ✅ COMPLETED | Thomas validated existing Item/Gas/Liquid pipe Detail placement, one-to-five-cell Grid/world links, rotation-independent alignment, correct visual direction, midpoint arms, live ghost previews, stable topology, resource-safe ghosts, and wrench disconnect behavior. No duplicate pipe content was introduced. |
-| Vehicle power foundations | 🛠️ WORKING ON | **6.9.0-dev** centralizes battery transfer so Recharge/Discharge modes work together, keeps Auto batteries deterministic, routes maritime fuel/coolant through the unified liquid-pipe network, adds a dedicated crude-engine solid-fuel hopper, and refreshes Step 13 ship-engine/turbo/chain-drive/generator visuals at large premium scale. **6.9.1-dev** further densifies the engine meshes so they read as solid industrial ship machinery with heavier superstructure, railings, housings, and larger flywheels inspired by the supplied reference. Unified power progression and Unity validation remain open. |
+| Vehicle power foundations | 🛠️ WORKING ON | **6.9.0-dev** centralizes battery transfer so Recharge/Discharge modes work together, keeps Auto batteries deterministic, routes maritime fuel/coolant through the unified liquid-pipe network, adds a dedicated crude-engine solid-fuel hopper, and refreshes Step 13 ship-engine/turbo/chain-drive/generator visuals at large premium scale. **6.9.1-dev** further densifies the engine meshes so they read as solid industrial ship machinery with heavier superstructure, railings, housings, and larger flywheels inspired by the supplied reference. **6.9.2-dev** refines the three ship engines again to look less synthetic, relocates visual fuel/coolant/exhaust/rotation ports to more believable service points, centers the major flywheel/output faces, and moves turbo attachment markers onto sensible engine locations. Unified power progression and Unity validation remain open. |
 | Damage, armor, weapons, and life support | 🟡 PARTIALLY COMPLETE | Basic block HP/damage and one grid weapon foundation exist. Full typed damage, player armor, pooled ballistics, hazards, airtight support, and combat content remain open. |
 
 **Crusader identity requirements:**

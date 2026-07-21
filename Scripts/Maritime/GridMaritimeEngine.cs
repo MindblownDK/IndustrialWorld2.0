@@ -283,24 +283,31 @@ namespace VoxelEngine.Maritime
         {
             int slotCount = MaxTurboSlots;
             float cs = Grid != null ? Grid.gridSize.CellSize() : VoxelEngine.GridSystem.GridSize.Large.CellSize();
+            Vector3 markerScale = tier switch
+            {
+                EngineTier.Giant => Vector3.one * cs * 0.30f,
+                EngineTier.Medium => Vector3.one * cs * 0.22f,
+                _ => Vector3.one * cs * 0.14f,
+            };
 
             for (int i = 0; i < slotCount; i++)
             {
                 string markerName = $"{TurboAttachmentNamePrefix}{i}";
                 Transform existing = transform.Find(markerName);
+                Vector3 markerPosition = GetTurboAttachmentMarkerPosition(i, cs);
                 if (existing != null)
                 {
-                    existing.localPosition = GetTurboAttachmentMarkerPosition(GetTurboAttachmentLocalOffset(i), cs);
+                    existing.localPosition = markerPosition;
                     existing.localRotation = Quaternion.identity;
                     if (existing.childCount > 0)
                     {
                         existing.localScale = Vector3.one;
                         for (int childIndex = 0; childIndex < existing.childCount; childIndex++)
-                            existing.GetChild(childIndex).localScale = Vector3.one * cs * 0.14f;
+                            existing.GetChild(childIndex).localScale = markerScale;
                     }
                     else
                     {
-                        existing.localScale = Vector3.one * cs * 0.14f;
+                        existing.localScale = markerScale;
                     }
                     continue;
                 }
@@ -308,9 +315,9 @@ namespace VoxelEngine.Maritime
                 var marker = GameObject.CreatePrimitive(PrimitiveType.Cube);
                 marker.name = markerName;
                 marker.transform.SetParent(transform, false);
-                marker.transform.localPosition = GetTurboAttachmentMarkerPosition(GetTurboAttachmentLocalOffset(i), cs);
+                marker.transform.localPosition = markerPosition;
                 marker.transform.localRotation = Quaternion.identity;
-                marker.transform.localScale = Vector3.one * cs * 0.14f;
+                marker.transform.localScale = markerScale;
 
                 var collider = marker.GetComponent<Collider>();
                 if (collider != null) Destroy(collider);
@@ -320,9 +327,23 @@ namespace VoxelEngine.Maritime
             }
         }
 
-        private static Vector3 GetTurboAttachmentMarkerPosition(Vector3Int localOffset, float cellSize)
+        private Vector3 GetTurboAttachmentMarkerPosition(int slotIndex, float cellSize)
         {
-            return new Vector3(localOffset.x, localOffset.y, localOffset.z) * (cellSize * 0.52f);
+            return tier switch
+            {
+                EngineTier.Small => new Vector3(cellSize * 0.40f, cellSize * 0.16f, -cellSize * 0.10f),
+                EngineTier.Medium => slotIndex == 0
+                    ? new Vector3(cellSize * 0.88f, cellSize * 1.18f, -cellSize * 0.40f)
+                    : new Vector3(-cellSize * 0.88f, cellSize * 1.18f, -cellSize * 0.40f),
+                EngineTier.Giant => slotIndex switch
+                {
+                    0 => new Vector3(cellSize * 1.38f, cellSize * 1.98f, -cellSize * 0.54f),
+                    1 => new Vector3(-cellSize * 1.38f, cellSize * 1.98f, -cellSize * 0.54f),
+                    2 => new Vector3(0f, cellSize * 3.30f, 0f),
+                    _ => new Vector3(0f, cellSize * 1.58f, -cellSize * 1.82f),
+                },
+                _ => new Vector3(GetTurboAttachmentLocalOffset(slotIndex).x, GetTurboAttachmentLocalOffset(slotIndex).y, GetTurboAttachmentLocalOffset(slotIndex).z) * (cellSize * 0.52f)
+            };
         }
 
         private static Material GetTurboAttachmentMaterial()

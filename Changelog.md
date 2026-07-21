@@ -1,9 +1,33 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.9.1-dev`
+**Current Version:** `6.9.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.9.2-dev] Engine Port Realism + Anti-Hollow Maritime Visual Pass
+
+**Type:** PATCH — visual polish and port-placement refinement only (no save schema break, no balance reset, no API touch).
+
+**Improved:**
+- Reworked the three ship engines again to look less hollow and less synthetic.
+- Moved major visible **rotation output / flywheel faces** into more believable front power-takeoff positions.
+- Repositioned visible **fuel**, **coolant**, and **exhaust** ports so they sit where the machinery actually suggests they should.
+- Updated visual **turbo attachment markers** so they appear on sensible engine locations rather than generic cell-offset positions.
+- Improved the front machinery faces on the Crude, Heavy Fuel Oil, and MGO engines so the drive output now reads more like an intentional ship-engine assembly.
+- Added more believable service-point placement across the regenerated maritime machinery while keeping Step 13 non-destructive.
+- Bumped `MaritimeMeshBuilder` again so Step 13 regenerates the improved engine visuals automatically.
+
+**Manual Unity Steps:**
+1. Let Unity compile and confirm the runtime banner reports `6.9.2-dev`.
+2. Open `Tools > Voxel Engine > Voxel Engine Setup`.
+3. Run **13. Build Maritime Content (Hulls, Engines, Shafts, Propellers, Turbo, Helm + Maritime Research Tree)** once.
+4. Inspect the regenerated Crude Engine, Heavy Fuel Oil Engine, and MGO Engine prefabs.
+5. Confirm the visible fuel/coolant/exhaust/rotation ports now sit in more believable positions.
+6. Confirm the flywheel/output faces read more like real ship machinery and less like hollow procedural shells.
+7. If needed, send me updated Unity screenshots and I can keep refining toward an even more hand-authored industrial look.
 
 ---
 
