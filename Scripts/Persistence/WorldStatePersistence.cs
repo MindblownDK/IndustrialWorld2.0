@@ -528,6 +528,10 @@ namespace VoxelEngine.Persistence
             if (assembler != null)
                 return SerializeMulti(assembler.inputC, assembler.outputC, assembler.upgradeC);
 
+            var maritimeEngine = go.GetComponentInChildren<VoxelEngine.Maritime.GridMaritimeEngine>();
+            if (maritimeEngine != null && maritimeEngine.SolidFuelInput != null)
+                return SerializeContainer(maritimeEngine.SolidFuelInput);
+
             return null;
         }
 
@@ -1200,7 +1204,18 @@ namespace VoxelEngine.Persistence
 
             var assembler = go.GetComponentInChildren<VoxelEngine.Simulation.Assembler>();
             if (assembler != null)
+            {
                 DeserializeMulti(sc, assembler.inputC, assembler.outputC, assembler.upgradeC);
+                return;
+            }
+
+            var maritimeEngine = go.GetComponentInChildren<VoxelEngine.Maritime.GridMaritimeEngine>();
+            if (maritimeEngine != null)
+            {
+                maritimeEngine.EnsureSolidFuelInput();
+                if (maritimeEngine.SolidFuelInput != null)
+                    DeserializeInto(maritimeEngine.SolidFuelInput, sc);
+            }
         }
 
         private void RestoreDrawer(VoxelEngine.Storage.StorageDrawer drawer, SavedContainer sc)

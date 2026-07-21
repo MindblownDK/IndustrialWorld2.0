@@ -1,7 +1,8 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridBattery.cs
 //
 // Grid battery — stores and releases power for the ship grid.
-// v5.43.0-dev — Implements IGridDataProvider for screen display.
+// v6.9.0-dev — transfer is now coordinated centrally by GridEntity so batteries
+// can charge/discharge each other reliably and explicit modes behave deterministically.
 
 using UnityEngine;
 
@@ -23,32 +24,59 @@ namespace VoxelEngine.GridSystem
         public float maxDischargeRate = 500f; // W
         public GridBatteryMode mode = GridBatteryMode.Auto;
 
-        public float Fill01 => capacityWh > 0 ? Mathf.Clamp01(storedWh / capacityWh) : 0;
+        public float Fill01 => capacityWh > 0 ? Mathf.Clamp01(storedWh / capacityWh) : 0f;
 
-        public float AvailableDischargeWatts =>
-            (Enabled && mode != GridBatteryMode.Recharge && storedWh > 0f) ? maxDischargeRate : 0f;
+        public float CurrentChargeWatts { get; private set; }
+        public float CurrentDischargeWatts { get; private set; }
+        public float NetTransferWatts => CurrentDischargeWatts - CurrentChargeWatts;
+        public bool IsCharging => CurrentChargeWatts > 0.01f;
+        public bool IsDischarging => CurrentDischargeWatts > 0.01f;
+        public string TransferState => IsDischarging ? "DISCHARGING" : IsCharging ? "CHARGING" : "IDLE";
+
+        public bool CanCharge => Enabled && mode != GridBatteryMode.Discharge && storedWh < capacityWh - 0.001f;
+        public bool CanDischarge => Enabled && mode != GridBatteryMode.Recharge && storedWh > 0.001f;
 
         public override float PowerOutput => 0f;
 
-        private void Update()
+        public float AvailableChargeWatts(float dt)
         {
-            if (Grid == null || !Enabled) return;
+            if (!CanCharge) return 0f;
+            if (dt <= 0.0001f) return 0f;
+            float spaceWh = Mathf.Max(0f, capacityWh - storedWh);
+            return Mathf.Min(maxChargeRate, spaceWh * 3600f / dt);
+        }
 
-            float surplus = Grid.PowerGenerated - Grid.PowerConsumed;
-            bool canCharge = mode == GridBatteryMode.Auto || mode == GridBatteryMode.Recharge;
-            bool canDischarge = mode == GridBatteryMode.Auto || mode == GridBatteryMode.Discharge;
-            bool gridHasLoad = Grid.PowerConsumed > 0.01f;
+        public float AvailableDischargeWatts(float dt)
+        {
+            if (!CanDischarge) return 0f;
+            if (dt <= 0.0001f) return 0f;
+            return Mathf.Min(maxDischargeRate, storedWh * 3600f / dt);
+        }
 
-            if (canCharge && surplus > 0.01f && storedWh < capacityWh)
-            {
-                float charge = Mathf.Min(surplus, maxChargeRate) * Time.deltaTime / 3600f;
-                storedWh = Mathf.Min(capacityWh, storedWh + charge);
-            }
-            else if (canDischarge && gridHasLoad && surplus <= 0.01f && storedWh > 0f)
-            {
-                float discharge = maxDischargeRate * Time.deltaTime / 3600f;
-                storedWh = Mathf.Max(0, storedWh - discharge);
-            }
+        public void BeginPowerTick()
+        {
+            CurrentChargeWatts = 0f;
+            CurrentDischargeWatts = 0f;
+        }
+
+        public float ChargeFromBus(float requestedWatts, float dt)
+        {
+            float acceptedWatts = Mathf.Min(Mathf.Max(0f, requestedWatts), AvailableChargeWatts(dt));
+            if (acceptedWatts <= 0.01f) return 0f;
+
+            storedWh = Mathf.Min(capacityWh, storedWh + acceptedWatts * dt / 3600f);
+            CurrentChargeWatts += acceptedWatts;
+            return acceptedWatts;
+        }
+
+        public float DischargeToBus(float requestedWatts, float dt)
+        {
+            float deliveredWatts = Mathf.Min(Mathf.Max(0f, requestedWatts), AvailableDischargeWatts(dt));
+            if (deliveredWatts <= 0.01f) return 0f;
+
+            storedWh = Mathf.Max(0f, storedWh - deliveredWatts * dt / 3600f);
+            CurrentDischargeWatts += deliveredWatts;
+            return deliveredWatts;
         }
 
         // -- IGridDataProvider -----------------------------------------
@@ -56,7 +84,7 @@ namespace VoxelEngine.GridSystem
         public string DataCategory => "Power";
         public string GetDisplayData()
         {
-            return $"POWER\n{Fill01 * 100f:0}%\n{storedWh / 1000f:0.00}/{capacityWh / 1000f:0.00} kWh\n{mode}\nRate: {maxDischargeRate / 1000f:0.0} kW";
+            return $"POWER\n{Fill01 * 100f:0}%\n{storedWh / 1000f:0.00}/{capacityWh / 1000f:0.00} kWh\n{mode}\n{TransferState}\nNet: {NetTransferWatts / 1000f:+0.0;-0.0;0.0} kW";
         }
     }
 }

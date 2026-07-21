@@ -976,7 +976,7 @@ namespace VoxelEngine.GridSystem.UI
                 return bp.IsActive ? "Draining" : "Standby";
             if (block is VoxelEngine.Maritime.GridHelm helm)
                 return helm.IsActive ? "Manned" : "Unmanned";
-            if (block is GridBattery battery) return battery.mode.ToString();
+            if (block is GridBattery battery) return $"{battery.mode} · {battery.TransferState}";
             if (block is GridLiquidTank liquid) return liquid.mode.ToString();
             if (block is GridGasTank gas) return gas.mode.ToString();
             if (block is GridLandingGear gear) return gear.IsLocked ? "Locked" : "Unlocked";

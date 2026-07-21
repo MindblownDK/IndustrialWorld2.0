@@ -162,7 +162,7 @@ namespace VoxelEngine.UI
             p.Add(UITheme.Muted(
                 "Place the pump above or beside a connected pool. Large oceans automatically become ∞ infinite — " +
                 "the pump spawns new liquid without draining the source. Finite pools are drained voxel-by-voxel. " +
-                "Connect water pipes to tanks to transport the liquid."));
+                "Connect liquid pipes to tanks and machines to transport the liquid."));
 
             return p;
         }

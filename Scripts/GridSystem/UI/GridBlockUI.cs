@@ -20,7 +20,7 @@ namespace VoxelEngine.GridSystem.UI
         public static VisualElement BuildPanel(GridBlock block, MachineUIs.SlotBuilder slot)
         {
             // Maritime blocks have their own UI system.
-            var maritimePanel = VoxelEngine.Maritime.MaritimeBlockUI.BuildPanel(block);
+            var maritimePanel = VoxelEngine.Maritime.MaritimeBlockUI.BuildPanel(block, slot);
             if (maritimePanel != null) return maritimePanel;
 
             var ledStrip = block != null ? block.GetComponent<VoxelEngine.Simulation.LEDStrip>() : null;
@@ -210,11 +210,9 @@ namespace VoxelEngine.GridSystem.UI
         private static VisualElement BatteryPanel(GridBattery bat)
         {
             var p = T.MachinePanel();
-            string state = bat.Grid == null ? "—"
-                         : bat.Grid.PowerBalance > 0.1f ? "CHARGING"
-                         : bat.Grid.PowerBalance < -0.1f ? "DISCHARGING" : "IDLE";
-            Color sc = state == "CHARGING" ? T.AccentGreen
-                     : state == "DISCHARGING" ? T.AccentAmber : T.AccentCyan;
+            string state = bat.TransferState;
+            Color sc = bat.IsCharging ? T.AccentGreen
+                     : bat.IsDischarging ? T.AccentAmber : T.AccentCyan;
             var (hdr, _, _, _) = T.HeaderRow("🔋 Battery", state, sc);
             p.Add(hdr);
             p.Add(T.AccentDivider(T.AccentGreen));
@@ -231,6 +229,8 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(T.Spacer(4));
             p.Add(T.StatRow("⚡", "Max Charge", PowerFormat.Watts(bat.maxChargeRate), T.AccentCyan));
             p.Add(T.StatRow("🔌", "Max Discharge", PowerFormat.Watts(bat.maxDischargeRate), T.AccentAmber));
+            p.Add(T.StatRow("↘", "Charging Now", PowerFormat.Watts(bat.CurrentChargeWatts), T.AccentGreen));
+            p.Add(T.StatRow("↗", "Discharging Now", PowerFormat.Watts(bat.CurrentDischargeWatts), T.AccentAmber));
             p.Add(T.Spacer(4));
             var modeRow = Row();
             modeRow.Add(T.SmallButton("Auto", () => { bat.mode = GridBatteryMode.Auto; VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel(); },
@@ -240,6 +240,7 @@ namespace VoxelEngine.GridSystem.UI
             modeRow.Add(T.SmallButton("Discharge", () => { bat.mode = GridBatteryMode.Discharge; VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel(); },
                 bat.mode == GridBatteryMode.Discharge ? T.AccentAmber : T.BgSlot));
             p.Add(modeRow);
+            p.Add(T.StatRow("⚙", "Mode", bat.mode.ToString(), T.TextSecondary));
             if (bat.Grid != null)
                 p.Add(T.StatRow("⚖", "Grid Balance", PowerFormat.Watts(bat.Grid.PowerBalance),
                     bat.Grid.PowerBalance >= 0 ? T.AccentGreen : T.AccentRed));

@@ -58,6 +58,7 @@ namespace VoxelEngine.GridSystem
         public float PowerConsumed  { get; private set; }
         public float PowerBalance   => PowerGenerated - PowerConsumed;
         public bool  HasPower       => PowerBalance >= -0.1f;
+        private readonly List<GridBattery> _batteryScratch = new(8);
 
         // ── Gas storage (shared across grid) ───────────────────────
         public float HydrogenStored { get; set; }
@@ -477,53 +478,173 @@ namespace VoxelEngine.GridSystem
         // ── Grid-Wide Power ────────────────────────────────────────
         private void UpdatePower()
         {
-            // Sum live GENERATORS (reactors, solar, …) and CONSUMERS first. Batteries are
-            // handled separately below so they fill any deficit — this avoids the per-frame
-            // ordering flicker where a drill turning on would briefly read HasPower=false
-            // (the battery's discharge lagged a frame behind the new load).
-            float gen = 0, con = 0, h2Cap = 0, h2Stored = 0, o2Stored = 0, batteryReserve = 0;
-            foreach (var b in AllBlocks)
+            // Power is resolved in one central pass so battery modes become deterministic:
+            //   • explicit Discharge batteries can power loads immediately,
+            //   • Recharge / Auto batteries can absorb genuine surplus,
+            //   • a Discharge battery can intentionally feed a Recharge / Auto battery.
+            float generatedWatts = 0f;
+            float consumedWatts = 0f;
+            float h2Cap = 0f;
+            float h2Stored = 0f;
+            float o2Stored = 0f;
+            var batteries = _batteryScratch;
+            batteries.Clear();
+
+            foreach (var block in AllBlocks)
             {
-                if (!b.Enabled) continue;
-                if (b is GridBattery bat)
+                if (block == null) continue;
+                if (!block.Enabled)
                 {
-                    batteryReserve += bat.AvailableDischargeWatts; // what it COULD supply this frame
+                    if (block is GridBattery disabledBattery) disabledBattery.BeginPowerTick();
                     continue;
                 }
-                gen += b.PowerOutput;
-                con += b.PowerDraw;
-                if (b is GridGasTank gt)
+
+                if (block is GridBattery battery)
                 {
-                    if (gt.gasType == Gas.GasType.Hydrogen)
+                    battery.BeginPowerTick();
+                    batteries.Add(battery);
+                    continue;
+                }
+
+                generatedWatts += Mathf.Max(0f, block.PowerOutput);
+                consumedWatts += Mathf.Max(0f, block.PowerDraw);
+
+                if (block is GridGasTank gasTank)
+                {
+                    if (gasTank.gasType == Gas.GasType.Hydrogen)
                     {
-                        h2Cap += gt.capacity;
-                        h2Stored += gt.stored;
+                        h2Cap += gasTank.capacity;
+                        h2Stored += gasTank.stored;
                     }
-                    else if (gt.gasType == Gas.GasType.Oxygen)
+                    else if (gasTank.gasType == Gas.GasType.Oxygen)
                     {
-                        o2Stored += gt.stored;
+                        o2Stored += gasTank.stored;
                     }
                 }
-                else if (b is GridHydrogenEngine he)
+                else if (block is GridHydrogenEngine hydrogenEngine)
                 {
-                    h2Stored += he.internalHydrogen;
+                    h2Stored += hydrogenEngine.internalHydrogen;
                 }
-                else if (b is GridH2O2Generator h2o2)
+                else if (block is GridH2O2Generator h2o2)
                 {
                     h2Stored += h2o2.h2Stored;
                     o2Stored += h2o2.o2Stored;
                 }
             }
 
-            // Batteries top up the generation up to the demand (never beyond what they can give).
-            float deficit = Mathf.Max(0f, con - gen);
-            float fromBatteries = Mathf.Min(deficit, batteryReserve);
+            float dt = Mathf.Max(Time.fixedDeltaTime, 0.0001f);
+            float remainingDemand = Mathf.Max(0f, consumedWatts - generatedWatts);
+            float totalBatteryDischarge = 0f;
+            float totalBatteryCharge = 0f;
 
-            PowerGenerated = gen + fromBatteries;
-            PowerConsumed = con;
+            // 1) Meet real grid load.
+            totalBatteryDischarge += SupplyDemandFromBatteries(batteries, GridBatteryMode.Discharge, ref remainingDemand, dt);
+            totalBatteryDischarge += SupplyDemandFromBatteries(batteries, GridBatteryMode.Auto, ref remainingDemand, dt);
+
+            // 2) Work out how much surplus can be used for charging.
+            float externalSurplus = Mathf.Max(0f, generatedWatts - consumedWatts);
+            float chargeDemand = BatteryChargeDemand(batteries, preferRechargeOnly: false, dt);
+
+            // 3) Explicit Discharge batteries are allowed to push spare energy onto the bus
+            //    specifically to charge other batteries.
+            float forcedTransferDemand = Mathf.Max(0f, chargeDemand - externalSurplus);
+            if (forcedTransferDemand > 0.01f)
+            {
+                float forcedTransfer = forcedTransferDemand;
+                totalBatteryDischarge += SupplyDemandFromBatteries(batteries, GridBatteryMode.Discharge, ref forcedTransfer, dt);
+                externalSurplus += forcedTransferDemand - forcedTransfer;
+            }
+
+            // 4) Prefer explicit Recharge batteries, then Auto batteries that did not already discharge.
+            float availableChargeWatts = externalSurplus;
+            totalBatteryCharge += ChargeBatteries(batteries, GridBatteryMode.Recharge, ref availableChargeWatts, dt);
+            totalBatteryCharge += ChargeAutoBatteries(batteries, ref availableChargeWatts, dt);
+
+            PowerGenerated = generatedWatts + totalBatteryDischarge;
+            PowerConsumed = consumedWatts + totalBatteryCharge;
             HydrogenCapacity = h2Cap;
             HydrogenStored = h2Stored;
             OxygenStored = o2Stored;
+        }
+
+        private static float SupplyDemandFromBatteries(List<GridBattery> batteries, GridBatteryMode mode,
+            ref float remainingDemand, float dt)
+        {
+            if (remainingDemand <= 0.01f || batteries == null || batteries.Count == 0) return 0f;
+
+            float delivered = 0f;
+            for (int i = 0; i < batteries.Count && remainingDemand > 0.01f; i++)
+            {
+                var battery = batteries[i];
+                if (battery == null || battery.mode != mode) continue;
+                float sent = battery.DischargeToBus(remainingDemand, dt);
+                if (sent <= 0.01f) continue;
+                delivered += sent;
+                remainingDemand -= sent;
+            }
+
+            return delivered;
+        }
+
+        private static float BatteryChargeDemand(List<GridBattery> batteries, bool preferRechargeOnly, float dt)
+        {
+            if (batteries == null || batteries.Count == 0) return 0f;
+
+            float demand = 0f;
+            for (int i = 0; i < batteries.Count; i++)
+            {
+                var battery = batteries[i];
+                if (battery == null) continue;
+                if (preferRechargeOnly)
+                {
+                    if (battery.mode != GridBatteryMode.Recharge) continue;
+                }
+                else if (battery.mode == GridBatteryMode.Discharge)
+                {
+                    continue;
+                }
+
+                demand += battery.AvailableChargeWatts(dt);
+            }
+
+            return demand;
+        }
+
+        private static float ChargeBatteries(List<GridBattery> batteries, GridBatteryMode mode,
+            ref float availableWatts, float dt)
+        {
+            if (availableWatts <= 0.01f || batteries == null || batteries.Count == 0) return 0f;
+
+            float accepted = 0f;
+            for (int i = 0; i < batteries.Count && availableWatts > 0.01f; i++)
+            {
+                var battery = batteries[i];
+                if (battery == null || battery.mode != mode) continue;
+                float taken = battery.ChargeFromBus(availableWatts, dt);
+                if (taken <= 0.01f) continue;
+                accepted += taken;
+                availableWatts -= taken;
+            }
+
+            return accepted;
+        }
+
+        private static float ChargeAutoBatteries(List<GridBattery> batteries, ref float availableWatts, float dt)
+        {
+            if (availableWatts <= 0.01f || batteries == null || batteries.Count == 0) return 0f;
+
+            float accepted = 0f;
+            for (int i = 0; i < batteries.Count && availableWatts > 0.01f; i++)
+            {
+                var battery = batteries[i];
+                if (battery == null || battery.mode != GridBatteryMode.Auto || battery.IsDischarging) continue;
+                float taken = battery.ChargeFromBus(availableWatts, dt);
+                if (taken <= 0.01f) continue;
+                accepted += taken;
+                availableWatts -= taken;
+            }
+
+            return accepted;
         }
 
         // Multiplier on raw thruster Newtons so SI-balanced ships fly responsively.

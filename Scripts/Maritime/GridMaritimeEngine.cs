@@ -2,9 +2,9 @@
 //
 // Maritime engine block. Three tiers share one class:
 //
-//   Small  (1×2×1)  — burns Wood/Coal items  → low torque, high fuel efficiency
-//   Medium (2×3×2)  — burns Heavy Fuel Oil   → medium torque, steady RPM
-//   Giant  (4×5×6)  — burns Marine Gas Oil   → colossal torque, heavy
+//   Small  (1×1×1 visual starter block) — burns Wood/Coal items
+//   Medium (4×3×2 visual ship engine)   — burns Heavy Fuel Oil
+//   Giant  (6×5×3 visual ship engine)   — burns Marine Gas Oil
 //
 // Fuel is drawn from grid storage (cargo for solids, liquid tanks for liquids)
 // into an internal buffer. FuelAvailable01 = buffer fill × throttle.
@@ -21,11 +21,11 @@ namespace VoxelEngine.Maritime
     /// <summary>Engine size tier — drives torque, RPM, fuel type, mass and turbo slots.</summary>
     public enum EngineTier : byte
     {
-        /// <summary>1×2×1 — burns wood/coal (solid). 1 small turbo slot.</summary>
+        /// <summary>Starter crude engine with a single 1×1×1 large-grid visual block. 1 small turbo slot.</summary>
         Small = 0,
-        /// <summary>2×3×2 — burns Heavy Fuel Oil. 2 turbo slots (small or large).</summary>
+        /// <summary>Large 4×3×2 visual heavy-fuel ship engine. 2 turbo slots (small or large).</summary>
         Medium = 1,
-        /// <summary>4×5×6 — burns Marine Gas Oil. 4 turbo slots. Massive.</summary>
+        /// <summary>Colossal 6×5×3 visual MGO ship engine. 4 turbo slots.</summary>
         Giant = 2,
     }
 
@@ -53,8 +53,10 @@ namespace VoxelEngine.Maritime
         public float fuelBufferCapacity = 60f;
         [Tooltip("Fuel consumed per second at full throttle. Solid = burn-sec/sec, Liquid = litres/sec.")]
         public float fuelConsumptionRate = 1f;
-        [Tooltip("Litres pulled from grid tanks per second when refilling.")]
+        [Tooltip("Litres pulled from connected liquid pipe networks per second when refilling.")]
         public float liquidRefillRate = 10f;
+        public const int SolidFuelSlotCount = 4;
+        public ItemContainer SolidFuelInput { get; private set; }
 
         [Header("Exhaust Gas")]
         [Tooltip("Maximum exhaust gas backlog before the engine chokes and stops.")]
@@ -139,6 +141,8 @@ namespace VoxelEngine.Maritime
                 float m = 0f;
                 if (fuelKind == MaritimeFuelKind.Liquid)
                     m += FuelBuffer * liquidFuel.DensityKgPerL();
+                else if (SolidFuelInput != null)
+                    m += MassUtil.ContainerMass(SolidFuelInput);
                 // Exhaust gas adds mass too (compressed gas is heavy).
                 m += ExhaustGas * 0.01f;
                 return m;
@@ -154,28 +158,54 @@ namespace VoxelEngine.Maritime
                 case EngineTier.Small:
                     blockName = "Crude Engine";
                     fuelKind = MaritimeFuelKind.Solid;
-                    fuelBufferCapacity = 60f;
-                    fuelConsumptionRate = 1f;
+                    if (Mathf.Approximately(maxTorque, 8000f)) maxTorque = 18000f;
+                    if (Mathf.Approximately(fuelBufferCapacity, 60f)) fuelBufferCapacity = 120f;
+                    if (Mathf.Approximately(fuelConsumptionRate, 1f)) fuelConsumptionRate = 1f;
                     break;
                 case EngineTier.Medium:
                     blockName = "Heavy Fuel Oil Engine";
                     fuelKind = MaritimeFuelKind.Liquid;
                     liquidFuel = LiquidType.HeavyFuelOil;
-                    fuelBufferCapacity = 80f;
-                    fuelConsumptionRate = 2f;
-                    liquidRefillRate = 8f;
+                    if (Mathf.Approximately(maxTorque, 40000f)) maxTorque = 125000f;
+                    if (Mathf.Approximately(fuelBufferCapacity, 80f)) fuelBufferCapacity = 240f;
+                    if (Mathf.Approximately(fuelConsumptionRate, 2f)) fuelConsumptionRate = 2f;
+                    if (Mathf.Approximately(liquidRefillRate, 8f)) liquidRefillRate = 28f;
+                    if (Mathf.Approximately(coolantCapacity, 50f)) coolantCapacity = 180f;
+                    if (Mathf.Approximately(coolantRefillRate, 5f)) coolantRefillRate = 20f;
                     break;
                 case EngineTier.Giant:
                     blockName = "MGO Engine";
                     fuelKind = MaritimeFuelKind.Liquid;
                     liquidFuel = LiquidType.MarineGasOil;
-                    fuelBufferCapacity = 300f;
-                    fuelConsumptionRate = 6f;
-                    liquidRefillRate = 25f;
+                    if (Mathf.Approximately(maxTorque, 500000f)) maxTorque = 950000f;
+                    if (Mathf.Approximately(fuelBufferCapacity, 300f) || Mathf.Approximately(fuelBufferCapacity, 500f)) fuelBufferCapacity = 1200f;
+                    if (Mathf.Approximately(fuelConsumptionRate, 6f) || Mathf.Approximately(fuelConsumptionRate, 12f)) fuelConsumptionRate = 12f;
+                    if (Mathf.Approximately(liquidRefillRate, 25f) || Mathf.Approximately(liquidRefillRate, 40f)) liquidRefillRate = 110f;
+                    if (Mathf.Approximately(coolantCapacity, 50f)) coolantCapacity = 800f;
+                    if (Mathf.Approximately(coolantRefillRate, 5f)) coolantRefillRate = 60f;
                     break;
             }
             FuelBuffer = Mathf.Min(FuelBuffer, fuelBufferCapacity);
+            EnsureSolidFuelInput();
             EnsureTurboAttachmentMarkers();
+        }
+
+        public void EnsureSolidFuelInput()
+        {
+            if (fuelKind != MaritimeFuelKind.Solid)
+            {
+                SolidFuelInput = null;
+                return;
+            }
+
+            if (SolidFuelInput == null) SolidFuelInput = new ItemContainer("Fuel Hopper", SolidFuelSlotCount);
+            else SolidFuelInput.Resize(SolidFuelSlotCount);
+            SolidFuelInput.AcceptFilter = (item, wanted) => IsValidSolidFuel(item) ? wanted : 0;
+        }
+
+        private static bool IsValidSolidFuel(ItemDefinition item)
+        {
+            return item is ResourceItem resource && resource.fuelSeconds > 0f;
         }
 
         /// <summary>Returns true when the supplied grid cell is one of this engine's named turbo slots.</summary>
@@ -354,6 +384,8 @@ namespace VoxelEngine.Maritime
 
             // Coolant: HFO and MGO engines REQUIRE coolant to run.
             bool needsCoolant = tier == EngineTier.Medium || tier == EngineTier.Giant;
+            if (needsCoolant)
+                RefillCoolant(dt); // allow a dry engine to prime from connected liquid pipes before evaluating run state
 
             if (!Enabled || !HasExhaust || exhaustChoked || (needsCoolant && !HasCoolant))
             {
@@ -367,10 +399,7 @@ namespace VoxelEngine.Maritime
 
             // Consume coolant (if needed).
             if (needsCoolant && IsRunning)
-            {
                 CoolantBuffer = Mathf.Max(0f, CoolantBuffer - coolantConsumptionRate * throttle * dt);
-                RefillCoolant(dt);
-            }
 
             // Consume fuel from the internal buffer.
             // Marine Engine Coolant reduces fuel consumption by 33%.
@@ -443,10 +472,11 @@ namespace VoxelEngine.Maritime
             if (fuelKind == MaritimeFuelKind.Solid)
             {
                 // Only pull a new fuel item when the buffer is getting low
-                // (avoids draining cargo one item per frame).
+                // (avoids draining a hopper/cargo line one item per frame).
                 if (FuelBuffer < fuelBufferCapacity * 0.25f)
                 {
-                    float burnSec = DrawSolidFuel();
+                    float burnSec = DrawSolidFuelFromInput();
+                    if (burnSec <= 0f) burnSec = DrawSolidFuel();
                     if (burnSec > 0f)
                         FuelBuffer = Mathf.Min(fuelBufferCapacity, FuelBuffer + burnSec);
                 }
@@ -457,6 +487,20 @@ namespace VoxelEngine.Maritime
                 float drawn = DrawLiquidFuel(liquidFuel, want);
                 FuelBuffer += drawn;
             }
+        }
+
+        private float DrawSolidFuelFromInput()
+        {
+            if (SolidFuelInput == null) return 0f;
+            for (int i = 0; i < SolidFuelInput.Size; i++)
+            {
+                var stack = SolidFuelInput.GetSlot(i);
+                if (stack == null || stack.IsEmpty) continue;
+                if (stack.item is not ResourceItem resource || resource.fuelSeconds <= 0f) continue;
+                int removed = SolidFuelInput.Remove(resource, 1);
+                if (removed > 0) return resource.fuelSeconds;
+            }
+            return 0f;
         }
 
         /// <summary>Refill coolant from grid tanks. Prefers Marine Engine Coolant, falls back to Water.</summary>

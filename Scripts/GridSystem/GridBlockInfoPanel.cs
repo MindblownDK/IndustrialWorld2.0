@@ -37,6 +37,12 @@ namespace VoxelEngine.GridSystem
                 stats += $"\nPower Draw: {gen.CurrentWattage:0} W\nStatus: {gen.Status}";
                 stats += $"\nWater: {gen.waterStored:0} / {gen.waterCapacity:0} L";
             }
+            else if (block is GridBattery battery)
+            {
+                stats += $"\nCharge: {battery.storedWh:0} / {battery.capacityWh:0} Wh";
+                stats += $"\nMode: {battery.mode} · {battery.TransferState}";
+                stats += $"\nCharge In: {battery.CurrentChargeWatts:0} W · Out: {battery.CurrentDischargeWatts:0} W";
+            }
             else if (block is GridLiquidTank tank)
             {
                 stats += $"\n{tank.liquidType.DisplayName()}: {tank.stored:0} / {tank.capacity:0} L";

@@ -35,11 +35,11 @@ namespace VoxelEngine.Maritime
     public static class MaritimeBlockUI
     {
         /// <summary>Entry point — called by GridBlockUI.BuildPanel for maritime blocks.</summary>
-        public static VisualElement BuildPanel(GridBlock block)
+        public static VisualElement BuildPanel(GridBlock block, MachineUIs.SlotBuilder slot = null)
         {
             return block switch
             {
-                GridMaritimeEngine eng      => EnginePanel(eng),
+                GridMaritimeEngine eng      => EnginePanel(eng, slot),
                 GridMaritimeGenerator gen   => GeneratorPanel(gen),
                 GridGearbox gb              => GearboxPanel(gb),
                 GridBilgePump bp            => BilgePumpPanel(bp),
@@ -59,7 +59,7 @@ namespace VoxelEngine.Maritime
         // ════════════════════════════════════════════════════════════════
         //  ENGINE — fuel tank / burn rate, exhaust, usage, torque, stress
         // ════════════════════════════════════════════════════════════════
-        private static VisualElement EnginePanel(GridMaritimeEngine eng)
+        private static VisualElement EnginePanel(GridMaritimeEngine eng, MachineUIs.SlotBuilder slot)
         {
             var p = T.MachinePanel();
 
@@ -108,11 +108,23 @@ namespace VoxelEngine.Maritime
             }
             else
             {
-                // Small engine: solid fuel — show a burn-rate bar instead of a tank.
+                // Crude engine: solid fuel hopper + burn-time buffer.
                 p.Add(GridUIHelpers.SectionTitle("Solid Fuel Buffer"));
-                var (burnBar, burnFill) = T.ProgressBar(eng.FuelFill01, T.AccentAmber, 14, true);
+                var (burnBar, _) = T.ProgressBar(eng.FuelFill01, T.AccentAmber, 14, true);
                 p.Add(burnBar);
                 p.Add(T.Muted($"Wood Logs / Planks / Coal · {eng.FuelBuffer:0}s remaining"));
+
+                if (eng.SolidFuelInput != null && slot != null)
+                {
+                    p.Add(T.Spacer(6));
+                    p.Add(GridUIHelpers.SectionTitle("Fuel Hopper"));
+                    p.Add(GridUIHelpers.WeightHeader(MassUtil.ContainerMass(eng.SolidFuelInput), "Fuel"));
+                    var hopper = T.SlotGrid(4);
+                    for (int i = 0; i < eng.SolidFuelInput.Size; i++)
+                        hopper.Add(slot(eng.SolidFuelInput, i, eng.SolidFuelInput.GetSlot(i), false, true));
+                    p.Add(hopper);
+                    p.Add(T.Muted("Insert solid fuel directly here, or keep matching fuel in connected cargo as backup."));
+                }
             }
 
             p.Add(T.Spacer(6));

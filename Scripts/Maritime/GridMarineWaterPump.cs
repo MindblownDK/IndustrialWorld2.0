@@ -92,26 +92,26 @@ namespace VoxelEngine.Maritime
         private float PushToTanks(float available, float dt)
         {
             if (Grid == null || available <= 0f) return 0f;
-            float remaining = available;
-            float maxPush = pumpRate * dt;
+            float maxPush = Mathf.Min(available, pumpRate * dt);
 
+            if (GridLiquidNetwork.Instance != null && GridLiquidNetwork.Instance.HasPipes(Grid))
+                return GridLiquidNetwork.Instance.FillLiquidFrom(this, LiquidType.Water, maxPush);
+
+            float remaining = maxPush;
             foreach (var kv in Grid.Blocks)
             {
-                if (remaining <= 0.01f || maxPush <= 0.01f) break;
+                if (remaining <= 0.01f) break;
                 if (kv.Value is not GridLiquidTank tank) continue;
                 if (tank.mode != GridTankMode.Auto) continue;
                 if (tank.liquidType != LiquidType.Water) continue;
 
-                float space = tank.capacity - tank.stored;
-                float push = Mathf.Min(Mathf.Min(space, remaining), maxPush);
-                if (push > 0f)
-                {
-                    tank.stored += push;
-                    remaining -= push;
-                    maxPush -= push;
-                }
+                float push = Mathf.Min(tank.capacity - tank.stored, remaining);
+                if (push <= 0f) continue;
+                tank.stored += push;
+                remaining -= push;
             }
-            return available - remaining;
+
+            return maxPush - remaining;
         }
     }
 }

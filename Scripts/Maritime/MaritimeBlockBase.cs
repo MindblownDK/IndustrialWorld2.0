@@ -68,11 +68,16 @@ namespace VoxelEngine.Maritime
         }
 
         // ── Liquid-fuel draw ──────────────────────────────────────────
-        /// <summary>Pull up to <paramref name="litres"/> of the given liquid from all
-        /// auto-mode GridLiquidTank blocks on this grid. Returns litres actually drawn.</summary>
+        /// <summary>Pull up to <paramref name="litres"/> of the given liquid from the connected
+        /// liquid pipe network. Falls back to legacy grid-wide tank access when the ship has no
+        /// liquid pipes at all so older builds remain functional.</summary>
         protected float DrawLiquidFuel(LiquidType type, float litres)
         {
             if (Grid == null || litres <= 0f) return 0f;
+
+            if (GridLiquidNetwork.Instance != null && GridLiquidNetwork.Instance.HasPipes(Grid))
+                return GridLiquidNetwork.Instance.DrawLiquidFor(this, type, litres);
+
             float remaining = litres;
             foreach (var kv in Grid.Blocks)
             {
@@ -85,10 +90,15 @@ namespace VoxelEngine.Maritime
             return litres - remaining;
         }
 
-        /// <summary>Total available litres of a liquid across all grid tanks (auto mode).</summary>
+        /// <summary>Total available litres of a liquid. Uses pipe topology when present and falls
+        /// back to legacy grid-wide access when a ship has no liquid pipes yet.</summary>
         protected float AvailableLiquid(LiquidType type)
         {
             if (Grid == null) return 0f;
+
+            if (GridLiquidNetwork.Instance != null && GridLiquidNetwork.Instance.HasPipes(Grid))
+                return GridLiquidNetwork.Instance.AvailableLiquidFor(this, type);
+
             float total = 0f;
             foreach (var kv in Grid.Blocks)
             {

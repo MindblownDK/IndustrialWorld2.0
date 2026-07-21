@@ -164,8 +164,9 @@ namespace VoxelEngine.EditorTools
             AddInfo(scroll,
                 "Step 13 builds the MARITIME PROPULSION & MECHANICAL NETWORK:\n" +
                 "  • Hull materials (Untreated Wood, Tar Plank, Iron Hull, Balsa Wood)\n" +
-                "  • Propulsion (Waterwheel, Drive Shaft, Propellers, Engines, Turbo, Gearbox, Generator)\n" +
-                "  • Control (Helm) + Utility (Bilge Pump, Exhaust Pipe)\n" +
+                "  • Propulsion (Waterwheel, Drive Shaft, Propellers, Engines, Ship Turbos, Gearbox, Generator)\n" +
+                "  • Large premium ship-engine visuals: Crude starter engine, massive HFO engine, colossal MGO engine\n" +
+                "  • Control (Helm) + Utility (Bilge Pump, Exhaust Pipe, Marine Water Pump)\n" +
                 "  • 4-tier \"Maritime Engineering\" research tree\n" +
                 "  • MaritimeSettings balance asset\n" +
                 "Re-runnable. Idempotent. Run AFTER step 12.");
@@ -2856,8 +2857,8 @@ namespace VoxelEngine.EditorTools
                 Object.DestroyImmediate(root);
                 return prefab;
             }
-            // Solid water pipe — warm burnished copper. Glass — translucent copper-tinted
-            // shell with a vivid water-blue inner that previews the fluid.
+            // Universal liquid pipe — warm burnished copper. Glass variant stays translucent
+            // so players can still preview a flowing liquid line at a glance.
             var pipeSolid = MakePipePrefab("Pipe_Solid",
                 new Color(0.78f, 0.45f, 0.20f),
                 new Color(0.25f, 0.55f, 0.90f), false);
@@ -2893,10 +2894,10 @@ namespace VoxelEngine.EditorTools
                 "Same as the solid tank but the water level is visible through the glass.");
             var bPump      = MakeFluidBlock("Block_WaterPump", "Water Pump",         new Color(0.55f,0.30f,0.20f), pumpPrefab,
                 "Pulls 20 L/s of water into the network while powered (~30 W). Connect cables to power, pipes to tanks.");
-            var bPipeSolid = MakeFluidBlock("Block_PipeSolid", "Water Pipe (Solid)", new Color(0.55f,0.30f,0.20f), pipeSolid,
-                "Carries up to 50 L/s. Place between tanks and pumps to connect them.");
-            var bPipeGlass = MakeFluidBlock("Block_PipeGlass", "Water Pipe (Glass)", new Color(0.55f,0.75f,0.95f), pipeGlass,
-                "Glass variant of the water pipe — same capacity, but transparent.");
+            var bPipeSolid = MakeFluidBlock("Block_PipeSolid", "Liquid Pipe (Solid)", new Color(0.55f,0.30f,0.20f), pipeSolid,
+                "Carries up to 50 L/s of any supported liquid. Place between tanks, pumps, and liquid-fed machines to connect them.");
+            var bPipeGlass = MakeFluidBlock("Block_PipeGlass", "Liquid Pipe (Glass)", new Color(0.55f,0.75f,0.95f), pipeGlass,
+                "Glass variant of the universal liquid pipe — same capacity, but transparent.");
 
             // ---- 6) Recipes ----
             var recipeRegistry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeRegistry>($"{ASSET_ROOT}/RecipeRegistry.asset");
@@ -2905,8 +2906,8 @@ namespace VoxelEngine.EditorTools
             AddRecipe("Recipe_WaterBucket", "Water Bucket", bucket, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)ironIngot, 3));
             AddRecipe("Recipe_TankSolid", "Water Tank (Solid)", bTankSolid, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)ironIngot, 6));
             AddRecipe("Recipe_TankGlass", "Water Tank (Glass)", bTankGlass, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)ironIngot, 4), ((VoxelEngine.Items.ItemDefinition)copperIngot, 4));
-            AddRecipe("Recipe_PipeSolid", "Water Pipe (Solid) x4", bPipeSolid, 4, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)copperIngot, 1));
-            AddRecipe("Recipe_PipeGlass", "Water Pipe (Glass) x4", bPipeGlass, 4, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)copperIngot, 2));
+            AddRecipe("Recipe_PipeSolid", "Liquid Pipe (Solid) x4", bPipeSolid, 4, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)copperIngot, 1));
+            AddRecipe("Recipe_PipeGlass", "Liquid Pipe (Glass) x4", bPipeGlass, 4, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)copperIngot, 2));
             AddRecipe("Recipe_WaterPump", "Water Pump", bPump, 1, VoxelEngine.Crafting.StationTier.Assembler, ((VoxelEngine.Items.ItemDefinition)ironIngot, 4), ((VoxelEngine.Items.ItemDefinition)copperIngot, 6));
 
             EditorUtility.SetDirty(recipeRegistry);
@@ -2924,7 +2925,7 @@ namespace VoxelEngine.EditorTools
                 "* Water Bucket (LMB scoop, RMB place — spreads to fill holes)\n" +
                 "* Water Tank (Solid + Glass variants, 1000L each)\n" +
                 "* Water Pump (20 L/s, ~30 W)\n" +
-                "* Water Pipes (Solid + Glass, 50 L/s capacity)\n" +
+                "* Liquid Pipes (Solid + Glass, 50 L/s capacity, any supported liquid)\n" +
                 "* 6 new recipes added to RecipeRegistry\n" +
                 "* FluidNetworkManager + FluidSimManager spawned in scene",
                 "OK");
@@ -5617,11 +5618,9 @@ root =>
                 return b;
             }
 
-            GameObject MakeMPref<T>(string name, Color color, Vector3 scale, System.Action<T> config = null) where T : VoxelEngine.GridSystem.GridBlock
+            GameObject MakeMPref<T>(string name, Color color, Vector3 scale, VoxelEngine.GridSystem.GridSize size, System.Action<T> config = null) where T : VoxelEngine.GridSystem.GridBlock
             {
                 string path = $"{PREFABS}/{name}.prefab";
-                var size  = name.Contains("Small") ? VoxelEngine.GridSystem.GridSize.Small : VoxelEngine.GridSystem.GridSize.Large;
-
                 bool prefabExists = AssetDatabase.LoadAssetAtPath<GameObject>(path) != null;
 
                 var prefab = GetOrCreatePrefab(path, name, (root) =>
@@ -5638,47 +5637,46 @@ root =>
                     };
                     try
                     {
-                        // Determine if we need to rebuild the mesh:
-                        // 1. Prefab is brand-new (no children at all).
-                        // 2. OR the mesh version marker is stale (old mesh builder).
                         bool needsMesh = root.transform.childCount == 0;
                         if (!needsMesh)
                         {
-                            // Check for the version marker child.
                             bool foundMarker = false;
                             int expectedVersion = VoxelEngine.Maritime.MaritimeMeshBuilder.Version;
                             foreach (Transform child in root.transform)
                             {
-                                if (child != null && child.name.StartsWith("__MaritimeMesh_v"))
-                                {
-                                    foundMarker = true;
-                                    if (child.name != $"__MaritimeMesh_v{expectedVersion}")
-                                        needsMesh = true; // version mismatch → rebuild
-                                    break;
-                                }
+                                if (child == null || !child.name.StartsWith("__MaritimeMesh_v")) continue;
+                                foundMarker = true;
+                                if (child.name != $"__MaritimeMesh_v{expectedVersion}") needsMesh = true;
+                                break;
                             }
-                            if (!foundMarker) needsMesh = true; // no marker → old builder → rebuild
+                            if (!foundMarker) needsMesh = true;
                         }
 
                         bool isNew = !prefabExists;
 
                         if (needsMesh)
-                        {
                             VoxelEngine.Maritime.MaritimeMeshBuilder.Build(root, name, size);
-                        }
 
                         var box = root.GetComponent<BoxCollider>();
                         if (box == null) box = root.AddComponent<BoxCollider>();
                         float cs = VoxelEngine.GridSystem.GridSizeExt.CellSize(size);
-                        box.size = new Vector3(cs, cs, cs);
+                        var renderers = root.GetComponentsInChildren<Renderer>(true);
+                        if (renderers != null && renderers.Length > 0)
+                        {
+                            Bounds bounds = renderers[0].bounds;
+                            for (int i = 1; i < renderers.Length; i++) bounds.Encapsulate(renderers[i].bounds);
+                            box.center = root.transform.InverseTransformPoint(bounds.center);
+                            box.size = Vector3.Max(bounds.size * 1.02f, Vector3.one * (cs * 0.2f));
+                        }
+                        else
+                        {
+                            box.center = Vector3.zero;
+                            box.size = new Vector3(cs, cs, cs);
+                        }
 
-                        // ALWAYS ensure the component exists (fixes missing-script bug
-                        // where StripMissingScripts removed a broken reference).
                         var b = root.GetComponent<T>();
                         if (b == null) b = root.AddComponent<T>();
 
-                        // Only apply config (tuning values) to freshly-created blocks
-                        // (preserves user-tweaked values on existing prefabs).
                         if (isNew) config?.Invoke(b);
                     }
                     finally { VoxelEngine.Maritime.MaritimeMeshBuilder.MaterialPersister = null; }
@@ -5731,23 +5729,23 @@ root =>
             //   4. Config/tuning ONLY applied to brand-new prefabs
             // This preserves all user prefab/material/value edits across re-runs.
 
-            var untWoodPref = MakeMPref<VoxelEngine.Maritime.GridUntreatedWood>("Hull_UntreatedWood", new Color(0.55f,0.40f,0.25f), Vector3.one);
+            var untWoodPref = MakeMPref<VoxelEngine.Maritime.GridUntreatedWood>("Hull_UntreatedWood", new Color(0.55f,0.40f,0.25f), Vector3.one, SzL);
             var itemUntWood = MakeMItem("MItem_UntreatedWood", "Untreated Wood Hull", new Color(0.55f,0.40f,0.25f), untWoodPref, SzL, 80, 200);
             AddMRecipe("Recipe_MUntreatedWood", "Untreated Wood Hull", itemUntWood, (woodLog, 4));
 
-            var tarPref = MakeMPref<VoxelEngine.Maritime.GridTarCoatedPlank>("Hull_TarPlank", new Color(0.30f,0.22f,0.14f), Vector3.one);
+            var tarPref = MakeMPref<VoxelEngine.Maritime.GridTarCoatedPlank>("Hull_TarPlank", new Color(0.30f,0.22f,0.14f), Vector3.one, SzL);
             var itemTar = MakeMItem("MItem_TarPlank", "Tar-Coated Plank", new Color(0.30f,0.22f,0.14f), tarPref, SzL, 60, 260);
             AddMRecipe("Recipe_MTarPlank", "Tar-Coated Plank", itemTar, (plank, 3), (ironIngot, 1));
 
-            var ironHullPref = MakeMPref<VoxelEngine.Maritime.GridIronHull>("Hull_IronHull", new Color(0.45f,0.47f,0.52f), Vector3.one);
+            var ironHullPref = MakeMPref<VoxelEngine.Maritime.GridIronHull>("Hull_IronHull", new Color(0.45f,0.47f,0.52f), Vector3.one, SzL);
             var itemIronHull = MakeMItem("MItem_IronHull", "Iron Hull", new Color(0.45f,0.47f,0.52f), ironHullPref, SzL, 400, 1000);
             AddMRecipe("Recipe_MIronHull", "Iron Hull", itemIronHull, (ironPlate, 6), (steelPlate, 2));
 
-            var balsaPref = MakeMPref<VoxelEngine.Maritime.GridBalsaWood>("Hull_BalsaWood", new Color(0.80f,0.65f,0.40f), Vector3.one);
+            var balsaPref = MakeMPref<VoxelEngine.Maritime.GridBalsaWood>("Hull_BalsaWood", new Color(0.80f,0.65f,0.40f), Vector3.one, SzL);
             var itemBalsa = MakeMItem("MItem_BalsaWood", "Balsa Wood", new Color(0.80f,0.65f,0.40f), balsaPref, SzL, 25, 80);
             AddMRecipe("Recipe_MBalsaWood", "Balsa Wood", itemBalsa, (woodLog, 2));
 
-            var shipContainerPref = MakeMPref<VoxelEngine.Maritime.GridShippingContainer>("ShippingContainer_Large", new Color(0.08f,0.22f,0.38f), Vector3.one,
+            var shipContainerPref = MakeMPref<VoxelEngine.Maritime.GridShippingContainer>("ShippingContainer_Large", new Color(0.08f,0.22f,0.38f), Vector3.one, SzL,
                 c => { c.slots = 60; c.maxMassKg = 5_000_000f; c.largeContainerMultiplier = 5f; });
             var itemShipContainer = MakeMItem("MItem_ShippingContainer", "Shipping Container", new Color(0.08f,0.22f,0.38f), shipContainerPref, SzL, 1800, 1200);
             AddMRecipe("Recipe_MShippingContainer", "Shipping Container", itemShipContainer, (steelPlate, 16), (ironPlate, 12), (circuit, 2));
@@ -5756,114 +5754,114 @@ root =>
             //  PROPULSION BLOCKS
             // ═══════════════════════════════════════════════════════════════
             // Waterwheel
-            var wheelPref = MakeMPref<VoxelEngine.Maritime.GridWaterwheel>("Waterwheel_Large", new Color(0.40f,0.30f,0.18f), Vector3.one,
+            var wheelPref = MakeMPref<VoxelEngine.Maritime.GridWaterwheel>("Waterwheel_Large", new Color(0.40f,0.30f,0.18f), Vector3.one, SzL,
                 w => { w.wheelSize = 3f; w.maxRPM = 120f; w.flowTorqueCoefficient = 12000f; });
             var itemWheel = MakeMItem("MItem_Waterwheel", "Waterwheel", new Color(0.40f,0.30f,0.18f), wheelPref, SzL, 300, 600);
             AddMRecipe("Recipe_MWaterwheel", "Waterwheel", itemWheel, (ironIngot, 4), (woodLog, 8), (ironGear, 2));
 
             // Drive Shaft
-            var shaftPref = MakeMPref<VoxelEngine.Maritime.GridDriveShaft>("DriveShaft_Large", new Color(0.70f,0.72f,0.75f), Vector3.one,
+            var shaftPref = MakeMPref<VoxelEngine.Maritime.GridDriveShaft>("DriveShaft_Large", new Color(0.70f,0.72f,0.75f), Vector3.one, SzL,
                 s => { s.maxSafeRPM = 3000f; });
             var itemShaft = MakeMItem("MItem_DriveShaft", "Drive Shaft", new Color(0.70f,0.72f,0.75f), shaftPref, SzL, 80, 300);
             AddMRecipe("Recipe_MDriveShaft", "Drive Shaft", itemShaft, (ironPlate, 2), (ironGear, 1));
 
             // Rotation Transfer
-            var rotTransferPref = MakeMPref<VoxelEngine.Maritime.GridRotationTransfer>("RotationTransfer_Large", new Color(0.62f,0.58f,0.46f), Vector3.one,
+            var rotTransferPref = MakeMPref<VoxelEngine.Maritime.GridRotationTransfer>("RotationTransfer_Large", new Color(0.62f,0.58f,0.46f), Vector3.one, SzL,
                 r => { r.route = VoxelEngine.Maritime.RotationTransferRoute.Up; r.maxSafeRPM = 3200f; });
             var itemRotTransfer = MakeMItem("MItem_RotationTransfer", "Rotation Transfer", new Color(0.62f,0.58f,0.46f), rotTransferPref, SzL, 140, 360);
             AddMRecipe("Recipe_MRotationTransfer", "Rotation Transfer", itemRotTransfer, (ironPlate, 3), (ironGear, 2));
 
             // Encased Chain Drive
-            var chainDrivePref = MakeMPref<VoxelEngine.Maritime.GridEncasedChainDrive>("EncasedChainDrive_Large", new Color(0.32f,0.34f,0.36f), Vector3.one,
+            var chainDrivePref = MakeMPref<VoxelEngine.Maritime.GridEncasedChainDrive>("EncasedChainDrive_Large", new Color(0.32f,0.34f,0.36f), Vector3.one, SzL,
                 c => { c.maxSafeRPM = 2600f; });
-            var itemChainDrive = MakeMItem("MItem_EncasedChainDrive", "Encased Chain Drive", new Color(0.32f,0.34f,0.36f), chainDrivePref, SzL, 180, 420);
+            var itemChainDrive = MakeMItem("MItem_EncasedChainDrive", "Encased Chain Drive", new Color(0.32f,0.34f,0.36f), chainDrivePref, SzL, 900, 2200);
             AddMRecipe("Recipe_MEncasedChainDrive", "Encased Chain Drive", itemChainDrive, (ironPlate, 4), (ironGear, 3), (steelPlate, 1));
 
             // Small Propeller
-            var propSPref = MakeMPref<VoxelEngine.Maritime.GridPropeller>("Propeller_Small_Large", new Color(0.85f,0.65f,0.25f), Vector3.one,
+            var propSPref = MakeMPref<VoxelEngine.Maritime.GridPropeller>("Propeller_Small_Large", new Color(0.85f,0.65f,0.25f), Vector3.one, SzL,
                 p => { p.tier = VoxelEngine.Maritime.PropellerTier.Small; p.propellerSize = 1f; p.maxRPM = 2000f; });
             var itemPropS = MakeMItem("MItem_PropSmall", "Small Propeller", new Color(0.85f,0.65f,0.25f), propSPref, SzL, 120, 300);
             AddMRecipe("Recipe_MPropSmall", "Small Propeller", itemPropS, (ironIngot, 3), (copperIngot, 1));
 
             // Large Propeller
-            var propLPref = MakeMPref<VoxelEngine.Maritime.GridPropeller>("Propeller_Large_Large", new Color(0.65f,0.55f,0.30f), Vector3.one,
+            var propLPref = MakeMPref<VoxelEngine.Maritime.GridPropeller>("Propeller_Large_Large", new Color(0.65f,0.55f,0.30f), Vector3.one, SzL,
                 p => { p.tier = VoxelEngine.Maritime.PropellerTier.Large; p.propellerSize = 3f; p.maxRPM = 1500f; });
             var itemPropL = MakeMItem("MItem_PropLarge", "Large Propeller", new Color(0.65f,0.55f,0.30f), propLPref, SzL, 800, 800);
             AddMRecipe("Recipe_MPropLarge", "Large Propeller", itemPropL, (steelPlate, 6), (ironGear, 4), (copperPlate, 2));
 
             // Exhaust Pipe
-            var exhaustPref = MakeMPref<VoxelEngine.Maritime.GridExhaustPipe>("ExhaustPipe_Large", new Color(0.30f,0.28f,0.25f), Vector3.one);
+            var exhaustPref = MakeMPref<VoxelEngine.Maritime.GridExhaustPipe>("ExhaustPipe_Large", new Color(0.30f,0.28f,0.25f), Vector3.one, SzL);
             var itemExhaust = MakeMItem("MItem_ExhaustPipe", "Exhaust Pipe", new Color(0.30f,0.28f,0.25f), exhaustPref, SzL, 40, 200);
             AddMRecipe("Recipe_MExhaustPipe", "Exhaust Pipe", itemExhaust, (ironPlate, 2));
 
             // Crude Engine (solid fuel)
-            var engSPref = MakeMPref<VoxelEngine.Maritime.GridMaritimeEngine>("Engine_Small_Large", new Color(0.50f,0.35f,0.18f), Vector3.one,
-                e => { e.tier = VoxelEngine.Maritime.EngineTier.Small; e.maxTorque = 8000f; e.maxRPM = 1500f; e.fuelKind = VoxelEngine.Maritime.MaritimeFuelKind.Solid; e.fuelBufferCapacity = 60f; e.fuelConsumptionRate = 1f; });
-            var itemEngS = MakeMItem("MItem_EngineSmall", "Crude Engine", new Color(0.50f,0.35f,0.18f), engSPref, SzL, 200, 500);
+            var engSPref = MakeMPref<VoxelEngine.Maritime.GridMaritimeEngine>("Engine_Small_Large", new Color(0.50f,0.35f,0.18f), Vector3.one, SzL,
+                e => { e.tier = VoxelEngine.Maritime.EngineTier.Small; e.maxTorque = 18000f; e.maxRPM = 1500f; e.fuelKind = VoxelEngine.Maritime.MaritimeFuelKind.Solid; e.fuelBufferCapacity = 120f; e.fuelConsumptionRate = 1f; });
+            var itemEngS = MakeMItem("MItem_EngineSmall", "Crude Engine", new Color(0.50f,0.35f,0.18f), engSPref, SzL, 450, 1200);
             AddMRecipe("Recipe_MEngineSmall", "Crude Engine", itemEngS, (ironIngot, 6), (ironGear, 4), (copperWire, 4));
 
             // Heavy Fuel Oil Engine
-            var engMPref = MakeMPref<VoxelEngine.Maritime.GridMaritimeEngine>("Engine_Medium_Large", new Color(0.40f,0.38f,0.35f), Vector3.one,
-                e => { e.tier = VoxelEngine.Maritime.EngineTier.Medium; e.maxTorque = 40000f; e.maxRPM = 1800f; e.fuelKind = VoxelEngine.Maritime.MaritimeFuelKind.Liquid; e.liquidFuel = VoxelEngine.Items.LiquidType.HeavyFuelOil; e.fuelBufferCapacity = 80f; e.fuelConsumptionRate = 2f; e.liquidRefillRate = 8f; });
-            var itemEngM = MakeMItem("MItem_EngineMedium", "Heavy Fuel Oil Engine", new Color(0.40f,0.38f,0.35f), engMPref, SzL, 700, 700);
+            var engMPref = MakeMPref<VoxelEngine.Maritime.GridMaritimeEngine>("Engine_Medium_Large", new Color(0.40f,0.38f,0.35f), Vector3.one, SzL,
+                e => { e.tier = VoxelEngine.Maritime.EngineTier.Medium; e.maxTorque = 125000f; e.maxRPM = 1800f; e.fuelKind = VoxelEngine.Maritime.MaritimeFuelKind.Liquid; e.liquidFuel = VoxelEngine.Items.LiquidType.HeavyFuelOil; e.fuelBufferCapacity = 240f; e.fuelConsumptionRate = 2f; e.liquidRefillRate = 28f; e.coolantCapacity = 180f; e.coolantRefillRate = 20f; });
+            var itemEngM = MakeMItem("MItem_EngineMedium", "Heavy Fuel Oil Engine", new Color(0.40f,0.38f,0.35f), engMPref, SzL, 2200, 4500);
             AddMRecipe("Recipe_MEngineMedium", "Heavy Fuel Oil Engine", itemEngM, (ironPlate, 8), (steelPlate, 4), (ironGear, 6), (circuit, 2));
 
             // MGO Engine — MASSIVE, expensive, colossal torque
-            var engGPref = MakeMPref<VoxelEngine.Maritime.GridMaritimeEngine>("Engine_Giant_Large", new Color(0.25f,0.25f,0.28f), new Vector3(1f,1.2f,1.2f),
-                e => { e.tier = VoxelEngine.Maritime.EngineTier.Giant; e.maxTorque = 500000f; e.maxRPM = 1200f; e.fuelKind = VoxelEngine.Maritime.MaritimeFuelKind.Liquid; e.liquidFuel = VoxelEngine.Items.LiquidType.MarineGasOil; e.fuelBufferCapacity = 500f; e.fuelConsumptionRate = 12f; e.liquidRefillRate = 40f; });
-            var itemEngG = MakeMItem("MItem_EngineGiant", "MGO Engine", new Color(0.25f,0.25f,0.28f), engGPref, SzL, 5000, 2500);
+            var engGPref = MakeMPref<VoxelEngine.Maritime.GridMaritimeEngine>("Engine_Giant_Large", new Color(0.25f,0.25f,0.28f), new Vector3(1f,1.2f,1.2f), SzL,
+                e => { e.tier = VoxelEngine.Maritime.EngineTier.Giant; e.maxTorque = 950000f; e.maxRPM = 1200f; e.fuelKind = VoxelEngine.Maritime.MaritimeFuelKind.Liquid; e.liquidFuel = VoxelEngine.Items.LiquidType.MarineGasOil; e.fuelBufferCapacity = 1200f; e.fuelConsumptionRate = 12f; e.liquidRefillRate = 110f; e.coolantCapacity = 800f; e.coolantRefillRate = 60f; });
+            var itemEngG = MakeMItem("MItem_EngineGiant", "MGO Engine", new Color(0.25f,0.25f,0.28f), engGPref, SzL, 14000, 18000);
             AddMRecipe("Recipe_MEngineGiant", "MGO Engine", itemEngG, (steelPlate, 48), (ironGear, 24), (advCircuit, 12), (copperWire, 32));
 
             // Small Turbocharger (1×1×1)
-            var turboSmallPref = MakeMPref<VoxelEngine.Maritime.GridTurbocharger>("Turbocharger_Small", new Color(0.85f,0.82f,0.70f), Vector3.one,
+            var turboSmallPref = MakeMPref<VoxelEngine.Maritime.GridTurbocharger>("Turbocharger_Small", new Color(0.85f,0.82f,0.70f), Vector3.one, SzL,
                 t => { t.tier = VoxelEngine.Maritime.TurboTier.Small; t.boostPerUnit = 0.15f; });
-            var itemTurboSmall = MakeMItem("MItem_TurboSmall", "Small Turbocharger", new Color(0.85f,0.82f,0.70f), turboSmallPref, SzL, 100, 250);
+            var itemTurboSmall = MakeMItem("MItem_TurboSmall", "Small Turbocharger", new Color(0.85f,0.82f,0.70f), turboSmallPref, SzL, 300, 900);
             AddMRecipe("Recipe_MTurboSmall", "Small Turbocharger", itemTurboSmall, (steelPlate, 3), (copperPlate, 3), (advCircuit, 1));
 
             // Large Turbocharger (2×2×2) — massive, for MGO engines
-            var turboLargePref = MakeMPref<VoxelEngine.Maritime.GridTurbocharger>("Turbocharger_Large", new Color(0.85f,0.82f,0.70f), Vector3.one * 1.5f,
+            var turboLargePref = MakeMPref<VoxelEngine.Maritime.GridTurbocharger>("Turbocharger_Large", new Color(0.85f,0.82f,0.70f), Vector3.one * 1.5f, SzL,
                 t => { t.tier = VoxelEngine.Maritime.TurboTier.Large; t.boostPerUnit = 0.25f; });
-            var itemTurboLarge = MakeMItem("MItem_TurboLarge", "Large Turbocharger", new Color(0.88f,0.85f,0.72f), turboLargePref, SzL, 500, 500);
+            var itemTurboLarge = MakeMItem("MItem_TurboLarge", "Large Turbocharger", new Color(0.88f,0.85f,0.72f), turboLargePref, SzL, 2400, 4200);
             AddMRecipe("Recipe_MTurboLarge", "Large Turbocharger", itemTurboLarge, (steelPlate, 8), (copperPlate, 6), (advCircuit, 4));
 
             // Gearbox
-            var gearPref = MakeMPref<VoxelEngine.Maritime.GridGearbox>("Gearbox_Large", new Color(0.55f,0.50f,0.40f), Vector3.one,
+            var gearPref = MakeMPref<VoxelEngine.Maritime.GridGearbox>("Gearbox_Large", new Color(0.55f,0.50f,0.40f), Vector3.one, SzL,
                 g => { g.gearRatio = 2f; g.maxOutputSpeed = 2000f; g.selectedGear = 2; });
             var itemGear = MakeMItem("MItem_Gearbox", "Gearbox", new Color(0.55f,0.50f,0.40f), gearPref, SzL, 400, 500);
             AddMRecipe("Recipe_MGearbox", "Gearbox", itemGear, (ironPlate, 6), (ironGear, 8), (steelPlate, 2));
 
             // Maritime Generator
-            var genPref = MakeMPref<VoxelEngine.Maritime.GridMaritimeGenerator>("MaritimeGenerator_Large", new Color(0.30f,0.50f,0.35f), Vector3.one,
-                g => { g.maxRPM = 1800f; g.maxWattOutput = 50000f; });
-            var itemGen = MakeMItem("MItem_MaritimeGenerator", "Maritime Generator", new Color(0.30f,0.50f,0.35f), genPref, SzL, 600, 600);
+            var genPref = MakeMPref<VoxelEngine.Maritime.GridMaritimeGenerator>("MaritimeGenerator_Large", new Color(0.30f,0.50f,0.35f), Vector3.one, SzL,
+                g => { g.maxRPM = 2400f; g.maxWattOutput = 500000f; g.bufferCapacityWh = 20000f; });
+            var itemGen = MakeMItem("MItem_MaritimeGenerator", "Maritime Generator", new Color(0.30f,0.50f,0.35f), genPref, SzL, 3200, 5200);
             AddMRecipe("Recipe_MMaritimeGenerator", "Maritime Generator", itemGen, (ironPlate, 8), (copperWire, 12), (circuit, 4));
 
             // Electrical Propeller
-            var ePropPref = MakeMPref<VoxelEngine.Maritime.GridElectricalPropeller>("EPropeller_Large", new Color(0.40f,0.55f,0.65f), Vector3.one,
+            var ePropPref = MakeMPref<VoxelEngine.Maritime.GridElectricalPropeller>("EPropeller_Large", new Color(0.40f,0.55f,0.65f), Vector3.one, SzL,
                 p => { p.propellerSize = 2f; p.maxRPM = 3000f; p.powerDrawWatts = 2000f; });
             var itemEProp = MakeMItem("MItem_EPropeller", "Electrical Propeller", new Color(0.40f,0.55f,0.65f), ePropPref, SzL, 500, 500);
             AddMRecipe("Recipe_MEPropeller", "Electrical Propeller", itemEProp, (steelPlate, 6), (copperWire, 8), (circuit, 4), (glass, 2));
 
             // Bilge Pump
-            var bilgePref = MakeMPref<VoxelEngine.Maritime.GridBilgePump>("BilgePump_Large", new Color(0.20f,0.30f,0.45f), Vector3.one,
+            var bilgePref = MakeMPref<VoxelEngine.Maritime.GridBilgePump>("BilgePump_Large", new Color(0.20f,0.30f,0.45f), Vector3.one, SzL,
                 b => { b.drainRate = 5f; b.drainRadiusCells = 4f; b.powerDrawWatts = 500f; });
             var itemBilge = MakeMItem("MItem_BilgePump", "Bilge Pump", new Color(0.20f,0.30f,0.45f), bilgePref, SzL, 200, 400);
             AddMRecipe("Recipe_MBilgePump", "Bilge Pump", itemBilge, (ironPlate, 4), (copperWire, 6), (circuit, 2));
 
             // Marine Water Pump
-            var pumpPref = MakeMPref<VoxelEngine.Maritime.GridMarineWaterPump>("MarineWaterPump_Large", new Color(0.15f, 0.35f, 0.55f), Vector3.one,
+            var pumpPref = MakeMPref<VoxelEngine.Maritime.GridMarineWaterPump>("MarineWaterPump_Large", new Color(0.15f, 0.35f, 0.55f), Vector3.one, SzL,
                 p => { p.pumpRate = 50f; p.bufferCapacity = 100f; p.powerDrawWatts = 200f; p.suctionDepth = 3f; });
             var itemPump = MakeMItem("MItem_MarineWaterPump", "Marine Water Pump", new Color(0.15f, 0.35f, 0.55f), pumpPref, SzL, 150, 350);
             AddMRecipe("Recipe_MMarineWaterPump", "Marine Water Pump", itemPump, (ironPlate, 4), (copperWire, 4), (ironGear, 2));
 
             // Ship Control Console (modern alternative to Helm)
-            var consolePref = MakeMPref<VoxelEngine.Maritime.GridShipConsole>("ShipConsole_Large", new Color(0.15f, 0.18f, 0.22f), Vector3.one,
+            var consolePref = MakeMPref<VoxelEngine.Maritime.GridShipConsole>("ShipConsole_Large", new Color(0.15f, 0.18f, 0.22f), Vector3.one, SzL,
                 c => { c.interactionRadius = 3f; });
             var itemConsole = MakeMItem("MItem_ShipConsole", "Ship Control Console", new Color(0.15f, 0.18f, 0.22f), consolePref, SzL, 200, 350);
             AddMRecipe("Recipe_MShipConsole", "Ship Control Console", itemConsole, (steelPlate, 6), (circuit, 4), (glass, 2), (copperWire, 4));
 
             // Helm
-            var helmPref = MakeMPref<VoxelEngine.Maritime.GridHelm>("Helm_Large", new Color(0.45f,0.30f,0.15f), Vector3.one,
+            var helmPref = MakeMPref<VoxelEngine.Maritime.GridHelm>("Helm_Large", new Color(0.45f,0.30f,0.15f), Vector3.one, SzL,
                 h => { h.interactionRadius = 3f; });
             var itemHelm = MakeMItem("MItem_Helm", "Helm", new Color(0.45f,0.30f,0.15f), helmPref, SzL, 150, 300);
             AddMRecipe("Recipe_MHelm", "Helm", itemHelm, (plank, 6), (ironIngot, 2), (ironGear, 2));
@@ -5876,18 +5874,18 @@ root =>
             SetDesc(itemWheel, "3x3x1 cast-iron waterwheel with oak paddles. DUAL-MODE: Generates torque from water current when stationary, OR produces paddle thrust when driven by a shaft on a moving ship. Place in flowing water.");
             SetDesc(itemShaft, "Drive shaft that transmits rotational torque from an engine to a propeller, gearbox, or generator. If a shaft is disabled or destroyed, the propulsion chain downstream stops. Chain blocks together engine-first.");
             SetDesc(itemRotTransfer, "Rotation Transfer casing. Carries shaft RPM like a drive shaft while visually routing rotation straight, up, or down. Rotate the block while placing to turn the route left/right.");
-            SetDesc(itemChainDrive, "Encased Chain Drive. Protected shaft segment with propeller mount points. Use it as the rugged chain casing that shaft-driven propellers bolt onto.");
+            SetDesc(itemChainDrive, "Encased Chain Drive. Heavy protected marine chain case with visible sprockets and propeller mount points. Carries rotational force between engines, gearboxes, shafts, and shaft-driven propellers.");
             SetDesc(itemShipContainer, "Maritime shipping container storage. Styled like a real intermodal container and carries 5x the mass of a Large Cargo Container.");
-            SetDesc(itemPropS, "3-blade cast bronze propeller (1x1x1). Low thrust but highly maneuverable. Consumes low shaft torque through its movable Rotation input point 0 cube. Place below the waterline facing the direction you want to push.");
-            SetDesc(itemPropL, "4-blade heavy steel industrial propeller (3x3x1). Extreme thrust with a movable Rotation input point 0 cube for shaft/chain-drive alignment. Shows visible cavitation bubbles when working hard.");
-            SetDesc(itemExhaust, "Exhaust venting pipe. EVERY engine requires at least one adjacent exhaust pipe or it chokes and produces zero torque. The pipe vents exhaust gas buildup and emits visible smoke particles while engines run. Looks like a pipe with vent holes.");
-            SetDesc(itemEngS, "Crude Engine (1x2x1). FUEL: Wood Logs / Planks / Coal (solid fuel from cargo). Low torque, high fuel efficiency - perfect for starter paddleboats. Exposed brass pistons, small copper boiler, sputtering smoke. REQUIRES adjacent Exhaust Pipe. Can fit 1 Small Turbocharger.");
-            SetDesc(itemEngM, "Heavy Fuel Oil Engine (2x3x2). FUEL: Heavy Fuel Oil (liquid, from refinery). Inline-4 cast iron block with medium torque and steady RPM. Vibrating belts, oil stains. REQUIRES adjacent Exhaust Pipe. Can fit 2 Small or Large Turbochargers. Pair with a Gearbox before a Generator for best efficiency.");
-            SetDesc(itemEngG, "MGO Engine (MASSIVE). FUEL: Marine Gas Oil / MGO (liquid, highest grade from refinery). Enormous torque - the most powerful engine in the game. V12 block with massive steel manifolds, twin exhaust feeds, rhythmic roaring. Very expensive to craft and run. REQUIRES adjacent Exhaust Pipe. Can fit 4 Small or Large Turbochargers for extreme boost.");
-            SetDesc(itemTurboSmall, "Small Turbocharger (1x1x1). Boosts an engine by +15% torque only when mounted on a named Turbo attachment point. Chrome snail housing with spinning compressor + glowing red hot side. Max 1 on Crude, 2 on HFO, 4 on MGO engines.");
-            SetDesc(itemTurboLarge, "Large Turbocharger (2x2x2 - MASSIVE). Boosts an engine by +25% torque only when mounted on a named Turbo attachment point. Huge chrome housing with 12-blade compressor + intense red glow under load. For MGO and HFO engines only. Max 2 on HFO, 4 on MGO engines.");
-            SetDesc(itemGear, "Industrial gearbox. Trades torque for RPM in all directions. 6 selectable gear ratios (0.5x to 4x). Higher ratio = faster spin but less torque. Speed is hard-clamped to prevent runaway gearing. Place between an engine and a propeller/generator.");
-            SetDesc(itemGen, "Maritime generator (2x2x2). Converts shaft torque into electricity. More RPM = more power. Best used after a gearbox (gear up for speed before the generator). Contains a small internal battery buffer. Connect to the ship power grid.");
+            SetDesc(itemPropS, "3-blade cast bronze propeller (detail-scale). Low thrust but highly maneuverable. Consumes shaft torque through its movable Rotation input point 0 mount. Place below the waterline facing the direction you want to push.");
+            SetDesc(itemPropL, "4-blade heavy steel industrial propeller. Extreme thrust with a movable Rotation input point 0 mount for shaft/chain-drive alignment. Built for big ship drivetrains and visible cavitation under load.");
+            SetDesc(itemExhaust, "Exhaust venting pipe. EVERY engine requires at least one adjacent exhaust pipe or it chokes and produces zero torque. The pipe vents exhaust gas buildup and emits visible smoke particles while engines run.");
+            SetDesc(itemEngS, "Crude Engine (starter 1x1x1 large-grid block). FUEL: Wood Logs / Planks / Coal. A heavy cast-iron beginner ship engine that produces rotational force into a shaft - not direct electricity. Includes a solid-fuel hopper and supports 1 Small Turbocharger. Requires an adjacent Exhaust Pipe.");
+            SetDesc(itemEngM, "Heavy Fuel Oil Engine (huge 4x3x2 visual ship engine). FUEL: Heavy Fuel Oil. Produces large rotational force for shafts, chain drives, propellers, and generators. Requires coolant and an adjacent Exhaust Pipe. Supports 2 Small or Large Turbochargers.");
+            SetDesc(itemEngG, "MGO Engine (colossal 6x5x3 visual ship engine). FUEL: Marine Gas Oil / MGO. Massive industrial ship diesel that produces extreme rotational force for the largest propellers and shaft generators. Requires coolant and adjacent exhaust. Supports 4 Small or Large Turbochargers.");
+            SetDesc(itemTurboSmall, "Small Ship Turbocharger. Boosts an engine by +15% torque only when mounted on a named Turbo attachment point. Compact industrial compressor housing for crude and medium ship engines.");
+            SetDesc(itemTurboLarge, "Large Ship Turbocharger. Boosts an engine by +25% torque only when mounted on a named Turbo attachment point. Huge industrial compressor for medium and giant ship engines.");
+            SetDesc(itemGear, "Industrial gearbox. Trades torque for RPM in all directions. 6 selectable gear ratios (0.5x to 4x). Higher ratio = faster spin but less torque. Speed is hard-clamped to prevent runaway gearing. Place between an engine and a propeller or shaft generator.");
+            SetDesc(itemGen, "Maritime shaft generator. Converts rotational force from a shaft into electricity. More RPM = more power. Best used after a gearbox when gearing up speed into the generator. Contains a small internal battery buffer.");
             SetDesc(itemEProp, "Electrical propeller (2x2x1). Torpedo-shaped bronze pod with a sleek 3-blade propeller. Driven by electricity from the grid (not shaft torque). Medium thrust with fast spin-up. Heavy armored power conduit.");
             SetDesc(itemBilge, "Bilge pump. Consumes electricity to drain waterlogged mass from nearby hull blocks within a 4-cell radius. Essential for surviving hull breaches and mega-storms on untreated-wood ships. Heavy, no buoyancy.");
             SetDesc(itemPump, "Marine Water Pump. Must be placed at or below the waterline to operate. Sucks seawater into an internal buffer, then pushes it into connected Water tanks. Used to supply engine coolant (Water) for HFO and MGO engines. Draws power from the grid.");

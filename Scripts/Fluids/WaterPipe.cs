@@ -53,7 +53,9 @@ namespace VoxelEngine.Fluids
                     bool endpoint = block is VoxelEngine.GridSystem.GridLiquidTank
                                  || block is VoxelEngine.GridSystem.GridH2O2Generator
                                  || block is VoxelEngine.GridSystem.GridRefinery
-                                 || block is VoxelEngine.GridSystem.GridChemicalPlant;
+                                 || block is VoxelEngine.GridSystem.GridChemicalPlant
+                                 || block is VoxelEngine.Maritime.GridMaritimeEngine
+                                 || block is VoxelEngine.Maritime.GridMarineWaterPump;
                     bool connectedPipe = block.GetComponentInChildren<WaterPipe>(true) != null;
                     if (!endpoint && !connectedPipe) continue;
                     if (VoxelEngine.Networks.WrenchBlacklist.IsBlocked(gridBlock.gameObject, block.gameObject)) continue;

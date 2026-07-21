@@ -52,6 +52,9 @@ namespace VoxelEngine.Maritime
             base.OnPlaced();
             if (string.IsNullOrEmpty(blockName) || blockName == "Armor Block")
                 blockName = "Maritime Generator";
+            if (Mathf.Approximately(maxRPM, 1800f)) maxRPM = 2400f;
+            if (Mathf.Approximately(maxWattOutput, 50000f)) maxWattOutput = 500000f;
+            if (Mathf.Approximately(bufferCapacityWh, 2000f)) bufferCapacityWh = 20000f;
         }
 
         public override void PopulateMaritimeNode(ref MechanicalNode node)

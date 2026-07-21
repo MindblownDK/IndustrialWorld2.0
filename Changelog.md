@@ -1,9 +1,51 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.8.0-dev`
+**Current Version:** `6.9.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.9.0-dev] Maritime Power Reliability + Monumental Ship Engine Pass
+
+**Type:** MINOR — new save-compatible maritime power and Step 13 content pass (battery behavior, liquid-pipe engine hookups, solid-fuel hopper, and regenerated ship-engine visuals; no save-schema break).
+
+**Fixed / Improved:**
+- **Grid battery transfer modes:** battery charge/discharge now resolves through one central Grid power pass instead of independent per-battery `Update()` timing.
+  - A battery set to **Discharge** can now actively feed a battery set to **Recharge**.
+  - **Auto** batteries no longer behave unpredictably when explicit discharge/recharge batteries are on the same grid.
+  - Battery panels now show live charging and discharging wattage.
+- **Unified liquid-pipe hookup for maritime systems:** maritime engines and marine water pumps are now valid liquid-pipe endpoints.
+  - Heavy Fuel Oil and MGO engines can draw fuel through connected liquid pipes.
+  - Medium/Giant maritime engines can now receive coolant through the same liquid-pipe topology.
+  - Marine Water Pump now fills connected liquid-pipe networks instead of only iterating raw tank lists.
+- **Crude Engine fuel access:** the crude engine now has a dedicated internal **solid-fuel hopper** (4 slots) for coal, planks, logs, and other valid solid fuels, while still supporting cargo fallback.
+  - Hopper contents persist through world save/load.
+  - Maritime engine UI now shows the hopper inventory for solid-fuel engines.
+- **Step 13 maritime prefab generation:** Step 13 now rebuilds ship-engine content with updated premium large-scale visuals by bumping `MaritimeMeshBuilder` to version 14.
+  - **Crude Engine** rebuilt as a proper heavy cast-iron starter engine.
+  - **Heavy Fuel Oil Engine** rebuilt as a huge inline industrial ship engine.
+  - **MGO Engine** rebuilt as a colossal multi-deck ship diesel.
+  - **Small / Large Ship Turbochargers**, **Encased Chain Drive**, and **Maritime Generator** also received refreshed premium industrial visuals.
+- **Large generated bounds:** Step 13 maritime prefabs now size their box colliders from generated renderer bounds instead of forcing a single-cell collider, fixing the “only a single cell is generated” visual/collider mismatch for oversized ship machinery.
+
+**Roadmap Status:**
+- **Power, Vehicles & Combat (4.7.0):** remains **🛠️ WORKING ON**.
+- **Vehicle power foundations:** advanced with deterministic battery transfer and proper liquid-fed maritime drivetrain support, but broader unified-power progression and Unity validation remain open.
+
+**Manual Unity Steps:**
+1. Let Unity compile and confirm the runtime banner reports `6.9.0-dev`.
+2. Open `Tools > Voxel Engine > Voxel Engine Setup`.
+3. Run **8. Build Fluid Content (Water bucket, tank, pump, pipes)** once so existing pipe items/recipes refresh to **Liquid Pipe** naming.
+4. Run **13. Build Maritime Content (Hulls, Engines, Shafts, Propellers, Turbo, Helm + Maritime Research Tree)** once.
+5. Run Step 13 a second time to confirm it remains non-destructive and keeps your existing numeric tuning.
+6. Test **Battery A = Discharge** and **Battery B = Recharge** on the same powered grid. Confirm Battery A loses charge while Battery B gains charge.
+7. Repeat with **Battery A = Discharge** and **Battery B = Auto**. Confirm Auto can absorb charge.
+8. Place a liquid tank, liquid pipes, and a **Heavy Fuel Oil Engine** / **MGO Engine**. Confirm fuel now transfers through liquid pipes.
+9. Connect coolant tanks/pipes and confirm medium/giant engines can receive coolant through the same liquid-pipe network.
+10. Open a **Crude Engine** and confirm the new fuel hopper slots accept logs, planks, or coal.
+11. Inspect the regenerated Step 13 prefabs and confirm the crude, HFO, and MGO engines now appear as large premium ship machinery with refreshed turbos, chain drive, and generator visuals.
 
 ---
 
