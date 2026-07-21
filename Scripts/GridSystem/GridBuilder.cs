@@ -195,6 +195,9 @@ namespace VoxelEngine.GridSystem
             }
 
             bool placingTurbo = IsTurbochargerItem(gbi, out var turboTier);
+            if (!placingTurbo && targetGrid != null && targetedBlock != null)
+                TryApplyMaritimePortSnap(gbi, targetGrid, targetedBlock, hit, ref gridPos, ref worldPos, ref rotation);
+
             if (placingTurbo)
             {
                 if (!TryFindTurboAttachment(targetGrid, gridPos, turboTier, out var engine))
@@ -799,6 +802,13 @@ namespace VoxelEngine.GridSystem
             return false;
         }
 
+        private enum MaritimePortSnapKind
+        {
+            None,
+            Exhaust,
+            ShaftDriven
+        }
+
         private bool IsTurbochargerItem(GridBlockItem item, out VoxelEngine.Maritime.TurboTier tier)
         {
             tier = VoxelEngine.Maritime.TurboTier.Small;
@@ -814,6 +824,87 @@ namespace VoxelEngine.GridSystem
             if (!id.Contains("turbocharger") && !display.Contains("turbocharger")) return false;
             tier = id.Contains("large") || display.Contains("large") ? VoxelEngine.Maritime.TurboTier.Large : VoxelEngine.Maritime.TurboTier.Small;
             return true;
+        }
+
+        private MaritimePortSnapKind GetMaritimePortSnapKind(GridBlockItem item)
+        {
+            if (item == null || item.blockPrefab == null) return MaritimePortSnapKind.None;
+            if (item.blockPrefab.GetComponentInChildren<VoxelEngine.Maritime.GridExhaustPipe>(true) != null)
+                return MaritimePortSnapKind.Exhaust;
+            if (item.blockPrefab.GetComponentInChildren<VoxelEngine.Maritime.GridDriveShaft>(true) != null
+                || item.blockPrefab.GetComponentInChildren<VoxelEngine.Maritime.GridRotationTransfer>(true) != null
+                || item.blockPrefab.GetComponentInChildren<VoxelEngine.Maritime.GridEncasedChainDrive>(true) != null
+                || item.blockPrefab.GetComponentInChildren<VoxelEngine.Maritime.GridGearbox>(true) != null
+                || item.blockPrefab.GetComponentInChildren<VoxelEngine.Maritime.GridMaritimeGenerator>(true) != null
+                || item.blockPrefab.GetComponentInChildren<VoxelEngine.Maritime.GridPropeller>(true) != null)
+                return MaritimePortSnapKind.ShaftDriven;
+            return MaritimePortSnapKind.None;
+        }
+
+        private void TryApplyMaritimePortSnap(GridBlockItem item, GridEntity grid, GridBlock hitBlock, RaycastHit hit,
+            ref Vector3Int gridPos, ref Vector3 worldPos, ref Quaternion rotation)
+        {
+            if (item == null || grid == null || hitBlock == null) return;
+            MaritimePortSnapKind kind = GetMaritimePortSnapKind(item);
+            if (kind == MaritimePortSnapKind.None) return;
+
+            string[] portNames = kind == MaritimePortSnapKind.Exhaust
+                ? new[] { "Port_ExhaustOutput", "Port_ExhaustOutput_L", "Port_ExhaustOutput_R" }
+                : new[] { "Port_ShaftOutput", "Port_ShaftInput", "Port_RotationInput", "Port_RotationOutput", "Port_RotationOutput_Straight", "Port_RotationOutput_Up", "Port_RotationOutput_Down", "Port_ShaftIO", "Propeller mount point 0", "Propeller mount point 1", "Rotation input point 0" };
+
+            if (!TryFindNearestNamedPort(hitBlock.transform, portNames, hit.point, out var port)) return;
+
+            Vector3 localPort = hitBlock.transform.InverseTransformPoint(port.position);
+            Vector3Int axis = SnapToCardinalAxis(localPort);
+            if (axis == Vector3Int.zero) return;
+
+            Vector3Int snappedCell = hitBlock.GridPos + axis;
+            if (!grid.CanPlace(snappedCell)) return;
+            if (!grid.HasNeighbor(snappedCell)) return;
+
+            gridPos = snappedCell;
+            worldPos = grid.GridToWorld(gridPos);
+            Vector3 worldAxis = grid.transform.TransformDirection(new Vector3(axis.x, axis.y, axis.z)).normalized;
+            Vector3 upAxis = Mathf.Abs(Vector3.Dot(worldAxis, grid.transform.up)) > 0.95f
+                ? grid.transform.forward
+                : grid.transform.up;
+            rotation = Quaternion.LookRotation(worldAxis, upAxis.normalized);
+        }
+
+        private bool TryFindNearestNamedPort(Transform root, string[] names, Vector3 hitPoint, out Transform port)
+        {
+            port = null;
+            if (root == null || names == null || names.Length == 0) return false;
+
+            float best = float.MaxValue;
+            foreach (Transform child in root.GetComponentsInChildren<Transform>(true))
+            {
+                if (child == null || child == root) continue;
+                string childName = child.name;
+                for (int i = 0; i < names.Length; i++)
+                {
+                    if (!childName.StartsWith(names[i], System.StringComparison.Ordinal)) continue;
+                    float d = (child.position - hitPoint).sqrMagnitude;
+                    if (d < best)
+                    {
+                        best = d;
+                        port = child;
+                    }
+                    break;
+                }
+            }
+            return port != null;
+        }
+
+        private static Vector3Int SnapToCardinalAxis(Vector3 localOffset)
+        {
+            if (localOffset.sqrMagnitude < 0.0001f) return Vector3Int.zero;
+            float ax = Mathf.Abs(localOffset.x);
+            float ay = Mathf.Abs(localOffset.y);
+            float az = Mathf.Abs(localOffset.z);
+            if (ax >= ay && ax >= az) return localOffset.x >= 0f ? Vector3Int.right : Vector3Int.left;
+            if (ay >= ax && ay >= az) return localOffset.y >= 0f ? Vector3Int.up : Vector3Int.down;
+            return localOffset.z >= 0f ? new Vector3Int(0, 0, 1) : new Vector3Int(0, 0, -1);
         }
 
         private bool TryFindTurboAttachment(GridEntity grid, Vector3Int gridPos,

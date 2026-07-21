@@ -44,6 +44,11 @@ namespace VoxelEngine.Maritime
         public float maxTorque = 8000f;
         [Tooltip("Maximum rotational speed in rev/min.")]
         public float maxRPM = 1500f;
+        [Tooltip("If enabled, the engine idles whenever it is fueled, cooled, enabled, and has exhaust. This keeps the machinery visibly alive and provides low RPM shaft output even before helm throttle increases.")]
+        public bool idleWhenEnabled = true;
+        [Range(0f, 0.35f)]
+        [Tooltip("Minimum throttle fraction used while idling.")]
+        public float idleThrottleFraction = 0.08f;
 
         [Header("Fuel")]
         public MaritimeFuelKind fuelKind = MaritimeFuelKind.Solid;
@@ -385,6 +390,9 @@ namespace VoxelEngine.Maritime
         public override void RefreshMaritimeNode(ref MechanicalNode node, float throttle)
         {
             float dt = Time.fixedDeltaTime;
+            float requestedThrottle = Enabled && idleWhenEnabled
+                ? Mathf.Max(throttle, idleThrottleFraction)
+                : throttle;
 
             // Exhaust check — need an exhaust pipe adjacent to vent gas.
             HasExhaust = HasAdjacentExhaust();
@@ -393,7 +401,7 @@ namespace VoxelEngine.Maritime
             // Gas builds up while running; vents through an adjacent exhaust pipe.
             if (IsRunning)
             {
-                ExhaustGas = Mathf.Min(exhaustGasCapacity, ExhaustGas + exhaustGasRate * throttle * dt);
+                ExhaustGas = Mathf.Min(exhaustGasCapacity, ExhaustGas + exhaustGasRate * requestedThrottle * dt);
             }
             if (HasExhaust)
             {
@@ -420,14 +428,14 @@ namespace VoxelEngine.Maritime
 
             // Consume coolant (if needed).
             if (needsCoolant && IsRunning)
-                CoolantBuffer = Mathf.Max(0f, CoolantBuffer - coolantConsumptionRate * throttle * dt);
+                CoolantBuffer = Mathf.Max(0f, CoolantBuffer - coolantConsumptionRate * requestedThrottle * dt);
 
             // Consume fuel from the internal buffer.
             // Marine Engine Coolant reduces fuel consumption by 33%.
             float fuelMultiplier = UsingPremiumCoolant ? 0.67f : 1f;
-            float consumption = fuelConsumptionRate * throttle * fuelMultiplier * dt;
+            float consumption = fuelConsumptionRate * requestedThrottle * fuelMultiplier * dt;
             FuelBuffer = Mathf.Max(0f, FuelBuffer - consumption);
-            CurrentUsage = fuelConsumptionRate * throttle * fuelMultiplier;
+            CurrentUsage = fuelConsumptionRate * requestedThrottle * fuelMultiplier;
 
             // Refill from grid storage.
             RefillBuffer(dt);
@@ -440,8 +448,8 @@ namespace VoxelEngine.Maritime
                 exhaustPenalty = 1f - overChoke * 0.7f; // lose up to 70% power near full
             }
 
-            IsRunning = FuelBuffer > 0.01f && throttle > 0.01f;
-            float effectiveFuel = IsRunning ? FuelFill01 * throttle * exhaustPenalty : 0f;
+            IsRunning = FuelBuffer > 0.01f && requestedThrottle > 0.01f;
+            float effectiveFuel = IsRunning ? FuelFill01 * requestedThrottle * exhaustPenalty : 0f;
 
             // Count connected turbos and apply stacked boost to the torque.
             CountTurbos();

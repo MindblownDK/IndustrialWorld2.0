@@ -1,9 +1,46 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.9.2-dev`
+**Current Version:** `6.9.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.9.3-dev] Maritime Idle Output + Port Snapping Pass
+
+**Type:** PATCH — drivetrain feedback, animation, and placement-snap refinement only (no save schema break, no balance reset, no API touch).
+
+**Fixed / Improved:**
+- Maritime engines now support a low **idle shaft output** when enabled, fueled, and properly exhausted, so they no longer appear permanently dead at zero helm throttle.
+  - This gives visible idle behavior, low RPM output, fuel usage, and piston/flywheel motion even before throttle increases.
+- Added missing visual drivetrain animation coverage:
+  - `GridEncasedChainDrive` chain rotor now animates.
+  - `GridRotationTransfer` bevel/transfer rotor now animates.
+  - Engine output couplings now animate.
+  - Maritime generator visible input coupling now animates.
+- Maritime generator mesh now has a clearer visible rotational input coupling.
+- Exhaust pipe visuals were rebuilt into a more directional exhaust piece with a connector side so snapping to engine exhaust positions reads better.
+- Added **maritime port-aware placement snapping** in `GridBuilder` for:
+  - Exhaust pipes
+  - Drive shafts
+  - Rotation transfers
+  - Encased chain drives
+  - Gearboxes
+  - Maritime generators
+  - Shaft-driven propellers
+- These parts now try to snap to the nearest believable matching maritime port on the targeted engine or drivetrain block instead of only using generic adjacent-cell placement.
+- Bumped `MaritimeMeshBuilder` again so Step 13 regenerates the updated couplings/exhaust visuals.
+
+**Manual Unity Steps:**
+1. Let Unity compile and confirm the runtime banner reports `6.9.3-dev`.
+2. Open `Tools > Voxel Engine > Voxel Engine Setup`.
+3. Run **13. Build Maritime Content (Hulls, Engines, Shafts, Propellers, Turbo, Helm + Maritime Research Tree)** once.
+4. Place a Crude, Heavy Fuel Oil, or MGO engine with fuel and exhaust attached.
+5. Confirm the engine now idles visibly instead of only reading as dead/idle forever.
+6. Confirm pistons, flywheel/output coupling, and connected drivetrain pieces visibly move.
+7. Place an exhaust pipe while aiming near an engine exhaust area and confirm it snaps to the correct adjacent position more naturally.
+8. Place shafts/generator/propeller/gearbox parts while aiming near visible shaft ports and confirm placement snaps to a matching drivetrain port more cleanly.
 
 ---
 

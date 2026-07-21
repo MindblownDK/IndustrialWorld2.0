@@ -39,11 +39,12 @@ namespace VoxelEngine.Maritime
         private Transform _spinPivot;       // propeller blades / wheel rotor
         private Transform _turboSpin;       // turbo compressor wheel
         private Transform[] _pistons;       // engine piston rods
-        private Transform _gearRotor;       // gearbox gear
+        private Transform _gearRotor;       // gearbox gear / transfer bevel
         private Transform _generatorRotor;  // generator coil rotor
         private Transform _helmWheel;       // helm steering wheel
         private Transform _crankshaft;      // engine crankshaft (visible pulley)
-        private Transform _shaftSpin;       // drive shaft visual spin
+        private Transform _shaftSpin;       // drive shaft / output coupler visual spin
+        private Transform _chainRotor;      // chain drive sprocket rotor
 
         private GridBlock _block;
 
@@ -62,6 +63,7 @@ namespace VoxelEngine.Maritime
             _helmWheel = FindDeep("HelmWheel");
             _crankshaft = FindDeep("CrankPulley");
             _shaftSpin = FindDeep("ShaftSpin");
+            _chainRotor = FindDeep("ChainRotor");
 
             // Pistons are named Piston_0, Piston_1, etc.
             var list = new System.Collections.Generic.List<Transform>();
@@ -119,6 +121,12 @@ namespace VoxelEngine.Maritime
                 case GridDriveShaft ds:
                     AnimateDriveShaft(ds, dt);
                     break;
+                case GridEncasedChainDrive cd:
+                    AnimateChainDrive(cd, dt);
+                    break;
+                case GridRotationTransfer rt:
+                    AnimateRotationTransfer(rt, dt);
+                    break;
             }
         }
 
@@ -147,8 +155,8 @@ namespace VoxelEngine.Maritime
 
         private void AnimateGenerator(GridMaritimeGenerator gen, float dt)
         {
-            if (_generatorRotor == null) return;
-            if (gen.CurrentRPM > 0.5f) SpinY(_generatorRotor, gen.CurrentRPM, dt);
+            if (_generatorRotor != null && gen.CurrentRPM > 0.5f) SpinY(_generatorRotor, gen.CurrentRPM, dt);
+            if (_shaftSpin != null && gen.CurrentRPM > 0.5f) SpinZ(_shaftSpin, gen.CurrentRPM, dt);
         }
 
         private void AnimateTurbo(GridTurbocharger tc, float dt)
@@ -182,6 +190,8 @@ namespace VoxelEngine.Maritime
             // Crankshaft pulley spins.
             if (_crankshaft != null)
                 SpinZ(_crankshaft, eng.CurrentRPM, dt);
+            if (_shaftSpin != null)
+                SpinZ(_shaftSpin, eng.CurrentRPM, dt);
         }
 
         private float[] _pistonBaseY;
@@ -190,6 +200,18 @@ namespace VoxelEngine.Maritime
         {
             if (_shaftSpin == null) return;
             if (ds.CurrentRPM > 0.5f) SpinZ(_shaftSpin, ds.CurrentRPM, dt);
+        }
+
+        private void AnimateChainDrive(GridEncasedChainDrive chainDrive, float dt)
+        {
+            if (_chainRotor != null && chainDrive.CurrentRPM > 0.5f) SpinX(_chainRotor, chainDrive.CurrentRPM, dt);
+            if (_shaftSpin != null && chainDrive.CurrentRPM > 0.5f) SpinZ(_shaftSpin, chainDrive.CurrentRPM, dt);
+        }
+
+        private void AnimateRotationTransfer(GridRotationTransfer transfer, float dt)
+        {
+            if (_gearRotor != null && transfer.CurrentRPM > 0.5f) SpinY(_gearRotor, transfer.CurrentRPM, dt);
+            if (_shaftSpin != null && transfer.CurrentRPM > 0.5f) SpinZ(_shaftSpin, transfer.CurrentRPM, dt);
         }
 
         private void AnimateHelm(GridHelm helm, float dt)
