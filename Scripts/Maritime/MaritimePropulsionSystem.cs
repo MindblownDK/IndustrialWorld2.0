@@ -157,6 +157,7 @@ namespace VoxelEngine.Maritime
                 GeneratorEfficiency = s.generatorEfficiency,
                 GlobalGearSpeedCap = s.globalGearSpeedCap,
                 WheelFlowTorque = s.wheelFlowTorque,
+                GeneratorSpeedBonus = s.generatorSpeedBonus,
             };
             JobHandle propHandle = propJob.Schedule(_chains.Length, 1);
 
@@ -316,6 +317,7 @@ namespace VoxelEngine.Maritime
             // Write chain nodes in chain order so each chain is a contiguous slice.
             var liveMap = new Dictionary<int, IMechanicalBlock>(); // oldIndex → block
             for (int i = 0; i < mechBlockByIndex.Count; i++) liveMap[i] = mechBlockByIndex[i];
+            var newIndexByOld = new Dictionary<int, int>(mechNodes.Count);
 
             foreach (var chain in chains.chainNodeOrder)
             {
@@ -324,10 +326,22 @@ namespace VoxelEngine.Maritime
                 n.ChainIndex = chain.chainId;
                 finalNodes[write] = n;
                 finalPositions[write] = mechPositions[chain.oldIndex];
+                newIndexByOld[chain.oldIndex] = write;
                 // Record live block for per-tick refresh at the NEW index.
                 if (liveMap.TryGetValue(chain.oldIndex, out var blk) && blk != null)
                     _liveMech.Add((write, blk));
                 write++;
+            }
+
+            // Second pass: convert BFS-parent OLD indices into the final NEW indices.
+            foreach (var chain in chains.chainNodeOrder)
+            {
+                int wi = newIndexByOld[chain.oldIndex];
+                var n = finalNodes[wi];
+                n.ParentIndex = chain.parentOldIndex >= 0 && newIndexByOld.TryGetValue(chain.parentOldIndex, out int p)
+                    ? p
+                    : -1;
+                finalNodes[wi] = n;
             }
 
             // Then hull nodes.
@@ -374,6 +388,7 @@ namespace VoxelEngine.Maritime
             {
                 Id = id,
                 Type = mech.NodeType,
+                ParentIndex = -1,
                 WorldPosition = worldPos,
                 WorldThrustAxis = math.normalizesafe(new float3(fwd.x, fwd.y, fwd.z), new float3(0, 0, 1)),
                 UpAxis = math.normalizesafe(new float3(up.x, up.y, up.z), new float3(0, 1, 0)),
@@ -385,6 +400,7 @@ namespace VoxelEngine.Maritime
                 MaxGearSpeed = settings.globalGearSpeedCap,
                 PropellerSize = 1f,
                 ThrustCoefficient = settings.thrustCoefficient,
+                OutputMultiplier = 1f,
             };
         }
 
@@ -394,6 +410,7 @@ namespace VoxelEngine.Maritime
             {
                 Id = id,
                 Type = MechanicalNodeType.Hull,
+                ParentIndex = -1,
                 WorldPosition = worldPos,
                 WorldThrustAxis = new float3(0, 0, 1),
                 UpAxis = new float3(0, 1, 0),
@@ -401,6 +418,7 @@ namespace VoxelEngine.Maritime
                 Volume = BlockVolume(block),
                 BlockHeight = _cellSize,
                 BuoyancyFactor = DefaultBuoyancyFactor(block),
+                OutputMultiplier = 1f,
             };
         }
 
@@ -436,7 +454,7 @@ namespace VoxelEngine.Maritime
         private struct ChainBuildResult
         {
             public List<PropulsionChain> chains;
-            public List<(int oldIndex, int chainId)> chainNodeOrder;
+            public List<(int oldIndex, int chainId, int parentOldIndex)> chainNodeOrder;
         }
 
         private ChainBuildResult BuildChains(List<MechanicalNode> mechNodes,
@@ -445,7 +463,7 @@ namespace VoxelEngine.Maritime
             int n = mechNodes.Count;
             var visited = new bool[n];
             var chains = new List<PropulsionChain>(8);
-            var order = new List<(int, int)>(n);
+            var order = new List<(int oldIndex, int chainId, int parentOldIndex)>(n);
 
             int chainId = 0;
             for (int start = 0; start < n; start++)
@@ -487,23 +505,30 @@ namespace VoxelEngine.Maritime
                 }
 
                 // Order the component source-first (BFS from the source if we have one).
-                List<int> ordered;
+                // Each node also records its BFS parent so the propagation job can
+                // evaluate the drivetrain as a tree (fixes branch splits + makes a
+                // gearbox work from ANY input side).
+                List<(int idx, int parent)> ordered;
                 if (source >= 0)
                 {
                     ordered = BfsOrdered(source, mechPositions, posToIndex, n);
                 }
                 else
                 {
-                    ordered = comp;
+                    ordered = new List<(int, int)>(comp.Count);
+                    foreach (int compIdx in comp) ordered.Add((compIdx, -1));
                 }
 
                 int sliceStart = order.Count;
-                foreach (int idx in ordered)
-                    order.Add((idx, chainId));
+                foreach (var entry in ordered)
+                    order.Add((entry.idx, chainId, entry.parent));
 
                 // SourceIndex is the ABSOLUTE index into the final node array
                 // (slice start + the source's position within the ordered slice).
-                int sourceOffset = source >= 0 ? ordered.IndexOf(source) : -1;
+                int sourceOffset = -1;
+                if (source >= 0)
+                    for (int oi = 0; oi < ordered.Count; oi++)
+                        if (ordered[oi].idx == source) { sourceOffset = oi; break; }
                 chains.Add(new PropulsionChain
                 {
                     StartIndex = sliceStart,
@@ -516,22 +541,22 @@ namespace VoxelEngine.Maritime
             return new ChainBuildResult { chains = chains, chainNodeOrder = order };
         }
 
-        private List<int> BfsOrdered(int source, List<Vector3Int> positions,
+        private List<(int idx, int parent)> BfsOrdered(int source, List<Vector3Int> positions,
             Dictionary<Vector3Int, int> posToIndex, int total)
         {
             var visited = new bool[total];
-            var result = new List<int>(16);
-            var queue = new Queue<int>(16);
-            queue.Enqueue(source);
+            var result = new List<(int, int)>(16);
+            var queue = new Queue<(int idx, int parent)>(16);
+            queue.Enqueue((source, -1));
             visited[source] = true;
             while (queue.Count > 0)
             {
-                int cur = queue.Dequeue();
-                result.Add(cur);
+                var (cur, parent) = queue.Dequeue();
+                result.Add((cur, parent));
                 Vector3Int p = positions[cur];
                 foreach (var off in Neighbours6)
                     if (posToIndex.TryGetValue(p + off, out int nb) && !visited[nb])
-                    { visited[nb] = true; queue.Enqueue(nb); }
+                    { visited[nb] = true; queue.Enqueue((nb, cur)); }
             }
             return result;
         }

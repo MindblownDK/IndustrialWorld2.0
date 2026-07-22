@@ -11,7 +11,11 @@
 //  ║   Animations driven:                                               ║
 //  ║     • Propeller blades spin at CurrentRPM                          ║
 //  ║     • Turbocharger compressor spins at TurboRPM                    ║
-//  ║     • Engine pistons bob at CurrentRPM                             ║
+//  ║     • Engine pistons pump at their firing order, slid along the    ║
+//  ║       cached bore axis so V-bank tilt animates correctly           ║
+//  ║     • Engine crankshaft + output shaft share one deterministic     ║
+//  ║       crank angle (shaft always linked to crankshaft)              ║
+//  ║     • MGO sea-water pump pulley belt-driven off the crank          ║
 //  ║     • Waterwheel paddles rotate at CurrentRPM                      ║
 //  ║     • Gearbox gear rotates at OutputRPM                            ║
 //  ║     • Generator rotor spins at CurrentRPM                          ║
@@ -28,23 +32,48 @@ namespace VoxelEngine.Maritime
     /// Lightweight per-block visual driver. Attached automatically by the mesh
     /// builder to any block with animatable parts. Finds named pivot children
     /// and rotates them based on the block's live state.
-    /// 
+    ///
     /// NOTE: No [RequireComponent] — that blocks StripMissingScripts from
     /// cleaning broken script refs on prefabs (Unity can't remove a component
     /// that another component depends on).
     /// </summary>
     public class MaritimeAnimator : MonoBehaviour
     {
+        // ── Engine timing tables ─────────────────────────────────────
+        // Firing-order crank phases (degrees of crank rotation, 720° cycle)
+        // indexed by cylinder number. Piston POSITION is a pure function of
+        // crank angle, so these phases double as the crank-pin offsets.
+        /// <summary>Inline-4, firing order 1-3-4-2.</summary>
+        private static readonly float[] Inline4FiringPhases = { 0f, 540f, 180f, 360f };
+        /// <summary>V8 cross-plane, firing order 1-8-4-3-6-5-7-2.</summary>
+        private static readonly float[] V8FiringPhases = { 0f, 630f, 180f, 270f, 450f, 360f, 540f, 90f };
+        /// <summary>V12 60° even-fire, firing order 1-12-5-8-3-10-6-7-2-11-4-9.</summary>
+        private static readonly float[] V12FiringPhases = { 0f, 480f, 240f, 600f, 120f, 360f, 420f, 180f, 660f, 300f, 540f, 60f };
+
         // Named pivots created by MaritimeMeshBuilder. Null if not present.
         private Transform _spinPivot;       // propeller blades / wheel rotor
         private Transform _turboSpin;       // turbo compressor wheel
         private Transform[] _pistons;       // engine piston rods
+        private Vector3[] _pistonBase;      // piston local rest positions
+        private Vector3[] _pistonAxis;      // piston bore axis in parent space (handles V-tilt)
         private Transform _gearRotor;       // gearbox gear / transfer bevel
         private Transform _generatorRotor;  // generator coil rotor
         private Transform _helmWheel;       // helm steering wheel
         private Transform _crankshaft;      // engine crankshaft (visible pulley)
         private Transform _shaftSpin;       // drive shaft / output coupler visual spin
         private Transform _chainRotor;      // chain drive sprocket rotor
+        private Transform _seaPump;         // MGO seawater pump pulley (accessory belt)
+
+        private Quaternion _crankBaseRot = Quaternion.identity;
+        private Quaternion _shaftBaseRot = Quaternion.identity;
+        private Quaternion _pumpBaseRot = Quaternion.identity;
+
+        // Shared deterministic crank angle. One accumulator drives the
+        // crankshaft, the output shaft and every piston so they never drift
+        // apart — the output shaft is ALWAYS linked to the crankshaft.
+        private float _crankAngleDeg;
+
+        private float _currentHelmAngle, _targetHelmAngle;
 
         private GridBlock _block;
 
@@ -64,8 +93,15 @@ namespace VoxelEngine.Maritime
             _crankshaft = FindDeep("CrankPulley");
             _shaftSpin = FindDeep("ShaftSpin");
             _chainRotor = FindDeep("ChainRotor");
+            _seaPump = FindDeep("SeaPump");
 
-            // Pistons are named Piston_0, Piston_1, etc.
+            if (_crankshaft != null) _crankBaseRot = _crankshaft.localRotation;
+            if (_shaftSpin != null) _shaftBaseRot = _shaftSpin.localRotation;
+            if (_seaPump != null) _pumpBaseRot = _seaPump.localRotation;
+
+            // Pistons are named Piston_0, Piston_1, etc. Cache the rest pose and
+            // the bore travel axis in PARENT space (piston.up through the parent's
+            // inverse) so tilted V-bank pistons slide along their own bore.
             var list = new System.Collections.Generic.List<Transform>();
             for (int i = 0; i < 12; i++)
             {
@@ -74,9 +110,16 @@ namespace VoxelEngine.Maritime
                 list.Add(p);
             }
             _pistons = list.ToArray();
-            _pistonBaseY = new float[_pistons.Length];
+            _pistonBase = new Vector3[_pistons.Length];
+            _pistonAxis = new Vector3[_pistons.Length];
             for (int i = 0; i < _pistons.Length; i++)
-                _pistonBaseY[i] = _pistons[i].localPosition.y;
+            {
+                var p = _pistons[i];
+                _pistonBase[i] = p.localPosition;
+                _pistonAxis[i] = p.parent != null
+                    ? p.parent.InverseTransformDirection(p.up)
+                    : Vector3.up;
+            }
         }
 
         private Transform FindDeep(string name)
@@ -170,31 +213,50 @@ namespace VoxelEngine.Maritime
             // Only animate when the engine is actually running (fuel + enabled + exhaust).
             if (!eng.IsRunning) return;
 
-            // Pistons bob up/down at engine RPM (firing order simulated via phase offset).
+            // engine_speed (0..1) is the single normalized driver: it controls the
+            // crankshaft RPM and the piston playback rate simultaneously.
+            float engineSpeed = eng.EngineSpeed01;
+            float visualRpm = engineSpeed * eng.maxRPM * eng.ModuleSpeedCapMultiplier;
+            if (visualRpm <= 0.5f) return;
+
+            // Advance the shared crank angle — one accumulator for crank, shaft,
+            // pump and pistons so the whole drivetrain visual stays in lock-step.
+            _crankAngleDeg = (_crankAngleDeg + visualRpm * 6f * dt) % 720f;
+
+            // Crankshaft + output shaft rotate from the SAME deterministic angle.
+            if (_crankshaft != null)
+                _crankshaft.localRotation = _crankBaseRot * Quaternion.Euler(0f, 0f, -_crankAngleDeg);
+            if (_shaftSpin != null)
+                _shaftSpin.localRotation = _shaftBaseRot * Quaternion.Euler(0f, 0f, -_crankAngleDeg);
+            // MGO seawater pump pulley — belt-driven off the front accessory drive.
+            if (_seaPump != null)
+                _seaPump.localRotation = _pumpBaseRot * Quaternion.Euler(0f, 0f, -_crankAngleDeg * 1.6f);
+
+            // Pistons pump at their firing-order phase, sliding along the cached
+            // bore axis so V-bank tilt animates correctly.
             if (_pistons != null && _pistons.Length > 0)
             {
-                float cycleRPM = eng.CurrentRPM;
-                float phase = (Time.time * cycleRPM * 6f) % 360f; // 6° per RPM·sec
+                float[] phases = FiringPhasesFor(_pistons.Length);
                 for (int i = 0; i < _pistons.Length; i++)
                 {
-                    float strokeOffset = i * (360f / _pistons.Length); // firing order spread
-                    float angle = (phase + strokeOffset) * Mathf.Deg2Rad;
-                    float bob = Mathf.Sin(angle) * 0.015f; // ±1.5cm travel
-                    var p = _pistons[i];
-                    var pos = p.localPosition;
-                    pos.y = _pistonBaseY[i] + bob;
-                    p.localPosition = pos;
+                    float phase = phases != null && i < phases.Length
+                        ? phases[i]
+                        : i * (720f / Mathf.Max(1, _pistons.Length));
+                    // Slider-crank approximation: position follows cos(crank+phase).
+                    float bob = Mathf.Cos((_crankAngleDeg + phase) * Mathf.Deg2Rad) * 0.018f;
+                    _pistons[i].localPosition = _pistonBase[i] + _pistonAxis[i] * bob;
                 }
             }
-
-            // Crankshaft pulley spins.
-            if (_crankshaft != null)
-                SpinZ(_crankshaft, eng.CurrentRPM, dt);
-            if (_shaftSpin != null)
-                SpinZ(_shaftSpin, eng.CurrentRPM, dt);
         }
 
-        private float[] _pistonBaseY;
+        /// <summary>Firing-order crank phases for the discovered piston count.</summary>
+        private static float[] FiringPhasesFor(int pistonCount) => pistonCount switch
+        {
+            4 => Inline4FiringPhases,   // Crude Inline-4  (1-3-4-2)
+            8 => V8FiringPhases,        // HFO V8          (1-8-4-3-6-5-7-2)
+            12 => V12FiringPhases,      // MGO V12         (1-12-5-8-3-10-6-7-2-11-4-9)
+            _ => null,
+        };
 
         private void AnimateDriveShaft(GridDriveShaft ds, float dt)
         {
@@ -225,8 +287,6 @@ namespace VoxelEngine.Maritime
             _currentHelmAngle = Mathf.LerpAngle(_currentHelmAngle, _targetHelmAngle, dt * 6f);
             _helmWheel.localRotation = Quaternion.Euler(0, 0, _currentHelmAngle);
         }
-
-        private float _currentHelmAngle, _targetHelmAngle;
 
         // ── Spin helpers (degrees per second from RPM) ─────────────────
         // RPM → degrees/sec = RPM * 6 (since 1 rev = 360°, 1 min = 60s → 6°/s per RPM)

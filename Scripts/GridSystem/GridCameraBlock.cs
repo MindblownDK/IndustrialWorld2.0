@@ -26,7 +26,7 @@ namespace VoxelEngine.GridSystem
         public Color onlineIdleColor = new Color(1.00f, 0.74f, 0.18f);
         public Color offlineColor = new Color(0.95f, 0.12f, 0.08f);
 
-        private readonly Dictionary<int, int> _feedConsumers = new();
+        private readonly Dictionary<EntityId, int> _feedConsumers = new();
         private Camera _captureCamera;
         private RenderTexture _renderTexture;
         private Renderer _statusLedRenderer;
@@ -100,7 +100,7 @@ namespace VoxelEngine.GridSystem
         public void RegisterFeedConsumer(GridScreenBlock screen)
         {
             if (screen == null) return;
-            _feedConsumers[screen.GetInstanceID()] = Time.frameCount;
+            _feedConsumers[screen.GetEntityId()] = Time.frameCount;
         }
 
         private void InitializeCamera()
@@ -110,7 +110,7 @@ namespace VoxelEngine.GridSystem
             int resolution = Mathf.Clamp(feedResolution, 128, 2048);
             _renderTexture = new RenderTexture(resolution, resolution, 24, RenderTextureFormat.ARGB32)
             {
-                name = "CameraBlock_Feed_" + GetInstanceID(),
+                name = "CameraBlock_Feed_" + GetEntityId(),
                 autoGenerateMips = false,
                 useMipMap = false,
                 wrapMode = TextureWrapMode.Clamp,
@@ -118,7 +118,7 @@ namespace VoxelEngine.GridSystem
             };
             _renderTexture.Create();
 
-            var camGo = new GameObject("CameraBlock_FeedCamera_" + GetInstanceID());
+            var camGo = new GameObject("CameraBlock_FeedCamera_" + GetEntityId());
             camGo.transform.SetParent(transform, false);
             camGo.transform.localPosition = cameraOffset;
             Quaternion localRotation = Quaternion.Euler(cameraRotation);
@@ -198,7 +198,7 @@ namespace VoxelEngine.GridSystem
                 _feedConsumers.Remove(s_expiredConsumerIds[i]);
         }
 
-        private static readonly List<int> s_expiredConsumerIds = new();
+        private static readonly List<EntityId> s_expiredConsumerIds = new();
 
         private void CacheStatusLed()
         {

@@ -4,6 +4,47 @@ Branch: **Dev** · Semantic Versioning 2.0.0
 
 ---
 
+## [2.22.1] — Animator Compile Fix (Rotate Arity)
+
+**Type:** PATCH — compile repair only; no behaviour change (game version 6.10.1-dev).
+
+### Fixed
+- `MaritimeAnimator.SpinY` passed 5 arguments to `Transform.Rotate` (maximum is 4) — compile error CS1501 resolved; piston/crank animations build again.
+- Related cleanup shipped in the same game patch: all `Object.GetInstanceID()` call sites migrated to Unity 6.4's `GetEntityId()` (BuildSystem, GridCameraBlock, GridScreenBlock, GridScreenConfigUI, WindTurbineUI, WorldStatePersistence).
+
+### Manual Unity steps
+1. Let Unity recompile — expect 0 errors, 0 warnings.
+2. Place an engine and confirm pistons, crank, output shaft (and V12 SeaPump) animate.
+
+---
+
+## [2.22.0] — Upgrade Modules, Heat Model, 20-Speed Gearbox & v16 Engine Models
+
+**Type:** MINOR — save-compatible feature update (game version 6.10.0-dev).
+
+### Added
+- **Engine/generator upgrade modules** (`EngineModuleItem` + Module Slots): High-Flow Turbocharger, Efficiency Tuning Chip (mandatory coolant requirement), Overclocked Fuel Injectors (dirty exhaust, +50% heat), Super-Cooler Radiator Jacket (+200% dissipation, 2 L/s fresh/sea water per jacket).
+- **Live heat model** on engines and generators: knocking ≥ 90 °C (−25% fuel efficiency), critical failure ≥ 100 °C (latched shutdown until < 80 °C), radiator water feed from grid tanks.
+- **Generator speed bonus**: up to +50% output near rated RPM (`MaritimeSettings.generatorSpeedBonus`).
+- **20-speed bidirectional gearbox** with live gear application; the propagation job now walks a BFS parent map so either face can be the physical input and branch splits behave correctly.
+- **IGridDataProvider on engines and generators** so grid screens can display their live data (RPM, torque/power, fuel ETA, heat, buffers).
+- **MaritimeMeshBuilder v16** — three rebuilt engine models: Crude Inline-4 (open-air pistons, exposed valvetrain, open-frame crank), HFO V8 (glass inspection windows, valley plenum, steam-traced filters), MGO V12 (quartz viewports, gantry walkways, ladders, belt-driven SeaPump, splined PTO). Deterministic crank/shaft/piston animation with real firing orders; tier-styled exhaust smoke (pulsating puffs / thick column / clean fast stream) with module and critical-heat effects.
+- Research tier 5 **Maritime Performance Tuning** + four module recipes (Assembler).
+
+### Fixed
+- Gearbox ratio changes now apply live (was stale until graph rebuild); Input RPM readout no longer inverted; legacy 2000 RPM cap auto-migrates to 10000.
+- Crude engine fuel readout shows a true ETA at the current draw rate instead of misleading "buffer seconds".
+- Shift-click quick transfer routes fuel items to the engine hopper and modules to module sockets.
+- Maritime blocks and grid screens are now breakable by hand/tool and grind correctly: item return uses `SourceItem` with a normalized-name fallback; precision-attachment removal no longer silently fails.
+- Grid batteries charge/discharge fair-share across all packs instead of one at a time.
+
+### Manual Unity steps
+1. Delete the old engine prefabs `Engine_Small/Medium/Giant_Large.prefab` under `Assets/VoxelEngine/Maritime/Prefabs/`.
+2. Run **Tools > Voxel Engine > Voxel Engine Setup > Step 13** — engine prefabs are rebuilt (v16), module items/recipes/research are created. Non-destructive; repeat-safe.
+3. Old saves load as-is: module sockets start empty; legacy gearboxes migrate on their first tick.
+
+---
+
 ## [2.21.1] — Item-Port Overlay Guard, Cargo Scrolling & Dry-Land Buoyancy Fix
 
 **Type:** PATCH — UI hardening, recipe access, and buoyancy correction; save-compatible.

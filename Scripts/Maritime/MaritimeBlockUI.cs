@@ -9,10 +9,13 @@
 //  placed block AND the ship master terminal.
 //
 //  Panels built:
-//    • GridMaritimeEngine      — fuel tank / burn rate, exhaust gas, usage,
-//                                torque, speed, stress, OVERSTRESSED.
-//    • GridMaritimeGenerator   — power production + internal battery buffer.
-//    • GridGearbox             — torque/speed in-out, gear ratio, overstress.
+//    • GridMaritimeEngine      — fuel ETA at current burn rate, fuel tank /
+//                                hopper, exhaust gas, heat (knocking/critical),
+//                                upgrade module sockets, torque/speed/stress.
+//    • GridMaritimeGenerator   — power + shaft-speed bonus, heat/coolant,
+//                                upgrade module sockets, internal buffer.
+//    • GridGearbox             — torque/speed in-out, 20-speed live gear
+//                                selection, bidirectional flow, overstress.
 //    • GridBilgePump           — draining status + radius.
 //    • GridPropeller           — speed, torque, thrust (terminal only).
 //    • GridElectricalPropeller — speed, thrust, power usage (terminal only).
@@ -40,7 +43,7 @@ namespace VoxelEngine.Maritime
             return block switch
             {
                 GridMaritimeEngine eng      => EnginePanel(eng, slot),
-                GridMaritimeGenerator gen   => GeneratorPanel(gen),
+                GridMaritimeGenerator gen   => GeneratorPanel(gen, slot),
                 GridGearbox gb              => GearboxPanel(gb),
                 GridBilgePump bp            => BilgePumpPanel(bp),
                 GridMarineWaterPump mwp     => MarineWaterPumpPanel(mwp),
@@ -66,7 +69,9 @@ namespace VoxelEngine.Maritime
             // ── Status determination ──────────────────────────────────
             string status;
             Color statusColor;
-            if (eng.IsOverstressed)      { status = "⚠ OVERSTRESSED"; statusColor = T.AccentRed; }
+            if (eng.CriticalFailure)      { status = "⛔ CRITICAL HEAT"; statusColor = T.AccentRed; }
+            else if (eng.IsOverheating)   { status = "⚠ OVERHEATING"; statusColor = T.AccentAmber; }
+            else if (eng.IsOverstressed)  { status = "⚠ OVERSTRESSED"; statusColor = T.AccentRed; }
             else if (!eng.HasExhaust)    { status = "⚠ NO EXHAUST";  statusColor = T.AccentRed; }
             else if (eng.ExhaustFill01 >= 0.99f) { status = "⛔ CHOKED"; statusColor = T.AccentRed; }
             else if (eng.IsChoked)       { status = "⚠ BACK-PRESSURE"; statusColor = T.AccentAmber; }
@@ -105,6 +110,8 @@ namespace VoxelEngine.Maritime
                         $"{eng.CoolantBuffer:0} / {eng.coolantCapacity:0} L", 70, 120));
                 }
                 p.Add(gaugeRow);
+                // Fuel ETA at the CURRENT burn rate — throttles correctly.
+                p.Add(T.Muted($"≈ {GridMaritimeEngine.FormatDuration(eng.EstimatedFuelSecondsRemaining)} of fuel at current burn rate"));
             }
             else
             {
@@ -112,7 +119,7 @@ namespace VoxelEngine.Maritime
                 p.Add(GridUIHelpers.SectionTitle("Solid Fuel Buffer"));
                 var (burnBar, _) = T.ProgressBar(eng.FuelFill01, T.AccentAmber, 14, true);
                 p.Add(burnBar);
-                p.Add(T.Muted($"Wood Logs / Planks / Coal · {eng.FuelBuffer:0}s remaining"));
+                p.Add(T.Muted($"Wood Logs / Planks / Coal · ≈ {GridMaritimeEngine.FormatDuration(eng.EstimatedFuelSecondsRemaining)} at current burn rate"));
 
                 if (eng.SolidFuelInput != null && slot != null)
                 {
@@ -162,6 +169,66 @@ namespace VoxelEngine.Maritime
             var (stressBar, _) = T.ProgressBar(eng.Stress01, stressColor, 6, false);
             p.Add(stressBar);
 
+            // ── Heat ──────────────────────────────────────────────────
+            p.Add(T.Spacer(6));
+            p.Add(GridUIHelpers.SectionTitle("Thermal"));
+            Color heatColor = eng.CriticalFailure ? T.AccentRed
+                            : eng.TemperatureC >= GridMaritimeEngine.KnockingTemperatureC ? T.AccentAmber
+                            : T.AccentGreen;
+            p.Add(T.StatRow("🌡", "Temperature",
+                $"{eng.TemperatureC:0}°C  ·  knocking ≥ {GridMaritimeEngine.KnockingTemperatureC:0}°  ·  critical ≥ {GridMaritimeEngine.CriticalTemperatureC:0}°",
+                heatColor));
+            var (heatBar, _) = T.ProgressBar(eng.Heat01, heatColor, 6, false);
+            p.Add(heatBar);
+
+            if (eng.CriticalFailure)
+            {
+                p.Add(T.Spacer(4));
+                var crit = T.StatusPill("⛔ CRITICAL HEAT — SHAFT STOPPED · COOL BELOW 80°C TO RESTART", T.AccentRed);
+                p.Add(crit.pill);
+            }
+            else if (eng.IsOverheating)
+            {
+                p.Add(T.Spacer(4));
+                var knock = T.StatusPill("⚠ KNOCKING — FUEL EFFICIENCY −25%", T.AccentAmber);
+                p.Add(knock.pill);
+            }
+
+            // ── Upgrade modules ───────────────────────────────────────
+            var moduleSlots = eng.GetModuleSlots();
+            if (moduleSlots != null && slot != null)
+            {
+                p.Add(T.Spacer(6));
+                p.Add(GridUIHelpers.SectionTitle($"Upgrade Modules ({eng.MaxModuleSlots} slots)"));
+                p.Add(GridUIHelpers.WeightHeader(MassUtil.ContainerMass(moduleSlots), "Modules"));
+                var moduleGrid = T.SlotGrid(eng.MaxModuleSlots);
+                for (int i = 0; i < moduleSlots.Size; i++)
+                    moduleGrid.Add(slot(moduleSlots, i, moduleSlots.GetSlot(i), false, true));
+                p.Add(moduleGrid);
+
+                bool anyModule = eng.TurboModuleCount + eng.EfficiencyChipCount
+                               + eng.InjectorModuleCount + eng.RadiatorModuleCount > 0;
+                if (anyModule)
+                {
+                    p.Add(T.StatRow("🧩", "Module Bonus",
+                        $"Output {eng.ModuleOutputMultiplier:0.##}× · Speed cap {eng.ModuleSpeedCapMultiplier:0.##}× · Fuel use {eng.ModuleFuelUseMultiplier:0.##}×",
+                        T.AccentPurple));
+                }
+                else
+                {
+                    p.Add(T.Muted("Socket upgrade modules: High-Flow Turbocharger, Efficiency Tuning Chip, " +
+                                  "Overclocked Fuel Injectors, Super-Cooler Radiator Jacket."));
+                }
+
+                if (eng.RadiatorModuleCount > 0)
+                {
+                    Color radColor = eng.RadiatorCoolingActive ? T.AccentCyan : T.AccentRed;
+                    p.Add(T.StatRow("💧", "Radiator Water", eng.RadiatorCoolingActive ? "FLOWING" : "DRY — DRAWING", radColor));
+                    var (radBar, _) = T.ProgressBar(eng.RadiatorWaterFill01, radColor, 5, false);
+                    p.Add(radBar);
+                }
+            }
+
             p.Add(T.Spacer(6));
             p.Add(T.Muted("Requires an adjacent Exhaust Pipe to vent gas. " +
                           "Without one the engine chokes and produces zero torque."));
@@ -172,12 +239,15 @@ namespace VoxelEngine.Maritime
         // ════════════════════════════════════════════════════════════════
         //  GENERATOR — power production + internal battery buffer
         // ════════════════════════════════════════════════════════════════
-        private static VisualElement GeneratorPanel(GridMaritimeGenerator gen)
+        private static VisualElement GeneratorPanel(GridMaritimeGenerator gen, MachineUIs.SlotBuilder slot)
         {
             var p = T.MachinePanel();
 
-            string status = gen.GeneratedWatts > 1f ? "● GENERATING" : "○ IDLE";
-            Color statusColor = gen.GeneratedWatts > 1f ? T.AccentGreen : T.AccentDim;
+            string status;
+            Color statusColor;
+            if (gen.CriticalFailure)         { status = "⛔ CRITICAL HEAT"; statusColor = T.AccentRed; }
+            else if (gen.GeneratedWatts > 1f) { status = "● GENERATING";   statusColor = T.AccentGreen; }
+            else                              { status = "○ IDLE";         statusColor = T.AccentDim; }
 
             var (hdr, _, _, _) = T.HeaderRow("🔌 Maritime Generator", status, statusColor);
             p.Add(hdr);
@@ -186,26 +256,78 @@ namespace VoxelEngine.Maritime
             // ── Power production ──────────────────────────────────────
             p.Add(GridUIHelpers.SectionTitle("Power Production"));
             p.Add(T.StatRow("⚡", "Output", PowerFormat.Watts(gen.GeneratedWatts), T.AccentGreen));
-            p.Add(T.StatRow("📊", "Rated Max", PowerFormat.Watts(gen.maxWattOutput), T.AccentCyan));
+
+            string rated = PowerFormat.Watts(gen.EffectiveMaxWattOutput);
+            if (gen.ModuleOutputMultiplier > 1.001f)
+                rated += $"  ({PowerFormat.Watts(gen.maxWattOutput)} × {gen.ModuleOutputMultiplier:0.##} modules)";
+            p.Add(T.StatRow("📊", "Rated Max", rated, T.AccentCyan));
             p.Add(T.StatRow("⚙", "Shaft Speed", $"{gen.CurrentRPM:0} RPM", T.AccentTeal));
 
+            // Speed bonus: the faster the shaft spins (relative to rated speed),
+            // the more power the generator squeezes out — up to +50%.
+            p.Add(T.StatRow("🚀", "Speed Bonus",
+                $"×{gen.CurrentSpeedBonusMultiplier:0.00} output (max ×{1f + gen.maxSpeedBonus:0.00})",
+                gen.CurrentSpeedBonusMultiplier > 1.01f ? T.AccentGold : T.TextSecondary));
+
             // Production bar.
-            float prodRatio = gen.maxWattOutput > 0f ? Mathf.Clamp01(gen.GeneratedWatts / gen.maxWattOutput) : 0f;
+            float prodRatio = gen.EffectiveMaxWattOutput > 0f ? Mathf.Clamp01(gen.GeneratedWatts / gen.EffectiveMaxWattOutput) : 0f;
             var (prodBar, _) = T.ProgressBar(prodRatio, T.AccentGreen, 8, true);
             p.Add(prodBar);
 
             p.Add(T.Spacer(8));
 
-            // ── Internal battery buffer ───────────────────────────────
-            p.Add(GridUIHelpers.SectionTitle("Internal Battery Buffer"));
+            // ── Temperature + coolant ─────────────────────────────────
+            p.Add(GridUIHelpers.SectionTitle("Thermal"));
+            Color heatColor = gen.CriticalFailure ? T.AccentRed
+                            : gen.TemperatureC >= GridMaritimeEngine.KnockingTemperatureC ? T.AccentAmber
+                            : T.AccentGreen;
+            p.Add(T.StatRow("🌡", "Temperature", $"{gen.TemperatureC:0}°C", heatColor));
+            var (heatBar, _) = T.ProgressBar(gen.Heat01, heatColor, 6, false);
+            p.Add(heatBar);
+            if (gen.CriticalFailure)
+            {
+                p.Add(T.Spacer(4));
+                var crit = T.StatusPill("⛔ CRITICAL HEAT — OUTPUT CUT · COOL BELOW 80°C TO RECOVER", T.AccentRed);
+                p.Add(crit.pill);
+            }
+
             var gaugeRow = Row();
-            gaugeRow.style.justifyContent = Justify.Center;
+            gaugeRow.style.justifyContent = Justify.SpaceAround;
             Color batColor = gen.BufferFill01 > 0.2f ? T.AccentGreen : T.AccentRed;
             gaugeRow.Add(T.TankGauge("BUFFER", gen.BufferFill01, batColor,
                 $"{gen.BufferCharge:0} / {gen.bufferCapacityWh:0} Wh", 70, 120));
+            gaugeRow.Add(T.TankGauge("COOLANT", gen.CoolantFill01, new Color(0.25f, 0.55f, 0.95f),
+                $"{gen.CoolantBuffer:0} / {gen.coolantCapacity:0} L", 70, 120));
             p.Add(gaugeRow);
             p.Add(T.Muted("Smooths output — the generator charges this buffer from " +
                           "shaft power, then feeds steady electricity to the grid."));
+
+            // ── Upgrade modules ───────────────────────────────────────
+            var moduleSlots = gen.GetModuleSlots();
+            if (moduleSlots != null && slot != null)
+            {
+                p.Add(T.Spacer(6));
+                p.Add(GridUIHelpers.SectionTitle($"Upgrade Modules ({GridMaritimeGenerator.MaxModuleSlots} slots)"));
+                p.Add(GridUIHelpers.WeightHeader(MassUtil.ContainerMass(moduleSlots), "Modules"));
+                var moduleGrid = T.SlotGrid(GridMaritimeGenerator.MaxModuleSlots);
+                for (int i = 0; i < moduleSlots.Size; i++)
+                    moduleGrid.Add(slot(moduleSlots, i, moduleSlots.GetSlot(i), false, true));
+                p.Add(moduleGrid);
+
+                if (gen.EfficiencyChipCount > 0)
+                    p.Add(T.StatRow("🧩", "Efficiency Chip", $"Output ×{gen.ModuleOutputMultiplier:0.##} · requires active coolant flow", T.AccentPurple));
+                else
+                    p.Add(T.Muted("Socket an Efficiency Tuning Chip (+40% max output, requires coolant) " +
+                                  "or a Super-Cooler Radiator Jacket (+200% heat dissipation, draws water)."));
+
+                if (gen.RadiatorModuleCount > 0)
+                {
+                    Color radColor = gen.RadiatorCoolingActive ? T.AccentCyan : T.AccentRed;
+                    p.Add(T.StatRow("💧", "Radiator Water", gen.RadiatorCoolingActive ? "FLOWING" : "DRY — DRAWING", radColor));
+                    var (radBar, _) = T.ProgressBar(gen.RadiatorWaterFill01, radColor, 5, false);
+                    p.Add(radBar);
+                }
+            }
 
             return p;
         }
@@ -228,7 +350,7 @@ namespace VoxelEngine.Maritime
             p.Add(GridUIHelpers.SectionTitle("Torque & Speed"));
 
             // Gear ratio display.
-            p.Add(T.StatRow("🔩", "Gear Ratio", $"{gb.gearRatio:0.00}× ({gb.selectedGear})", T.AccentGold));
+            p.Add(T.StatRow("🔩", "Gear Ratio", $"{gb.gearRatio:0.##}× (G{gb.selectedGear} of {GridGearbox.GearCount})", T.AccentGold));
             p.Add(T.StatRow("⚡", "Max Speed", $"{gb.maxOutputSpeed:0} RPM", T.AccentCyan));
 
             p.Add(T.Spacer(4));
@@ -259,28 +381,28 @@ namespace VoxelEngine.Maritime
                 p.Add(warn.pill);
             }
 
-            // ── Gear selection ────────────────────────────────────────
+            // ── Gear selection (20 gears, applied live) ───────────────
             p.Add(T.Spacer(6));
-            p.Add(GridUIHelpers.SectionTitle("Gear Selection"));
+            p.Add(GridUIHelpers.SectionTitle("Gear Selection — 20-Speed"));
             var gearRow = Row();
             gearRow.style.flexWrap = Wrap.Wrap;
-            float[] ratios = { 0.5f, 0.75f, 1f, 1.5f, 2.5f, 4f };
-            for (int i = 0; i < ratios.Length; i++)
+            for (int i = 0; i < GridGearbox.GearCount; i++)
             {
                 int gearNum = i + 1;
                 bool active = gb.selectedGear == gearNum;
                 var captured = gearNum;
-                var btn = T.SmallButton($"G{gearNum}\n{ratios[i]}×", () =>
+                var btn = T.SmallButton($"G{gearNum}\n{GridGearbox.GearRatios[i]:0.##}×", () =>
                 {
-                    gb.selectedGear = captured;
+                    gb.SetGear(captured);
                     VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
                 }, active ? T.AccentGold : (Color?)null);
-                btn.style.width = 62;
+                btn.style.width = 56;
                 gearRow.Add(btn);
             }
             p.Add(gearRow);
-            p.Add(T.Muted("Higher ratio = faster output but less torque. " +
-                          "Use low gears for heavy props, high gears for generators."));
+            p.Add(T.Muted("Bidirectional: power can enter from EITHER side — the opposite side " +
+                          "automatically becomes the output. Higher ratio = faster output but less " +
+                          "torque. Low gears for heavy props, high gears for generators."));
 
             return p;
         }

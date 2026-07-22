@@ -2,15 +2,26 @@
 //
 // Maritime engine block. Three tiers share one class:
 //
-//   Small  (1×1×1 visual starter block) — burns Wood/Coal items
-//   Medium (4×3×2 visual ship engine)   — burns Heavy Fuel Oil
-//   Giant  (6×5×3 visual ship engine)   — burns Marine Gas Oil
+//   Small  (Crude Inline-4 visual, 1×1×1 block)   — burns Wood/Coal items
+//   Medium (Heavy Fuel Oil V8 visual)              — burns Heavy Fuel Oil
+//   Giant  (MGO Marine V12 visual)                 — burns Marine Gas Oil
 //
 // Fuel is drawn from grid storage (cargo for solids, liquid tanks for liquids)
-// into an internal buffer. FuelAvailable01 = buffer fill × throttle.
+// into an internal buffer. FuelAvailable01 = buffer fill × throttle × penalties.
 //
 // REQUIRES an adjacent Exhaust Pipe — without one the engine chokes and
-// produces zero torque. Turbochargers only boost when mounted on named engine attachment points.
+// produces zero torque. Turbochargers only boost when mounted on named engine
+// attachment points.
+//
+// v6.10.0-dev — Modular Upgrade Modules + Dynamic Heat & Coolant Penalty System:
+//   • Module Slots (2/3/4 by tier) accept EngineModuleItem upgrades.
+//   • Live temperature model: <90°C normal, ≥90°C knocking (-25% fuel
+//     efficiency), ≥100°C mechanical failure (shaft stops, black smoke).
+//   • Efficiency Tuning Chip unlocks a mandatory active-coolant requirement
+//     (engine overheats in ~15 s without coolant flow).
+//   • Super-Cooler Radiator Jacket needs a continuous fresh/sea water feed.
+//   • Honest fuel ETA: EstimatedFuelSecondsRemaining replaces the misleading
+//     "buffer seconds" readout (burn time at the CURRENT throttle draw rate).
 
 using UnityEngine;
 using VoxelEngine.GridSystem;
@@ -29,7 +40,7 @@ namespace VoxelEngine.Maritime
         Giant = 2,
     }
 
-    public class GridMaritimeEngine : MaritimeBlockBase
+    public class GridMaritimeEngine : MaritimeBlockBase, IGridDataProvider
     {
         private const string TurboAttachmentNamePrefix = "Turbo attachment point ";
         private static Material _turboAttachmentMaterial;
@@ -89,6 +100,87 @@ namespace VoxelEngine.Maritime
         /// <summary>True if the engine has coolant available.</summary>
         public bool HasCoolant => CoolantBuffer > 0.01f;
 
+        [Header("Thermal Management")]
+        [Tooltip("Heat generated per second at full throttle (°C/s) before module bonuses.")]
+        public float baseHeatRate = 1.4f;
+        [Tooltip("Passive heat dissipation per second (°C/s) with no coolant and no radiator.")]
+        public float baseDissipationRate = 1.0f;
+        [Tooltip("Extra dissipation per second (°C/s) while coolant is flowing.")]
+        public float coolantDissipationRate = 2.0f;
+        /// <summary>Engine temperature in °C. Rises with load, sinks from dissipation.</summary>
+        public float TemperatureC { get; private set; } = AmbientTemperatureC;
+        /// <summary>Anchored fault state — stays latched until the engine cools below RecoverTemperatureC.</summary>
+        public bool CriticalFailure { get; private set; }
+
+        // ── Thermal thresholds (spec) ────────────────────────────────
+        /// <summary>Low/normal operating heat.</summary>
+        public const float AmbientTemperatureC = 25f;
+        /// <summary>Comfort ceiling — below this the engine is perfectly happy.</summary>
+        public const float NormalTemperatureC = 70f;
+        /// <summary>Overheating: engine knocks, fuel efficiency drops 25%.</summary>
+        public const float KnockingTemperatureC = 90f;
+        /// <summary>Critical heat: mechanical failure — output shaft stops, heavy black smoke.</summary>
+        public const float CriticalTemperatureC = 100f;
+        /// <summary>Failure latch releases below this temperature (hysteresis band).</summary>
+        public const float RecoverTemperatureC = 80f;
+        /// <summary>Hard ceiling so temperature never runs away to silly numbers.</summary>
+        public const float MaxTemperatureC = 130f;
+        /// <summary>Forced heat rise (°C/s) when an Efficiency Tuning Chip is installed
+        /// but no coolant is actively flowing. 25°C → 100°C in roughly 15 s (spec).</summary>
+        public const float EfficiencyChipDryHeatRate = 5.2f;
+
+        /// <summary>0..1 engine heat normalized against the critical point (UI bars).</summary>
+        public float Heat01 => Mathf.Clamp01(TemperatureC / CriticalTemperatureC);
+        /// <summary>≥ 90°C — engine knocks and burns 25% more fuel for the same work.</summary>
+        public bool IsOverheating => TemperatureC >= KnockingTemperatureC;
+        /// <summary>≥ 100°C or latched failure — output shaft is stopped mechanically.</summary>
+        public bool IsCriticalHeat => CriticalFailure;
+
+        // ── Modules / upgrades ───────────────────────────────────────
+        /// <summary>Module container. Socket EngineModuleItems to boost output —
+        /// high-tier upgrades add logistics requirements (coolant, water).</summary>
+        public ItemContainer ModuleSlots { get; private set; }
+        /// <summary>Module slot count per tier: Inline-4 = 2, V8 = 3, V12 = 4.</summary>
+        public int MaxModuleSlots => tier switch
+        {
+            EngineTier.Small  => 2,
+            EngineTier.Medium => 3,
+            EngineTier.Giant  => 4,
+            _ => 1,
+        };
+
+        // Computed module tallies (refreshed every simulation tick).
+        public int TurboModuleCount { get; private set; }
+        public int EfficiencyChipCount { get; private set; }
+        public int InjectorModuleCount { get; private set; }
+        public int RadiatorModuleCount { get; private set; }
+        /// <summary>Total output multiplier from socketed modules (1 = stock).</summary>
+        public float ModuleOutputMultiplier { get; private set; } = 1f;
+        /// <summary>Total RPM cap multiplier from socketed modules (1 = stock).</summary>
+        public float ModuleSpeedCapMultiplier { get; private set; } = 1f;
+        /// <summary>Total fuel-use multiplier from socketed modules (1 = stock).</summary>
+        public float ModuleFuelUseMultiplier { get; private set; } = 1f;
+        /// <summary>True while a Super-Cooler Radiator Jacket is socketed AND water is flowing.</summary>
+        public bool RadiatorCoolingActive { get; private set; }
+        /// <summary>Water intake state of the radiator (0..1 of demand met this tick).</summary>
+        public float RadiatorWaterFill01 { get; private set; }
+
+        // ── Smoke VFX modifiers (read by adjacent GridExhaustPipe) ───
+        /// <summary>Exhaust smoke velocity multiplier (High-Flow Turbocharger module).</summary>
+        public float SmokeSpeedMultiplier { get; private set; } = 1f;
+        /// <summary>True while Overclocked Fuel Injectors dirty the exhaust.</summary>
+        public bool SmokeDirty => InjectorModuleCount > 0;
+        /// <summary>0..1 live engine speed — normalized RPM against the module-raised cap.
+        /// Drives the visible crankshaft RPM and the piston playback rate simultaneously.</summary>
+        public float EngineSpeed01
+        {
+            get
+            {
+                float cap = maxRPM * ModuleSpeedCapMultiplier;
+                return cap > 0.01f ? Mathf.Clamp01(CurrentRPM / cap) : 0f;
+            }
+        }
+
         [Header("State (read-only)")]
         /// <summary>Current fuel buffer level (0..capacity).</summary>
         public float FuelBuffer { get; private set; }
@@ -114,13 +206,13 @@ namespace VoxelEngine.Maritime
         /// <summary>Current RPM (written back by ApplyResults).</summary>
         public float CurrentRPM { get; private set; }
 
-        /// <summary>Current litres/s fuel consumption (for UI).</summary>
+        /// <summary>Current fuel consumption per second (solid = burn-units/s, liquid = L/s).</summary>
         public float CurrentUsage { get; private set; }
 
         /// <summary>Current torque output (for UI).</summary>
         public float CurrentTorque { get; private set; }
 
-        /// <summary>0..1 stress level (torque vs max, with exhaust penalty).</summary>
+        /// <summary>0..1 stress level (torque vs max, with exhaust + heat penalties).</summary>
         public float Stress01 { get; private set; }
 
         /// <summary>True when the engine is overstressed (torque demand exceeds safe limits).</summary>
@@ -129,7 +221,7 @@ namespace VoxelEngine.Maritime
         /// <summary>Number of turbochargers connected to this engine (for UI).</summary>
         public int ConnectedTurboCount { get; private set; }
         /// <summary>Total turbo boost multiplier (1.0 = none, 1.4 = one small, etc.).</summary>
-        public float TurboBoostTotal { get; private set; }
+        public float TurboBoostTotal { get; private set; } = 1f;
         /// <summary>Max turbo slots this engine supports.</summary>
         public int MaxTurboSlots => tier switch
         {
@@ -138,6 +230,38 @@ namespace VoxelEngine.Maritime
             EngineTier.Giant  => 4,
             _ => 0,
         };
+
+        /// <summary>Honest burn-time estimate: seconds of fuel remaining at the CURRENT
+        /// draw rate. When the engine is not consuming yet, the idle-rate estimate is
+        /// shown so the number is still meaningful before throttle-up.</summary>
+        public float EstimatedFuelSecondsRemaining
+        {
+            get
+            {
+                float rate = CurrentUsage;
+                if (rate <= 0.0001f)
+                {
+                    float idleFrac = idleWhenEnabled ? Mathf.Max(0.02f, idleThrottleFraction) : 1f;
+                    rate = fuelConsumptionRate * idleFrac;
+                }
+                if (IsOverheating) rate *= 4f / 3f; // knocking wastes 25% efficiency
+                return rate > 0.0001f ? FuelBuffer / rate : 0f;
+            }
+        }
+
+        /// <summary>Formats seconds as a compact human duration (e.g. "2m 14s", "43s").</summary>
+        public static string FormatDuration(float seconds)
+        {
+            if (seconds <= 0.5f) return "0s";
+            if (seconds < 90f) return $"{seconds:0}s";
+            int total = Mathf.FloorToInt(seconds);
+            int m = total / 60;
+            int s = total % 60;
+            if (m < 60) return $"{m}m {s:00}s";
+            int h = m / 60;
+            m %= 60;
+            return $"{h}h {m:00}m";
+        }
 
         public override float ContentMass
         {
@@ -148,6 +272,8 @@ namespace VoxelEngine.Maritime
                     m += FuelBuffer * liquidFuel.DensityKgPerL();
                 else if (SolidFuelInput != null)
                     m += MassUtil.ContainerMass(SolidFuelInput);
+                if (ModuleSlots != null)
+                    m += MassUtil.ContainerMass(ModuleSlots);
                 // Exhaust gas adds mass too (compressed gas is heavy).
                 m += ExhaustGas * 0.01f;
                 return m;
@@ -166,6 +292,8 @@ namespace VoxelEngine.Maritime
                     if (Mathf.Approximately(maxTorque, 8000f)) maxTorque = 18000f;
                     if (Mathf.Approximately(fuelBufferCapacity, 60f)) fuelBufferCapacity = 120f;
                     if (Mathf.Approximately(fuelConsumptionRate, 1f)) fuelConsumptionRate = 1f;
+                    if (Mathf.Approximately(baseHeatRate, 1.4f)) baseHeatRate = 1.0f;
+                    if (Mathf.Approximately(baseDissipationRate, 1.0f)) baseDissipationRate = 1.1f;
                     break;
                 case EngineTier.Medium:
                     blockName = "Heavy Fuel Oil Engine";
@@ -177,6 +305,8 @@ namespace VoxelEngine.Maritime
                     if (Mathf.Approximately(liquidRefillRate, 8f)) liquidRefillRate = 28f;
                     if (Mathf.Approximately(coolantCapacity, 50f)) coolantCapacity = 180f;
                     if (Mathf.Approximately(coolantRefillRate, 5f)) coolantRefillRate = 20f;
+                    if (Mathf.Approximately(baseHeatRate, 1.4f)) baseHeatRate = 2.4f;
+                    if (Mathf.Approximately(coolantDissipationRate, 2.0f)) coolantDissipationRate = 2.9f;
                     break;
                 case EngineTier.Giant:
                     blockName = "MGO Engine";
@@ -188,10 +318,14 @@ namespace VoxelEngine.Maritime
                     if (Mathf.Approximately(liquidRefillRate, 25f) || Mathf.Approximately(liquidRefillRate, 40f)) liquidRefillRate = 110f;
                     if (Mathf.Approximately(coolantCapacity, 50f)) coolantCapacity = 800f;
                     if (Mathf.Approximately(coolantRefillRate, 5f)) coolantRefillRate = 60f;
+                    if (Mathf.Approximately(baseHeatRate, 1.4f)) baseHeatRate = 3.4f;
+                    if (Mathf.Approximately(coolantDissipationRate, 2.0f)) coolantDissipationRate = 4.2f;
                     break;
             }
             FuelBuffer = Mathf.Min(FuelBuffer, fuelBufferCapacity);
+            if (TemperatureC < AmbientTemperatureC) TemperatureC = AmbientTemperatureC;
             EnsureSolidFuelInput();
+            EnsureModuleSlots();
             EnsureTurboAttachmentMarkers();
         }
 
@@ -206,6 +340,30 @@ namespace VoxelEngine.Maritime
             if (SolidFuelInput == null) SolidFuelInput = new ItemContainer("Fuel Hopper", SolidFuelSlotCount);
             else SolidFuelInput.Resize(SolidFuelSlotCount);
             SolidFuelInput.AcceptFilter = (item, wanted) => IsValidSolidFuel(item) ? wanted : 0;
+        }
+
+        /// <summary>Ensure (or right-size) the module socket container. Re-applies the
+        /// tier-compatibility accept gate so sockets migrate cleanly when a prefab is
+        /// re-loaded by the persistence layer.</summary>
+        public void EnsureModuleSlots()
+        {
+            int count = MaxModuleSlots;
+            if (ModuleSlots == null) ModuleSlots = new ItemContainer("Module Slots", count);
+            else ModuleSlots.Resize(count);
+            ModuleSlots.AcceptFilter = (item, wanted) => CanSocketModule(item) ? wanted : 0;
+        }
+
+        /// <summary>Module container accessor that guarantees the container exists (UI use).</summary>
+        public ItemContainer GetModuleSlots()
+        {
+            EnsureModuleSlots();
+            return ModuleSlots;
+        }
+
+        /// <summary>True when the item may be socketed into this engine's module slots.</summary>
+        public bool CanSocketModule(ItemDefinition item)
+        {
+            return item is EngineModuleItem module && module.IsCompatibleWithTier(tier);
         }
 
         private static bool IsValidSolidFuel(ItemDefinition item)
@@ -332,20 +490,26 @@ namespace VoxelEngine.Maritime
             }
         }
 
+        /// <summary>Visual socket positions on the v6.10 engine models (Inline-4 / V8 / V12).
+        /// The persistent mesh builder draws matching flange bases at these exact spots so
+        /// the runtime snapping markers sit flush on the machined turbo mounting pads.</summary>
         private Vector3 GetTurboAttachmentMarkerPosition(int slotIndex, float cellSize)
         {
             return tier switch
             {
-                EngineTier.Small => new Vector3(cellSize * 0.40f, cellSize * 0.16f, -cellSize * 0.10f),
+                // Inline-4: rectangular exhaust-manifold port, top-right.
+                EngineTier.Small => new Vector3(cellSize * 0.16f, cellSize * 0.30f, -cellSize * 0.06f),
+                // HFO V8: two flanged turbo mounts in the valley, toward the front & back.
                 EngineTier.Medium => slotIndex == 0
-                    ? new Vector3(cellSize * 0.88f, cellSize * 1.18f, -cellSize * 0.40f)
-                    : new Vector3(-cellSize * 0.88f, cellSize * 1.18f, -cellSize * 0.40f),
+                    ? new Vector3(cellSize * 0.58f, cellSize * 0.42f, -cellSize * 0.16f)
+                    : new Vector3(-cellSize * 0.58f, cellSize * 0.42f, -cellSize * 0.16f),
+                // MGO V12: four mounts in a 2×2 grid on the central exhaust plenum.
                 EngineTier.Giant => slotIndex switch
                 {
-                    0 => new Vector3(cellSize * 1.38f, cellSize * 1.98f, -cellSize * 0.54f),
-                    1 => new Vector3(-cellSize * 1.38f, cellSize * 1.98f, -cellSize * 0.54f),
-                    2 => new Vector3(0f, cellSize * 3.30f, 0f),
-                    _ => new Vector3(0f, cellSize * 1.58f, -cellSize * 1.82f),
+                    0 => new Vector3(cellSize * 1.24f, cellSize * 0.66f, -cellSize * 0.24f),
+                    1 => new Vector3(-cellSize * 1.24f, cellSize * 0.66f, -cellSize * 0.24f),
+                    2 => new Vector3(0f, cellSize * 0.94f, cellSize * 0.36f),
+                    _ => new Vector3(0f, cellSize * 0.82f, -cellSize * 0.90f),
                 },
                 _ => new Vector3(GetTurboAttachmentLocalOffset(slotIndex).x, GetTurboAttachmentLocalOffset(slotIndex).y, GetTurboAttachmentLocalOffset(slotIndex).z) * (cellSize * 0.52f)
             };
@@ -382,6 +546,7 @@ namespace VoxelEngine.Maritime
             node.MaxRPM = maxRPM;
             node.GearRatio = 1f;
             node.PropellerSize = 1f;
+            node.OutputMultiplier = 1f;
 
             if (tier == EngineTier.Giant)
                 node.SetFlag(MechanicalFlags.GiantDiesel);
@@ -390,6 +555,9 @@ namespace VoxelEngine.Maritime
         public override void RefreshMaritimeNode(ref MechanicalNode node, float throttle)
         {
             float dt = Time.fixedDeltaTime;
+            EnsureModuleSlots();
+            RefreshModuleTotals();
+
             float requestedThrottle = Enabled && idleWhenEnabled
                 ? Mathf.Max(throttle, idleThrottleFraction)
                 : throttle;
@@ -398,7 +566,6 @@ namespace VoxelEngine.Maritime
             HasExhaust = HasAdjacentExhaust();
 
             // ── Exhaust gas accumulation ────────────────────────────────
-            // Gas builds up while running; vents through an adjacent exhaust pipe.
             if (IsRunning)
             {
                 ExhaustGas = Mathf.Min(exhaustGasCapacity, ExhaustGas + exhaustGasRate * requestedThrottle * dt);
@@ -408,6 +575,9 @@ namespace VoxelEngine.Maritime
                 ExhaustGas = Mathf.Max(0f, ExhaustGas - exhaustVentRate * dt);
             }
 
+            // ── Thermal model ──────────────────────────────────────────
+            TickThermal(dt, requestedThrottle);
+
             // ── Engine running conditions ───────────────────────────────
             bool exhaustChoked = ExhaustFill01 >= 0.99f;
 
@@ -416,7 +586,11 @@ namespace VoxelEngine.Maritime
             if (needsCoolant)
                 RefillCoolant(dt); // allow a dry engine to prime from connected liquid pipes before evaluating run state
 
-            if (!Enabled || !HasExhaust || exhaustChoked || (needsCoolant && !HasCoolant))
+            // Latched mechanical failure — only clears once the block cools below 80°C.
+            if (CriticalFailure && TemperatureC <= RecoverTemperatureC)
+                CriticalFailure = false;
+
+            if (!Enabled || !HasExhaust || exhaustChoked || CriticalFailure || (needsCoolant && !HasCoolant))
             {
                 node.FuelAvailable01 = 0f;
                 IsRunning = false;
@@ -433,6 +607,8 @@ namespace VoxelEngine.Maritime
             // Consume fuel from the internal buffer.
             // Marine Engine Coolant reduces fuel consumption by 33%.
             float fuelMultiplier = UsingPremiumCoolant ? 0.67f : 1f;
+            fuelMultiplier *= ModuleFuelUseMultiplier;
+            if (IsOverheating) fuelMultiplier *= 4f / 3f; // knocking: fuel efficiency drops 25%
             float consumption = fuelConsumptionRate * requestedThrottle * fuelMultiplier * dt;
             FuelBuffer = Mathf.Max(0f, FuelBuffer - consumption);
             CurrentUsage = fuelConsumptionRate * requestedThrottle * fuelMultiplier;
@@ -453,13 +629,15 @@ namespace VoxelEngine.Maritime
 
             // Count connected turbos and apply stacked boost to the torque.
             CountTurbos();
-            node.MaxTorque = maxTorque * TurboBoostTotal;
+            node.MaxTorque = maxTorque * TurboBoostTotal * ModuleOutputMultiplier;
+            node.MaxRPM = maxRPM * ModuleSpeedCapMultiplier;
+            node.OutputMultiplier = 1f;
 
             node.FuelAvailable01 = effectiveFuel;
 
             // Stress = how hard we're pushing relative to max.
             CurrentTorque = node.MaxTorque * effectiveFuel;
-            Stress01 = Mathf.Clamp01(effectiveFuel * (1f + ExhaustFill01 * 0.3f));
+            Stress01 = Mathf.Clamp01(effectiveFuel * (1f + ExhaustFill01 * 0.3f + Heat01 * 0.15f));
         }
 
         public override void ApplyResults(in MechanicalNode node)
@@ -489,6 +667,116 @@ namespace VoxelEngine.Maritime
 
             TurboBoostTotal = boost;
         }
+
+        // ══════════════════════════════════════════════════════════════
+        //  MODULES — socketed EngineModuleItems drive output/heat/smoke
+        // ══════════════════════════════════════════════════════════════
+        /// <summary>Re-tally socketed modules and derive all multipliers. Runs every
+        /// fixed tick: modules hot-swap instantly without needing a graph rebuild.</summary>
+        private void RefreshModuleTotals()
+        {
+            TurboModuleCount = 0;
+            EfficiencyChipCount = 0;
+            InjectorModuleCount = 0;
+            RadiatorModuleCount = 0;
+
+            float outputBonus = 0f;
+            float speedBonus = 0f;
+            float fuelModifier = 0f;
+            float heatBonus = 0f;
+            float dissipationMul = 1f;
+            float smokeSpeed = 1f;
+            bool any = ModuleSlots != null && ModuleSlots.Size > 0;
+
+            if (any)
+            {
+                for (int i = 0; i < ModuleSlots.Size; i++)
+                {
+                    var stack = ModuleSlots.GetSlot(i);
+                    if (stack == null || stack.IsEmpty) continue;
+                    if (stack.item is not EngineModuleItem module) continue;
+                    int n = Mathf.Max(1, stack.count);
+
+                    switch (module.moduleKind)
+                    {
+                        case EngineModuleKind.HighFlowTurbocharger: TurboModuleCount += n; break;
+                        case EngineModuleKind.EfficiencyTuningChip: EfficiencyChipCount += n; break;
+                        case EngineModuleKind.OverclockedFuelInjectors: InjectorModuleCount += n; break;
+                        case EngineModuleKind.SuperCoolerRadiatorJacket: RadiatorModuleCount += n; break;
+                    }
+
+                    outputBonus += module.outputPowerBonus * n;
+                    speedBonus += module.speedCapBonus * n;
+                    fuelModifier += module.fuelUseModifier * n;
+                    heatBonus += module.heatGenerationBonus * n;
+                    dissipationMul *= Mathf.Pow(Mathf.Max(1f, module.dissipationMultiplier), n);
+                    smokeSpeed *= Mathf.Pow(Mathf.Max(0.1f, module.exhaustSmokeVelocityMul), n);
+                }
+            }
+
+            ModuleOutputMultiplier = Mathf.Max(0.05f, 1f + outputBonus);
+            ModuleSpeedCapMultiplier = Mathf.Max(0.5f, 1f + speedBonus);
+            ModuleFuelUseMultiplier = Mathf.Max(0.05f, 1f + fuelModifier);
+            _moduleHeatBonus = heatBonus;
+            _moduleDissipationMultiplier = dissipationMul;
+            SmokeSpeedMultiplier = smokeSpeed;
+        }
+
+        private float _moduleHeatBonus;
+        private float _moduleDissipationMultiplier = 1f;
+
+        /// <summary>True while an Efficiency Tuning Chip is socketed and therefore a
+        /// continuous ACTIVE coolant flow is mandatory during operation.</summary>
+        public bool RequiresActiveCoolantFlow => EfficiencyChipCount > 0;
+
+        // ══════════════════════════════════════════════════════════════
+        //  THERMAL MODEL — heat builds with load, coolant + radiator sink it
+        // ══════════════════════════════════════════════════════════════
+        private void TickThermal(float dt, float requestedThrottle)
+        {
+            // Radiator jackets draw fresh/sea water from grid tanks while running.
+            RadiatorWaterFill01 = 0f;
+            RadiatorCoolingActive = false;
+            if (RadiatorModuleCount > 0 && IsRunning)
+            {
+                float want = RadiatorWaterDrawPerModule * RadiatorModuleCount * dt;
+                float got = want > 0.0001f ? DrawLiquidFuel(LiquidType.Water, want) : 0f;
+                RadiatorWaterFill01 = want > 0.0001f ? Mathf.Clamp01(got / want) : 1f;
+                RadiatorCoolingActive = RadiatorWaterFill01 > 0.5f;
+            }
+
+            bool loadActive = IsRunning && requestedThrottle > 0.01f;
+
+            // Heat generation: throttle load × injector bonus (+50% per injector type module).
+            float heatGen = loadActive
+                ? baseHeatRate * requestedThrottle * (1f + Mathf.Max(0f, _moduleHeatBonus))
+                : 0f;
+
+            // Dissipation: passive base + flowing coolant (premium coolant sinks 25% better),
+            // multiplied by ACTIVE radiator jackets (water must be flowing for the bonus).
+            float dissipation = baseDissipationRate;
+            if (HasCoolant)
+                dissipation += coolantDissipationRate * (UsingPremiumCoolant ? 1.25f : 1f);
+            if (RadiatorModuleCount > 0 && RadiatorCoolingActive)
+                dissipation *= _moduleDissipationMultiplier;
+
+            float net = heatGen - dissipation;
+
+            // Efficiency Tuning Chip: without a continuous ACTIVE coolant flow the engine
+            // overheats within ~15 seconds of operation (spec).
+            if (loadActive && RequiresActiveCoolantFlow && !HasCoolant)
+                net += EfficiencyChipDryHeatRate;
+
+            // No coolant flow at all on a liquid engine slowly bakes the block too.
+            TemperatureC = Mathf.Clamp(TemperatureC + net * dt, AmbientTemperatureC, MaxTemperatureC);
+
+            // Critical mechanical failure at 100°C — shaft stops, heavy black smoke.
+            if (TemperatureC >= CriticalTemperatureC)
+                CriticalFailure = true;
+        }
+
+        /// <summary>Water demand (L/s at full throttle) per socketed radiator jacket.</summary>
+        public const float RadiatorWaterDrawPerModule = 2f;
 
         // ══════════════════════════════════════════════════════════════
         //  FUEL MANAGEMENT
@@ -555,6 +843,29 @@ namespace VoxelEngine.Maritime
                 CoolantBuffer += drawn;
                 UsingPremiumCoolant = false;
             }
+        }
+
+        // ══════════════════════════════════════════════════════════════
+        //  IGridDataProvider — live data for Grid Screens
+        // ══════════════════════════════════════════════════════════════
+        public string SourceName => blockName;
+        public string DataCategory => "Maritime Engines";
+        public string GetDisplayData()
+        {
+            string status =
+                CriticalFailure ? "CRITICAL HEAT — SHAFT STOPPED" :
+                IsOverheating ? "KNOCKING — OVERHEATING" :
+                IsRunning ? "RUNNING" :
+                !HasExhaust ? "NO EXHAUST" : "IDLE";
+            string fuel = fuelKind == MaritimeFuelKind.Liquid
+                ? $"FUEL {FuelFill01 * 100f:0}% ({FuelBuffer:0} L)"
+                : $"FUEL {FuelFill01 * 100f:0}% (≈{FormatDuration(EstimatedFuelSecondsRemaining)})";
+            return
+                $"ENGINE {status}\n" +
+                $"{CurrentRPM:0} RPM · {CurrentTorque:0} N·m\n" +
+                $"{fuel}\n" +
+                $"HEAT {Heat01 * 100f:0}% ({TemperatureC:0}°C)\n" +
+                $"EXHAUST {ExhaustFill01 * 100f:0}%";
         }
     }
 }

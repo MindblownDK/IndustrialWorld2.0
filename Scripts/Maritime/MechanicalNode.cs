@@ -50,6 +50,10 @@ namespace VoxelEngine.Maritime
         public MechanicalNodeType Type;
         /// <summary>Connected-component id (0 = standalone). Nodes of one chain share this.</summary>
         public int ChainIndex;
+        /// <summary>BFS parent within the chain (-1 = chain source / no parent). Lets the
+        /// propagation job evaluate each node from its actual upstream neighbour so branched
+        /// drivetrains route torque/RPM correctly and a gearbox works from ANY input side.</summary>
+        public int ParentIndex;
         public byte Flags;
 
         // ── Geometry (world space, captured at rebuild) ──────────────
@@ -86,6 +90,13 @@ namespace VoxelEngine.Maritime
         public float GearRatio;
         /// <summary>Hard RPM clamp for this gearbox (stops runaway gearing).</summary>
         public float MaxGearSpeed;
+        /// <summary>Per-node shaft torque arriving at this node after upstream transforms
+        /// (computed by the propagation job; N·m on the shared bus at this point).</summary>
+        public float ShaftTorque;
+        /// <summary>Per-node shaft RPM arriving at this node after upstream transforms.</summary>
+        public float ShaftRpm;
+        /// <summary>Extra output multiplier for consumers (upgrade modules on generators).</summary>
+        public float OutputMultiplier;
 
         // ── Propeller / wheel consumers ──────────────────────────────
         /// <summary>Size multiplier (1× small, 3× large, etc.).</summary>

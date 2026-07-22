@@ -1,0 +1,39 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2423b2107f8043b1967e21c34aff5d4f, type: 3}
+  m_Name: MItem_ModuleInjectors
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Items.EngineModuleItem
+  itemId: overclocked_fuel_injectors
+  displayName: Overclocked Fuel Injectors
+  description: 'Overclocked injection timing (T2/T3 engines). +30% output power,
+    +15% speed cap. Trade-off: +50% heat generation, +20% fuel use, and dirty soot-black
+    exhaust. Pair with a Super-Cooler Radiator Jacket.'
+  icon: {fileID: 0}
+  iconTint: {r: 0.85, g: 0.25, b: 0.2, a: 1}
+  maxStack: 1
+  massPerUnit: 1
+  category: Maritime
+  viewmodelPrefab: {fileID: 0}
+  moduleKind: 2
+  worksOnTier1: 0
+  worksOnTier2: 1
+  worksOnTier3: 1
+  worksOnGenerator: 0
+  outputPowerBonus: 0.3
+  speedCapBonus: 0.15
+  fuelUseModifier: 0.2
+  heatGenerationBonus: 0.5
+  dissipationMultiplier: 1
+  requiresActiveCoolant: 0
+  waterDrawLitresPerSec: 0
+  exhaustSmokeVelocityMul: 1.2
+  dirtyExhaust: 1

@@ -41,7 +41,7 @@ namespace VoxelEngine.Building
         private GridPrecisionLatticePreview _precisionLattice;
         private readonly System.Collections.Generic.List<Vector3> _pipeGhostLinks = new(1);
         private VoxelEngine.Networks.PipeVisualBuilder _pipeGhostVisual;
-        private int _pipeGhostTargetId;
+        private EntityId _pipeGhostTargetId;
         private Vector3 _pipeGhostLastPosition = new(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
 
         public static bool HoldingBlock { get; private set; }
@@ -113,7 +113,7 @@ namespace VoxelEngine.Building
                 _ghost.name = "BuildGhost";
                 _ghostItem = block;
                 _pipeGhostVisual = null;
-                _pipeGhostTargetId = 0;
+                _pipeGhostTargetId = EntityId.None;
                 _pipeGhostLastPosition = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
                 _pipeGhostLinks.Clear();
                 StripGhost(_ghost, _ghostMaterialValid);
@@ -248,20 +248,20 @@ namespace VoxelEngine.Building
             else
             {
                 var hits = Physics.OverlapSphere(ghostPosition, cellSize * 5f + cellSize * 0.4f);
-                var seen = new System.Collections.Generic.HashSet<int>();
+                var seen = new System.Collections.Generic.HashSet<EntityId>();
                 foreach (var hit in hits)
                 {
                     MonoBehaviour candidate = null;
                     if (itemPipe) candidate = hit.GetComponentInParent<VoxelEngine.Transport.ItemPipe>();
                     else if (gasPipe) candidate = hit.GetComponentInParent<VoxelEngine.Gas.GasPipe>();
                     else if (liquidPipe) candidate = hit.GetComponentInParent<VoxelEngine.Fluids.WaterPipe>();
-                    if (candidate != null && seen.Add(candidate.GetInstanceID())) Consider(candidate);
+                    if (candidate != null && seen.Add(candidate.GetEntityId())) Consider(candidate);
                 }
             }
 
-            int targetId = best != null ? best.GetInstanceID() : 0;
+            EntityId targetId = best != null ? best.GetEntityId() : EntityId.None;
             Vector3 targetPosition = best != null ? best.transform.position : default;
-            bool ghostMovedWithTarget = targetId != 0
+            bool ghostMovedWithTarget = targetId != EntityId.None
                 && (ghostPosition - _pipeGhostLastPosition).sqrMagnitude > 0.0001f;
             bool changed = visual != _pipeGhostVisual || targetId != _pipeGhostTargetId
                 || ghostMovedWithTarget

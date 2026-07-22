@@ -35,7 +35,7 @@ namespace VoxelEngine.GridSystem
 
         [Header("Data Sources")]
         public List<Vector3Int> dataSourcePositions = new();
-        public List<int> dataSourceInstanceIds = new();
+        public List<EntityId> dataSourceInstanceIds = new(); // session-local handles; re-bound by ResolveAllProviders()
 
         // Legacy single-source fields — migrated into lists on first access
         public Vector3Int legacyGridPos;
@@ -298,7 +298,10 @@ namespace VoxelEngine.GridSystem
                 if (!dataSourcePositions.Contains(legacyGridPos))
                 {
                     dataSourcePositions.Add(legacyGridPos);
-                    dataSourceInstanceIds.Add(legacyInstanceId);
+                    // Legacy int instance ids can't map onto EntityIds (and were
+                    // session-local anyway) — seed None; ResolveAllProviders()
+                    // re-binds the live id on the next read.
+                    dataSourceInstanceIds.Add(EntityId.None);
                 }
                 legacyGridPos = Vector3Int.zero;
                 legacyInstanceId = 0;
@@ -664,7 +667,7 @@ namespace VoxelEngine.GridSystem
             for (int i = dataSourcePositions.Count - 1; i >= 0; i--)
             {
                 var pos = dataSourcePositions[i];
-                int storedId = i < dataSourceInstanceIds.Count ? dataSourceInstanceIds[i] : 0;
+                EntityId storedId = i < dataSourceInstanceIds.Count ? dataSourceInstanceIds[i] : EntityId.None;
 
                 IGridDataProvider provider = null;
                 if (UnifiedGridTopology.TryResolveAddress(Grid, pos, out var block))
@@ -672,7 +675,7 @@ namespace VoxelEngine.GridSystem
                     provider = ResolveProviderComponent(block);
                     if (provider != null)
                     {
-                        int currentId = block.GetInstanceID();
+                        EntityId currentId = block.GetEntityId();
                         if (currentId != storedId)
                         {
                             // Block was replaced — update instance id
@@ -696,7 +699,7 @@ namespace VoxelEngine.GridSystem
             return dataSourcePositions.Contains(pos);
         }
 
-        public void ToggleSource(Vector3Int pos, int instanceId)
+        public void ToggleSource(Vector3Int pos, EntityId instanceId)
         {
             if (!_migrated) MigrateLegacy();
             if (dataSourcePositions.Contains(pos))
@@ -712,7 +715,7 @@ namespace VoxelEngine.GridSystem
             }
         }
 
-        public void SetPrimarySource(Vector3Int pos, int instanceId)
+        public void SetPrimarySource(Vector3Int pos, EntityId instanceId)
         {
             if (!_migrated) MigrateLegacy();
             dataSourcePositions.Clear();
@@ -752,7 +755,7 @@ namespace VoxelEngine.GridSystem
                 bestAddress = UnifiedGridTopology.AddressOf(block);
             }
             if (best != null && bestBlock != null)
-                ToggleSource(bestAddress, bestBlock.GetInstanceID());
+                ToggleSource(bestAddress, bestBlock.GetEntityId());
         }
 
         private static IGridDataProvider ResolveProviderComponent(GridBlock block)

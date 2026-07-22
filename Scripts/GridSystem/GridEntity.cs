@@ -572,15 +572,36 @@ namespace VoxelEngine.GridSystem
         {
             if (remainingDemand <= 0.01f || batteries == null || batteries.Count == 0) return 0f;
 
+            // Fair-share discharge: the demand is spread across every battery that can
+            // still deliver, so packs drain TOGETHER instead of the first battery in the
+            // list doing all the work while the rest sit idle.
             float delivered = 0f;
-            for (int i = 0; i < batteries.Count && remainingDemand > 0.01f; i++)
+            var saturated = new HashSet<int>(batteries.Count);
+            for (int round = 0; round < 8 && remainingDemand > 0.01f; round++)
             {
-                var battery = batteries[i];
-                if (battery == null || battery.mode != mode) continue;
-                float sent = battery.DischargeToBus(remainingDemand, dt);
-                if (sent <= 0.01f) continue;
-                delivered += sent;
-                remainingDemand -= sent;
+                int candidates = 0;
+                for (int i = 0; i < batteries.Count; i++)
+                {
+                    var battery = batteries[i];
+                    if (battery == null || battery.mode != mode || saturated.Contains(i)) continue;
+                    if (battery.AvailableDischargeWatts(dt) > 0.01f) candidates++;
+                    else saturated.Add(i);
+                }
+                if (candidates == 0) break;
+
+                float share = remainingDemand / candidates;
+                float deliveredThisRound = 0f;
+                for (int i = 0; i < batteries.Count; i++)
+                {
+                    var battery = batteries[i];
+                    if (battery == null || battery.mode != mode || saturated.Contains(i)) continue;
+                    float sent = battery.DischargeToBus(share, dt);
+                    deliveredThisRound += sent;
+                    if (sent < share - 0.01f) saturated.Add(i); // rate-limited or nearly empty
+                }
+                delivered += deliveredThisRound;
+                remainingDemand -= deliveredThisRound;
+                if (deliveredThisRound < 0.01f) break;
             }
 
             return delivered;
@@ -612,39 +633,54 @@ namespace VoxelEngine.GridSystem
 
         private static float ChargeBatteries(List<GridBattery> batteries, GridBatteryMode mode,
             ref float availableWatts, float dt)
-        {
-            if (availableWatts <= 0.01f || batteries == null || batteries.Count == 0) return 0f;
-
-            float accepted = 0f;
-            for (int i = 0; i < batteries.Count && availableWatts > 0.01f; i++)
-            {
-                var battery = batteries[i];
-                if (battery == null || battery.mode != mode) continue;
-                float taken = battery.ChargeFromBus(availableWatts, dt);
-                if (taken <= 0.01f) continue;
-                accepted += taken;
-                availableWatts -= taken;
-            }
-
-            return accepted;
-        }
+            => ChargeBatteriesFairShare(batteries, mode, skipDischargingAuto: false, ref availableWatts, dt);
 
         private static float ChargeAutoBatteries(List<GridBattery> batteries, ref float availableWatts, float dt)
+            => ChargeBatteriesFairShare(batteries, GridBatteryMode.Auto, skipDischargingAuto: true, ref availableWatts, dt);
+
+        /// <summary>
+        /// Fair-share charging: surplus watts are split EQUALLY between every battery
+        /// that can still accept charge — so a grid with several batteries tops them all
+        /// up together instead of greedily charging only the first one in the list.
+        /// Water-filling rounds re-offer leftover watts from full/rate-limited packs to
+        /// the batteries that can still take more.
+        /// </summary>
+        private static float ChargeBatteriesFairShare(List<GridBattery> batteries, GridBatteryMode mode,
+            bool skipDischargingAuto, ref float availableWatts, float dt)
         {
             if (availableWatts <= 0.01f || batteries == null || batteries.Count == 0) return 0f;
 
-            float accepted = 0f;
-            for (int i = 0; i < batteries.Count && availableWatts > 0.01f; i++)
+            float acceptedTotal = 0f;
+            var saturated = new HashSet<int>(batteries.Count);
+            for (int round = 0; round < 8 && availableWatts > 0.01f; round++)
             {
-                var battery = batteries[i];
-                if (battery == null || battery.mode != GridBatteryMode.Auto || battery.IsDischarging) continue;
-                float taken = battery.ChargeFromBus(availableWatts, dt);
-                if (taken <= 0.01f) continue;
-                accepted += taken;
-                availableWatts -= taken;
+                int candidates = 0;
+                for (int i = 0; i < batteries.Count; i++)
+                {
+                    var battery = batteries[i];
+                    if (battery == null || battery.mode != mode || saturated.Contains(i)) continue;
+                    if (skipDischargingAuto && battery.IsDischarging) { saturated.Add(i); continue; }
+                    if (battery.AvailableChargeWatts(dt) > 0.01f) candidates++;
+                    else saturated.Add(i);
+                }
+                if (candidates == 0) break;
+
+                float share = availableWatts / candidates;
+                float acceptedThisRound = 0f;
+                for (int i = 0; i < batteries.Count; i++)
+                {
+                    var battery = batteries[i];
+                    if (battery == null || battery.mode != mode || saturated.Contains(i)) continue;
+                    float taken = battery.ChargeFromBus(share, dt);
+                    acceptedThisRound += taken;
+                    availableWatts -= taken;
+                    if (taken < share - 0.01f) saturated.Add(i); // nearly full or rate-limited
+                }
+                acceptedTotal += acceptedThisRound;
+                if (acceptedThisRound < 0.01f) break;
             }
 
-            return accepted;
+            return acceptedTotal;
         }
 
         // Multiplier on raw thruster Newtons so SI-balanced ships fly responsively.

@@ -242,7 +242,7 @@ namespace VoxelEngine.GridSystem.UI
                 foreach (var (pos, provider) in sources)
                 {
                     var idx = pos;
-                    int instId = (provider as GridBlock)?.GetInstanceID() ?? 0;
+                    EntityId instId = (provider as GridBlock)?.GetEntityId() ?? EntityId.None;
                     bool isOn = _target.HasSource(pos);
 
                     bool isCameraSource = provider is IGridCameraFeedProvider;

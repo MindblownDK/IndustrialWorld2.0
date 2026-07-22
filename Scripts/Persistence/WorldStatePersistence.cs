@@ -529,8 +529,24 @@ namespace VoxelEngine.Persistence
                 return SerializeMulti(assembler.inputC, assembler.outputC, assembler.upgradeC);
 
             var maritimeEngine = go.GetComponentInChildren<VoxelEngine.Maritime.GridMaritimeEngine>();
-            if (maritimeEngine != null && maritimeEngine.SolidFuelInput != null)
-                return SerializeContainer(maritimeEngine.SolidFuelInput);
+            if (maritimeEngine != null)
+            {
+                // Solid-fuel hopper FIRST, module sockets second — legacy saves
+                // (fuel-only, no containerSizes) line up with the first container.
+                var engineModules = maritimeEngine.GetModuleSlots();
+                if (maritimeEngine.SolidFuelInput != null || engineModules != null)
+                    return SerializeMulti(maritimeEngine.SolidFuelInput, engineModules);
+                return null;
+            }
+
+            var maritimeGenerator = go.GetComponentInChildren<VoxelEngine.Maritime.GridMaritimeGenerator>();
+            if (maritimeGenerator != null)
+            {
+                var generatorModules = maritimeGenerator.GetModuleSlots();
+                if (generatorModules != null)
+                    return SerializeContainer(generatorModules);
+                return null;
+            }
 
             return null;
         }
@@ -566,7 +582,9 @@ namespace VoxelEngine.Persistence
             var sc = new SavedContainer();
             foreach (var c in containers)
             {
-                if (c == null) continue;
+                // Keep the sizes array 1:1 with the containers array so a null
+                // container never shifts later containers out of alignment.
+                if (c == null) { sc.containerSizes.Add(0); continue; }
                 c.EnsureValid();
                 sc.containerSizes.Add(c.Slots.Count);
                 for (int i = 0; i < c.Slots.Count; i++)
@@ -1060,15 +1078,18 @@ namespace VoxelEngine.Persistence
                     var xs = sc.sourcePositionsX.Split(',');
                     var ys = sc.sourcePositionsY.Split(',');
                     var zs = sc.sourcePositionsZ.Split(',');
-                    var ids = sc.sourceInstanceIds.Split(',');
                     screenBlock.dataSourcePositions.Clear();
                     screenBlock.dataSourceInstanceIds.Clear();
                     for (int si = 0; si < xs.Length && si < ys.Length && si < zs.Length; si++)
                     {
                         if (int.TryParse(xs[si], out int px) && int.TryParse(ys[si], out int py) && int.TryParse(zs[si], out int pz))
+                        {
                             screenBlock.dataSourcePositions.Add(new Vector3Int(px, py, pz));
-                        if (si < ids.Length && int.TryParse(ids[si], out int id))
-                            screenBlock.dataSourceInstanceIds.Add(id);
+                            // Instance ids are session-local handles (older saves stored
+                            // raw ints, 6.10+ stores EntityId handles) — neither survives a
+                            // reload. Seed None and let ResolveAllProviders() re-bind live ids.
+                            screenBlock.dataSourceInstanceIds.Add(EntityId.None);
+                        }
                     }
                 }
             }
@@ -1213,8 +1234,19 @@ namespace VoxelEngine.Persistence
             if (maritimeEngine != null)
             {
                 maritimeEngine.EnsureSolidFuelInput();
-                if (maritimeEngine.SolidFuelInput != null)
-                    DeserializeInto(maritimeEngine.SolidFuelInput, sc);
+                maritimeEngine.EnsureModuleSlots();
+                // Legacy saves hold only the fuel hopper (no containerSizes):
+                // they fill the first container and leave the module slots empty.
+                DeserializeMulti(sc, maritimeEngine.SolidFuelInput, maritimeEngine.ModuleSlots);
+                return;
+            }
+
+            var maritimeGenerator = go.GetComponentInChildren<VoxelEngine.Maritime.GridMaritimeGenerator>();
+            if (maritimeGenerator != null)
+            {
+                maritimeGenerator.EnsureModuleSlots();
+                if (maritimeGenerator.ModuleSlots != null)
+                    DeserializeInto(maritimeGenerator.ModuleSlots, sc);
             }
         }
 
@@ -1304,9 +1336,11 @@ namespace VoxelEngine.Persistence
             for (int ci = 0; ci < containers.Length; ci++)
             {
                 var c = containers[ci];
-                if (c == null) continue;
+                int wantSize = ci < sc.containerSizes.Count ? sc.containerSizes[ci] : (c != null ? c.Slots.Count : 0);
+                // Skip a null container's recorded entry span so the following
+                // containers stay aligned with their saved entries.
+                if (c == null) { idx += wantSize; continue; }
                 c.EnsureValid();
-                int wantSize = ci < sc.containerSizes.Count ? sc.containerSizes[ci] : c.Slots.Count;
                 int take = Mathf.Min(wantSize, c.Slots.Count);
                 for (int i = 0; i < take && idx < sc.entries.Count; i++, idx++)
                 {

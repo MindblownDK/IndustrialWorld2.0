@@ -207,8 +207,9 @@ namespace VoxelEngine.Player
                 var tree = hit.collider.GetComponentInParent<Tree>();
                 if (tree != null) { HitTree(tree); return; }
 
-                // Grid block grinding.
-                var gridBlock = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
+                // Grid block breaking — resolver tolerates colliders sitting on child
+                // visuals (maritime machinery, screens) instead of the block root.
+                var gridBlock = ResolveGridBlockFromHit(hit);
                 if (gridBlock != null)
                 {
                     var grindStack = inventory.ActiveStack;
@@ -217,6 +218,10 @@ namespace VoxelEngine.Player
                         HandleGrind(gridBlock, grinder, hit);
                         return;
                     }
+                    // Any other tool (or bare hands) damages the block so maritime
+                    // blocks and screens can be broken exactly like any other structure.
+                    HitGridBlockWithTool(gridBlock, hit);
+                    return;
                 }
 
                 // Wild crop?
@@ -912,44 +917,130 @@ namespace VoxelEngine.Player
                 _grindProgress = 0f; _grindTarget = null;
                 GrindProgress01 = 0f; IsGrinding = false;
 
-                // Find the matching GridBlockItem to return to the player.
-                string blockName = block.blockName;
-                VoxelEngine.GridSystem.GridBlockItem foundItem = null;
+                // Return the block to the player as an item (SourceItem-first, so
+                // renamed maritime blocks/screens resolve reliably), then remove it.
+                ReturnGridBlockItemToPlayer(block, "Ground down");
+                RemoveGridBlockFromGrid(block);
 
-                // Search all loaded GridBlockItem assets.
+                ConsumeDurability(inventory.ActiveStack);
+                _nextHit = Time.time + 0.3f;
+            }
+        }
+
+        // ── Grid block breaking / item recovery ─────────────────────
+
+        /// <summary>Resolve the GridBlock under the crosshair. Colliders on maritime
+        /// machinery and screens often sit on child visuals instead of the block root,
+        /// so walk up the hierarchy first; if the hit belongs to a grid but not a
+        /// specific block collider, fall back to mapping the hit point to a grid cell.</summary>
+        private VoxelEngine.GridSystem.GridBlock ResolveGridBlockFromHit(RaycastHit hit)
+        {
+            if (hit.collider == null) return null;
+
+            var direct = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
+            if (direct != null) return direct;
+
+            var grid = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridEntity>();
+            if (grid == null) return null;
+
+            var pos = grid.WorldToGrid(hit.point);
+            return grid.GetBlock(pos);
+        }
+
+        /// <summary>LMB fallback for grid blocks when no grinder is held: any tool
+        /// (or bare hands) chips away at the block's HP so maritime machinery and
+        /// screens can be broken and recovered like any other structure.</summary>
+        private void HitGridBlockWithTool(VoxelEngine.GridSystem.GridBlock block, RaycastHit hit)
+        {
+            var stack = inventory.ActiveStack;
+            int damage = (int)handStrength;
+            float rate = handFireRate;
+            if (!stack.IsEmpty && stack.item is ToolItem t)
+            {
+                damage = (int)t.strength;
+                rate   = t.fireRate;
+                ConsumeDurability(stack);
+            }
+
+            // Capture identity before Damage() potentially removes and destroys it.
+            bool destroyed = block.Damage(damage);
+            _feedback?.Trigger(hit.point, hit.normal, new Color(0.7f, 0.7f, 0.75f));
+
+            if (destroyed) ReturnGridBlockItemToPlayer(block, "Broke down");
+            _nextHit = Time.time + 1f / Mathf.Max(0.1f, rate);
+        }
+
+        /// <summary>Give the item that placed <paramref name="block"/> back to the
+        /// player. Prefers the runtime SourceItem (set by GridBuilder at placement)
+        /// because blocks are renamed on placement ("Screen (Small)", "Crude Engine"),
+        /// then falls back to a normalized name search across GridBlockItem assets.</summary>
+        private void ReturnGridBlockItemToPlayer(VoxelEngine.GridSystem.GridBlock block, string verb)
+        {
+            if (block == null) return;
+            string blockName = block.blockName;
+            VoxelEngine.GridSystem.GridBlockItem foundItem = block.SourceItem as VoxelEngine.GridSystem.GridBlockItem;
+
+            if (foundItem == null)
+            {
+                string wanted = SimplifyBlockName(blockName);
                 var allItems = Resources.FindObjectsOfTypeAll<VoxelEngine.GridSystem.GridBlockItem>();
                 foreach (var gbi in allItems)
                 {
-                    if (gbi.displayName == blockName || gbi.name.Contains(blockName))
+                    if (gbi == null) continue;
+                    if (SimplifyBlockName(gbi.displayName) == wanted
+                        || SimplifyBlockName(gbi.itemId) == wanted
+                        || SimplifyBlockName(gbi.name) == wanted)
                     {
                         foundItem = gbi;
                         break;
                     }
                 }
-
-                // Give the item back to the player.
-                if (foundItem != null)
-                {
-                    inventory.Add(foundItem, 1);
-                    VoxelEngine.UI.BuildFeedbackHud.Show(
-                        $"Ground down {blockName}", $"+1 {foundItem.displayName}",
-                        foundItem.icon, VoxelEngine.UI.UITheme.AccentOrange);
-                }
-                else
-                {
-                    // Fallback: spawn as dropped item.
-                    VoxelEngine.UI.BuildFeedbackHud.Show(
-                        $"Ground down {blockName}", "Block recovered",
-                        null, VoxelEngine.UI.UITheme.AccentOrange);
-                }
-
-                // Remove the block from its grid.
-                if (block.Grid != null) block.Grid.RemoveBlock(block.GridPos);
-                else Destroy(block.gameObject);
-
-                ConsumeDurability(inventory.ActiveStack);
-                _nextHit = Time.time + 0.3f;
             }
+
+            if (foundItem != null)
+            {
+                inventory.Add(foundItem, 1);
+                VoxelEngine.UI.BuildFeedbackHud.Show(
+                    $"{verb} {blockName}", $"+1 {foundItem.displayName}",
+                    foundItem.icon, VoxelEngine.UI.UITheme.AccentOrange);
+            }
+            else
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show(
+                    $"{verb} {blockName}", "Block recovered",
+                    null, VoxelEngine.UI.UITheme.AccentOrange);
+            }
+        }
+
+        /// <summary>Remove a block from its owning grid, honouring the precision
+        /// attachment layer (plain Grid.RemoveBlock silently fails for those).</summary>
+        private static void RemoveGridBlockFromGrid(VoxelEngine.GridSystem.GridBlock block)
+        {
+            if (block == null) return;
+            if (block.Grid != null)
+            {
+                if (block.IsPrecisionAttachment)
+                    block.Grid.GetComponent<VoxelEngine.GridSystem.GridPrecisionAttachmentLayer>()
+                        ?.RemoveBlock(block.PrecisionGridPos);
+                else
+                    block.Grid.RemoveBlock(block.GridPos);
+            }
+            else
+            {
+                Destroy(block.gameObject);
+            }
+        }
+
+        /// <summary>Normalize a name for matching: lowercase, alphanumerics only.
+        /// Bridges placement-renamed blocks ("Screen (Small)") and their item assets
+        /// ("Screen_Small").</summary>
+        private static string SimplifyBlockName(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return string.Empty;
+            var sb = new System.Text.StringBuilder(name.Length);
+            foreach (char c in name)
+                if (char.IsLetterOrDigit(c)) sb.Append(char.ToLowerInvariant(c));
+            return sb.ToString();
         }
 
         // Which grid blocks open an interaction panel on the Interact key. Pure

@@ -1,9 +1,87 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.9.3-dev`
+**Current Version:** `6.10.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.10.1-dev] Compile Fix + Unity 6.4 GetEntityId Migration
+
+**Type:** PATCH — compile error and deprecation-warning cleanup only; no gameplay change, no save schema break.
+
+**Fixed:**
+- **Compile error CS1501** in `MaritimeAnimator.SpinY` (a `Transform.Rotate` call passed 5 arguments — the maximum is 4). The maritime animator compiles again.
+- **All CS0618 warnings (`Object.GetInstanceID()` is obsolete in Unity 6.4) migrated to `GetEntityId()`** — every one of the 9 call sites:
+  - `Building/BuildSystem` — pipe-ghost candidate dedup (`HashSet<EntityId>`) and ghost target tracking (`EntityId _pipeGhostTargetId`).
+  - `GridSystem/GridCameraBlock` — screen→camera feed consumer registry and its prune list now keyed by `EntityId`; feed camera and render-texture names use the new id.
+  - `GridSystem/GridScreenBlock` — `dataSourceInstanceIds` is now `List<EntityId>`; `ToggleSource` / `SetPrimarySource` signatures updated accordingly.
+  - `GridSystem/UI/GridScreenConfigUI` and `Power/Wind/WindTurbineUI` — source selection ids and the per-turbine scroll-restore owner id via `GetEntityId()`.
+- **Save compatibility note:** screen source instance ids are session-local handles and were never stable across launches (old saves stored plain ints; 6.10+ stores `EntityId` text). Loading now seeds `EntityId.None` per source and lets `ResolveAllProviders()` re-bind the live ids on first read — identical behaviour, and positions/ids now stay strictly index-aligned.
+
+**Manual Unity Steps:**
+1. Pull/reload `Dev` and let Unity recompile — expect **0 errors, 0 warnings**.
+2. Open a previously configured grid screen → data sources re-bind automatically and still display.
+3. Open two different wind turbines in sequence → scroll position is still remembered per turbine.
+4. Place/verify a maritime engine → pistons/crank animate (this is the file the compile error was blocking).
+
+---
+
+### [6.10.0-dev] Maritime Upgrade Modules, 20-Speed Gearbox & Premium Engine Rebuild
+
+**Type:** MINOR — new save-compatible feature content (engine modules, heat system, generator speed bonus, 20-speed gearbox), plus bug fixes. Old saves load cleanly; placed blocks auto-migrate (module containers start empty, legacy 2000 RPM gearboxes migrate to the 10000 RPM cap on placement/tick).
+
+**New — Engine & Generator Upgrade Modules:**
+- New socketable **`Engine Upgrade Modules`** (new `EngineModuleItem` asset type) that slot into new **Module Slots** on engines (2/3/4 slots by tier) and maritime generators (2 slots) — open the block panel and drop modules in:
+  - **High-Flow Turbocharger** (T1/T2/T3 engines): +20% output power, +10% RPM cap, +10% fuel use, faster exhaust smoke.
+  - **Efficiency Tuning Chip** (T2/T3 engines + generators): +40% max output power, −15% fuel use — **unlocks a mandatory active-coolant requirement** (overheats in ~15 s without continuous coolant flow).
+  - **Overclocked Fuel Injectors** (T2/T3 engines): +30% output power, +15% speed cap, +50% heat generation, dirty soot-black exhaust.
+  - **Super-Cooler Radiator Jacket** (T2/T3 engines + generators): +200% heat dissipation, draws a continuous fresh/sea water feed (2 L/s per jacket) from connected tanks.
+- Modules hot-swap live (no rebuild), persist in saves, support shift-click quick transfer, and are enforced one-per-kind per slot (maxStack 1).
+- New **research tier 5: Maritime Performance Tuning** (after MSC Loreto-class Propulsion) unlocks all four module recipes at the Assembler.
+
+**New — Engine & Generator Heat Model:**
+- Live temperature on every maritime engine and generator: normal below 90 °C, **knocking** ≥ 90 °C (−25% fuel efficiency), **critical mechanical failure** ≥ 100 °C (shaft stops, heavy black smoke, latched until cooled below 80 °C).
+- Radiator water draw, coolant flow, and heat are shown on the block panels (temperature stat, heat bar, knocking/critical warning pills, radiator flow status).
+- Married to smoke: critical heat makes any adjacent exhaust stack belch heavy black smoke at increased rate; Overclocked Injectors darken the plume; High-Flow Turbochargers raise exhaust velocity.
+
+**New — Generator Speed Bonus:**
+- Maritime generators now earn up to **+50% output** as shaft speed approaches rated RPM (`MaritimeSettings.generatorSpeedBonus`, default 0.5) — gearing up into a generator finally pays off.
+
+**New — Premium Engine Models (MaritimeMeshBuilder v16):**
+- **Tier 1 Crude Inline-4** (~2 m): chipped blue-green cast iron, open-frame crankcase with a visible crankshaft, four open-air pistons, exposed pushrods + valve springs, grease-stained rear SAE drive flange.
+- **Tier 2 HFO V8** (~4×2×2 m): faded-yellow 90° V-block, glass-paneled framed inspection windows on both flanks revealing the banks and crankshaft, valley intake plenum, HFO heating manifold with steam-traced fuel filters, geared output housing, insulated heat-discoloured (blue/orange) exhaust stack.
+- **Tier 3 MGO V12** (~8×4×3 m): anodized red/silver precision diesel, dry-sump pan, electronic valve-train covers, four armored quartz viewing ports, gantry walkways with railings and access ladders along the whole block, four turbo trunks off the central exhaust plenum, front accessory belt driving an animated **SeaPump** seawater pump, massive splined PTO shaft in a bearing housing.
+- All three share one deterministic crank angle: crankshaft, output shaft, pistons (true firing-order phases 1-3-4-2 / 1-8-4-3-6-5-7-2 / 1-12-5-8-3-10-6-7-2-11-4-9) and the SeaPump stay in lock-step, and pistons slide along their tilted V-bore axes. `engine_speed` (0–1) drives crank RPM and piston playback rate simultaneously.
+- Exhaust smoke is now tier-styled: T1 pulsating RPM-synced puffs, T2 steady thick dark-grey column, T3 clean fast blueish-white stream.
+- Invisible locator sockets (`Socket_*`, standard axes) are included in each engine prefab for alignment reference.
+
+**Fixed / Improved:**
+- **Gearbox gear ratio actually works now**: gear changes apply LIVE every tick (previously only refreshed on graph rebuild), the Input RPM readout was inverted (multiplied instead of divided), and the 2000 RPM output clamp that silently killed gears above ~1.3× on stock engines is gone (10000 cap, legacy blocks auto-migrate).
+- **Gearbox is now 20-speed and truly bidirectional**: 20 selectable ratios (0.25×…6.00×) applied from the panel, and the job is tree-aware (BFS parent map) so power can enter EITHER side — the far side becomes the output. Branched drivetrains no longer leak gearbox ratios into sibling branches, and a generator only sinks torque on its own branch.
+- **Crude engine "fuel seconds" were not seconds**: the buffer readout only matched reality at full throttle. It now shows an honest ETA (`EstimatedFuelSecondsRemaining` at the CURRENT draw rate, formatted as `1h 05m` / `2m 14s` / `43s`) on solid and liquid engines alike.
+- **Shift-click coal into the fuel hopper works**: quick-transfer now routes burnable items to the engine hopper and modules to the module sockets (engines + generators) instead of falling through to network routing.
+- **Maritime blocks and screens can be broken/mined**: LMB with any tool (or bare hands) damages grid blocks with proper tool strength/rate/durability; grinding and breaking now return the correct item via the block's `SourceItem` with a normalized name-search fallback ("Screen (Small)" ↔ `Screen_Small`), and removal works on the precision attachment layer instead of silently failing.
+- **Screen datatypes for engines and generators**: `GridMaritimeEngine` and `GridMaritimeGenerator` now implement `IGridDataProvider` (categories "Maritime Engines" / "Maritime Generators") so grid screens can display RPM, torque/power, fuel ETA, heat and buffer status.
+- **Several batteries now charge together**: surplus generation is shared equally across all Recharge/Auto batteries on a grid (water-filling rounds re-offer leftovers from full packs); discharge demand is likewise spread instead of draining only the first pack.
+- Save system: engine fuel hopper + module sockets serialize together (legacy fuel-only saves fill the hopper and leave sockets empty), generator sockets persist, and multi-container (de)serialization stays aligned when a container is null.
+
+**Manual Unity Steps:**
+1. Pull/reload the `Dev` branch and let Unity compile.
+2. In the Project window, **delete the three old engine prefabs** so the new v16 models are authored fresh:
+   - `Assets/VoxelEngine/Maritime/Prefabs/Engine_Small_Large.prefab`
+   - `Assets/VoxelEngine/Maritime/Prefabs/Engine_Medium_Large.prefab`
+   - `Assets/VoxelEngine/Maritime/Prefabs/Engine_Giant_Large.prefab`
+   (Item assets keep working — Step 13 reconnects `blockPrefab` automatically.)
+3. Open `Tools > Voxel Engine > Voxel Engine Setup`.
+4. Run **13. Build Maritime Content** once — it rebuilds the three engine prefabs with the new models, creates the four upgrade-module items + recipes, adds research tier 5 (Maritime Performance Tuning) and updates gearbox defaults. The step is non-destructive: existing prefabs/items/recipes keep your edits.
+5. Place a Crude / HFO / MGO engine and confirm the new visuals, moving pistons (firing order), spinning crank + output shaft, and (V12) the belt-driven SeaPump.
+6. Open an engine: check the fuel ETA line, the thermal section, and socket modules into the Module Slots; confirm the heat gauge rises without coolant when an Efficiency Tuning Chip is installed.
+7. Shift-click coal with an engine panel open → it lands in the fuel hopper; shift-click a module → it lands in the module sockets.
+8. Open a gearbox: 20 gear buttons apply live; feed power into either side and confirm the other side outputs at ratio.
+9. Wire generators to grid batteries: multiple batteries now charge together; open a grid screen and add engine/generator data sources.
+10. Break a maritime block and a screen with a normal tool (and with the grinder) and confirm you get the item back.
 
 ---
 

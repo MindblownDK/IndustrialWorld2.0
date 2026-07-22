@@ -3294,6 +3294,21 @@ namespace VoxelEngine.UI
                     if (reactor.leuPelletItem != null && item == reactor.leuPelletItem) return reactor.fuelC;
                     if (reactor.iceItem != null && item == reactor.iceItem) return reactor.iceC;
                     return reactor.fuelC;
+                case VoxelEngine.Maritime.GridMaritimeEngine engine:
+                {
+                    // Upgrade modules route to the engine module slots (tier-filtered).
+                    if (item is VoxelEngine.Items.EngineModuleItem && engine.CanSocketModule(item))
+                        return engine.GetModuleSlots();
+                    // Burnable items (wood logs, planks, coal) route to the fuel hopper.
+                    // The hopper's own AcceptFilter keeps anything else out.
+                    if (engine.SolidFuelInput != null && item is VoxelEngine.Items.ResourceItem res && res.fuelSeconds > 0f)
+                        return engine.SolidFuelInput;
+                    return null;
+                }
+                case VoxelEngine.Maritime.GridMaritimeGenerator generator:
+                    if (item is VoxelEngine.Items.EngineModuleItem && generator.CanSocketModule(item))
+                        return generator.GetModuleSlots();
+                    return null;
                 default:
                     return null;
             }

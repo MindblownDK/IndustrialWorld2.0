@@ -1,0 +1,39 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2423b2107f8043b1967e21c34aff5d4f, type: 3}
+  m_Name: MItem_ModuleTurbo
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Items.EngineModuleItem
+  itemId: high_flow_turbocharger
+  displayName: High-Flow Turbocharger
+  description: 'High-flow compressor upgrade (T1/T2/T3 engines). +20% output power,
+    +10% RPM cap per socketed module. Trade-off: +10% fuel use and visibly faster
+    exhaust smoke. Socket into an engine''s Module Slots (right-click the engine).'
+  icon: {fileID: 0}
+  iconTint: {r: 0.9, g: 0.55, b: 0.15, a: 1}
+  maxStack: 1
+  massPerUnit: 1
+  category: Maritime
+  viewmodelPrefab: {fileID: 0}
+  moduleKind: 0
+  worksOnTier1: 1
+  worksOnTier2: 1
+  worksOnTier3: 1
+  worksOnGenerator: 0
+  outputPowerBonus: 0.2
+  speedCapBonus: 0.1
+  fuelUseModifier: 0.1
+  heatGenerationBonus: 0.1
+  dissipationMultiplier: 1
+  requiresActiveCoolant: 0
+  waterDrawLitresPerSec: 0
+  exhaustSmokeVelocityMul: 1.5
+  dirtyExhaust: 0

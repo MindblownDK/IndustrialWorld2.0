@@ -1,0 +1,41 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe52eb4685f86c44d967d9cd3e4bd91a, type: 3}
+  m_Name: res_maritime_tuning
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Research.ResearchNode
+  nodeId: res_maritime_tuning
+  displayName: Maritime Performance Tuning
+  description: 'Push machinery past factory limits. Unlocks the four engine upgrade
+    Module recipes: High-Flow Turbocharger, Efficiency Tuning Chip, Overclocked Fuel
+    Injectors, and Super-Cooler Radiator Jacket. Modules socket into Module Slots
+    on engines and generators - greater power demands greater cooling.'
+  iconTint: {r: 0.2, g: 0.5, b: 0.8, a: 1}
+  category: 0
+  subCategory: 6
+  tier: 5
+  column: 6
+  eraLabel: 
+  prerequisites:
+  - {fileID: 11400000, guid: bf2d4e02bd0b86c48b051af76db3d1ad, type: 2}
+  researchSeconds: 260
+  cost:
+  - pack: {fileID: 11400000, guid: 8c4bb8c69288cbe4bb74ab787695d922, type: 2}
+    count: 60
+  unlocksRecipes:
+  - {fileID: 11400000, guid: 75739d72f2cd9484593b477ef9c4dc14, type: 2}
+  - {fileID: 11400000, guid: eb482dc0d4b52614ca5a83924a776bd3, type: 2}
+  - {fileID: 11400000, guid: c7fc167941d2ee64cbc480dbd908a04f, type: 2}
+  - {fileID: 11400000, guid: 630e65ab12aaef2478532d4856b69826, type: 2}
+  upgradeKind: 0
+  upgradePerRankAmount: 0
+  maxRanks: 1
+  costScalesWithRank: 1

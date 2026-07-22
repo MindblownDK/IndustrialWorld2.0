@@ -40,6 +40,8 @@ namespace VoxelEngine.Maritime
         [Range(0.1f, 2f)] public float rpmResponse = 1.0f;
         [Tooltip("Generator efficiency converting shaft power (torque·ω) into electricity (W).")]
         [Range(0f, 1f)] public float generatorEfficiency = 0.85f;
+        [Tooltip("Bonus electrical output a generator makes at its rated RPM. 0.5 = up to +50% more power at full rated speed.")]
+        [Range(0f, 1f)] public float generatorSpeedBonus = 0.5f;
 
         [Header("Gearbox")]
         [Tooltip("Absolute RPM clamp applied to every gearbox output (safety).")]

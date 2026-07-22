@@ -165,9 +165,13 @@ namespace VoxelEngine.EditorTools
                 "Step 13 builds the MARITIME PROPULSION & MECHANICAL NETWORK:\n" +
                 "  • Hull materials (Untreated Wood, Tar Plank, Iron Hull, Balsa Wood)\n" +
                 "  • Propulsion (Waterwheel, Drive Shaft, Propellers, Engines, Ship Turbos, Gearbox, Generator)\n" +
-                "  • Large premium ship-engine visuals: Crude starter engine, massive HFO engine, colossal MGO engine\n" +
+                "  • Premium engine models: Crude Inline-4, HFO V8 with glass inspection windows, MGO V12 with\n" +
+                "    gantry walkways, quartz viewports and a belt-driven seawater pump (rebuilds via mesh version)\n" +
+                "  • Engine upgrade modules: High-Flow Turbocharger, Efficiency Tuning Chip,\n" +
+                "    Overclocked Fuel Injectors, Super-Cooler Radiator Jacket (engines + generators)\n" +
+                "  • 20-speed bidirectional gearbox\n" +
                 "  • Control (Helm) + Utility (Bilge Pump, Exhaust Pipe, Marine Water Pump)\n" +
-                "  • 4-tier \"Maritime Engineering\" research tree\n" +
+                "  • 5-tier \"Maritime Engineering\" research tree\n" +
                 "  • MaritimeSettings balance asset\n" +
                 "Re-runnable. Idempotent. Run AFTER step 12.");
             AddWizardButton(scroll, "13. Build Maritime Content (Hulls, Engines, Shafts, Propellers, Turbo, Helm + Maritime Research Tree)", BuildMaritimeContent, 56);
@@ -5826,7 +5830,7 @@ root =>
 
             // Gearbox
             var gearPref = MakeMPref<VoxelEngine.Maritime.GridGearbox>("Gearbox_Large", new Color(0.55f,0.50f,0.40f), Vector3.one, SzL,
-                g => { g.gearRatio = 2f; g.maxOutputSpeed = 2000f; g.selectedGear = 2; });
+                g => { g.selectedGear = 10; g.gearRatio = 1.00f; g.maxOutputSpeed = 10000f; });
             var itemGear = MakeMItem("MItem_Gearbox", "Gearbox", new Color(0.55f,0.50f,0.40f), gearPref, SzL, 400, 500);
             AddMRecipe("Recipe_MGearbox", "Gearbox", itemGear, (ironPlate, 6), (ironGear, 8), (steelPlate, 2));
 
@@ -5866,6 +5870,76 @@ root =>
             var itemHelm = MakeMItem("MItem_Helm", "Helm", new Color(0.45f,0.30f,0.15f), helmPref, SzL, 150, 300);
             AddMRecipe("Recipe_MHelm", "Helm", itemHelm, (plank, 6), (ironIngot, 2), (ironGear, 2));
 
+            // ═══════════════════════════════════════════════════════════════
+            //  ENGINE UPGRADE MODULES (socketed into engine/generator Module Slots)
+            // ═══════════════════════════════════════════════════════════════
+            VoxelEngine.Items.EngineModuleItem MakeEngineModule(
+                string assetName, string display, Color tint, VoxelEngine.Items.EngineModuleKind kind,
+                bool t1, bool t2, bool t3, bool gen,
+                float outputBonus, float speedBonus, float fuelMod, float heatBonus,
+                float dissipationMul, bool needsCoolant, float waterDraw,
+                float smokeSpeedMul, bool dirtySmoke, string desc)
+            {
+                string path = $"{ITEMS}/{assetName}.asset";
+                bool existed = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.EngineModuleItem>(path) != null;
+                var m = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.EngineModuleItem>(path);
+                if (m == null) { m = ScriptableObject.CreateInstance<VoxelEngine.Items.EngineModuleItem>(); AssetDatabase.CreateAsset(m, path); }
+                // Only populate fields on freshly-created modules — never overwrite user edits.
+                if (!existed)
+                {
+                    m.itemId = display.ToLowerInvariant().Replace(" ", "_").Replace("-", "_").Replace("/", "_").Replace("(", "").Replace(")", "");
+                    m.displayName = display; m.iconTint = tint; m.category = "Maritime";
+                    m.maxStack = 1; // exactly one module of each kind per block
+                    m.description = desc;
+                    m.moduleKind = kind;
+                    m.worksOnTier1 = t1; m.worksOnTier2 = t2; m.worksOnTier3 = t3; m.worksOnGenerator = gen;
+                    m.outputPowerBonus = outputBonus; m.speedCapBonus = speedBonus;
+                    m.fuelUseModifier = fuelMod; m.heatGenerationBonus = heatBonus;
+                    m.dissipationMultiplier = dissipationMul;
+                    m.requiresActiveCoolant = needsCoolant; m.waterDrawLitresPerSec = waterDraw;
+                    m.exhaustSmokeVelocityMul = smokeSpeedMul; m.dirtyExhaust = dirtySmoke;
+                }
+                EditorUtility.SetDirty(m);
+                return m;
+            }
+
+            var itemModuleTurbo = MakeEngineModule("MItem_ModuleTurbo", "High-Flow Turbocharger", new Color(0.90f, 0.55f, 0.15f),
+                VoxelEngine.Items.EngineModuleKind.HighFlowTurbocharger,
+                t1: true, t2: true, t3: true, gen: false,
+                outputBonus: 0.20f, speedBonus: 0.10f, fuelMod: 0.10f, heatBonus: 0.10f,
+                dissipationMul: 1f, needsCoolant: false, waterDraw: 0f,
+                smokeSpeedMul: 1.5f, dirtySmoke: false,
+                desc: "High-flow compressor upgrade (T1/T2/T3 engines). +20% output power, +10% RPM cap per socketed module. Trade-off: +10% fuel use and visibly faster exhaust smoke. Socket into an engine's Module Slots (right-click the engine).");
+
+            var itemModuleEfficiency = MakeEngineModule("MItem_ModuleEfficiency", "Efficiency Tuning Chip", new Color(0.30f, 0.85f, 0.60f),
+                VoxelEngine.Items.EngineModuleKind.EfficiencyTuningChip,
+                t1: false, t2: true, t3: true, gen: true,
+                outputBonus: 0.40f, speedBonus: 0f, fuelMod: -0.15f, heatBonus: 0f,
+                dissipationMul: 1f, needsCoolant: true, waterDraw: 0f,
+                smokeSpeedMul: 1f, dirtySmoke: false,
+                desc: "Precision injection/field tuning (T2/T3 engines + generators). +40% max output power, -15% fuel use. WARNING: unlocks a MANDATORY active-coolant requirement — without continuous coolant flow the block overheats within ~15 seconds.");
+
+            var itemModuleInjectors = MakeEngineModule("MItem_ModuleInjectors", "Overclocked Fuel Injectors", new Color(0.85f, 0.25f, 0.20f),
+                VoxelEngine.Items.EngineModuleKind.OverclockedFuelInjectors,
+                t1: false, t2: true, t3: true, gen: false,
+                outputBonus: 0.30f, speedBonus: 0.15f, fuelMod: 0.20f, heatBonus: 0.50f,
+                dissipationMul: 1f, needsCoolant: false, waterDraw: 0f,
+                smokeSpeedMul: 1.2f, dirtySmoke: true,
+                desc: "Overclocked injection timing (T2/T3 engines). +30% output power, +15% speed cap. Trade-off: +50% heat generation, +20% fuel use, and dirty soot-black exhaust. Pair with a Super-Cooler Radiator Jacket.");
+
+            var itemModuleRadiator = MakeEngineModule("MItem_ModuleRadiator", "Super-Cooler Radiator Jacket", new Color(0.25f, 0.60f, 0.95f),
+                VoxelEngine.Items.EngineModuleKind.SuperCoolerRadiatorJacket,
+                t1: false, t2: true, t3: true, gen: true,
+                outputBonus: 0f, speedBonus: 0f, fuelMod: 0f, heatBonus: 0f,
+                dissipationMul: 3f, needsCoolant: false, waterDraw: 2f,
+                smokeSpeedMul: 1f, dirtySmoke: false,
+                desc: "Water-jacketed radiator sleeve (T2/T3 engines + generators). +200% heat dissipation while running. Requires a CONTINUOUS fresh/sea water supply drawn from connected tanks (2 L/s per jacket) — keep a Marine Water Pump feeding the grid.");
+
+            AddMRecipe("Recipe_MModuleTurbo", "High-Flow Turbocharger", itemModuleTurbo, (steelPlate, 4), (copperPlate, 4), (ironGear, 2), (circuit, 1));
+            AddMRecipe("Recipe_MModuleEfficiency", "Efficiency Tuning Chip", itemModuleEfficiency, (advCircuit, 3), (circuit, 2), (copperWire, 6));
+            AddMRecipe("Recipe_MModuleInjectors", "Overclocked Fuel Injectors", itemModuleInjectors, (steelPlate, 3), (ironGear, 3), (circuit, 2), (copperWire, 2));
+            AddMRecipe("Recipe_MModuleRadiator", "Super-Cooler Radiator Jacket", itemModuleRadiator, (copperPlate, 6), (steelPlate, 3), (glass, 2), (copperWire, 2));
+
             // ── Item descriptions (only set if empty — preserves user edits) ──
             SetDesc(itemUntWood, "Buoyant starter hull. Absorbs water over time while submerged, gradually increasing mass and sinking the ship lower. Research Tar-Coated Plank for waterproof voyages.");
             SetDesc(itemTar, "100% waterproof hull. Never waterlogs. The reliable mid-game hull material for ocean voyages. Slightly more durable than untreated wood.");
@@ -5879,12 +5953,12 @@ root =>
             SetDesc(itemPropS, "3-blade cast bronze propeller (detail-scale). Low thrust but highly maneuverable. Consumes shaft torque through its movable Rotation input point 0 mount. Place below the waterline facing the direction you want to push.");
             SetDesc(itemPropL, "4-blade heavy steel industrial propeller. Extreme thrust with a movable Rotation input point 0 mount for shaft/chain-drive alignment. Built for big ship drivetrains and visible cavitation under load.");
             SetDesc(itemExhaust, "Exhaust venting pipe. EVERY engine requires at least one adjacent exhaust pipe or it chokes and produces zero torque. The pipe vents exhaust gas buildup and emits visible smoke particles while engines run.");
-            SetDesc(itemEngS, "Crude Engine (starter 1x1x1 large-grid block). FUEL: Wood Logs / Planks / Coal. A heavy cast-iron beginner ship engine that produces rotational force into a shaft - not direct electricity. Includes a solid-fuel hopper and supports 1 Small Turbocharger. Requires an adjacent Exhaust Pipe.");
-            SetDesc(itemEngM, "Heavy Fuel Oil Engine (huge 4x3x2 visual ship engine). FUEL: Heavy Fuel Oil. Produces large rotational force for shafts, chain drives, propellers, and generators. Requires coolant and an adjacent Exhaust Pipe. Supports 2 Small or Large Turbochargers.");
-            SetDesc(itemEngG, "MGO Engine (colossal 6x5x3 visual ship engine). FUEL: Marine Gas Oil / MGO. Massive industrial ship diesel that produces extreme rotational force for the largest propellers and shaft generators. Requires coolant and adjacent exhaust. Supports 4 Small or Large Turbochargers.");
+            SetDesc(itemEngS, "Crude Inline-4 Engine (starter 1x1x1 large-grid block). FUEL: Wood Logs / Planks / Coal. Chipped blue-green cast-iron block with four open-air pistons, exposed pushrods and an open-frame crankshaft. Produces rotational force into a shaft - not direct electricity. Solid-fuel hopper, 1 Small Turbocharger socket, 2 upgrade-Module slots. Requires an adjacent Exhaust Pipe. Watch the temperature: knocking above 90°C, mechanical failure at 100°C.");
+            SetDesc(itemEngM, "Heavy Fuel Oil V8 Engine (~4x2x2 m). FUEL: Heavy Fuel Oil. Faded yellow V-block with glass-paneled inspection windows, a valley intake plenum and steam-heated fuel filters. 3 upgrade-Module slots, 2 turbo flanges. Requires coolant and an adjacent Exhaust Pipe. Watch the temperature: knocking above 90°C, mechanical failure at 100°C.");
+            SetDesc(itemEngG, "MGO Marine V12 Engine (~8x4x3 m flagship). FUEL: Marine Gas Oil / MGO. Anodized red/silver precision diesel with armored quartz viewports, gantry walkways, a belt-driven seawater pump and a massive splined PTO shaft. 4 upgrade-Module slots, 4 turbo mounts. Requires coolant and adjacent exhaust. Watch the temperature: knocking above 90°C, mechanical failure at 100°C.");
             SetDesc(itemTurboSmall, "Small Ship Turbocharger. Boosts an engine by +15% torque only when mounted on a named Turbo attachment point. Compact industrial compressor housing for crude and medium ship engines.");
             SetDesc(itemTurboLarge, "Large Ship Turbocharger. Boosts an engine by +25% torque only when mounted on a named Turbo attachment point. Huge industrial compressor for medium and giant ship engines.");
-            SetDesc(itemGear, "Industrial gearbox. Trades torque for RPM in all directions. 6 selectable gear ratios (0.5x to 4x). Higher ratio = faster spin but less torque. Speed is hard-clamped to prevent runaway gearing. Place between an engine and a propeller or shaft generator.");
+            SetDesc(itemGear, "Industrial 20-speed gearbox. Trades torque for RPM in ALL directions - power can enter from either side and the opposite side automatically becomes the output. 20 selectable ratios (0.25x torque gears to 6.00x speed gears), gear changes apply live. Speed is hard-clamped at 10000 RPM to prevent runaway gearing. Place between an engine and a propeller or shaft generator.");
             SetDesc(itemGen, "Maritime shaft generator. Converts rotational force from a shaft into electricity. More RPM = more power. Best used after a gearbox when gearing up speed into the generator. Contains a small internal battery buffer.");
             SetDesc(itemEProp, "Electrical propeller (2x2x1). Torpedo-shaped bronze pod with a sleek 3-blade propeller. Driven by electricity from the grid (not shaft torque). Medium thrust with fast spin-up. Heavy armored power conduit.");
             SetDesc(itemBilge, "Bilge pump. Consumes electricity to drain waterlogged mass from nearby hull blocks within a 4-cell radius. Essential for surviving hull breaches and mega-storms on untreated-wood ships. Heavy, no buoyancy.");
@@ -5969,11 +6043,18 @@ root =>
                     new[] { t2 });
 
                 // Tier 4: MSC Loreto-class Propulsion (Giant Diesel, Turbocharger, Large Propeller)
-                MakeMaritimeNode("res_maritime_loreto", "MSC Loreto-class Propulsion",
+                var t4 = MakeMaritimeNode("res_maritime_loreto", "MSC Loreto-class Propulsion",
                     "The pinnacle of maritime engineering. Unlocks the Giant Diesel Engine, Turbocharger, and Large Propeller.",
                     4, 6, 200f, new[] { (sciT3, 40) },
                     recipes.FindAll(r => r != null && (r.name.Contains("EngineGiant") || r.name.Contains("Turbocharger") || r.name.Contains("PropLarge"))).ToArray(),
                     new[] { t3 });
+
+                // Tier 5: Maritime Performance Tuning (engine/generator upgrade modules)
+                MakeMaritimeNode("res_maritime_tuning", "Maritime Performance Tuning",
+                    "Push machinery past factory limits. Unlocks the four engine upgrade Module recipes: High-Flow Turbocharger, Efficiency Tuning Chip, Overclocked Fuel Injectors, and Super-Cooler Radiator Jacket. Modules socket into Module Slots on engines and generators - greater power demands greater cooling.",
+                    5, 6, 260f, new[] { (sciT3, 60) },
+                    recipes.FindAll(r => r != null && r.name.Contains("Module")).ToArray(),
+                    new[] { t4 });
 
                 EditorUtility.SetDirty(tree);
             }
@@ -6000,13 +6081,17 @@ root =>
                 $"Maritime content built!\n\n" +
                 $"BLOCKS ({recipes.Count} prefabs + items + recipes):\n" +
                 "  Hull: Untreated Wood, Tar Plank, Iron Hull, Balsa Wood\n" +
-                "  Propulsion: Waterwheel, Drive Shaft, Rotation Transfer, Encased Chain Drive, Small/Large Propeller, Exhaust, Small/Medium/Giant Engine, Turbocharger, Gearbox, Generator, E-Propeller, Bilge Pump, Helm\n" +
+                "  Propulsion: Waterwheel, Drive Shaft, Rotation Transfer, Encased Chain Drive, Small/Large Propeller, Exhaust, Crude Inline-4 / HFO V8 / MGO V12 Engines, Turbocharger, 20-speed Gearbox, Generator, E-Propeller, Bilge Pump, Helm\n" +
+                "  Modules: High-Flow Turbocharger, Efficiency Tuning Chip, Overclocked Fuel Injectors, Super-Cooler Radiator Jacket\n" +
                 "  Storage: Shipping Container (5x Large Cargo capacity)\n\n" +
-                "RESEARCH TREE (4-tier Maritime Engineering):\n" +
+                "RESEARCH TREE (5-tier Maritime Engineering):\n" +
                 "  T1: Hydro-Mechanics\n" +
                 "  T2: Steam & Internal Combustion\n" +
                 "  T3: Heavy Industrial Maritime\n" +
-                "  T4: MSC Loreto-class Propulsion\n\n" +
+                "  T4: MSC Loreto-class Propulsion\n" +
+                "  T5: Maritime Performance Tuning (upgrade modules)\n\n" +
+                "NOTE: If you deleted the old engine prefabs, this step rebuilt them with the\n" +
+                "new v16 engine models (mesh version auto-upgrades otherwise).\n" +
                 "MaritimeSettings asset created in Maritime/.\n" +
                 "All recipes gated behind the research tree.",
                 "OK");

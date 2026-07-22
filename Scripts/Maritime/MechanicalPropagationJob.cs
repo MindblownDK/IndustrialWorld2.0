@@ -3,14 +3,21 @@
 // Burst-compiled torque propagation across the cached propulsion chains.
 //
 //   • Runs as IJobParallelFor over CHAINS (each chain is independent).
-//   • Within one chain it sweeps serially:  source → shafts → gearbox → consumer,
-//     applying turbo boost, gear ratios, broken-shaft cutoff and generator load.
+//   • Within one chain it evaluates every node from its BFS PARENT (set at
+//     rebuild), so branched drivetrains route torque/RPM correctly and a
+//     gearbox trades torque for speed no matter which face is the input.
 //   • Writes CurrentRPM + ElectricityOutput back into the node array so the
 //     subsequent BuoyancyJob can convert RPM into thrust.
 //
-// Zero GC, zero managed calls, Burst-friendly. The "Component-Driven Network
-// Graph" the design specifies: the heavy graph walk happens once (at rebuild)
-// and this job only ever touches a flat struct array.
+// v6.10.0-dev —
+//   • Tree-aware per-node shaft values (ShaftTorque/ShaftRpm via ParentIndex)
+//     replacing the single rolling accumulator: branch splits no longer leak
+//     a gearbox ratio into sibling branches, and generators only sink the
+//     torque on their own branch.
+//   • Generator Speed Bonus: spinning faster toward rated RPM yields up to
+//     +50% more electrical output (maxSpeedBonus, read from node.MaxRPM scale).
+//   • Generator OutputMultiplier: upgrade-module output bonus, fed from the
+//     live block each tick.
 
 using Unity.Burst;
 using Unity.Collections;
@@ -43,6 +50,8 @@ namespace VoxelEngine.Maritime
         public float GeneratorEfficiency;
         public float GlobalGearSpeedCap;
         public float WheelFlowTorque;
+        /// <summary>Extra generator output at rated RPM (0.5 = +50%).</summary>
+        public float GeneratorSpeedBonus;
 
         // ω = rpm × 2π/60. Hardcoded literal because math.PI2 is static-readonly
         // (not a compile-time const) and cannot be used in a const expression.
@@ -70,6 +79,8 @@ namespace VoxelEngine.Maritime
                 var node = Nodes[i];
                 node.ElectricityOutput = 0f;
                 node.ElectricityDemand = 0f;
+                node.ShaftTorque = 0f;
+                node.ShaftRpm = 0f;
 
                 bool producer = node.Type == MechanicalNodeType.Engine || node.Type == MechanicalNodeType.Waterwheel;
                 if (!producer || node.IsBroken || node.FuelAvailable01 <= 0.0001f)
@@ -97,7 +108,8 @@ namespace VoxelEngine.Maritime
                 haveSource = true;
             }
 
-            float rpm = torque > 0.0001f ? rpmWeighted / torque : rpmMax;
+            float busRpm = torque > 0.0001f ? rpmWeighted / torque : rpmMax;
+            float busTorque = torque;
 
             // If there's no live source the whole chain is idle — zero every node's RPM.
             if (!haveSource)
@@ -108,60 +120,105 @@ namespace VoxelEngine.Maritime
                     n.CurrentRPM = 0f;
                     n.ElectricityOutput = 0f;
                     n.ElectricityDemand = 0f;
+                    n.ShaftTorque = 0f;
+                    n.ShaftRpm = 0f;
                     Nodes[i] = n;
                 }
                 return;
             }
 
-            // ── Propagate torque + RPM through the rest of the chain ──────
+            // ── Propagate the bus through the chain, parent by parent ──
+            // Nodes are stored in BFS order from the source, so a parent is always
+            // evaluated before its children in this pass.
             for (int i = chain.StartIndex; i < end; i++)
             {
                 var node = Nodes[i];
-                if (node.Type == MechanicalNodeType.Engine) continue;
+
+                // Upstream shaft state: sources own the shared bus; everyone else
+                // inherits from their BFS parent (their actual physical input side).
+                float inTorque;
+                float inRpm;
+                if (node.ParentIndex < 0)
+                {
+                    inTorque = busTorque;
+                    inRpm = busRpm;
+                }
+                else
+                {
+                    var parent = Nodes[node.ParentIndex];
+                    inTorque = parent.ShaftTorque;
+                    inRpm = parent.ShaftRpm;
+                }
 
                 switch (node.Type)
                 {
+                    case MechanicalNodeType.Engine:
+                        // Torque source — feeds the bus, shows its own generated RPM.
+                        node.ShaftTorque = inTorque;
+                        node.ShaftRpm = inRpm;
+                        break;
+
                     case MechanicalNodeType.Shaft:
-                        if (node.IsBroken) { torque = 0f; rpm = 0f; } // severed → chain dies downstream
-                        node.CurrentRPM = rpm;
+                        if (node.IsBroken) { inTorque = 0f; inRpm = 0f; } // severed → branch dies
+                        node.ShaftTorque = inTorque;
+                        node.ShaftRpm = inRpm;
+                        node.CurrentRPM = inRpm;
                         break;
 
                     case MechanicalNodeType.Gearbox:
                     {
-                        // Speed up (or down): rpm scales, torque trades inversely (power ≈ conserved).
+                        // Speed up (or down): rpm scales, torque trades inversely
+                        // (power ≈ conserved). Symmetric — whichever face carries the
+                        // input, the opposite side carries the transformed output.
                         float gr = math.max(0.01f, node.GearRatio);
-                        rpm = rpm * gr;
-                        rpm = math.min(rpm, math.min(node.MaxGearSpeed, GlobalGearSpeedCap));
-                        torque = torque / gr;
-                        node.CurrentRPM = rpm;
+                        float outRpm = math.min(inRpm * gr, math.min(node.MaxGearSpeed, GlobalGearSpeedCap));
+                        node.ShaftRpm = outRpm;
+                        node.ShaftTorque = inTorque / gr;
+                        node.CurrentRPM = outRpm;
                         break;
                     }
 
                     case MechanicalNodeType.Propeller:
                     case MechanicalNodeType.Waterwheel:
                         // Torque consumers that turn RPM into thrust (computed in BuoyancyJob).
-                        node.CurrentRPM = rpm;
+                        if (node.Type == MechanicalNodeType.Waterwheel && node.ParentIndex < 0)
+                        {
+                            node.ShaftTorque = inTorque;
+                            node.ShaftRpm = inRpm;
+                            break; // source-mode waterwheel — own RPM already set above
+                        }
+                        node.ShaftTorque = inTorque;
+                        node.ShaftRpm = inRpm;
+                        node.CurrentRPM = inRpm;
                         break;
 
                     case MechanicalNodeType.Generator:
                     {
                         // Mechanical → electrical. P = τ·ω, scaled by efficiency.
-                        float omega = rpm * RPM_TO_RAD_PER_SEC;
-                        node.ElectricityOutput = torque * omega * GeneratorEfficiency;
-                        node.CurrentRPM = rpm;
-                        // A generator is a load sink: it consumes the remaining shaft torque.
-                        torque = 0f;
+                        // Speed Bonus: the closer the shaft runs to the generator's
+                        // rated RPM, the more power it makes (up to +50%).
+                        float omega = inRpm * RPM_TO_RAD_PER_SEC;
+                        float speedBonus = 1f + GeneratorSpeedBonus * math.saturate(inRpm / math.max(1f, node.MaxRPM));
+                        node.ElectricityOutput = inTorque * omega * GeneratorEfficiency * speedBonus * math.max(0.01f, node.OutputMultiplier);
+                        node.CurrentRPM = inRpm;
+                        node.ShaftRpm = inRpm;
+                        // A generator is a load sink: downstream of it gets no torque.
+                        node.ShaftTorque = 0f;
                         break;
                     }
 
                     case MechanicalNodeType.ElectricalPropeller:
                         // Driven by electricity, not by shaft torque — handled in BuoyancyJob.
                         node.CurrentRPM = 0f;
+                        node.ShaftTorque = inTorque;
+                        node.ShaftRpm = inRpm;
                         node.ElectricityDemand = node.MaxTorque; // used as a watt demand proxy
                         break;
 
                     default:
                         node.CurrentRPM = 0f;
+                        node.ShaftTorque = inTorque;
+                        node.ShaftRpm = inRpm;
                         break;
                 }
 

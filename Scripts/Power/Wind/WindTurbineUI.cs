@@ -29,8 +29,8 @@ namespace VoxelEngine.Power.Wind
 
         // Scroll position survives the 4 Hz live-refresh rebuild — without this the
         // panel snapped back to the top every refresh tick. Reset per turbine.
-        private static float _savedScroll;
-        private static int   _savedScrollOwner;
+        private static float    _savedScroll;
+        private static EntityId _savedScrollOwner;
 
         public static VisualElement BuildPanel(WindTurbineController c, Inventory inventory)
         {
@@ -83,7 +83,7 @@ namespace VoxelEngine.Power.Wind
 
             // Restore the player's scroll position after a live-refresh rebuild —
             // exactly once (first layout pass), so it never fights active scrolling.
-            if (_savedScrollOwner != c.GetInstanceID()) { _savedScroll = 0f; _savedScrollOwner = c.GetInstanceID(); }
+            if (_savedScrollOwner != c.GetEntityId()) { _savedScroll = 0f; _savedScrollOwner = c.GetEntityId(); }
             bool restored = false;
             scroll.RegisterCallback<GeometryChangedEvent>(_ =>
             {

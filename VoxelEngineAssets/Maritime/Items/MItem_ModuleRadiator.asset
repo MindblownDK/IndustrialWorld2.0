@@ -1,0 +1,40 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2423b2107f8043b1967e21c34aff5d4f, type: 3}
+  m_Name: MItem_ModuleRadiator
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Items.EngineModuleItem
+  itemId: super_cooler_radiator_jacket
+  displayName: Super-Cooler Radiator Jacket
+  description: "Water-jacketed radiator sleeve (T2/T3 engines + generators). +200%
+    heat dissipation while running. Requires a CONTINUOUS fresh/sea water supply
+    drawn from connected tanks (2 L/s per jacket) \u2014 keep a Marine Water Pump
+    feeding the grid."
+  icon: {fileID: 0}
+  iconTint: {r: 0.25, g: 0.6, b: 0.95, a: 1}
+  maxStack: 1
+  massPerUnit: 1
+  category: Maritime
+  viewmodelPrefab: {fileID: 0}
+  moduleKind: 3
+  worksOnTier1: 0
+  worksOnTier2: 1
+  worksOnTier3: 1
+  worksOnGenerator: 1
+  outputPowerBonus: 0
+  speedCapBonus: 0
+  fuelUseModifier: 0
+  heatGenerationBonus: 0
+  dissipationMultiplier: 3
+  requiresActiveCoolant: 0
+  waterDrawLitresPerSec: 2
+  exhaustSmokeVelocityMul: 1
+  dirtyExhaust: 0
