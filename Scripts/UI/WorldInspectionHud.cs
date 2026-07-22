@@ -22,7 +22,8 @@ namespace VoxelEngine.UI
     public static class WorldInspectionHud
     {
         private const float ProbeInterval = 0.10f;
-        private const float ProbeDistance = 10f;
+        // Match the modern 16 m build reach so what you can build at, you can read at.
+        private const float ProbeDistance = 16f;
 
         private static VisualElement _uiRoot;
         private static VisualElement _card;
@@ -209,18 +210,50 @@ namespace VoxelEngine.UI
             }
 
             Ray ray = camera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
-            if (!TryRaycastIgnoringPlayer(ray, out RaycastHit hit, ProbeDistance))
-            {
-                Hide();
-                return;
-            }
-
-            if (!TryResolve(hit, out var info))
+            // Probe along the WHOLE ray and take the first hit that resolves into
+            // displayable info. Don't give up at the first collider: ghosts, held-tool
+            // viewmodels and other transient blockers must never swallow the card when
+            // the player has items or tools in hand.
+            if (!TryResolveAlongRay(ray, out var info))
             {
                 Hide();
                 return;
             }
             Show(info);
+        }
+
+        /// <summary>Walks every hit along the ray (closest first), skipping player
+        /// children and known transient rigs, and resolves the FIRST informative one.</summary>
+        private static bool TryResolveAlongRay(Ray ray, out TargetInfo info)
+        {
+            var hits = Physics.RaycastAll(ray, ProbeDistance, ~0, QueryTriggerInteraction.Ignore);
+            System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+            var player = GameObject.FindGameObjectWithTag("Player");
+            Transform playerRoot = player != null ? player.transform : null;
+
+            for (int i = 0; i < hits.Length; i++)
+            {
+                var candidate = hits[i];
+                if (candidate.collider == null) continue;
+                if (playerRoot != null && candidate.collider.transform.IsChildOf(playerRoot)) continue;
+                // Skip transient rigs: build ghosts, viewmodels, held items.
+                string rootName = candidate.collider.transform.root.name;
+                if (IsTransientRigName(rootName)) continue;
+
+                if (TryResolve(candidate, out info)) return true;
+            }
+            info = default;
+            return false;
+        }
+
+        private static bool IsTransientRigName(string rootName)
+        {
+            if (string.IsNullOrEmpty(rootName)) return false;
+            return rootName.StartsWith("GridGhost", System.StringComparison.Ordinal)
+                || rootName.StartsWith("BuildGhost", System.StringComparison.Ordinal)
+                || rootName.StartsWith("Viewmodel", System.StringComparison.Ordinal)
+                || rootName.StartsWith("PipePrecisionLatticePreview", System.StringComparison.Ordinal)
+                || rootName.StartsWith("LedStretchGhost", System.StringComparison.Ordinal);
         }
 
         private static bool TryResolve(RaycastHit hit, out TargetInfo info)
@@ -362,24 +395,6 @@ namespace VoxelEngine.UI
             info.detail = "WORLD OBJECT";
             info.status = $"Distance: {hit.distance:0.0} m";
             return true;
-        }
-
-        private static bool TryRaycastIgnoringPlayer(Ray ray, out RaycastHit hit, float maxDistance)
-        {
-            var hits = Physics.RaycastAll(ray, maxDistance, ~0, QueryTriggerInteraction.Ignore);
-            System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
-            var player = GameObject.FindGameObjectWithTag("Player");
-            Transform playerRoot = player != null ? player.transform : null;
-            for (int i = 0; i < hits.Length; i++)
-            {
-                var candidate = hits[i];
-                if (candidate.collider == null) continue;
-                if (playerRoot != null && candidate.collider.transform.IsChildOf(playerRoot)) continue;
-                hit = candidate;
-                return true;
-            }
-            hit = default;
-            return false;
         }
 
         private static void ShowInventoryItem(ItemStack stack)

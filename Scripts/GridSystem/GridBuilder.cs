@@ -20,7 +20,13 @@ namespace VoxelEngine.GridSystem
         [Header("Refs")]
         public Camera buildCamera;
         public Inventory inventory;
-        public float reach = 8f;
+        /// <summary>Build raycast reach. Older player prefabs serialized the legacy
+        /// 8 m value — Start() raises any stale value to the modern reach.</summary>
+        public float reach = 16f;
+
+        /// <summary>The modern build reach (m). Anything shorter is treated as a stale
+        /// serialized value from an older player prefab and auto-upgraded in Start().</summary>
+        public const float BuildReach = 16f;
 
         [Header("Ghost")]
         public Color ghostColor = new Color(0.3f, 0.8f, 1f, 0.3f);
@@ -60,6 +66,8 @@ namespace VoxelEngine.GridSystem
         {
             if (buildCamera == null) buildCamera = Camera.main;
             if (inventory == null) inventory = GetComponentInParent<Inventory>();
+            // Older player prefabs serialized the short 8 m build reach — upgrade it.
+            if (reach < BuildReach) reach = BuildReach;
         }
 
         private void Update()
@@ -228,6 +236,12 @@ namespace VoxelEngine.GridSystem
             }
             CancelLedStretch(false);
 
+            // Ground clearance: a free-standing block (new construct on terrain) must
+            // never sink into the ground, no matter how far its visual model hangs
+            // below the pivot (the MGO V12 spans ~1.6 cells tall).
+            if (targetGrid == null)
+                LiftPoseOutOfGround(gbi, hit, ref worldPos, rotation);
+
             ShowGhost(gbi, worldPos, rotation);
 
             if (GameSettings.WasPressed(InputAction.Build) && TryPlaceBlock(gbi, targetGrid, gridPos, worldPos, rotation))
@@ -251,6 +265,67 @@ namespace VoxelEngine.GridSystem
             }
             hit = default;
             return false;
+        }
+
+        // ── Ground-clearance lift ─────────────────────────────────────
+        private static readonly System.Collections.Generic.Dictionary<GridBlockItem, Bounds> s_prefabLocalBounds = new();
+
+        /// <summary>
+        /// Raises <paramref name="worldPos"/> along the surface normal until the lowest
+        /// point of the placed prefab's visual bounds clears the ground contact point.
+        /// Applies the final (rotated) bounds of the item, so deliberately tilted
+        /// placements are respected too. Ships attach through the lattice path instead
+        /// and are intentionally not lifted.
+        /// </summary>
+        private static void LiftPoseOutOfGround(GridBlockItem item, RaycastHit hit, ref Vector3 worldPos, Quaternion rotation)
+        {
+            if (item == null) return;
+            Vector3 up = hit.normal.sqrMagnitude > 0.0001f
+                ? hit.normal.normalized
+                : GravityProvider.GetUp(hit.point);
+
+            Bounds local = GetPrefabLocalBounds(item);
+            Vector3 center = local.center;
+            Vector3 ext = local.extents;
+            float lowest = float.MaxValue;
+            for (int xi = -1; xi <= 1; xi += 2)
+            for (int yi = -1; yi <= 1; yi += 2)
+            for (int zi = -1; zi <= 1; zi += 2)
+            {
+                Vector3 cornerWorld = worldPos + rotation * (center + new Vector3(ext.x * xi, ext.y * yi, ext.z * zi));
+                float heightAlongUp = Vector3.Dot(cornerWorld - hit.point, up);
+                if (heightAlongUp < lowest) lowest = heightAlongUp;
+            }
+            // A small skin avoids z-fighting with the terrain surface.
+            if (lowest < 0.005f) worldPos += up * (0.005f - lowest);
+        }
+
+        /// <summary>Combined renderer bounds of the item's prefab in prefab-local space (cached).</summary>
+        private static Bounds GetPrefabLocalBounds(GridBlockItem item)
+        {
+            if (s_prefabLocalBounds.TryGetValue(item, out var cached)) return cached;
+            Bounds b;
+            var prefab = item.blockPrefab;
+            if (prefab != null)
+            {
+                var renderers = prefab.GetComponentsInChildren<Renderer>(true);
+                if (renderers.Length > 0)
+                {
+                    // In a prefab asset Renderer.bounds are evaluated in the asset's own
+                    // local frame (root at origin), including the root scale — exactly the
+                    // placement frame we need.
+                    b = renderers[0].bounds;
+                    for (int i = 1; i < renderers.Length; i++) b.Encapsulate(renderers[i].bounds);
+                    if (prefab.transform.position.sqrMagnitude > 0.0001f)
+                        b.center -= prefab.transform.position;
+                    s_prefabLocalBounds[item] = b;
+                    return b;
+                }
+            }
+            float half = item.gridSize.CellSize() * 0.5f;
+            b = new Bounds(Vector3.zero, new Vector3(half * 2f, half * 2f, half * 2f));
+            s_prefabLocalBounds[item] = b;
+            return b;
         }
 
         private void HandlePrecisionAttachment(GridBlockItem item, GridEntity grid, RaycastHit hit)
@@ -854,17 +929,34 @@ namespace VoxelEngine.GridSystem
 
             if (!TryFindNearestNamedPort(hitBlock.transform, portNames, hit.point, out var port)) return;
 
-            Vector3 localPort = hitBlock.transform.InverseTransformPoint(port.position);
-            Vector3Int axis = SnapToCardinalAxis(localPort);
-            if (axis == Vector3Int.zero) return;
-
-            Vector3Int snappedCell = hitBlock.GridPos + axis;
+            // Convert the port's ACTUAL world position into the grid's cell space.
+            // The v16+ machine models hang several cells past their origin cell, so the
+            // old "one cell from the hit block" math pointed the new block into empty
+            // space — or into the engine body itself.
+            float cs = grid.gridSize.CellSize();
+            Vector3 gridLocalPort = grid.transform.InverseTransformPoint(port.position);
+            Vector3Int snappedCell = new(
+                Mathf.RoundToInt(gridLocalPort.x / cs),
+                Mathf.RoundToInt(gridLocalPort.y / cs),
+                Mathf.RoundToInt(gridLocalPort.z / cs));
+            if (snappedCell == hitBlock.GridPos)
+            {
+                // Port sits inside the machine's own lattice cell — push one cell out
+                // along the port's dominant local axis instead.
+                Vector3Int axis = SnapToCardinalAxis(hitBlock.transform.InverseTransformPoint(port.position));
+                if (axis == Vector3Int.zero) return;
+                snappedCell = hitBlock.GridPos + axis;
+            }
             if (!grid.CanPlace(snappedCell)) return;
-            if (!grid.HasNeighbor(snappedCell)) return;
+            // No HasNeighbor gate here: the snapped cell is structurally tied to the
+            // machine through the named port itself (ports intentionally overhang the
+            // origin cell), so lattice neighbours may legitimately be absent.
 
             gridPos = snappedCell;
             worldPos = grid.GridToWorld(gridPos);
-            Vector3 worldAxis = grid.transform.TransformDirection(new Vector3(axis.x, axis.y, axis.z)).normalized;
+            Vector3 worldAxis = worldPos - hitBlock.transform.position;
+            if (worldAxis.sqrMagnitude < 0.0001f) worldAxis = grid.transform.forward;
+            worldAxis = worldAxis.normalized;
             Vector3 upAxis = Mathf.Abs(Vector3.Dot(worldAxis, grid.transform.up)) > 0.95f
                 ? grid.transform.forward
                 : grid.transform.up;

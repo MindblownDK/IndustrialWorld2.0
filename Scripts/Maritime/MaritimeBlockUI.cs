@@ -160,6 +160,8 @@ namespace VoxelEngine.Maritime
 
             p.Add(T.StatRow("🔄", "Torque", $"{eng.CurrentTorque:0} N·m", T.AccentGold));
             p.Add(T.StatRow("⚙", "Speed", $"{eng.CurrentRPM:0} RPM", T.AccentTeal));
+            p.Add(T.Muted("Torque curve: available torque sags as RPM climbs — " +
+                          "more speed = less pull, and running close to redline raises stress."));
 
             // Stress bar.
             Color stressColor = eng.IsOverstressed ? T.AccentRed
@@ -184,7 +186,7 @@ namespace VoxelEngine.Maritime
             if (eng.CriticalFailure)
             {
                 p.Add(T.Spacer(4));
-                var crit = T.StatusPill("⛔ CRITICAL HEAT — SHAFT STOPPED · COOL BELOW 80°C TO RESTART", T.AccentRed);
+                var crit = T.StatusPill("⛔ CRITICAL HEAT — ENGINE SEIZED · REPAIR REQUIRED", T.AccentRed);
                 p.Add(crit.pill);
             }
             else if (eng.IsOverheating)
@@ -192,6 +194,54 @@ namespace VoxelEngine.Maritime
                 p.Add(T.Spacer(4));
                 var knock = T.StatusPill("⚠ KNOCKING — FUEL EFFICIENCY −25%", T.AccentAmber);
                 p.Add(knock.pill);
+            }
+
+            // ── Seized engine → spare-parts repair ─────────────────────
+            if (eng.NeedsRepair)
+            {
+                p.Add(T.Spacer(6));
+                p.Add(GridUIHelpers.SectionTitle("Emergency Repair"));
+
+                var inv = VoxelEngine.UI.GameUIController.Instance != null
+                    ? VoxelEngine.UI.GameUIController.Instance.inventory
+                    : null;
+
+                if (eng.TemperatureC > GridMaritimeEngine.RecoverTemperatureC)
+                    p.Add(T.Muted($"Too hot to work on — wait until the block cools below " +
+                                  $"{GridMaritimeEngine.RecoverTemperatureC:0}°C (now {eng.TemperatureC:0}°C)."));
+
+                bool afford = eng.CanAffordRepair(inv);
+                foreach (var part in eng.RepairCost)
+                {
+                    if (part.item == null) continue;
+                    int have = 0;
+                    if (inv != null && inv.container != null)
+                        for (int i = 0; i < inv.container.Size; i++)
+                        {
+                            var stack = inv.container.GetSlot(i);
+                            if (stack != null && !stack.IsEmpty && stack.item == part.item) have += stack.count;
+                        }
+                    p.Add(T.StatRow("🔧", part.item.displayName,
+                        $"{have} / {part.count}",
+                        have >= part.count ? T.AccentGreen : T.AccentRed));
+                }
+
+                bool repairable = eng.TemperatureC <= GridMaritimeEngine.RecoverTemperatureC && afford;
+                var repairBtn = T.ActionButton("🔧  REPAIR ENGINE", () =>
+                {
+                    if (eng.TryRepairCriticalFailure(inv))
+                    {
+                        VoxelEngine.UI.BuildFeedbackHud.Show(
+                            "Engine repaired", $"{eng.blockName} restored to working order",
+                            null, T.AccentGreen);
+                    }
+                    VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+                }, repairable ? T.AccentGreen : (Color?)null);
+                repairBtn.SetEnabled(repairable);
+                p.Add(repairBtn);
+                if (!afford)
+                    p.Add(T.Muted("Collect the spare parts above — a subset of this engine's " +
+                                  "crafting recipe — then press repair."));
             }
 
             // ── Upgrade modules ───────────────────────────────────────
@@ -350,7 +400,7 @@ namespace VoxelEngine.Maritime
             p.Add(GridUIHelpers.SectionTitle("Torque & Speed"));
 
             // Gear ratio display.
-            p.Add(T.StatRow("🔩", "Gear Ratio", $"{gb.gearRatio:0.##}× (G{gb.selectedGear} of {GridGearbox.GearCount})", T.AccentGold));
+            p.Add(T.StatRow("🔩", "Gear Ratio", $"{gb.EffectiveRatio:0.##}×", T.AccentGold));
             p.Add(T.StatRow("⚡", "Max Speed", $"{gb.maxOutputSpeed:0} RPM", T.AccentCyan));
 
             p.Add(T.Spacer(4));
@@ -381,28 +431,47 @@ namespace VoxelEngine.Maritime
                 p.Add(warn.pill);
             }
 
-            // ── Gear selection (20 gears, applied live) ───────────────
+            // ── Free-form ratio: type a number or drag the slider ─────
             p.Add(T.Spacer(6));
-            p.Add(GridUIHelpers.SectionTitle("Gear Selection — 20-Speed"));
-            var gearRow = Row();
-            gearRow.style.flexWrap = Wrap.Wrap;
-            for (int i = 0; i < GridGearbox.GearCount; i++)
+            p.Add(GridUIHelpers.SectionTitle("Gear Ratio"));
+
+            var slider = new Slider(GridGearbox.MinGearRatio, GridGearbox.MaxGearRatio)
             {
-                int gearNum = i + 1;
-                bool active = gb.selectedGear == gearNum;
-                var captured = gearNum;
-                var btn = T.SmallButton($"G{gearNum}\n{GridGearbox.GearRatios[i]:0.##}×", () =>
-                {
-                    gb.SetGear(captured);
-                    VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
-                }, active ? T.AccentGold : (Color?)null);
-                btn.style.width = 56;
-                gearRow.Add(btn);
+                value = gb.EffectiveRatio,
+                showInputField = true, // the player can type e.g. 6 for 6× directly
+                lowValue = GridGearbox.MinGearRatio,
+                highValue = GridGearbox.MaxGearRatio,
+            };
+            slider.style.marginTop = 2;
+
+            var ratioSummary = new Label();
+            ratioSummary.style.fontSize = 10;
+            ratioSummary.style.marginTop = 4;
+            ratioSummary.style.color = new StyleColor(T.TextSecondary);
+            ratioSummary.style.whiteSpace = WhiteSpace.Normal;
+
+            void UpdateSummary()
+            {
+                float r = gb.EffectiveRatio;
+                ratioSummary.text =
+                    $"Output: speed ×{r:0.##}  ·  torque ÷{r:0.##}" +
+                    (r > 1f ? "   (high gear — speed build)" : r < 1f ? "   (low gear — heavy loads)" : "   (1:1 direct drive)");
             }
-            p.Add(gearRow);
+
+            slider.RegisterValueChangedCallback(evt =>
+            {
+                gb.SetRatio(evt.newValue);   // applies live through the propulsion job
+                slider.SetValueWithoutNotify(gb.EffectiveRatio);
+                UpdateSummary();
+            });
+            UpdateSummary();
+
+            p.Add(slider);
+            p.Add(ratioSummary);
+            p.Add(T.Spacer(4));
             p.Add(T.Muted("Bidirectional: power can enter from EITHER side — the opposite side " +
                           "automatically becomes the output. Higher ratio = faster output but less " +
-                          "torque. Low gears for heavy props, high gears for generators."));
+                          "torque. Low ratios for heavy props, high ratios for generators."));
 
             return p;
         }

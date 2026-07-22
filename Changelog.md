@@ -1,9 +1,54 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.10.1-dev`
+**Current Version:** `6.11.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.11.0-dev] Ground-Safe Placement, Exact Port Snapping, Liquid Network & Engine Realism Pass
+
+**Type:** MINOR — new save-compatible gameplay systems (heat-seizure repair, free-ratio gearbox, realistic torque curve), large placement/connection fixes, and three rebuilt machine visuals (MaritimeMeshBuilder v17). Old saves load cleanly; placed gearboxes clamp into the new ratio range on first tick; seized-engine state is runtime-only and starts clean on load.
+
+**New — Free-Ratio Gearbox:**
+- The gearbox no longer has 20 fixed gears: type ANY ratio (0.25× – 20.0×) in the panel's input field or drag the new slider. Value applies live, no graph rebuild — high numbers for generators, low numbers for heavy props.
+
+**New — Realistic Engine Torque & Stress:**
+- Marine-diesel torque curve: available torque **sags as shaft speed climbs** (≈1.18× at idle → 0.58× at redline), so more speed really means less pull.
+- Stress now rises with shaft speed plus load-versus-curve, with back-pressure and heat on top — running near redline genuinely overworks the engine, and an overstressed engine runs 35% hotter.
+- Engine panel explains the curve under the speed readout.
+
+**New — Heat-Seizure Repair:**
+- Reaching 100 °C now **seizes** the engine permanently: the latch no longer auto-clears on cooldown. The engine panel opens an *Emergency Repair* section listing spare parts (a subset of that engine's own crafting recipe — e.g. iron plates/gears for HFO, steel/gears/circuits for MGO). Cool below 80 °C, have the parts in your inventory, press **REPAIR**.
+- Spare-part lists are authored per engine prefab by Step 13 and only filled when empty (hand-tuned prefabs are preserved).
+
+**Fixed — Placement:**
+- **Blocks can no longer be placed into the ground, no matter their size.** Free-standing (new-construct) placements compute the prefab's real rotated render bounds and lift the pose along the surface normal until the lowest point clears the ground — the MGO V12 finally stands on its feet instead of sinking to its cylinders.
+- **Build reach doubled: 8 m → 16 m** (both builders; stale serialized 8 m values on older player prefabs auto-upgrade).
+
+**Fixed — Snapping & Connections (works with grid mode ON or OFF):**
+- Maritime port snap now converts the port's **actual world position** to its lattice cell — exhaust pipes, drive shafts, gearboxes, generators and propellers magnet onto the engine's real port (even 2 cells out on the big models) instead of a cell beside the block's origin. This also fixes drive shafts ending up *inside* the medium engine.
+- **Liquid pipes snap to liquid ports** (fuel/coolant/steam intakes) in both ghost preview and final placement — regardless of grid mode.
+- **Liquid tanks now actually connect to liquid pipes**: the grid liquid network no longer relies on lattice face-touch alone — pipes within world reach of a machine/tank body or its named liquid ports join the network, and pipe visuals draw their arms across those links.
+- Exhaust detection switched the same way (face OR proximity/ports), so engines see correctly-snapped pipes **and** the exhaust pipe finally reports *venting* + emits smoke again instead of "no active engines adjacent".
+
+**Fixed — Block Info HUD:**
+- Top-left inspection card now walks the ENTIRE ray until something resolvable is found and skips ghosts/viewmodels/held rigs — block info displays with items or tools in hand, and its probe distance grew to match the 16 m reach.
+
+**New Visuals (MaritimeMeshBuilder v17 — rebuilt in place by Step 13):**
+- **Exhaust Pipe**: bolted base flange, engine-side elbow with heat-tinted intake lip, tapered three-stage stack with weld beads and heat bands, dark inner throat, rain cap on tripod legs, side support braces, red `Port_ExhaustInput`.
+- **Drive Shaft**: real line shaft — two pillow-block bearing pedestals with bolted feet and grease nipples, end flanges with six-bolt circles, and a spinning assembly of polished shaft, splined mid-section, brass keyway, U-joint yoke and clamp collars.
+- **Maritime Generator**: skid rails, finned stator barrel with brass frame ties, rear fan cowl with vent slots, top terminal box with cable glands — and a **wide-open front bell with a safety-yellow guard ring** so the spinning driveshaft input coupling and stub shaft are always visible (gold `Port_ShaftInput` beyond the ring).
+
+**Manual Unity Steps:**
+1. Pull/reload `Dev` and let Unity compile (expect 0 errors, 0 warnings).
+2. Open `Tools > Voxel Engine > Voxel Engine Setup`, run **Step 13** once — v17 rebuilds exhaust/shaft/generator in place and fills engine repair costs (no prefab deletion needed this time).
+3. Run **Step 8** once to rename pipes to "Liquid Pipe (Solid/Glass) · 0.5 m".
+4. Place an MGO engine on terrain → it rests on its feet; aim at any block from >8 m → HUD info appears; hold coal + look at a block → card still shows.
+5. Hold an exhaust pipe near an engine's stack → it snaps to the exact port cell; hold a liquid pipe near an engine fuel/coolant flange → it snaps; confirm the tank feeds the engine (fuel gauge rises).
+6. Open a gearbox: type `6` in the ratio field (or drag the slider) → output spins at 6×; throttle an engine up: torque readout sags at high RPM and stress climbs; overheat an engine → it seizes and the *Emergency Repair* section appears.
+7. Run an engine with a snapped exhaust pipe → smoke puffs/columns/streams per tier and the pipe UI says *venting*.
 
 ---
 

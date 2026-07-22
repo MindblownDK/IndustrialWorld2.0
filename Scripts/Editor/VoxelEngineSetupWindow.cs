@@ -169,7 +169,10 @@ namespace VoxelEngine.EditorTools
                 "    gantry walkways, quartz viewports and a belt-driven seawater pump (rebuilds via mesh version)\n" +
                 "  • Engine upgrade modules: High-Flow Turbocharger, Efficiency Tuning Chip,\n" +
                 "    Overclocked Fuel Injectors, Super-Cooler Radiator Jacket (engines + generators)\n" +
-                "  • 20-speed bidirectional gearbox\n" +
+                "  • Free-ratio bidirectional gearbox (typed number + slider, 0.25×–20×)\n" +
+                "  • Heat-seizure repair rules: engines that overheat past 100 °C seize and need\n" +
+                "    spare parts (from their own recipe) to be repaired\n" +
+                "  • v17 meshes: marine funnel exhaust stack, pillow-block drive shaft, guarded-coupling generator\n" +
                 "  • Control (Helm) + Utility (Bilge Pump, Exhaust Pipe, Marine Water Pump)\n" +
                 "  • 5-tier \"Maritime Engineering\" research tree\n" +
                 "  • MaritimeSettings balance asset\n" +
@@ -2898,9 +2901,9 @@ namespace VoxelEngine.EditorTools
                 "Same as the solid tank but the water level is visible through the glass.");
             var bPump      = MakeFluidBlock("Block_WaterPump", "Water Pump",         new Color(0.55f,0.30f,0.20f), pumpPrefab,
                 "Pulls 20 L/s of water into the network while powered (~30 W). Connect cables to power, pipes to tanks.");
-            var bPipeSolid = MakeFluidBlock("Block_PipeSolid", "Liquid Pipe (Solid)", new Color(0.55f,0.30f,0.20f), pipeSolid,
+            var bPipeSolid = MakeFluidBlock("Block_PipeSolid", "Liquid Pipe (Solid) · 0.5 m", new Color(0.55f,0.30f,0.20f), pipeSolid,
                 "Carries up to 50 L/s of any supported liquid. Place between tanks, pumps, and liquid-fed machines to connect them.");
-            var bPipeGlass = MakeFluidBlock("Block_PipeGlass", "Liquid Pipe (Glass)", new Color(0.55f,0.75f,0.95f), pipeGlass,
+            var bPipeGlass = MakeFluidBlock("Block_PipeGlass", "Liquid Pipe (Glass) · 0.5 m", new Color(0.55f,0.75f,0.95f), pipeGlass,
                 "Glass variant of the universal liquid pipe — same capacity, but transparent.");
 
             // ---- 6) Recipes ----
@@ -2910,8 +2913,8 @@ namespace VoxelEngine.EditorTools
             AddRecipe("Recipe_WaterBucket", "Water Bucket", bucket, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)ironIngot, 3));
             AddRecipe("Recipe_TankSolid", "Water Tank (Solid)", bTankSolid, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)ironIngot, 6));
             AddRecipe("Recipe_TankGlass", "Water Tank (Glass)", bTankGlass, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)ironIngot, 4), ((VoxelEngine.Items.ItemDefinition)copperIngot, 4));
-            AddRecipe("Recipe_PipeSolid", "Liquid Pipe (Solid) x4", bPipeSolid, 4, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)copperIngot, 1));
-            AddRecipe("Recipe_PipeGlass", "Liquid Pipe (Glass) x4", bPipeGlass, 4, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)copperIngot, 2));
+            AddRecipe("Recipe_PipeSolid", "Liquid Pipe (Solid) x4 · 0.5 m", bPipeSolid, 4, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)copperIngot, 1));
+            AddRecipe("Recipe_PipeGlass", "Liquid Pipe (Glass) x4 · 0.5 m", bPipeGlass, 4, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)copperIngot, 2));
             AddRecipe("Recipe_WaterPump", "Water Pump", bPump, 1, VoxelEngine.Crafting.StationTier.Assembler, ((VoxelEngine.Items.ItemDefinition)ironIngot, 4), ((VoxelEngine.Items.ItemDefinition)copperIngot, 6));
 
             EditorUtility.SetDirty(recipeRegistry);
@@ -5722,6 +5725,24 @@ root =>
                 }
             }
 
+            // Fill heat-seizure repair parts ONLY when the prefab doesn't have any
+            // yet — never overwrites spare-part lists the user tuned by hand.
+            void EnsureEngineRepairCost(GameObject prefab, params (VoxelEngine.Items.ItemDefinition item, int count)[] parts)
+            {
+                if (prefab == null) return;
+                var engine = prefab.GetComponent<VoxelEngine.Maritime.GridMaritimeEngine>();
+                if (engine == null) return;
+                if (engine.repairCost != null && engine.repairCost.Length > 0) return;
+                var list = new System.Collections.Generic.List<VoxelEngine.Maritime.GridMaritimeEngine.RepairPart>();
+                foreach (var part in parts)
+                    if (part.item != null)
+                        list.Add(new VoxelEngine.Maritime.GridMaritimeEngine.RepairPart { item = part.item, count = part.count });
+                if (list.Count == 0) return;
+                engine.repairCost = list.ToArray();
+                EditorUtility.SetDirty(engine);
+                PrefabUtility.SavePrefabAsset(prefab);
+            }
+
             // ═══════════════════════════════════════════════════════════════
             //  HULL MATERIALS
             // ═══════════════════════════════════════════════════════════════
@@ -5803,18 +5824,23 @@ root =>
                 e => { e.tier = VoxelEngine.Maritime.EngineTier.Small; e.maxTorque = 18000f; e.maxRPM = 1500f; e.fuelKind = VoxelEngine.Maritime.MaritimeFuelKind.Solid; e.fuelBufferCapacity = 120f; e.fuelConsumptionRate = 1f; });
             var itemEngS = MakeMItem("MItem_EngineSmall", "Crude Engine", new Color(0.50f,0.35f,0.18f), engSPref, SzL, 450, 1200);
             AddMRecipe("Recipe_MEngineSmall", "Crude Engine", itemEngS, (ironIngot, 6), (ironGear, 4), (copperWire, 4));
+            // Heat-seizure spare parts (subset of the recipe) — fills only when the
+            // prefab has none yet; player edits to existing prefabs are preserved.
+            EnsureEngineRepairCost(engSPref, (ironIngot, 4), (ironGear, 2), (copperWire, 2));
 
             // Heavy Fuel Oil Engine
             var engMPref = MakeMPref<VoxelEngine.Maritime.GridMaritimeEngine>("Engine_Medium_Large", new Color(0.40f,0.38f,0.35f), Vector3.one, SzL,
                 e => { e.tier = VoxelEngine.Maritime.EngineTier.Medium; e.maxTorque = 125000f; e.maxRPM = 1800f; e.fuelKind = VoxelEngine.Maritime.MaritimeFuelKind.Liquid; e.liquidFuel = VoxelEngine.Items.LiquidType.HeavyFuelOil; e.fuelBufferCapacity = 240f; e.fuelConsumptionRate = 2f; e.liquidRefillRate = 28f; e.coolantCapacity = 180f; e.coolantRefillRate = 20f; });
             var itemEngM = MakeMItem("MItem_EngineMedium", "Heavy Fuel Oil Engine", new Color(0.40f,0.38f,0.35f), engMPref, SzL, 2200, 4500);
             AddMRecipe("Recipe_MEngineMedium", "Heavy Fuel Oil Engine", itemEngM, (ironPlate, 8), (steelPlate, 4), (ironGear, 6), (circuit, 2));
+            EnsureEngineRepairCost(engMPref, (ironPlate, 4), (steelPlate, 2), (ironGear, 3), (circuit, 1));
 
             // MGO Engine — MASSIVE, expensive, colossal torque
             var engGPref = MakeMPref<VoxelEngine.Maritime.GridMaritimeEngine>("Engine_Giant_Large", new Color(0.25f,0.25f,0.28f), new Vector3(1f,1.2f,1.2f), SzL,
                 e => { e.tier = VoxelEngine.Maritime.EngineTier.Giant; e.maxTorque = 950000f; e.maxRPM = 1200f; e.fuelKind = VoxelEngine.Maritime.MaritimeFuelKind.Liquid; e.liquidFuel = VoxelEngine.Items.LiquidType.MarineGasOil; e.fuelBufferCapacity = 1200f; e.fuelConsumptionRate = 12f; e.liquidRefillRate = 110f; e.coolantCapacity = 800f; e.coolantRefillRate = 60f; });
             var itemEngG = MakeMItem("MItem_EngineGiant", "MGO Engine", new Color(0.25f,0.25f,0.28f), engGPref, SzL, 14000, 18000);
             AddMRecipe("Recipe_MEngineGiant", "MGO Engine", itemEngG, (steelPlate, 48), (ironGear, 24), (advCircuit, 12), (copperWire, 32));
+            EnsureEngineRepairCost(engGPref, (steelPlate, 12), (ironGear, 6), (advCircuit, 3), (copperWire, 8));
 
             // Small Turbocharger (1×1×1)
             var turboSmallPref = MakeMPref<VoxelEngine.Maritime.GridTurbocharger>("Turbocharger_Small", new Color(0.85f,0.82f,0.70f), Vector3.one, SzL,
@@ -5828,9 +5854,9 @@ root =>
             var itemTurboLarge = MakeMItem("MItem_TurboLarge", "Large Turbocharger", new Color(0.88f,0.85f,0.72f), turboLargePref, SzL, 2400, 4200);
             AddMRecipe("Recipe_MTurboLarge", "Large Turbocharger", itemTurboLarge, (steelPlate, 8), (copperPlate, 6), (advCircuit, 4));
 
-            // Gearbox
+            // Gearbox — free-form ratio (typed number / slider in the panel, 0.25×–20×)
             var gearPref = MakeMPref<VoxelEngine.Maritime.GridGearbox>("Gearbox_Large", new Color(0.55f,0.50f,0.40f), Vector3.one, SzL,
-                g => { g.selectedGear = 10; g.gearRatio = 1.00f; g.maxOutputSpeed = 10000f; });
+                g => { g.gearRatio = 1.00f; g.maxOutputSpeed = 10000f; });
             var itemGear = MakeMItem("MItem_Gearbox", "Gearbox", new Color(0.55f,0.50f,0.40f), gearPref, SzL, 400, 500);
             AddMRecipe("Recipe_MGearbox", "Gearbox", itemGear, (ironPlate, 6), (ironGear, 8), (steelPlate, 2));
 
@@ -6081,7 +6107,7 @@ root =>
                 $"Maritime content built!\n\n" +
                 $"BLOCKS ({recipes.Count} prefabs + items + recipes):\n" +
                 "  Hull: Untreated Wood, Tar Plank, Iron Hull, Balsa Wood\n" +
-                "  Propulsion: Waterwheel, Drive Shaft, Rotation Transfer, Encased Chain Drive, Small/Large Propeller, Exhaust, Crude Inline-4 / HFO V8 / MGO V12 Engines, Turbocharger, 20-speed Gearbox, Generator, E-Propeller, Bilge Pump, Helm\n" +
+                "  Propulsion: Waterwheel, Drive Shaft, Rotation Transfer, Encased Chain Drive, Small/Large Propeller, Exhaust, Crude Inline-4 / HFO V8 / MGO V12 Engines, Turbocharger, free-ratio Gearbox (0.25×–20×), Generator, E-Propeller, Bilge Pump, Helm\n" +
                 "  Modules: High-Flow Turbocharger, Efficiency Tuning Chip, Overclocked Fuel Injectors, Super-Cooler Radiator Jacket\n" +
                 "  Storage: Shipping Container (5x Large Cargo capacity)\n\n" +
                 "RESEARCH TREE (5-tier Maritime Engineering):\n" +
@@ -6090,8 +6116,9 @@ root =>
                 "  T3: Heavy Industrial Maritime\n" +
                 "  T4: MSC Loreto-class Propulsion\n" +
                 "  T5: Maritime Performance Tuning (upgrade modules)\n\n" +
-                "NOTE: If you deleted the old engine prefabs, this step rebuilt them with the\n" +
-                "new v16 engine models (mesh version auto-upgrades otherwise).\n" +
+                "NOTE: v17 rebuilt Exhaust Pipe / Drive Shaft / Generator visuals in place\n" +
+                "and engines got heat-seizure repair costs (spare parts from their own recipe).\n" +
+                "Mesh version auto-upgrades all other prefabs in place.\n" +
                 "MaritimeSettings asset created in Maritime/.\n" +
                 "All recipes gated behind the research tree.",
                 "OK");

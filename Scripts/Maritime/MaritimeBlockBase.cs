@@ -43,7 +43,11 @@ namespace VoxelEngine.Maritime
             new( 0, 0, 1), new( 0, 0,-1),
         };
 
-        /// <summary>True if any of the 6 face-neighbours is an exhaust pipe.</summary>
+        /// <summary>True if any of the 6 face-neighbours is an exhaust pipe — OR an
+        /// exhaust pipe sits close to one of this machine's exhaust ports / its body.
+        /// The port-aware fallback is required because modern machine models (and the
+        /// pipes snapped to their ports) legitimately span more than one lattice cell,
+        /// so pure face-neighbour checks miss a correctly attached pipe.</summary>
         protected bool HasAdjacentExhaust()
         {
             if (Grid == null) return false;
@@ -52,7 +56,51 @@ namespace VoxelEngine.Maritime
                 var nb = Grid.GetBlock(GridPos + off);
                 if (nb is GridExhaustPipe) return true;
             }
+            return IsExhaustPipeNearMachine();
+        }
+
+        // Scratch buffers for the physics proximity queries (prefab-overhang tolerant).
+        private static readonly Collider[] s_exhaustProbe = new Collider[8];
+        private static readonly System.Collections.Generic.List<Vector3> s_exhaustPorts = new(4);
+
+        /// <summary>World-space fallback: a GridExhaustPipe whose center is near one of
+        /// this machine's named <c>Port_ExhaustOutput*</c> transforms (or touching its
+        /// body) counts as adjacent, even when the pipe's lattice cell is not a direct
+        /// face-neighbour of this block's origin cell.</summary>
+        private bool IsExhaustPipeNearMachine()
+        {
+            float cs = Grid != null ? Grid.gridSize.CellSize() : 2.5f;
+            CollectExhaustPortPositions(cs);
+
+            int sampleCount = s_exhaustPorts.Count + 1; // every port + the body centre
+            for (int s = 0; s < sampleCount; s++)
+            {
+                Vector3 center = s < s_exhaustPorts.Count ? s_exhaustPorts[s] : transform.position;
+                float radius = s < s_exhaustPorts.Count ? cs * 0.65f : cs * 1.15f;
+                int hitCount = Physics.OverlapSphereNonAlloc(center, radius, s_exhaustProbe, ~0, QueryTriggerInteraction.Collide);
+                for (int i = 0; i < hitCount; i++)
+                {
+                    var col = s_exhaustProbe[i];
+                    if (col == null) continue;
+                    var pipe = col.GetComponentInParent<GridExhaustPipe>();
+                    if (pipe != null && pipe.Grid == Grid) return true;
+                }
+            }
             return false;
+        }
+
+        /// <summary>Fills the scratch list with the world positions of this machine's
+        /// <c>Port_ExhaustOutput*</c> transforms (up to 4).</summary>
+        private void CollectExhaustPortPositions(float cs)
+        {
+            s_exhaustPorts.Clear();
+            foreach (Transform child in transform.GetComponentsInChildren<Transform>(true))
+            {
+                if (s_exhaustPorts.Count >= 4) break;
+                if (child == null || child == transform) continue;
+                if (!child.name.StartsWith("Port_ExhaustOutput", System.StringComparison.Ordinal)) continue;
+                s_exhaustPorts.Add(child.position);
+            }
         }
 
         /// <summary>True if any face-neighbour is a turbocharger (for visual / chained checks).</summary>

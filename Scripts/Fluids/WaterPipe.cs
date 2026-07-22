@@ -42,14 +42,18 @@ namespace VoxelEngine.Fluids
 
             // If this normal liquid pipe is attached to a grid, also draw arms to
             // adjacent liquid-capable grid blocks. WrenchBlacklist can disable each
-            // pipe ↔ endpoint link.
+            // pipe ↔ endpoint link. Arms reach BOTH the classic face-touch neighbours
+            // and world-space-proximate endpoints (big machine models overhang their
+            // lattice cell, and pipes snap to their named liquid ports).
             var gridBlock = GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
             var grid = gridBlock != null ? gridBlock.Grid : null;
             if (grid != null)
             {
-                foreach (var block in VoxelEngine.GridSystem.UnifiedGridTopology.AdjacentBlocks(grid, gridBlock))
+                float cs = grid.gridSize.CellSize();
+
+                void AddArm(VoxelEngine.GridSystem.GridBlock block)
                 {
-                    if (block == null || block == gridBlock) continue;
+                    if (block == null || block == gridBlock) return;
                     bool endpoint = block is VoxelEngine.GridSystem.GridLiquidTank
                                  || block is VoxelEngine.GridSystem.GridH2O2Generator
                                  || block is VoxelEngine.GridSystem.GridRefinery
@@ -57,14 +61,35 @@ namespace VoxelEngine.Fluids
                                  || block is VoxelEngine.Maritime.GridMaritimeEngine
                                  || block is VoxelEngine.Maritime.GridMarineWaterPump;
                     bool connectedPipe = block.GetComponentInChildren<WaterPipe>(true) != null;
-                    if (!endpoint && !connectedPipe) continue;
-                    if (VoxelEngine.Networks.WrenchBlacklist.IsBlocked(gridBlock.gameObject, block.gameObject)) continue;
+                    if (!endpoint && !connectedPipe) return;
+                    if (VoxelEngine.Networks.WrenchBlacklist.IsBlocked(gridBlock.gameObject, block.gameObject)) return;
                     _neighbourPosBuf.Add(connectedPipe
                         ? Vector3.Lerp(transform.position, block.transform.position, 0.5f)
                         : block.transform.position);
                 }
+
+                foreach (var block in VoxelEngine.GridSystem.UnifiedGridTopology.AdjacentBlocks(grid, gridBlock))
+                    AddArm(block);
+
+                // Proximity arms: draw toward liquid endpoints whose body or named
+                // liquid ports the pipe touches even when lattice cells don't face-touch.
+                var myGridBlock = gridBlock;
+                int hitCount = Physics.OverlapSphereNonAlloc(transform.position,
+                    Mathf.Max(myGridBlock != null ? myGridBlock.EffectiveCellSize : cs,
+                        VoxelEngine.GridSystem.GridSize.Small.CellSize()) * 1.35f,
+                    s_armProbe, ~0, QueryTriggerInteraction.Collide);
+                for (int i = 0; i < hitCount; i++)
+                {
+                    var col = s_armProbe[i];
+                    if (col == null) continue;
+                    var block = col.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
+                    if (block == null || block.Grid != grid) continue;
+                    AddArm(block);
+                }
             }
             return _neighbourPosBuf;
         }
+
+        private static readonly Collider[] s_armProbe = new Collider[12];
     }
 }

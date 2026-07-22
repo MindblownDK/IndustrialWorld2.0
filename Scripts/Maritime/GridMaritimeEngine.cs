@@ -13,6 +13,16 @@
 // produces zero torque. Turbochargers only boost when mounted on named engine
 // attachment points.
 //
+// v6.11.0-dev — Realistic torque curve + repairable heat seizure:
+//   • Torque curve: available torque sags as shaft speed climbs (marine-diesel
+//     curve: 1.18× idle → 0.58× redline), so SPEED now costs TORQUE.
+//   • Stress rises with speed and load-versus-curve: running an engine into the
+//     redline genuinely overworks it; an overstressed engine also runs hotter.
+//   • Critical heat (≥100°C) now SEIZES the engine: it stays broken until the
+//     player repairs it with spare parts taken from the engine's own crafting
+//     recipe (NeedsRepair → TryRepairCriticalFailure, repair requires the block
+//     to have cooled below 80°C first).
+//
 // v6.10.0-dev — Modular Upgrade Modules + Dynamic Heat & Coolant Penalty System:
 //   • Module Slots (2/3/4 by tier) accept EngineModuleItem upgrades.
 //   • Live temperature model: <90°C normal, ≥90°C knocking (-25% fuel
@@ -109,8 +119,12 @@ namespace VoxelEngine.Maritime
         public float coolantDissipationRate = 2.0f;
         /// <summary>Engine temperature in °C. Rises with load, sinks from dissipation.</summary>
         public float TemperatureC { get; private set; } = AmbientTemperatureC;
-        /// <summary>Anchored fault state — stays latched until the engine cools below RecoverTemperatureC.</summary>
+        /// <summary>Anchored fault state — set at CriticalTemperatureC and stays latched
+        /// until the block is repaired (try TryRepairCriticalFailure once cooled).</summary>
         public bool CriticalFailure { get; private set; }
+        /// <summary>True while a critical-heat seizure physically damaged the engine and
+        /// it cannot run again until repaired with spare parts (subset of its recipe).</summary>
+        public bool NeedsRepair { get; private set; }
 
         // ── Thermal thresholds (spec) ────────────────────────────────
         /// <summary>Low/normal operating heat.</summary>
@@ -586,10 +600,7 @@ namespace VoxelEngine.Maritime
             if (needsCoolant)
                 RefillCoolant(dt); // allow a dry engine to prime from connected liquid pipes before evaluating run state
 
-            // Latched mechanical failure — only clears once the block cools below 80°C.
-            if (CriticalFailure && TemperatureC <= RecoverTemperatureC)
-                CriticalFailure = false;
-
+            // Seized engines stay down until repaired — cooling alone is not enough.
             if (!Enabled || !HasExhaust || exhaustChoked || CriticalFailure || (needsCoolant && !HasCoolant))
             {
                 node.FuelAvailable01 = 0f;
@@ -629,15 +640,24 @@ namespace VoxelEngine.Maritime
 
             // Count connected turbos and apply stacked boost to the torque.
             CountTurbos();
-            node.MaxTorque = maxTorque * TurboBoostTotal * ModuleOutputMultiplier;
+            // Realistic torque curve: available torque sags as the shaft approaches
+            // redline, so raw SPEED now genuinely costs TORQUE.
+            float speedStressTerm = EngineSpeed01;
+            float torqueCurve = TorqueCurveAtSpeed(speedStressTerm);
+            node.MaxTorque = maxTorque * TurboBoostTotal * ModuleOutputMultiplier * torqueCurve;
             node.MaxRPM = maxRPM * ModuleSpeedCapMultiplier;
             node.OutputMultiplier = 1f;
 
             node.FuelAvailable01 = effectiveFuel;
 
-            // Stress = how hard we're pushing relative to max.
+            // Stress: same pull at high RPM (where the curve sags) is much harder on
+            // the engine than at low RPM; back-pressure and heat add their share.
             CurrentTorque = node.MaxTorque * effectiveFuel;
-            Stress01 = Mathf.Clamp01(effectiveFuel * (1f + ExhaustFill01 * 0.3f + Heat01 * 0.15f));
+            float loadStress = effectiveFuel / Mathf.Max(0.35f, torqueCurve) * 0.55f;
+            Stress01 = Mathf.Clamp01(speedStressTerm * 0.45f + loadStress
+                + ExhaustFill01 * 0.30f + Heat01 * 0.20f);
+            // An overstressed engine converts the extra friction to heat (applied in
+            // TickThermal next tick — single-frame feedback, keeps the loop stable).
         }
 
         public override void ApplyResults(in MechanicalNode node)
@@ -751,6 +771,9 @@ namespace VoxelEngine.Maritime
             float heatGen = loadActive
                 ? baseHeatRate * requestedThrottle * (1f + Mathf.Max(0f, _moduleHeatBonus))
                 : 0f;
+            // Overwork penalty: an overstressed engine (high RPM, high load on a sagged
+            // torque curve) wastes a third more energy as heat.
+            if (IsOverstressed) heatGen *= 1.35f;
 
             // Dissipation: passive base + flowing coolant (premium coolant sinks 25% better),
             // multiplied by ACTIVE radiator jackets (water must be flowing for the bonus).
@@ -770,9 +793,83 @@ namespace VoxelEngine.Maritime
             // No coolant flow at all on a liquid engine slowly bakes the block too.
             TemperatureC = Mathf.Clamp(TemperatureC + net * dt, AmbientTemperatureC, MaxTemperatureC);
 
-            // Critical mechanical failure at 100°C — shaft stops, heavy black smoke.
+            // Critical mechanical failure at 100°C — shaft stops, heavy black smoke,
+            // and the engine SEIZES: it needs spare-parts repairs to ever run again.
             if (TemperatureC >= CriticalTemperatureC)
+            {
                 CriticalFailure = true;
+                NeedsRepair = true;
+            }
+        }
+
+        // ══════════════════════════════════════════════════════════════
+        //  TORQUE CURVE + EMERGENCY REPAIR
+        // ══════════════════════════════════════════════════════════════
+        /// <summary>Marine-diesel torque curve vs normalized shaft speed (0..1):
+        /// the harder the shaft screams, the less turning force the engine can push
+        /// through it — 1.18× at idle → ~1.0× at 60% RPM → 0.58× at redline.</summary>
+        public static float TorqueCurveAtSpeed(float speed01)
+        {
+            speed01 = Mathf.Clamp01(speed01);
+            return 1.18f - 0.60f * speed01 * speed01;
+        }
+
+        /// <summary>One spare part needed to repair a heat-seized engine.</summary>
+        [System.Serializable]
+        public struct RepairPart
+        {
+            public ItemDefinition item;
+            public int count;
+        }
+
+        [Header("Emergency Repair")]
+        [Tooltip("Spare parts needed to bring a heat-seized engine back to life — a subset of its own crafting recipe. Assigned on the prefab by the content builder (Step 13).")]
+        public RepairPart[] repairCost = new RepairPart[0];
+
+        /// <summary>Effective repair cost list (prefab-defined; empty for legacy prefabs).</summary>
+        public System.Collections.Generic.IReadOnlyList<RepairPart> RepairCost
+            => repairCost != null && repairCost.Length > 0 ? repairCost : System.Array.Empty<RepairPart>();
+
+        /// <summary>True when every repair part is present in the inventory.</summary>
+        public bool CanAffordRepair(Inventory inventory)
+        {
+            if (inventory == null || inventory.container == null) return false;
+            foreach (var part in RepairCost)
+            {
+                if (part.item == null) continue;
+                if (CountInContainer(inventory.container, part.item) < part.count) return false;
+            }
+            return RepairCost.Count > 0;
+        }
+
+        /// <summary>Repair a heat-seized engine. Requires the block to have cooled below
+        /// RecoverTemperatureC and every spare part in the inventory. Consumes the parts,
+        /// clears the seized latch and brings the block to a safe idle temperature.</summary>
+        public bool TryRepairCriticalFailure(Inventory inventory)
+        {
+            if (!NeedsRepair || inventory == null || inventory.container == null) return false;
+            if (TemperatureC > RecoverTemperatureC) return false; // too hot to work on
+            if (!CanAffordRepair(inventory)) return false;
+
+            foreach (var part in RepairCost)
+                if (part.item != null)
+                    inventory.container.Remove(part.item, part.count);
+
+            NeedsRepair = false;
+            CriticalFailure = false;
+            TemperatureC = Mathf.Min(TemperatureC, 65f);
+            return true;
+        }
+
+        private static int CountInContainer(VoxelEngine.Items.ItemContainer container, ItemDefinition item)
+        {
+            int count = 0;
+            for (int i = 0; i < container.Size; i++)
+            {
+                var stack = container.GetSlot(i);
+                if (stack != null && !stack.IsEmpty && stack.item == item) count += stack.count;
+            }
+            return count;
         }
 
         /// <summary>Water demand (L/s at full throttle) per socketed radiator jacket.</summary>

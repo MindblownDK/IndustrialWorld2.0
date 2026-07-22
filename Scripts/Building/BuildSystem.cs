@@ -24,7 +24,13 @@ namespace VoxelEngine.Building
         public Inventory inventory;
 
         [Header("Tuning")]
-        public float reach = 8f;
+        /// <summary>Build raycast reach. Older player prefabs serialized the legacy
+        /// 8 m value — Awake() raises any stale value to the modern reach.</summary>
+        public float reach = 16f;
+
+        /// <summary>The modern build reach (m). Anything shorter is treated as a stale
+        /// serialized value from an older player prefab and auto-upgraded in Awake().</summary>
+        public const float BuildReach = 16f;
         public bool  gridSnap = true;
         public float gridSize = 1f;
         public float ghostAlpha = 0.5f;
@@ -59,6 +65,9 @@ namespace VoxelEngine.Building
             // Create translucent ghost materials.
             _ghostMaterialValid   = MakeGhostMaterial(new Color(0.4f, 0.9f, 0.5f, ghostAlpha));
             _ghostMaterialInvalid = MakeGhostMaterial(new Color(0.95f, 0.35f, 0.3f, ghostAlpha));
+
+            // Older player prefabs serialized the short 8 m build reach — upgrade it.
+            if (reach < BuildReach) reach = BuildReach;
         }
 
         private void Update()
@@ -131,8 +140,11 @@ namespace VoxelEngine.Building
             var targetGrid = hit.collider != null ? hit.collider.GetComponentInParent<GridEntity>() : null;
             if (targetGrid != null && IsUnifiedPipe(block))
             {
-                bool validPrecision = UnifiedGridTopology.TryGetDetailPlacement(
-                    targetGrid, hit, out var precisionPos, out var hostStructuralPos, out var faceAxis);
+                Vector3Int precisionPos, hostStructuralPos, faceAxis;
+                bool validPrecision = TryGetMaritimeLiquidPortSnap(targetGrid, block, hit,
+                        out precisionPos, out hostStructuralPos, out faceAxis)
+                    || UnifiedGridTopology.TryGetDetailPlacement(
+                        targetGrid, hit, out precisionPos, out hostStructuralPos, out faceAxis);
                 ShowPrecisionLattice(targetGrid, hostStructuralPos, faceAxis);
 
                 var pipeVisual = _ghost.GetComponentInChildren<VoxelEngine.Networks.PipeVisualBuilder>(true);
@@ -204,6 +216,72 @@ namespace VoxelEngine.Building
             return block.placedPrefab.GetComponentInChildren<VoxelEngine.Transport.ItemPipe>(true) != null
                 || block.placedPrefab.GetComponentInChildren<VoxelEngine.Gas.GasPipe>(true) != null
                 || block.placedPrefab.GetComponentInChildren<VoxelEngine.Fluids.WaterPipe>(true) != null;
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        //  MARITIME LIQUID-PORT SNAP
+        //  Liquid pipes pulled toward a named liquid port on the targeted machine
+        //  (fuel intake, coolant intake, steam heat, generic liquid IO) snap onto
+        //  the exact Detail-lattice cell that hosts the port — regardless of grid
+        //  mode and regardless of how far the machine's visual model overhangs
+        //  its origin cell. Rotation stays player-controlled + auto-shaped by the
+        //  pipe network builder, only the position is magnetised.
+        // ════════════════════════════════════════════════════════════════
+        private static readonly string[] LiquidPortPrefixes =
+        {
+            "Port_FuelInput", "Port_CoolantInput", "Port_SteamHeat",
+            "Port_LiquidInput", "Port_WaterInput", "Port_LiquidIO", "Port_WaterIO",
+        };
+
+        private static bool TryGetMaritimeLiquidPortSnap(GridEntity grid, BlockItem item, RaycastHit hit,
+            out Vector3Int precisionPos, out Vector3Int hostStructuralPos, out Vector3Int faceAxis)
+        {
+            precisionPos = default;
+            hostStructuralPos = default;
+            faceAxis = default;
+            if (grid == null || item == null || item.placedPrefab == null || hit.collider == null) return false;
+            // Only liquid pipes snap to liquid ports.
+            if (item.placedPrefab.GetComponentInChildren<VoxelEngine.Fluids.WaterPipe>(true) == null) return false;
+
+            var targetBlock = hit.collider.GetComponentInParent<GridBlock>();
+            if (targetBlock == null || targetBlock.Grid != grid) return false;
+
+            float small = GridSize.Small.CellSize();
+            float maxSnap = small * 2.5f; // generous — ports overhang big machine cells
+
+            Transform best = null;
+            float bestDist = float.MaxValue;
+            foreach (Transform child in targetBlock.transform.GetComponentsInChildren<Transform>(true))
+            {
+                if (child == null || child == targetBlock.transform) continue;
+                bool matches = false;
+                for (int i = 0; i < LiquidPortPrefixes.Length; i++)
+                {
+                    if (child.name.StartsWith(LiquidPortPrefixes[i], System.StringComparison.Ordinal)) { matches = true; break; }
+                }
+                if (!matches) continue;
+                float d = (child.position - hit.point).sqrMagnitude;
+                if (d < bestDist) { bestDist = d; best = child; }
+            }
+            if (best == null || bestDist > maxSnap * maxSnap) return false;
+
+            Vector3 local = grid.transform.InverseTransformPoint(best.position);
+            precisionPos = new Vector3Int(
+                Mathf.RoundToInt(local.x / small),
+                Mathf.RoundToInt(local.y / small),
+                Mathf.RoundToInt(local.z / small));
+            hostStructuralPos = targetBlock.GridPos;
+
+            // Outward face axis = dominant grid-space direction from the machine's
+            // origin toward the port (fallback: the ray's hit normal).
+            Vector3 hostLocal = grid.transform.InverseTransformPoint(targetBlock.transform.position);
+            Vector3 outward = local - hostLocal;
+            faceAxis = outward.sqrMagnitude > 0.0001f
+                ? UnifiedGridTopology.SnapFaceAxis(grid, grid.transform.TransformDirection(outward.normalized))
+                : UnifiedGridTopology.SnapFaceAxis(grid, hit.normal);
+
+            var layer = grid.GetComponent<GridPrecisionAttachmentLayer>();
+            return layer == null || layer.CanPlace(precisionPos);
         }
 
         private System.Collections.Generic.List<Vector3> ProvidePipeGhostLinks() => _pipeGhostLinks;
@@ -349,8 +427,10 @@ namespace VoxelEngine.Building
         private bool TryPlaceUnifiedPipe(BlockItem item, GridEntity grid, RaycastHit hit)
         {
             if (item == null || item.placedPrefab == null || grid == null) return false;
-            if (!UnifiedGridTopology.TryGetDetailPlacement(grid, hit,
-                    out var precisionPos, out var hostStructuralPos, out _)) return false;
+            Vector3Int precisionPos, hostStructuralPos;
+            if (!TryGetMaritimeLiquidPortSnap(grid, item, hit, out precisionPos, out hostStructuralPos, out _)
+                && !UnifiedGridTopology.TryGetDetailPlacement(grid, hit,
+                    out precisionPos, out hostStructuralPos, out _)) return false;
 
             var layer = grid.GetComponent<GridPrecisionAttachmentLayer>()
                 ?? grid.gameObject.AddComponent<GridPrecisionAttachmentLayer>();

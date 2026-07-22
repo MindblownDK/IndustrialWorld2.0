@@ -17,7 +17,7 @@ namespace VoxelEngine.Maritime
     public static class MaritimeMeshBuilder
     {
         // v16: rebuilt engine models — Crude Inline-4, HFO V8, MGO V12.
-        public const int Version = 16;
+        public const int Version = 17;
         private static Shader Lit => Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
         public static System.Func<Material, string, Material> MaterialPersister;
         private static int _matCounter;
@@ -937,98 +937,276 @@ namespace VoxelEngine.Maritime
         // ════════════════════════════════════════════════════════════════
         //  DRIVE SHAFT
         // ════════════════════════════════════════════════════════════════
+        // ════════════════════════════════════════════════════════════════
+        //  DRIVE SHAFT — line shaft on two pillow-block bearings (v17 remake)
+        //  Static: bearing pedestals, mounting feet, bolt circles.
+        //  Spinning: shaft rod, spline section, keyway, U-joint yoke, collars.
+        // ════════════════════════════════════════════════════════════════
         static void BuildDriveShaft(GameObject r, float cs)
         {
-            // Static flanges at both ends.
-            Cyl(r, Steel, new Vector3(0, 0, -cs * 0.42f), cs * 0.18f, cs * 0.05f).transform.localRotation = Quaternion.Euler(90, 0, 0);
-            Cyl(r, Steel, new Vector3(0, 0, cs * 0.42f), cs * 0.18f, cs * 0.05f).transform.localRotation = Quaternion.Euler(90, 0, 0);
+            // ── Two pillow-block bearing pedestals (static) ────────────
+            for (int side = 0; side < 2; side++)
+            {
+                float z = side == 0 ? -cs * 0.30f : cs * 0.30f;
+                // Foot plate with two mounting pads.
+                Box(r, DarkSteel, new Vector3(0, -cs * 0.16f, z), new Vector3(cs * 0.34f, cs * 0.045f, cs * 0.16f));
+                for (int px = 0; px < 2; px++)
+                {
+                    float bx = px == 0 ? -cs * 0.12f : cs * 0.12f;
+                    Sphere(r, CastIron, new Vector3(bx, -cs * 0.125f, z - cs * 0.055f), cs * 0.030f);
+                    Sphere(r, CastIron, new Vector3(bx, -cs * 0.125f, z + cs * 0.055f), cs * 0.030f);
+                }
+                // Pillow block body + cap; the bore line sits on the pivot axis.
+                Box(r, CastIron, new Vector3(0, -cs * 0.075f, z), new Vector3(cs * 0.20f, cs * 0.13f, cs * 0.12f));
+                Box(r, Steel,    new Vector3(0, -cs * 0.015f, z), new Vector3(cs * 0.22f, cs * 0.060f, cs * 0.13f));
+                // Bearing race (dark ring the shaft passes through).
+                var race = Cyl(r, DarkSteel, new Vector3(0, cs * 0.015f, z), cs * 0.065f, cs * 0.08f);
+                race.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                // Grease nipples.
+                Sphere(r, Brass, new Vector3(cs * 0.08f, 0f, z), cs * 0.018f);
+                Sphere(r, Brass, new Vector3(-cs * 0.08f, 0f, z), cs * 0.018f);
+            }
 
-            // Spinning part: shaft + universal joint inside ShaftSpin pivot.
+            // ── End mounting flanges with bolt circles (static) ────────
+            for (int side = 0; side < 2; side++)
+            {
+                float z = side == 0 ? -cs * 0.455f : cs * 0.455f;
+                var flange = Cyl(r, Steel, new Vector3(0, cs * 0.015f, z), cs * 0.16f, cs * 0.035f);
+                flange.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                for (int bi = 0; bi < 6; bi++)
+                {
+                    float ang = bi * 60f * Mathf.Deg2Rad;
+                    Sphere(r, DarkSteel,
+                        new Vector3(Mathf.Cos(ang) * cs * 0.125f, cs * 0.015f + Mathf.Sin(ang) * cs * 0.125f,
+                            z + (side == 0 ? -cs * 0.025f : cs * 0.025f)), cs * 0.030f);
+                }
+            }
+
+            // ── Spinning assembly (driver/animator rotates "ShaftSpin") ─
             var spin = new GameObject("ShaftSpin");
             spin.transform.SetParent(r.transform, false);
-            var shaft = Cyl(spin, Chrome, V0, cs * 0.1f, cs * 0.78f);
-            shaft.transform.localRotation = Quaternion.Euler(90, 0, 0);
-            // U-joint cross (visible when spinning).
-            Box(spin, DarkSteel, V0, new Vector3(cs * 0.16f, cs * 0.03f, cs * 0.03f));
-            Box(spin, DarkSteel, V0, new Vector3(cs * 0.03f, cs * 0.03f, cs * 0.16f));
-            Sphere(spin, DarkSteel, V0, cs * 0.06f);
+            spin.transform.localPosition = new Vector3(0, cs * 0.015f, 0);
+
+            // Main polished shaft.
+            var shaft = Cyl(spin, Chrome, V0, cs * 0.055f, cs * 0.88f);
+            shaft.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+
+            // Splined mid-section: 8 ribs running the middle third of the rod.
+            for (int si = 0; si < 8; si++)
+            {
+                float ang = si * 45f * Mathf.Deg2Rad;
+                float sx = Mathf.Cos(ang) * cs * 0.058f;
+                float sy = Mathf.Sin(ang) * cs * 0.058f;
+                Box(spin, Steel, new Vector3(sx, sy, 0),
+                    new Vector3(cs * 0.022f, cs * 0.022f, cs * 0.28f));
+            }
+
+            // Keyway bar along the shaft (reads rotation instantly).
+            Box(spin, Brass, new Vector3(cs * 0.062f, 0f, 0f),
+                new Vector3(cs * 0.020f, cs * 0.018f, cs * 0.52f));
+
+            // Universal-joint yoke at the center (two crossing arms + hub).
+            Box(spin, DarkSteel, V0, new Vector3(cs * 0.145f, cs * 0.028f, cs * 0.028f));
+            Box(spin, DarkSteel, V0, new Vector3(cs * 0.028f, cs * 0.028f, cs * 0.145f));
+            Sphere(spin, Bronze, V0, cs * 0.070f);
+
+            // Clamp collars next to each bearing.
+            for (int side = 0; side < 2; side++)
+            {
+                float z = side == 0 ? -cs * 0.375f : cs * 0.375f;
+                var collar = Cyl(spin, DarkSteel, new Vector3(0, 0, z), cs * 0.090f, cs * 0.035f);
+                collar.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                Sphere(spin, Steel, new Vector3(cs * 0.088f, 0, z), cs * 0.020f); // set screw
+            }
+
+            Socket(r, "Socket_DriveCore", V0);
         }
 
         // ════════════════════════════════════════════════════════════════
         //  GENERATOR — heavy shaft-driven maritime dynamo
         // ════════════════════════════════════════════════════════════════
+        // ════════════════════════════════════════════════════════════════
+        //  GENERATOR — shaft-driven marine alternator (v17 remake)
+        //  Layout: skid rails → stator barrel with cooling fins → rear fan
+        //  cowl → OPEN front bell with a safety-yellow guard ring so the
+        //  driveshaft input coupling is always visible (easy orientation).
+        //  "GenRotor" + "ShaftSpin" pivots are physically driven by the
+        //  MaritimeAnimator — names must not change.
+        // ════════════════════════════════════════════════════════════════
         static void BuildGenerator(GameObject r, float cs)
         {
-            float width = cs * 1.45f;
-            float height = cs * 1.50f;
-            float length = cs * 1.80f;
+            float bodyY = cs * 0.02f;   // shaft centerline height
 
-            Box(r, DarkSteel, new Vector3(0, -height * 0.28f, 0), new Vector3(width * 1.04f, height * 0.28f, length));
-            Box(r, Steel, new Vector3(0, height * 0.10f, 0), new Vector3(width * 0.92f, height * 0.52f, length * 0.86f));
-            Box(r, DarkSteel, new Vector3(0, height * 0.44f, 0), new Vector3(width * 0.80f, height * 0.18f, length * 0.72f));
+            // ── Skid frame: twin rail beams + cross feet ───────────────
+            for (int side = 0; side < 2; side++)
+            {
+                float x = side == 0 ? -cs * 0.26f : cs * 0.26f;
+                Box(r, DarkSteel, new Vector3(x, -cs * 0.42f, 0), new Vector3(cs * 0.16f, cs * 0.10f, cs * 1.30f));
+            }
+            for (int fi = 0; fi < 2; fi++)
+            {
+                float z = fi == 0 ? -cs * 0.55f : cs * 0.55f;
+                Box(r, DarkSteel, new Vector3(0, -cs * 0.46f, z), new Vector3(cs * 0.72f, cs * 0.06f, cs * 0.16f));
+            }
 
-            // Stator frame.
-            Box(r, Brass, new Vector3(width * 0.34f, height * 0.18f, 0), new Vector3(width * 0.06f, height * 0.56f, length * 0.52f));
-            Box(r, Brass, new Vector3(-width * 0.34f, height * 0.18f, 0), new Vector3(width * 0.06f, height * 0.56f, length * 0.52f));
-            Box(r, Brass, new Vector3(0, height * 0.18f, length * 0.26f), new Vector3(width * 0.56f, height * 0.06f, cs * 0.08f));
-            Box(r, Brass, new Vector3(0, height * 0.18f, -length * 0.26f), new Vector3(width * 0.56f, height * 0.06f, cs * 0.08f));
+            // ── Stator barrel (the big blue-grey drum) ─────────────────
+            var barrel = Cyl(r, Steel, new Vector3(0, bodyY, cs * 0.10f), cs * 0.34f, cs * 0.85f);
+            barrel.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            // Barrel band rings.
+            for (int ri = 0; ri < 3; ri++)
+            {
+                float z = cs * (-0.14f + ri * 0.24f);
+                var band = Cyl(r, DarkSteel, new Vector3(0, bodyY, z), cs * 0.355f, cs * 0.03f);
+                band.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            }
+            // Cooling fins on top + sides, running fore-aft.
+            for (int fi = 0; fi < 7; fi++)
+            {
+                float z = Mathf.Lerp(-cs * 0.20f, cs * 0.40f, fi / 6f);
+                Box(r, AluminumSilver, new Vector3(0, bodyY + cs * 0.36f, z), new Vector3(cs * 0.50f, cs * 0.035f, cs * 0.05f));
+            }
+            // Brass stator frame ties.
+            Box(r, Brass, new Vector3(cs * 0.36f, bodyY, cs * 0.10f), new Vector3(cs * 0.05f, cs * 0.22f, cs * 0.62f));
+            Box(r, Brass, new Vector3(-cs * 0.36f, bodyY, cs * 0.10f), new Vector3(cs * 0.05f, cs * 0.22f, cs * 0.62f));
 
+            // ── Rear bell + fan cowl with ventilation slots ────────────
+            var rearBell = Cyl(r, CastIron, new Vector3(0, bodyY, cs * 0.60f), cs * 0.30f, cs * 0.14f);
+            rearBell.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            var cowl = Cyl(r, DarkSteel, new Vector3(0, bodyY, cs * 0.72f), cs * 0.26f, cs * 0.12f);
+            cowl.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            for (int vi = 0; vi < 8; vi++)
+            {
+                float ang = vi * 45f * Mathf.Deg2Rad;
+                Box(r, Rubber, new Vector3(Mathf.Cos(ang) * cs * 0.21f, bodyY + Mathf.Sin(ang) * cs * 0.21f, cs * 0.785f),
+                    new Vector3(cs * 0.055f, cs * 0.055f, cs * 0.02f));
+            }
+
+            // ── Rotor (animated "GenRotor" — copper pole stacks) ───────
             var rotor = new GameObject("GenRotor");
             rotor.transform.SetParent(r.transform, false);
-            rotor.transform.localPosition = new Vector3(0, height * 0.18f, 0);
+            rotor.transform.localPosition = new Vector3(0, bodyY, cs * 0.04f);
             for (int i = 0; i < 4; i++)
             {
-                float z = Mathf.Lerp(-length * 0.22f, length * 0.22f, i / 3f);
-                var coil = Cyl(rotor, Copper, new Vector3(0, 0, z), cs * 0.18f, width * 0.40f);
+                float z = Mathf.Lerp(-cs * 0.16f, cs * 0.20f, i / 3f);
+                var coil = Cyl(rotor, Copper, new Vector3(0, 0, z), cs * 0.185f, cs * 0.44f);
                 coil.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
             }
-            Box(rotor, Steel, V0, new Vector3(width * 0.18f, cs * 0.14f, length * 0.64f));
+            Box(rotor, Steel, V0, new Vector3(cs * 0.16f, cs * 0.14f, cs * 0.60f));
 
-            // Visible spinning input coupling.
+            // ── Terminal box (top, toward the rear) ────────────────────
+            Box(r, CastIron, new Vector3(0, bodyY + cs * 0.46f, cs * 0.42f), new Vector3(cs * 0.34f, cs * 0.16f, cs * 0.32f));
+            Box(r, LabelBlue, new Vector3(0, bodyY + cs * 0.547f, cs * 0.42f), new Vector3(cs * 0.26f, cs * 0.012f, cs * 0.24f));
+            // Three cable glands facing up.
+            for (int gi = 0; gi < 3; gi++)
+            {
+                float gx = -cs * 0.10f + gi * cs * 0.10f;
+                var gland = Cyl(r, Brass, new Vector3(gx, bodyY + cs * 0.545f, cs * 0.50f), cs * 0.028f, cs * 0.05f);
+                gland.transform.localRotation = Quaternion.identity;
+            }
+
+            // ── OPEN FRONT BELL + guarded driveshaft input ─────────────
+            // Aperture ring instead of a solid face: four frame rails around a
+            // round hole so the spinning coupling is always visible from any angle.
+            float fz = -cs * 0.52f; // front face z
+            Box(r, CastIron, new Vector3(0, bodyY + cs * 0.28f, fz), new Vector3(cs * 0.56f, cs * 0.10f, cs * 0.10f)); // top rail
+            Box(r, CastIron, new Vector3(0, bodyY - cs * 0.28f, fz), new Vector3(cs * 0.56f, cs * 0.10f, cs * 0.10f)); // bottom rail
+            Box(r, CastIron, new Vector3(cs * 0.28f, bodyY, fz), new Vector3(cs * 0.10f, cs * 0.48f, cs * 0.10f));   // +x post
+            Box(r, CastIron, new Vector3(-cs * 0.28f, bodyY, fz), new Vector3(cs * 0.10f, cs * 0.48f, cs * 0.10f));  // -x post
+            // Safety-yellow guard ring around the spinning stub.
+            var guardRing = Cyl(r, YellowPaint, new Vector3(0, bodyY, fz - cs * 0.045f), cs * 0.215f, cs * 0.035f);
+            guardRing.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            var guardInner = Cyl(r, Rubber, new Vector3(0, bodyY, fz - cs * 0.04f), cs * 0.165f, cs * 0.03f);
+            guardInner.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+
+            // Spinning input coupling — the OF CENTER visual anchor, animated.
             var shaftSpin = new GameObject("ShaftSpin");
             shaftSpin.transform.SetParent(r.transform, false);
-            shaftSpin.transform.localPosition = new Vector3(0, 0, -length * 0.56f);
-            var coupling = Cyl(shaftSpin, Steel, V0, cs * 0.11f, cs * 0.26f);
+            shaftSpin.transform.localPosition = new Vector3(0, bodyY, -cs * 0.60f);
+            var coupling = Cyl(shaftSpin, Chrome, new Vector3(0, 0, cs * 0.06f), cs * 0.105f, cs * 0.10f);
             coupling.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
-            var shaftHub = Box(shaftSpin, DarkSteel, new Vector3(0, 0, cs * 0.10f), new Vector3(cs * 0.22f, cs * 0.18f, cs * 0.12f));
-
-            // Service box and cooling shroud.
-            Box(r, CastIron, new Vector3(width * 0.44f, height * 0.26f, 0), new Vector3(width * 0.18f, height * 0.42f, length * 0.34f));
-            Box(r, CastIron, new Vector3(0, height * 0.64f, 0), new Vector3(width * 0.70f, height * 0.10f, length * 0.62f));
-            for (int i = 0; i < 5; i++)
+            // Coupling bolt circle (4 bolt heads) — rotation is unmistakable.
+            for (int bi = 0; bi < 4; bi++)
             {
-                float z = Mathf.Lerp(-length * 0.26f, length * 0.26f, i / 4f);
-                Box(r, Steel, new Vector3(0, height * 0.74f, z), new Vector3(width * 0.56f, cs * 0.03f, cs * 0.06f));
+                float ang = bi * 90f * Mathf.Deg2Rad;
+                Sphere(shaftSpin, DarkSteel,
+                    new Vector3(Mathf.Cos(ang) * cs * 0.078f, Mathf.Sin(ang) * cs * 0.078f, 0f), cs * 0.032f);
             }
-            Box(r, Glow, new Vector3(0, height * 0.50f, -length * 0.42f), new Vector3(width * 0.38f, cs * 0.05f, cs * 0.05f));
+            // Stub shaft reaching through the guard ring to the port.
+            var stub = Cyl(shaftSpin, Chrome, new Vector3(0, 0, -cs * 0.16f), cs * 0.062f, cs * 0.26f);
+            stub.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            Sphere(shaftSpin, Brass, new Vector3(cs * 0.055f, 0, -cs * 0.16f), cs * 0.018f); // key dot
 
-            // Feet.
-            Box(r, DarkSteel, new Vector3(-width * 0.28f, -height * 0.56f, 0), new Vector3(cs * 0.18f, height * 0.30f, cs * 0.24f));
-            Box(r, DarkSteel, new Vector3(width * 0.28f, -height * 0.56f, 0), new Vector3(cs * 0.18f, height * 0.30f, cs * 0.24f));
+            // The shaft-input port BEYOND the guard ring — gold, unmistakable.
+            Port(r, "Port_ShaftInput", PortShaft, new Vector3(0, bodyY, -cs * 0.72f),
+                new Vector3(cs * 0.15f, cs * 0.15f, cs * 0.05f));
 
-            Port(r, "Port_ShaftInput", PortShaft, new Vector3(0, 0, -length * 0.66f), new Vector3(cs * 0.14f, cs * 0.14f, cs * 0.05f));
+            Socket(r, "Socket_StatorAxis", new Vector3(0, bodyY, cs * 0.10f));
         }
 
         // ════════════════════════════════════════════════════════════════
         //  EXHAUST PIPE
         // ════════════════════════════════════════════════════════════════
+        // ════════════════════════════════════════════════════════════════
+        //  EXHAUST PIPE — marine funnel stack (v17 remake)
+        //  Bolted base flange → horizontal elbow toward the engine port →
+        //  tapered vertical stack with weld beads + heat band → inner
+        //  throat and a rain cap on tripod legs. Smoke emits ≈ +0.55 cs.
+        // ════════════════════════════════════════════════════════════════
         static void BuildExhaustPipe(GameObject r, float cs)
         {
-            // Directional marine exhaust: back connector plugs into the engine,
-            // then the stack rises upward.
-            var backConnector = Cyl(r, CastIron, new Vector3(0, -cs * 0.08f, -cs * 0.34f), cs * 0.12f, cs * 0.18f);
-            backConnector.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
-            Box(r, Steel, new Vector3(0, -cs * 0.08f, -cs * 0.18f), new Vector3(cs * 0.22f, cs * 0.18f, cs * 0.18f));
-            var riser = Cyl(r, CastIron, new Vector3(0, cs * 0.18f, 0), cs * 0.13f, cs * 0.62f);
-            riser.transform.localRotation = Quaternion.identity;
-            Cyl(r, Steel, new Vector3(0, -cs * 0.28f, -cs * 0.34f), cs * 0.20f, cs * 0.05f);
-            Cyl(r, DarkSteel, new Vector3(0, cs * 0.52f, 0), cs * 0.15f, cs * 0.04f);
-            for (int i = 0; i < 4; i++)
+            // ── Bolted base flange (mounts to the deck/cell face) ──────
+            Box(r, DarkSteel, new Vector3(0, -cs * 0.455f, 0), new Vector3(cs * 0.46f, cs * 0.06f, cs * 0.46f));
+            for (int bi = 0; bi < 4; bi++)
             {
-                float y = cs * 0.02f + i * cs * 0.12f;
-                Box(r, Steel, new Vector3(cs * 0.11f, y, 0), new Vector3(cs * 0.03f, cs * 0.05f, cs * 0.03f));
-                Box(r, Steel, new Vector3(-cs * 0.11f, y, 0), new Vector3(cs * 0.03f, cs * 0.05f, cs * 0.03f));
+                float ang = (bi * 90f + 45f) * Mathf.Deg2Rad;
+                Sphere(r, CastIron, new Vector3(Mathf.Cos(ang) * cs * 0.17f, -cs * 0.415f,
+                    Mathf.Sin(ang) * cs * 0.17f), cs * 0.034f);
             }
+
+            // ── Horizontal elbow reaching back toward the engine ───────
+            var intake = Cyl(r, CastIron, new Vector3(0, -cs * 0.30f, -cs * 0.24f), cs * 0.125f, cs * 0.42f);
+            intake.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            // Elbow bend sphere.
+            Sphere(r, CastIron, new Vector3(0, -cs * 0.28f, -cs * 0.02f), cs * 0.30f);
+            // End flange ring + heat-discoloured intake lip.
+            var lipRing = Cyl(r, HeatOrange, new Vector3(0, -cs * 0.30f, -cs * 0.425f), cs * 0.155f, cs * 0.045f);
+            lipRing.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            // The engine-side connection port (red = exhaust input).
+            Port(r, "Port_ExhaustInput", PortExhaust, new Vector3(0, -cs * 0.30f, -cs * 0.49f),
+                new Vector3(cs * 0.14f, cs * 0.14f, cs * 0.05f));
+
+            // ── Tapered three-stage stack ──────────────────────────────
+            var stageA = Cyl(r, CastIron, new Vector3(0, -cs * 0.10f, 0), cs * 0.150f, cs * 0.24f); stageA.transform.localRotation = Quaternion.identity;
+            var stageB = Cyl(r, Steel,    new Vector3(0,  cs * 0.13f, 0), cs * 0.135f, cs * 0.28f); stageB.transform.localRotation = Quaternion.identity;
+            var stageC = Cyl(r, Steel,    new Vector3(0,  cs * 0.36f, 0), cs * 0.118f, cs * 0.22f); stageC.transform.localRotation = Quaternion.identity;
+            // Weld bead rings between the stages.
+            Cyl(r, DarkSteel, new Vector3(0,  cs * 0.005f, 0), cs * 0.155f, cs * 0.020f);
+            Cyl(r, DarkSteel, new Vector3(0,  cs * 0.255f, 0), cs * 0.140f, cs * 0.020f);
+            // Heat band (bands of lifetime stains near the top).
+            Cyl(r, HeatBlue,   new Vector3(0,  cs * 0.315f, 0), cs * 0.140f, cs * 0.025f);
+            Cyl(r, HeatOrange, new Vector3(0,  cs * 0.185f, 0), cs * 0.148f, cs * 0.025f);
+
+            // ── Inner throat (the dark opening the smoke exits) ────────
+            Cyl(r, Rubber, new Vector3(0, cs * 0.485f, 0), cs * 0.095f, cs * 0.035f);
+            var rim = Cyl(r, DarkSteel, new Vector3(0, cs * 0.50f, 0), cs * 0.125f, cs * 0.02f);
+
+            // ── Rain cap on tripod legs ────────────────────────────────
+            var capDisc = Cyl(r, DarkSteel, new Vector3(0, cs * 0.635f, 0), cs * 0.20f, cs * 0.028f);
+            var capKnob = Cyl(r, Steel, new Vector3(0, cs * 0.662f, 0), cs * 0.045f, cs * 0.05f);
+            for (int li = 0; li < 3; li++)
+            {
+                float ang = li * 120f * Mathf.Deg2Rad;
+                Strut(r, Steel,
+                    new Vector3(Mathf.Cos(ang) * cs * 0.115f, cs * 0.51f, Mathf.Sin(ang) * cs * 0.115f),
+                    new Vector3(Mathf.Cos(ang) * cs * 0.175f, cs * 0.625f, Mathf.Sin(ang) * cs * 0.175f),
+                    cs * 0.02f);
+            }
+
+            // ── Support braces on the sides ────────────────────────────
+            Strut(r, DarkSteel, new Vector3( cs * 0.16f, -cs * 0.16f,  cs * 0.10f), new Vector3( cs * 0.34f, -cs * 0.42f,  cs * 0.28f), cs * 0.028f);
+            Strut(r, DarkSteel, new Vector3(-cs * 0.16f, -cs * 0.16f,  cs * 0.10f), new Vector3(-cs * 0.34f, -cs * 0.42f,  cs * 0.28f), cs * 0.028f);
+
+            Socket(r, "Socket_StackTop", new Vector3(0, cs * 0.55f, 0));
         }
 
         // ════════════════════════════════════════════════════════════════

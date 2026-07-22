@@ -4,6 +4,35 @@ Branch: **Dev** · Semantic Versioning 2.0.0
 
 ---
 
+## [2.23.0] — Ground-Safe Placement, Port Snap, Liquid Links, Torque Curve & Seizure Repair
+
+**Type:** MINOR — save-compatible gameplay + connection fixes and MaritimeMeshBuilder v17 (game version 6.11.0-dev).
+
+### Added
+- **Free-ratio gearbox (0.25×–20×)**: typed input field + slider in the panel replaces the 20 fixed gears; `GridGearbox.SetRatio` applies live.
+- **Marine-diesel torque curve** on engines (`TorqueCurveAtSpeed`: 1.18× idle → 0.58× redline) feeding real shaft torque; speed-based stress model; overstressed engines run 35% hotter.
+- **Heat-seizure repair**: 100 °C seizes an engine until repaired with spare parts (subset of its recipe) under 80 °C (`NeedsRepair`, `TryRepairCriticalFailure`, prefab-authored `repairCost` filled by Step 13).
+- **Ground-clearance lift**: free-standing placements raise out of the terrain using the prefab's true rotated bounds — no more MGO engine sinking into the ground.
+- **Build reach 8 m → 16 m** with auto-upgrade of stale serialized values.
+
+### Fixed
+- **Maritime port snap to the actual port cell**: shafts/exhaust/gearboxes/generators/propellers magnet onto the engine's real port position (several cells out on big models) — fixes shafts spawning inside the medium engine.
+- **Liquid pipes snap to liquid ports** (both ghost + final placement, grid mode agnostic), and the grid liquid network treats world-space proximity to machine bodies/liquid ports as connected — tanks really feed engines via pipes again; WaterPipe arms draw across proximity links.
+- **Exhaust detection**: engines' `HasAdjacentExhaust` and the exhaust pipe's engine scan now use face neighbours OR port/body proximity — the pipe reports *venting* and emits smoke again (was stuck at "no active engines adjacent").
+- **WorldInspectionHud**: the card probes every hit along the ray and skips ghosts/viewmodels, so block info shows with items/tools held; distance raised to 16 m.
+
+### Visuals (MaritimeMeshBuilder v17)
+- Exhaust Pipe → bolted flange, heat-tinted elbow intake, tapered stack with weld beads/heat bands, inner throat, rain cap, braces, red `Port_ExhaustInput`.
+- Drive Shaft → pillow-block bearings, bolted end flanges, splined shaft with brass keyway, U-joint yoke, clamp collars.
+- Generator → skid rails, finned stator barrel, rear fan cowl, terminal box, open front bell with **safety-yellow guard ring and visible spinning input coupling** (gold `Port_ShaftInput`).
+
+### Manual Unity steps
+1. Run **Step 13** (v17 meshes rebuild in place; repair costs fill when empty — no prefab deletion needed).
+2. Run **Step 8** once to apply the "Liquid Pipe (Solid/Glass)" rename.
+3. Slightly smoky legacy builds reconnect automatically (proximity detection).
+
+---
+
 ## [2.22.1] — Animator Compile Fix (Rotate Arity)
 
 **Type:** PATCH — compile repair only; no behaviour change (game version 6.10.1-dev).

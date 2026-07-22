@@ -5,8 +5,10 @@
 // gas from adjacent engines and emits visible smoke particles while venting.
 //
 // Mechanics:
-//   • Scans 6 face-neighbours for GridMaritimeEngine blocks.
-//   • While any neighbour engine is running + producing exhaust gas, the pipe
+//   • Finds engines by face-neighbours AND by world-space proximity — pipes snapped
+//     to an engine's exhaust port can sit several lattice cells from the engine's
+//     origin cell on the big modern engine models, so proximity is the truth test.
+//   • While any adjacent engine is running + producing exhaust gas, the pipe
 //     emits smoke particles styled after the engine's tier:
 //       Tier 1 Crude   — pulsating dark blackish-grey puffs tuned to RPM.
 //       Tier 2 HFO V8  — steady, thick dark-grey column.
@@ -52,6 +54,15 @@ namespace VoxelEngine.Maritime
         private bool _venting;
         private float _puffPhase;
 
+        private static readonly Vector3Int[] Faces =
+        {
+            new( 1,0,0), new(-1,0,0),
+            new( 0,1,0), new( 0,-1,0),
+            new( 0,0,1), new( 0,0,-1),
+        };
+        private static readonly Collider[] s_engineProbe = new Collider[16];
+        private readonly System.Collections.Generic.HashSet<GridMaritimeEngine> _foundEngines = new();
+
         public override void OnPlaced()
         {
             base.OnPlaced();
@@ -76,26 +87,39 @@ namespace VoxelEngine.Maritime
             bool anyDirty = false;
             bool anyCritical = false;
 
+            // Collect every engine this pipe can vent for: face-neighbours (classic
+            // 1-cell builds) PLUS world-space proximity, which is what actually matters
+            // for port-snapped pipes on the big modern engine models — their lattice
+            // cell may sit one or two cells away from the engine's origin cell.
+            _foundEngines.Clear();
             if (Grid != null)
             {
-                var faces = new[]
+                foreach (var off in Faces)
                 {
-                    new Vector3Int( 1,0,0), new(-1,0,0),
-                    new( 0,1,0), new( 0,-1,0),
-                    new( 0,0,1), new( 0,0,-1),
-                };
-                foreach (var off in faces)
-                {
-                    var nb = Grid.GetBlock(GridPos + off);
-                    if (nb is not GridMaritimeEngine eng || !eng.IsRunning || eng.ExhaustGas <= 0.5f)
-                        continue;
-
-                    _venting = true;
-                    if (eng.ExhaustGas > maxExhaust) { maxExhaust = eng.ExhaustGas; anchor = eng; }
-                    smokeSpeedMul = Mathf.Max(smokeSpeedMul, eng.SmokeSpeedMultiplier);
-                    anyDirty |= eng.SmokeDirty;
-                    anyCritical |= eng.IsCriticalHeat;
+                    if (Grid.GetBlock(GridPos + off) is GridMaritimeEngine eng)
+                        _foundEngines.Add(eng);
                 }
+                float cs = Grid.gridSize.CellSize();
+                int hitCount = Physics.OverlapSphereNonAlloc(
+                    transform.position, cs * 1.35f, s_engineProbe, ~0, QueryTriggerInteraction.Collide);
+                for (int i = 0; i < hitCount; i++)
+                {
+                    var col = s_engineProbe[i];
+                    if (col == null) continue;
+                    var eng = col.GetComponentInParent<GridMaritimeEngine>();
+                    if (eng != null && eng.Grid == Grid) _foundEngines.Add(eng);
+                }
+            }
+
+            foreach (var eng in _foundEngines)
+            {
+                if (!eng.IsRunning || eng.ExhaustGas <= 0.5f) continue;
+
+                _venting = true;
+                if (eng.ExhaustGas > maxExhaust) { maxExhaust = eng.ExhaustGas; anchor = eng; }
+                smokeSpeedMul = Mathf.Max(smokeSpeedMul, eng.SmokeSpeedMultiplier);
+                anyDirty |= eng.SmokeDirty;
+                anyCritical |= eng.IsCriticalHeat;
             }
 
             var emission = _smokeFX.emission;
