@@ -1,9 +1,20 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.11.0-dev`
+**Current Version:** `6.11.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.11.1-dev] Compile Fix — WaterPipe `CellSize` Extension Resolution
+
+**Type:** PATCH — compile-error fix only; no behaviour, asset, or save changes. Old saves load cleanly.
+
+**Fixed:**
+- `CS1061` in `Assets/Scripts/Fluids/WaterPipe.cs` (lines 52 & 79): the liquid-pipe visual arm code introduced in 6.11.0-dev called the `GridSize.CellSize()` extension method without importing `VoxelEngine.GridSystem`, which blocked compilation. Both call sites now use the repo's standard fully-qualified static form `VoxelEngine.GridSystem.GridSizeExt.CellSize(...)` — identical runtime behaviour (proximity arm radius for grid-attached liquid pipes).
+
+**Manual Unity Steps:** none — drop in the file, let Unity recompile, done. (Step 8 / Step 13 re-runs are NOT required; no assets changed.)
 
 ---
 

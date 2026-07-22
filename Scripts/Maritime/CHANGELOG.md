@@ -4,6 +4,15 @@ Branch: **Dev** · Semantic Versioning 2.0.0
 
 ---
 
+## [2.23.1] — Compile Fix: WaterPipe `CellSize`
+
+**Type:** PATCH — compile-error fix only (game version 6.11.1-dev).
+
+### Fixed
+- `CS1061` build break in `Scripts/Fluids/WaterPipe.cs`: `GridSize.CellSize()` was invoked as an extension method without `using VoxelEngine.GridSystem;` in scope. Switched both call sites to the explicit static call `VoxelEngine.GridSystem.GridSizeExt.CellSize(...)` (matches the pattern used in `VoxelEngineSetupWindow` / `PlayerInteractionTool`). No behaviour change — the 2.23.0 liquid-arm proximity visuals work exactly as delivered once the project compiles again.
+
+---
+
 ## [2.23.0] — Ground-Safe Placement, Port Snap, Liquid Links, Torque Curve & Seizure Repair
 
 **Type:** MINOR — save-compatible gameplay + connection fixes and MaritimeMeshBuilder v17 (game version 6.11.0-dev).

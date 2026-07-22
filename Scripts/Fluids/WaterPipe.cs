@@ -49,7 +49,7 @@ namespace VoxelEngine.Fluids
             var grid = gridBlock != null ? gridBlock.Grid : null;
             if (grid != null)
             {
-                float cs = grid.gridSize.CellSize();
+                float cs = VoxelEngine.GridSystem.GridSizeExt.CellSize(grid.gridSize);
 
                 void AddArm(VoxelEngine.GridSystem.GridBlock block)
                 {
@@ -76,7 +76,7 @@ namespace VoxelEngine.Fluids
                 var myGridBlock = gridBlock;
                 int hitCount = Physics.OverlapSphereNonAlloc(transform.position,
                     Mathf.Max(myGridBlock != null ? myGridBlock.EffectiveCellSize : cs,
-                        VoxelEngine.GridSystem.GridSize.Small.CellSize()) * 1.35f,
+                        VoxelEngine.GridSystem.GridSizeExt.CellSize(VoxelEngine.GridSystem.GridSize.Small)) * 1.35f,
                     s_armProbe, ~0, QueryTriggerInteraction.Collide);
                 for (int i = 0; i < hitCount; i++)
                 {
