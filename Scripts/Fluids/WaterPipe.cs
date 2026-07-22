@@ -65,7 +65,11 @@ namespace VoxelEngine.Fluids
                     if (VoxelEngine.Networks.WrenchBlacklist.IsBlocked(gridBlock.gameObject, block.gameObject)) return;
                     _neighbourPosBuf.Add(connectedPipe
                         ? Vector3.Lerp(transform.position, block.transform.position, 0.5f)
-                        : block.transform.position);
+                        // Aim endpoint arms at the machine's ACTUAL liquid port (fuel
+                        // intake, coolant intake, tank Port_LiquidIO …) instead of its
+                        // lattice centre — arms used to skew inline through the body.
+                        : VoxelEngine.Maritime.MaritimePorts.PortPositionOrCenter(
+                            block, VoxelEngine.Maritime.MaritimePorts.LiquidPrefixes, transform.position));
                 }
 
                 foreach (var block in VoxelEngine.GridSystem.UnifiedGridTopology.AdjacentBlocks(grid, gridBlock))

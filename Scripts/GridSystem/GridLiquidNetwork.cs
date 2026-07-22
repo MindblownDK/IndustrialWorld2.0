@@ -77,6 +77,9 @@ namespace VoxelEngine.GridSystem
             float total = 0f;
             foreach (var tank in ConnectedTanks(endpoint, type, requireExistingType: true))
                 total += Mathf.Max(0f, tank.stored);
+            CollectBridgedClassicTanks(endpoint, type, forDraw: true, s_bridgedTanks);
+            foreach (var tank in s_bridgedTanks)
+                total += Mathf.Max(0f, tank.StoredLitres);
             return total;
         }
 
@@ -85,6 +88,9 @@ namespace VoxelEngine.GridSystem
             float total = 0f;
             foreach (var tank in ConnectedTanks(endpoint, type, requireExistingType: false))
                 total += Mathf.Max(0f, tank.capacity - tank.stored);
+            CollectBridgedClassicTanks(endpoint, type, forDraw: false, s_bridgedTanks);
+            foreach (var tank in s_bridgedTanks)
+                total += Mathf.Max(0f, tank.capacityLitres - tank.StoredLitres);
             return total;
         }
 
@@ -96,6 +102,15 @@ namespace VoxelEngine.GridSystem
             {
                 if (drawn >= litres) break;
                 drawn += tank.Remove(litres - drawn);
+            }
+            if (drawn < litres)
+            {
+                CollectBridgedClassicTanks(endpoint, type, forDraw: true, s_bridgedTanks);
+                foreach (var tank in s_bridgedTanks)
+                {
+                    if (drawn >= litres) break;
+                    drawn += tank.TakeSome(type, litres - drawn);
+                }
             }
             return drawn;
         }
@@ -111,7 +126,98 @@ namespace VoxelEngine.GridSystem
                 if (tank.stored <= 0.001f) tank.liquidType = type;
                 filled += tank.Add(litres - filled);
             }
+            if (filled < litres)
+            {
+                CollectBridgedClassicTanks(endpoint, type, forDraw: false, s_bridgedTanks);
+                foreach (var tank in s_bridgedTanks)
+                {
+                    if (filled >= litres) break;
+                    filled += tank.AddSome(type, litres - filled);
+                }
+            }
             return filled;
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        //  CLASSIC FLUID NETWORK BRIDGE
+        //  The ship-side grid system and the classic ground-side FluidNetwork
+        //  are ONE physical pipe world to the player: a classic WaterPipe run
+        //  that touches any liquid port (or the body) of an endpoint — engine,
+        //  pump, tank, whatever — bridges both systems. This is what finally
+        //  makes "liquid pipes to the liquid tank" work no matter WHICH tank
+        //  variant the pipe run terminates at.
+        // ════════════════════════════════════════════════════════════════
+        private const int ClassicWalkCap = 512;
+        private static readonly List<VoxelEngine.Fluids.WaterTank> s_bridgedTanks = new(8);
+        private static readonly List<Vector3> s_classicSeeds = new(8);
+        private static readonly HashSet<VoxelEngine.Fluids.WaterPipe> s_classicVisited = new();
+        private static readonly Queue<VoxelEngine.Fluids.WaterPipe> s_classicQueue = new();
+        private static readonly Collider[] s_classicProbe = new Collider[16];
+
+        /// <summary>Collect classic <see cref="VoxelEngine.Fluids.WaterTank"/>s reachable
+        /// from the endpoint through the classic fluid network. Seed points are the
+        /// endpoint's named liquid ports (generous range) plus its body centre.</summary>
+        private static void CollectBridgedClassicTanks(GridBlock endpoint, LiquidType type,
+            bool forDraw, List<VoxelEngine.Fluids.WaterTank> outTanks)
+        {
+            outTanks.Clear();
+            if (endpoint == null) return;
+            float cs = endpoint.Grid != null ? endpoint.Grid.gridSize.CellSize() : 2.5f;
+
+            // Gather probe centres: up to 4 liquid ports + the body centre.
+            s_classicSeeds.Clear();
+            foreach (Transform child in endpoint.transform.GetComponentsInChildren<Transform>(true))
+            {
+                if (s_classicSeeds.Count >= 4) break;
+                if (child == null || child == endpoint.transform) continue;
+                bool liquidPort = false;
+                for (int i = 0; i < VoxelEngine.Maritime.MaritimePorts.LiquidPrefixes.Length; i++)
+                {
+                    if (child.name.StartsWith(VoxelEngine.Maritime.MaritimePorts.LiquidPrefixes[i], System.StringComparison.Ordinal)) { liquidPort = true; break; }
+                }
+                if (liquidPort) s_classicSeeds.Add(child.position);
+            }
+            s_classicSeeds.Add(endpoint.transform.position);
+
+            // Seed classic pipes around every probe centre.
+            s_classicVisited.Clear();
+            s_classicQueue.Clear();
+            for (int c = 0; c < s_classicSeeds.Count; c++)
+            {
+                float radius = c < s_classicSeeds.Count - 1 ? cs * 1.6f : endpoint.EffectiveCellSize * 1.35f;
+                int hitCount = Physics.OverlapSphereNonAlloc(s_classicSeeds[c], radius, s_classicProbe, ~0, QueryTriggerInteraction.Collide);
+                for (int i = 0; i < hitCount; i++)
+                {
+                    var col = s_classicProbe[i];
+                    if (col == null) continue;
+                    var pipe = col.GetComponentInParent<VoxelEngine.Fluids.WaterPipe>();
+                    if (pipe != null && s_classicVisited.Add(pipe)) s_classicQueue.Enqueue(pipe);
+                }
+            }
+
+            // Walk the classic neighbour graph, collecting compatible tanks.
+            int walked = 0;
+            while (s_classicQueue.Count > 0 && walked++ < ClassicWalkCap)
+            {
+                var pipe = s_classicQueue.Dequeue();
+                var neighbours = pipe.neighbours;
+                if (neighbours == null) continue;
+                foreach (var node in neighbours)
+                {
+                    if (node is VoxelEngine.Fluids.WaterPipe nextPipe)
+                    {
+                        if (s_classicVisited.Add(nextPipe)) s_classicQueue.Enqueue(nextPipe);
+                    }
+                    else if (node is VoxelEngine.Fluids.WaterTank tank)
+                    {
+                        if (outTanks.Contains(tank)) continue;
+                        bool usable = forDraw
+                            ? tank.liquidType == type && tank.StoredLitres > 0.001f
+                            : tank.IsEmpty || tank.liquidType == type;
+                        if (usable) outTanks.Add(tank);
+                    }
+                }
+            }
         }
 
         private IEnumerable<GridLiquidTank> ConnectedTanks(GridBlock endpoint, LiquidType type, bool requireExistingType)
@@ -185,12 +291,6 @@ namespace VoxelEngine.GridSystem
         private static readonly Collider[] s_liquidProbe = new Collider[12];
         private static readonly List<GridBlock> s_proximityResult = new(12);
 
-        private static readonly string[] LiquidPortPrefixes =
-        {
-            "Port_FuelInput", "Port_CoolantInput", "Port_SteamHeat",
-            "Port_LiquidInput", "Port_WaterInput", "Port_LiquidIO", "Port_WaterIO",
-        };
-
         /// <summary>World-space adjacency for liquid links: A is a machine/tank endpoint,
         /// B is a pipe. Counts as linked when the pipe's centre is within reach of one of
         /// the endpoint's named liquid ports, OR close enough to the endpoint's body to
@@ -204,9 +304,9 @@ namespace VoxelEngine.GridSystem
             {
                 if (child == null || child == endpoint.transform) continue;
                 bool liquidPort = false;
-                for (int i = 0; i < LiquidPortPrefixes.Length; i++)
+                for (int i = 0; i < VoxelEngine.Maritime.MaritimePorts.LiquidPrefixes.Length; i++)
                 {
-                    if (child.name.StartsWith(LiquidPortPrefixes[i], System.StringComparison.Ordinal)) { liquidPort = true; break; }
+                    if (child.name.StartsWith(VoxelEngine.Maritime.MaritimePorts.LiquidPrefixes[i], System.StringComparison.Ordinal)) { liquidPort = true; break; }
                 }
                 if (!liquidPort) continue;
                 if ((child.position - pipe.transform.position).sqrMagnitude <= portRange2) return true;

@@ -1,9 +1,71 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.11.1-dev`
+**Current Version:** `6.13.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.13.1-dev] Compile Fix (CS0126) + Full Unity 6 Deprecated-Lookup Warning Sweep
+
+**Type:** PATCH — pure bug fixes, zero behaviour change, fully save-compatible.
+
+**Fixed:**
+- **CS0126 compile error** in `GridBuilder.TryApplyMaritimePortSnap` (line 1020): a valueless `return;` inside the new `bool`-returning port-snap path broke the build on 6.13.0-dev. Now returns `false` so the placement simply falls back to normal rules when the port axis can't be resolved.
+- **All CS0618 deprecated-find warnings swept repo-wide** (same warning class Thomas pasted, plus the identical sites that would surface right after): 
+  - `GridLightBlock`, `LEDStrip`, `GridSlidingDoor` (motion sensors): `FindObjectsByType<T>(FindObjectsInactive.Exclude, FindObjectsSortMode.None)` → the non-deprecated `(FindObjectsInactive)` overload. `None` never sorted, so order/behaviour is unchanged.
+  - `CrestWaterSetupUtility` (5 direct calls) + reflection helper: now resolves the non-deprecated `FindObjectsByType(Type, FindObjectsInactive)` overload — identical results, no obsolete enum reference.
+  - `CrestFlowSampler`, `WaterMeshBuilder`: same overload migration.
+  - `GridShapeVariantSetup` (editor, ×4) + `CrestVoxelWaterBinder`: `FindObjectOfType` → `FindFirstObjectByType`.
+
+**Manual Unity Steps:** copy the changed scripts into your clone, let Unity recompile — the console should now show **0 errors, 0 warnings** from this family.
+
+---
+
+### [6.13.0-dev] Chained Drive Shafts Physically Touch + Snap In Perfect Extension
+
+**Type:** MINOR — save-compatible visual/link improvement (MaritimeMeshBuilder v19). Old saves load cleanly; existing shafts keep working and pick up the new look on the next Step-13 run.
+
+**New:**
+- **Shafts touch when chained**: the spinning chrome rod now spans the full cell, so two drive shafts placed in extension of each other meet exactly at the shared cell face — one continuous driveline, no more floating gap.
+- **Gold coupling rings at both rod tips** (`Port_ShaftIO_F` / `Port_ShaftIO_B`): chained shafts meet ring-to-ring like a real bolted flange coupling — and because they're named shaft ports, a **held shaft now snaps exactly in extension** of a placed one (aim at the shaft, it magnetises onto the far tip's cell, collinear automatically).
+
+**Changed:** MaritimeMeshBuilder **v19**. Keyway bar lengthened to match the full-cell rod.
+
+**Manual Unity Steps:** copy the changed script, then run `Tools > Voxel Engine > Voxel Engine Setup` → **Step 13** once (rebuilds the driveshaft visual in place, non-destructively).
+
+---
+
+### [6.12.0-dev] Engine Oxygen, AIP Module, Universal Port Snapping, Placement Guards & Truly Non-Destructive Step 13
+
+**Type:** MINOR — new save-compatible gameplay systems (engine oxygen requirement + Closed-Cycle AIP upgrade module + exhaust-gas tap), large placement/snapping fixes, and four reworked machine visuals (MaritimeMeshBuilder v18). Old saves load cleanly: socketed modules persist by item id; the new module kind appends to the end of the `EngineModuleKind` enum; engine oxygen starvation is runtime-only and never damages placed blocks.
+
+**New — Engines Breathe Oxygen:**
+- Every maritime engine now needs a small supply of **O₂** for combustion: an internal buffer (sips at 0.25 O₂-units per fuel unit) refills from any gas-tank reachable via **gas pipes plugged into the engine's new `Port_OxygenInput`** (air-filter housings visible on all three engine tiers). Starved engines stall harmlessly — no damage, no fuel burn — and the panel/screen warns clearly.
+- New upgrade module: **Closed-Cycle AIP Module** (all tiers). Solid chlorate oxygen candles thermally decompose to release chemically-bound O₂ while a regenerative CO₂-scrubbed exhaust-recirculation loop returns the un-consumed oxygen fraction to the intake — the engine carries its own oxidiser, so the external air requirement disappears. Trade-off: +5% fuel use. Crafted from steel plates, advanced circuits, copper wire and glass.
+
+**New — Exhaust Gas Tap (foundation for the concealed-space atmosphere sim on the Roadmap):**
+- Exhaust pipes gained a chrome **`Port_ExhaustGasIO`** top flange. Gas pipes snapped onto it route captured exhaust into gas networks as the new **`GasType.ExhaustGas`** (storable in gas tanks) — captured exhaust visibly **thins the smoke plume**. Gas pipes snap to gas ports only; liquid pipes snap to liquid ports only.
+
+**Fixed — Snapping:**
+- **MGO exhaust snap**: the lattice-neighbour gate fired *before* the port snap and the MGO's collectors sit two cells from its origin cell, so the snap was unreachable — port mounts are now tried first, from ANY aim point on the machine (aim anywhere, it centres on the port's exact cell, per the HFO behaviour).
+- **Exhaust orientation** follows the port's dominant axis: MGO top collectors raise a vertical stack, side ports lay a horizontal run reaching slightly outboard.
+- **Fuel port snap + coolant placement**: the MGO's box collider was ~1.2× inflated (root scale double-applied in Step 13) and physically stood between your ray and the port — collider now fits exactly, snap range widened, and pipes land on the port's own Detail cell.
+- **Gas pipes ⇄ exhaust pipes** snap both ways (exhaust held → gas pipe aims; gas pipe held → exhaust gas tap aims).
+
+**Fixed — Placement physics:**
+- **No more blocks inside the player** (no more being shoved upwards) and **no more blocks buried in terrain/other constructs** (no more grid kicks): a world-space obstruction test rejects both (GridBuilder + classic BuildSystem).
+- **MGO bottom-alignment**: tall machine models placed on top of a block now rest their visual bottom ON the supporting face instead of sinking their overhang into it.
+- Pipe visual **arms aim at the machine's actual port** (fuel/coolant/tank/oxygen/gas tap) instead of skewing inline through the block centre.
+
+**Fixed — Liquid pipes ⇄ liquid tanks (final):** the grid liquid system and the classic FluidNetwork are now bridged — any pipe run touching a liquid port/body connects **both** tank types (`GridLiquidTank` and classic `WaterTank`) to engines, pumps and radiators, in both directions. Liquid tanks also gained visible **`Port_LiquidIO`** markers (N/S/E/W/Top) pipes snap to.
+
+**Changed — Item block properties actually work:** placed blocks take **name, mass, max HP and current HP from the GridBlockItem asset**; the engine's tier auto-config no longer stomps the item's name (fallback-only). MaritimeMeshBuilder **v18** visuals: straight no-support exhaust stack, driveshaft without ground feet, oxygen intakes on engines, gas-tap flange.
+
+**Changed — Step 13 is now strictly non-destructive:** prefab colliders re-fit ONLY on create/mesh-rebuild/missing (and fit correctly under root scale), block items/recipes/config populate only when new, missing scripts/materials are linked and broken recipe chains restored — your names, masses, HP, balancing values and prefab edits survive every re-run.
+
+**Manual Unity Steps:** copy the changed scripts in, let Unity compile, then run `Tools > Voxel Engine > Voxel Engine Setup` → **Step 13 (Build Maritime Content)** once. It rebuilds the four v18 visuals in place, adds the oxygen ports/air filters, the gas-tap flange, the tank's liquid ports and the AIP module + recipe — non-destructively.
 
 ---
 

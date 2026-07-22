@@ -1,7 +1,7 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.11.1-dev`
+**Current Version:** `6.13.1-dev`
 **Roadmap Version:** `6.9.3-dev`
 **Date:** 2026-07-21
 **Status:** Power, Vehicles & Combat (4.7.0) — WORKING ON
@@ -1307,6 +1307,12 @@ Statuses are evidence-based and move forward only after code/content review and 
     - Green/yellow/red indicator.
     - Excessive heat causes damage over time.
     - Heat tolerance armor upgrades raise the safe threshold.
+
+14. **Concealed-Space Atmosphere & Exhaust Simulation** *(planned — foundation shipped in 6.12.0-dev: exhaust pipes carry a `Port_ExhaustGasIO` gas tap, engines require piped oxygen, and `GasType.ExhaustGas` flows through gas networks)*
+    - Enclosed/concealed volumes (engine rooms, tanks, caves sealed by blocks) track their own gas composition.
+    - Exhaust gas pumped into a concealed space **heats the space up**; beyond a threshold it damages and destroys surrounding blocks (engine rooms need ventilation, not just a pipe).
+    - Burning engines **deplete the room's oxygen**; below the critical O₂ fraction engines stall (no combustion air) and the player **cannot breathe** inside the space (links into the player oxygen/breathing system).
+    - Synergies: Closed-Cycle AIP modules ignore room air entirely (closed-loop subs), radiators dump room heat, quality-of-life goals: vents/fans/bulkhead doors that exchange gas between concealed spaces and atmosphere.
 
 13. **Nuclear Warheads & Heavy Ordinance**
     - Craftable nuclear warheads for grid-mounted missiles.

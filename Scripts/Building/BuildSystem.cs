@@ -141,7 +141,7 @@ namespace VoxelEngine.Building
             if (targetGrid != null && IsUnifiedPipe(block))
             {
                 Vector3Int precisionPos, hostStructuralPos, faceAxis;
-                bool validPrecision = TryGetMaritimeLiquidPortSnap(targetGrid, block, hit,
+                bool validPrecision = TryGetMaritimePortSnap(targetGrid, block, hit,
                         out precisionPos, out hostStructuralPos, out faceAxis)
                     || UnifiedGridTopology.TryGetDetailPlacement(
                         targetGrid, hit, out precisionPos, out hostStructuralPos, out faceAxis);
@@ -219,51 +219,42 @@ namespace VoxelEngine.Building
         }
 
         // ════════════════════════════════════════════════════════════════
-        //  MARITIME LIQUID-PORT SNAP
-        //  Liquid pipes pulled toward a named liquid port on the targeted machine
-        //  (fuel intake, coolant intake, steam heat, generic liquid IO) snap onto
-        //  the exact Detail-lattice cell that hosts the port — regardless of grid
-        //  mode and regardless of how far the machine's visual model overhangs
-        //  its origin cell. Rotation stays player-controlled + auto-shaped by the
-        //  pipe network builder, only the position is magnetised.
+        //  MARITIME PORT SNAP (liquids + gases)
+        //  Pipes pulled toward a named service port on the targeted machine snap
+        //  onto the exact Detail-lattice cell that hosts the port — regardless of
+        //  grid mode and regardless of how far the machine's visual model overhangs
+        //  its origin cell. LIQUID pipes snap ONLY to liquid ports (fuel, coolant,
+        //  liquid IO — incl. the liquid tank's Port_LiquidIO); GAS pipes snap ONLY
+        //  to gas ports (engine oxygen intake, the exhaust pipe's gas tap, generic
+        //  gas IO, steam heat). Rotation stays player-controlled + auto-shaped by
+        //  the pipe network builder, only the position is magnetised.
         // ════════════════════════════════════════════════════════════════
-        private static readonly string[] LiquidPortPrefixes =
-        {
-            "Port_FuelInput", "Port_CoolantInput", "Port_SteamHeat",
-            "Port_LiquidInput", "Port_WaterInput", "Port_LiquidIO", "Port_WaterIO",
-        };
-
-        private static bool TryGetMaritimeLiquidPortSnap(GridEntity grid, BlockItem item, RaycastHit hit,
+        private static bool TryGetMaritimePortSnap(GridEntity grid, BlockItem item, RaycastHit hit,
             out Vector3Int precisionPos, out Vector3Int hostStructuralPos, out Vector3Int faceAxis)
         {
             precisionPos = default;
             hostStructuralPos = default;
             faceAxis = default;
             if (grid == null || item == null || item.placedPrefab == null || hit.collider == null) return false;
-            // Only liquid pipes snap to liquid ports.
-            if (item.placedPrefab.GetComponentInChildren<VoxelEngine.Fluids.WaterPipe>(true) == null) return false;
+
+            // Route by the HELD pipe type — liquid pipes to liquid ports only,
+            // gas pipes to gas ports only (the fuel port doesn't take steam hoses).
+            string[] prefixes;
+            if (item.placedPrefab.GetComponentInChildren<VoxelEngine.Fluids.WaterPipe>(true) != null)
+                prefixes = VoxelEngine.Maritime.MaritimePorts.LiquidPrefixes;
+            else if (item.placedPrefab.GetComponentInChildren<VoxelEngine.Gas.GasPipe>(true) != null)
+                prefixes = VoxelEngine.Maritime.MaritimePorts.GasPrefixes;
+            else return false;
 
             var targetBlock = hit.collider.GetComponentInParent<GridBlock>();
             if (targetBlock == null || targetBlock.Grid != grid) return false;
 
             float small = GridSize.Small.CellSize();
-            float maxSnap = small * 2.5f; // generous — ports overhang big machine cells
+            float maxSnap = small * 3.5f; // generous — ports overhang big machine cells
 
-            Transform best = null;
-            float bestDist = float.MaxValue;
-            foreach (Transform child in targetBlock.transform.GetComponentsInChildren<Transform>(true))
-            {
-                if (child == null || child == targetBlock.transform) continue;
-                bool matches = false;
-                for (int i = 0; i < LiquidPortPrefixes.Length; i++)
-                {
-                    if (child.name.StartsWith(LiquidPortPrefixes[i], System.StringComparison.Ordinal)) { matches = true; break; }
-                }
-                if (!matches) continue;
-                float d = (child.position - hit.point).sqrMagnitude;
-                if (d < bestDist) { bestDist = d; best = child; }
-            }
-            if (best == null || bestDist > maxSnap * maxSnap) return false;
+            Transform best = VoxelEngine.Maritime.MaritimePorts.FindNearest(
+                targetBlock.transform, prefixes, hit.point, maxSnap);
+            if (best == null) return false;
 
             Vector3 local = grid.transform.InverseTransformPoint(best.position);
             precisionPos = new Vector3Int(
@@ -428,7 +419,7 @@ namespace VoxelEngine.Building
         {
             if (item == null || item.placedPrefab == null || grid == null) return false;
             Vector3Int precisionPos, hostStructuralPos;
-            if (!TryGetMaritimeLiquidPortSnap(grid, item, hit, out precisionPos, out hostStructuralPos, out _)
+            if (!TryGetMaritimePortSnap(grid, item, hit, out precisionPos, out hostStructuralPos, out _)
                 && !UnifiedGridTopology.TryGetDetailPlacement(grid, hit,
                     out precisionPos, out hostStructuralPos, out _)) return false;
 
@@ -967,8 +958,13 @@ namespace VoxelEngine.Building
 
         private bool IsPlacementValid(Vector3 pos, BlockItem block)
         {
-            // Don't allow placing inside the player.
-            if (Vector3.Distance(pos, transform.position) < 0.5f) return false;
+            // Never place inside the player — a proper capsule column test, not a flat
+            // distance check: blocks spawning between the player's feet used to launch
+            // them upwards. Player pivot ≈ feet, capsule ≈ 1.9 m tall.
+            Vector3 feet = transform.position;
+            bool insideColumn = new Vector2(feet.x - pos.x, feet.z - pos.z).magnitude < 0.65f;
+            bool withinHeight = pos.y > feet.y - 0.4f && pos.y < feet.y + 2.05f;
+            if (insideColumn && withinHeight) return false;
 
             // For cables/pipes use a very tight box (they chain end-to-end).
             // For solid blocks use a half-block check.
@@ -987,6 +983,9 @@ namespace VoxelEngine.Building
                 }
                 // Block placement on dynamic rigidbodies.
                 if (col.attachedRigidbody != null && !col.attachedRigidbody.isKinematic) return false;
+                // Static world geometry (terrain, rocks, trees): never bury a block
+                // into it — half-buried placements kicked the whole construct.
+                if (col.attachedRigidbody == null) return false;
             }
             return true;
         }

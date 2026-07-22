@@ -5664,21 +5664,35 @@ root =>
                         if (needsMesh)
                             VoxelEngine.Maritime.MaritimeMeshBuilder.Build(root, name, size);
 
+                        // Root collider: re-fit ONLY on create / mesh rebuild / when
+                        // missing — manual collider edits survive re-runs (non-destructive).
+                        // bounds arrive in unscaled asset space while BoxCollider.size is
+                        // root-LOCAL: divide out the root scale or it double-applies (the
+                        // MGO's 1.2 Y/Z scale used to inflate the hitbox way past the model).
                         var box = root.GetComponent<BoxCollider>();
-                        if (box == null) box = root.AddComponent<BoxCollider>();
-                        float cs = VoxelEngine.GridSystem.GridSizeExt.CellSize(size);
-                        var renderers = root.GetComponentsInChildren<Renderer>(true);
-                        if (renderers != null && renderers.Length > 0)
+                        bool colliderMissing = box == null;
+                        if (colliderMissing) box = root.AddComponent<BoxCollider>();
+                        if (isNew || needsMesh || colliderMissing)
                         {
-                            Bounds bounds = renderers[0].bounds;
-                            for (int i = 1; i < renderers.Length; i++) bounds.Encapsulate(renderers[i].bounds);
-                            box.center = root.transform.InverseTransformPoint(bounds.center);
-                            box.size = Vector3.Max(bounds.size * 1.02f, Vector3.one * (cs * 0.2f));
-                        }
-                        else
-                        {
-                            box.center = Vector3.zero;
-                            box.size = new Vector3(cs, cs, cs);
+                            float cs = VoxelEngine.GridSystem.GridSizeExt.CellSize(size);
+                            var renderers = root.GetComponentsInChildren<Renderer>(true);
+                            if (renderers != null && renderers.Length > 0)
+                            {
+                                Bounds bounds = renderers[0].bounds;
+                                for (int i = 1; i < renderers.Length; i++) bounds.Encapsulate(renderers[i].bounds);
+                                Vector3 rootScale = root.transform.localScale;
+                                Vector3 invScale = new Vector3(
+                                    Mathf.Abs(rootScale.x) > 0.0001f ? 1f / rootScale.x : 1f,
+                                    Mathf.Abs(rootScale.y) > 0.0001f ? 1f / rootScale.y : 1f,
+                                    Mathf.Abs(rootScale.z) > 0.0001f ? 1f / rootScale.z : 1f);
+                                box.center = root.transform.InverseTransformPoint(bounds.center);
+                                box.size = Vector3.Max(Vector3.Scale(bounds.size * 1.02f, invScale), Vector3.one * (cs * 0.2f));
+                            }
+                            else
+                            {
+                                box.center = Vector3.zero;
+                                box.size = new Vector3(cs, cs, cs);
+                            }
                         }
 
                         var b = root.GetComponent<T>();
@@ -5723,6 +5737,59 @@ root =>
                     item.description = desc;
                     EditorUtility.SetDirty(item);
                 }
+            }
+
+            // The grid liquid tank gains its named liquid ports so LIQUID pipes
+            // magnet onto it (and liquid links form through the port rules).
+            // NON-DESTRUCTIVE: ports are created only when missing.
+            void EnsureLiquidTankPorts()
+            {
+                string path = $"{PREFABS}/LiquidTank_Large.prefab";
+                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                if (prefab == null) return;
+
+                string matPath = $"{PREFABS}/Mats/LiquidPortMarker.mat";
+                var mat = AssetDatabase.LoadAssetAtPath<Material>(matPath);
+                if (mat == null)
+                {
+                    var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+                    mat = new Material(shader) { name = "LiquidPortMarker" };
+                    if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", new Color(0.20f, 0.55f, 1.00f, 1f));
+                    else mat.color = new Color(0.20f, 0.55f, 1.00f, 1f);
+                    if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0.6f);
+                    if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.8f);
+                    EnsureFolder($"{PREFABS}/Mats");
+                    AssetDatabase.CreateAsset(mat, matPath);
+                    mat = AssetDatabase.LoadAssetAtPath<Material>(matPath);
+                }
+
+                // Root scale is (1.5, 1.8, 1.5): local offsets land at sane world spots.
+                (string name, Vector3 pos, Vector3 euler)[] ports =
+                {
+                    ("Port_LiquidIO_N",   new Vector3( 0.00f, -0.22f, -0.52f), new Vector3(90f, 0f, 0f)),
+                    ("Port_LiquidIO_S",   new Vector3( 0.00f, -0.22f,  0.52f), new Vector3(90f, 0f, 0f)),
+                    ("Port_LiquidIO_E",   new Vector3( 0.52f, -0.22f,  0.00f), new Vector3(0f, 0f, 90f)),
+                    ("Port_LiquidIO_W",   new Vector3(-0.52f, -0.22f,  0.00f), new Vector3(0f, 0f, 90f)),
+                    ("Port_LiquidIO_Top", new Vector3( 0.00f,  0.55f,  0.00f), Vector3.zero),
+                };
+
+                bool dirty = false;
+                foreach (var (name, pos, euler) in ports)
+                {
+                    if (prefab.transform.Find(name) != null) continue;
+                    var port = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                    port.name = name;
+                    port.transform.SetParent(prefab.transform, false);
+                    port.transform.localPosition = pos;
+                    port.transform.localRotation = Quaternion.Euler(euler);
+                    port.transform.localScale = new Vector3(0.14f, 0.035f, 0.14f);
+                    var col = port.GetComponent<Collider>();
+                    if (col != null) Object.DestroyImmediate(col);
+                    var renderer = port.GetComponent<Renderer>();
+                    if (renderer != null && mat != null) renderer.sharedMaterial = mat;
+                    dirty = true;
+                }
+                if (dirty) PrefabUtility.SavePrefabAsset(prefab);
             }
 
             // Fill heat-seizure repair parts ONLY when the prefab doesn't have any
@@ -5964,7 +6031,19 @@ root =>
             AddMRecipe("Recipe_MModuleTurbo", "High-Flow Turbocharger", itemModuleTurbo, (steelPlate, 4), (copperPlate, 4), (ironGear, 2), (circuit, 1));
             AddMRecipe("Recipe_MModuleEfficiency", "Efficiency Tuning Chip", itemModuleEfficiency, (advCircuit, 3), (circuit, 2), (copperWire, 6));
             AddMRecipe("Recipe_MModuleInjectors", "Overclocked Fuel Injectors", itemModuleInjectors, (steelPlate, 3), (ironGear, 3), (circuit, 2), (copperWire, 2));
+            var itemModuleAip = MakeEngineModule("MItem_ModuleAip", "Closed-Cycle AIP Module", new Color(0.65f, 0.85f, 0.95f),
+                VoxelEngine.Items.EngineModuleKind.AirIndependentPropulsionLoop,
+                t1: true, t2: true, t3: true, gen: false,
+                outputBonus: 0f, speedBonus: 0f, fuelMod: 0.05f, heatBonus: 0f,
+                dissipationMul: 1f, needsCoolant: false, waterDraw: 0f,
+                smokeSpeedMul: 1f, dirtySmoke: false,
+                desc: "Air-Independent Propulsion loop (all engine tiers) — the engine NO LONGER needs an external oxygen supply. Why it works: a magazine of solid chlorate oxygen candles thermally decomposes on demand, releasing chemically-bound O2 (the same reaction that airs submarine crews and space stations); a closed exhaust-recirculation loop with a regenerative CO2 scrubber strips the burn products and returns the un-consumed oxygen fraction to the intake, so the combustion cycle carries its own oxidiser instead of breathing the room. Trade-off: +5% fuel use (chemical oxygen has mass). History: the closed-cycle diesel let hunter submarines run for weeks without surfacing.");
+
             AddMRecipe("Recipe_MModuleRadiator", "Super-Cooler Radiator Jacket", itemModuleRadiator, (copperPlate, 6), (steelPlate, 3), (glass, 2), (copperWire, 2));
+            AddMRecipe("Recipe_MModuleAip", "Closed-Cycle AIP Module", itemModuleAip, (steelPlate, 4), (advCircuit, 2), (copperWire, 4), (glass, 2));
+
+            // The liquid tank needs its named ports so liquid pipes snap + link.
+            EnsureLiquidTankPorts();
 
             // ── Item descriptions (only set if empty — preserves user edits) ──
             SetDesc(itemUntWood, "Buoyant starter hull. Absorbs water over time while submerged, gradually increasing mass and sinking the ship lower. Research Tar-Coated Plank for waterproof voyages.");

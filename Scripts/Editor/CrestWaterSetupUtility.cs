@@ -132,7 +132,7 @@ namespace VoxelEngine.EditorTools
             // Unity's object list; Crest editor callbacks can mutate the hierarchy during teardown.
             try
             {
-                var transforms = UnityEngine.Object.FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+                var transforms = UnityEngine.Object.FindObjectsByType<Transform>(FindObjectsInactive.Include);
                 foreach (var t in transforms)
                 {
                     if (!IsLiveSceneObject(t)) continue;
@@ -514,7 +514,7 @@ namespace VoxelEngine.EditorTools
             // so its LOD cascades keep populating the shader globals; the runtime
             // CrestVoxelWaterBinder hides the visible ocean tiles instead.
 
-            var bootstraps = UnityEngine.Object.FindObjectsByType<VoxelEngine.WaterSim.PlanetWaterRendererBootstrap>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var bootstraps = UnityEngine.Object.FindObjectsByType<VoxelEngine.WaterSim.PlanetWaterRendererBootstrap>(FindObjectsInactive.Include);
             var bootstrap = bootstraps != null && bootstraps.Length > 0 ? bootstraps[0] : null;
             if (bootstrap == null)
             {
@@ -577,7 +577,7 @@ namespace VoxelEngine.EditorTools
         {
             SafeNukeAllCrest();
 
-            var bootstraps = UnityEngine.Object.FindObjectsByType<VoxelEngine.WaterSim.PlanetWaterRendererBootstrap>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var bootstraps = UnityEngine.Object.FindObjectsByType<VoxelEngine.WaterSim.PlanetWaterRendererBootstrap>(FindObjectsInactive.Include);
             var bootstrap = bootstraps != null && bootstraps.Length > 0 ? bootstraps[0] : null;
             if (bootstrap == null)
             {
@@ -602,7 +602,7 @@ namespace VoxelEngine.EditorTools
             // Left intentionally disabled in v3.20.9 – patch renderer causes second ocean plane
             // If you need it, uncomment below
             /*
-            var existing = UnityEngine.Object.FindObjectsByType<VoxelEngine.WaterSim.ProceduralWaterPatchRenderer>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var existing = UnityEngine.Object.FindObjectsByType<VoxelEngine.WaterSim.ProceduralWaterPatchRenderer>(FindObjectsInactive.Include);
             if (existing != null)
             {
                 foreach (var r in existing)
@@ -711,7 +711,7 @@ namespace VoxelEngine.EditorTools
         {
             try
             {
-                var grids = UnityEngine.Object.FindObjectsByType<VoxelEngine.GridSystem.GridEntity>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+                var grids = UnityEngine.Object.FindObjectsByType<VoxelEngine.GridSystem.GridEntity>(FindObjectsInactive.Include);
                 foreach (var grid in grids)
                 {
                     if (grid == null) continue;
@@ -781,9 +781,9 @@ namespace VoxelEngine.EditorTools
             try
             {
                 // Unity 6000+
-                var method = typeof(UnityEngine.Object).GetMethod("FindObjectsByType", new[] { typeof(Type), typeof(FindObjectsInactive), typeof(FindObjectsSortMode) });
+                var method = typeof(UnityEngine.Object).GetMethod("FindObjectsByType", new[] { typeof(Type), typeof(FindObjectsInactive) });
                 if (method != null)
-                    return (UnityEngine.Object[])method.Invoke(null, new object[] { t, FindObjectsInactive.Include, FindObjectsSortMode.None }) ?? Array.Empty<UnityEngine.Object>();
+                    return (UnityEngine.Object[])method.Invoke(null, new object[] { t, FindObjectsInactive.Include }) ?? Array.Empty<UnityEngine.Object>();
             }
             catch (Exception e)
             {
@@ -814,7 +814,7 @@ namespace VoxelEngine.EditorTools
         {
             try
             {
-                var transforms = UnityEngine.Object.FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+                var transforms = UnityEngine.Object.FindObjectsByType<Transform>(FindObjectsInactive.Include);
                 foreach (var t in transforms)
                 {
                     if (t != null && t.name == "LiquidSurface")
@@ -828,7 +828,7 @@ namespace VoxelEngine.EditorTools
         {
             try
             {
-                var transforms = UnityEngine.Object.FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+                var transforms = UnityEngine.Object.FindObjectsByType<Transform>(FindObjectsInactive.Include);
                 foreach (var t in transforms)
                 {
                     if (t != null && t.name == "LiquidSurface")

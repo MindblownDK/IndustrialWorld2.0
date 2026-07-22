@@ -73,6 +73,7 @@ namespace VoxelEngine.Maritime
             else if (eng.IsOverheating)   { status = "⚠ OVERHEATING"; statusColor = T.AccentAmber; }
             else if (eng.IsOverstressed)  { status = "⚠ OVERSTRESSED"; statusColor = T.AccentRed; }
             else if (!eng.HasExhaust)    { status = "⚠ NO EXHAUST";  statusColor = T.AccentRed; }
+            else if (eng.OxygenStarved)  { status = "⚠ NO OXYGEN";  statusColor = T.AccentRed; }
             else if (eng.ExhaustFill01 >= 0.99f) { status = "⛔ CHOKED"; statusColor = T.AccentRed; }
             else if (eng.IsChoked)       { status = "⚠ BACK-PRESSURE"; statusColor = T.AccentAmber; }
             else if (eng.IsRunning)      { status = "● RUNNING";      statusColor = T.AccentGreen; }
@@ -134,6 +135,20 @@ namespace VoxelEngine.Maritime
                 }
             }
 
+            // ── Oxygen supply (combustion air) ────────────────────────
+            p.Add(GridUIHelpers.SectionTitle("Oxygen"));
+            if (eng.AirIndependent)
+            {
+                p.Add(T.Muted("CLOSED-CYCLE AIP active — oxygen loop is closed, no external air supply needed."));
+            }
+            else
+            {
+                Color o2Color = eng.OxygenFill01 > 0.25f ? T.AccentCyan : T.AccentRed;
+                var (o2Bar, _) = T.ProgressBar(eng.OxygenFill01, o2Color, 8, true);
+                p.Add(o2Bar);
+                p.Add(T.Muted("Combustion air (sips O₂). Feed the Port_OxygenInput via gas pipes from an oxygen tank/electrolyser — or fit a Closed-Cycle AIP module to never need air again."));
+            }
+
             p.Add(T.Spacer(6));
 
             // ── Exhaust gas warning ───────────────────────────────────
@@ -147,6 +162,13 @@ namespace VoxelEngine.Maritime
             {
                 var warn = T.StatusPill("⚠ EXHAUST BACKING UP — VENT FASTER!", T.AccentRed);
                 p.Add(warn.pill);
+                p.Add(T.Spacer(4));
+            }
+
+            if (eng.OxygenStarved && eng.RequiresExternalOxygen)
+            {
+                var o2Warn = T.StatusPill("⚠ OXYGEN STARVED — ENGINE STOPS", T.AccentRed);
+                p.Add(o2Warn.pill);
                 p.Add(T.Spacer(4));
             }
 

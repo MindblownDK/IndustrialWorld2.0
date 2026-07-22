@@ -23,6 +23,9 @@ namespace VoxelEngine.Items
         OverclockedFuelInjectors = 2,
         /// <summary>200% heat dissipation while a continuous fresh/sea water supply is present.</summary>
         SuperCoolerRadiatorJacket = 3,
+        /// <summary>Closed oxygen loop (chemical candles + CO2 scrubber): the engine no
+        /// longer needs an external oxygen supply. Trade-off: slightly higher fuel use.</summary>
+        AirIndependentPropulsionLoop = 4,
     }
 
     [CreateAssetMenu(menuName = "Voxel Engine/Items/Engine Upgrade Module", fileName = "Module_New")]
@@ -62,6 +65,8 @@ namespace VoxelEngine.Items
         public float exhaustSmokeVelocityMul = 1f;
         [Tooltip("If true the exhaust turns visibly darker/dirtier while this module is socketed.")]
         public bool dirtyExhaust = false;
+        [Tooltip("If true, the host engine no longer requires an external oxygen supply via its Port_OxygenInput (closed-loop air-independent propulsion).")]
+        public bool removesOxygenRequirement = false;
 
         /// <summary>True when this module may be socketed into the given engine tier.</summary>
         public bool IsCompatibleWithTier(Maritime.EngineTier tier) => tier switch

@@ -92,7 +92,7 @@ namespace VoxelEngine.WaterSim
             int frame = Time.frameCount;
             if (_cachedFrame == frame) return;
             _cachedFrame = frame;
-            _splines = Object.FindObjectsByType<Spline>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            _splines = Object.FindObjectsByType<Spline>(FindObjectsInactive.Exclude);
         }
     }
 }

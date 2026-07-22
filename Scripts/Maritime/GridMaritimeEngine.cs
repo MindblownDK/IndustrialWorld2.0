@@ -110,6 +110,26 @@ namespace VoxelEngine.Maritime
         /// <summary>True if the engine has coolant available.</summary>
         public bool HasCoolant => CoolantBuffer > 0.01f;
 
+        // ── Oxygen supply (combustion needs air; AIP modules close the loop) ──
+        [Header("Oxygen Supply")]
+        [Tooltip("Internal oxygen buffer capacity (gas units). Lets the engine ride through short supply hiccups.")]
+        public float oxygenBufferCapacity = 60f;
+        [Tooltip("Oxygen consumed per unit of fuel actually burned (gas units). Deliberately small — engines sip air.")]
+        public float oxygenPerFuelUnit = 0.25f;
+        [Tooltip("How fast the buffer refills from a connected oxygen gas supply (units/s).")]
+        public float oxygenRefillRate = 12f;
+
+        /// <summary>Live oxygen reserve, fed through the engine's Port_OxygenInput.</summary>
+        public float OxygenBuffer { get; private set; }
+        public float OxygenFill01 => oxygenBufferCapacity > 0f ? Mathf.Clamp01(OxygenBuffer / oxygenBufferCapacity) : 0f;
+        /// <summary>True when no oxygen burn is possible right now and the engine needs one.</summary>
+        public bool OxygenStarved { get; private set; }
+        /// <summary>True while a Closed-Cycle AIP module closes the oxygen loop (no external air needed).</summary>
+        public bool AirIndependent => AipModuleCount > 0;
+        public bool RequiresExternalOxygen => !AirIndependent;
+        /// <summary>Oxygen available for combustion this tick.</summary>
+        public bool HasOxygen => !RequiresExternalOxygen || OxygenBuffer > 0.01f;
+
         [Header("Thermal Management")]
         [Tooltip("Heat generated per second at full throttle (°C/s) before module bonuses.")]
         public float baseHeatRate = 1.4f;
@@ -168,6 +188,7 @@ namespace VoxelEngine.Maritime
         public int EfficiencyChipCount { get; private set; }
         public int InjectorModuleCount { get; private set; }
         public int RadiatorModuleCount { get; private set; }
+        public int AipModuleCount { get; private set; }
         /// <summary>Total output multiplier from socketed modules (1 = stock).</summary>
         public float ModuleOutputMultiplier { get; private set; } = 1f;
         /// <summary>Total RPM cap multiplier from socketed modules (1 = stock).</summary>
@@ -301,7 +322,11 @@ namespace VoxelEngine.Maritime
             switch (tier)
             {
                 case EngineTier.Small:
-                    blockName = "Crude Engine";
+                    // Name comes from the placed ITEM (player-renameable in the
+                    // GridBlockItem asset). Only fall back to the tier default when
+                    // the block carries no meaningful name at all.
+                    if (string.IsNullOrEmpty(blockName) || blockName == "Armor Block" || blockName == "Maritime Engine")
+                        blockName = "Crude Engine";
                     fuelKind = MaritimeFuelKind.Solid;
                     if (Mathf.Approximately(maxTorque, 8000f)) maxTorque = 18000f;
                     if (Mathf.Approximately(fuelBufferCapacity, 60f)) fuelBufferCapacity = 120f;
@@ -310,7 +335,11 @@ namespace VoxelEngine.Maritime
                     if (Mathf.Approximately(baseDissipationRate, 1.0f)) baseDissipationRate = 1.1f;
                     break;
                 case EngineTier.Medium:
-                    blockName = "Heavy Fuel Oil Engine";
+                    // Name comes from the placed ITEM (player-renameable in the
+                    // GridBlockItem asset). Only fall back to the tier default when
+                    // the block carries no meaningful name at all.
+                    if (string.IsNullOrEmpty(blockName) || blockName == "Armor Block" || blockName == "Maritime Engine")
+                        blockName = "Heavy Fuel Oil Engine";
                     fuelKind = MaritimeFuelKind.Liquid;
                     liquidFuel = LiquidType.HeavyFuelOil;
                     if (Mathf.Approximately(maxTorque, 40000f)) maxTorque = 125000f;
@@ -323,7 +352,11 @@ namespace VoxelEngine.Maritime
                     if (Mathf.Approximately(coolantDissipationRate, 2.0f)) coolantDissipationRate = 2.9f;
                     break;
                 case EngineTier.Giant:
-                    blockName = "MGO Engine";
+                    // Name comes from the placed ITEM (player-renameable in the
+                    // GridBlockItem asset). Only fall back to the tier default when
+                    // the block carries no meaningful name at all.
+                    if (string.IsNullOrEmpty(blockName) || blockName == "Armor Block" || blockName == "Maritime Engine")
+                        blockName = "MGO Engine";
                     fuelKind = MaritimeFuelKind.Liquid;
                     liquidFuel = LiquidType.MarineGasOil;
                     if (Mathf.Approximately(maxTorque, 500000f)) maxTorque = 950000f;
@@ -592,6 +625,9 @@ namespace VoxelEngine.Maritime
             // ── Thermal model ──────────────────────────────────────────
             TickThermal(dt, requestedThrottle);
 
+            // ── Oxygen (combustion air) — Closed-Cycle AIP modules skip this ──
+            TickOxygen(dt, requestedThrottle); // primes the buffer from a connected supply before the run gate
+
             // ── Engine running conditions ───────────────────────────────
             bool exhaustChoked = ExhaustFill01 >= 0.99f;
 
@@ -601,7 +637,9 @@ namespace VoxelEngine.Maritime
                 RefillCoolant(dt); // allow a dry engine to prime from connected liquid pipes before evaluating run state
 
             // Seized engines stay down until repaired — cooling alone is not enough.
-            if (!Enabled || !HasExhaust || exhaustChoked || CriticalFailure || (needsCoolant && !HasCoolant))
+            // Without oxygen (and no Closed-Cycle AIP module) there is no combustion.
+            if (!Enabled || !HasExhaust || exhaustChoked || CriticalFailure
+                || (needsCoolant && !HasCoolant) || (RequiresExternalOxygen && !HasOxygen))
             {
                 node.FuelAvailable01 = 0f;
                 IsRunning = false;
@@ -699,6 +737,7 @@ namespace VoxelEngine.Maritime
             EfficiencyChipCount = 0;
             InjectorModuleCount = 0;
             RadiatorModuleCount = 0;
+            AipModuleCount = 0;
 
             float outputBonus = 0f;
             float speedBonus = 0f;
@@ -723,7 +762,11 @@ namespace VoxelEngine.Maritime
                         case EngineModuleKind.EfficiencyTuningChip: EfficiencyChipCount += n; break;
                         case EngineModuleKind.OverclockedFuelInjectors: InjectorModuleCount += n; break;
                         case EngineModuleKind.SuperCoolerRadiatorJacket: RadiatorModuleCount += n; break;
+                        case EngineModuleKind.AirIndependentPropulsionLoop: AipModuleCount += n; break;
                     }
+                    // The flag mirrors the kind so hand-authored modules can opt in too.
+                    if (module.removesOxygenRequirement && module.moduleKind != EngineModuleKind.AirIndependentPropulsionLoop)
+                        AipModuleCount += n;
 
                     outputBonus += module.outputPowerBonus * n;
                     speedBonus += module.speedCapBonus * n;
@@ -801,6 +844,70 @@ namespace VoxelEngine.Maritime
                 NeedsRepair = true;
             }
         }
+
+        // ══════════════════════════════════════════════════════════════
+        //  OXYGEN — draw from the Port_OxygenInput gas supply (or space
+        //  gas-tank), then burn it with the fuel. A socketed Closed-Cycle
+        //  AIP module skips the whole requirement.
+        // ══════════════════════════════════════════════════════════════
+        private VoxelEngine.Gas.GasTank _oxygenTank;
+        private float _oxygenScanTimer;
+        private Transform _oxygenPort;
+
+        private void TickOxygen(float dt, float requestedThrottle)
+        {
+            if (AirIndependent)
+            {
+                OxygenStarved = false;
+                _oxygenTank = null;
+                return;
+            }
+
+            // Burn oxygen with the fuel actually consumed this tick.
+            if (IsRunning && requestedThrottle > 0.01f)
+                OxygenBuffer = Mathf.Max(0f, OxygenBuffer
+                    - fuelConsumptionRate * requestedThrottle * oxygenPerFuelUnit * dt);
+
+            // Refill from the pipe-fed oxygen supply (cached tank rescan at 2 Hz —
+            // the full pipe BFS every fixed tick would be wasteful).
+            if (OxygenBuffer < oxygenBufferCapacity - 0.01f)
+            {
+                _oxygenScanTimer -= dt;
+                if (_oxygenTank == null || _oxygenScanTimer <= 0f)
+                {
+                    _oxygenScanTimer = 0.5f;
+                    if (_oxygenTank == null || _oxygenTank.storedGasType != VoxelEngine.Gas.GasType.Oxygen
+                        || _oxygenTank.storedAmount <= 0.01f)
+                    {
+                        _oxygenTank = FindOxygenTank();
+                    }
+                }
+
+                if (_oxygenTank != null)
+                {
+                    float want = Mathf.Min(oxygenBufferCapacity - OxygenBuffer, oxygenRefillRate * dt);
+                    OxygenBuffer += _oxygenTank.TryTake(VoxelEngine.Gas.GasType.Oxygen, want);
+                }
+            }
+
+            OxygenStarved = RequiresExternalOxygen && OxygenBuffer <= 0.01f;
+        }
+
+        /// <summary>Oxygen gas tank reachable from this engine — searched around the named
+        /// Port_OxygenInput first (that's where the player plugs the O₂ line in), with the
+        /// whole machine body as fallback so compact one-cell builds still work.</summary>
+        private VoxelEngine.Gas.GasTank FindOxygenTank()
+        {
+            if (VoxelEngine.Gas.GasNetwork.Instance == null) return null;
+            float cs = Grid != null ? Grid.gridSize.CellSize() : 2.5f;
+            if (_oxygenPort == null)
+                _oxygenPort = MaritimePorts.FindNearest(transform, s_oxygenPortPrefix, transform.position);
+            Vector3 origin = _oxygenPort != null ? _oxygenPort.position : transform.position;
+            return VoxelEngine.Gas.GasNetwork.Instance.FindTankNear(origin, VoxelEngine.Gas.GasType.Oxygen,
+                forOutput: true, searchDist: cs * 1.6f);
+        }
+
+        private static readonly string[] s_oxygenPortPrefix = { "Port_OxygenInput" };
 
         // ══════════════════════════════════════════════════════════════
         //  TORQUE CURVE + EMERGENCY REPAIR
@@ -952,8 +1059,10 @@ namespace VoxelEngine.Maritime
             string status =
                 CriticalFailure ? "CRITICAL HEAT — SHAFT STOPPED" :
                 IsOverheating ? "KNOCKING — OVERHEATING" :
+                OxygenStarved ? "OXYGEN STARVED" :
                 IsRunning ? "RUNNING" :
-                !HasExhaust ? "NO EXHAUST" : "IDLE";
+                !HasExhaust ? "NO EXHAUST" :
+                (RequiresExternalOxygen && !HasOxygen) ? "NO OXYGEN" : "IDLE";
             string fuel = fuelKind == MaritimeFuelKind.Liquid
                 ? $"FUEL {FuelFill01 * 100f:0}% ({FuelBuffer:0} L)"
                 : $"FUEL {FuelFill01 * 100f:0}% (≈{FormatDuration(EstimatedFuelSecondsRemaining)})";
@@ -962,7 +1071,8 @@ namespace VoxelEngine.Maritime
                 $"{CurrentRPM:0} RPM · {CurrentTorque:0} N·m\n" +
                 $"{fuel}\n" +
                 $"HEAT {Heat01 * 100f:0}% ({TemperatureC:0}°C)\n" +
-                $"EXHAUST {ExhaustFill01 * 100f:0}%";
+                $"EXHAUST {ExhaustFill01 * 100f:0}%\n" +
+                (AirIndependent ? "OXYGEN CLOSED-LOOP (AIP)" : $"OXYGEN {OxygenFill01 * 100f:0}%");
         }
     }
 }

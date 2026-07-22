@@ -212,7 +212,7 @@ namespace VoxelEngine.WaterSim
             var oceanType = System.Type.GetType("Crest.OceanRenderer, Crest");
             if (oceanType != null)
             {
-                _oceanRenderer = GetComponent(oceanType) ?? FindObjectOfType(oceanType) as Component;
+                _oceanRenderer = GetComponent(oceanType) ?? FindFirstObjectByType(oceanType) as Component;
                 if (_oceanRenderer != null)
                 {
                     _oceanBehaviour = _oceanRenderer as Behaviour;

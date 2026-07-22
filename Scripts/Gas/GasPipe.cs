@@ -31,6 +31,7 @@ namespace VoxelEngine.Gas
         // ── Visual integration ─────────────────────────────────
         private PipeVisualBuilder _visuals;
         private readonly List<Vector3> _neighbourPosBuf = new(6);
+        private static readonly Collider[] s_armProbe = new Collider[12];
 
         private void Awake()
         {
@@ -65,24 +66,47 @@ namespace VoxelEngine.Gas
 
             // If this normal gas pipe is attached to a grid, also draw arms to
             // adjacent gas-capable grid blocks. WrenchBlacklist can disable each
-            // pipe ↔ endpoint link.
+            // pipe ↔ endpoint link. Endpoint arms aim at the block's real GAS port
+            // (engine oxygen intake, exhaust-pipe gas tap) when it has one.
             var gridBlock = GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
             var grid = gridBlock != null ? gridBlock.Grid : null;
             if (grid != null)
             {
-                foreach (var block in VoxelEngine.GridSystem.UnifiedGridTopology.AdjacentBlocks(grid, gridBlock))
+                void AddArm(VoxelEngine.GridSystem.GridBlock block)
                 {
-                    if (block == null || block == gridBlock) continue;
+                    if (block == null || block == gridBlock) return;
                     bool endpoint = block is VoxelEngine.GridSystem.GridGasTank
                                  || block is VoxelEngine.GridSystem.GridH2O2Generator
                                  || block is VoxelEngine.GridSystem.GridHydrogenEngine
-                                 || block is VoxelEngine.GridSystem.GridThruster;
+                                 || block is VoxelEngine.GridSystem.GridThruster
+                                 || block is VoxelEngine.Maritime.GridExhaustPipe
+                                 || block is VoxelEngine.Maritime.GridMaritimeEngine;
                     bool connectedPipe = block.GetComponentInChildren<GasPipe>(true) != null;
-                    if (!endpoint && !connectedPipe) continue;
-                    if (VoxelEngine.Networks.WrenchBlacklist.IsBlocked(gridBlock.gameObject, block.gameObject)) continue;
+                    if (!endpoint && !connectedPipe) return;
+                    if (VoxelEngine.Networks.WrenchBlacklist.IsBlocked(gridBlock.gameObject, block.gameObject)) return;
                     _neighbourPosBuf.Add(connectedPipe
                         ? Vector3.Lerp(transform.position, block.transform.position, 0.5f)
-                        : block.transform.position);
+                        : VoxelEngine.Maritime.MaritimePorts.PortPositionOrCenter(
+                            block, VoxelEngine.Maritime.MaritimePorts.GasPrefixes, transform.position));
+                }
+
+                foreach (var block in VoxelEngine.GridSystem.UnifiedGridTopology.AdjacentBlocks(grid, gridBlock))
+                    AddArm(block);
+
+                // Proximity arms: gas ports overhang the lattice on the big machine
+                // models (engine O2 intakes, the exhaust gas tap), so face-touch alone
+                // misses them — reach any gas-capable block in touch range.
+                int hitCount = Physics.OverlapSphereNonAlloc(transform.position,
+                    Mathf.Max(gridBlock != null ? gridBlock.EffectiveCellSize : 0.5f,
+                        VoxelEngine.GridSystem.GridSizeExt.CellSize(VoxelEngine.GridSystem.GridSize.Small)) * 1.35f,
+                    s_armProbe, ~0, QueryTriggerInteraction.Collide);
+                for (int i = 0; i < hitCount; i++)
+                {
+                    var col = s_armProbe[i];
+                    if (col == null) continue;
+                    var block = col.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
+                    if (block == null || block == gridBlock || block.Grid != grid) continue;
+                    AddArm(block);
                 }
             }
             return _neighbourPosBuf;

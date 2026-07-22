@@ -4,6 +4,49 @@ Branch: **Dev** · Semantic Versioning 2.0.0
 
 ---
 
+## [2.25.1] — Port-Snap Compile Fix (CS0126)
+
+**Type:** PATCH — build fix, zero behaviour change (game version 6.13.1-dev).
+
+### Fixed
+- `GridBuilder.TryApplyMaritimePortSnap`: a valueless `return;` in the bool-returning snap path (port-axis unresolvable fallback) broke compilation with CS0126. Now returns `false`, falling back to standard placement exactly as designed.
+
+---
+
+## [2.25.0] — Chained Drive Shafts Touch & Snap In Extension
+
+**Type:** MINOR — save-compatible visual/link improvement, MaritimeMeshBuilder v19 (game version 6.13.0-dev).
+
+### Added
+- **Full-cell shaft rod + gold coupling rings** (`Port_ShaftIO_F`/`_B`): collinear chained shafts now physically touch at the shared cell face, meeting ring-to-ring like a bolted flange coupling.
+- **Snap-in-extension**: the ring ports are named shaft ports, so a held drive shaft magnetises straight onto the end of a placed one — effortless collinear drivelines.
+
+---
+
+## [2.24.0] — Engine Oxygen, AIP Loop, Universal Port Snap, Exhaust-Gas Tap & Straight Stack
+
+**Type:** MINOR — save-compatible gameplay systems + snapping/placement fixes and MaritimeMeshBuilder v18 (game version 6.12.0-dev).
+
+### Added
+- **Engine oxygen requirement**: internal O₂ buffer (0.25 units per fuel unit) refilled through the new visible `Port_OxygenInput` air intakes on all three engine tiers from gas-pipe-fed oxygen tanks; starved engines stall cleanly with panel/screen warnings (`OxygenStarved`, `OxygenFill01`, `HasOxygen`).
+- **Closed-Cycle AIP Module** (`EngineModuleKind.AirIndependentPropulsionLoop`, `removesOxygenRequirement`): chlorate oxygen candles + regenerative CO₂-scrubbed exhaust recirculation close the oxygen loop — no external air needed, +5% fuel use. Works on T1/T2/T3.
+- **Exhaust-gas tap**: straight exhaust pipe carries a top `Port_ExhaustGasIO` flange; connected gas networks capture part of the stream as the new storable `GasType.ExhaustGas` and the smoke plume visibly thins (foundation for the concealed-space atmosphere sim on the Roadmap).
+- **`MaritimePorts` shared registry**: one source of truth for liquid/gas/exhaust/shaft port prefixes used by the builder, the build system, pipe visuals and networks.
+
+### Fixed
+- **MGO exhaust snap** (port mounts now evaluated before the lattice-neighbour gate that big models could never pass) — snapping works from any aim point on the machine and always centres on the port's own cell; orientation follows the port's dominant axis (vertical stacks on top collectors, horizontal runs on side ports).
+- **Gas pipes ⇄ exhaust pipes snap both ways**; fuel/coolant snap no longer defeated by the inflated MGO collider (Step-13 collider fit now divides out root scale); snap range widened.
+- **No placement into the player or into terrain/constructs** (new world-space obstruction test on both builders) — no more player launches or grid kicks.
+- **Tall machines rest on their visual bottom** when placed on top of a block (MGO sump no longer buries into armour).
+- **Liquid networks bridged with the classic FluidNetwork**: classic `WaterTank`s behind any pipe run touching a liquid port/body now feed (and are filled by) engines, pumps and radiators; pipe arms aim at the real port instead of the block centre; liquid pipes snap to liquid ports only (steam moved to the gas family); liquid tanks gained `Port_LiquidIO` markers.
+- **Item block properties**: engine tier auto-config no longer stomps the item-driven block name — name/mass/maxHP/currentHP all come from the `GridBlockItem` asset.
+
+### Changed
+- MaritimeMeshBuilder **v18**: straight exhaust stack (no L, no ground supports), driveshaft ground feet removed, oxygen intakes + air filters on all engines, gas-tap flange on the exhaust.
+- Step 13 strictly non-destructive: colliders re-fit only on create/rebuild/missing, everything else already populate-if-new/link-if-missing.
+
+---
+
 ## [2.23.1] — Compile Fix: WaterPipe `CellSize`
 
 **Type:** PATCH — compile-error fix only (game version 6.11.1-dev).

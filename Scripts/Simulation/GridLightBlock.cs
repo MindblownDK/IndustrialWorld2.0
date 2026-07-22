@@ -185,7 +185,7 @@ namespace VoxelEngine.Simulation
             if (_motionCheckTimer > 0f) return;
             _motionCheckTimer = 0.20f;
 
-            var players = Object.FindObjectsByType<VoxelEngine.Player.PlayerController>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            var players = Object.FindObjectsByType<VoxelEngine.Player.PlayerController>(FindObjectsInactive.Exclude);
             float radiusSqr = Mathf.Max(0.1f, motionRadius) * Mathf.Max(0.1f, motionRadius);
             for (int i = 0; i < players.Length; i++)
             {

@@ -8,5 +8,6 @@ namespace VoxelEngine.Gas
         Steam = 1,      // from boiling water in reactor
         Hydrogen = 2,   // from electrolysis of ice
         Oxygen = 3,     // from electrolysis of ice
+        ExhaustGas = 4, // hot exhaust routed off engine stacks via the gas-tap port
     }
 }

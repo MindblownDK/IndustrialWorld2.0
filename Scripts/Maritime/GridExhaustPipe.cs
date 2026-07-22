@@ -50,9 +50,19 @@ namespace VoxelEngine.Maritime
         [Tooltip("How strongly dirty exhaust (fuel injectors) darkens the plume, 0-1.")]
         [Range(0f, 1f)] public float dirtyDarkenAmount = 0.55f;
 
+        [Header("Exhaust-Gas Tap")]
+        [Tooltip("Exhaust gas units/sec pushed into a connected gas network via the Port_ExhaustGasIO tap while venting. Captured exhaust produces visibly less smoke.")]
+        public float gasTapFeedRate = 8f;
+
         private ParticleSystem _smokeFX;
         private bool _venting;
         private float _puffPhase;
+        // Gas-tap capture state (rescan at 2 Hz; the captured share thins the plume).
+        private VoxelEngine.Gas.GasTank _gasTapTank;
+        private float _gasTapScanTimer;
+        private Transform _gasTapPort;
+        /// <summary>True while the gas tap routes captured exhaust into a gas network.</summary>
+        public bool IsCapturingGas => _gasTapTank != null;
 
         private static readonly Vector3Int[] Faces =
         {
@@ -182,21 +192,59 @@ namespace VoxelEngine.Maritime
                 speed = Mathf.Max(speed * 0.6f, 0.7f); // sluggish, oily roll-off
             }
 
+            // ── Gas-tap capture: a connected gas network swallows part of
+            //    the stream as storable ExhaustGas and the plume thins out. ──
+            TickGasTap(anchor);
+
             // High-Flow Turbochargers — higher exhaust velocity.
             main.startSpeed = new ParticleSystem.MinMaxCurve(1.5f * speed, 3f * speed);
             var velOverLife = _smokeFX.velocityOverLifetime;
             velOverLife.y = new ParticleSystem.MinMaxCurve(1f * speed, 2.5f * speed);
 
-            emission.rateOverTime = rate;
+            emission.rateOverTime = _gasTapTank != null ? rate * 0.45f : rate;
             main.startColor = baseColor;
         }
+
+        // ── Exhaust-gas tap ───────────────────────────────────────────
+        /// <summary>Push the captured share of the exhaust stream into whichever gas
+        /// network is hooked onto the Port_ExhaustGasIO tap. Storage-backed capture thins
+        /// the visible smoke; when no network/tank accepts the gas, everything vents.</summary>
+        private void TickGasTap(GridMaritimeEngine anchor)
+        {
+            if (VoxelEngine.Gas.GasNetwork.Instance == null) { _gasTapTank = null; return; }
+
+            _gasTapScanTimer -= Time.deltaTime;
+            if (_gasTapScanTimer <= 0f)
+            {
+                _gasTapScanTimer = 0.5f;
+                if (_gasTapTank == null || _gasTapTank.capacity - _gasTapTank.storedAmount <= 0.01f)
+                {
+                    _gasTapTank = null;
+                    float cs = Grid != null ? Grid.gridSize.CellSize() : 2.5f;
+                    if (_gasTapPort == null)
+                        _gasTapPort = MaritimePorts.FindNearest(transform, s_gasTapPortPrefix, transform.position);
+                    Vector3 origin = _gasTapPort != null ? _gasTapPort.position : transform.position;
+                    _gasTapTank = VoxelEngine.Gas.GasNetwork.Instance.FindTankNear(
+                        origin, VoxelEngine.Gas.GasType.ExhaustGas, forOutput: false, searchDist: cs * 1.6f);
+                }
+            }
+
+            if (_gasTapTank == null || anchor == null) return;
+            float feed = gasTapFeedRate * Time.deltaTime;
+            if (feed <= 0f) return;
+            float accepted = _gasTapTank.TryAdd(VoxelEngine.Gas.GasType.ExhaustGas, feed);
+            if (accepted <= 0.0001f) _gasTapTank = null; // full / wrong gas — rescan next window
+        }
+
+        private static readonly string[] s_gasTapPortPrefix = { "Port_ExhaustGasIO" };
 
         private void CreateSmokeEffect()
         {
             var go = new GameObject("ExhaustSmoke");
             go.transform.SetParent(transform, false);
             float cs = Grid != null ? Grid.gridSize.CellSize() : 2.5f;
-            go.transform.localPosition = new Vector3(0, cs * 0.55f, 0);
+            // v18 straight pipe: smoke exits the +Z outlet (Socket_StackTop).
+            go.transform.localPosition = new Vector3(0, 0, cs * 0.52f);
 
             _smokeFX = go.AddComponent<ParticleSystem>();
             var main = _smokeFX.main;

@@ -155,7 +155,7 @@ namespace VoxelEngine.WaterSim
         private static void RefreshLiveWaterRenderers()
         {
             if (_waterMat == null && _oilMat == null) return;
-            var filters = Object.FindObjectsByType<MeshFilter>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var filters = Object.FindObjectsByType<MeshFilter>(FindObjectsInactive.Include);
             for (int i = 0; i < filters.Length; i++)
             {
                 var f = filters[i];
