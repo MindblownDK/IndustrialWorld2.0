@@ -4,6 +4,15 @@ Branch: **Dev** · Semantic Versioning 2.0.0
 
 ---
 
+## [2.26.1] — Step-13 Fix: MGO Banded-Hitbox MissingComponentException
+
+**Type:** PATCH — editor-tool crash fix (game version 6.14.1-dev).
+
+### Fixed
+- Step 13 no longer aborts with `MissingComponentException` at `BoxCollider.set_center` while retrofitting the MGO banded hitbox: `GetComponent() ?? AddComponent()` + unguarded sets replaced by the null-safe `FitBandHitbox` helper (find-or-create, re-fetch, warn-and-retry instead of crash).
+
+---
+
 ## [2.26.0] — Oriented Ports, 5-Cell Endpoint Proximity, Flex Couplings & MGO Banded Hitbox (Mesh v21)
 
 **Type:** MINOR — save-compatible connectivity features + snap/placement fixes (game version 6.14.0-dev, MaritimeMeshBuilder v21).

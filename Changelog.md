@@ -1,9 +1,21 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.14.0-dev`
+**Current Version:** `6.14.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.14.1-dev] Step-13 Fix: MGO Banded-Hitbox MissingComponentException
+
+**Type:** PATCH — editor-tool crash fix, no runtime change.
+
+**Fixed:**
+- `MissingComponentException` at `BoxCollider.set_center` when running Step 13: the MGO's banded hitbox used `GetComponent() ?? AddComponent()` followed by an unguarded property set. The C# `??` operator does not respect Unity's object-lifetime semantics, and this tool's prefab pipeline is documented to transiently invalidate freshly added components — so `set_center` could fire on a dead wrapper and abort the whole content build.
+- Replaced with `FitBandHitbox(...)`: find-or-create each band child, explicit `== null` checks, re-fetch after add, and a never-throw guard that warns and retries next run instead of crashing. Root-box re-fetch added on the same path.
+
+**Manual Unity Steps:** copy `Scripts\Editor\VoxelEngineSetupWindow.cs`, recompile, run **Step 13** again — it completes and the MGO gets its slim-lower / full-upper hitbox pair.
 
 ---
 

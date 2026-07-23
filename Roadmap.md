@@ -1,7 +1,7 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.14.0-dev`
+**Current Version:** `6.14.1-dev`
 **Roadmap Version:** `6.9.3-dev`
 **Date:** 2026-07-21
 **Status:** Power, Vehicles & Combat (4.7.0) — WORKING ON

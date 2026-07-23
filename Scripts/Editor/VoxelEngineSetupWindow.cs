@@ -5677,6 +5677,7 @@ root =>
                             && root.transform.Find("Hitbox_Lower") == null
                             && root.transform.Find("Hitbox_Upper") == null;
                         if (colliderMissing) box = root.AddComponent<BoxCollider>();
+                        if (box == null) box = root.GetComponent<BoxCollider>(); // re-fetch after transient add
                         if (isNew || needsMesh || colliderMissing)
                         {
                             float cs = VoxelEngine.GridSystem.GridSizeExt.CellSize(size);
@@ -5713,28 +5714,19 @@ root =>
                                     Vector3 lowerCenter = new(bCenter.x, minY + lowerSize.y * 0.5f, bCenter.z);
                                     Vector3 upperCenter = new(bCenter.x, minY + bSize.y - upperSize.y * 0.5f, bCenter.z);
 
-                                    var lowerGo = root.transform.Find("Hitbox_Lower") != null
-                                        ? root.transform.Find("Hitbox_Lower").gameObject
-                                        : new GameObject("Hitbox_Lower");
-                                    if (lowerGo.transform.parent != root.transform)
-                                        lowerGo.transform.SetParent(root.transform, false);
-                                    var lowerBox = lowerGo.GetComponent<BoxCollider>() ?? lowerGo.AddComponent<BoxCollider>();
-                                    lowerBox.center = lowerCenter;
-                                    lowerBox.size = lowerSize;
-
-                                    var upperGo = root.transform.Find("Hitbox_Upper") != null
-                                        ? root.transform.Find("Hitbox_Upper").gameObject
-                                        : new GameObject("Hitbox_Upper");
-                                    if (upperGo.transform.parent != root.transform)
-                                        upperGo.transform.SetParent(root.transform, false);
-                                    var upperBox = upperGo.GetComponent<BoxCollider>() ?? upperGo.AddComponent<BoxCollider>();
-                                    upperBox.center = upperCenter;
-                                    upperBox.size = upperSize;
+                                    // Find-or-create each band child, then fit its box with
+                                    // EXPLICIT Unity null checks: freshly added components can
+                                    // come back as dead wrappers during transient editor reloads
+                                    // (this tool's own history shows it) — the C# ?? operator
+                                    // does NOT honour Unity's object-lifetime semantics, which
+                                    // is what threw MissingComponentException at .set_center.
+                                    FitBandHitbox(root.transform, "Hitbox_Lower", lowerCenter, lowerSize);
+                                    FitBandHitbox(root.transform, "Hitbox_Upper", upperCenter, upperSize);
 
                                     box = null; // the two bands carry all collision now
                                 }
                             }
-                            else
+                            else if (box != null)
                             {
                                 box.center = Vector3.zero;
                                 box.size = new Vector3(cs, cs, cs);
@@ -5788,6 +5780,32 @@ root =>
             // The grid liquid tank gains its named liquid ports so LIQUID pipes
             // magnet onto it (and liquid links form through the port rules).
             // NON-DESTRUCTIVE: ports are created only when missing.
+            /// <summary>Find-or-create one band of the MGO's two-piece hitbox and fit
+            /// its BoxCollider. Every access is null-guarded: Step 13 must never throw
+            /// on transiently-stripped components — worst case the band is retried on
+            /// the next run instead of aborting the whole content build.</summary>
+            void FitBandHitbox(Transform rootTransform, string bandName, Vector3 center, Vector3 size)
+            {
+                if (rootTransform == null) return;
+                var band = rootTransform.Find(bandName);
+                if (band == null)
+                {
+                    var go = new GameObject(bandName);
+                    go.transform.SetParent(rootTransform, false);
+                    band = go.transform;
+                }
+                var bandBox = band.GetComponent<BoxCollider>();
+                if (bandBox == null) bandBox = band.gameObject.AddComponent<BoxCollider>();
+                if (bandBox == null) bandBox = band.GetComponent<BoxCollider>(); // transient re-fetch
+                if (bandBox == null)
+                {
+                    Debug.LogWarning($"[VoxelEngineSetup] Could not fit '{bandName}' on '{rootTransform.name}' this run — retry Step 13 and it will be fitted then.");
+                    return;
+                }
+                bandBox.center = center;
+                bandBox.size = size;
+            }
+
             void EnsureLiquidTankPorts()
             {
                 string path = $"{PREFABS}/LiquidTank_Large.prefab";
