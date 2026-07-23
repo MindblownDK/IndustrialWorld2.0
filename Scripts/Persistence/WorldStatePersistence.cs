@@ -720,6 +720,10 @@ namespace VoxelEngine.Persistence
                     {
                         itemId = sourceItem.itemId,
                         localRotation = block.transform.localRotation,
+                        // Exact pose: ground-lifted machine bottoms and port-centred
+                        // pipe/shaft snaps must restore identically after save/load.
+                        hasLocalPose = true,
+                        localPosition = block.transform.localPosition,
                         currentHP = block.currentHP,
                         enabled = block.Enabled,
                         isPrecision = block.IsPrecisionAttachment,
@@ -875,6 +879,11 @@ namespace VoxelEngine.Persistence
                     block.transform.rotation = grid.transform.rotation * saved.localRotation;
                     grid.AddBlock(saved.gridPos, block);
                 }
+
+                // Exact pose restore (ground lifts / port-centred ports snaps); old
+                // saves lack the fields and keep the pure lattice pose instead.
+                if (saved.hasLocalPose)
+                    block.transform.localPosition = saved.localPosition;
 
                 // OnPlaced initializes defaults, so reapply persisted state afterwards.
                 block.currentHP = saved.currentHP > 0f ? saved.currentHP : block.maxHP;
@@ -1383,6 +1392,9 @@ namespace VoxelEngine.Persistence
             public Vector3Int precisionPos;
             public Vector3Int precisionHostPos;
             public Quaternion localRotation;
+            // Exact block pose (present in saves written from game 6.14.0-dev on).
+            public bool hasLocalPose;
+            public Vector3 localPosition;
             public float currentHP;
             public bool enabled = true;
             public bool hasShapeVariant;

@@ -20,15 +20,18 @@ namespace VoxelEngine.Maritime
         {
             "Port_FuelInput", "Port_CoolantInput",
             "Port_LiquidInput", "Port_WaterInput", "Port_LiquidIO", "Port_WaterIO",
+            "Port_WaterIntake", "Port_WaterOutlet",
         };
 
         /// <summary>Gas-only ports (oxygen feed, exhaust-gas tap, generic gas
-        /// IO incl. steam). Gas pipes magnet onto these — and ONLY these.</summary>
+        /// IO incl. steam). Gas pipes magnet onto these — and ONLY these.
+        /// (The residual-heat steam port was removed by request — exhaust is
+        /// the one and only hot-gas hookup.)</summary>
         public static readonly string[] GasPrefixes =
         {
             "Port_OxygenInput", "Port_OxygenOutput", "Port_ExhaustGasIO",
             "Port_GasInput", "Port_GasOutput", "Port_GasIO",
-            "Port_HydrogenInput", "Port_HydrogenOutput", "Port_SteamHeat",
+            "Port_HydrogenInput", "Port_HydrogenOutput",
         };
 
         /// <summary>Engine exhaust outputs (exhaust pipes + gas taps snap here).</summary>
@@ -75,6 +78,25 @@ namespace VoxelEngine.Maritime
             if (block == null) return fromPoint;
             var port = FindNearest(block.transform, prefixes, fromPoint);
             return port != null ? port.position : block.transform.position;
+        }
+
+        /// <summary>TRUE authored outward direction of a port in world space — read from its
+        /// <see cref="MaritimePortFacing"/> tag (direction stored relative to the machine root,
+        /// which every port is a direct child of). Falls back to the port transform's +Z when
+        /// untagged, then to <paramref name="fallbackDir"/> when that is degenerate. Connectors
+        /// must NEVER guess orientation from a position offset: ports near a machine's centre
+        /// line (top exhaust collectors, deep fuel ports) silently mis-aim that way.</summary>
+        public static Vector3 PortOutwardWorld(Transform port, Vector3 fallbackDir)
+        {
+            if (port != null)
+            {
+                var facing = port.GetComponent<MaritimePortFacing>();
+                if (facing != null && facing.localOutward.sqrMagnitude > 0.0001f && port.parent != null)
+                    return port.parent.TransformDirection(facing.localOutward.normalized).normalized;
+                if (port.forward.sqrMagnitude > 0.0001f)
+                    return port.forward.normalized;
+            }
+            return fallbackDir.sqrMagnitude > 0.0001f ? fallbackDir.normalized : Vector3.up;
         }
     }
 }

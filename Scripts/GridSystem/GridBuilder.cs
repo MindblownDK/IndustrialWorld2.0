@@ -583,6 +583,14 @@ namespace VoxelEngine.GridSystem
             else
             {
                 grid.AddBlock(gridPos, block);
+
+                // Ghost truth: the ghost showed the FINAL pose — ground-clearance
+                // lifts (MGO bottom resting ON the armour face) and port-centred
+                // snaps — while AddBlock snaps the transform to the raw lattice
+                // cell. Re-apply the ghost pose so the placed block matches what
+                // the player saw instead of sinking into its supporting face.
+                block.transform.position = worldPos;
+                block.transform.rotation = rotation;
             }
 
             VoxelEngine.UI.BuildFeedbackHud.ShowBlockPlaced(item.displayName, item, 1);
@@ -1002,49 +1010,57 @@ namespace VoxelEngine.GridSystem
                 else return false;
             }
 
-            // Convert the port's ACTUAL world position into the grid's cell space.
-            // The v16+ machine models hang several cells past their origin cell, so the
-            // old "one cell from the hit block" math pointed the new block into empty
-            // space — or into the engine body itself.
+            // ── Resolve from TRUE authored port orientation (v21) ──────────
+            // MaritimePortFacing tags carry the machine-local outward direction of
+            // every port; containers are also rotated so +Z is outward. Older
+            // untagged ports fall back to the axis-of-offset guess.
             float cs = grid.gridSize.CellSize();
+            Vector3 fallbackAxisWorld = hitBlock.transform.TransformDirection(
+                (Vector3)SnapToCardinalAxis(hitBlock.transform.InverseTransformPoint(port.position)));
+            Vector3 outWorld = VoxelEngine.Maritime.MaritimePorts.PortOutwardWorld(port, fallbackAxisWorld);
+
+            // Cell choice: the lattice cell just OUTSIDE the port along its facing.
+            // Positions arrive in GRID space so rotated ships stay correct.
             Vector3 gridLocalPort = grid.transform.InverseTransformPoint(port.position);
-            Vector3Int snappedCell = new(
-                Mathf.RoundToInt(gridLocalPort.x / cs),
-                Mathf.RoundToInt(gridLocalPort.y / cs),
-                Mathf.RoundToInt(gridLocalPort.z / cs));
-            if (snappedCell == hitBlock.GridPos)
+            Vector3 outGridLocal = grid.transform.InverseTransformDirection(outWorld);
+            Vector3Int outAxis = SnapToCardinalAxis(outGridLocal);
+            Vector3 cellPos = outAxis != Vector3Int.zero
+                ? gridLocalPort + (Vector3)outAxis * (cs * 0.55f)
+                : gridLocalPort;
+            Vector3Int snappedCell = RoundHalfUp(cellPos / cs);
+            if (outAxis != Vector3Int.zero && snappedCell == hitBlock.GridPos)
+                snappedCell = hitBlock.GridPos + outAxis;
+            if (!grid.CanPlace(snappedCell))
             {
-                // Port sits inside the machine's own lattice cell — push one cell out
-                // along the port's dominant local axis instead.
-                Vector3Int axis = SnapToCardinalAxis(hitBlock.transform.InverseTransformPoint(port.position));
-                if (axis == Vector3Int.zero) return false;
-                snappedCell = hitBlock.GridPos + axis;
+                // Facing-cell occupied (e.g. bracketing an overhang): fall back to the
+                // cell the port itself sits in, as long as it isn't the machine origin.
+                Vector3Int portCell = RoundHalfUp(gridLocalPort / cs);
+                if (portCell == hitBlock.GridPos || !grid.CanPlace(portCell)) return false;
+                snappedCell = portCell;
             }
-            if (!grid.CanPlace(snappedCell)) return false;
             // No HasNeighbor gate here: the snapped cell is structurally tied to the
             // machine through the named port itself (ports intentionally overhang the
             // origin cell), so lattice neighbours may legitimately be absent.
-
-            // Centre the new block on the PORT's own cell — never on a guessed offset —
-            // so no matter where on the machine the player aims, the pipe/shaft always
-            // lands centered on the port (per the HFO exhaust behaviour).
             gridPos = snappedCell;
-            worldPos = grid.GridToWorld(gridPos);
 
-            // Orient along the port's dominant axis off the machine: e.g. the MGO's
-            // top collectors point their cells UP, so the straight stack stands
-            // upright; side ports lay it horizontal, reaching a little outboard.
-            Vector3 localFromMachine = hitBlock.transform.InverseTransformPoint(port.position);
-            Vector3Int axisLocal = SnapToCardinalAxis(localFromMachine);
-            Vector3 worldAxis = axisLocal == Vector3Int.zero
-                ? (hit.normal.sqrMagnitude > 0.0001f ? hit.normal.normalized : grid.transform.forward)
-                : hitBlock.transform.TransformDirection((Vector3)axisLocal).normalized;
-            Vector3 upAxis = Mathf.Abs(Vector3.Dot(worldAxis, grid.transform.up)) > 0.95f
+            // The block is placed EXACTLY on the port (not merely cell-rounded) and
+            // oriented along the port's true facing: flange to flange, centred on the
+            // port object — TryPlaceBlock honours this exact pose on placement.
+            worldPos = port.position;
+            Vector3 upAxis = Mathf.Abs(Vector3.Dot(outWorld, grid.transform.up)) > 0.95f
                 ? grid.transform.forward
                 : grid.transform.up;
-            rotation = Quaternion.LookRotation(worldAxis, upAxis.normalized);
+            rotation = Quaternion.LookRotation(outWorld, upAxis.normalized);
             return true;
         }
+
+        /// <summary>Component-wise round-half-up (Mathf.RoundToInt uses banker's
+        /// rounding, which drags .5 cells toward even and visibly off-centres ports
+        /// sitting on half-cell boundaries).</summary>
+        private static Vector3Int RoundHalfUp(Vector3 v) => new(
+            Mathf.FloorToInt(v.x + 0.5f),
+            Mathf.FloorToInt(v.y + 0.5f),
+            Mathf.FloorToInt(v.z + 0.5f));
 
         private bool TryFindNearestNamedPort(Transform root, string[] names, Vector3 hitPoint, out Transform port)
         {

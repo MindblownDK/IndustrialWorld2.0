@@ -200,6 +200,10 @@ namespace VoxelEngine.GridSystem
             while (s_classicQueue.Count > 0 && walked++ < ClassicWalkCap)
             {
                 var pipe = s_classicQueue.Dequeue();
+                // Five-cell cardinal corridor: a classic tank parked up to five
+                // lattice cells straight off ANY pipe on the run also counts as
+                // connected — no pipe needs to physically hump the tank shell.
+                ProbeClassicTankCorridor(pipe, type, forDraw, outTanks);
                 var neighbours = pipe.neighbours;
                 if (neighbours == null) continue;
                 foreach (var node in neighbours)
@@ -210,14 +214,42 @@ namespace VoxelEngine.GridSystem
                     }
                     else if (node is VoxelEngine.Fluids.WaterTank tank)
                     {
-                        if (outTanks.Contains(tank)) continue;
-                        bool usable = forDraw
-                            ? tank.liquidType == type && tank.StoredLitres > 0.001f
-                            : tank.IsEmpty || tank.liquidType == type;
-                        if (usable) outTanks.Add(tank);
+                        TryAddBridgedTank(tank, type, forDraw, outTanks);
                     }
                 }
             }
+        }
+
+        private static readonly Collider[] s_classicRowProbe = new Collider[16];
+
+        private static void TryAddBridgedTank(VoxelEngine.Fluids.WaterTank tank, LiquidType type,
+            bool forDraw, List<VoxelEngine.Fluids.WaterTank> outTanks)
+        {
+            if (tank == null || outTanks.Contains(tank)) return;
+            bool usable = forDraw
+                ? tank.liquidType == type && tank.StoredLitres > 0.001f
+                : tank.IsEmpty || tank.liquidType == type;
+            if (usable) outTanks.Add(tank);
+        }
+
+        /// <summary>Collect classic water tanks up to five lattice cells away from
+        /// <paramref name="pipe"/> in a straight cardinal row (valid direction only —
+        /// never diagonal). Grid-mounted pipes probe in their grid's frame.</summary>
+        private static void ProbeClassicTankCorridor(VoxelEngine.Fluids.WaterPipe pipe, LiquidType type,
+            bool forDraw, List<VoxelEngine.Fluids.WaterTank> outTanks)
+        {
+            if (pipe == null) return;
+            var block = pipe.GetComponentInParent<GridBlock>();
+            float step = block != null ? block.EffectiveCellSize : VoxelEngine.Networks.PipeAdjacency.DefaultGridSize;
+            Transform frame = block != null && block.Grid != null ? block.Grid.transform : null;
+            VoxelEngine.Networks.PipeAdjacency.ProbeCardinal(pipe.transform.position, frame, step, 5,
+                s_classicRowProbe, col =>
+                {
+                    var tank = col.GetComponent<VoxelEngine.Fluids.WaterTank>();
+                    if (tank == null) tank = col.GetComponentInParent<VoxelEngine.Fluids.WaterTank>();
+                    if (tank != null) TryAddBridgedTank(tank, type, forDraw, outTanks);
+                    return false; // corridor sweeps fully — collect every tank it passes
+                });
         }
 
         private IEnumerable<GridLiquidTank> ConnectedTanks(GridBlock endpoint, LiquidType type, bool requireExistingType)

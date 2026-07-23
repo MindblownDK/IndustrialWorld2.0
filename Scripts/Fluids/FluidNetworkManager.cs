@@ -75,16 +75,19 @@ namespace VoxelEngine.Fluids
                         if (b == n) continue;
                         Vector3 pa = n.transform.position, pb = b.transform.position;
 
-                        // Pipe↔pipe links may bridge five cardinal cells. Pipe↔tank /
-                        // pipe↔pump links retain the shorter endpoint rule.
+                        // Any link involving a pipe may bridge FIVE cardinal cells —
+                        // tanks and pumps join a run from a distance in a valid
+                        // direction, exactly like pipe↔pipe already did. Only
+                        // pipe-less pairs (tank↔tank / tank↔pump) stay touch-close.
                         bool bIsPipe = b.Kind == FluidNodeKind.Pipe;
+                        bool involvesPipe = nIsPipe || bIsPipe;
                         float step = GridStep(n, b);
-                        float range = nIsPipe && bIsPipe
+                        float range = involvesPipe
                             ? Mathf.Max(Mathf.Max(rA, b.connectRadius), step * 5f)
                             : Mathf.Max(rA, b.connectRadius);
                         if ((pa - pb).sqrMagnitude > range * range) continue;
                         Vector3 connectionDelta = VoxelEngine.Networks.PipeAdjacency.ConnectionDelta(n, b);
-                        bool ok = (nIsPipe && bIsPipe)
+                        bool ok = involvesPipe
                             ? VoxelEngine.Networks.PipeAdjacency.IsCardinalLinkDelta(connectionDelta, step, 5f, step * 0.35f)
                             : VoxelEngine.Networks.PipeAdjacency.IsAxisAlignedWithinDelta(connectionDelta, step, 2.5f, step * 0.35f);
                         if (!ok) continue;

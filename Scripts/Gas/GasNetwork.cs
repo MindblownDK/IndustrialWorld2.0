@@ -75,7 +75,8 @@ namespace VoxelEngine.Gas
         }
 
         /// <summary>Find a GasTank of the given type reachable from a position via gas pipes.</summary>
-        public GasTank FindTankNear(Vector3 origin, GasType type, bool forOutput, float searchDist = 3f)
+        public GasTank FindTankNear(Vector3 origin, GasType type, bool forOutput, float searchDist = 3f,
+            float corridorStep = 0f)
         {
             // Direct adjacency check first.
             var hits = Physics.OverlapSphere(origin, searchDist);
@@ -91,6 +92,13 @@ namespace VoxelEngine.Gas
                 }
             }
 
+            // Five-cell cardinal corridor straight off the consumer's port: a tank
+            // parked up to five lattice cells in a straight row from the port counts
+            // as plugged in — no pipe needs to physically hump the tank shell.
+            float step = corridorStep > 0.0001f ? corridorStep : Networks.PipeAdjacency.DefaultGridSize;
+            var viaPort = ProbeTankCardinal(origin, null, step, type, forOutput);
+            if (viaPort != null) return viaPort;
+
             // BFS through pipe network.
             foreach (var startPipe in _pipes)
             {
@@ -101,21 +109,60 @@ namespace VoxelEngine.Gas
                 while (queue.Count > 0)
                 {
                     var cur = queue.Dequeue();
-                    var tankHits = Physics.OverlapSphere(cur.transform.position, cur.connectRadius);
-                    foreach (var col in tankHits)
-                    {
-                        var tank = col.GetComponent<GasTank>();
-                        if (tank == null) continue;
-                        if (forOutput && tank.allowOutput && tank.storedGasType == type && tank.storedAmount > 0)
-                            return tank;
-                        if (!forOutput && tank.acceptInput && (tank.storedGasType == type || tank.storedGasType == GasType.None))
-                            return tank;
-                    }
+                    float pipeStep = GridStep(cur, cur);
+                    var block = cur.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
+                    Transform frame = block != null && block.Grid != null ? block.Grid.transform : null;
+                    // Short radius (touching tanks) + the five-cell corridor.
+                    var near = ProbeTankSphere(cur.transform.position, cur.connectRadius, type, forOutput);
+                    if (near != null) return near;
+                    var viaPipe = ProbeTankCardinal(cur.transform.position, frame, pipeStep, type, forOutput);
+                    if (viaPipe != null) return viaPipe;
                     foreach (var nb in cur.neighbours)
                         if (visited.Add(nb)) queue.Enqueue(nb);
                 }
             }
             return null;
+        }
+
+        private static readonly Collider[] s_tankProbe = new Collider[16];
+
+        private static GasTank ProbeTankSphere(Vector3 centre, float radius, GasType type, bool forOutput)
+        {
+            var tankHits = Physics.OverlapSphere(centre, radius);
+            foreach (var col in tankHits)
+            {
+                var tank = col != null ? col.GetComponent<GasTank>() ?? col.GetComponentInParent<GasTank>() : null;
+                if (tank == null) continue;
+                if (forOutput && tank.allowOutput && tank.storedGasType == type && tank.storedAmount > 0)
+                    return tank;
+                if (!forOutput && tank.acceptInput && (tank.storedGasType == type || tank.storedGasType == GasType.None))
+                    return tank;
+            }
+            return null;
+        }
+
+        /// <summary>Tank reachable from <paramref name="origin"/> along a straight
+        /// cardinal lattice row (max five cells) — deduction of "connects from a
+        /// distance in a valid direction" for gas endpoints.</summary>
+        private static GasTank ProbeTankCardinal(Vector3 origin, Transform gridFrame, float step, GasType type, bool forOutput)
+        {
+            GasTank found = null;
+            Networks.PipeAdjacency.ProbeCardinal(origin, gridFrame, step, 5, s_tankProbe, col =>
+            {
+                var tank = col.GetComponent<GasTank>();
+                if (tank == null) tank = col.GetComponentInParent<GasTank>();
+                if (tank == null) return false;
+                if (forOutput && tank.allowOutput && (tank.storedGasType == type || tank.storedGasType == GasType.None) && tank.storedAmount > 0)
+                {
+                    found = tank; return true;
+                }
+                if (!forOutput && tank.acceptInput && (tank.storedGasType == type || tank.storedGasType == GasType.None))
+                {
+                    found = tank; return true;
+                }
+                return false;
+            });
+            return found;
         }
 
         private static float GridStep(GasPipe a, GasPipe b)

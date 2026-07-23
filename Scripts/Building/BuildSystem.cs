@@ -141,8 +141,9 @@ namespace VoxelEngine.Building
             if (targetGrid != null && IsUnifiedPipe(block))
             {
                 Vector3Int precisionPos, hostStructuralPos, faceAxis;
-                bool validPrecision = TryGetMaritimePortSnap(targetGrid, block, hit,
-                        out precisionPos, out hostStructuralPos, out faceAxis)
+                bool snappedToPort = TryGetMaritimePortSnap(targetGrid, block, hit,
+                        out precisionPos, out hostStructuralPos, out faceAxis, out Vector3 anchorLocal);
+                bool validPrecision = snappedToPort
                     || UnifiedGridTopology.TryGetDetailPlacement(
                         targetGrid, hit, out precisionPos, out hostStructuralPos, out faceAxis);
                 ShowPrecisionLattice(targetGrid, hostStructuralPos, faceAxis);
@@ -151,7 +152,11 @@ namespace VoxelEngine.Building
                 if (pipeVisual != null)
                     pipeVisual.gridSize = GridSize.Small.CellSize();
 
-                Vector3 localPosition = (Vector3)precisionPos * GridSize.Small.CellSize();
+                // Port-snapped pipes hug the port exactly (ghost truth — placement
+                // lands on the same anchor); face placements sit on their cell.
+                Vector3 localPosition = snappedToPort
+                    ? anchorLocal
+                    : (Vector3)precisionPos * GridSize.Small.CellSize();
                 Vector3 worldPosition = targetGrid.transform.TransformPoint(localPosition);
                 Quaternion worldRotation = targetGrid.transform.rotation
                     * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
@@ -230,11 +235,13 @@ namespace VoxelEngine.Building
         //  the pipe network builder, only the position is magnetised.
         // ════════════════════════════════════════════════════════════════
         private static bool TryGetMaritimePortSnap(GridEntity grid, BlockItem item, RaycastHit hit,
-            out Vector3Int precisionPos, out Vector3Int hostStructuralPos, out Vector3Int faceAxis)
+            out Vector3Int precisionPos, out Vector3Int hostStructuralPos, out Vector3Int faceAxis,
+            out Vector3 anchorLocal)
         {
             precisionPos = default;
             hostStructuralPos = default;
             faceAxis = default;
+            anchorLocal = default;
             if (grid == null || item == null || item.placedPrefab == null || hit.collider == null) return false;
 
             // Route by the HELD pipe type — liquid pipes to liquid ports only,
@@ -250,28 +257,51 @@ namespace VoxelEngine.Building
             if (targetBlock == null || targetBlock.Grid != grid) return false;
 
             float small = GridSize.Small.CellSize();
-            float maxSnap = small * 3.5f; // generous — ports overhang big machine cells
+            // The big machine hitboxes reach far past their ports (an MGO fuel port
+            // can sit ~4m inside the collider surface), so the snap radius must span
+            // machine internals — not just the port's own overhang.
+            float maxSnap = Mathf.Max(small * 3.5f, grid.gridSize.CellSize() * 2.0f);
 
             Transform best = VoxelEngine.Maritime.MaritimePorts.FindNearest(
                 targetBlock.transform, prefixes, hit.point, maxSnap);
             if (best == null) return false;
 
+            // Anchor = the port's exact grid-local position: the placed pipe sits
+            // CENTRED ON the port object (plugs in), while the Detail-lattice cell
+            // it claims sits just outside the port along its authored facing.
             Vector3 local = grid.transform.InverseTransformPoint(best.position);
+            anchorLocal = local;
+
+            Vector3 hostLocal = grid.transform.InverseTransformPoint(targetBlock.transform.position);
+            Vector3 offsetOut = (local - hostLocal).normalized;
+            Vector3 fallbackWorld = offsetOut.sqrMagnitude > 0.0001f
+                ? grid.transform.TransformDirection(offsetOut)
+                : hit.normal;
+            Vector3 outWorld = VoxelEngine.Maritime.MaritimePorts.PortOutwardWorld(best, fallbackWorld);
+            Vector3 outLocal = grid.transform.InverseTransformDirection(outWorld);
+
+            Vector3 cellPos = local + outLocal.normalized * (small * 0.75f);
             precisionPos = new Vector3Int(
-                Mathf.RoundToInt(local.x / small),
-                Mathf.RoundToInt(local.y / small),
-                Mathf.RoundToInt(local.z / small));
+                Mathf.FloorToInt(cellPos.x / small + 0.5f),
+                Mathf.FloorToInt(cellPos.y / small + 0.5f),
+                Mathf.FloorToInt(cellPos.z / small + 0.5f));
             hostStructuralPos = targetBlock.GridPos;
 
-            // Outward face axis = dominant grid-space direction from the machine's
-            // origin toward the port (fallback: the ray's hit normal).
-            Vector3 hostLocal = grid.transform.InverseTransformPoint(targetBlock.transform.position);
-            Vector3 outward = local - hostLocal;
-            faceAxis = outward.sqrMagnitude > 0.0001f
-                ? UnifiedGridTopology.SnapFaceAxis(grid, grid.transform.TransformDirection(outward.normalized))
-                : UnifiedGridTopology.SnapFaceAxis(grid, hit.normal);
+            // Outward face axis — prefer the port's true authored facing; fallback:
+            // dominant grid-space direction from the machine's origin toward the port.
+            faceAxis = UnifiedGridTopology.SnapFaceAxis(grid, outWorld);
+            if (faceAxis == Vector3Int.zero)
+                faceAxis = offsetOut.sqrMagnitude > 0.0001f
+                    ? UnifiedGridTopology.SnapFaceAxis(grid, grid.transform.TransformDirection(offsetOut))
+                    : UnifiedGridTopology.SnapFaceAxis(grid, hit.normal);
 
             var layer = grid.GetComponent<GridPrecisionAttachmentLayer>();
+            if (layer != null && layer.CanPlace(precisionPos)) return true;
+            // Facing cell taken: claim the cell the port itself sits in.
+            precisionPos = new Vector3Int(
+                Mathf.FloorToInt(local.x / small + 0.5f),
+                Mathf.FloorToInt(local.y / small + 0.5f),
+                Mathf.FloorToInt(local.z / small + 0.5f));
             return layer == null || layer.CanPlace(precisionPos);
         }
 
@@ -419,7 +449,9 @@ namespace VoxelEngine.Building
         {
             if (item == null || item.placedPrefab == null || grid == null) return false;
             Vector3Int precisionPos, hostStructuralPos;
-            if (!TryGetMaritimePortSnap(grid, item, hit, out precisionPos, out hostStructuralPos, out _)
+            bool snappedToPort = TryGetMaritimePortSnap(grid, item, hit,
+                out precisionPos, out hostStructuralPos, out _, out Vector3 anchorLocal);
+            if (!snappedToPort
                 && !UnifiedGridTopology.TryGetDetailPlacement(grid, hit,
                     out precisionPos, out hostStructuralPos, out _)) return false;
 
@@ -447,6 +479,11 @@ namespace VoxelEngine.Building
                 Destroy(go);
                 return false;
             }
+
+            // Port-snapped pipes sit exactly on the port object — centred like the
+            // ghost showed — not merely rounded onto the Detail cell.
+            if (snappedToPort)
+                block.transform.localPosition = anchorLocal;
 
             VoxelEngine.UI.BuildFeedbackHud.Show(
                 "Pipe Attached", $"{item.displayName} · Detail lattice", item.icon, item.iconTint);

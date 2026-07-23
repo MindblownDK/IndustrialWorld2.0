@@ -5670,7 +5670,12 @@ root =>
                         // root-LOCAL: divide out the root scale or it double-applies (the
                         // MGO's 1.2 Y/Z scale used to inflate the hitbox way past the model).
                         var box = root.GetComponent<BoxCollider>();
-                        bool colliderMissing = box == null;
+                        // "Missing" = neither the legacy single box nor the banded
+                        // hitbox pair exists — otherwise manual collider edits are
+                        // preserved verbatim across Step-13 re-runs.
+                        bool colliderMissing = box == null
+                            && root.transform.Find("Hitbox_Lower") == null
+                            && root.transform.Find("Hitbox_Upper") == null;
                         if (colliderMissing) box = root.AddComponent<BoxCollider>();
                         if (isNew || needsMesh || colliderMissing)
                         {
@@ -5687,6 +5692,47 @@ root =>
                                     Mathf.Abs(rootScale.z) > 0.0001f ? 1f / rootScale.z : 1f);
                                 box.center = root.transform.InverseTransformPoint(bounds.center);
                                 box.size = Vector3.Max(Vector3.Scale(bounds.size * 1.02f, invScale), Vector3.one * (cs * 0.2f));
+
+                                // MGO V12 silhouette: the cylinder heads + gantry make the
+                                // TOP considerably wider than the slim crankcase/sea-chest
+                                // bottom, so one full-bounds box walled the player ~1m off
+                                // the model. Swap it for a two-piece banded hitbox:
+                                //   lower band (bottom 55%) slim, upper band full width.
+                                // Inside the same non-destructive gate, so hand-tuned
+                                // colliders on the prefab survive subsequent Step-13 runs.
+                                if (name.Contains("Engine_Giant"))
+                                {
+                                    Vector3 bCenter = root.transform.InverseTransformPoint(bounds.center);
+                                    Vector3 bSize = Vector3.Max(Vector3.Scale(bounds.size * 1.02f, invScale), Vector3.one * (cs * 0.2f));
+                                    if (box != null) Object.DestroyImmediate(box);
+
+                                    const float lowerFraction = 0.55f;
+                                    Vector3 lowerSize = new(bSize.x * 0.62f, bSize.y * lowerFraction, bSize.z * 0.92f);
+                                    Vector3 upperSize = new(bSize.x, bSize.y * (1f - lowerFraction) + bSize.y * 0.04f, bSize.z);
+                                    float minY = bCenter.y - bSize.y * 0.5f;
+                                    Vector3 lowerCenter = new(bCenter.x, minY + lowerSize.y * 0.5f, bCenter.z);
+                                    Vector3 upperCenter = new(bCenter.x, minY + bSize.y - upperSize.y * 0.5f, bCenter.z);
+
+                                    var lowerGo = root.transform.Find("Hitbox_Lower") != null
+                                        ? root.transform.Find("Hitbox_Lower").gameObject
+                                        : new GameObject("Hitbox_Lower");
+                                    if (lowerGo.transform.parent != root.transform)
+                                        lowerGo.transform.SetParent(root.transform, false);
+                                    var lowerBox = lowerGo.GetComponent<BoxCollider>() ?? lowerGo.AddComponent<BoxCollider>();
+                                    lowerBox.center = lowerCenter;
+                                    lowerBox.size = lowerSize;
+
+                                    var upperGo = root.transform.Find("Hitbox_Upper") != null
+                                        ? root.transform.Find("Hitbox_Upper").gameObject
+                                        : new GameObject("Hitbox_Upper");
+                                    if (upperGo.transform.parent != root.transform)
+                                        upperGo.transform.SetParent(root.transform, false);
+                                    var upperBox = upperGo.GetComponent<BoxCollider>() ?? upperGo.AddComponent<BoxCollider>();
+                                    upperBox.center = upperCenter;
+                                    upperBox.size = upperSize;
+
+                                    box = null; // the two bands carry all collision now
+                                }
                             }
                             else
                             {
@@ -5764,25 +5810,41 @@ root =>
                 }
 
                 // Root scale is (1.5, 1.8, 1.5): local offsets land at sane world spots.
-                (string name, Vector3 pos, Vector3 euler)[] ports =
+                // `outward` is the authored attach facing (MaritimePortFacing) — snapping
+                // and pipe arms read TRUE port orientation from it, never position guesses.
+                (string name, Vector3 pos, Vector3 euler, Vector3 outward)[] ports =
                 {
-                    ("Port_LiquidIO_N",   new Vector3( 0.00f, -0.22f, -0.52f), new Vector3(90f, 0f, 0f)),
-                    ("Port_LiquidIO_S",   new Vector3( 0.00f, -0.22f,  0.52f), new Vector3(90f, 0f, 0f)),
-                    ("Port_LiquidIO_E",   new Vector3( 0.52f, -0.22f,  0.00f), new Vector3(0f, 0f, 90f)),
-                    ("Port_LiquidIO_W",   new Vector3(-0.52f, -0.22f,  0.00f), new Vector3(0f, 0f, 90f)),
-                    ("Port_LiquidIO_Top", new Vector3( 0.00f,  0.55f,  0.00f), Vector3.zero),
+                    ("Port_LiquidIO_N",   new Vector3( 0.00f, -0.22f, -0.52f), new Vector3(90f, 0f, 0f),  Vector3.back),
+                    ("Port_LiquidIO_S",   new Vector3( 0.00f, -0.22f,  0.52f), new Vector3(90f, 0f, 0f),  Vector3.forward),
+                    ("Port_LiquidIO_E",   new Vector3( 0.52f, -0.22f,  0.00f), new Vector3(0f, 0f, 90f),  Vector3.right),
+                    ("Port_LiquidIO_W",   new Vector3(-0.52f, -0.22f,  0.00f), new Vector3(0f, 0f, 90f),  Vector3.left),
+                    ("Port_LiquidIO_Top", new Vector3( 0.00f,  0.55f,  0.00f), Vector3.zero,              Vector3.up),
                 };
 
                 bool dirty = false;
-                foreach (var (name, pos, euler) in ports)
+                foreach (var (name, pos, euler, outward) in ports)
                 {
-                    if (prefab.transform.Find(name) != null) continue;
+                    var existing = prefab.transform.Find(name);
+                    if (existing != null)
+                    {
+                        // Link the missing facing tag on user-owned prefabs — never moves
+                        // or reshapes anything the user placed (non-destructive rule).
+                        if (existing.GetComponent<VoxelEngine.Maritime.MaritimePortFacing>() == null)
+                        {
+                            var tag = existing.gameObject.AddComponent<VoxelEngine.Maritime.MaritimePortFacing>();
+                            tag.localOutward = outward;
+                            dirty = true;
+                        }
+                        continue;
+                    }
                     var port = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
                     port.name = name;
                     port.transform.SetParent(prefab.transform, false);
                     port.transform.localPosition = pos;
                     port.transform.localRotation = Quaternion.Euler(euler);
                     port.transform.localScale = new Vector3(0.14f, 0.035f, 0.14f);
+                    var facing = port.AddComponent<VoxelEngine.Maritime.MaritimePortFacing>();
+                    facing.localOutward = outward;
                     var col = port.GetComponent<Collider>();
                     if (col != null) Object.DestroyImmediate(col);
                     var renderer = port.GetComponent<Renderer>();

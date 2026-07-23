@@ -121,6 +121,9 @@ namespace VoxelEngine.Maritime
                 }
             }
 
+            // The bellows stub that seals flange → port (rescan at 2 Hz).
+            TickFlexCoupling();
+
             foreach (var eng in _foundEngines)
             {
                 if (!eng.IsRunning || eng.ExhaustGas <= 0.5f) continue;
@@ -225,7 +228,8 @@ namespace VoxelEngine.Maritime
                         _gasTapPort = MaritimePorts.FindNearest(transform, s_gasTapPortPrefix, transform.position);
                     Vector3 origin = _gasTapPort != null ? _gasTapPort.position : transform.position;
                     _gasTapTank = VoxelEngine.Gas.GasNetwork.Instance.FindTankNear(
-                        origin, VoxelEngine.Gas.GasType.ExhaustGas, forOutput: false, searchDist: cs * 1.6f);
+                        origin, VoxelEngine.Gas.GasType.ExhaustGas, forOutput: false, searchDist: cs * 2.0f,
+                        corridorStep: cs);
                 }
             }
 
@@ -237,6 +241,72 @@ namespace VoxelEngine.Maritime
         }
 
         private static readonly string[] s_gasTapPortPrefix = { "Port_ExhaustGasIO" };
+
+        // ══════════════════════════════════════════════════════════════
+        //  FLEX COUPLING — a bellows stub that seals this pipe's intake
+        //  flange to the served engine's REAL exhaust-output port. Ports
+        //  overhang the machine's own lattice cell (the MGO collectors sit
+        //  two cells out), so the pipe body can't always kiss the port on
+        //  its own — the coupling spans the residual gap and every exhaust
+        //  hookup looks welded shut.
+        // ══════════════════════════════════════════════════════════════
+        private GameObject _flexCoupling;
+        private Transform _intakePort;
+        private float _couplingTimer;
+        private static readonly string[] s_intakePortPrefix = { "Port_ExhaustInput" };
+
+        private void TickFlexCoupling()
+        {
+            _couplingTimer -= Time.deltaTime;
+            if (_couplingTimer > 0f) return;
+            _couplingTimer = 0.5f;
+            UpdateFlexCoupling();
+        }
+
+        private void UpdateFlexCoupling()
+        {
+            if (_intakePort == null)
+                _intakePort = MaritimePorts.FindNearest(transform, s_intakePortPrefix, transform.position);
+            if (_intakePort == null) return;
+
+            float reach = EffectiveCellSize * 1.35f;
+            Vector3 from = _intakePort.position;
+            Transform target = null;
+            float bestSq = reach * reach;
+            foreach (var eng in _foundEngines)
+            {
+                if (eng == null) continue;
+                var port = MaritimePorts.FindNearest(eng.transform, MaritimePorts.ExhaustOutputPrefixes, from, reach);
+                if (port == null) continue;
+                float d = (port.position - from).sqrMagnitude;
+                if (d < bestSq) { bestSq = d; target = port; }
+            }
+
+            if (target == null || bestSq < 0.0004f)
+            {
+                if (_flexCoupling != null) { Destroy(_flexCoupling); _flexCoupling = null; }
+                return;
+            }
+
+            if (_flexCoupling == null)
+            {
+                _flexCoupling = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                _flexCoupling.name = "FlexCoupling";
+                _flexCoupling.transform.SetParent(transform, true);
+                var col = _flexCoupling.GetComponent<Collider>();
+                if (col != null) Destroy(col);
+                var portRenderer = _intakePort.GetComponentInChildren<Renderer>();
+                if (portRenderer != null)
+                    _flexCoupling.GetComponent<Renderer>().sharedMaterial = portRenderer.sharedMaterial;
+            }
+
+            Vector3 to = target.position - from;
+            float distance = to.magnitude;
+            float tube = EffectiveCellSize * 0.085f;
+            _flexCoupling.transform.position = from + to * 0.5f;
+            _flexCoupling.transform.rotation = Quaternion.FromToRotation(Vector3.up, to.normalized);
+            _flexCoupling.transform.localScale = new Vector3(tube, distance * 0.5f, tube);
+        }
 
         private void CreateSmokeEffect()
         {

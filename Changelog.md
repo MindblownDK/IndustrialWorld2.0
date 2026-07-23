@@ -1,9 +1,41 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.13.2-dev`
+**Current Version:** `6.14.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.14.0-dev] Oriented Ports, 5-Cell Endpoint Proximity, Flex Exhaust Couplings, Ghost-True Placement & MGO Banded Hitbox (Mesh v21)
+
+**Type:** MINOR — new save-compatible connectivity features + placement/snap fixes. Old saves load cleanly (new pose-save fields are optional on read; mesh rebuilds in place via the v21 marker).
+
+**New — 5-cell endpoint proximity ("valid lattice direction") for every pipe family:**
+- Tanks/containers/machines now join a pipe run from **up to five lattice cells away on a straight cardinal row** — no pipe needs to physically hump the tank shell anymore:
+  - **Classic liquid** (`FluidNetworkManager`): pipe↔tank/pump links use the same 5-cell cardinal rule pipes already had.
+  - **Gas**: tanks reachable from any pipe — or straight off a consumer port (engine O₂ intake, exhaust gas tap) — via a new cardinal corridor probe.
+  - **Item pipes**: chests/machines connect and accept delivery from up to five cells in a valid direction; glass-pipe pellets animate the full hop.
+  - **Grid liquid bridge**: classic tanks near (≤5 cells, cardinal) any pipe walked from a machine's liquid ports count as connected.
+
+**New — True authored port orientation + exact port-centred placement:**
+- Every maritime port now carries a `MaritimePortFacing` tag and a rotated container (+Z = outward attach direction): all three engines (exhaust, O₂, fuel, coolant, shaft), gearbox, exhaust pipe (intake + gas tap), drive-shaft coupling rings and the marine water pump. Liquid-tank markers get the tag too — linked non-destructively when missing.
+- Snapped blocks now **place exactly ON the port, oriented along its real facing** — no more "middle of the engine", no more off-by-half-a-cell: ghost and placed block are pixel-identical, and the exact pose **persists through save/load** (new optional `localPosition` field in grid-block save records).
+
+**New — Flex exhaust couplings:** every exhaust pipe grows a bellows stub that seals its intake flange to the served engine's REAL exhaust port (rescan at 2 Hz) — port-snapped exhaust runs always look welded shut, on every engine tier.
+
+**Fixed:**
+- **MGO (and any overhang machine) no longer sinks into its supporting face on placement** — `TryPlaceBlock` now keeps the exact ghost pose instead of the raw lattice cell.
+- **Exhaust pipe snap on the smaller engines** no longer lands mid-block (cell resolution now follows the port's facing, not a position guess).
+- **MGO exhaust snap** centred on the port instead of hugging its far end.
+- **Liquid snap on the MGO works** (snap radius spans machine internals; ports sit up to ~4 m inside the collider surface).
+- **Gas pipe → exhaust gas-tap snap works**; **gas pipe → O₂ intake is centred on the port**.
+- **Engines actually draw O₂** from tanks that aren't touching the pipes (corridor probe + wider rescan reach).
+- **MGO hitbox** swapped for a two-piece banded collider (slim lower band ≈62% width, full-width upper band) — walk right up to the crankcase. Refit rides the same non-destructive Step-13 gate (manual collider edits survive).
+- **Steam/heat port removed** (mesh + prefix lists) — exhaust is the single hot-gas hookup, as requested.
+- Round-half-up cell rounding (banker's rounding dragged half-cell ports off-centre).
+
+**Manual Unity Steps:** copy the changed scripts in, recompile, run `Tools > Voxel Engine > Voxel Engine Setup` → **Step 13** once (rebuilds meshes to v21 in place, retrofits the MGO banded hitbox, tags tank-port facings — all non-destructive).
 
 ---
 

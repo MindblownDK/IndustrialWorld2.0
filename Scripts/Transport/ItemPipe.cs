@@ -57,6 +57,39 @@ namespace VoxelEngine.Transport
         private readonly List<(Vector3 from, Vector3 to)> _flowSegments = new(6);
         private ItemDefinition _flowItem;
 
+        // Candidate endpoint colliders gathered per scan: touch-range sphere PLUS
+        // the five-cell cardinal corridor (chests/machines join from up to five
+        // lattice cells away in a straight row — same rule as every other pipe).
+        private readonly List<Collider> _endpointColliders = new(24);
+        private readonly HashSet<Collider> _endpointColliderSet = new();
+        private static readonly Collider[] s_endpointProbe = new Collider[24];
+
+        /// <summary>Fill <see cref="_endpointColliders"/> with every collider the pipe
+        /// should consider an endpoint candidate: anything in touch range, plus the
+        /// five-cell cardinal corridor in this pipe's lattice frame.</summary>
+        private void GatherEndpointColliders()
+        {
+            _endpointColliders.Clear();
+            _endpointColliderSet.Clear();
+            int near = Physics.OverlapSphereNonAlloc(transform.position, endpointConnectRadius,
+                s_endpointProbe, ~0, QueryTriggerInteraction.Collide);
+            for (int i = 0; i < near; i++)
+            {
+                var col = s_endpointProbe[i]; s_endpointProbe[i] = null;
+                if (col != null && _endpointColliderSet.Add(col)) _endpointColliders.Add(col);
+            }
+
+            var block = GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
+            float step = block != null ? block.EffectiveCellSize : VoxelEngine.Networks.PipeAdjacency.DefaultGridSize;
+            Transform frame = block != null && block.Grid != null ? block.Grid.transform : null;
+            VoxelEngine.Networks.PipeAdjacency.ProbeCardinal(transform.position, frame, step, 5,
+                s_endpointProbe, col =>
+                {
+                    if (col != null && _endpointColliderSet.Add(col)) _endpointColliders.Add(col);
+                    return false; // collect everything — endpoints never stop the sweep
+                });
+        }
+
         // World-space direction the most recent item ARRIVED from (set by an
         // upstream pipe via ReceiveFlow). Used as the "entry" side when this
         // pipe forwards onward, so flow looks continuous across joints.
@@ -203,8 +236,8 @@ namespace VoxelEngine.Transport
         private void ScanEndpoints()
         {
             _endpointPositions.Clear();
-            var hits = Physics.OverlapSphere(transform.position, endpointConnectRadius);
-            foreach (var col in hits)
+            GatherEndpointColliders();
+            foreach (var col in _endpointColliders)
             {
                 if (col.gameObject == gameObject) continue;
                 if (col.GetComponentInParent<ItemPipe>() != null) continue; // pipes already handled
@@ -339,12 +372,12 @@ namespace VoxelEngine.Transport
         /// </summary>
         private void TryPushToSinks(ItemStack stack, Vector3 entryDir)
         {
-            // Use the SHORT endpoint radius (≈ one cell) so items only drop into a
-            // sink that is DIRECTLY adjacent. This forces the stream to hop pipe →
-            // pipe along the run instead of teleporting from the first pipe into a
-            // chest several cells away — so every glass segment animates the flow.
-            var hits = Physics.OverlapSphere(transform.position, endpointConnectRadius);
-            foreach (var col in hits)
+            // Sinks = touch range PLUS the five-cell cardinal corridor: a chest or
+            // machine up to five lattice cells straight off the pipe still takes
+            // delivery (same rule tanks got for liquid/gas). Directed flow segments
+            // keep the pellets animating the full hop in glass pipes.
+            GatherEndpointColliders();
+            foreach (var col in _endpointColliders)
             {
                 if (col.gameObject == gameObject) continue;
                 if (col.GetComponentInParent<ItemPipe>() != null) continue; // skip pipes

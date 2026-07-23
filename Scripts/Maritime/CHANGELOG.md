@@ -4,6 +4,23 @@ Branch: **Dev** · Semantic Versioning 2.0.0
 
 ---
 
+## [2.26.0] — Oriented Ports, 5-Cell Endpoint Proximity, Flex Couplings & MGO Banded Hitbox (Mesh v21)
+
+**Type:** MINOR — save-compatible connectivity features + snap/placement fixes (game version 6.14.0-dev, MaritimeMeshBuilder v21).
+
+### Added
+- **`MaritimePortFacing`** tag on every maritime port (engines, gearbox, exhaust pipe, shaft rings, water pump, liquid-tank markers): true authored outward direction, ending all position-guess mis-aims. Ports place **exactly centred on the port object along its facing**, ghost ≡ placed ≡ restored-after-load.
+- **Five-cell cardinal endpoint proximity** for gas tanks, classic liquid tanks/pumps and item containers ("valid lattice direction, never diagonal") — engines refuel, breathe and offload exhaust without pipes touching the shell.
+- **Exhaust flex couplings**: bellows stub seals each exhaust pipe's flange to the engine's real exhaust port at 2 Hz rescan.
+- **MGO banded hitbox**: slim lower / full-width upper pair — walkable up close (Step-13 retrofit, non-destructive).
+
+### Fixed
+- Overhang machines (MGO) placed on deck faces no longer sink into the support — exact ghost pose is kept and persisted.
+- Exhaust snap centred on smaller engines and the MGO; liquid snap works on the MGO; gas taps snap and centre; O₂ feed actually drawn.
+- **Steam-heat port removed** — exhaust only, by request.
+
+---
+
 ## [2.25.2] — Drive Shaft Floor Mounts Fully Removed (Mesh v20)
 
 **Type:** PATCH — visual bugfix, save-compatible (game version 6.13.2-dev).

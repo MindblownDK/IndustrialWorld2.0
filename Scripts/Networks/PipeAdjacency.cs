@@ -144,5 +144,60 @@ namespace VoxelEngine.Networks
             float along = Mathf.Max(dx, dy, dz);
             return along <= gs * maxStepsAway + tol;
         }
+
+        // ── Cardinal endpoint probes (tanks / containers at lattice range) ──
+        private static readonly Vector3[] s_probeAxesWorld =
+        {
+            Vector3.right, Vector3.left, Vector3.up, Vector3.down, Vector3.forward, Vector3.back,
+        };
+        private static readonly Vector3[] s_probeAxesGrid = new Vector3[6];
+
+        /// <summary>
+        /// The "five lattice cells in a valid direction" rule: step along each of the
+        /// six cardinal axes (in <paramref name="gridFrame"/>'s frame when supplied,
+        /// world axes otherwise) for up to <paramref name="maxCells"/> lattice cells,
+        /// OverlapSphere-probing every cell centre. <paramref name="visit"/> runs per
+        /// hit collider and returns true to stop early. Used by the gas/liquid/item
+        /// endpoint lookups so tanks and containers join a pipe run without sitting
+        /// physically on top of it — but never diagonally or off-axis.
+        /// </summary>
+        public static void ProbeCardinal(Vector3 origin, Transform gridFrame, float step,
+            int maxCells, Collider[] buffer, System.Func<Collider, bool> visit)
+        {
+            if (visit == null || buffer == null || buffer.Length == 0) return;
+            step = step > 0.0001f ? step : DefaultGridSize;
+            maxCells = Mathf.Max(1, maxCells);
+            float radius = step * 0.45f;
+
+            Vector3[] axes = s_probeAxesWorld;
+            if (gridFrame != null)
+            {
+                s_probeAxesGrid[0] = gridFrame.right;
+                s_probeAxesGrid[1] = -gridFrame.right;
+                s_probeAxesGrid[2] = gridFrame.up;
+                s_probeAxesGrid[3] = -gridFrame.up;
+                s_probeAxesGrid[4] = gridFrame.forward;
+                s_probeAxesGrid[5] = -gridFrame.forward;
+                axes = s_probeAxesGrid;
+            }
+
+            for (int a = 0; a < 6; a++)
+            {
+                Vector3 dir = axes[a];
+                for (int k = 1; k <= maxCells; k++)
+                {
+                    Vector3 centre = origin + dir * (step * k);
+                    int count = Physics.OverlapSphereNonAlloc(centre, radius, buffer,
+                        ~0, QueryTriggerInteraction.Collide);
+                    for (int i = 0; i < count; i++)
+                    {
+                        var col = buffer[i];
+                        if (col == null) continue;
+                        buffer[i] = null;
+                        if (visit(col)) return;
+                    }
+                }
+            }
+        }
     }
 }

@@ -904,7 +904,7 @@ namespace VoxelEngine.Maritime
                 _oxygenPort = MaritimePorts.FindNearest(transform, s_oxygenPortPrefix, transform.position);
             Vector3 origin = _oxygenPort != null ? _oxygenPort.position : transform.position;
             return VoxelEngine.Gas.GasNetwork.Instance.FindTankNear(origin, VoxelEngine.Gas.GasType.Oxygen,
-                forOutput: true, searchDist: cs * 1.6f);
+                forOutput: true, searchDist: cs * 2.0f, corridorStep: cs);
         }
 
         private static readonly string[] s_oxygenPortPrefix = { "Port_OxygenInput" };
