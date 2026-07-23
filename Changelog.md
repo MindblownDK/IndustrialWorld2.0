@@ -1,9 +1,33 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.15.0-dev`
+**Current Version:** `6.15.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.15.1-dev] Autosave Compile Cleanup & Modern Power Node IDs
+
+**Type:** PATCH — compile/warning cleanup for 6.15.0-dev. Fully save-compatible; no save schema, recipe, prefab, setup, or public API changes.
+
+**Fixed:**
+- Fixed `CS0136` in `WorldStatePersistence.WorldStatePath()` by renaming the nested `folder` local to `stateFolder` and the fallback folder local to `fallbackFolder`.
+- Fixed Unity 6 deprecation warnings by replacing runtime `GetInstanceID()` calls with `GetEntityId().GetHashCode()` in `PowerNetworkManager.NeighbourSignature()` and the grid-liquid bridge cache key.
+- Runtime build version constants now report `6.15.1-dev`.
+
+**Roadmap Status:**
+- World Management, Autosaves & Item Limits remains **✅ COMPLETED**; this patch only cleans up the compile/warning reported after 6.15.0-dev.
+
+**Files touched (pull these):**
+- `Scripts/Persistence/WorldStatePersistence.cs`
+- `Scripts/Power/PowerNetworkManager.cs`
+- `Scripts/GridSystem/GridLiquidNetwork.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Roadmap.md`
+- `Changelog.md`
+
+**Manual steps:** none — compile/warning cleanup only. No `Tools > Voxel Engine > Voxel Engine Setup` run required.
 
 ---
 

@@ -249,7 +249,7 @@ namespace VoxelEngine.Power
                 if (list != null)
                 {
                     for (int i = 0; i < list.Count; i++)
-                        if (list[i] != null) h = h * 31 + list[i].GetInstanceID();
+                        if (list[i] != null) h = h * 31 + list[i].GetEntityId().GetHashCode();
                     h = h * 31 + list.Count;
                 }
                 return h;

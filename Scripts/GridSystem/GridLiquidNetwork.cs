@@ -170,7 +170,7 @@ namespace VoxelEngine.GridSystem
             outTanks.Clear();
             if (endpoint == null) return;
 
-            long key = ((long)endpoint.GetInstanceID() << 8) ^ (((long)(int)type << 1) | (forDraw ? 1L : 0L));
+            long key = ((long)endpoint.GetEntityId().GetHashCode() << 8) ^ (((long)(int)type << 1) | (forDraw ? 1L : 0L));
             if (s_bridgeCache.TryGetValue(key, out var cached)
                 && Time.time - cached.time < BridgeCacheTtl)
             {

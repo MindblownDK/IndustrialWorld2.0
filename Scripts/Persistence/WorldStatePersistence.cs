@@ -203,15 +203,15 @@ namespace VoxelEngine.Persistence
             if (session != null)
             {
                 string path = session.WorldStatePathFor(worldName);
-                string folder = Path.GetDirectoryName(path);
-                if (!string.IsNullOrEmpty(folder)) Directory.CreateDirectory(folder);
+                string stateFolder = Path.GetDirectoryName(path);
+                if (!string.IsNullOrEmpty(stateFolder)) Directory.CreateDirectory(stateFolder);
                 return path;
             }
 
-            string folder = Path.Combine(Application.persistentDataPath, "VoxelWorlds",
+            string fallbackFolder = Path.Combine(Application.persistentDataPath, "VoxelWorlds",
                 Menu.WorldSession.SanitizeWorldFolderName(worldName));
-            Directory.CreateDirectory(folder);
-            return Path.Combine(folder, "world_state.json");
+            Directory.CreateDirectory(fallbackFolder);
+            return Path.Combine(fallbackFolder, "world_state.json");
         }
 
         private bool SavePlayer(SaveData save)
