@@ -4,6 +4,59 @@ Branch: **Dev** · Semantic Versioning 2.0.0
 
 ---
 
+## [2.26.5] — Aim-True Port Picks, Collider-Surface Seating, Pipe-to-Pipe Chaining
+
+**Type:** PATCH (game version 6.14.5-dev).
+
+### Fixed
+- **Port selection was hit-point-relative** — buried engine ports (MGO fuel/coolant/O₂) can sit beyond the
+  snap radius measured from the visible hull face the player aims at, so the snap silently failed and pipes
+  placed inside the inputs. `MaritimePorts.FindNearestToRay` selects ports by distance to the AIM RAY LINE
+  (max 0.45 m lateral; buried ports accepted up to snap-range past the hull hit — far-side tunneling rejected).
+- **Seating is now collider-true, not renderer-AABB-estimated** — a reverse `RaycastNonAlloc` down the port's
+  authored `MaritimePortFacing` axis finds the machine's OWN shell face (hitboxes, armor bands, stepped
+  silhouettes); the hub seats half a pipe-cell beyond it. Surface ports keep the 2.26.3 snug plug exactly.
+- **Pipe-to-pipe chaining** — aiming at a run's open end (whose arms/caps are collider-free) no longer yields
+  nothing: a forgiving sphere-cast grips the nearest same-family pipe hub and chains one Detail cell forward
+  (continuation) or sideways (branch). Preview ghost and click share the computation — ghost ≡ placed.
+- All unified-pipe placement tails extracted into one `PlaceOnDetailLattice` (port / detail / chain paths all
+  refresh visuals + networks + feedback identically).
+
+---
+
+## [2.26.4] — Pipes Seat OUTSIDE the Engine Hull (Buried Ports)
+
+**Type:** PATCH (game version 6.14.4-dev).
+
+### Fixed
+- **Pipe hub rendered INSIDE the engine body on buried ports** — several MGO ports (fuel, coolant, O₂) are
+  authored metres inside the engine's collider/hull surface, so the standard half-cell plug seated the pipe
+  hub inside the machine. `BuildSystem`'s port snap now walks the seat out along the port's authored facing
+  (`MaritimePortFacing`) until it clears the machine's **rendered shell**, then adds the usual half-cell plug —
+  the pipe lands just outside the engine, like a free-placed pipe beside it. Surface ports keep the exact snug
+  fit from 2.26.3 (HFO coolant et al. unchanged — measured hull exit is ~zero there). The Detail-lattice
+  occupancy cell follows the hub, and the shell bounds are cached per machine (10 s TTL) so the per-frame
+  placement ghost pays nothing.
+
+### Performance (cable networks, shared with game 6.14.4-dev)
+- Power topology rebuilds no longer re-mesh EVERY cable (neighbour-signature gate on `onNeighboursChanged`),
+  placement bursts coalesce into one rebuild (0.12 s settle), line-of-sight checks are allocation-free
+  (`RaycastNonAlloc`), tier-collar materials are cached per colour instead of leaked per rebuild, and
+  `DataCable`'s twice-per-second probes use non-alloc physics buffers.
+
+---
+
+## [2.26.3] — Unified Pipe Placement = Ghost, Pipe-Lag Cures, O₂/Exhaust Separation
+
+**Type:** PATCH (game version 6.14.3-dev).
+
+### Fixed
+- **Placement fork removed**: the ghost-snapped port placement now actually ships — `PlayerInteractionTool.TryPlaceStaticPipeOnGrid` deleted; unified pipes place via `BuildSystem.TryPlace` (port-anchored, facing-correct, Detail-lattice visual sizing + immediate network refresh carried over).
+- **Pipe-count lag**: 0.6 s cache on the grid-liquid bridge walk, 0.5 s memo on item-pipe endpoint corridors, 0.35 s memo on gas tank lookups (the 31-sphere corridor probes no longer re-run every tick per endpoint).
+- **O₂ supply purity**: gas pipes suppress exhaust-tap arms when a clean gas port is nearer; the exhaust tap only feeds networks seeded by pipes anchored to the tap's own block — a neighbouring oxygen line can no longer be flooded with exhaust.
+
+---
+
 ## [2.26.2] — Port-True Pipe Seating, Shaft Coupling Rule, Grid-Tank Classic Bridge (Mesh v22)
 
 **Type:** PATCH — behaviour fixes (game version 6.14.2-dev, MaritimeMeshBuilder v22).

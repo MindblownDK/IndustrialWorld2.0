@@ -39,6 +39,11 @@ namespace VoxelEngine.Power
         [System.NonSerialized] public PowerNetwork network;
         [System.NonSerialized] public List<PowerNode> neighbours = new();
 
+        // Shared line-of-sight raycast buffer — CanLinkTo runs once per node pair
+        // per topology rebuild, and Physics.RaycastAll allocates a fresh array EVERY
+        // call. With ~20 cables + machines that was hundreds of allocs per rebuild.
+        private static readonly RaycastHit[] s_losBuffer = new RaycastHit[48];
+
         // Manual links (from manual wires)
         [System.NonSerialized] public List<PowerNode> manualLinks = new();
         [System.NonSerialized] public Dictionary<PowerNode, float> manualLinkCapacities = new();
@@ -99,10 +104,12 @@ namespace VoxelEngine.Power
             if (castDist <= 0f) return true;
             Vector3 origin = a + dir * SHRINK;
 
-            var hits = Physics.RaycastAll(origin, dir, castDist, connectionBlockingLayers, QueryTriggerInteraction.Ignore);
-            for (int i = 0; i < hits.Length; i++)
+            int hitCount = Physics.RaycastNonAlloc(
+                origin, dir, s_losBuffer, castDist, connectionBlockingLayers,
+                QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < hitCount; i++)
             {
-                var h = hits[i];
+                var h = s_losBuffer[i];
                 if (h.collider == null) continue;
                 var node = h.collider.GetComponentInParent<PowerNode>();
                 if (node == this || node == other) continue;

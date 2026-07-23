@@ -1,9 +1,77 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.14.2-dev`
+**Current Version:** `6.14.5-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.14.5-dev] Aim-True Port Selection, Collider-True Pipe Seating & Pipe-to-Pipe Chaining
+
+**Type:** PATCH — placement/UX fixes. Fully save-compatible.
+
+**Fixed:**
+- **Pipes STILL placing inside engine inputs** — two-stage root cause, both removed:
+  1. *Port selection* measured distance from the ray's **surface hit point**; ports buried deep in the MGO hull can sit beyond the snap radius from the visible hull face, so the snap silently fell back to plain cell placement inside the machine. Ports are now ALSO matched by **distance to the aim ray line** (accepting buried ports up to snap-range past the hull; far-side ports the ray would tunnel through stay rejected).
+  2. *Seating* used renderer-AABB bounds to escape the hull — replaced with a **reverse raycast against the machine's own colliders**: cast back down the port's authored facing from far outside, take the first machine face struck, seat the hub half a cell beyond it. Surface ports resolve to the exact snug plug from before; buried ports now land physically outside the engine, on its real shell (hitboxes included — armor bands, stepped silhouettes, all of it).
+- **No ghost when aiming at another pipe (can't attach pipes to pipe ends)** — pipe arms and end-caps are collider-free visuals; only the small hub box was ray-hittable, so aiming anywhere along a run or at its open tip found nothing: no ghost, no placement. New **chain aim**: when the camera ray misses and you hold a pipe, a forgiving fat sphere-cast along the view grips the nearest same-family pipe hub and computes the Detail cell one step from it — forward along the run axis when aiming past the tip (continuation), sideways when aiming at the pipe's side (branch). The ghost shows exactly the cell the click places (red when the cell is occupied), shared by `BuildSystem` preview and the `PlayerInteractionTool` ray-miss click — pipe runs now grow like tracks.
+- Placement tail for all unified pipes unified into one `PlaceOnDetailLattice` (port-snapped, detail-placed and chain-placed pipes all get the same lattice visuals, network refresh and feedback).
+
+**Files touched (pull these):**
+- `Scripts/Building/BuildSystem.cs`
+- `Scripts/Maritime/MaritimePorts.cs`
+- `Scripts/Player/PlayerInteractionTool.cs`
+
+**Manual steps:** none — runtime-only. (No `Voxel Engine Setup` / Step 13 run required; MaritimeMeshBuilder stays v22.)
+
+Maritime subsystem → **2.26.5** (see `Scripts/Maritime/CHANGELOG.md`).
+
+---
+
+### [6.14.4-dev] Pipe Seating Outside Engine Hull & Cable Network Performance
+
+**Type:** PATCH — behaviour + performance fixes. Fully save-compatible.
+
+**Fixed:**
+- **Pipes placing INSIDE the engine body**: ports authored buried inside a machine's hull (MGO fuel/coolant/O₂ can sit metres inside the collider surface) only got the standard half-cell plug, leaving the pipe hub rendering inside the engine. The snap now walks the seat **out along the port's authored facing to the machine's rendered shell** and plugs half a cell beyond it — the pipe lands just OUTSIDE the engine like a free-placed pipe beside it. Surface ports keep the exact snug fit that already worked (HFO coolant untouched). The claimed Detail-lattice occupancy cell follows the hub, and shell bounds are cached per machine so the per-frame ghost preview costs nothing extra.
+
+**Performance (cable networks — "20 cables = A LOT of lag"):**
+- **Factory-wide re-mesh storm killed**: every topology rebuild fired `onNeighboursChanged` on EVERY power node, so placing ONE cable rebuilt the generated cable meshes of the ENTIRE factory (destroying/respawning ~20 GameObjects per cable — O(N²) churn across a cabling session). The event now fires only for nodes whose connection set actually changed (neighbour-signature compare). Placing cable #21 rebuilds the 1–2 cables it touches, not 21.
+- **Placement bursts coalesced**: holding the place button marked the topology dirty every frame → full rebuild + all-pair line-of-sight raycasts every frame. Rebuilds now settle for 0.12 s and batch — one rebuild per burst.
+- **Zero-alloc line-of-sight**: `PowerNode.CanLinkTo` switched from allocating `Physics.RaycastAll` (one fresh array per node PAIR per rebuild) to `RaycastNonAlloc` with a shared buffer.
+- **Material leak fixed**: cable tier-collar materials (`GridCableVisuals`) were re-created PER cable PER rebuild and the old ones never released — now one shared cached material per tier colour.
+- **DataCable probes de-allocated**: the twice-per-second neighbour probe used allocating `OverlapBox`/`RaycastAll` per cable — now `OverlapBoxNonAlloc`/`RaycastNonAlloc` with shared buffers (that all-layers 5 m broadphase box was a GC spike per cable per scan).
+
+**Files touched (pull these):**
+- `Scripts/Building/BuildSystem.cs`
+- `Scripts/Power/PowerNode.cs`
+- `Scripts/Power/PowerNetworkManager.cs`
+- `Scripts/Networks/GridCableVisuals.cs`
+- `Scripts/Networks/DataCable.cs`
+
+**Manual steps:** none — runtime-only. (No `Voxel Engine Setup` / Step 13 run required; MaritimeMeshBuilder stays v22.)
+
+Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
+
+---
+
+### [6.14.3-dev] Unified Pipe Placement = Ghost, Pipe-Lag Cures & O₂/Exhaust Plumbing Separation
+
+**Type:** PATCH — placement-path unification, performance and network-purity fixes. Fully save-compatible.
+
+**Fixed:**
+- **Pipes ignoring port snaps on placement** (ghost snapped, block landed "closest to the player"): a second, older placement path in `PlayerInteractionTool` (`TryPlaceStaticPipeOnGrid`) raced the BuildSystem on every right-click and knew nothing about maritime ports. It's removed — unified pipes always place through `BuildSystem.TryPlace`, so the placed pipe lands exactly where the ghost showed (port-anchored, facing-correct). Its Detail-lattice visual sizing and immediate network refresh were carried into the single path.
+- **Heavy lag with ~20+ pipes**: three hot scans were re-running physics corrridor probes far more often than anything changes:
+  - Grid-liquid bridge (BFS + 5-cell corridors per endpoint per tick) → 0.6 s result cache per endpoint/type/direction.
+  - Item-pipe endpoint corridor sweeps → memoized 0.5 s per pipe (bypassed instantly on wrench/config rescan).
+  - Gas `FindTankNear` pipe BFS → memoized 0.35 s per query origin/type.
+- **Oxygen not flowing & pipes not reaching tanks** — mostly a knock-on of the placement fork (pipes nowhere near the ports); with the snap unbroken, the 5-lattice-cell corridor + tank bridges from 6.14.2 do their job.
+- **O₂ line also connecting to the exhaust pipe / exhaust gas poisoning the oxygen supply**:
+  - Gas pipes now suppress exhaust-tap arms whenever a clean (non-tap) gas port is closer — the O₂ line plugs into the intake, not the tap standing beside it.
+  - The exhaust tap only feeds exhaust into networks seeded by pipes **anchored to its own exhaust pipe block** (the dedicated capture run). A nearby oxygen line stays clean — and the engine O₂ feed keeps finding breathable gas.
+
+**Manual Unity Steps:** copy the changed scripts in, recompile, play. No Step-13 run needed for this one (runtime-only changes).
 
 ---
 

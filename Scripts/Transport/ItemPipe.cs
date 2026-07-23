@@ -63,12 +63,19 @@ namespace VoxelEngine.Transport
         private readonly List<Collider> _endpointColliders = new(24);
         private readonly HashSet<Collider> _endpointColliderSet = new();
         private static readonly Collider[] s_endpointProbe = new Collider[24];
+        private float _nextEndpointGatherAt;
 
         /// <summary>Fill <see cref="_endpointColliders"/> with every collider the pipe
         /// should consider an endpoint candidate: anything in touch range, plus the
         /// five-cell cardinal corridor in this pipe's lattice frame.</summary>
         private void GatherEndpointColliders()
         {
+            // Memoize the 5-cell corridor sweep per pipe: it runs inside both the
+            // visual scan and the push tick, and 31 OverlapSphere probes per call add
+            // up fast with long pipe runs — endpoints rarely change within 0.5 s.
+            if (Time.time < _nextEndpointGatherAt && _endpointColliders.Count > 0) return;
+            _nextEndpointGatherAt = Time.time + 0.5f;
+
             _endpointColliders.Clear();
             _endpointColliderSet.Clear();
             int near = Physics.OverlapSphereNonAlloc(transform.position, endpointConnectRadius,
@@ -288,6 +295,7 @@ namespace VoxelEngine.Transport
         /// </summary>
         public void ForceEndpointRescan()
         {
+            _nextEndpointGatherAt = 0f; // bypass the memo — config changed just now
             ScanEndpoints();
             if (_visuals != null) _visuals.ForceRebuild();
         }

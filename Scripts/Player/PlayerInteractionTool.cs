@@ -115,7 +115,26 @@ namespace VoxelEngine.Player
 
             if (!mineHeld && !buildHeld && !buildDown) return;
 
-            if (!hasHit) return;
+            if (!hasHit)
+            {
+                // Unified pipes: extending a run by aiming at its open end has to work
+                // even when the camera ray slips between the thin arm/cap visuals and
+                // hits nothing at all. The BuildSystem ghost previews this exact chain
+                // cell right now, so clicking here places what the player sees.
+                if ((buildDown || buildHeld) && Time.time >= _nextHit
+                    && !inventory.ActiveStack.IsEmpty
+                    && inventory.ActiveStack.item is BlockItem heldPipe
+                    && IsUnifiedPipeItem(heldPipe)
+                    && BuildSystem.Instance != null
+                    && BuildSystem.Instance.TryPlaceUnifiedPipeChain(heldPipe, ray))
+                {
+                    int takenPipe = inventory.container.Remove(heldPipe, 1);
+                    if (takenPipe == 0) TryNetworkConsume(heldPipe, 1);
+                    VoxelEngine.UI.BuildFeedbackHud.ShowBlockPlaced(heldPipe.displayName, heldPipe, 1);
+                    _nextHit = Time.time + 0.2f;
+                }
+                return;
+            }
 
             // ── WRENCH dispatch — short-circuits all other tool behaviour. ──
             //   LMB = connect/select  •  RMB = disconnect  •  Shift modifies both
@@ -264,7 +283,10 @@ namespace VoxelEngine.Player
             {
                 bool aimingUnifiedPipeAtGrid = IsUnifiedPipeItem(heldBlock)
                     && hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridEntity>() != null;
-                if (Time.time >= _nextHit && TryPlaceStaticPipeOnGrid(heldBlock, hit))
+                // ONE placement path for unified pipes: BuildSystem.TryPlace routes
+                // them through the maritime port-snap (ghost ≡ placed). The old
+                // static fork bypassed the snap and dropped pipes at the raw ray hit.
+                if (Time.time >= _nextHit && BuildSystem.Instance != null && BuildSystem.Instance.TryPlace(heldBlock, hit, ray.direction))
                 {
                     int taken = inventory.container.Remove(heldBlock, 1);
                     if (taken == 0) TryNetworkConsume(heldBlock, 1);
@@ -540,9 +562,7 @@ namespace VoxelEngine.Player
                 if (Time.time < _nextHit) return;
                 bool aimingUnifiedPipeAtGrid = IsUnifiedPipeItem(block)
                     && hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridEntity>() != null;
-                bool placed = aimingUnifiedPipeAtGrid
-                    ? TryPlaceStaticPipeOnGrid(block, hit)
-                    : BuildSystem.Instance != null && BuildSystem.Instance.TryPlace(block, hit, ray.direction);
+                bool placed = BuildSystem.Instance != null && BuildSystem.Instance.TryPlace(block, hit, ray.direction);
                 if (placed)
                 {
                     int taken = inventory.container.Remove(block, 1);
@@ -609,61 +629,6 @@ namespace VoxelEngine.Player
             return block.placedPrefab.GetComponentInChildren<VoxelEngine.Transport.ItemPipe>(true) != null
                 || block.placedPrefab.GetComponentInChildren<VoxelEngine.Gas.GasPipe>(true) != null
                 || block.placedPrefab.GetComponentInChildren<VoxelEngine.Fluids.WaterPipe>(true) != null;
-        }
-
-        private bool TryPlaceStaticPipeOnGrid(BlockItem block, RaycastHit hit)
-        {
-            if (!IsUnifiedPipeItem(block)) return false;
-            var targetGrid = hit.collider != null ? hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridEntity>() : null;
-            if (targetGrid == null || targetGrid.gridSize != VoxelEngine.GridSystem.GridSize.Large) return false;
-
-            if (!VoxelEngine.GridSystem.UnifiedGridTopology.TryGetDetailPlacement(
-                    targetGrid, hit, out var precisionPos, out var hostStructuralPos, out _))
-                return false;
-
-            var go = Instantiate(block.placedPrefab);
-            go.name = block.displayName;
-            var gridBlock = go.GetComponent<VoxelEngine.GridSystem.GridBlock>();
-            if (gridBlock == null) gridBlock = go.AddComponent<VoxelEngine.GridSystem.GridBlock>();
-            gridBlock.blockName = block.displayName;
-            gridBlock.BlockMass = Mathf.Max(block.massPerUnit, 5f);
-            gridBlock.maxHP = Mathf.Max(block.blockHealth, 100f);
-
-            float detailSize = VoxelEngine.GridSystem.GridSizeExt.CellSize(VoxelEngine.GridSystem.GridSize.Small);
-            foreach (var box in go.GetComponentsInChildren<BoxCollider>(true))
-                box.size = Vector3.Min(box.size, Vector3.one * detailSize);
-
-            var layer = targetGrid.GetComponent<VoxelEngine.GridSystem.GridPrecisionAttachmentLayer>();
-            if (layer == null) layer = targetGrid.gameObject.AddComponent<VoxelEngine.GridSystem.GridPrecisionAttachmentLayer>();
-            Quaternion worldRotation = targetGrid.transform.rotation
-                * Quaternion.Euler(VoxelEngine.Building.BuildSystem.RotationSteps.x * 90f,
-                    VoxelEngine.Building.BuildSystem.RotationSteps.y * 90f,
-                    VoxelEngine.Building.BuildSystem.RotationSteps.z * 90f);
-            Quaternion localRotation = Quaternion.Inverse(targetGrid.transform.rotation) * worldRotation;
-            if (!layer.AddBlock(precisionPos, hostStructuralPos, gridBlock, localRotation))
-            {
-                Destroy(go);
-                return false;
-            }
-
-            var placed = go.GetComponent<VoxelEngine.Building.PlacedBlock>();
-            if (placed != null)
-            {
-                placed.Item = block;
-                placed.Hp = block.blockHealth;
-                placed.onGrid = true;
-            }
-
-            var pipeVisual = go.GetComponentInChildren<VoxelEngine.Networks.PipeVisualBuilder>(true);
-            if (pipeVisual != null)
-            {
-                pipeVisual.gridSize = detailSize;
-                pipeVisual.ForceRebuild();
-            }
-            VoxelEngine.Transport.ItemPipeNetwork.Instance?.SetDirty();
-            VoxelEngine.Gas.GasNetwork.Instance?.SetDirty();
-            VoxelEngine.Fluids.FluidNetworkManager.Instance?.SetDirty();
-            return true;
         }
 
         /// <summary>

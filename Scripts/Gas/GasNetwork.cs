@@ -74,9 +74,42 @@ namespace VoxelEngine.Gas
             }
         }
 
-        /// <summary>Find a GasTank of the given type reachable from a position via gas pipes.</summary>
+        // Memoize identical tank lookups briefly: engines, taps and pumps probe on
+        // their own 0.5 s windows, and the pipe BFS + corridor probes are the hot
+        // path on long runs.
+        private const float TankQueryTtl = 0.35f;
+        private readonly System.Collections.Generic.Dictionary<long, (float time, GasTank tank)> _tankQueryCache = new();
+
+        private static long TankQueryKey(Vector3 origin, GasType type, bool forOutput, bool filtered)
+        {
+            int x = Mathf.RoundToInt(origin.x * 2f);
+            int y = Mathf.RoundToInt(origin.y * 2f);
+            int z = Mathf.RoundToInt(origin.z * 2f);
+            long k = ((long)(x & 0xFFFFF) << 43) ^ ((long)(y & 0xFFFFF) << 23) ^ ((long)(z & 0xFFFFF) << 3);
+            return k ^ ((long)(int)type << 1) ^ (forOutput ? 1L : 0L) ^ (filtered ? 2L : 0L);
+        }
+
+        /// <summary>Find a GasTank of the given type reachable from a position via gas pipes.
+        /// <paramref name="seedFilter"/> (optional) restricts which pipes may SEED the
+        /// network walk — the exhaust gas tap uses it so only pipes anchored to its own
+        /// exhaust pipe feed exhaust into a network (a shared oxygen line stays clean).</summary>
         public GasTank FindTankNear(Vector3 origin, GasType type, bool forOutput, float searchDist = 3f,
-            float corridorStep = 0f)
+            float corridorStep = 0f, System.Predicate<GasPipe> seedFilter = null)
+        {
+            long key = TankQueryKey(origin, type, forOutput, seedFilter != null);
+            if (_tankQueryCache.TryGetValue(key, out var memo) && Time.time - memo.time < TankQueryTtl)
+            {
+                // memo.tank honours Unity lifetime: destroyed tanks read as null.
+                if (!memo.tank) return null;
+                return memo.tank;
+            }
+            var result = FindTankNearUncached(origin, type, forOutput, searchDist, corridorStep, seedFilter);
+            _tankQueryCache[key] = (Time.time, result);
+            return result;
+        }
+
+        private GasTank FindTankNearUncached(Vector3 origin, GasType type, bool forOutput, float searchDist,
+            float corridorStep, System.Predicate<GasPipe> seedFilter)
         {
             // Direct adjacency check first.
             var hits = Physics.OverlapSphere(origin, searchDist);
@@ -102,6 +135,8 @@ namespace VoxelEngine.Gas
             // BFS through pipe network.
             foreach (var startPipe in _pipes)
             {
+                if (startPipe == null) continue;
+                if (seedFilter != null && !seedFilter(startPipe)) continue;
                 if ((startPipe.transform.position - origin).sqrMagnitude > searchDist * searchDist) continue;
                 var visited = new HashSet<GasPipe>();
                 var queue = new Queue<GasPipe>();

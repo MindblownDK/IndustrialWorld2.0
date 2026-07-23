@@ -105,6 +105,12 @@ namespace VoxelEngine.Networks
         /// (Iron, Lead), and uses high metallic + high smoothness so the
         /// collar looks like a bolted brass / steel clamp.
         /// </summary>
+        // CACHED by tint: this used to allocate a brand-new Material on EVERY
+        // cable visual rebuild and threw the old one on the floor (leak) — with
+        // every topology touch re-meshing many cables the leak piled up fast.
+        // One shared instance per tier colour is all we ever need.
+        private static readonly Dictionary<Color, Material> _tierAccentCache = new();
+
         private static Material MakeTierAccentVariant(Material src)
         {
             if (src == null) return SharedSleeveMaterial();
@@ -114,9 +120,13 @@ namespace VoxelEngine.Networks
                 Mathf.Clamp01(baseTint.g * 0.85f + 0.15f),
                 Mathf.Clamp01(baseTint.b * 0.85f + 0.15f),
                 1f);
-            return IndustrialPipeMesh.CreateMetalMaterial(
+            if (_tierAccentCache.TryGetValue(accent, out Material cached) && cached != null)
+                return cached;
+            var mat = IndustrialPipeMesh.CreateMetalMaterial(
                 accent, $"{src.name}_TierCollar",
                 metallic: 0.95f, smoothness: 0.90f);
+            _tierAccentCache[accent] = mat;
+            return mat;
         }
 
         /// <summary>

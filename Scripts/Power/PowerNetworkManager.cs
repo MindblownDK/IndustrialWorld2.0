@@ -23,7 +23,25 @@ namespace VoxelEngine.Power
         private readonly HashSet<PowerNode>     _allNodes = new();
         private readonly List<PowerNetwork>     _networks = new();
         private bool _topologyDirty;
+        private float _topologyDirtyAt = -1f;
         private float _tickTimer;
+
+        /// <summary>
+        /// Per-node neighbour-set signatures captured BEFORE each rebuild, so the
+        /// "neighbours changed" event only fires for nodes whose connections ACTUALLY
+        /// changed. Without this gate, placing ONE cable re-meshed the visuals of
+        /// EVERY cable in the world — an O(N²) GameObject churn across a cabling
+        /// session (20 cables → hundreds of destroyed/respawned mesh children per
+        /// placement) which is exactly the placement-time lag spike players felt.
+        /// </summary>
+        private readonly Dictionary<PowerNode, int> _neighbourSignatures = new();
+
+        /// <summary>
+        /// Coalesce placement bursts: while the player holds the place button, every
+        /// new cable marks the topology dirty — batch those into one rebuild after a
+        /// short settle delay instead of a full rebuild per frame.
+        /// </summary>
+        private const float TopologyRebuildDelay = 0.12f;
 
         public static void EnsureInstance()
         {
@@ -41,12 +59,12 @@ namespace VoxelEngine.Power
 
         public void Register(PowerNode node)
         {
-            if (_allNodes.Add(node)) _topologyDirty = true;
+            if (_allNodes.Add(node)) MarkTopologyDirty();
         }
 
         public void Unregister(PowerNode node)
         {
-            if (_allNodes.Remove(node)) _topologyDirty = true;
+            if (_allNodes.Remove(node)) MarkTopologyDirty();
             node.network = null;
             node.neighbours?.Clear();
         }
@@ -54,14 +72,23 @@ namespace VoxelEngine.Power
         /// <summary>Force a topology rebuild on the next Update tick — used
         /// by the wrench after it edits the WrenchBlacklist so the visual
         /// change is reflected instantly without waiting for register churn.</summary>
-        public void SetDirty() => _topologyDirty = true;
+        public void SetDirty() => MarkTopologyDirty();
+
+        private void MarkTopologyDirty()
+        {
+            if (!_topologyDirty) _topologyDirtyAt = Time.unscaledTime;
+            _topologyDirty = true;
+        }
 
         private void Update()
         {
-            if (_topologyDirty)
+            if (_topologyDirty && Time.unscaledTime - _topologyDirtyAt >= TopologyRebuildDelay)
             {
-                RebuildTopology();
+                // Clear BEFORE rebuilding: anything that dirties the topology DURING
+                // the rebuild (a script reacting to onNeighboursChanged) must schedule
+                // a follow-up pass, not have its flag swallowed by the post-clear.
                 _topologyDirty = false;
+                RebuildTopology();
             }
 
             _tickTimer += Time.deltaTime;
@@ -75,6 +102,12 @@ namespace VoxelEngine.Power
         // ============================================================
         private void RebuildTopology()
         {
+            // Capture each node's CURRENT neighbour-set signature before wiping, so
+            // after the rebuild we can tell exactly which nodes actually changed.
+            _neighbourSignatures.Clear();
+            foreach (var n in _allNodes)
+                if (n != null) _neighbourSignatures[n] = NeighbourSignature(n);
+
             // Reset.
             _networks.Clear();
             foreach (var n in _allNodes) { n.network = null; n.neighbours.Clear(); }
@@ -192,8 +225,35 @@ namespace VoxelEngine.Power
                 net.Recompute();
             }
 
-            // Notify every node so visuals (cable arms, indicator LEDs, etc.) can rebuild.
-            foreach (var n in snapshot) n.onNeighboursChanged?.Invoke();
+            // Notify only nodes whose connection set ACTUALLY changed so visuals
+            // (cable arms, indicator LEDs, etc.) rebuild. A brand-new node has no
+            // recorded signature and always gets its first notify; untouched parts
+            // of the factory keep their meshes — no more factory-wide re-mesh
+            // storm every time a cable is placed.
+            foreach (var n in snapshot)
+            {
+                if (n == null) continue;
+                int sig = NeighbourSignature(n);
+                if (!_neighbourSignatures.TryGetValue(n, out int oldSig) || oldSig != sig)
+                    n.onNeighboursChanged?.Invoke();
+            }
+        }
+
+        /// <summary>Hash of a node's neighbour set (order + members) for change detection.</summary>
+        private static int NeighbourSignature(PowerNode n)
+        {
+            unchecked
+            {
+                int h = 17;
+                var list = n.neighbours;
+                if (list != null)
+                {
+                    for (int i = 0; i < list.Count; i++)
+                        if (list[i] != null) h = h * 31 + list[i].GetInstanceID();
+                    h = h * 31 + list.Count;
+                }
+                return h;
+            }
         }
 
         // ============================================================

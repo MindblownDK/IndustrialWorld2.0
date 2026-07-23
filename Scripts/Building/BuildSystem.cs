@@ -131,6 +131,30 @@ namespace VoxelEngine.Building
             var ray = shootCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
             if (!TryRaycastIgnoringSelf(ray, out var hit, reach))
             {
+                // The ray slipped between the thin pipe visuals (their arms/caps are
+                // collider-free — only the small hub box is ray-hittable). Gripping
+                // the nearest pipe hub along the aim shows the continuation/branch
+                // ghost instead of nothing; clicking places exactly this cell.
+                if (IsUnifiedPipe(block) && TryChainAim(block, ray,
+                        out GridEntity chainGrid, out Vector3Int chainPos,
+                        out Vector3Int chainHost, out Vector3Int chainFace, out bool chainCanPlace))
+                {
+                    _ghost.SetActive(true);
+                    ShowPrecisionLattice(chainGrid, chainHost, chainFace);
+
+                    var chainVisual = _ghost.GetComponentInChildren<VoxelEngine.Networks.PipeVisualBuilder>(true);
+                    if (chainVisual != null)
+                        chainVisual.gridSize = GridSize.Small.CellSize();
+
+                    Vector3 chainLocal = (Vector3)chainPos * GridSize.Small.CellSize();
+                    Vector3 chainWorld = chainGrid.transform.TransformPoint(chainLocal);
+                    Quaternion chainRot = chainGrid.transform.rotation
+                        * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
+                    _ghost.transform.SetPositionAndRotation(chainWorld, chainRot);
+                    ConfigurePipeGhostConnection(block, chainGrid, chainWorld, GridSize.Small.CellSize());
+                    ApplyGhostMaterial(_ghost, chainCanPlace ? _ghostMaterialValid : _ghostMaterialInvalid);
+                    return;
+                }
                 _ghost.SetActive(false);
                 HidePrecisionLattice();
                 return;
@@ -141,7 +165,7 @@ namespace VoxelEngine.Building
             if (targetGrid != null && IsUnifiedPipe(block))
             {
                 Vector3Int precisionPos, hostStructuralPos, faceAxis;
-                bool snappedToPort = TryGetMaritimePortSnap(targetGrid, block, hit,
+                bool snappedToPort = TryGetMaritimePortSnap(targetGrid, block, hit, ray,
                         out precisionPos, out hostStructuralPos, out faceAxis, out Vector3 anchorLocal);
                 bool validPrecision = snappedToPort
                     || UnifiedGridTopology.TryGetDetailPlacement(
@@ -234,7 +258,7 @@ namespace VoxelEngine.Building
         //  gas IO, steam heat). Rotation stays player-controlled + auto-shaped by
         //  the pipe network builder, only the position is magnetised.
         // ════════════════════════════════════════════════════════════════
-        private static bool TryGetMaritimePortSnap(GridEntity grid, BlockItem item, RaycastHit hit,
+        private static bool TryGetMaritimePortSnap(GridEntity grid, BlockItem item, RaycastHit hit, Ray aimRay,
             out Vector3Int precisionPos, out Vector3Int hostStructuralPos, out Vector3Int faceAxis,
             out Vector3 anchorLocal)
         {
@@ -262,15 +286,28 @@ namespace VoxelEngine.Building
             // machine internals — not just the port's own overhang.
             float maxSnap = Mathf.Max(small * 3.5f, grid.gridSize.CellSize() * 2.0f);
 
+            // TWO picks, hit-proximity first, aim-ray second. The ray pick covers the
+            // case the hit-distance pick cannot: the player aims ACROSS the machine at
+            // a port buried deep inside the hull, where the surface hit point sits
+            // metres from the port. Buried ports lie past the hull along the aim, so
+            // accept ray candidates up to maxSnap beyond the hit distance — far-side
+            // ports (the ray would tunnel clean through the machine) stay rejected.
             Transform best = VoxelEngine.Maritime.MaritimePorts.FindNearest(
                 targetBlock.transform, prefixes, hit.point, maxSnap);
+            if (best == null)
+            {
+                best = VoxelEngine.Maritime.MaritimePorts.FindNearestToRay(
+                    targetBlock.transform, prefixes, aimRay, maxLineDistance: 0.45f,
+                    maxRayT: hit.distance + maxSnap);
+            }
             if (best == null) return false;
 
-            // Anchor = the port position pushed HALF A PIPE-CELL out along the port's
-            // authored facing: the pipe hub plugs INTO the port face from outside
-            // (straight out of it, centred — never buried inside the machine body or
-            // slid beside it), while the Detail-lattice cell it claims sits just
-            // beyond the port.
+            // Anchor = the seat for the pipe hub. Snug half-cell plug on surface ports;
+            // for ports authored metres INSIDE the engine hull (MGO fuel/coolant/O₂)
+            // SeatAnchorOutsideMachineShell finds the machine's own collider surface
+            // along the port's authored facing (reverse ray) and seats half a cell
+            // beyond it — the pipe lands just OUTSIDE the engine like a free-placed
+            // pipe beside it.
             Vector3 local = grid.transform.InverseTransformPoint(best.position);
 
             Vector3 hostLocal = grid.transform.InverseTransformPoint(targetBlock.transform.position);
@@ -280,8 +317,11 @@ namespace VoxelEngine.Building
                 : hit.normal;
             Vector3 outWorld = VoxelEngine.Maritime.MaritimePorts.PortOutwardWorld(best, fallbackWorld);
             Vector3 outLocal = grid.transform.InverseTransformDirection(outWorld).normalized;
-            anchorLocal = local + outLocal * (small * 0.5f);
-            Vector3 cellPos = local + outLocal * (small * 0.75f);
+            anchorLocal = SeatAnchorOutsideMachineShell(targetBlock, grid, local, outLocal, small);
+            // The Detail-lattice cell the pipe CLAIMS follows the hub: on surface ports
+            // this is the cell just beyond the port face (same as before); when the seat
+            // was pushed out past the hull the occupancy lives where the hub actually is.
+            Vector3 cellPos = anchorLocal + outLocal * (small * 0.25f);
             precisionPos = new Vector3Int(
                 Mathf.FloorToInt(cellPos.x / small + 0.5f),
                 Mathf.FloorToInt(cellPos.y / small + 0.5f),
@@ -304,6 +344,66 @@ namespace VoxelEngine.Building
                 Mathf.FloorToInt(local.y / small + 0.5f),
                 Mathf.FloorToInt(local.z / small + 0.5f));
             return layer == null || layer.CanPlace(precisionPos);
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        //  MACHINE SHELL SEATING (buried ports)
+        //  Ports authored deep inside a machine's hull (MGO fuel / coolant /
+        //  O₂ sit metres inside the collider surface) can't be dressed with the
+        //  usual half-cell plug — the pipe hub renders INSIDE the engine body.
+        //  We find the machine's OWN hull surface along the port's authored
+        //  facing with a REVERSE ray: start far outside on the port's outward
+        //  axis, cast back toward the port, and take the first machine collider
+        //  struck — that face is exactly where a pipe should plug. Seat = that
+        //  surface + half a pipe-cell out. Surface ports resolve to the same
+        //  snug plug as before (the hull face is the port face itself), and if
+        //  no machine collider is found along the axis (port pokes through a
+        //  hitbox gap) the snug plug remains as graceful fallback.
+        // ════════════════════════════════════════════════════════════════
+        private static readonly RaycastHit[] s_seatProbe = new RaycastHit[32];
+
+        /// <summary>
+        /// Compute the pipe-hub seat for a port: the machine's own collider surface
+        /// along the port facing, plus half a pipe-cell outward. Expressed in GRID-LOCAL
+        /// space (same space as <paramref name="portLocal"/>/<paramref name="outLocal"/>).
+        /// </summary>
+        private static Vector3 SeatAnchorOutsideMachineShell(
+            GridBlock machine, GridEntity grid, Vector3 portLocal, Vector3 outLocal, float small)
+        {
+            Vector3 snugSeat = portLocal + outLocal * (small * 0.5f);
+            if (machine == null || grid == null) return snugSeat;
+
+            Vector3 portWorld = grid.transform.TransformPoint(portLocal);
+            Vector3 outWorld = grid.transform.TransformDirection(outLocal).normalized;
+            if (outWorld.sqrMagnitude < 0.0001f) return snugSeat;
+
+            const float MaxProbe = 12f; // generous: deepest buried port we support
+            Vector3 probeOrigin = portWorld + outWorld * MaxProbe;
+            int hitCount = Physics.RaycastNonAlloc(probeOrigin, -outWorld, s_seatProbe,
+                MaxProbe, ~0, QueryTriggerInteraction.Ignore);
+
+            float bestDist = float.MaxValue;
+            Vector3 bestPoint = default;
+            for (int i = 0; i < hitCount; i++)
+            {
+                var h = s_seatProbe[i];
+                if (h.collider == null) continue;
+                // Only the machine's own shell counts — neighbors/armor in front of
+                // the port must not pull the seat onto THEIR surface.
+                if (!h.collider.transform.IsChildOf(machine.transform)) continue;
+                if (h.distance < bestDist) { bestDist = h.distance; bestPoint = h.point; }
+            }
+
+            if (bestDist >= MaxProbe) return snugSeat;   // axis found no machine shell — snug plug
+
+            Vector3 surfaceLocal = grid.transform.InverseTransformPoint(bestPoint);
+            Vector3 seat = surfaceLocal + outLocal * (small * 0.5f);
+            // Sanity: never seat CLOSER to the machine core than the snug plug when the
+            // shell probe resolves weirdly (ngon-authored ports on hitbox seams).
+            float snugT = Vector3.Dot(snugSeat - portLocal, outLocal);
+            float seatT = Vector3.Dot(seat - portLocal, outLocal);
+            if (seatT < snugT - 0.001f) return snugSeat;
+            return seat;
         }
 
         private System.Collections.Generic.List<Vector3> ProvidePipeGhostLinks() => _pipeGhostLinks;
@@ -395,7 +495,19 @@ namespace VoxelEngine.Building
         {
             var targetGrid = hit.collider != null ? hit.collider.GetComponentInParent<GridEntity>() : null;
             if (targetGrid != null && IsUnifiedPipe(block))
-                return TryPlaceUnifiedPipe(block, targetGrid, hit);
+            {
+                // Rebuild the aim ray from the camera so port selection can match the
+                // ray-line the player is actually aiming along (buried engine ports).
+                Vector3 rayOrigin = shootCamera != null
+                    ? shootCamera.transform.position
+                    : hit.point - viewDir.normalized * 0.5f;
+                var aimRay = new Ray(rayOrigin, viewDir.normalized);
+                if (TryPlaceUnifiedPipe(block, targetGrid, hit, aimRay)) return true;
+                // Hit-based math failed (hit in a gap between the machine's colliders,
+                // occupied Detail cell, ...) — try the chain continuation on the same
+                // aim so a pipe run STILL grows when clicking its open end.
+                return TryPlaceUnifiedPipeChain(block, aimRay);
+            }
 
             ComputePlacementPose(hit, block, out Vector3 pos, out Quaternion rot);
             if (!IsPlacementValid(pos, block)) return false;
@@ -446,19 +558,59 @@ namespace VoxelEngine.Building
         /// its normal static-world behavior everywhere else, while this path gives it
         /// a real GridBlock address so physics, networks, and persistence move together.
         /// </summary>
-        private bool TryPlaceUnifiedPipe(BlockItem item, GridEntity grid, RaycastHit hit)
+        private bool TryPlaceUnifiedPipe(BlockItem item, GridEntity grid, RaycastHit hit, Ray aimRay)
         {
             if (item == null || item.placedPrefab == null || grid == null) return false;
             Vector3Int precisionPos, hostStructuralPos;
-            bool snappedToPort = TryGetMaritimePortSnap(grid, item, hit,
+            bool snappedToPort = TryGetMaritimePortSnap(grid, item, hit, aimRay,
                 out precisionPos, out hostStructuralPos, out _, out Vector3 anchorLocal);
             if (!snappedToPort
                 && !UnifiedGridTopology.TryGetDetailPlacement(grid, hit,
                     out precisionPos, out hostStructuralPos, out _)) return false;
 
+            var block = PlaceOnDetailLattice(item, grid, precisionPos, hostStructuralPos,
+                snappedToPort ? anchorLocal : (Vector3?)null);
+            if (block == null) return false;
+
+            VoxelEngine.UI.BuildFeedbackHud.Show(
+                "Pipe Attached", $"{item.displayName} · Detail lattice", item.icon, item.iconTint);
+            return true;
+        }
+
+        /// <summary>
+        /// Public entry for the RAY-MISS click path (PlayerInteractionTool): extending a
+        /// pipe run by aiming at its open end must work even when the camera ray slips
+        /// between the thin arm/cap visuals and hits nothing at all. The ghost preview
+        /// computes the same cell via <see cref="TryChainAim"/>, so ghost ≡ placed.
+        /// </summary>
+        public bool TryPlaceUnifiedPipeChain(BlockItem item, Ray aimRay)
+        {
+            if (!TryChainAim(item, aimRay,
+                    out GridEntity grid, out Vector3Int precisionPos,
+                    out Vector3Int hostStructuralPos, out _, out bool canPlace))
+                return false;
+            if (!canPlace) return false;
+
+            var block = PlaceOnDetailLattice(item, grid, precisionPos, hostStructuralPos, null);
+            if (block == null) return false;
+
+            VoxelEngine.UI.BuildFeedbackHud.Show(
+                "Pipe Attached", $"{item.displayName} · Detail lattice", item.icon, item.iconTint);
+            return true;
+        }
+
+        /// <summary>
+        /// The shared tail of every unified-pipe placement: claim the Detail cell, spawn
+        /// + register the pipe, optionally re-seat it on a port anchor, refresh visuals
+        /// and all pipe networks immediately. Returns the placed block, or null when the
+        /// cell was occupied / the layer rejected the add.
+        /// </summary>
+        private GridBlock PlaceOnDetailLattice(BlockItem item, GridEntity grid,
+            Vector3Int precisionPos, Vector3Int hostStructuralPos, Vector3? portAnchorLocal)
+        {
             var layer = grid.GetComponent<GridPrecisionAttachmentLayer>()
                 ?? grid.gameObject.AddComponent<GridPrecisionAttachmentLayer>();
-            if (!layer.CanPlace(precisionPos)) return false;
+            if (!layer.CanPlace(precisionPos)) return null;
 
             var go = Instantiate(item.placedPrefab);
             var block = go.GetComponent<GridBlock>() ?? go.AddComponent<GridBlock>();
@@ -478,16 +630,117 @@ namespace VoxelEngine.Building
             if (!layer.AddBlock(precisionPos, hostStructuralPos, block, localRotation))
             {
                 Destroy(go);
-                return false;
+                return null;
             }
 
             // Port-snapped pipes sit exactly on the port object — centred like the
             // ghost showed — not merely rounded onto the Detail cell.
-            if (snappedToPort)
-                block.transform.localPosition = anchorLocal;
+            if (portAnchorLocal.HasValue)
+                block.transform.localPosition = portAnchorLocal.Value;
 
-            VoxelEngine.UI.BuildFeedbackHud.Show(
-                "Pipe Attached", $"{item.displayName} · Detail lattice", item.icon, item.iconTint);
+            // Grid-mounted pipes link on the Detail lattice step (carried over from
+            // the retired static placement fork) and refresh visuals + all pipe
+            // networks immediately instead of waiting for their polling cadence.
+            var pipeVisual = go.GetComponentInChildren<VoxelEngine.Networks.PipeVisualBuilder>(true);
+            if (pipeVisual != null)
+            {
+                pipeVisual.gridSize = GridSize.Small.CellSize();
+                pipeVisual.ForceRebuild();
+            }
+            VoxelEngine.Transport.ItemPipeNetwork.Instance?.SetDirty();
+            VoxelEngine.Gas.GasNetwork.Instance?.SetDirty();
+            VoxelEngine.Fluids.FluidNetworkManager.Instance?.SetDirty();
+            return block;
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        //  PIPE CHAIN AIM (ray-miss continuation)
+        //  Pipe ARMS and end-caps are collider-free visuals; the only ray-hit
+        //  target on a pipe is the small hub box. Aiming at the open end of a
+        //  run in open space therefore finds NOTHING — no ghost, no placement.
+        //  ChainAim forgives the aim: a fat sphere-cast along the view ray
+        //  grips the nearest held-type pipe hub and computes the Detail cell
+        //  one step from it — along the run axis when aiming past the tip
+        //  (continuation), or sideways when aiming at its side (branch).
+        // ════════════════════════════════════════════════════════════════
+        private static readonly RaycastHit[] s_chainBuffer = new RaycastHit[16];
+
+        /// <summary>
+        /// Find the chain-continuation cell from the pipe hub closest to the aim ray.
+        /// Shared by the ghost preview and <see cref="TryPlaceUnifiedPipeChain"/> so the
+        /// previewed cell is exactly the placed one. <paramref name="canPlace"/> reports
+        /// whether the computed cell is free of other pipes and structural blocks — the
+        /// ghost tints red on false instead of hiding.
+        /// </summary>
+        private bool TryChainAim(BlockItem item, Ray aimRay,
+            out GridEntity grid, out Vector3Int precisionPos, out Vector3Int hostStructuralPos,
+            out Vector3Int faceAxis, out bool canPlace)
+        {
+            grid = null;
+            precisionPos = hostStructuralPos = faceAxis = default;
+            canPlace = false;
+            if (item == null || item.placedPrefab == null) return false;
+
+            bool itemPipe = item.placedPrefab.GetComponentInChildren<VoxelEngine.Transport.ItemPipe>(true) != null;
+            bool gasPipe = !itemPipe && item.placedPrefab.GetComponentInChildren<VoxelEngine.Gas.GasPipe>(true) != null;
+            bool liquidPipe = !itemPipe && !gasPipe
+                && item.placedPrefab.GetComponentInChildren<VoxelEngine.Fluids.WaterPipe>(true) != null;
+            if (!itemPipe && !gasPipe && !liquidPipe) return false;
+
+            int hitCount = Physics.SphereCastNonAlloc(aimRay, 0.45f, s_chainBuffer,
+                reach, ~0, QueryTriggerInteraction.Ignore);
+            Transform selfRoot = transform.root;
+            GridBlock best = null;
+            float bestDist = float.MaxValue;
+            for (int i = 0; i < hitCount; i++)
+            {
+                var h = s_chainBuffer[i];
+                if (h.collider == null) continue;
+                if (selfRoot != null && h.collider.transform.IsChildOf(selfRoot)) continue;
+                var gb = h.collider.GetComponentInParent<GridBlock>();
+                if (gb == null || !gb.IsPrecisionAttachment || gb.Grid == null) continue;
+                // Chain only onto the SAME pipe family — item/gas/liquid never mix.
+                bool sameFamily =
+                    (itemPipe && gb.GetComponentInChildren<VoxelEngine.Transport.ItemPipe>(true) != null)
+                    || (gasPipe && gb.GetComponentInChildren<VoxelEngine.Gas.GasPipe>(true) != null)
+                    || (liquidPipe && gb.GetComponentInChildren<VoxelEngine.Fluids.WaterPipe>(true) != null);
+                if (!sameFamily) continue;
+                if (h.distance < bestDist) { bestDist = h.distance; best = gb; }
+            }
+            if (best == null) return false;
+
+            grid = best.Grid;
+            Vector3 hubWorld = best.transform.position;
+
+            // Approach vector: from the hub toward where the aim ray passes it.
+            // Prominent sideways approach ⇒ branch cell; nearly head-on (aiming past
+            // the pipe into space) ⇒ walk the run FORWARD along the view ray's
+            // dominant grid axis — the classic "aim at the tip to continue" motion.
+            float t = Mathf.Max(0f, Vector3.Dot(hubWorld - aimRay.origin, aimRay.direction));
+            Vector3 approach = aimRay.GetPoint(t);
+            Vector3 perp = approach - hubWorld;
+            Vector3 axisWorld = perp.magnitude < 0.15f ? aimRay.direction : perp;
+            faceAxis = UnifiedGridTopology.SnapFaceAxis(grid, axisWorld);
+            if (faceAxis == Vector3Int.zero) faceAxis = Vector3Int.up;
+
+            precisionPos = best.PrecisionGridPos + faceAxis;
+            hostStructuralPos = best.PrecisionHostGridPos;
+
+            var layer = grid.PrecisionAttachments;
+            bool free = layer == null || layer.CanPlace(precisionPos);
+            if (free)
+            {
+                // Chained cells must not dive into a structural block (mirrors the
+                // guard in UnifiedGridTopology.TryGetDetailPlacement).
+                Vector3 localPosition = (Vector3)precisionPos * GridSize.Small.CellSize();
+                float large = GridSize.Large.CellSize();
+                Vector3Int structuralCell = new(
+                    Mathf.RoundToInt(localPosition.x / large),
+                    Mathf.RoundToInt(localPosition.y / large),
+                    Mathf.RoundToInt(localPosition.z / large));
+                free = grid.GetBlock(structuralCell) == null;
+            }
+            canPlace = free;
             return true;
         }
 

@@ -229,7 +229,7 @@ namespace VoxelEngine.Maritime
                     Vector3 origin = _gasTapPort != null ? _gasTapPort.position : transform.position;
                     _gasTapTank = VoxelEngine.Gas.GasNetwork.Instance.FindTankNear(
                         origin, VoxelEngine.Gas.GasType.ExhaustGas, forOutput: false, searchDist: cs * 2.0f,
-                        corridorStep: cs);
+                        corridorStep: cs, seedFilter: IsTapAnchoredPipe);
                 }
             }
 
@@ -241,6 +241,20 @@ namespace VoxelEngine.Maritime
         }
 
         private static readonly string[] s_gasTapPortPrefix = { "Port_ExhaustGasIO" };
+
+        /// <summary>Exhaust capture only flows through pipes ANCHORED TO THIS exhaust
+        /// pipe (the dedicated capture run): an oxygen supply line that merely runs
+        /// nearby must never get flooded with exhaust gas. From the anchored seeds
+        /// the walk may continue down the run's own neighbours.</summary>
+        private bool IsTapAnchoredPipe(VoxelEngine.Gas.GasPipe pipe)
+        {
+            if (pipe == null) return false;
+            var block = pipe.GetComponentInParent<GridBlock>();
+            if (block == null) return false;
+            return block.IsPrecisionAttachment
+                ? block.PrecisionHostGridPos == GridPos
+                : block.GridPos == GridPos;
+        }
 
         // ══════════════════════════════════════════════════════════════
         //  FLEX COUPLING — a bellows stub that seals this pipe's intake

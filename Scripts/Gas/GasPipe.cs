@@ -72,9 +72,13 @@ namespace VoxelEngine.Gas
             var grid = gridBlock != null ? gridBlock.Grid : null;
             if (grid != null)
             {
-                void AddArm(VoxelEngine.GridSystem.GridBlock block)
+                // Gather all gas-capable candidates once (adjacent + proximity),
+                // resolving each block's nearest gas port — so exhaust-tap arms can
+                // be suppressed whenever a cleaner (non-tap) port is closer.
+                _armCandidates.Clear();
+                void Consider(VoxelEngine.GridSystem.GridBlock block)
                 {
-                    if (block == null || block == gridBlock) return;
+                    if (block == null || block == gridBlock || block.Grid != grid) return;
                     bool endpoint = block is VoxelEngine.GridSystem.GridGasTank
                                  || block is VoxelEngine.GridSystem.GridH2O2Generator
                                  || block is VoxelEngine.GridSystem.GridHydrogenEngine
@@ -83,15 +87,12 @@ namespace VoxelEngine.Gas
                                  || block is VoxelEngine.Maritime.GridMaritimeEngine;
                     bool connectedPipe = block.GetComponentInChildren<GasPipe>(true) != null;
                     if (!endpoint && !connectedPipe) return;
-                    if (VoxelEngine.Networks.WrenchBlacklist.IsBlocked(gridBlock.gameObject, block.gameObject)) return;
-                    _neighbourPosBuf.Add(connectedPipe
-                        ? Vector3.Lerp(transform.position, block.transform.position, 0.5f)
-                        : VoxelEngine.Maritime.MaritimePorts.PortPositionOrCenter(
-                            block, VoxelEngine.Maritime.MaritimePorts.GasPrefixes, transform.position));
+                    if (_armCandidates.Contains(block)) return;
+                    _armCandidates.Add(block);
                 }
 
                 foreach (var block in VoxelEngine.GridSystem.UnifiedGridTopology.AdjacentBlocks(grid, gridBlock))
-                    AddArm(block);
+                    Consider(block);
 
                 // Proximity arms: gas ports overhang the lattice on the big machine
                 // models (engine O2 intakes, the exhaust gas tap), so face-touch alone
@@ -104,12 +105,47 @@ namespace VoxelEngine.Gas
                 {
                     var col = s_armProbe[i];
                     if (col == null) continue;
-                    var block = col.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
-                    if (block == null || block == gridBlock || block.Grid != grid) continue;
-                    AddArm(block);
+                    Consider(col.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>());
+                }
+
+                // Closest CLEAN (non-exhaust-tap) gas port to THIS pipe — an O₂
+                // delivery pipe plugs into the intake, not into the exhaust tap
+                // standing next to it.
+                float bestCleanDistSqr = float.MaxValue;
+                for (int i = 0; i < _armCandidates.Count; i++)
+                {
+                    var block = _armCandidates[i];
+                    var port = VoxelEngine.Maritime.MaritimePorts.FindNearest(
+                        block.transform, VoxelEngine.Maritime.MaritimePorts.GasPrefixes, transform.position);
+                    if (port == null || IsExhaustTapPort(port)) continue;
+                    float d = (port.position - transform.position).sqrMagnitude;
+                    if (d < bestCleanDistSqr) bestCleanDistSqr = d;
+                }
+
+                for (int i = 0; i < _armCandidates.Count; i++)
+                {
+                    var block = _armCandidates[i];
+                    if (VoxelEngine.Networks.WrenchBlacklist.IsBlocked(gridBlock.gameObject, block.gameObject)) continue;
+                    bool connectedPipe = block.GetComponentInChildren<GasPipe>(true) != null;
+                    if (connectedPipe)
+                    {
+                        _neighbourPosBuf.Add(Vector3.Lerp(transform.position, block.transform.position, 0.5f));
+                        continue;
+                    }
+                    var port = VoxelEngine.Maritime.MaritimePorts.FindNearest(
+                        block.transform, VoxelEngine.Maritime.MaritimePorts.GasPrefixes, transform.position);
+                    if (port != null && IsExhaustTapPort(port)
+                        && (port.position - transform.position).sqrMagnitude > bestCleanDistSqr)
+                        continue; // a cleaner port is nearer — this pipe isn't the capture run
+                    _neighbourPosBuf.Add(port != null ? port.position : block.transform.position);
                 }
             }
             return _neighbourPosBuf;
         }
+
+        private readonly System.Collections.Generic.List<VoxelEngine.GridSystem.GridBlock> _armCandidates = new(8);
+
+        private static bool IsExhaustTapPort(Transform port)
+            => port != null && port.name.StartsWith("Port_ExhaustGasIO", System.StringComparison.Ordinal);
     }
 }

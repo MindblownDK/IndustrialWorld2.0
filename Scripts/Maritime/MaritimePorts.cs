@@ -69,7 +69,40 @@ namespace VoxelEngine.Maritime
             return best;
         }
 
-        /// <summary>World position of the nearest matching port on <paramref name="block"/>,
+        /// <summary>
+        /// Aim-true port selection: nearest matching port to the AIM RAY LINE, not to a
+        /// surface hit point. Deep ports (MGO fuel/coolant sit metres inside the engine
+        /// hull) can be several metres from the hitbox face the player is aiming at, so
+        /// pure hit-point proximity silently picks nothing; a ray-line pick selects the
+        /// port the player is actually aiming across the machine at.
+        /// Accepts ports within <paramref name="maxLineDistance"/> of the ray line and
+        /// along-ray t in [0, <paramref name="maxRayT"/>]. Returns null when none qualify.
+        /// </summary>
+        public static Transform FindNearestToRay(Transform root, string[] prefixes, Ray ray,
+            float maxLineDistance, float maxRayT = float.PositiveInfinity)
+        {
+            if (root == null || prefixes == null) return null;
+            Transform best = null;
+            float bestLineDistSqr = maxLineDistance * maxLineDistance;
+            foreach (Transform child in root.GetComponentsInChildren<Transform>(true))
+            {
+                if (child == null || child == root) continue;
+                string childName = child.name;
+                bool matches = false;
+                for (int i = 0; i < prefixes.Length; i++)
+                {
+                    if (childName.StartsWith(prefixes[i], System.StringComparison.Ordinal)) { matches = true; break; }
+                }
+                if (!matches) continue;
+
+                Vector3 toPort = child.position - ray.origin;
+                float t = Vector3.Dot(toPort, ray.direction);
+                if (t < 0f || t > maxRayT) continue;                     // behind camera / too far
+                float lineDistSqr = (toPort - ray.direction * t).sqrMagnitude;
+                if (lineDistSqr < bestLineDistSqr) { bestLineDistSqr = lineDistSqr; best = child; }
+            }
+            return best;
+        }
         /// falling back to the block's own centre when it has no such port. This is what
         /// pipe visual arms should aim at — never the raw block centre when a named port
         /// exists, or arms visually skew through the machine body instead of towards it.</summary>

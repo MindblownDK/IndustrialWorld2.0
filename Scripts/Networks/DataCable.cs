@@ -47,6 +47,11 @@ namespace VoxelEngine.Networks
         // are O(k) instead of FindObjectsOfType every frame.
         private static readonly HashSet<DataCable> _AllCables = new();
 
+        // Shared non-alloc physics buffers — every cable probes every 0.5 s and the
+        // allocating Overlap/Raycast variants were the cable-count GC spike source.
+        private static readonly Collider[]   s_overlapBuffer = new Collider[128];
+        private static readonly RaycastHit[] s_rayBuffer     = new RaycastHit[48];
+
         private void Awake()
         {
             EnsureAnchor();
@@ -146,12 +151,13 @@ namespace VoxelEngine.Networks
             float gs = gridSize > 0 ? gridSize : 1f;
             float probeRange = gs * 2.5f;
             Vector3 self = transform.position;
-            Collider[] nearby = Physics.OverlapBox(self,
-                Vector3.one * probeRange, Quaternion.identity, ~0,
+            int nearbyCount = Physics.OverlapBoxNonAlloc(self,
+                Vector3.one * probeRange, s_overlapBuffer, Quaternion.identity, ~0,
                 QueryTriggerInteraction.Collide);
 
-            foreach (var h in nearby)
+            for (int nIdx = 0; nIdx < nearbyCount; nIdx++)
             {
+                var h = s_overlapBuffer[nIdx];
                 if (h == null) continue;
                 if (h.transform.IsChildOf(transform)) continue;  // ignore self
 
@@ -304,9 +310,11 @@ namespace VoxelEngine.Networks
             if (castDist <= 0f) return true;
             Vector3 origin = a + dir * SHRINK;
 
-            var hits = Physics.RaycastAll(origin, dir, castDist, losBlockingLayers, QueryTriggerInteraction.Ignore);
-            foreach (var h in hits)
+            int hitCount = Physics.RaycastNonAlloc(origin, dir, s_rayBuffer, castDist,
+                losBlockingLayers, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < hitCount; i++)
             {
+                var h = s_rayBuffer[i];
                 if (h.collider == null) continue;
                 // Ignore ourselves.
                 if (h.collider.transform.IsChildOf(transform)) continue;

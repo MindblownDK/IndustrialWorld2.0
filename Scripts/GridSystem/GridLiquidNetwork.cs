@@ -157,11 +157,37 @@ namespace VoxelEngine.GridSystem
         /// <summary>Collect classic <see cref="VoxelEngine.Fluids.WaterTank"/>s reachable
         /// from the endpoint through the classic fluid network. Seed points are the
         /// endpoint's named liquid ports (generous range) plus its body centre.</summary>
+        // Bridge results cached briefly per (endpoint, type, direction): the classic-pipe
+        // BFS + the five-lattice-cell corridor probes are the hot path with many pipes
+        // placed, and tanks don't move between sub-second scans.
+        private const float BridgeCacheTtl = 0.6f;
+        private static readonly System.Collections.Generic.Dictionary<long, (float time, List<VoxelEngine.Fluids.WaterTank> tanks)> s_bridgeCache
+            = new();
+
         private static void CollectBridgedClassicTanks(GridBlock endpoint, LiquidType type,
             bool forDraw, List<VoxelEngine.Fluids.WaterTank> outTanks)
         {
             outTanks.Clear();
             if (endpoint == null) return;
+
+            long key = ((long)endpoint.GetInstanceID() << 8) ^ (((long)(int)type << 1) | (forDraw ? 1L : 0L));
+            if (s_bridgeCache.TryGetValue(key, out var cached)
+                && Time.time - cached.time < BridgeCacheTtl)
+            {
+                cached.tanks.RemoveAll(t => t == null);
+                for (int i = 0; i < cached.tanks.Count; i++) outTanks.Add(cached.tanks[i]);
+                return;
+            }
+
+            var fresh = new List<VoxelEngine.Fluids.WaterTank>(8);
+            CollectBridgedClassicTanksUncached(endpoint, type, forDraw, fresh);
+            s_bridgeCache[key] = (Time.time, fresh);
+            for (int i = 0; i < fresh.Count; i++) outTanks.Add(fresh[i]);
+        }
+
+        private static void CollectBridgedClassicTanksUncached(GridBlock endpoint, LiquidType type,
+            bool forDraw, List<VoxelEngine.Fluids.WaterTank> outTanks)
+        {
             float cs = endpoint.Grid != null ? endpoint.Grid.gridSize.CellSize() : 2.5f;
 
             // Gather probe centres: up to 4 liquid ports + the body centre.
