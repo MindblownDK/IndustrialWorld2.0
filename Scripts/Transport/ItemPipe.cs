@@ -80,7 +80,10 @@ namespace VoxelEngine.Transport
             }
 
             var block = GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
-            float step = block != null ? block.EffectiveCellSize : VoxelEngine.Networks.PipeAdjacency.DefaultGridSize;
+            // Five LATTICE cells: grid-mounted pipes probe on the grid's own cell size.
+            float step = block != null && block.Grid != null
+                ? VoxelEngine.GridSystem.GridSizeExt.CellSize(block.Grid.gridSize)
+                : VoxelEngine.Networks.PipeAdjacency.DefaultGridSize;
             Transform frame = block != null && block.Grid != null ? block.Grid.transform : null;
             VoxelEngine.Networks.PipeAdjacency.ProbeCardinal(transform.position, frame, step, 5,
                 s_endpointProbe, col =>

@@ -5872,6 +5872,36 @@ root =>
                 if (dirty) PrefabUtility.SavePrefabAsset(prefab);
             }
 
+            // Classic-network presence on the big grid tank: the classic liquid pipe
+            // graph can now link to it (five-lattice-cell cardinal endpoint rule) and
+            // content mirrors both ways. Create/link only — never reconfigures an
+            // adapter the user touched (non-destructive).
+            void EnsureLiquidTankClassicBridge()
+            {
+                string path = $"{PREFABS}/LiquidTank_Large.prefab";
+                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                if (prefab == null) return;
+                var gridTank = prefab.GetComponent<VoxelEngine.GridSystem.GridLiquidTank>();
+                if (gridTank == null) return;
+
+                bool dirty = false;
+                var adapter = prefab.GetComponent<VoxelEngine.GridSystem.LiquidTankClassicAdapter>();
+                if (adapter == null)
+                {
+                    adapter = prefab.AddComponent<VoxelEngine.GridSystem.LiquidTankClassicAdapter>();
+                    adapter.gridTank = gridTank;
+                    adapter.capacityLitres = gridTank.capacity;
+                    adapter.liquidType = gridTank.liquidType;
+                    dirty = true;
+                }
+                else if (adapter.gridTank == null)
+                {
+                    adapter.gridTank = gridTank;
+                    dirty = true;
+                }
+                if (dirty) PrefabUtility.SavePrefabAsset(prefab);
+            }
+
             // Fill heat-seizure repair parts ONLY when the prefab doesn't have any
             // yet — never overwrites spare-part lists the user tuned by hand.
             void EnsureEngineRepairCost(GameObject prefab, params (VoxelEngine.Items.ItemDefinition item, int count)[] parts)
@@ -6122,8 +6152,11 @@ root =>
             AddMRecipe("Recipe_MModuleRadiator", "Super-Cooler Radiator Jacket", itemModuleRadiator, (copperPlate, 6), (steelPlate, 3), (glass, 2), (copperWire, 2));
             AddMRecipe("Recipe_MModuleAip", "Closed-Cycle AIP Module", itemModuleAip, (steelPlate, 4), (advCircuit, 2), (copperWire, 4), (glass, 2));
 
-            // The liquid tank needs its named ports so liquid pipes snap + link.
+            // The liquid tank needs its named ports so liquid pipes snap + link,
+            // and its classic-graph bridge so classic liquid pipes can feed/drain
+            // it from up to five lattice cells away.
             EnsureLiquidTankPorts();
+            EnsureLiquidTankClassicBridge();
 
             // ── Item descriptions (only set if empty — preserves user edits) ──
             SetDesc(itemUntWood, "Buoyant starter hull. Absorbs water over time while submerged, gradually increasing mass and sinking the ship lower. Research Tar-Coated Plank for waterproof voyages.");

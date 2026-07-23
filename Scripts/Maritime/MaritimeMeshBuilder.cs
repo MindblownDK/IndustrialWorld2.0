@@ -23,7 +23,7 @@ namespace VoxelEngine.Maritime
         // v19: shaft tips span the full cell and carry gold coupling rings
         //      (Port_ShaftIO_F/B) so collinear shafts physically TOUCH at the
         //      shared face and a held shaft snaps exactly in extension.
-        public const int Version = 21;
+        public const int Version = 22;
         private static Shader Lit => Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
         public static System.Func<Material, string, Material> MaterialPersister;
         private static int _matCounter;
@@ -313,7 +313,7 @@ namespace VoxelEngine.Maritime
             Cyl(r, CastIron, new Vector3(-cs * 0.24f, cs * 0.36f, -cs * 0.28f), cs * 0.05f, cs * 0.35f);
             Box(r, Steel, new Vector3(-cs * 0.24f, cs * 0.555f, -cs * 0.28f), new Vector3(cs * 0.12f, cs * 0.015f, cs * 0.12f));
             Port(r, "Port_ExhaustOutput", PortExhaust, new Vector3(-cs * 0.24f, cs * 0.60f, -cs * 0.28f),
-                new Vector3(cs * 0.11f, cs * 0.05f, cs * 0.11f), PrimitiveType.Cube, Vector3.up);
+                new Vector3(cs * 0.11f, cs * 0.11f, cs * 0.05f), PrimitiveType.Cube, Vector3.up);
 
             // ── Air filter + oxygen intake (chrome — combustion air, v18) ──
             Cyl(r, Steel, new Vector3(cs * 0.34f, cs * 0.30f, cs * 0.24f), cs * 0.060f, cs * 0.10f);
@@ -321,13 +321,13 @@ namespace VoxelEngine.Maritime
                 Cyl(r, AluminumSilver, new Vector3(cs * 0.34f, cs * (0.265f + k * 0.035f), cs * 0.24f), cs * 0.066f, cs * 0.012f);
             Strut(r, Chrome, new Vector3(cs * 0.34f, cs * 0.30f, cs * 0.24f), new Vector3(cs * 0.18f, cs * 0.40f, cs * 0.18f), cs * 0.02f);
             Port(r, "Port_OxygenInput", Chrome, new Vector3(cs * 0.44f, cs * 0.30f, cs * 0.24f),
-                new Vector3(cs * 0.05f, cs * 0.10f, cs * 0.10f), PrimitiveType.Cube, Vector3.right);
+                new Vector3(cs * 0.10f, cs * 0.10f, cs * 0.05f), PrimitiveType.Cube, Vector3.right);
 
             // ── Item intake hopper (right side) ───────────────────────
             Box(r, DarkSteel, new Vector3(cs * 0.36f, cs * 0.10f, -cs * 0.26f), new Vector3(cs * 0.14f, cs * 0.20f, cs * 0.24f));
             Box(r, Steel, new Vector3(cs * 0.36f, cs * 0.215f, -cs * 0.26f), new Vector3(cs * 0.16f, cs * 0.02f, cs * 0.26f));
             Port(r, "Port_ItemIntake", PortFuel, new Vector3(cs * 0.44f, cs * 0.10f, -cs * 0.26f),
-                new Vector3(cs * 0.05f, cs * 0.12f, cs * 0.12f), PrimitiveType.Cube, Vector3.right);
+                new Vector3(cs * 0.12f, cs * 0.12f, cs * 0.05f), PrimitiveType.Cube, Vector3.right);
 
             // ── Grease-stained rear drive flange + SAE output ─────────
             var flange = Cyl(r, Rubber, new Vector3(0, -cs * 0.20f, cs * 0.44f), cs * 0.15f, cs * 0.035f);
@@ -468,7 +468,7 @@ namespace VoxelEngine.Maritime
             Cyl(r, Steel, new Vector3(cs * 0.34f, cs * 0.40f, cs * 0.45f), cs * 0.10f, cs * 0.06f);
             Cyl(r, Steel, new Vector3(cs * 0.34f, cs * 0.58f, cs * 0.45f), cs * 0.10f, cs * 0.06f);
             Port(r, "Port_ExhaustOutput", PortExhaust, new Vector3(cs * 0.34f, cs * 0.70f, cs * 0.45f),
-                new Vector3(cs * 0.13f, cs * 0.05f, cs * 0.13f), PrimitiveType.Cube, Vector3.up);
+                new Vector3(cs * 0.13f, cs * 0.13f, cs * 0.05f), PrimitiveType.Cube, Vector3.up);
 
             // ── HFO heating manifold + steam-traced fuel filters ──────
             var heatPipe = Cyl(r, Brass, new Vector3(-cs * 0.40f, cs * 0.02f, 0), cs * 0.03f, cs * 1.30f);
@@ -498,7 +498,7 @@ namespace VoxelEngine.Maritime
                 Box(r, DarkSteel, new Vector3(cs * 0.485f, cs * (0.025f + k * 0.035f), cs * 0.62f), new Vector3(cs * 0.012f, cs * 0.02f, cs * 0.14f));
             Strut(r, Chrome, new Vector3(cs * 0.40f, cs * 0.10f, cs * 0.55f), new Vector3(cs * 0.10f, cs * 0.40f, cs * 0.30f), cs * 0.025f);
             Port(r, "Port_OxygenInput", Chrome, new Vector3(cs * 0.50f, cs * 0.08f, cs * 0.62f),
-                new Vector3(cs * 0.05f, cs * 0.10f, cs * 0.10f), PrimitiveType.Cube, Vector3.right);
+                new Vector3(cs * 0.10f, cs * 0.10f, cs * 0.05f), PrimitiveType.Cube, Vector3.right);
 
             // ── Twin turbo pads + snapping sockets (valley service) ───
             Strut(r, Steel, new Vector3(cs * 0.34f, cs * 0.30f, -cs * 0.16f), new Vector3(cs * 0.58f, cs * 0.42f, -cs * 0.16f), cs * 0.06f);
@@ -650,7 +650,7 @@ namespace VoxelEngine.Maritime
                 Cyl(r, HeatBlue, new Vector3(0, cs * 0.72f, z), cs * 0.125f, cs * 0.06f);
                 Cyl(r, HeatOrange, new Vector3(0, cs * 0.77f, z), cs * 0.12f, cs * 0.05f);
                 Port(r, e == 0 ? "Port_ExhaustOutput_F" : "Port_ExhaustOutput_R", PortExhaust,
-                    new Vector3(0, cs * 0.84f, z), new Vector3(cs * 0.16f, cs * 0.05f, cs * 0.16f),
+                    new Vector3(0, cs * 0.84f, z), new Vector3(cs * 0.16f, cs * 0.16f, cs * 0.05f),
                     PrimitiveType.Cube, Vector3.up);
             }
 
@@ -1223,7 +1223,7 @@ namespace VoxelEngine.Maritime
             Sphere(r, Steel, new Vector3(cs * 0.045f, cs * 0.235f, cs * 0.05f), cs * 0.020f);
             Sphere(r, Steel, new Vector3(-cs * 0.045f, cs * 0.235f, cs * 0.05f), cs * 0.020f);
             Port(r, "Port_ExhaustGasIO", Chrome, new Vector3(0, cs * 0.26f, cs * 0.05f),
-                new Vector3(cs * 0.10f, cs * 0.05f, cs * 0.10f), PrimitiveType.Cube, Vector3.up);
+                new Vector3(cs * 0.10f, cs * 0.10f, cs * 0.05f), PrimitiveType.Cube, Vector3.up);
 
             // ── Outlet rim + dark throat (smoke exits here, +Z) ───────
             var rim = Cyl(r, DarkSteel, new Vector3(0, 0, cs * 0.43f), cs * 0.155f, cs * 0.05f);
@@ -1271,13 +1271,13 @@ namespace VoxelEngine.Maritime
             // Vertical pipe going down from the volute — this is what touches the water.
             var intake = Cyl(r, PortFuel, new Vector3(0, -cs * 0.35f, cs * 0.15f), cs * 0.1f, cs * 0.2f);
             Port(r, "Port_WaterIntake", PortFuel, new Vector3(0, -cs * 0.48f, cs * 0.15f),
-                new Vector3(cs * 0.14f, cs * 0.04f, cs * 0.14f), PrimitiveType.Cube, Vector3.down);
+                new Vector3(cs * 0.14f, cs * 0.14f, cs * 0.04f), PrimitiveType.Cube, Vector3.down);
 
             // ── Discharge outlet port (blue, on the side — connects to tanks) ──
             var outlet = Cyl(r, PortFuel, new Vector3(cs * 0.35f, -cs * 0.1f, 0), cs * 0.08f, cs * 0.15f);
             outlet.transform.localRotation = Quaternion.Euler(0, 0, 90);
             Port(r, "Port_WaterOutlet", PortFuel, new Vector3(cs * 0.45f, -cs * 0.1f, 0),
-                new Vector3(cs * 0.04f, cs * 0.12f, cs * 0.12f), PrimitiveType.Cube, Vector3.right);
+                new Vector3(cs * 0.12f, cs * 0.12f, cs * 0.04f), PrimitiveType.Cube, Vector3.right);
 
             // Pressure gauge (small brass dial on top of volute).
             Sphere(r, Brass, new Vector3(-cs * 0.15f, cs * 0.05f, cs * 0.25f), cs * 0.06f);
@@ -1441,25 +1441,29 @@ namespace VoxelEngine.Maritime
         /// prefab hierarchy and move it. The child mesh can be swapped cube↔cylinder
         /// by deleting and re-adding a different primitive in the editor.</summary>
         /// <param name="outward">Machine-local direction the attaching block connects
-        /// FROM (e.g. Vector3.up for a top collector). The container's +Z AND a
-        /// MaritimePortFacing tag are aligned to it, so snapping, ghost rotation and
-        /// pipe arms read TRUE authored port orientation instead of guessing an axis
-        /// from a position offset (which mis-aimed centre-line ports).</param>
+        /// FROM (e.g. Vector3.up for a top collector). Stored on a MaritimePortFacing
+        /// tag (runtime's single source of truth for snap orientation); the PRIM child
+        /// is then rotated so its authored thin/disc axis (local Z for cubes, the
+        /// cylinder axis for cylinders) FACES outward on the machine — the container
+        /// itself stays axis-aligned with the model so neighbour visuals never skew.</param>
         static GameObject Port(GameObject parent, string portName, Material m, Vector3 pos, Vector3 scale,
             PrimitiveType shape = PrimitiveType.Cube, Vector3 outward = default)
         {
             var container = new GameObject(portName);
             container.transform.SetParent(parent.transform, false);
             container.transform.localPosition = pos;
+            var prim = Prim(container, shape, m, V0, scale);
             if (outward.sqrMagnitude > 0.0001f)
             {
                 Vector3 dir = outward.normalized;
                 Vector3 guide = Mathf.Abs(Vector3.Dot(dir, Vector3.up)) > 0.95f ? Vector3.forward : Vector3.up;
-                container.transform.localRotation = Quaternion.LookRotation(dir, guide);
+                // Cubes: thin local-Z disc faces outward. Cylinders: axis (local Y)
+                // points outward — pre-rotate 90° so the final facing lands right.
+                prim.transform.localRotation = Quaternion.LookRotation(dir, guide)
+                    * (shape == PrimitiveType.Cylinder ? Quaternion.Euler(90f, 0f, 0f) : Quaternion.identity);
                 var facing = container.AddComponent<MaritimePortFacing>();
                 facing.localOutward = dir;
             }
-            Prim(container, shape, m, V0, scale);
             return container;
         }
 

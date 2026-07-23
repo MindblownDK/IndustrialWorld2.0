@@ -109,8 +109,12 @@ namespace VoxelEngine.Gas
                 while (queue.Count > 0)
                 {
                     var cur = queue.Dequeue();
-                    float pipeStep = GridStep(cur, cur);
                     var block = cur.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
+                    // Five LATTICE cells — on a construct the probe honours the grid's
+                    // own cell size (Large 2.5 m), matching how players count spaces.
+                    float pipeStep = block != null && block.Grid != null
+                        ? VoxelEngine.GridSystem.GridSizeExt.CellSize(block.Grid.gridSize)
+                        : GridStep(cur, cur);
                     Transform frame = block != null && block.Grid != null ? block.Grid.transform : null;
                     // Short radius (touching tanks) + the five-cell corridor.
                     var near = ProbeTankSphere(cur.transform.position, cur.connectRadius, type, forOutput);

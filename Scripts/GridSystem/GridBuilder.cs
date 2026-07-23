@@ -1043,10 +1043,14 @@ namespace VoxelEngine.GridSystem
             // origin cell), so lattice neighbours may legitimately be absent.
             gridPos = snappedCell;
 
-            // The block is placed EXACTLY on the port (not merely cell-rounded) and
-            // oriented along the port's true facing: flange to flange, centred on the
-            // port object — TryPlaceBlock honours this exact pose on placement.
-            worldPos = port.position;
+            // The block is placed EXACTLY on the port (exhaust pipes plug straight
+            // into the collector) — while shaft-driven blocks mount HALF A CELL OUT
+            // along the facing: their own coupling ring then kisses the port ring
+            // flange-to-flange instead of the rod telescoping into the gearbox or
+            // the already-placed shaft. TryPlaceBlock honours this exact pose.
+            worldPos = kind == MaritimePortSnapKind.ShaftDriven
+                ? port.position + outWorld * (cs * 0.5f)
+                : port.position;
             Vector3 upAxis = Mathf.Abs(Vector3.Dot(outWorld, grid.transform.up)) > 0.95f
                 ? grid.transform.forward
                 : grid.transform.up;

@@ -82,13 +82,24 @@ namespace VoxelEngine.Fluids
                         bool bIsPipe = b.Kind == FluidNodeKind.Pipe;
                         bool involvesPipe = nIsPipe || bIsPipe;
                         float step = GridStep(n, b);
+                        // Pipe↔endpoint (tank/pump) pairs probe FIVE LATTICE CELLS:
+                        // when both live on the same construct, the grid's own cell
+                        // size defines a "grid space" — matching how players count.
+                        float probeStep = step;
+                        if (involvesPipe && !(nIsPipe && bIsPipe))
+                        {
+                            var ga = n.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>()?.Grid;
+                            var gb = b.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>()?.Grid;
+                            if (ga != null && ga == gb)
+                                probeStep = VoxelEngine.GridSystem.GridSizeExt.CellSize(ga.gridSize);
+                        }
                         float range = involvesPipe
-                            ? Mathf.Max(Mathf.Max(rA, b.connectRadius), step * 5f)
+                            ? Mathf.Max(Mathf.Max(rA, b.connectRadius), probeStep * 5f)
                             : Mathf.Max(rA, b.connectRadius);
                         if ((pa - pb).sqrMagnitude > range * range) continue;
                         Vector3 connectionDelta = VoxelEngine.Networks.PipeAdjacency.ConnectionDelta(n, b);
                         bool ok = involvesPipe
-                            ? VoxelEngine.Networks.PipeAdjacency.IsCardinalLinkDelta(connectionDelta, step, 5f, step * 0.35f)
+                            ? VoxelEngine.Networks.PipeAdjacency.IsCardinalLinkDelta(connectionDelta, probeStep, 5f, probeStep * 0.35f)
                             : VoxelEngine.Networks.PipeAdjacency.IsAxisAlignedWithinDelta(connectionDelta, step, 2.5f, step * 0.35f);
                         if (!ok) continue;
 

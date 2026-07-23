@@ -4,6 +4,19 @@ Branch: **Dev** · Semantic Versioning 2.0.0
 
 ---
 
+## [2.26.2] — Port-True Pipe Seating, Shaft Coupling Rule, Grid-Tank Classic Bridge (Mesh v22)
+
+**Type:** PATCH — behaviour fixes (game version 6.14.2-dev, MaritimeMeshBuilder v22).
+
+### Fixed
+- Pipes plug **straight out of the port face, centred** (anchor pushed half a pipe-cell along the authored facing) — no more MGO/HFO "beside the port" placements; O₂ ports line up on all engines.
+- Port markers face outward correctly: prim-face orientation (containers stay axis-aligned); thin-Z disc authoring restored on O₂ / exhaust / gas-tap / item-intake / water-pump ports.
+- Shaft-driven blocks mount half a cell **out** along the facing — coupling rings kiss; drive shafts no longer sink halfway into placed shafts and couple to gearboxes properly.
+- Five-cell endpoint probes use the **host grid's lattice cell size** (mounted pipes were probing 5×0.5 m instead of 5×2.5 m).
+- **Grid LiquidTank joins the classic liquid graph** via the new `LiquidTankClassicAdapter` (Step-13 installed, non-destructive) — classic liquid pipes connect at five lattice cells; O₂ and fuel flow to engines.
+
+---
+
 ## [2.26.1] — Step-13 Fix: MGO Banded-Hitbox MissingComponentException
 
 **Type:** PATCH — editor-tool crash fix (game version 6.14.1-dev).

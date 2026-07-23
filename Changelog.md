@@ -1,9 +1,26 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.14.1-dev`
+**Current Version:** `6.14.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.14.2-dev] Port-True Pipe Seating, Shaft Coupling Rule, Grid-Tank Classic Bridge & Lattice-True 5-Cell Probes (Mesh v22)
+
+**Type:** PATCH — behaviour fixes on the 6.14.0 systems. Fully save-compatible; meshes rebuild in place via the v22 marker.
+
+**Fixed:**
+- **Pipes no longer land "beside" the port** (MGO fuel/coolant, HFO fuel): the placement anchor is now the port face pushed half a pipe-cell **straight out along the port's authored facing** — the hub plugs into the port from outside, centred, ghost ≡ placed.
+- **O₂ intake placement offset**: same anchor rule fixes it on all three engines.
+- **O₂ port orientation wrong on all engines** (and any edge-on port markers): ports no longer rotate their whole container (which turned disc markers sideways). The marker PRIM now faces outward with correct authoring (thin-Z discs on O₂/exhaust/gas-tap/item-intake/water-pump ports; cylinders point their axis along the facing).
+- **Drive shaft placed halfway inside an already-placed shaft / not coupling to the gearbox**: shaft-driven blocks now mount **half a cell out along the port facing**, so coupling rings kiss flange-to-flange — shafts, gearboxes, generators, propellers all couple correctly. Exhaust pipes keep their plug-in centring.
+- **Liquid/gas pipes still not seeing tanks**: probes now measure **five LATTICE cells using the host grid's own cell size** (2.5 m Large) — previously mounted pipes probed five tiny 0.5 m cells and missed tanks standing one or two grid spaces away.
+- **The big grid LiquidTank finally joins the classic liquid pipe graph**: new `LiquidTankClassicAdapter` (a WaterTank-shaped shim mirroring stored litres both ways, installed non-destructively by Step 13) — classic liquid pipes link to the tank at five lattice cells and content stays in sync whichever side fills or drains.
+- **O₂/fuel actually flowing to engines**: consequence of the above (corridor probes use the right step on every path; the tank is now a first-class network member).
+
+**Manual Unity Steps:** copy the changed scripts (incl. NEW `Scripts\GridSystem\LiquidTankClassicAdapter.cs`), recompile, run **Step 13** once (meshes → v22, tank bridge installed — non-destructive).
 
 ---
 

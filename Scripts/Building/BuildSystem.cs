@@ -266,11 +266,12 @@ namespace VoxelEngine.Building
                 targetBlock.transform, prefixes, hit.point, maxSnap);
             if (best == null) return false;
 
-            // Anchor = the port's exact grid-local position: the placed pipe sits
-            // CENTRED ON the port object (plugs in), while the Detail-lattice cell
-            // it claims sits just outside the port along its authored facing.
+            // Anchor = the port position pushed HALF A PIPE-CELL out along the port's
+            // authored facing: the pipe hub plugs INTO the port face from outside
+            // (straight out of it, centred — never buried inside the machine body or
+            // slid beside it), while the Detail-lattice cell it claims sits just
+            // beyond the port.
             Vector3 local = grid.transform.InverseTransformPoint(best.position);
-            anchorLocal = local;
 
             Vector3 hostLocal = grid.transform.InverseTransformPoint(targetBlock.transform.position);
             Vector3 offsetOut = (local - hostLocal).normalized;
@@ -278,9 +279,9 @@ namespace VoxelEngine.Building
                 ? grid.transform.TransformDirection(offsetOut)
                 : hit.normal;
             Vector3 outWorld = VoxelEngine.Maritime.MaritimePorts.PortOutwardWorld(best, fallbackWorld);
-            Vector3 outLocal = grid.transform.InverseTransformDirection(outWorld);
-
-            Vector3 cellPos = local + outLocal.normalized * (small * 0.75f);
+            Vector3 outLocal = grid.transform.InverseTransformDirection(outWorld).normalized;
+            anchorLocal = local + outLocal * (small * 0.5f);
+            Vector3 cellPos = local + outLocal * (small * 0.75f);
             precisionPos = new Vector3Int(
                 Mathf.FloorToInt(cellPos.x / small + 0.5f),
                 Mathf.FloorToInt(cellPos.y / small + 0.5f),
