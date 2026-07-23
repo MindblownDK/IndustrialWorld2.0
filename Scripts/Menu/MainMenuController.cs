@@ -31,13 +31,20 @@ namespace VoxelEngine.Menu
         private VisualElement _root;
         private WorldSession  _session;
 
-        private enum Page { Main, Saves, NewWorld, Settings }
+        private enum Page { Main, Saves, NewWorld, EditWorld, Settings }
         private Page _page = Page.Main;
 
         // New-world form values.
-        private string _newName           = "MyWorld";
-        private int    _newSeed           = 0;
+        private string _newName            = "MyWorld";
+        private int    _newSeed            = 0;
         private int    _newMaxDroppedItems = WorldSession.DefaultMaxDroppedItems;
+
+        // Edit-world form values. Only non-generation settings are editable here.
+        private string _editOriginalName = string.Empty;
+        private string _editName = string.Empty;
+        private int    _editMaxDroppedItems = WorldSession.DefaultMaxDroppedItems;
+        private string _menuStatus = string.Empty;
+        private string _expandedAutosaveWorld = string.Empty;
 
         // ── Cosmos: solar-system picker + per-planet editable seeds ──
         private List<SolarSystemTemplate> _systemChoices;
@@ -136,6 +143,7 @@ namespace VoxelEngine.Menu
                 case Page.Main:     BuildMainPage();     break;
                 case Page.Saves:    BuildSavesPage();    break;
                 case Page.NewWorld: BuildNewWorldPage(); break;
+                case Page.EditWorld: BuildEditWorldPage(); break;
                 case Page.Settings: BuildSettingsPage(); break;
             }
         }
@@ -199,8 +207,16 @@ namespace VoxelEngine.Menu
             var panel = MakePanel(660, 0);
             _root.Add(panel);
 
-            panel.Add(PageHeader("SAVES", "BACK", () => { _page = Page.Main; BuildUI(); }));
+            panel.Add(PageHeader("SAVES", "BACK", () => { _menuStatus = string.Empty; _page = Page.Main; BuildUI(); }));
             panel.Add(T.AccentDivider());
+            if (!string.IsNullOrEmpty(_menuStatus))
+            {
+                var status = T.Muted(_menuStatus);
+                status.style.marginTop = 4;
+                status.style.marginBottom = 6;
+                status.style.color = new StyleColor(_menuStatus.StartsWith("Error", StringComparison.OrdinalIgnoreCase) ? T.AccentRed : T.AccentTeal);
+                panel.Add(status);
+            }
             panel.Add(T.Spacer(4));
 
             var scroll = new ScrollView(ScrollViewMode.Vertical);
@@ -239,17 +255,21 @@ namespace VoxelEngine.Menu
 
         private VisualElement BuildSaveRow(WorldSummary w)
         {
+            var card = new VisualElement();
+            card.style.flexDirection   = FlexDirection.Column;
+            card.style.paddingTop      = 12;
+            card.style.paddingBottom   = 12;
+            card.style.paddingLeft     = 14;
+            card.style.paddingRight    = 14;
+            card.style.marginBottom    = 8;
+            card.style.backgroundColor = new StyleColor(T.BgCard);
+            T.Radius(card, T.CardRadius);
+            T.Border(card, 1, T.BorderDim);
+
             var row = new VisualElement();
-            row.style.flexDirection   = FlexDirection.Row;
-            row.style.alignItems      = Align.Center;
-            row.style.paddingTop      = 12;
-            row.style.paddingBottom   = 12;
-            row.style.paddingLeft     = 14;
-            row.style.paddingRight    = 14;
-            row.style.marginBottom    = 6;
-            row.style.backgroundColor = new StyleColor(T.BgCard);
-            T.Radius(row, T.CardRadius);
-            T.Border(row, 1, T.BorderDim);
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            card.Add(row);
 
             // Left accent stripe — colour based on save size.
             var stripe = new VisualElement();
@@ -264,7 +284,7 @@ namespace VoxelEngine.Menu
 
             // Info column.
             var info = new VisualElement();
-            info.style.flexGrow  = 1;
+            info.style.flexGrow = 1;
             info.pickingMode = PickingMode.Ignore;
 
             var name = new Label(w.name);
@@ -278,27 +298,147 @@ namespace VoxelEngine.Menu
                 ? $"{w.sizeBytes / 1024.0:0.0} KB"
                 : $"{w.sizeBytes / (1024.0 * 1024.0):0.00} MB";
             string seed  = w.savedSeed.HasValue ? $"  ·  seed {w.savedSeed.Value}" : "";
-            var meta = T.Muted($"{w.lastWrite:dd-MM-yyyy  HH:mm}  ·  {size}{seed}");
+            var meta = T.Muted($"{w.lastWrite:dd-MM-yyyy  HH:mm}  ·  {size}{seed}  ·  drops {Mathf.Max(1, w.maxDroppedItems)}");
             meta.style.marginTop = 2;
             info.Add(meta);
             row.Add(info);
 
-            // Action buttons — built locally so we can mix the icon font in.
-            var playBtn = BuildIconSmallButton(LucideIcons.Play, "PLAY",
-                () => LoadWorld(w.name), T.AccentCyan);
-            playBtn.style.marginRight = 6;
+            // Main action: PLAY remains the primary target.
+            var playBtn = BuildIconSmallButton(LucideIcons.Play, "PLAY", () => LoadWorld(w.name), T.AccentCyan);
+            playBtn.style.minHeight = 40;
+            playBtn.style.minWidth = 92;
+            playBtn.style.marginRight = 8;
             row.Add(playBtn);
 
-            var cloneBtn = BuildIconSmallButton(LucideIcons.Globe, "CLONE",
-                () => CloneWorldAction(w.name), T.AccentTeal);
-            cloneBtn.style.marginRight = 6;
-            row.Add(cloneBtn);
+            // Edit + Saves grouped together as the world-management cluster.
+            var manage = new VisualElement();
+            manage.style.flexDirection = FlexDirection.Column;
+            manage.style.marginRight = 8;
+            var editBtn = BuildIconSmallButton(LucideIcons.Settings, "EDIT", () => StartEditWorld(w), T.BgSlot);
+            editBtn.style.minWidth = 86;
+            editBtn.style.marginBottom = 4;
+            manage.Add(editBtn);
+            bool savesExpanded = _expandedAutosaveWorld == w.name;
+            var savesBtn = BuildIconSmallButton(LucideIcons.Save, savesExpanded ? "HIDE" : "SAVES", () =>
+            {
+                _expandedAutosaveWorld = savesExpanded ? string.Empty : w.name;
+                _menuStatus = string.Empty;
+                BuildUI();
+            }, T.BgSlot);
+            savesBtn.style.minWidth = 86;
+            manage.Add(savesBtn);
+            row.Add(manage);
 
-            var delBtn = BuildIconSmallButton(LucideIcons.Trash, "DELETE",
-                () => { _session.DeleteWorld(w.name); BuildUI(); }, T.AccentRed);
-            row.Add(delBtn);
+            // Clone + smaller Delete stacked beside management.
+            var side = new VisualElement();
+            side.style.flexDirection = FlexDirection.Column;
+            var cloneBtn = BuildIconSmallButton(LucideIcons.Globe, "CLONE", () => CloneWorldAction(w.name), T.AccentTeal);
+            cloneBtn.style.minWidth = 82;
+            cloneBtn.style.marginBottom = 4;
+            side.Add(cloneBtn);
+            var delBtn = BuildIconSmallButton(LucideIcons.Trash, "DEL", () =>
+            {
+                _session.DeleteWorld(w.name);
+                _menuStatus = $"Deleted world '{w.name}'.";
+                if (_expandedAutosaveWorld == w.name) _expandedAutosaveWorld = string.Empty;
+                BuildUI();
+            }, T.AccentRed);
+            delBtn.style.minWidth = 82;
+            delBtn.style.minHeight = 26;
+            delBtn.style.fontSize = 9;
+            side.Add(delBtn);
+            row.Add(side);
 
-            return row;
+            card.Add(BuildAutosaveSlots(w.name, savesExpanded));
+            return card;
+        }
+
+        private VisualElement BuildAutosaveSlots(string worldName, bool expanded)
+        {
+            var box = new VisualElement();
+            box.style.marginTop = 10;
+            box.style.paddingTop = 8;
+            box.style.paddingBottom = 8;
+            box.style.paddingLeft = 10;
+            box.style.paddingRight = 10;
+            box.style.backgroundColor = new StyleColor(new Color(T.BgSlot.r, T.BgSlot.g, T.BgSlot.b, 0.55f));
+            T.Radius(box, T.CardRadius * 0.75f);
+            T.Border(box, 1, T.BorderDim);
+
+            var header = new VisualElement();
+            header.style.flexDirection = FlexDirection.Row;
+            header.style.alignItems = Align.Center;
+            var title = T.Muted("AUTOSAVE SLOTS");
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            title.style.flexGrow = 1;
+            header.Add(title);
+            if (expanded)
+            {
+                var hint = T.Muted("Restore copies the slot to the current save and backs up the previous current save.");
+                hint.style.unityTextAlign = TextAnchor.MiddleRight;
+                header.Add(hint);
+            }
+            box.Add(header);
+
+            var slots = new VisualElement();
+            slots.style.flexDirection = FlexDirection.Row;
+            slots.style.flexWrap = Wrap.Wrap;
+            slots.style.marginTop = 6;
+
+            foreach (var slot in _session.GetAutosaveSlots(worldName))
+                slots.Add(BuildAutosaveSlotCard(slot));
+            box.Add(slots);
+            return box;
+        }
+
+        private VisualElement BuildAutosaveSlotCard(AutosaveSlotSummary slot)
+        {
+            var card = new VisualElement();
+            card.style.minWidth = 180;
+            card.style.flexGrow = 1;
+            card.style.marginRight = 6;
+            card.style.marginBottom = 6;
+            card.style.paddingTop = 8;
+            card.style.paddingBottom = 8;
+            card.style.paddingLeft = 8;
+            card.style.paddingRight = 8;
+            card.style.backgroundColor = new StyleColor(new Color(T.BgCard.r, T.BgCard.g, T.BgCard.b, 0.82f));
+            T.Radius(card, 6f);
+            T.Border(card, 1, slot.exists ? T.AccentTeal : T.BorderDim);
+
+            var label = new Label($"SLOT {slot.slotIndex}");
+            label.style.color = new StyleColor(slot.exists ? T.TextPrimary : T.TextSecondary);
+            label.style.fontSize = 10;
+            label.style.unityFontStyleAndWeight = FontStyle.Bold;
+            card.Add(label);
+
+            string metaText = slot.exists
+                ? $"{slot.lastWrite:dd-MM HH:mm} · {FormatBytes(slot.sizeBytes)}"
+                : "Empty — waiting for autosave";
+            var meta = T.Muted(metaText);
+            meta.style.marginTop = 2;
+            meta.style.marginBottom = 6;
+            card.Add(meta);
+
+            var restore = BuildIconSmallButton(LucideIcons.Save, slot.exists ? "RESTORE" : "EMPTY", () =>
+            {
+                if (!slot.exists) return;
+                bool ok = _session.RestoreAutosaveSlot(slot.worldName, slot.slotIndex, out var message);
+                _menuStatus = ok ? message : "Error: " + message;
+                BuildUI();
+            }, slot.exists ? T.AccentCyan : T.BgSlot);
+            restore.SetEnabled(slot.exists);
+            restore.style.minHeight = 26;
+            restore.style.fontSize = 9;
+            card.Add(restore);
+            return card;
+        }
+
+        private static string FormatBytes(long bytes)
+        {
+            if (bytes < 1024) return bytes + " B";
+            if (bytes < 1024 * 1024) return $"{bytes / 1024.0:0.0} KB";
+            return $"{bytes / (1024.0 * 1024.0):0.00} MB";
         }
 
         // ════════════════════════════════════════════════════════════
@@ -376,6 +516,62 @@ namespace VoxelEngine.Menu
         }
 
         // ════════════════════════════════════════════════════════════
+        //                     EDIT WORLD PAGE
+        // ════════════════════════════════════════════════════════════
+        private void BuildEditWorldPage()
+        {
+            var panel = MakePanel(560, 0);
+            _root.Add(panel);
+
+            panel.Add(PageHeader("EDIT WORLD", "BACK", () => { _menuStatus = string.Empty; _page = Page.Saves; BuildUI(); }));
+            panel.Add(T.AccentDivider());
+            panel.Add(T.Spacer(4));
+
+            var warning = T.Muted("Non-generation settings only. Seeds, planets, terrain, chunks, and saved builds are never regenerated here.");
+            warning.style.marginBottom = 12;
+            warning.style.color = new StyleColor(T.AccentTeal);
+            panel.Add(warning);
+
+            if (!string.IsNullOrEmpty(_menuStatus))
+            {
+                var status = T.Muted(_menuStatus);
+                status.style.marginBottom = 10;
+                status.style.color = new StyleColor(_menuStatus.StartsWith("Error", StringComparison.OrdinalIgnoreCase) ? T.AccentRed : T.AccentTeal);
+                panel.Add(status);
+            }
+
+            panel.Add(FormLabel("World Name"));
+            var nameField = new TextField { value = _editName };
+            StyleField(nameField);
+            nameField.RegisterValueChangedCallback(e => _editName = SanitizeName(e.newValue));
+            panel.Add(nameField);
+            panel.Add(T.Spacer(12));
+
+            panel.Add(FormLabel("Maximum Dropped Items"));
+            var maxDropsField = new TextField { value = _editMaxDroppedItems.ToString() };
+            StyleField(maxDropsField);
+            maxDropsField.RegisterValueChangedCallback(e =>
+            {
+                if (int.TryParse(e.newValue, out var parsed))
+                    _editMaxDroppedItems = Mathf.Clamp(parsed, 1, 10000);
+            });
+            panel.Add(maxDropsField);
+            var maxDropsHelp = T.Muted("Default 90 · applies only to physical world drops. Conveyor packets and belt visuals are protected separately.");
+            maxDropsHelp.style.marginTop = 3;
+            panel.Add(maxDropsHelp);
+
+            panel.Add(T.Spacer(18));
+            var row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.justifyContent = Justify.FlexEnd;
+            var cancel = BuildIconSmallButton(LucideIcons.ArrowLeft, "CANCEL", () => { _menuStatus = string.Empty; _page = Page.Saves; BuildUI(); }, T.BgSlot);
+            cancel.style.marginRight = 8;
+            row.Add(cancel);
+            row.Add(BuildIconSmallButton(LucideIcons.Save, "SAVE", ApplyWorldEdit, T.AccentCyan));
+            panel.Add(row);
+        }
+
+        // ════════════════════════════════════════════════════════════
         //                     SETTINGS PAGE
         // ════════════════════════════════════════════════════════════
         private void BuildSettingsPage()
@@ -441,6 +637,46 @@ namespace VoxelEngine.Menu
         private void KeybindTab(VisualElement p)  => SettingsUI.KeybindTab(p, this, BuildUI);
 
         // ── Page Actions ───────────────────────────────────────────
+        private void StartEditWorld(WorldSummary world)
+        {
+            _editOriginalName = world.name;
+            _editName = world.name;
+            _editMaxDroppedItems = Mathf.Max(1, world.maxDroppedItems);
+            _menuStatus = string.Empty;
+            _page = Page.EditWorld;
+            BuildUI();
+        }
+
+        private void ApplyWorldEdit()
+        {
+            string requestedName = SanitizeName(_editName);
+            if (string.IsNullOrWhiteSpace(requestedName)) requestedName = _editOriginalName;
+            string finalName = _editOriginalName;
+
+            if (!string.Equals(requestedName, _editOriginalName, StringComparison.Ordinal))
+            {
+                if (!_session.RenameWorld(_editOriginalName, requestedName, out var renameMessage))
+                {
+                    _menuStatus = "Error: " + renameMessage;
+                    BuildUI();
+                    return;
+                }
+                finalName = requestedName;
+            }
+
+            if (!_session.SaveWorldSettingsFor(finalName, _editMaxDroppedItems))
+            {
+                _menuStatus = "Error: Could not save world settings.";
+                BuildUI();
+                return;
+            }
+
+            _menuStatus = $"Saved world settings for '{finalName}'.";
+            _editOriginalName = finalName;
+            _page = Page.Saves;
+            BuildUI();
+        }
+
         private void LoadWorld(string worldName)
         {
             _session.worldName  = worldName;
@@ -540,46 +776,30 @@ namespace VoxelEngine.Menu
         }
 
         /// <summary>
-        /// CLONE action: pre-fill the New World page from an existing world's cosmos sidecar
-        /// (same system + same per-planet seeds, fully editable) and a " (copy)" name.
+        /// CLONE action: true save clone. Copies the selected world folder byte-for-byte
+        /// into the next available "copy" name so the clone boots identically.
         /// </summary>
         private void CloneWorldAction(string sourceName)
         {
-            EnsureSystemChoicesLoaded();
-            _newName = SanitizeName(sourceName + " copy");
-
-            // Try to carry the source world's cosmos state into the editor fields.
-            var sysBackup = _session.chosenSystemName;
-            var stateBackup = _session.seedState;
-            _session.worldName = sourceName;
-            bool loaded = _session.LoadCosmosSidecar();
-            if (loaded && _session.seedState != null && _session.seedState.planets != null)
-            {
-                // Align the selected system dropdown to the source's system name.
-                _selectedSystemIndex = 0;
-                for (int i = 0; i < _systemChoices.Count; i++)
-                    if (_systemChoices[i] != null && _systemChoices[i].systemName == _session.chosenSystemName)
-                    { _selectedSystemIndex = i; break; }
-
-                _planetNames.Clear();
-                _planetSeeds.Clear();
-                foreach (var ps in _session.seedState.planets)
-                {
-                    _planetNames.Add(ps.planetName);
-                    _planetSeeds.Add(ps.seed);
-                }
-                _selectedSpawnPlanet = Mathf.Clamp(_session.spawnPlanetIndex, 0, Mathf.Max(0, _planetNames.Count - 1));
-            }
+            string cloneName = NextCloneName(sourceName);
+            string clonedPath = _session.CloneWorld(sourceName, cloneName);
+            if (string.IsNullOrEmpty(clonedPath))
+                _menuStatus = $"Error: Could not clone '{sourceName}'.";
             else
-            {
-                RebuildPlanetSeedsForSystem(_selectedSystemIndex);
-            }
-            // Restore session fields we temporarily borrowed (the clone isn't the source).
-            _session.chosenSystemName = sysBackup;
-            _session.seedState        = stateBackup;
-
-            _page = Page.NewWorld;
+                _menuStatus = $"Cloned '{sourceName}' → '{cloneName}'.";
             BuildUI();
+        }
+
+        private string NextCloneName(string sourceName)
+        {
+            string baseName = SanitizeName(sourceName + " copy");
+            if (!Directory.Exists(_session.WorldFolderPath(baseName))) return baseName;
+            for (int i = 2; i < 1000; i++)
+            {
+                string candidate = SanitizeName(sourceName + " copy " + i);
+                if (!Directory.Exists(_session.WorldFolderPath(candidate))) return candidate;
+            }
+            return SanitizeName(sourceName + " copy " + DateTime.Now.ToString("yyyyMMddHHmmss"));
         }
 
         /// <summary>Builds the solar-system picker + per-planet seed editor block.</summary>

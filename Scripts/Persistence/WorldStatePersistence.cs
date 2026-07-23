@@ -60,7 +60,7 @@ namespace VoxelEngine.Persistence
             int interval = VoxelEngine.Settings.GameSettings.AutosaveSeconds;
             if (interval <= 0) { _saveTimer = 0f; return; } // autosave disabled
             _saveTimer += Time.deltaTime;
-            if (_saveTimer >= interval) { _saveTimer = 0f; SaveAll(); }
+            if (_saveTimer >= interval) { _saveTimer = 0f; SaveAll(writeAutosaveSlot: true); }
         }
 
         private void OnApplicationQuit() => SaveAll();
@@ -103,7 +103,7 @@ namespace VoxelEngine.Persistence
         // ============================================================
         //                          SAVE
         // ============================================================
-        public void SaveAll()
+        public void SaveAll(bool writeAutosaveSlot = false)
         {
             if (Menu.WorldSession.Instance == null) return;
             string path = WorldStatePath();
@@ -132,9 +132,67 @@ namespace VoxelEngine.Persistence
                 {
                     File.Move(temporaryPath, path);
                 }
+                if (writeAutosaveSlot)
+                    WriteAutosaveSnapshot(path);
                 Debug.Log($"[WorldState] Saved -> {path} (previous snapshot: {backupPath})");
             }
             catch (Exception ex) { Debug.LogError("[WorldState] Save failed: " + ex.Message); }
+        }
+
+        private static void WriteAutosaveSnapshot(string worldStatePath)
+        {
+            if (string.IsNullOrEmpty(worldStatePath) || !File.Exists(worldStatePath)) return;
+            try
+            {
+                string folder = Path.GetDirectoryName(worldStatePath);
+                if (string.IsNullOrEmpty(folder)) return;
+
+                for (int slot = Menu.WorldSession.AutosaveSlotCount; slot >= 2; slot--)
+                {
+                    string previous = Path.Combine(folder, $"world_state.autosave{slot - 1}.json");
+                    string current = Path.Combine(folder, $"world_state.autosave{slot}.json");
+                    if (File.Exists(previous)) AtomicCopyFile(previous, current, current + ".previous");
+                }
+
+                AtomicCopyFile(worldStatePath, Path.Combine(folder, "world_state.autosave1.json"),
+                    Path.Combine(folder, "world_state.autosave1.json.previous"));
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning("[WorldState] Autosave slot snapshot failed: " + ex.Message);
+            }
+        }
+
+        private static void AtomicCopyFile(string source, string destination, string backupPath)
+        {
+            string folder = Path.GetDirectoryName(destination);
+            if (!string.IsNullOrEmpty(folder)) Directory.CreateDirectory(folder);
+            string tmp = destination + ".tmp";
+            if (File.Exists(tmp)) File.Delete(tmp);
+            File.Copy(source, tmp, overwrite: true);
+
+            try
+            {
+                if (File.Exists(destination))
+                {
+                    if (!string.IsNullOrEmpty(backupPath) && File.Exists(backupPath)) File.Delete(backupPath);
+                    File.Replace(tmp, destination, backupPath, ignoreMetadataErrors: true);
+                }
+                else
+                    File.Move(tmp, destination);
+            }
+            catch
+            {
+                if (File.Exists(tmp))
+                {
+                    if (File.Exists(destination))
+                    {
+                        if (!string.IsNullOrEmpty(backupPath)) File.Copy(destination, backupPath, overwrite: true);
+                        File.Delete(destination);
+                    }
+                    File.Move(tmp, destination);
+                }
+            }
         }
 
         private string WorldStatePath()
@@ -142,7 +200,16 @@ namespace VoxelEngine.Persistence
             var session = Menu.WorldSession.Instance;
             string worldName = !string.IsNullOrEmpty(session != null ? session.worldName : null)
                 ? session.worldName : "DefaultWorld";
-            string folder = Path.Combine(Application.persistentDataPath, "VoxelWorlds", worldName);
+            if (session != null)
+            {
+                string path = session.WorldStatePathFor(worldName);
+                string folder = Path.GetDirectoryName(path);
+                if (!string.IsNullOrEmpty(folder)) Directory.CreateDirectory(folder);
+                return path;
+            }
+
+            string folder = Path.Combine(Application.persistentDataPath, "VoxelWorlds",
+                Menu.WorldSession.SanitizeWorldFolderName(worldName));
             Directory.CreateDirectory(folder);
             return Path.Combine(folder, "world_state.json");
         }

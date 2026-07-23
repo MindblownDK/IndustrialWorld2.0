@@ -1,9 +1,45 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.14.7-dev`
+**Current Version:** `6.15.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.15.0-dev] World Management Autosave Slots & Edit World
+
+**Type:** MINOR — save-compatible world-management UI/system feature. No save schema migration, recipe changes, prefab changes, or setup step required.
+
+**Added / Improved:**
+- Added three rotating autosave slot files beside each world's `world_state.json`:
+  - `world_state.autosave1.json`
+  - `world_state.autosave2.json`
+  - `world_state.autosave3.json`
+- Background autosaves now write the current save first, then rotate that valid snapshot into slot 1 while preserving the previous slots. Manual quit/menu saves still write the normal current save without burning autosave history.
+- The Saves page now shows three visible autosave slot cards per world with timestamp, size, empty-state text, and restore buttons.
+- Restoring an autosave slot safely copies that slot back to `world_state.json` and backs up the previous current save as `world_state.before_autosave_restore.json`.
+- Added **Edit World** for non-generation settings only:
+  - world folder/display name
+  - maximum active physical dropped items
+- Edit World deliberately does not touch seeds, planets, terrain/chunks, save schema, placed blocks, recipes, research, or generated content.
+- Save cards now use the requested management layout: primary **PLAY**, grouped **EDIT/SAVES**, and stacked **CLONE/DEL** controls.
+- Clone now performs a true save clone by copying the existing world folder to the next available copy name.
+- World summaries now surface each world's configured dropped-item limit in the save-card metadata.
+- Runtime build version constants now report `6.15.0-dev`.
+
+**Roadmap Status:**
+- World Management, Autosaves & Item Limits: **🛠️ WORKING ON → ✅ COMPLETED**.
+
+**Files touched (pull these):**
+- `Scripts/Menu/MainMenuController.cs`
+- `Scripts/Menu/WorldSession.cs`
+- `Scripts/Persistence/WorldStatePersistence.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Roadmap.md`
+- `Changelog.md`
+
+**Manual steps:** none — runtime/UI-only. No `Tools > Voxel Engine > Voxel Engine Setup` run required.
 
 ---
 
