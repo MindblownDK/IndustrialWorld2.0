@@ -898,15 +898,76 @@ namespace VoxelEngine.Persistence
             if (save.player == null) return;
             var inv = FindAnyObjectByType<Inventory>();
             if (inv == null) return;
-            // Teleport.
+
+            Vector3 restorePosition = ResolvePlayerRestorePosition(save.player.pos, out bool usedFallback);
+            float restoreRotY = IsFinite(save.player.rotY) ? save.player.rotY : 0f;
+            if (usedFallback)
+            {
+                Debug.LogWarning($"[WorldState] Saved player position was invalid; restored inventory at safe spawn {restorePosition} without rewriting the save file.");
+            }
+
+            // Teleport only after validating the coordinates. A corrupt NaN/Infinity
+            // player pose must never touch the live transform because it can poison
+            // physics, chunk streaming, and follow-up autosaves before PlayerSpawner
+            // gets a chance to choose a fresh/bed spawn.
             var cc = inv.GetComponent<CharacterController>();
             if (cc != null) cc.enabled = false;
-            inv.transform.position = save.player.pos;
-            inv.transform.eulerAngles = new Vector3(0, save.player.rotY, 0);
+            inv.transform.position = restorePosition;
+            inv.transform.eulerAngles = new Vector3(0, restoreRotY, 0);
             if (cc != null) cc.enabled = true;
             // Inventory.
             if (save.player.container != null) DeserializeInto(inv.container, save.player.container);
             inv.SetActiveHotbar(save.player.activeHotbarIndex);
+        }
+
+        private static Vector3 ResolvePlayerRestorePosition(Vector3 savedPosition, out bool usedFallback)
+        {
+            if (IsSafePlayerSavePosition(savedPosition))
+            {
+                usedFallback = false;
+                return savedPosition;
+            }
+
+            usedFallback = true;
+            var session = Menu.WorldSession.Instance;
+            if (session != null)
+            {
+                // Read-only refresh. This improves fallback quality when persistence
+                // restores before PlayerSpawner has loaded the spawn sidecar.
+                session.LoadSpawnSidecar();
+
+                if (session.hasBedSpawn && IsSafePlayerSavePosition(session.bedSpawnPoint))
+                    return session.bedSpawnPoint;
+                if (session.worldSpawnInitialized && IsSafePlayerSavePosition(session.worldSpawnPoint))
+                    return session.worldSpawnPoint;
+                if (IsSafePlayerSavePosition(session.worldSpawnPoint))
+                    return session.worldSpawnPoint;
+            }
+
+            var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
+            if (body != null)
+            {
+                Vector3 up = body.transform != null ? body.transform.up : Vector3.up;
+                if (session != null && IsFiniteVector(session.worldSpawnPoint))
+                {
+                    Vector3 fromCore = session.worldSpawnPoint - body.transform.position;
+                    if (fromCore.sqrMagnitude > 0.001f)
+                        up = fromCore.normalized;
+                }
+                return body.transform.position + up * (body.SurfaceRadius + 25f);
+            }
+
+            return new Vector3(0f, 250f, 0f);
+        }
+
+        private static bool IsFinite(float value)
+        {
+            return !float.IsNaN(value) && !float.IsInfinity(value);
+        }
+
+        private static bool IsFiniteVector(Vector3 pos)
+        {
+            return IsFinite(pos.x) && IsFinite(pos.y) && IsFinite(pos.z);
         }
 
         private void RestorePlacedBlocks(SaveData save)

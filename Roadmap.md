@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.14.5-dev`
-**Roadmap Version:** `6.9.3-dev`
-**Date:** 2026-07-21
-**Status:** Power, Vehicles & Combat (4.7.0) — WORKING ON
+**Current Version:** `6.14.7-dev`
+**Roadmap Version:** `6.14.7-dev`
+**Date:** 2026-07-23
+**Status:** Player Save Safety — COMPLETED; Power, Vehicles & Combat (4.7.0) remains WORKING ON
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
 ---
@@ -44,59 +44,58 @@ The design goal is a seamless blend of:
 | Domain | Status | Notes |
 |--------|--------|-------|
 | Voxel world / planet / gravity | 🛠️ WORKING ON | Planet terrain generation exists but grid gravity is broken: grids fall as if unaffected by gravity and do not align with the planet surface when placed. Grid planet-alignment and consistent gravity for all grid types remain open. |
-| Cosmos / star system framework | 🟡 Exists | Needs planet-specific resources and interplanetary travel |
+| Cosmos / star system framework | 🟡 PARTIALLY COMPLETE | Framework exists; planet-specific resources and interplanetary travel remain open. |
 | Grid systems (ships/vehicles) | 🛠️ WORKING ON | Core grid building works. Radial gravity is in place, and Thomas validated the 6.4.6-dev placement stabilization pass for terrain-aligned fresh-grid spawn, delayed first-frame physics handoff, and landing-gear auto-lock grace. Broader orbit/vehicle progression work remains. |
-| Maritime grid | 🟡 Basic | Needs refinement and feature parity |
+| Maritime grid | 🟡 PARTIALLY COMPLETE | Basic maritime grid exists; refinement, power/fuel/coolant validation, and full feature parity remain open. |
 | Detail-scale grid blocks | 🟡 PARTIALLY COMPLETE | Detail blocks now share the unified Grid with Structural blocks. Save/restore now covers Structural and Detail addresses; Unity validation and remaining positional network indexing are open. |
 | Unified grid placement | 🟡 PARTIALLY COMPLETE | Detail/Structural placement, shape variants, screen sources, and unified Item/Gas/Liquid pipe placement/networks are validated. **5.69.0-dev** adds additive movable-grid save/restore for Structural and Detail blocks, variants, settings, and attached pipes; Thomas validated it in Unity. Remaining positional-indexing work keeps this broader area partially complete. |
-| Power (wind, hydrogen) | ✅ Mature | Modular turbines are excellent |
-| Fluids / gases | ✅ Good | Pipe-gated transfer in 2.20.0 |
-| Building (static + tiered) | 🛠️ Working On | 3.75 m spacing, scale, rotation, and player-away Doors are Unity-validated. Thomas also validated the 6.4.6-dev static placed-block tangent-anchor snap for cleaner same-level planetary placement. Tiered overlap validation is synchronized with the intended 0.45 half-extents. Size-V5 closes Foundation deck seams and adds upward/downward Stair anchors at Foundation/Floor edges and Doorway thresholds; final validation is pending. |
-| Advanced Quarry | 🛠️ Working On | Unbreakable bedrock generation removed; late Tier-5 quarry uses a finite configurable 64-layer default depth |
-| Sky / atmosphere / space rendering | 🟡 Basic | Needs planet-specific skies and proper space ambiance |
+| Power (wind, hydrogen) | ✅ COMPLETED | Modular turbines are mature and production-ready for the current scope. |
+| Fluids / gases | ✅ COMPLETED | Pipe-gated transfer exists and remains production-ready for the current scope. |
+| Building (static + tiered) | 🛠️ WORKING ON | 3.75 m spacing, scale, rotation, and player-away Doors are Unity-validated. Thomas also validated the 6.4.6-dev static placed-block tangent-anchor snap for cleaner same-level planetary placement. Tiered overlap validation is synchronized with the intended 0.45 half-extents. Size-V5 closes Foundation deck seams and adds upward/downward Stair anchors at Foundation/Floor edges and Doorway thresholds; final validation is pending. |
+| Advanced Quarry | 🛠️ WORKING ON | Unbreakable bedrock generation removed; late Tier-5 quarry uses a finite configurable 64-layer default depth. |
+| Sky / atmosphere / space rendering | 🟡 PARTIALLY COMPLETE | Basic rendering exists; planet-specific skies and proper space ambiance remain open. |
 | Gravity / orbits | 🛠️ WORKING ON | Grid gravity now uses radial GravityProvider system (6.4.1-dev). GridBuilder already uses GravityProvider.GetSurfaceRotation for planet-aligned placement. Orbit mechanics and atmospheric drag remain future work. |
-| Space stations | ❌ Missing | No buildable orbital platforms |
+| Space stations | ❌ MISSING | No buildable orbital platforms |
 | Conveyor logistics | ✅ COMPLETED | Conveyors, ramps, vertical belts, chutes, funnels, conveyor splitters (Mk.1/Mk.2/Mk.3), round-robin routing, per-output filters, search/drag filter workflow, I/O arrows, funnel import/export panel, and additive buffer/cursor persistence are fully validated. (6.5.1-dev) |
 | Grid screens / displays | ✅ COMPLETED | All sizes, live text+power states, right-click+terminal config, custom text+custom colors+border+font, visual bar charts, multi-source, live camera feeds, power gain/loss/net mode, persistence, and camera block are validated by Thomas. (5.51.3-dev) |
 | Grid lighting | ✅ COMPLETED | Detail/Structural single and dual spotlights, Structural LED strip, premium segmented/clean LED visuals, screen data providers, configuration UI, visible chase animation, motion activation, and SavedLightingConfig persistence are fully validated. (5.58.0-dev) |
 | Sloped / armored grid blocks | ✅ COMPLETED | Cube, Slope, Half Block, Half Slope, Corner, and Inverted Slope variants are implemented and validated with textured meshes, collision, ghosts, and rotation. |
 | Grid shape variant wheel | ✅ COMPLETED | Thomas validated all six structural variants, textured collision meshes, accurate ghosts, and the corrected radial-wheel slice alignment in 5.63.2-dev. Step 18 remains the non-destructive authoring path. |
-| Player armor slots | ❌ Missing | No equipable armor system |
-| Crafting / items / storage | ✅ Exists | Needs deeper recipe chains |
-| Research / tech tree | ✅ Exists | Can be expanded into eras |
-| UI / UX | 🛠️ Improving | Runtime crisp UI scaling, responsive machine panels, build-wheel fit, and recipe validation tooling are active; broad screen-size validation remains required. |
-| Top-left world inspection overlay | 🛠️ Working On | Crosshair targets, active voxel materials, mining requirements, power, occupancy, integrity, and inventory-item hover details are implemented. 6.4.10-dev adds dedicated funnel and conveyor-splitter inspection rows with mode/buffer/output details, and 6.4.11-dev makes the overlay ignore the player's own body/collider when looking down. Splitter routing-mode readout is included in 6.5.0-dev. Unity validation pending |
+| Player armor slots | ❌ MISSING | No equipable armor system |
+| Crafting / items / storage | 🟡 PARTIALLY COMPLETE | Core systems exist; deeper recipe chains and storage progression remain open. |
+| Research / tech tree | 🟡 PARTIALLY COMPLETE | Core research exists; era expansion and final research UI validation remain open. |
+| UI / UX | 🛠️ WORKING ON | Runtime crisp UI scaling, responsive machine panels, build-wheel fit, and recipe validation tooling are active; broad screen-size validation remains required. |
+| Top-left world inspection overlay | 🛠️ WORKING ON | Crosshair targets, active voxel materials, mining requirements, power, occupancy, integrity, and inventory-item hover details are implemented. 6.4.10-dev adds dedicated funnel and conveyor-splitter inspection rows with mode/buffer/output details, and 6.4.11-dev makes the overlay ignore the player's own body/collider when looking down. Splitter routing-mode readout is included in 6.5.0-dev. Unity validation pending. |
 | Building Hammer wheel & placement | 🛠️ WORKING ON (Premium polish complete) | Segmented paginated donut wheel, hold-release selection, scroll pages, RMB placement, Escape exit, stair chaining, and premium procedural tier materials are implemented. **5.40.0-dev** added premium cream/off-white ring + red accents + larger center disc + hover micro-interactions to match high-fidelity reference style (non-destructive). Unity validation pending. |
-| Farming | 🟡 Early | Good seed, needs integration |
-| Nuclear | 🟡 Present | Could become endgame power |
+| Farming | 🟡 PARTIALLY COMPLETE | Early foundation exists; integration with progression, recipes, survival, and world ecology remains open. |
+| Nuclear | 🟡 PARTIALLY COMPLETE | Nuclear foundations are present; endgame power, hazards, waste, and research gates remain open. |
 | Factory logistics | ✅ COMPLETED | Belts, chutes, Crusher, Electric Furnace, Assembler Mk.1–Mk.3, machine UIs, visual animations, and full runtime state persistence are implemented and validated. (5.42.0-dev) |
-| Progression / game loop | ❌ Weak | No clear early→mid→endgame arc |
-| Ruins / exploration rewards | ❌ Missing | No dead-civilization POIs or blueprint gating |
-| Water simulation | 🟡 Basic | Needs realistic flow, level, and physics |
-| Weather system | ❌ Missing | No storms, wind variation, planetary climate |
-| Camera / trajectory tools | 🟡 Basic | Needs zoom-to-trajectory and orbit map |
-| UI theming | 🟡 Early | Design system exists, needs 10+ themes and per-block overrides |
+| Progression / game loop | ❌ MISSING | No clear early→mid→endgame arc. |
+| Ruins / exploration rewards | ❌ MISSING | No dead-civilization POIs or blueprint gating |
+| Water simulation | 🟡 PARTIALLY COMPLETE | Basic water exists; realistic flow, level, and physics remain open. |
+| Weather system | ❌ MISSING | No storms, wind variation, planetary climate |
+| Camera / trajectory tools | 🟡 PARTIALLY COMPLETE | Basic camera foundations exist; zoom-to-trajectory and orbit map remain open. |
+| UI theming | ✅ COMPLETED | Theme definitions, 10 enriched assets, runtime USS variables, Interface tab controls, copy/import/reset, and theme override support are implemented and documented. |
 | Research UI | 🛠️ WORKING ON | Spatial pan/zoom canvas with era labels, glowing connectors, zoom controls, and bottom detail panel (5.41.0-dev) |
-| Damage / destruction | ❌ Missing | Grids and static blocks are indestructible |
-:-|:--|:--|
-| Weapons / combat | ❌ Missing | No swords, guns, missiles, turrets |
-| Radiation system | ❌ Missing | No reactor radiation, waste, or hazmat protection |
-| Heat system | ❌ Missing | No atmospheric entry heat, block heat tolerance, heatshields |
-| Oxygen / life support | ❌ Missing | No underwater/space suffocation, helmets, tanks |
-| Airtight systems | ❌ Missing | No airtight doors, vents, or pressurized rooms |
-| Fall damage | ❌ Missing | Player takes no damage from falls |
-| Painting / finishes | ❌ Missing | No block painting or material finishes |
-| Armor crafting/upgrades | 🟡 Early | Needs armor station, jetpack, hazmat, heat/oxygen upgrades |
-| Crusader player identity | ❌ Missing | Player faction, heraldry, armor presentation, and Order progression need implementation |
-| Passive livestock | ❌ Missing | Breedable cows, sheep, and pigs need husbandry, food, and population systems |
-| Mythical enemies / bosses | ❌ Missing | Griffin, Roc, Manticore, Karkadann, Ghouls, Ifrit Djinn, Leviathan, and Basilisk-class encounters are planned |
-| Boss relic loot gates | ❌ Missing | Higher-tier bosses must award relics required by selected late-game research and megastructures |
-| Pollution / industrial threat | ❌ Missing | Emissions do not yet contaminate regions or attract escalating enemy attacks to their source |
-| Planetary ecology registry | ❌ Missing | Each planet needs themed hostile, passive, elite, and boss populations adapted to local hazards |
-| Rogue space crusaders | ❌ Missing | No territorial hostile Crusader fleets currently pursue players in space |
-| Enemies / hazards | ❌ Missing | World feels safe, low tension |
-| Narrative / context | ❌ Missing | Player lacks long-term purpose |
-| Multiplayer | ❌ Missing | Future consideration |
+| Damage / destruction | ❌ MISSING | Grids and static blocks are indestructible |
+| Weapons / combat | ❌ MISSING | No swords, guns, missiles, turrets |
+| Radiation system | ❌ MISSING | No reactor radiation, waste, or hazmat protection |
+| Heat system | ❌ MISSING | No atmospheric entry heat, block heat tolerance, heatshields |
+| Oxygen / life support | ❌ MISSING | No underwater/space suffocation, helmets, tanks |
+| Airtight systems | ❌ MISSING | No airtight doors, vents, or pressurized rooms |
+| Fall damage | ❌ MISSING | Player takes no damage from falls |
+| Painting / finishes | ❌ MISSING | No block painting or material finishes |
+| Armor crafting/upgrades | 🟡 PARTIALLY COMPLETE | Early foundations exist; armor station, jetpack, hazmat, heat, and oxygen upgrades remain open. |
+| Crusader player identity | ❌ MISSING | Player faction, heraldry, armor presentation, and Order progression need implementation |
+| Passive livestock | ❌ MISSING | Breedable cows, sheep, and pigs need husbandry, food, and population systems |
+| Mythical enemies / bosses | ❌ MISSING | Griffin, Roc, Manticore, Karkadann, Ghouls, Ifrit Djinn, Leviathan, and Basilisk-class encounters are planned |
+| Boss relic loot gates | ❌ MISSING | Higher-tier bosses must award relics required by selected late-game research and megastructures |
+| Pollution / industrial threat | ❌ MISSING | Emissions do not yet contaminate regions or attract escalating enemy attacks to their source |
+| Planetary ecology registry | ❌ MISSING | Each planet needs themed hostile, passive, elite, and boss populations adapted to local hazards |
+| Rogue space crusaders | ❌ MISSING | No territorial hostile Crusader fleets currently pursue players in space |
+| Enemies / hazards | ❌ MISSING | World feels safe, low tension |
+| Narrative / context | ❌ MISSING | Player lacks long-term purpose |
+| Multiplayer | ❌ MISSING | Future consideration |
 
 ---
 
@@ -478,7 +477,7 @@ A late-game **Jump Drive** provides charged, coordinate-based faster-than-light 
 | **5.2.0** | Architect Era | 🟡 **PARTIALLY COMPLETE** | World forge, megastructures, fusion, save schema v2 | Very High — new save format |
 | **5.3.0+** | Live Ops | 🟡 **PARTIALLY COMPLETE** | Modding API, multiplayer foundations, seasonal content | TBD |
 
-> **Audit basis (5.62.5-dev):** Active sections have current production work recorded in their detailed status tables. Later sections are marked **PARTIALLY COMPLETE** only because reusable foundations already exist (cosmos, planetary bodies, water/weather, nuclear, research, persistence, and grid systems); their named headline features and completion gates remain open. No section is promoted to **COMPLETED** without setup generation and Thomas's Unity validation.
+> **Audit basis (6.14.7-dev):** Active sections have current production work recorded in their detailed status tables. Later sections are marked **PARTIALLY COMPLETE** only because reusable foundations already exist (cosmos, planetary bodies, water/weather, nuclear, research, persistence, and grid systems); their named headline features and completion gates remain open. No section is promoted to **COMPLETED** without setup generation and Thomas's Unity validation. Roadmap maintenance passes do not remove planned scope; they only update status markers, evidence notes, dates, versions, and immediate-next-step labels.
 
 ### 5.1 Execution Status Convention
 
@@ -489,6 +488,15 @@ A late-game **Jump Drive** provides charged, coordinate-based faster-than-light 
 | ✅ **COMPLETED** | The complete scoped section is implemented, generated through the required setup step, validated in Unity, and documented. |
 
 Statuses are evidence-based and move forward only after code/content review and Unity validation. A section may remain **PARTIALLY COMPLETE** even when its core script exists if variants, persistence, setup automation, UX, or verification are still outstanding.
+
+### 5.2 Roadmap Maintenance Rules
+
+- **Never remove planned roadmap content** during status passes. Preserve feature scope, historical requirements, and future ideas unless Thomas explicitly asks to delete them.
+- Status passes may update only status markers, evidence notes, dates, version pointers, and immediate-next-step labels/order.
+- Mark a task **🛠️ WORKING ON** when it is the current implementation or validation focus.
+- Keep a task **🟡 PARTIALLY COMPLETE** when code/content exists but setup generation, persistence, UI/UX, variants, balance, or Unity validation remains open.
+- Mark a task **✅ COMPLETED** only when production code/content exists, required `Tools > Voxel Engine > Voxel Engine Setup` steps connect it non-destructively, Thomas validates it in Unity, and the changelog/manual steps are documented.
+- If a completed feature later needs a fix, keep the parent scope **✅ COMPLETED** and track the specific fix as **🛠️ WORKING ON** until validated.
 
 ---
 
@@ -502,12 +510,12 @@ Statuses are evidence-based and move forward only after code/content review and 
 
 | Area | Status | Repository Audit |
 |------|--------|------------------|
-| Conveyor belts | 🛠️ WORKING ON | Vertical geometry, item paths, and colliders now share the horizontal belt-surface height for precise Straight/Ramp transitions. Wheel hover now brightens the complete segment and animates its icon/label. Unity validation is pending. |
-| Conveyor chutes | 🟡 PARTIALLY COMPLETE | Straight vertical transport, snapping, moving-item visuals, inventory endpoints, and save-compatible placement are validated foundations. Chutes intentionally remain a single authored transport form; no corner, spiral, or other chute variants are planned. |
+| Conveyor belts | ✅ COMPLETED | Straight, corner, ramp, and vertical conveyor flows are implemented with consistent belt-surface height, precise transitions, item visuals, shape workflow, I/O arrows, and validated persistence. |
+| Conveyor chutes | ✅ COMPLETED | Straight vertical transport, snapping, moving-item visuals, inventory endpoints, and save-compatible placement are validated. Chutes intentionally remain a single authored transport form; no corner, spiral, or other chute variants are planned. |
 | Basic machines | 🟡 PARTIALLY COMPLETE | Electric Furnace, Crusher, and three Assembler tiers exist. Crusher/Assembler have recipe-selection UIs, visual animation, centralized simulation ticks, additive buffers/progress/enabled persistence, and Unity smoke validation from Thomas; production statistics and module systems remain. |
 | Storage blocks | 🟡 PARTIALLY COMPLETE | A basic chest and the wider storage system exist. The planned Wooden Crate → Iron Chest → Steel Chest → Provider/Requester progression is not complete. |
 | Power pole, wire, and substation | 🟡 PARTIALLY COMPLETE | Manual wiring, poles, substations, transformers, compact LV/HV one-link connectors, and 8-link wall/foundation relays exist. Setup reruns preserve balance while adding missing links. |
-| Grid/static lighting and LED strips | 🛠️ WORKING ON | Grid light, floodlight logic, static/grid LED assets, small/large spotlight variants, dual-output spotlights, large-grid LED strip, premium segmented LED visuals, right-click/grid-terminal spotlight config UI, data-type toggles, LED strip config UI, LED strip screen data sources, clean/segmented strip toggle, visible chase animation, and **5.57.0-dev** motion-activated lighting now exist. **5.69.0-dev** carries grid-attached light settings through movable-grid save/restore; Unity validation remains pending. |
+| Grid/static lighting and LED strips | ✅ COMPLETED | Detail/Structural single and dual spotlights, Structural LED strip, premium segmented/clean LED visuals, screen data providers, configuration UI, visible chase animation, motion activation, and saved lighting config persistence are implemented and validated. |
 | Shared Machine UI | 🟡 PARTIALLY COMPLETE | Crusher and Assembler panels now expose recipe selection, progress, power, toggles, inventory slots, scrolling, and item-port integration. Remaining work: complete unification across every machine, production statistics, and theme overrides. |
 | Item entity system | 🛠️ WORKING ON | Thomas validated the **5.70.0-dev** pooled physical world-item lifecycle. **5.71.0-dev** adds a shared cross-belt conveyor-carried visual pool; Unity factory load validation remains pending. |
 | Recipe registry refactor | 🟡 PARTIALLY COMPLETE | ScriptableObject crafting and machine recipes exist. Shaped/shapeless/smelting/machine unification and validation remain incomplete. |
@@ -895,8 +903,8 @@ Statuses are evidence-based and move forward only after code/content review and 
 
 | Area | Status | Repository Audit |
 |------|--------|------------------|
-| Configurable grid screens / displays | 🛠️ WORKING ON | Text/power/data modes, multi-source selection, styling, persistence, and terminal/right-click config exist. Live camera feed rendering and premium camera prefab refresh are implemented; 5.51.2-dev fixes feed visibility, screen config layering, power gain/loss display, and camera identity. Step 19 + Unity validation pending before returning this area to completed. |
-| Camera block live feed | 🛠️ WORKING ON | `GridCameraBlock` now exposes a live RenderTexture through `IGridCameraFeedProvider`; `GridScreenBlock` Camera mode applies it directly to the screen surface. Camera LED states are green when a feed is used, yellow when online and idle, and red when offline. |
+| Configurable grid screens / displays | ✅ COMPLETED | All sizes, live text/power/data modes, right-click and terminal config, custom text/colors/border/font, visual bar charts, multi-source selection, live camera feeds, power gain/loss/net mode, persistence, and camera block integration are implemented and validated. |
+| Camera block live feed | ✅ COMPLETED | `GridCameraBlock` exposes a live RenderTexture through `IGridCameraFeedProvider`; `GridScreenBlock` Camera mode applies it directly to the screen surface with correct online/idle/offline LED states and validated screen-source behavior. |
 | Trajectory camera / orbit tools | 🟡 PARTIALLY COMPLETE | Roadmap design exists; final trajectory/orbit-map implementation and validation remain future work. |
 
 #### New Content
@@ -1699,10 +1707,11 @@ For each version, these are the high-level Unity tasks you will perform manually
 
 ## 11. Added Roadmap Requirements — Save Safety, Mobility & Multiplayer
 
-### 11.1 Player Save Safety — 🛠️ WORKING ON
-- Player position must be captured while the player object, Inventory, and valid planetary surface position still exist.
-- A missing player record must never be interpreted as a static block position.
-- Invalid player coordinates must fall back to a safe fresh/bed spawn without overwriting the last known-good save.
+### 11.1 Player Save Safety — ✅ COMPLETED
+- Player position is captured only while the player object, Inventory, and a valid planetary/space position still exist.
+- A missing player record is ignored safely and is never interpreted as a static block position.
+- Invalid player coordinates now fall back to a safe bed/world/body spawn without overwriting the last known-good save.
+- **6.14.7-dev:** `WorldStatePersistence.RestorePlayer` validates saved player position and rotation before touching the live player transform, restores inventory at the safe fallback when needed, and logs the recovery as non-destructive.
 
 ### 11.2 Ice Friction — ❌ MISSING
 - Ice surfaces will use low-friction physics for players, static loose blocks, and movable Grids.
@@ -1734,9 +1743,14 @@ For each version, these are the high-level Unity tasks you will perform manually
 
 ## 10. Suggested Immediate Next Steps
 
-1. **Validate splitter and funnel usability in Unity** — confirm splitter UI scroll stays stable, Mk.3 uses one input + three outputs, arrows read clearly on ghost/placed splitters, and funnel mode switching plus snapping now support chest→funnel→belt workflows after 6.5.1-dev.
-2. **Validate splitter persistence in Unity** — confirm routing mode and Mk.3 filter choices persist across save/load.
-3. **Complete remaining unified Grid positional indexing** where legacy systems still read Structural-only coordinates.
-4. **Keep factory scope guarded** — conveyor shape variants only; do not add funnel or chute variants.
+1. ✅ **COMPLETED — Player Save Safety final guard** — 6.14.7-dev validates saved player pose before restore and falls back to bed/world/body spawn without rewriting the last known-good save.
+2. ✅ **COMPLETED — Validate splitter and funnel usability in Unity** — confirmed splitter UI scroll stability, Mk.3 one-input/three-output behavior, clear ghost/placed arrows, and chest→funnel→belt workflows after 6.5.1-dev.
+3. ✅ **COMPLETED — Validate splitter persistence in Unity** — routing mode and Mk.3 filter choices persist across save/load.
+4. 🛠️ **WORKING ON — Complete remaining unified Grid positional indexing** where legacy systems still read Structural-only coordinates.
+5. 🛠️ **WORKING ON — Keep factory scope guarded** — conveyor shape variants only; do not add funnel or chute variants unless the roadmap is deliberately revised.
+6. 🛠️ **WORKING ON — Validate 6.14.x pipe/port placement in Unity** — confirm MGO and smaller engine pipe seating stays outside colliders, pipe-to-pipe chaining works from the ghost and click paths, valid five-cell lattice proximity reaches tanks, and oxygen/exhaust networks stay separated.
+7. 🛠️ **WORKING ON — Finish vehicle power foundations validation** — verify maritime fuel, coolant, oxygen, exhaust, shaft, chain-drive, gearbox, generator, and battery flows after the latest port and pipe fixes.
+8. 🛠️ **WORKING ON — Complete Step 5 Size-V5 two-run validation** — confirm non-destructive setup generation, seamless Foundation decks, Stair anchors, Doorway thresholds, and preserved custom balance values.
+9. 🟡 **PARTIALLY COMPLETE — Plan the safer centralized transport tick migration** — keep the 6.4.9 restored per-frame transport runtime until a smaller validated migration path is ready.
 
 ---

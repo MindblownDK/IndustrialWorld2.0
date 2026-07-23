@@ -1,9 +1,52 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.14.5-dev`
+**Current Version:** `6.14.7-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.14.7-dev] Player Save Safety Final Guard
+
+**Type:** PATCH — save-safety/runtime recovery fix. Fully save-compatible; no save schema, recipe, prefab, setup, or public API changes.
+
+**Fixed / Improved:**
+- `WorldStatePersistence.RestorePlayer` now validates the saved player position before writing it to the live player transform. Corrupt `NaN`/`Infinity` positions or positions buried deeply inside an active planetary body no longer poison physics, chunk streaming, or follow-up autosaves.
+- Invalid saved player rotation now falls back to `0` degrees instead of applying an invalid yaw.
+- Invalid player coordinates recover non-destructively to the best safe spawn in order: bed spawn, initialized world spawn, stored world spawn, active-body surface fallback, then flat-world high spawn.
+- Recovery restores the player inventory at the fallback position but does **not** rewrite `world_state.json`, preserving the last known-good save for manual inspection or future recovery.
+- Runtime build version constants now report `6.14.7-dev` so the main-menu footer and startup log match the changelog/roadmap version.
+
+**Roadmap Status:**
+- Player Save Safety: **🛠️ WORKING ON → ✅ COMPLETED**.
+
+**Files touched (pull these):**
+- `Scripts/Persistence/WorldStatePersistence.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Roadmap.md`
+- `Changelog.md`
+
+**Manual steps:** none — runtime-only safety fix. No `Tools > Voxel Engine > Voxel Engine Setup` run required.
+
+---
+
+### [6.14.6-dev] Roadmap Status Governance & Current Focus Sync
+
+**Type:** PATCH — documentation/roadmap tracking only. Fully save-compatible; no runtime, prefab, recipe, setup, save-schema, or API changes.
+
+**Changed:**
+- Synced `Roadmap.md` header to 6.14.6-dev and the current local date.
+- Added explicit roadmap maintenance rules: never remove planned roadmap content during status passes; update only status markers, evidence notes, dates, version pointers, and immediate-next-step labels/order unless Thomas explicitly asks otherwise.
+- Normalized Current State Snapshot status labels to the standard roadmap convention (`WORKING ON`, `PARTIALLY COMPLETE`, `COMPLETED`, `MISSING`) and fixed a malformed markdown table separator.
+- Promoted roadmap rows to **COMPLETED** where the roadmap/changelog already recorded Thomas validation: conveyor belts/chutes, grid/static lighting + LED strips, configurable grid screens, and camera block live feeds. Broader milestone rows remain **WORKING ON** where open tasks still exist.
+- Marked old splitter/funnel immediate-next-step validations as **COMPLETED** and appended the current active focus: 6.14.x pipe/port validation, vehicle power foundations validation, Step 5 Size-V5 two-run validation, and the safer centralized transport tick migration plan.
+
+**Files touched (pull these):**
+- `Roadmap.md`
+- `Changelog.md`
+
+**Manual steps:** none — documentation-only. No `Tools > Voxel Engine > Voxel Engine Setup` run required.
 
 ---
 
