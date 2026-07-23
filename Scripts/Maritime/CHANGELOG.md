@@ -4,6 +4,15 @@ Branch: **Dev** · Semantic Versioning 2.0.0
 
 ---
 
+## [2.25.2] — Drive Shaft Floor Mounts Fully Removed (Mesh v20)
+
+**Type:** PATCH — visual bugfix, save-compatible (game version 6.13.2-dev).
+
+### Fixed
+- **Pillow-block bearing pedestals removed** from the drive shaft model: v18 dropped the ground feet but left the cast-iron stands, caps, race rings and grease nipples — v20 removes them completely. The shaft is now a pure floating shaft line (end coupler flanges, spinning full-cell rod, spline ribs, keyway, U-joint yoke, clamp collars, gold `Port_ShaftIO_F/B` rings) with nothing hanging off the axis to clip decks or neighbour blocks. Collider refits on the Step-13 rebuild.
+
+---
+
 ## [2.25.1] — Port-Snap Compile Fix (CS0126)
 
 **Type:** PATCH — build fix, zero behaviour change (game version 6.13.1-dev).

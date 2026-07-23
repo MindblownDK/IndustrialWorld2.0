@@ -23,7 +23,7 @@ namespace VoxelEngine.Maritime
         // v19: shaft tips span the full cell and carry gold coupling rings
         //      (Port_ShaftIO_F/B) so collinear shafts physically TOUCH at the
         //      shared face and a held shaft snaps exactly in extension.
-        public const int Version = 19;
+        public const int Version = 20;
         private static Shader Lit => Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
         public static System.Func<Material, string, Material> MaterialPersister;
         private static int _matCounter;
@@ -978,22 +978,14 @@ namespace VoxelEngine.Maritime
         // ════════════════════════════════════════════════════════════════
         static void BuildDriveShaft(GameObject r, float cs)
         {
-            // ── Two pillow-block bearing pedestals (static) ────────────
-            // (v18: ground feet removed — shafts almost never stand on the ground;
-            //  the bearings now ride the shaft line as a self-contained module.)
-            for (int side = 0; side < 2; side++)
-            {
-                float z = side == 0 ? -cs * 0.30f : cs * 0.30f;
-                // Pillow block body + cap; the bore line sits on the pivot axis.
-                Box(r, CastIron, new Vector3(0, -cs * 0.075f, z), new Vector3(cs * 0.20f, cs * 0.13f, cs * 0.12f));
-                Box(r, Steel,    new Vector3(0, -cs * 0.015f, z), new Vector3(cs * 0.22f, cs * 0.060f, cs * 0.13f));
-                // Bearing race (dark ring the shaft passes through).
-                var race = Cyl(r, DarkSteel, new Vector3(0, cs * 0.015f, z), cs * 0.065f, cs * 0.08f);
-                race.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
-                // Grease nipples.
-                Sphere(r, Brass, new Vector3(cs * 0.08f, 0f, z), cs * 0.018f);
-                Sphere(r, Brass, new Vector3(-cs * 0.08f, 0f, z), cs * 0.018f);
-            }
+            // ── NO floor mounts / pedestals (v20) ──────────────────────
+            // Drive shafts on a grid are always coupled port-to-port between
+            // machines — never stood on the deck — so the module is a pure
+            // floating shaft line: coupler flanges at the ends, spinning rod
+            // through the middle, and NOTHING hanging off the axis to clip
+            // through decks, hulls or neighbour blocks.
+            // (v18 removed the ground feet; the pillow-block pedestals stayed
+            //  and still read as "floor mounts" — v20 removes those too.)
 
             // ── End mounting flanges with bolt circles (static) ────────
             for (int side = 0; side < 2; side++)
@@ -1039,7 +1031,7 @@ namespace VoxelEngine.Maritime
             Box(spin, DarkSteel, V0, new Vector3(cs * 0.028f, cs * 0.028f, cs * 0.145f));
             Sphere(spin, Bronze, V0, cs * 0.070f);
 
-            // Clamp collars next to each bearing.
+            // Clamp collars inboard of each end flange.
             for (int side = 0; side < 2; side++)
             {
                 float z = side == 0 ? -cs * 0.375f : cs * 0.375f;

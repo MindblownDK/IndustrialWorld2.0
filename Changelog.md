@@ -1,9 +1,21 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.13.1-dev`
+**Current Version:** `6.13.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.13.2-dev] Drive Shaft Floor Mounts Fully Removed (Mesh v20)
+
+**Type:** PATCH — visual bugfix, fully save-compatible. Step 13 rebuilds the shaft mesh in place, non-destructively.
+
+**Fixed:**
+- **The driveshaft's pillow-block bearing pedestals are gone for good.** v18 removed the ground feet but the two cast-iron pillow-block stands (bodies, caps, race rings and grease nipples) stayed and still read as "floor mounts" — and they hung *below* the shaft line, clipping through decks and hulls. v20 deletes them entirely: the shaft is now a **pure floating shaft line** — end coupler flanges with bolt circles, full-cell polished rod with spline ribs, keyway, U-joint yoke, clamp collars and the gold `Port_ShaftIO` coupling rings. Couples port-to-port between machines with nothing standing on the deck.
+- Box collider auto-refits to the slimmer bounds on the Step-13 rebuild (existing non-destructive gate: `isNew || needsMesh || colliderMissing`).
+
+**Manual Unity Steps:** copy `Scripts\Maritime\MaritimeMeshBuilder.cs` into your clone, recompile, then run `Tools > Voxel Engine > Voxel Engine Setup` → **Step 13** once (marker `__MaritimeMesh_v20` forces the mesh rebuild in place — your balancing, scripts and item data are untouched).
 
 ---
 
