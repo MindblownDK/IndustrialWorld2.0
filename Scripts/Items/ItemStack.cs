@@ -48,12 +48,18 @@ namespace VoxelEngine.Items
             };
         }
 
+        public static int MaxItemsPerStack(ItemDefinition item)
+        {
+            if (item == null) return 0;
+            return item.IsStackable ? ItemContainer.DefaultMaxItemsPerStack : 1;
+        }
+
         public static bool CanMerge(ItemStack a, ItemStack b)
         {
             if (a.IsEmpty || b.IsEmpty) return true;
             if (a.item != b.item) return false;
             if (!a.item.IsStackable) return false;
-            if (a.count >= a.item.maxStack) return false;
+            if (a.count >= MaxItemsPerStack(a.item)) return false;
             // Never merge two payload-bearing stacks — each instance is unique.
             if (a.payload != null || b.payload != null) return false;
             return true;

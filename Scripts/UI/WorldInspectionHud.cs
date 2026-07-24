@@ -403,7 +403,7 @@ namespace VoxelEngine.UI
             string detail = string.IsNullOrWhiteSpace(stack.item.category)
                 ? "INVENTORY ITEM"
                 : stack.item.category.ToUpperInvariant();
-            string status = $"Stack: {stack.count}/{Mathf.Max(1, stack.item.maxStack)} · Mass: {stack.item.massPerUnit * stack.count:0.##}";
+            string status = $"Stack: {stack.count}/{Mathf.Max(1, ItemStack.MaxItemsPerStack(stack.item))} · Mass: {stack.item.massPerUnit * stack.count:0.##}";
             if (stack.item is ToolItem tool && tool.maxDurability > 0)
                 status += $" · Durability: {Mathf.Max(0, stack.durability)}/{tool.maxDurability}";
             Show(new TargetInfo

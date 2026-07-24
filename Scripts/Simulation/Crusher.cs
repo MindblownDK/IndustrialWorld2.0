@@ -175,7 +175,7 @@ namespace VoxelEngine.Simulation
         public int GetInputCapacity(ItemDefinition item)
         {
             if (item == null) return 0;
-            return inputC.HasSpace(item, 1) ? item.maxStack : 0;
+            return inputC.HasSpace(item, 1) ? ItemStack.MaxItemsPerStack(item) : 0;
         }
 
         public int TryInsert(ItemDefinition item, int count)

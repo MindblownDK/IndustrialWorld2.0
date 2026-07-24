@@ -37,6 +37,7 @@ namespace VoxelEngine.GridSystem
             if (blockName == "Armor Block") blockName = "Cargo Container";
             if (container == null) container = new ItemContainer("Cargo", slots);
             else container.Resize(slots);
+            container.OverrideMaxWeightKg = maxMassKg;
             ApplyFilter();
             if (Grid != null && GridItemNetwork.Instance != null)
                 GridItemNetwork.Instance.RegisterContainer(Grid, this);

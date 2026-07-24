@@ -109,7 +109,7 @@ namespace VoxelEngine.GridSystem
                     var s = cargo.container.GetSlot(i);
                     if (s == null || s.IsEmpty || s.item == null || !IsSmeltable(s.item)) continue;
                     if (!inputC.HasSpace(s.item, 1)) return;
-                    int take = Mathf.Min(s.count, s.item.maxStack);
+                    int take = Mathf.Min(s.count, ItemStack.MaxItemsPerStack(s.item));
                     int moved = cargo.container.Remove(s.item, take);
                     if (moved > 0)
                     {

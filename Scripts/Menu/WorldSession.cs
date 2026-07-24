@@ -19,10 +19,20 @@ namespace VoxelEngine.Menu
         public string worldName = "DefaultWorld";
         public int    seed      = 1337;
 
+        public const int DefaultMaxDroppedItems = 1000;
+        public const float DefaultPlayerInventoryWeightKg = 450f;
+        public const float DefaultContainerWeightKg = 5000f;
+        public const int DefaultInventoryWeightPercent = 100;
+        public const int DefaultContainerWeightPercent = 100;
+
         /// <summary>Maximum simultaneous physical world drops. Conveyor packets use
         /// their own simulation and are deliberately never included in this limit.</summary>
-        public int maxDroppedItems = 90;
-        public const int DefaultMaxDroppedItems = 90;
+        public int maxDroppedItems = DefaultMaxDroppedItems;
+
+        public int inventoryWeightPercent = DefaultInventoryWeightPercent;
+        public int containerWeightPercent = DefaultContainerWeightPercent;
+        public float PlayerInventoryWeightLimitKg => DefaultPlayerInventoryWeightKg * Mathf.Clamp(inventoryWeightPercent, 25, 1000) / 100f;
+        public float ContainerWeightLimitKg => DefaultContainerWeightKg * Mathf.Clamp(containerWeightPercent, 25, 1000) / 100f;
 
         // Spawn data. The world spawn is computed once on first load; bed spawn is per-bed.
         public Vector3 worldSpawnPoint = new Vector3(0, 200, 0);
@@ -132,8 +142,15 @@ namespace VoxelEngine.Menu
                 foreach (var f in info.GetFiles("*.dat", SearchOption.TopDirectoryOnly))
                     size += f.Length;
                 int? savedSeed = TryReadSeed(dir);
-                int savedMaxDrops = TryReadWorldSettings(info.Name, out var maxDrops)
-                    ? maxDrops : DefaultMaxDroppedItems;
+                int savedMaxDrops = DefaultMaxDroppedItems;
+                int savedInventoryWeightPercent = DefaultInventoryWeightPercent;
+                int savedContainerWeightPercent = DefaultContainerWeightPercent;
+                if (TryReadWorldSettings(info.Name, out var maxDrops, out var invWeightPct, out var containerWeightPct))
+                {
+                    savedMaxDrops = maxDrops;
+                    savedInventoryWeightPercent = invWeightPct;
+                    savedContainerWeightPercent = containerWeightPct;
+                }
                 result.Add(new WorldSummary
                 {
                     name        = info.Name,
@@ -141,7 +158,9 @@ namespace VoxelEngine.Menu
                     sizeBytes   = size,
                     lastWrite   = info.LastWriteTime,
                     savedSeed   = savedSeed,
-                    maxDroppedItems = savedMaxDrops
+                    maxDroppedItems = savedMaxDrops,
+                    inventoryWeightPercent = savedInventoryWeightPercent,
+                    containerWeightPercent = savedContainerWeightPercent
                 });
             }
             result.Sort((a, b) => b.lastWrite.CompareTo(a.lastWrite));
@@ -185,6 +204,8 @@ namespace VoxelEngine.Menu
         private class WorldSettingsData
         {
             public int maxDroppedItems = DefaultMaxDroppedItems;
+            public int inventoryWeightPercent = DefaultInventoryWeightPercent;
+            public int containerWeightPercent = DefaultContainerWeightPercent;
         }
 
         /// <summary>Non-generation settings only. This sidecar never changes seeds,
@@ -197,7 +218,9 @@ namespace VoxelEngine.Menu
                 maxDroppedItems = Mathf.Clamp(maxDroppedItems, 1, 10000);
                 File.WriteAllText(WorldSettingsPath, JsonUtility.ToJson(new WorldSettingsData
                 {
-                    maxDroppedItems = maxDroppedItems
+                    maxDroppedItems = maxDroppedItems,
+                    inventoryWeightPercent = Mathf.Clamp(inventoryWeightPercent, 25, 1000),
+                    containerWeightPercent = Mathf.Clamp(containerWeightPercent, 25, 1000)
                 }, true));
             }
             catch (Exception ex) { Debug.LogWarning("[WorldSession] SaveWorldSettings: " + ex.Message); }
@@ -206,18 +229,33 @@ namespace VoxelEngine.Menu
         public void LoadWorldSettings()
         {
             maxDroppedItems = DefaultMaxDroppedItems;
+            inventoryWeightPercent = DefaultInventoryWeightPercent;
+            containerWeightPercent = DefaultContainerWeightPercent;
             try
             {
                 if (!File.Exists(WorldSettingsPath)) return;
                 var data = JsonUtility.FromJson<WorldSettingsData>(File.ReadAllText(WorldSettingsPath));
-                if (data != null) maxDroppedItems = Mathf.Clamp(data.maxDroppedItems, 1, 10000);
+                if (data != null)
+                {
+                    maxDroppedItems = Mathf.Clamp(data.maxDroppedItems, 1, 10000);
+                    inventoryWeightPercent = data.inventoryWeightPercent <= 0 ? DefaultInventoryWeightPercent : Mathf.Clamp(data.inventoryWeightPercent, 25, 1000);
+                    containerWeightPercent = data.containerWeightPercent <= 0 ? DefaultContainerWeightPercent : Mathf.Clamp(data.containerWeightPercent, 25, 1000);
+                }
             }
             catch (Exception ex) { Debug.LogWarning("[WorldSession] LoadWorldSettings: " + ex.Message); }
         }
 
         public bool TryReadWorldSettings(string name, out int savedMaxDroppedItems)
         {
+            return TryReadWorldSettings(name, out savedMaxDroppedItems, out _, out _);
+        }
+
+        public bool TryReadWorldSettings(string name, out int savedMaxDroppedItems,
+            out int savedInventoryWeightPercent, out int savedContainerWeightPercent)
+        {
             savedMaxDroppedItems = DefaultMaxDroppedItems;
+            savedInventoryWeightPercent = DefaultInventoryWeightPercent;
+            savedContainerWeightPercent = DefaultContainerWeightPercent;
             try
             {
                 string path = WorldSettingsPathFor(name);
@@ -225,6 +263,8 @@ namespace VoxelEngine.Menu
                 var data = JsonUtility.FromJson<WorldSettingsData>(File.ReadAllText(path));
                 if (data == null) return false;
                 savedMaxDroppedItems = Mathf.Clamp(data.maxDroppedItems, 1, 10000);
+                savedInventoryWeightPercent = data.inventoryWeightPercent <= 0 ? DefaultInventoryWeightPercent : Mathf.Clamp(data.inventoryWeightPercent, 25, 1000);
+                savedContainerWeightPercent = data.containerWeightPercent <= 0 ? DefaultContainerWeightPercent : Mathf.Clamp(data.containerWeightPercent, 25, 1000);
                 return true;
             }
             catch (Exception ex)
@@ -236,17 +276,30 @@ namespace VoxelEngine.Menu
 
         public bool SaveWorldSettingsFor(string name, int newMaxDroppedItems)
         {
+            return SaveWorldSettingsFor(name, newMaxDroppedItems,
+                inventoryWeightPercent > 0 ? inventoryWeightPercent : DefaultInventoryWeightPercent,
+                containerWeightPercent > 0 ? containerWeightPercent : DefaultContainerWeightPercent);
+        }
+
+        public bool SaveWorldSettingsFor(string name, int newMaxDroppedItems, int newInventoryWeightPercent, int newContainerWeightPercent)
+        {
             try
             {
                 string folder = WorldFolderPath(name);
                 Directory.CreateDirectory(folder);
                 var data = new WorldSettingsData
                 {
-                    maxDroppedItems = Mathf.Clamp(newMaxDroppedItems, 1, 10000)
+                    maxDroppedItems = Mathf.Clamp(newMaxDroppedItems, 1, 10000),
+                    inventoryWeightPercent = Mathf.Clamp(newInventoryWeightPercent, 25, 1000),
+                    containerWeightPercent = Mathf.Clamp(newContainerWeightPercent, 25, 1000)
                 };
                 File.WriteAllText(WorldSettingsPathFor(name), JsonUtility.ToJson(data, true));
                 if (SanitizeWorldFolderName(name) == SanitizeWorldFolderName(worldName))
+                {
                     maxDroppedItems = data.maxDroppedItems;
+                    inventoryWeightPercent = data.inventoryWeightPercent;
+                    containerWeightPercent = data.containerWeightPercent;
+                }
                 return true;
             }
             catch (Exception ex)
@@ -522,6 +575,8 @@ namespace VoxelEngine.Menu
         public DateTime lastWrite;
         public int?     savedSeed;
         public int      maxDroppedItems;
+        public int      inventoryWeightPercent;
+        public int      containerWeightPercent;
     }
 
     public struct AutosaveSlotSummary

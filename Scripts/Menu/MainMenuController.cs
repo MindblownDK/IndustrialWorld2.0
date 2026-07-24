@@ -13,6 +13,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UIElements;
 using VoxelEngine.Cosmos;
+using VoxelEngine.Items;
 using VoxelEngine.Settings;
 using VoxelEngine.UI;
 using T = VoxelEngine.UI.UITheme;
@@ -38,11 +39,15 @@ namespace VoxelEngine.Menu
         private string _newName            = "MyWorld";
         private int    _newSeed            = 0;
         private int    _newMaxDroppedItems = WorldSession.DefaultMaxDroppedItems;
+        private int    _newInventoryWeightPercent = WorldSession.DefaultInventoryWeightPercent;
+        private int    _newContainerWeightPercent = WorldSession.DefaultContainerWeightPercent;
 
         // Edit-world form values. Only non-generation settings are editable here.
         private string _editOriginalName = string.Empty;
         private string _editName = string.Empty;
         private int    _editMaxDroppedItems = WorldSession.DefaultMaxDroppedItems;
+        private int    _editInventoryWeightPercent = WorldSession.DefaultInventoryWeightPercent;
+        private int    _editContainerWeightPercent = WorldSession.DefaultContainerWeightPercent;
         private string _menuStatus = string.Empty;
         private string _expandedAutosaveWorld = string.Empty;
 
@@ -298,7 +303,7 @@ namespace VoxelEngine.Menu
                 ? $"{w.sizeBytes / 1024.0:0.0} KB"
                 : $"{w.sizeBytes / (1024.0 * 1024.0):0.00} MB";
             string seed  = w.savedSeed.HasValue ? $"  ·  seed {w.savedSeed.Value}" : "";
-            var meta = T.Muted($"{w.lastWrite:dd-MM-yyyy  HH:mm}  ·  {size}{seed}  ·  drops {Mathf.Max(1, w.maxDroppedItems)}");
+            var meta = T.Muted($"{w.lastWrite:dd-MM-yyyy  HH:mm}  ·  {size}{seed}  ·  drops {Mathf.Max(1, w.maxDroppedItems)}  ·  inv {Mathf.Max(25, w.inventoryWeightPercent)}% / containers {Mathf.Max(25, w.containerWeightPercent)}%");
             meta.style.marginTop = 2;
             info.Add(meta);
             row.Add(info);
@@ -502,9 +507,33 @@ namespace VoxelEngine.Menu
                     _newMaxDroppedItems = Mathf.Clamp(parsed, 1, 10000);
             });
             scroll.Add(maxDropsField);
-            var maxDropsHelp = T.Muted("Default 90 · applies only to physical world drops. Conveyor packets are protected separately.");
+            var maxDropsHelp = T.Muted("Default 1000 · applies only to physical world drops. Conveyor packets are protected separately.");
             maxDropsHelp.style.marginTop = 3;
             scroll.Add(maxDropsHelp);
+            scroll.Add(T.Spacer(12));
+
+            scroll.Add(FormLabel("Inventory Weight Limit %"));
+            var invWeightField = new TextField { value = _newInventoryWeightPercent.ToString() };
+            StyleField(invWeightField);
+            invWeightField.RegisterValueChangedCallback(e =>
+            {
+                if (int.TryParse(e.newValue, out var parsed))
+                    _newInventoryWeightPercent = Mathf.Clamp(parsed, 25, 1000);
+            });
+            scroll.Add(invWeightField);
+            scroll.Add(T.Muted($"100% = {MassFormat.Format(WorldSession.DefaultPlayerInventoryWeightKg)} player matter capacity."));
+            scroll.Add(T.Spacer(10));
+
+            scroll.Add(FormLabel("Container / Machine Weight Limit %"));
+            var containerWeightField = new TextField { value = _newContainerWeightPercent.ToString() };
+            StyleField(containerWeightField);
+            containerWeightField.RegisterValueChangedCallback(e =>
+            {
+                if (int.TryParse(e.newValue, out var parsed))
+                    _newContainerWeightPercent = Mathf.Clamp(parsed, 25, 1000);
+            });
+            scroll.Add(containerWeightField);
+            scroll.Add(T.Muted($"100% = {MassFormat.Format(WorldSession.DefaultContainerWeightKg)} per chest/machine matter buffer."));
             scroll.Add(T.Spacer(16));
 
             // ── Cosmos: solar-system picker + per-planet custom seeds ──
@@ -556,9 +585,33 @@ namespace VoxelEngine.Menu
                     _editMaxDroppedItems = Mathf.Clamp(parsed, 1, 10000);
             });
             panel.Add(maxDropsField);
-            var maxDropsHelp = T.Muted("Default 90 · applies only to physical world drops. Conveyor packets and belt visuals are protected separately.");
+            var maxDropsHelp = T.Muted("Default 1000 · applies only to physical world drops. Conveyor packets and belt visuals are protected separately.");
             maxDropsHelp.style.marginTop = 3;
             panel.Add(maxDropsHelp);
+            panel.Add(T.Spacer(12));
+
+            panel.Add(FormLabel("Inventory Weight Limit %"));
+            var invWeightField = new TextField { value = _editInventoryWeightPercent.ToString() };
+            StyleField(invWeightField);
+            invWeightField.RegisterValueChangedCallback(e =>
+            {
+                if (int.TryParse(e.newValue, out var parsed))
+                    _editInventoryWeightPercent = Mathf.Clamp(parsed, 25, 1000);
+            });
+            panel.Add(invWeightField);
+            panel.Add(T.Muted($"100% = {MassFormat.Format(WorldSession.DefaultPlayerInventoryWeightKg)} player matter capacity."));
+            panel.Add(T.Spacer(10));
+
+            panel.Add(FormLabel("Container / Machine Weight Limit %"));
+            var containerWeightField = new TextField { value = _editContainerWeightPercent.ToString() };
+            StyleField(containerWeightField);
+            containerWeightField.RegisterValueChangedCallback(e =>
+            {
+                if (int.TryParse(e.newValue, out var parsed))
+                    _editContainerWeightPercent = Mathf.Clamp(parsed, 25, 1000);
+            });
+            panel.Add(containerWeightField);
+            panel.Add(T.Muted($"100% = {MassFormat.Format(WorldSession.DefaultContainerWeightKg)} per chest/machine matter buffer."));
 
             panel.Add(T.Spacer(18));
             var row = new VisualElement();
@@ -642,6 +695,8 @@ namespace VoxelEngine.Menu
             _editOriginalName = world.name;
             _editName = world.name;
             _editMaxDroppedItems = Mathf.Max(1, world.maxDroppedItems);
+            _editInventoryWeightPercent = Mathf.Clamp(world.inventoryWeightPercent <= 0 ? WorldSession.DefaultInventoryWeightPercent : world.inventoryWeightPercent, 25, 1000);
+            _editContainerWeightPercent = Mathf.Clamp(world.containerWeightPercent <= 0 ? WorldSession.DefaultContainerWeightPercent : world.containerWeightPercent, 25, 1000);
             _menuStatus = string.Empty;
             _page = Page.EditWorld;
             BuildUI();
@@ -664,7 +719,7 @@ namespace VoxelEngine.Menu
                 finalName = requestedName;
             }
 
-            if (!_session.SaveWorldSettingsFor(finalName, _editMaxDroppedItems))
+            if (!_session.SaveWorldSettingsFor(finalName, _editMaxDroppedItems, _editInventoryWeightPercent, _editContainerWeightPercent))
             {
                 _menuStatus = "Error: Could not save world settings.";
                 BuildUI();
@@ -698,6 +753,8 @@ namespace VoxelEngine.Menu
             _session.seed              = _newSeed;
             _session.isNewWorld        = true;
             _session.maxDroppedItems   = Mathf.Clamp(_newMaxDroppedItems, 1, 10000);
+            _session.inventoryWeightPercent = Mathf.Clamp(_newInventoryWeightPercent, 25, 1000);
+            _session.containerWeightPercent = Mathf.Clamp(_newContainerWeightPercent, 25, 1000);
             _session.SaveWorldSettings();
 
             // Persist the cosmos choice (system + per-planet seeds) so the same seeds

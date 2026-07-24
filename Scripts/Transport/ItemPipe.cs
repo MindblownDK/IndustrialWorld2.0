@@ -190,9 +190,9 @@ namespace VoxelEngine.Transport
             {
                 var s = _buffer.GetSlot(i);
                 if (s.IsEmpty)
-                    free += item.maxStack;
+                    free += ItemStack.MaxItemsPerStack(item);
                 else if (s.item == item && item.IsStackable)
-                    free += item.maxStack - s.count;
+                    free += ItemStack.MaxItemsPerStack(item) - s.count;
             }
             return free;
         }

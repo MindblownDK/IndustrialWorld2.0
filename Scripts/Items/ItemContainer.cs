@@ -12,6 +12,8 @@ namespace VoxelEngine.Items
     [Serializable]
     public class ItemContainer : IItemContainer
     {
+        public const int DefaultMaxItemsPerStack = 900;
+
         [SerializeField] private string         _name = "Container";
         [SerializeField] private List<ItemStack> _slots;
         [SerializeField] private int             _minSize = 1;   // expected size; used by self-heal
@@ -22,13 +24,49 @@ namespace VoxelEngine.Items
         public IReadOnlyList<ItemStack> Slots { get { EnsureValid(); return _slots; } }
         public event Action OnChanged;
 
+        /// <summary>Player inventory uses the world player-weight setting; all other
+        /// containers use the world container-weight setting. This keeps legacy
+        /// containers save-compatible while making capacity data-driven.</summary>
+        [NonSerialized] public bool UsePlayerWeightProfile;
+        [NonSerialized] public float OverrideMaxWeightKg = -1f;
+
+        public float CurrentWeightKg => MassUtil.ContainerMass(this);
+        public float MaxWeightKg
+        {
+            get
+            {
+                if (OverrideMaxWeightKg > 0f) return OverrideMaxWeightKg;
+                var session = VoxelEngine.Menu.WorldSession.Instance;
+                if (session == null) return UsePlayerWeightProfile
+                    ? VoxelEngine.Menu.WorldSession.DefaultPlayerInventoryWeightKg
+                    : VoxelEngine.Menu.WorldSession.DefaultContainerWeightKg;
+                return UsePlayerWeightProfile
+                    ? session.PlayerInventoryWeightLimitKg
+                    : session.ContainerWeightLimitKg;
+            }
+        }
+        public float RemainingWeightKg => Mathf.Max(0f, MaxWeightKg - CurrentWeightKg);
+        public float WeightFill01 => MaxWeightKg <= 0f ? 0f : Mathf.Clamp01(CurrentWeightKg / MaxWeightKg);
+
         /// <summary>Optional gate consulted before accepting items — return how many of
         /// <c>item</c> may currently be added (e.g. a cargo container caps by mass).
         /// Null means "no extra limit". Set by the owning block.</summary>
         [NonSerialized] public Func<ItemDefinition, int, int> AcceptFilter;
 
         private int Allowed(ItemDefinition item, int wanted)
-            => AcceptFilter == null ? wanted : Mathf.Clamp(AcceptFilter(item, wanted), 0, wanted);
+        {
+            if (item == null || wanted <= 0) return 0;
+            int allowed = wanted;
+
+            float unitMass = Mathf.Max(0.0001f, item.massPerUnit);
+            float remaining = RemainingWeightKg;
+            if (MaxWeightKg > 0f)
+                allowed = Mathf.Min(allowed, Mathf.FloorToInt((remaining + 0.0001f) / unitMass));
+
+            if (AcceptFilter != null)
+                allowed = Mathf.Min(allowed, Mathf.Clamp(AcceptFilter(item, allowed), 0, allowed));
+            return Mathf.Clamp(allowed, 0, wanted);
+        }
 
         public ItemContainer() { }   // for Unity deserialization
         public ItemContainer(string name, int size)
@@ -100,13 +138,10 @@ namespace VoxelEngine.Items
             // Honour an optional accept gate (e.g. cargo mass cap). Anything the
             // gate refuses is held back and returned to the caller as leftover.
             int heldBack = 0;
-            if (AcceptFilter != null)
-            {
-                int allow = Allowed(stack.item, stack.count);
-                heldBack = stack.count - allow;
-                if (allow <= 0) return stack;        // nothing fits
-                stack.count = allow;
-            }
+            int allow = Allowed(stack.item, stack.count);
+            heldBack = stack.count - allow;
+            if (allow <= 0) return stack;        // nothing fits by mass/filter
+            stack.count = allow;
 
             // Pass 1: merge into existing partial stacks inside the range.
             if (stack.item.IsStackable)
@@ -116,7 +151,7 @@ namespace VoxelEngine.Items
                     var s = _slots[i];
                     if (s.IsEmpty || s.item != stack.item) continue;
                     if (!ItemStack.CanMerge(s, stack)) continue;
-                    int space = stack.item.maxStack - s.count;
+                    int space = ItemStack.MaxItemsPerStack(stack.item) - s.count;
                     if (space <= 0) continue;
                     int add = Mathf.Min(space, stack.count);
                     s.count += add;
@@ -127,12 +162,13 @@ namespace VoxelEngine.Items
             for (int i = start; i < end && stack.count > 0; i++)
             {
                 if (!_slots[i].IsEmpty) continue;
-                int add = stack.item.IsStackable ? Mathf.Min(stack.item.maxStack, stack.count) : 1;
+                int add = stack.item.IsStackable ? Mathf.Min(ItemStack.MaxItemsPerStack(stack.item), stack.count) : 1;
                 _slots[i] = new ItemStack
                 {
                     item       = stack.item,
                     count      = add,
-                    durability = stack.durability
+                    durability = stack.durability,
+                    payload    = stack.payload
                 };
                 stack.count -= add;
             }
@@ -170,14 +206,15 @@ namespace VoxelEngine.Items
         public bool HasSpace(ItemDefinition item, int count)
         {
             EnsureValid();
+            if (item == null || count <= 0) return false;
             int free = 0;
             foreach (var s in _slots)
             {
-                if (s.IsEmpty)                free += item.maxStack;
-                else if (s.item == item && item.IsStackable) free += item.maxStack - s.count;
-                if (free >= count) return true;
+                if (s.IsEmpty) free += ItemStack.MaxItemsPerStack(item);
+                else if (s.item == item && item.IsStackable) free += Mathf.Max(0, ItemStack.MaxItemsPerStack(item) - s.count);
+                if (free >= count) break;
             }
-            return free >= count;
+            return Mathf.Min(free, Allowed(item, count)) >= count;
         }
 
         /// <summary>Sort slots: group by item, merge partial stacks, push empties to end.</summary>
@@ -193,7 +230,7 @@ namespace VoxelEngine.Items
                     if (_slots[j].IsEmpty) continue;
                     if (_slots[i].item != _slots[j].item) continue;
                     if (!_slots[i].item.IsStackable) continue;
-                    int space = _slots[i].item.maxStack - _slots[i].count;
+                    int space = ItemStack.MaxItemsPerStack(_slots[i].item) - _slots[i].count;
                     if (space <= 0) break;
                     int move = System.Math.Min(space, _slots[j].count);
                     _slots[i].count += move;
@@ -228,7 +265,7 @@ namespace VoxelEngine.Items
                 for (int j = i + 1; j < end; j++)
                 {
                     if (_slots[j].IsEmpty || _slots[i].item != _slots[j].item || !_slots[i].item.IsStackable) continue;
-                    int space = _slots[i].item.maxStack - _slots[i].count;
+                    int space = ItemStack.MaxItemsPerStack(_slots[i].item) - _slots[i].count;
                     if (space <= 0) break;
                     int move = System.Math.Min(space, _slots[j].count);
                     _slots[i].count += move; _slots[j].count -= move;

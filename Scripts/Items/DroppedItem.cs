@@ -21,6 +21,7 @@ namespace VoxelEngine.Items
         /// <summary>Total item units currently represented by physical world drops.
         /// Conveyor packets are a separate simulation and never contribute here.</summary>
         public static int ActivePhysicalItemCount { get; private set; }
+        private static float _lastLimitNoticeTime = -999f;
         private int _registeredItemCount;
 
         private float _spawnTime;
@@ -40,8 +41,22 @@ namespace VoxelEngine.Items
         {
             if (stack == null || stack.IsEmpty) return null;
 
+            int requestedCount = stack.count;
             int capacity = AvailablePhysicalCapacity;
-            if (capacity <= 0) return null;
+            if (capacity <= 0)
+            {
+                ShowLimitNotice("Drop limit reached", $"{MaximumPhysicalItemCount:N0} physical items active · stack was not spawned", true);
+                return null;
+            }
+
+            if (requestedCount > capacity)
+            {
+                ShowLimitNotice("Drop limit capped stack", $"Spawned {capacity:N0}/{requestedCount:N0} before the world-drop limit", true);
+            }
+            else
+            {
+                WarnIfNearLimit(capacity - requestedCount);
+            }
 
             var di = DroppedItemPool.Get();
             var go = di.gameObject;
@@ -113,11 +128,31 @@ namespace VoxelEngine.Items
             get
             {
                 var session = VoxelEngine.Menu.WorldSession.Instance;
-                return session != null ? Mathf.Max(1, session.maxDroppedItems) : 90;
+                return session != null ? Mathf.Max(1, session.maxDroppedItems) : VoxelEngine.Menu.WorldSession.DefaultMaxDroppedItems;
             }
         }
 
         public static int AvailablePhysicalCapacity => Mathf.Max(0, MaximumPhysicalItemCount - ActivePhysicalItemCount);
+
+        private static void WarnIfNearLimit(int remainingAfterSpawn)
+        {
+            int max = MaximumPhysicalItemCount;
+            if (max <= 0) return;
+            float usedAfter = max - Mathf.Max(0, remainingAfterSpawn);
+            float fill = usedAfter / Mathf.Max(1f, max);
+            if (fill >= 0.95f)
+                ShowLimitNotice("Drop limit critical", $"{usedAfter:N0}/{max:N0} physical item units active", true);
+            else if (fill >= 0.80f)
+                ShowLimitNotice("Drop limit nearing", $"{usedAfter:N0}/{max:N0} physical item units active", false);
+        }
+
+        private static void ShowLimitNotice(string title, string detail, bool critical)
+        {
+            if (Time.unscaledTime - _lastLimitNoticeTime < 2.5f) return;
+            _lastLimitNoticeTime = Time.unscaledTime;
+            VoxelEngine.UI.BuildFeedbackHud.Show(title, detail, null,
+                critical ? new Color(0.95f, 0.25f, 0.18f) : new Color(1f, 0.72f, 0.22f));
+        }
 
         /// <summary>Marks the inventory that intentionally dropped this stack.
         /// That inventory must leave the pickup trigger before it can collect it again.</summary>

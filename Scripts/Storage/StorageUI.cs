@@ -23,8 +23,8 @@ namespace VoxelEngine.Storage
         //                    STORAGE TERMINAL
         //  Big-chest slot-grid layout.  Each unique item type stored
         //  in the network gets its own icon slot.
-        //  • Click a slot          → extract 1 (up to item.maxStack)
-        //  • Shift+Click a slot    → extract full maxStack
+        //  • Click a slot          → extract 1 (up to the matter-stack cap)
+        //  • Shift+Click a slot    → extract a full matter stack
         //  • Shift+Click inventory → store into network  (handled by
         //    GameUIController.QuickTransfer via _openStorageTerminal)
         // ════════════════════════════════════════════════════════════
@@ -58,11 +58,13 @@ namespace VoxelEngine.Storage
 
             // ── Storage fill bar ──────────────────────────────────
             p.Add(T.StatRow("💾", "Storage",
-                $"{rack.TotalStored:N0} / {rack.TotalCapacity:N0}", T.AccentCyan));
+                $"{rack.TotalStored:N0} / {rack.TotalCapacity:N0} GB", T.AccentCyan));
             var (fillBar, _) = T.ProgressBar(
                 rack.TotalCapacity > 0 ? (float)rack.TotalStored / rack.TotalCapacity : 0f,
                 T.AccentCyan, 8, true);
             p.Add(fillBar);
+            p.Add(T.Spacer(4));
+            p.Add(T.Muted("Matter conversion: each stored unit is encoded as stable matter data. Heavier items consume more GB."));
             p.Add(T.Spacer(6));
 
             // ── Search + Sort ─────────────────────────────────────
@@ -172,7 +174,7 @@ namespace VoxelEngine.Storage
                         continue;
 
                     var def = FindItemDef(entry.itemId);
-                    int maxExtract = def != null ? def.maxStack : 64;
+                    int maxExtract = def != null ? ItemStack.MaxItemsPerStack(def) : ItemContainer.DefaultMaxItemsPerStack;
 
                     // ── Slot cell ────────────────────────────────
                     var cell = new VisualElement();
@@ -790,7 +792,7 @@ namespace VoxelEngine.Storage
             p.Add(T.AccentDivider(T.AccentCyan));
 
             p.Add(T.StatRow("💾", "Storage",
-                $"{nas.TotalStored:N0} / {nas.TotalCapacity:N0}", T.AccentCyan));
+                $"{nas.TotalStored:N0} / {nas.TotalCapacity:N0} GB", T.AccentCyan));
             var (bar, _) = T.ProgressBar(
                 nas.TotalCapacity > 0 ? (float)nas.TotalStored / nas.TotalCapacity : 0,
                 T.AccentCyan, 8, true);
@@ -854,7 +856,7 @@ namespace VoxelEngine.Storage
             p.Add(T.AccentDivider(T.AccentCyan));
 
             // Stats.
-            p.Add(T.StatRow("💾", "Storage",     $"{rack.TotalStored:N0} / {rack.TotalCapacity:N0}", T.AccentCyan));
+            p.Add(T.StatRow("💾", "Storage",     $"{rack.TotalStored:N0} / {rack.TotalCapacity:N0} GB", T.AccentCyan));
             p.Add(T.StatRow("🧠", "Patterns",    $"{rack.PatternSlots} slots",       T.TextSecondary));
             p.Add(T.StatRow("⚡", "Craft Speed",  $"{rack.CraftSpeedMultiplier:0.0}x", T.AccentGold));
             p.Add(T.Divider());
@@ -899,7 +901,7 @@ namespace VoxelEngine.Storage
                 foreach (var nas in rack.connectedNAS)
                     if (nas != null) { nasS += nas.TotalStored; nasCap += nas.TotalCapacity; }
                 p.Add(T.StatRow("🗄", "NAS Blocks",
-                    $"{nasCnt}x  ({nasS:N0}/{nasCap:N0})", T.AccentCyan));
+                    $"{nasCnt}x  ({nasS:N0}/{nasCap:N0} GB)", T.AccentCyan));
             }
             else
             {

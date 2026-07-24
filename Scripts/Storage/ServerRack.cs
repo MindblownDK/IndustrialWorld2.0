@@ -215,13 +215,15 @@ namespace VoxelEngine.Storage
 
             // ── Sync & total disks ─────────────────────────────────
             SyncDisks();
+            float usedGb = 0f;
             TotalStored = 0; TotalCapacity = 0;
             foreach (var d in activeDisks)
             {
                 if (d == null) continue;
-                TotalStored   += d.totalStored;
+                usedGb += d.UsedGigabytes;
                 TotalCapacity += d.Capacity;
             }
+            TotalStored = Mathf.CeilToInt(usedGb);
         }
 
         private void SyncDisks()
@@ -405,7 +407,7 @@ namespace VoxelEngine.Storage
                 {
                     if (merged.TryGetValue(e.itemId, out var ex)) ex.count += e.count;
                     else merged[e.itemId] = new StoredItemEntry
-                        { itemId = e.itemId, displayName = e.displayName, count = e.count };
+                        { itemId = e.itemId, displayName = e.displayName, count = e.count, massPerUnit = e.massPerUnit <= 0f ? 1f : e.massPerUnit };
                 }
             }
             PruneExternalStorage();

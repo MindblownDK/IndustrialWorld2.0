@@ -1106,6 +1106,55 @@ namespace VoxelEngine.UI
             return wrapper;
         }
 
+        private VisualElement BuildInventoryWeightReadout()
+        {
+            var box = new VisualElement();
+            box.style.marginTop = 2;
+            box.style.marginBottom = 8;
+            box.style.paddingTop = 7;
+            box.style.paddingBottom = 7;
+            box.style.paddingLeft = 9;
+            box.style.paddingRight = 9;
+            box.style.backgroundColor = new StyleColor(new Color(0.08f, 0.10f, 0.14f, 0.82f));
+            SetBorderRadius(box, 5);
+
+            float current = inventory != null ? inventory.CurrentWeightKg : 0f;
+            float max = inventory != null ? inventory.MaxWeightKg : VoxelEngine.Menu.WorldSession.DefaultPlayerInventoryWeightKg;
+            float fill = max > 0f ? Mathf.Clamp01(current / max) : 0f;
+            Color accent = fill >= 0.95f ? UITheme.AccentRed : fill >= 0.80f ? UITheme.AccentAmber : UITheme.AccentCyan;
+
+            var row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            var label = new Label("MATTER WEIGHT");
+            label.style.flexGrow = 1;
+            label.style.fontSize = 9;
+            label.style.letterSpacing = 1f;
+            label.style.unityFontStyleAndWeight = FontStyle.Bold;
+            label.style.color = new StyleColor(UITheme.TextMuted);
+            row.Add(label);
+            var value = new Label($"{MassFormat.Format(current)} / {MassFormat.Format(max)}");
+            value.style.fontSize = 10;
+            value.style.unityFontStyleAndWeight = FontStyle.Bold;
+            value.style.color = new StyleColor(accent);
+            row.Add(value);
+            box.Add(row);
+
+            var bar = new VisualElement();
+            bar.style.height = 5;
+            bar.style.marginTop = 5;
+            bar.style.backgroundColor = new StyleColor(new Color(0f, 0f, 0f, 0.35f));
+            SetBorderRadius(bar, 3);
+            var fillBar = new VisualElement();
+            fillBar.style.height = 5;
+            fillBar.style.width = new StyleLength(new Length(fill * 100f, LengthUnit.Percent));
+            fillBar.style.backgroundColor = new StyleColor(accent);
+            SetBorderRadius(fillBar, 3);
+            bar.Add(fillBar);
+            box.Add(bar);
+            return box;
+        }
+
         // ----- HOTBAR -----
         private void BuildHotbar(VisualElement root)
         {
@@ -1146,6 +1195,7 @@ namespace VoxelEngine.UI
             root.Add(panel);
 
             panel.Add(MakeTitle("Inventory"));
+            panel.Add(BuildInventoryWeightReadout());
 
             // Backpack grid with sort button
             panel.Add(BuildSortableSlotGrid(inventory.container, Inventory.HOTBAR_SIZE, Inventory.TOTAL_SIZE));
@@ -1471,7 +1521,7 @@ namespace VoxelEngine.UI
             // Status hint — shows which rack the active transmitter is pointed at.
             var rack = GetActiveWirelessRack();
             var statusTxt = rack != null && rack.IsOnline
-                ? $"  \u2713 online ({rack.TotalStored:N0}/{rack.TotalCapacity:N0})"
+                ? $"  \u2713 online ({rack.TotalStored:N0}/{rack.TotalCapacity:N0} GB)"
                 : "  \u26A0 offline";
             var status = new Label(statusTxt);
             status.style.color    = new StyleColor(rack != null && rack.IsOnline ? UITheme.AccentGreen : UITheme.AccentRed);
@@ -2574,20 +2624,21 @@ namespace VoxelEngine.UI
                 return;
             }
 
-            // Respect destination/source AcceptFilter gates during direct drag/swap too.
-            // Insert() already honours filters, but SetSlot()-based swaps used to bypass them.
-            if (!CanDirectSet(destC, srcStack) || !CanDirectSet(srcC, dstStack))
-            {
-                CancelDrag();
-                return;
-            }
+            bool sameContainer = srcC == destC;
 
             // Stack merge.
             if (!srcStack.IsEmpty && !dstStack.IsEmpty &&
                 dstStack.item == srcStack.item && srcStack.item.IsStackable)
             {
-                int space = srcStack.item.maxStack - dstStack.count;
+                int space = ItemStack.MaxItemsPerStack(srcStack.item) - dstStack.count;
                 int move  = Mathf.Min(space, srcStack.count);
+                if (!sameContainer)
+                    move = Mathf.Min(move, MaxDirectAdd(destC, srcStack.item, move));
+                if (move <= 0)
+                {
+                    CancelDrag();
+                    return;
+                }
                 dstStack.count += move;
                 srcStack.count -= move;
                 destC.SetSlot(destIdx, dstStack);
@@ -2595,6 +2646,14 @@ namespace VoxelEngine.UI
             }
             else
             {
+                // Respect destination/source AcceptFilter and mass gates during direct swaps.
+                // Insert() already honours filters, but SetSlot()-based swaps used to bypass them.
+                if (!sameContainer && (!CanDirectSet(destC, srcStack, dstStack) || !CanDirectSet(srcC, dstStack, srcStack)))
+                {
+                    CancelDrag();
+                    return;
+                }
+
                 // Plain swap.
                 destC.SetSlot(destIdx, srcStack);
                 srcC.SetSlot(srcIdx, dstStack);
@@ -2602,11 +2661,33 @@ namespace VoxelEngine.UI
             CancelDrag();
         }
 
-        private static bool CanDirectSet(IItemContainer container, ItemStack stack)
+        private static int MaxDirectAdd(IItemContainer container, ItemDefinition item, int wanted)
+        {
+            if (item == null || wanted <= 0) return 0;
+            int allowed = wanted;
+            if (container is ItemContainer itemContainer)
+            {
+                if (itemContainer.AcceptFilter != null)
+                    allowed = Mathf.Min(allowed, Mathf.Clamp(itemContainer.AcceptFilter(item, allowed), 0, allowed));
+                float freeMass = itemContainer.MaxWeightKg - itemContainer.CurrentWeightKg;
+                allowed = Mathf.Min(allowed, Mathf.FloorToInt((freeMass + 0.0001f) / Mathf.Max(0.0001f, item.massPerUnit)));
+            }
+            return Mathf.Clamp(allowed, 0, wanted);
+        }
+
+        private static bool CanDirectSet(IItemContainer container, ItemStack stack, ItemStack replacing)
         {
             if (stack == null || stack.IsEmpty || stack.item == null) return true;
-            if (container is ItemContainer itemContainer && itemContainer.AcceptFilter != null)
-                return itemContainer.AcceptFilter(stack.item, stack.count) >= stack.count;
+            if (container is ItemContainer itemContainer)
+            {
+                if (itemContainer.AcceptFilter != null && itemContainer.AcceptFilter(stack.item, stack.count) < stack.count)
+                    return false;
+                float replacingMass = replacing == null || replacing.IsEmpty || replacing.item == null
+                    ? 0f
+                    : MassUtil.StackMass(replacing.item, replacing.count);
+                float freeAfterReplace = itemContainer.MaxWeightKg - Mathf.Max(0f, itemContainer.CurrentWeightKg - replacingMass);
+                return freeAfterReplace + 0.0001f >= MassUtil.StackMass(stack.item, stack.count);
+            }
             return true;
         }
 
@@ -3337,7 +3418,7 @@ namespace VoxelEngine.UI
             foreach (var slot in container.Slots)
             {
                 if (slot == null || slot.IsEmpty) return true;
-                if (slot.item == item && item.IsStackable && slot.count < item.maxStack) return true;
+                if (slot.item == item && item.IsStackable && slot.count < ItemStack.MaxItemsPerStack(item)) return true;
             }
 
             return false;

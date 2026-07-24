@@ -16,7 +16,7 @@ namespace VoxelEngine.Items
         public Sprite icon;
         [Tooltip("Color used for icon fallback when no sprite is assigned.")]
         public Color iconTint = Color.white;
-        public int   maxStack    = 999;
+        public int   maxStack    = 900;
         public float massPerUnit = 1f;
         [Tooltip("Free-form category for filtering in the crafting list. Examples: Resources, Tools, Building, Power, Stations.")]
         public string category    = "Misc";

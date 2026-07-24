@@ -35,6 +35,7 @@ namespace VoxelEngine.GridSystem.UI
             public bool showHidden;
             public bool showDataTypes;
             public bool showPowerUsage;
+            public string searchQuery = string.Empty;
             public readonly HashSet<string> hiddenDataTypes = new();
             public int lastSelectedIndex = -1;
         }
@@ -295,6 +296,19 @@ namespace VoxelEngine.GridSystem.UI
             }, state.showHidden ? T.AccentCyan : T.AccentDim));
             col.Add(header);
 
+            var search = new TextField { value = state.searchQuery ?? string.Empty };
+            search.style.minHeight = 26;
+            search.style.marginBottom = 6;
+            search.tooltip = "Search by block name, type, status, or category.";
+            search.RegisterValueChangedCallback(e =>
+            {
+                state.searchQuery = e.newValue ?? string.Empty;
+                RefreshTerminal();
+            });
+            search.RegisterCallback<FocusInEvent>(_ => PortConfigHud.IsAnyDropdownOpen = true);
+            search.RegisterCallback<FocusOutEvent>(_ => PortConfigHud.IsAnyDropdownOpen = false);
+            col.Add(search);
+
             if (state.selected.Count > 0)
                 col.Add(BuildSelectionTools(state));
 
@@ -326,6 +340,7 @@ namespace VoxelEngine.GridSystem.UI
             {
                 var b = blocks[i];
                 if (grouped.Contains(b)) continue;
+                if (!MatchesSearch(b, state.searchQuery)) continue;
                 bool hidden = IsHidden(state, b);
                 if (hidden && !state.showHidden) continue;
                 list.Add(BlockRow(state, blocks, i, tab, onSelectTab, indent: false, hidden));
@@ -1134,13 +1149,36 @@ namespace VoxelEngine.GridSystem.UI
 
         private static bool HasToggle(GridBlock b) => b != null;
 
-        private static bool IsTerminalBlock(GridBlock b) => b != null;
+        private static bool IsTerminalBlock(GridBlock b)
+        {
+            if (b == null) return false;
+            if (b is GridArmorBlock) return false;
+            if (b.GetComponentInChildren<VoxelEngine.Fluids.WaterPipe>(true) != null) return false;
+            return true;
+        }
+
+        private static bool MatchesSearch(GridBlock block, string query)
+        {
+            if (block == null) return false;
+            if (string.IsNullOrWhiteSpace(query)) return true;
+            string q = query.Trim();
+            return Contains(block.blockName, q)
+                || Contains(block.GetType().Name, q)
+                || Contains(CategoryName(block), q)
+                || Contains(BlockStatus(block), q);
+        }
+
+        private static bool Contains(string value, string query)
+        {
+            return !string.IsNullOrEmpty(value)
+                && value.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0;
+        }
 
         private static void SetAllEnabled(GridEntity grid, bool on)
         {
             if (grid == null) return;
             foreach (var block in grid.AllBlocks)
-                if (block != null && HasToggle(block)) block.Enabled = on;
+                if (block != null && IsTerminalBlock(block) && HasToggle(block)) block.Enabled = on;
             RefreshTerminal();
         }
 

@@ -1,9 +1,63 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.15.1-dev`
+**Current Version:** `6.16.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.16.0-dev] Inventory Weight, Matter Stacks, Drop Warnings & Terminal Search
+
+**Type:** MINOR — save-compatible inventory/world-management/UI feature set. No save schema migration, recipe changes, prefab changes, or setup step required.
+
+**Added / Improved:**
+- Default physical dropped-item limit is now **1000** instead of 90. Existing worlds can edit this from **Edit World**.
+- Added right-corner toast warnings when physical world drops approach the active limit, hit the limit, or a spawned stack is capped by the remaining drop capacity.
+- Added global **900-unit matter stacks** for stackable items. Per-item stack-size authoring no longer creates smaller stack caps during insertion, pipe buffering, machine input, storage extraction, or UI merge checks. Unique payload/tool items remain one-per-stack.
+- Added world-configurable weight multipliers for:
+  - player inventory max matter weight
+  - chest/container/machine max matter weight
+- New World and Edit World expose both weight multipliers as percentages without touching generation settings.
+- Player inventory now shows a live **Matter Weight** readout and fill bar: current weight / max weight.
+- Chests and machines now enforce container weight limits through `ItemContainer`; grid cargo keeps its authored larger mass cap through an override.
+- Breaking a block now drains every contained `ItemContainer` first: contents try to enter the player's inventory, then any leftovers drop into the world. This covers chests, machines, module slots, and other inventory-bearing placed blocks.
+- Storage disks now describe and behave as **matter-conversion storage**: heavier items consume more GB per unit, and storage UIs show GB usage.
+- Ship Control Terminal now has a block search field and no longer lists armor blocks or liquid/water pipe utility blocks.
+- Runtime build version constants now report `6.16.0-dev`.
+
+**Roadmap Status:**
+- World Management, Autosaves & Item Limits remains **✅ COMPLETED** and now includes weight/drop-limit world settings.
+- Crafting / items / storage moved to **🛠️ WORKING ON** for active weight/matter-stack/storage progression work.
+
+**Files touched (pull these):**
+- `Scripts/Items/ItemDefinition.cs`
+- `Scripts/Items/ItemStack.cs`
+- `Scripts/Items/ItemContainer.cs`
+- `Scripts/Items/Inventory.cs`
+- `Scripts/Items/DroppedItem.cs`
+- `Scripts/Building/PlacedBlock.cs`
+- `Scripts/Menu/MainMenuController.cs`
+- `Scripts/Menu/WorldSession.cs`
+- `Scripts/UI/GameUIController.cs`
+- `Scripts/UI/WorldInspectionHud.cs`
+- `Scripts/GridSystem/UI/GridMasterTerminal.cs`
+- `Scripts/GridSystem/GridCargoContainer.cs`
+- `Scripts/GridSystem/GridElectricFurnace.cs`
+- `Scripts/Crafting/ElectricFurnace.cs`
+- `Scripts/Simulation/Assembler.cs`
+- `Scripts/Simulation/Crusher.cs`
+- `Scripts/Transport/ItemPipe.cs`
+- `Scripts/Player/PlayerInteractionTool.cs`
+- `Scripts/Storage/StorageDisk.cs`
+- `Scripts/Storage/ServerRack.cs`
+- `Scripts/Storage/NASBlock.cs`
+- `Scripts/Storage/StorageUI.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Roadmap.md`
+- `Changelog.md`
+
+**Manual steps:** none — runtime/UI-only. No `Tools > Voxel Engine > Voxel Engine Setup` run required.
 
 ---
 

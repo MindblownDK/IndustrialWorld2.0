@@ -165,7 +165,7 @@ namespace VoxelEngine.Player
                 {
                     int amount = 1;
                     if (IsShiftHeld() && drawer.storedItem != null)
-                        amount = Mathf.Max(VoxelEngine.Storage.StorageDrawer.DefaultBaseStackSize, drawer.storedItem.maxStack);
+                        amount = Mathf.Max(VoxelEngine.Storage.StorageDrawer.DefaultBaseStackSize, ItemStack.MaxItemsPerStack(drawer.storedItem));
                     drawer.TryPlayerExtract(inventory, amount);
                     _nextHit = Time.time + 0.12f;
                     return;

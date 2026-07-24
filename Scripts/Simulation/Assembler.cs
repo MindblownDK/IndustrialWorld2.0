@@ -182,7 +182,7 @@ namespace VoxelEngine.Simulation
             if (item == null) return 0;
             // Accept any item that matches a known recipe input.
             if (!IsKnownInput(item)) return 0;
-            return inputC.HasSpace(item, 1) ? item.maxStack : 0;
+            return inputC.HasSpace(item, 1) ? ItemStack.MaxItemsPerStack(item) : 0;
         }
 
         public int TryInsert(ItemDefinition item, int count)

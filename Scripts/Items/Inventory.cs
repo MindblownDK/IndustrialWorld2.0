@@ -39,6 +39,17 @@ namespace VoxelEngine.Items
         {
             if (container == null) container = new ItemContainer("Inventory", TOTAL_SIZE);
             else container.Resize(TOTAL_SIZE);
+            container.UsePlayerWeightProfile = true;
+        }
+
+        public float CurrentWeightKg
+        {
+            get { EnsureContainer(); return container.CurrentWeightKg; }
+        }
+
+        public float MaxWeightKg
+        {
+            get { EnsureContainer(); return container.MaxWeightKg; }
         }
 
         // Backwards-compat helper for VoxelEditor / old code.
@@ -47,7 +58,10 @@ namespace VoxelEngine.Items
             if (item == null || count <= 0) return;
             var leftover = container.Insert(new ItemStack(item, count));
             if (leftover != null && leftover.count > 0)
-                Debug.Log($"[Inventory] Inventory full — dropped {leftover.count} x {item.displayName}");
+            {
+                Debug.Log($"[Inventory] Inventory overweight/full — dropped {leftover.count} x {item.displayName}");
+                DroppedItem.Spawn(leftover, transform.position + Vector3.up * 0.6f, Vector3.up);
+            }
         }
 
         public int CountOf(ItemDefinition item) => container.CountOf(item);

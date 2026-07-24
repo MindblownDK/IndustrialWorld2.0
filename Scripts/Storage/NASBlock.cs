@@ -39,6 +39,7 @@ namespace VoxelEngine.Storage
         private void SyncDisks()
         {
             while (activeDisks.Count < diskSlots.Size) activeDisks.Add(null);
+            float usedGb = 0f;
             TotalStored = 0; TotalCapacity = 0;
 
             for (int i = 0; i < diskSlots.Size; i++)
@@ -47,12 +48,21 @@ namespace VoxelEngine.Storage
                 if (slot.IsEmpty || !(slot.item is StorageDisk sd))
                 { activeDisks[i] = null; continue; }
 
-                if (activeDisks[i] == null || activeDisks[i].tier != sd.tier)
-                    activeDisks[i] = new DiskData { tier = sd.tier };
+                var data = slot.payload as DiskData;
+                if (data == null || data.tier != sd.tier)
+                {
+                    data = activeDisks[i] != null && activeDisks[i].tier == sd.tier
+                        ? activeDisks[i]
+                        : new DiskData { tier = sd.tier };
+                    slot.payload = data;
+                    diskSlots.SetSlot(i, slot);
+                }
+                activeDisks[i] = data;
 
-                TotalStored += activeDisks[i].totalStored;
+                usedGb += activeDisks[i].UsedGigabytes;
                 TotalCapacity += activeDisks[i].Capacity;
             }
+            TotalStored = Mathf.CeilToInt(usedGb);
         }
 
         /// <summary>Called by ServerRack to include this NAS's disks in the network.</summary>
