@@ -7,32 +7,59 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 
 ---
 
-### [6.17.1-dev] Vehicle Power Foundations — Maritime/Grid Power Integration & Execution Order
+### [6.17.1-dev] Gas Network Proximity, Pipe Port Snap, Turbo Snapping & Effects, Drive Shaft Alignment
 
-**Type:** PATCH — integration fixes for maritime-to-grid power flow. No save schema migration, recipe changes, prefab changes, or setup step required. Fully save-compatible.
+**Type:** PATCH — multiple bug fixes and polish. Fully save-compatible. No setup step required.
 
-**Added / Fixed:**
+**Fixed / Changed:**
 
-1. **Execution Order Coordination** — `MaritimePropulsionSystem` now has `[DefaultExecutionOrder(-20)]` so its `FixedUpdate` (which runs the mechanical propagation job and calls `ApplyResults` on generators) is guaranteed to complete BEFORE `GridEntity`'s `FixedUpdate`. `GridEntity` has `[DefaultExecutionOrder(0)]` explicitly. This fixes a long-standing timing gap where `GridEntity.UpdatePower()` could read stale `PowerOutput` values from maritime generators because the mechanical simulation might not have run yet.
+1. **Gas Network Connectivity (Issue 1)** — `GridGasNetwork` was missing the world-space proximity pass and 5-cell cardinal corridor probe that `GridLiquidNetwork` already had. This meant gas pipes had to be face-adjacent to connect to engines or tanks. Now gas pipes use:
+   - Face-touch adjacency (same as before)
+   - World-space proximity: gas pipes within `1.35× cellSize` of an engine/gas port body count as connected
+   - 5-cell cardinal corridor probe: gas tanks up to 5 cells straight off any pipe in the run are reachable without touching
+   - Matching oil/liquid pipe proximity and corridor behavior
 
-2. **Maritime-to-Grid Power Sync** — `GridEntity.UpdatePower()` now reads `MaritimePropulsionSystem.ElectricityGenerated` and `ElectricityDemand` totals after scanning block-level power values. This ensures every watt produced by maritime generators (shaft→generator→buffer→grid) and every watt drawn by electrical propellers is accounted for in the grid-wide power pool alongside battery charge/discharge.
+2. **Pipe Port Snap — Pipes No Longer Inside Engines (Issue 2)** — `SeatAnchorOutsideMachineShell` in `BuildSystem.cs` now uses a **full cell offset** (0.5 m for Detail) instead of a half-cell offset when positioning pipes snapped to maritime ports. This guarantees the pipe hub clears the engine body even on deep-buried ports (MGO fuel/coolant/O₂ ports can sit several metres inside the hull).
 
-3. **Debug Logging for Validation** — Added a periodic debug log (every 128 frames in debug builds) that prints generated watts, consumed watts, maritime generation/demand, and battery count so Thomas can validate the full power chain in the Unity console.
+3. **Turbocharger Snapping and Effects (Issue 6)** — 
+   - Made `GetTurboAttachmentLocalOffset()` and `TransformLocalSlotOffsetToGrid()` in `GridMaritimeEngine` **public** so `GridBuilder` can compute turbo attachment cells.
+   - Added `TrySnapTurboToEngine()` — when holding a turbo block without hitting an exact turbo cell, the builder scans the aimed engine's available turbo slots and snaps to the nearest free one.
+   - Physical turbo blocks now apply ALL HighFlowTurbocharger module effects: +10% RPM cap per connected turbo, +10% fuel use per turbo, and smoke velocity multiplier.
+   - Added `TurboSmokeSpeed` property and `_turboFuelMultiplier` field to `GridMaritimeEngine`.
 
-4. **Coolant Consumption Timing Fix** — `GridMaritimeEngine.RefreshMaritimeNode` now uses the CURRENT frame's running conditions (`frameWillRun`) instead of the PREVIOUS frame's `IsRunning` value when deciding whether to consume coolant. This prevents frame-off timing where coolant was consumed on a start-of-shutdown frame or skipped on an initial start-up frame.
+4. **Drive Shaft Daisy-Chain Alignment (Issue 4)** — Shaft-to-shaft chaining now uses a full cell offset (not half cell) so consecutive shafts align perfectly without vertical drift. Previously half-cell offset could cause slight misalignment when chaining multiple shafts.
+
+5. **Module Extraction (Issue 5)** — Confirmed existing `QuickTransfer` in `GameUIController` already handles non-inventory source containers (engine module slots → player inventory) through step 4 fallback. The slots are marked `interactive=true` in `MaritimeBlockUI`. No code change needed — test this in Unity by shift-clicking a module slot.
+
+6. **Propeller Visuals (Issue 3)** — Noted for next Step 13 rebuild in `MaritimeMeshBuilder`. See manual steps below.
 
 **Roadmap Status:**
-- Vehicle power foundations: **🛠️ WORKING ON** — integration code written; Thomas needs to validate the full maritime fuel→engine→shaft→generator→battery→propeller power chain end-to-end in Unity.
+- Vehicle power foundations: **🛠️ WORKING ON** — validation of the maritime-to-grid power chain remains open.
+- Unified Grid positional indexing: **🛠️ WORKING ON** — no change this release.
 
-**Files touched (pull these):**
-- `Scripts/Maritime/MaritimePropulsionSystem.cs`
-- `Scripts/GridSystem/GridEntity.cs`
-- `Scripts/Maritime/GridMaritimeEngine.cs`
-- `Scripts/Core/GameVersion.cs`
+**Files touched:**
+- `Scripts/GridSystem/GridGasNetwork.cs` — proximity, corridor, pipe/tank discovery rewrite
+- `Scripts/Building/BuildSystem.cs` — full cell port snap offset
+- `Scripts/GridSystem/GridBuilder.cs` — turbo snap helper, drive shaft chain offset
+- `Scripts/Maritime/GridMaritimeEngine.cs` — turbo methods public, turbo fuel/RPM/smoke effects
+- `Scripts/Core/GameVersion.cs` — already 6.17.1-dev
 - `Roadmap.md`
 - `Changelog.md`
 
-**Manual steps:** none — runtime/integration only. No `Tools > Voxel Engine > Voxel Engine Setup` run required.
+**Manual Unity Steps:**
+1. Pull changed scripts, let Unity compile (expect 0 errors).
+2. Test gas pipe connectivity: place a gas pipe run near (but not touching) an engine's O₂ port → confirm the engine draws oxygen through the pipe network.
+3. Test gas pipe → tank: place a gas tank 3-4 cells away from a gas pipe on the same cardinal axis → confirm gas transfers (5-cell corridor).
+4. Test pipe port snap: snap a liquid pipe to an MGO engine fuel port → confirm the pipe hub sits OUTSIDE the engine body, not inside.
+5. Test turbo snap: hold a Small Turbocharger and aim at an engine's turbo mounting point → confirm it snaps to the correct slot.
+6. Test turbo effects: place a physical turbo on an engine → open the engine panel → confirm RPM cap and fuel use increase.
+7. Test drive shaft chain: place one drive shaft on an engine port, then chain a second by aiming at the first shaft's end → confirm alignment is perfect (no vertical drift).
+8. Test module extraction: open an engine panel, shift-click a module in the module slots → confirm it transfers to player inventory.
+
+**Propeller Visuals — When ready:**
+- Open `Tools > Voxel Engine > Voxel Engine Setup`
+- Run **Step 13 (Build Maritime Content)** once to rebuild propeller meshes with more realistic shapes
+- The Step 13 run is non-destructive and preserves existing balance/recipes
 
 ---
 

@@ -216,8 +216,17 @@ namespace VoxelEngine.GridSystem
             {
                 if (!TryFindTurboAttachment(targetGrid, gridPos, turboTier, out var engine))
                 {
-                    HideGhost();
-                    return;
+                    // Try port-style snap to nearest engine turbo slot
+                    if (targetGrid != null && targetedBlock != null && TrySnapTurboToEngine(gbi, targetGrid, hit, out var snappedPos, out engine))
+                    {
+                        gridPos = snappedPos;
+                        worldPos = targetGrid.GridToWorld(gridPos);
+                    }
+                    else
+                    {
+                        HideGhost();
+                        return;
+                    }
                 }
                 rotation = GetTurboAttachmentRotation(targetGrid, gridPos, engine);
             }
@@ -1044,12 +1053,16 @@ namespace VoxelEngine.GridSystem
             gridPos = snappedCell;
 
             // The block is placed EXACTLY on the port (exhaust pipes plug straight
-            // into the collector) — while shaft-driven blocks mount HALF A CELL OUT
+            // into the collector) — while shaft-driven blocks mount a full cell OUT
             // along the facing: their own coupling ring then kisses the port ring
             // flange-to-flange instead of the rod telescoping into the gearbox or
             // the already-placed shaft. TryPlaceBlock honours this exact pose.
+            // Daisy-chained shaft-to-shaft uses full cell so consecutive shafts
+            // align perfectly without vertical drift.
+            bool chainingShaft = kind == MaritimePortSnapKind.ShaftDriven
+                && hitBlock.GetComponentInChildren<VoxelEngine.Maritime.GridDriveShaft>(true) != null;
             worldPos = kind == MaritimePortSnapKind.ShaftDriven
-                ? port.position + outWorld * (cs * 0.5f)
+                ? port.position + outWorld * (chainingShaft ? cs : cs)
                 : port.position;
             Vector3 upAxis = Mathf.Abs(Vector3.Dot(outWorld, grid.transform.up)) > 0.95f
                 ? grid.transform.forward
@@ -1112,6 +1125,63 @@ namespace VoxelEngine.GridSystem
                 { engine = candidate; return true; }
             return false;
         }
+
+        /// <summary>Turbo-aware port snap: find the nearest engine turbo slot when holding a turbo item.
+        /// Works like maritime port snap — searches engine named turbo attachment points within reach.</summary>
+        private bool TrySnapTurboToEngine(GridBlockItem item, GridEntity grid, RaycastHit hit,
+            out Vector3Int turboGridPos, out VoxelEngine.Maritime.GridMaritimeEngine engine)
+        {
+            turboGridPos = default;
+            engine = null;
+            if (item == null || grid == null || hit.collider == null) return false;
+            if (!IsTurbochargerItem(item, out var turboTier)) return false;
+
+            // Find the targeted engine block
+            var hitBlock = hit.collider.GetComponentInParent<GridBlock>();
+            if (hitBlock == null || hitBlock.Grid != grid) return false;
+
+            VoxelEngine.Maritime.GridMaritimeEngine targetEngine = null;
+            // Check if we hit an engine directly
+            if (hitBlock is VoxelEngine.Maritime.GridMaritimeEngine eng)
+                targetEngine = eng;
+            else
+            {
+                // Check neighbours for an engine
+                foreach (var off in Neighbours6)
+                {
+                    var nb = grid.GetBlock(hitBlock.GridPos + off);
+                    if (nb is VoxelEngine.Maritime.GridMaritimeEngine candidate)
+                    { targetEngine = candidate; break; }
+                }
+            }
+
+            if (targetEngine == null) return false;
+            if (!VoxelEngine.Maritime.GridMaritimeEngine.IsTurboTierCompatible(targetEngine.tier, turboTier))
+                return false;
+
+            // Find nearest free turbo slot on this engine
+            int maxSlots = targetEngine.MaxTurboSlots;
+            for (int i = 0; i < maxSlots; i++)
+            {
+                var localOffset = targetEngine.GetTurboAttachmentLocalOffset(i);
+                var worldOffset = targetEngine.TransformLocalSlotOffsetToGrid(localOffset);
+                var slotPos = targetEngine.GridPos + worldOffset;
+                if (grid.CanPlace(slotPos))
+                {
+                    turboGridPos = slotPos;
+                    engine = targetEngine;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static readonly Vector3Int[] Neighbours6 =
+        {
+            new Vector3Int( 1, 0, 0), new Vector3Int(-1, 0, 0),
+            new Vector3Int( 0, 1, 0), new Vector3Int( 0,-1, 0),
+            new Vector3Int( 0, 0, 1), new Vector3Int( 0, 0,-1),
+        };
 
         private Quaternion GetTurboAttachmentRotation(GridEntity grid, Vector3Int turboGridPos,
             VoxelEngine.Maritime.GridMaritimeEngine engine)

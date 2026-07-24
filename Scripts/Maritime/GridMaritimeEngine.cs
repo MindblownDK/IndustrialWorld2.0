@@ -205,6 +205,9 @@ namespace VoxelEngine.Maritime
         public float SmokeSpeedMultiplier { get; private set; } = 1f;
         /// <summary>True while Overclocked Fuel Injectors dirty the exhaust.</summary>
         public bool SmokeDirty => InjectorModuleCount > 0;
+        /// <summary>Smoke speed multiplier boosted by connected physical turbos (same effect as HighFlowTurbocharger module).</summary>
+        public float TurboSmokeSpeed => 1f + ConnectedTurboCount * 0.10f;
+
         /// <summary>0..1 live engine speed — normalized RPM against the module-raised cap.
         /// Drives the visible crankshaft RPM and the piston playback rate simultaneously.</summary>
         public float EngineSpeed01
@@ -447,7 +450,7 @@ namespace VoxelEngine.Maritime
             return turboTier != TurboTier.Large || engineTier != EngineTier.Small;
         }
 
-        private Vector3Int GetTurboAttachmentLocalOffset(int slotIndex)
+        public Vector3Int GetTurboAttachmentLocalOffset(int slotIndex)
         {
             switch (tier)
             {
@@ -468,7 +471,7 @@ namespace VoxelEngine.Maritime
             }
         }
 
-        private Vector3Int TransformLocalSlotOffsetToGrid(Vector3Int localOffset)
+        public Vector3Int TransformLocalSlotOffsetToGrid(Vector3Int localOffset)
         {
             if (Grid == null) return localOffset;
 
@@ -661,6 +664,7 @@ namespace VoxelEngine.Maritime
             // Marine Engine Coolant reduces fuel consumption by 33%.
             float fuelMultiplier = UsingPremiumCoolant ? 0.67f : 1f;
             fuelMultiplier *= ModuleFuelUseMultiplier;
+            fuelMultiplier *= _turboFuelMultiplier; // physical turbos increase fuel use
             if (IsOverheating) fuelMultiplier *= 4f / 3f; // knocking: fuel efficiency drops 25%
             float consumption = fuelConsumptionRate * requestedThrottle * fuelMultiplier * dt;
             FuelBuffer = Mathf.Max(0f, FuelBuffer - consumption);
@@ -681,14 +685,20 @@ namespace VoxelEngine.Maritime
             float effectiveFuel = IsRunning ? FuelFill01 * requestedThrottle * exhaustPenalty : 0f;
 
             // Count connected turbos and apply stacked boost to the torque.
+            // Physical turbo blocks also provide RPM cap bonus, fuel use increase,
+            // and smoke velocity (matching the HighFlowTurbocharger module effects).
             CountTurbos();
             // Realistic torque curve: available torque sags as the shaft approaches
             // redline, so raw SPEED now genuinely costs TORQUE.
             float speedStressTerm = EngineSpeed01;
             float torqueCurve = TorqueCurveAtSpeed(speedStressTerm);
+            float turboRpmBonus = ConnectedTurboCount * 0.10f; // +10% RPM cap per connected turbo
+            float turboFuelPenalty = 1f + ConnectedTurboCount * 0.10f; // +10% fuel use per turbo
             node.MaxTorque = maxTorque * TurboBoostTotal * ModuleOutputMultiplier * torqueCurve;
-            node.MaxRPM = maxRPM * ModuleSpeedCapMultiplier;
+            node.MaxRPM = maxRPM * (ModuleSpeedCapMultiplier + turboRpmBonus);
             node.OutputMultiplier = 1f;
+            // Apply turbo fuel penalty to the consumption multiplier for honest ETA display
+            _turboFuelMultiplier = turboFuelPenalty;
 
             node.FuelAvailable01 = effectiveFuel;
 
@@ -786,11 +796,13 @@ namespace VoxelEngine.Maritime
             ModuleFuelUseMultiplier = Mathf.Max(0.05f, 1f + fuelModifier);
             _moduleHeatBonus = heatBonus;
             _moduleDissipationMultiplier = dissipationMul;
-            SmokeSpeedMultiplier = smokeSpeed;
+            // Physical turbo blocks also contribute to smoke velocity
+            SmokeSpeedMultiplier = smokeSpeed * TurboSmokeSpeed;
         }
 
         private float _moduleHeatBonus;
         private float _moduleDissipationMultiplier = 1f;
+        private float _turboFuelMultiplier = 1f;
 
         /// <summary>True while an Efficiency Tuning Chip is socketed and therefore a
         /// continuous ACTIVE coolant flow is mandatory during operation.</summary>

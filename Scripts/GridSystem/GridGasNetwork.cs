@@ -7,6 +7,7 @@
 
 using System.Collections.Generic;
 using UnityEngine;
+using VoxelEngine.Networks;
 
 namespace VoxelEngine.GridSystem
 {
@@ -128,30 +129,48 @@ namespace VoxelEngine.GridSystem
             var grid = endpoint != null ? endpoint.Grid : null;
             if (grid == null || type == Gas.GasType.None) yield break;
 
+            float cs = grid.gridSize.CellSize();
             var visitedPipes = new HashSet<GridBlock>();
             var yieldedTanks = new HashSet<GridGasTank>();
             var queue = new Queue<GridBlock>();
 
-            foreach (var adjacent in UnifiedGridTopology.AdjacentBlocks(grid, endpoint))
+            void SeedPipe(GridBlock pipe)
             {
-                if (!IsGasPipe(adjacent)
-                    || VoxelEngine.Networks.WrenchBlacklist.IsBlocked(endpoint.gameObject, adjacent.gameObject)
-                    || !visitedPipes.Add(adjacent)) continue;
-                queue.Enqueue(adjacent);
+                if (pipe == null || VoxelEngine.Networks.WrenchBlacklist.IsBlocked(endpoint.gameObject, pipe.gameObject)
+                    || !visitedPipes.Add(pipe)) return;
+                queue.Enqueue(pipe);
+            }
+
+            // Classic face-touch adjacency
+            foreach (var adjacent in UnifiedGridTopology.AdjacentBlocks(grid, endpoint))
+                if (IsGasPipe(adjacent)) SeedPipe(adjacent);
+            // PLUS world-space proximity — pipes snapped to a port may sit cells away
+            foreach (var pipe in grid.AllBlocks)
+            {
+                if (pipe == null || !IsGasPipe(pipe)) continue;
+                if (BlocksAreGasLinked(endpoint, pipe, cs)) SeedPipe(pipe);
             }
 
             while (queue.Count > 0)
             {
                 var pipeBlock = queue.Dequeue();
+
+                // Pipe → pipe growth (face adjacency + proximity)
                 foreach (var adjacent in UnifiedGridTopology.AdjacentBlocks(grid, pipeBlock))
                 {
-                    if (IsGasPipe(adjacent))
-                    {
-                        if (!VoxelEngine.Networks.WrenchBlacklist.IsBlocked(pipeBlock.gameObject, adjacent.gameObject)
-                            && visitedPipes.Add(adjacent)) queue.Enqueue(adjacent);
-                        continue;
-                    }
+                    if (IsGasPipe(adjacent)
+                        && !VoxelEngine.Networks.WrenchBlacklist.IsBlocked(pipeBlock.gameObject, adjacent.gameObject)
+                        && visitedPipes.Add(adjacent)) queue.Enqueue(adjacent);
+                }
+                foreach (var pipe in ProximityPipes(grid, pipeBlock, cs))
+                {
+                    if (!VoxelEngine.Networks.WrenchBlacklist.IsBlocked(pipeBlock.gameObject, pipe.gameObject)
+                        && visitedPipes.Add(pipe)) queue.Enqueue(pipe);
+                }
 
+                // Pipe → tanks (face + proximity + 5-cell cardinal corridor)
+                foreach (var adjacent in UnifiedGridTopology.AdjacentBlocks(grid, pipeBlock))
+                {
                     if (adjacent is GridGasTank tank && tank.Enabled
                         && !VoxelEngine.Networks.WrenchBlacklist.IsBlocked(pipeBlock.gameObject, tank.gameObject))
                     {
@@ -160,7 +179,106 @@ namespace VoxelEngine.GridSystem
                         if (typeOk && stockpileOk && yieldedTanks.Add(tank)) yield return tank;
                     }
                 }
+                foreach (var maybeTank in ProximityBlocks(grid, pipeBlock, cs))
+                {
+                    if (maybeTank is not GridGasTank tank || !tank.Enabled
+                        || VoxelEngine.Networks.WrenchBlacklist.IsBlocked(pipeBlock.gameObject, tank.gameObject)) continue;
+                    bool typeOk = tank.gasType == type || (!forOutput && tank.stored <= 0.001f);
+                    bool stockpileOk = includeStockpile || tank.mode != GridTankMode.Stockpile;
+                    if (typeOk && stockpileOk && yieldedTanks.Add(tank)) yield return tank;
+                }
+                // 5-cell cardinal corridor to catch tanks offset from the pipe run
+                ProbeGasTankCorridor(pipeBlock, type, forOutput, includeStockpile, yieldedTanks);
             }
+        }
+
+        // Scratch buffers for proximity helpers.
+        private static readonly Collider[] s_gasProbe = new Collider[12];
+        private static readonly List<GridBlock> s_gasProximityResult = new(12);
+
+        /// <summary>World-space adjacency: A is a machine/tank, B is a gas pipe.
+        /// Counts as linked when the pipe is within reach of one of the machine's
+        /// named gas ports, OR close enough to the machine's body.</summary>
+        private static bool BlocksAreGasLinked(GridBlock endpoint, GridBlock pipe, float cs)
+        {
+            if (endpoint == null || pipe == null) return false;
+            float portRange = cs * 1.5f;
+            float portRange2 = portRange * portRange;
+            foreach (Transform child in endpoint.transform.GetComponentsInChildren<Transform>(true))
+            {
+                if (child == null || child == endpoint.transform) continue;
+                bool gasPort = false;
+                for (int i = 0; i < VoxelEngine.Maritime.MaritimePorts.GasPrefixes.Length; i++)
+                {
+                    if (child.name.StartsWith(VoxelEngine.Maritime.MaritimePorts.GasPrefixes[i], System.StringComparison.Ordinal)) { gasPort = true; break; }
+                }
+                if (!gasPort) continue;
+                if ((child.position - pipe.transform.position).sqrMagnitude <= portRange2) return true;
+            }
+            float bodyRange = endpoint.EffectiveCellSize * 1.35f;
+            return (endpoint.transform.position - pipe.transform.position).sqrMagnitude <= bodyRange * bodyRange;
+        }
+
+        private static IEnumerable<GridBlock> ProximityPipes(GridEntity grid, GridBlock origin, float cs)
+        {
+            s_gasProximityResult.Clear();
+            if (grid == null || origin == null) yield break;
+            float radius = Mathf.Max(origin.EffectiveCellSize, GridSize.Small.CellSize()) * 1.35f;
+            int hitCount = Physics.OverlapSphereNonAlloc(origin.transform.position, radius, s_gasProbe, ~0, QueryTriggerInteraction.Collide);
+            for (int i = 0; i < hitCount; i++)
+            {
+                var col = s_gasProbe[i];
+                if (col == null) continue;
+                var block = col.GetComponentInParent<GridBlock>();
+                if (block == null || block == origin || block.Grid != grid) continue;
+                if (!IsGasPipe(block)) continue;
+                if (s_gasProximityResult.Contains(block)) continue;
+                s_gasProximityResult.Add(block);
+            }
+            for (int i = 0; i < s_gasProximityResult.Count; i++)
+                yield return s_gasProximityResult[i];
+        }
+
+        private static IEnumerable<GridBlock> ProximityBlocks(GridEntity grid, GridBlock origin, float cs)
+        {
+            s_gasProximityResult.Clear();
+            if (grid == null || origin == null) yield break;
+            float radius = Mathf.Max(origin.EffectiveCellSize, GridSize.Small.CellSize()) * 1.35f;
+            int hitCount = Physics.OverlapSphereNonAlloc(origin.transform.position, radius, s_gasProbe, ~0, QueryTriggerInteraction.Collide);
+            for (int i = 0; i < hitCount; i++)
+            {
+                var col = s_gasProbe[i];
+                if (col == null) continue;
+                var block = col.GetComponentInParent<GridBlock>();
+                if (block == null || block == origin || block.Grid != grid) continue;
+                if (s_gasProximityResult.Contains(block)) continue;
+                s_gasProximityResult.Add(block);
+            }
+            for (int i = 0; i < s_gasProximityResult.Count; i++)
+                yield return s_gasProximityResult[i];
+        }
+
+        private static readonly Collider[] s_gasRowProbe = new Collider[16];
+
+        private static void ProbeGasTankCorridor(GridBlock pipeBlock, Gas.GasType type,
+            bool forOutput, bool includeStockpile, HashSet<GridGasTank> yieldedTanks)
+        {
+            if (pipeBlock == null) return;
+            float cs = pipeBlock.Grid != null ? pipeBlock.Grid.gridSize.CellSize() : 2.5f;
+            Transform frame = pipeBlock.Grid != null ? pipeBlock.Grid.transform : null;
+            VoxelEngine.Networks.PipeAdjacency.ProbeCardinal(pipeBlock.transform.position, frame, cs, 5,
+                s_gasRowProbe, col =>
+                {
+                    var tank = col.GetComponent<GridGasTank>();
+                    if (tank == null) tank = col.GetComponentInParent<GridGasTank>();
+                    if (tank != null && tank.Enabled && !yieldedTanks.Contains(tank))
+                    {
+                        bool typeOk = tank.gasType == type || (!forOutput && tank.stored <= 0.001f);
+                        bool stockpileOk = includeStockpile || tank.mode != GridTankMode.Stockpile;
+                        if (typeOk && stockpileOk) yieldedTanks.Add(tank);
+                    }
+                    return false;
+                });
         }
 
         private static bool IsGasPipe(GridBlock block)
