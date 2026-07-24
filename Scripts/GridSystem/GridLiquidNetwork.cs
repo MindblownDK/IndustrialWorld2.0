@@ -75,7 +75,7 @@ namespace VoxelEngine.GridSystem
         public float AvailableLiquidFor(GridBlock endpoint, LiquidType type)
         {
             float total = 0f;
-            foreach (var tank in ConnectedTanks(endpoint, type, requireExistingType: true))
+            foreach (var tank in CachedTanks(endpoint, type, requireExistingType: true))
                 total += Mathf.Max(0f, tank.stored);
             CollectBridgedClassicTanks(endpoint, type, forDraw: true, s_bridgedTanks);
             foreach (var tank in s_bridgedTanks)
@@ -86,7 +86,7 @@ namespace VoxelEngine.GridSystem
         public float SpaceForLiquidFrom(GridBlock endpoint, LiquidType type)
         {
             float total = 0f;
-            foreach (var tank in ConnectedTanks(endpoint, type, requireExistingType: false))
+            foreach (var tank in CachedTanks(endpoint, type, requireExistingType: false))
                 total += Mathf.Max(0f, tank.capacity - tank.stored);
             CollectBridgedClassicTanks(endpoint, type, forDraw: false, s_bridgedTanks);
             foreach (var tank in s_bridgedTanks)
@@ -94,11 +94,31 @@ namespace VoxelEngine.GridSystem
             return total;
         }
 
+        // ════════════════════════════════════════════════════════════════
+        //  CONNECTED-TANKS CACHE — prevents the full BFS on every frame
+        //  when multiple consumers draw from the same grid. The cache is
+        //  keyed by (endpoint entity, type, direction) and lives 0.15 s.
+        //  A topology rebuild (SetDirty) clears the cache immediately.
+        // ════════════════════════════════════════════════════════════════
+        private static readonly System.Collections.Generic.Dictionary<long, (float time, System.Collections.Generic.List<GridLiquidTank> tanks)> s_tankCache
+            = new();
+        private const float TankCacheTtl = 0.15f;
+        private static long TankCacheKey(GridBlock endpoint, LiquidType type, bool forOutput)
+        {
+            var id = endpoint != null ? endpoint.GetEntityId().GetHashCode() : 0;
+            return ((long)id << 16) ^ ((long)(int)type << 1) ^ (forOutput ? 1L : 0L);
+        }
+        /// <summary>Clear the connected-tanks cache when pipe topology changes.</summary>
+        public void SetDirty()
+        {
+            s_tankCache.Clear();
+        }
+
         public float DrawLiquidFor(GridBlock endpoint, LiquidType type, float litres)
         {
             if (litres <= 0f) return 0f;
             float drawn = 0f;
-            foreach (var tank in ConnectedTanks(endpoint, type, requireExistingType: true))
+            foreach (var tank in CachedTanks(endpoint, type, requireExistingType: true))
             {
                 if (drawn >= litres) break;
                 drawn += tank.Remove(litres - drawn);
@@ -119,7 +139,7 @@ namespace VoxelEngine.GridSystem
         {
             if (litres <= 0f) return 0f;
             float filled = 0f;
-            foreach (var tank in ConnectedTanks(endpoint, type, requireExistingType: false))
+            foreach (var tank in CachedTanks(endpoint, type, requireExistingType: false))
             {
                 if (filled >= litres) break;
                 if (tank.liquidType != type && tank.stored > 0.001f) continue;
@@ -281,6 +301,28 @@ namespace VoxelEngine.GridSystem
                 });
         }
 
+        /// <summary>Cached wrapper for <see cref="ConnectedTanks"/>. Stores the
+        /// tank list per (endpoint, type, direction) for 0.15 s so the full BFS
+        /// isn't repeated every frame for every consumer on the grid.</summary>
+        private IEnumerable<GridLiquidTank> CachedTanks(GridBlock endpoint, LiquidType type, bool requireExistingType)
+        {
+            long key = TankCacheKey(endpoint, type, requireExistingType);
+            if (s_tankCache.TryGetValue(key, out var cached) && Time.time - cached.time < TankCacheTtl)
+            {
+                for (int i = 0; i < cached.tanks.Count; i++)
+                    if (cached.tanks[i] != null) yield return cached.tanks[i];
+                yield break;
+            }
+
+            // Run the BFS, cache the result.
+            var fresh = new List<GridLiquidTank>(8);
+            foreach (var tank in ConnectedTanks(endpoint, type, requireExistingType))
+                if (tank != null) fresh.Add(tank);
+            s_tankCache[key] = (Time.time, fresh);
+            for (int i = 0; i < fresh.Count; i++)
+                yield return fresh[i];
+        }
+
         private IEnumerable<GridLiquidTank> ConnectedTanks(GridBlock endpoint, LiquidType type, bool requireExistingType)
         {
             var grid = endpoint != null ? endpoint.Grid : null;
@@ -359,7 +401,7 @@ namespace VoxelEngine.GridSystem
         public static bool BlocksAreLiquidLinked(GridBlock endpoint, GridBlock pipe, float cs)
         {
             if (endpoint == null || pipe == null) return false;
-            float portRange = cs * 1.5f;
+            float portRange = cs * 2.5f;
             float portRange2 = portRange * portRange;
             foreach (Transform child in endpoint.transform.GetComponentsInChildren<Transform>(true))
             {
@@ -372,7 +414,7 @@ namespace VoxelEngine.GridSystem
                 if (!liquidPort) continue;
                 if ((child.position - pipe.transform.position).sqrMagnitude <= portRange2) return true;
             }
-            float bodyRange = endpoint.EffectiveCellSize * 1.35f;
+            float bodyRange = endpoint.EffectiveCellSize * 2.0f;
             return (endpoint.transform.position - pipe.transform.position).sqrMagnitude <= bodyRange * bodyRange;
         }
 

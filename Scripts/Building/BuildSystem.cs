@@ -364,15 +364,17 @@ namespace VoxelEngine.Building
 
         /// <summary>
         /// Compute the pipe-hub seat for a port: the machine's own collider surface
-        /// along the port facing, plus a full pipe-cell outward. Uses full cell offset
-        /// (0.5 m for Detail) instead of half-cell so pipes clear deep engine ports
-        /// reliably. Expressed in GRID-LOCAL space (same space as <paramref name="portLocal"/>/<paramref name="outLocal"/>).
+        /// along the port facing. Uses reverse raycast from outside the machine to
+        /// find the TRUE hull surface, then seats half a cell beyond it. Surface
+        /// ports land in the classic snug plug position; deep-buried ports (MGO
+        /// fuel/coolant/O₂ metres inside the hull) are pushed to the actual shell.
+        /// Expressed in GRID-LOCAL space (same space as <paramref name="portLocal"/>/<paramref name="outLocal"/>).
         /// </summary>
         private static Vector3 SeatAnchorOutsideMachineShell(
             GridBlock machine, GridEntity grid, Vector3 portLocal, Vector3 outLocal, float small)
         {
-            // Full cell outward (not half) ensures pipes clear deep engine ports.
-            Vector3 snugSeat = portLocal + outLocal * small;
+            // Half-cell classic position (tried full-cell in 6.17.1-dev, broke proximity)
+            Vector3 snugSeat = portLocal + outLocal * (small * 0.5f);
             if (machine == null || grid == null) return snugSeat;
 
             Vector3 portWorld = grid.transform.TransformPoint(portLocal);
@@ -399,7 +401,7 @@ namespace VoxelEngine.Building
             if (bestDist >= MaxProbe) return snugSeat;   // axis found no machine shell — snug plug
 
             Vector3 surfaceLocal = grid.transform.InverseTransformPoint(bestPoint);
-            Vector3 seat = surfaceLocal + outLocal * small; // full cell outward, not half
+            Vector3 seat = surfaceLocal + outLocal * (small * 0.5f); // half cell outward (prevents proximity breakage)
             // Sanity: never seat CLOSER to the machine core than the snug plug when the
             // shell probe resolves weirdly (ngon-authored ports on hitbox seams).
             float snugT = Vector3.Dot(snugSeat - portLocal, outLocal);
@@ -652,6 +654,8 @@ namespace VoxelEngine.Building
             VoxelEngine.Transport.ItemPipeNetwork.Instance?.SetDirty();
             VoxelEngine.Gas.GasNetwork.Instance?.SetDirty();
             VoxelEngine.Fluids.FluidNetworkManager.Instance?.SetDirty();
+            VoxelEngine.GridSystem.GridLiquidNetwork.Instance?.SetDirty();
+            VoxelEngine.GridSystem.GridGasNetwork.Instance?.SetDirty();
             return block;
         }
 

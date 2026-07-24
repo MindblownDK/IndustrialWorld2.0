@@ -862,11 +862,13 @@ namespace VoxelEngine.Maritime
         }
 
         // ══════════════════════════════════════════════════════════════
-        //  OXYGEN — draw from the Port_OxygenInput gas supply (or space
-        //  gas-tank), then burn it with the fuel. A socketed Closed-Cycle
-        //  AIP module skips the whole requirement.
+        //  OXYGEN — draw from the grid gas network via Port_OxygenInput.
+        //  Uses GridGasNetwork (grid-compatible), NOT the classic GasNetwork
+        //  which can only find classic GasTank objects. Modern builds use
+        //  GridGasTank and grid gas pipes — the classic network misses them.
+        //  Falls back to direct grid-wide gas tank iteration when no grid gas
+        //  pipes are present (backward-compatible with legacy builds).
         // ══════════════════════════════════════════════════════════════
-        private VoxelEngine.Gas.GasTank _oxygenTank;
         private float _oxygenScanTimer;
         private Transform _oxygenPort;
 
@@ -875,7 +877,6 @@ namespace VoxelEngine.Maritime
             if (AirIndependent)
             {
                 OxygenStarved = false;
-                _oxygenTank = null;
                 return;
             }
 
@@ -884,46 +885,40 @@ namespace VoxelEngine.Maritime
                 OxygenBuffer = Mathf.Max(0f, OxygenBuffer
                     - fuelConsumptionRate * requestedThrottle * oxygenPerFuelUnit * dt);
 
-            // Refill from the pipe-fed oxygen supply (cached tank rescan at 2 Hz —
-            // the full pipe BFS every fixed tick would be wasteful).
+            // Refill from the grid gas network (pipe-connected tanks).
             if (OxygenBuffer < oxygenBufferCapacity - 0.01f)
             {
-                _oxygenScanTimer -= dt;
-                if (_oxygenTank == null || _oxygenScanTimer <= 0f)
+                float want = Mathf.Min(oxygenBufferCapacity - OxygenBuffer, oxygenRefillRate * dt);
+                float drawn = 0f;
+
+                // Primary: pipe-connected draw via GridGasNetwork
+                if (Grid != null && GridGasNetwork.Instance != null)
                 {
-                    _oxygenScanTimer = 0.5f;
-                    if (_oxygenTank == null || _oxygenTank.storedGasType != VoxelEngine.Gas.GasType.Oxygen
-                        || _oxygenTank.storedAmount <= 0.01f)
+                    if (GridGasNetwork.Instance.HasPipes(Grid))
+                        drawn = GridGasNetwork.Instance.DrawGasFor(this, VoxelEngine.Gas.GasType.Oxygen, want);
+                    // Fallback: direct grid-wide tank scan (no pipes on grid yet, or pipe path failed)
+                    if (drawn < want * 0.9f)
                     {
-                        _oxygenTank = FindOxygenTank();
+                        float stillNeed = want - drawn;
+                        foreach (var block in Grid.AllBlocks)
+                        {
+                            if (stillNeed <= 0.01f) break;
+                            if (block is GridGasTank tank && tank.Enabled && tank.gasType == VoxelEngine.Gas.GasType.Oxygen && tank.stored > 0.01f)
+                            {
+                                float take = Mathf.Min(stillNeed, tank.stored);
+                                tank.stored = Mathf.Max(0f, tank.stored - take);
+                                stillNeed -= take;
+                                drawn += take;
+                            }
+                        }
                     }
                 }
 
-                if (_oxygenTank != null)
-                {
-                    float want = Mathf.Min(oxygenBufferCapacity - OxygenBuffer, oxygenRefillRate * dt);
-                    OxygenBuffer += _oxygenTank.TryTake(VoxelEngine.Gas.GasType.Oxygen, want);
-                }
+                OxygenBuffer = Mathf.Min(oxygenBufferCapacity, OxygenBuffer + drawn);
             }
 
             OxygenStarved = RequiresExternalOxygen && OxygenBuffer <= 0.01f;
         }
-
-        /// <summary>Oxygen gas tank reachable from this engine — searched around the named
-        /// Port_OxygenInput first (that's where the player plugs the O₂ line in), with the
-        /// whole machine body as fallback so compact one-cell builds still work.</summary>
-        private VoxelEngine.Gas.GasTank FindOxygenTank()
-        {
-            if (VoxelEngine.Gas.GasNetwork.Instance == null) return null;
-            float cs = Grid != null ? Grid.gridSize.CellSize() : 2.5f;
-            if (_oxygenPort == null)
-                _oxygenPort = MaritimePorts.FindNearest(transform, s_oxygenPortPrefix, transform.position);
-            Vector3 origin = _oxygenPort != null ? _oxygenPort.position : transform.position;
-            return VoxelEngine.Gas.GasNetwork.Instance.FindTankNear(origin, VoxelEngine.Gas.GasType.Oxygen,
-                forOutput: true, searchDist: cs * 2.0f, corridorStep: cs);
-        }
-
-        private static readonly string[] s_oxygenPortPrefix = { "Port_OxygenInput" };
 
         // ══════════════════════════════════════════════════════════════
         //  TORQUE CURVE + EMERGENCY REPAIR

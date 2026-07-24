@@ -1,13 +1,53 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.17.1-dev`
+**Current Version:** `6.17.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
 
 ---
 
-### [6.17.1-dev] Gas Network Proximity, Pipe Port Snap, Turbo Snapping & Effects, Drive Shaft Alignment
+### [6.17.2-dev] Engine Oxygen/Grid Gas Network, Fuel/Pipe Fallback, Performance Caching & Pipe Proximity Fixes
+
+**Type:** PATCH — major connectivity and performance fixes. Fully save-compatible. No setup step required.
+
+**Fixed / Changed:**
+
+1. **Oxygen Not Flowing to Engines (ROOT CAUSE)** — `GridMaritimeEngine.TickOxygen()` used the classic `GasNetwork.Instance.FindTankNear()` which searches for `VoxelEngine.Gas.GasTank` (classic gas tank). Modern grid builds use `GridGasTank` — a completely different class. The classic network could never find grid gas tanks. **Fix:** Rewrote `TickOxygen()` to use `GridGasNetwork.Instance.DrawGasFor(this, GasType.Oxygen, ...)` with a direct grid-wide tank fallback when no gas pipes are connected.
+
+2. **Fuel Not Flowing to Engines (ROOT CAUSE)** — `MaritimeBlockBase.DrawLiquidFuel()` checked `HasPipes(Grid)` — if true, it ONLY used `GridLiquidNetwork.DrawLiquidFor()`. If the pipe path returned 0 (pipe couldn't find the tank), the direct tank-iteration fallback was SKIPPED. Coolant worked because `RefillCoolant()` tried two liquid types (MarineEngineCoolant then Water), which had redundancy. **Fix:** `DrawLiquidFuel()` now ALSO runs the direct tank fallback when the pipe path draws less than requested.
+
+3. **Performance: ConnectedTanks BFS Storm** — `ConnectedTanks()` in both `GridLiquidNetwork` and `GridGasNetwork` ran a full proximity BFS over ALL blocks on the grid every time `DrawLiquidFor`/`DrawGasFor` was called — every FixedUpdate per engine per liquid/gas type. With 40+ cables, this created massive lag. **Fix:** Added result caching with a 0.15 s TTL in both networks. Added `SetDirty()` methods that invalidate the cache when pipes are placed.
+
+4. **Pipe Proximity Range Too Short** — `BlocksAreLiquidLinked` and `BlocksAreGasLinked` used a 1.5× cell size port range and 1.35× body range. MGO engine ports can sit 2+ cells from the origin — the pipe was placed at the port but fell outside the proximity check. **Fix:** Widened to 2.5× cell size port range and 2.0× body range.
+
+5. **Pipes Inside Engines (Refined)** — Reverted the `SeatAnchorOutsideMachineShell` full-cell offset back to half-cell to restore proximity detection. The shell probe reverse-raycast still handles deep-buried ports.
+
+6. **GAS/LIQUID Network SetDirty on Pipe Placement** — Added calls to `GridLiquidNetwork.Instance.SetDirty()` and `GridGasNetwork.Instance.SetDirty()` in `BuildSystem.PlaceOnDetailLattice` so the cache clears whenever a pipe is placed or removed.
+
+**Roadmap Status:**
+- Vehicle power foundations: **🛠️ WORKING ON** — oxygen and fuel now flow correctly. Thomas should validate the full engine power chain end-to-end.
+- Cable performance: **🛠️ WORKING ON** — ConnectedTanks caching mitigates the primary frame-rate sink.
+
+**Files touched:**
+- `Scripts/Maritime/GridMaritimeEngine.cs` — oxygen rewrite to use GridGasNetwork
+- `Scripts/Maritime/MaritimeBlockBase.cs` — fuel draw fallback
+- `Scripts/GridSystem/GridLiquidNetwork.cs` — proximity range doubled, ConnectedTanks cache + SetDirty
+- `Scripts/GridSystem/GridGasNetwork.cs` — proximity range doubled, ConnectedTanks cache + SetDirty
+- `Scripts/Building/BuildSystem.cs` — reverted seat anchor to half-cell, added SetDirty calls
+- `Scripts/Core/GameVersion.cs` — bumped to 6.17.2-dev
+- `Roadmap.md`
+- `Changelog.md`
+
+**Manual Unity Steps:**
+1. Pull all changed scripts, let Unity compile (expect 0 errors).
+2. Place an MGO engine on a grid with a GridLiquidTank (HeavyFuelOil or MarineGasOil) and a GridGasTank (Oxygen) connected via liquid + gas pipes.
+3. Open the engine panel → confirm Oxygen buffer fills, Fuel buffer fills, Coolant buffer fills.
+4. Start the engine → confirm it runs without showing "NO OXYGEN" or "OUT OF FUEL".
+5. Place 40+ cables on the same grid → confirm frame rate stays playable.
+6. Place a liquid pipe snapped to an engine port → confirm the pipe hub sits just outside the engine body, not inside.
+7. Test without pipes: fill GridLiquidTank and GridGasTank on the same grid as an engine but with no pipes → confirm the direct-tank fallback still delivers fuel and oxygen.
+8. Save/reload → confirm engine state persists.
 
 **Type:** PATCH — multiple bug fixes and polish. Fully save-compatible. No setup step required.
 

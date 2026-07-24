@@ -34,6 +34,22 @@ namespace VoxelEngine.GridSystem
             new Vector3Int(0, 0, 1), new Vector3Int(0, 0, -1)
         };
 
+        // ════════════════════════════════════════════════════════════════
+        //  CONNECTED-TANKS CACHE — prevents the full BFS on every frame
+        // ════════════════════════════════════════════════════════════════
+        private const float TankCacheTtl = 0.15f;
+        private static readonly System.Collections.Generic.Dictionary<long, (float time, System.Collections.Generic.List<GridGasTank> tanks)> s_tankCache
+            = new();
+        private static long TankCacheKey(GridBlock endpoint, Gas.GasType type, bool forOutput, bool includeStockpile)
+        {
+            var id = endpoint != null ? endpoint.GetEntityId().GetHashCode() : 0;
+            return ((long)id << 24) ^ ((long)(int)type << 8) ^ ((forOutput ? 1L : 0L) << 4) ^ (includeStockpile ? 1L : 0L);
+        }
+        public void SetDirty()
+        {
+            s_tankCache.Clear();
+        }
+
         private void Awake()
         {
             if (_instance != null && _instance != this) { Destroy(gameObject); return; }
@@ -66,7 +82,7 @@ namespace VoxelEngine.GridSystem
         public float AvailableGasFor(GridBlock consumer, Gas.GasType type, bool includeStockpile = false)
         {
             float total = 0f;
-            foreach (var tank in ConnectedTanks(consumer, type, forOutput: true, includeStockpile))
+            foreach (var tank in CachedTanks(consumer, type, forOutput: true, includeStockpile))
                 total += Mathf.Max(0f, tank.stored);
             return total;
         }
@@ -75,7 +91,7 @@ namespace VoxelEngine.GridSystem
         {
             if (consumer == null || type == Gas.GasType.None || litres <= 0f) return 0f;
             float drawn = 0f;
-            foreach (var tank in ConnectedTanks(consumer, type, forOutput: true, includeStockpile))
+            foreach (var tank in CachedTanks(consumer, type, forOutput: true, includeStockpile))
             {
                 if (drawn >= litres) break;
                 drawn += tank.Draw(litres - drawn, ignoreStockpile: includeStockpile);
@@ -87,7 +103,7 @@ namespace VoxelEngine.GridSystem
         {
             if (producer == null || type == Gas.GasType.None || litres <= 0f) return 0f;
             float filled = 0f;
-            foreach (var tank in ConnectedTanks(producer, type, forOutput: false, includeStockpile: true))
+            foreach (var tank in CachedTanks(producer, type, forOutput: false, includeStockpile: true))
             {
                 if (filled >= litres) break;
                 filled += tank.Add(type, litres - filled);
@@ -122,6 +138,27 @@ namespace VoxelEngine.GridSystem
                     filled += tank.Add(type, litres - filled);
             }
             return filled;
+        }
+
+        /// <summary>Cached wrapper for <see cref="ConnectedTanks"/>. Stores the
+        /// tank list per (endpoint, type, direction) for 0.15 s so the full BFS
+        /// isn't repeated every frame for every consumer.</summary>
+        private IEnumerable<GridGasTank> CachedTanks(GridBlock endpoint, Gas.GasType type, bool forOutput, bool includeStockpile)
+        {
+            long key = TankCacheKey(endpoint, type, forOutput, includeStockpile);
+            if (s_tankCache.TryGetValue(key, out var cached) && Time.time - cached.time < TankCacheTtl)
+            {
+                for (int i = 0; i < cached.tanks.Count; i++)
+                    if (cached.tanks[i] != null) yield return cached.tanks[i];
+                yield break;
+            }
+
+            var fresh = new System.Collections.Generic.List<GridGasTank>(8);
+            foreach (var tank in ConnectedTanks(endpoint, type, forOutput, includeStockpile))
+                if (tank != null) fresh.Add(tank);
+            s_tankCache[key] = (Time.time, fresh);
+            for (int i = 0; i < fresh.Count; i++)
+                yield return fresh[i];
         }
 
         private IEnumerable<GridGasTank> ConnectedTanks(GridBlock endpoint, Gas.GasType type, bool forOutput, bool includeStockpile)
@@ -202,7 +239,7 @@ namespace VoxelEngine.GridSystem
         private static bool BlocksAreGasLinked(GridBlock endpoint, GridBlock pipe, float cs)
         {
             if (endpoint == null || pipe == null) return false;
-            float portRange = cs * 1.5f;
+            float portRange = cs * 2.5f;
             float portRange2 = portRange * portRange;
             foreach (Transform child in endpoint.transform.GetComponentsInChildren<Transform>(true))
             {
@@ -215,7 +252,7 @@ namespace VoxelEngine.GridSystem
                 if (!gasPort) continue;
                 if ((child.position - pipe.transform.position).sqrMagnitude <= portRange2) return true;
             }
-            float bodyRange = endpoint.EffectiveCellSize * 1.35f;
+            float bodyRange = endpoint.EffectiveCellSize * 2.0f;
             return (endpoint.transform.position - pipe.transform.position).sqrMagnitude <= bodyRange * bodyRange;
         }
 

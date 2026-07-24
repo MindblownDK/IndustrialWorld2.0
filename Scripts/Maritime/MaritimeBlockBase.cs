@@ -117,25 +117,38 @@ namespace VoxelEngine.Maritime
 
         // ── Liquid-fuel draw ──────────────────────────────────────────
         /// <summary>Pull up to <paramref name="litres"/> of the given liquid from the connected
-        /// liquid pipe network. Falls back to legacy grid-wide tank access when the ship has no
-        /// liquid pipes at all so older builds remain functional.</summary>
+        /// liquid pipe network. Falls back to legacy grid-wide tank access when the pipe path
+        /// returns less than requested (e.g. no pipes present, or pipe topology can't reach
+        /// the tank despite tanks being on the grid).</summary>
         protected float DrawLiquidFuel(LiquidType type, float litres)
         {
             if (Grid == null || litres <= 0f) return 0f;
 
-            if (GridLiquidNetwork.Instance != null && GridLiquidNetwork.Instance.HasPipes(Grid))
-                return GridLiquidNetwork.Instance.DrawLiquidFor(this, type, litres);
+            float drawn = 0f;
 
-            float remaining = litres;
-            foreach (var kv in Grid.Blocks)
+            // Primary: pipe-connected draw via GridLiquidNetwork
+            if (GridLiquidNetwork.Instance != null && GridLiquidNetwork.Instance.HasPipes(Grid))
             {
-                if (remaining <= 0.01f) break;
-                if (kv.Value is not GridLiquidTank tank) continue;
-                if (tank.mode != GridTankMode.Auto) continue;
-                if (tank.liquidType != type) continue;
-                remaining -= tank.Remove(remaining);
+                drawn = GridLiquidNetwork.Instance.DrawLiquidFor(this, type, litres);
             }
-            return litres - remaining;
+
+            // Fallback: direct grid-wide tank scan (when pipe path failed or no pipes exist)
+            if (drawn < litres * 0.9f)
+            {
+                float remaining = litres - drawn;
+                foreach (var kv in Grid.Blocks)
+                {
+                    if (remaining <= 0.01f) break;
+                    if (kv.Value is not GridLiquidTank tank) continue;
+                    if (tank.mode != GridTankMode.Auto && tank.mode != GridTankMode.Stockpile) continue;
+                    if (tank.liquidType != type || tank.stored <= 0.001f) continue;
+                    float take = Mathf.Min(remaining, tank.stored);
+                    remaining -= tank.Remove(take);
+                    drawn += take;
+                }
+            }
+
+            return drawn;
         }
 
         /// <summary>Total available litres of a liquid. Uses pipe topology when present and falls
