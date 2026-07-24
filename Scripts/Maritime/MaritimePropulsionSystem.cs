@@ -33,6 +33,7 @@ using VoxelEngine.GridSystem;
 namespace VoxelEngine.Maritime
 {
     [RequireComponent(typeof(Rigidbody))]
+    [DefaultExecutionOrder(-20)] // must run BEFORE GridEntity so generator PowerOutput values are fresh
     public class MaritimePropulsionSystem : MonoBehaviour
     {
         // ── Tuning ────────────────────────────────────────────────────

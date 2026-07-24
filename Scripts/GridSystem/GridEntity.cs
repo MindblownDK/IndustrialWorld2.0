@@ -20,6 +20,7 @@ using VoxelEngine.Maritime;
 namespace VoxelEngine.GridSystem
 {
     [RequireComponent(typeof(Rigidbody))]
+    [DefaultExecutionOrder(0)] // runs AFTER MaritimePropulsionSystem (-20) so maritime power values are fresh
     public class GridEntity : MonoBehaviour
     {
         [Header("Grid")]
@@ -482,6 +483,11 @@ namespace VoxelEngine.GridSystem
             //   • explicit Discharge batteries can power loads immediately,
             //   • Recharge / Auto batteries can absorb genuine surplus,
             //   • a Discharge battery can intentionally feed a Recharge / Auto battery.
+            //
+            // MaritimePropulsionSystem runs before this method ([DefaultExecutionOrder(-20)])
+            // so maritime generators' ApplyResults() has written GeneratedWatts/CurrentRPM
+            // and the MaritimePropulsionSystem.ElectricityGenerated/ElectricityDemand totals
+            // reflect the latest mechanical-simulation tick.
             float generatedWatts = 0f;
             float consumedWatts = 0f;
             float h2Cap = 0f;
@@ -530,6 +536,31 @@ namespace VoxelEngine.GridSystem
                     h2Stored += h2o2.h2Stored;
                     o2Stored += h2o2.o2Stored;
                 }
+            }
+
+            // ── Maritime power sync ───────────────────────────────────
+            // MaritimePropulsionSystem computes generator and electrical-propeller
+            // totals from the mechanical propagation job. By this point (our
+            // FixedUpdate runs AFTER the maritime system's), its
+            // ElectricityGenerated / ElectricityDemand include every maritime
+            // generator's shaft-to-electricity output and every electrical
+            // propeller's load. We add these into the grid-wide pool so batteries
+            // see the full picture.
+            var maritime = Maritime;
+            if (maritime != null)
+            {
+                generatedWatts += maritime.ElectricityGenerated;
+                consumedWatts += maritime.ElectricityDemand;
+            }
+
+            // Log the full power chain once for validation in the Unity console.
+            // Filter repeats so the log doesn't spam: key stats every 120 frames.
+            if ((Time.frameCount & 127) == 0 && Debug.isDebugBuild)
+            {
+                Debug.Log($"[{gameObject.name}] GRID POWER: gen={generatedWatts:F1}W draw={consumedWatts:F1}W " +
+                    $"maritimeGen={maritime?.ElectricityGenerated ?? 0f:F1}W " +
+                    $"maritimeDemand={maritime?.ElectricityDemand ?? 0f:F1}W " +
+                    $"batteries={_batteryScratch.Count}");
             }
 
             float dt = Mathf.Max(Time.fixedDeltaTime, 0.0001f);

@@ -649,8 +649,12 @@ namespace VoxelEngine.Maritime
             }
             node.ClearFlag(MechanicalFlags.Broken);
 
-            // Consume coolant (if needed).
-            if (needsCoolant && IsRunning)
+            // We already know the engine will run this frame (conditions passed above).
+            // Consume coolant NOW — not from the previous frame's IsRunning value —
+            // because the engine IS running this frame.
+            bool frameWillRun = !exhaustChoked && HasExhaust && !CriticalFailure
+                && (!needsCoolant || HasCoolant) && (!RequiresExternalOxygen || HasOxygen);
+            if (frameWillRun && needsCoolant)
                 CoolantBuffer = Mathf.Max(0f, CoolantBuffer - coolantConsumptionRate * requestedThrottle * dt);
 
             // Consume fuel from the internal buffer.

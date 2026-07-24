@@ -1,9 +1,38 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.17.0-dev`
+**Current Version:** `6.17.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.17.1-dev] Vehicle Power Foundations — Maritime/Grid Power Integration & Execution Order
+
+**Type:** PATCH — integration fixes for maritime-to-grid power flow. No save schema migration, recipe changes, prefab changes, or setup step required. Fully save-compatible.
+
+**Added / Fixed:**
+
+1. **Execution Order Coordination** — `MaritimePropulsionSystem` now has `[DefaultExecutionOrder(-20)]` so its `FixedUpdate` (which runs the mechanical propagation job and calls `ApplyResults` on generators) is guaranteed to complete BEFORE `GridEntity`'s `FixedUpdate`. `GridEntity` has `[DefaultExecutionOrder(0)]` explicitly. This fixes a long-standing timing gap where `GridEntity.UpdatePower()` could read stale `PowerOutput` values from maritime generators because the mechanical simulation might not have run yet.
+
+2. **Maritime-to-Grid Power Sync** — `GridEntity.UpdatePower()` now reads `MaritimePropulsionSystem.ElectricityGenerated` and `ElectricityDemand` totals after scanning block-level power values. This ensures every watt produced by maritime generators (shaft→generator→buffer→grid) and every watt drawn by electrical propellers is accounted for in the grid-wide power pool alongside battery charge/discharge.
+
+3. **Debug Logging for Validation** — Added a periodic debug log (every 128 frames in debug builds) that prints generated watts, consumed watts, maritime generation/demand, and battery count so Thomas can validate the full power chain in the Unity console.
+
+4. **Coolant Consumption Timing Fix** — `GridMaritimeEngine.RefreshMaritimeNode` now uses the CURRENT frame's running conditions (`frameWillRun`) instead of the PREVIOUS frame's `IsRunning` value when deciding whether to consume coolant. This prevents frame-off timing where coolant was consumed on a start-of-shutdown frame or skipped on an initial start-up frame.
+
+**Roadmap Status:**
+- Vehicle power foundations: **🛠️ WORKING ON** — integration code written; Thomas needs to validate the full maritime fuel→engine→shaft→generator→battery→propeller power chain end-to-end in Unity.
+
+**Files touched (pull these):**
+- `Scripts/Maritime/MaritimePropulsionSystem.cs`
+- `Scripts/GridSystem/GridEntity.cs`
+- `Scripts/Maritime/GridMaritimeEngine.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Roadmap.md`
+- `Changelog.md`
+
+**Manual steps:** none — runtime/integration only. No `Tools > Voxel Engine > Voxel Engine Setup` run required.
 
 ---
 

@@ -1,9 +1,9 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.17.0-dev`
-**Roadmap Version:** `6.17.0-dev`
-**Date:** 2026-07-23
+**Current Version:** `6.17.1-dev`
+**Roadmap Version:** `6.17.1-dev`
+**Date:** 2026-07-24
 **Status:** World Management, Autosaves & Item Limits — COMPLETED; Power, Vehicles & Combat (4.7.0) remains WORKING ON
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
@@ -731,7 +731,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Unified grid placement | 🟡 PARTIALLY COMPLETE | Thomas validated Detail-on-Structural lattice placement and size-labelled content. Gas/liquid topology and screen data-source addressing now resolve both block scales on one Grid; **5.69.0-dev** persistence was Unity-validated by Thomas. Remaining positional-indexing work is open. |
 | Unified grid screen sources | ✅ COMPLETED | Thomas validated the unified screen/data-source work. Detail providers use precision-safe encoded addresses while legacy Structural addresses remain compatible. |
 | Unified pipe placement and networks | ✅ COMPLETED | Thomas validated existing Item/Gas/Liquid pipe Detail placement, one-to-five-cell Grid/world links, rotation-independent alignment, correct visual direction, midpoint arms, live ghost previews, stable topology, resource-safe ghosts, and wrench disconnect behavior. No duplicate pipe content was introduced. |
-| Vehicle power foundations | 🛠️ WORKING ON | **6.9.0-dev** centralizes battery transfer so Recharge/Discharge modes work together, keeps Auto batteries deterministic, routes maritime fuel/coolant through the unified liquid-pipe network, adds a dedicated crude-engine solid-fuel hopper, and refreshes Step 13 ship-engine/turbo/chain-drive/generator visuals at large premium scale. **6.9.1-dev** further densifies the engine meshes so they read as solid industrial ship machinery with heavier superstructure, railings, housings, and larger flywheels inspired by the supplied reference. **6.9.2-dev** refines the three ship engines again to look less synthetic, relocates visual fuel/coolant/exhaust/rotation ports to more believable service points, centers the major flywheel/output faces, and moves turbo attachment markers onto sensible engine locations. **6.9.3-dev** adds idle engine shaft output for visible running behavior, animates chain-drive/rotation-transfer/generator coupling visuals, and snaps exhaust/shaft-driven maritime parts to the nearest believable matching engine or drivetrain port during placement. Unified power progression and Unity validation remain open. |
+| Vehicle power foundations | 🛠️ WORKING ON | **6.9.0-dev** centralizes battery transfer so Recharge/Discharge modes work together, keeps Auto batteries deterministic, routes maritime fuel/coolant through the unified liquid-pipe network, adds a dedicated crude-engine solid-fuel hopper, and refreshes Step 13 ship-engine/turbo/chain-drive/generator visuals at large premium scale. **6.9.1-dev** further densifies the engine meshes so they read as solid industrial ship machinery with heavier superstructure, railings, housings, and larger flywheels inspired by the supplied reference. **6.9.2-dev** refines the three ship engines again to look less synthetic, relocates visual fuel/coolant/exhaust/rotation ports to more believable service points, centers the major flywheel/output faces, and moves turbo attachment markers onto sensible engine locations. **6.9.3-dev** adds idle engine shaft output for visible running behavior, animates chain-drive/rotation-transfer/generator coupling visuals, and snaps exhaust/shaft-driven maritime parts to the nearest believable matching engine or drivetrain port during placement. **6.17.1-dev** adds [DefaultExecutionOrder(-20)] to MaritimePropulsionSystem (runs before GridEntity), [DefaultExecutionOrder(0)] to GridEntity, maritime power sync in GridEntity.UpdatePower() so generator output and electrical-propeller demand flow into the grid battery pool, and fixes coolant consumption timing (use current-frame conditions instead of last-frame IsRunning). Unity validation of the full maritime-to-grid power chain remains open. |
 | Damage, armor, weapons, and life support | 🟡 PARTIALLY COMPLETE | Basic block HP/damage and one grid weapon foundation exist. Full typed damage, player armor, pooled ballistics, hazards, airtight support, and combat content remain open. |
 
 **Crusader identity requirements:**
@@ -1757,7 +1757,7 @@ For each version, these are the high-level Unity tasks you will perform manually
 7. 🛠️ **WORKING ON — Complete remaining unified Grid positional indexing** where legacy systems still read Structural-only coordinates.
 8. 🛠️ **WORKING ON — Keep factory scope guarded** — conveyor shape variants only; do not add funnel or chute variants unless the roadmap is deliberately revised.
 9. 🛠️ **WORKING ON — Validate 6.14.x pipe/port placement in Unity** — confirm MGO and smaller engine pipe seating stays outside colliders, pipe-to-pipe chaining works from the ghost and click paths, valid five-cell lattice proximity reaches tanks, and oxygen/exhaust networks stay separated.
-10. 🛠️ **WORKING ON — Finish vehicle power foundations validation** — verify maritime fuel, coolant, oxygen, exhaust, shaft, chain-drive, gearbox, generator, and battery flows after the latest port and pipe fixes.
+10. 🛠️ **WORKING ON — Finish vehicle power foundations validation** — 6.17.1-dev adds execution-order coordination and maritime-to-grid power sync so generator output and electrical-propeller demand flow into the grid battery pool. Thomas needs to validate the full maritime fuel→engine→shaft→generator→battery→propeller power chain end-to-end in Unity.
 11. 🛠️ **WORKING ON — Complete Step 5 Size-V5 two-run validation** — confirm non-destructive setup generation, seamless Foundation decks, Stair anchors, Doorway thresholds, and preserved custom balance values.
 12. 🟡 **PARTIALLY COMPLETE — Plan the safer centralized transport tick migration** — keep the 6.4.9 restored per-frame transport runtime until a smaller validated migration path is ready.
 
