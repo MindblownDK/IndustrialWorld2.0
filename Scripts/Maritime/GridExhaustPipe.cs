@@ -79,6 +79,70 @@ namespace VoxelEngine.Maritime
             if (string.IsNullOrEmpty(blockName) || blockName == "Armor Block")
                 blockName = "Exhaust Pipe";
             CreateSmokeEffect();
+            _needsOrient = true;
+            _orientRetries = 0;
+        }
+
+        private void OnEnable()
+        {
+            // Freshly placed AND restored-from-save pipes both re-aim their intake
+            // flange at the served engine's exhaust port on the first frame.
+            _needsOrient = true;
+            _orientRetries = 0;
+        }
+
+        /// <summary>True once the pipe has aimed its intake at the engine this spawn.</summary>
+        private bool _needsOrient = true;
+        private int _orientRetries;
+
+        // ══════════════════════════════════════════════════════════════
+        //  AUTO-ORIENT — point the intake flange (local −Z, Port_ExhaustInput)
+        //  at the nearest engine exhaust-output port so the pipe always mounts
+        //  the right way round: flange DOWN onto a top collector, outlet (+Z,
+        //  Socket_StackTop) pointing away. Fixes pipes that were placed with a
+        //  generic player rotation and ended up backwards on the engine.
+        // ══════════════════════════════════════════════════════════════
+        private void AutoOrientToEngine()
+        {
+            if (Grid == null)
+            {
+                // Grid not wired yet — retry for a short window, then give up.
+                _needsOrient = ++_orientRetries < 30;
+                return;
+            }
+            _needsOrient = false;
+
+            float cs = Grid.gridSize.CellSize();
+            GridMaritimeEngine engine = null;
+            float bestSq = float.MaxValue;
+            int hitCount = Physics.OverlapSphereNonAlloc(
+                transform.position, cs * 1.8f, s_engineProbe, ~0, QueryTriggerInteraction.Collide);
+            for (int i = 0; i < hitCount; i++)
+            {
+                var col = s_engineProbe[i];
+                if (col == null) continue;
+                var e = col.GetComponentInParent<GridMaritimeEngine>();
+                if (e == null || e.Grid != Grid) continue;
+                float d = (e.transform.position - transform.position).sqrMagnitude;
+                if (d < bestSq) { bestSq = d; engine = e; }
+            }
+            if (engine == null) return; // no engine to serve — keep placement rotation
+
+            // Aim at the nearest exhaust-output port (authored Port_ExhaustOutput*,
+            // or a player-installed variable Port_ExhaustOutput_V).
+            var port = MaritimePorts.FindNearest(
+                engine.transform, MaritimePorts.ExhaustOutputPrefixes, transform.position, cs * 3.0f);
+            Vector3 away = port != null
+                ? transform.position - port.position
+                : transform.position - engine.transform.position;
+            if (away.sqrMagnitude < 0.0001f) away = Grid.transform.up;
+            away = away.normalized;
+
+            // +Z (outlet) points AWAY from the port ⇒ −Z (intake flange) faces it.
+            Vector3 upHint = Mathf.Abs(Vector3.Dot(away, Grid.transform.up)) > 0.95f
+                ? Grid.transform.forward
+                : Grid.transform.up;
+            transform.rotation = Quaternion.LookRotation(away, upHint.normalized);
         }
 
         /// <summary>True if any adjacent engine is currently venting exhaust gas.</summary>
@@ -86,6 +150,7 @@ namespace VoxelEngine.Maritime
 
         private void Update()
         {
+            if (_needsOrient) AutoOrientToEngine();
             if (_smokeFX == null) return;
 
             // Scan adjacent engines, keeping the strongest exhaust source as the

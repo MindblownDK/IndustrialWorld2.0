@@ -162,12 +162,12 @@ namespace VoxelEngine.Networks
         /// physically on top of it — but never diagonally or off-axis.
         /// </summary>
         public static void ProbeCardinal(Vector3 origin, Transform gridFrame, float step,
-            int maxCells, Collider[] buffer, System.Func<Collider, bool> visit)
+            int maxCells, Collider[] buffer, System.Func<Collider, bool> visit, float radiusScale = 0.45f)
         {
             if (visit == null || buffer == null || buffer.Length == 0) return;
             step = step > 0.0001f ? step : DefaultGridSize;
             maxCells = Mathf.Max(1, maxCells);
-            float radius = step * 0.45f;
+            float radius = step * Mathf.Max(0.05f, radiusScale);
 
             Vector3[] axes = s_probeAxesWorld;
             if (gridFrame != null)

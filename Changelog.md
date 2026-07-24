@@ -1,9 +1,84 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.17.3-dev`
+**Current Version:** `6.18.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.18.0-dev] Variable Color-Coded Engine Service Ports, Pipe/Tank Connectivity Overhaul, Exhaust Auto-Orient & True Propeller Blades
+
+**Type:** MINOR — new system (variable service ports) + connectivity/orientation fixes + propeller rebuild. **Fully save-compatible.** One manual setup step required (rebuild maritime prefabs) — see below.
+
+**Added — Variable Color-Coded Service Ports (HFO V8 / MGO V12):**
+
+1. **"Connect from anywhere" ports.** Instead of threading pipes onto fixed ports buried metres inside the engine hull, you now aim a liquid/gas pipe at **any face of the engine** and a color-coded service port is born exactly at the surface — always **outside** the body, always visible, always easy to chain the next pipe onto. This eliminates the "pipe disappears inside the engine input" problem at the source: a port can never be buried because it is created on the hull where you aimed.
+
+2. **Color-coded by service.** Fuel = **amber**, Coolant = **teal**, Oxygen = **sky-blue**, Exhaust = **red**. Installed ports show a glowing collar + eye so you can read an engine's hookups at a glance.
+
+3. **Per-engine caps enforced.** 1 × Fuel, 1 × Coolant, 1 × Oxygen, up to 2 × Exhaust. Trying to attach a pipe whose service is already full is **rejected**: the ghost tints red and placement is blocked with a message (e.g. *"Fuel input already connected (max 1)"*) — no pipe spam, and no silent free-pipe that would sneak past the cap.
+
+4. **Smart service detection.** The service a port takes on is inferred from what your grid's tanks actually hold (with an "engine still needs it" tiebreaker). A second pipe of the same service re-snaps to the existing port instead of spawning a duplicate collar.
+
+5. **Save-compatible by design.** Authored model ports stay in place as the engine's defaults (existing saves + existing pipe connections keep working untouched). Dynamic ports are purely additive child transforms named with the same `Port_*` prefixes + a `MaritimePortFacing` tag, so **all existing snapping, network topology and engine consumption code works unchanged**. Dynamic ports serialize across save/load.
+
+**Fixed — Pipe / Tank Connectivity:**
+
+6. **Tanks now connect from several cells away (ROOT CAUSE).** The liquid + gas "corridor probe" stepped in coarse **structural** cells (2.5 m) with thin radius, so a tank sitting between sample points was skipped — the reason a tank four cells off a pipe run wouldn't connect. **Fix:** both `GridLiquidNetwork` and `GridGasNetwork` now sweep the corridor on the **detail lattice** (0.5 m steps) with **overlapping** probe spheres out to five structural cells. A tank on a straight cardinal line within range is now sampled continuously and can never be skipped, and a pipe whose detail position sits slightly off the tank's row is forgiven.
+
+7. **Liquid/gas now actually pumps into the engines.** Direct consequence of #6 — the engine draws fuel/coolant/oxygen via `DrawLiquidFor`/`DrawGasFor`, which only return anything once a connected tank is *found*. With the corridor fixed, the buffers fill and the engine runs. (Pipes are still mandatory — the no-pipe fallback stays removed.)
+
+8. **Pipe hubs sit further off authored ports.** Authored-port snaps now seat the hub 1.4 detail cells outward (was 1.0) so the hub is visibly proud of the hull and easy to chain. Variable ports (the preferred path) seat from the actual hull surface and are always outside.
+
+**Fixed — Exhaust Pipe Orientation:**
+
+9. **Exhaust pipes now auto-orient the right way (ROOT CAUSE).** The exhaust pipe kept whatever player rotation it was placed with, so its intake flange (local −Z) frequently pointed sideways instead of down onto the engine's upward-facing exhaust collector. **Fix:** `GridExhaustPipe` now auto-orients on placement (and on save/load): it finds the nearest engine exhaust-output port (authored or variable) and rotates so the **intake flange faces the port** and the **outlet/stack points away** — flange down onto a top collector, every time. The flex-coupling still seals any residual gap.
+
+**Changed — Maritime Propellers Rebuilt:**
+
+10. **Real propeller blades.** `BuildPropeller` / `BuildEPropeller` previously fanned flat boxes around a hub. They are now genuine **lofted screw blades**: tapered chord, root→tip pitch twist, a cambered lens section and a swept tip, on a rounded hub with a faired tail cone. Small = 3 bronze blades, Large = 4 steel blades, electric pod = 3 matching blades. The `SpinPivot` name + Z-axis spin are preserved so `MaritimeAnimator` drives them exactly as before. (Mesh `Version` bumped 22 → 23 to force a prefab rebuild.)
+
+**Notes / Known behaviour:**
+- The per-service cap governs the clean color-coded ports. The legacy proximity connection (a free-placed pipe near an engine) still behaves as before; the cap is about the nice variable ports, not about blocking every possible pipe.
+- Variable service ports are a **Medium (HFO V8)** and **Giant (MGO V12)** feature — the liquid-fuelled tiers that take piped fuel/coolant/oxygen. The Crude Inline-4 (solid fuel) is unaffected.
+
+**Roadmap Status:**
+- Vehicle power foundations: **🛠️ WORKING ON** — connectivity, port snapping, exhaust orientation and propellers overhauled. Thomas to validate the full fuel→engine→shaft→propeller chain end-to-end.
+
+**Files touched:**
+- `Scripts/Maritime/MaritimeVariablePorts.cs` — **NEW**: `PortService`, `VariablePortRecord`, `MaritimeVariablePorts` component (caps, color-coded port objects, save capture/rebuild) + `MaritimePortPlanner` (shared geometry + service resolution).
+- `Scripts/Maritime/GridMaritimeEngine.cs` — `VariablePorts` accessor + `CaptureVariablePorts`/`RestoreVariablePorts` save hooks.
+- `Scripts/Building/BuildSystem.cs` — variable-port snap path (ghost preview + commit), over-cap reject (red ghost + blocked placement + message), improved authored-port seat offset.
+- `Scripts/Maritime/GridExhaustPipe.cs` — auto-orient intake flange toward the nearest engine exhaust port (placement + save/load).
+- `Scripts/GridSystem/GridLiquidNetwork.cs` — detail-lattice corridor probe with overlapping spheres.
+- `Scripts/GridSystem/GridGasNetwork.cs` — detail-lattice corridor probe with overlapping spheres.
+- `Scripts/Networks/PipeAdjacency.cs` — `ProbeCardinal` gains an optional `radiusScale`.
+- `Scripts/Maritime/MaritimeMeshBuilder.cs` — lofted propeller blades + `MakePropellerBladeMesh`/`MeshGo` helpers; `Version` 22 → 23.
+- `Scripts/Persistence/WorldStatePersistence.cs` — additive `SavedMaritimePorts` capture/restore on engine blocks.
+- `Scripts/Core/GameVersion.cs` — bumped to 6.18.0-dev.
+- `Roadmap.md`, `Changelog.md`.
+
+**Manual Unity Steps (one-time prefab rebuild + validation):**
+
+*A. Rebuild the maritime prefabs (required for the new propellers):*
+1. Pull all changed scripts, let Unity compile (expect **0 errors**).
+2. Open **Tool → Voxel Engine → Voxel Engine Setup**.
+3. Rebuild the maritime block prefabs (the setup window detects the `__MaritimeMesh_v22` markers and re-bakes them to `v23`). Confirm the **Small Propeller**, **Large Propeller** and **Electrical Propeller** prefabs now show real curved blades.
+4. No new items/recipes/research are needed — this feature adds **no** new items; it only changes engine behaviour + propeller visuals, so nothing in the Voxel Engine Setup item/recipe/research tables needs touching.
+
+*B. Validate variable service ports:*
+5. Place an **HFO V8 (Medium)** or **MGO V12 (Giant)** engine on a ship grid.
+6. Hold a **liquid pipe**, aim at the **side/top of the engine body** (not an existing port) and place → an **amber Fuel** collar appears where you aimed and the pipe hub sits just **outside** the hull. Aim elsewhere and place a second liquid pipe → a **teal Coolant** collar appears.
+7. Hold a **gas pipe**, aim at the engine and place → a **sky-blue Oxygen** collar appears.
+8. Try to place a **second fuel** liquid pipe when fuel+coolant are both installed → the ghost goes **red** and placement is refused with *"…already connected (max 1)"*.
+9. Run liquid pipes from a **GridLiquidTank (HeavyFuelOil / MarineGasOil)** to within a few cells of the engine, and gas pipes from a **GridGasTank (Oxygen)** likewise — they do **not** need to touch the tank. Open the engine panel → confirm **Fuel, Oxygen and Coolant buffers fill**.
+10. Start the engine → confirm it runs without *"OUT OF FUEL"* / *"NO OXYGEN"* warnings.
+
+*C. Validate exhaust + propellers:*
+11. Place an **Exhaust Pipe** on top of the running engine → confirm its **intake flange faces DOWN** onto the engine's exhaust collector and the **stack points UP**, and that it emits the tier-correct smoke.
+12. Connect a drive shaft from the engine's `Port_ShaftOutput` to a **propeller** → confirm the new blades **spin about the shaft axis** and the ship produces thrust.
+13. **Save → reload** → confirm the color-coded variable ports, pipe connections and engine state all persist (no ports lost, fuel still flowing).
 
 ---
 

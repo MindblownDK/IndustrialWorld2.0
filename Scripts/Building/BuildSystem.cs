@@ -50,6 +50,13 @@ namespace VoxelEngine.Building
         private EntityId _pipeGhostTargetId;
         private Vector3 _pipeGhostLastPosition = new(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
 
+        /// <summary>Set while a port snap is rejected because the engine's service
+        /// port of that type is already at capacity. The ghost tints red and placement
+        /// is blocked with a message instead of silently falling through to a free
+        /// detail-lattice pipe (which would bypass the per-engine cap).</summary>
+        private static bool s_portCapBlocked;
+        private static string s_portCapReason;
+
         public static bool HoldingBlock { get; private set; }
         public static string HeldBlockName { get; private set; } = string.Empty;
         public static Vector3Int RotationSteps { get; private set; }
@@ -165,9 +172,14 @@ namespace VoxelEngine.Building
             if (targetGrid != null && IsUnifiedPipe(block))
             {
                 Vector3Int precisionPos, hostStructuralPos, faceAxis;
-                bool snappedToPort = TryGetMaritimePortSnap(targetGrid, block, hit, ray,
-                        out precisionPos, out hostStructuralPos, out faceAxis, out Vector3 anchorLocal);
-                bool validPrecision = snappedToPort
+                bool snappedToPort = TryGetMaritimePortSnap(targetGrid, block, hit, ray, commit: false,
+                        out precisionPos, out hostStructuralPos, out faceAxis, out Vector3 anchorLocal, out _);
+                // Over-cap aim: the engine refuses another port of this service. Show
+                // the pipe at the aim point in RED instead of pretending a free cell
+                // is available (which would let the player bypass the cap).
+                bool validPrecision;
+                if (s_portCapBlocked) validPrecision = false;
+                else validPrecision = snappedToPort
                     || UnifiedGridTopology.TryGetDetailPlacement(
                         targetGrid, hit, out precisionPos, out hostStructuralPos, out faceAxis);
                 ShowPrecisionLattice(targetGrid, hostStructuralPos, faceAxis);
@@ -180,7 +192,9 @@ namespace VoxelEngine.Building
                 // lands on the same anchor); face placements sit on their cell.
                 Vector3 localPosition = snappedToPort
                     ? anchorLocal
-                    : (Vector3)precisionPos * GridSize.Small.CellSize();
+                    : s_portCapBlocked
+                        ? targetGrid.transform.InverseTransformPoint(hit.point)
+                        : (Vector3)precisionPos * GridSize.Small.CellSize();
                 Vector3 worldPosition = targetGrid.transform.TransformPoint(localPosition);
                 Quaternion worldRotation = targetGrid.transform.rotation
                     * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
@@ -259,13 +273,16 @@ namespace VoxelEngine.Building
         //  the pipe network builder, only the position is magnetised.
         // ════════════════════════════════════════════════════════════════
         private static bool TryGetMaritimePortSnap(GridEntity grid, BlockItem item, RaycastHit hit, Ray aimRay,
-            out Vector3Int precisionPos, out Vector3Int hostStructuralPos, out Vector3Int faceAxis,
-            out Vector3 anchorLocal)
+            bool commit, out Vector3Int precisionPos, out Vector3Int hostStructuralPos, out Vector3Int faceAxis,
+            out Vector3 anchorLocal, out string feedback)
         {
             precisionPos = default;
             hostStructuralPos = default;
             faceAxis = default;
             anchorLocal = default;
+            feedback = null;
+            s_portCapBlocked = false;
+            s_portCapReason = null;
             if (grid == null || item == null || item.placedPrefab == null || hit.collider == null) return false;
 
             // Route by the HELD pipe type — liquid pipes to liquid ports only,
@@ -300,7 +317,17 @@ namespace VoxelEngine.Building
                     targetBlock.transform, prefixes, aimRay, maxLineDistance: 0.45f,
                     maxRayT: hit.distance + maxSnap);
             }
-            if (best == null) return false;
+            if (best == null)
+            {
+                // No authored/dynamic port near the aim. When the target is a liquid
+                // HFO/MGO engine, install (or re-snap to) a color-coded VARIABLE
+                // service port right where the player is aiming — "connect from
+                // anywhere". The port is born on the hull surface, so the pipe can
+                // never end up buried inside the engine body.
+                bool isGas = item.placedPrefab.GetComponentInChildren<VoxelEngine.Gas.GasPipe>(true) != null;
+                return TryGetVariablePortSnap(grid, targetBlock, isGas, hit, commit, out feedback,
+                    out precisionPos, out hostStructuralPos, out faceAxis, out anchorLocal);
+            }
 
             // Anchor = the seat for the pipe hub. Snug half-cell plug on surface ports;
             // for ports authored metres INSIDE the engine hull (MGO fuel/coolant/O₂)
@@ -364,8 +391,73 @@ namespace VoxelEngine.Building
         private static Vector3 SeatAnchorOutsideMachineShell(
             GridBlock machine, GridEntity grid, Vector3 portLocal, Vector3 outLocal, float small)
         {
-            // ONE full Detail cell outward from the port — guaranteed outside engine.
-            return portLocal + outLocal * small;
+            // 1.4 Detail cells outward from the authored port — comfortably outside
+            // the engine body and visibly proud of the hull so the player can see the
+            // hub and chain the next pipe onto it. (Variable service ports seat from
+            // the actual hull surface and are the preferred, always-outside path.)
+            return portLocal + outLocal * (small * 1.4f);
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        //  VARIABLE SERVICE PORT SNAP
+        //  Player aims at the body of a liquid HFO/MGO engine with no authored
+        //  port nearby → a color-coded service port (fuel/coolant/oxygen) is
+        //  installed at the surface hit and the pipe snaps onto it. Ghost calls
+        //  with commit=false to preview the seat without mutating the engine;
+        //  placement calls with commit=true to actually install the port. Both
+        //  run identical geometry so ghost ≡ placed.
+        // ════════════════════════════════════════════════════════════════
+        private static bool TryGetVariablePortSnap(GridEntity grid, GridBlock targetBlock, bool isGas,
+            RaycastHit hit, bool commit, out string feedback,
+            out Vector3Int precisionPos, out Vector3Int hostStructuralPos, out Vector3Int faceAxis,
+            out Vector3 anchorLocal)
+        {
+            precisionPos = default;
+            hostStructuralPos = default;
+            faceAxis = default;
+            anchorLocal = default;
+            feedback = null;
+
+            var engine = targetBlock as VoxelEngine.Maritime.GridMaritimeEngine;
+            // Variable liquid/gas ports are a Medium (HFO V8) and Giant (MGO V12)
+            // feature — the tiers that take piped fuel/coolant/oxygen.
+            if (engine == null
+                || engine.tier == VoxelEngine.Maritime.EngineTier.Small
+                || engine.Grid != grid) return false;
+
+            float small = GridSize.Small.CellSize();
+            var plan = VoxelEngine.Maritime.MaritimePortPlanner.PlanPipe(
+                grid, engine, isGas, hit.point, hit.normal, small);
+
+            if (plan.atCap)
+            {
+                int max = VoxelEngine.Maritime.MaritimeVariablePorts.MaxFor(plan.service);
+                feedback = $"{VoxelEngine.Maritime.MaritimeVariablePorts.LabelFor(plan.service)} already connected (max {max})";
+                s_portCapBlocked = true;
+                s_portCapReason = feedback;
+                return false;
+            }
+            if (!plan.ok) return false;
+
+            anchorLocal = plan.seatGridLocal;
+            precisionPos = new Vector3Int(
+                Mathf.FloorToInt(plan.seatGridLocal.x / small + 0.5f),
+                Mathf.FloorToInt(plan.seatGridLocal.y / small + 0.5f),
+                Mathf.FloorToInt(plan.seatGridLocal.z / small + 0.5f));
+            hostStructuralPos = engine.GridPos;
+            faceAxis = plan.faceAxis;
+
+            var layer = grid.GetComponent<GridPrecisionAttachmentLayer>();
+            if (layer != null && !layer.CanPlace(precisionPos)) return false;
+
+            // Commit installs the physical color-coded port; ghost only previews.
+            if (commit && !plan.reusesExisting)
+                engine.VariablePorts.AddPort(plan.service, plan.portLocal, plan.outLocal);
+
+            feedback = plan.reusesExisting
+                ? $"Connected to {VoxelEngine.Maritime.MaritimeVariablePorts.LabelFor(plan.service)}"
+                : $"{VoxelEngine.Maritime.MaritimeVariablePorts.LabelFor(plan.service)} installed";
+            return true;
         }
 
         private System.Collections.Generic.List<Vector3> ProvidePipeGhostLinks() => _pipeGhostLinks;
@@ -524,8 +616,18 @@ namespace VoxelEngine.Building
         {
             if (item == null || item.placedPrefab == null || grid == null) return false;
             Vector3Int precisionPos, hostStructuralPos;
-            bool snappedToPort = TryGetMaritimePortSnap(grid, item, hit, aimRay,
-                out precisionPos, out hostStructuralPos, out _, out Vector3 anchorLocal);
+            bool snappedToPort = TryGetMaritimePortSnap(grid, item, hit, aimRay, commit: true,
+                out precisionPos, out hostStructuralPos, out _, out Vector3 anchorLocal, out string portFeedback);
+            // The engine already has its fill of this service — refuse the placement
+            // outright (with a message) instead of dropping a free pipe that would
+            // sneak past the per-engine cap.
+            if (!snappedToPort && s_portCapBlocked)
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show(
+                    "Port Full", s_portCapReason ?? "Engine service port already connected",
+                    item.icon, item.iconTint);
+                return false;
+            }
             if (!snappedToPort
                 && !UnifiedGridTopology.TryGetDetailPlacement(grid, hit,
                     out precisionPos, out hostStructuralPos, out _)) return false;
@@ -534,8 +636,12 @@ namespace VoxelEngine.Building
                 snappedToPort ? anchorLocal : (Vector3?)null);
             if (block == null) return false;
 
-            VoxelEngine.UI.BuildFeedbackHud.Show(
-                "Pipe Attached", $"{item.displayName} · Detail lattice", item.icon, item.iconTint);
+            // A freshly installed variable service port announces itself; a rejected
+            // over-cap attempt never reaches here (placement fails earlier).
+            string detail = !string.IsNullOrEmpty(portFeedback)
+                ? portFeedback
+                : $"{item.displayName} · Detail lattice";
+            VoxelEngine.UI.BuildFeedbackHud.Show("Pipe Attached", detail, item.icon, item.iconTint);
             return true;
         }
 

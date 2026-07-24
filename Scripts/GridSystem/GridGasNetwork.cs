@@ -301,9 +301,15 @@ namespace VoxelEngine.GridSystem
             bool forOutput, bool includeStockpile, HashSet<GridGasTank> yieldedTanks)
         {
             if (pipeBlock == null) return;
-            float cs = pipeBlock.Grid != null ? pipeBlock.Grid.gridSize.CellSize() : 2.5f;
+            float structural = pipeBlock.Grid != null ? pipeBlock.Grid.gridSize.CellSize() : 2.5f;
+            float detail = GridSize.Small.CellSize();
+            // Dense detail-lattice sweep with overlapping spheres — mirrors the liquid
+            // network so an oxygen/exhaust tank a few cells off the pipe run connects
+            // reliably instead of being skipped between coarse structural samples.
+            float reach = Mathf.Max(structural * 5f, 3f);
+            int maxCells = Mathf.CeilToInt(reach / detail);
             Transform frame = pipeBlock.Grid != null ? pipeBlock.Grid.transform : null;
-            VoxelEngine.Networks.PipeAdjacency.ProbeCardinal(pipeBlock.transform.position, frame, cs, 5,
+            VoxelEngine.Networks.PipeAdjacency.ProbeCardinal(pipeBlock.transform.position, frame, detail, maxCells,
                 s_gasRowProbe, col =>
                 {
                     var tank = col.GetComponent<GridGasTank>();
@@ -315,7 +321,7 @@ namespace VoxelEngine.GridSystem
                         if (typeOk && stockpileOk) yieldedTanks.Add(tank);
                     }
                     return false;
-                });
+                }, radiusScale: 1.1f);
         }
 
         private static bool IsGasPipe(GridBlock block)

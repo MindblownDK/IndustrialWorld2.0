@@ -417,7 +417,33 @@ namespace VoxelEngine.Persistence
                 entry.screenConfig = scfg;
             }
 
+            CaptureMaritimePorts(go, entry);
             CaptureLightingRuntime(go, entry);
+        }
+
+        /// <summary>Capture a maritime engine's player-installed variable service
+        /// ports (color-coded fuel/coolant/oxygen/exhaust). Authored model ports are
+        /// baked into the prefab and need no save data; only the additive dynamic
+        /// ports are recorded here.</summary>
+        private static void CaptureMaritimePorts(GameObject go, SavedPlacedBlock entry)
+        {
+            var engine = go.GetComponentInChildren<VoxelEngine.Maritime.GridMaritimeEngine>(true);
+            if (engine == null) return;
+            var records = engine.CaptureVariablePorts();
+            if (records == null || records.Count == 0) return;
+            var saved = new SavedMaritimePorts();
+            for (int i = 0; i < records.Count; i++)
+            {
+                var r = records[i];
+                if (r == null) continue;
+                saved.ports.Add(new SavedVariablePort
+                {
+                    service = r.service,
+                    localPos = r.localPos,
+                    localOutward = r.localOutward
+                });
+            }
+            entry.maritimePorts = saved;
         }
 
         private static void CaptureLightingRuntime(GameObject go, SavedPlacedBlock entry)
@@ -1231,7 +1257,27 @@ namespace VoxelEngine.Persistence
                 }
             }
 
+            RestoreMaritimePorts(go, saved.maritimePorts);
             RestoreLightingRuntime(go, saved.lightingConfig);
+        }
+
+        /// <summary>Re-materialise a maritime engine's saved variable service ports.
+        /// Idempotent — clears any existing dynamic ports first. Legacy saves pass a
+        /// null <paramref name="saved"/> and the engine keeps its authored ports.</summary>
+        private static void RestoreMaritimePorts(GameObject go, SavedMaritimePorts saved)
+        {
+            if (saved == null || saved.ports == null || saved.ports.Count == 0) return;
+            var engine = go.GetComponentInChildren<VoxelEngine.Maritime.GridMaritimeEngine>(true);
+            if (engine == null) return;
+            var records = new List<VoxelEngine.Maritime.VariablePortRecord>(saved.ports.Count);
+            for (int i = 0; i < saved.ports.Count; i++)
+            {
+                var p = saved.ports[i];
+                if (p == null) continue;
+                records.Add(new VoxelEngine.Maritime.VariablePortRecord(
+                    (VoxelEngine.Maritime.PortService)p.service, p.localPos, p.localOutward));
+            }
+            engine.RestoreVariablePorts(records);
         }
 
         private static void RestoreLightingRuntime(GameObject go, SavedLightingConfig cfg)
@@ -1562,6 +1608,21 @@ namespace VoxelEngine.Persistence
             public SavedScreenConfig screenConfig;
             // Lighting config for GridLightBlock / LEDStrip. Null = not a configurable light.
             public SavedLightingConfig lightingConfig;
+            // Variable engine service ports (color-coded "connect from anywhere").
+            // Null for every block except maritime engines that carry player-installed
+            // ports. Additive — legacy saves leave it null and engines keep their
+            // authored ports exactly as before.
+            public SavedMaritimePorts maritimePorts;
+        }
+        [Serializable] private class SavedMaritimePorts
+        {
+            public List<SavedVariablePort> ports = new();
+        }
+        [Serializable] private class SavedVariablePort
+        {
+            public int service;
+            public Vector3 localPos;
+            public Vector3 localOutward;
         }
         [Serializable] private class SavedFunnelState
         {

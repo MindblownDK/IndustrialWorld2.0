@@ -410,6 +410,37 @@ namespace VoxelEngine.Maritime
             return ModuleSlots;
         }
 
+        // ── Variable service ports (color-coded "connect from anywhere") ──
+        private MaritimeVariablePorts _variablePorts;
+        /// <summary>Player-installed color-coded service ports (fuel/coolant/oxygen/
+        /// exhaust). Lazily created on first use. The authored model ports remain the
+        /// engine's save-compatible defaults; these dynamic ports are purely additive
+        /// and never remove or alter the authored ones.</summary>
+        public MaritimeVariablePorts VariablePorts
+        {
+            get
+            {
+                if (_variablePorts == null) _variablePorts = GetComponent<MaritimeVariablePorts>();
+                if (_variablePorts == null) _variablePorts = gameObject.AddComponent<MaritimeVariablePorts>();
+                return _variablePorts;
+            }
+        }
+
+        /// <summary>Snapshot of dynamic service ports for the save system, or null
+        /// when the engine carries none (legacy engines).</summary>
+        public System.Collections.Generic.List<VariablePortRecord> CaptureVariablePorts()
+        {
+            var vp = GetComponent<MaritimeVariablePorts>();
+            return vp != null && vp.HasRecords ? vp.CaptureRecords() : null;
+        }
+
+        /// <summary>Re-materialise dynamic service ports after a save/load.</summary>
+        public void RestoreVariablePorts(System.Collections.Generic.List<VariablePortRecord> records)
+        {
+            if (records == null || records.Count == 0) return;
+            VariablePorts.RebuildFromRecords(records);
+        }
+
         /// <summary>True when the item may be socketed into this engine's module slots.</summary>
         public bool CanSocketModule(ItemDefinition item)
         {

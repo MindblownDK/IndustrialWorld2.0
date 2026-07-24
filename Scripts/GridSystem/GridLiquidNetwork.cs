@@ -452,9 +452,18 @@ namespace VoxelEngine.GridSystem
             bool requireExistingType, HashSet<GridLiquidTank> yieldedTanks)
         {
             if (pipeBlock == null) return;
-            float cs = pipeBlock.Grid != null ? pipeBlock.Grid.gridSize.CellSize() : 2.5f;
+            float structural = pipeBlock.Grid != null ? pipeBlock.Grid.gridSize.CellSize() : 2.5f;
+            float detail = GridSize.Small.CellSize();
+            // Dense detail-lattice sweep: a tank up to five STRUCTURAL cells away on a
+            // straight cardinal line is sampled every detail cell with OVERLAPPING
+            // spheres, so it can never be skipped between coarse sample points — the
+            // root cause of "the tank four cells away won't connect". Overlap radius
+            // 1.1× also forgives a pipe whose detail-lattice position sits slightly
+            // off the tank's structural row.
+            float reach = Mathf.Max(structural * 5f, 3f);
+            int maxCells = Mathf.CeilToInt(reach / detail);
             Transform frame = pipeBlock.Grid != null ? pipeBlock.Grid.transform : null;
-            VoxelEngine.Networks.PipeAdjacency.ProbeCardinal(pipeBlock.transform.position, frame, cs, 5,
+            VoxelEngine.Networks.PipeAdjacency.ProbeCardinal(pipeBlock.transform.position, frame, detail, maxCells,
                 s_gridTankRowProbe, col =>
                 {
                     var tank = col.GetComponent<GridLiquidTank>();
@@ -465,7 +474,7 @@ namespace VoxelEngine.GridSystem
                         if (typeOk) yieldedTanks.Add(tank);
                     }
                     return false;
-                });
+                }, radiusScale: 1.1f);
         }
 
         private static bool IsLiquidPipe(GridBlock block)

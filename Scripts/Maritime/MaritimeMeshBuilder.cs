@@ -9,6 +9,7 @@
 //  ║   so MaritimeAnimator can find and rotate them.                    ║
 //  ╚══════════════════════════════════════════════════════════════════╝
 
+using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.GridSystem;
 
@@ -23,7 +24,11 @@ namespace VoxelEngine.Maritime
         // v19: shaft tips span the full cell and carry gold coupling rings
         //      (Port_ShaftIO_F/B) so collinear shafts physically TOUCH at the
         //      shared face and a held shaft snaps exactly in extension.
-        public const int Version = 22;
+        // v23: maritime propellers rebuilt as true lofted screw blades — tapered
+        //      chord, root→tip pitch twist, cambered section and swept tip — instead
+        //      of flat boxes. Bronze small / steel large; electric pod gets matching
+        //      blades. Color-coded variable engine service ports added elsewhere.
+        public const int Version = 23;
         private static Shader Lit => Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
         public static System.Func<Material, string, Material> MaterialPersister;
         private static int _matCounter;
@@ -163,7 +168,10 @@ namespace VoxelEngine.Maritime
         }
 
         // ════════════════════════════════════════════════════════════════
-        //  PROPELLER — hub + angled blades inside SpinPivot
+        //  PROPELLER — true lofted screw blades inside SpinPivot
+        //  Blades fan around the shaft axis (Z) and spin about Z. Each blade
+        //  is a lofted mesh: tapered chord, root→tip pitch twist, a cambered
+        //  lens section and a swept tip — a real ship's screw, not flat boxes.
         // ════════════════════════════════════════════════════════════════
         static void BuildPropeller(GameObject r, float cs, int blades, float bladeLen, Material bladeMat, bool heavy)
         {
@@ -172,34 +180,46 @@ namespace VoxelEngine.Maritime
             spin.transform.localPosition = new Vector3(0, 0, cs * 0.15f);
 
             var hubMat = heavy ? DarkSteel : Bronze;
-            var hub = Cyl(spin, hubMat, V0, cs * 0.14f, cs * 0.22f);
+            // Hub barrel along the shaft axis (Z).
+            var hub = Cyl(spin, hubMat, V0, cs * 0.13f, cs * 0.26f);
             hub.transform.localRotation = Quaternion.Euler(90, 0, 0);
-            Sphere(spin, hubMat, new Vector3(0, 0, cs * 0.18f), cs * 0.1f);
+            // Rounded nose (forward, +Z) and a slightly wider hub shoulder (aft).
+            Sphere(spin, hubMat, new Vector3(0, 0, cs * 0.16f), cs * 0.17f);
+            Sphere(spin, hubMat, new Vector3(0, 0, -cs * 0.08f), cs * 0.20f);
 
-            float pitch = heavy ? 22f : 15f;
+            float rootChord = heavy ? cs * 0.34f : cs * 0.24f;
+            float tipChord  = heavy ? cs * 0.17f : cs * 0.13f;
+            float rootPitch = heavy ? 36f : 28f;
+            float tipPitch  = heavy ? 15f : 11f;
+            float thickness = heavy ? cs * 0.05f : cs * 0.032f;
+            float skew      = heavy ? cs * 0.16f : cs * 0.09f;
+            float hubRadius = cs * 0.12f;
+            var bladeMesh = MakePropellerBladeMesh(bladeLen, rootChord, tipChord,
+                rootPitch, tipPitch, thickness, skew, hubRadius);
+
             for (int i = 0; i < blades; i++)
             {
                 float angle = i * (360f / blades);
-                // Per-blade pivot at hub center — fans blades around the hub.
+                // Per-blade pivot fanned about the shaft axis (Z); SpinPivot spins
+                // the whole set about Z so the blades sweep the propeller disc.
                 var bladePivot = new GameObject($"Blade_{i}");
                 bladePivot.transform.SetParent(spin.transform, false);
-                bladePivot.transform.localRotation = Quaternion.Euler(0, angle, 0);
-                // Blade mesh offset from pivot so it sits at the rim.
-                var blade = Box(bladePivot, bladeMat, new Vector3(bladeLen + cs * 0.1f, 0, 0),
-                    new Vector3(bladeLen * 1.6f, cs * 0.05f, cs * 0.12f));
-                blade.transform.localRotation = Quaternion.Euler(0, 0, pitch);
+                bladePivot.transform.localRotation = Quaternion.Euler(0, 0, angle);
+                MeshGo(bladePivot, bladeMesh, bladeMat, Vector3.zero, Quaternion.identity, Vector3.one);
             }
 
-            // Bossing / shaft housing behind the prop.
-            Box(r, CastIron, new Vector3(0, 0, -cs * 0.25f), new Vector3(cs * 0.55f, cs * 0.55f, cs * 0.4f));
-            // Shaft input port (gold — where rotation comes in).
-            Port(r, "Port_ShaftInput", PortShaft, new Vector3(0, 0, -cs * 0.42f), new Vector3(cs * 0.12f, cs * 0.12f, cs * 0.04f));
-            Port(r, "Rotation input point 0", PortShaft, new Vector3(0, 0, -cs * 0.50f), new Vector3(cs * 0.16f, cs * 0.16f, cs * 0.06f));
+            // Bossing / shaft housing behind the prop (−Z) + a faired tail cone.
+            Box(r, CastIron, new Vector3(0, 0, -cs * 0.30f), new Vector3(cs * 0.55f, cs * 0.55f, cs * 0.42f));
+            var tail = Cyl(r, hubMat, new Vector3(0, 0, -cs * 0.04f), cs * 0.09f, cs * 0.20f);
+            tail.transform.localRotation = Quaternion.Euler(90, 0, 0);
+            // Shaft input ports (gold — where rotation comes in). Names preserved.
+            Port(r, "Port_ShaftInput", PortShaft, new Vector3(0, 0, -cs * 0.46f), new Vector3(cs * 0.12f, cs * 0.12f, cs * 0.04f));
+            Port(r, "Rotation input point 0", PortShaft, new Vector3(0, 0, -cs * 0.52f), new Vector3(cs * 0.16f, cs * 0.16f, cs * 0.06f));
             Box(r, Steel, new Vector3(0, -cs * 0.35f, -cs * 0.2f), new Vector3(cs * 0.1f, cs * 0.3f, cs * 0.15f));
         }
 
         // ════════════════════════════════════════════════════════════════
-        //  ELECTRIC PROPELLER — torpedo pod
+        //  ELECTRIC PROPELLER — torpedo pod with matching lofted blades
         // ════════════════════════════════════════════════════════════════
         static void BuildEPropeller(GameObject r, float cs)
         {
@@ -213,18 +233,107 @@ namespace VoxelEngine.Maritime
             // Armored conduit.
             Box(r, DarkSteel, new Vector3(0, 0, -cs * 0.42f), new Vector3(cs * 0.25f, cs * 0.25f, cs * 0.15f));
 
-            var hub = Cyl(spin, Bronze, V0, cs * 0.1f, cs * 0.12f);
+            var hub = Cyl(spin, Bronze, V0, cs * 0.1f, cs * 0.16f);
             hub.transform.localRotation = Quaternion.Euler(90, 0, 0);
+            Sphere(spin, Bronze, new Vector3(0, 0, cs * 0.10f), cs * 0.12f);
+
+            var bladeMesh = MakePropellerBladeMesh(cs * 0.26f, cs * 0.20f, cs * 0.10f,
+                30f, 12f, cs * 0.026f, cs * 0.06f, cs * 0.09f);
             for (int i = 0; i < 3; i++)
             {
-                float a = i * 120f;
                 var bladePivot = new GameObject($"Blade_{i}");
                 bladePivot.transform.SetParent(spin.transform, false);
-                bladePivot.transform.localRotation = Quaternion.Euler(0, a, 0);
-                var blade = Box(bladePivot, Bronze, new Vector3(cs * 0.2f, 0, 0),
-                    new Vector3(cs * 0.3f, cs * 0.04f, cs * 0.08f));
-                blade.transform.localRotation = Quaternion.Euler(0, 0, 12f);
+                bladePivot.transform.localRotation = Quaternion.Euler(0, 0, i * 120f);
+                MeshGo(bladePivot, bladeMesh, Bronze, Vector3.zero, Quaternion.identity, Vector3.one);
             }
+        }
+
+        // ── Lofted propeller-blade mesh ───────────────────────────────
+        // One blade extending radially along +X from the hub. Lofted from
+        // <paramref name="radial"/> cambered lens sections whose chord tapers,
+        // pitch twists and sweep increase toward the tip — the hallmark curve
+        // of a fixed-pitch ship's screw. Shared by every blade on the prop.
+        static Mesh MakePropellerBladeMesh(float length, float rootChord, float tipChord,
+            float rootPitchDeg, float tipPitchDeg, float thickness, float skew, float hubRadius)
+        {
+            const int radial = 14;  // stations root → tip
+            const int half = 9;     // sample points per surface (leading→trailing)
+            int loop = half * 2;    // closed section loop (top surface + bottom surface)
+
+            var verts = new List<Vector3>(radial * loop);
+            var uvs = new List<Vector2>(radial * loop);
+            var tris = new List<int>((radial - 1) * loop * 6);
+
+            for (int i = 0; i < radial; i++)
+            {
+                float t = i / (float)(radial - 1);
+                float x = hubRadius + t * length;
+                float c = Mathf.Lerp(rootChord, tipChord, t);
+                float th = thickness * Mathf.Lerp(1f, 0.30f, t);   // thinner toward the tip
+                float pitch = Mathf.Lerp(rootPitchDeg, tipPitchDeg, t) * Mathf.Deg2Rad;
+                float skewOff = skew * t * t;                       // swept tip
+                float cosP = Mathf.Cos(pitch), sinP = Mathf.Sin(pitch);
+
+                for (int j = 0; j < loop; j++)
+                {
+                    // Chord fraction 0→1 along the top surface, then 1→0 along the
+                    // bottom — one closed loop around the section.
+                    bool top = j < half;
+                    float s = top ? j / (float)(half - 1) : 1f - (j - half) / (float)(half - 1);
+                    float xc = Mathf.Clamp01(s);
+
+                    // Cambered lens section: zero thickness at the leading/trailing
+                    // edges, max thickness ~30% chord; gentle camber gives a distinct
+                    // pressure face / suction back.
+                    float sinPi = Mathf.Sin(Mathf.PI * xc);
+                    float yt = th * Mathf.Pow(Mathf.Max(0f, sinPi), 0.6f);
+                    float camber = c * 0.055f * sinPi;
+                    float zc = (xc - 0.5f) * c;                 // chordwise coordinate
+                    float yc = (top ? camber + yt : camber - yt);
+
+                    // Pitch twist about the radial (X) axis, then sweep the section aft.
+                    float y = yc * cosP - zc * sinP;
+                    float z = yc * sinP + zc * cosP + skewOff;
+
+                    verts.Add(new Vector3(x, y, z));
+                    uvs.Add(new Vector2(t, j / (float)loop));
+                }
+            }
+
+            for (int i = 0; i < radial - 1; i++)
+            {
+                for (int j = 0; j < loop; j++)
+                {
+                    int a = i * loop + j;
+                    int b = i * loop + (j + 1) % loop;
+                    int c0 = (i + 1) * loop + j;
+                    int d = (i + 1) * loop + (j + 1) % loop;
+                    tris.Add(a); tris.Add(c0); tris.Add(b);
+                    tris.Add(b); tris.Add(c0); tris.Add(d);
+                }
+            }
+
+            var mesh = new Mesh { name = "PropellerBlade" };
+            mesh.SetVertices(verts);
+            mesh.SetUVs(0, uvs);
+            mesh.SetTriangles(tris, 0);
+            mesh.RecalculateNormals();
+            mesh.RecalculateTangents();
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+
+        /// <summary>Attach a shared mesh as a visual child (no collider).</summary>
+        static GameObject MeshGo(GameObject parent, Mesh mesh, Material mat, Vector3 pos, Quaternion rot, Vector3 scale)
+        {
+            var go = new GameObject("BladeMesh");
+            go.transform.SetParent(parent.transform, false);
+            go.transform.localPosition = pos;
+            go.transform.localRotation = rot;
+            go.transform.localScale = scale;
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            go.AddComponent<MeshRenderer>().sharedMaterial = mat;
+            return go;
         }
 
         // ════════════════════════════════════════════════════════════════
