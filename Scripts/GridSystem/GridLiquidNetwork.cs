@@ -290,6 +290,7 @@ namespace VoxelEngine.GridSystem
             float cs = grid.gridSize.CellSize();
             var visitedPipes = new HashSet<GridBlock>();
             var yieldedTanks = new HashSet<GridLiquidTank>();
+            var corridorTanks = new List<GridLiquidTank>(4);
             var queue = new Queue<GridBlock>();
 
             void SeedPipe(GridBlock pipe)
@@ -339,7 +340,9 @@ namespace VoxelEngine.GridSystem
                     bool typeOk = tank.liquidType == type || (!requireExistingType && tank.stored <= 0.001f);
                     if (typeOk && yieldedTanks.Add(tank)) yield return tank;
                 }
-                ProbeGridTankCorridor(pipeBlock, type, requireExistingType, yieldedTanks);
+                ProbeGridTankCorridor(pipeBlock, type, requireExistingType, yieldedTanks, corridorTanks);
+                for (int i = 0; i < corridorTanks.Count; i++)
+                    yield return corridorTanks[i];
             }
 
             // ── Brute-force 5-cell cardinal fallback for liquid tanks
@@ -419,8 +422,9 @@ namespace VoxelEngine.GridSystem
         private static readonly Collider[] s_gridTankRowProbe = new Collider[32];
 
         private static void ProbeGridTankCorridor(GridBlock pipeBlock, LiquidType type,
-            bool requireExistingType, HashSet<GridLiquidTank> yieldedTanks)
+            bool requireExistingType, HashSet<GridLiquidTank> yieldedTanks, List<GridLiquidTank> newlyLinked)
         {
+            newlyLinked?.Clear();
             if (pipeBlock == null) return;
             float structural = pipeBlock.Grid != null ? pipeBlock.Grid.gridSize.CellSize() : 2.5f;
             float detail = GridSize.Small.CellSize();
@@ -435,7 +439,7 @@ namespace VoxelEngine.GridSystem
                     if (tank != null && tank.Enabled && tank.mode != GridTankMode.Stockpile && !yieldedTanks.Contains(tank))
                     {
                         bool typeOk = tank.liquidType == type || (!requireExistingType && tank.stored <= 0.001f);
-                        if (typeOk) yieldedTanks.Add(tank);
+                        if (typeOk && yieldedTanks.Add(tank)) newlyLinked?.Add(tank);
                     }
                     return false;
                 }, radiusScale: 2.2f);

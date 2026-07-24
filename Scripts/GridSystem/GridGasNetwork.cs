@@ -164,6 +164,7 @@ namespace VoxelEngine.GridSystem
             float cs = grid.gridSize.CellSize();
             var visitedPipes = new HashSet<GridBlock>();
             var yieldedTanks = new HashSet<GridGasTank>();
+            var corridorTanks = new List<GridGasTank>(4);
             var queue = new Queue<GridBlock>();
 
             void SeedPipe(GridBlock pipe)
@@ -215,7 +216,9 @@ namespace VoxelEngine.GridSystem
                     bool stockpileOk = includeStockpile || tank.mode != GridTankMode.Stockpile;
                     if (typeOk && stockpileOk && yieldedTanks.Add(tank)) yield return tank;
                 }
-                ProbeGasTankCorridor(pipeBlock, type, forOutput, includeStockpile, yieldedTanks);
+                ProbeGasTankCorridor(pipeBlock, type, forOutput, includeStockpile, yieldedTanks, corridorTanks);
+                for (int i = 0; i < corridorTanks.Count; i++)
+                    yield return corridorTanks[i];
             }
 
             // ── Brute-force 5-cell cardinal fallback ──────────────────
@@ -320,8 +323,9 @@ namespace VoxelEngine.GridSystem
         private static readonly Collider[] s_gasRowProbe = new Collider[32];
 
         private static void ProbeGasTankCorridor(GridBlock pipeBlock, Gas.GasType type,
-            bool forOutput, bool includeStockpile, HashSet<GridGasTank> yieldedTanks)
+            bool forOutput, bool includeStockpile, HashSet<GridGasTank> yieldedTanks, List<GridGasTank> newlyLinked)
         {
+            newlyLinked?.Clear();
             if (pipeBlock == null) return;
             float structural = pipeBlock.Grid != null ? pipeBlock.Grid.gridSize.CellSize() : 2.5f;
             float detail = GridSize.Small.CellSize();
@@ -337,7 +341,7 @@ namespace VoxelEngine.GridSystem
                     {
                         bool typeOk = tank.gasType == type || (!forOutput && tank.stored <= 0.001f);
                         bool stockpileOk = includeStockpile || tank.mode != GridTankMode.Stockpile;
-                        if (typeOk && stockpileOk) yieldedTanks.Add(tank);
+                        if (typeOk && stockpileOk && yieldedTanks.Add(tank)) newlyLinked?.Add(tank);
                     }
                     return false;
                 }, radiusScale: 2.2f);

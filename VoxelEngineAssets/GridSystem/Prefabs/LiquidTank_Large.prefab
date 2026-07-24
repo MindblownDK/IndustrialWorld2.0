@@ -371,6 +371,7 @@ GameObject:
   - component: {fileID: 3786319537041580005}
   - component: {fileID: 1970672022771170687}
   - component: {fileID: 1719690021450888927}
+  - component: {fileID: 5457641282246707923}
   m_Layer: 0
   m_Name: LiquidTank_Large
   m_TagString: Untagged
@@ -440,3 +441,21 @@ MonoBehaviour:
   capacity: 500
   stored: 0
   mode: 0
+--- !u!114 &5457641282246707923
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9002842631867892413}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ee5e0894947ddc04ca6028a5f2235b89, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.GridSystem.LiquidTankClassicAdapter
+  connectRadius: 1.5
+  capacityLitres: 500
+  liquidType: 0
+  water: 0
+  isGlass: 0
+  gridTank: {fileID: 1719690021450888927}

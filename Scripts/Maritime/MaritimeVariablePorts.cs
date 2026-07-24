@@ -383,6 +383,11 @@ namespace VoxelEngine.Maritime
 
             if (!vports.CanAdd(service))
             {
+                // Still compute the chassis/grid-bound preview geometry for the red
+                // over-cap ghost. Otherwise callers only had default local positions,
+                // which could draw the service ring at the construct Rigidbody origin
+                // instead of on the engine hull the player is aiming at.
+                FillSeatFromSurface(grid, engine, hitPointWorld, hitNormalWorld, detailCell, ref plan);
                 plan.atCap = true; // → caller shows "<service> already connected (max N)"
                 return plan;
             }
@@ -400,12 +405,24 @@ namespace VoxelEngine.Maritime
             Vector3 hitPointWorld, Vector3 hitNormalWorld, float detailCell, ref Plan plan)
         {
             Vector3 outWorld = SnapOutwardToWorld(grid, hitNormalWorld);
-            Vector3 portWorld = hitPointWorld - outWorld * 0.02f;
-            Vector3 seatWorld = hitPointWorld + outWorld * (detailCell * 0.55f);
+
+            // Snap the pipe seat first, then derive the preview/placed port from that
+            // same lattice cell. This makes the colored port ghost follow the pipe
+            // ghost exactly in GridBuilder instead of floating at the raw collider hit
+            // point. The tiny inward inset keeps the collar visually bolted to the
+            // chassis while remaining fully grid-bound and save-compatible.
+            Vector3 rawSeatGridLocal = grid.transform.InverseTransformPoint(
+                hitPointWorld + outWorld * (detailCell * 0.55f));
+            Vector3 snappedSeatGridLocal = new Vector3(
+                Mathf.Floor(rawSeatGridLocal.x / detailCell + 0.5f) * detailCell,
+                Mathf.Floor(rawSeatGridLocal.y / detailCell + 0.5f) * detailCell,
+                Mathf.Floor(rawSeatGridLocal.z / detailCell + 0.5f) * detailCell);
+            Vector3 seatWorld = grid.transform.TransformPoint(snappedSeatGridLocal);
+            Vector3 portWorld = seatWorld - outWorld * (detailCell * 0.55f + 0.02f);
 
             plan.portLocal = engine.transform.InverseTransformPoint(portWorld);
             plan.outLocal = engine.transform.InverseTransformDirection(outWorld).normalized;
-            plan.seatGridLocal = grid.transform.InverseTransformPoint(seatWorld);
+            plan.seatGridLocal = snappedSeatGridLocal;
             plan.faceAxis = UnifiedGridTopology.SnapFaceAxis(grid, outWorld);
             if (plan.faceAxis == Vector3Int.zero) plan.faceAxis = Vector3Int.up;
         }

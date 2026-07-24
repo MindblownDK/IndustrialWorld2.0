@@ -1,9 +1,33 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.19.2-dev`
+**Current Version:** `6.19.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.19.3-dev] Grid Port Ghost Lattice Follow & Corridor Tank Yield Fix
+
+**Type:** PATCH — bug fixes for grid-builder maritime port preview alignment and gas/liquid 5-cell tank connection reliability. No save schema changes and no breaking API changes.
+
+**Fixed — engine service port ghost follows the pipe ghost on the grid lattice:**
+1. `MaritimePortPlanner.FillSeatFromSurface()` now snaps the pipe seat to the Detail lattice first, then derives the preview/placed port collar from that same snapped seat. This keeps the colored port ghost and the pipe ghost moving together in `GridBuilder` instead of letting the port ring sit on a raw collider hit point.
+2. Over-cap previews now still compute chassis/grid-bound port geometry before returning the red rejection state. This prevents the red port ring from falling back to default local positions when a service is full.
+
+**Fixed — gas/liquid tanks found by 5-cell corridor probes now actually connect:**
+3. `GridGasNetwork` and `GridLiquidNetwork` were marking tanks discovered by the 5-cell corridor probe as “seen” but not yielding them to the caller immediately. Because the later brute-force fallback skipped already-seen tanks, corridor hits could be suppressed instead of connected.
+4. Both networks now collect newly discovered corridor tanks and yield them in the same BFS pass, preserving duplicate protection while making the advertised 5-grid-square tank connection reliable.
+
+**Manual Unity step:**
+- Run **Tools → Voxel Engine → Voxel Engine Setup → 13. Build Maritime Content** once if your local prefabs have not already been rebuilt after the gas-tank port setup. This is non-destructive and only creates/repairs missing prefab/item/recipe/research links.
+
+**Files touched:**
+- `Scripts/Maritime/MaritimeVariablePorts.cs`
+- `Scripts/GridSystem/GridGasNetwork.cs`
+- `Scripts/GridSystem/GridLiquidNetwork.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
 
 ---
 
