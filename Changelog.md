@@ -1,9 +1,48 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.19.1-dev`
+**Current Version:** `6.19.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.19.2-dev] Grid Port Ghost & 5-Cell Tank Link Fix
+
+**Type:** PATCH — bug fixes for maritime port ghost and gas/liquid tank connectivity. No save break, save-compatible, no prefab rebuild required beyond optional setup.
+
+**Fixed — Port ghost on engine now follows pipe ghost and is grid-bound (ROOT CAUSE):**
+1. `GridBuilder` had NO variable-port path for liquid/gas/item pipes on grid ships. Exhaust/shaft snapping existed, but Fuel/Coolant/Oxygen/Item services (player-placed color-coded ports) were only handled in `BuildSystem` (voxel world). Now grid builder:
+   - Detects pipe family (Liquid/Gas/Item) via `IsPipeItem`.
+   - Plans variable port via `MaritimePortPlanner.PlanPipe` with detail-lattice seat (`seatGridLocal` → precision cell).
+   - Shows a **ghost port ring** anchored to the engine chassis (`block.transform.TransformPoint(portLocal)`) — NOT the Rigidbody root — fixing "port at end of Rigidbody far from chassis".
+   - The ring color matches service (amber Fuel, teal Coolant, sky-blue Oxygen, green Item) and tints red when at cap. It follows the pipe ghost 100% because both use identical `PlanPipe` geometry.
+   - Placement is grid-bound: anchorLocal = precisionPos * SmallCellSize, `layer.AddBlock` + `block.transform.localPosition = anchorLocal`. `PipeVisualBuilder` + `GridGasNetwork`/`GridLiquidNetwork` refreshed immediately.
+   - Over-cap: ghost tints red, toast "Fuel/Coolant/Oxygen already connected (max N)" every 1.2s, exactly like voxel builder.
+2. Added `_ghostPortRing` fields + `ShowGhostPortRing` / `HideGhostPortRing` + `ShowGhostPortRingForBlock` helpers, bound to GridBuilder lifecycle (hide on ghost hide, destroy on OnDestroy).
+
+**Fixed — Gas pipes never connect to gas tank, same for liquid tanks and pipes — now 5-grid-square connection (ROOT CAUSE):**
+3. Gas tanks had **no named `Port_GasIO_*` markers** — only liquid tanks had `Port_LiquidIO_*`. `BlocksAreGasLinked` / `ProximityBlocks` relied on port proximity first, falling back to body range only 2× cell. Without gas ports, tanks beyond ~5m were missed and the 5-cell corridor probe sometimes missed due to small buffer/radius.
+   - Added `EnsureGasTankPorts()` in `VoxelEngineSetupWindow` — creates 6 gas port markers (N/S/E/W/Top/Bottom) with `MaritimePortFacing` outward, same positions as liquid ports, with glowing sky-blue material. Non-destructive (adds missing facing tag only if port exists).
+   - Called in maritime content build: `EnsureLiquidTankPorts()`, `EnsureGasTankPorts()`, `EnsureLiquidTankClassicBridge()`.
+4. `GridGasNetwork` and `GridLiquidNetwork` hardened for reliable 5-cell connection:
+   - Probe buffers enlarged 12→32 colliders, proximity result list 12→32.
+   - Detail-pipe proximity radius widened: `max(Large*1.15,2.25)` → `max(Large*1.5,3.25)`; structural pipes `max(cell,Small)*1.8` → `*2.0`; bodyRange `EffectiveCellSize*2.0` → `*3.0` for face-touch forgiveness.
+   - Corridor probe `radiusScale` 1.6→2.2 — overlapping spheres more forgiving of slight off-axis.
+   - Added brute-force cardinal fallback: after BFS, scan ALL grid tanks and if any tank is within 5 cells cardinally (`PipeAdjacency.IsCardinalLinkDelta`) of ANY visited pipe, yield it. Guarantees advertised "5 grid squares" even if OverlapSphere probe missed.
+   - Classic probe buffers also 16→32, radiusScale 2.2 for liquid bridge.
+5. Manual Unity steps (optional but recommended):
+   - Tools → Voxel Engine → Setup Wizard → **13. Build Maritime Content** once — creates gas tank ports (non-destructive).
+   - Place GasTank_Large / LiquidTank_Large and a gas/liquid pipe 5 cells away cardinally — verify network connects, tank UI shows flow, engine buffers fill.
+   - Place maritime engine (Small/Medium/Giant), hold gas/liquid/item pipe, aim at hull — verify colored port ring follows pipe ghost, is bound to grid, sits on chassis (not Rigidbody end).
+   - Click to place — verify port installed, pipe seated on detail lattice, visually outside hull.
+
+**Files touched:**
+- `Scripts/GridSystem/GridBuilder.cs` — variable-port ghost ring + grid-bound placement + chassis-anchored port (fix Rigidbody far bug).
+- `Scripts/GridSystem/GridGasNetwork.cs` — 5-cell reliability: bigger buffers, wider radius, 2.2× corridor + brute-force cardinal fallback.
+- `Scripts/GridSystem/GridLiquidNetwork.cs` — same as gas.
+- `Scripts/Editor/VoxelEngineSetupWindow.cs` — `EnsureGasTankPorts()` + call.
+- `Changelog.md`, `GameVersion.cs` (bump to 6.19.2-dev).
 
 ---
 

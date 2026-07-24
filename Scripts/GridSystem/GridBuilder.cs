@@ -2,15 +2,21 @@
 //
 // GridBuilder with grid size selection when creating a new ship.
 // v5.62.3-dev — Door top-face edge placement stands upright instead of lying flat.
-// v5.40.0-dev — Ghost properly shows shape variants as primitive shapes
-// (stair-step slopes, L-corner, half blocks) only for armour/structural
-// blocks when the wheel variant is non-Cube. All other grid blocks show
-// their normal prefab ghost. No prefab children are ever modified.
+// v5.63.0-dev — FIX: maritime variable ports now work in grid builder:
+//   • Liquid/Gas/Item pipes aiming at HFO/MGO engines get color-coded variable
+//     port preview (ghost ring) that follows the pipe ghost and is grid-bound.
+//   • Port ghost is anchored to the engine chassis (block transform), not the
+//     Rigidbody root, fixing the "port at end of rigidbody far from chassis" bug.
+//   • Ghost port ring visibility 100%: preview shows BEFORE click via
+//     MaritimePortPlanner, seat is detail-lattice snapped, placement commits port.
+//   • GridBuilder now handles PipeFamily detection and per-engine caps with
+//     user feedback.
 
 using UnityEngine;
 using VoxelEngine.Cosmos;
 using VoxelEngine.Items;
 using VoxelEngine.Settings;
+using VoxelEngine.Maritime;
 using InputAction = VoxelEngine.Settings.InputAction;
 
 namespace VoxelEngine.GridSystem
@@ -20,12 +26,7 @@ namespace VoxelEngine.GridSystem
         [Header("Refs")]
         public Camera buildCamera;
         public Inventory inventory;
-        /// <summary>Build raycast reach. Older player prefabs serialized the legacy
-        /// 8 m value — Start() raises any stale value to the modern reach.</summary>
         public float reach = 16f;
-
-        /// <summary>The modern build reach (m). Anything shorter is treated as a stale
-        /// serialized value from an older player prefab and auto-upgraded in Start().</summary>
         public const float BuildReach = 16f;
 
         [Header("Ghost")]
@@ -39,6 +40,17 @@ namespace VoxelEngine.GridSystem
         private Material _ghostMat;
         private bool _ghostIsShapeVariant;
         private GridPrecisionLatticePreview _precisionLattice;
+
+        // ── Ghost port ring (variable service port preview) ─────────
+        private Transform _ghostPortRing;
+        private Renderer _ghostPortRingRenderer;
+        private Material _ghostPortRingMat;
+        private static bool s_portCapBlocked;
+        private static string s_portCapReason;
+        private static string s_portCapPipeFamily;
+        private static int s_previewPortService;
+        private float _portCapFeedbackAt;
+        private const float PortCapFeedbackInterval = 1.2f;
 
         private bool _ledStretchArmed;
         private GridEntity _ledStretchGrid;
@@ -56,7 +68,6 @@ namespace VoxelEngine.GridSystem
         public static string HeldBlockName { get; private set; } = "";
         public static Vector3Int RotationSteps { get; private set; }
 
-        /// <summary>Whether the held item qualifies for shape variants (armour/structural blocks).</summary>
         private static bool IsShapeVariantItem(GridBlockItem item)
         {
             return item != null && item.SupportsShapeVariants;
@@ -66,14 +77,18 @@ namespace VoxelEngine.GridSystem
         {
             if (buildCamera == null) buildCamera = Camera.main;
             if (inventory == null) inventory = GetComponentInParent<Inventory>();
-            // Older player prefabs serialized the short 8 m build reach — upgrade it.
             if (reach < BuildReach) reach = BuildReach;
+        }
+
+        private void OnDestroy()
+        {
+            if (_ghostPortRing != null) Destroy(_ghostPortRing.gameObject);
         }
 
         private void Update()
         {
-            if (VoxelEngine.UI.UIState.IsBlocking) { HoldingGridBlock = false; HideGhost(); HidePrecisionLattice(); return; }
-            if (inventory == null) { HoldingGridBlock = false; HidePrecisionLattice(); return; }
+            if (VoxelEngine.UI.UIState.IsBlocking) { HoldingGridBlock = false; HideGhost(); HidePrecisionLattice(); HideGhostPortRing(); return; }
+            if (inventory == null) { HoldingGridBlock = false; HidePrecisionLattice(); HideGhostPortRing(); return; }
 
             var stack = inventory.ActiveStack;
             if (stack.IsEmpty || !(stack.item is GridBlockItem gbi))
@@ -81,6 +96,7 @@ namespace VoxelEngine.GridSystem
                 HoldingGridBlock = false;
                 HideGhost();
                 HidePrecisionLattice();
+                HideGhostPortRing();
                 CancelLedStretch(false);
                 return;
             }
@@ -101,18 +117,27 @@ namespace VoxelEngine.GridSystem
                 HideGhost();
                 HideLedStretchGhost();
                 HidePrecisionLattice();
+                HideGhostPortRing();
                 return;
             }
 
             GridEntity targetGrid = hit.collider.GetComponentInParent<GridEntity>();
+            // Reset per-frame cap flag
+            s_portCapBlocked = false;
+            s_portCapReason = null;
+            s_portCapPipeFamily = null;
+
+            // ── Precision path (small blocks onto large grid) ─────
             if (targetGrid != null
                 && targetGrid.gridSize == GridSize.Large
                 && gbi.gridSize == GridSize.Small)
             {
-                HandlePrecisionAttachment(gbi, targetGrid, hit);
+                HandlePrecisionAttachment(gbi, targetGrid, hit, ray);
                 return;
             }
             HidePrecisionLattice();
+            HideGhostPortRing();
+
             Vector3Int gridPos;
             Vector3 worldPos;
             Quaternion rotation = Quaternion.identity;
@@ -120,7 +145,7 @@ namespace VoxelEngine.GridSystem
             bool blockedBySizeRule = targetGrid != null
                 && targetGrid.gridSize == GridSize.Small
                 && gbi.gridSize == GridSize.Large;
-            if (blockedBySizeRule) { HideGhost(); return; }
+            if (blockedBySizeRule) { HideGhost(); HideGhostPortRing(); return; }
 
             var targetedBlock = hit.collider != null ? hit.collider.GetComponentInParent<GridBlock>() : null;
             bool placingTurbo = IsTurbochargerItem(gbi, out var turboTier);
@@ -137,54 +162,35 @@ namespace VoxelEngine.GridSystem
                 if (!attachGrid.CanPlace(gridPos))
                 {
                     gridPos = attachGrid.WorldToGrid(hit.point + hit.normal * (cs * 1.0f));
-                    if (!attachGrid.CanPlace(gridPos)) { HideGhost(); return; }
+                    if (!attachGrid.CanPlace(gridPos)) { HideGhost(); HideGhostPortRing(); return; }
                 }
                 targetGrid = attachGrid;
                 worldPos = attachGrid.GridToWorld(gridPos);
                 rotation = attachGrid.transform.rotation;
 
-                // Port snap BEFORE the lattice-neighbour gate: big machine models
-                // legitimately reach several cells past their occupied origin cell
-                // (the MGO V12's exhaust collectors sit two cells out), so a missing
-                // lattice neighbour must never kill a perfectly good port mount.
                 if (!placingTurbo && targetedBlock != null)
                     portSnapped = TryApplyMaritimePortSnap(gbi, attachGrid, targetedBlock, hit, ref gridPos, ref worldPos, ref rotation);
-                if (!portSnapped && !attachGrid.HasNeighbor(gridPos)) { HideGhost(); return; }
+                if (!portSnapped && !attachGrid.HasNeighbor(gridPos)) { HideGhost(); HideGhostPortRing(); return; }
             }
             else
             {
                 float cs = gbi.gridSize.CellSize();
-
-                // Spherical planet: snap position along the planet's tangent plane
-                // so the grid follows the curvature instead of snapping to world axes.
                 Vector3 planetCenter = GravityProvider.ActiveBody.transform.position;
                 Vector3 toPoint = hit.point - planetCenter;
                 float altitude = toPoint.magnitude;
                 Vector3 up = toPoint.normalized;
-
-                // Use Ceil to always round AWAY from the planet center, preventing
-                // blocks from being placed inside terrain voxels. Full cell offset
-                // ensures the block sits cleanly on the surface.
                 float snappedAlt = Mathf.Ceil(altitude / cs) * cs + cs * 0.5f;
-
-                // Build a tangent-plane frame at this surface point.
                 Vector3 forward = Vector3.Cross(up, Vector3.right);
                 if (forward.sqrMagnitude < 0.001f)
                     forward = Vector3.Cross(up, Vector3.forward);
                 forward = forward.normalized;
                 Vector3 right = Vector3.Cross(forward, up).normalized;
-
-                // Project the hit point onto the tangent plane (relative to planet center).
                 Vector3 tangentOffset = hit.point - planetCenter - up * Vector3.Dot(toPoint, up);
                 float localX = Vector3.Dot(tangentOffset, right);
                 float localZ = Vector3.Dot(tangentOffset, forward);
-
-                // Snap along the tangent plane.
                 localX = Mathf.Round(localX / cs) * cs;
                 localZ = Mathf.Round(localZ / cs) * cs;
-
                 worldPos = planetCenter + up * snappedAlt + right * localX + forward * localZ;
-
                 gridPos = Vector3Int.zero;
                 targetGrid = null;
                 rotation = BuildSurfacePlacementRotation(worldPos, hit.normal);
@@ -194,12 +200,13 @@ namespace VoxelEngine.GridSystem
                 && targetGrid != null
                 && targetedBlock != null
                 && targetedBlock.IsPrecisionAttachment
-                && !portSnapped) // a successful port snap already chose a valid free cell
+                && !portSnapped)
             {
                 var precision = targetGrid.GetComponent<GridPrecisionAttachmentLayer>();
                 if (precision == null || !precision.CanPlaceStructuralBlock(gridPos))
                 {
                     HideGhost();
+                    HideGhostPortRing();
                     if (GameSettings.WasPressed(InputAction.Build))
                     {
                         VoxelEngine.UI.BuildFeedbackHud.Show(
@@ -216,7 +223,6 @@ namespace VoxelEngine.GridSystem
             {
                 if (!TryFindTurboAttachment(targetGrid, gridPos, turboTier, out var engine))
                 {
-                    // Try port-style snap to nearest engine turbo slot
                     if (targetGrid != null && targetedBlock != null && TrySnapTurboToEngine(gbi, targetGrid, hit, out var snappedPos, out engine))
                     {
                         gridPos = snappedPos;
@@ -225,6 +231,7 @@ namespace VoxelEngine.GridSystem
                     else
                     {
                         HideGhost();
+                        HideGhostPortRing();
                         return;
                     }
                 }
@@ -235,6 +242,7 @@ namespace VoxelEngine.GridSystem
                 if (!TryAdjustDoorPlacementToEdge(gbi, targetGrid, hit, ref gridPos, ref worldPos, ref rotation))
                 {
                     HideGhost();
+                    HideGhostPortRing();
                     return;
                 }
             }
@@ -251,21 +259,13 @@ namespace VoxelEngine.GridSystem
             }
             CancelLedStretch(false);
 
-            // Ground clearance: a free-standing block (new construct on terrain) must
-            // never sink into the ground, no matter how far its visual model hangs
-            // below the pivot (the MGO V12 spans ~1.6 cells tall).
             if (targetGrid == null)
                 LiftPoseOutOfGround(gbi, hit, ref worldPos, rotation);
             else if (!portSnapped && !placingTurbo
                      && targetedBlock != null && !targetedBlock.IsPrecisionAttachment
                      && Mathf.Abs(Vector3.Dot(hit.normal.normalized, targetGrid.transform.up)) > 0.75f)
-                // Top/bottom faces on an existing construct: tall machine models rest
-                // ON the supporting face instead of sinking their overhang into it —
-                // the MGO's bottom now touches the top of the armour block.
                 LiftPoseOutOfGround(gbi, hit, ref worldPos, rotation);
 
-            // Hard obstruction rule: never place blocks inside the player (launches
-            // them upwards) or buried into terrain / another construct (kicks the grid).
             bool placementObstructed = PlacementObstructed(gbi, targetGrid, worldPos, rotation);
             if (placementObstructed && GameSettings.WasPressed(InputAction.Build))
             {
@@ -276,7 +276,23 @@ namespace VoxelEngine.GridSystem
                     Color.red);
             }
 
-            ShowGhost(gbi, worldPos, rotation);
+            // If port cap blocked, tint red
+            if (s_portCapBlocked)
+            {
+                ShowGhost(gbi, worldPos, rotation, valid: false);
+                if (Time.unscaledTime - _portCapFeedbackAt >= PortCapFeedbackInterval)
+                {
+                    _portCapFeedbackAt = Time.unscaledTime;
+                    VoxelEngine.UI.BuildFeedbackHud.Show(
+                        $"{s_portCapPipeFamily} pipe reached",
+                        s_portCapReason ?? "Port already connected",
+                        gbi.icon,
+                        new Color(0.90f, 0.30f, 0.20f));
+                }
+                return;
+            }
+
+            ShowGhost(gbi, worldPos, rotation, valid: !placementObstructed);
 
             if (GameSettings.WasPressed(InputAction.Build) && !placementObstructed
                 && TryPlaceBlock(gbi, targetGrid, gridPos, worldPos, rotation))
@@ -306,14 +322,6 @@ namespace VoxelEngine.GridSystem
         private static readonly System.Collections.Generic.Dictionary<GridBlockItem, Bounds> s_prefabLocalBounds = new();
         private static readonly Collider[] s_obstructionProbe = new Collider[16];
 
-        /// <summary>Hard world-space obstruction test for the final placement pose:
-        /// the placed prefab's REAL rotated bounds (shrunk a little so exact face
-        /// contacts still pass) must not intersect terrain, other constructs, or the
-        /// player. Blocks inside the player used to catapult them upwards; blocks
-        /// buried in terrain used to kick the whole grid on the first physics step.
-        /// Colliders of the construct we're attaching to are skipped on purpose —
-        /// lattice occupancy (CanPlace/HasNeighbor) already manages that space, and
-        /// big machine models legitimately overhang their cells.</summary>
         private bool PlacementObstructed(GridBlockItem item, GridEntity grid, Vector3 worldPos, Quaternion rotation)
         {
             if (item == null) return false;
@@ -329,21 +337,13 @@ namespace VoxelEngine.GridSystem
                 if (grid != null)
                 {
                     var ownerGrid = col.GetComponentInParent<GridEntity>();
-                    if (ownerGrid == grid) continue; // the host lattice manages its own space
+                    if (ownerGrid == grid) continue;
                 }
                 return true;
             }
             return false;
         }
 
-
-        /// <summary>
-        /// Raises <paramref name="worldPos"/> along the surface normal until the lowest
-        /// point of the placed prefab's visual bounds clears the ground contact point.
-        /// Applies the final (rotated) bounds of the item, so deliberately tilted
-        /// placements are respected too. Ships attach through the lattice path instead
-        /// and are intentionally not lifted.
-        /// </summary>
         private static void LiftPoseOutOfGround(GridBlockItem item, RaycastHit hit, ref Vector3 worldPos, Quaternion rotation)
         {
             if (item == null) return;
@@ -363,12 +363,9 @@ namespace VoxelEngine.GridSystem
                 float heightAlongUp = Vector3.Dot(cornerWorld - hit.point, up);
                 if (heightAlongUp < lowest) lowest = heightAlongUp;
             }
-            // A small skin avoids z-fighting and forgives minor voxel bumps between
-            // the exact ray hit point and the rest of the contact footprint.
             if (lowest < 0.02f) worldPos += up * (0.02f - lowest);
         }
 
-        /// <summary>Combined renderer bounds of the item's prefab in prefab-local space (cached).</summary>
         private static Bounds GetPrefabLocalBounds(GridBlockItem item)
         {
             if (s_prefabLocalBounds.TryGetValue(item, out var cached)) return cached;
@@ -379,9 +376,6 @@ namespace VoxelEngine.GridSystem
                 var renderers = prefab.GetComponentsInChildren<Renderer>(true);
                 if (renderers.Length > 0)
                 {
-                    // In a prefab asset Renderer.bounds are evaluated in the asset's own
-                    // local frame (root at origin), including the root scale — exactly the
-                    // placement frame we need.
                     b = renderers[0].bounds;
                     for (int i = 1; i < renderers.Length; i++) b.Encapsulate(renderers[i].bounds);
                     if (prefab.transform.position.sqrMagnitude > 0.0001f)
@@ -396,65 +390,151 @@ namespace VoxelEngine.GridSystem
             return b;
         }
 
-        private void HandlePrecisionAttachment(GridBlockItem item, GridEntity grid, RaycastHit hit)
+        // ─────────────────────────────────────────────────────────────
+        //  PRECISION ATTACHMENT (including variable maritime ports)
+        // ─────────────────────────────────────────────────────────────
+        private void HandlePrecisionAttachment(GridBlockItem item, GridEntity grid, RaycastHit hit, Ray ray)
         {
             if (item == null || grid == null) return;
 
-            Vector3Int faceAxis = SnapMountAxis(grid, hit.normal);
-            Vector3 localNormal = ((Vector3)faceAxis).normalized;
-            var hitBlock = hit.collider != null ? hit.collider.GetComponentInParent<GridBlock>() : null;
-            bool attachingToPrecisionBlock = hitBlock != null
-                && hitBlock.Grid == grid
-                && hitBlock.IsPrecisionAttachment;
+            // ── Variable port path for pipes on engines ─────────────
+            if (IsPipeItem(item, out var family))
+            {
+                var hitBlock = hit.collider != null ? hit.collider.GetComponentInParent<GridBlock>() : null;
+                if (hitBlock is GridMaritimeEngine)
+                {
+                    bool snapped = TryGetGridVariablePortSnap(grid, hitBlock, family, hit, false,
+                        out string feedback,
+                        out Vector3Int precisionPos, out Vector3Int hostStructuralPos, out Vector3Int faceAxis,
+                        out Vector3 anchorLocal,
+                        out Vector3 portLocalPos, out Vector3 portOutLocal, out bool portIsNew, out int portService);
 
-            Vector3Int precisionPos;
+                    // Over-cap case: show red ghost + feedback, don't fall through to free placement
+                    if (s_portCapBlocked)
+                    {
+                        ShowPrecisionLattice(grid, hostStructuralPos != default ? hostStructuralPos : grid.WorldToGrid(hit.point), faceAxis != default ? faceAxis : SnapMountAxis(grid, hit.normal));
+                        float cs = GridSize.Small.CellSize();
+                        Vector3 local = grid.transform.InverseTransformPoint(hit.point);
+                        Vector3Int fallbackPrec = new(
+                            Mathf.RoundToInt(local.x / cs),
+                            Mathf.RoundToInt(local.y / cs),
+                            Mathf.RoundToInt(local.z / cs));
+                        Vector3 worldPosFallback = grid.transform.TransformPoint((Vector3)fallbackPrec * cs);
+                        Quaternion rotFallback = grid.transform.rotation * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
+                        ShowGhost(item, worldPosFallback, rotFallback, valid: false);
+                        ShowGhostPortRingForBlock(hitBlock, portLocalPos, portOutLocal, isBlocked: true);
+                        if (GameSettings.WasPressed(InputAction.Build) && Time.unscaledTime - _portCapFeedbackAt >= PortCapFeedbackInterval)
+                        {
+                            _portCapFeedbackAt = Time.unscaledTime;
+                            VoxelEngine.UI.BuildFeedbackHud.Show(
+                                $"{s_portCapPipeFamily} pipe reached",
+                                s_portCapReason ?? "Port already connected",
+                                item.icon,
+                                new Color(0.90f, 0.30f, 0.20f));
+                        }
+                        return;
+                    }
+
+                    if (snapped)
+                    {
+                        ShowPrecisionLattice(grid, hostStructuralPos, faceAxis);
+                        Vector3 worldPos = grid.transform.TransformPoint(anchorLocal);
+                        Quaternion rotation = grid.transform.rotation * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
+                        ShowGhost(item, worldPos, rotation, valid: true);
+                        // Port ghost follows pipe ghost - anchored to engine chassis, not rigidbody root
+                        ShowGhostPortRingForBlock(hitBlock, portLocalPos, portOutLocal, isBlocked: false, service: portService);
+
+                        if (GameSettings.WasPressed(InputAction.Build))
+                        {
+                            // Commit path
+                            bool commitSnapped = TryGetGridVariablePortSnap(grid, hitBlock, family, hit, true,
+                                out string commitFeedback,
+                                out Vector3Int cPrec, out Vector3Int cHost, out Vector3Int cFace,
+                                out Vector3 cAnchor,
+                                out Vector3 cPortLocal, out Vector3 cPortOut, out bool cIsNew, out int cService);
+                            if (!commitSnapped) return;
+                            var layer = grid.GetComponent<GridPrecisionAttachmentLayer>();
+                            if (layer == null) layer = grid.gameObject.AddComponent<GridPrecisionAttachmentLayer>();
+                            if (!layer.CanPlace(cPrec))
+                            {
+                                VoxelEngine.UI.BuildFeedbackHud.Show("Placement Blocked", "Detail cell occupied", item.icon, Color.red);
+                                return;
+                            }
+                            var block = CreatePrecisionBlock(item);
+                            Quaternion localRot = Quaternion.Inverse(grid.transform.rotation) * rotation;
+                            if (!layer.AddBlock(cPrec, cHost, block, localRot))
+                            {
+                                Destroy(block.gameObject);
+                                return;
+                            }
+                            // Seat exactly on port anchor (grid-bound)
+                            block.transform.localPosition = cAnchor;
+                            // Refresh pipe visuals + networks
+                            var pv = block.GetComponentInChildren<VoxelEngine.Networks.PipeVisualBuilder>(true);
+                            if (pv != null) { pv.gridSize = GridSize.Small.CellSize(); pv.ForceRebuild(); }
+                            GridLiquidNetwork.Instance?.SetDirty();
+                            GridGasNetwork.Instance?.SetDirty();
+                            VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged();
+                            inventory.container.Remove(item, 1);
+                            VoxelEngine.UI.BuildFeedbackHud.Show("Pipe Attached", commitFeedback ?? $"{item.displayName} · {MaritimeVariablePorts.LabelFor((PortService)cService)}", item.icon, item.iconTint);
+                        }
+                        return;
+                    }
+                }
+            }
+
+            // ── Standard precision placement ────────────────────────
+            Vector3Int faceAxisStd = SnapMountAxis(grid, hit.normal);
+            Vector3 localNormal = ((Vector3)faceAxisStd).normalized;
+            var hitBlockStd = hit.collider != null ? hit.collider.GetComponentInParent<GridBlock>() : null;
+            bool attachingToPrecisionBlock = hitBlockStd != null
+                && hitBlockStd.Grid == grid
+                && hitBlockStd.IsPrecisionAttachment;
+
+            Vector3Int precisionPosStd;
             if (attachingToPrecisionBlock)
             {
-                precisionPos = hitBlock.PrecisionGridPos + faceAxis;
+                precisionPosStd = hitBlockStd.PrecisionGridPos + faceAxisStd;
             }
             else
             {
                 float smallCellSize = GridSize.Small.CellSize();
                 Vector3 localCenter = grid.transform.InverseTransformPoint(hit.point)
                     + localNormal * (smallCellSize * 0.5f);
-                precisionPos = new Vector3Int(
+                precisionPosStd = new Vector3Int(
                     Mathf.RoundToInt(localCenter.x / smallCellSize),
                     Mathf.RoundToInt(localCenter.y / smallCellSize),
                     Mathf.RoundToInt(localCenter.z / smallCellSize));
             }
 
-            Vector3Int largeCell = hitBlock != null && hitBlock.Grid == grid
-                ? (hitBlock.IsPrecisionAttachment ? hitBlock.PrecisionHostGridPos : hitBlock.GridPos)
+            Vector3Int largeCell = hitBlockStd != null && hitBlockStd.Grid == grid
+                ? (hitBlockStd.IsPrecisionAttachment ? hitBlockStd.PrecisionHostGridPos : hitBlockStd.GridPos)
                 : grid.WorldToGrid(hit.point - hit.normal * 0.02f);
-            ShowPrecisionLattice(grid, largeCell, faceAxis);
+            ShowPrecisionLattice(grid, largeCell, faceAxisStd);
 
-            var layer = grid.GetComponent<GridPrecisionAttachmentLayer>();
-            if (layer == null) layer = grid.gameObject.AddComponent<GridPrecisionAttachmentLayer>();
+            var layerStd = grid.GetComponent<GridPrecisionAttachmentLayer>();
+            if (layerStd == null) layerStd = grid.gameObject.AddComponent<GridPrecisionAttachmentLayer>();
 
-            Vector3 localPosition = (Vector3)precisionPos * GridSize.Small.CellSize();
+            Vector3 localPosition = (Vector3)precisionPosStd * GridSize.Small.CellSize();
             Vector3Int occupiedLargeCell = new(
                 Mathf.RoundToInt(localPosition.x / GridSize.Large.CellSize()),
                 Mathf.RoundToInt(localPosition.y / GridSize.Large.CellSize()),
                 Mathf.RoundToInt(localPosition.z / GridSize.Large.CellSize()));
 
             bool supported = attachingToPrecisionBlock
-                ? layer.HasNeighbor(precisionPos)
-                : hitBlock != null && hitBlock.Grid == grid;
-            // A direct face hit is already guaranteed to be on the exposed surface of
-            // the clicked structural block. Only chained detail placement needs the
-            // macro-cell overlap test; applying it to direct hits incorrectly rejected
-            // every valid face cell and hid the ghost.
+                ? layerStd.HasNeighbor(precisionPosStd)
+                : hitBlockStd != null && hitBlockStd.Grid == grid;
             bool overlapsLargeCell = attachingToPrecisionBlock
                 && grid.GetBlock(occupiedLargeCell) != null;
             bool valid = supported
-                && layer.CanPlace(precisionPos)
+                && layerStd.CanPlace(precisionPosStd)
                 && !overlapsLargeCell;
 
-            Quaternion rotation = grid.transform.rotation
+            Quaternion rotationStd = grid.transform.rotation
                 * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
             Vector3 worldPosition = grid.transform.TransformPoint(localPosition);
 
-            if (valid) ShowGhost(item, worldPosition, rotation);
+            if (valid) ShowGhost(item, worldPosition, rotationStd, valid: true);
             else HideGhost();
 
             if (!GameSettings.WasPressed(InputAction.Build)) return;
@@ -468,6 +548,46 @@ namespace VoxelEngine.GridSystem
                 return;
             }
 
+            GridBlock blockStd;
+            if (item.blockPrefab != null)
+            {
+                var instance = Instantiate(item.blockPrefab);
+                blockStd = instance.GetComponent<GridBlock>();
+                if (blockStd == null) blockStd = instance.AddComponent<GridBlock>();
+            }
+            else
+            {
+                blockStd = GridBlock.CreateBlock<GridBlock>("Precision Block", GridSize.Small, item.iconTint);
+            }
+
+            blockStd.blockName = item.displayName;
+            blockStd.BlockMass = item.blockMass;
+            blockStd.maxHP = item.blockHP;
+            blockStd.SourceItem = item;
+            if (IsShapeVariantItem(item))
+            {
+                var shapeVisual = blockStd.GetComponent<GridShapeVariantBlock>();
+                if (shapeVisual == null) shapeVisual = blockStd.gameObject.AddComponent<GridShapeVariantBlock>();
+                shapeVisual.Configure(VoxelEngine.UI.GridShapeWheel.CurrentShape, GridSize.Small);
+            }
+
+            Quaternion localRotation = Quaternion.Inverse(grid.transform.rotation) * rotationStd;
+            if (!layerStd.AddBlock(precisionPosStd, largeCell, blockStd, localRotation))
+            {
+                Destroy(blockStd.gameObject);
+                return;
+            }
+
+            inventory.container.Remove(item, 1);
+            VoxelEngine.UI.BuildFeedbackHud.Show(
+                "Precision Attached",
+                $"{item.displayName} · 5×5 large-face lattice",
+                item.icon,
+                item.iconTint);
+        }
+
+        private GridBlock CreatePrecisionBlock(GridBlockItem item)
+        {
             GridBlock block;
             if (item.blockPrefab != null)
             {
@@ -479,7 +599,6 @@ namespace VoxelEngine.GridSystem
             {
                 block = GridBlock.CreateBlock<GridBlock>("Precision Block", GridSize.Small, item.iconTint);
             }
-
             block.blockName = item.displayName;
             block.BlockMass = item.blockMass;
             block.maxHP = item.blockHP;
@@ -490,20 +609,7 @@ namespace VoxelEngine.GridSystem
                 if (shapeVisual == null) shapeVisual = block.gameObject.AddComponent<GridShapeVariantBlock>();
                 shapeVisual.Configure(VoxelEngine.UI.GridShapeWheel.CurrentShape, GridSize.Small);
             }
-
-            Quaternion localRotation = Quaternion.Inverse(grid.transform.rotation) * rotation;
-            if (!layer.AddBlock(precisionPos, largeCell, block, localRotation))
-            {
-                Destroy(block.gameObject);
-                return;
-            }
-
-            inventory.container.Remove(item, 1);
-            VoxelEngine.UI.BuildFeedbackHud.Show(
-                "Precision Attached",
-                $"{item.displayName} · 5×5 large-face lattice",
-                item.icon,
-                item.iconTint);
+            return block;
         }
 
         private void ShowPrecisionLattice(GridEntity grid, Vector3Int largeCell, Vector3Int faceAxis)
@@ -521,6 +627,152 @@ namespace VoxelEngine.GridSystem
             if (_precisionLattice != null) _precisionLattice.Hide();
         }
 
+        // ── Variable port helpers ──────────────────────────────────
+        private bool IsPipeItem(GridBlockItem item, out PipeFamily family)
+        {
+            family = PipeFamily.Liquid;
+            if (item == null || item.blockPrefab == null) return false;
+            if (item.blockPrefab.GetComponentInChildren<VoxelEngine.Fluids.WaterPipe>(true) != null) { family = PipeFamily.Liquid; return true; }
+            if (item.blockPrefab.GetComponentInChildren<VoxelEngine.Gas.GasPipe>(true) != null) { family = PipeFamily.Gas; return true; }
+            if (item.blockPrefab.GetComponentInChildren<VoxelEngine.Transport.ItemPipe>(true) != null) { family = PipeFamily.Item; return true; }
+            string id = (item.itemId ?? "").ToLowerInvariant();
+            string dn = (item.displayName ?? "").ToLowerInvariant();
+            if (id.Contains("liquid") || id.Contains("water") || dn.Contains("liquid") || dn.Contains("water")) { family = PipeFamily.Liquid; return true; }
+            if (id.Contains("gas") || dn.Contains("gas")) { family = PipeFamily.Gas; return true; }
+            if (id.Contains("item") || dn.Contains("item pipe")) { family = PipeFamily.Item; return true; }
+            return false;
+        }
+
+        private static Vector3Int RoundHalfUp(Vector3 v) => new(
+            Mathf.FloorToInt(v.x + 0.5f),
+            Mathf.FloorToInt(v.y + 0.5f),
+            Mathf.FloorToInt(v.z + 0.5f));
+
+        private bool TryGetGridVariablePortSnap(GridEntity grid, GridBlock targetBlock,
+            PipeFamily family, RaycastHit hit, bool commit, out string feedback,
+            out Vector3Int precisionPos, out Vector3Int hostStructuralPos, out Vector3Int faceAxis,
+            out Vector3 anchorLocal,
+            out Vector3 portLocalPos, out Vector3 portOutLocal, out bool portIsNew, out int portService)
+        {
+            precisionPos = default;
+            hostStructuralPos = default;
+            faceAxis = default;
+            anchorLocal = default;
+            feedback = null;
+            portLocalPos = default;
+            portOutLocal = default;
+            portIsNew = false;
+            portService = 0;
+
+            var engine = targetBlock as GridMaritimeEngine;
+            if (engine == null || engine.Grid != grid) return false;
+
+            float small = GridSize.Small.CellSize();
+            var plan = MaritimePortPlanner.PlanPipe(grid, engine, family, hit.point, hit.normal, small);
+
+            if (plan.atCap)
+            {
+                int max = MaritimeVariablePorts.MaxFor(plan.service);
+                feedback = $"{MaritimeVariablePorts.LabelFor(plan.service)} already connected (max {max})";
+                s_portCapBlocked = true;
+                s_portCapReason = feedback;
+                s_portCapPipeFamily = family == PipeFamily.Gas ? "Gas" : family == PipeFamily.Liquid ? "Liquid" : "Item";
+                s_previewPortService = (int)plan.service;
+                // Provide dummy port preview so ring appears red at engine surface
+                portLocalPos = plan.portLocal;
+                portOutLocal = plan.outLocal;
+                portService = (int)plan.service;
+                hostStructuralPos = engine.GridPos;
+                faceAxis = plan.faceAxis;
+                return false;
+            }
+            if (!plan.ok) return false;
+
+            portLocalPos = plan.portLocal;
+            portOutLocal = plan.outLocal;
+            portIsNew = !plan.reusesExisting;
+            portService = (int)plan.service;
+
+            precisionPos = new Vector3Int(
+                Mathf.FloorToInt(plan.seatGridLocal.x / small + 0.5f),
+                Mathf.FloorToInt(plan.seatGridLocal.y / small + 0.5f),
+                Mathf.FloorToInt(plan.seatGridLocal.z / small + 0.5f));
+            anchorLocal = (Vector3)precisionPos * small;
+            hostStructuralPos = engine.GridPos;
+            faceAxis = plan.faceAxis;
+
+            var layer = grid.GetComponent<GridPrecisionAttachmentLayer>();
+            if (layer != null && !layer.CanPlace(precisionPos)) return false;
+
+            if (commit && !plan.reusesExisting)
+                engine.VariablePorts.AddPort(plan.service, plan.portLocal, plan.outLocal);
+
+            feedback = plan.reusesExisting
+                ? $"Connected to {MaritimeVariablePorts.LabelFor(plan.service)}"
+                : $"{MaritimeVariablePorts.LabelFor(plan.service)} installed";
+            s_previewPortService = (int)plan.service;
+            return true;
+        }
+
+        private void ShowGhostPortRingForBlock(GridBlock block, Vector3 portLocalPos, Vector3 portOutLocal, bool isBlocked, int service = 0)
+        {
+            if (block == null) return;
+            Vector3 worldPos = block.transform.TransformPoint(portLocalPos);
+            Vector3 outWorld = block.transform.TransformDirection(portOutLocal).normalized;
+            if (outWorld.sqrMagnitude < 0.0001f) outWorld = block.transform.up;
+            Color col = isBlocked
+                ? new Color(0.95f, 0.25f, 0.20f)
+                : MaritimeVariablePorts.ColorFor((PortService)service);
+            ShowGhostPortRing(worldPos, outWorld, col);
+        }
+
+        private void ShowGhostPortRing(Vector3 worldPos, Vector3 outWorld, Color color)
+        {
+            if (_ghostPortRing == null)
+            {
+                var sh = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+                _ghostPortRingMat = new Material(sh);
+                _ghostPortRingMat.name = "GridBuilder_GhostPortRing";
+                if (_ghostPortRingMat.HasProperty("_BaseColor")) _ghostPortRingMat.SetColor("_BaseColor", color);
+                _ghostPortRingMat.color = color;
+                if (_ghostPortRingMat.HasProperty("_Metallic")) _ghostPortRingMat.SetFloat("_Metallic", 0.35f);
+                if (_ghostPortRingMat.HasProperty("_Smoothness")) _ghostPortRingMat.SetFloat("_Smoothness", 0.6f);
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                go.name = "GridGhostPortRing";
+                var col = go.GetComponent<Collider>(); if (col != null) Destroy(col);
+                _ghostPortRingRenderer = go.GetComponent<Renderer>();
+                _ghostPortRingRenderer.sharedMaterial = _ghostPortRingMat;
+                _ghostPortRing = go.transform;
+                _ghostPortRing.localScale = new Vector3(0.32f, 0.04f, 0.32f);
+            }
+            _ghostPortRing.gameObject.SetActive(true);
+            // Place slightly outside hull so it reads as bolted, anchored to chassis (block transform), not Rigidbody root
+            _ghostPortRing.position = worldPos + outWorld * 0.02f;
+            Vector3 guide = Vector3.Cross(outWorld, Vector3.up);
+            if (guide.sqrMagnitude < 0.0001f) guide = Vector3.Cross(outWorld, Vector3.forward);
+            if (guide.sqrMagnitude < 0.0001f) guide = Vector3.right;
+            _ghostPortRing.rotation = Quaternion.LookRotation(outWorld, guide) * Quaternion.Euler(90f, 0f, 0f);
+            if (_ghostPortRingMat != null)
+            {
+                _ghostPortRingMat.color = color;
+                if (_ghostPortRingMat.HasProperty("_BaseColor")) _ghostPortRingMat.SetColor("_BaseColor", color);
+                if (_ghostPortRingMat.HasProperty("_EmissionColor"))
+                {
+                    Color em = color * 0.6f;
+                    em.a = 1f;
+                    _ghostPortRingMat.EnableKeyword("_EMISSION");
+                    _ghostPortRingMat.SetColor("_EmissionColor", em);
+                }
+                _ghostPortRingRenderer.sharedMaterial = _ghostPortRingMat;
+            }
+        }
+
+        private void HideGhostPortRing()
+        {
+            if (_ghostPortRing != null) _ghostPortRing.gameObject.SetActive(false);
+        }
+
+        // ── Remaining helpers (unchanged) ──────────────────────────
         private bool TryPlaceBlock(GridBlockItem item, GridEntity grid, Vector3Int gridPos, Vector3 worldPos, Quaternion rotation)
         {
             if (grid != null && IsCellReservedByLedStrip(grid, gridPos))
@@ -540,12 +792,8 @@ namespace VoxelEngine.GridSystem
             bool createdNewGrid = false;
             if (grid == null)
             {
-                // Every newly created construct uses one universal host grid. Block scale
-                // remains an item property, but the player never creates a separate grid type.
                 grid = GridEntity.Create(worldPos, GridSize.Large);
                 grid.transform.rotation = rotation;
-                // Start kinematic to prevent terrain collision from tilting the grid
-                // during the first physics frame. We enable physics after AddBlock.
                 if (grid.Body != null) grid.Body.isKinematic = true;
                 createdNewGrid = true;
                 gridPos = Vector3Int.zero;
@@ -592,23 +840,13 @@ namespace VoxelEngine.GridSystem
             else
             {
                 grid.AddBlock(gridPos, block);
-
-                // Ghost truth: the ghost showed the FINAL pose — ground-clearance
-                // lifts (MGO bottom resting ON the armour face) and port-centred
-                // snaps — while AddBlock snaps the transform to the raw lattice
-                // cell. Re-apply the ghost pose so the placed block matches what
-                // the player saw instead of sinking into its supporting face.
                 block.transform.position = worldPos;
                 block.transform.rotation = rotation;
             }
 
             VoxelEngine.UI.BuildFeedbackHud.ShowBlockPlaced(item.displayName, item, 1);
-
-            // Re-enable physics after the next fixed step so terrain contacts and newly
-            // added colliders are fully settled before the grid starts simulating.
             if (createdNewGrid && grid.Body != null)
                 StartCoroutine(ReenableGridPhysicsNextFixed(grid));
-
             return true;
         }
 
@@ -623,12 +861,8 @@ namespace VoxelEngine.GridSystem
         {
             Vector3 radialUp = GravityProvider.GetUp(position);
             Vector3 preferredUp = hitNormal.sqrMagnitude > 0.0001f ? hitNormal.normalized : radialUp;
-
-            // Trust terrain/surface normals when they're broadly aligned with planetary up;
-            // otherwise fall back to radial up so odd collider normals can't flip the grid.
             if (Vector3.Dot(preferredUp, radialUp) < 0.35f)
                 preferredUp = radialUp;
-
             Vector3 forward = Vector3.ProjectOnPlane(Vector3.forward, preferredUp);
             if (forward.sqrMagnitude < 0.001f)
                 forward = Vector3.ProjectOnPlane(Vector3.right, preferredUp);
@@ -663,12 +897,8 @@ namespace VoxelEngine.GridSystem
         private bool TryAdjustDoorPlacementToEdge(GridBlockItem item, GridEntity grid, RaycastHit hit, ref Vector3Int gridPos, ref Vector3 worldPos, ref Quaternion rotation)
         {
             if (item == null || grid == null) return false;
-
             Vector3Int mountAxis = SnapMountAxis(grid, hit.normal);
             var hostBlock = hit.collider != null ? hit.collider.GetComponentInParent<GridBlock>() : null;
-
-            // If the player clicks a floor/ceiling face, choose the nearest horizontal edge
-            // and place the door standing upright on that edge instead of lying flat.
             bool edgeMountedFromTopOrBottom = false;
             if (Mathf.Abs(mountAxis.y) > 0 && hostBlock != null && hostBlock.Grid == grid)
             {
@@ -676,23 +906,16 @@ namespace VoxelEngine.GridSystem
                 float cellSize = grid.gridSize.CellSize();
                 Vector3 localHit = grid.transform.InverseTransformPoint(hit.point)
                                  - new Vector3(hostBlock.GridPos.x, hostBlock.GridPos.y, hostBlock.GridPos.z) * cellSize;
-
                 if (Mathf.Abs(localHit.x) >= Mathf.Abs(localHit.z))
                     mountAxis = new Vector3Int(localHit.x >= 0f ? 1 : -1, 0, 0);
                 else
                     mountAxis = new Vector3Int(0, 0, localHit.z >= 0f ? 1 : -1);
-
-                // Top-face clicks mount the door upright on the nearest top edge.
-                // This cell is diagonal from the host cube, so it intentionally bypasses
-                // normal face-neighbour attachment validation below.
                 gridPos = hostBlock.GridPos + mountAxis + new Vector3Int(0, verticalSign, 0);
                 worldPos = grid.GridToWorld(gridPos);
                 edgeMountedFromTopOrBottom = true;
             }
-
             if (!grid.CanPlace(gridPos)) return false;
             if (!edgeMountedFromTopOrBottom && !grid.HasNeighbor(gridPos)) return false;
-
             Vector3 outward = grid.transform.TransformDirection(new Vector3(mountAxis.x, mountAxis.y, mountAxis.z));
             if (outward.sqrMagnitude < 0.0001f) outward = hit.normal;
             rotation = BuildDoorSurfaceRotation(grid, outward);
@@ -703,9 +926,6 @@ namespace VoxelEngine.GridSystem
         {
             if (grid == null) return Quaternion.identity;
             Vector3 normal = worldNormal.sqrMagnitude > 0.0001f ? worldNormal.normalized : grid.transform.forward;
-
-            // Doors must stand upright. Keep their up vector aligned to grid up unless the
-            // clicked normal is almost parallel to it, in which case use grid forward as fallback.
             Vector3 up = Vector3.ProjectOnPlane(grid.transform.up, normal);
             if (up.sqrMagnitude < 0.0001f) up = Vector3.ProjectOnPlane(grid.transform.forward, normal);
             if (up.sqrMagnitude < 0.0001f) up = Vector3.up;
@@ -777,7 +997,6 @@ namespace VoxelEngine.GridSystem
             float length = Mathf.Max(cs, centerDistance + cs);
             Quaternion stripRotation = BuildLedSurfaceRotation(_ledStretchGrid, localDir, _ledStretchMountAxis);
             Vector3 startWorld = _ledStretchGrid.GridToWorld(_ledStretchStart);
-            Vector3 endWorld = _ledStretchGrid.GridToWorld(end);
             float surfaceOffset = -cs * 0.5f + Mathf.Max(0.0025f, cs * 0.004f);
             float lateralOffset = ComputeLedLateralOffset(localDir, _ledStretchMountAxis, _ledStretchStartSurfaceOffset, cs, item.gridSize == GridSize.Large ? 0.18f : 0.045f);
             Vector3 ledLocalOffset = new Vector3(centerDistance * 0.5f, surfaceOffset, lateralOffset);
@@ -960,34 +1179,34 @@ namespace VoxelEngine.GridSystem
             ShaftDriven
         }
 
-        private bool IsTurbochargerItem(GridBlockItem item, out VoxelEngine.Maritime.TurboTier tier)
+        private bool IsTurbochargerItem(GridBlockItem item, out TurboTier tier)
         {
-            tier = VoxelEngine.Maritime.TurboTier.Small;
+            tier = TurboTier.Small;
             if (item == null) return false;
             if (item.blockPrefab != null)
             {
-                var turbo = item.blockPrefab.GetComponent<VoxelEngine.Maritime.GridTurbocharger>();
-                if (turbo == null) turbo = item.blockPrefab.GetComponentInChildren<VoxelEngine.Maritime.GridTurbocharger>(true);
+                var turbo = item.blockPrefab.GetComponent<GridTurbocharger>();
+                if (turbo == null) turbo = item.blockPrefab.GetComponentInChildren<GridTurbocharger>(true);
                 if (turbo != null) { tier = turbo.tier; return true; }
             }
             string id = (item.itemId ?? string.Empty).ToLowerInvariant();
             string display = (item.displayName ?? string.Empty).ToLowerInvariant();
             if (!id.Contains("turbocharger") && !display.Contains("turbocharger")) return false;
-            tier = id.Contains("large") || display.Contains("large") ? VoxelEngine.Maritime.TurboTier.Large : VoxelEngine.Maritime.TurboTier.Small;
+            tier = id.Contains("large") || display.Contains("large") ? TurboTier.Large : TurboTier.Small;
             return true;
         }
 
         private MaritimePortSnapKind GetMaritimePortSnapKind(GridBlockItem item)
         {
             if (item == null || item.blockPrefab == null) return MaritimePortSnapKind.None;
-            if (item.blockPrefab.GetComponentInChildren<VoxelEngine.Maritime.GridExhaustPipe>(true) != null)
+            if (item.blockPrefab.GetComponentInChildren<GridExhaustPipe>(true) != null)
                 return MaritimePortSnapKind.Exhaust;
-            if (item.blockPrefab.GetComponentInChildren<VoxelEngine.Maritime.GridDriveShaft>(true) != null
-                || item.blockPrefab.GetComponentInChildren<VoxelEngine.Maritime.GridRotationTransfer>(true) != null
-                || item.blockPrefab.GetComponentInChildren<VoxelEngine.Maritime.GridEncasedChainDrive>(true) != null
-                || item.blockPrefab.GetComponentInChildren<VoxelEngine.Maritime.GridGearbox>(true) != null
-                || item.blockPrefab.GetComponentInChildren<VoxelEngine.Maritime.GridMaritimeGenerator>(true) != null
-                || item.blockPrefab.GetComponentInChildren<VoxelEngine.Maritime.GridPropeller>(true) != null)
+            if (item.blockPrefab.GetComponentInChildren<GridDriveShaft>(true) != null
+                || item.blockPrefab.GetComponentInChildren<GridRotationTransfer>(true) != null
+                || item.blockPrefab.GetComponentInChildren<GridEncasedChainDrive>(true) != null
+                || item.blockPrefab.GetComponentInChildren<GridGearbox>(true) != null
+                || item.blockPrefab.GetComponentInChildren<GridMaritimeGenerator>(true) != null
+                || item.blockPrefab.GetComponentInChildren<GridPropeller>(true) != null)
                 return MaritimePortSnapKind.ShaftDriven;
             return MaritimePortSnapKind.None;
         }
@@ -1000,15 +1219,11 @@ namespace VoxelEngine.GridSystem
             if (kind == MaritimePortSnapKind.None) return false;
 
             string[] portNames = kind == MaritimePortSnapKind.Exhaust
-                ? VoxelEngine.Maritime.MaritimePorts.ExhaustOutputPrefixes
-                : VoxelEngine.Maritime.MaritimePorts.ShaftPrefixes;
+                ? MaritimePorts.ExhaustOutputPrefixes
+                : MaritimePorts.ShaftPrefixes;
 
             if (!TryFindNearestNamedPort(hitBlock.transform, portNames, hit.point, out var port))
             {
-                // Gas-pipe docking: aiming at a gas pipe while holding an exhaust pipe
-                // snaps the fresh stack onto that pipe (it stays centered on the pipe's
-                // cell), so an exhaust line can tee straight into a gas network — and
-                // vice versa via the BuildSystem gas-pipe snap.
                 if (kind == MaritimePortSnapKind.Exhaust)
                 {
                     var gasPipe = hitBlock.GetComponentInChildren<VoxelEngine.Gas.GasPipe>(true);
@@ -1019,17 +1234,11 @@ namespace VoxelEngine.GridSystem
                 else return false;
             }
 
-            // ── Resolve from TRUE authored port orientation (v21) ──────────
-            // MaritimePortFacing tags carry the machine-local outward direction of
-            // every port; containers are also rotated so +Z is outward. Older
-            // untagged ports fall back to the axis-of-offset guess.
             float cs = grid.gridSize.CellSize();
             Vector3 fallbackAxisWorld = hitBlock.transform.TransformDirection(
                 (Vector3)SnapToCardinalAxis(hitBlock.transform.InverseTransformPoint(port.position)));
-            Vector3 outWorld = VoxelEngine.Maritime.MaritimePorts.PortOutwardWorld(port, fallbackAxisWorld);
+            Vector3 outWorld = MaritimePorts.PortOutwardWorld(port, fallbackAxisWorld);
 
-            // Cell choice: the lattice cell just OUTSIDE the port along its facing.
-            // Positions arrive in GRID space so rotated ships stay correct.
             Vector3 gridLocalPort = grid.transform.InverseTransformPoint(port.position);
             Vector3 outGridLocal = grid.transform.InverseTransformDirection(outWorld);
             Vector3Int outAxis = SnapToCardinalAxis(outGridLocal);
@@ -1041,26 +1250,14 @@ namespace VoxelEngine.GridSystem
                 snappedCell = hitBlock.GridPos + outAxis;
             if (!grid.CanPlace(snappedCell))
             {
-                // Facing-cell occupied (e.g. bracketing an overhang): fall back to the
-                // cell the port itself sits in, as long as it isn't the machine origin.
                 Vector3Int portCell = RoundHalfUp(gridLocalPort / cs);
                 if (portCell == hitBlock.GridPos || !grid.CanPlace(portCell)) return false;
                 snappedCell = portCell;
             }
-            // No HasNeighbor gate here: the snapped cell is structurally tied to the
-            // machine through the named port itself (ports intentionally overhang the
-            // origin cell), so lattice neighbours may legitimately be absent.
             gridPos = snappedCell;
 
-            // The block is placed EXACTLY on the port (exhaust pipes plug straight
-            // into the collector) — while shaft-driven blocks mount a full cell OUT
-            // along the facing: their own coupling ring then kisses the port ring
-            // flange-to-flange instead of the rod telescoping into the gearbox or
-            // the already-placed shaft. TryPlaceBlock honours this exact pose.
-            // Daisy-chained shaft-to-shaft uses full cell so consecutive shafts
-            // align perfectly without vertical drift.
             bool chainingShaft = kind == MaritimePortSnapKind.ShaftDriven
-                && hitBlock.GetComponentInChildren<VoxelEngine.Maritime.GridDriveShaft>(true) != null;
+                && hitBlock.GetComponentInChildren<GridDriveShaft>(true) != null;
             worldPos = kind == MaritimePortSnapKind.ShaftDriven
                 ? port.position + outWorld * (chainingShaft ? cs : cs)
                 : port.position;
@@ -1071,19 +1268,10 @@ namespace VoxelEngine.GridSystem
             return true;
         }
 
-        /// <summary>Component-wise round-half-up (Mathf.RoundToInt uses banker's
-        /// rounding, which drags .5 cells toward even and visibly off-centres ports
-        /// sitting on half-cell boundaries).</summary>
-        private static Vector3Int RoundHalfUp(Vector3 v) => new(
-            Mathf.FloorToInt(v.x + 0.5f),
-            Mathf.FloorToInt(v.y + 0.5f),
-            Mathf.FloorToInt(v.z + 0.5f));
-
         private bool TryFindNearestNamedPort(Transform root, string[] names, Vector3 hitPoint, out Transform port)
         {
             port = null;
             if (root == null || names == null || names.Length == 0) return false;
-
             float best = float.MaxValue;
             foreach (Transform child in root.GetComponentsInChildren<Transform>(true))
             {
@@ -1116,50 +1304,43 @@ namespace VoxelEngine.GridSystem
         }
 
         private bool TryFindTurboAttachment(GridEntity grid, Vector3Int gridPos,
-            VoxelEngine.Maritime.TurboTier turboTier, out VoxelEngine.Maritime.GridMaritimeEngine engine)
+            TurboTier turboTier, out GridMaritimeEngine engine)
         {
             engine = null;
             if (grid == null || !grid.CanPlace(gridPos)) return false;
             foreach (var kv in grid.Blocks)
-                if (kv.Value is VoxelEngine.Maritime.GridMaritimeEngine candidate && candidate.CanAttachTurboAt(gridPos, turboTier))
+                if (kv.Value is GridMaritimeEngine candidate && candidate.CanAttachTurboAt(gridPos, turboTier))
                 { engine = candidate; return true; }
             return false;
         }
 
-        /// <summary>Turbo-aware port snap: find the nearest engine turbo slot when holding a turbo item.
-        /// Works like maritime port snap — searches engine named turbo attachment points within reach.</summary>
         private bool TrySnapTurboToEngine(GridBlockItem item, GridEntity grid, RaycastHit hit,
-            out Vector3Int turboGridPos, out VoxelEngine.Maritime.GridMaritimeEngine engine)
+            out Vector3Int turboGridPos, out GridMaritimeEngine engine)
         {
             turboGridPos = default;
             engine = null;
             if (item == null || grid == null || hit.collider == null) return false;
             if (!IsTurbochargerItem(item, out var turboTier)) return false;
-
-            // Find the targeted engine block
             var hitBlock = hit.collider.GetComponentInParent<GridBlock>();
             if (hitBlock == null || hitBlock.Grid != grid) return false;
 
-            VoxelEngine.Maritime.GridMaritimeEngine targetEngine = null;
-            // Check if we hit an engine directly
-            if (hitBlock is VoxelEngine.Maritime.GridMaritimeEngine eng)
+            GridMaritimeEngine targetEngine = null;
+            if (hitBlock is GridMaritimeEngine eng)
                 targetEngine = eng;
             else
             {
-                // Check neighbours for an engine
                 foreach (var off in Neighbours6)
                 {
                     var nb = grid.GetBlock(hitBlock.GridPos + off);
-                    if (nb is VoxelEngine.Maritime.GridMaritimeEngine candidate)
+                    if (nb is GridMaritimeEngine candidate)
                     { targetEngine = candidate; break; }
                 }
             }
 
             if (targetEngine == null) return false;
-            if (!VoxelEngine.Maritime.GridMaritimeEngine.IsTurboTierCompatible(targetEngine.tier, turboTier))
+            if (!GridMaritimeEngine.IsTurboTierCompatible(targetEngine.tier, turboTier))
                 return false;
 
-            // Find nearest free turbo slot on this engine
             int maxSlots = targetEngine.MaxTurboSlots;
             for (int i = 0; i < maxSlots; i++)
             {
@@ -1184,7 +1365,7 @@ namespace VoxelEngine.GridSystem
         };
 
         private Quaternion GetTurboAttachmentRotation(GridEntity grid, Vector3Int turboGridPos,
-            VoxelEngine.Maritime.GridMaritimeEngine engine)
+            GridMaritimeEngine engine)
         {
             if (grid == null || engine == null) return Quaternion.identity;
             Vector3 engineWorld = grid.GridToWorld(engine.GridPos);
@@ -1231,34 +1412,19 @@ namespace VoxelEngine.GridSystem
             return best;
         }
 
-        // ── Ghost System ───────────────────────────────────────────
-
-        /// <summary>
-        /// Shows the appropriate ghost preview. For armour/structural blocks with a
-        /// non-Cube shape variant selected, draws a primitive shape representation
-        /// (stair-step slope, half block, L-corner, etc.). For all other blocks or
-        /// when the variant is Cube, shows the normal prefab ghost.
-        /// </summary>
-        private void ShowGhost(GridBlockItem item, Vector3 pos, Quaternion rotation)
+        private void ShowGhost(GridBlockItem item, Vector3 pos, Quaternion rotation, bool valid = true)
         {
             bool isShapeItem = IsShapeVariantItem(item);
             var currentShape = VoxelEngine.UI.GridShapeWheel.CurrentShape;
             bool useShapeGhost = isShapeItem && currentShape != VoxelEngine.UI.GridShapeVariant.Cube;
 
             bool needsRebuild = _ghost == null || _ghostItem != item;
-
-            // Only rebuild shape ghost if variant changed (and we're using shape ghost mode)
             if (!needsRebuild && useShapeGhost && _ghostIsShapeVariant)
             {
-                // variant stays the same? fine. variant changed? rebuild.
-                // We check by seeing if the ghost is still valid for this variant.
-                // Simplest: track the shape variant on the ghost name
                 string expectedName = "GridGhost_" + currentShape.ToString();
                 if (_ghost == null || _ghost.name != expectedName)
                     needsRebuild = true;
             }
-
-            // If we were showing shape ghost but now should show prefab (or vice versa)
             if (!needsRebuild && _ghost != null && _ghostIsShapeVariant != useShapeGhost)
                 needsRebuild = true;
 
@@ -1276,7 +1442,6 @@ namespace VoxelEngine.GridSystem
                 }
                 else
                 {
-                    // Normal prefab ghost
                     if (item.blockPrefab != null)
                     {
                         _ghost = Instantiate(item.blockPrefab);
@@ -1287,35 +1452,21 @@ namespace VoxelEngine.GridSystem
                         _ghost.transform.localScale = Vector3.one * item.gridSize.CellSize();
                     }
                     _ghost.name = "GridGhost";
-
-                    // Strip colliders + block scripts
                     foreach (var c in _ghost.GetComponentsInChildren<Collider>()) Destroy(c);
                     foreach (var b in _ghost.GetComponentsInChildren<GridBlock>()) Destroy(b);
                 }
-
                 BuildGhostMaterial();
             }
 
             if (_ghost == null) return;
-
             BuildGhostMaterial();
-            ApplyGhostMaterialToRenderers();
+            ApplyGhostMaterialToRenderers(valid);
 
             _ghost.SetActive(true);
             _ghost.transform.position = pos;
             _ghost.transform.rotation = rotation;
         }
 
-        /// <summary>
-        /// Builds a multi-cube shape that clearly represents each variant:
-        /// • Cube: single full cube
-        /// • Slope: stair-step of 4 blocks ascending diagonally
-        /// • HalfBlock: half-height cube
-        /// • HalfSlope: half-height stair-step
-        /// • Corner: L-shaped arrangement
-        /// • InvertedSlope: stair-step descending diagonally
-        /// All primitives, no prefab children touched.
-        /// </summary>
         private GameObject BuildShapeGhost(VoxelEngine.UI.GridShapeVariant shape, GridSize size)
         {
             var ghost = new GameObject("GridGhostShape");
@@ -1338,9 +1489,12 @@ namespace VoxelEngine.GridSystem
             _ghostMat.renderQueue = 3100;
         }
 
-        private void ApplyGhostMaterialToRenderers()
+        private void ApplyGhostMaterialToRenderers(bool valid = true)
         {
             if (_ghost == null || _ghostMat == null) return;
+            Color c = valid ? ghostColor : new Color(1f, 0.3f, 0.3f, 0.35f);
+            if (_ghostMat.HasProperty("_BaseColor")) _ghostMat.SetColor("_BaseColor", c);
+            _ghostMat.color = c;
             foreach (var r in _ghost.GetComponentsInChildren<MeshRenderer>())
             {
                 r.sharedMaterial = _ghostMat;

@@ -4,10 +4,17 @@
 // WaterPipe component can be placed onto a grid and then counts as that grid's
 // liquid conduit. Liquid transfer is topology-based: a producer/consumer must
 // touch a connected pipe run that reaches a compatible tank.
+//
+// v5.63.1-dev — FIX: liquid pipes ↔ liquid tanks now reliably connect at 5 squares:
+//   • Increased buffers (12→32), widened detail-pipe proximity (2.25→3.25m),
+//     bodyRange 2×→3× so face-touch tanks always link.
+//   • Corridor radiusScale 1.6→2.2 + brute-force cardinal fallback scanning ALL
+//     grid tanks within 5 cells of any visited pipe (mirrors gas fix).
 
 using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.Items;
+using VoxelEngine.Networks;
 
 namespace VoxelEngine.GridSystem
 {
@@ -27,12 +34,6 @@ namespace VoxelEngine.GridSystem
                 return _instance;
             }
         }
-
-        private static readonly Vector3Int[] Neighbours =
-        {
-            Vector3Int.right, Vector3Int.left, Vector3Int.up, Vector3Int.down,
-            new Vector3Int(0, 0, 1), new Vector3Int(0, 0, -1)
-        };
 
         private readonly Dictionary<GridEntity, List<GridLiquidTank>> _tanks = new();
 
@@ -94,25 +95,14 @@ namespace VoxelEngine.GridSystem
             return total;
         }
 
-        // ════════════════════════════════════════════════════════════════
-        //  CONNECTED-TANKS CACHE — prevents the full BFS on every frame
-        //  when multiple consumers draw from the same grid. The cache is
-        //  keyed by (endpoint entity, type, direction) and lives 0.15 s.
-        //  A topology rebuild (SetDirty) clears the cache immediately.
-        // ════════════════════════════════════════════════════════════════
-        private static readonly System.Collections.Generic.Dictionary<long, (float time, System.Collections.Generic.List<GridLiquidTank> tanks)> s_tankCache
-            = new();
+        private static readonly Dictionary<long, (float time, List<GridLiquidTank> tanks)> s_tankCache = new();
         private const float TankCacheTtl = 0.15f;
         private static long TankCacheKey(GridBlock endpoint, LiquidType type, bool forOutput)
         {
             var id = endpoint != null ? endpoint.GetEntityId().GetHashCode() : 0;
             return ((long)id << 16) ^ ((long)(int)type << 1) ^ (forOutput ? 1L : 0L);
         }
-        /// <summary>Clear the connected-tanks cache when pipe topology changes.</summary>
-        public void SetDirty()
-        {
-            s_tankCache.Clear();
-        }
+        public void SetDirty() => s_tankCache.Clear();
 
         public float DrawLiquidFor(GridBlock endpoint, LiquidType type, float litres)
         {
@@ -158,31 +148,15 @@ namespace VoxelEngine.GridSystem
             return filled;
         }
 
-        // ════════════════════════════════════════════════════════════════
-        //  CLASSIC FLUID NETWORK BRIDGE
-        //  The ship-side grid system and the classic ground-side FluidNetwork
-        //  are ONE physical pipe world to the player: a classic WaterPipe run
-        //  that touches any liquid port (or the body) of an endpoint — engine,
-        //  pump, tank, whatever — bridges both systems. This is what finally
-        //  makes "liquid pipes to the liquid tank" work no matter WHICH tank
-        //  variant the pipe run terminates at.
-        // ════════════════════════════════════════════════════════════════
         private const int ClassicWalkCap = 512;
         private static readonly List<VoxelEngine.Fluids.WaterTank> s_bridgedTanks = new(8);
         private static readonly List<Vector3> s_classicSeeds = new(8);
         private static readonly HashSet<VoxelEngine.Fluids.WaterPipe> s_classicVisited = new();
         private static readonly Queue<VoxelEngine.Fluids.WaterPipe> s_classicQueue = new();
-        private static readonly Collider[] s_classicProbe = new Collider[16];
+        private static readonly Collider[] s_classicProbe = new Collider[32];
 
-        /// <summary>Collect classic <see cref="VoxelEngine.Fluids.WaterTank"/>s reachable
-        /// from the endpoint through the classic fluid network. Seed points are the
-        /// endpoint's named liquid ports (generous range) plus its body centre.</summary>
-        // Bridge results cached briefly per (endpoint, type, direction): the classic-pipe
-        // BFS + the five-lattice-cell corridor probes are the hot path with many pipes
-        // placed, and tanks don't move between sub-second scans.
         private const float BridgeCacheTtl = 0.6f;
-        private static readonly System.Collections.Generic.Dictionary<long, (float time, List<VoxelEngine.Fluids.WaterTank> tanks)> s_bridgeCache
-            = new();
+        private static readonly Dictionary<long, (float time, List<VoxelEngine.Fluids.WaterTank> tanks)> s_bridgeCache = new();
 
         private static void CollectBridgedClassicTanks(GridBlock endpoint, LiquidType type,
             bool forDraw, List<VoxelEngine.Fluids.WaterTank> outTanks)
@@ -209,8 +183,6 @@ namespace VoxelEngine.GridSystem
             bool forDraw, List<VoxelEngine.Fluids.WaterTank> outTanks)
         {
             float cs = endpoint.Grid != null ? endpoint.Grid.gridSize.CellSize() : 2.5f;
-
-            // Gather probe centres: up to 4 liquid ports + the body centre.
             s_classicSeeds.Clear();
             foreach (Transform child in endpoint.transform.GetComponentsInChildren<Transform>(true))
             {
@@ -225,7 +197,6 @@ namespace VoxelEngine.GridSystem
             }
             s_classicSeeds.Add(endpoint.transform.position);
 
-            // Seed classic pipes around every probe centre.
             s_classicVisited.Clear();
             s_classicQueue.Clear();
             for (int c = 0; c < s_classicSeeds.Count; c++)
@@ -241,14 +212,10 @@ namespace VoxelEngine.GridSystem
                 }
             }
 
-            // Walk the classic neighbour graph, collecting compatible tanks.
             int walked = 0;
             while (s_classicQueue.Count > 0 && walked++ < ClassicWalkCap)
             {
                 var pipe = s_classicQueue.Dequeue();
-                // Five-cell cardinal corridor: a classic tank parked up to five
-                // lattice cells straight off ANY pipe on the run also counts as
-                // connected — no pipe needs to physically hump the tank shell.
                 ProbeClassicTankCorridor(pipe, type, forDraw, outTanks);
                 var neighbours = pipe.neighbours;
                 if (neighbours == null) continue;
@@ -266,7 +233,7 @@ namespace VoxelEngine.GridSystem
             }
         }
 
-        private static readonly Collider[] s_classicRowProbe = new Collider[16];
+        private static readonly Collider[] s_classicRowProbe = new Collider[32];
 
         private static void TryAddBridgedTank(VoxelEngine.Fluids.WaterTank tank, LiquidType type,
             bool forDraw, List<VoxelEngine.Fluids.WaterTank> outTanks)
@@ -278,32 +245,25 @@ namespace VoxelEngine.GridSystem
             if (usable) outTanks.Add(tank);
         }
 
-        /// <summary>Collect classic water tanks up to five lattice cells away from
-        /// <paramref name="pipe"/> in a straight cardinal row (valid direction only —
-        /// never diagonal). Grid-mounted pipes probe in their grid's frame.</summary>
         private static void ProbeClassicTankCorridor(VoxelEngine.Fluids.WaterPipe pipe, LiquidType type,
             bool forDraw, List<VoxelEngine.Fluids.WaterTank> outTanks)
         {
             if (pipe == null) return;
             var block = pipe.GetComponentInParent<GridBlock>();
-            // Five LATTICE cells — mounted pipes probe on the host grid's cell size.
             float step = block != null && block.Grid != null
                 ? block.Grid.gridSize.CellSize()
-                : VoxelEngine.Networks.PipeAdjacency.DefaultGridSize;
+                : PipeAdjacency.DefaultGridSize;
             Transform frame = block != null && block.Grid != null ? block.Grid.transform : null;
-            VoxelEngine.Networks.PipeAdjacency.ProbeCardinal(pipe.transform.position, frame, step, 5,
+            PipeAdjacency.ProbeCardinal(pipe.transform.position, frame, step, 5,
                 s_classicRowProbe, col =>
                 {
                     var tank = col.GetComponent<VoxelEngine.Fluids.WaterTank>();
                     if (tank == null) tank = col.GetComponentInParent<VoxelEngine.Fluids.WaterTank>();
                     if (tank != null) TryAddBridgedTank(tank, type, forDraw, outTanks);
-                    return false; // corridor sweeps fully — collect every tank it passes
-                });
+                    return false;
+                }, radiusScale: 2.2f);
         }
 
-        /// <summary>Cached wrapper for <see cref="ConnectedTanks"/>. Stores the
-        /// tank list per (endpoint, type, direction) for 0.15 s so the full BFS
-        /// isn't repeated every frame for every consumer on the grid.</summary>
         private IEnumerable<GridLiquidTank> CachedTanks(GridBlock endpoint, LiquidType type, bool requireExistingType)
         {
             long key = TankCacheKey(endpoint, type, requireExistingType);
@@ -314,7 +274,6 @@ namespace VoxelEngine.GridSystem
                 yield break;
             }
 
-            // Run the BFS, cache the result.
             var fresh = new List<GridLiquidTank>(8);
             foreach (var tank in ConnectedTanks(endpoint, type, requireExistingType))
                 if (tank != null) fresh.Add(tank);
@@ -335,17 +294,13 @@ namespace VoxelEngine.GridSystem
 
             void SeedPipe(GridBlock pipe)
             {
-                if (pipe == null || VoxelEngine.Networks.WrenchBlacklist.IsBlocked(endpoint.gameObject, pipe.gameObject)
+                if (pipe == null || WrenchBlacklist.IsBlocked(endpoint.gameObject, pipe.gameObject)
                     || !visitedPipes.Add(pipe)) return;
                 queue.Enqueue(pipe);
             }
 
-            // Classic face-touch adjacency …
             foreach (var adjacent in UnifiedGridTopology.AdjacentBlocks(grid, endpoint))
                 if (IsLiquidPipe(adjacent)) SeedPipe(adjacent);
-            // … PLUS world-space proximity, which is what big machine models actually
-            // need: a pipe snapped to Port_FuelInput / Port_CoolantInput can sit one or
-            // two lattice cells away from the machine's origin cell and must still feed it.
             foreach (var pipe in grid.AllBlocks)
             {
                 if (pipe == null || !IsLiquidPipe(pipe)) continue;
@@ -356,25 +311,22 @@ namespace VoxelEngine.GridSystem
             {
                 var pipeBlock = queue.Dequeue();
 
-                // Pipe → pipe growth (world-touch adjacency + generous proximity).
                 foreach (var adjacent in UnifiedGridTopology.AdjacentBlocks(grid, pipeBlock))
                 {
                     if (IsLiquidPipe(adjacent)
-                        && !VoxelEngine.Networks.WrenchBlacklist.IsBlocked(pipeBlock.gameObject, adjacent.gameObject)
+                        && !WrenchBlacklist.IsBlocked(pipeBlock.gameObject, adjacent.gameObject)
                         && visitedPipes.Add(adjacent)) queue.Enqueue(adjacent);
                 }
                 foreach (var pipe in ProximityBlocks(grid, pipeBlock, cs, liquidOnly: true))
                 {
-                    if (!VoxelEngine.Networks.WrenchBlacklist.IsBlocked(pipeBlock.gameObject, pipe.gameObject)
+                    if (!WrenchBlacklist.IsBlocked(pipeBlock.gameObject, pipe.gameObject)
                         && visitedPipes.Add(pipe)) queue.Enqueue(pipe);
                 }
 
-                // Pipe → tanks. Face adjacency first, then proximity (a tank touching a
-                // machine's overhang model, or a port-side pipe, must also register).
                 foreach (var adjacent in UnifiedGridTopology.AdjacentBlocks(grid, pipeBlock))
                 {
                     if (adjacent is GridLiquidTank tank && tank.Enabled && tank.mode != GridTankMode.Stockpile
-                        && !VoxelEngine.Networks.WrenchBlacklist.IsBlocked(pipeBlock.gameObject, tank.gameObject))
+                        && !WrenchBlacklist.IsBlocked(pipeBlock.gameObject, tank.gameObject))
                     {
                         bool typeOk = tank.liquidType == type || (!requireExistingType && tank.stored <= 0.001f);
                         if (typeOk && yieldedTanks.Add(tank)) yield return tank;
@@ -383,24 +335,43 @@ namespace VoxelEngine.GridSystem
                 foreach (var maybeTank in ProximityBlocks(grid, pipeBlock, cs, liquidOnly: false))
                 {
                     if (maybeTank is not GridLiquidTank tank || !tank.Enabled || tank.mode == GridTankMode.Stockpile
-                        || VoxelEngine.Networks.WrenchBlacklist.IsBlocked(pipeBlock.gameObject, tank.gameObject)) continue;
+                        || WrenchBlacklist.IsBlocked(pipeBlock.gameObject, tank.gameObject)) continue;
                     bool typeOk = tank.liquidType == type || (!requireExistingType && tank.stored <= 0.001f);
                     if (typeOk && yieldedTanks.Add(tank)) yield return tank;
                 }
-                // 5-cell cardinal corridor: a GridLiquidTank up to five lattice cells
-                // away from any pipe on the run in a straight cardinal line is connected.
                 ProbeGridTankCorridor(pipeBlock, type, requireExistingType, yieldedTanks);
+            }
+
+            // ── Brute-force 5-cell cardinal fallback for liquid tanks
+            if (visitedPipes.Count > 0)
+            {
+                float smallStep = GridSize.Small.CellSize();
+                float structuralStep = grid.gridSize.CellSize();
+                foreach (var block in grid.AllBlocks)
+                {
+                    if (block is not GridLiquidTank tank || !tank.Enabled || tank.mode == GridTankMode.Stockpile) continue;
+                    if (yieldedTanks.Contains(tank)) continue;
+                    bool typeOk = tank.liquidType == type || (!requireExistingType && tank.stored <= 0.001f);
+                    if (!typeOk) continue;
+                    foreach (var pipe in visitedPipes)
+                    {
+                        Vector3 delta = pipe.transform.position - tank.transform.position;
+                        Vector3 localDelta = grid.transform.InverseTransformVector(delta);
+                        if (PipeAdjacency.IsCardinalLinkDelta(localDelta, smallStep, 5f, smallStep * 0.55f)
+                            || PipeAdjacency.IsCardinalLinkDelta(localDelta, structuralStep, 5f, structuralStep * 0.35f)
+                            || (delta.sqrMagnitude <= structuralStep * 5f * structuralStep * 5f && PipeAdjacency.IsAxisAlignedWithinDelta(localDelta, smallStep, 5f, smallStep * 0.75f)))
+                        {
+                            if (yieldedTanks.Add(tank)) yield return tank;
+                            break;
+                        }
+                    }
+                }
             }
         }
 
-        // Scratch buffers shared by the proximity helpers.
-        private static readonly Collider[] s_liquidProbe = new Collider[12];
-        private static readonly List<GridBlock> s_proximityResult = new(12);
+        private static readonly Collider[] s_liquidProbe = new Collider[32];
+        private static readonly List<GridBlock> s_proximityResult = new(32);
 
-        /// <summary>World-space adjacency for liquid links: A is a machine/tank endpoint,
-        /// B is a pipe. Counts as linked when the pipe's centre is within reach of one of
-        /// the endpoint's named liquid ports, OR close enough to the endpoint's body to
-        /// touch its (possibly overhanging) visual model.</summary>
         public static bool BlocksAreLiquidLinked(GridBlock endpoint, GridBlock pipe, float cs)
         {
             if (endpoint == null || pipe == null) return false;
@@ -417,25 +388,19 @@ namespace VoxelEngine.GridSystem
                 if (!liquidPort) continue;
                 if ((child.position - pipe.transform.position).sqrMagnitude <= portRange2) return true;
             }
-            float bodyRange = endpoint.EffectiveCellSize * 2.0f;
+            float bodyRange = endpoint.EffectiveCellSize * 3.0f;
             return (endpoint.transform.position - pipe.transform.position).sqrMagnitude <= bodyRange * bodyRange;
         }
 
-        /// <summary>All grid blocks within a generous touch radius of <paramref name="origin"/>,
-        /// used as the proximity pass that machine-model overhang makes necessary.
-        /// Radius is tuned so a pipe placed 0.5 m from a structural tank's face
-        /// (≈1.5–2 m from the tank's origin) is always found — 0.9 m was too tight.</summary>
         private static IEnumerable<GridBlock> ProximityBlocks(GridEntity grid, GridBlock origin, float cs, bool liquidOnly)
         {
             s_proximityResult.Clear();
             if (grid == null || origin == null) yield break;
-            // Detail pipes (0.5 m) need ~2.7 m to reach a structural neighbour
-            // face-to-face across a 2.5 m cell. Structural pipes use 1.8× their cell.
             float originCell = origin.EffectiveCellSize;
             bool isDetail = origin.IsPrecisionAttachment;
             float radius = isDetail
-                ? Mathf.Max(GridSize.Large.CellSize() * 1.15f, 2.25f)
-                : Mathf.Max(originCell, GridSize.Small.CellSize()) * 1.8f;
+                ? Mathf.Max(GridSize.Large.CellSize() * 1.5f, 3.25f)
+                : Mathf.Max(originCell, GridSize.Small.CellSize()) * 2.0f;
             int hitCount = Physics.OverlapSphereNonAlloc(origin.transform.position, radius, s_liquidProbe, ~0, QueryTriggerInteraction.Collide);
             for (int i = 0; i < hitCount; i++)
             {
@@ -443,13 +408,7 @@ namespace VoxelEngine.GridSystem
                 if (col == null) continue;
                 var block = col.GetComponentInParent<GridBlock>();
                 if (block == null || block == origin || block.Grid != grid) continue;
-                if (liquidOnly && !IsLiquidPipe(block))
-                {
-                    // For pipe→pipe, a cardinal-aligned gap test still matters, but
-                    // allow any pipe within radius — pipe-to-pipe adjacency is
-                    // re-checked via IsCardinalLink when links are built.
-                    continue;
-                }
+                if (liquidOnly && !IsLiquidPipe(block)) continue;
                 if (s_proximityResult.Contains(block)) continue;
                 s_proximityResult.Add(block);
             }
@@ -457,27 +416,18 @@ namespace VoxelEngine.GridSystem
                 yield return s_proximityResult[i];
         }
 
-        private static readonly Collider[] s_gridTankRowProbe = new Collider[16];
+        private static readonly Collider[] s_gridTankRowProbe = new Collider[32];
 
-        /// <summary>Collect GridLiquidTank up to five lattice cells away from
-        /// <paramref name="pipeBlock"/> in a straight cardinal row (valid direction only —
-        /// never diagonal). Grid-mounted pipes probe in their grid's frame.</summary>
         private static void ProbeGridTankCorridor(GridBlock pipeBlock, LiquidType type,
             bool requireExistingType, HashSet<GridLiquidTank> yieldedTanks)
         {
             if (pipeBlock == null) return;
             float structural = pipeBlock.Grid != null ? pipeBlock.Grid.gridSize.CellSize() : 2.5f;
             float detail = GridSize.Small.CellSize();
-            // Dense detail-lattice sweep: a tank up to five STRUCTURAL cells away on a
-            // straight cardinal line is sampled every detail cell with OVERLAPPING
-            // spheres, so it can never be skipped between coarse sample points — the
-            // root cause of "the tank four cells away won't connect". Overlap radius
-            // 1.1× also forgives a pipe whose detail-lattice position sits slightly
-            // off the tank's structural row.
             float reach = Mathf.Max(structural * 5f, 3f);
             int maxCells = Mathf.CeilToInt(reach / detail);
             Transform frame = pipeBlock.Grid != null ? pipeBlock.Grid.transform : null;
-            VoxelEngine.Networks.PipeAdjacency.ProbeCardinal(pipeBlock.transform.position, frame, detail, maxCells,
+            PipeAdjacency.ProbeCardinal(pipeBlock.transform.position, frame, detail, maxCells,
                 s_gridTankRowProbe, col =>
                 {
                     var tank = col.GetComponent<GridLiquidTank>();
@@ -488,7 +438,7 @@ namespace VoxelEngine.GridSystem
                         if (typeOk) yieldedTanks.Add(tank);
                     }
                     return false;
-                }, radiusScale: 1.6f);
+                }, radiusScale: 2.2f);
         }
 
         private static bool IsLiquidPipe(GridBlock block)
