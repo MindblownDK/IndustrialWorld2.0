@@ -113,6 +113,7 @@ namespace VoxelEngine.UI
         // Drag-drop state
         private DragSource _dragSource;
         private VisualElement _dragGhost;
+        private VisualElement _dropVoidOverlay;
 
         private struct DragSource
         {
@@ -821,6 +822,7 @@ namespace VoxelEngine.UI
         public void CloseAll()
         {
             CloseItemPortsOverlay();
+            CloseDropVoidOverlay();
             if (_inventoryOpen) UIState.PopBlock();
             _inventoryOpen  = false;
             _rightContainer = null; _openChest = null;
@@ -881,11 +883,13 @@ namespace VoxelEngine.UI
             // modal tree mounted instead of clearing it underneath the player; the
             // latest container state is rebuilt immediately when the overlay closes.
             if (_itemPortsOverlay != null && _itemPortsOverlay.parent != null) return;
+            if (_dropVoidOverlay != null && _dropVoidOverlay.parent != null) return;
             if (_itemPortsOverlay != null)
             {
                 _itemPortsOverlay = null;
                 PortConfigHud.IsAnyDropdownOpen = false;
             }
+            if (_dropVoidOverlay != null) _dropVoidOverlay = null;
             if (_searchHasFocus) return;
             WorldInspectionHud.ClearInventoryHover();
 
@@ -2778,17 +2782,220 @@ namespace VoxelEngine.UI
         {
             if (c == null) return;
             var stack = c.GetSlot(idx);
-            if (stack.IsEmpty) return;
+            if (stack == null || stack.IsEmpty) return;
 
+            int capacity = VoxelEngine.Items.DroppedItem.AvailablePhysicalCapacity;
+            bool wouldVoid = stack.count > capacity;
+            var session = VoxelEngine.Menu.WorldSession.Instance;
+            bool shouldWarn = session == null || session.showDropVoidWarning;
+
+            if (wouldVoid && shouldWarn)
+            {
+                ShowDropVoidConfirmation(c, idx, stack, Mathf.Max(0, capacity));
+                return;
+            }
+
+            CompleteDropFromSlot(c, idx, allowVoidOverflow: wouldVoid);
+        }
+
+        private void ShowDropVoidConfirmation(IItemContainer container, int slotIndex, ItemStack snapshot, int capacity)
+        {
+            if (_root == null || snapshot == null || snapshot.IsEmpty) return;
+            if (_dropVoidOverlay != null && _dropVoidOverlay.parent != null) return;
+
+            int voidCount = Mathf.Max(0, snapshot.count - capacity);
+            var session = VoxelEngine.Menu.WorldSession.Instance;
+            bool showNextTime = session == null || session.showDropVoidWarning;
+
+            var overlay = new VisualElement { name = "DropVoidConfirmOverlay" };
+            overlay.style.position = Position.Absolute;
+            overlay.style.left = 0;
+            overlay.style.top = 0;
+            overlay.style.right = 0;
+            overlay.style.bottom = 0;
+            overlay.style.alignItems = Align.Center;
+            overlay.style.justifyContent = Justify.Center;
+            overlay.pickingMode = PickingMode.Position;
+
+            var dim = new VisualElement();
+            dim.style.position = Position.Absolute;
+            dim.style.left = 0;
+            dim.style.top = 0;
+            dim.style.right = 0;
+            dim.style.bottom = 0;
+            dim.style.backgroundColor = new StyleColor(new Color(0.02f, 0.025f, 0.04f, 0.68f));
+            dim.pickingMode = PickingMode.Position;
+            overlay.Add(dim);
+
+            var card = MakePanel();
+            card.style.width = 520;
+            card.style.maxWidth = Length.Percent(92);
+            card.style.paddingTop = 20;
+            card.style.paddingBottom = 18;
+            card.style.paddingLeft = 22;
+            card.style.paddingRight = 22;
+            card.pickingMode = PickingMode.Position;
+            overlay.Add(card);
+
+            var title = MakeTitle("DROP LIMIT WARNING");
+            title.style.color = new StyleColor(UITheme.AccentAmber);
+            card.Add(title);
+            card.Add(UITheme.AccentDivider(UITheme.AccentAmber));
+
+            var msg = new Label($"You are about to drop {snapshot.count:N0} x {snapshot.item.displayName}, but only {capacity:N0} physical item units can exist before the world-drop limit is reached.\n\nConfirming will drop what fits and VOID {voidCount:N0} item unit{(voidCount == 1 ? "" : "s")}. Denying keeps the stack in your inventory.");
+            msg.style.whiteSpace = WhiteSpace.Normal;
+            msg.style.color = new StyleColor(UITheme.TextSecondary);
+            msg.style.fontSize = 12;
+            msg.style.marginTop = 8;
+            msg.style.marginBottom = 12;
+            card.Add(msg);
+
+            var toggle = new Toggle("Show this warning before voiding drops in this world");
+            toggle.SetValueWithoutNotify(showNextTime);
+            toggle.style.color = new StyleColor(UITheme.TextSecondary);
+            toggle.style.marginBottom = 14;
+            toggle.RegisterValueChangedCallback(e => showNextTime = e.newValue);
+            card.Add(toggle);
+
+            var row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.justifyContent = Justify.FlexEnd;
+            row.style.alignItems = Align.Center;
+
+            void CloseOnly()
+            {
+                SaveDropVoidWarningPreference(showNextTime);
+                CloseDropVoidOverlay();
+            }
+
+            var deny = new Button(() =>
+            {
+                CloseOnly();
+                BuildFeedbackHud.Show("Drop cancelled", "Stack kept in inventory", snapshot.item.icon, UITheme.AccentCyan);
+            }) { text = "DENY" };
+            deny.style.minWidth = 100;
+            deny.style.minHeight = 34;
+            deny.style.marginRight = 8;
+            deny.style.color = Color.white;
+            deny.style.backgroundColor = new StyleColor(UITheme.BgSlot);
+            SetBorderRadius(deny, UITheme.ButtonRadius);
+            ZeroBorder(deny);
+            row.Add(deny);
+
+            var confirm = new Button(() =>
+            {
+                CloseOnly();
+                CompleteDropFromSlot(container, slotIndex, allowVoidOverflow: true);
+            }) { text = "CONFIRM VOID" };
+            confirm.style.minWidth = 150;
+            confirm.style.minHeight = 34;
+            confirm.style.color = Color.white;
+            confirm.style.unityFontStyleAndWeight = FontStyle.Bold;
+            confirm.style.backgroundColor = new StyleColor(UITheme.AccentRed);
+            SetBorderRadius(confirm, UITheme.ButtonRadius);
+            ZeroBorder(confirm);
+            row.Add(confirm);
+            card.Add(row);
+
+            _dropVoidOverlay = overlay;
+            _root.Add(overlay);
+            overlay.BringToFront();
+        }
+
+        private static void SaveDropVoidWarningPreference(bool showWarning)
+        {
+            var session = VoxelEngine.Menu.WorldSession.Instance;
+            if (session == null) return;
+            session.showDropVoidWarning = showWarning;
+            session.SaveWorldSettings();
+        }
+
+        private void CloseDropVoidOverlay()
+        {
+            if (_dropVoidOverlay != null && _dropVoidOverlay.parent != null)
+                _dropVoidOverlay.RemoveFromHierarchy();
+            _dropVoidOverlay = null;
+        }
+
+        private void CompleteDropFromSlot(IItemContainer c, int idx, bool allowVoidOverflow)
+        {
+            if (c == null) return;
+            var stack = c.GetSlot(idx);
+            if (stack == null || stack.IsEmpty || stack.item == null) return;
+
+            GetDropPose(out Vector3 spawnPos, out Vector3 tossDir);
+
+            int capacity = VoxelEngine.Items.DroppedItem.AvailablePhysicalCapacity;
+            int spawnCount = allowVoidOverflow ? Mathf.Min(stack.count, Mathf.Max(0, capacity)) : stack.count;
+            int voided = allowVoidOverflow ? Mathf.Max(0, stack.count - spawnCount) : 0;
+
+            DroppedItem dropped = null;
+            if (spawnCount > 0)
+            {
+                var spawnStack = new ItemStack
+                {
+                    item = stack.item,
+                    count = spawnCount,
+                    durability = stack.durability,
+                    payload = stack.payload
+                };
+                dropped = VoxelEngine.Items.DroppedItem.Spawn(spawnStack, spawnPos, tossDir);
+                if (dropped != null) dropped.SetDropOwner(inventory);
+            }
+
+            if (!allowVoidOverflow && dropped == null)
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show("Drop Limit Reached",
+                    $"Physical world limit: {VoxelEngine.Items.DroppedItem.MaximumPhysicalItemCount:N0}",
+                    stack.item.icon, new Color(0.95f, 0.55f, 0.20f));
+                return;
+            }
+
+            if (allowVoidOverflow)
+            {
+                c.SetSlot(idx, new ItemStack());
+            }
+            else
+            {
+                int droppedCount = dropped != null ? dropped.stack.count : 0;
+                int remaining = Mathf.Max(0, stack.count - droppedCount);
+                var retained = remaining > 0
+                    ? new ItemStack { item = stack.item, count = remaining, durability = stack.durability, payload = stack.payload }
+                    : new ItemStack();
+                c.SetSlot(idx, retained);
+            }
+
+            if (spawnCount > 0 && voided > 0)
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show(
+                    $"Dropped {stack.item.displayName}",
+                    $"-{spawnCount:N0} · {voided:N0} voided",
+                    stack.item.icon,
+                    UITheme.AccentAmber);
+            }
+            else if (voided > 0)
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show(
+                    $"Voided {stack.item.displayName}",
+                    $"{voided:N0} item unit{(voided == 1 ? "" : "s")} removed",
+                    stack.item.icon,
+                    UITheme.AccentRed);
+            }
+            else
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show(
+                    $"Dropped {stack.item.displayName}",
+                    $"-{spawnCount:N0}",
+                    stack.item.icon,
+                    new Color(0.85f, 0.35f, 0.25f));
+            }
+        }
+
+        private void GetDropPose(out Vector3 spawnPos, out Vector3 tossDir)
+        {
             // Spawn the drop a short distance in front of the player at chest
             // height. Using a fixed offset relative to the player root (not the
-            // camera) avoids two failure modes the user reported:
-            //   • Camera.main returning null → drop ends up at the world origin
-            //     and is "invisible" because it's far away.
-            //   • Spawning inside the camera near-clip plane → drop is rendered
-            //     behind the near plane and culled.
-            Vector3 spawnPos;
-            Vector3 tossDir;
+            // camera) avoids Camera.main/null and near-clip culling failures.
             if (inventory != null)
             {
                 var root = inventory.transform;
@@ -2800,28 +3007,6 @@ namespace VoxelEngine.UI
                 spawnPos = Vector3.up * 2f;
                 tossDir  = Vector3.forward;
             }
-
-            var dropped = VoxelEngine.Items.DroppedItem.Spawn(stack, spawnPos, tossDir);
-            if (dropped == null)
-            {
-                VoxelEngine.UI.BuildFeedbackHud.Show("Drop Limit Reached",
-                    $"Physical world limit: {VoxelEngine.Items.DroppedItem.MaximumPhysicalItemCount}",
-                    stack.item.icon, new Color(0.95f, 0.55f, 0.20f));
-                return;
-            }
-
-            dropped.SetDropOwner(inventory);
-            int droppedCount = dropped.stack.count;
-            int remaining = Mathf.Max(0, stack.count - droppedCount);
-            var retained = remaining > 0
-                ? new ItemStack { item = stack.item, count = remaining, durability = stack.durability }
-                : new ItemStack();
-            c.SetSlot(idx, retained);
-            VoxelEngine.UI.BuildFeedbackHud.Show(
-                $"Dropped {stack.item.displayName}",
-                $"-{droppedCount} · {remaining} retained",
-                stack.item.icon,
-                new Color(0.85f, 0.35f, 0.25f));
         }
 
         // ============================================================
@@ -3074,6 +3259,7 @@ namespace VoxelEngine.UI
         private void UpdateDragDrop()
         {
             if (!_inventoryOpen) return;
+            if (_dropVoidOverlay != null && _dropVoidOverlay.parent != null) return;
 
             // --- Read mouse state directly from the device ---
 #if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
@@ -3495,6 +3681,7 @@ namespace VoxelEngine.UI
         private void CheckDropKey()
         {
             if (_searchHasFocus || !_inventoryOpen) return;
+            if (_dropVoidOverlay != null && _dropVoidOverlay.parent != null) return;
             if (!GameSettings.WasPressed(InputAction.DropItem)) return;
 
 #if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM

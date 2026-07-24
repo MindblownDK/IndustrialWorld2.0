@@ -41,6 +41,7 @@ namespace VoxelEngine.Menu
         private int    _newMaxDroppedItems = WorldSession.DefaultMaxDroppedItems;
         private int    _newInventoryWeightPercent = WorldSession.DefaultInventoryWeightPercent;
         private int    _newContainerWeightPercent = WorldSession.DefaultContainerWeightPercent;
+        private bool   _newShowDropVoidWarning = true;
 
         // Edit-world form values. Only non-generation settings are editable here.
         private string _editOriginalName = string.Empty;
@@ -48,6 +49,7 @@ namespace VoxelEngine.Menu
         private int    _editMaxDroppedItems = WorldSession.DefaultMaxDroppedItems;
         private int    _editInventoryWeightPercent = WorldSession.DefaultInventoryWeightPercent;
         private int    _editContainerWeightPercent = WorldSession.DefaultContainerWeightPercent;
+        private bool   _editShowDropVoidWarning = true;
         private string _menuStatus = string.Empty;
         private string _expandedAutosaveWorld = string.Empty;
 
@@ -535,6 +537,12 @@ namespace VoxelEngine.Menu
             });
             scroll.Add(containerWeightField);
             scroll.Add(T.Muted($"100% = {MassFormat.Format(WorldSession.DefaultContainerWeightKg)} per chest/machine matter buffer."));
+            var dropWarnToggle = new Toggle("Warn before voiding drops above the physical drop limit");
+            dropWarnToggle.SetValueWithoutNotify(_newShowDropVoidWarning);
+            dropWarnToggle.style.marginTop = 8;
+            dropWarnToggle.style.color = new StyleColor(T.TextSecondary);
+            dropWarnToggle.RegisterValueChangedCallback(e => _newShowDropVoidWarning = e.newValue);
+            scroll.Add(dropWarnToggle);
             scroll.Add(T.Spacer(16));
 
             // ── Cosmos: solar-system picker + per-planet custom seeds ──
@@ -613,6 +621,12 @@ namespace VoxelEngine.Menu
             });
             panel.Add(containerWeightField);
             panel.Add(T.Muted($"100% = {MassFormat.Format(WorldSession.DefaultContainerWeightKg)} per chest/machine matter buffer."));
+            var dropWarnToggle = new Toggle("Warn before voiding drops above the physical drop limit");
+            dropWarnToggle.SetValueWithoutNotify(_editShowDropVoidWarning);
+            dropWarnToggle.style.marginTop = 8;
+            dropWarnToggle.style.color = new StyleColor(T.TextSecondary);
+            dropWarnToggle.RegisterValueChangedCallback(e => _editShowDropVoidWarning = e.newValue);
+            panel.Add(dropWarnToggle);
 
             panel.Add(T.Spacer(18));
             var row = new VisualElement();
@@ -698,6 +712,7 @@ namespace VoxelEngine.Menu
             _editMaxDroppedItems = Mathf.Max(1, world.maxDroppedItems);
             _editInventoryWeightPercent = Mathf.Clamp(world.inventoryWeightPercent <= 0 ? WorldSession.DefaultInventoryWeightPercent : world.inventoryWeightPercent, 25, 1000);
             _editContainerWeightPercent = Mathf.Clamp(world.containerWeightPercent <= 0 ? WorldSession.DefaultContainerWeightPercent : world.containerWeightPercent, 25, 1000);
+            _editShowDropVoidWarning = world.showDropVoidWarning;
             _menuStatus = string.Empty;
             _page = Page.EditWorld;
             BuildUI();
@@ -720,7 +735,7 @@ namespace VoxelEngine.Menu
                 finalName = requestedName;
             }
 
-            if (!_session.SaveWorldSettingsFor(finalName, _editMaxDroppedItems, _editInventoryWeightPercent, _editContainerWeightPercent))
+            if (!_session.SaveWorldSettingsFor(finalName, _editMaxDroppedItems, _editInventoryWeightPercent, _editContainerWeightPercent, _editShowDropVoidWarning))
             {
                 _menuStatus = "Error: Could not save world settings.";
                 BuildUI();
@@ -756,6 +771,7 @@ namespace VoxelEngine.Menu
             _session.maxDroppedItems   = Mathf.Clamp(_newMaxDroppedItems, 1, 10000);
             _session.inventoryWeightPercent = Mathf.Clamp(_newInventoryWeightPercent, 25, 1000);
             _session.containerWeightPercent = Mathf.Clamp(_newContainerWeightPercent, 25, 1000);
+            _session.showDropVoidWarning = _newShowDropVoidWarning;
             _session.SaveWorldSettings();
 
             // Persist the cosmos choice (system + per-planet seeds) so the same seeds

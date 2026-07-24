@@ -1,9 +1,43 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.16.1-dev`
+**Current Version:** `6.17.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.17.0-dev] Drop-Void Confirmation & Per-World Warning Toggle
+
+**Type:** MINOR — save-compatible UI/world-setting feature. Adds one non-generation world setting; no save schema migration, recipe changes, prefab changes, or setup step required.
+
+**Added / Changed:**
+- Manual item drops that exceed the physical world-drop limit no longer simply block the action.
+- When a manual drop would exceed the limit, the player now gets a centered confirmation dialog explaining:
+  - how many units they are trying to drop
+  - how many physical item units can still spawn
+  - how many units will be voided if confirmed
+- Dialog buttons:
+  - **CONFIRM VOID** — drops what fits and permanently voids the excess.
+  - **DENY** — keeps the stack untouched in the inventory/container slot.
+- Added a per-world checkbox: **Show this warning before voiding drops in this world**.
+  - The checkbox is remembered in `world_settings.json`.
+  - If disabled, future over-limit manual drops proceed directly: what fits spawns, excess is voided.
+- New World and Edit World also expose the drop-void warning toggle for each save.
+- Runtime build version constants now report `6.17.0-dev`.
+
+**Roadmap Status:**
+- Inventory Weight, Drop Warnings & Terminal Search remains **✅ COMPLETED** and now includes the over-limit manual drop confirmation workflow.
+
+**Files touched (pull these):**
+- `Scripts/UI/GameUIController.cs`
+- `Scripts/Menu/WorldSession.cs`
+- `Scripts/Menu/MainMenuController.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Roadmap.md`
+- `Changelog.md`
+
+**Manual steps:** none — runtime/UI/settings only. No `Tools > Voxel Engine > Voxel Engine Setup` run required.
 
 ---
 

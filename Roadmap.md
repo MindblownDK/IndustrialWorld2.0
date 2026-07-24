@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.16.1-dev`
-**Roadmap Version:** `6.16.1-dev`
+**Current Version:** `6.17.0-dev`
+**Roadmap Version:** `6.17.0-dev`
 **Date:** 2026-07-23
 **Status:** World Management, Autosaves & Item Limits — COMPLETED; Power, Vehicles & Combat (4.7.0) remains WORKING ON
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -477,7 +477,7 @@ A late-game **Jump Drive** provides charged, coordinate-based faster-than-light 
 | **5.2.0** | Architect Era | 🟡 **PARTIALLY COMPLETE** | World forge, megastructures, fusion, save schema v2 | Very High — new save format |
 | **5.3.0+** | Live Ops | 🟡 **PARTIALLY COMPLETE** | Modding API, multiplayer foundations, seasonal content | TBD |
 
-> **Audit basis (6.16.1-dev):** Active sections have current production work recorded in their detailed status tables. Later sections are marked **PARTIALLY COMPLETE** only because reusable foundations already exist (cosmos, planetary bodies, water/weather, nuclear, research, persistence, and grid systems); their named headline features and completion gates remain open. No section is promoted to **COMPLETED** without setup generation and Thomas's Unity validation. Roadmap maintenance passes do not remove planned scope; they only update status markers, evidence notes, dates, versions, and immediate-next-step labels.
+> **Audit basis (6.17.0-dev):** Active sections have current production work recorded in their detailed status tables. Later sections are marked **PARTIALLY COMPLETE** only because reusable foundations already exist (cosmos, planetary bodies, water/weather, nuclear, research, persistence, and grid systems); their named headline features and completion gates remain open. No section is promoted to **COMPLETED** without setup generation and Thomas's Unity validation. Roadmap maintenance passes do not remove planned scope; they only update status markers, evidence notes, dates, versions, and immediate-next-step labels.
 
 ### 5.1 Execution Status Convention
 
@@ -1744,19 +1744,21 @@ For each version, these are the high-level Unity tasks you will perform manually
 - **6.15.1-dev:** Unity compile cleanup fixed the `WorldStatePersistence` local-name collision and replaced the remaining deprecated runtime `GetInstanceID()` calls with `GetEntityId()`.
 - **6.16.0-dev:** World settings now also include inventory/container weight multipliers, the default physical drop limit is 1000, and drop-limit warning toasts protect players from silent physical-drop culling.
 - **6.16.1-dev:** Ship Control search compile fix, autosave slots now fully hide when collapsed, and the default autosave cadence is 5 minutes.
+- **6.17.0-dev:** Manual drops above the physical item limit now show a per-world confirm/deny void warning with a remembered show-warning checkbox; confirmed over-limit drops void only the excess instead of blocking the action.
 
 ## 10. Suggested Immediate Next Steps
 
-1. ✅ **COMPLETED — Inventory Weight, Drop Warnings & Terminal Search** — 6.16.1-dev keeps the 6.16.0-dev feature complete and fixes Ship Control search compilation, true autosave panel hiding, and 5-minute default autosaves.
-2. ✅ **COMPLETED — World Management, Autosaves & Item Limits** — 6.15.1-dev keeps the 6.15.0-dev autosave/Edit World feature complete and fixes the Unity compile error plus deprecated runtime ID warnings.
-3. ✅ **COMPLETED — Player Save Safety final guard** — 6.14.7-dev validates saved player pose before restore and falls back to bed/world/body spawn without rewriting the last known-good save.
-4. ✅ **COMPLETED — Validate splitter and funnel usability in Unity** — confirmed splitter UI scroll stability, Mk.3 one-input/three-output behavior, clear ghost/placed arrows, and chest→funnel→belt workflows after 6.5.1-dev.
-5. ✅ **COMPLETED — Validate splitter persistence in Unity** — routing mode and Mk.3 filter choices persist across save/load.
-6. 🛠️ **WORKING ON — Complete remaining unified Grid positional indexing** where legacy systems still read Structural-only coordinates.
-7. 🛠️ **WORKING ON — Keep factory scope guarded** — conveyor shape variants only; do not add funnel or chute variants unless the roadmap is deliberately revised.
-8. 🛠️ **WORKING ON — Validate 6.14.x pipe/port placement in Unity** — confirm MGO and smaller engine pipe seating stays outside colliders, pipe-to-pipe chaining works from the ghost and click paths, valid five-cell lattice proximity reaches tanks, and oxygen/exhaust networks stay separated.
-9. 🛠️ **WORKING ON — Finish vehicle power foundations validation** — verify maritime fuel, coolant, oxygen, exhaust, shaft, chain-drive, gearbox, generator, and battery flows after the latest port and pipe fixes.
-10. 🛠️ **WORKING ON — Complete Step 5 Size-V5 two-run validation** — confirm non-destructive setup generation, seamless Foundation decks, Stair anchors, Doorway thresholds, and preserved custom balance values.
-11. 🟡 **PARTIALLY COMPLETE — Plan the safer centralized transport tick migration** — keep the 6.4.9 restored per-frame transport runtime until a smaller validated migration path is ready.
+1. ✅ **COMPLETED — Drop-Void Confirmation & Per-World Warning Toggle** — 6.17.0-dev adds confirm/deny handling for manual drops above the physical item limit and remembers the warning checkbox per save.
+2. ✅ **COMPLETED — Inventory Weight, Drop Warnings & Terminal Search** — 6.16.1-dev keeps the 6.16.0-dev feature complete and fixes Ship Control search compilation, true autosave panel hiding, and 5-minute default autosaves.
+3. ✅ **COMPLETED — World Management, Autosaves & Item Limits** — 6.15.1-dev keeps the 6.15.0-dev autosave/Edit World feature complete and fixes the Unity compile error plus deprecated runtime ID warnings.
+4. ✅ **COMPLETED — Player Save Safety final guard** — 6.14.7-dev validates saved player pose before restore and falls back to bed/world/body spawn without rewriting the last known-good save.
+5. ✅ **COMPLETED — Validate splitter and funnel usability in Unity** — confirmed splitter UI scroll stability, Mk.3 one-input/three-output behavior, clear ghost/placed arrows, and chest→funnel→belt workflows after 6.5.1-dev.
+6. ✅ **COMPLETED — Validate splitter persistence in Unity** — routing mode and Mk.3 filter choices persist across save/load.
+7. 🛠️ **WORKING ON — Complete remaining unified Grid positional indexing** where legacy systems still read Structural-only coordinates.
+8. 🛠️ **WORKING ON — Keep factory scope guarded** — conveyor shape variants only; do not add funnel or chute variants unless the roadmap is deliberately revised.
+9. 🛠️ **WORKING ON — Validate 6.14.x pipe/port placement in Unity** — confirm MGO and smaller engine pipe seating stays outside colliders, pipe-to-pipe chaining works from the ghost and click paths, valid five-cell lattice proximity reaches tanks, and oxygen/exhaust networks stay separated.
+10. 🛠️ **WORKING ON — Finish vehicle power foundations validation** — verify maritime fuel, coolant, oxygen, exhaust, shaft, chain-drive, gearbox, generator, and battery flows after the latest port and pipe fixes.
+11. 🛠️ **WORKING ON — Complete Step 5 Size-V5 two-run validation** — confirm non-destructive setup generation, seamless Foundation decks, Stair anchors, Doorway thresholds, and preserved custom balance values.
+12. 🟡 **PARTIALLY COMPLETE — Plan the safer centralized transport tick migration** — keep the 6.4.9 restored per-frame transport runtime until a smaller validated migration path is ready.
 
 ---
