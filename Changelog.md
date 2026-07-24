@@ -1,9 +1,35 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.19.3-dev`
+**Current Version:** `6.19.4-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.19.4-dev] Detail-Lattice Pipe-to-Tank 5-Cell Connection Fix
+
+**Type:** PATCH — pipe/tank connectivity and visual-link bug fix. Save-compatible; no save schema or balance changes.
+
+**Fixed — gas/liquid pipes connect to tanks across 5 Detail lattice cells:**
+1. `GridGasNetwork` and `GridLiquidNetwork` now evaluate tank links against the **Small/Detail lattice step** only: 5 × 0.5 m cells, matching pipe↔pipe long links.
+2. Tank connection checks are now **port-aware**. The network tests each tank's named `Port_Gas*` / `Port_Liquid*` marker first and only falls back to tank center if no marker exists. This fixes valid pipe runs aimed at tank ports being rejected because the tank body center was not aligned with the detail pipe.
+3. Corridor probing now walks exactly 5 Detail cells instead of deriving a much larger range from the structural grid size.
+
+**Fixed — pipe visuals now show the same 5-cell tank reach:**
+4. `GasPipe` and `WaterPipe` now draw arms to grid gas/liquid tanks when the nearest tank port is within the same 5 Detail-cell cardinal link rule used by the network.
+5. Visual arms target the named tank port, so the pipe points cleanly to the connector instead of skewing toward the tank body center.
+
+**Manual Unity step:**
+- If your gas tank prefab still lacks gas port markers, run **Tools → Voxel Engine → Voxel Engine Setup → 13. Build Maritime Content** once. Non-destructive.
+
+**Files touched:**
+- `Scripts/GridSystem/GridGasNetwork.cs`
+- `Scripts/GridSystem/GridLiquidNetwork.cs`
+- `Scripts/Gas/GasPipe.cs`
+- `Scripts/Fluids/WaterPipe.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
 
 ---
 

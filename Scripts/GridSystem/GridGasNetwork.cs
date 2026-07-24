@@ -228,8 +228,6 @@ namespace VoxelEngine.GridSystem
             if (visitedPipes.Count > 0)
             {
                 float smallStep = GridSize.Small.CellSize();
-                float structuralStep = grid.gridSize.CellSize();
-                float maxRange = Mathf.Max(structuralStep * 5f, 3f);
                 foreach (var block in grid.AllBlocks)
                 {
                     if (block is not GridGasTank tank || !tank.Enabled || yieldedTanks.Contains(tank)) continue;
@@ -238,11 +236,8 @@ namespace VoxelEngine.GridSystem
                     if (!typeOk || !stockpileOk) continue;
                     foreach (var pipe in visitedPipes)
                     {
-                        Vector3 delta = pipe != null ? pipe.transform.position - tank.transform.position : Vector3.zero;
-                        Vector3 localDelta = grid.transform.InverseTransformVector(delta);
-                        if (PipeAdjacency.IsCardinalLinkDelta(localDelta, smallStep, 5f, smallStep * 0.55f)
-                            || PipeAdjacency.IsCardinalLinkDelta(localDelta, structuralStep, 5f, structuralStep * 0.35f)
-                            || delta.sqrMagnitude <= maxRange * maxRange && PipeAdjacency.IsAxisAlignedWithinDelta(localDelta, smallStep, 5f, smallStep * 0.75f))
+                        if (IsTankPortWithinDetailLink(grid, pipe, tank,
+                                VoxelEngine.Maritime.MaritimePorts.GasPrefixes, smallStep))
                         {
                             if (yieldedTanks.Add(tank)) yield return tank;
                             break;
@@ -327,10 +322,8 @@ namespace VoxelEngine.GridSystem
         {
             newlyLinked?.Clear();
             if (pipeBlock == null) return;
-            float structural = pipeBlock.Grid != null ? pipeBlock.Grid.gridSize.CellSize() : 2.5f;
             float detail = GridSize.Small.CellSize();
-            float reach = Mathf.Max(structural * 5f, 3f);
-            int maxCells = Mathf.CeilToInt(reach / detail);
+            const int maxCells = 5;
             Transform frame = pipeBlock.Grid != null ? pipeBlock.Grid.transform : null;
             PipeAdjacency.ProbeCardinal(pipeBlock.transform.position, frame, detail, maxCells,
                 s_gasRowProbe, col =>
@@ -345,6 +338,32 @@ namespace VoxelEngine.GridSystem
                     }
                     return false;
                 }, radiusScale: 2.2f);
+        }
+
+        private static bool IsTankPortWithinDetailLink(GridEntity grid, GridBlock pipe, GridBlock tank,
+            string[] portPrefixes, float detailStep)
+        {
+            if (grid == null || pipe == null || tank == null) return false;
+            detailStep = detailStep > 0.0001f ? detailStep : GridSize.Small.CellSize();
+
+            bool TestTarget(Vector3 targetWorld)
+            {
+                Vector3 localDelta = grid.transform.InverseTransformVector(targetWorld - pipe.transform.position);
+                return PipeAdjacency.IsCardinalLinkDelta(localDelta, detailStep, 5f, detailStep * 0.55f);
+            }
+
+            foreach (Transform child in tank.transform.GetComponentsInChildren<Transform>(true))
+            {
+                if (child == null || child == tank.transform) continue;
+                bool matches = false;
+                for (int i = 0; i < portPrefixes.Length; i++)
+                {
+                    if (child.name.StartsWith(portPrefixes[i], System.StringComparison.Ordinal)) { matches = true; break; }
+                }
+                if (matches && TestTarget(child.position)) return true;
+            }
+
+            return TestTarget(tank.transform.position);
         }
 
         private static bool IsGasPipe(GridBlock block)

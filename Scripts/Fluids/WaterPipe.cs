@@ -149,6 +149,22 @@ namespace VoxelEngine.Fluids
                         }
                     }
                 }
+
+                // Detail-lattice tank reach: grid tanks connect visually at the same
+                // 5-small-cell cardinal range that pipe↔pipe links use. The target is
+                // the tank's nearest named liquid port, not the tank body centre.
+                float detailStep = VoxelEngine.GridSystem.GridSizeExt.CellSize(VoxelEngine.GridSystem.GridSize.Small);
+                foreach (var block in grid.AllBlocks)
+                {
+                    if (block is not VoxelEngine.GridSystem.GridLiquidTank tank) continue;
+                    if (VoxelEngine.Networks.WrenchBlacklist.IsBlocked(gridBlock.gameObject, tank.gameObject)) continue;
+                    var port = VoxelEngine.Maritime.MaritimePorts.FindNearest(
+                        tank.transform, VoxelEngine.Maritime.MaritimePorts.LiquidPrefixes, transform.position);
+                    Vector3 target = port != null ? port.position : tank.transform.position;
+                    Vector3 localDelta = grid.transform.InverseTransformVector(target - transform.position);
+                    if (!VoxelEngine.Networks.PipeAdjacency.IsCardinalLinkDelta(localDelta, detailStep, 5f, detailStep * 0.55f)) continue;
+                    if (!_neighbourPosBuf.Contains(target)) _neighbourPosBuf.Add(target);
+                }
             }
             else
             {

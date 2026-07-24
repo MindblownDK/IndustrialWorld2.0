@@ -121,6 +121,21 @@ namespace VoxelEngine.Gas
                     Consider(col.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>());
                 }
 
+                // Detail-lattice tank reach: grid gas tanks connect visually at the
+                // same 5-small-cell cardinal range that pipe↔pipe links use.
+                // The actual drawn arm targets the nearest named gas port.
+                float detailStep = VoxelEngine.GridSystem.GridSizeExt.CellSize(VoxelEngine.GridSystem.GridSize.Small);
+                foreach (var block in grid.AllBlocks)
+                {
+                    if (block is not VoxelEngine.GridSystem.GridGasTank tank) continue;
+                    var port = VoxelEngine.Maritime.MaritimePorts.FindNearest(
+                        tank.transform, VoxelEngine.Maritime.MaritimePorts.GasPrefixes, transform.position);
+                    Vector3 target = port != null ? port.position : tank.transform.position;
+                    Vector3 localDelta = grid.transform.InverseTransformVector(target - transform.position);
+                    if (!VoxelEngine.Networks.PipeAdjacency.IsCardinalLinkDelta(localDelta, detailStep, 5f, detailStep * 0.55f)) continue;
+                    Consider(tank);
+                }
+
                 // Closest CLEAN (non-exhaust-tap) gas port to THIS pipe — an O₂
                 // delivery pipe plugs into the intake, not into the exhaust tap
                 // standing next to it.
