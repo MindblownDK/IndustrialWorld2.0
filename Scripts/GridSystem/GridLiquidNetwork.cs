@@ -422,12 +422,20 @@ namespace VoxelEngine.GridSystem
         }
 
         /// <summary>All grid blocks within a generous touch radius of <paramref name="origin"/>,
-        /// used as the proximity pass that machine-model overhang makes necessary.</summary>
+        /// used as the proximity pass that machine-model overhang makes necessary.
+        /// Radius is tuned so a pipe placed 0.5 m from a structural tank's face
+        /// (≈1.5–2 m from the tank's origin) is always found — 0.9 m was too tight.</summary>
         private static IEnumerable<GridBlock> ProximityBlocks(GridEntity grid, GridBlock origin, float cs, bool liquidOnly)
         {
             s_proximityResult.Clear();
             if (grid == null || origin == null) yield break;
-            float radius = Mathf.Max(origin.EffectiveCellSize, GridSize.Small.CellSize()) * 1.8f;
+            // Detail pipes (0.5 m) need ~2.7 m to reach a structural neighbour
+            // face-to-face across a 2.5 m cell. Structural pipes use 1.8× their cell.
+            float originCell = origin.EffectiveCellSize;
+            bool isDetail = origin.IsPrecisionAttachment;
+            float radius = isDetail
+                ? Mathf.Max(GridSize.Large.CellSize() * 1.15f, 2.25f)
+                : Mathf.Max(originCell, GridSize.Small.CellSize()) * 1.8f;
             int hitCount = Physics.OverlapSphereNonAlloc(origin.transform.position, radius, s_liquidProbe, ~0, QueryTriggerInteraction.Collide);
             for (int i = 0; i < hitCount; i++)
             {
@@ -435,7 +443,13 @@ namespace VoxelEngine.GridSystem
                 if (col == null) continue;
                 var block = col.GetComponentInParent<GridBlock>();
                 if (block == null || block == origin || block.Grid != grid) continue;
-                if (liquidOnly && !IsLiquidPipe(block)) continue;
+                if (liquidOnly && !IsLiquidPipe(block))
+                {
+                    // For pipe→pipe, a cardinal-aligned gap test still matters, but
+                    // allow any pipe within radius — pipe-to-pipe adjacency is
+                    // re-checked via IsCardinalLink when links are built.
+                    continue;
+                }
                 if (s_proximityResult.Contains(block)) continue;
                 s_proximityResult.Add(block);
             }

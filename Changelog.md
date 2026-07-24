@@ -1,9 +1,38 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.19.0-dev`
+**Current Version:** `6.19.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.19.1-dev] Pipe Connectivity Overhaul — Tank Reach, Variable Port Preview, Pipe-Cap Feedback, Spatial-Hash Performance
+
+**Type:** PATCH — bug fixes, balance/polish for the pipe network. No save changes, no API breaks, no prefab rebuilds required.
+
+**Fixed — Pipes connect to tanks from the expected 0.5 m face-touch range:**
+1. The 6.19.0 proximity radius for pipe↔tank links (~0.9 m) was too tight for a pipe snapped 0.5 m off a structural tank face (that is ~1.5–2 m from the tank's transform origin). Liquid and gas grid networks now use a **2.25 m proximity radius** for detail-attached pipes, and the classic fluid network uses a **2.75 m** endpoint-search cap, so a gas/liquid pipe placed flush against any tank (grid-mounted or world-placed) connects reliably at one face distance.
+2. `GridStep` now returns the **detail cell size (0.5 m)** when one side of a link is a precision attachment, instead of using the structural cell size (2.5 m). This was the root cause of "pipe sits right next to the tank but does not link" — the adjacency test was rejecting perfectly valid 0.5 m gaps.
+3. Pipe↔endpoint adjacency tolerance widened slightly (0.35 → 0.45× step), forgiving small placement misalignments without ever allowing diagonals.
+4. `WaterPipe` / `GasPipe` visual arms now also draw toward **world-placed** `WaterTank`, `WaterPump` and `GasTank` endpoints (previously only grid-mounted blocks drew arms, so a pipe next to a world tank looked disconnected).
+
+**Fixed — Variable ports are visible 100% of the time when aiming:**
+5. A **color-coded ghost port ring** is drawn on the engine hull **before** the player clicks, exactly where the new variable port will be installed. Same color coding as a placed port (amber=Fuel, teal=Coolant, sky-blue=Oxygen). When the service is at capacity the ring tints red, so the player can read the rejection at a glance.
+6. When aiming at a spot that would reuse an existing port, no new ring is drawn (the real port is already there), matching the existing "reuse existing port" logic.
+
+**Fixed — Pipe-cap feedback (engine over-cap):**
+7. When aiming at an engine whose service port is already at capacity (e.g. fuel port already installed, player tries to attach a second liquid pipe), the **ghost now tints RED** (non-placeable) instead of silently falling through.
+8. A bottom-right toast fires every ~1.2 s while the player keeps aiming: title `"<family> pipe reached"`, detail `"<service> already connected (max N)"`. Uses the same `BuildFeedbackHud` as every other placement toast with a red accent.
+9. Clicking while over-cap is blocked and shows a persistent `Port Full` toast — no more silent fails.
+
+**Fixed — Pipe lag with many pipes placed (spatial hash rebuilds):**
+10. `GasNetwork` and `ItemPipeNetwork` were rebuilding their neighbour graphs with a **brute-force O(N²) double loop** every time a pipe was added — the source of the frame-time spikes when the player built long runs. Both networks now use the same **5 m spatial hash** the fluid network already uses, reducing topology rebuild from O(N²) to O(N).
+11. `connectRadius` defaults tightened across `FluidNode`, `GasPipe` and `ItemPipe` (3.0 m → 1.5 m) so the topology manager cannot accidentally grow multi-metre phantom links across gaps; the manager caps the range anyway, but a tighter default prevents edge cases.
+12. Visual arm probe radii capped at **0.85 m** (down from effectively 3.4 m on large grid blocks) so pipe visuals do not waste cycles scanning for endpoints across the room, and do not grow spurious arms to blocks that are not actually linked.
+13. Topology rebuilds across all three pipe networks (fluid / gas / item) now use a **120 ms settle delay** (matching the power network) instead of rebuilding every frame during rapid placement bursts.
+14. `PipeVisualBuilder.NotifyTopologyChanged()` is now bumped from `PlaceOnDetailLattice`, after each topology rebuild, and on pipe unregister — so visuals refresh exactly once per topology change instead of relying on the slow safety-net poll.
+15. `GasNetwork` tank probe buffer is now properly cleared between scans and enlarged to 24 entries; stale collider references could previously produce phantom tank hits.
 
 ---
 

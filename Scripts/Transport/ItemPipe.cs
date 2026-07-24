@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using VoxelEngine.GridSystem;
 using VoxelEngine.Items;
 using VoxelEngine.Networks;
 
@@ -22,8 +23,9 @@ namespace VoxelEngine.Transport
     public class ItemPipe : MonoBehaviour
     {
         // ── Inspector ──────────────────────────────────────────────────────
-        [Tooltip("Distance at which this pipe auto-connects to neighbours.")]
-        public float connectRadius = 3.0f;
+        [Tooltip("Distance at which this pipe auto-connects to neighbours. Capped " +
+                 "at one lattice cell by the topology manager — set for endpoint scans only.")]
+        public float connectRadius = 1.5f;
 
         [Tooltip("Max items this single pipe segment can hold in transit.")]
         public int bufferSize = 4;
@@ -86,12 +88,22 @@ namespace VoxelEngine.Transport
                 if (col != null && _endpointColliderSet.Add(col)) _endpointColliders.Add(col);
             }
 
-            var block = GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
-            // Five LATTICE cells: grid-mounted pipes probe on the grid's own cell size.
-            float step = block != null && block.Grid != null
-                ? VoxelEngine.GridSystem.GridSizeExt.CellSize(block.Grid.gridSize)
-                : VoxelEngine.Networks.PipeAdjacency.DefaultGridSize;
-            Transform frame = block != null && block.Grid != null ? block.Grid.transform : null;
+            var block = GetComponentInParent<GridBlock>();
+            // Five LATTICE cells: grid-mounted detail (0.5 m) pipes probe on the
+            // small grid cell size so tanks/chests one face away register.
+            float step;
+            Transform frame = null;
+            if (block != null && block.Grid != null)
+            {
+                step = block.IsPrecisionAttachment
+                    ? GridSizeExt.CellSize(GridSize.Small)
+                    : GridSizeExt.CellSize(block.Grid.gridSize);
+                frame = block.Grid.transform;
+            }
+            else
+            {
+                step = VoxelEngine.Networks.PipeAdjacency.DefaultGridSize;
+            }
             VoxelEngine.Networks.PipeAdjacency.ProbeCardinal(transform.position, frame, step, 5,
                 s_endpointProbe, col =>
                 {

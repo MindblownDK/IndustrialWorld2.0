@@ -260,7 +260,11 @@ namespace VoxelEngine.GridSystem
         {
             s_gasProximityResult.Clear();
             if (grid == null || origin == null) yield break;
-            float radius = Mathf.Max(origin.EffectiveCellSize, GridSize.Small.CellSize()) * 1.8f;
+            // Detail (0.5 m) pipes may sit up to ~2 m away from a structural
+            // tank face and still be a "face-touch" connection — widen radius.
+            float radius = origin.IsPrecisionAttachment
+                ? Mathf.Max(GridSize.Large.CellSize() * 1.15f, 2.25f)
+                : Mathf.Max(origin.EffectiveCellSize, GridSize.Small.CellSize()) * 1.8f;
             int hitCount = Physics.OverlapSphereNonAlloc(origin.transform.position, radius, s_gasProbe, ~0, QueryTriggerInteraction.Collide);
             for (int i = 0; i < hitCount; i++)
             {
@@ -280,7 +284,9 @@ namespace VoxelEngine.GridSystem
         {
             s_gasProximityResult.Clear();
             if (grid == null || origin == null) yield break;
-            float radius = Mathf.Max(origin.EffectiveCellSize, GridSize.Small.CellSize()) * 1.8f;
+            float radius = origin.IsPrecisionAttachment
+                ? Mathf.Max(GridSize.Large.CellSize() * 1.15f, 2.25f)
+                : Mathf.Max(origin.EffectiveCellSize, GridSize.Small.CellSize()) * 1.8f;
             int hitCount = Physics.OverlapSphereNonAlloc(origin.transform.position, radius, s_gasProbe, ~0, QueryTriggerInteraction.Collide);
             for (int i = 0; i < hitCount; i++)
             {

@@ -1,15 +1,14 @@
 // Assets/Scripts/VoxelEngine/Transport/ItemPipeNetwork.cs
 using System.Collections.Generic;
 using UnityEngine;
+using VoxelEngine.GridSystem;
 
 namespace VoxelEngine.Transport
 {
     /// <summary>
     /// Singleton manager that maintains the ItemPipe neighbour graph.
-    /// Same pattern as <see cref="VoxelEngine.Fluids.FluidNetworkManager"/>
-    /// and <see cref="VoxelEngine.Power.PowerNetworkManager"/>.
-    ///
-    /// Add this component to a manager GameObject in your scene.
+    /// Uses a 5 m spatial hash for O(N) neighbour discovery instead of
+    /// the old O(N^2) double loop that lagged at high pipe counts.
     /// </summary>
     public class ItemPipeNetwork : MonoBehaviour
     {
@@ -25,6 +24,8 @@ namespace VoxelEngine.Transport
 
         private readonly List<ItemPipe> _pipes = new();
         private bool _dirty;
+        private float _dirtyAt = -1f;
+        private const float RebuildSettleDelay = 0.12f;
 
         private void Awake()
         {
@@ -42,76 +43,131 @@ namespace VoxelEngine.Transport
             if (pipe != null && !_pipes.Contains(pipe))
             {
                 _pipes.Add(pipe);
-                _dirty = true;
+                MarkDirty();
             }
         }
 
         public void Unregister(ItemPipe pipe)
         {
+            if (pipe == null) return;
             if (_pipes.Remove(pipe))
             {
-                foreach (var p in _pipes)
-                    p.neighbours.Remove(pipe);
+                for (int i = 0; i < _pipes.Count; i++)
+                    if (_pipes[i] != null) _pipes[i].neighbours.Remove(pipe);
                 pipe.neighbours.Clear();
+                VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged();
             }
         }
 
         private void LateUpdate()
         {
             if (!_dirty) return;
-            Rebuild();
+            if (Time.unscaledTime - _dirtyAt < RebuildSettleDelay) return;
             _dirty = false;
+            Rebuild();
+            VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged();
         }
 
-        /// <summary>
-        /// Brute-force neighbour discovery by distance. Fine for &lt; 500 pipes.
-        /// </summary>
+        private void MarkDirty()
+        {
+            if (!_dirty) _dirtyAt = Time.unscaledTime;
+            _dirty = true;
+        }
+
         private void Rebuild()
         {
-            foreach (var p in _pipes)
-                p.neighbours.Clear();
-
             for (int i = 0; i < _pipes.Count; i++)
+                if (_pipes[i] != null) _pipes[i].neighbours.Clear();
+
+            _pipes.RemoveAll(p => p == null);
+            int n = _pipes.Count;
+            if (n < 2) goto EndpointRescan;
+
+            const float CELL = 5f;
+            const float CELL_INV = 1f / CELL;
+            var hash = new Dictionary<Vector3Int, List<ItemPipe>>(n * 2);
+            Vector3Int Cell(Vector3 p) => new Vector3Int(
+                Mathf.FloorToInt(p.x * CELL_INV),
+                Mathf.FloorToInt(p.y * CELL_INV),
+                Mathf.FloorToInt(p.z * CELL_INV));
+
+            for (int i = 0; i < n; i++)
             {
-                for (int j = i + 1; j < _pipes.Count; j++)
+                var p = _pipes[i];
+                var k = Cell(p.transform.position);
+                if (!hash.TryGetValue(k, out var bucket)) hash[k] = bucket = new List<ItemPipe>(4);
+                bucket.Add(p);
+            }
+
+            // Index map for O(1) "is this my senior pair" test so we don't
+            // double-process pairs like the old loop did.
+            var index = new Dictionary<ItemPipe, int>(n);
+            for (int i = 0; i < n; i++) index[_pipes[i]] = i;
+
+            for (int i = 0; i < n; i++)
+            {
+                var a = _pipes[i];
+                if (a == null) continue;
+                Vector3 pa = a.transform.position;
+                var c0 = Cell(pa);
+                float rA = a.connectRadius;
+
+                for (int dz = -1; dz <= 1; dz++)
+                for (int dy = -1; dy <= 1; dy++)
+                for (int dx = -1; dx <= 1; dx++)
                 {
-                    var a = _pipes[i];
-                    var b = _pipes[j];
-                    Vector3 pa = a.transform.position, pb = b.transform.position;
-                    float step = GridStep(a, b);
-                    float maxDist = Mathf.Max(Mathf.Max(a.connectRadius, b.connectRadius), step * 5f);
-                    if (Vector3.SqrMagnitude(pa - pb) > maxDist * maxDist) continue;
+                    if (!hash.TryGetValue(new Vector3Int(c0.x + dx, c0.y + dy, c0.z + dz), out var bucket)) continue;
+                    for (int bi = 0; bi < bucket.Count; bi++)
+                    {
+                        var b = bucket[bi];
+                        if (b == null || b == a) continue;
+                        if (index.TryGetValue(b, out int j) && j <= i) continue;
 
-                    // Evaluate alignment in the shared Grid frame, not either pipe's
-                    // rotation. World pipes continue using world-grid axes.
-                    Vector3 connectionDelta = VoxelEngine.Networks.PipeAdjacency.ConnectionDelta(a, b);
-                    if (!VoxelEngine.Networks.PipeAdjacency.IsCardinalLinkDelta(connectionDelta, step, 5f, step * 0.35f)) continue;
+                        Vector3 pb = b.transform.position;
+                        float step = GridStep(a, b);
+                        float range = step * 5.1f;
+                        float radiusCap = Mathf.Max(rA, b.connectRadius);
+                        if (radiusCap > range) range = Mathf.Min(radiusCap, 5f);
 
-                    // Wrench blacklist — explicit player disconnect persists.
-                    if (VoxelEngine.Networks.WrenchBlacklist.IsBlocked(a, b)) continue;
+                        if ((pa - pb).sqrMagnitude > range * range) continue;
 
-                    if (!a.neighbours.Contains(b)) a.neighbours.Add(b);
-                    if (!b.neighbours.Contains(a)) b.neighbours.Add(a);
+                        Vector3 connectionDelta = VoxelEngine.Networks.PipeAdjacency.ConnectionDelta(a, b);
+                        if (!VoxelEngine.Networks.PipeAdjacency.IsCardinalLinkDelta(connectionDelta, step, 5f, step * 0.35f)) continue;
+
+                        if (VoxelEngine.Networks.WrenchBlacklist.IsBlocked(a, b)) continue;
+
+                        if (!a.neighbours.Contains(b)) a.neighbours.Add(b);
+                        if (!b.neighbours.Contains(a)) b.neighbours.Add(a);
+                    }
                 }
             }
 
-            // Refresh each pipe's endpoint (chest/machine) connections too, so a
-            // port being enabled/disabled reconnects or drops the visual arm and
-            // the functional link immediately on the next dirty rebuild.
-            foreach (var p in _pipes)
+        EndpointRescan:
+            // Refresh each pipe's endpoint (chest/machine) connections too.
+            for (int i = 0; i < _pipes.Count; i++)
+            {
+                var p = _pipes[i];
                 if (p != null) p.ForceEndpointRescan();
+            }
         }
 
         private static float GridStep(ItemPipe a, ItemPipe b)
         {
-            var blockA = a != null ? a.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>() : null;
-            var blockB = b != null ? b.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>() : null;
+            var blockA = a != null ? a.GetComponentInParent<GridBlock>() : null;
+            var blockB = b != null ? b.GetComponentInParent<GridBlock>() : null;
             if (blockA != null && blockB != null && blockA.Grid != null && blockA.Grid == blockB.Grid)
+            {
+                bool aSmall = blockA.IsPrecisionAttachment;
+                bool bSmall = blockB.IsPrecisionAttachment;
+                float small = GridSizeExt.CellSize(GridSize.Small);
+                if (aSmall && bSmall) return small;
+                if (aSmall != bSmall) return small;
                 return (blockA.EffectiveCellSize + blockB.EffectiveCellSize) * 0.5f;
+            }
             return VoxelEngine.Networks.PipeAdjacency.DefaultGridSize;
         }
 
         /// <summary>Call after moving/adding a pipe at runtime to force re-link.</summary>
-        public void SetDirty() => _dirty = true;
+        public void SetDirty() => MarkDirty();
     }
 }

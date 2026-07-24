@@ -14,8 +14,9 @@ namespace VoxelEngine.Fluids
     {
         public abstract FluidNodeKind Kind { get; }
 
-        [Tooltip("Distance at which this node will auto-connect to neighbouring nodes/pipes.")]
-        public float connectRadius = 3.0f;
+        [Tooltip("Distance at which this node will auto-connect to neighbouring nodes/pipes. " +
+                 "Capped at one lattice cell by the topology manager so pipes can't reach across gaps.")]
+        public float connectRadius = 1.5f;
 
         [System.NonSerialized] public FluidNetwork network;
         [System.NonSerialized] public List<FluidNode> neighbours = new();

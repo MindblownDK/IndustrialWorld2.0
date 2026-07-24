@@ -5,6 +5,7 @@
 
 using System.Collections.Generic;
 using UnityEngine;
+using VoxelEngine.GridSystem;
 
 namespace VoxelEngine.Gas
 {
@@ -19,8 +20,15 @@ namespace VoxelEngine.Gas
             Instance = go.AddComponent<GasNetwork>();
             DontDestroyOnLoad(go);
         }
+
         private readonly List<GasPipe> _pipes = new();
         private bool _dirty;
+        private float _dirtyAt = -1f;
+
+        // Coalesce rapid register/unregister bursts (e.g. placing pipes in a row)
+        // into a single rebuild so we don't do O(N) work every frame the player
+        // holds the place button. Mirrors PowerNetworkManager.
+        private const float RebuildSettleDelay = 0.12f;
 
         private void Awake()
         {
@@ -30,47 +38,117 @@ namespace VoxelEngine.Gas
 
         public void Register(GasPipe p)
         {
-            if (!_pipes.Contains(p)) { _pipes.Add(p); _dirty = true; }
+            if (p == null) return;
+            if (!_pipes.Contains(p)) { _pipes.Add(p); MarkDirty(); }
         }
 
         public void Unregister(GasPipe p)
         {
+            if (p == null) return;
             if (_pipes.Remove(p))
             {
-                foreach (var nb in _pipes) nb.neighbours.Remove(p);
+                for (int i = 0; i < _pipes.Count; i++)
+                    _pipes[i].neighbours.Remove(p);
                 p.neighbours.Clear();
+                // A removal is topology-changing — bump version so visuals
+                // refresh once. Additions wait for the rebuild so they fire
+                // exactly once after links settle.
+                VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged();
             }
+        }
+
+        private void MarkDirty()
+        {
+            if (!_dirty) _dirtyAt = Time.unscaledTime;
+            _dirty = true;
         }
 
         private void LateUpdate()
         {
-            if (_dirty) { Rebuild(); _dirty = false; }
+            if (!_dirty) return;
+            if (Time.unscaledTime - _dirtyAt < RebuildSettleDelay) return;
+            _dirty = false;
+            Rebuild();
+            VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged();
         }
 
         private void Rebuild()
         {
-            foreach (var p in _pipes) p.neighbours.Clear();
             for (int i = 0; i < _pipes.Count; i++)
-            for (int j = i + 1; j < _pipes.Count; j++)
+                if (_pipes[i] != null) _pipes[i].neighbours.Clear();
+
+            // Strip destroyed pipes before hashing so we don't walk tombstones.
+            _pipes.RemoveAll(p => p == null);
+            int n = _pipes.Count;
+            if (n < 2) return;
+
+            // ── SPATIAL HASH (cell size = 5m) ─────────────────────────────
+            // O(N) neighbour discovery instead of the old O(N^2) double loop
+            // that lagged hard once the player laid a hundred+ pipes. The
+            // cell size is chosen so any valid pipe↔pipe link (≤ 5 lattice
+            // cells in a cardinal line) lives inside this cell or one of the
+            // immediate 3×3×3 neighbours.
+            const float CELL = 5f;
+            const float CELL_INV = 1f / CELL;
+            var hash = new Dictionary<Vector3Int, List<GasPipe>>(n * 2);
+            Vector3Int Cell(Vector3 p) => new Vector3Int(
+                Mathf.FloorToInt(p.x * CELL_INV),
+                Mathf.FloorToInt(p.y * CELL_INV),
+                Mathf.FloorToInt(p.z * CELL_INV));
+            for (int i = 0; i < n; i++)
             {
-                var a = _pipes[i]; var b = _pipes[j];
-                Vector3 pa = a.transform.position, pb = b.transform.position;
-                float step = GridStep(a, b);
-                float range = Mathf.Max(Mathf.Max(a.connectRadius, b.connectRadius), step * 5f);
+                var p = _pipes[i];
+                var k = Cell(p.transform.position);
+                if (!hash.TryGetValue(k, out var bucket)) hash[k] = bucket = new List<GasPipe>(4);
+                bucket.Add(p);
+            }
 
-                // Distance gate is cheap, do it first.
-                if ((pa - pb).sqrMagnitude > range * range) continue;
+            // Build an index map so we don't O(N) IndexOf() in the inner loop.
+            var index = new Dictionary<GasPipe, int>(n);
+            for (int i = 0; i < n; i++) index[_pipes[i]] = i;
 
-                // Shared Grid alignment ignores individual pipe rotation. World pipes
-                // continue using world-grid axes.
-                Vector3 connectionDelta = VoxelEngine.Networks.PipeAdjacency.ConnectionDelta(a, b);
-                if (!VoxelEngine.Networks.PipeAdjacency.IsCardinalLinkDelta(connectionDelta, step, 5f, step * 0.35f)) continue;
+            for (int i = 0; i < n; i++)
+            {
+                var a = _pipes[i];
+                if (a == null) continue;
+                Vector3 pa = a.transform.position;
+                var c0 = Cell(pa);
+                float rA = a.connectRadius;
+                var ga = a.GetComponentInParent<GridBlock>();
 
-                // Wrench blacklist — player wrenched these two apart; honour it
-                // until a wrench reconnect or one of them is broken/replaced.
-                if (VoxelEngine.Networks.WrenchBlacklist.IsBlocked(a, b)) continue;
+                for (int dz = -1; dz <= 1; dz++)
+                for (int dy = -1; dy <= 1; dy++)
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    if (!hash.TryGetValue(new Vector3Int(c0.x + dx, c0.y + dy, c0.z + dz), out var bucket)) continue;
+                    for (int bi = 0; bi < bucket.Count; bi++)
+                    {
+                        var b = bucket[bi];
+                        if (b == null || b == a) continue;
+                        // Avoid double-processing — only consider pairs (i,j) with j>i.
+                        if (!index.TryGetValue(b, out int j) || j <= i) continue;
 
-                a.neighbours.Add(b); b.neighbours.Add(a);
+                        Vector3 pb = b.transform.position;
+                        float step = GridStep(a, b, ga);
+
+                        // Pipe↔pipe range honours the FIVE-cell cardinal rule.
+                        // Capped so pipes can't magically reach across gaps.
+                        float range = step * 5.1f;
+                        float rB = b.connectRadius;
+                        float radiusCap = Mathf.Max(rA, rB);
+                        if (radiusCap > range) range = Mathf.Min(radiusCap, 5f);
+
+                        if ((pa - pb).sqrMagnitude > range * range) continue;
+
+                        Vector3 connectionDelta = VoxelEngine.Networks.PipeAdjacency.ConnectionDelta(a, b);
+                        if (!VoxelEngine.Networks.PipeAdjacency.IsCardinalLinkDelta(connectionDelta, step, 5f, step * 0.35f)) continue;
+
+                        if (VoxelEngine.Networks.WrenchBlacklist.IsBlocked(a, b)) continue;
+
+                        if (!a.neighbours.Contains(b)) a.neighbours.Add(b);
+                        if (!b.neighbours.Contains(a)) b.neighbours.Add(a);
+                    }
+                }
             }
         }
 
@@ -78,7 +156,7 @@ namespace VoxelEngine.Gas
         // their own 0.5 s windows, and the pipe BFS + corridor probes are the hot
         // path on long runs.
         private const float TankQueryTtl = 0.35f;
-        private readonly System.Collections.Generic.Dictionary<long, (float time, GasTank tank)> _tankQueryCache = new();
+        private readonly Dictionary<long, (float time, GasTank tank)> _tankQueryCache = new();
 
         private static long TankQueryKey(Vector3 origin, GasType type, bool forOutput, bool filtered)
         {
@@ -99,7 +177,6 @@ namespace VoxelEngine.Gas
             long key = TankQueryKey(origin, type, forOutput, seedFilter != null);
             if (_tankQueryCache.TryGetValue(key, out var memo) && Time.time - memo.time < TankQueryTtl)
             {
-                // memo.tank honours Unity lifetime: destroyed tanks read as null.
                 if (!memo.tank) return null;
                 return memo.tank;
             }
@@ -112,64 +189,69 @@ namespace VoxelEngine.Gas
             float corridorStep, System.Predicate<GasPipe> seedFilter)
         {
             // Direct adjacency check first.
-            var hits = Physics.OverlapSphere(origin, searchDist);
-            foreach (var col in hits)
+            int hitCount = Physics.OverlapSphereNonAlloc(origin, searchDist, s_tankProbe, ~0, QueryTriggerInteraction.Collide);
+            for (int i = 0; i < hitCount; i++)
             {
-                var tank = col.GetComponent<GasTank>();
-                if (tank != null)
-                {
-                    if (forOutput && tank.allowOutput && (tank.storedGasType == type || tank.storedGasType == GasType.None) && tank.storedAmount > 0)
-                        return tank;
-                    if (!forOutput && tank.acceptInput && (tank.storedGasType == type || tank.storedGasType == GasType.None))
-                        return tank;
-                }
+                var col = s_tankProbe[i];
+                var tank = col != null ? col.GetComponent<GasTank>() ?? col.GetComponentInParent<GasTank>() : null;
+                if (tank == null) continue;
+                if (forOutput && tank.allowOutput && (tank.storedGasType == type || tank.storedGasType == GasType.None) && tank.storedAmount > 0)
+                    return tank;
+                if (!forOutput && tank.acceptInput && (tank.storedGasType == type || tank.storedGasType == GasType.None))
+                    return tank;
             }
 
-            // Five-cell cardinal corridor straight off the consumer's port: a tank
-            // parked up to five lattice cells in a straight row from the port counts
-            // as plugged in — no pipe needs to physically hump the tank shell.
-            float step = corridorStep > 0.0001f ? corridorStep : Networks.PipeAdjacency.DefaultGridSize;
+            float step = corridorStep > 0.0001f ? corridorStep : VoxelEngine.Networks.PipeAdjacency.DefaultGridSize;
             var viaPort = ProbeTankCardinal(origin, null, step, type, forOutput);
             if (viaPort != null) return viaPort;
 
-            // BFS through pipe network.
-            foreach (var startPipe in _pipes)
+            // BFS through pipe network — seed pipes near origin.
+            var visited = new HashSet<GasPipe>();
+            var queue = new Queue<GasPipe>();
+            for (int i = 0; i < _pipes.Count; i++)
             {
+                var startPipe = _pipes[i];
                 if (startPipe == null) continue;
                 if (seedFilter != null && !seedFilter(startPipe)) continue;
                 if ((startPipe.transform.position - origin).sqrMagnitude > searchDist * searchDist) continue;
-                var visited = new HashSet<GasPipe>();
-                var queue = new Queue<GasPipe>();
-                queue.Enqueue(startPipe); visited.Add(startPipe);
-                while (queue.Count > 0)
+                if (visited.Add(startPipe)) queue.Enqueue(startPipe);
+            }
+
+            while (queue.Count > 0)
+            {
+                var cur = queue.Dequeue();
+                var block = cur.GetComponentInParent<GridBlock>();
+                float pipeStep = block != null && block.Grid != null
+                    ? GridSizeExt.CellSize(block.Grid.gridSize)
+                    : GridStep(cur, cur);
+                Transform frame = block != null && block.Grid != null ? block.Grid.transform : null;
+
+                // Use a fixed ~2.75 m probe radius for tank detection — connectRadius
+                // is kept for explicit links but tank discovery needs a stable face-
+                // touch range that works even when connectRadius is tightened.
+                var near = ProbeTankSphere(cur.transform.position, Mathf.Max(cur.connectRadius, 2.75f), type, forOutput);
+                if (near != null) return near;
+                var viaPipe = ProbeTankCardinal(cur.transform.position, frame, pipeStep, type, forOutput);
+                if (viaPipe != null) return viaPipe;
+
+                if (cur.neighbours == null) continue;
+                for (int i = 0; i < cur.neighbours.Count; i++)
                 {
-                    var cur = queue.Dequeue();
-                    var block = cur.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
-                    // Five LATTICE cells — on a construct the probe honours the grid's
-                    // own cell size (Large 2.5 m), matching how players count spaces.
-                    float pipeStep = block != null && block.Grid != null
-                        ? VoxelEngine.GridSystem.GridSizeExt.CellSize(block.Grid.gridSize)
-                        : GridStep(cur, cur);
-                    Transform frame = block != null && block.Grid != null ? block.Grid.transform : null;
-                    // Short radius (touching tanks) + the five-cell corridor.
-                    var near = ProbeTankSphere(cur.transform.position, cur.connectRadius, type, forOutput);
-                    if (near != null) return near;
-                    var viaPipe = ProbeTankCardinal(cur.transform.position, frame, pipeStep, type, forOutput);
-                    if (viaPipe != null) return viaPipe;
-                    foreach (var nb in cur.neighbours)
-                        if (visited.Add(nb)) queue.Enqueue(nb);
+                    var nb = cur.neighbours[i];
+                    if (nb != null && visited.Add(nb)) queue.Enqueue(nb);
                 }
             }
             return null;
         }
 
-        private static readonly Collider[] s_tankProbe = new Collider[16];
+        private static readonly Collider[] s_tankProbe = new Collider[24];
 
         private static GasTank ProbeTankSphere(Vector3 centre, float radius, GasType type, bool forOutput)
         {
-            var tankHits = Physics.OverlapSphere(centre, radius);
-            foreach (var col in tankHits)
+            int hitCount = Physics.OverlapSphereNonAlloc(centre, radius, s_tankProbe, ~0, QueryTriggerInteraction.Collide);
+            for (int i = 0; i < hitCount; i++)
             {
+                var col = s_tankProbe[i];
                 var tank = col != null ? col.GetComponent<GasTank>() ?? col.GetComponentInParent<GasTank>() : null;
                 if (tank == null) continue;
                 if (forOutput && tank.allowOutput && tank.storedGasType == type && tank.storedAmount > 0)
@@ -180,13 +262,10 @@ namespace VoxelEngine.Gas
             return null;
         }
 
-        /// <summary>Tank reachable from <paramref name="origin"/> along a straight
-        /// cardinal lattice row (max five cells) — deduction of "connects from a
-        /// distance in a valid direction" for gas endpoints.</summary>
         private static GasTank ProbeTankCardinal(Vector3 origin, Transform gridFrame, float step, GasType type, bool forOutput)
         {
             GasTank found = null;
-            Networks.PipeAdjacency.ProbeCardinal(origin, gridFrame, step, 5, s_tankProbe, col =>
+            VoxelEngine.Networks.PipeAdjacency.ProbeCardinal(origin, gridFrame, step, 5, s_tankProbe, col =>
             {
                 var tank = col.GetComponent<GasTank>();
                 if (tank == null) tank = col.GetComponentInParent<GasTank>();
@@ -204,16 +283,23 @@ namespace VoxelEngine.Gas
             return found;
         }
 
-        private static float GridStep(GasPipe a, GasPipe b)
+        private static float GridStep(GasPipe a, GasPipe b, GridBlock ga = null)
         {
-            var blockA = a != null ? a.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>() : null;
-            var blockB = b != null ? b.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>() : null;
+            var blockA = ga ?? (a != null ? a.GetComponentInParent<GridBlock>() : null);
+            var blockB = b != null ? b.GetComponentInParent<GridBlock>() : null;
             if (blockA != null && blockB != null && blockA.Grid != null && blockA.Grid == blockB.Grid)
+            {
+                bool aSmall = blockA.IsPrecisionAttachment;
+                bool bSmall = blockB.IsPrecisionAttachment;
+                float small = GridSizeExt.CellSize(GridSize.Small);
+                if (aSmall && bSmall) return small;
+                if (aSmall != bSmall) return small;
                 return (blockA.EffectiveCellSize + blockB.EffectiveCellSize) * 0.5f;
+            }
             return VoxelEngine.Networks.PipeAdjacency.DefaultGridSize;
         }
 
-        public void SetDirty() => _dirty = true;
-        private void OnDestroy() { if (Instance == this) Instance = null; }
+        public void SetDirty() => MarkDirty();
+        private void OnDestroy() { if (Instance == this) Instance = null; _tankQueryCache.Clear(); }
     }
 }

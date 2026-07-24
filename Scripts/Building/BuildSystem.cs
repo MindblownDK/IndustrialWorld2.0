@@ -56,6 +56,17 @@ namespace VoxelEngine.Building
         /// detail-lattice pipe (which would bypass the per-engine cap).</summary>
         private static bool s_portCapBlocked;
         private static string s_portCapReason;
+        private static string s_portCapPipeFamily;
+        private static int s_previewPortService;
+        private float _portCapFeedbackAt;       // throttle bottom-right toast while aiming
+        private const float PortCapFeedbackInterval = 1.2f;
+
+        // Ghost-port preview ring (shown on the engine hull while the player aims
+        // at a surface that will create a variable port) so the port collar is
+        // visible BEFORE they click — fixes "ports isn't showing 100% of the time".
+        private Transform _ghostPortRing;
+        private Renderer _ghostPortRingRenderer;
+        private Material _ghostPortRingMat;
 
         public static bool HoldingBlock { get; private set; }
         public static string HeldBlockName { get; private set; } = string.Empty;
@@ -136,6 +147,8 @@ namespace VoxelEngine.Building
             }
 
             var ray = shootCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
+            HideGhostPortRing();
+
             if (!TryRaycastIgnoringSelf(ray, out var hit, reach))
             {
                 // The ray slipped between the thin pipe visuals (their arms/caps are
@@ -172,11 +185,32 @@ namespace VoxelEngine.Building
             if (targetGrid != null && IsUnifiedPipe(block))
             {
                 Vector3Int precisionPos, hostStructuralPos, faceAxis;
+                Vector3 ghostPortWorldPos = default; Vector3 ghostPortOutWorld = default;
+                bool showGhostPort = false;
+                Color ghostPortColor = Color.white;
+
                 bool snappedToPort = TryGetMaritimePortSnap(targetGrid, block, hit, ray, commit: false,
-                        out precisionPos, out hostStructuralPos, out faceAxis, out Vector3 anchorLocal, out _);
+                        out precisionPos, out hostStructuralPos, out faceAxis,
+                        out Vector3 anchorLocal, out string portFeedback,
+                        out Vector3 previewPortLocal, out Vector3 previewOutLocal, out bool previewIsNew);
+                if (previewIsNew)
+                {
+                    var targetBlock = hit.collider.GetComponentInParent<GridBlock>();
+                    if (targetBlock != null)
+                    {
+                        ghostPortWorldPos = targetBlock.transform.TransformPoint(previewPortLocal);
+                        ghostPortOutWorld = targetBlock.transform.TransformDirection(previewOutLocal).normalized;
+                        showGhostPort = true;
+                        ghostPortColor = s_portCapBlocked
+                            ? new Color(0.95f, 0.25f, 0.20f)
+                            : VoxelEngine.Maritime.MaritimeVariablePorts.ColorFor(
+                                (VoxelEngine.Maritime.PortService)s_previewPortService);
+                    }
+                }
+
                 // Over-cap aim: the engine refuses another port of this service. Show
-                // the pipe at the aim point in RED instead of pretending a free cell
-                // is available (which would let the player bypass the cap).
+                // the pipe at the aim point in RED and surface a toast instead of
+                // silently falling through (which used to let players bypass the cap).
                 bool validPrecision;
                 if (s_portCapBlocked) validPrecision = false;
                 else validPrecision = snappedToPort
@@ -188,8 +222,6 @@ namespace VoxelEngine.Building
                 if (pipeVisual != null)
                     pipeVisual.gridSize = GridSize.Small.CellSize();
 
-                // Port-snapped pipes hug the port exactly (ghost truth — placement
-                // lands on the same anchor); face placements sit on their cell.
                 Vector3 localPosition = snappedToPort
                     ? anchorLocal
                     : s_portCapBlocked
@@ -201,6 +233,16 @@ namespace VoxelEngine.Building
                 _ghost.transform.SetPositionAndRotation(worldPosition, worldRotation);
                 ConfigurePipeGhostConnection(block, targetGrid, worldPosition, GridSize.Small.CellSize());
                 ApplyGhostMaterial(_ghost, validPrecision ? _ghostMaterialValid : _ghostMaterialInvalid);
+
+                if (showGhostPort) ShowGhostPortRing(ghostPortWorldPos, ghostPortOutWorld, ghostPortColor);
+                if (s_portCapBlocked && Time.unscaledTime - _portCapFeedbackAt >= PortCapFeedbackInterval)
+                {
+                    _portCapFeedbackAt = Time.unscaledTime;
+                    VoxelEngine.UI.BuildFeedbackHud.Show(
+                        $"{s_portCapPipeFamily} pipe reached",
+                        s_portCapReason ?? "Port already connected",
+                        block.icon, new Color(0.90f, 0.30f, 0.20f));
+                }
                 return;
             }
             HidePrecisionLattice();
@@ -235,7 +277,13 @@ namespace VoxelEngine.Building
             RotationSteps = _rotSteps;
             if (_ghost != null) { Destroy(_ghost); _ghost = null; _ghostItem = null; }
             HidePrecisionLattice();
+            HideGhostPortRing();
             Quarry.HidePlacementPreview();
+        }
+
+        private void OnDestroy()
+        {
+            if (_ghostPortRing != null) Destroy(_ghostPortRing.gameObject);
         }
 
         private void HandleRotationInput()
@@ -276,33 +324,54 @@ namespace VoxelEngine.Building
             bool commit, out Vector3Int precisionPos, out Vector3Int hostStructuralPos, out Vector3Int faceAxis,
             out Vector3 anchorLocal, out string feedback)
         {
+            return TryGetMaritimePortSnap(grid, item, hit, aimRay, commit,
+                out precisionPos, out hostStructuralPos, out faceAxis, out anchorLocal, out feedback,
+                out _, out _, out _);
+        }
+
+        // Full overload — used by the ghost preview so it can draw a port collar
+        // on the hull BEFORE the player commits to placement.
+        private static bool TryGetMaritimePortSnap(GridEntity grid, BlockItem item, RaycastHit hit, Ray aimRay,
+            bool commit, out Vector3Int precisionPos, out Vector3Int hostStructuralPos, out Vector3Int faceAxis,
+            out Vector3 anchorLocal, out string feedback,
+            out Vector3 newPortLocalPos, out Vector3 newPortOutLocal, out bool portIsNew)
+        {
             precisionPos = default;
             hostStructuralPos = default;
             faceAxis = default;
             anchorLocal = default;
             feedback = null;
+            newPortLocalPos = default;
+            newPortOutLocal = default;
+            portIsNew = false;
             s_portCapBlocked = false;
             s_portCapReason = null;
+            s_portCapPipeFamily = null;
+            s_previewPortService = 0;
             if (grid == null || item == null || item.placedPrefab == null || hit.collider == null) return false;
 
             // Route by the HELD pipe type — liquid pipes to liquid ports, gas pipes to
             // gas ports, item pipes to item ports (the fuel port doesn't take steam hoses).
             string[] prefixes;
             VoxelEngine.Maritime.PipeFamily family;
+            string familyLabel;
             if (item.placedPrefab.GetComponentInChildren<VoxelEngine.Fluids.WaterPipe>(true) != null)
             {
                 prefixes = VoxelEngine.Maritime.MaritimePorts.LiquidPrefixes;
                 family = VoxelEngine.Maritime.PipeFamily.Liquid;
+                familyLabel = "Liquid";
             }
             else if (item.placedPrefab.GetComponentInChildren<VoxelEngine.Gas.GasPipe>(true) != null)
             {
                 prefixes = VoxelEngine.Maritime.MaritimePorts.GasPrefixes;
                 family = VoxelEngine.Maritime.PipeFamily.Gas;
+                familyLabel = "Gas";
             }
             else if (item.placedPrefab.GetComponentInChildren<VoxelEngine.Transport.ItemPipe>(true) != null)
             {
                 prefixes = VoxelEngine.Maritime.MaritimePorts.ItemPrefixes;
                 family = VoxelEngine.Maritime.PipeFamily.Item;
+                familyLabel = "Item";
             }
             else return false;
 
@@ -338,8 +407,18 @@ namespace VoxelEngine.Building
                 // decides which service the held pipe family maps to and whether this
                 // engine tier offers it (fuel/coolant/oxygen on HFO+MGO; oxygen+item on
                 // the Crude engine).
-                return TryGetVariablePortSnap(grid, targetBlock, family, hit, commit, out feedback,
-                    out precisionPos, out hostStructuralPos, out faceAxis, out anchorLocal);
+                bool ok = TryGetVariablePortSnap(grid, targetBlock, family, hit, commit, out feedback,
+                    out precisionPos, out hostStructuralPos, out faceAxis, out anchorLocal,
+                    out Vector3 vpLocal, out Vector3 voLocal, out bool vpIsNew, out int vpService);
+                if (vpIsNew)
+                {
+                    newPortLocalPos = vpLocal;
+                    newPortOutLocal = voLocal;
+                    portIsNew = true;
+                    s_previewPortService = vpService;
+                }
+                if (s_portCapBlocked) s_portCapPipeFamily = familyLabel;
+                return ok;
             }
 
             // Anchor = the seat for the pipe hub. Snug half-cell plug on surface ports;
@@ -425,17 +504,29 @@ namespace VoxelEngine.Building
             out Vector3Int precisionPos, out Vector3Int hostStructuralPos, out Vector3Int faceAxis,
             out Vector3 anchorLocal)
         {
+            return TryGetVariablePortSnap(grid, targetBlock, family, hit, commit, out feedback,
+                out precisionPos, out hostStructuralPos, out faceAxis, out anchorLocal,
+                out _, out _, out _, out _);
+        }
+
+        private static bool TryGetVariablePortSnap(GridEntity grid, GridBlock targetBlock,
+            VoxelEngine.Maritime.PipeFamily family, RaycastHit hit, bool commit, out string feedback,
+            out Vector3Int precisionPos, out Vector3Int hostStructuralPos, out Vector3Int faceAxis,
+            out Vector3 anchorLocal,
+            out Vector3 portLocalPos, out Vector3 portOutLocal, out bool portIsNew, out int portService)
+        {
             precisionPos = default;
             hostStructuralPos = default;
             faceAxis = default;
             anchorLocal = default;
             feedback = null;
+            portLocalPos = default;
+            portOutLocal = default;
+            portIsNew = false;
+            portService = 0;
 
             var engine = targetBlock as VoxelEngine.Maritime.GridMaritimeEngine;
             if (engine == null || engine.Grid != grid) return false;
-            // Whether this engine tier offers the held pipe's service (and which service
-            // it maps to) is decided inside the planner — the Crude engine offers
-            // oxygen + item, the HFO/MGO engines offer fuel + coolant + oxygen.
 
             float small = GridSize.Small.CellSize();
             var plan = VoxelEngine.Maritime.MaritimePortPlanner.PlanPipe(
@@ -451,8 +542,14 @@ namespace VoxelEngine.Building
             }
             if (!plan.ok) return false;
 
-            // Snap the pipe hub onto the DETAIL lattice cell just outside the surface so
-            // placement is fine-grid aligned (the small lattice), not free-floating.
+            // Expose the planned port to the caller so the ghost preview can draw
+            // a color-coded collar on the hull before the player clicks.
+            portLocalPos = plan.portLocal;
+            portOutLocal = plan.outLocal;
+            portIsNew = !plan.reusesExisting;
+            portService = (int)plan.service;
+
+            // Snap the pipe hub onto the DETAIL lattice cell just outside the surface.
             precisionPos = new Vector3Int(
                 Mathf.FloorToInt(plan.seatGridLocal.x / small + 0.5f),
                 Mathf.FloorToInt(plan.seatGridLocal.y / small + 0.5f),
@@ -464,7 +561,6 @@ namespace VoxelEngine.Building
             var layer = grid.GetComponent<GridPrecisionAttachmentLayer>();
             if (layer != null && !layer.CanPlace(precisionPos)) return false;
 
-            // Commit installs the physical color-coded port; ghost only previews.
             if (commit && !plan.reusesExisting)
                 engine.VariablePorts.AddPort(plan.service, plan.portLocal, plan.outLocal);
 
@@ -557,6 +653,53 @@ namespace VoxelEngine.Building
         private void HidePrecisionLattice()
         {
             if (_precisionLattice != null) _precisionLattice.Hide();
+        }
+
+        // ── Ghost port ring ──────────────────────────────────────────
+        // Draws a color-coded disc on the engine hull while the player
+        // aims at a surface that will create a new variable port. This
+        // makes the port visible BEFORE placement, fixing "ports aren't
+        // showing 100% of the time".
+        private void ShowGhostPortRing(Vector3 worldPos, Vector3 outWorld, Color color)
+        {
+            if (_ghostPortRing == null)
+            {
+                var sh = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+                _ghostPortRingMat = new Material(sh)
+                {
+                    color = color
+                };
+                if (_ghostPortRingMat.HasProperty("_BaseColor")) _ghostPortRingMat.SetColor("_BaseColor", color);
+                if (_ghostPortRingMat.HasProperty("_Metallic")) _ghostPortRingMat.SetFloat("_Metallic", 0.35f);
+                if (_ghostPortRingMat.HasProperty("_Smoothness")) _ghostPortRingMat.SetFloat("_Smoothness", 0.6f);
+
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                Destroy(go.GetComponent<Collider>());
+                go.transform.localScale = new Vector3(0.24f, 0.03f, 0.24f);
+                _ghostPortRingRenderer = go.GetComponent<Renderer>();
+                _ghostPortRing = go.transform;
+            }
+            _ghostPortRing.gameObject.SetActive(true);
+            _ghostPortRing.position = worldPos + outWorld * 0.02f;
+            Vector3 guide = Mathf.Abs(Vector3.Dot(outWorld, Vector3.up)) > 0.95f ? Vector3.forward : Vector3.up;
+            _ghostPortRing.rotation = Quaternion.LookRotation(outWorld, guide) * Quaternion.Euler(90f, 0f, 0f);
+            if (_ghostPortRingMat != null)
+            {
+                Color em = color * 0.9f;
+                _ghostPortRingMat.color = color;
+                if (_ghostPortRingMat.HasProperty("_BaseColor")) _ghostPortRingMat.SetColor("_BaseColor", color);
+                if (_ghostPortRingMat.HasProperty("_EmissionColor"))
+                {
+                    _ghostPortRingMat.EnableKeyword("_EMISSION");
+                    _ghostPortRingMat.SetColor("_EmissionColor", em);
+                }
+                _ghostPortRingRenderer.sharedMaterial = _ghostPortRingMat;
+            }
+        }
+
+        private void HideGhostPortRing()
+        {
+            if (_ghostPortRing != null) _ghostPortRing.gameObject.SetActive(false);
         }
 
         public bool TryPlace(BlockItem block, RaycastHit hit, Vector3 viewDir)
@@ -672,6 +815,7 @@ namespace VoxelEngine.Building
                     out Vector3Int hostStructuralPos, out _, out bool canPlace))
                 return false;
             if (!canPlace) return false;
+            if (!canPlace) return false;
 
             var block = PlaceOnDetailLattice(item, grid, precisionPos, hostStructuralPos, null);
             if (block == null) return false;
@@ -734,6 +878,7 @@ namespace VoxelEngine.Building
             VoxelEngine.Fluids.FluidNetworkManager.Instance?.SetDirty();
             VoxelEngine.GridSystem.GridLiquidNetwork.Instance?.SetDirty();
             VoxelEngine.GridSystem.GridGasNetwork.Instance?.SetDirty();
+            VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged();
             return block;
         }
 

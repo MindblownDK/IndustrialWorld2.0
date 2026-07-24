@@ -20,7 +20,9 @@ namespace VoxelEngine.Gas
     {
         [Tooltip("Max pressure this pipe can handle (arbitrary units).")]
         public float maxPressure = 100f;
-        public float connectRadius = 3.0f;
+        [Tooltip("World-space search radius for other pipes. Capped at one detail " +
+                 "cell (≈0.5 m) by the topology manager so pipes can't reach across gaps.")]
+        public float connectRadius = 1.5f;
 
         [Header("Visual")]
         [Tooltip("Render as a translucent glass pipe with the carried gas visible inside.")]
@@ -86,6 +88,12 @@ namespace VoxelEngine.Gas
                                  || block is VoxelEngine.Maritime.GridExhaustPipe
                                  || block is VoxelEngine.Maritime.GridMaritimeEngine;
                     bool connectedPipe = block.GetComponentInChildren<GasPipe>(true) != null;
+                    // World-side gas tanks/electrolysers placed adjacent to a grid
+                    // pipe should also draw an arm — same bridging rule as liquid pipes.
+                    bool worldEndpoint = !endpoint && !connectedPipe &&
+                        (block.GetComponentInChildren<VoxelEngine.Gas.GasTank>(true) != null);
+                    if (endpoint) { /* keep */ }
+                    else if (worldEndpoint) endpoint = true;
                     if (!endpoint && !connectedPipe) return;
                     if (_armCandidates.Contains(block)) return;
                     _armCandidates.Add(block);
@@ -97,9 +105,14 @@ namespace VoxelEngine.Gas
                 // Proximity arms: gas ports overhang the lattice on the big machine
                 // models (engine O2 intakes, the exhaust gas tap), so face-touch alone
                 // misses them — reach any gas-capable block in touch range.
-                int hitCount = Physics.OverlapSphereNonAlloc(transform.position,
+                // Radius is TIGHT (~0.7 m for detail pipes) so pipes don't grow arms
+                // toward machines that sit across the room (the "tries to connect to
+                // pipes nowhere near it" spam reported by players).
+                float probeRadius = Mathf.Min(
                     Mathf.Max(gridBlock != null ? gridBlock.EffectiveCellSize : 0.5f,
                         VoxelEngine.GridSystem.GridSizeExt.CellSize(VoxelEngine.GridSystem.GridSize.Small)) * 1.35f,
+                    0.85f);
+                int hitCount = Physics.OverlapSphereNonAlloc(transform.position, probeRadius,
                     s_armProbe, ~0, QueryTriggerInteraction.Collide);
                 for (int i = 0; i < hitCount; i++)
                 {
@@ -139,11 +152,68 @@ namespace VoxelEngine.Gas
                         continue; // a cleaner port is nearer — this pipe isn't the capture run
                     _neighbourPosBuf.Add(port != null ? port.position : block.transform.position);
                 }
+
+                // World-side gas tanks/electrolysers placed next to a grid pipe
+                // (bridging between world-placed tanks and grid-mounted pipes).
+                int worldHit = Physics.OverlapSphereNonAlloc(transform.position, probeRadius,
+                    s_worldProbe, ~0, QueryTriggerInteraction.Collide);
+                for (int i = 0; i < worldHit; i++)
+                {
+                    var col = s_worldProbe[i]; s_worldProbe[i] = null;
+                    if (col == null) continue;
+                    var gb = col.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
+                    if (gb != null) continue; // already handled above
+                    var wPipe = col.GetComponentInParent<GasPipe>();
+                    if (wPipe != null && wPipe != this)
+                    {
+                        if (VoxelEngine.Networks.PipeAdjacency.IsCardinalNeighbour(
+                                transform.position, wPipe.transform.position,
+                                VoxelEngine.Networks.PipeAdjacency.DefaultGridSize))
+                            _neighbourPosBuf.Add(Vector3.Lerp(transform.position, wPipe.transform.position, 0.5f));
+                        continue;
+                    }
+                    var wTank = col.GetComponentInParent<GasTank>();
+                    if (wTank != null)
+                    {
+                        Vector3 anchor = wTank.transform.position;
+                        if ((anchor - transform.position).sqrMagnitude <= probeRadius * probeRadius)
+                            _neighbourPosBuf.Add(Vector3.Lerp(transform.position, anchor, 0.5f));
+                    }
+                }
+            }
+            else
+            {
+                // Free-placed (non-grid) gas pipe — draw arms to nearby world tanks/pipes.
+                float reach = VoxelEngine.Networks.PipeAdjacency.DefaultGridSize * 1.35f;
+                int hitCount = Physics.OverlapSphereNonAlloc(transform.position, reach,
+                    s_worldProbe, ~0, QueryTriggerInteraction.Collide);
+                for (int i = 0; i < hitCount; i++)
+                {
+                    var col = s_worldProbe[i]; s_worldProbe[i] = null;
+                    if (col == null) continue;
+                    var other = col.GetComponentInParent<GasPipe>();
+                    if (other != null && other != this)
+                    {
+                        if (VoxelEngine.Networks.PipeAdjacency.IsCardinalNeighbour(
+                                transform.position, other.transform.position))
+                            _neighbourPosBuf.Add(Vector3.Lerp(transform.position, other.transform.position, 0.5f));
+                        continue;
+                    }
+                    var tank = col.GetComponentInParent<GasTank>();
+                    if (tank != null)
+                    {
+                        Vector3 delta = tank.transform.position - transform.position;
+                        if (VoxelEngine.Networks.PipeAdjacency.IsAxisAlignedWithinDelta(
+                                delta, VoxelEngine.Networks.PipeAdjacency.DefaultGridSize, 1.2f, 0.45f))
+                            _neighbourPosBuf.Add(Vector3.Lerp(transform.position, tank.transform.position, 0.5f));
+                    }
+                }
             }
             return _neighbourPosBuf;
         }
 
         private readonly System.Collections.Generic.List<VoxelEngine.GridSystem.GridBlock> _armCandidates = new(8);
+        private static readonly Collider[] s_worldProbe = new Collider[16];
 
         private static bool IsExhaustTapPort(Transform port)
             => port != null && port.name.StartsWith("Port_ExhaustGasIO", System.StringComparison.Ordinal);

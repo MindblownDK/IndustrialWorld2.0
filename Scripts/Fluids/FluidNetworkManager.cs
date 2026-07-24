@@ -2,9 +2,11 @@
 //
 // Mirror of PowerNetworkManager but for water. Simpler — we don't enforce per-tick flow
 // caps yet; pipes are connectivity only and tanks aggregate water across the network.
+// Topology rebuild uses a 5 m spatial hash so large pipe farms stay frame-rate friendly.
 
 using System.Collections.Generic;
 using UnityEngine;
+using VoxelEngine.GridSystem;
 
 namespace VoxelEngine.Fluids
 {
@@ -15,6 +17,8 @@ namespace VoxelEngine.Fluids
         private readonly HashSet<FluidNode> _all = new();
         private readonly List<FluidNetwork> _networks = new();
         private bool _topologyDirty;
+        private float _topologyDirtyAt = -1f;
+        private const float RebuildSettleDelay = 0.12f;
 
         public static void EnsureInstance()
         {
@@ -30,41 +34,76 @@ namespace VoxelEngine.Fluids
             Instance = this;
         }
 
-        public void Register(FluidNode n)   { if (_all.Add(n))    _topologyDirty = true; }
-        public void Unregister(FluidNode n) { if (_all.Remove(n)) _topologyDirty = true; n.network = null; n.neighbours?.Clear(); }
+        public void Register(FluidNode n)   { if (n != null && _all.Add(n)) MarkDirty(); }
+        public void Unregister(FluidNode n)
+        {
+            if (n == null) return;
+            if (_all.Remove(n))
+            {
+                n.network = null; n.neighbours?.Clear();
+                MarkDirty();
+                VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged();
+            }
+        }
 
         /// <summary>Force a topology rebuild — used by the wrench after blacklist edits.</summary>
-        public void SetDirty() => _topologyDirty = true;
+        public void SetDirty() => MarkDirty();
+
+        private void MarkDirty()
+        {
+            if (!_topologyDirty) _topologyDirtyAt = Time.unscaledTime;
+            _topologyDirty = true;
+        }
 
         private void Update()
         {
-            if (_topologyDirty) { Rebuild(); _topologyDirty = false; }
+            if (!_topologyDirty) return;
+            if (Time.unscaledTime - _topologyDirtyAt < RebuildSettleDelay) return;
+            _topologyDirty = false;
+            Rebuild();
+            VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged();
         }
 
         private void Rebuild()
         {
             _networks.Clear();
-            foreach (var n in _all) { n.network = null; n.neighbours.Clear(); }
+            foreach (var n in _all)
+            {
+                if (n == null) continue;
+                n.network = null;
+                n.neighbours.Clear();
+            }
             var snapshot = new List<FluidNode>(_all);
             snapshot.RemoveAll(n => n == null);
 
-            // O(N) spatial hash. Five metres keeps every valid five-cell world
-            // pipe span inside this cell or one of its immediate neighbours.
+            // ── SPATIAL HASH (cell = 5m) — O(N) neighbour discovery ──────
+            // Any two nodes that can legally link (≤ 5 lattice cells in a
+            // cardinal line) sit in the same or adjacent hash cells.
             const float CELL = 5f;
-            var hash = new Dictionary<Vector3Int, List<FluidNode>>();
+            const float CELL_INV = 1f / CELL;
+            var hash = new Dictionary<Vector3Int, List<FluidNode>>(snapshot.Count * 2);
             Vector3Int Cell(Vector3 p) => new Vector3Int(
-                Mathf.FloorToInt(p.x / CELL), Mathf.FloorToInt(p.y / CELL), Mathf.FloorToInt(p.z / CELL));
+                Mathf.FloorToInt(p.x * CELL_INV),
+                Mathf.FloorToInt(p.y * CELL_INV),
+                Mathf.FloorToInt(p.z * CELL_INV));
             foreach (var n in snapshot)
             {
                 var k = Cell(n.transform.position);
                 if (!hash.TryGetValue(k, out var bucket)) hash[k] = bucket = new List<FluidNode>(4);
                 bucket.Add(n);
             }
+
+            // Build a quick index so we can skip already-handled pairs.
+            var index = new Dictionary<FluidNode, int>(snapshot.Count);
+            for (int i = 0; i < snapshot.Count; i++) index[snapshot[i]] = i;
+
             foreach (var n in snapshot)
             {
                 var c0 = Cell(n.transform.position);
                 float rA = n.connectRadius;
                 bool nIsPipe = n.Kind == FluidNodeKind.Pipe;
+                var gbA = n.GetComponentInParent<GridBlock>();
+
                 for (int dz = -1; dz <= 1; dz++)
                 for (int dy = -1; dy <= 1; dy++)
                 for (int dx = -1; dx <= 1; dx++)
@@ -73,40 +112,57 @@ namespace VoxelEngine.Fluids
                     foreach (var b in bucket)
                     {
                         if (b == n) continue;
-                        Vector3 pa = n.transform.position, pb = b.transform.position;
+                        if (index.TryGetValue(b, out int j) && j < index[n]) continue; // avoid duplicates
 
-                        // Any link involving a pipe may bridge FIVE cardinal cells —
-                        // tanks and pumps join a run from a distance in a valid
-                        // direction, exactly like pipe↔pipe already did. Only
-                        // pipe-less pairs (tank↔tank / tank↔pump) stay touch-close.
+                        Vector3 pa = n.transform.position, pb = b.transform.position;
                         bool bIsPipe = b.Kind == FluidNodeKind.Pipe;
                         bool involvesPipe = nIsPipe || bIsPipe;
-                        float step = GridStep(n, b);
-                        // Pipe↔endpoint (tank/pump) pairs probe FIVE LATTICE CELLS:
-                        // when both live on the same construct, the grid's own cell
-                        // size defines a "grid space" — matching how players count.
-                        float probeStep = step;
+
+                        // GridStep now honours precision (0.5 m) detail pipes so a
+                        // tank placed ONE FACE (0.5 m) from a pipe actually links.
+                        float step = GridStep(n, b, gbA);
+
+                        // Pipe↔endpoint connections use a tighter, predictable
+                        // range: 5× the governing step capping at 2.75 m — this
+                        // replaces the old "max(connectRadius, 5*step)" rule where
+                        // the default 3 m connectRadius let pipes reach 3+ metres
+                        // across to nodes nowhere near them (the "spam connection"
+                        // lag/false-arm source).
+                        float range;
                         if (involvesPipe && !(nIsPipe && bIsPipe))
                         {
-                            var ga = n.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>()?.Grid;
-                            var gb = b.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>()?.Grid;
-                            if (ga != null && ga == gb)
-                                probeStep = VoxelEngine.GridSystem.GridSizeExt.CellSize(ga.gridSize);
+                            // Endpoints (tanks/pumps) have a structural 2.5 m origin,
+                            // so a pipe one face (0.5 m) from their shell is still
+                            // ~1.5–2 m from the transform. Use 5× the governing step
+                            // (capped at 2.75 m) which is guaranteed to reach one
+                            // face-touch at the smallest grid size while staying
+                            // tight enough to prevent cross-room links.
+                            float detailStep = GridSizeExt.CellSize(GridSize.Small);
+                            range = Mathf.Max(step * 5.1f, detailStep * 5.1f, 2.75f);
+                            float authored = Mathf.Max(rA, b.connectRadius);
+                            if (authored > range) range = Mathf.Min(authored, 3.5f);
                         }
-                        float range = involvesPipe
-                            ? Mathf.Max(Mathf.Max(rA, b.connectRadius), probeStep * 5f)
-                            : Mathf.Max(rA, b.connectRadius);
+                        else if (nIsPipe && bIsPipe)
+                        {
+                            range = step * 5.1f;
+                        }
+                        else
+                        {
+                            range = Mathf.Max(rA, b.connectRadius);
+                        }
+
                         if ((pa - pb).sqrMagnitude > range * range) continue;
+
                         Vector3 connectionDelta = VoxelEngine.Networks.PipeAdjacency.ConnectionDelta(n, b);
                         bool ok = involvesPipe
-                            ? VoxelEngine.Networks.PipeAdjacency.IsCardinalLinkDelta(connectionDelta, probeStep, 5f, probeStep * 0.35f)
-                            : VoxelEngine.Networks.PipeAdjacency.IsAxisAlignedWithinDelta(connectionDelta, step, 2.5f, step * 0.35f);
+                            ? VoxelEngine.Networks.PipeAdjacency.IsCardinalLinkDelta(connectionDelta, step, 5f, step * 0.45f)
+                            : VoxelEngine.Networks.PipeAdjacency.IsAxisAlignedWithinDelta(connectionDelta, step, 2.5f, step * 0.45f);
                         if (!ok) continue;
 
-                        // Wrench blacklist — explicit player disconnect persists.
                         if (VoxelEngine.Networks.WrenchBlacklist.IsBlocked(n, b)) continue;
 
                         if (!n.neighbours.Contains(b)) n.neighbours.Add(b);
+                        if (!b.neighbours.Contains(n)) b.neighbours.Add(n);
                     }
                 }
             }
@@ -127,15 +183,23 @@ namespace VoxelEngine.Fluids
             }
         }
 
-        private static float GridStep(FluidNode a, FluidNode b)
+        private static float GridStep(FluidNode a, FluidNode b, GridBlock gbA = null)
         {
-            var blockA = a != null ? a.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>() : null;
-            var blockB = b != null ? b.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>() : null;
+            var blockA = gbA ?? (a != null ? a.GetComponentInParent<GridBlock>() : null);
+            var blockB = b != null ? b.GetComponentInParent<GridBlock>() : null;
             if (blockA != null && blockB != null && blockA.Grid != null && blockA.Grid == blockB.Grid)
+            {
+                bool aSmall = blockA.IsPrecisionAttachment;
+                bool bSmall = blockB.IsPrecisionAttachment;
+                float small = GridSizeExt.CellSize(GridSize.Small);
+                if (aSmall && bSmall) return small;
+                if (aSmall != bSmall) return small;
                 return (blockA.EffectiveCellSize + blockB.EffectiveCellSize) * 0.5f;
+            }
             return VoxelEngine.Networks.PipeAdjacency.DefaultGridSize;
         }
 
         public IReadOnlyList<FluidNetwork> Networks => _networks;
     }
 }
+
