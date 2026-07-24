@@ -51,7 +51,7 @@ namespace VoxelEngine.Settings
 
         // Bump this when default keybinds change to force a one-time migration
         // that fills in missing or invalid bindings on old saves.
-        private const int    CURRENT_VERSION = 11;
+        private const int    CURRENT_VERSION = 12;
 
         // ----- defaults -----
         public const float DEFAULT_FOV       = 75f;
@@ -64,7 +64,7 @@ namespace VoxelEngine.Settings
         public const int   DEFAULT_DISPLAY   = 0;
         public const int   DEFAULT_VSYNC     = 1;
         public const int   DEFAULT_VIEWDIST  = 6;
-        public const int   DEFAULT_AUTOSAVE  = 30;   // seconds; 0 = disabled
+        public const int   DEFAULT_AUTOSAVE  = 300;  // seconds; 0 = disabled
         // Discrete autosave choices offered in the UI (seconds). 0 = "Off".
         public static readonly int[] AUTOSAVE_CHOICES = { 0, 15, 30, 60, 120, 300 };
 
@@ -186,6 +186,12 @@ namespace VoxelEngine.Settings
             string down = PlayerPrefs.GetString(K_KEY_PREFIX + InputAction.Down, "");
             if (string.IsNullOrEmpty(down) || down == "LeftCtrl" || down == "RightCtrl")
                 PlayerPrefs.SetString(K_KEY_PREFIX + InputAction.Down, "C");
+
+            // v12: autosave default is now 5 minutes. Existing profiles that were
+            // still on the old 30-second default migrate to 5 minutes; custom
+            // values such as Off/15s/1m/2m are preserved.
+            int autosave = PlayerPrefs.GetInt(K_AUTOSAVE, 30);
+            if (autosave == 30) PlayerPrefs.SetInt(K_AUTOSAVE, DEFAULT_AUTOSAVE);
 
             PlayerPrefs.SetInt(K_VERSION, CURRENT_VERSION);
             PlayerPrefs.Save();

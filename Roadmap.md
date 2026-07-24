@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.16.0-dev`
-**Roadmap Version:** `6.16.0-dev`
+**Current Version:** `6.16.1-dev`
+**Roadmap Version:** `6.16.1-dev`
 **Date:** 2026-07-23
 **Status:** World Management, Autosaves & Item Limits — COMPLETED; Power, Vehicles & Combat (4.7.0) remains WORKING ON
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -477,7 +477,7 @@ A late-game **Jump Drive** provides charged, coordinate-based faster-than-light 
 | **5.2.0** | Architect Era | 🟡 **PARTIALLY COMPLETE** | World forge, megastructures, fusion, save schema v2 | Very High — new save format |
 | **5.3.0+** | Live Ops | 🟡 **PARTIALLY COMPLETE** | Modding API, multiplayer foundations, seasonal content | TBD |
 
-> **Audit basis (6.16.0-dev):** Active sections have current production work recorded in their detailed status tables. Later sections are marked **PARTIALLY COMPLETE** only because reusable foundations already exist (cosmos, planetary bodies, water/weather, nuclear, research, persistence, and grid systems); their named headline features and completion gates remain open. No section is promoted to **COMPLETED** without setup generation and Thomas's Unity validation. Roadmap maintenance passes do not remove planned scope; they only update status markers, evidence notes, dates, versions, and immediate-next-step labels.
+> **Audit basis (6.16.1-dev):** Active sections have current production work recorded in their detailed status tables. Later sections are marked **PARTIALLY COMPLETE** only because reusable foundations already exist (cosmos, planetary bodies, water/weather, nuclear, research, persistence, and grid systems); their named headline features and completion gates remain open. No section is promoted to **COMPLETED** without setup generation and Thomas's Unity validation. Roadmap maintenance passes do not remove planned scope; they only update status markers, evidence notes, dates, versions, and immediate-next-step labels.
 
 ### 5.1 Execution Status Convention
 
@@ -1743,10 +1743,11 @@ For each version, these are the high-level Unity tasks you will perform manually
 - **6.15.0-dev:** Background autosaves now rotate into three visible slot files, the Saves page exposes restore controls with current-save backup, Edit World safely renames the folder and updates dropped-item limits only, and save cards use the requested management layout.
 - **6.15.1-dev:** Unity compile cleanup fixed the `WorldStatePersistence` local-name collision and replaced the remaining deprecated runtime `GetInstanceID()` calls with `GetEntityId()`.
 - **6.16.0-dev:** World settings now also include inventory/container weight multipliers, the default physical drop limit is 1000, and drop-limit warning toasts protect players from silent physical-drop culling.
+- **6.16.1-dev:** Ship Control search compile fix, autosave slots now fully hide when collapsed, and the default autosave cadence is 5 minutes.
 
 ## 10. Suggested Immediate Next Steps
 
-1. ✅ **COMPLETED — Inventory Weight, Drop Warnings & Terminal Search** — 6.16.0-dev adds 900-unit matter stacks, world-configurable player/container weight limits, matter-conversion storage GB usage, player inventory weight readout, contained-item drop recovery, drop-limit warning toasts, terminal search, and hides armor/liquid-pipe utility blocks from Ship Control.
+1. ✅ **COMPLETED — Inventory Weight, Drop Warnings & Terminal Search** — 6.16.1-dev keeps the 6.16.0-dev feature complete and fixes Ship Control search compilation, true autosave panel hiding, and 5-minute default autosaves.
 2. ✅ **COMPLETED — World Management, Autosaves & Item Limits** — 6.15.1-dev keeps the 6.15.0-dev autosave/Edit World feature complete and fixes the Unity compile error plus deprecated runtime ID warnings.
 3. ✅ **COMPLETED — Player Save Safety final guard** — 6.14.7-dev validates saved player pose before restore and falls back to bed/world/body spawn without rewriting the last known-good save.
 4. ✅ **COMPLETED — Validate splitter and funnel usability in Unity** — confirmed splitter UI scroll stability, Mk.3 one-input/three-output behavior, clear ghost/placed arrows, and chest→funnel→belt workflows after 6.5.1-dev.

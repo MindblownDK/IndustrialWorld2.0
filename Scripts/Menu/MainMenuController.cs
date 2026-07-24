@@ -354,7 +354,8 @@ namespace VoxelEngine.Menu
             side.Add(delBtn);
             row.Add(side);
 
-            card.Add(BuildAutosaveSlots(w.name, savesExpanded));
+            if (savesExpanded)
+                card.Add(BuildAutosaveSlots(w.name, true));
             return card;
         }
 

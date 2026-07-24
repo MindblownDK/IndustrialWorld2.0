@@ -1165,7 +1165,7 @@ namespace VoxelEngine.GridSystem.UI
             return Contains(block.blockName, q)
                 || Contains(block.GetType().Name, q)
                 || Contains(CategoryName(block), q)
-                || Contains(BlockStatus(block), q);
+                || Contains(BlockStateLabel(block), q);
         }
 
         private static bool Contains(string value, string query)

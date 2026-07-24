@@ -1,9 +1,35 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.16.0-dev`
+**Current Version:** `6.16.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.16.1-dev] Autosave Visibility, Five-Minute Cadence & Terminal Search Compile Fix
+
+**Type:** PATCH — compile/UI/settings cleanup for 6.16.0-dev. Fully save-compatible; no save schema, recipe, prefab, setup, or public API changes.
+
+**Fixed / Changed:**
+- Fixed `CS0103` in `GridMasterTerminal` by using the existing `BlockStateLabel(...)` helper for terminal search instead of the non-existent `BlockStatus(...)` name.
+- The Saves page **SAVES/HIDE** button now truly collapses the autosave slot panel instead of only darkening the slot cards.
+- Default autosave cadence is now **5 minutes / 300 seconds**.
+- Settings migration v12 upgrades profiles still using the old 30-second default to 5 minutes while preserving custom autosave choices such as Off, 15s, 1m, or 2m.
+- Runtime build version constants now report `6.16.1-dev`.
+
+**Roadmap Status:**
+- Inventory Weight, Drop Warnings & Terminal Search remains **✅ COMPLETED**; this patch only cleans up compile/UI/settings issues reported after 6.16.0-dev.
+
+**Files touched (pull these):**
+- `Scripts/GridSystem/UI/GridMasterTerminal.cs`
+- `Scripts/Menu/MainMenuController.cs`
+- `Scripts/Settings/GameSettings.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Roadmap.md`
+- `Changelog.md`
+
+**Manual steps:** none — compile/UI/settings cleanup only. No `Tools > Voxel Engine > Voxel Engine Setup` run required.
 
 ---
 
