@@ -885,33 +885,16 @@ namespace VoxelEngine.Maritime
                 OxygenBuffer = Mathf.Max(0f, OxygenBuffer
                     - fuelConsumptionRate * requestedThrottle * oxygenPerFuelUnit * dt);
 
-            // Refill from the grid gas network (pipe-connected tanks).
+            // Refill from the grid gas network (pipe-connected tanks only — no cheating without pipes).
             if (OxygenBuffer < oxygenBufferCapacity - 0.01f)
             {
                 float want = Mathf.Min(oxygenBufferCapacity - OxygenBuffer, oxygenRefillRate * dt);
                 float drawn = 0f;
 
-                // Primary: pipe-connected draw via GridGasNetwork
                 if (Grid != null && GridGasNetwork.Instance != null)
                 {
-                    if (GridGasNetwork.Instance.HasPipes(Grid))
-                        drawn = GridGasNetwork.Instance.DrawGasFor(this, VoxelEngine.Gas.GasType.Oxygen, want);
-                    // Fallback: direct grid-wide tank scan (no pipes on grid yet, or pipe path failed)
-                    if (drawn < want * 0.9f)
-                    {
-                        float stillNeed = want - drawn;
-                        foreach (var block in Grid.AllBlocks)
-                        {
-                            if (stillNeed <= 0.01f) break;
-                            if (block is GridGasTank tank && tank.Enabled && tank.gasType == VoxelEngine.Gas.GasType.Oxygen && tank.stored > 0.01f)
-                            {
-                                float take = Mathf.Min(stillNeed, tank.stored);
-                                tank.stored = Mathf.Max(0f, tank.stored - take);
-                                stillNeed -= take;
-                                drawn += take;
-                            }
-                        }
-                    }
+                    // ONLY pipe-connected draw — player MUST use gas pipes to feed oxygen.
+                    drawn = GridGasNetwork.Instance.DrawGasFor(this, VoxelEngine.Gas.GasType.Oxygen, want);
                 }
 
                 OxygenBuffer = Mathf.Min(oxygenBufferCapacity, OxygenBuffer + drawn);

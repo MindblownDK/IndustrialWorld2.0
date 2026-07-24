@@ -338,76 +338,34 @@ namespace VoxelEngine.Building
 
             var layer = grid.GetComponent<GridPrecisionAttachmentLayer>();
             if (layer != null && layer.CanPlace(precisionPos)) return true;
-            // Facing cell taken: claim the cell the port itself sits in.
-            precisionPos = new Vector3Int(
-                Mathf.FloorToInt(local.x / small + 0.5f),
-                Mathf.FloorToInt(local.y / small + 0.5f),
-                Mathf.FloorToInt(local.z / small + 0.5f));
-            return layer == null || layer.CanPlace(precisionPos);
+            // Facing cell taken — port snap fails, let placement fall through
+            // to normal grid placement. NEVER fall back to the port's own cell
+            // (it sits inside the engine body and makes the pipe render inside).
+            return false;
         }
 
         // ════════════════════════════════════════════════════════════════
-        //  MACHINE SHELL SEATING (buried ports)
-        //  Ports authored deep inside a machine's hull (MGO fuel / coolant /
-        //  O₂ sit metres inside the collider surface) can't be dressed with the
-        //  usual half-cell plug — the pipe hub renders INSIDE the engine body.
-        //  We find the machine's OWN hull surface along the port's authored
-        //  facing with a REVERSE ray: start far outside on the port's outward
-        //  axis, cast back toward the port, and take the first machine collider
-        //  struck — that face is exactly where a pipe should plug. Seat = that
-        //  surface + half a pipe-cell out. Surface ports resolve to the same
-        //  snug plug as before (the hull face is the port face itself), and if
-        //  no machine collider is found along the axis (port pokes through a
-        //  hitbox gap) the snug plug remains as graceful fallback.
+        //  PIPE HUB SEATING — simple full-cell offset
+        //  The pipe hub sits exactly one full Detail cell outward from the
+        //  port's own position, along the port's authored facing direction.
+        //  This guarantees the pipe body is completely outside the engine
+        //  body, even for deep-buried ports (MGO fuel/coolant/O₂).
+        //  The widened proximity range (2.5× cell) ensures the pipe is still
+        //  found as connected to the engine despite the full-cell gap.
+        //  ⚠ Do NOT use collider-dependent reverse raycasting — complex
+        //  banded hitboxes (MGO slim/full-width bands) make it unreliable.
         // ════════════════════════════════════════════════════════════════
-        private static readonly RaycastHit[] s_seatProbe = new RaycastHit[32];
-
         /// <summary>
-        /// Compute the pipe-hub seat for a port: the machine's own collider surface
-        /// along the port facing. Uses reverse raycast from outside the machine to
-        /// find the TRUE hull surface, then seats half a cell beyond it. Surface
-        /// ports land in the classic snug plug position; deep-buried ports (MGO
-        /// fuel/coolant/O₂ metres inside the hull) are pushed to the actual shell.
-        /// Expressed in GRID-LOCAL space (same space as <paramref name="portLocal"/>/<paramref name="outLocal"/>).
+        /// Compute the pipe-hub seat for a port. Always sits one full Detail cell (0.5 m)
+        /// outward from the port position along its outward facing. Simple, reliable,
+        /// and guaranteed outside the engine body regardless of collider geometry.
+        /// Expressed in GRID-LOCAL space.
         /// </summary>
         private static Vector3 SeatAnchorOutsideMachineShell(
             GridBlock machine, GridEntity grid, Vector3 portLocal, Vector3 outLocal, float small)
         {
-            // Half-cell classic position (tried full-cell in 6.17.1-dev, broke proximity)
-            Vector3 snugSeat = portLocal + outLocal * (small * 0.5f);
-            if (machine == null || grid == null) return snugSeat;
-
-            Vector3 portWorld = grid.transform.TransformPoint(portLocal);
-            Vector3 outWorld = grid.transform.TransformDirection(outLocal).normalized;
-            if (outWorld.sqrMagnitude < 0.0001f) return snugSeat;
-
-            const float MaxProbe = 12f; // generous: deepest buried port we support
-            Vector3 probeOrigin = portWorld + outWorld * MaxProbe;
-            int hitCount = Physics.RaycastNonAlloc(probeOrigin, -outWorld, s_seatProbe,
-                MaxProbe, ~0, QueryTriggerInteraction.Ignore);
-
-            float bestDist = float.MaxValue;
-            Vector3 bestPoint = default;
-            for (int i = 0; i < hitCount; i++)
-            {
-                var h = s_seatProbe[i];
-                if (h.collider == null) continue;
-                // Only the machine's own shell counts — neighbors/armor in front of
-                // the port must not pull the seat onto THEIR surface.
-                if (!h.collider.transform.IsChildOf(machine.transform)) continue;
-                if (h.distance < bestDist) { bestDist = h.distance; bestPoint = h.point; }
-            }
-
-            if (bestDist >= MaxProbe) return snugSeat;   // axis found no machine shell — snug plug
-
-            Vector3 surfaceLocal = grid.transform.InverseTransformPoint(bestPoint);
-            Vector3 seat = surfaceLocal + outLocal * (small * 0.5f); // half cell outward (prevents proximity breakage)
-            // Sanity: never seat CLOSER to the machine core than the snug plug when the
-            // shell probe resolves weirdly (ngon-authored ports on hitbox seams).
-            float snugT = Vector3.Dot(snugSeat - portLocal, outLocal);
-            float seatT = Vector3.Dot(seat - portLocal, outLocal);
-            if (seatT < snugT - 0.001f) return snugSeat;
-            return seat;
+            // ONE full Detail cell outward from the port — guaranteed outside engine.
+            return portLocal + outLocal * small;
         }
 
         private System.Collections.Generic.List<Vector3> ProvidePipeGhostLinks() => _pipeGhostLinks;

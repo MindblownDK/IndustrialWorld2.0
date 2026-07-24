@@ -1,9 +1,53 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.17.2-dev`
+**Current Version:** `6.17.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.17.3-dev] Final Pipe/Tank Connectivity, Pipe Seat, No-Pipe Fallback Removed & Tank Corridor Probe
+
+**Type:** PATCH — critical connectivity fixes. Fully save-compatible. No setup step required.
+
+**Fixed:**
+
+1. **Pipes Need to Touch Tanks (ROOT CAUSE)** — The `ConnectedTanks` BFS in `GridLiquidNetwork` had face-touch and proximity checks but was MISSING the 5-cell cardinal corridor probe for `GridLiquidTank`. The classic bridge had this probe for `WaterTank`, but grid liquid tanks had no corridor search. **Fix:** Added `ProbeGridTankCorridor()` — a 5-cell cardinal corridor sweep from every pipe in the run, exactly matching how classic tanks are found. A GridLiquidTank up to 5 cells away on a straight cardinal line now connects.
+
+2. **Fuel/Oxygen Not Flowing** — Same root cause as #1. The pipe network couldn't find the tank, so `DrawLiquidFor`/`DrawGasFor` returned 0. With the corridor probe, tanks within range are discovered.
+
+3. **No-Pipe Fallback Removed** — Removed the direct grid-wide tank iteration from both `DrawLiquidFuel()` (MaritimeBlockBase) and `TickOxygen()` (GridMaritimeEngine). Players MUST place pipes to connect tanks to engines. No more cheating.
+
+4. **Pipe Hub Sits Inside Engine (ROOT CAUSE)** — The reverse-raycast seating in `SeatAnchorOutsideMachineShell` was unreliable with complex banded hitboxes (MGO slim/full-width bands). The ray could miss the machine's outer collider, falling back to a half-cell plug that was still inside the engine body. **Fix:** Replaced the entire 50-line collider raycasting approach with a single line: `portLocal + outLocal * small` — one full Detail cell (0.5 m) outward from the port position. Always outside the engine. The doubled proximity range (2.5× cell) ensures the pipe is still found as connected.
+
+5. **Port Snap Fallback Into Engine** — When the outward Detail cell was occupied, `TryGetMaritimePortSnap` fell back to the port's OWN cell, which is inside the engine body. **Fix:** Now returns `false` instead, letting placement fall through to normal grid placement.
+
+6. **Shift-Click** — Confirmed the code path exists and should work. Test by opening an engine panel (right-click on the engine), then shift-click a module in the module slots — it should transfer to player inventory. The `QuickTransfer` fallback at step 4 routes any non-player-container source to the player's inventory.
+
+**Roadmap Status:**
+- Vehicle power foundations: **🛠️ WORKING ON** — oxygen/fuel/pipe connectivity fixed. Thomas should validate end-to-end.
+- Cable performance: **✅ COMPLETED** — caching mitigates the frame-rate sink.
+
+**Files touched:**
+- `Scripts/GridSystem/GridLiquidNetwork.cs` — added ProbeGridTankCorridor
+- `Scripts/Maritime/MaritimeBlockBase.cs` — removed no-pipe fallback
+- `Scripts/Maritime/GridMaritimeEngine.cs` — removed no-pipe fallback
+- `Scripts/Building/BuildSystem.cs` — simplified seat anchor to full-cell offset, removed port-cell fallback
+- `Scripts/Core/GameVersion.cs` — bumped to 6.17.3-dev
+- `Roadmap.md`
+- `Changelog.md`
+
+**Manual Unity Steps:**
+1. Pull all changed files, compile (expect 0 errors).
+2. Place an MGO engine on a grid with GridLiquidTank (HeavyFuelOil) and GridGasTank (Oxygen).
+3. Place liquid pipes from near the engine's fuel port to within 5 cells of the fuel tank (straight cardinal line).
+4. Place gas pipes from near the engine's O₂ port to within 5 cells of the oxygen tank.
+5. Open the engine panel → confirm fuel, oxygen, and coolant buffers fill.
+6. Start the engine → confirm it runs without starvation warnings.
+7. Verify the pipe hubs sit OUTSIDE the engine body, not inside.
+8. Verify that removing the pipes stops fuel/oxygen flow immediately.
+9. Test shift-click: open engine panel, shift-click a module → transfers to inventory. If it doesn't, let me know the exact panel context and I'll investigate further.
 
 ---
 

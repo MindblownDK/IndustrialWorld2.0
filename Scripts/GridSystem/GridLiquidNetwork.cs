@@ -387,6 +387,9 @@ namespace VoxelEngine.GridSystem
                     bool typeOk = tank.liquidType == type || (!requireExistingType && tank.stored <= 0.001f);
                     if (typeOk && yieldedTanks.Add(tank)) yield return tank;
                 }
+                // 5-cell cardinal corridor: a GridLiquidTank up to five lattice cells
+                // away from any pipe on the run in a straight cardinal line is connected.
+                ProbeGridTankCorridor(pipeBlock, type, requireExistingType, yieldedTanks);
             }
         }
 
@@ -438,6 +441,31 @@ namespace VoxelEngine.GridSystem
             }
             for (int i = 0; i < s_proximityResult.Count; i++)
                 yield return s_proximityResult[i];
+        }
+
+        private static readonly Collider[] s_gridTankRowProbe = new Collider[16];
+
+        /// <summary>Collect GridLiquidTank up to five lattice cells away from
+        /// <paramref name="pipeBlock"/> in a straight cardinal row (valid direction only —
+        /// never diagonal). Grid-mounted pipes probe in their grid's frame.</summary>
+        private static void ProbeGridTankCorridor(GridBlock pipeBlock, LiquidType type,
+            bool requireExistingType, HashSet<GridLiquidTank> yieldedTanks)
+        {
+            if (pipeBlock == null) return;
+            float cs = pipeBlock.Grid != null ? pipeBlock.Grid.gridSize.CellSize() : 2.5f;
+            Transform frame = pipeBlock.Grid != null ? pipeBlock.Grid.transform : null;
+            VoxelEngine.Networks.PipeAdjacency.ProbeCardinal(pipeBlock.transform.position, frame, cs, 5,
+                s_gridTankRowProbe, col =>
+                {
+                    var tank = col.GetComponent<GridLiquidTank>();
+                    if (tank == null) tank = col.GetComponentInParent<GridLiquidTank>();
+                    if (tank != null && tank.Enabled && tank.mode != GridTankMode.Stockpile && !yieldedTanks.Contains(tank))
+                    {
+                        bool typeOk = tank.liquidType == type || (!requireExistingType && tank.stored <= 0.001f);
+                        if (typeOk) yieldedTanks.Add(tank);
+                    }
+                    return false;
+                });
         }
 
         private static bool IsLiquidPipe(GridBlock block)
