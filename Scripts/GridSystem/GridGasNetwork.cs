@@ -260,7 +260,7 @@ namespace VoxelEngine.GridSystem
         {
             s_gasProximityResult.Clear();
             if (grid == null || origin == null) yield break;
-            float radius = Mathf.Max(origin.EffectiveCellSize, GridSize.Small.CellSize()) * 1.35f;
+            float radius = Mathf.Max(origin.EffectiveCellSize, GridSize.Small.CellSize()) * 1.8f;
             int hitCount = Physics.OverlapSphereNonAlloc(origin.transform.position, radius, s_gasProbe, ~0, QueryTriggerInteraction.Collide);
             for (int i = 0; i < hitCount; i++)
             {
@@ -280,7 +280,7 @@ namespace VoxelEngine.GridSystem
         {
             s_gasProximityResult.Clear();
             if (grid == null || origin == null) yield break;
-            float radius = Mathf.Max(origin.EffectiveCellSize, GridSize.Small.CellSize()) * 1.35f;
+            float radius = Mathf.Max(origin.EffectiveCellSize, GridSize.Small.CellSize()) * 1.8f;
             int hitCount = Physics.OverlapSphereNonAlloc(origin.transform.position, radius, s_gasProbe, ~0, QueryTriggerInteraction.Collide);
             for (int i = 0; i < hitCount; i++)
             {
@@ -321,7 +321,7 @@ namespace VoxelEngine.GridSystem
                         if (typeOk && stockpileOk) yieldedTanks.Add(tank);
                     }
                     return false;
-                }, radiusScale: 1.1f);
+                }, radiusScale: 1.6f);
         }
 
         private static bool IsGasPipe(GridBlock block)

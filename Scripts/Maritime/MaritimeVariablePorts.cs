@@ -34,13 +34,23 @@ using VoxelEngine.Items;
 
 namespace VoxelEngine.Maritime
 {
-    /// <summary>The four engine service categories a pipe can hook into.</summary>
+    /// <summary>The engine service categories a pipe can hook into.</summary>
     public enum PortService : byte
     {
         Fuel = 0,
         Coolant = 1,
         Oxygen = 2,
         Exhaust = 3,
+        Item = 4,
+    }
+
+    /// <summary>Which pipe family the player is holding — drives which service a
+    /// variable port takes on.</summary>
+    public enum PipeFamily : byte
+    {
+        Liquid = 0,
+        Gas = 1,
+        Item = 2,
     }
 
     /// <summary>Serializable description of one dynamic service port. Stored on the
@@ -86,6 +96,7 @@ namespace VoxelEngine.Maritime
                 case PortService.Coolant: return 1;
                 case PortService.Oxygen: return 1;
                 case PortService.Exhaust: return 2;
+                case PortService.Item: return 1;
                 default: return 1;
             }
         }
@@ -100,6 +111,7 @@ namespace VoxelEngine.Maritime
                 case PortService.Coolant: return "Port_CoolantInput";
                 case PortService.Oxygen: return "Port_OxygenInput";
                 case PortService.Exhaust: return "Port_ExhaustOutput";
+                case PortService.Item: return "Port_ItemIntake";
                 default: return "Port_LiquidIO";
             }
         }
@@ -114,6 +126,7 @@ namespace VoxelEngine.Maritime
                 case PortService.Coolant: return new Color(0.20f, 0.85f, 0.75f);  // teal
                 case PortService.Oxygen: return new Color(0.45f, 0.75f, 1.00f);   // sky-blue
                 case PortService.Exhaust: return new Color(0.90f, 0.20f, 0.12f);  // red
+                case PortService.Item: return new Color(0.62f, 0.86f, 0.32f);     // green
                 default: return Color.white;
             }
         }
@@ -126,7 +139,26 @@ namespace VoxelEngine.Maritime
                 case PortService.Coolant: return "Coolant input";
                 case PortService.Oxygen: return "Oxygen input";
                 case PortService.Exhaust: return "Exhaust output";
+                case PortService.Item: return "Item intake";
                 default: return "Service port";
+            }
+        }
+
+        /// <summary>Which services an engine tier offers as variable ports. The Crude
+        /// Inline-4 (Small, solid-fuel) takes only oxygen + item intake; the liquid
+        /// HFO V8 (Medium) and MGO V12 (Giant) take fuel + coolant + oxygen. Exhaust
+        /// always uses the engine's authored exhaust collector(s).</summary>
+        public static bool IsServiceAllowed(EngineTier tier, PortService s)
+        {
+            switch (tier)
+            {
+                case EngineTier.Small:
+                    return s == PortService.Oxygen || s == PortService.Item;
+                case EngineTier.Medium:
+                case EngineTier.Giant:
+                    return s == PortService.Fuel || s == PortService.Coolant || s == PortService.Oxygen;
+                default:
+                    return false;
             }
         }
 
@@ -236,33 +268,38 @@ namespace VoxelEngine.Maritime
             facing.localOutward = dir;
 
             Color col = ColorFor(service);
-            var ringMat = PortMaterial(col, emissive: col * 0.35f);
-            var eyeMat = PortMaterial(col, emissive: col * 0.9f);
+            var ringMat = PortMaterial(col, emissive: col * 0.40f);
+            var eyeMat = PortMaterial(col, emissive: col * 0.95f);
 
-            // Outer collar (a thin disc facing outward along local +Z).
+            // Low-profile color-coded collar that sits FLUSH on the hull (the
+            // container itself is inset slightly into the surface by the planner, so
+            // this disc reads as mounted on the engine — never floating off it).
+            // Kept deliberately small so it doesn't swallow a thin gas pipe.
             var collar = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             collar.name = "Collar";
             collar.transform.SetParent(container.transform, false);
-            collar.transform.localPosition = new Vector3(0f, 0f, 0.02f);
+            collar.transform.localPosition = new Vector3(0f, 0f, 0.005f);
             collar.transform.localRotation = Quaternion.Euler(90f, 0f, 0f); // cylinder axis → +Z
-            collar.transform.localScale = new Vector3(0.34f, 0.06f, 0.34f);
+            collar.transform.localScale = new Vector3(0.12f, 0.02f, 0.12f); // ~0.24 m disc, 0.04 m thick
             ApplyVisual(collar, ringMat);
 
-            // Glowing centre eye the player aims at.
+            // Small glowing centre eye the player aims at (sphere primitive is 1 m
+            // across, so this is a ~0.09 m dot).
             var eye = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             eye.name = "Eye";
             eye.transform.SetParent(container.transform, false);
-            eye.transform.localPosition = new Vector3(0f, 0f, 0.05f);
-            eye.transform.localScale = new Vector3(0.16f, 0.16f, 0.10f);
+            eye.transform.localPosition = new Vector3(0f, 0f, 0.016f);
+            eye.transform.localScale = new Vector3(0.09f, 0.09f, 0.05f);
             ApplyVisual(eye, eyeMat);
 
-            // Short nipple the pipe visually plugs onto.
+            // Short, thin coupling nipple the pipe plugs onto — slim enough that a
+            // gas pipe stays clearly visible around it (~0.07 m dia × 0.07 m long).
             var nipple = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             nipple.name = "Nipple";
             nipple.transform.SetParent(container.transform, false);
-            nipple.transform.localPosition = new Vector3(0f, 0f, 0.12f);
+            nipple.transform.localPosition = new Vector3(0f, 0f, 0.04f);
             nipple.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
-            nipple.transform.localScale = new Vector3(0.16f, 0.16f, 0.16f);
+            nipple.transform.localScale = new Vector3(0.035f, 0.035f, 0.035f);
             ApplyVisual(nipple, ringMat);
 
             return container.transform;
@@ -295,10 +332,11 @@ namespace VoxelEngine.Maritime
     }
 
     // ════════════════════════════════════════════════════════════════════
-    //  PORT PLANNER — shared by BuildSystem (liquid/gas pipes) and
-    //  GridBuilder (exhaust pipes). Pure geometry + capacity logic; the
-    //  caller decides whether to actually commit (placement) or just
-    //  preview (ghost). Ghost ≡ placed because both run the same math.
+    //  PORT PLANNER — used by BuildSystem for liquid / gas / item pipe
+    //  snaps. Pure geometry + capacity logic; the caller decides whether to
+    //  commit (placement) or just preview (ghost). Ghost ≡ placed because
+    //  both run the same math. Exhaust uses the engine's authored exhaust
+    //  collectors (no variable exhaust port), so it isn't planned here.
     // ════════════════════════════════════════════════════════════════════
     public static class MaritimePortPlanner
     {
@@ -310,26 +348,29 @@ namespace VoxelEngine.Maritime
             public PortService service;
             public Vector3 portLocal;     // engine-local dynamic-port position
             public Vector3 outLocal;      // engine-local outward (for MaritimePortFacing)
-            public Vector3 seatGridLocal; // grid-local pipe-hub seat (where the pipe sits)
+            public Vector3 seatGridLocal; // grid-local pipe-hub seat (snapped to the detail lattice by the caller)
             public Vector3Int faceAxis;   // grid-space outward face axis
             public Transform existing;    // existing port transform when reusesExisting
         }
 
-        /// <summary>Plan a liquid or gas pipe attachment onto an engine surface.</summary>
-        public static Plan PlanPipe(GridEntity grid, GridMaritimeEngine engine, bool isGas,
+        /// <summary>Plan a liquid / gas / item pipe attachment onto an engine surface.</summary>
+        public static Plan PlanPipe(GridEntity grid, GridMaritimeEngine engine, PipeFamily family,
             Vector3 hitPointWorld, Vector3 hitNormalWorld, float detailCell)
         {
             var plan = new Plan();
             if (grid == null || engine == null) return plan;
 
             var vports = engine.VariablePorts;
-            PortService service = isGas
-                ? ResolveGasService(grid, vports)
-                : ResolveLiquidService(grid, vports);
+            PortService service = ResolveService(family, grid, vports, engine.tier, hitPointWorld);
             plan.service = service;
 
-            // Reuse an already-installed port of this service if one exists — the
-            // pipe re-snaps to it instead of spawning a duplicate collar.
+            // This engine tier doesn't offer that service (e.g. a liquid pipe on the
+            // solid-fuel Crude engine) — decline so placement falls through to a normal
+            // detail-lattice pipe instead of forcing an unsupported port.
+            if (!MaritimeVariablePorts.IsServiceAllowed(engine.tier, service)) return plan;
+
+            // Reuse an already-installed port of this service if one exists — the pipe
+            // re-snaps to it instead of spawning a duplicate collar.
             var existing = vports.FindExisting(service);
             if (existing != null)
             {
@@ -342,7 +383,7 @@ namespace VoxelEngine.Maritime
 
             if (!vports.CanAdd(service))
             {
-                plan.atCap = true;
+                plan.atCap = true; // → caller shows "<service> already connected (max N)"
                 return plan;
             }
 
@@ -351,45 +392,16 @@ namespace VoxelEngine.Maritime
             return plan;
         }
 
-        /// <summary>Plan an exhaust-pipe attachment onto an engine surface.</summary>
-        public static Plan PlanExhaust(GridEntity grid, GridMaritimeEngine engine,
-            Vector3 hitPointWorld, Vector3 hitNormalWorld, float detailCell)
-        {
-            var plan = new Plan { service = PortService.Exhaust };
-            if (grid == null || engine == null) return plan;
-
-            var vports = engine.VariablePorts;
-            var existing = vports.FindExisting(PortService.Exhaust);
-            if (existing != null)
-            {
-                plan.ok = true;
-                plan.reusesExisting = true;
-                plan.existing = existing;
-                FillSeatFromPort(grid, engine, existing, detailCell, ref plan);
-                return plan;
-            }
-            if (!vports.CanAdd(PortService.Exhaust))
-            {
-                plan.atCap = true;
-                return plan;
-            }
-
-            FillSeatFromSurface(grid, engine, hitPointWorld, hitNormalWorld, detailCell, ref plan);
-            plan.ok = true;
-            return plan;
-        }
-
-        // Seat the pipe just OUTSIDE the hit surface, along a cardinal-snapped
-        // outward. The dynamic port collar sits on the surface; the pipe hub sits a
-        // comfortable stub-distance beyond it so it is plainly visible and easy to
-        // chain the next pipe onto.
+        // The dynamic port collar mounts FLUSH on the hull (inset a touch so it reads
+        // as bolted to the engine — never floating off the collider). The pipe hub
+        // claims the detail cell just OUTSIDE the surface; the caller snaps the hub
+        // onto that lattice cell so placement is fine-grid aligned.
         private static void FillSeatFromSurface(GridEntity grid, GridMaritimeEngine engine,
             Vector3 hitPointWorld, Vector3 hitNormalWorld, float detailCell, ref Plan plan)
         {
             Vector3 outWorld = SnapOutwardToWorld(grid, hitNormalWorld);
-
-            Vector3 portWorld = hitPointWorld + outWorld * (detailCell * 0.12f);
-            Vector3 seatWorld = hitPointWorld + outWorld * (detailCell * 0.85f);
+            Vector3 portWorld = hitPointWorld - outWorld * 0.02f;
+            Vector3 seatWorld = hitPointWorld + outWorld * (detailCell * 0.55f);
 
             plan.portLocal = engine.transform.InverseTransformPoint(portWorld);
             plan.outLocal = engine.transform.InverseTransformDirection(outWorld).normalized;
@@ -398,13 +410,13 @@ namespace VoxelEngine.Maritime
             if (plan.faceAxis == Vector3Int.zero) plan.faceAxis = Vector3Int.up;
         }
 
-        // When reusing an existing dynamic port, seat the pipe one stub-distance
-        // beyond the port along its authored outward (identical look to a fresh port).
+        // When reusing an existing dynamic port, seat the pipe one stub-distance beyond
+        // the port along its authored outward (identical look to a fresh port).
         private static void FillSeatFromPort(GridEntity grid, GridMaritimeEngine engine,
             Transform port, float detailCell, ref Plan plan)
         {
             Vector3 outWorld = MaritimePorts.PortOutwardWorld(port, engine.transform.up);
-            Vector3 seatWorld = port.position + outWorld * (detailCell * 0.70f);
+            Vector3 seatWorld = port.position + outWorld * (detailCell * 0.55f);
             plan.portLocal = engine.transform.InverseTransformPoint(port.position);
             plan.outLocal = engine.transform.InverseTransformDirection(outWorld).normalized;
             plan.seatGridLocal = grid.transform.InverseTransformPoint(seatWorld);
@@ -413,7 +425,7 @@ namespace VoxelEngine.Maritime
         }
 
         /// <summary>Snap a world normal to the nearest grid-frame cardinal axis so
-        /// pipes always route along clean lattice lines.</summary>
+        /// ports + pipes always route along clean lattice lines.</summary>
         private static Vector3 SnapOutwardToWorld(GridEntity grid, Vector3 normalWorld)
         {
             Vector3 local = grid.transform.InverseTransformDirection(
@@ -429,65 +441,67 @@ namespace VoxelEngine.Maritime
         private static float LocalSign(float v) => Mathf.Approximately(v, 0f) ? 1f : v;
 
         // ── Service resolution ────────────────────────────────────────
-        // The liquid/gas pipes are generic; the SERVICE a port takes on is inferred
-        // from what the grid's tanks actually hold, with an "engine still needs it"
-        // tiebreaker. Functionality never depends on the label — an engine draws
-        // fuel AND coolant from whichever tanks are connected through the liquid
-        // family — so the inference only drives the colour + the per-service cap.
-        private static PortService ResolveLiquidService(GridEntity grid, MaritimeVariablePorts vports)
+        private static PortService ResolveService(PipeFamily family, GridEntity grid,
+            MaritimeVariablePorts vports, EngineTier tier, Vector3 hitPoint)
+        {
+            switch (family)
+            {
+                case PipeFamily.Liquid: return ResolveLiquidService(grid, vports, hitPoint);
+                case PipeFamily.Gas:    return PortService.Oxygen;
+                case PipeFamily.Item:   return PortService.Item;
+                default:                return PortService.Fuel;
+            }
+        }
+
+        // Liquid pipes are generic; the SERVICE (fuel vs coolant) is inferred from what
+        // the pipe run being extended actually carries — queried through the cached
+        // liquid network from the nearest already-placed liquid pipe. When nothing is
+        // connected yet (building engine-first) we fall back to "what the engine still
+        // needs". There is deliberately NO auto-switch when a service is full, so the
+        // caller surfaces the "<service> already connected (max N)" message.
+        private static PortService ResolveLiquidService(GridEntity grid, MaritimeVariablePorts vports, Vector3 hitPoint)
         {
             bool hasFuel = false, hasCoolant = false;
-            foreach (var block in grid.AllBlocks)
+            var net = GridLiquidNetwork.Instance;
+            var seed = FindNearestPipe(grid, hitPoint, isGas: false);
+            if (net != null && seed != null)
             {
-                if (block is GridLiquidTank tank && tank.Enabled)
-                {
-                    if (IsCoolantLiquid(tank.liquidType)) hasCoolant = true;
-                    else hasFuel = true; // CrudeOil/RefinedOil/LiquidFuel/HFO/MGO
-                }
+                hasFuel =
+                    net.AvailableLiquidFor(seed, LiquidType.HeavyFuelOil) > 0.001f ||
+                    net.AvailableLiquidFor(seed, LiquidType.MarineGasOil) > 0.001f ||
+                    net.AvailableLiquidFor(seed, LiquidType.LiquidFuel) > 0.001f ||
+                    net.AvailableLiquidFor(seed, LiquidType.CrudeOil) > 0.001f ||
+                    net.AvailableLiquidFor(seed, LiquidType.RefinedOil) > 0.001f;
+                hasCoolant =
+                    net.AvailableLiquidFor(seed, LiquidType.MarineEngineCoolant) > 0.001f ||
+                    net.AvailableLiquidFor(seed, LiquidType.Water) > 0.001f;
             }
 
-            PortService choice;
-            if (hasFuel && !hasCoolant) choice = PortService.Fuel;
-            else if (hasCoolant && !hasFuel) choice = PortService.Coolant;
-            else choice = !vports.HasAny(PortService.Fuel) ? PortService.Fuel
+            if (hasFuel && !hasCoolant) return PortService.Fuel;
+            if (hasCoolant && !hasFuel) return PortService.Coolant;
+            // Ambiguous (both / neither) — assign by what the engine still needs.
+            return !vports.HasAny(PortService.Fuel) ? PortService.Fuel
                 : !vports.HasAny(PortService.Coolant) ? PortService.Coolant
                 : PortService.Fuel;
-
-            // Steer toward a service that still has capacity.
-            if (choice == PortService.Fuel && !vports.CanAdd(PortService.Fuel) && vports.CanAdd(PortService.Coolant))
-                choice = PortService.Coolant;
-            else if (choice == PortService.Coolant && !vports.CanAdd(PortService.Coolant) && vports.CanAdd(PortService.Fuel))
-                choice = PortService.Fuel;
-            return choice;
         }
 
-        private static PortService ResolveGasService(GridEntity grid, MaritimeVariablePorts vports)
+        /// <summary>Nearest already-placed pipe of the family within ~3 m of the aim
+        /// point — the run the player is extending. Used to read what it carries.</summary>
+        private static GridBlock FindNearestPipe(GridEntity grid, Vector3 worldPos, bool isGas)
         {
-            bool hasOxygen = false, hasExhaust = false;
-            foreach (var block in grid.AllBlocks)
+            GridBlock best = null;
+            float bestSq = 9f; // 3 m
+            foreach (var b in grid.AllBlocks)
             {
-                if (block is GridGasTank tank && tank.Enabled)
-                {
-                    if (tank.gasType == VoxelEngine.Gas.GasType.ExhaustGas) hasExhaust = true;
-                    else if (tank.gasType == VoxelEngine.Gas.GasType.Oxygen) hasOxygen = true;
-                }
+                if (b == null) continue;
+                bool match = isGas
+                    ? b.GetComponentInChildren<VoxelEngine.Gas.GasPipe>(true) != null
+                    : b.GetComponentInChildren<VoxelEngine.Fluids.WaterPipe>(true) != null;
+                if (!match) continue;
+                float d = (b.transform.position - worldPos).sqrMagnitude;
+                if (d < bestSq) { bestSq = d; best = b; }
             }
-
-            PortService choice;
-            if (hasOxygen && !hasExhaust) choice = PortService.Oxygen;
-            else if (hasExhaust && !hasOxygen) choice = PortService.Exhaust;
-            else choice = !vports.HasAny(PortService.Oxygen) ? PortService.Oxygen
-                : vports.CanAdd(PortService.Exhaust) ? PortService.Exhaust
-                : PortService.Oxygen;
-
-            if (choice == PortService.Oxygen && !vports.CanAdd(PortService.Oxygen) && vports.CanAdd(PortService.Exhaust))
-                choice = PortService.Exhaust;
-            else if (choice == PortService.Exhaust && !vports.CanAdd(PortService.Exhaust) && vports.CanAdd(PortService.Oxygen))
-                choice = PortService.Oxygen;
-            return choice;
+            return best;
         }
-
-        private static bool IsCoolantLiquid(LiquidType t)
-            => t == LiquidType.Water || t == LiquidType.MarineEngineCoolant;
     }
 }

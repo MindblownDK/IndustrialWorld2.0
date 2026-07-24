@@ -285,13 +285,25 @@ namespace VoxelEngine.Building
             s_portCapReason = null;
             if (grid == null || item == null || item.placedPrefab == null || hit.collider == null) return false;
 
-            // Route by the HELD pipe type — liquid pipes to liquid ports only,
-            // gas pipes to gas ports only (the fuel port doesn't take steam hoses).
+            // Route by the HELD pipe type — liquid pipes to liquid ports, gas pipes to
+            // gas ports, item pipes to item ports (the fuel port doesn't take steam hoses).
             string[] prefixes;
+            VoxelEngine.Maritime.PipeFamily family;
             if (item.placedPrefab.GetComponentInChildren<VoxelEngine.Fluids.WaterPipe>(true) != null)
+            {
                 prefixes = VoxelEngine.Maritime.MaritimePorts.LiquidPrefixes;
+                family = VoxelEngine.Maritime.PipeFamily.Liquid;
+            }
             else if (item.placedPrefab.GetComponentInChildren<VoxelEngine.Gas.GasPipe>(true) != null)
+            {
                 prefixes = VoxelEngine.Maritime.MaritimePorts.GasPrefixes;
+                family = VoxelEngine.Maritime.PipeFamily.Gas;
+            }
+            else if (item.placedPrefab.GetComponentInChildren<VoxelEngine.Transport.ItemPipe>(true) != null)
+            {
+                prefixes = VoxelEngine.Maritime.MaritimePorts.ItemPrefixes;
+                family = VoxelEngine.Maritime.PipeFamily.Item;
+            }
             else return false;
 
             var targetBlock = hit.collider.GetComponentInParent<GridBlock>();
@@ -319,13 +331,14 @@ namespace VoxelEngine.Building
             }
             if (best == null)
             {
-                // No authored/dynamic port near the aim. When the target is a liquid
-                // HFO/MGO engine, install (or re-snap to) a color-coded VARIABLE
-                // service port right where the player is aiming — "connect from
-                // anywhere". The port is born on the hull surface, so the pipe can
-                // never end up buried inside the engine body.
-                bool isGas = item.placedPrefab.GetComponentInChildren<VoxelEngine.Gas.GasPipe>(true) != null;
-                return TryGetVariablePortSnap(grid, targetBlock, isGas, hit, commit, out feedback,
+                // No authored/dynamic port near the aim. Install (or re-snap to) a
+                // color-coded VARIABLE service port right where the player is aiming —
+                // "connect from anywhere". The port is born on the hull surface, so the
+                // pipe can never end up buried inside the engine body. The planner
+                // decides which service the held pipe family maps to and whether this
+                // engine tier offers it (fuel/coolant/oxygen on HFO+MGO; oxygen+item on
+                // the Crude engine).
+                return TryGetVariablePortSnap(grid, targetBlock, family, hit, commit, out feedback,
                     out precisionPos, out hostStructuralPos, out faceAxis, out anchorLocal);
             }
 
@@ -407,8 +420,8 @@ namespace VoxelEngine.Building
         //  placement calls with commit=true to actually install the port. Both
         //  run identical geometry so ghost ≡ placed.
         // ════════════════════════════════════════════════════════════════
-        private static bool TryGetVariablePortSnap(GridEntity grid, GridBlock targetBlock, bool isGas,
-            RaycastHit hit, bool commit, out string feedback,
+        private static bool TryGetVariablePortSnap(GridEntity grid, GridBlock targetBlock,
+            VoxelEngine.Maritime.PipeFamily family, RaycastHit hit, bool commit, out string feedback,
             out Vector3Int precisionPos, out Vector3Int hostStructuralPos, out Vector3Int faceAxis,
             out Vector3 anchorLocal)
         {
@@ -419,15 +432,14 @@ namespace VoxelEngine.Building
             feedback = null;
 
             var engine = targetBlock as VoxelEngine.Maritime.GridMaritimeEngine;
-            // Variable liquid/gas ports are a Medium (HFO V8) and Giant (MGO V12)
-            // feature — the tiers that take piped fuel/coolant/oxygen.
-            if (engine == null
-                || engine.tier == VoxelEngine.Maritime.EngineTier.Small
-                || engine.Grid != grid) return false;
+            if (engine == null || engine.Grid != grid) return false;
+            // Whether this engine tier offers the held pipe's service (and which service
+            // it maps to) is decided inside the planner — the Crude engine offers
+            // oxygen + item, the HFO/MGO engines offer fuel + coolant + oxygen.
 
             float small = GridSize.Small.CellSize();
             var plan = VoxelEngine.Maritime.MaritimePortPlanner.PlanPipe(
-                grid, engine, isGas, hit.point, hit.normal, small);
+                grid, engine, family, hit.point, hit.normal, small);
 
             if (plan.atCap)
             {
@@ -439,11 +451,13 @@ namespace VoxelEngine.Building
             }
             if (!plan.ok) return false;
 
-            anchorLocal = plan.seatGridLocal;
+            // Snap the pipe hub onto the DETAIL lattice cell just outside the surface so
+            // placement is fine-grid aligned (the small lattice), not free-floating.
             precisionPos = new Vector3Int(
                 Mathf.FloorToInt(plan.seatGridLocal.x / small + 0.5f),
                 Mathf.FloorToInt(plan.seatGridLocal.y / small + 0.5f),
                 Mathf.FloorToInt(plan.seatGridLocal.z / small + 0.5f));
+            anchorLocal = (Vector3)precisionPos * small;
             hostStructuralPos = engine.GridPos;
             faceAxis = plan.faceAxis;
 

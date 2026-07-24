@@ -89,6 +89,7 @@ namespace VoxelEngine.GridSystem
 
             block.OnPlaced();
             grid.RecalculateMass();
+            VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged();
             return true;
         }
 
@@ -103,6 +104,7 @@ namespace VoxelEngine.GridSystem
             }
             var grid = Grid;
             grid?.RecalculateMass();
+            VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged();
             if (_blocks.Count == 0 && grid != null && grid.BlockCount == 0)
                 Destroy(grid.gameObject);
         }

@@ -34,6 +34,13 @@ namespace VoxelEngine.Maritime
             "Port_HydrogenInput", "Port_HydrogenOutput",
         };
 
+        /// <summary>Item ports (solid-fuel intake on the Crude Inline-4, generic item IO).
+        /// Item pipes magnet onto these.</summary>
+        public static readonly string[] ItemPrefixes =
+        {
+            "Port_ItemIntake", "Port_ItemIO", "Port_ItemInput",
+        };
+
         /// <summary>Engine exhaust outputs (exhaust pipes + gas taps snap here).</summary>
         public static readonly string[] ExhaustOutputPrefixes = { "Port_ExhaustOutput" };
 

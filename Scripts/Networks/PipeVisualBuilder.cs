@@ -53,8 +53,20 @@ namespace VoxelEngine.Networks
         public bool hollowGlass = false;
 
         [Header("Performance")]
-        [Tooltip("Seconds between neighbour-change checks.")]
-        public float rebuildInterval = 0.4f;
+        [Tooltip("Seconds between safety-net neighbour checks. Rebuilds are normally " +
+                 "event-driven (fired when a block is placed/removed via " +
+                 "NotifyTopologyChanged); this is only a slow fallback so nothing " +
+                 "stays permanently stale.")]
+        public float rebuildInterval = 2.0f;
+
+        // ── Topology-change signal ─────────────────────────────────────
+        // Bumped by the grid whenever a block is added/removed. Each builder
+        // remembers the last version it processed and only re-scans its
+        // neighbours when the version changes — so pipes no longer poll every
+        // 0.4 s (which lagged when many pipes sat close together); they rebuild
+        // exactly when something nearby is placed or removed.
+        public static int TopologyVersion { get; private set; }
+        public static void NotifyTopologyChanged() => TopologyVersion++;
 
         // ── Legacy compat (silently ignored by the new pipe renderer) ──
         // These three fields were used by the old cube-primitive renderer
@@ -106,6 +118,7 @@ namespace VoxelEngine.Networks
         private readonly List<Vector3> _scratch = new(6);
         private int   _lastHash;
         private float _scanTimer;
+        private int   _seenVersion = -1;
 
         private void Awake()
         {
@@ -215,9 +228,20 @@ namespace VoxelEngine.Networks
 
         private void Update()
         {
-            _scanTimer += Time.deltaTime;
-            if (_scanTimer < rebuildInterval) return;
+            // Event-driven rebuild: re-scan neighbours only when the grid topology
+            // changed (a block placed/removed bumped TopologyVersion) since our last
+            // pass. A slow safety-net poll guards against any signal we might miss, so
+            // nothing stays permanently stale. The safety net is FLOORED to 1.5 s so
+            // older prefabs that serialized the legacy 0.4 s rebuildInterval don't
+            // resurrect the per-pipe continuous scanning that lagged with many pipes.
+            bool topologyChanged = _seenVersion != TopologyVersion;
+            if (!topologyChanged)
+            {
+                _scanTimer += Time.deltaTime;
+                if (_scanTimer < Mathf.Max(rebuildInterval, 1.5f)) return;
+            }
             _scanTimer = 0f;
+            _seenVersion = TopologyVersion;
 
             int h = ComputeNeighbourHash();
             if (h == _lastHash) return;

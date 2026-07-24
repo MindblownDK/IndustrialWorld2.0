@@ -1,9 +1,88 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.18.0-dev`
+**Current Version:** `6.19.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.19.0-dev] Variable Port Round 2 — Visible Propellers, Flush Color-Coded Ports, Fine-Lattice Pipe Snap, Crude O₂/Item Ports, Static Ports Removed, Tank Reach & Pipe-Visual Perf
+
+**Type:** MINOR — extends the variable-port system to the Crude engine (+ new Item service), removes the static engine service ports, and bundles the round-2 fixes from playtest feedback. Save mechanism intact; **old saves are not a concern this cycle (single-tester), but nothing about the save format was broken.** One manual setup step required (rebuild maritime prefabs, mesh v23→v24).
+
+**Fixed — Propellers now actually have blades (ROOT CAUSE):**
+
+1. The lofted blades from 6.18.0 never showed up because (a) blade length was an **absolute** value instead of scaling with the cell — tiny relative to the hub on large-grid props — and (b) the thin lofted shell was **back-face culled**. **Fix:** blade length/chord/thickness now scale with the cell (proportional to the hub at any grid size), and the blade material is rendered **double-sided** (`_Cull = Off`) so the screw is visible from every angle regardless of winding. Small = 3 bronze blades, Large = 4 steel, electric pod = 3. Mesh `Version` 23 → 24.
+
+**Fixed — Ports no longer float off the engine:**
+
+2. Variable port collars were seated *outside* the collider surface, so they hovered in the gap. **Fix:** the collar now mounts **flush** — inset ~2 cm into the hull so it reads as bolted to the engine, with only a slim glowing eye + thin coupling nipple proud of the surface.
+
+**Fixed — Port no longer swallows the gas pipe:**
+
+3. The port visual was oversized (big collar + fat protruding cylinder) and covered a thin gas pipe. **Fix:** the collar, eye and nipple are now **low-profile and slim** (~0.24 m disc, ~0.07 m nipple) so a gas pipe stays clearly visible plugged into it.
+
+**Fixed — Pipe placement uses the small (fine) lattice:**
+
+4. A pipe snapped to a variable port was sitting at a free-floating position with no grid alignment. **Fix:** the pipe hub now **snaps to the Detail-lattice cell** just outside the surface — clean fine-grid placement, easy to chain.
+
+**Added — Crude Inline-4 variable ports (Oxygen + Items):**
+
+5. The Crude (Small) engine now takes player-placed color-coded **Oxygen** (sky-blue, gas pipe) and **Item intake** (green, item pipe) ports. New `PortService.Item` + `ItemPrefixes` (`Port_ItemIntake`). Per-tier gating: **Small = Oxygen + Item**, **Medium/Giant = Fuel + Coolant + Oxygen**. Aiming an unsupported pipe family at an engine (e.g. a liquid pipe on the Crude) just falls through to normal fine-lattice placement.
+
+**Removed — Static engine service ports:**
+
+6. The authored **fuel / coolant / oxygen / item** ports were removed from all three engines (HFO V8, MGO V12, Crude Inline-4). Those services are now **only** via player-placed variable ports. **Exhaust collectors and shaft/rotation ports stay** (exhaust pipe still snaps to the authored exhaust output and auto-orients). The engine's body-proximity fallback still lets a nearby pipe connect, so nothing dead-ends.
+
+**Fixed — Tanks connect within ~0.5 m (incl. diagonal):**
+
+7. Even after the 6.18 corridor rewrite, a tank ~0.5 m off a pipe run (especially diagonally, ~0.71 m) could miss both the corridor samples and the 0.675 m proximity check. **Fix:** corridor probe spheres enlarged (radius scale 1.1 → 1.6) **and** the pipe/tank proximity radius widened (×1.35 → ×1.8 ≈ 0.9 m for a detail pipe), so a tank one cell away connects reliably on any axis.
+
+**Fixed — Pipe visuals no longer lag when pipes sit close together (ROOT CAUSE):**
+
+8. Every `PipeVisualBuilder` re-scanned its neighbours **every 0.4 s** (a full grid-block sweep per pipe), which lagged with many nearby pipes. **Fix:** rebuilds are now **event-driven** — a global `TopologyVersion` is bumped by `GridEntity`/`GridPrecisionAttachmentLayer` whenever a block is added or removed, and each pipe only re-scans when that version changes (with a slow 2 s safety-net poll). Placing/removing a pipe, machine, tank or chest triggers exactly one neighbour re-check; idle pipes do nothing.
+
+**Confirmed — "max reached" feedback:**
+
+9. The service resolver no longer silently *swaps* a full service for an empty one. The carried type is inferred from the pipe run you're extending (via the cached liquid network), so connecting a second **fuel** run now correctly refuses with **"Fuel input already connected (max 1)"** (red ghost + blocked placement) instead of quietly becoming coolant.
+
+**Notes:**
+- Exhaust handling is unchanged from 6.18 (auto-orients onto the authored exhaust collector) — now that fuel/oxygen/coolant flow again, the engine runs end-to-end.
+- The Item-intake port gives the Crude engine a color-coded item-pipe connection point; solid-fuel delivery follows the existing item-network rules.
+
+**Roadmap Status:**
+- Vehicle power foundations: **🛠️ WORKING ON** — propellers, ports, connectivity and pipe-visual performance overhauled. Thomas to validate fuel→engine→shaft→propeller end-to-end.
+
+**Files touched:**
+- `Scripts/Maritime/MaritimeMeshBuilder.cs` — propeller blades scale with cell + double-sided material; static fuel/coolant/oxygen/item ports removed (exhaust + shaft kept); `DoubleSided` helper; `Version` 23 → 24.
+- `Scripts/Maritime/MaritimeVariablePorts.cs` — `PortService.Item` + `PipeFamily`; per-tier `IsServiceAllowed`; smaller flush port visual; planner reworked to family routing + carried-type inference (no auto-switch) + flush/lattice seating; unused `PlanExhaust`/`ResolveGasService` removed.
+- `Scripts/Maritime/MaritimePorts.cs` — `ItemPrefixes`.
+- `Scripts/Building/BuildSystem.cs` — route liquid/gas/**item** pipes by family; enable variable ports on the Crude engine (gated in planner); snap pipe hub to the Detail lattice.
+- `Scripts/GridSystem/GridLiquidNetwork.cs` / `GridGasNetwork.cs` — corridor radius 1.1→1.6, pipe/tank proximity ×1.35→×1.8.
+- `Scripts/Networks/PipeVisualBuilder.cs` — event-driven rebuild via `TopologyVersion`; slow safety-net poll.
+- `Scripts/GridSystem/GridEntity.cs` / `GridPrecisionAttachmentLayer.cs` — bump `PipeVisualBuilder.NotifyTopologyChanged()` on block add/remove.
+- `Scripts/Core/GameVersion.cs` — bumped to 6.19.0-dev.
+- `Roadmap.md`, `Changelog.md`.
+
+**Manual Unity Steps (one-time prefab rebuild + validation):**
+
+*A. Rebuild maritime prefabs (required for the visible propeller blades):*
+1. Pull all changed scripts, compile (expect **0 errors**).
+2. Open **Tool → Voxel Engine → Voxel Engine Setup** and rebuild the maritime prefabs (the `__MaritimeMesh_v23` markers re-bake to `v24`). Confirm the **Small / Large / Electrical propellers** now show real curved blades (not a bare hub).
+3. No new items / recipes / research are needed — nothing in the Setup item/recipe/research tables changes.
+
+*B. Validate variable ports + static-port removal:*
+4. Place an **HFO V8** or **MGO V12**. Confirm there are **no** built-in fuel/coolant/oxygen port cubes on the model (exhaust collector + shaft flange remain).
+5. Aim a **liquid pipe** at the engine body → an **amber Fuel** collar appears **flush** on the hull; the pipe hub sits on the **fine lattice** just outside. Aim elsewhere with another liquid pipe fed from a coolant tank → a **teal Coolant** collar.
+6. Aim a **gas pipe** → **sky-blue Oxygen** collar (slim — the gas pipe stays visible around it).
+7. Connect a **second fuel** run → ghost goes **red**, placement refused with **"Fuel input already connected (max 1)"**.
+8. Place a **Crude Inline-4** → confirm a **gas pipe** makes an **Oxygen** port and an **item pipe** makes a green **Item intake** port; a liquid pipe does **not** make a port (falls through to normal placement).
+
+*C. Validate connectivity + performance:*
+9. Put a **GridLiquidTank** / **GridGasTank** ~0.5–1 m off the end of a pipe run (try face-adjacent **and** diagonal) → buffers fill; engine runs.
+10. Place **30+ pipes** close together → confirm **no lag** from visual updates; placing one more pipe updates neighbouring arms **once** and then idles.
+11. **Save → reload** → variable ports + engine state persist.
 
 ---
 

@@ -346,6 +346,9 @@ namespace VoxelEngine.GridSystem
             // Notify the maritime propulsion graph that the ship changed
             // (it lazily rebuilds next FixedUpdate — zero per-block work).
             NotifyMaritimeDirty();
+            // Tell pipe visuals the topology changed so they rebuild their arms
+            // (event-driven — no continuous polling).
+            VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged();
         }
 
         public void RemoveBlock(Vector3Int gridPos)
@@ -357,6 +360,7 @@ namespace VoxelEngine.GridSystem
             RecalculateMass();
 
             NotifyMaritimeDirty();
+            VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged();
 
             if (_blocks.Count == 0 && (PrecisionAttachments == null || PrecisionAttachments.Count == 0))
                 Destroy(gameObject);

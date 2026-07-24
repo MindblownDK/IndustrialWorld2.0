@@ -28,7 +28,12 @@ namespace VoxelEngine.Maritime
         //      chord, root→tip pitch twist, cambered section and swept tip — instead
         //      of flat boxes. Bronze small / steel large; electric pod gets matching
         //      blades. Color-coded variable engine service ports added elsewhere.
-        public const int Version = 23;
+        // v24: propeller blades now scale with the cell (were far too small on large
+        //      grids) and render double-sided so they are always visible. Static
+        //      fuel/coolant/oxygen/item service ports REMOVED from all three engines
+        //      (exhaust + shaft ports stay) — those services now use player-placed
+        //      color-coded variable ports.
+        public const int Version = 24;
         private static Shader Lit => Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
         public static System.Func<Material, string, Material> MaterialPersister;
         private static int _matCounter;
@@ -187,15 +192,22 @@ namespace VoxelEngine.Maritime
             Sphere(spin, hubMat, new Vector3(0, 0, cs * 0.16f), cs * 0.17f);
             Sphere(spin, hubMat, new Vector3(0, 0, -cs * 0.08f), cs * 0.20f);
 
-            float rootChord = heavy ? cs * 0.34f : cs * 0.24f;
-            float tipChord  = heavy ? cs * 0.17f : cs * 0.13f;
-            float rootPitch = heavy ? 36f : 28f;
-            float tipPitch  = heavy ? 15f : 11f;
-            float thickness = heavy ? cs * 0.05f : cs * 0.032f;
-            float skew      = heavy ? cs * 0.16f : cs * 0.09f;
-            float hubRadius = cs * 0.12f;
-            var bladeMesh = MakePropellerBladeMesh(bladeLen, rootChord, tipChord,
+            // Blade geometry scales with the cell so the screw is proportioned to
+            // its hub at any grid size (the old absolute length produced blades far
+            // too small to read on large-grid propellers).
+            float bladeLength = cs * (heavy ? 0.62f : 0.55f);
+            float rootChord = cs * (heavy ? 0.36f : 0.28f);
+            float tipChord  = cs * (heavy ? 0.18f : 0.14f);
+            float rootPitch = heavy ? 38f : 30f;
+            float tipPitch  = heavy ? 16f : 12f;
+            float thickness = cs * (heavy ? 0.055f : 0.038f);
+            float skew      = cs * (heavy ? 0.20f : 0.11f);
+            float hubRadius = cs * 0.13f;
+            var bladeMesh = MakePropellerBladeMesh(bladeLength, rootChord, tipChord,
                 rootPitch, tipPitch, thickness, skew, hubRadius);
+            // Double-sided so the blades are visible from every angle regardless of
+            // winding — guarantees the screw actually shows up.
+            var bladeRenderMat = DoubleSided(bladeMat);
 
             for (int i = 0; i < blades; i++)
             {
@@ -205,7 +217,7 @@ namespace VoxelEngine.Maritime
                 var bladePivot = new GameObject($"Blade_{i}");
                 bladePivot.transform.SetParent(spin.transform, false);
                 bladePivot.transform.localRotation = Quaternion.Euler(0, 0, angle);
-                MeshGo(bladePivot, bladeMesh, bladeMat, Vector3.zero, Quaternion.identity, Vector3.one);
+                MeshGo(bladePivot, bladeMesh, bladeRenderMat, Vector3.zero, Quaternion.identity, Vector3.one);
             }
 
             // Bossing / shaft housing behind the prop (−Z) + a faired tail cone.
@@ -237,15 +249,27 @@ namespace VoxelEngine.Maritime
             hub.transform.localRotation = Quaternion.Euler(90, 0, 0);
             Sphere(spin, Bronze, new Vector3(0, 0, cs * 0.10f), cs * 0.12f);
 
-            var bladeMesh = MakePropellerBladeMesh(cs * 0.26f, cs * 0.20f, cs * 0.10f,
-                30f, 12f, cs * 0.026f, cs * 0.06f, cs * 0.09f);
+            var bladeMesh = MakePropellerBladeMesh(cs * 0.40f, cs * 0.24f, cs * 0.12f,
+                32f, 13f, cs * 0.030f, cs * 0.08f, cs * 0.10f);
+            var bladeRenderMat = DoubleSided(Bronze);
             for (int i = 0; i < 3; i++)
             {
                 var bladePivot = new GameObject($"Blade_{i}");
                 bladePivot.transform.SetParent(spin.transform, false);
                 bladePivot.transform.localRotation = Quaternion.Euler(0, 0, i * 120f);
-                MeshGo(bladePivot, bladeMesh, Bronze, Vector3.zero, Quaternion.identity, Vector3.one);
+                MeshGo(bladePivot, bladeMesh, bladeRenderMat, Vector3.zero, Quaternion.identity, Vector3.one);
             }
+        }
+
+        /// <summary>Clone a material with back-face culling disabled so thin lofted
+        /// blade shells render from both sides (never disappear at grazing angles or
+        /// from an unexpected triangle winding).</summary>
+        static Material DoubleSided(Material src)
+        {
+            var m = new Material(src);
+            if (m.HasProperty("_Cull")) m.SetFloat("_Cull", 0f); // 0 = Off (render both faces)
+            if (MaterialPersister != null) m = MaterialPersister(m, $"MMat_{_matCounter++}");
+            return m;
         }
 
         // ── Lofted propeller-blade mesh ───────────────────────────────
@@ -429,14 +453,14 @@ namespace VoxelEngine.Maritime
             for (int k = 0; k < 3; k++)
                 Cyl(r, AluminumSilver, new Vector3(cs * 0.34f, cs * (0.265f + k * 0.035f), cs * 0.24f), cs * 0.066f, cs * 0.012f);
             Strut(r, Chrome, new Vector3(cs * 0.34f, cs * 0.30f, cs * 0.24f), new Vector3(cs * 0.18f, cs * 0.40f, cs * 0.18f), cs * 0.02f);
-            Port(r, "Port_OxygenInput", Chrome, new Vector3(cs * 0.44f, cs * 0.30f, cs * 0.24f),
-                new Vector3(cs * 0.10f, cs * 0.10f, cs * 0.05f), PrimitiveType.Cube, Vector3.right);
+            // (Static Port_OxygenInput removed — the Crude engine now uses a
+            //  player-placed color-coded VARIABLE oxygen port; see MaritimeVariablePorts.)
 
             // ── Item intake hopper (right side) ───────────────────────
             Box(r, DarkSteel, new Vector3(cs * 0.36f, cs * 0.10f, -cs * 0.26f), new Vector3(cs * 0.14f, cs * 0.20f, cs * 0.24f));
             Box(r, Steel, new Vector3(cs * 0.36f, cs * 0.215f, -cs * 0.26f), new Vector3(cs * 0.16f, cs * 0.02f, cs * 0.26f));
-            Port(r, "Port_ItemIntake", PortFuel, new Vector3(cs * 0.44f, cs * 0.10f, -cs * 0.26f),
-                new Vector3(cs * 0.12f, cs * 0.12f, cs * 0.05f), PrimitiveType.Cube, Vector3.right);
+            // (Static Port_ItemIntake removed — the Crude engine now uses a
+            //  player-placed color-coded VARIABLE item-intake port.)
 
             // ── Grease-stained rear drive flange + SAE output ─────────
             var flange = Cyl(r, Rubber, new Vector3(0, -cs * 0.20f, cs * 0.44f), cs * 0.15f, cs * 0.035f);
@@ -593,21 +617,19 @@ namespace VoxelEngine.Maritime
 
             // ── Service ports: HFO intake, steam heat, coolant ────────
             Strut(r, Brass, new Vector3(-cs * 0.40f, -cs * 0.02f, -cs * 0.30f), new Vector3(-cs * 0.44f, -cs * 0.20f, -cs * 0.30f), cs * 0.03f);
-            Port(r, "Port_FuelInput", PortFuel, new Vector3(-cs * 0.44f, -cs * 0.22f, -cs * 0.30f),
-                new Vector3(cs * 0.12f, cs * 0.12f, cs * 0.05f), PrimitiveType.Cube, Vector3.left);
+            // (Static Port_FuelInput removed — HFO V8 now uses a player-placed
+            //  color-coded VARIABLE fuel port; see MaritimeVariablePorts.)
             // (v21: residual steam-heat port REMOVED by request — exhaust is the
             //  one and only hot-gas hookup on the engines.)
             Strut(r, PortCoolant, new Vector3(cs * 0.44f, -cs * 0.18f, -cs * 0.42f), new Vector3(cs * 0.30f, -cs * 0.05f, -cs * 0.42f), cs * 0.025f);
-            Port(r, "Port_CoolantInput", PortCoolant, new Vector3(cs * 0.44f, -cs * 0.18f, -cs * 0.42f),
-                new Vector3(cs * 0.12f, cs * 0.12f, cs * 0.05f), PrimitiveType.Cube, Vector3.right);
+            // (Static Port_CoolantInput removed — VARIABLE coolant port instead.)
 
             // ── Air filter box + oxygen intake (chrome — combustion air, v18) ──
             Box(r, AluminumSilver, new Vector3(cs * 0.43f, cs * 0.08f, cs * 0.62f), new Vector3(cs * 0.10f, cs * 0.12f, cs * 0.16f));
             for (int k = 0; k < 3; k++)
                 Box(r, DarkSteel, new Vector3(cs * 0.485f, cs * (0.025f + k * 0.035f), cs * 0.62f), new Vector3(cs * 0.012f, cs * 0.02f, cs * 0.14f));
             Strut(r, Chrome, new Vector3(cs * 0.40f, cs * 0.10f, cs * 0.55f), new Vector3(cs * 0.10f, cs * 0.40f, cs * 0.30f), cs * 0.025f);
-            Port(r, "Port_OxygenInput", Chrome, new Vector3(cs * 0.50f, cs * 0.08f, cs * 0.62f),
-                new Vector3(cs * 0.10f, cs * 0.10f, cs * 0.05f), PrimitiveType.Cube, Vector3.right);
+            // (Static Port_OxygenInput removed — VARIABLE oxygen port instead.)
 
             // ── Twin turbo pads + snapping sockets (valley service) ───
             Strut(r, Steel, new Vector3(cs * 0.34f, cs * 0.30f, -cs * 0.16f), new Vector3(cs * 0.58f, cs * 0.42f, -cs * 0.16f), cs * 0.06f);
@@ -806,8 +828,8 @@ namespace VoxelEngine.Maritime
             Strut(r, Rubber, new Vector3(0, -cs * 0.21f, -cs * 1.55f), new Vector3(cs * 0.42f, -cs * 0.56f, -cs * 1.58f), cs * 0.025f);
             Strut(r, Rubber, new Vector3(0, -cs * 0.47f, -cs * 1.55f), new Vector3(cs * 0.42f, -cs * 0.68f, -cs * 1.58f), cs * 0.025f);
             Strut(r, PortCoolant, new Vector3(cs * 0.56f, -cs * 0.56f, -cs * 0.80f), new Vector3(cs * 0.30f, -cs * 0.30f, -cs * 0.50f), cs * 0.035f);
-            Port(r, "Port_CoolantInput", PortCoolant, new Vector3(cs * 0.58f, -cs * 0.60f, -cs * 0.72f),
-                new Vector3(cs * 0.16f, cs * 0.16f, cs * 0.06f), PrimitiveType.Cube, Vector3.right);
+            // (Static Port_CoolantInput removed — MGO V12 now uses a player-placed
+            //  color-coded VARIABLE coolant port; see MaritimeVariablePorts.)
 
             // ── Massive splined PTO (rear) + bearing housing ──────────
             Box(r, CastIron, new Vector3(0, -cs * 0.34f, cs * 1.55f), new Vector3(cs * 0.36f, cs * 0.30f, cs * 0.12f));
@@ -839,8 +861,7 @@ namespace VoxelEngine.Maritime
             Box(r, DarkSteel, new Vector3(-cs * 0.55f, cs * 0.42f, -cs * 0.90f), new Vector3(cs * 0.06f, cs * 0.11f, cs * 0.22f));
             Box(r, LabelBlue, new Vector3(-cs * 0.53f, cs * 0.42f, -cs * 0.90f), new Vector3(cs * 0.05f, cs * 0.09f, cs * 0.20f));
             Strut(r, Brass, new Vector3(-cs * 0.50f, -cs * 0.30f, -cs * 1.38f), new Vector3(-cs * 0.50f, cs * 0.26f, -cs * 1.05f), cs * 0.025f);
-            Port(r, "Port_FuelInput", PortFuel, new Vector3(-cs * 0.50f, -cs * 0.30f, -cs * 1.42f),
-                new Vector3(cs * 0.14f, cs * 0.14f, cs * 0.06f), PrimitiveType.Cube, Vector3.left);
+            // (Static Port_FuelInput removed — VARIABLE fuel port instead.)
 
             // ── Twin air-filter housings + oxygen intake (chrome — combustion air, v18) ──
             Box(r, AluminumSilver, new Vector3(-cs * 0.50f, cs * 0.08f, -cs * 1.32f), new Vector3(cs * 0.14f, cs * 0.14f, cs * 0.24f));
@@ -851,8 +872,7 @@ namespace VoxelEngine.Maritime
                 Box(r, DarkSteel, new Vector3(cs * 0.565f, cs * (0.015f + k * 0.04f), -cs * 1.32f), new Vector3(cs * 0.015f, cs * 0.022f, cs * 0.20f));
             Strut(r, Chrome, new Vector3(-cs * 0.50f, cs * 0.15f, -cs * 1.28f), new Vector3(-cs * 0.30f, cs * 0.52f, -cs * 0.40f), cs * 0.03f);
             Strut(r, Chrome, new Vector3(cs * 0.50f, cs * 0.15f, -cs * 1.28f), new Vector3(cs * 0.30f, cs * 0.52f, -cs * 0.40f), cs * 0.03f);
-            Port(r, "Port_OxygenInput", Chrome, new Vector3(-cs * 0.50f, cs * 0.08f, -cs * 1.48f),
-                new Vector3(cs * 0.12f, cs * 0.12f, cs * 0.05f), PrimitiveType.Cube, Vector3.left);
+            // (Static Port_OxygenInput removed — VARIABLE oxygen port instead.)
 
             // ── Invisible locator sockets (standard axes) ─────────────
             Socket(r, "Socket_CrankAxis", new Vector3(0, -cs * 0.34f, 0));
