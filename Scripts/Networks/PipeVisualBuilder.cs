@@ -68,11 +68,11 @@ namespace VoxelEngine.Networks
         public static int TopologyVersion { get; private set; }
         public static void NotifyTopologyChanged() => TopologyVersion++;
 
-        // ── Legacy compat (silently ignored by the new pipe renderer) ──
-        // These three fields were used by the old cube-primitive renderer
-        // before the upgrade to IndustrialPipeMesh. Kept so prefab assets
-        // and old editor wizard code that still poke them keep compiling.
-        // The new renderer derives all sizing from the PipeStyle profile.
+        // ── Legacy compat / visual toggles ───────────────────────────
+        // These fields were used by the old cube-primitive renderer before
+        // the upgrade to IndustrialPipeMesh. Sizing is now profile-driven,
+        // but showUnusedFaceCaps remains a live clarity toggle: gas/liquid
+        // pipes disable it so dead-end caps do not look like fake links.
         [HideInInspector] public float coreSize           = 0.34f;
         [HideInInspector] public float armThickness       = 0.24f;
         [HideInInspector] public bool  showUnusedFaceCaps = true;
@@ -280,7 +280,8 @@ namespace VoxelEngine.Networks
                 style,
                 _shellMat,
                 (isGlass && !hollowGlass) ? _innerMat : null,
-                _accentMat);
+                _accentMat,
+                showUnusedFaceCaps);
         }
 
         // ────────────────────────────────────────────────────────

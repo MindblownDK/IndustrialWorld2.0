@@ -334,7 +334,9 @@ namespace VoxelEngine.GridSystem
                     {
                         bool typeOk = tank.gasType == type || (!forOutput && tank.stored <= 0.001f);
                         bool stockpileOk = includeStockpile || tank.mode != GridTankMode.Stockpile;
-                        if (typeOk && stockpileOk && yieldedTanks.Add(tank)) newlyLinked?.Add(tank);
+                        bool portAligned = IsTankPortWithinDetailLink(pipeBlock.Grid, pipeBlock, tank,
+                            VoxelEngine.Maritime.MaritimePorts.GasPrefixes, detail);
+                        if (typeOk && stockpileOk && portAligned && yieldedTanks.Add(tank)) newlyLinked?.Add(tank);
                     }
                     return false;
                 }, radiusScale: 2.2f);

@@ -5114,6 +5114,82 @@ root =>
                 return prefab;
             }
 
+            void EnsureGridTankPorts(GameObject prefabAsset, string materialName, Color color,
+                string portPrefix, bool includeBottom)
+            {
+                if (prefabAsset == null) return;
+                string prefabPath = AssetDatabase.GetAssetPath(prefabAsset);
+                if (string.IsNullOrEmpty(prefabPath)) return;
+
+                EnsureFolder(PREFABS + "/Mats");
+                string matPath = $"{PREFABS}/Mats/{materialName}.mat";
+                var mat = AssetDatabase.LoadAssetAtPath<Material>(matPath);
+                if (mat == null)
+                {
+                    var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+                    mat = new Material(shader) { name = materialName, color = color };
+                    if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", color);
+                    if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0.5f);
+                    if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.75f);
+                    if (mat.HasProperty("_EmissionColor")) { mat.EnableKeyword("_EMISSION"); mat.SetColor("_EmissionColor", color * 0.45f); }
+                    AssetDatabase.CreateAsset(mat, matPath);
+                    mat = AssetDatabase.LoadAssetAtPath<Material>(matPath);
+                }
+
+                var prefabRoot = PrefabUtility.LoadPrefabContents(prefabPath);
+                bool dirty = false;
+                try
+                {
+                    var ports = new System.Collections.Generic.List<(string name, Vector3 pos, Vector3 euler, Vector3 outward)>
+                    {
+                        ($"{portPrefix}_N",   new Vector3( 0.00f, -0.22f, -0.52f), new Vector3(90f, 0f, 0f),  Vector3.back),
+                        ($"{portPrefix}_S",   new Vector3( 0.00f, -0.22f,  0.52f), new Vector3(90f, 0f, 0f),  Vector3.forward),
+                        ($"{portPrefix}_E",   new Vector3( 0.52f, -0.22f,  0.00f), new Vector3(0f, 0f, 90f),  Vector3.right),
+                        ($"{portPrefix}_W",   new Vector3(-0.52f, -0.22f,  0.00f), new Vector3(0f, 0f, 90f),  Vector3.left),
+                        ($"{portPrefix}_Top", new Vector3( 0.00f,  0.55f,  0.00f), Vector3.zero,              Vector3.up),
+                    };
+                    if (includeBottom)
+                        ports.Add(($"{portPrefix}_Bottom", new Vector3(0.00f, -0.55f, 0.00f), new Vector3(180f, 0f, 0f), Vector3.down));
+
+                    foreach (var (portName, pos, euler, outward) in ports)
+                    {
+                        var existing = prefabRoot.transform.Find(portName);
+                        if (existing != null)
+                        {
+                            existing.localPosition = pos;
+                            existing.localRotation = Quaternion.Euler(euler);
+                            var facingExisting = existing.GetComponent<VoxelEngine.Maritime.MaritimePortFacing>();
+                            if (facingExisting == null)
+                                facingExisting = existing.gameObject.AddComponent<VoxelEngine.Maritime.MaritimePortFacing>();
+                            facingExisting.localOutward = outward;
+                            dirty = true;
+                            continue;
+                        }
+
+                        var port = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                        port.name = portName;
+                        port.transform.SetParent(prefabRoot.transform, false);
+                        port.transform.localPosition = pos;
+                        port.transform.localRotation = Quaternion.Euler(euler);
+                        port.transform.localScale = new Vector3(0.14f, 0.035f, 0.14f);
+                        var facing = port.AddComponent<VoxelEngine.Maritime.MaritimePortFacing>();
+                        facing.localOutward = outward;
+                        var col = port.GetComponent<Collider>();
+                        if (col != null) Object.DestroyImmediate(col);
+                        var renderer = port.GetComponent<Renderer>();
+                        if (renderer != null && mat != null) renderer.sharedMaterial = mat;
+                        dirty = true;
+                    }
+
+                    if (dirty)
+                        PrefabUtility.SaveAsPrefabAsset(prefabRoot, prefabPath);
+                }
+                finally
+                {
+                    PrefabUtility.UnloadPrefabContents(prefabRoot);
+                }
+            }
+
             // -- Recipes --
             var recipes = new System.Collections.Generic.List<VoxelEngine.Crafting.RecipeDefinition>();
             VoxelEngine.Crafting.RecipeDefinition AddGRecipe(string name, string display, VoxelEngine.Items.ItemDefinition output, params (VoxelEngine.Items.ItemDefinition item, int n)[] inputs)
@@ -5312,10 +5388,12 @@ root =>
             // Unified Liquid Tank — replaces the old Water Tank + Liquid Fuel Tank.
             // Liquid type is chosen from the tank's UI (Water / Crude / Refined / Liquid Fuel).
             var liquidTankPref = MakeGPref<VoxelEngine.GridSystem.GridLiquidTank>("LiquidTank_Large", new Color(0.25f, 0.5f, 0.85f), new Vector3(1.5f, 1.8f, 1.5f), t => { t.capacity = 500f; t.liquidType = VoxelEngine.Items.LiquidType.Water; });
+            EnsureGridTankPorts(liquidTankPref, "LiquidPortMarker", new Color(0.20f, 0.55f, 1.00f, 1f), "Port_LiquidIO", includeBottom: true);
             var itemLiquidTank = MakeGItem("GItem_LiquidTank", "Liquid Tank", Color.white, liquidTankPref, VoxelEngine.GridSystem.GridSize.Large, 220, 400);
             AddGRecipe("Recipe_GLiquidTank", "Liquid Tank", itemLiquidTank, (steelPlate, 5), (glass, 2), (copperWire, 2));
 
             var gasTankPref = MakeGPref<VoxelEngine.GridSystem.GridGasTank>("GasTank_Large", new Color(0.55f, 0.7f, 0.85f), new Vector3(1.5f, 1.8f, 1.5f), t => t.capacity = 500f);
+            EnsureGridTankPorts(gasTankPref, "GasPortMarker", new Color(0.45f, 0.75f, 1.0f, 1f), "Port_GasIO", includeBottom: true);
             var itemGasTank = MakeGItem("GItem_GasTank", "Gas Tank", Color.white, gasTankPref, VoxelEngine.GridSystem.GridSize.Large, 240, 380);
             AddGRecipe("Recipe_GGasTank", "Gas Tank", itemGasTank, (steelPlate, 5), (glass, 2), (copperWire, 2));
 
@@ -6210,12 +6288,11 @@ root =>
             AddMRecipe("Recipe_MModuleRadiator", "Super-Cooler Radiator Jacket", itemModuleRadiator, (copperPlate, 6), (steelPlate, 3), (glass, 2), (copperWire, 2));
             AddMRecipe("Recipe_MModuleAip", "Closed-Cycle AIP Module", itemModuleAip, (steelPlate, 4), (advCircuit, 2), (copperWire, 4), (glass, 2));
 
-            // The liquid tank needs its named ports so liquid pipes snap + link,
-            // and its classic-graph bridge so classic liquid pipes can feed/drain
-            // it from up to five lattice cells away. Gas tank needs identical ports
-            // for the 5-cell gas connection.
-            EnsureLiquidTankPorts();
-            EnsureGasTankPorts();
+            // Grid tank port markers are authored by Step 12 where the grid tank
+            // prefabs are generated. Do not create primitive port objects here — doing
+            // so from the maritime pass can leak scene objects when the prefab asset is
+            // not opened through PrefabUtility.LoadPrefabContents. Keep only the classic
+            // liquid bridge repair here.
             EnsureLiquidTankClassicBridge();
 
             // ── Item descriptions (only set if empty — preserves user edits) ──

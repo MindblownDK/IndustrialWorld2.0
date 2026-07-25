@@ -29,6 +29,9 @@ namespace VoxelEngine.Fluids
             // Water/fluid pipes use the FATTER copper profile so they're
             // visually distinct from the slim brass gas pipes.
             _visuals.style = VoxelEngine.Networks.PipeStyle.Copper;
+            // Unused end-caps looked like fake connections. Liquid pipes now only
+            // render arms/collars for actual connected neighbours or endpoints.
+            _visuals.showUnusedFaceCaps = false;
         }
 
         private List<Vector3> GetNeighbourPositions()

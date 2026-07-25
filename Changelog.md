@@ -1,9 +1,60 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.19.4-dev`
+**Current Version:** `6.19.6-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.19.6-dev] Prefab-Safe Grid Tank Port Repair
+
+**Type:** PATCH — editor/setup bug fix. Save-compatible; no gameplay balance or schema changes.
+
+**Fixed — tank ports no longer get created as loose scene objects:**
+1. Step 12 `EnsureGridTankPorts()` now opens the actual tank prefab through `PrefabUtility.LoadPrefabContents()`, edits the prefab contents, saves with `PrefabUtility.SaveAsPrefabAsset()`, then unloads the prefab contents.
+2. This prevents `Port_GasIO_*` / `Port_LiquidIO_*` primitives from being spawned into the open scene hierarchy instead of becoming children of the prefab asset.
+3. Step 13 no longer runs its older direct primitive port creation for grid tanks. Grid tank ports are now owned by Step 12 only, where the grid tank prefabs are generated.
+4. Existing prefab port transforms/facing tags are still repaired non-destructively; tank capacity, recipes, power, mass, and other tuning values are untouched.
+
+**Manual Unity cleanup:**
+- Delete any loose `Port_GasIO_*` / `Port_LiquidIO_*` objects that were accidentally added to the active scene by the previous setup run.
+- Then run **Tools → Voxel Engine → Voxel Engine Setup → 12. Build Grid System Content** once.
+
+**Files touched:**
+- `Scripts/Editor/VoxelEngineSetupWindow.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
+
+---
+
+### [6.19.5-dev] Step 12 Tank Ports & No-Fake Pipe Caps
+
+**Type:** PATCH — non-destructive setup repair plus visual clarity for pipe endpoints. Save-compatible; no schema change.
+
+**Fixed — Step 12 grid tanks now get ports when they are generated:**
+1. Added non-destructive `EnsureGridTankPorts()` directly to **Step 12 / Build Grid System Content**.
+2. `LiquidTank_Large` now receives `Port_LiquidIO_N/S/E/W/Top/Bottom` with `MaritimePortFacing` tags during Step 12.
+3. `GasTank_Large` now receives `Port_GasIO_N/S/E/W/Top/Bottom` with `MaritimePortFacing` tags during Step 12.
+4. Existing port transforms are preserved; missing facing tags are repaired and missing ports are created. No tank capacity, mass, power, recipe cost, or tuning values are overwritten.
+5. The gas/liquid corridor probes now validate the tank's named port alignment before accepting a broad collider hit, preventing off-axis/nearby tanks from being treated as connected.
+
+**Fixed — pipe visuals no longer look like they are trying to connect everywhere:**
+6. `PipeVisualBuilder` now forwards its existing `showUnusedFaceCaps` flag to `IndustrialPipeMesh`.
+7. Gas and liquid pipes set `showUnusedFaceCaps = false`, so standalone pipe hubs only show real connected arms instead of decorative unused caps that looked like fake connections.
+
+**Manual Unity step:**
+- Run **Tools → Voxel Engine → Voxel Engine Setup → 12. Build Grid System Content** once. This is the important one for grid gas/liquid tank ports.
+- Step 13 is no longer required just to repair grid tank ports, but remains safe to run for maritime content.
+
+**Files touched:**
+- `Scripts/Editor/VoxelEngineSetupWindow.cs`
+- `Scripts/Networks/IndustrialPipeMesh.cs`
+- `Scripts/Networks/PipeVisualBuilder.cs`
+- `Scripts/Gas/GasPipe.cs`
+- `Scripts/Fluids/WaterPipe.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
 
 ---
 

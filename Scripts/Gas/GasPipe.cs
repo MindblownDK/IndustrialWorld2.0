@@ -46,6 +46,9 @@ namespace VoxelEngine.Gas
             // Gas pipes are SLIM polished brass — distinct silhouette from the
             // fatter copper water pipes so the player can tell them apart at a glance.
             _visuals.style = VoxelEngine.Networks.PipeStyle.Brass;
+            // Unused end-caps looked like the pipe was trying to connect in every
+            // direction. Gas pipes now only show arms where a real network link exists.
+            _visuals.showUnusedFaceCaps = false;
         }
 
         private void OnEnable()

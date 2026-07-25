@@ -281,7 +281,8 @@ namespace VoxelEngine.Networks
             PipeStyle style,
             Material shellMat,
             Material innerMat,   // only used by glass shells; pass null for solid
-            Material accentMat)  // collars / end terminals; pass null to reuse shell
+            Material accentMat,  // collars / end terminals; pass null to reuse shell
+            bool showUnusedEndCaps = true)
         {
             if (visualRoot == null) return;
 
@@ -453,7 +454,7 @@ namespace VoxelEngine.Networks
             //   • squareEndCaps = false → round cap when hub is a sphere, OR
             //                             a small square block when hub is a
             //                             cube (so the silhouette stays coherent).
-            if (p.drawEndCaps)
+            if (p.drawEndCaps && showUnusedEndCaps)
             {
                 for (int i = 0; i < CardinalAxes.Length; i++)
                 {

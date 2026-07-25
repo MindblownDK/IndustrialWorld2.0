@@ -433,7 +433,9 @@ namespace VoxelEngine.GridSystem
                     if (tank != null && tank.Enabled && tank.mode != GridTankMode.Stockpile && !yieldedTanks.Contains(tank))
                     {
                         bool typeOk = tank.liquidType == type || (!requireExistingType && tank.stored <= 0.001f);
-                        if (typeOk && yieldedTanks.Add(tank)) newlyLinked?.Add(tank);
+                        bool portAligned = IsTankPortWithinDetailLink(pipeBlock.Grid, pipeBlock, tank,
+                            VoxelEngine.Maritime.MaritimePorts.LiquidPrefixes, detail);
+                        if (typeOk && portAligned && yieldedTanks.Add(tank)) newlyLinked?.Add(tank);
                     }
                     return false;
                 }, radiusScale: 2.2f);
