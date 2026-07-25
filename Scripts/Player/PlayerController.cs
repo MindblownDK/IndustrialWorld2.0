@@ -12,6 +12,7 @@
 using UnityEngine;
 using VoxelEngine.Settings;
 using VoxelEngine.Cosmos;
+using VoxelEngine.Environment;
 using InputAction = VoxelEngine.Settings.InputAction;
 #if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
 using UnityEngine.InputSystem;
@@ -35,6 +36,14 @@ namespace VoxelEngine.Player
         public float airAcceleration = 4f;
         [Tooltip("Friction applied to horizontal velocity on the ground when no input. Per second.")]
         public float groundFriction = 10f;
+
+        [Header("Ice Movement")]
+        [Tooltip("Ground friction used when standing on Ice voxels. Lower values keep momentum and create a slippery glide.")]
+        public float iceGroundFriction = 0.85f;
+        [Tooltip("Multiplier applied to ground acceleration on Ice voxels. Lower values make steering/braking less instant.")]
+        [Range(0.05f, 1f)] public float iceAccelerationMultiplier = 0.28f;
+        [Tooltip("Slide friction multiplier while sliding on Ice voxels.")]
+        [Range(0.05f, 1f)] public float iceSlideFrictionMultiplier = 0.35f;
 
         [Header("Jump / Gravity")]
         public float jumpHeight = 1.4f;
@@ -76,6 +85,7 @@ namespace VoxelEngine.Player
         private Quaternion _flyRotation = Quaternion.identity;
         private Vector3 _velocity;          // includes Y in walk mode; in fly mode XYZ
         private bool   _grounded;
+        private bool   _onIce;
         private float  _lastGroundedTime;
         private bool   _crouched;
         private bool   _sliding;
@@ -274,6 +284,7 @@ namespace VoxelEngine.Player
                 _grounded = CheckRadialGround(up);
             else
                 _grounded = _cc.isGrounded;
+            _onIce = _grounded && IceFrictionUtility.IsIceBelow(transform.position + up * 0.15f, up, 0.75f);
             if (_grounded) _lastGroundedTime = Time.time;
             bool canCoyote = (Time.time - _lastGroundedTime) <= coyoteTime;
 
@@ -316,7 +327,8 @@ namespace VoxelEngine.Player
             if (_sliding)
             {
                 // Apply slide friction -> exponential decay toward 0.
-                horiz = Vector3.Lerp(horiz, Vector3.zero, 1f - Mathf.Exp(-slideFriction * dt));
+                float activeSlideFriction = _onIce ? slideFriction * iceSlideFrictionMultiplier : slideFriction;
+                horiz = Vector3.Lerp(horiz, Vector3.zero, 1f - Mathf.Exp(-activeSlideFriction * dt));
 
                 // End slide if speed too low or crouch released.
                 if (horiz.magnitude < slideEndSpeed || !crouchHeld) _sliding = false;
@@ -325,11 +337,13 @@ namespace VoxelEngine.Player
             {
                 Vector3 wishVel = wishDir * targetSpeed;
                 float accel = _grounded ? groundAcceleration : airAcceleration;
+                if (_grounded && _onIce) accel *= iceAccelerationMultiplier;
 
                 if (_grounded && wishDir.sqrMagnitude < 0.01f)
                 {
                     // Apply ground friction: glide toward 0 horizontal velocity.
-                    horiz = Vector3.Lerp(horiz, Vector3.zero, 1f - Mathf.Exp(-groundFriction * dt));
+                    float activeFriction = _onIce ? iceGroundFriction : groundFriction;
+                    horiz = Vector3.Lerp(horiz, Vector3.zero, 1f - Mathf.Exp(-activeFriction * dt));
                 }
                 else
                 {

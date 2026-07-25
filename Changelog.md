@@ -1,9 +1,31 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.20.2-dev`
+**Current Version:** `6.21.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.21.0-dev] Ice Friction Player Movement First Pass
+
+**Type:** MINOR — new movement/hazard surface behavior. Save-compatible; no save schema change.
+
+**Added — player ice friction:**
+1. Added `IceFrictionUtility`, a shared active-world voxel sampler that detects solid `MaterialId.Ice` below a world position on both flat worlds and spherical planets.
+2. `PlayerController` now detects when the grounded player is standing on Ice voxels.
+3. Walking on ice uses much lower friction, reduced steering/braking acceleration, and lower slide friction so momentum carries naturally instead of stopping instantly.
+4. The implementation is intentionally data-light and non-destructive; no prefab or material balance values are overwritten.
+
+**Roadmap:**
+5. Marked `11.2 Ice Friction` as **WORKING ON** because player ice movement is implemented, while static loose blocks and movable Grids still need their rigidbody/physics pass before the section can be completed.
+
+**Files touched:**
+- `Scripts/Environment/IceFrictionUtility.cs`
+- `Scripts/Player/PlayerController.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
+- `Roadmap.md`
 
 ---
 
