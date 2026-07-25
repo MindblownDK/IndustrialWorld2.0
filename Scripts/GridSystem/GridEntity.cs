@@ -54,7 +54,10 @@ namespace VoxelEngine.GridSystem
         // ── Physics ────────────────────────────────────────────────
         private Rigidbody _rb;
         private bool _touchingIce;
+        private float _lastIceContactTime = -999f;
         private const float IceGridBrakeMultiplier = 0.18f;
+        private const float IceContactGravityGrace = 2.0f;
+        private const float IceRecoveryGravityMultiplier = 1.75f;
         public Rigidbody Body => _rb;
 
         // ── Power (grid-wide, no cables) ───────────────────────────
@@ -230,6 +233,7 @@ namespace VoxelEngine.GridSystem
 
             UpdatePower();
             _touchingIce = DetectIceContact();
+            if (_touchingIce) _lastIceContactTime = Time.time;
             UpdateThrust();
             UpdateDampeners();
             UpdateWheels();
@@ -292,8 +296,17 @@ namespace VoxelEngine.GridSystem
             return IceFrictionUtility.IsIceBelow(transform.position + up * 0.15f, up, 1.25f);
         }
 
+        private bool IsRecoveringFromIceContact()
+        {
+            return Time.time - _lastIceContactTime <= IceContactGravityGrace;
+        }
+
         private bool ShouldDampenerHoldHover()
         {
+            // A grid that has just skidded/tilted off ice must keep falling back
+            // toward the planet. Hover-hold dampeners cancelling gravity here made
+            // tilted grids drift upward and hang in the air.
+            if (IsRecoveringFromIceContact()) return false;
             return DampenersOn && !HasManualThrustInput() && HasHoverAuthority();
         }
 
@@ -322,7 +335,10 @@ namespace VoxelEngine.GridSystem
             // translation, the ship should not continue falling through atmosphere gravity.
             if (ShouldDampenerHoldHover()) return;
 
-            _rb.AddForce(CurrentGravityAcceleration(), ForceMode.Acceleration);
+            Vector3 gravity = CurrentGravityAcceleration();
+            if (IsRecoveringFromIceContact() && !IsControlled)
+                gravity *= IceRecoveryGravityMultiplier;
+            _rb.AddForce(gravity, ForceMode.Acceleration);
         }
 
         // ── Block Management ───────────────────────────────────────
@@ -840,16 +856,30 @@ namespace VoxelEngine.GridSystem
                 // dampeners feel like they're wrestling real inertia.
                 float massFactor = 10000f / Mathf.Max(10000f, _rb.mass);
                 float brake = 2.5f * massFactor;
-                if (_touchingIce) brake *= IceGridBrakeMultiplier;
+                bool iceRecovery = IsRecoveringFromIceContact();
+                if (iceRecovery) brake *= IceGridBrakeMultiplier;
+
+                // On/just-after ice, dampeners brake only tangent drift. They must not
+                // fight the gravity-axis velocity, or a tilted grid can hover upward
+                // after losing contact with the ice.
+                Vector3 dampedVelocity = vel;
+                if (iceRecovery)
+                {
+                    Vector3 gravity = CurrentGravityAcceleration();
+                    if (gravity.sqrMagnitude > 0.0001f)
+                        dampedVelocity = Vector3.ProjectOnPlane(vel, gravity.normalized);
+                }
 
                 // Soften the brake at very low speeds so the ship coasts gently to a stop
                 // instead of slamming on the brakes.
-                float speed = vel.magnitude;
+                float speed = dampedVelocity.magnitude;
                 float settle = Mathf.Clamp01(speed / 0.5f);
-                _rb.AddForce(-vel * brake * settle, ForceMode.Acceleration);
+                if (speed > 0.0001f)
+                    _rb.AddForce(-dampedVelocity * brake * settle, ForceMode.Acceleration);
 
                 // Hard snap only when almost stopped, so the ship doesn't drift forever.
-                if (speed < 0.03f)
+                // During ice recovery never zero vertical/gravity velocity.
+                if (!iceRecovery && speed < 0.03f)
                     _rb.linearVelocity = Vector3.zero;
             }
 

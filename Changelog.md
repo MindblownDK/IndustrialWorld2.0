@@ -1,9 +1,26 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.21.1-dev`
+**Current Version:** `6.21.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.21.2-dev] Ice Grid Gravity Recovery Fix
+
+**Type:** PATCH — ice-friction physics fix for movable grids. Save-compatible; no save schema change.
+
+**Fixed — tilted grids no longer drift upward after sliding off ice:**
+1. `GridEntity` now keeps a short ice-contact grace timer after any block touches Ice.
+2. During that grace window, hover-hold dampeners cannot cancel gravity. This prevents thruster authority from making a recently-tilted grid hang in the air after losing ice contact.
+3. Dampener braking during ice recovery now only brakes tangent drift, not gravity-axis velocity, so the grid can fall back toward the planet naturally.
+4. Added a small temporary gravity multiplier during ice recovery for uncontrolled grids to make re-contact with the surface feel reliable.
+
+**Files touched:**
+- `Scripts/GridSystem/GridEntity.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
 
 ---
 

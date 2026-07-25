@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.21.1-dev`
-**Roadmap Version:** `6.21.1-dev`
+**Current Version:** `6.21.2-dev`
+**Roadmap Version:** `6.21.2-dev`
 **Date:** 2026-07-24
 **Status:** World Management, Autosaves & Item Limits — COMPLETED; Power, Vehicles & Combat (4.7.0) remains WORKING ON
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -1716,7 +1716,8 @@ For each version, these are the high-level Unity tasks you will perform manually
 ### 11.2 Ice Friction — ✅ COMPLETED
 - Ice surfaces use low-friction physics for players, static loose blocks, and movable Grids.
 - **6.21.0-dev:** Player movement detects solid Ice voxels underfoot and applies low-friction, reduced-steering movement on ice.
-- **6.21.1-dev:** Physical dropped items use low Rigidbody damping and delayed settling on ice, and movable Grids reduce dampener/angular braking while touching Ice. Current ice-friction scope is complete after Unity validation from Thomas.
+- **6.21.1-dev:** Physical dropped items use low Rigidbody damping and delayed settling on ice, and movable Grids reduce dampener/angular braking while touching Ice.
+- **6.21.2-dev:** Movable Grids keep gravity active for a short grace period after ice contact, dampen only tangent drift during that recovery, and fall back toward the planet instead of hanging upward after tilting off ice. Current ice-friction scope is complete after Unity validation from Thomas.
 
 ### 11.3 Jetpack Families — ❌ MISSING
 - Add two dedicated jetpack equipment slots.
