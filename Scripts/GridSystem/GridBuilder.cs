@@ -401,6 +401,51 @@ namespace VoxelEngine.GridSystem
             if (IsPipeItem(item, out var family))
             {
                 var hitBlock = hit.collider != null ? hit.collider.GetComponentInParent<GridBlock>() : null;
+                if (TryGetGridTankVariablePortSnap(grid, hitBlock, family, hit, false,
+                        out string tankFeedback,
+                        out Vector3Int tankPrecisionPos, out Vector3Int tankHostStructuralPos, out Vector3Int tankFaceAxis,
+                        out Vector3 tankAnchorLocal, out Vector3 tankPortLocalPos, out Vector3 tankPortOutLocal,
+                        out GridTankPortFamily tankPortFamily))
+                {
+                    ShowPrecisionLattice(grid, tankHostStructuralPos, tankFaceAxis);
+                    Vector3 worldPos = grid.transform.TransformPoint(tankAnchorLocal);
+                    Quaternion rotation = grid.transform.rotation * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
+                    ShowGhost(item, worldPos, rotation, valid: true);
+                    ShowGhostPortRingForBlockColor(hitBlock, tankPortLocalPos, tankPortOutLocal, GridTankVariablePorts.ColorFor(tankPortFamily));
+
+                    if (GameSettings.WasPressed(InputAction.Build))
+                    {
+                        bool commitSnapped = TryGetGridTankVariablePortSnap(grid, hitBlock, family, hit, true,
+                            out string commitFeedback,
+                            out Vector3Int cPrec, out Vector3Int cHost, out Vector3Int cFace,
+                            out Vector3 cAnchor, out Vector3 cPortLocal, out Vector3 cPortOut, out GridTankPortFamily cFamily);
+                        if (!commitSnapped) return;
+                        var layer = grid.GetComponent<GridPrecisionAttachmentLayer>();
+                        if (layer == null) layer = grid.gameObject.AddComponent<GridPrecisionAttachmentLayer>();
+                        if (!layer.CanPlace(cPrec))
+                        {
+                            VoxelEngine.UI.BuildFeedbackHud.Show("Placement Blocked", "Detail cell occupied", item.icon, Color.red);
+                            return;
+                        }
+                        var block = CreatePrecisionBlock(item);
+                        Quaternion localRot = Quaternion.Inverse(grid.transform.rotation) * rotation;
+                        if (!layer.AddBlock(cPrec, cHost, block, localRot))
+                        {
+                            Destroy(block.gameObject);
+                            return;
+                        }
+                        block.transform.localPosition = cAnchor;
+                        var pv = block.GetComponentInChildren<VoxelEngine.Networks.PipeVisualBuilder>(true);
+                        if (pv != null) { pv.gridSize = GridSize.Small.CellSize(); pv.ForceRebuild(); }
+                        GridLiquidNetwork.Instance?.SetDirty();
+                        GridGasNetwork.Instance?.SetDirty();
+                        VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged();
+                        inventory.container.Remove(item, 1);
+                        VoxelEngine.UI.BuildFeedbackHud.Show("Pipe Attached", commitFeedback ?? $"{item.displayName} · {GridTankVariablePorts.LabelFor(cFamily)}", item.icon, item.iconTint);
+                    }
+                    return;
+                }
+
                 if (hitBlock is GridMaritimeEngine)
                 {
                     bool snapped = TryGetGridVariablePortSnap(grid, hitBlock, family, hit, false,
@@ -712,6 +757,79 @@ namespace VoxelEngine.GridSystem
                 : $"{MaritimeVariablePorts.LabelFor(plan.service)} installed";
             s_previewPortService = (int)plan.service;
             return true;
+        }
+
+        private bool TryGetGridTankVariablePortSnap(GridEntity grid, GridBlock targetBlock,
+            PipeFamily pipeFamily, RaycastHit hit, bool commit, out string feedback,
+            out Vector3Int precisionPos, out Vector3Int hostStructuralPos, out Vector3Int faceAxis,
+            out Vector3 anchorLocal, out Vector3 portLocalPos, out Vector3 portOutLocal,
+            out GridTankPortFamily tankFamily)
+        {
+            feedback = null;
+            precisionPos = default;
+            hostStructuralPos = default;
+            faceAxis = default;
+            anchorLocal = default;
+            portLocalPos = default;
+            portOutLocal = default;
+            tankFamily = GridTankPortFamily.Liquid;
+
+            if (grid == null || targetBlock == null || targetBlock.Grid != grid) return false;
+            if (pipeFamily == PipeFamily.Liquid)
+            {
+                if (targetBlock is not GridLiquidTank) return false;
+                tankFamily = GridTankPortFamily.Liquid;
+            }
+            else if (pipeFamily == PipeFamily.Gas)
+            {
+                if (targetBlock is not GridGasTank) return false;
+                tankFamily = GridTankPortFamily.Gas;
+            }
+            else return false;
+
+            float small = GridSize.Small.CellSize();
+            faceAxis = SnapMountAxis(grid, hit.normal);
+            if (faceAxis == Vector3Int.zero) faceAxis = Vector3Int.up;
+            Vector3 outGridLocal = new Vector3(faceAxis.x, faceAxis.y, faceAxis.z).normalized;
+            Vector3 outWorld = grid.transform.TransformDirection(outGridLocal).normalized;
+
+            Vector3 rawSeatGridLocal = grid.transform.InverseTransformPoint(hit.point + outWorld * (small * 0.55f));
+            precisionPos = new Vector3Int(
+                Mathf.FloorToInt(rawSeatGridLocal.x / small + 0.5f),
+                Mathf.FloorToInt(rawSeatGridLocal.y / small + 0.5f),
+                Mathf.FloorToInt(rawSeatGridLocal.z / small + 0.5f));
+            anchorLocal = (Vector3)precisionPos * small;
+            hostStructuralPos = targetBlock.IsPrecisionAttachment
+                ? targetBlock.PrecisionHostGridPos
+                : targetBlock.GridPos;
+
+            var layer = grid.GetComponent<GridPrecisionAttachmentLayer>();
+            if (layer != null && !layer.CanPlace(precisionPos)) return false;
+
+            Vector3 seatWorld = grid.transform.TransformPoint(anchorLocal);
+            Vector3 portWorld = seatWorld - outWorld * (small * 0.55f + 0.02f);
+            portLocalPos = targetBlock.transform.InverseTransformPoint(portWorld);
+            portOutLocal = targetBlock.transform.InverseTransformDirection(outWorld).normalized;
+            if (portOutLocal.sqrMagnitude < 0.0001f) portOutLocal = Vector3.up;
+
+            if (commit)
+            {
+                var ports = targetBlock.GetComponent<GridTankVariablePorts>();
+                if (ports == null) ports = targetBlock.gameObject.AddComponent<GridTankVariablePorts>();
+                ports.AddPort(tankFamily, portLocalPos, portOutLocal);
+            }
+
+            feedback = GridTankVariablePorts.LabelFor(tankFamily) + " installed";
+            return true;
+        }
+
+        private void ShowGhostPortRingForBlockColor(GridBlock block, Vector3 portLocalPos, Vector3 portOutLocal, Color color)
+        {
+            if (block == null) return;
+            Vector3 worldPos = block.transform.TransformPoint(portLocalPos);
+            Vector3 outWorld = block.transform.TransformDirection(portOutLocal).normalized;
+            if (outWorld.sqrMagnitude < 0.0001f) outWorld = block.transform.up;
+            ShowGhostPortRing(worldPos, outWorld, color);
         }
 
         private void ShowGhostPortRingForBlock(GridBlock block, Vector3 portLocalPos, Vector3 portOutLocal, bool isBlocked, int service = 0)

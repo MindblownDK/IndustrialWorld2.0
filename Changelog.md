@@ -1,9 +1,34 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.19.6-dev`
+**Current Version:** `6.20.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.20.0-dev] Variable Tank Ports for Grid Gas/Liquid Tanks
+
+**Type:** MINOR — new save-compatible variable port feature for grid tanks. Additive save data only; existing saves remain compatible.
+
+**Added — tank ports now work like maritime engine ports:**
+1. New `GridTankVariablePorts` component stores player-installed variable ports on grid gas/liquid tanks.
+2. Holding a matching pipe and aiming at a grid tank hull now previews a colored port ring exactly where the port will be installed:
+   - Blue = liquid tank port.
+   - Sky-blue = gas tank port.
+3. Pipe placement snaps to the same Detail lattice cell used by the port preview, so ghost and placed pipe match.
+4. Clicking installs a dynamic child port (`Port_LiquidIO_V` / `Port_GasIO_V`) on the actual tank block and seats the pipe outside the hull.
+5. Network and visual systems already discover these variable ports through the existing port-prefix rules, so gas/liquid tank links use the new variable port instead of relying on fixed prefab markers.
+
+**Persistence:**
+6. Variable tank ports are saved/restored using the existing additive variable-port payload path. Legacy saves without tank ports still load normally.
+
+**Files touched:**
+- `Scripts/GridSystem/GridTankVariablePorts.cs`
+- `Scripts/GridSystem/GridBuilder.cs`
+- `Scripts/Persistence/WorldStatePersistence.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
 
 ---
 

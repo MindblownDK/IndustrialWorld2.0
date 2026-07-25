@@ -428,22 +428,45 @@ namespace VoxelEngine.Persistence
         private static void CaptureMaritimePorts(GameObject go, SavedPlacedBlock entry)
         {
             var engine = go.GetComponentInChildren<VoxelEngine.Maritime.GridMaritimeEngine>(true);
-            if (engine == null) return;
-            var records = engine.CaptureVariablePorts();
-            if (records == null || records.Count == 0) return;
-            var saved = new SavedMaritimePorts();
-            for (int i = 0; i < records.Count; i++)
+            if (engine != null)
             {
-                var r = records[i];
-                if (r == null) continue;
-                saved.ports.Add(new SavedVariablePort
+                var records = engine.CaptureVariablePorts();
+                if (records == null || records.Count == 0) return;
+                var saved = new SavedMaritimePorts();
+                for (int i = 0; i < records.Count; i++)
                 {
-                    service = r.service,
+                    var r = records[i];
+                    if (r == null) continue;
+                    saved.ports.Add(new SavedVariablePort
+                    {
+                        service = r.service,
+                        localPos = r.localPos,
+                        localOutward = r.localOutward
+                    });
+                }
+                entry.maritimePorts = saved;
+                return;
+            }
+
+            // Reuse the same additive port payload for grid tank variable ports.
+            // service stores GridTankPortFamily (0=Liquid, 1=Gas) for tank blocks.
+            var tankPorts = go.GetComponentInChildren<VoxelEngine.GridSystem.GridTankVariablePorts>(true);
+            if (tankPorts == null || !tankPorts.HasRecords) return;
+            var tankRecords = tankPorts.CaptureRecords();
+            if (tankRecords == null || tankRecords.Count == 0) return;
+            var tankSaved = new SavedMaritimePorts();
+            for (int i = 0; i < tankRecords.Count; i++)
+            {
+                var r = tankRecords[i];
+                if (r == null) continue;
+                tankSaved.ports.Add(new SavedVariablePort
+                {
+                    service = r.family,
                     localPos = r.localPos,
                     localOutward = r.localOutward
                 });
             }
-            entry.maritimePorts = saved;
+            entry.maritimePorts = tankSaved;
         }
 
         private static void CaptureLightingRuntime(GameObject go, SavedPlacedBlock entry)
@@ -1268,16 +1291,37 @@ namespace VoxelEngine.Persistence
         {
             if (saved == null || saved.ports == null || saved.ports.Count == 0) return;
             var engine = go.GetComponentInChildren<VoxelEngine.Maritime.GridMaritimeEngine>(true);
-            if (engine == null) return;
-            var records = new List<VoxelEngine.Maritime.VariablePortRecord>(saved.ports.Count);
+            if (engine != null)
+            {
+                var records = new List<VoxelEngine.Maritime.VariablePortRecord>(saved.ports.Count);
+                for (int i = 0; i < saved.ports.Count; i++)
+                {
+                    var p = saved.ports[i];
+                    if (p == null) continue;
+                    records.Add(new VoxelEngine.Maritime.VariablePortRecord(
+                        (VoxelEngine.Maritime.PortService)p.service, p.localPos, p.localOutward));
+                }
+                engine.RestoreVariablePorts(records);
+                return;
+            }
+
+            var tankBlock = go.GetComponentInChildren<VoxelEngine.GridSystem.GridBlock>(true);
+            if (tankBlock == null) return;
+            bool isTank = tankBlock is VoxelEngine.GridSystem.GridLiquidTank
+                || tankBlock is VoxelEngine.GridSystem.GridGasTank;
+            if (!isTank) return;
+
+            var tankPorts = tankBlock.GetComponent<VoxelEngine.GridSystem.GridTankVariablePorts>();
+            if (tankPorts == null) tankPorts = tankBlock.gameObject.AddComponent<VoxelEngine.GridSystem.GridTankVariablePorts>();
+            var tankRecords = new List<VoxelEngine.GridSystem.GridTankPortRecord>(saved.ports.Count);
             for (int i = 0; i < saved.ports.Count; i++)
             {
                 var p = saved.ports[i];
                 if (p == null) continue;
-                records.Add(new VoxelEngine.Maritime.VariablePortRecord(
-                    (VoxelEngine.Maritime.PortService)p.service, p.localPos, p.localOutward));
+                tankRecords.Add(new VoxelEngine.GridSystem.GridTankPortRecord(
+                    (VoxelEngine.GridSystem.GridTankPortFamily)p.service, p.localPos, p.localOutward));
             }
-            engine.RestoreVariablePorts(records);
+            tankPorts.RebuildFromRecords(tankRecords);
         }
 
         private static void RestoreLightingRuntime(GameObject go, SavedLightingConfig cfg)
