@@ -1,9 +1,51 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.22.4-dev`
+**Current Version:** `6.23.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.23.0-dev] Cryobed Offline-Survival Foundation
+
+**Type:** MINOR — new save-compatible life-support/offline-survival foundation content. No save schema break.
+
+**Added — static and grid cryobeds:**
+1. Added `Cryobed` for static bases and `GridCryobed` for ships/stations.
+2. Right-clicking either cryobed claims it as the player's respawn/offline-survival anchor using the existing spawn sidecar path.
+3. Grid cryobeds expose basic `IGridDataProvider` status text for future screens/terminals.
+4. Step 11 now creates the static Cryobed prefab, BlockItem, and recipe non-destructively.
+5. Step 12 now creates the Grid Cryobed prefab, GridBlockItem, and recipe non-destructively.
+
+**Roadmap:**
+6. Marked `11.4 Cryobeds, Offline Survival & Oxygen` as **WORKING ON**. Cryobed anchors exist; oxygen-rich environment checks, offline death logic, and full life-support integration remain open.
+
+**Manual Unity steps:**
+- Run **Tools → Voxel Engine → Voxel Engine Setup → 11. Build Survival + Industrial Logistics Content** for the static Cryobed.
+- Run **Tools → Voxel Engine → Voxel Engine Setup → 12. Build Grid System Content** for the Grid Cryobed.
+
+**Files touched:**
+- `Scripts/Building/Cryobed.cs`
+- `Scripts/GridSystem/GridCryobed.cs`
+- `Scripts/Player/PlayerInteractionTool.cs`
+- `Scripts/Editor/VoxelEngineSetupWindow.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
+- `Roadmap.md`
+
+---
+
+### [6.22.5-dev] Spawn Clearance Final Lift Hotfix
+
+**Type:** PATCH — spawn clearance correction. Save-compatible.
+
+**Fixed:**
+1. Increased player spawn clearance to keep the CharacterController fully above terrain.
+2. Added a final terrain-lift pass immediately before enabling player control so late-updated chunk meshes cannot leave the player slightly embedded.
+
+**Files touched:**
+- `Scripts/Player/PlayerSpawner.cs`
 
 ---
 

@@ -4029,6 +4029,27 @@ namespace VoxelEngine.EditorTools
             AddRecipe(FARM_RECIPES, "Recipe_Sprinkler", "Sprinkler", blockSprinkler, 1, VoxelEngine.Crafting.StationTier.CraftingBench, false, ((VoxelEngine.Items.ItemDefinition)ironPlate, 2), ((VoxelEngine.Items.ItemDefinition)copperWire, 4));
             AddRecipe(FARM_RECIPES, "Recipe_Harvester", "Harvester", blockHarvester, 1, VoxelEngine.Crafting.StationTier.Assembler, false, ((VoxelEngine.Items.ItemDefinition)ironPlate, 4), ((VoxelEngine.Items.ItemDefinition)ironGear, 4), ((VoxelEngine.Items.ItemDefinition)circuit, 1));
 
+            // ── Static Cryobed (offline-survival foundation) ──
+            var cryobedPrefab = MakePref(STORE_PREFABS, "Cryobed_Static",
+                new Color(0.28f, 0.62f, 0.82f), new Vector3(2.1f, 0.62f, 0.95f),
+                root =>
+                {
+                    var cb = root.AddComponent<VoxelEngine.Building.Cryobed>();
+                    cb.displayName = "Cryobed";
+                    cb.oxygenRequired = true;
+                    cb.poweredRequired = true;
+                    var light = new GameObject("Generated_StatusLight");
+                    light.transform.SetParent(root.transform, false);
+                    light.transform.localPosition = new Vector3(0f, 0.42f, -0.48f);
+                    var l = light.AddComponent<Light>();
+                    l.type = LightType.Point; l.color = new Color(0.45f, 0.85f, 1f); l.intensity = 1.2f; l.range = 3f;
+                });
+            var blockCryobed = MakeBlk(STORE_BLOCKS, "Block_Cryobed", "Cryobed",
+                "Sealed respawn/offline-survival bed foundation. Later life-support passes will require oxygen and power to keep offline Crusaders safe.",
+                new Color(0.45f, 0.85f, 1f), cryobedPrefab, "Life Support", hp: 450, miningTier: 2);
+            AddRecipe(STORE_RECIPES, "Recipe_Cryobed", "Cryobed", blockCryobed, 1, VoxelEngine.Crafting.StationTier.Assembler, false,
+                ((VoxelEngine.Items.ItemDefinition)steelPlate, 6), ((VoxelEngine.Items.ItemDefinition)glass, 4), ((VoxelEngine.Items.ItemDefinition)circuit, 2), ((VoxelEngine.Items.ItemDefinition)copperWire, 6));
+
             // Cooking recipes — happen at any Furnace (treated like a smelting recipe? simpler as bench recipes here).
             AddRecipe(FARM_RECIPES, "Recipe_Cook_Bread", "Bread", foodBread, 1, VoxelEngine.Crafting.StationTier.Furnace, false, ((VoxelEngine.Items.ItemDefinition)foodWheatRaw, 3));
             AddRecipe(FARM_RECIPES, "Recipe_Cook_Stew", "Vegetable Stew", foodStew, 1, VoxelEngine.Crafting.StationTier.Furnace, false, ((VoxelEngine.Items.ItemDefinition)foodCarrotRaw, 2), ((VoxelEngine.Items.ItemDefinition)foodCornRaw, 1));
@@ -5248,6 +5269,14 @@ root =>
             AddGRecipe("Recipe_JetpackHydrogenBoost", "Hydrogen Boost Pack", jetHydrogen, (steelPlate, 4), (copperWire, 8), (circuit, 2));
             AddGRecipe("Recipe_JetpackAtmospheric", "Atmospheric Jetpack", jetAtmospheric, (steelPlate, 6), (copperWire, 10), (circuit, 3));
             AddGRecipe("Recipe_JetpackHybrid", "Hybrid Jetpack", jetHybrid, (steelPlate, 10), (copperWire, 16), (advCircuit ?? circuit, 3), (lithium, 2));
+
+            // -- 0b) Grid Cryobed (offline-survival foundation) --
+            var gridCryobedPref = MakeGPref<VoxelEngine.GridSystem.GridCryobed>("Cryobed_Large", new Color(0.28f, 0.62f, 0.82f), new Vector3(2.2f, 0.75f, 1.1f),
+                c => { c.blockName = "Grid Cryobed"; c.idleWatts = 35f; c.oxygenRequired = true; c.poweredRequired = true; });
+            var itemGridCryobed = MakeGItem("GItem_Cryobed", "Grid Cryobed", new Color(0.45f, 0.85f, 1f), gridCryobedPref, VoxelEngine.GridSystem.GridSize.Large, 620, 650);
+            itemGridCryobed.description = "Grid-mounted sealed respawn/offline-survival bed foundation. Future life-support pass will require oxygen and power for offline survival.";
+            EditorUtility.SetDirty(itemGridCryobed);
+            AddGRecipe("Recipe_GCryobed", "Grid Cryobed", itemGridCryobed, (steelPlate, 8), (glass, 4), (circuit, 3), (copperWire, 8));
 
             // -- 1) Cockpits --
             var cockSmallPref = MakeGPref<VoxelEngine.GridSystem.GridCockpit>("Cockpit_Small", new Color(0.2f, 0.4f, 0.8f), new Vector3(0.8f, 0.8f, 1.2f),

@@ -401,6 +401,10 @@ namespace VoxelEngine.Player
                     return;
                 }
 
+                var cryobed = hit.collider.GetComponentInParent<VoxelEngine.Building.Cryobed>();
+                if (cryobed != null) { cryobed.ClaimAsSpawn(); return; }
+                var gridCryobed = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridCryobed>();
+                if (gridCryobed != null) { gridCryobed.ClaimAsSpawn(); return; }
                 var bed = hit.collider.GetComponentInParent<VoxelEngine.Building.Bed>();
                 if (bed != null) { bed.ClaimAsSpawn(); return; }
 
