@@ -189,6 +189,12 @@ namespace VoxelEngine.Fluids
             var blockB = b != null ? b.GetComponentInParent<GridBlock>() : null;
             if (blockA != null && blockB != null && blockA.Grid != null && blockA.Grid == blockB.Grid)
             {
+                // Pipe↔pipe links always use the Detail lattice step. Old/legacy pipe
+                // prefabs can arrive on a grid without IsPrecisionAttachment set; using
+                // structural size then allowed one-left + one-up diagonal links through.
+                if (a != null && b != null && a.Kind == FluidNodeKind.Pipe && b.Kind == FluidNodeKind.Pipe)
+                    return GridSizeExt.CellSize(GridSize.Small);
+
                 bool aSmall = blockA.IsPrecisionAttachment;
                 bool bSmall = blockB.IsPrecisionAttachment;
                 float small = GridSizeExt.CellSize(GridSize.Small);

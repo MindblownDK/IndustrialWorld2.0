@@ -58,6 +58,8 @@ namespace VoxelEngine.Building
         private static string s_portCapReason;
         private static string s_portCapPipeFamily;
         private static int s_previewPortService;
+        private static bool s_previewTankPort;
+        private static VoxelEngine.GridSystem.GridTankPortFamily s_previewTankPortFamily;
         private float _portCapFeedbackAt;       // throttle bottom-right toast while aiming
         private const float PortCapFeedbackInterval = 1.2f;
 
@@ -203,8 +205,10 @@ namespace VoxelEngine.Building
                         showGhostPort = true;
                         ghostPortColor = s_portCapBlocked
                             ? new Color(0.95f, 0.25f, 0.20f)
-                            : VoxelEngine.Maritime.MaritimeVariablePorts.ColorFor(
-                                (VoxelEngine.Maritime.PortService)s_previewPortService);
+                            : s_previewTankPort
+                                ? VoxelEngine.GridSystem.GridTankVariablePorts.ColorFor(s_previewTankPortFamily)
+                                : VoxelEngine.Maritime.MaritimeVariablePorts.ColorFor(
+                                    (VoxelEngine.Maritime.PortService)s_previewPortService);
                     }
                 }
 
@@ -348,6 +352,8 @@ namespace VoxelEngine.Building
             s_portCapReason = null;
             s_portCapPipeFamily = null;
             s_previewPortService = 0;
+            s_previewTankPort = false;
+            s_previewTankPortFamily = VoxelEngine.GridSystem.GridTankPortFamily.Liquid;
             if (grid == null || item == null || item.placedPrefab == null || hit.collider == null) return false;
 
             // Route by the HELD pipe type — liquid pipes to liquid ports, gas pipes to
@@ -379,6 +385,23 @@ namespace VoxelEngine.Building
             if (targetBlock == null || targetBlock.Grid != grid) return false;
 
             float small = GridSize.Small.CellSize();
+
+            // Grid gas/liquid tanks use the same variable-port UX as maritime
+            // engines: aim at the tank hull with the matching pipe, preview a colored
+            // port ring, then install a dynamic Port_*_V and seat the pipe on the
+            // Detail lattice just outside it.
+            if (TryGetGridTankVariablePortSnap(grid, targetBlock, family, hit, commit,
+                    out feedback, out precisionPos, out hostStructuralPos, out faceAxis,
+                    out anchorLocal, out Vector3 tankPortLocal, out Vector3 tankOutLocal,
+                    out bool tankPortIsNew, out VoxelEngine.GridSystem.GridTankPortFamily tankFamily))
+            {
+                newPortLocalPos = tankPortLocal;
+                newPortOutLocal = tankOutLocal;
+                portIsNew = tankPortIsNew;
+                s_previewTankPort = true;
+                s_previewTankPortFamily = tankFamily;
+                return true;
+            }
             // The big machine hitboxes reach far past their ports (an MGO fuel port
             // can sit ~4m inside the collider surface), so the snap radius must span
             // machine internals — not just the port's own overhang.
@@ -499,6 +522,70 @@ namespace VoxelEngine.Building
         //  placement calls with commit=true to actually install the port. Both
         //  run identical geometry so ghost ≡ placed.
         // ════════════════════════════════════════════════════════════════
+        private static bool TryGetGridTankVariablePortSnap(GridEntity grid, GridBlock targetBlock,
+            VoxelEngine.Maritime.PipeFamily pipeFamily, RaycastHit hit, bool commit, out string feedback,
+            out Vector3Int precisionPos, out Vector3Int hostStructuralPos, out Vector3Int faceAxis,
+            out Vector3 anchorLocal, out Vector3 portLocalPos, out Vector3 portOutLocal,
+            out bool portIsNew, out VoxelEngine.GridSystem.GridTankPortFamily tankFamily)
+        {
+            feedback = null;
+            precisionPos = default;
+            hostStructuralPos = default;
+            faceAxis = default;
+            anchorLocal = default;
+            portLocalPos = default;
+            portOutLocal = default;
+            portIsNew = false;
+            tankFamily = VoxelEngine.GridSystem.GridTankPortFamily.Liquid;
+
+            if (grid == null || targetBlock == null || targetBlock.Grid != grid) return false;
+            if (pipeFamily == VoxelEngine.Maritime.PipeFamily.Liquid)
+            {
+                if (targetBlock is not VoxelEngine.GridSystem.GridLiquidTank) return false;
+                tankFamily = VoxelEngine.GridSystem.GridTankPortFamily.Liquid;
+            }
+            else if (pipeFamily == VoxelEngine.Maritime.PipeFamily.Gas)
+            {
+                if (targetBlock is not VoxelEngine.GridSystem.GridGasTank) return false;
+                tankFamily = VoxelEngine.GridSystem.GridTankPortFamily.Gas;
+            }
+            else return false;
+
+            float small = GridSize.Small.CellSize();
+            faceAxis = UnifiedGridTopology.SnapFaceAxis(grid, hit.normal);
+            if (faceAxis == Vector3Int.zero) faceAxis = Vector3Int.up;
+            Vector3 outLocal = new Vector3(faceAxis.x, faceAxis.y, faceAxis.z).normalized;
+            Vector3 outWorld = grid.transform.TransformDirection(outLocal).normalized;
+
+            Vector3 rawSeatGridLocal = grid.transform.InverseTransformPoint(hit.point + outWorld * (small * 0.55f));
+            precisionPos = new Vector3Int(
+                Mathf.FloorToInt(rawSeatGridLocal.x / small + 0.5f),
+                Mathf.FloorToInt(rawSeatGridLocal.y / small + 0.5f),
+                Mathf.FloorToInt(rawSeatGridLocal.z / small + 0.5f));
+            anchorLocal = (Vector3)precisionPos * small;
+            hostStructuralPos = targetBlock.IsPrecisionAttachment ? targetBlock.PrecisionHostGridPos : targetBlock.GridPos;
+
+            var layer = grid.GetComponent<GridPrecisionAttachmentLayer>();
+            if (layer != null && !layer.CanPlace(precisionPos)) return false;
+
+            Vector3 seatWorld = grid.transform.TransformPoint(anchorLocal);
+            Vector3 portWorld = seatWorld - outWorld * (small * 0.55f + 0.02f);
+            portLocalPos = targetBlock.transform.InverseTransformPoint(portWorld);
+            portOutLocal = targetBlock.transform.InverseTransformDirection(outWorld).normalized;
+            if (portOutLocal.sqrMagnitude < 0.0001f) portOutLocal = Vector3.up;
+
+            var ports = targetBlock.GetComponent<VoxelEngine.GridSystem.GridTankVariablePorts>();
+            portIsNew = true;
+            if (commit)
+            {
+                if (ports == null) ports = targetBlock.gameObject.AddComponent<VoxelEngine.GridSystem.GridTankVariablePorts>();
+                ports.AddPort(tankFamily, portLocalPos, portOutLocal);
+            }
+
+            feedback = VoxelEngine.GridSystem.GridTankVariablePorts.LabelFor(tankFamily) + " installed";
+            return true;
+        }
+
         private static bool TryGetVariablePortSnap(GridEntity grid, GridBlock targetBlock,
             VoxelEngine.Maritime.PipeFamily family, RaycastHit hit, bool commit, out string feedback,
             out Vector3Int precisionPos, out Vector3Int hostStructuralPos, out Vector3Int faceAxis,

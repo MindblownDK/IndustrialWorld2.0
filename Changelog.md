@@ -1,9 +1,33 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.20.0-dev`
+**Current Version:** `6.20.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.20.1-dev] Tank Variable Ports in BuildSystem & Strict Pipe Lattice Links
+
+**Type:** PATCH — fixes variable tank port placement path and pipe diagonal false-links. Save-compatible.
+
+**Fixed — variable tank ports now use the same placement path as engine ports:**
+1. `BuildSystem` now handles variable gas/liquid tank ports when placing the normal static/world pipe items onto a grid. This matches the maritime engine behavior path that already worked.
+2. `GridBuilder` support remains in place for grid-held pipe items, but the normal held gas/liquid pipe path now also previews/commits `Port_GasIO_V` / `Port_LiquidIO_V` on tank hulls.
+3. Preview ring color is tank-family aware: liquid blue, gas sky-blue.
+
+**Fixed — pipes no longer link diagonally one cell over + one cell up:**
+4. `GasNetwork`, `FluidNetworkManager`, and `ItemPipeNetwork` now force all grid pipe↔pipe links to use the Detail lattice step, even if a legacy prefab forgot to mark itself as a precision attachment.
+5. This removes the loose structural-grid tolerance that allowed diagonal links like “one left and one up” to pass as a cardinal pipe connection.
+
+**Files touched:**
+- `Scripts/Building/BuildSystem.cs`
+- `Scripts/GridSystem/GridBuilder.cs`
+- `Scripts/Gas/GasNetwork.cs`
+- `Scripts/Fluids/FluidNetworkManager.cs`
+- `Scripts/Transport/ItemPipeNetwork.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
 
 ---
 

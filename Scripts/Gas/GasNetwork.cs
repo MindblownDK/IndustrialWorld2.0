@@ -289,12 +289,11 @@ namespace VoxelEngine.Gas
             var blockB = b != null ? b.GetComponentInParent<GridBlock>() : null;
             if (blockA != null && blockB != null && blockA.Grid != null && blockA.Grid == blockB.Grid)
             {
-                bool aSmall = blockA.IsPrecisionAttachment;
-                bool bSmall = blockB.IsPrecisionAttachment;
-                float small = GridSizeExt.CellSize(GridSize.Small);
-                if (aSmall && bSmall) return small;
-                if (aSmall != bSmall) return small;
-                return (blockA.EffectiveCellSize + blockB.EffectiveCellSize) * 0.5f;
+                // All grid pipe↔pipe links use the Detail lattice step, regardless
+                // of whether an old prefab forgot to mark itself as a precision
+                // attachment. This prevents one-left + one-up diagonal links from
+                // passing under the loose structural-grid tolerance.
+                return GridSizeExt.CellSize(GridSize.Small);
             }
             return VoxelEngine.Networks.PipeAdjacency.DefaultGridSize;
         }
