@@ -191,6 +191,13 @@ namespace VoxelEngine.Player
             UpdateLook();
             UpdateFlyToggle();
 
+            if (GameSettings.FlyMode && !HasFlightPermission())
+            {
+                GameSettings.FlyMode = false;
+                _yaw = transform.rotation.eulerAngles.y;
+                VoxelEngine.UI.BuildFeedbackHud.Show("Flight Offline", "No jetpack equipped", null, Color.yellow);
+            }
+
             if (GameSettings.FlyMode) FlyUpdate();
             else                      WalkUpdate();
 
@@ -244,6 +251,14 @@ namespace VoxelEngine.Player
             cameraPivot.localRotation= Quaternion.Euler(_pitch, 0, 0);
         }
 
+        private bool HasFlightPermission()
+        {
+            var equipment = GetComponent<PlayerEquipment>();
+            return PlayerStats.Instance == null
+                || PlayerStats.Instance.HasFlightUnlocked
+                || (equipment != null && equipment.HasUsableJetpack);
+        }
+
         private void UpdateFlyToggle()
         {
             if (GameSettings.WasPressed(InputAction.ToggleFly))
@@ -252,10 +267,7 @@ namespace VoxelEngine.Player
                 // is in dev/editor and just wants to enable it via Settings).
                 var equipment = GetComponent<PlayerEquipment>();
                 bool equippedNow = equipment != null && equipment.TryQuickEquipActiveJetpack();
-                bool allowed = PlayerStats.Instance == null
-                               || PlayerStats.Instance.HasFlightUnlocked
-                               || (equipment != null && equipment.HasUsableJetpack)
-                               || Application.isEditor;
+                bool allowed = HasFlightPermission();
                 if (allowed)
                 {
                     bool turningOn = !GameSettings.FlyMode;

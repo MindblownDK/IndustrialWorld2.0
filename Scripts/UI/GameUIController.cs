@@ -1073,7 +1073,7 @@ namespace VoxelEngine.UI
 
 
         /// <summary>Creates a sort button + slot grid for any ItemContainer.</summary>
-        private VisualElement BuildSortableSlotGrid(IItemContainer container, int startIdx = 0, int endIdx = -1)
+        private VisualElement BuildSortableSlotGrid(IItemContainer container, int startIdx = 0, int endIdx = -1, bool showSort = true)
         {
             var wrapper = new VisualElement();
 
@@ -1083,7 +1083,7 @@ namespace VoxelEngine.UI
             sortRow.style.justifyContent = Justify.FlexEnd;
             sortRow.style.marginBottom = 4;
 
-            if (container is ItemContainer ic)
+            if (showSort && container is ItemContainer ic)
             {
                 var sortBtn = new Button(() => { if (startIdx > 0) ic.SortRange(startIdx, endIdx < 0 ? ic.Size : endIdx); else ic.Sort(); Refresh(); }) { text = "⇅ Sort" };
                 sortBtn.style.minHeight = 22; sortBtn.style.minWidth = 60;
@@ -1095,7 +1095,7 @@ namespace VoxelEngine.UI
                 ZeroBorder(sortBtn);
                 sortRow.Add(sortBtn);
             }
-            wrapper.Add(sortRow);
+            if (showSort) wrapper.Add(sortRow);
 
             // Slot grid
             var grid = new VisualElement();
@@ -1108,6 +1108,60 @@ namespace VoxelEngine.UI
             wrapper.Add(grid);
 
             return wrapper;
+        }
+
+        private VisualElement BuildJetpackSlotsPanel(VoxelEngine.Player.PlayerEquipment equipment)
+        {
+            var box = new VisualElement();
+            box.style.marginTop = 6;
+            box.style.marginBottom = 10;
+            box.style.paddingTop = 9;
+            box.style.paddingBottom = 9;
+            box.style.paddingLeft = 10;
+            box.style.paddingRight = 10;
+            box.style.backgroundColor = new StyleColor(new Color(0.045f, 0.060f, 0.085f, 0.94f));
+            SetBorderRadius(box, 8);
+            box.style.borderTopWidth = box.style.borderBottomWidth = box.style.borderLeftWidth = box.style.borderRightWidth = 1;
+            box.style.borderTopColor = box.style.borderBottomColor = box.style.borderLeftColor = box.style.borderRightColor = new StyleColor(new Color(0.18f, 0.72f, 0.88f, 0.55f));
+
+            var header = new VisualElement();
+            header.style.flexDirection = FlexDirection.Row;
+            header.style.alignItems = Align.Center;
+            header.style.marginBottom = 7;
+
+            var title = new Label("JETPACK BAY");
+            title.style.flexGrow = 1;
+            title.style.fontSize = 10;
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            title.style.letterSpacing = 1.2f;
+            title.style.color = UITheme.AccentCyan;
+            header.Add(title);
+
+            var status = new Label(equipment.HasUsableJetpack ? "ONLINE" : "EMPTY");
+            status.style.fontSize = 9;
+            status.style.unityFontStyleAndWeight = FontStyle.Bold;
+            status.style.color = equipment.HasUsableJetpack ? new Color(0.30f, 0.95f, 0.55f) : new Color(0.95f, 0.62f, 0.18f);
+            status.style.backgroundColor = new StyleColor(new Color(0f, 0f, 0f, 0.32f));
+            status.style.paddingLeft = 7;
+            status.style.paddingRight = 7;
+            status.style.paddingTop = 2;
+            status.style.paddingBottom = 2;
+            SetBorderRadius(status, 9);
+            header.Add(status);
+            box.Add(header);
+
+            var slots = BuildSortableSlotGrid(equipment.JetpackSlots, 0,
+                VoxelEngine.Player.PlayerEquipment.JetpackSlotCount, showSort: false);
+            slots.style.marginLeft = 2;
+            box.Add(slots);
+
+            var hint = new Label("Shift-click a jetpack from hotbar/backpack to equip. Two packs can be carried.");
+            hint.style.whiteSpace = WhiteSpace.Normal;
+            hint.style.marginTop = 6;
+            hint.style.fontSize = 9;
+            hint.style.color = new Color(0.70f, 0.78f, 0.88f, 0.92f);
+            box.Add(hint);
+            return box;
         }
 
         private VisualElement BuildInventoryWeightReadout()
@@ -1203,10 +1257,7 @@ namespace VoxelEngine.UI
 
             var equipment = inventory != null ? inventory.GetComponent<VoxelEngine.Player.PlayerEquipment>() : null;
             if (equipment != null)
-            {
-                panel.Add(MakeSubtitle("Jetpack Slots"));
-                panel.Add(BuildSortableSlotGrid(equipment.JetpackSlots, 0, VoxelEngine.Player.PlayerEquipment.JetpackSlotCount));
-            }
+                panel.Add(BuildJetpackSlotsPanel(equipment));
 
             // Backpack grid with sort button
             panel.Add(BuildSortableSlotGrid(inventory.container, Inventory.HOTBAR_SIZE, Inventory.TOTAL_SIZE));
@@ -3366,6 +3417,42 @@ namespace VoxelEngine.UI
             if (inventory == null) return;
             var srcStack = sourceC.GetSlot(sourceIdx);
             if (srcStack.IsEmpty) return;
+
+            var equipment = inventory.GetComponent<VoxelEngine.Player.PlayerEquipment>();
+            var jetpackSlots = equipment != null ? equipment.JetpackSlots : null;
+
+            // Jetpack QoL: shift-click from either hotbar or backpack equips into the
+            // dedicated jetpack slots before any external machine/storage routing.
+            if (sourceC == inventory.container && srcStack.item is JetpackItem && jetpackSlots != null)
+            {
+                var cloneJet = new ItemStack { item = srcStack.item, count = 1, durability = srcStack.durability, payload = srcStack.payload };
+                var leftoverJet = jetpackSlots.Insert(cloneJet);
+                if (leftoverJet == null || leftoverJet.count <= 0)
+                {
+                    srcStack.count -= 1;
+                    sourceC.SetSlot(sourceIdx, srcStack.count <= 0 ? new ItemStack() : srcStack);
+                    BuildFeedbackHud.Show("Jetpack Equipped", srcStack.item.displayName, srcStack.item.icon, srcStack.item.iconTint);
+                    Refresh();
+                    return;
+                }
+                BuildFeedbackHud.Show("Jetpack Slots Full", "Remove a pack before equipping another", srcStack.item.icon, Color.yellow);
+                return;
+            }
+
+            // Shift-clicking a jetpack slot sends it back to normal inventory.
+            if (jetpackSlots != null && sourceC == jetpackSlots)
+            {
+                var cloneBack = new ItemStack { item = srcStack.item, count = srcStack.count, durability = srcStack.durability, payload = srcStack.payload };
+                var leftoverBack = inventory.container.Insert(cloneBack);
+                int movedBack = leftoverBack == null ? srcStack.count : (srcStack.count - leftoverBack.count);
+                if (movedBack > 0)
+                {
+                    if (movedBack >= srcStack.count) sourceC.SetSlot(sourceIdx, new ItemStack());
+                    else { srcStack.count -= movedBack; sourceC.SetSlot(sourceIdx, srcStack); }
+                    Refresh();
+                }
+                return;
+            }
 
             // 1) Inventory → an EXPLICIT open machine takes priority. This block must come
             // before any wireless / storage-terminal routing below, otherwise coal-into-furnace

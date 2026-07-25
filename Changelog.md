@@ -1,9 +1,34 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.22.1-dev`
+**Current Version:** `6.22.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.22.2-dev] Jetpack Slot QoL & Inventory Polish
+
+**Type:** PATCH — jetpack equipment UI/interaction polish. Save-compatible.
+
+**Fixed — flight state updates immediately when jetpacks are removed:**
+1. `PlayerController` now continuously validates flight permission while fly mode is active.
+2. If the player has no research unlock and removes the last usable jetpack, fly mode shuts off immediately with a small feedback toast instead of staying active until both slots were manipulated/rechecked.
+
+**Improved — shift-click jetpack routing:**
+3. Shift-clicking a `JetpackItem` from hotbar or backpack now equips one into the first free jetpack slot before machine/storage routing.
+4. Shift-clicking a jetpack equipment slot sends it back to normal inventory.
+
+**Improved — jetpack inventory presentation:**
+5. Removed the Sort button from the jetpack slot section.
+6. Replaced the plain slot row with a styled `JETPACK BAY` panel showing ONLINE/EMPTY state, accent border, and a concise hint.
+
+**Files touched:**
+- `Scripts/Player/PlayerController.cs`
+- `Scripts/UI/GameUIController.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
+- `Roadmap.md`
 
 ---
 
