@@ -1,9 +1,30 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.22.0-dev`
+**Current Version:** `6.22.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.22.1-dev] Jetpack Slot Persistence & Inventory UI
+
+**Type:** PATCH — jetpack equipment usability/persistence pass. Save-compatible; additive player save field only.
+
+**Added — jetpack equipment persists:**
+1. `WorldStatePersistence` now saves/restores the two `PlayerEquipment` jetpack slots using an additive `SavedPlayer.jetpackSlots` field.
+2. Legacy saves leave the field null and restore with empty jetpack slots.
+
+**Added — visible jetpack slots in inventory:**
+3. The inventory panel now shows a `Jetpack Slots` section above the backpack grid when `PlayerEquipment` exists.
+4. Slots use the existing drag/drop slot UI and the equipment container filter only accepts `JetpackItem` assets.
+
+**Files touched:**
+- `Scripts/Persistence/WorldStatePersistence.cs`
+- `Scripts/UI/GameUIController.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
+- `Roadmap.md`
 
 ---
 

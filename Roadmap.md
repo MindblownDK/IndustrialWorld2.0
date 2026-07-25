@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.22.0-dev`
-**Roadmap Version:** `6.22.0-dev`
+**Current Version:** `6.22.1-dev`
+**Roadmap Version:** `6.22.1-dev`
 **Date:** 2026-07-24
 **Status:** World Management, Autosaves & Item Limits — COMPLETED; Power, Vehicles & Combat (4.7.0) remains WORKING ON
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -1724,7 +1724,8 @@ For each version, these are the high-level Unity tasks you will perform manually
 - Hydrogen boost pack: Shift activates a boost; hydrogen-only flight remains possible with no power draw.
 - Atmospheric jetpack: atmospheric propulsion role.
 - Hybrid jetpack: atmospheric plus ion operation using power only.
-- **6.22.0-dev:** Added `PlayerEquipment` with two jetpack slots, `JetpackItem` data assets for Hydrogen Boost / Atmospheric / Hybrid families, quick-equip from the active hotbar stack, Step 12 item/recipe generation, and PlayerController flight gating/speed modifiers from equipped jetpacks. Remaining work: dedicated equipment UI, fuel/power accounting, persistence, armor-station upgrade integration, and final Unity validation.
+- **6.22.0-dev:** Added `PlayerEquipment` with two jetpack slots, `JetpackItem` data assets for Hydrogen Boost / Atmospheric / Hybrid families, quick-equip from the active hotbar stack, Step 12 item/recipe generation, and PlayerController flight gating/speed modifiers from equipped jetpacks.
+- **6.22.1-dev:** Jetpack slots now appear in the Inventory UI and persist through save/load via an additive player save field. Remaining work: fuel/power accounting, armor-station upgrade integration, and final Unity validation.
 
 ### 11.4 Cryobeds, Offline Survival & Oxygen — ❌ MISSING
 - Add static and Grid cryobed items/blocks.

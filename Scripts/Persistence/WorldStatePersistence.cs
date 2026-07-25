@@ -218,11 +218,13 @@ namespace VoxelEngine.Persistence
         {
             var inv = FindPlayerInventory();
             if (inv == null || !IsSafePlayerSavePosition(inv.transform.position)) return false;
+            var equipment = inv.GetComponent<VoxelEngine.Player.PlayerEquipment>();
             save.player = new SavedPlayer
             {
                 pos = inv.transform.position,
                 rotY = inv.transform.eulerAngles.y,
                 container = SerializeContainer(inv.container),
+                jetpackSlots = equipment != null ? SerializeContainer(equipment.JetpackSlots) : null,
                 activeHotbarIndex = inv.activeHotbarIndex
             };
             return true;
@@ -1031,8 +1033,11 @@ namespace VoxelEngine.Persistence
             inv.transform.position = restorePosition;
             inv.transform.eulerAngles = new Vector3(0, restoreRotY, 0);
             if (cc != null) cc.enabled = true;
-            // Inventory.
+            // Inventory + equipment.
             if (save.player.container != null) DeserializeInto(inv.container, save.player.container);
+            var equipment = inv.GetComponent<VoxelEngine.Player.PlayerEquipment>();
+            if (equipment == null) equipment = inv.gameObject.AddComponent<VoxelEngine.Player.PlayerEquipment>();
+            if (save.player.jetpackSlots != null) DeserializeInto(equipment.JetpackSlots, save.player.jetpackSlots);
             inv.SetActiveHotbar(save.player.activeHotbarIndex);
         }
 
@@ -1624,6 +1629,9 @@ namespace VoxelEngine.Persistence
         {
             public Vector3 pos; public float rotY;
             public SavedContainer container;
+            // Additive in 6.22.1: two dedicated jetpack equipment slots.
+            // Legacy saves leave this null and restore with empty slots.
+            public SavedContainer jetpackSlots;
             public int activeHotbarIndex;
         }
         [Serializable] private class SavedPlacedBlock

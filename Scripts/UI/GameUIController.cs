@@ -1201,6 +1201,13 @@ namespace VoxelEngine.UI
             panel.Add(MakeTitle("Inventory"));
             panel.Add(BuildInventoryWeightReadout());
 
+            var equipment = inventory != null ? inventory.GetComponent<VoxelEngine.Player.PlayerEquipment>() : null;
+            if (equipment != null)
+            {
+                panel.Add(MakeSubtitle("Jetpack Slots"));
+                panel.Add(BuildSortableSlotGrid(equipment.JetpackSlots, 0, VoxelEngine.Player.PlayerEquipment.JetpackSlotCount));
+            }
+
             // Backpack grid with sort button
             panel.Add(BuildSortableSlotGrid(inventory.container, Inventory.HOTBAR_SIZE, Inventory.TOTAL_SIZE));
 
