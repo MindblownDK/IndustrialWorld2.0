@@ -92,13 +92,19 @@ namespace VoxelEngine.Fluids
                         if (!portReachable) return;
                     }
                     if (VoxelEngine.Networks.WrenchBlacklist.IsBlocked(gridBlock.gameObject, block.gameObject)) return;
-                    _neighbourPosBuf.Add(connectedPipe
-                        ? Vector3.Lerp(transform.position, block.transform.position, 0.5f)
-                        // Aim endpoint arms at the machine's ACTUAL liquid port (fuel
-                        // intake, coolant intake, tank Port_LiquidIO …) instead of its
-                        // lattice centre — arms used to skew inline through the body.
-                        : VoxelEngine.Maritime.MaritimePorts.PortPositionOrCenter(
-                            block, VoxelEngine.Maritime.MaritimePorts.LiquidPrefixes, transform.position));
+                    if (connectedPipe)
+                    {
+                        float detail = VoxelEngine.GridSystem.GridSizeExt.CellSize(VoxelEngine.GridSystem.GridSize.Small);
+                        Vector3 localDelta = grid.transform.InverseTransformVector(block.transform.position - transform.position);
+                        if (!VoxelEngine.Networks.PipeAdjacency.IsCardinalLinkDelta(localDelta, detail, 5f, detail * 0.12f)) return;
+                        _neighbourPosBuf.Add(Vector3.Lerp(transform.position, block.transform.position, 0.5f));
+                        return;
+                    }
+                    // Aim endpoint arms at the machine's ACTUAL liquid port (fuel
+                    // intake, coolant intake, tank Port_LiquidIO …) instead of its
+                    // lattice centre — arms used to skew inline through the body.
+                    _neighbourPosBuf.Add(VoxelEngine.Maritime.MaritimePorts.PortPositionOrCenter(
+                        block, VoxelEngine.Maritime.MaritimePorts.LiquidPrefixes, transform.position));
                 }
 
                 foreach (var block in VoxelEngine.GridSystem.UnifiedGridTopology.AdjacentBlocks(grid, gridBlock))

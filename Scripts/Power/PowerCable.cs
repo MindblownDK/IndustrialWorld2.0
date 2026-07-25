@@ -99,6 +99,7 @@ namespace VoxelEngine.Power
         /// </summary>
         public override bool CanLinkTo(PowerNode other)
         {
+            if (other is PowerCable && !IsStrictCableCardinalNeighbour(other)) return false;
             if (!base.CanLinkTo(other)) return false;
 
             // Consumers can always tap a nearby energy pipe. Item-port configuration
@@ -127,6 +128,21 @@ namespace VoxelEngine.Power
             }
 
             return true;
+        }
+
+        private bool IsStrictCableCardinalNeighbour(PowerNode other)
+        {
+            if (other == null) return false;
+            var aBlock = GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
+            var bBlock = other.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
+            float step = gridSize > 0f ? gridSize : 1f;
+            Vector3 delta = other.transform.position - transform.position;
+            if (aBlock != null && bBlock != null && aBlock.Grid != null && aBlock.Grid == bBlock.Grid)
+            {
+                step = VoxelEngine.GridSystem.GridSizeExt.CellSize(VoxelEngine.GridSystem.GridSize.Small);
+                delta = aBlock.Grid.transform.InverseTransformVector(delta);
+            }
+            return VoxelEngine.Networks.PipeAdjacency.IsCardinalLinkDelta(delta, step, 1f, step * 0.12f);
         }
 
         /// <summary>

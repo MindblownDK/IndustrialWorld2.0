@@ -290,13 +290,13 @@ namespace VoxelEngine.Networks
         {
             Vector3 d = b - a;
             float gs = gridSize > 0 ? gridSize : 1f;
-            float dx = Mathf.Abs(d.x), dy = Mathf.Abs(d.y), dz = Mathf.Abs(d.z);
-            float tol = positionTolerance;
-            int oneStepAxes = 0;
-            if (Mathf.Abs(dx - gs) < tol) oneStepAxes++; else if (dx > tol) return false;
-            if (Mathf.Abs(dy - gs) < tol) oneStepAxes++; else if (dy > tol) return false;
-            if (Mathf.Abs(dz - gs) < tol) oneStepAxes++; else if (dz > tol) return false;
-            return oneStepAxes == 1;
+            var myBlock = GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
+            if (myBlock != null && myBlock.Grid != null)
+            {
+                d = myBlock.Grid.transform.InverseTransformVector(d);
+                gs = VoxelEngine.GridSystem.GridSizeExt.CellSize(VoxelEngine.GridSystem.GridSize.Small);
+            }
+            return PipeAdjacency.IsCardinalLinkDelta(d, gs, 1f, gs * 0.12f);
         }
 
         private bool HasLineOfSight(Vector3 a, Vector3 b, ConnectionAnchor remoteAnchor)

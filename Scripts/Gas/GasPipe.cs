@@ -160,6 +160,10 @@ namespace VoxelEngine.Gas
                     bool connectedPipe = block.GetComponentInChildren<GasPipe>(true) != null;
                     if (connectedPipe)
                     {
+                        float detail = VoxelEngine.GridSystem.GridSizeExt.CellSize(VoxelEngine.GridSystem.GridSize.Small);
+                        Vector3 localDelta = grid.transform.InverseTransformVector(block.transform.position - transform.position);
+                        if (!VoxelEngine.Networks.PipeAdjacency.IsCardinalLinkDelta(localDelta, detail, 5f, detail * 0.12f))
+                            continue;
                         _neighbourPosBuf.Add(Vector3.Lerp(transform.position, block.transform.position, 0.5f));
                         continue;
                     }

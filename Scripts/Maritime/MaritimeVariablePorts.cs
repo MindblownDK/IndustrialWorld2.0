@@ -369,15 +369,15 @@ namespace VoxelEngine.Maritime
             // detail-lattice pipe instead of forcing an unsupported port.
             if (!MaritimeVariablePorts.IsServiceAllowed(engine.tier, service)) return plan;
 
-            // Reuse an already-installed port of this service if one exists — the pipe
-            // re-snaps to it instead of spawning a duplicate collar.
+            // A player-installed variable port is a single-pipe service socket.
+            // Do NOT re-snap additional pipes to it: that made multiple pipes try to
+            // share one dynamic connector. Treat an existing variable service port as
+            // full so the builder shows the same red over-cap feedback as engines.
             var existing = vports.FindExisting(service);
             if (existing != null)
             {
-                plan.ok = true;
-                plan.reusesExisting = true;
-                plan.existing = existing;
                 FillSeatFromPort(grid, engine, existing, detailCell, ref plan);
+                plan.atCap = true;
                 return plan;
             }
 

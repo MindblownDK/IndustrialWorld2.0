@@ -445,6 +445,14 @@ namespace VoxelEngine.GridSystem
                     }
                     return;
                 }
+                if (IsMatchingTankBlockForPipe(hitBlock, family))
+                {
+                    HideGhost();
+                    HideGhostPortRing();
+                    if (GameSettings.WasPressed(InputAction.Build))
+                        VoxelEngine.UI.BuildFeedbackHud.Show("Port Occupied", "That variable tank port already has a pipe", item.icon, Color.red);
+                    return;
+                }
 
                 if (hitBlock is GridMaritimeEngine)
                 {
@@ -757,6 +765,12 @@ namespace VoxelEngine.GridSystem
                 : $"{MaritimeVariablePorts.LabelFor(plan.service)} installed";
             s_previewPortService = (int)plan.service;
             return true;
+        }
+
+        private static bool IsMatchingTankBlockForPipe(GridBlock block, PipeFamily family)
+        {
+            return (family == PipeFamily.Liquid && block is GridLiquidTank)
+                || (family == PipeFamily.Gas && block is GridGasTank);
         }
 
         private bool TryGetGridTankVariablePortSnap(GridEntity grid, GridBlock targetBlock,

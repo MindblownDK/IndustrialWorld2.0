@@ -421,6 +421,17 @@ namespace VoxelEngine.Building
                     targetBlock.transform, prefixes, aimRay, maxLineDistance: 0.45f,
                     maxRayT: hit.distance + maxSnap);
             }
+            if (best != null && IsRuntimeVariablePort(best))
+            {
+                Vector3 outWorldPreview = VoxelEngine.Maritime.MaritimePorts.PortOutwardWorld(best, hit.normal);
+                newPortLocalPos = targetBlock.transform.InverseTransformPoint(best.position);
+                newPortOutLocal = targetBlock.transform.InverseTransformDirection(outWorldPreview).normalized;
+                portIsNew = true;
+                s_portCapBlocked = true;
+                s_portCapReason = "Variable port already has a pipe";
+                s_portCapPipeFamily = familyLabel;
+                return false;
+            }
             if (best == null)
             {
                 // No authored/dynamic port near the aim. Install (or re-snap to) a
@@ -522,6 +533,11 @@ namespace VoxelEngine.Building
         //  placement calls with commit=true to actually install the port. Both
         //  run identical geometry so ghost ≡ placed.
         // ════════════════════════════════════════════════════════════════
+        private static bool IsRuntimeVariablePort(Transform port)
+        {
+            return port != null && port.name.EndsWith("_V", System.StringComparison.Ordinal);
+        }
+
         private static bool TryGetGridTankVariablePortSnap(GridEntity grid, GridBlock targetBlock,
             VoxelEngine.Maritime.PipeFamily pipeFamily, RaycastHit hit, bool commit, out string feedback,
             out Vector3Int precisionPos, out Vector3Int hostStructuralPos, out Vector3Int faceAxis,

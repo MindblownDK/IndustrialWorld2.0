@@ -194,6 +194,7 @@ namespace VoxelEngine.GridSystem
                 }
                 foreach (var pipe in ProximityPipes(grid, pipeBlock, cs))
                 {
+                    if (!AreDetailPipesCardinalLinked(grid, pipeBlock, pipe)) continue;
                     if (!WrenchBlacklist.IsBlocked(pipeBlock.gameObject, pipe.gameObject)
                         && visitedPipes.Add(pipe)) queue.Enqueue(pipe);
                 }
@@ -340,6 +341,14 @@ namespace VoxelEngine.GridSystem
                     }
                     return false;
                 }, radiusScale: 2.2f);
+        }
+
+        private static bool AreDetailPipesCardinalLinked(GridEntity grid, GridBlock a, GridBlock b)
+        {
+            if (grid == null || a == null || b == null) return false;
+            float detail = GridSize.Small.CellSize();
+            Vector3 localDelta = grid.transform.InverseTransformVector(b.transform.position - a.transform.position);
+            return PipeAdjacency.IsCardinalLinkDelta(localDelta, detail, 5f, detail * 0.12f);
         }
 
         private static bool IsTankPortWithinDetailLink(GridEntity grid, GridBlock pipe, GridBlock tank,

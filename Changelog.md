@@ -1,9 +1,42 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.20.1-dev`
+**Current Version:** `6.20.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.20.2-dev] Strict Cardinal Pipe/Cable Links & Single-Use Variable Ports
+
+**Type:** PATCH — connection cleanup and variable-port behavior fix. Save-compatible.
+
+**Fixed — pipes no longer visually/network-connect diagonally:**
+1. `GridGasNetwork` and `GridLiquidNetwork` now filter proximity-discovered pipe neighbours through a strict Detail-lattice cardinal test before BFS links them.
+2. `GasPipe` and `WaterPipe` visual providers now refuse connected-pipe arms unless the target pipe is cardinal on the Detail lattice. This removes the “one left and one up” diagonal visual bridge shown in the screenshot.
+3. Pipe↔pipe tolerance for these grid visual/proximity links is tightened to `0.12 × DetailCell`, so vertical/side offsets cannot sneak through as valid cardinal links.
+
+**Improved — power/data cable cardinal behavior:**
+4. `PowerCable` now performs a grid-local strict cardinal check before allowing cable↔cable links, instead of relying on the looser radial-world distance fallback.
+5. `DataCable` cardinal checks now use grid-local Detail-lattice math when placed on a grid, improving cable arm consistency on constructs.
+
+**Changed — variable ports are single-use sockets:**
+6. Existing dynamic variable ports (`*_V`) are no longer valid snap targets for another pipe.
+7. Maritime engine variable ports now report as full instead of reusing the same dynamic port.
+8. Tank variable ports already block through occupied Detail cells; the shared port-snap path now also rejects direct snapping to an existing `*_V` port with feedback.
+
+**Files touched:**
+- `Scripts/Building/BuildSystem.cs`
+- `Scripts/GridSystem/GridBuilder.cs`
+- `Scripts/GridSystem/GridGasNetwork.cs`
+- `Scripts/GridSystem/GridLiquidNetwork.cs`
+- `Scripts/Gas/GasPipe.cs`
+- `Scripts/Fluids/WaterPipe.cs`
+- `Scripts/Power/PowerCable.cs`
+- `Scripts/Networks/DataCable.cs`
+- `Scripts/Maritime/MaritimeVariablePorts.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
 
 ---
 
