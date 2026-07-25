@@ -26,7 +26,7 @@ namespace VoxelEngine.Player
         public int searchRadius = 32;
 
         private CharacterController _cc;
-        private const float SpawnGroundClearance = 0.35f;
+        private const float SpawnGroundClearance = 1.15f;
         public  bool ReadyForPlayerControl { get; private set; }
 
         private void Awake()
@@ -215,7 +215,11 @@ namespace VoxelEngine.Player
             }
             }
 
-            // One more frame to let physics settle.
+            // One more frame to let physics settle, then run one final terrain-lift
+            // pass at the exact release pose. This prevents the CharacterController
+            // from enabling while its feet are still intersecting a late-updated mesh.
+            yield return null;
+            SetPosition(LiftSavedPositionOutOfGround(transform.position));
             yield return null;
 
             EnableController();
