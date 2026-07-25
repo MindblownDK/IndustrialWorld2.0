@@ -104,8 +104,9 @@ namespace VoxelEngine.Player
             // player can traverse any natural terrain angle on a planet surface.
             _cc.slopeLimit = 85f;
             _cc.stepOffset = 0.6f;
-            // Ensure water state tracker exists for swimming detection.
+            // Ensure water/equipment trackers exist for movement-state checks.
             if (GetComponent<PlayerWaterState>() == null) gameObject.AddComponent<PlayerWaterState>();
+            if (GetComponent<PlayerEquipment>() == null) gameObject.AddComponent<PlayerEquipment>();
             _smoothedEyeHeight = standEyeHeight;
 
             if (cameraPivot == null)
@@ -249,8 +250,11 @@ namespace VoxelEngine.Player
             {
                 // Only allow toggling fly mode if research has unlocked it (OR if the user
                 // is in dev/editor and just wants to enable it via Settings).
+                var equipment = GetComponent<PlayerEquipment>();
+                bool equippedNow = equipment != null && equipment.TryQuickEquipActiveJetpack();
                 bool allowed = PlayerStats.Instance == null
                                || PlayerStats.Instance.HasFlightUnlocked
+                               || (equipment != null && equipment.HasUsableJetpack)
                                || Application.isEditor;
                 if (allowed)
                 {
@@ -262,7 +266,11 @@ namespace VoxelEngine.Player
                         _yaw = transform.rotation.eulerAngles.y;     // carry heading back into walk mode
                 }
                 else
-                    Debug.Log("[Player] Flight is locked. Research it in the Research menu (Y).");
+                {
+                    string detail = equippedNow ? "Jetpack equipped, but flight remains locked" : "Research flight or equip a jetpack in one of the two slots.";
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Flight Locked", detail, null, Color.yellow);
+                    Debug.Log("[Player] Flight is locked. Research it or equip a jetpack.");
+                }
             }
         }
 
@@ -491,7 +499,10 @@ namespace VoxelEngine.Player
             if (GameSettings.IsHeld(InputAction.Up)) wishDir += transform.up;
             if (GameSettings.IsHeld(InputAction.Crouch)) wishDir -= transform.up;
 
-            float spd = flySpeed * (GameSettings.IsHeld(InputAction.Sprint) ? flySprintMultiplier : 1f);
+            var equipment = GetComponent<PlayerEquipment>();
+            float packSpeed = equipment != null && equipment.HasUsableJetpack ? equipment.FlightSpeedMultiplier : 1f;
+            float packBoost = equipment != null && equipment.HasUsableJetpack ? equipment.BoostMultiplier : 1f;
+            float spd = flySpeed * packSpeed * (GameSettings.IsHeld(InputAction.Sprint) ? flySprintMultiplier * packBoost : 1f);
             Vector3 wishVel = wishDir.sqrMagnitude > 0.0001f ? wishDir.normalized * spd : Vector3.zero;
 
             // Inertial-dampener feel: smooth toward target, no gravity in fly mode.

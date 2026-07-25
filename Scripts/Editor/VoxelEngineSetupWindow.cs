@@ -602,6 +602,7 @@ namespace VoxelEngine.EditorTools
             pc.playerCamera = cam;
 
             var inv = playerGo.AddComponent<VoxelEngine.Items.Inventory>();
+            playerGo.AddComponent<VoxelEngine.Player.PlayerEquipment>();
             var pick = camGo.AddComponent<VoxelEngine.Player.PlayerInteractionTool>();
             pick.world = activeWorld;
             pick.registry = registry;
@@ -5206,6 +5207,46 @@ root =>
                 if (registry != null && !registry.recipes.Contains(r)) registry.recipes.Add(r);
                 recipes.Add(r); return r;
             }
+
+            // -- 0) Player equipment: Jetpack families --
+            VoxelEngine.Items.JetpackItem MakeJetpack(string assetName, string id, string display,
+                VoxelEngine.Items.JetpackFamily family, Color tint, float speedMul, float boostMul,
+                bool atmosphere, bool vacuum, bool hydrogen, bool power)
+            {
+                string path = $"{ITEMS}/{assetName}.asset";
+                var item = GetOrCreateAsset<VoxelEngine.Items.JetpackItem>(path);
+                item.itemId = id;
+                item.displayName = display;
+                item.description = family switch
+                {
+                    VoxelEngine.Items.JetpackFamily.HydrogenBoost => "Hydrogen boost pack for fast short-burst movement. Equips into one of two jetpack slots.",
+                    VoxelEngine.Items.JetpackFamily.Atmospheric => "Atmospheric jetpack for controlled air movement. Equips into one of two jetpack slots.",
+                    _ => "Hybrid jetpack with atmospheric and vacuum-capable propulsion. Equips into one of two jetpack slots."
+                };
+                item.iconTint = tint;
+                item.maxStack = 1;
+                item.massPerUnit = 12f;
+                item.category = "Equipment";
+                item.family = family;
+                item.flightSpeedMultiplier = speedMul;
+                item.boostMultiplier = boostMul;
+                item.supportsAtmosphere = atmosphere;
+                item.supportsVacuum = vacuum;
+                item.usesHydrogen = hydrogen;
+                item.usesPower = power;
+                EditorUtility.SetDirty(item);
+                return item;
+            }
+
+            var jetHydrogen = MakeJetpack("Equip_JetpackHydrogenBoost", "jetpack_hydrogen_boost", "Hydrogen Boost Pack",
+                VoxelEngine.Items.JetpackFamily.HydrogenBoost, new Color(0.45f, 0.85f, 1.00f), 1.05f, 1.35f, true, false, true, false);
+            var jetAtmospheric = MakeJetpack("Equip_JetpackAtmospheric", "jetpack_atmospheric", "Atmospheric Jetpack",
+                VoxelEngine.Items.JetpackFamily.Atmospheric, new Color(0.95f, 0.62f, 0.18f), 1.00f, 1.10f, true, false, false, true);
+            var jetHybrid = MakeJetpack("Equip_JetpackHybrid", "jetpack_hybrid", "Hybrid Jetpack",
+                VoxelEngine.Items.JetpackFamily.Hybrid, new Color(0.72f, 0.42f, 1.00f), 1.15f, 1.25f, true, true, true, true);
+            AddGRecipe("Recipe_JetpackHydrogenBoost", "Hydrogen Boost Pack", jetHydrogen, (steelPlate, 4), (copperWire, 8), (circuit, 2));
+            AddGRecipe("Recipe_JetpackAtmospheric", "Atmospheric Jetpack", jetAtmospheric, (steelPlate, 6), (copperWire, 10), (circuit, 3));
+            AddGRecipe("Recipe_JetpackHybrid", "Hybrid Jetpack", jetHybrid, (steelPlate, 10), (copperWire, 16), (advCircuit ?? circuit, 3), (lithium, 2));
 
             // -- 1) Cockpits --
             var cockSmallPref = MakeGPref<VoxelEngine.GridSystem.GridCockpit>("Cockpit_Small", new Color(0.2f, 0.4f, 0.8f), new Vector3(0.8f, 0.8f, 1.2f),

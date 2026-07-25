@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.21.2-dev`
-**Roadmap Version:** `6.21.2-dev`
+**Current Version:** `6.22.0-dev`
+**Roadmap Version:** `6.22.0-dev`
 **Date:** 2026-07-24
 **Status:** World Management, Autosaves & Item Limits — COMPLETED; Power, Vehicles & Combat (4.7.0) remains WORKING ON
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -1719,11 +1719,12 @@ For each version, these are the high-level Unity tasks you will perform manually
 - **6.21.1-dev:** Physical dropped items use low Rigidbody damping and delayed settling on ice, and movable Grids reduce dampener/angular braking while touching Ice.
 - **6.21.2-dev:** Movable Grids keep gravity active for a short grace period after ice contact, dampen only tangent drift during that recovery, and fall back toward the planet instead of hanging upward after tilting off ice. Current ice-friction scope is complete after Unity validation from Thomas.
 
-### 11.3 Jetpack Families — ❌ MISSING
+### 11.3 Jetpack Families — 🛠️ WORKING ON
 - Add two dedicated jetpack equipment slots.
 - Hydrogen boost pack: Shift activates a boost; hydrogen-only flight remains possible with no power draw.
 - Atmospheric jetpack: atmospheric propulsion role.
 - Hybrid jetpack: atmospheric plus ion operation using power only.
+- **6.22.0-dev:** Added `PlayerEquipment` with two jetpack slots, `JetpackItem` data assets for Hydrogen Boost / Atmospheric / Hybrid families, quick-equip from the active hotbar stack, Step 12 item/recipe generation, and PlayerController flight gating/speed modifiers from equipped jetpacks. Remaining work: dedicated equipment UI, fuel/power accounting, persistence, armor-station upgrade integration, and final Unity validation.
 
 ### 11.4 Cryobeds, Offline Survival & Oxygen — ❌ MISSING
 - Add static and Grid cryobed items/blocks.

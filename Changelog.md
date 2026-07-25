@@ -1,9 +1,43 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.21.2-dev`
+**Current Version:** `6.22.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.22.0-dev] Jetpack Families Equipment Foundation
+
+**Type:** MINOR — new save-compatible player equipment foundation and jetpack item family. No save schema break.
+
+**Added — two jetpack equipment slots foundation:**
+1. Added `PlayerEquipment` with two dedicated jetpack slots and a quick-equip path from the active hotbar stack.
+2. `PlayerController` now ensures `PlayerEquipment` exists and allows fly mode when either research unlocks flight or a usable jetpack is equipped.
+3. Fly speed and sprint/boost speed can now be modified by the equipped jetpack.
+
+**Added — data-driven jetpack item families:**
+4. Added `JetpackItem` and `JetpackFamily` with Hydrogen Boost, Atmospheric, and Hybrid definitions.
+5. Step 12 now creates three non-destructive jetpack item assets and recipes:
+   - Hydrogen Boost Pack.
+   - Atmospheric Jetpack.
+   - Hybrid Jetpack.
+6. Existing balance values are preserved by the setup workflow where possible; this pass adds the equipment/data foundation while later passes can add full UI, hydrogen/power fuel accounting, persistence, and armor-station upgrade integration.
+
+**Roadmap:**
+7. Marked `11.3 Jetpack Families` as **WORKING ON**.
+
+**Manual Unity step:**
+- Run **Tools → Voxel Engine → Voxel Engine Setup → 12. Build Grid System Content** once to create/connect the jetpack items and recipes.
+
+**Files touched:**
+- `Scripts/Items/JetpackItem.cs`
+- `Scripts/Player/PlayerEquipment.cs`
+- `Scripts/Player/PlayerController.cs`
+- `Scripts/Editor/VoxelEngineSetupWindow.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
+- `Roadmap.md`
 
 ---
 
