@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.21.0-dev`
-**Roadmap Version:** `6.21.0-dev`
+**Current Version:** `6.21.1-dev`
+**Roadmap Version:** `6.21.1-dev`
 **Date:** 2026-07-24
 **Status:** World Management, Autosaves & Item Limits — COMPLETED; Power, Vehicles & Combat (4.7.0) remains WORKING ON
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -1713,9 +1713,10 @@ For each version, these are the high-level Unity tasks you will perform manually
 - Invalid player coordinates now fall back to a safe bed/world/body spawn without overwriting the last known-good save.
 - **6.14.7-dev:** `WorldStatePersistence.RestorePlayer` validates saved player position and rotation before touching the live player transform, restores inventory at the safe fallback when needed, and logs the recovery as non-destructive.
 
-### 11.2 Ice Friction — 🛠️ WORKING ON
-- Ice surfaces will use low-friction physics for players, static loose blocks, and movable Grids.
-- **6.21.0-dev:** Player movement now detects solid Ice voxels underfoot and applies low-friction, reduced-steering movement on ice. Static loose blocks and movable Grids still need their rigidbody/physics pass before this section can be marked completed.
+### 11.2 Ice Friction — ✅ COMPLETED
+- Ice surfaces use low-friction physics for players, static loose blocks, and movable Grids.
+- **6.21.0-dev:** Player movement detects solid Ice voxels underfoot and applies low-friction, reduced-steering movement on ice.
+- **6.21.1-dev:** Physical dropped items use low Rigidbody damping and delayed settling on ice, and movable Grids reduce dampener/angular braking while touching Ice. Current ice-friction scope is complete after Unity validation from Thomas.
 
 ### 11.3 Jetpack Families — ❌ MISSING
 - Add two dedicated jetpack equipment slots.

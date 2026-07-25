@@ -15,6 +15,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.Cosmos;
+using VoxelEngine.Environment;
 using VoxelEngine.Maritime;
 
 namespace VoxelEngine.GridSystem
@@ -52,6 +53,8 @@ namespace VoxelEngine.GridSystem
 
         // ── Physics ────────────────────────────────────────────────
         private Rigidbody _rb;
+        private bool _touchingIce;
+        private const float IceGridBrakeMultiplier = 0.18f;
         public Rigidbody Body => _rb;
 
         // ── Power (grid-wide, no cables) ───────────────────────────
@@ -226,6 +229,7 @@ namespace VoxelEngine.GridSystem
             if (_rb != null) _rb.useGravity = false;
 
             UpdatePower();
+            _touchingIce = DetectIceContact();
             UpdateThrust();
             UpdateDampeners();
             UpdateWheels();
@@ -270,6 +274,22 @@ namespace VoxelEngine.GridSystem
         private bool HasManualThrustInput()
         {
             return IsControlled && ThrustInput.sqrMagnitude > 0.01f;
+        }
+
+        private bool DetectIceContact()
+        {
+            Vector3 up = GravityProvider.GetUp(transform.position);
+            int sampled = 0;
+            foreach (var block in AllBlocks)
+            {
+                if (block == null) continue;
+                sampled++;
+                if (IceFrictionUtility.IsIceBelow(block.transform.position + up * 0.15f, up,
+                        Mathf.Max(block.EffectiveCellSize * 0.75f, 0.75f)))
+                    return true;
+                if (sampled >= 16) break; // deterministic cheap sample cap for large ships
+            }
+            return IceFrictionUtility.IsIceBelow(transform.position + up * 0.15f, up, 1.25f);
         }
 
         private bool ShouldDampenerHoldHover()
@@ -801,7 +821,8 @@ namespace VoxelEngine.GridSystem
                 _rb.AddTorque(worldTorque, ForceMode.Acceleration);
             }
             // Angular damping lets the ship stop spinning cleanly when the pilot releases input.
-            _rb.angularDamping = 3f;
+            // On ice keep it lower so landed grids can skid/rotate instead of feeling glued.
+            _rb.angularDamping = _touchingIce ? 0.6f : 3f;
         }
 
         // ── Inertia Dampeners ──────────────────────────────────────
@@ -819,6 +840,7 @@ namespace VoxelEngine.GridSystem
                 // dampeners feel like they're wrestling real inertia.
                 float massFactor = 10000f / Mathf.Max(10000f, _rb.mass);
                 float brake = 2.5f * massFactor;
+                if (_touchingIce) brake *= IceGridBrakeMultiplier;
 
                 // Soften the brake at very low speeds so the ship coasts gently to a stop
                 // instead of slamming on the brakes.
@@ -834,7 +856,8 @@ namespace VoxelEngine.GridSystem
             Vector3 angVel = _rb.angularVelocity;
             if (!isThrusting && angVel.sqrMagnitude > 0.01f)
             {
-                _rb.angularVelocity = Vector3.Lerp(angVel, Vector3.zero, 4f * Time.fixedDeltaTime);
+                float angularBrake = _touchingIce ? 0.75f : 4f;
+                _rb.angularVelocity = Vector3.Lerp(angVel, Vector3.zero, angularBrake * Time.fixedDeltaTime);
             }
         }
 

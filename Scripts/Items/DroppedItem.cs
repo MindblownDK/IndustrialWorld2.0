@@ -5,6 +5,8 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
+using VoxelEngine.Cosmos;
+using VoxelEngine.Environment;
 
 namespace VoxelEngine.Items
 {
@@ -32,6 +34,10 @@ namespace VoxelEngine.Items
         private float _bobPhase;
         private Rigidbody _rb;
         private bool _settled;
+        private const float NormalLinearDamping = 3f;
+        private const float IceLinearDamping = 0.18f;
+        private const float NormalAngularDamping = 4f;
+        private const float IceAngularDamping = 0.45f;
         // A manually dropped stack must not immediately re-enter the same inventory
         // through the large pickup trigger while it is still beside the player.
         private Inventory _dropOwner;
@@ -96,8 +102,8 @@ namespace VoxelEngine.Items
             // Reuse the pooled physics and pickup components.
             var rb = go.GetComponent<Rigidbody>();
             rb.mass = 0.3f;
-            rb.linearDamping = 3f;
-            rb.angularDamping = 4f;
+            rb.linearDamping = NormalLinearDamping;
+            rb.angularDamping = NormalAngularDamping;
             rb.interpolation = RigidbodyInterpolation.Interpolate;
             rb.isKinematic = false;
             rb.linearVelocity = tossDir.normalized * 2.5f + Vector3.up * 3f;
@@ -166,10 +172,21 @@ namespace VoxelEngine.Items
         {
             if (Time.time - _spawnTime > lifetime) { Despawn(); return; }
 
-            if (_rb != null && !_settled && _rb.linearVelocity.sqrMagnitude < 0.1f &&
-                Time.time - _spawnTime > 1.5f)
+            bool onIce = false;
+            if (_rb != null && !_settled)
+            {
+                Vector3 up = GravityProvider.GetUp(transform.position);
+                onIce = IceFrictionUtility.IsIceBelow(transform.position + up * 0.1f, up, 0.65f);
+                _rb.linearDamping = onIce ? IceLinearDamping : NormalLinearDamping;
+                _rb.angularDamping = onIce ? IceAngularDamping : NormalAngularDamping;
+            }
+
+            if (_rb != null && !_settled && _rb.linearVelocity.sqrMagnitude < (onIce ? 0.015f : 0.1f) &&
+                Time.time - _spawnTime > (onIce ? 4.0f : 1.5f))
             {
                 _settled = true;
+                _rb.linearDamping = NormalLinearDamping;
+                _rb.angularDamping = NormalAngularDamping;
                 _rb.isKinematic = true;
             }
 

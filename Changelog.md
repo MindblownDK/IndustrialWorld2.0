@@ -1,9 +1,33 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.21.0-dev`
+**Current Version:** `6.21.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.21.1-dev] Ice Friction Rigidbody Completion
+
+**Type:** PATCH — completes the ice friction pass for physical drops and movable grids. Save-compatible; no save schema change.
+
+**Added — physical drops slide on ice:**
+1. `DroppedItem` now uses `IceFrictionUtility` while its Rigidbody is active.
+2. Drops on Ice voxels use low linear/angular damping and wait longer before settling, so tossed items can slide naturally instead of instantly stopping.
+
+**Added — movable grids skid more on ice:**
+3. `GridEntity` samples its placed blocks for Ice contact during physics ticks.
+4. When touching Ice, grid dampener braking and angular braking are reduced, and angular damping is lowered so landed ships/rovers feel less glued to the surface.
+
+**Roadmap:**
+5. Marked `11.2 Ice Friction` as **COMPLETED** for current scope: player, physical drops/static loose item bodies, and movable grids now have ice-specific low-friction behavior.
+
+**Files touched:**
+- `Scripts/Items/DroppedItem.cs`
+- `Scripts/GridSystem/GridEntity.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
+- `Roadmap.md`
 
 ---
 
