@@ -1,9 +1,34 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.22.2-dev`
+**Current Version:** `6.22.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.22.3-dev] Jetpack Bay Live Update & Boost Spool Polish
+
+**Type:** PATCH — jetpack equipment UX and movement feel polish. Save-compatible.
+
+**Fixed — jetpack slot UI live updates on drag/drop:**
+1. Drag/drop swaps involving jetpack slots now call `Refresh()` after the drag completes, so removing a pack updates the Jetpack Bay ONLINE/EMPTY state immediately.
+2. Shift-click removal already routes back to inventory; this pass keeps the equipment display synchronized after direct dragging too.
+
+**Improved — calmer Jetpack Bay styling:**
+3. Removed the boxed panel background/border around the Jetpack Bay section.
+4. Moved the ONLINE/EMPTY status pill directly beside `JETPACK BAY` on the left, making the inventory section cleaner and less flashy.
+5. Jetpack slots still keep the existing readable slot visuals but no longer appear inside a heavy framed box.
+
+**Improved — Hydrogen Boost Pack feel:**
+6. Hydrogen boost packs now spool boost over a very short charge-up instead of applying full boost instantly. The ramp is intentionally subtle so controls remain responsive.
+
+**Files touched:**
+- `Scripts/UI/GameUIController.cs`
+- `Scripts/Player/PlayerController.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
+- `Roadmap.md`
 
 ---
 

@@ -1115,22 +1115,18 @@ namespace VoxelEngine.UI
             var box = new VisualElement();
             box.style.marginTop = 6;
             box.style.marginBottom = 10;
-            box.style.paddingTop = 9;
-            box.style.paddingBottom = 9;
-            box.style.paddingLeft = 10;
-            box.style.paddingRight = 10;
-            box.style.backgroundColor = new StyleColor(new Color(0.045f, 0.060f, 0.085f, 0.94f));
-            SetBorderRadius(box, 8);
-            box.style.borderTopWidth = box.style.borderBottomWidth = box.style.borderLeftWidth = box.style.borderRightWidth = 1;
-            box.style.borderTopColor = box.style.borderBottomColor = box.style.borderLeftColor = box.style.borderRightColor = new StyleColor(new Color(0.18f, 0.72f, 0.88f, 0.55f));
+            box.style.paddingTop = 2;
+            box.style.paddingBottom = 4;
+            box.style.paddingLeft = 2;
+            box.style.paddingRight = 2;
 
             var header = new VisualElement();
             header.style.flexDirection = FlexDirection.Row;
             header.style.alignItems = Align.Center;
-            header.style.marginBottom = 7;
+            header.style.justifyContent = Justify.FlexStart;
+            header.style.marginBottom = 6;
 
             var title = new Label("JETPACK BAY");
-            title.style.flexGrow = 1;
             title.style.fontSize = 10;
             title.style.unityFontStyleAndWeight = FontStyle.Bold;
             title.style.letterSpacing = 1.2f;
@@ -1138,6 +1134,7 @@ namespace VoxelEngine.UI
             header.Add(title);
 
             var status = new Label(equipment.HasUsableJetpack ? "ONLINE" : "EMPTY");
+            status.style.marginLeft = 8;
             status.style.fontSize = 9;
             status.style.unityFontStyleAndWeight = FontStyle.Bold;
             status.style.color = equipment.HasUsableJetpack ? new Color(0.30f, 0.95f, 0.55f) : new Color(0.95f, 0.62f, 0.18f);
@@ -1157,7 +1154,7 @@ namespace VoxelEngine.UI
 
             var hint = new Label("Shift-click a jetpack from hotbar/backpack to equip. Two packs can be carried.");
             hint.style.whiteSpace = WhiteSpace.Normal;
-            hint.style.marginTop = 6;
+            hint.style.marginTop = 4;
             hint.style.fontSize = 9;
             hint.style.color = new Color(0.70f, 0.78f, 0.88f, 0.92f);
             box.Add(hint);
@@ -2721,6 +2718,7 @@ namespace VoxelEngine.UI
                 srcC.SetSlot(srcIdx, dstStack);
             }
             CancelDrag();
+            Refresh();
         }
 
         private static int MaxDirectAdd(IItemContainer container, ItemDefinition item, int wanted)

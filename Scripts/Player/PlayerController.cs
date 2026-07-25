@@ -90,6 +90,7 @@ namespace VoxelEngine.Player
         private bool   _crouched;
         private bool   _sliding;
         private float  _smoothedEyeHeight;
+        private float  _jetpackBoostCharge;
 
         // ===== Editor inspector helpers (for the in-inspector toggle button) =====
         [HideInInspector] public bool inspectorFlyToggle;
@@ -512,9 +513,24 @@ namespace VoxelEngine.Player
             if (GameSettings.IsHeld(InputAction.Crouch)) wishDir -= transform.up;
 
             var equipment = GetComponent<PlayerEquipment>();
-            float packSpeed = equipment != null && equipment.HasUsableJetpack ? equipment.FlightSpeedMultiplier : 1f;
-            float packBoost = equipment != null && equipment.HasUsableJetpack ? equipment.BoostMultiplier : 1f;
-            float spd = flySpeed * packSpeed * (GameSettings.IsHeld(InputAction.Sprint) ? flySprintMultiplier * packBoost : 1f);
+            var pack = equipment != null ? equipment.GetBestJetpack() : null;
+            float packSpeed = pack != null ? Mathf.Max(0.1f, pack.flightSpeedMultiplier) : 1f;
+            float packBoost = pack != null ? Mathf.Max(1f, pack.boostMultiplier) : 1f;
+            bool boosting = GameSettings.IsHeld(InputAction.Sprint);
+            if (pack != null && pack.family == VoxelEngine.Items.JetpackFamily.HydrogenBoost)
+            {
+                // Hydrogen boost packs spool briefly instead of instantly hitting max
+                // thrust. The ramp is deliberately short so controls stay responsive.
+                float targetCharge = boosting ? 1f : 0f;
+                float rate = boosting ? 3.2f : 5.5f;
+                _jetpackBoostCharge = Mathf.MoveTowards(_jetpackBoostCharge, targetCharge, rate * dt);
+            }
+            else
+            {
+                _jetpackBoostCharge = boosting ? 1f : 0f;
+            }
+            float boostFactor = boosting ? Mathf.Lerp(1f, packBoost, _jetpackBoostCharge) : 1f;
+            float spd = flySpeed * packSpeed * (boosting ? flySprintMultiplier * boostFactor : 1f);
             Vector3 wishVel = wishDir.sqrMagnitude > 0.0001f ? wishDir.normalized * spd : Vector3.zero;
 
             // Inertial-dampener feel: smooth toward target, no gravity in fly mode.

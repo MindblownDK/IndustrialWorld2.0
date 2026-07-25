@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.22.2-dev`
-**Roadmap Version:** `6.22.2-dev`
+**Current Version:** `6.22.3-dev`
+**Roadmap Version:** `6.22.3-dev`
 **Date:** 2026-07-24
 **Status:** World Management, Autosaves & Item Limits — COMPLETED; Power, Vehicles & Combat (4.7.0) remains WORKING ON
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -1726,7 +1726,8 @@ For each version, these are the high-level Unity tasks you will perform manually
 - Hybrid jetpack: atmospheric plus ion operation using power only.
 - **6.22.0-dev:** Added `PlayerEquipment` with two jetpack slots, `JetpackItem` data assets for Hydrogen Boost / Atmospheric / Hybrid families, quick-equip from the active hotbar stack, Step 12 item/recipe generation, and PlayerController flight gating/speed modifiers from equipped jetpacks.
 - **6.22.1-dev:** Jetpack slots now appear in the Inventory UI and persist through save/load via an additive player save field.
-- **6.22.2-dev:** Jetpack slot UX polish: shift-click from hotbar/backpack equips into the first free slot, shift-click from equipment returns to inventory, the Sort button is removed from equipment slots, the Jetpack Bay panel has an ONLINE/EMPTY visual state, and flight mode shuts off immediately when the last usable jetpack is removed. Remaining work: fuel/power accounting, armor-station upgrade integration, and final Unity validation.
+- **6.22.2-dev:** Jetpack slot UX polish: shift-click from hotbar/backpack equips into the first free slot, shift-click from equipment returns to inventory, the Sort button is removed from equipment slots, the Jetpack Bay panel has an ONLINE/EMPTY visual state, and flight mode shuts off immediately when the last usable jetpack is removed.
+- **6.22.3-dev:** Jetpack Bay no longer uses a heavy boxed frame, the ONLINE/EMPTY pill sits beside the title on the left, drag/drop slot changes refresh immediately, and Hydrogen Boost Pack sprint boost has a short subtle spool-up. Remaining work: fuel/power accounting, armor-station upgrade integration, and final Unity validation.
 
 ### 11.4 Cryobeds, Offline Survival & Oxygen — ❌ MISSING
 - Add static and Grid cryobed items/blocks.
