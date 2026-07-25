@@ -1,9 +1,37 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.22.3-dev`
+**Current Version:** `6.22.4-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.22.4-dev] Safe Player Spawn Lift & Own-Player Raycast Filter
+
+**Type:** PATCH — spawn safety and crosshair filtering fixes. Save-compatible.
+
+**Fixed — player no longer spawns stuck in the ground:**
+1. `PlayerSpawner` now uses a larger ground clearance when placing fresh/bed spawns on terrain.
+2. Saved near-surface positions are lifted out of the voxel surface after the target chunk loads, preventing older slightly-buried saves from enabling the CharacterController inside the ground.
+3. The setup wizard now explicitly tags newly spawned player roots as `Player`.
+
+**Fixed — crosshair/raycast tools no longer hit the local player:**
+4. Added `PlayerRaycastFilter`, a shared helper that ignores only the local player's own colliders while keeping the design open for future multiplayer targeting of other players.
+5. Applied the filter to mining/interaction, build ghosts, grid builder, tiered building, and the world inspection HUD.
+6. Looking down should no longer target your own body/player collider.
+
+**Files touched:**
+- `Scripts/Player/PlayerRaycastFilter.cs`
+- `Scripts/Player/PlayerSpawner.cs`
+- `Scripts/Player/PlayerInteractionTool.cs`
+- `Scripts/Building/BuildSystem.cs`
+- `Scripts/Building/Tiered/BuildSystemV2.cs`
+- `Scripts/GridSystem/GridBuilder.cs`
+- `Scripts/UI/WorldInspectionHud.cs`
+- `Scripts/Editor/VoxelEngineSetupWindow.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
 
 ---
 

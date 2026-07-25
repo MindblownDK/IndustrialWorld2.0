@@ -588,6 +588,7 @@ namespace VoxelEngine.Player
                 var candidate = hits[i];
                 if (candidate.collider == null) continue;
                 if (selfRoot != null && candidate.collider.transform.IsChildOf(selfRoot)) continue;
+                if (PlayerRaycastFilter.IsOwnPlayerCollider(candidate.collider, transform)) continue;
                 hit = candidate;
                 return true;
             }

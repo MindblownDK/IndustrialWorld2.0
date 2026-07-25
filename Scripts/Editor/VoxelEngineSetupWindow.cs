@@ -571,6 +571,7 @@ namespace VoxelEngine.EditorTools
 
             // ----- Player -----
             var playerGo = new GameObject("Player");
+            playerGo.tag = "Player";
             playerGo.transform.position = new Vector3(0, 150, 0);
 
             // CharacterController for collisions with the voxel mesh.

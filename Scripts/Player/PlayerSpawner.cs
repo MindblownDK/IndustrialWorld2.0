@@ -26,6 +26,7 @@ namespace VoxelEngine.Player
         public int searchRadius = 32;
 
         private CharacterController _cc;
+        private const float SpawnGroundClearance = 0.35f;
         public  bool ReadyForPlayerControl { get; private set; }
 
         private void Awake()
@@ -104,7 +105,7 @@ namespace VoxelEngine.Player
                                 }
                                 if (!isWater)
                                 {
-                                    bestSpawn = hit.point + sampleDir * 0.05f;
+                                    bestSpawn = hit.point + sampleDir * SpawnGroundClearance;
                                     foundLand = true;
                                     break;
                                 }
@@ -145,6 +146,15 @@ namespace VoxelEngine.Player
                 && Vector3.Distance(target, activeBody.transform.position) > activeBody.SurfaceRadius + 80f;
             if (!savedInSpace)
                 yield return WaitForChunkAt(VoxelCoordOf(target), maxWaitSeconds);
+
+            // Saved positions near terrain can be from an older build that wrote the
+            // controller slightly inside the voxel surface. Lift them to the first
+            // surface below the player before enabling the CharacterController.
+            if (hasSavedPos && !savedInSpace)
+            {
+                target = LiftSavedPositionOutOfGround(target);
+                SetPosition(target);
+            }
 
             // For fresh worlds, NOW find the actual top-of-ground position.
             // Skip on spheres — FindFreshSpawnNearby scans in world-space voxel coords which
@@ -192,7 +202,7 @@ namespace VoxelEngine.Player
                 }
                 if (Physics.Raycast(from, dir, out var hit, 300f, ~0, QueryTriggerInteraction.Ignore))
                 {
-                    SetPosition(hit.point + lift * 0.05f);
+                    SetPosition(hit.point + lift * SpawnGroundClearance);
                     snapped = true;
                     break;
                 }
@@ -363,8 +373,27 @@ namespace VoxelEngine.Player
                 lift = Vector3.up;
             }
             if (Physics.Raycast(from, dir, out var hit, 300f, ~0, QueryTriggerInteraction.Ignore))
-                return hit.point + lift * 0.05f;
+                return hit.point + lift * SpawnGroundClearance;
             return target + lift * 0.5f;
+        }
+
+        private Vector3 LiftSavedPositionOutOfGround(Vector3 saved)
+        {
+            Vector3 up;
+            var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
+            if (body != null) up = body.UpAt(saved);
+            else up = Vector3.up;
+            if (up.sqrMagnitude < 0.0001f) up = Vector3.up;
+            up.Normalize();
+
+            Vector3 from = saved + up * 8f;
+            if (Physics.Raycast(from, -up, out var hit, 16f, ~0, QueryTriggerInteraction.Ignore))
+            {
+                float heightAboveSurface = Vector3.Dot(saved - hit.point, up);
+                if (heightAboveSurface < SpawnGroundClearance)
+                    return hit.point + up * SpawnGroundClearance;
+            }
+            return saved;
         }
 
         /// <summary>

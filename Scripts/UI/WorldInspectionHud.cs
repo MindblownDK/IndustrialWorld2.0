@@ -228,14 +228,15 @@ namespace VoxelEngine.UI
         {
             var hits = Physics.RaycastAll(ray, ProbeDistance, ~0, QueryTriggerInteraction.Ignore);
             System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
-            var player = GameObject.FindGameObjectWithTag("Player");
-            Transform playerRoot = player != null ? player.transform : null;
+            var localPlayer = Camera.main != null ? Camera.main.GetComponentInParent<VoxelEngine.Player.PlayerController>() : Object.FindAnyObjectByType<VoxelEngine.Player.PlayerController>();
+            Transform playerRoot = localPlayer != null ? localPlayer.transform : null;
 
             for (int i = 0; i < hits.Length; i++)
             {
                 var candidate = hits[i];
                 if (candidate.collider == null) continue;
                 if (playerRoot != null && candidate.collider.transform.IsChildOf(playerRoot)) continue;
+                if (localPlayer != null && VoxelEngine.Player.PlayerRaycastFilter.IsOwnPlayerCollider(candidate.collider, localPlayer.transform)) continue;
                 // Skip transient rigs: build ghosts, viewmodels, held items.
                 string rootName = candidate.collider.transform.root.name;
                 if (IsTransientRigName(rootName)) continue;
