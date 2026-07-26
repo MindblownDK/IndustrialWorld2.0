@@ -1,9 +1,37 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.26.1-dev`
+**Current Version:** `6.26.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.26.2-dev] Cryobed Control UI & Ownership Tools
+
+**Type:** PATCH — cryobed UX and respawn selection polish. Save-compatible.
+
+**Added — cryobed UI:**
+1. Added `CryobedConfigHud`, a premium control panel opened by right-clicking static or grid cryobeds.
+2. The panel shows current availability, power status/estimate, oxygen status/estimate, and ownership state.
+3. Cryobeds can now be renamed from the panel so respawn choices are easier to identify.
+4. Added buttons for Claim, Remove Ownership, and Transfer placeholder for future multiplayer ownership handoff.
+5. Already-claimed cryobeds now show `Already claimed by you` instead of blindly claiming again.
+
+**Improved — death screen respawn list:**
+6. Death screen uses cryobed names and availability text from the cryobed components.
+7. Grid cryobeds use their `SpawnPoint` and filtered availability directly.
+
+**Files touched:**
+- `Scripts/UI/CryobedConfigHud.cs`
+- `Scripts/UI/GameUIController.cs`
+- `Scripts/UI/DeathScreenHud.cs`
+- `Scripts/Building/Cryobed.cs`
+- `Scripts/GridSystem/GridCryobed.cs`
+- `Scripts/Player/PlayerInteractionTool.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
+- `Roadmap.md`
 
 ---
 

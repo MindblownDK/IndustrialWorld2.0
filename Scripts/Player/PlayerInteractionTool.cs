@@ -402,9 +402,9 @@ namespace VoxelEngine.Player
                 }
 
                 var cryobed = hit.collider.GetComponentInParent<VoxelEngine.Building.Cryobed>();
-                if (cryobed != null) { cryobed.ClaimAsSpawn(); return; }
+                if (cryobed != null) { VoxelEngine.UI.CryobedConfigHud.Open(cryobed); return; }
                 var gridCryobed = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridCryobed>();
-                if (gridCryobed != null) { gridCryobed.ClaimAsSpawn(); return; }
+                if (gridCryobed != null) { VoxelEngine.UI.CryobedConfigHud.Open(gridCryobed); return; }
                 var bed = hit.collider.GetComponentInParent<VoxelEngine.Building.Bed>();
                 if (bed != null) { bed.ClaimAsSpawn(); return; }
 

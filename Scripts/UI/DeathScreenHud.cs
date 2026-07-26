@@ -199,13 +199,11 @@ namespace VoxelEngine.UI
             foreach (var cryo in Object.FindObjectsByType<Cryobed>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
             {
                 if (cryo == null || !cryo.IsAvailableForRespawn) continue;
-                Vector3 up = VoxelEngine.Cosmos.GravityProvider.GetUp(cryo.transform.position);
-                if (up.sqrMagnitude < 0.0001f) up = Vector3.up;
-                Vector3 pos = cryo.transform.position + up.normalized * 1.35f;
+                Vector3 pos = cryo.SpawnPoint;
                 AddUnique(list, new RespawnChoice
                 {
                     title = cryo.displayName,
-                    detail = "Cryobed · " + FormatPosition(pos),
+                    detail = cryo.AvailabilityText + " · " + FormatPosition(pos),
                     position = pos,
                     accent = new Color(0.45f, 0.85f, 1.0f)
                 });
@@ -214,13 +212,11 @@ namespace VoxelEngine.UI
             foreach (var cryo in Object.FindObjectsByType<GridCryobed>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
             {
                 if (cryo == null || !cryo.IsAvailableForRespawn) continue;
-                Vector3 up = VoxelEngine.Cosmos.GravityProvider.GetUp(cryo.transform.position);
-                if (up.sqrMagnitude < 0.0001f) up = cryo.Grid != null ? cryo.Grid.transform.up : Vector3.up;
-                Vector3 pos = cryo.transform.position + up.normalized * 1.35f;
+                Vector3 pos = cryo.SpawnPoint;
                 AddUnique(list, new RespawnChoice
                 {
                     title = cryo.blockName,
-                    detail = "Grid Cryobed · " + FormatPosition(pos),
+                    detail = cryo.AvailabilityText + " · " + FormatPosition(pos),
                     position = pos,
                     accent = new Color(0.45f, 0.85f, 1.0f)
                 });

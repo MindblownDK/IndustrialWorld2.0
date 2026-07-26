@@ -25,6 +25,45 @@ namespace VoxelEngine.GridSystem
             : !IsPowered ? "NO POWER"
             : "NO OXYGEN";
 
+        public Vector3 SpawnPoint
+        {
+            get
+            {
+                Vector3 up = GravityProvider.GetUp(transform.position);
+                if (up.sqrMagnitude < 0.0001f) up = Grid != null ? Grid.transform.up : Vector3.up;
+                return transform.position + up.normalized * 1.35f;
+            }
+        }
+
+        public string PowerEstimateText
+        {
+            get
+            {
+                if (!poweredRequired) return "Power optional";
+                float storedWh = 0f;
+                if (Grid != null)
+                    foreach (var block in Grid.AllBlocks)
+                        if (block is GridBattery battery && battery.Enabled) storedWh += Mathf.Max(0f, battery.storedWh);
+                if (idleWatts <= 0.01f) return IsPowered ? "Connected" : "No power";
+                return storedWh > 0.01f
+                    ? $"{storedWh:0} Wh stored · ~{storedWh / idleWatts:0.0} h at {idleWatts:0} W"
+                    : IsPowered ? $"Grid powered · {idleWatts:0} W draw" : $"Needs {idleWatts:0} W";
+            }
+        }
+
+        public string OxygenEstimateText
+        {
+            get
+            {
+                if (!oxygenRequired) return "Oxygen optional";
+                float oxygen = Grid != null ? Grid.OxygenStored : 0f;
+                const float offlineOxygenPerHour = 12f;
+                return oxygen > 0.01f
+                    ? $"{oxygen:0} O₂ stored · ~{oxygen / offlineOxygenPerHour:0.0} h reserve"
+                    : "No connected oxygen reserve";
+            }
+        }
+
         public override void OnPlaced()
         {
             base.OnPlaced();
@@ -35,9 +74,7 @@ namespace VoxelEngine.GridSystem
         {
             var session = VoxelEngine.Menu.WorldSession.Instance;
             if (session == null) return;
-            Vector3 up = GravityProvider.GetUp(transform.position);
-            if (up.sqrMagnitude < 0.0001f) up = Grid != null ? Grid.transform.up : Vector3.up;
-            session.bedSpawnPoint = transform.position + up.normalized * 1.35f;
+            session.bedSpawnPoint = SpawnPoint;
             session.hasBedSpawn = true;
             session.SaveSpawnSidecar();
             VoxelEngine.UI.BuildFeedbackHud.Show("Cryobed Linked", "Respawn/offline safety point updated", null, new Color(0.45f, 0.85f, 1f));
@@ -48,9 +85,7 @@ namespace VoxelEngine.GridSystem
         public string DataCategory => "Life Support";
         public string GetDisplayData()
         {
-            string power = poweredRequired ? $"POWER {idleWatts:0} W" : "POWER OPTIONAL";
-            string oxygen = oxygenRequired ? "OXYGEN REQUIRED" : "OXYGEN OPTIONAL";
-            return $"CRYOBED\n{AvailabilityText}\n{power}\n{oxygen}";
+            return $"CRYOBED\n{AvailabilityText}\n{PowerEstimateText}\n{OxygenEstimateText}";
         }
     }
 }
