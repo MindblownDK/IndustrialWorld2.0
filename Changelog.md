@@ -1,9 +1,29 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.30.1-dev`
+**Current Version:** `6.30.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.30.2-dev] Premium Ruins Polish — Walls Together, Visible Chest, Rusted Steel & Rare Easy Numbers
+
+**Type:** PATCH — premium visual + spawn tuning, save-compatible.
+
+**User Feedback from image.png:**
+- Walls scattered, not together → fixed exact module grid (3.75m), no random pos offset for base foundations, only slight rotation tilt 1.5-3° for ruined feel, not scattered. Foundations now 0.99*module scale, exact grid, all present for solid base.
+- Chest invisible but lootable where supposed to be → added visible chest mesh (`ChestMesh` cube with dark metal `0.22,0.22,0.24` + glow light 1.2 intensity 5m range) inside `RuinChest_Visible` GO with BoxCollider 1.2x0.9x0.9, plus beacon light 1.8 intensity 20m range for distance visibility.
+- Says steel and iron wall/found but actually wood (pic shows brown with green base) → now uses premium rusted metallic mats: `RustMain 0.66,0.34,0.18 orange rust`, `RustDark 0.42,0.24,0.14`, `RustLight 0.78,0.50,0.28`, not wood brown. Overrode all renderers, 65% rustMain, 20% rustDark, 15% rustLight/moss. No wood tier.
+- Ruins spawn EVERYWHERE, ALOT → previously 0.0085 density gave ~5-15 per 10 chunks, too many. Now rarer with easy numbers: `RUIN_DENSITY_WAREHOUSE = 0.0020f`, `FACTORY = 0.0015f`, `BUNKER = 0.0018f` — 0.2%, 0.15%, 0.18% per surface voxel = ~1 ruin per 2-3 chunks, somewhat rare as requested. Easy numbers to tweak (user request: not 0.005(something) confusing).
+
+**Added — Easy Density Tuning:**
+- Defined constants at injection site with comment: "PREMIUM RARE — easy numbers to tweak (user request: not 0.005(something) confusing) — 0.002 = 0.2% = ~1 ruin per 500 surface voxels = somewhat rare". To make rarer: lower to 0.001, more common: raise to 0.004.
+
+**Files touched:**
+- `Scripts/Editor/VoxelEngineSetupWindow.cs` (premium MakeRuinPrefab rewrite, visible chest, metallic rust, exact grid, rare easy densities)
+- `Scripts/Core/GameVersion.cs` (6.30.1 → 6.30.2)
+- `Changelog.md`
+
+---
 
 ---
 
