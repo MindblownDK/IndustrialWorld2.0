@@ -1,7 +1,47 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.27.3-dev`
+**Current Version:** `6.28.0-dev`
+
+All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.28.0-dev] Offline Survival & Room Oxygen (11.4 Completion)
+
+**Type:** MINOR — new save-compatible offline survival rules + room O₂ validation. No save schema break.
+
+**Added — Offline Survival Service (`Player/OfflineSurvivalService.cs`):**
+1. New singleton `OfflineSurvivalService` with `EnsureInstance()` (DontDestroyOnLoad). Saves `offline_state.json` in world folder on every `WorldStatePersistence.SaveAll` (quit/autosave): UTC timestamp, player pos, claimed cryobed pos/name.
+2. On next login (`PlayerSpawner.SpawnRoutine` after 1 frame for cryobed restore) it computes offline hours (clamped 0-720h, <2 min ignored to avoid save-spam). 
+3. **If claimed GridCryobed exists:** consumes `offlineOxygenPerHour * hours` from its `oxygenStored`. If enough, deducts and survives; if not, sets stored to 0 and dies. Checks `IsPowered` — no power = offline death. Logs reason.
+4. **If claimed Static Cryobed exists:** requires `IsPowered` + `HasOxygenEnvironment` (now checks nearby O₂). If fails, dies; else survives with room O₂ OK.
+5. **If no claimed cryobed:** checks oxygen-rich environment at logout pos via `IsOxygenRichEnvironment` — within 10 m of powered producing biofarm (static/grid), 6-7 m of gas tank with O₂ >5-10 L (static/grid), or 6 m of powered cryobed with O₂. If found, survives without cryobed.
+6. **If no cryobed and no O₂-rich env:** dies offline after `hours:0.0h`.
+7. On death, `PlayerSpawner` clears `hasBedSpawn`, saves sidecar, deletes offline file, and after control enabled triggers `PlayerStats.TakeDamage(9999)` → `DeathScreenHud` with world spawn fallback. Shows `BuildFeedbackHud` with reason (red) before death.
+
+**Improved — room oxygen for static Cryobed (`Building/Cryobed.cs`):**
+8. Previously `HasOxygenEnvironment => true` with TODO comment. Now implements `IsOxygenRichAt(pos)` shared logic: scans for powered producing biofarms (10 m), O₂ tanks with >5 L (7 m), grid cryobeds with O₂ (6 m). Returns true if any found. Used for `IsAvailableForRespawn` and `OxygenEstimateText` (now shows "Room O₂ OK · biofarm / tank / cryobed nearby" vs "No room O₂ · needs piped biofarm / O₂ tank within 8m").
+9. Updated `OxygenEstimateText` to reflect actual room O₂ status instead of placeholder.
+
+**Integration:**
+10. `WorldStatePersistence.SaveAll` now calls `OfflineSurvivalService.EnsureInstance().SaveOfflineState(playerPos)` after writing `world_state.json`.
+11. `PlayerSpawner.SpawnRoutine` now calls `CheckOfflineSurvivalAndConsume()` after initial yield, handles `offlineDied` flag: ignores saved pos, forces world spawn path, and after `ReadyForPlayerControl` triggers death with feedback HUD showing offline reason.
+12. Offline file auto-cleared on death to prevent re-trigger.
+
+**Manual Steps:** None — additive file `offline_state.json`, no prefab changes. Existing saves get offline file on next save.
+
+**Files touched:**
+- `Scripts/Player/OfflineSurvivalService.cs`
+- `Scripts/Player/PlayerSpawner.cs`
+- `Scripts/Building/Cryobed.cs`
+- `Scripts/Persistence/WorldStatePersistence.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
+
+---
+
+### [6.27.3-dev] Grid Gravity & Planet Surface Alignment Fix
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
 

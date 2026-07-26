@@ -51,7 +51,46 @@ namespace VoxelEngine.Player
             yield return null;
 
             var session = Menu.WorldSession.Instance;
+
+            // 11.4 Offline survival — consume cryobed O₂ based on offline time.
+            // This runs after WorldStatePersistence has restored placed cryobeds/biofarms.
+            bool offlineDied = false;
+            string offlineReason = "";
+            try
+            {
+                OfflineSurvivalService.EnsureInstance();
+                // Give one extra frame for grid blocks to restore from save before checking
+                yield return null;
+                if (OfflineSurvivalService.Instance != null)
+                {
+                    var offlineRes = OfflineSurvivalService.Instance.CheckOfflineSurvivalAndConsume();
+                    if (offlineRes.hoursOffline > 0.01f)
+                    {
+                        Debug.Log($"[OfflineSurvival] {offlineRes.reason} (hadCryobed={offlineRes.hadCryobed}, hours={offlineRes.hoursOffline:0.0}, O2 consumed={offlineRes.oxygenConsumed:0})");
+                        offlineReason = offlineRes.reason;
+                        if (!offlineRes.survived)
+                        {
+                            offlineDied = true;
+                            // Clear bed spawn so we fall back to world spawn
+                            if (session != null)
+                            {
+                                session.hasBedSpawn = false;
+                                session.SaveSpawnSidecar();
+                            }
+                            // Clear offline file so we don't re-apply death on next load
+                            OfflineSurvivalService.Instance.ClearOfflineFile();
+                        }
+                    }
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning("[OfflineSurvival] Check exception: " + ex.Message);
+            }
+
             bool hasSavedPos = TryReadSavedPlayerPosition(out Vector3 savedPos);
+            // If we died offline, ignore saved pos — force world spawn path
+            if (offlineDied) hasSavedPos = false;
 
             // Determine the target position.
             Vector3 target;
@@ -254,6 +293,22 @@ namespace VoxelEngine.Player
                 Cursor.visible = false;
             }
             Debug.Log("[PlayerSpawner] Player control enabled at " + transform.position);
+
+            // 11.4 Offline death — if we died while offline, kill player now and show death screen
+            if (offlineDied)
+            {
+                // Give one frame for UI to mount
+                yield return null;
+                var stats = GetComponent<PlayerStats>();
+                if (stats != null)
+                {
+                    // Show feedback before death screen
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Offline Death", offlineReason, null, new Color(0.95f, 0.25f, 0.20f));
+                    // Delay death by 0.5s so feedback is readable
+                    yield return new WaitForSeconds(0.6f);
+                    stats.TakeDamage(9999f); // will trigger Die() -> DeathScreen with world spawn
+                }
+            }
         }
 
         private void OnDisable()

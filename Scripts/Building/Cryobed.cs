@@ -1,12 +1,14 @@
 // Assets/Scripts/VoxelEngine/Building/Cryobed.cs
 //
-// Static cryobed foundation for offline survival. Current pass provides the
-// spawn/offline-safe anchor; oxygen/power requirements are added by the later
-// life-support pass.
+// Static cryobed foundation for offline survival. Now checks for piped/room oxygen
+// via nearby biofarms, O₂ tanks, and grid cryobeds — completing 11.4 room-pressure pass.
 
 using UnityEngine;
 using VoxelEngine.Cosmos;
 using VoxelEngine.Power;
+using VoxelEngine.GridSystem;
+using VoxelEngine.Fluids;
+using VoxelEngine.Gas;
 
 namespace VoxelEngine.Building
 {
@@ -28,7 +30,16 @@ namespace VoxelEngine.Building
             }
         }
 
-        public bool HasOxygenEnvironment => true; // room/vent oxygen arrives in the later pressure pass
+        // Room oxygen: powered biofarm producing nearby, O₂ tank with O₂, or grid cryobed with O₂
+        public bool HasOxygenEnvironment
+        {
+            get
+            {
+                if (!oxygenRequired) return true;
+                return IsOxygenRichAt(transform.position);
+            }
+        }
+
         public bool IsAvailableForRespawn => IsPowered && HasOxygenEnvironment;
 
         public Vector3 SpawnPoint
@@ -44,9 +55,17 @@ namespace VoxelEngine.Building
         public string PowerEstimateText => poweredRequired
             ? IsPowered ? $"Connected · draws {idleWatts:0} W" : $"Needs {idleWatts:0} W"
             : "Power optional";
-        public string OxygenEstimateText => oxygenRequired
-            ? "Room oxygen checks pending pressure-system pass"
-            : "Oxygen optional";
+
+        public string OxygenEstimateText
+        {
+            get
+            {
+                if (!oxygenRequired) return "Oxygen optional";
+                return HasOxygenEnvironment
+                    ? "Room O₂ OK · biofarm / tank / cryobed nearby"
+                    : "No room O₂ · needs piped biofarm / O₂ tank within 8m";
+            }
+        }
 
         public string AvailabilityText => IsAvailableForRespawn
             ? "ONLINE"
@@ -54,7 +73,7 @@ namespace VoxelEngine.Building
 
         public void ClaimAsSpawn()
         {
-            var session = VoxelEngine.Menu.WorldSession.Instance;
+            var session = Menu.WorldSession.Instance;
             if (session == null) return;
             claimedByLocalPlayer = true;
             session.bedSpawnPoint = SpawnPoint;
@@ -62,6 +81,51 @@ namespace VoxelEngine.Building
             session.SaveSpawnSidecar();
             VoxelEngine.UI.BuildFeedbackHud.Show("Cryobed Linked", "Respawn/offline safety point updated", null, new Color(0.45f, 0.85f, 1f));
             Debug.Log($"[Cryobed] Spawn point set to {session.bedSpawnPoint}");
+        }
+
+        // Shared oxygen-rich check used by cryobed and offline service
+        public static bool IsOxygenRichAt(Vector3 pos)
+        {
+            const float biofarmRadius = 10f;
+            const float tankRadius = 7f;
+            const float cryobedRadius = 6f;
+
+            // Static biofarms producing
+            foreach (var bf in Object.FindObjectsByType<Biofarm>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            {
+                if (bf == null || !bf.IsRunning) continue;
+                if ((bf.transform.position - pos).sqrMagnitude <= biofarmRadius * biofarmRadius)
+                    return true;
+            }
+            // Grid biofarms producing
+            foreach (var bf in Object.FindObjectsByType<GridBiofarm>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            {
+                if (bf == null || !bf.IsProducing) continue;
+                if ((bf.transform.position - pos).sqrMagnitude <= biofarmRadius * biofarmRadius)
+                    return true;
+            }
+            // Static gas tanks with O₂
+            foreach (var tank in Object.FindObjectsByType<GasTank>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            {
+                if (tank == null || tank.storedGasType != GasType.Oxygen || tank.storedAmount < 5f) continue;
+                if ((tank.transform.position - pos).sqrMagnitude <= tankRadius * tankRadius)
+                    return true;
+            }
+            // Grid gas tanks with O₂
+            foreach (var tank in Object.FindObjectsByType<GridGasTank>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            {
+                if (tank == null || tank.gasType != GasType.Oxygen || tank.stored < 5f) continue;
+                if ((tank.transform.position - pos).sqrMagnitude <= tankRadius * tankRadius)
+                    return true;
+            }
+            // Grid cryobeds with O₂ (even if not claimed)
+            foreach (var cryo in Object.FindObjectsByType<GridCryobed>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            {
+                if (cryo == null || !cryo.HasOxygenEnvironment || !cryo.IsPowered) continue;
+                if ((cryo.transform.position - pos).sqrMagnitude <= cryobedRadius * cryobedRadius)
+                    return true;
+            }
+            return false;
         }
     }
 }

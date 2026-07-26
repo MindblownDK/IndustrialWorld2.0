@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.27.3-dev`
-**Roadmap Version:** `6.27.3-dev`
+**Current Version:** `6.28.0-dev`
+**Roadmap Version:** `6.28.0-dev`
 **Date:** 2026-07-26
-**Status:** Grid Gravity & Planet Alignment Fixed (6.27.3) + Passive Oxygen (11.5) Completed; World Management (11.7) Completed; Power, Vehicles & Combat (4.7.0) remains WORKING ON
+**Status:** Offline Survival & Room Oxygen (11.4) Completed (6.28.0) + Grid Gravity Fixed (6.27.3) + Passive Oxygen (11.5) Completed; World Management (11.7) Completed; Power, Vehicles & Combat (4.7.0) remains WORKING ON
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
 ---
@@ -1730,7 +1730,7 @@ For each version, these are the high-level Unity tasks you will perform manually
 - **6.22.2-dev:** Jetpack slot UX polish: shift-click from hotbar/backpack equips into the first free slot, shift-click from equipment returns to inventory, the Sort button is removed from equipment slots, the Jetpack Bay panel has an ONLINE/EMPTY visual state, and flight mode shuts off immediately when the last usable jetpack is removed.
 - **6.22.3-dev:** Jetpack Bay no longer uses a heavy boxed frame, the ONLINE/EMPTY pill sits beside the title on the left, drag/drop slot changes refresh immediately, and Hydrogen Boost Pack sprint boost has a short subtle spool-up. Remaining work: fuel/power accounting, armor-station upgrade integration, and final Unity validation.
 
-### 11.4 Cryobeds, Offline Survival & Oxygen — 🛠️ WORKING ON
+### 11.4 Cryobeds, Offline Survival & Oxygen — ✅ COMPLETED (6.28.0-dev)
 - Add static and Grid cryobed items/blocks.
 - An offline player requires an active cryobed or oxygen-rich environment.
 - If oxygen depletes or no valid offline-survival condition exists, the player dies.
@@ -1739,7 +1739,9 @@ For each version, these are the high-level Unity tasks you will perform manually
 - **6.26.2-dev:** Added a right-click Cryobed Control UI with status, power/oxygen estimates, rename, claim, remove ownership, and transfer placeholder controls. Death-screen entries now use cryobed names and component availability text.
 - **6.26.4-dev:** Fixed claim behavior so cryobeds can be owned before power/oxygen is available, preserved ownership on multiple cryobeds, persisted cryobed names/ownership/oxygen, prevented numeric name input from triggering hotbar actions, and made Grid Cryobed availability require oxygen piped into its internal buffer via variable gas ports.
 - **6.24.0-dev:** Added Space Helmet and Oxygen Tank equipment items/recipes, Life Support equipment slots in Inventory, save/load for helmet/tank slots, and underwater oxygen reserve/drain reduction when helmet+tank are equipped.
-- **6.24.1-dev:** Equipment UI now places Jetpack Bay and Life Support side-by-side to preserve backpack room, removes extra hint text, and activates underwater oxygen drain using head-underwater/deep-swim checks. Remaining work: active oxygen-rich environment checks, offline death rules, cryobed power/oxygen validation, vacuum/room-pressure integration, and final Unity validation.
+- **6.24.1-dev:** Equipment UI now places Jetpack Bay and Life Support side-by-side to preserve backpack room, removes extra hint text, and activates underwater oxygen drain using head-underwater/deep-swim checks.
+- **6.26.6-dev:** Made cryobed UI live-ticking with oxygen tank visual (fill %, color cues), fixed linked spawn name resolving to actual cryobed name, and fixed world spawn fallback 0,250,0 bug by persisting final grounded spawn.
+- **6.28.0-dev:** Completed offline survival: new `OfflineSurvivalService` saves UTC logout time/pos/cryobed to `offline_state.json` on every save/quit, on next login computes offline hours (clamped 0-720h, <2 min ignored), consumes `offlineOxygenPerHour * hours` from claimed `GridCryobed.oxygenStored` (or checks `Cryobed.IsPowered + HasOxygenEnvironment` for static), checks oxygen-rich environment (powered biofarm producing within 10 m, O₂ tank >5-10 L within 6-7 m, powered cryobed with O₂ within 6 m) when no claimed cryobed, and kills player offline (clears bed spawn, triggers `Die()` with feedback HUD showing reason) if O₂ depleted / no power / no O₂-rich env / cryobed destroyed. Room O₂ for static cryobed now checks nearby biofarm/tank/cryobed via `Cryobed.IsOxygenRichAt()` instead of always true.
 
 ### 11.5 Passive Oxygen Generation — ✅ COMPLETED (6.27.0-dev) + PATCHES 6.27.1 & 6.27.2
 - Add an expensive Biofarm / oxygen garden system that passively generates oxygen over time.

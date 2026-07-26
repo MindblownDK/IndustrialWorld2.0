@@ -135,6 +135,16 @@ namespace VoxelEngine.Persistence
                 if (writeAutosaveSlot)
                     WriteAutosaveSnapshot(path);
                 Debug.Log($"[WorldState] Saved -> {path} (previous snapshot: {backupPath})");
+
+                // 11.4 Offline survival — record logout time/pos/cryobed for O₂ consumption on next login
+                try
+                {
+                    VoxelEngine.Player.OfflineSurvivalService.EnsureInstance();
+                    var inv = FindPlayerInventory();
+                    if (inv != null && OfflineSurvivalService.Instance != null)
+                        OfflineSurvivalService.Instance.SaveOfflineState(inv.transform.position);
+                }
+                catch (Exception ex2) { Debug.LogWarning("[WorldState] Offline save: " + ex2.Message); }
             }
             catch (Exception ex) { Debug.LogError("[WorldState] Save failed: " + ex.Message); }
         }
