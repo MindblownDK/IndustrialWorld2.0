@@ -1,9 +1,25 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.24.1-dev`
+**Current Version:** `6.24.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.24.2-dev] Equipment UI Compile Fix
+
+**Type:** PATCH — Unity UI Toolkit compatibility fix. Save-compatible.
+
+**Fixed:**
+1. Removed unsupported `IStyle.columnGap` usage from the compact equipment row.
+2. Replaced it with `marginLeft` on the Life Support panel so older/current Unity UI Toolkit versions compile cleanly.
+
+**Files touched:**
+- `Scripts/UI/GameUIController.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
+- `Roadmap.md`
 
 ---
 

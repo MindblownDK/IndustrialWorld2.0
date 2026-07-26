@@ -1117,7 +1117,6 @@ namespace VoxelEngine.UI
             row.style.alignItems = Align.FlexStart;
             row.style.marginTop = 4;
             row.style.marginBottom = 8;
-            row.style.columnGap = 10;
 
             var jet = BuildJetpackSlotsPanel(equipment);
             jet.style.flexGrow = 1;
@@ -1125,6 +1124,7 @@ namespace VoxelEngine.UI
             var life = BuildLifeSupportSlotsPanel(equipment);
             life.style.flexGrow = 1;
             life.style.flexBasis = new StyleLength(new Length(50f, LengthUnit.Percent));
+            life.style.marginLeft = 10;
             row.Add(jet);
             row.Add(life);
             return row;
