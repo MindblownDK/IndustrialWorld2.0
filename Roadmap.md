@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.26.3-dev`
-**Roadmap Version:** `6.26.3-dev`
+**Current Version:** `6.26.4-dev`
+**Roadmap Version:** `6.26.4-dev`
 **Date:** 2026-07-24
 **Status:** World Management, Autosaves & Item Limits — COMPLETED; Power, Vehicles & Combat (4.7.0) remains WORKING ON
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -1737,6 +1737,7 @@ For each version, these are the high-level Unity tasks you will perform manually
 - **6.23.0-dev:** Added static `Cryobed` and grid `GridCryobed` blocks, setup-generated items/recipes in Steps 11 and 12, right-click spawn/offline-survival anchor claiming, and basic grid screen data text.
 - **6.26.1-dev:** Cryobeds now expose availability state; static cryobeds get setup-generated power draw, grid cryobeds report power/oxygen availability, and the death screen lists only currently available cryobed choices.
 - **6.26.2-dev:** Added a right-click Cryobed Control UI with status, power/oxygen estimates, rename, claim, remove ownership, and transfer placeholder controls. Death-screen entries now use cryobed names and component availability text.
+- **6.26.4-dev:** Fixed claim behavior so cryobeds can be owned before power/oxygen is available, preserved ownership on multiple cryobeds, persisted cryobed names/ownership/oxygen, prevented numeric name input from triggering hotbar actions, and made Grid Cryobed availability require oxygen piped into its internal buffer via variable gas ports.
 - **6.24.0-dev:** Added Space Helmet and Oxygen Tank equipment items/recipes, Life Support equipment slots in Inventory, save/load for helmet/tank slots, and underwater oxygen reserve/drain reduction when helmet+tank are equipped.
 - **6.24.1-dev:** Equipment UI now places Jetpack Bay and Life Support side-by-side to preserve backpack room, removes extra hint text, and activates underwater oxygen drain using head-underwater/deep-swim checks. Remaining work: active oxygen-rich environment checks, offline death rules, cryobed power/oxygen validation, vacuum/room-pressure integration, and final Unity validation.
 

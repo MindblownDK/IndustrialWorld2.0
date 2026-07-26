@@ -1,9 +1,42 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.26.3-dev`
+**Current Version:** `6.26.4-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.26.4-dev] Cryobed Claiming, Naming & Oxygen Connectivity Fixes
+
+**Type:** PATCH — cryobed ownership/UI/connectivity corrections. Save-compatible.
+
+**Fixed — claiming and respawn behavior:**
+1. Cryobeds can now be claimed even when they currently lack power or oxygen. Availability still controls whether they appear as usable death-screen respawn targets.
+2. Claiming one cryobed no longer removes ownership from other cryobeds; ownership is tracked per cryobed.
+3. Death screen no longer masks a named cryobed behind the generic `Linked Spawn` entry when the linked spawn points at a live bed/cryobed.
+4. Cryobed names and ownership now persist for static and grid cryobeds. Grid cryobed internal oxygen also persists.
+
+**Fixed — Cryobed Control UI:**
+5. Number keys no longer trigger hotbar selection while the Cryobed name field is active, so typing numeric names no longer closes/soft-locks the UI.
+6. Cryobed UI still closes with Escape.
+7. The claim button remains usable while offline/unpowered/unoxygenated; unavailable beds simply cannot be used as respawn points until made available.
+
+**Fixed — oxygen must be piped into Grid Cryobeds:**
+8. Grid Cryobed availability now depends on its own internal oxygen buffer, not just generic grid oxygen storage.
+9. Oxygen producers only fill cryobeds through the connected gas-pipe network and the cryobed's variable gas port, so players must pipe oxygen into the cryobed.
+
+**Files touched:**
+- `Scripts/Building/Cryobed.cs`
+- `Scripts/GridSystem/GridCryobed.cs`
+- `Scripts/GridSystem/GridGasNetwork.cs`
+- `Scripts/UI/CryobedConfigHud.cs`
+- `Scripts/UI/DeathScreenHud.cs`
+- `Scripts/UI/GameUIController.cs`
+- `Scripts/Persistence/WorldStatePersistence.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
+- `Roadmap.md`
 
 ---
 

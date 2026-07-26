@@ -110,7 +110,7 @@ namespace VoxelEngine.GridSystem
             }
             if (type == Gas.GasType.Oxygen && producer.Grid != null && filled < litres)
             {
-                foreach (var cryobed in ConnectedCryobeds(producer.Grid))
+                foreach (var cryobed in ConnectedCryobeds(producer))
                 {
                     if (filled >= litres) break;
                     if (cryobed == null || !cryobed.Enabled) continue;
@@ -360,16 +360,45 @@ namespace VoxelEngine.GridSystem
             return PipeAdjacency.IsCardinalLinkDelta(localDelta, detail, 5f, detail * 0.12f);
         }
 
-        private static IEnumerable<GridCryobed> ConnectedCryobeds(GridEntity grid)
+        private static IEnumerable<GridCryobed> ConnectedCryobeds(GridBlock endpoint)
         {
+            var grid = endpoint != null ? endpoint.Grid : null;
             if (grid == null) yield break;
+            float cs = grid.gridSize.CellSize();
             float detail = GridSize.Small.CellSize();
+            var visitedPipes = new HashSet<GridBlock>();
+            var queue = new Queue<GridBlock>();
+
+            void Seed(GridBlock pipe)
+            {
+                if (pipe == null || !IsGasPipe(pipe) || WrenchBlacklist.IsBlocked(endpoint.gameObject, pipe.gameObject)) return;
+                if (visitedPipes.Add(pipe)) queue.Enqueue(pipe);
+            }
+
+            foreach (var adjacent in UnifiedGridTopology.AdjacentBlocks(grid, endpoint))
+                if (IsGasPipe(adjacent)) Seed(adjacent);
+            foreach (var block in grid.AllBlocks)
+                if (IsGasPipe(block) && BlocksAreGasLinked(endpoint, block, cs)) Seed(block);
+
+            while (queue.Count > 0)
+            {
+                var pipeBlock = queue.Dequeue();
+                foreach (var adjacent in UnifiedGridTopology.AdjacentBlocks(grid, pipeBlock))
+                    if (IsGasPipe(adjacent)
+                        && !WrenchBlacklist.IsBlocked(pipeBlock.gameObject, adjacent.gameObject)
+                        && AreDetailPipesCardinalLinked(grid, pipeBlock, adjacent)
+                        && visitedPipes.Add(adjacent)) queue.Enqueue(adjacent);
+                foreach (var pipe in ProximityPipes(grid, pipeBlock, cs))
+                    if (AreDetailPipesCardinalLinked(grid, pipeBlock, pipe)
+                        && !WrenchBlacklist.IsBlocked(pipeBlock.gameObject, pipe.gameObject)
+                        && visitedPipes.Add(pipe)) queue.Enqueue(pipe);
+            }
+
             foreach (var block in grid.AllBlocks)
             {
                 if (block is not GridCryobed cryo || !cryo.Enabled) continue;
-                foreach (var pipe in grid.AllBlocks)
+                foreach (var pipe in visitedPipes)
                 {
-                    if (!IsGasPipe(pipe)) continue;
                     if (IsTankPortWithinDetailLink(grid, pipe, cryo,
                             VoxelEngine.Maritime.MaritimePorts.GasPrefixes, detail))
                     {

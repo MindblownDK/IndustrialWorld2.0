@@ -3901,6 +3901,7 @@ namespace VoxelEngine.UI
         private void CheckHotbarKey(InputAction act, int slotIdx)
         {
             if (_searchHasFocus) return; // typing in search bar — don't intercept digits
+            if (UIState.IsBlocking && !_inventoryOpen) return; // modal text fields (cryobed/death/etc.) own number keys
             if (!GameSettings.WasPressed(act) || inventory == null) return;
             if (_inventoryOpen)
             {

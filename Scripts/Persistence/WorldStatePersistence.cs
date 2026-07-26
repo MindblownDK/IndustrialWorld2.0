@@ -267,6 +267,13 @@ namespace VoxelEngine.Persistence
                     hp = pb.Hp,
                     container = TryFindContainer(pb.gameObject)
                 };
+                var cryobed = pb.GetComponentInChildren<VoxelEngine.Building.Cryobed>(true);
+                if (cryobed != null)
+                {
+                    entry.customName = cryobed.displayName;
+                    entry.cryobedClaimed = cryobed.claimedByLocalPlayer;
+                }
+
                 var windPart = pb.GetComponent<VoxelEngine.Power.Wind.WindTurbinePart>();
                 if (windPart != null) entry.windCondition = Mathf.Max(0.01f, windPart.condition);
                 var conveyor = pb.GetComponentInChildren<VoxelEngine.Simulation.ConveyorBelt>(true);
@@ -853,6 +860,13 @@ namespace VoxelEngine.Persistence
                         container = TryFindContainer(block.gameObject)
                     };
 
+                    if (block is GridCryobed cryoBlock)
+                    {
+                        savedBlock.customName = cryoBlock.blockName;
+                        savedBlock.cryobedClaimed = cryoBlock.claimedByLocalPlayer;
+                        savedBlock.cryobedOxygen = cryoBlock.oxygenStored;
+                    }
+
                     var shape = block.GetComponent<GridShapeVariantBlock>();
                     if (shape != null)
                     {
@@ -952,7 +966,7 @@ namespace VoxelEngine.Persistence
                 var go = Instantiate(prefab);
                 var block = go.GetComponent<GridBlock>() ?? go.AddComponent<GridBlock>();
                 block.SourceItem = sourceItem;
-                block.blockName = sourceItem.displayName;
+                block.blockName = !string.IsNullOrEmpty(saved.customName) ? saved.customName : sourceItem.displayName;
                 if (sourceItem is GridBlockItem authoredGridItem)
                 {
                     block.BlockMass = authoredGridItem.blockMass;
@@ -964,6 +978,11 @@ namespace VoxelEngine.Persistence
                 }
                 block.currentHP = saved.currentHP > 0f ? saved.currentHP : block.maxHP;
                 block.Enabled = saved.enabled;
+                if (block is GridCryobed restoredGridCryo)
+                {
+                    restoredGridCryo.claimedByLocalPlayer = saved.cryobedClaimed;
+                    restoredGridCryo.oxygenStored = Mathf.Clamp(saved.cryobedOxygen, 0f, restoredGridCryo.oxygenCapacity);
+                }
 
                 if (sourceItem is BlockItem attachedItem)
                 {
@@ -1104,6 +1123,12 @@ namespace VoxelEngine.Persistence
                 var go = Instantiate(blockItem.placedPrefab, sb.pos, finalRot);
                 go.name = blockItem.displayName + " (restored)";
                 if (go.GetComponentInChildren<Collider>() == null) go.AddComponent<BoxCollider>();
+                var restoredCryobed = go.GetComponentInChildren<VoxelEngine.Building.Cryobed>(true);
+                if (restoredCryobed != null)
+                {
+                    if (!string.IsNullOrEmpty(sb.customName)) restoredCryobed.displayName = sb.customName;
+                    restoredCryobed.claimedByLocalPlayer = sb.cryobedClaimed;
+                }
                 var pb = go.GetComponent<PlacedBlock>();
                 if (pb == null) pb = go.AddComponent<PlacedBlock>();
                 pb.Item = blockItem; pb.Hp = sb.hp;
@@ -1626,6 +1651,9 @@ namespace VoxelEngine.Persistence
             public bool enabled = true;
             public bool hasShapeVariant;
             public int shapeVariant;
+            public string customName;
+            public bool cryobedClaimed;
+            public float cryobedOxygen;
             public SavedContainer container;
             public SavedPlacedBlock runtime;
         }
@@ -1647,6 +1675,8 @@ namespace VoxelEngine.Persistence
             public Vector3 pos; public Quaternion rot; public float rotY;
             public int hp;
             public SavedContainer container;
+            public string customName;
+            public bool cryobedClaimed;
             // Wind turbine part condition (0..100). 0 = "not set" (legacy saves)
             // and restores as factory-new. Only written for WindTurbinePart blocks.
             public float windCondition;

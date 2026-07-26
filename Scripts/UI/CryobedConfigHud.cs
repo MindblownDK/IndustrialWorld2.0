@@ -88,7 +88,6 @@ namespace VoxelEngine.UI
 
             var buttons = new VisualElement(); buttons.style.flexDirection = FlexDirection.Row; buttons.style.flexWrap = Wrap.Wrap; buttons.style.marginTop = 12;
             var claimButton = MakeButton(IsOwned() ? "Claimed" : "Claim", () => { Claim(); Rebuild(); }, online ? T.AccentCyan : Color.gray);
-            claimButton.SetEnabled(online);
             buttons.Add(claimButton);
             buttons.Add(MakeButton("Remove", () => { RemoveOwnership(); Rebuild(); }, new Color(0.95f,0.62f,0.18f)));
             buttons.Add(MakeButton("Transfer", () => BuildFeedbackHud.Show("Transfer", "Multiplayer ownership transfer will unlock later", null, T.AccentAmber), new Color(0.55f,0.58f,0.66f)));
