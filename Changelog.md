@@ -1,9 +1,31 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.24.0-dev`
+**Current Version:** `6.24.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.24.1-dev] Compact Equipment Row & Oxygen Drain Activation
+
+**Type:** PATCH — equipment UI layout and oxygen behavior polish. Save-compatible.
+
+**Improved — equipment UI uses less inventory space:**
+1. Jetpack Bay and Life Support now render side-by-side in one compact equipment row.
+2. Removed the extra hint text under both equipment sections to keep more vertical room for the backpack grid.
+3. The Life Support status remains next to its title, matching the cleaned-up Jetpack Bay style.
+
+**Fixed — oxygen now drains underwater:**
+4. `PlayerStats` now drains oxygen when the player's head is underwater or when swimming at high water depth.
+5. Equipped Space Helmet + Oxygen Tank still increase max oxygen and reduce drain as intended.
+
+**Files touched:**
+- `Scripts/UI/GameUIController.cs`
+- `Scripts/Player/PlayerStats.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
+- `Roadmap.md`
 
 ---
 

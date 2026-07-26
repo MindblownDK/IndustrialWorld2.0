@@ -1110,6 +1110,26 @@ namespace VoxelEngine.UI
             return wrapper;
         }
 
+        private VisualElement BuildEquipmentRow(VoxelEngine.Player.PlayerEquipment equipment)
+        {
+            var row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.FlexStart;
+            row.style.marginTop = 4;
+            row.style.marginBottom = 8;
+            row.style.columnGap = 10;
+
+            var jet = BuildJetpackSlotsPanel(equipment);
+            jet.style.flexGrow = 1;
+            jet.style.flexBasis = new StyleLength(new Length(50f, LengthUnit.Percent));
+            var life = BuildLifeSupportSlotsPanel(equipment);
+            life.style.flexGrow = 1;
+            life.style.flexBasis = new StyleLength(new Length(50f, LengthUnit.Percent));
+            row.Add(jet);
+            row.Add(life);
+            return row;
+        }
+
         private VisualElement BuildJetpackSlotsPanel(VoxelEngine.Player.PlayerEquipment equipment)
         {
             var box = new VisualElement();
@@ -1152,12 +1172,6 @@ namespace VoxelEngine.UI
             slots.style.marginLeft = 2;
             box.Add(slots);
 
-            var hint = new Label("Shift-click a jetpack from hotbar/backpack to equip. Two packs can be carried.");
-            hint.style.whiteSpace = WhiteSpace.Normal;
-            hint.style.marginTop = 4;
-            hint.style.fontSize = 9;
-            hint.style.color = new Color(0.70f, 0.78f, 0.88f, 0.92f);
-            box.Add(hint);
             return box;
         }
 
@@ -1204,12 +1218,6 @@ namespace VoxelEngine.UI
             slotRow.Add(BuildSlot(equipment.OxygenTankSlots, 0, equipment.OxygenTankSlots.GetSlot(0), false));
             box.Add(slotRow);
 
-            var hint = new Label("Helmet + tank extends underwater air. Shift-click either item to equip.");
-            hint.style.whiteSpace = WhiteSpace.Normal;
-            hint.style.marginTop = 4;
-            hint.style.fontSize = 9;
-            hint.style.color = new Color(0.70f, 0.78f, 0.88f, 0.92f);
-            box.Add(hint);
             return box;
         }
 
@@ -1306,10 +1314,7 @@ namespace VoxelEngine.UI
 
             var equipment = inventory != null ? inventory.GetComponent<VoxelEngine.Player.PlayerEquipment>() : null;
             if (equipment != null)
-            {
-                panel.Add(BuildJetpackSlotsPanel(equipment));
-                panel.Add(BuildLifeSupportSlotsPanel(equipment));
-            }
+                panel.Add(BuildEquipmentRow(equipment));
 
             // Backpack grid with sort button
             panel.Add(BuildSortableSlotGrid(inventory.container, Inventory.HOTBAR_SIZE, Inventory.TOTAL_SIZE));

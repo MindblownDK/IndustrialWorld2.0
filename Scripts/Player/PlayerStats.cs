@@ -82,7 +82,8 @@ namespace VoxelEngine.Player
             var equipment = GetComponent<PlayerEquipment>();
             MaxOxygen = baseMaxOxygen + (equipment != null ? equipment.BonusOxygen : 0f);
             var ws = GetComponent<PlayerWaterState>();
-            if (ws != null && ws.IsHeadUnderwater)
+            bool oxygenBlocked = ws != null && (ws.IsHeadUnderwater || (ws.IsSwimming && ws.WaterDepth > 0.90f));
+            if (oxygenBlocked)
             {
                 float drainMul = equipment != null ? equipment.OxygenDrainMultiplier : 1f;
                 Oxygen -= Time.deltaTime * 5f * drainMul;
