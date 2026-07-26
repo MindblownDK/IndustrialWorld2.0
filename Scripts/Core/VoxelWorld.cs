@@ -252,6 +252,8 @@ namespace VoxelEngine.Core
             if (_biomes.IsCreated)           _biomes.Dispose();
             if (_vertexAttributes.IsCreated) _vertexAttributes.Dispose();
             VoxelEngine.Settings.GameSettings.OnChanged -= ApplyUserSettings;
+            // Never leave the static ActiveWorld pointer dangling at this destroyed world.
+            ActiveWorld.ClearIfCurrent(this);
             if (Instance == this) Instance = null;
         }
 

@@ -88,6 +88,7 @@ namespace VoxelEngine.Gas
                                  || block is VoxelEngine.GridSystem.GridH2O2Generator
                                  || block is VoxelEngine.GridSystem.GridHydrogenEngine
                                  || block is VoxelEngine.GridSystem.GridThruster
+                                 || block is VoxelEngine.GridSystem.GridCryobed
                                  || block is VoxelEngine.Maritime.GridExhaustPipe
                                  || block is VoxelEngine.Maritime.GridMaritimeEngine;
                     bool connectedPipe = block.GetComponentInChildren<GasPipe>(true) != null;
@@ -169,6 +170,10 @@ namespace VoxelEngine.Gas
                     }
                     var port = VoxelEngine.Maritime.MaritimePorts.FindNearest(
                         block.transform, VoxelEngine.Maritime.MaritimePorts.GasPrefixes, transform.position);
+                    // Cryobeds are large blocks — only link the arm to a real installed
+                    // gas port. Aiming at the model centre (the tank fallback) would bury
+                    // the arm inside the bed before the player installs a port.
+                    if (block is VoxelEngine.GridSystem.GridCryobed && port == null) continue;
                     if (port != null && IsExhaustTapPort(port)
                         && (port.position - transform.position).sqrMagnitude > bestCleanDistSqr)
                         continue; // a cleaner port is nearer — this pipe isn't the capture run

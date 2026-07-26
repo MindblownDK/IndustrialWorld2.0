@@ -18,6 +18,9 @@ namespace VoxelEngine.GridSystem
         public float oxygenCapacity = 120f;
         public float oxygenStored;
         public float offlineOxygenPerHour = 12f;
+        [Tooltip("Litres of oxygen pulled per second from connected oxygen tanks through " +
+                 "the grid gas-pipe network while the internal buffer is not full.")]
+        public float oxygenIntakePerSecond = 6f;
 
         public override float PowerDraw => Enabled && poweredRequired ? idleWatts : 0f;
         public bool IsPowered => !poweredRequired || Grid == null || Grid.HasPower;
@@ -64,6 +67,25 @@ namespace VoxelEngine.GridSystem
                     ? $"{oxygenStored:0}/{oxygenCapacity:0} O₂ · ~{oxygenStored / Mathf.Max(0.01f, offlineOxygenPerHour):0.0} h reserve"
                     : "No piped oxygen in cryobed buffer";
             }
+        }
+
+        private void FixedUpdate()
+        {
+            // Actively pull oxygen from connected oxygen tanks through the grid
+            // gas-pipe network. Producers only spill their *overflow* into cryobeds
+            // (tanks fill first), so a bed wired to a tank would otherwise stay empty
+            // forever. Pulling like any other gas consumer makes "pipe oxygen into the
+            // cryobed" work regardless of whether a tank buffers the network.
+            if (!Enabled || !oxygenRequired) return;
+            if (oxygenStored >= oxygenCapacity - 0.001f) return;
+            var grid = Grid;
+            if (grid == null) return;
+            var gasNet = GridGasNetwork.Instance;
+            if (gasNet == null || !gasNet.HasPipes(grid)) return;
+            float want = oxygenIntakePerSecond * Time.fixedDeltaTime;
+            if (want <= 0f) return;
+            float got = gasNet.DrawGasFor(this, VoxelEngine.Gas.GasType.Oxygen, want);
+            if (got > 0f) AddOxygen(got);
         }
 
         public override void OnPlaced()

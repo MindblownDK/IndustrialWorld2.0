@@ -259,7 +259,16 @@ namespace VoxelEngine.Player
         {
             ReadyForPlayerControl = false;
             DisableController();
-            SetPosition(new Vector3(dest.x, Mathf.Max(dest.y, 250f), dest.z));
+            // Mirror the first-spawn routine: on a spherical body the parked position
+            // must sit at the TRUE destination height. The player transform drives chunk
+            // streaming, so forcing Y up to 250 (a flat-world streaming trick) on a sphere
+            // parks the viewer far below the surface spawn — the chunks around the cryobed
+            // never stream in, WaitForChunkAt times out, and the player is dropped far from
+            // the chosen respawn point.
+            float parkY = VoxelEngine.Cosmos.GravityProvider.ActiveBody != null
+                          ? dest.y
+                          : Mathf.Max(dest.y, 250f);
+            SetPosition(new Vector3(dest.x, parkY, dest.z));
             yield return WaitForChunkAt(VoxelCoordOf(dest), 8f);
             SetPosition(SnapToGround(dest));
             yield return null;

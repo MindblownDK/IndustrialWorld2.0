@@ -229,6 +229,10 @@ namespace VoxelEngine.Cosmos
             if (_ores.IsCreated)            _ores.Dispose();
             if (_biomes.IsCreated)          _biomes.Dispose();
             if (_vertexAttributes.IsCreated)_vertexAttributes.Dispose();
+            // Never leave the static ActiveWorld pointer dangling at this destroyed world —
+            // otherwise callers route terrain queries into a dead CelestialBody and throw
+            // MissingReferenceException every frame (breaking the whole world on reload).
+            VoxelEngine.Core.ActiveWorld.ClearIfCurrent(this);
             if (Instance == this) Instance = null;
         }
 
@@ -682,10 +686,14 @@ namespace VoxelEngine.Cosmos
         }
 
         /// <summary>Convert a WORLD position to a chunk coord (body-relative cartesian grid).</summary>
-        public Vector3Int WorldToChunk(Vector3 worldPos) => LocalToChunk(body.transform.InverseTransformPoint(worldPos));
+        public Vector3Int WorldToChunk(Vector3 worldPos)
+            => body == null ? Vector3Int.zero : LocalToChunk(body.transform.InverseTransformPoint(worldPos));
 
         public Vector3Int WorldToVoxel(Vector3 worldPos)
         {
+            // Guard against a destroyed CelestialBody — callers (dropped items, fluid sim,
+            // tools) query through ActiveWorld.Current and must never hit a torn-down body.
+            if (body == null) return Vector3Int.zero;
             Vector3 lp = body.transform.InverseTransformPoint(worldPos) / VoxelConstants.VOXEL_SIZE;
             return new Vector3Int(Mathf.FloorToInt(lp.x), Mathf.FloorToInt(lp.y), Mathf.FloorToInt(lp.z));
         }

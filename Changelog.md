@@ -1,9 +1,42 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.26.4-dev`
+**Current Version:** `6.26.5-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.26.5-dev] Cryobed Oxygen Piping, Pipe Arms & Respawn Stability
+
+**Type:** PATCH — cryobed life-support connectivity + respawn/world-stability fixes. Save-compatible (no save schema or public API changes).
+
+**Fixed — Cryobed oxygen piping (the "no piped oxygen" bug):**
+1. Grid Cryobeds now actively pull oxygen from connected oxygen tanks through the grid gas-pipe network (like any other gas consumer). Previously oxygen only spilled into a bed *after* every tank on the network was full, so a bed wired to a tank stayed empty forever and always reported "No piped oxygen in cryobed buffer".
+2. Added a tunable `oxygenIntakePerSecond` field on `GridCryobed` (default 6 L/s) controlling the fill rate. Existing beds keep their stored oxygen; the new field simply defaults in.
+3. The producer-overflow path (H2/O2 generator → bed with no tank) is preserved unchanged, so both direct and tank-buffered topologies now fill the bed.
+
+**Fixed — gas pipe visual arms to Cryobeds:**
+4. Gas pipes now draw their chunky brass connection arm to a Grid Cryobed's installed gas port. `GridCryobed` was missing from the gas-pipe endpoint list, so pipes never visually connected to the bed even though the placement ghost showed the port.
+5. Cryobed arms aim at the real installed gas port and are suppressed until a port exists — no more arms burying into the centre of the large bed model.
+
+**Fixed — respawn landing far from the chosen point:**
+6. Death/bed respawn now parks the player at the true destination height on spherical worlds. The routine was still forcing the flat-world "park at Y≥250" trick on spheres, which parked the streaming viewer far below the surface spawn — chunks around the cryobed never streamed in, the wait timed out, and the player was dropped far from the selected respawn point. Now mirrors the first-spawn routine.
+
+**Fixed — `MissingReferenceException` (destroyed `CelestialBody`) breaking the world:**
+7. `ActiveWorld.Current` no longer hands back a destroyed world. The static pointer could hold a torn-down `SphereWorld` behind an interface reference (the C# `??` operator only tests reference-null, not Unity's overloaded destroyed-null), so per-frame callers like the dropped-item ice probe hit the dead `CelestialBody` and spammed `MissingReferenceException`, breaking chunk streaming. The getter now re-validates the backing Unity object and returns null when it is gone.
+8. Both `SphereWorld` and the flat `VoxelWorld` now clear the static `ActiveWorld` pointer in `OnDestroy`.
+9. `SphereWorld.WorldToVoxel` / `WorldToChunk` guard against a null/destroyed body and return safe defaults as a final safety net.
+
+**Files touched:**
+- `Scripts/Gas/GasPipe.cs`
+- `Scripts/GridSystem/GridCryobed.cs`
+- `Scripts/Player/PlayerSpawner.cs`
+- `Scripts/Core/IVoxelWorld.cs`
+- `Scripts/Core/VoxelWorld.cs`
+- `Scripts/Cosmos/SphereWorld.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
 
 ---
 

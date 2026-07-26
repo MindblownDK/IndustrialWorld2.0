@@ -49,8 +49,27 @@ namespace VoxelEngine.Core
         /// <summary>The active voxel world (flat or spherical). Null until a bootstrap sets it.</summary>
         public static IVoxelWorld Current
         {
-            get => _current ?? (_current = VoxelWorld.Instance as IVoxelWorld);
+            get
+            {
+                // A destroyed world can linger behind this interface reference: the C# `??`
+                // operator only tests reference-null, NOT Unity's overloaded "destroyed ==
+                // null", so a torn-down SphereWorld would otherwise be handed back to callers
+                // and its dead CelestialBody would throw MissingReferenceException (e.g. the
+                // dropped-item ice probe). Re-validate the backing Unity object before return.
+                if (!IsAlive(_current)) _current = VoxelWorld.Instance as IVoxelWorld;
+                return IsAlive(_current) ? _current : null;
+            }
             set => _current = value;
         }
+
+        /// <summary>Clears the pointer if it targets <paramref name="world"/> (called from a
+        /// world's OnDestroy so the static never dangles at a destroyed world).</summary>
+        public static void ClearIfCurrent(IVoxelWorld world)
+        {
+            if (ReferenceEquals(_current, world)) _current = null;
+        }
+
+        private static bool IsAlive(IVoxelWorld world)
+            => world is UnityEngine.Object uo ? uo != null : world != null;
     }
 }
