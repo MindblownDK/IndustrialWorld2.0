@@ -918,6 +918,7 @@ namespace VoxelEngine.UI
             VoxelEngine.GridSystem.GridPilotHud.EnsureMounted(_root);
             GrinderHud.EnsureMounted(_root);
             BuildCostHud.EnsureMounted(_root);
+            DeathScreenHud.EnsureMounted(_root);
 
             // (We poll mouse buttons in Update() — much more reliable than RegisterCallback.)
 

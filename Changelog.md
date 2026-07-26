@@ -1,9 +1,30 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.25.0-dev`
+**Current Version:** `6.26.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.26.0-dev] Death Screen & Respawn Selection
+
+**Type:** MINOR — new save-compatible death/respawn UI flow. No save schema change.
+
+**Added — premium death screen:**
+1. Added `DeathScreenHud`, a full-screen `CRUSADER DOWN` overlay with a dark premium panel, red accent border, and respawn choice buttons.
+2. Player death no longer instantly respawns. `PlayerStats.Die()` now opens the death screen and blocks gameplay input until a respawn option is selected.
+3. Respawn choices include World Spawn, the active linked spawn, live Beds, static Cryobeds, and Grid Cryobeds.
+4. Selecting a respawn choice restores player health/stamina/hunger/oxygen and sends the player through `PlayerSpawner.RespawnAt()` so the same safe chunk/grounding flow is used.
+
+**Files touched:**
+- `Scripts/UI/DeathScreenHud.cs`
+- `Scripts/UI/GameUIController.cs`
+- `Scripts/Player/PlayerStats.cs`
+- `Scripts/Player/PlayerSpawner.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
+- `Roadmap.md`
 
 ---
 

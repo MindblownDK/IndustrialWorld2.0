@@ -121,10 +121,10 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1134252223802311826}
-  - component: {fileID: 5864432392529166027}
-  - component: {fileID: 4252419162055731412}
-  - component: {fileID: 7558732429690956311}
-  - component: {fileID: 51501188702280735}
+  - component: {fileID: 2367747605938610581}
+  - component: {fileID: 5142247804786572715}
+  - component: {fileID: 5232789637177431804}
+  - component: {fileID: 8415968386611905855}
   m_Layer: 0
   m_Name: OilRefinery
   m_TagString: Untagged
@@ -148,7 +148,7 @@ Transform:
   - {fileID: 3139181791953359697}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &5864432392529166027
+--- !u!114 &2367747605938610581
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -157,12 +157,12 @@ MonoBehaviour:
   m_GameObject: {fileID: 8197380636947939266}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 39aaf583ef1899d44a6d552b40d2375c, type: 3}
+  m_Script: {fileID: 11500000, guid: c7559729cfde534449152d447d6032d5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Crafting.CraftingStation
   tier: 3
   displayName: Oil Refinery
---- !u!114 &4252419162055731412
+--- !u!114 &5142247804786572715
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -171,7 +171,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 8197380636947939266}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 04cec34cc4f1e1d47a08090bcd4f29aa, type: 3}
+  m_Script: {fileID: 11500000, guid: 6254f43b9ee357e42947aeefeb604b29, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.PortConfig
   ports:
@@ -201,7 +201,7 @@ MonoBehaviour:
     enabled: 1
   portIndicatorSize: 0.4
   showPortIndicators: 1
---- !u!114 &7558732429690956311
+--- !u!114 &5232789637177431804
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -210,14 +210,14 @@ MonoBehaviour:
   m_GameObject: {fileID: 8197380636947939266}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9eacd68ef9a141ae95f225d895db1c7b, type: 3}
+  m_Script: {fileID: 11500000, guid: f32f5330ee6f3da43a965a126547c187, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.ItemPortRouting
   pushInterval: 0.5
   pushPerTick: 8
   pipeConnectRadius: 1.6
   distribution: 0
---- !u!114 &51501188702280735
+--- !u!114 &8415968386611905855
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -226,7 +226,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 8197380636947939266}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 913b99477aca9bb4998358c2567e3c9f, type: 3}
+  m_Script: {fileID: 11500000, guid: 2484d1d2433208343bb0c1f3c9a6d288, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Crafting.OilRefinery
   knownRecipes:

@@ -121,9 +121,9 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1731991142191177951}
-  - component: {fileID: 6839494715923817148}
-  - component: {fileID: 9137062420457099884}
-  - component: {fileID: 4468742205913425186}
+  - component: {fileID: 8787986391516906937}
+  - component: {fileID: 2536704590832372423}
+  - component: {fileID: 8365357238183920608}
   m_Layer: 0
   m_Name: HydrogenEngine
   m_TagString: Untagged
@@ -147,7 +147,7 @@ Transform:
   - {fileID: 1441037708392269185}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &6839494715923817148
+--- !u!114 &8787986391516906937
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -156,7 +156,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 969518177088337001}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1482c2065bf1c5945a5515c3d878688a, type: 3}
+  m_Script: {fileID: 11500000, guid: 363945cdebe15444fb1cbd04f7967cb5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Power.PowerGenerator
   connectRadius: 1.8
@@ -167,7 +167,7 @@ MonoBehaviour:
     m_Bits: 4294967295
   wattsPerSecond: 0
   isOn: 1
---- !u!114 &9137062420457099884
+--- !u!114 &2536704590832372423
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -176,13 +176,13 @@ MonoBehaviour:
   m_GameObject: {fileID: 969518177088337001}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1f8b8158c33b76f4ea33ec446a9e15a3, type: 3}
+  m_Script: {fileID: 11500000, guid: 2c511e01a928c724f9d7126f57e47491, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.PlacedBlock
   Item: {fileID: 0}
   Hp: 100
   onGrid: 1
---- !u!114 &4468742205913425186
+--- !u!114 &8365357238183920608
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -191,7 +191,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 969518177088337001}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 0418216e955ff674aab65dec3cbce993, type: 3}
+  m_Script: {fileID: 11500000, guid: a59eeba64d7d1ae42a94eb2f4000c01b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Gas.HydrogenEngine
   hydrogenPerSecond: 5

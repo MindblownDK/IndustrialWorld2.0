@@ -36,6 +36,7 @@ namespace VoxelEngine.Player
         public float SprintMultiplier { get; private set; }
         public int   BackpackSlots    { get; private set; }
         public bool  HasFlightUnlocked{ get; private set; }
+        public bool  IsDead      { get; private set; }
         public float MaxHunger   { get; private set; }
         public float Hunger      { get; private set; }
         public float MaxOxygen   { get; private set; }
@@ -176,17 +177,29 @@ namespace VoxelEngine.Player
 
         private void Die()
         {
-            Debug.Log("[Player] Died — respawning.");
+            if (IsDead) return;
+            Debug.Log("[Player] Died — awaiting respawn selection.");
+            IsDead = true;
+            Health = 0f;
+            Stamina = 0f;
+            VoxelEngine.Settings.GameSettings.FlyMode = false;
+            VoxelEngine.UI.DeathScreenHud.Show(this);
+            OnStatsChanged?.Invoke();
+        }
+
+        public void RespawnAt(Vector3 position)
+        {
+            IsDead = false;
             Health  = MaxHealth;
             Stamina = MaxStamina;
             MaxHunger = baseMaxHunger;
             Hunger = MaxHunger;
             MaxOxygen = baseMaxOxygen;
             Oxygen = MaxOxygen;
-            // Delegate to the spawner; it knows about bed / world spawn.
+
             var spawner = GetComponent<PlayerSpawner>();
-            if (spawner != null) spawner.Respawn();
-            else                 transform.position = new Vector3(0, 250, 0);
+            if (spawner != null) spawner.RespawnAt(position);
+            else transform.position = position;
             OnStatsChanged?.Invoke();
         }
 

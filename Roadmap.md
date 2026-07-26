@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.25.0-dev`
-**Roadmap Version:** `6.25.0-dev`
+**Current Version:** `6.26.0-dev`
+**Roadmap Version:** `6.26.0-dev`
 **Date:** 2026-07-24
 **Status:** World Management, Autosaves & Item Limits — COMPLETED; Power, Vehicles & Combat (4.7.0) remains WORKING ON
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -77,7 +77,7 @@ The design goal is a seamless blend of:
 | Camera / trajectory tools | 🟡 PARTIALLY COMPLETE | Basic camera foundations exist; zoom-to-trajectory and orbit map remain open. |
 | UI theming | ✅ COMPLETED | Theme definitions, 10 enriched assets, runtime USS variables, Interface tab controls, copy/import/reset, and theme override support are implemented and documented. |
 | Research UI | 🛠️ WORKING ON | Spatial pan/zoom canvas with era labels, glowing connectors, zoom controls, and bottom detail panel (5.41.0-dev) |
-| Damage / destruction | ❌ MISSING | Grids and static blocks are indestructible |
+| Damage / destruction | 🛠️ WORKING ON | **6.26.0-dev:** Player death flow now has a premium death screen and selectable respawn anchors. Grid/static block destruction remains open. |
 | Weapons / combat | ❌ MISSING | No swords, guns, missiles, turrets |
 | Radiation system | ❌ MISSING | No reactor radiation, waste, or hazmat protection |
 | Heat system | ❌ MISSING | No atmospheric entry heat, block heat tolerance, heatshields |

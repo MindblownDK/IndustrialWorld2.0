@@ -9,11 +9,11 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 722765675448006455}
-  - component: {fileID: 5547063755936084113}
-  - component: {fileID: 2850621527897688812}
-  - component: {fileID: 121800295511824166}
-  - component: {fileID: 5330501283818790705}
-  - component: {fileID: 7834372062635245943}
+  - component: {fileID: 1057137963275514452}
+  - component: {fileID: 2134679002149659880}
+  - component: {fileID: 4849834938218141249}
+  - component: {fileID: 2702704654642750764}
+  - component: {fileID: 7755790617538997778}
   m_Layer: 0
   m_Name: PortableReactor
   m_TagString: Untagged
@@ -37,7 +37,7 @@ Transform:
   - {fileID: 9164183049510700166}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &5547063755936084113
+--- !u!114 &1057137963275514452
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -46,7 +46,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 3229534888760126357}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1482c2065bf1c5945a5515c3d878688a, type: 3}
+  m_Script: {fileID: 11500000, guid: 363945cdebe15444fb1cbd04f7967cb5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Power.PowerGenerator
   connectRadius: 1.6
@@ -57,7 +57,7 @@ MonoBehaviour:
     m_Bits: 4294967295
   wattsPerSecond: 0
   isOn: 1
---- !u!114 &2850621527897688812
+--- !u!114 &2134679002149659880
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -66,13 +66,13 @@ MonoBehaviour:
   m_GameObject: {fileID: 3229534888760126357}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1f8b8158c33b76f4ea33ec446a9e15a3, type: 3}
+  m_Script: {fileID: 11500000, guid: 2c511e01a928c724f9d7126f57e47491, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.PlacedBlock
   Item: {fileID: 0}
   Hp: 100
   onGrid: 1
---- !u!114 &121800295511824166
+--- !u!114 &4849834938218141249
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -81,7 +81,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 3229534888760126357}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 04cec34cc4f1e1d47a08090bcd4f29aa, type: 3}
+  m_Script: {fileID: 11500000, guid: 6254f43b9ee357e42947aeefeb604b29, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.PortConfig
   ports:
@@ -111,7 +111,7 @@ MonoBehaviour:
     enabled: 1
   portIndicatorSize: 0.4
   showPortIndicators: 1
---- !u!114 &5330501283818790705
+--- !u!114 &2702704654642750764
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -120,14 +120,14 @@ MonoBehaviour:
   m_GameObject: {fileID: 3229534888760126357}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9eacd68ef9a141ae95f225d895db1c7b, type: 3}
+  m_Script: {fileID: 11500000, guid: f32f5330ee6f3da43a965a126547c187, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.ItemPortRouting
   pushInterval: 0.5
   pushPerTick: 8
   pipeConnectRadius: 1.6
   distribution: 0
---- !u!114 &7834372062635245943
+--- !u!114 &7755790617538997778
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -136,7 +136,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 3229534888760126357}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 7206062189a3ef041a23c1937303c2c0, type: 3}
+  m_Script: {fileID: 11500000, guid: 400b9e455fd7ef4489ac83e48e787789, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Nuclear.PortableReactor
   leuPelletItem: {fileID: 11400000, guid: 776dfe3601e8299449f59357271766e5, type: 2}

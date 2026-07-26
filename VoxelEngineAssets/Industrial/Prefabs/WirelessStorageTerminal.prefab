@@ -9,9 +9,9 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2748258526120619663}
-  - component: {fileID: 1952049477563883177}
-  - component: {fileID: 351468333465587675}
-  - component: {fileID: 1748222099323089099}
+  - component: {fileID: 1002972581141137825}
+  - component: {fileID: 4427970936012347087}
+  - component: {fileID: 5424710915491015647}
   m_Layer: 0
   m_Name: WirelessStorageTerminal
   m_TagString: Untagged
@@ -35,7 +35,7 @@ Transform:
   - {fileID: 8583641308668083146}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1952049477563883177
+--- !u!114 &1002972581141137825
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -44,7 +44,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 4992734715689890576}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b231df31f45343346a2b14ed69ac7e7a, type: 3}
+  m_Script: {fileID: 11500000, guid: 28fc9f3838f902547a6f32208010c358, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Power.PowerConsumer
   connectRadius: 1.6
@@ -54,7 +54,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 4294967295
   wattsPerSecond: 60
---- !u!114 &351468333465587675
+--- !u!114 &4427970936012347087
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -63,13 +63,13 @@ MonoBehaviour:
   m_GameObject: {fileID: 4992734715689890576}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1f8b8158c33b76f4ea33ec446a9e15a3, type: 3}
+  m_Script: {fileID: 11500000, guid: 2c511e01a928c724f9d7126f57e47491, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.PlacedBlock
   Item: {fileID: 0}
   Hp: 100
   onGrid: 1
---- !u!114 &1748222099323089099
+--- !u!114 &5424710915491015647
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -78,7 +78,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 4992734715689890576}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5a0d2a4ed3c07184db025cef3f2444df, type: 3}
+  m_Script: {fileID: 11500000, guid: c0586418763163249a4326e1a54da6d6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Storage.StorageTerminal
   searchRadius: 12

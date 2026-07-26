@@ -121,10 +121,10 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 634409308679864621}
-  - component: {fileID: 9182455417241492042}
-  - component: {fileID: 8941691006792769219}
-  - component: {fileID: 6349452457710026781}
-  - component: {fileID: 1747251876928248643}
+  - component: {fileID: 5124316473015677177}
+  - component: {fileID: 4632564120134715990}
+  - component: {fileID: 8448493180088990319}
+  - component: {fileID: 1710400554458424229}
   m_Layer: 0
   m_Name: ServerRack
   m_TagString: Untagged
@@ -148,7 +148,7 @@ Transform:
   - {fileID: 3242436505280421709}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &9182455417241492042
+--- !u!114 &5124316473015677177
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -157,7 +157,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 8585199525781807816}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b231df31f45343346a2b14ed69ac7e7a, type: 3}
+  m_Script: {fileID: 11500000, guid: 28fc9f3838f902547a6f32208010c358, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Power.PowerConsumer
   connectRadius: 1.6
@@ -167,7 +167,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 4294967295
   wattsPerSecond: 100
---- !u!114 &8941691006792769219
+--- !u!114 &4632564120134715990
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -176,13 +176,13 @@ MonoBehaviour:
   m_GameObject: {fileID: 8585199525781807816}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1f8b8158c33b76f4ea33ec446a9e15a3, type: 3}
+  m_Script: {fileID: 11500000, guid: 2c511e01a928c724f9d7126f57e47491, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.PlacedBlock
   Item: {fileID: 0}
   Hp: 100
   onGrid: 1
---- !u!114 &6349452457710026781
+--- !u!114 &8448493180088990319
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -191,7 +191,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 8585199525781807816}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 15117e7fa206b534ba21c56ca76606c3, type: 3}
+  m_Script: {fileID: 11500000, guid: 28ab8870c523b7e419a3214f35486abd, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Storage.ServerRack
   diskSlots:
@@ -212,7 +212,7 @@ MonoBehaviour:
     _minSize: 1
   activeDisks: []
   connectedNAS: []
---- !u!114 &1747251876928248643
+--- !u!114 &1710400554458424229
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -221,7 +221,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 8585199525781807816}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 445a71aa1a278ef408d4bfb46c5d5962, type: 3}
+  m_Script: {fileID: 11500000, guid: 4f0d87293ad6ff647859d6cf4dc21055, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Storage.AutoCrafter
   patterns: []

@@ -250,6 +250,11 @@ namespace VoxelEngine.Player
             StartCoroutine(RespawnRoutine(dest));
         }
 
+        public void RespawnAt(Vector3 destination)
+        {
+            StartCoroutine(RespawnRoutine(destination));
+        }
+
         private IEnumerator RespawnRoutine(Vector3 dest)
         {
             ReadyForPlayerControl = false;

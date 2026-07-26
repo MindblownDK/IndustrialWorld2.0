@@ -9,9 +9,9 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 667842219308047465}
-  - component: {fileID: 8325775938596806037}
-  - component: {fileID: 8740330214878590237}
-  - component: {fileID: 1849381939636541318}
+  - component: {fileID: 2987425906803768129}
+  - component: {fileID: 8309872084747430461}
+  - component: {fileID: 3348886488471947385}
   m_Layer: 0
   m_Name: Harvester
   m_TagString: Untagged
@@ -35,7 +35,7 @@ Transform:
   - {fileID: 2386115097698811784}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &8325775938596806037
+--- !u!114 &2987425906803768129
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -44,7 +44,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 5215036116368676641}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b231df31f45343346a2b14ed69ac7e7a, type: 3}
+  m_Script: {fileID: 11500000, guid: 28fc9f3838f902547a6f32208010c358, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Power.PowerConsumer
   connectRadius: 1.6
@@ -54,7 +54,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 4294967295
   wattsPerSecond: 40
---- !u!114 &8740330214878590237
+--- !u!114 &8309872084747430461
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -63,13 +63,13 @@ MonoBehaviour:
   m_GameObject: {fileID: 5215036116368676641}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1f8b8158c33b76f4ea33ec446a9e15a3, type: 3}
+  m_Script: {fileID: 11500000, guid: 2c511e01a928c724f9d7126f57e47491, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.PlacedBlock
   Item: {fileID: 0}
   Hp: 100
   onGrid: 1
---- !u!114 &1849381939636541318
+--- !u!114 &3348886488471947385
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -78,7 +78,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 5215036116368676641}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6ae8981e5b6369049875797e08990787, type: 3}
+  m_Script: {fileID: 11500000, guid: b92e8dd8c3215c64897a46114d4f3b63, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Farming.Harvester
   scanRadius: 8
