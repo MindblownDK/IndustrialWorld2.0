@@ -355,7 +355,7 @@ namespace VoxelEngine.EditorTools
             ConfigureSerializedCrestOcean(existing, waterMaterial);
 
             var t = existing.transform;
-            var world = UnityEngine.Object.FindFirstObjectByType<VoxelEngine.Core.VoxelWorld>();
+            var world = UnityEngine.Object.FindAnyObjectByType<VoxelEngine.Core.VoxelWorld>();
             if (world != null)
             {
                 float seaY = world.flatSeaLevel * VoxelEngine.Core.VoxelConstants.VOXEL_SIZE;

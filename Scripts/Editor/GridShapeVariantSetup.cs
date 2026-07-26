@@ -31,7 +31,7 @@ namespace VoxelEngine.EditorTools
             if (player == null)
             {
                 // Try to find any object with an Inventory (the player always has one).
-                var inv = Object.FindFirstObjectByType<Inventory>();
+                var inv = Object.FindAnyObjectByType<Inventory>();
                 if (inv != null) player = inv.gameObject;
             }
 
@@ -63,11 +63,11 @@ namespace VoxelEngine.EditorTools
             // GridBuilder should be on the same GameObject as the player or camera.
             GridBuilder builder = null;
             if (player != null) builder = player.GetComponent<GridBuilder>();
-            if (builder == null) builder = Object.FindFirstObjectByType<GridBuilder>();
+            if (builder == null) builder = Object.FindAnyObjectByType<GridBuilder>();
             if (builder == null)
             {
                 // Try to find the build camera on the player or in the scene
-                Camera cam = player != null ? player.GetComponentInChildren<Camera>() : Object.FindFirstObjectByType<Camera>();
+                Camera cam = player != null ? player.GetComponentInChildren<Camera>() : Object.FindAnyObjectByType<Camera>();
                 if (cam != null && cam.gameObject != null)
                 {
                     builder = Undo.AddComponent<GridBuilder>(cam.gameObject);
@@ -101,7 +101,7 @@ namespace VoxelEngine.EditorTools
                 {
                     var inv = builder.GetComponentInParent<Inventory>();
                     if (inv == null && player != null) inv = player.GetComponent<Inventory>();
-                    if (inv == null) inv = Object.FindFirstObjectByType<Inventory>();
+                    if (inv == null) inv = Object.FindAnyObjectByType<Inventory>();
                     if (inv != null)
                     {
                         builder.inventory = inv;

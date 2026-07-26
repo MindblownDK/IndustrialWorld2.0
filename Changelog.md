@@ -1,7 +1,36 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.30.0-dev`
+**Current Version:** `6.30.1-dev`
+
+All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.30.1-dev] Ruins Step 11 Crash Fix — PlacedBlock Namespace & Premium Overlap
+
+**Type:** PATCH — editor crash + spawn visibility fix, save-compatible.
+
+**Fixed — `NullReferenceException` at `MakeRuinPrefab:4191` + `PlacedBlock` not found:**
+1. `VoxelEngineSetupWindow.cs:4251,4252,4286,4287,4351,4352` CS0246 `PlacedBlock` not found — `PlacedBlock` lives in `VoxelEngine.Building`, file had no using. Fixed by fully qualifying to `VoxelEngine.Building.PlacedBlock` via perl replace.
+2. `blockRuinWarehouse` does not exist in `MakeRuinPrefab` scope (created after) — removed `if (blockRuinWarehouse != null) pb.Item = ...` assignments for foundation/wall/rubble fallback cubes. Rubble now has `PlacedBlock` Hp only (120-350) without Item, preventing NRE. Main walls use real tiered prefabs (`Wall_Steel/Iron`) which are already mineable for resources.
+3. Root collider for scatter overlap: added large `BoxCollider` size `size*1.1, y*1.2` + `PlacedBlock` marker Hp 500 so `ChunkScatter` overlap check (`Tree/PlacedBlock/PlacedTieredBlock`) prevents ruins spawning inside each other.
+4. Increased scatter density 7x: Warehouse 0.0012→0.0085, Factory 0.0009→0.0065, Bunker 0.0010→0.0075, scale 1.2-2.0 (was 0.9-1.3) — now ~5-15 ruins per 10 chunks vs ~1 before. Added biomes Forest/Beach to target list.
+5. Fixed obsolete warnings `FindFirstObjectByType` → `FindAnyObjectByType` in `GridShapeVariantSetup.cs` and `CrestWaterSetupUtility.cs`.
+6. `EnsureLiquidTankPorts` / `EnsureGasTankPorts` unused warnings are benign (local functions, kept for future use).
+
+**Result:** Step 11 `BuildSurvivalAndLogisticsContent` no longer throws NRE, ruins actually spawn in Wasteland/Plains/Steppes/Desert/Forest/Beach with premium large rusted crusader base look (real building blocks, mineable walls, rubble, beacon light).
+
+**Files touched:**
+- `Scripts/Editor/VoxelEngineSetupWindow.cs`
+- `Scripts/Editor/GridShapeVariantSetup.cs`
+- `Scripts/Editor/CrestWaterSetupUtility.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
+
+---
+
+### [6.30.0-dev] Premium Ruins — Real Crusader Bases, Mineable Rusted Walls & High Spawn Rate
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
 

@@ -4248,10 +4248,9 @@ namespace VoxelEngine.EditorTools
                         fnd.name = "Foundation_Fallback";
                         var r = fnd.GetComponent<Renderer>();
                         if (r != null) r.sharedMaterial = rustMat;
-                        var pb = fnd.GetComponent<PlacedBlock>();
-                        if (pb == null) pb = fnd.AddComponent<PlacedBlock>();
+                        var pb = fnd.GetComponent<VoxelEngine.Building.PlacedBlock>();
+                        if (pb == null) pb = fnd.AddComponent<VoxelEngine.Building.PlacedBlock>();
                         // Assign a block item that drops steelPlate when mined
-                        if (blockRuinWarehouse != null) pb.Item = blockRuinWarehouse;
                         pb.Hp = 350;
                     }
                     fnd.transform.SetParent(root.transform, false);
@@ -4283,9 +4282,8 @@ namespace VoxelEngine.EditorTools
                         wall.name = isHalf ? "HalfWall_Fallback" : "Wall_Fallback";
                         var rend = wall.GetComponent<Renderer>();
                         if (rend != null) rend.sharedMaterial = UnityEngine.Random.value < 0.5f ? rustMat : rustDarkMat;
-                        var pb = wall.GetComponent<PlacedBlock>();
-                        if (pb == null) pb = wall.AddComponent<PlacedBlock>();
-                        if (blockRuinWarehouse != null) pb.Item = blockRuinWarehouse;
+                        var pb = wall.GetComponent<VoxelEngine.Building.PlacedBlock>();
+                        if (pb == null) pb = wall.AddComponent<VoxelEngine.Building.PlacedBlock>();
                         pb.Hp = 250;
                         // Scale for half wall
                         if (isHalf) wall.transform.localScale = new Vector3(1, 0.5f, 1);
@@ -4350,10 +4348,9 @@ namespace VoxelEngine.EditorTools
                     if (rend != null) rend.sharedMaterial = UnityEngine.Random.value < 0.5f ? rustDarkMat : mossMat;
                     var col = rubble.GetComponent<Collider>();
                     if (col == null) rubble.AddComponent<BoxCollider>();
-                    var pb = rubble.GetComponent<PlacedBlock>();
-                    if (pb == null) pb = rubble.AddComponent<PlacedBlock>();
+                    var pb = rubble.GetComponent<VoxelEngine.Building.PlacedBlock>();
+                    if (pb == null) pb = rubble.AddComponent<VoxelEngine.Building.PlacedBlock>();
                     // Drop steel/iron when mined
-                    if (blockRuinWarehouse != null) pb.Item = blockRuinWarehouse;
                     pb.Hp = 120;
                 }
 
