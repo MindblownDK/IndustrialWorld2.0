@@ -1,7 +1,46 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.27.0-dev`
+**Current Version:** `6.27.1-dev`
+
+All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.27.1-dev] Grid Biofarm UI, Variable Ports & Vertical Pipe Fix
+
+**Type:** PATCH — biofarm UX + pipe connectivity fixes. Save-compatible.
+
+**Fixed — grid biofarm had no UI:**
+1. `PlayerInteractionTool.GridBlockHasUI` now includes `GridBiofarm` and `GridCryobed` so RMB opens the premium panel instead of doing nothing.
+2. `GameUIController` already watched `biomassInput` and `GridBlockUI` had `BiofarmPanel`, but the block was blocked from ever opening — now fixed.
+3. Grid cryobed was also missing from `GridBlockHasUI`, so its terminal panel wasn't reachable when not via `CryobedConfigHud` — now included for consistency.
+
+**Added — variable ports on all biofarms (like grid tanks):**
+4. `BuildSystem.TryGetGridTankVariablePortSnap` and `GridBuilder.TryGetGridTankVariablePortSnap` / `IsMatchingTankBlockForPipe` now accept `GridBiofarm` (and `GridH2O2Generator`) for both `Liquid` and `Gas` families.
+5. Placing a liquid pipe (water) or gas pipe (O₂) while aiming at a biofarm hull spawns a colored variable port (`Port_LiquidIO_V` blue, `Port_GasIO_V` cyan) flush on the hull, and the pipe snaps to the detail lattice just outside it — same UX as HFO/MGO engines and grid gas/liquid tanks.
+6. Added `GridTankVariablePorts` component auto-creation on first variable port install — persists via save/load.
+7. `VoxelEngineSetupWindow` Step 12 now calls `EnsureGridTankPorts` for `Biofarm_Large` for both gas and liquid, so fixed N/S/E/W/Top/Bottom ports also exist as fallback.
+8. **Static biofarm** (world) now participates in pipe visuals: `WaterPipe` and `GasPipe` `GetNeighbourPositions` now treat `Building.Biofarm` as endpoint for both grid-attached and free-placed pipes, so arms grow toward the biofarm model instead of stopping short.
+
+**Fixed — pipes cannot connect vertically on land:**
+9. `PipeAdjacency` vertical tolerance increased: `VerticalTolerance = 0.65f`. `IsCardinalNeighbour`, `IsCardinalLinkDelta`, and `IsAxisAlignedWithinDelta` now use larger tolerance when dominant axis is Y, allowing 0.4-0.5 m sideways drift from uneven terrain hit normals that previously broke vertical shafts.
+10. `BuildSystem.IsPlacementValid` now allows thin stacking blocks (pipes/cables, `allowStacking = true`) to ignore static world geometry (terrain). Previously any overlap with static MeshCollider blocked placement, so starting a vertical column on rough ground failed. Dynamic rigidbody blocking still enforced.
+
+**Files touched:**
+- `Scripts/Player/PlayerInteractionTool.cs`
+- `Scripts/Building/BuildSystem.cs`
+- `Scripts/GridSystem/GridBuilder.cs`
+- `Scripts/Fluids/WaterPipe.cs`
+- `Scripts/Gas/GasPipe.cs`
+- `Scripts/Networks/PipeAdjacency.cs`
+- `Scripts/Editor/VoxelEngineSetupWindow.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
+
+---
+
+### [6.27.0-dev] Passive Oxygen Generation — Biofarm Oxygen Garden (11.5)
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
 

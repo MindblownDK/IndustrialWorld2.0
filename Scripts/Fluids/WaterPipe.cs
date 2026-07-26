@@ -59,6 +59,7 @@ namespace VoxelEngine.Fluids
                     if (block == null || block == gridBlock) return;
                     bool endpoint = block is VoxelEngine.GridSystem.GridLiquidTank
                                  || block is VoxelEngine.GridSystem.GridH2O2Generator
+                                 || block is VoxelEngine.GridSystem.GridBiofarm
                                  || block is VoxelEngine.GridSystem.GridRefinery
                                  || block is VoxelEngine.GridSystem.GridChemicalPlant
                                  || block is VoxelEngine.Maritime.GridMaritimeEngine
@@ -68,7 +69,8 @@ namespace VoxelEngine.Fluids
                     // endpoints when they sit next to a grid pipe.
                     bool worldEndpoint = !endpoint && !connectedPipe &&
                         (block.GetComponentInChildren<VoxelEngine.Fluids.WaterTank>(true) != null
-                         || block.GetComponentInChildren<VoxelEngine.Fluids.WaterPump>(true) != null);
+                         || block.GetComponentInChildren<VoxelEngine.Fluids.WaterPump>(true) != null
+                         || block.GetComponentInChildren<VoxelEngine.Building.Biofarm>(true) != null);
                     if (endpoint) { /* keep */ }
                     else if (worldEndpoint) endpoint = true;
                     if (!endpoint && !connectedPipe) return;
@@ -196,9 +198,10 @@ namespace VoxelEngine.Fluids
                     }
                     var tank = col.GetComponentInParent<VoxelEngine.Fluids.WaterTank>();
                     var pump = col.GetComponentInParent<VoxelEngine.Fluids.WaterPump>();
-                    if (tank != null || pump != null)
+                    var biofarm = col.GetComponentInParent<VoxelEngine.Building.Biofarm>();
+                    if (tank != null || pump != null || biofarm != null)
                     {
-                        Vector3 anchor = tank != null ? tank.transform.position : pump.transform.position;
+                        Vector3 anchor = tank != null ? tank.transform.position : pump != null ? pump.transform.position : biofarm.transform.position;
                         Vector3 delta = anchor - transform.position;
                         if (VoxelEngine.Networks.PipeAdjacency.IsAxisAlignedWithinDelta(
                                 delta, VoxelEngine.Networks.PipeAdjacency.DefaultGridSize, 1.2f, 0.45f))

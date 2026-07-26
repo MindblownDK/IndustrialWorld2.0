@@ -557,13 +557,17 @@ namespace VoxelEngine.Building
             if (grid == null || targetBlock == null || targetBlock.Grid != grid) return false;
             if (pipeFamily == VoxelEngine.Maritime.PipeFamily.Liquid)
             {
-                if (targetBlock is not VoxelEngine.GridSystem.GridLiquidTank) return false;
+                if (targetBlock is not VoxelEngine.GridSystem.GridLiquidTank
+                    && targetBlock is not VoxelEngine.GridSystem.GridBiofarm
+                    && targetBlock is not VoxelEngine.GridSystem.GridH2O2Generator) return false;
                 tankFamily = VoxelEngine.GridSystem.GridTankPortFamily.Liquid;
             }
             else if (pipeFamily == VoxelEngine.Maritime.PipeFamily.Gas)
             {
                 if (targetBlock is not VoxelEngine.GridSystem.GridGasTank
-                    && targetBlock is not VoxelEngine.GridSystem.GridCryobed) return false;
+                    && targetBlock is not VoxelEngine.GridSystem.GridCryobed
+                    && targetBlock is not VoxelEngine.GridSystem.GridBiofarm
+                    && targetBlock is not VoxelEngine.GridSystem.GridH2O2Generator) return false;
                 tankFamily = VoxelEngine.GridSystem.GridTankPortFamily.Gas;
             }
             else return false;
@@ -1606,6 +1610,12 @@ namespace VoxelEngine.Building
                     if (!block.allowStacking) return false;
                     continue;
                 }
+                // Thin stacking blocks (pipes/cables) are allowed to clip slightly into
+                // terrain when building vertical shafts on land — previously IsPlacementValid
+                // blocked any static overlap, so vertical pipe columns on rough ground
+                // could never be started. We now allow thin blocks to ignore static
+                // world geometry; dynamic rigidbodies still block.
+                if (isThin) continue;
                 // Block placement on dynamic rigidbodies.
                 if (col.attachedRigidbody != null && !col.attachedRigidbody.isKinematic) return false;
                 // Static world geometry (terrain, rocks, trees): never bury a block

@@ -1035,6 +1035,8 @@ namespace VoxelEngine.Player
             return b is VoxelEngine.GridSystem.GridLiquidTank
                 || b is VoxelEngine.GridSystem.GridGasTank
                 || b is VoxelEngine.GridSystem.GridH2O2Generator
+                || b is VoxelEngine.GridSystem.GridBiofarm
+                || b is VoxelEngine.GridSystem.GridCryobed
                 || b is VoxelEngine.GridSystem.GridBattery
                 || b is VoxelEngine.GridSystem.GridCargoContainer
                 || b is VoxelEngine.GridSystem.GridWeapon

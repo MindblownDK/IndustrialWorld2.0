@@ -6,7 +6,7 @@
 // ║  Used by GasNetwork, ItemPipeNetwork and FluidNetworkManager     ║
 // ║  to decide whether two placed pipes should snap into a single    ║
 // ║  network. Without this check, two pipes diagonally 2 m apart     ║
-// ║  on different floors would still be "within radius", so the      ║
+// ║  on different floors would still be \"within radius\", so the      ║
 // ║  visual builder grew arms toward empty air. Pipe links remain    ║
 // ║  on one cardinal axis and may use either immediate-neighbour or  ║
 // ║  explicitly bounded multi-cell connection rules.                 ║
@@ -31,13 +31,14 @@ namespace VoxelEngine.Networks
         /// placed via the BuildSystem on slightly different surface heights
         /// (eg the same row of dirt but one sits 0.1m higher because of a
         /// scattered stone underneath) still register as cardinal neighbours.
-        /// The fail-safe is the "one-axis-step + others zero" requirement —
+        /// The fail-safe is the \"one-axis-step + others zero\" requirement —
         /// even with the wider tolerance, diagonal pipes never connect.
         /// </summary>
         public const float DefaultTolerance = 0.35f;
+        public const float VerticalTolerance = 0.65f;
 
         /// <summary>
-        /// True when <paramref name="a"/> and <paramref name="b"/> are exactly ONE
+        /// True when <paramref name=\"a\"/> and <paramref name=\"b\"/> are exactly ONE
         /// grid step apart on EXACTLY one cardinal axis (±X / ±Y / ±Z) and not
         /// offset on the other two. This is the same predicate used by the wire
         /// renderer, so cables, pipes and all conduits share one visual language.
@@ -53,8 +54,8 @@ namespace VoxelEngine.Networks
 
             // Pick the dominant axis. If the dominant axis is within (gs/2 .. 2*gs)
             // AND the other two axes are within `tol` of zero, this is a cardinal
-            // neighbour. This is much more forgiving than the strict "exactly 1
-            // step ± tol" test and handles pipes placed on slightly uneven
+            // neighbour. This is much more forgiving than the strict \"exactly 1
+            // step ± tol\" test and handles pipes placed on slightly uneven
             // terrain or via the build ghost on non-integer grid surfaces.
             float maxAxis = Mathf.Max(dx, Mathf.Max(dy, dz));
             if (maxAxis < gs * 0.5f) return false; // too close (same cell)
@@ -64,16 +65,20 @@ namespace VoxelEngine.Networks
                 (dx >= dy && dx >= dz) ? 0 :
                 (dy >= dx && dy >= dz) ? 1 : 2;
 
-            // Ensure the OTHER two axes are within tolerance of zero (so pipes
-            // on the same row connect even if their Y values differ slightly).
+            // For vertical pipes on land the hit normal is rarely perfectly vertical
+            // and the ghost can drift 0.4-0.5 m sideways, which previously broke
+            // vertical shafts. Allow a larger horizontal tolerance for Y-dominant links.
+            float effectiveTol = tol;
+            if (dominant == 1) effectiveTol = Mathf.Max(tol, VerticalTolerance);
+
             float other1 = dominant == 0 ? dy : dx;
             float other2 = dominant == 2 ? dy : dz;
-            return other1 <= tol && other2 <= tol;
+            return other1 <= effectiveTol && other2 <= effectiveTol;
         }
 
         /// <summary>
         /// True when two pipes share one cardinal axis and are no farther apart than
-        /// <paramref name="maxCells"/> cells. Used by long pipe links while retaining
+        /// <paramref name=\"maxCells\"/> cells. Used by long pipe links while retaining
         /// the same strict no-diagonal rule as immediate neighbours.
         /// </summary>
         public static bool IsCardinalLink(Vector3 a, Vector3 b,
@@ -95,9 +100,11 @@ namespace VoxelEngine.Networks
             if (along < gs * 0.5f || along > gs * Mathf.Max(1f, maxCells) + tol) return false;
 
             int dominant = (dx >= dy && dx >= dz) ? 0 : (dy >= dx && dy >= dz) ? 1 : 2;
+            float effectiveTol = tol;
+            if (dominant == 1) effectiveTol = Mathf.Max(tol, VerticalTolerance);
             float other1 = dominant == 0 ? dy : dx;
             float other2 = dominant == 2 ? dy : dz;
-            return other1 <= tol && other2 <= tol;
+            return other1 <= effectiveTol && other2 <= effectiveTol;
         }
 
         /// <summary>
@@ -135,14 +142,19 @@ namespace VoxelEngine.Networks
             float tol = tolerance > 0 ? tolerance : DefaultTolerance;
             float dx = Mathf.Abs(d.x), dy = Mathf.Abs(d.y), dz = Mathf.Abs(d.z);
 
+            // Vertical pipes on land can drift 0.4-0.5m sideways due to uneven terrain normal.
+            // Use a slightly larger tolerance when the active axis is Y.
+            float effectiveTol = tol;
+            if (dy > dx && dy > dz) effectiveTol = Mathf.Max(tol, VerticalTolerance);
+
             int activeAxes = 0;
-            if (dx > tol) activeAxes++;
-            if (dy > tol) activeAxes++;
-            if (dz > tol) activeAxes++;
+            if (dx > effectiveTol) activeAxes++;
+            if (dy > effectiveTol) activeAxes++;
+            if (dz > effectiveTol) activeAxes++;
             if (activeAxes != 1) return false;
 
             float along = Mathf.Max(dx, dy, dz);
-            return along <= gs * maxStepsAway + tol;
+            return along <= gs * maxStepsAway + effectiveTol;
         }
 
         // ── Cardinal endpoint probes (tanks / containers at lattice range) ──
@@ -153,10 +165,10 @@ namespace VoxelEngine.Networks
         private static readonly Vector3[] s_probeAxesGrid = new Vector3[6];
 
         /// <summary>
-        /// The "five lattice cells in a valid direction" rule: step along each of the
-        /// six cardinal axes (in <paramref name="gridFrame"/>'s frame when supplied,
-        /// world axes otherwise) for up to <paramref name="maxCells"/> lattice cells,
-        /// OverlapSphere-probing every cell centre. <paramref name="visit"/> runs per
+        /// The \"five lattice cells in a valid direction\" rule: step along each of the
+        /// six cardinal axes (in <paramref name=\"gridFrame\"/>'s frame when supplied,
+        /// world axes otherwise) for up to <paramref name=\"maxCells\"/> lattice cells,
+        /// OverlapSphere-probing every cell centre. <paramref name=\"visit\"/> runs per
         /// hit collider and returns true to stop early. Used by the gas/liquid/item
         /// endpoint lookups so tanks and containers join a pipe run without sitting
         /// physically on top of it — but never diagonally or off-axis.

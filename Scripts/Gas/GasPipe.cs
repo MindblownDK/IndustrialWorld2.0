@@ -86,6 +86,7 @@ namespace VoxelEngine.Gas
                     if (block == null || block == gridBlock || block.Grid != grid) return;
                     bool endpoint = block is VoxelEngine.GridSystem.GridGasTank
                                  || block is VoxelEngine.GridSystem.GridH2O2Generator
+                                 || block is VoxelEngine.GridSystem.GridBiofarm
                                  || block is VoxelEngine.GridSystem.GridHydrogenEngine
                                  || block is VoxelEngine.GridSystem.GridThruster
                                  || block is VoxelEngine.GridSystem.GridCryobed
@@ -95,7 +96,8 @@ namespace VoxelEngine.Gas
                     // World-side gas tanks/electrolysers placed adjacent to a grid
                     // pipe should also draw an arm — same bridging rule as liquid pipes.
                     bool worldEndpoint = !endpoint && !connectedPipe &&
-                        (block.GetComponentInChildren<VoxelEngine.Gas.GasTank>(true) != null);
+                        (block.GetComponentInChildren<VoxelEngine.Gas.GasTank>(true) != null
+                         || block.GetComponentInChildren<VoxelEngine.Building.Biofarm>(true) != null);
                     if (endpoint) { /* keep */ }
                     else if (worldEndpoint) endpoint = true;
                     if (!endpoint && !connectedPipe) return;
@@ -200,9 +202,10 @@ namespace VoxelEngine.Gas
                         continue;
                     }
                     var wTank = col.GetComponentInParent<GasTank>();
-                    if (wTank != null)
+                    var wBiofarm = col.GetComponentInParent<VoxelEngine.Building.Biofarm>();
+                    if (wTank != null || wBiofarm != null)
                     {
-                        Vector3 anchor = wTank.transform.position;
+                        Vector3 anchor = wTank != null ? wTank.transform.position : wBiofarm.transform.position;
                         if ((anchor - transform.position).sqrMagnitude <= probeRadius * probeRadius)
                             _neighbourPosBuf.Add(Vector3.Lerp(transform.position, anchor, 0.5f));
                     }
@@ -227,12 +230,14 @@ namespace VoxelEngine.Gas
                         continue;
                     }
                     var tank = col.GetComponentInParent<GasTank>();
-                    if (tank != null)
+                    var biofarm = col.GetComponentInParent<VoxelEngine.Building.Biofarm>();
+                    if (tank != null || biofarm != null)
                     {
-                        Vector3 delta = tank.transform.position - transform.position;
+                        Vector3 anchor = tank != null ? tank.transform.position : biofarm.transform.position;
+                        Vector3 delta = anchor - transform.position;
                         if (VoxelEngine.Networks.PipeAdjacency.IsAxisAlignedWithinDelta(
                                 delta, VoxelEngine.Networks.PipeAdjacency.DefaultGridSize, 1.2f, 0.45f))
-                            _neighbourPosBuf.Add(Vector3.Lerp(transform.position, tank.transform.position, 0.5f));
+                            _neighbourPosBuf.Add(Vector3.Lerp(transform.position, anchor, 0.5f));
                     }
                 }
             }
