@@ -1119,12 +1119,8 @@ namespace VoxelEngine.UI
             row.style.marginBottom = 8;
 
             var jet = BuildJetpackSlotsPanel(equipment);
-            jet.style.flexGrow = 1;
-            jet.style.flexBasis = new StyleLength(new Length(50f, LengthUnit.Percent));
             var life = BuildLifeSupportSlotsPanel(equipment);
-            life.style.flexGrow = 1;
-            life.style.flexBasis = new StyleLength(new Length(50f, LengthUnit.Percent));
-            life.style.marginLeft = 10;
+            life.style.marginLeft = 12;
             row.Add(jet);
             row.Add(life);
             return row;

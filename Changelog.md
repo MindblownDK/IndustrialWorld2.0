@@ -1,9 +1,25 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.24.2-dev`
+**Current Version:** `6.24.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.24.3-dev] Compact Equipment Row Alignment
+
+**Type:** PATCH — inventory equipment layout polish. Save-compatible.
+
+**Improved:**
+1. Removed the 50% flex-basis layout from Jetpack Bay and Life Support so both sections are compact and sit together on the left side of the inventory panel.
+2. Life Support now sits immediately to the right of Jetpack Bay with a small margin, removing the awkward empty space on the right side of the Life Support area.
+
+**Files touched:**
+- `Scripts/UI/GameUIController.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
+- `Roadmap.md`
 
 ---
 
