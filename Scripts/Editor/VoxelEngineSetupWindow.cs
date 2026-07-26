@@ -4120,6 +4120,138 @@ namespace VoxelEngine.EditorTools
             AddRecipe(STORE_RECIPES, "Recipe_Biofarm", "Biofarm", blockBiofarm, 1, VoxelEngine.Crafting.StationTier.Assembler, false,
                 ((VoxelEngine.Items.ItemDefinition)steelPlate, 8), ((VoxelEngine.Items.ItemDefinition)glass, 6), ((VoxelEngine.Items.ItemDefinition)circuit, 3), ((VoxelEngine.Items.ItemDefinition)copperWire, 6), ((VoxelEngine.Items.ItemDefinition)plastic, 2));
 
+            // ── Ruins & Blueprint Data Cores (4.9.0 — exploration rewards) ──
+            // Blueprint cores are FOUND in ruins, not crafted. Unlock wind turbine sub-recipes etc.
+            VoxelEngine.Items.BlueprintDataCoreItem MakeBlueprint(string assetName, string display, string targetRecipeAsset, string desc, Color tint)
+            {
+                string path = $"{MISC_ITEMS}/{assetName}.asset";
+                var bp = GetOrCreateAsset<VoxelEngine.Items.BlueprintDataCoreItem>(path);
+                bp.itemId = assetName.ToLower();
+                bp.displayName = display;
+                bp.description = desc;
+                bp.iconTint = tint;
+                bp.maxStack = 1;
+                bp.massPerUnit = 0.5f;
+                bp.category = "Blueprints";
+                bp.subcategory = VoxelEngine.Items.ResourceCategory.Component;
+                bp.targetDisplayName = display.Replace("Damaged Blueprint: ", "");
+                bp.targetRecipeAssetName = targetRecipeAsset;
+                // Try to resolve targetRecipe asset for direct reference
+                var rec = FindRecipeByName(targetRecipeAsset);
+                if (rec != null) bp.targetRecipe = rec;
+                EditorUtility.SetDirty(bp);
+                return bp;
+            }
+
+            var bpNacelle = MakeBlueprint("Item_Blueprint_Nacelle_t90", "Damaged Blueprint: Nacelle t90",
+                "Recipe_t90_Nacelle", "Rusted data core containing wind turbine nacelle schematics. Right-click to restore. Found in collapsed warehouses.",
+                new Color(0.85f, 0.65f, 0.25f));
+            var bpGearbox = MakeBlueprint("Item_Blueprint_Gearbox_t90", "Damaged Blueprint: Gearbox t90",
+                "Recipe_t90_Gearbox", "Corrupted gearbox blueprint. Right-click to restore. Found in derelict factories.",
+                new Color(0.75f, 0.55f, 0.20f));
+            var bpBlade = MakeBlueprint("Item_Blueprint_Blade_t90", "Damaged Blueprint: Blade t90",
+                "Recipe_t90_Blade", "Wind turbine blade blueprint, partially overgrown. Right-click to restore.",
+                new Color(0.80f, 0.70f, 0.30f));
+            var bpTower = MakeBlueprint("Item_Blueprint_Tower_t90", "Damaged Blueprint: Tower t90",
+                "Recipe_t90_Tower", "Tower segment blueprint from ruined outpost. Right-click to restore.",
+                new Color(0.70f, 0.60f, 0.25f));
+
+            // Ruin prefabs — rusted, overgrown, damaged versions of real blocks.
+            // Simple MVP: 2x2x2 rusted shell with a RuinChest inside.
+            GameObject MakeRuinPrefab(string name, Color rustColor, Vector3 size, int minComp, int maxComp)
+            {
+                string path = $"{MISC_PREFABS}/{name}.prefab";
+                var root = new GameObject(name);
+
+                // Rusted shell — 4 small cubes forming a collapsed frame
+                for (int i = 0; i < 4; i++)
+                {
+                    var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    cube.name = $"Rusted{i}";
+                    cube.transform.SetParent(root.transform, false);
+                    cube.transform.localPosition = new Vector3(
+                        Random.Range(-size.x*0.3f, size.x*0.3f),
+                        Random.Range(0, size.y*0.5f),
+                        Random.Range(-size.z*0.3f, size.z*0.3f));
+                    cube.transform.localScale = Vector3.one * Random.Range(0.6f, 1.2f);
+                    var rend = cube.GetComponent<Renderer>();
+                    if (rend != null) rend.sharedMaterial = MakeColoredMat(MISC_PREFABS, $"Mat_{name}_{i}", rustColor * Random.Range(0.8f,1.1f));
+                }
+
+                // Chest / loot point — add RuinChest on ROOT so any child collider hit finds it via GetComponentInParent
+                var chestGO = new GameObject("RuinChest");
+                chestGO.transform.SetParent(root.transform, false);
+                chestGO.transform.localPosition = new Vector3(0, 0.3f, 0);
+                var chestCol = chestGO.AddComponent<BoxCollider>();
+                chestCol.size = new Vector3(1.2f, 0.8f, 0.8f);
+                chestCol.isTrigger = false;
+
+                // Root also gets RuinChest for reliable interaction (any rusted cube hit → parent root → chest)
+                var rootChest = root.AddComponent<VoxelEngine.Exploration.RuinChest>();
+                rootChest.ruinName = name.Replace("Ruin_", "").Replace("_", " ");
+                rootChest.minComponents = minComp;
+                rootChest.maxComponents = maxComp;
+                rootChest.possibleComponents = new VoxelEngine.Items.ItemDefinition[] { steelPlate, ironPlate, copperWire, circuit };
+                rootChest.possibleFuel = new VoxelEngine.Items.ItemDefinition[] { coal };
+                rootChest.possibleBlueprints = new VoxelEngine.Items.BlueprintDataCoreItem[] { bpNacelle, bpGearbox, bpBlade, bpTower };
+
+                // Child chest also gets a copy (visual) but root is authoritative
+                var childChest = chestGO.AddComponent<VoxelEngine.Exploration.RuinChest>();
+                childChest.ruinName = rootChest.ruinName;
+                childChest.minComponents = minComp;
+                childChest.maxComponents = maxComp;
+                childChest.possibleComponents = rootChest.possibleComponents;
+                childChest.possibleFuel = rootChest.possibleFuel;
+                childChest.possibleBlueprints = rootChest.possibleBlueprints;
+
+                var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
+                Object.DestroyImmediate(root);
+                return prefab;
+            }
+
+            var ruinWarehouse = MakeRuinPrefab("Ruin_WarehouseSmall", new Color(0.55f,0.38f,0.22f), new Vector3(3f,2f,3f), 2, 4);
+            var ruinFactory = MakeRuinPrefab("Ruin_FactoryCollapsed", new Color(0.45f,0.32f,0.20f), new Vector3(4f,2.5f,4f), 3, 5);
+            var ruinBunker = MakeRuinPrefab("Ruin_Bunker", new Color(0.40f,0.40f,0.42f), new Vector3(2.5f,1.8f,2.5f), 2, 3);
+
+            // Ruin blocks (placeable decoration, not required for scatter but handy)
+            var blockRuinWarehouse = MakeBlk(MISC_BLOCKS, "Block_RuinWarehouse", "Rusted Warehouse Ruin",
+                "Collapsed warehouse from dead civilization. Contains loot and possibly a damaged blueprint core. Spawns rarely in Wasteland/Plains.",
+                new Color(0.55f,0.38f,0.22f), ruinWarehouse, "Ruins", hp: 250, miningTier: 1);
+            var blockRuinFactory = MakeBlk(MISC_BLOCKS, "Block_RuinFactory", "Collapsed Factory Ruin",
+                "Derelict factory, overgrown and rusted. Holds components and blueprint cores.",
+                new Color(0.45f,0.32f,0.20f), ruinFactory, "Ruins", hp: 300, miningTier: 1);
+
+            // No recipes for ruins — they are found, not crafted.
+
+            // Inject ruins into biomes as very rare scatter (non-destructive append)
+            try
+            {
+                var biomeRegistryPath = ASSET_ROOT + "/BiomeRegistry.asset";
+                var br = AssetDatabase.LoadAssetAtPath<VoxelEngine.Biomes.BiomeRegistry>(biomeRegistryPath);
+                if (br != null)
+                {
+                    foreach (var biome in br.biomes)
+                    {
+                        if (biome == null) continue;
+                        bool isTarget = biome.biomeName == "Wasteland" || biome.biomeName == "Plains" || biome.biomeName == "Steppes" || biome.biomeName == "Desert";
+                        if (!isTarget) continue;
+                        var existing = biome.scatter != null ? new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>(biome.scatter) : new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>();
+                        // Avoid duplicating ruins if already present
+                        bool hasRuin = false;
+                        foreach (var e in existing) if (e.prefab != null && e.prefab.name.Contains("Ruin_")) { hasRuin = true; break; }
+                        if (hasRuin) continue;
+                        existing.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = ruinWarehouse, density = 0.0012f, minScale = 0.9f, maxScale = 1.3f, minHeight = 0, maxHeight = 9999 });
+                        existing.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = ruinFactory, density = 0.0009f, minScale = 0.9f, maxScale = 1.4f, minHeight = 0, maxHeight = 9999 });
+                        existing.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = ruinBunker, density = 0.0010f, minScale = 0.9f, maxScale = 1.2f, minHeight = 0, maxHeight = 9999 });
+                        biome.scatter = existing.ToArray();
+                        EditorUtility.SetDirty(biome);
+                    }
+                    EditorUtility.SetDirty(br);
+                    Debug.Log("[VoxelEngineSetup] Ruins injected into Wasteland/Plains/Steppes/Desert biomes as rare scatter.");
+                }
+            }
+            catch (System.Exception ex) { Debug.LogWarning("[VoxelEngineSetup] Ruins biome injection failed: " + ex.Message); }
+
             // Cooking recipes — happen at any Furnace (treated like a smelting recipe? simpler as bench recipes here).
             AddRecipe(FARM_RECIPES, "Recipe_Cook_Bread", "Bread", foodBread, 1, VoxelEngine.Crafting.StationTier.Furnace, false, ((VoxelEngine.Items.ItemDefinition)foodWheatRaw, 3));
             AddRecipe(FARM_RECIPES, "Recipe_Cook_Stew", "Vegetable Stew", foodStew, 1, VoxelEngine.Crafting.StationTier.Furnace, false, ((VoxelEngine.Items.ItemDefinition)foodCarrotRaw, 2), ((VoxelEngine.Items.ItemDefinition)foodCornRaw, 1));

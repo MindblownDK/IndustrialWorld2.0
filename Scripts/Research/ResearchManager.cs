@@ -39,6 +39,7 @@ namespace VoxelEngine.Research
             }
             Instance = this;
             LoadFromDisk();
+            VoxelEngine.Exploration.BlueprintUnlockManager.EnsureInstance();
         }
 
         private void OnDestroy()
@@ -192,6 +193,15 @@ namespace VoxelEngine.Research
         {
             if (recipe == null) return false;
             if (recipe.unlockedByDefault) return true;
+
+            // Blueprint unlocks (ruins) — 4.9.0
+            try
+            {
+                if (VoxelEngine.Exploration.BlueprintUnlockManager.Instance != null &&
+                    VoxelEngine.Exploration.BlueprintUnlockManager.Instance.IsUnlocked(recipe))
+                    return true;
+            }
+            catch { }
 
             // Search through all nodes in the tree.
             if (tree == null) return false;

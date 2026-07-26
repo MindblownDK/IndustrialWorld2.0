@@ -1,7 +1,58 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.28.1-dev`
+**Current Version:** `6.29.0-dev`
+
+All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.29.0-dev] Ruins of Dead Civilization & Blueprint Data Cores (4.9.0)
+
+**Type:** MINOR — new exploration loop, save-compatible (additive scatter + blueprint unlock file).
+
+**Added — Blueprint Unlock System (`Exploration/BlueprintUnlockManager.cs`):**
+1. New singleton `BlueprintUnlockManager` with `EnsureInstance()` (DontDestroyOnLoad). Persists `blueprint_unlocks.json` in world folder (HashSet of unlocked recipe asset names like `Recipe_t90_Nacelle`).
+2. `IsUnlocked(recipe)` / `Unlock(recipeName)` + `BuildFeedbackHud` toast "Blueprint Restored".
+3. Integrated into `ResearchManager.IsRecipeUnlocked` — checks blueprint manager first, so blueprint-unlocked recipes appear as unlocked even without research node.
+
+**Added — Blueprint Data Core Item (`Items/BlueprintDataCoreItem.cs`):**
+4. Subclass of `ResourceItem` (category Blueprints, 1 stack). Fields: `targetDisplayName`, `targetRecipeAssetName`, `targetRecipe` direct ref.
+5. `TryUnlock()` resolves asset name and calls manager. Used via RMB in `PlayerInteractionTool` (active hotbar blueprint → unlock → consume 1 → feedback). Shows "Already Unlocked" if already restored.
+
+**Added — Ruin Chest (`Exploration/RuinChest.cs`):**
+6. `RuinChest` MonoBehaviour with rusted visual, BoxCollider trigger, loot tables: `possibleComponents` (steelPlate, ironPlate, copperWire, circuit), `possibleFuel` (coal), `possibleBlueprints` (4 wind turbine cores). Rolls `minComponents`-`maxComponents` (2-5) random components + 60% fuel + 35% blueprint (guaranteed if no blueprint unlocked yet). Marks `isLooted` + 30 min respawn timer.
+7. Interaction via `PlayerInteractionTool` RMB: `FindObjectsByType<RuinChest>` parent search, calls `TryOpen(inventory)` → adds loot + feedback "Blueprint Core Found!".
+8. Visual style: rusted, overgrown, damaged versions of real blocks — 4 small cubes with rusted materials, plus chest point.
+
+**Added — Ruin Prefabs & Scatter (via Step 11):**
+9. Step 11 `BuildSurvivalAndLogisticsContent` now creates:
+   - 4 blueprint cores: `Item_Blueprint_Nacelle_t90` → `Recipe_t90_Nacelle`, `Gearbox`, `Blade`, `Tower` (tints amber, descriptions "Rusted data core... Right-click to restore. Found in collapsed warehouses").
+   - 3 ruin prefabs: `Ruin_WarehouseSmall` (3x2x3, 2-4 comps, 0.55,0.38,0.22 rust), `Ruin_FactoryCollapsed` (4x2.5x4, 3-5 comps), `Ruin_Bunker` (2.5x1.8x2.5, 2-3 comps) — each with root `RuinChest` + child chest collider for reliable interaction (any rusted cube hit → parent root → chest).
+   - 2 ruin blocks: `Block_RuinWarehouse`, `Block_RuinFactory` (placeable decoration, category Ruins, 250-300 HP).
+   - Injects ruins into biomes as very rare scatter (non-destructive append): Wasteland/Plains/Steppes/Desert get 0.0012/0.0009/0.0010 density for warehouse/factory/bunker with 0.9-1.4 scale. Checks existing scatter for "Ruin_" to avoid duplication, logs injection.
+10. No recipes for ruins — found, not crafted. Blueprints are found only in ruins, then consumed to unlock.
+
+**Integration:**
+11. `PlayerInteractionTool`: Added blueprint use (RMB active stack blueprint → TryUnlock → remove 1) and ruin chest open (RMB on `RuinChest` → `TryOpen`).
+12. `ResearchManager.Awake` now `EnsureInstance` for `BlueprintUnlockManager` so blueprint file loads on start.
+13. `ResearchManager.IsRecipeUnlocked` now checks blueprint manager first.
+
+**Manual Steps:**
+- Run **Tools → Voxel Engine → Voxel Engine Setup → 11. Build Survival + Industrial Logistics Content** once to create blueprint items + ruin prefabs + scatter injection + ruin blocks. Idempotent.
+- Ruins will appear in existing worlds after next chunk generation (new chunks) in Wasteland/Plains/Steppes/Desert with very low density — explore to find.
+
+**Files touched:**
+- `Scripts/Exploration/BlueprintUnlockManager.cs`
+- `Scripts/Items/BlueprintDataCoreItem.cs`
+- `Scripts/Exploration/RuinChest.cs`
+- `Scripts/Research/ResearchManager.cs`
+- `Scripts/Player/PlayerInteractionTool.cs`
+- `Scripts/Editor/VoxelEngineSetupWindow.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
+
+---
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
 

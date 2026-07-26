@@ -351,6 +351,21 @@ namespace VoxelEngine.Player
                     return;
                 }
 
+                // Blueprint data core — RMB to restore blueprint and unlock recipe (4.9.0)
+                if (!eatStack.IsEmpty && eatStack.item is VoxelEngine.Items.BlueprintDataCoreItem bpCore)
+                {
+                    if (bpCore.TryUnlock())
+                    {
+                        inventory.container.Remove(bpCore, 1);
+                        VoxelEngine.UI.BuildFeedbackHud.Show($"Blueprint Restored", $"{bpCore.targetDisplayName} unlocked!", bpCore.icon, new Color(0.45f, 0.85f, 1f));
+                    }
+                    else
+                    {
+                        VoxelEngine.UI.BuildFeedbackHud.Show($"Already Unlocked", $"{bpCore.targetDisplayName} is already restored", bpCore.icon, Color.gray);
+                    }
+                    return;
+                }
+
                 // Farm plot: plant seed or harvest.
                 var farmPlot = hit.collider.GetComponentInParent<VoxelEngine.Farming.FarmPlot>();
                 if (farmPlot != null)
@@ -382,6 +397,9 @@ namespace VoxelEngine.Player
                 }
 
                 // 1) Open container if looking at chest / furnace / crafting bench.
+                var ruinChest = hit.collider.GetComponentInParent<VoxelEngine.Exploration.RuinChest>();
+                if (ruinChest != null) { ruinChest.TryOpen(inventory); return; }
+
                 var chest = hit.collider.GetComponentInParent<Chest>();
                 if (chest != null) { UI.GameUIController.Instance?.OpenContainer(chest.container, chest); return; }
 

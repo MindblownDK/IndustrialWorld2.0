@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.28.1-dev`
-**Roadmap Version:** `6.28.1-dev`
+**Current Version:** `6.29.0-dev`
+**Roadmap Version:** `6.29.0-dev`
 **Date:** 2026-07-26
-**Status:** Compile Fixes (6.28.1) + Offline Survival & Room Oxygen (11.4) Completed (6.28.0) + Grid Gravity Fixed (6.27.3) + Passive Oxygen (11.5) Completed; World Management (11.7) Completed; Power, Vehicles & Combat (4.7.0) remains WORKING ON
+**Status:** Ruins & Blueprints (4.9.0) Partially Completed (6.29.0) + Compile Fixes (6.28.1) + Offline Survival (11.4) + Grid Gravity (6.27.3) + Passive Oxygen (11.5); World Management (11.7) Completed; Power, Vehicles & Combat (4.7.0) remains WORKING ON
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
 ---
@@ -991,23 +991,22 @@ Statuses are evidence-based and move forward only after code/content review and 
 
 ---
 
-### 6.5 Version 4.9.0 — Living Worlds
+### 6.5 Version 4.9.0 — Living Worlds — 🟡 PARTIALLY COMPLETE (Ruins 6.29.0)
 
 **Goal:** Make every planet feel alive, dangerous, and worth exploring — with ruins to loot, weather to survive, and enemies to fight.
 
-#### New Content
+#### New Content — Ruins Implemented in 6.29.0-dev
 
-1. **Ruins of a Dead Civilization**
-   - Rare broken warehouses, collapsed factories, and derelict bases scattered across biomes.
-   - Visual style: rusted, overgrown, damaged versions of real player blocks.
-   - Loot containers hold components, fuel, and — most importantly — **damaged blueprint data cores**.
+1. **Ruins of a Dead Civilization — ✅ COMPLETED (6.29.0)**
+   - Rare broken warehouses, collapsed factories, and derelict bases scattered across biomes (Wasteland/Plains/Steppes/Desert at 0.001 density via `BiomeDefinition.scatter`).
+   - Visual style: rusted, overgrown, damaged versions of real player blocks — 4-cube collapsed frame with rusted materials + `RuinChest` loot point (root + child chest colliders for reliable interaction).
+   - Loot containers hold components (steelPlate, ironPlate, copperWire, circuit), fuel (coal), and — most importantly — **damaged blueprint data cores**.
 
-2. **Blueprint / Recipe Unlock System**
-   - Some recipes are **not available at game start**.
-   - Finding a rusted wind turbine nacelle in a ruin unlocks the real nacelle recipe.
-   - Finding a broken gearbox unlocks the gearbox recipe.
+2. **Blueprint / Recipe Unlock System — ✅ COMPLETED (6.29.0)**
+   - Some recipes are **not available at game start** (gated via `BlueprintUnlockManager`).
+   - Finding a rusted wind turbine nacelle in a ruin unlocks the real nacelle recipe (`Recipe_t90_Nacelle`), gearbox (`Recipe_t90_Gearbox`), blade, tower.
    - Only a small, curated set of recipes are gated this way — enough to slow progress without frustration.
-   - Damaged blueprints must be taken to a research station to be restored.
+   - Damaged blueprints are consumed on RMB in hotbar → `TryUnlock()` → `BuildFeedbackHud` toast + `blueprint_unlocks.json` persistence. `ResearchManager.IsRecipeUnlocked` now checks blueprint manager first. (Note: original design said research station restoration, we simplify to direct RMB consumption for MVP — can be moved to lab later.)
 
 3. **Planet Resource Registry**
    - Each planet/moon has a fixed resource signature.
