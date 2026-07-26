@@ -9,10 +9,10 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2727662399514665975}
-  - component: {fileID: 7434902669795390406}
-  - component: {fileID: 9096102384872815372}
-  - component: {fileID: 1580857355157691352}
-  - component: {fileID: 2765358960939416969}
+  - component: {fileID: 3814177174484851168}
+  - component: {fileID: 4663737158822581988}
+  - component: {fileID: 4947374043132741270}
+  - component: {fileID: 6644085824980302415}
   m_Layer: 0
   m_Name: Furnace
   m_TagString: Untagged
@@ -36,7 +36,7 @@ Transform:
   - {fileID: 2346420326406884761}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &7434902669795390406
+--- !u!114 &3814177174484851168
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -45,12 +45,12 @@ MonoBehaviour:
   m_GameObject: {fileID: 2729089929732934182}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c7559729cfde534449152d447d6032d5, type: 3}
+  m_Script: {fileID: 11500000, guid: 39aaf583ef1899d44a6d552b40d2375c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Crafting.CraftingStation
   tier: 2
   displayName: Furnace
---- !u!114 &9096102384872815372
+--- !u!114 &4663737158822581988
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -59,7 +59,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 2729089929732934182}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6254f43b9ee357e42947aeefeb604b29, type: 3}
+  m_Script: {fileID: 11500000, guid: 04cec34cc4f1e1d47a08090bcd4f29aa, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.PortConfig
   ports:
@@ -89,7 +89,7 @@ MonoBehaviour:
     enabled: 1
   portIndicatorSize: 0.4
   showPortIndicators: 1
---- !u!114 &1580857355157691352
+--- !u!114 &4947374043132741270
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -98,14 +98,14 @@ MonoBehaviour:
   m_GameObject: {fileID: 2729089929732934182}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f32f5330ee6f3da43a965a126547c187, type: 3}
+  m_Script: {fileID: 11500000, guid: 9eacd68ef9a141ae95f225d895db1c7b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.ItemPortRouting
   pushInterval: 0.5
   pushPerTick: 8
   pipeConnectRadius: 1.6
   distribution: 0
---- !u!114 &2765358960939416969
+--- !u!114 &6644085824980302415
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -114,7 +114,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 2729089929732934182}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f8b9861855ed90d4082495271e589c78, type: 3}
+  m_Script: {fileID: 11500000, guid: 525b7988b545de545b26326f71583042, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Crafting.Furnace
   knownRecipes:

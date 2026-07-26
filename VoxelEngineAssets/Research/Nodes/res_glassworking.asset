@@ -9,7 +9,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 276f1cb435bae4746a948e60292a9601, type: 3}
+  m_Script: {fileID: 11500000, guid: fe52eb4685f86c44d967d9cd3e4bd91a, type: 3}
   m_Name: res_glassworking
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Research.ResearchNode
   nodeId: res_glassworking
@@ -30,7 +30,9 @@ MonoBehaviour:
     count: 10
   - pack: {fileID: 11400000, guid: 080d81aee84fd5b4486b15264d31da24, type: 2}
     count: 5
-  unlocksRecipes: []
+  unlocksRecipes:
+  - {fileID: 11400000, guid: 5a8227da17e73744388ed88a2048fbab, type: 2}
+  - {fileID: 11400000, guid: 0db7ae5c8d383034188aaed3ae5dfe98, type: 2}
   upgradeKind: 0
   upgradePerRankAmount: 0
   maxRanks: 1

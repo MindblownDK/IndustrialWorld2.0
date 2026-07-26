@@ -4070,6 +4070,10 @@ namespace VoxelEngine.EditorTools
                     cb.displayName = "Cryobed";
                     cb.oxygenRequired = true;
                     cb.poweredRequired = true;
+                    cb.idleWatts = 35f;
+                    var power = root.AddComponent<VoxelEngine.Power.PowerConsumer>();
+                    power.wattsPerSecond = 35f;
+                    power.connectRadius = 1.8f;
                     var light = new GameObject("Generated_StatusLight");
                     light.transform.SetParent(root.transform, false);
                     light.transform.localPosition = new Vector3(0f, 0.42f, -0.48f);

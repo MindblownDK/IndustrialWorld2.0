@@ -9,9 +9,9 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2721656465813365719}
-  - component: {fileID: 7010414182899590145}
-  - component: {fileID: 5453197396351590739}
-  - component: {fileID: 7857666583097642156}
+  - component: {fileID: 8563652583315021914}
+  - component: {fileID: 6039722740872298291}
+  - component: {fileID: 594696604725965771}
   m_Layer: 0
   m_Name: SteamTurbine
   m_TagString: Untagged
@@ -35,7 +35,7 @@ Transform:
   - {fileID: 6593114999905653732}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &7010414182899590145
+--- !u!114 &8563652583315021914
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -44,7 +44,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 4481327246350666748}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 363945cdebe15444fb1cbd04f7967cb5, type: 3}
+  m_Script: {fileID: 11500000, guid: 1482c2065bf1c5945a5515c3d878688a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Power.PowerGenerator
   connectRadius: 2
@@ -55,7 +55,7 @@ MonoBehaviour:
     m_Bits: 4294967295
   wattsPerSecond: 0
   isOn: 1
---- !u!114 &5453197396351590739
+--- !u!114 &6039722740872298291
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -64,13 +64,13 @@ MonoBehaviour:
   m_GameObject: {fileID: 4481327246350666748}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2c511e01a928c724f9d7126f57e47491, type: 3}
+  m_Script: {fileID: 11500000, guid: 1f8b8158c33b76f4ea33ec446a9e15a3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.PlacedBlock
   Item: {fileID: 0}
   Hp: 100
   onGrid: 1
---- !u!114 &7857666583097642156
+--- !u!114 &594696604725965771
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -79,7 +79,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 4481327246350666748}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a6c40bb34448d1348971ac222df6c20e, type: 3}
+  m_Script: {fileID: 11500000, guid: 2a17d9592bdd6504d99e42f31327c0f3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Nuclear.SteamTurbine
   efficiency: 0.33

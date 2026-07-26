@@ -198,7 +198,7 @@ namespace VoxelEngine.UI
 
             foreach (var cryo in Object.FindObjectsByType<Cryobed>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
             {
-                if (cryo == null) continue;
+                if (cryo == null || !cryo.IsAvailableForRespawn) continue;
                 Vector3 up = VoxelEngine.Cosmos.GravityProvider.GetUp(cryo.transform.position);
                 if (up.sqrMagnitude < 0.0001f) up = Vector3.up;
                 Vector3 pos = cryo.transform.position + up.normalized * 1.35f;
@@ -213,7 +213,7 @@ namespace VoxelEngine.UI
 
             foreach (var cryo in Object.FindObjectsByType<GridCryobed>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
             {
-                if (cryo == null) continue;
+                if (cryo == null || !cryo.IsAvailableForRespawn) continue;
                 Vector3 up = VoxelEngine.Cosmos.GravityProvider.GetUp(cryo.transform.position);
                 if (up.sqrMagnitude < 0.0001f) up = cryo.Grid != null ? cryo.Grid.transform.up : Vector3.up;
                 Vector3 pos = cryo.transform.position + up.normalized * 1.35f;

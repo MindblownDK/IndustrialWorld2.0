@@ -121,11 +121,11 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 6595099221615788548}
-  - component: {fileID: 3166179164909351955}
-  - component: {fileID: 4910711491071018576}
-  - component: {fileID: 7805196572717288408}
-  - component: {fileID: 2947910395602637481}
-  - component: {fileID: 3901267910316092585}
+  - component: {fileID: 583247344667468420}
+  - component: {fileID: 8190783292380733971}
+  - component: {fileID: 3944286241496425249}
+  - component: {fileID: 8164139033159218033}
+  - component: {fileID: 2985218469209148806}
   m_Layer: 0
   m_Name: Quarry
   m_TagString: Untagged
@@ -149,7 +149,7 @@ Transform:
   - {fileID: 1014623945098635672}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &3166179164909351955
+--- !u!114 &583247344667468420
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -158,7 +158,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 7970160966265083376}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 28fc9f3838f902547a6f32208010c358, type: 3}
+  m_Script: {fileID: 11500000, guid: b231df31f45343346a2b14ed69ac7e7a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Power.PowerConsumer
   connectRadius: 2
@@ -168,7 +168,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 4294967295
   wattsPerSecond: 500
---- !u!114 &4910711491071018576
+--- !u!114 &8190783292380733971
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -177,7 +177,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 7970160966265083376}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6254f43b9ee357e42947aeefeb604b29, type: 3}
+  m_Script: {fileID: 11500000, guid: 04cec34cc4f1e1d47a08090bcd4f29aa, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.PortConfig
   ports:
@@ -207,7 +207,7 @@ MonoBehaviour:
     enabled: 1
   portIndicatorSize: 0.4
   showPortIndicators: 1
---- !u!114 &7805196572717288408
+--- !u!114 &3944286241496425249
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -216,13 +216,13 @@ MonoBehaviour:
   m_GameObject: {fileID: 7970160966265083376}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2c511e01a928c724f9d7126f57e47491, type: 3}
+  m_Script: {fileID: 11500000, guid: 1f8b8158c33b76f4ea33ec446a9e15a3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.PlacedBlock
   Item: {fileID: 0}
   Hp: 100
   onGrid: 1
---- !u!114 &2947910395602637481
+--- !u!114 &8164139033159218033
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -231,14 +231,14 @@ MonoBehaviour:
   m_GameObject: {fileID: 7970160966265083376}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f32f5330ee6f3da43a965a126547c187, type: 3}
+  m_Script: {fileID: 11500000, guid: 9eacd68ef9a141ae95f225d895db1c7b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.ItemPortRouting
   pushInterval: 0.5
   pushPerTick: 8
   pipeConnectRadius: 1.6
   distribution: 0
---- !u!114 &3901267910316092585
+--- !u!114 &2985218469209148806
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -247,7 +247,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 7970160966265083376}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1f404da36d519424cb923cfc0a42829a, type: 3}
+  m_Script: {fileID: 11500000, guid: 9d25859404e3c1946885f800339d7255, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.Quarry
   defaultSize: 16

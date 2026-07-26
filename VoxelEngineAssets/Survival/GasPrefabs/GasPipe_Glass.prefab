@@ -10,9 +10,9 @@ GameObject:
   m_Component:
   - component: {fileID: 8114587215362949582}
   - component: {fileID: 3140074199434431663}
-  - component: {fileID: 6346057988681830929}
-  - component: {fileID: 2460587756456236595}
-  - component: {fileID: 5740785642287215710}
+  - component: {fileID: 1790398372941632480}
+  - component: {fileID: 4528927610952466024}
+  - component: {fileID: 7381174217762581862}
   m_Layer: 0
   m_Name: GasPipe_Glass
   m_TagString: Untagged
@@ -56,7 +56,7 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 0.4, y: 0.4, z: 0.4}
   m_Center: {x: 0, y: 0, z: 0}
---- !u!114 &6346057988681830929
+--- !u!114 &1790398372941632480
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -65,13 +65,13 @@ MonoBehaviour:
   m_GameObject: {fileID: 7958537624718459053}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2c511e01a928c724f9d7126f57e47491, type: 3}
+  m_Script: {fileID: 11500000, guid: 1f8b8158c33b76f4ea33ec446a9e15a3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.PlacedBlock
   Item: {fileID: 0}
   Hp: 100
   onGrid: 1
---- !u!114 &2460587756456236595
+--- !u!114 &4528927610952466024
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -80,13 +80,13 @@ MonoBehaviour:
   m_GameObject: {fileID: 7958537624718459053}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f446a75f782f0af499e46d31d939f790, type: 3}
+  m_Script: {fileID: 11500000, guid: 784b00a2a3305f64a9865639ec0230da, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Gas.GasPipe
   maxPressure: 100
   connectRadius: 3
   isGlass: 1
---- !u!114 &5740785642287215710
+--- !u!114 &7381174217762581862
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -95,7 +95,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 7958537624718459053}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 04a4451340f01a94c9414bbfcbedf0f1, type: 3}
+  m_Script: {fileID: 11500000, guid: b2c3d4e5f60718293041526374859102, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Networks.PipeVisualBuilder
   style: 0

@@ -9,10 +9,10 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 6375350115551671543}
-  - component: {fileID: 502775694553214492}
-  - component: {fileID: 6232676600732079167}
-  - component: {fileID: 8436811297309779996}
-  - component: {fileID: 2029990703250825692}
+  - component: {fileID: 263377335145429015}
+  - component: {fileID: 7848687957326602693}
+  - component: {fileID: 5759363135563263083}
+  - component: {fileID: 7997118347255194711}
   m_Layer: 0
   m_Name: Pumpjack
   m_TagString: Untagged
@@ -36,7 +36,7 @@ Transform:
   - {fileID: 107044246276775146}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &502775694553214492
+--- !u!114 &263377335145429015
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -45,13 +45,13 @@ MonoBehaviour:
   m_GameObject: {fileID: 5046380633412393529}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2c511e01a928c724f9d7126f57e47491, type: 3}
+  m_Script: {fileID: 11500000, guid: 1f8b8158c33b76f4ea33ec446a9e15a3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.PlacedBlock
   Item: {fileID: 0}
   Hp: 100
   onGrid: 1
---- !u!114 &6232676600732079167
+--- !u!114 &7848687957326602693
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -60,7 +60,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 5046380633412393529}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6254f43b9ee357e42947aeefeb604b29, type: 3}
+  m_Script: {fileID: 11500000, guid: 04cec34cc4f1e1d47a08090bcd4f29aa, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.PortConfig
   ports:
@@ -90,7 +90,7 @@ MonoBehaviour:
     enabled: 1
   portIndicatorSize: 0.4
   showPortIndicators: 1
---- !u!114 &8436811297309779996
+--- !u!114 &5759363135563263083
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -99,14 +99,14 @@ MonoBehaviour:
   m_GameObject: {fileID: 5046380633412393529}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f32f5330ee6f3da43a965a126547c187, type: 3}
+  m_Script: {fileID: 11500000, guid: 9eacd68ef9a141ae95f225d895db1c7b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.ItemPortRouting
   pushInterval: 0.5
   pushPerTick: 8
   pipeConnectRadius: 1.6
   distribution: 0
---- !u!114 &2029990703250825692
+--- !u!114 &7997118347255194711
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -115,7 +115,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 5046380633412393529}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 243e8f885bad5014d923493b0a516682, type: 3}
+  m_Script: {fileID: 11500000, guid: 0e2d6087e130bbe4397244bd7c52bac0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Crafting.Pumpjack
   emptyBarrel: {fileID: 11400000, guid: 84d464069ef1264449d531ddf58fea27, type: 2}

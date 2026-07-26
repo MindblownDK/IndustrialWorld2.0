@@ -121,10 +121,10 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 4150961081310147096}
-  - component: {fileID: 8093366660665713925}
-  - component: {fileID: 5874148649795235358}
-  - component: {fileID: 8617642492711720907}
-  - component: {fileID: 2576536205945109055}
+  - component: {fileID: 7424625576270165505}
+  - component: {fileID: 5025063208848685206}
+  - component: {fileID: 8818503585263588346}
+  - component: {fileID: 8348023992232930994}
   m_Layer: 0
   m_Name: ReactorCore
   m_TagString: Untagged
@@ -148,7 +148,7 @@ Transform:
   - {fileID: 252421770979135823}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &8093366660665713925
+--- !u!114 &7424625576270165505
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -157,13 +157,13 @@ MonoBehaviour:
   m_GameObject: {fileID: 7287442669559933592}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2c511e01a928c724f9d7126f57e47491, type: 3}
+  m_Script: {fileID: 11500000, guid: 1f8b8158c33b76f4ea33ec446a9e15a3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.PlacedBlock
   Item: {fileID: 0}
   Hp: 100
   onGrid: 1
---- !u!114 &5874148649795235358
+--- !u!114 &5025063208848685206
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -172,7 +172,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 7287442669559933592}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6254f43b9ee357e42947aeefeb604b29, type: 3}
+  m_Script: {fileID: 11500000, guid: 04cec34cc4f1e1d47a08090bcd4f29aa, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.PortConfig
   ports:
@@ -202,7 +202,7 @@ MonoBehaviour:
     enabled: 1
   portIndicatorSize: 0.4
   showPortIndicators: 1
---- !u!114 &8617642492711720907
+--- !u!114 &8818503585263588346
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -211,14 +211,14 @@ MonoBehaviour:
   m_GameObject: {fileID: 7287442669559933592}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f32f5330ee6f3da43a965a126547c187, type: 3}
+  m_Script: {fileID: 11500000, guid: 9eacd68ef9a141ae95f225d895db1c7b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.ItemPortRouting
   pushInterval: 0.5
   pushPerTick: 8
   pipeConnectRadius: 1.6
   distribution: 0
---- !u!114 &2576536205945109055
+--- !u!114 &8348023992232930994
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -227,7 +227,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 7287442669559933592}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 161ae361ddc2c0740b49f2899a3359c7, type: 3}
+  m_Script: {fileID: 11500000, guid: 03ccf5606b4f3b346b2930f547eb4b26, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Nuclear.ReactorCore
   fuelRodItem: {fileID: 11400000, guid: 55c1a746d1ff9a64196aadb6c2f62204, type: 2}

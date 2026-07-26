@@ -16,6 +16,14 @@ namespace VoxelEngine.GridSystem
         public float idleWatts = 35f;
 
         public override float PowerDraw => Enabled && poweredRequired ? idleWatts : 0f;
+        public bool IsPowered => !poweredRequired || Grid == null || Grid.HasPower;
+        public bool HasOxygenEnvironment => !oxygenRequired || (Grid != null && Grid.OxygenStored > 0.01f);
+        public bool IsAvailableForRespawn => Enabled && IsPowered && HasOxygenEnvironment;
+        public string AvailabilityText => IsAvailableForRespawn
+            ? "ONLINE"
+            : !Enabled ? "OFFLINE"
+            : !IsPowered ? "NO POWER"
+            : "NO OXYGEN";
 
         public override void OnPlaced()
         {
@@ -42,7 +50,7 @@ namespace VoxelEngine.GridSystem
         {
             string power = poweredRequired ? $"POWER {idleWatts:0} W" : "POWER OPTIONAL";
             string oxygen = oxygenRequired ? "OXYGEN REQUIRED" : "OXYGEN OPTIONAL";
-            return $"CRYOBED\n{(Enabled ? "ONLINE" : "OFFLINE")}\n{power}\n{oxygen}";
+            return $"CRYOBED\n{AvailabilityText}\n{power}\n{oxygen}";
         }
     }
 }

@@ -9,13 +9,15 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5e86d8200ff9eb04d99801ce62f74d8d, type: 3}
+  m_Script: {fileID: 11500000, guid: 9b76ccf0d2c60d942965b00c15422682, type: 3}
   m_Name: Block_ItemPipe_Glass
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Items.BlockItem
   itemId: block_itempipe_glass
-  displayName: Item Pipe (Glass)
+  displayName: "Item Pipe (Glass) \xB7 0.5 m"
   description: "Translucent variant of the Item Pipe \u2014 exposes the items flowing
-    through. Same throughput."
+    through. Same throughput.\n\nUses the existing pipe item everywhere. On a Grid
+    it snaps to the 0.5 m Detail lattice; no separate Grid pipe item is required.
+    Pipe links can bridge up to five grid cells in one cardinal direction."
   icon: {fileID: 0}
   iconTint: {r: 0.92, g: 0.96, b: 1, a: 1}
   maxStack: 99

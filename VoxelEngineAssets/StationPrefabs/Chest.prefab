@@ -121,9 +121,9 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 3649199862401085765}
-  - component: {fileID: 3343137474246444059}
-  - component: {fileID: 7166847718840242133}
-  - component: {fileID: 6847427055158051847}
+  - component: {fileID: 2471087768089157425}
+  - component: {fileID: 5588789118396054373}
+  - component: {fileID: 6100307414922708278}
   m_Layer: 0
   m_Name: Chest
   m_TagString: Untagged
@@ -147,7 +147,7 @@ Transform:
   - {fileID: 3496898142256891319}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &3343137474246444059
+--- !u!114 &2471087768089157425
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -156,7 +156,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 6063048767194912982}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6254f43b9ee357e42947aeefeb604b29, type: 3}
+  m_Script: {fileID: 11500000, guid: 04cec34cc4f1e1d47a08090bcd4f29aa, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.PortConfig
   ports:
@@ -186,7 +186,7 @@ MonoBehaviour:
     enabled: 1
   portIndicatorSize: 0.4
   showPortIndicators: 1
---- !u!114 &7166847718840242133
+--- !u!114 &5588789118396054373
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -195,14 +195,14 @@ MonoBehaviour:
   m_GameObject: {fileID: 6063048767194912982}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f32f5330ee6f3da43a965a126547c187, type: 3}
+  m_Script: {fileID: 11500000, guid: 9eacd68ef9a141ae95f225d895db1c7b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.ItemPortRouting
   pushInterval: 0.5
   pushPerTick: 8
   pipeConnectRadius: 1.6
   distribution: 0
---- !u!114 &6847427055158051847
+--- !u!114 &6100307414922708278
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -211,7 +211,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 6063048767194912982}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a582c8bf20fbb8242a7b8684782ece3a, type: 3}
+  m_Script: {fileID: 11500000, guid: 63f495c8e0dd9a6408acf54660ab9bde, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.Chest
   size: 30

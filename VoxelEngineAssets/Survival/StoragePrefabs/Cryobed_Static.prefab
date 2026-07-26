@@ -9,7 +9,8 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 71955795384430112}
-  - component: {fileID: 3649143348062882405}
+  - component: {fileID: 3432812541509053029}
+  - component: {fileID: 7973754566980404006}
   m_Layer: 0
   m_Name: Cryobed_Static
   m_TagString: Untagged
@@ -34,7 +35,7 @@ Transform:
   - {fileID: 4484476123173664265}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &3649143348062882405
+--- !u!114 &3432812541509053029
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -43,12 +44,32 @@ MonoBehaviour:
   m_GameObject: {fileID: 68067815123395367}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: aea681a8b59dd634cbea04567a71c7b0, type: 3}
+  m_Script: {fileID: 11500000, guid: 84ca57fce85dc554d9c63d63e1c8b2cd, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.Cryobed
   displayName: Cryobed
   oxygenRequired: 1
   poweredRequired: 1
+  idleWatts: 35
+--- !u!114 &7973754566980404006
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 68067815123395367}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b231df31f45343346a2b14ed69ac7e7a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Power.PowerConsumer
+  connectRadius: 1.8
+  requireGridAlignedNeighbours: 0
+  gridSize: 1
+  connectionBlockingLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  wattsPerSecond: 35
 --- !u!1 &964544896112751923
 GameObject:
   m_ObjectHideFlags: 0

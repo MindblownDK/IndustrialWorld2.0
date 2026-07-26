@@ -6,6 +6,7 @@
 
 using UnityEngine;
 using VoxelEngine.Cosmos;
+using VoxelEngine.Power;
 
 namespace VoxelEngine.Building
 {
@@ -14,6 +15,24 @@ namespace VoxelEngine.Building
         public string displayName = "Cryobed";
         public bool oxygenRequired = true;
         public bool poweredRequired = true;
+        public float idleWatts = 35f;
+
+        public bool IsPowered
+        {
+            get
+            {
+                if (!poweredRequired) return true;
+                var consumer = GetComponent<PowerConsumer>();
+                return consumer == null || consumer.IsPowered;
+            }
+        }
+
+        public bool HasOxygenEnvironment => true; // room/vent oxygen arrives in the later pressure pass
+        public bool IsAvailableForRespawn => IsPowered && HasOxygenEnvironment;
+
+        public string AvailabilityText => IsAvailableForRespawn
+            ? "ONLINE"
+            : !IsPowered ? "NO POWER" : "NO OXYGEN";
 
         public void ClaimAsSpawn()
         {

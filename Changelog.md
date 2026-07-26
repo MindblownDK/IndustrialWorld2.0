@@ -1,9 +1,29 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.26.0-dev`
+**Current Version:** `6.26.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.26.1-dev] Cryobed Availability Validation
+
+**Type:** PATCH — respawn-choice availability polish. Save-compatible.
+
+**Improved:**
+1. Static `Cryobed` now exposes power/oxygen availability state and Step 11 adds a small `PowerConsumer` draw to the generated prefab.
+2. `GridCryobed` now reports ONLINE / NO POWER / NO OXYGEN based on grid power and stored oxygen.
+3. Death screen only lists cryobeds that are currently available, while World Spawn and the active linked spawn remain available fallback choices.
+
+**Files touched:**
+- `Scripts/Building/Cryobed.cs`
+- `Scripts/GridSystem/GridCryobed.cs`
+- `Scripts/UI/DeathScreenHud.cs`
+- `Scripts/Editor/VoxelEngineSetupWindow.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
+- `Roadmap.md`
 
 ---
 
