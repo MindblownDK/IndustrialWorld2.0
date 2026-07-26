@@ -55,6 +55,8 @@ namespace VoxelEngine.Player
 
             // Determine the target position.
             Vector3 target;
+            bool isFreshWorld = false;
+
             if (hasSavedPos)
             {
                 target = savedPos;
@@ -67,6 +69,7 @@ namespace VoxelEngine.Player
             }
             else
             {
+                isFreshWorld = true;
                 // Fresh world. If a sphere body is active, spawn on its surface; else flat origin.
                 var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
                 if (body != null)
@@ -124,7 +127,7 @@ namespace VoxelEngine.Player
                 else
                 {
                     target = new Vector3(0, 250, 0);
-                    Debug.Log("[PlayerSpawner] Fresh world — placing player above origin to trigger chunk streaming.");
+                    Debug.Log("[PlayerSpawner] Fresh FLAT world — placing player above origin to trigger chunk streaming.");
                 }
             }
 
@@ -156,21 +159,16 @@ namespace VoxelEngine.Player
                 SetPosition(target);
             }
 
-            // For fresh worlds, NOW find the actual top-of-ground position.
-            // Skip on spheres — FindFreshSpawnNearby scans in world-space voxel coords which
-            // is wrong for a body-offset sphere, and the radial raycast below handles ground
-            // detection on planets anyway.
+            // For flat fresh worlds, find the actual top-of-ground position.
+            // We intentionally compute the ground target BEFORE snapping but DEFER saving
+            // worldSpawn until AFTER the final raycast snap, so worldSpawnPoint always
+            // equals the actual walkable ground, never the 0,250,0 parking placeholder.
             bool isSphere = VoxelEngine.Cosmos.GravityProvider.ActiveBody != null;
-            if (!hasSavedPos && !(session != null && session.hasBedSpawn) && !isSphere)
+            if (isFreshWorld && !isSphere)
             {
                 Vector3 ground = FindFreshSpawnNearby(target);
                 target = ground;
-                if (session != null)
-                {
-                    session.worldSpawnPoint = target;
-                    session.worldSpawnInitialized = true;
-                    session.SaveSpawnSidecar();
-                }
+                // Don't save yet — wait until after final SnapToGround for accuracy.
             }
 
             // A saved position is authoritative: it can be on terrain, in atmosphere,
@@ -178,41 +176,41 @@ namespace VoxelEngine.Player
             bool snapped = hasSavedPos;
             if (!hasSavedPos)
             {
-            // Snap a fresh/bed spawn to actual ground via raycast — keep retrying until we get a real hit,
-            // because the mesh collider may take a frame or two to activate after the chunk
-            // mesh is uploaded.
-            float groundT0 = Time.time;
-            while (!snapped && Time.time - groundT0 < 5f)
-            {
-                // On a sphere, raycast RADIAL-DOWN (toward the body core) instead of world-down.
-                var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
-                Vector3 from, dir, lift;
-                if (body != null)
+                // Snap a fresh/bed spawn to actual ground via raycast — keep retrying until we get a real hit,
+                // because the mesh collider may take a frame or two to activate after the chunk
+                // mesh is uploaded.
+                float groundT0 = Time.time;
+                while (!snapped && Time.time - groundT0 < 5f)
                 {
-                    Vector3 bup = body.UpAt(transform.position);
-                    from = transform.position + bup * 100f;
-                    dir  = -bup;
-                    lift = bup;
+                    // On a sphere, raycast RADIAL-DOWN (toward the body core) instead of world-down.
+                    var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
+                    Vector3 from, dir, lift;
+                    if (body != null)
+                    {
+                        Vector3 bup = body.UpAt(transform.position);
+                        from = transform.position + bup * 100f;
+                        dir  = -bup;
+                        lift = bup;
+                    }
+                    else
+                    {
+                        from = new Vector3(target.x, target.y + 100f, target.z);
+                        dir  = Vector3.down;
+                        lift = Vector3.up;
+                    }
+                    if (Physics.Raycast(from, dir, out var hit, 300f, ~0, QueryTriggerInteraction.Ignore))
+                    {
+                        SetPosition(hit.point + lift * SpawnGroundClearance);
+                        snapped = true;
+                        break;
+                    }
+                    yield return null;
                 }
-                else
+                if (!snapped)
                 {
-                    from = new Vector3(target.x, target.y + 100f, target.z);
-                    dir  = Vector3.down;
-                    lift = Vector3.up;
+                    Debug.LogWarning("[PlayerSpawner] Could not raycast to ground after 5s — placing at target surface.");
+                    SetPosition(target);
                 }
-                if (Physics.Raycast(from, dir, out var hit, 300f, ~0, QueryTriggerInteraction.Ignore))
-                {
-                    SetPosition(hit.point + lift * SpawnGroundClearance);
-                    snapped = true;
-                    break;
-                }
-                yield return null;
-            }
-            if (!snapped)
-            {
-                Debug.LogWarning("[PlayerSpawner] Could not raycast to ground after 5s — placing at target surface.");
-                SetPosition(target);
-            }
             }
 
             // One more frame to let physics settle, then run one final terrain-lift
@@ -221,6 +219,32 @@ namespace VoxelEngine.Player
             yield return null;
             SetPosition(LiftSavedPositionOutOfGround(transform.position));
             yield return null;
+
+            // For any fresh-world first spawn (flat OR sphere), persist the FINAL grounded
+            // position as the true world spawn. This fixes the 0,250,0 bug where the death
+            // screen and initial spawn fell back to the parking placeholder instead of the
+            // computed safe ground.
+            if (isFreshWorld && session != null)
+            {
+                // If we snapped to ground, transform.position is now the real ground.
+                // If we couldn't snap, fall back to the best target we computed.
+                Vector3 finalSpawn = transform.position;
+                if (finalSpawn.y < -1000f || finalSpawn.y > 200000f) finalSpawn = target;
+                // Only override if we have a sane position and haven't already initialized
+                // during this same run, or if the old stored spawn was still the default.
+                bool shouldSave = !session.worldSpawnInitialized ||
+                                  session.worldSpawnPoint.sqrMagnitude < 0.1f ||
+                                  (Mathf.Abs(session.worldSpawnPoint.x) < 0.1f &&
+                                   Mathf.Abs(session.worldSpawnPoint.z) < 0.1f &&
+                                   session.worldSpawnPoint.y >= 249f && session.worldSpawnPoint.y <= 251f);
+                if (shouldSave)
+                {
+                    session.worldSpawnPoint = finalSpawn;
+                    session.worldSpawnInitialized = true;
+                    session.SaveSpawnSidecar();
+                    Debug.Log("[PlayerSpawner] World spawn initialized at " + finalSpawn);
+                }
+            }
 
             EnableController();
             ReadyForPlayerControl = true;
@@ -246,7 +270,21 @@ namespace VoxelEngine.Player
         public void Respawn()
         {
             var session = Menu.WorldSession.Instance;
-            Vector3 dest = session != null ? session.GetActiveSpawn() : new Vector3(0, 250, 0);
+            Vector3 dest;
+            if (session != null)
+            {
+                // Prefer the explicit linked bed spawn; otherwise use the true world spawn.
+                // If world spawn is still uninitialized (legacy save), fall back to current player
+                // position rather than teleporting to 0,250,0 sky.
+                if (session.hasBedSpawn) dest = session.bedSpawnPoint;
+                else if (session.worldSpawnInitialized) dest = session.worldSpawnPoint;
+                else if (session.worldSpawnPoint.sqrMagnitude > 0.1f) dest = session.worldSpawnPoint;
+                else dest = transform.position;
+            }
+            else
+            {
+                dest = new Vector3(0, 250, 0);
+            }
             StartCoroutine(RespawnRoutine(dest));
         }
 

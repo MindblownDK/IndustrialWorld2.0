@@ -160,9 +160,24 @@ namespace VoxelEngine.UI
         {
             var list = new List<RespawnChoice>(8);
             var session = VoxelEngine.Menu.WorldSession.Instance;
-            Vector3 worldSpawn = session != null && session.worldSpawnInitialized
-                ? session.worldSpawnPoint
-                : new Vector3(0f, 250f, 0f);
+
+            // World spawn: prefer the initialized true spawn, but tolerate non-zero legacy saves.
+            // The 0,250,0 fallback is only used if absolutely nothing else exists — PlayerSpawner
+            // now initializes worldSpawnPoint to the real grounded position on first play.
+            Vector3 worldSpawn;
+            if (session != null)
+            {
+                if (session.worldSpawnInitialized)
+                    worldSpawn = session.worldSpawnPoint;
+                else if (session.worldSpawnPoint.sqrMagnitude > 0.5f)
+                    worldSpawn = session.worldSpawnPoint;
+                else
+                    worldSpawn = new Vector3(0f, 250f, 0f);
+            }
+            else
+            {
+                worldSpawn = new Vector3(0f, 250f, 0f);
+            }
 
             AddUnique(list, new RespawnChoice
             {
@@ -174,10 +189,12 @@ namespace VoxelEngine.UI
 
             if (session != null && session.hasBedSpawn && !LinkedSpawnIsUnavailableCryobed(session.bedSpawnPoint))
             {
+                // Resolve the actual name of the linked spawn instead of generic "Linked Spawn".
+                string linkedName = ResolveLinkedSpawnName(session.bedSpawnPoint);
                 AddUnique(list, new RespawnChoice
                 {
-                    title = "Linked Spawn",
-                    detail = "Current active spawn · " + FormatPosition(session.bedSpawnPoint),
+                    title = linkedName,
+                    detail = "Linked spawn · " + FormatPosition(session.bedSpawnPoint),
                     position = session.bedSpawnPoint,
                     accent = new Color(0.30f, 0.95f, 0.62f)
                 });
@@ -189,7 +206,7 @@ namespace VoxelEngine.UI
                 Vector3 pos = bed.transform.position + Vector3.up * 1.2f;
                 AddUnique(list, new RespawnChoice
                 {
-                    title = bed.displayName,
+                    title = string.IsNullOrWhiteSpace(bed.displayName) ? "Bed" : bed.displayName,
                     detail = "Bed · " + FormatPosition(pos),
                     position = pos,
                     accent = new Color(0.95f, 0.72f, 0.25f)
@@ -202,7 +219,7 @@ namespace VoxelEngine.UI
                 Vector3 pos = cryo.SpawnPoint;
                 AddUnique(list, new RespawnChoice
                 {
-                    title = cryo.displayName,
+                    title = string.IsNullOrWhiteSpace(cryo.displayName) ? "Cryobed" : cryo.displayName,
                     detail = cryo.AvailabilityText + " · " + FormatPosition(pos),
                     position = pos,
                     accent = new Color(0.45f, 0.85f, 1.0f)
@@ -215,7 +232,7 @@ namespace VoxelEngine.UI
                 Vector3 pos = cryo.SpawnPoint;
                 AddUnique(list, new RespawnChoice
                 {
-                    title = cryo.blockName,
+                    title = string.IsNullOrWhiteSpace(cryo.blockName) ? "Grid Cryobed" : cryo.blockName,
                     detail = cryo.AvailabilityText + " · " + FormatPosition(pos),
                     position = pos,
                     accent = new Color(0.45f, 0.85f, 1.0f)
@@ -223,6 +240,36 @@ namespace VoxelEngine.UI
             }
 
             return list;
+        }
+
+        /// <summary>
+        /// Returns the display name of whatever bed/cryobed sits at the linked spawn
+        /// position, so the death screen shows "My Awesome Bunker" instead of generic
+        /// "Linked Spawn". Falls back to "Linked Spawn" if nothing matches.
+        /// </summary>
+        private static string ResolveLinkedSpawnName(Vector3 linkedPos)
+        {
+            const float tolSq = 2.5f; // slightly larger tolerance for floating point
+            foreach (var bed in Object.FindObjectsByType<Bed>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            {
+                if (bed == null) continue;
+                Vector3 pos = bed.transform.position + Vector3.up * 1.2f;
+                if ((pos - linkedPos).sqrMagnitude < tolSq)
+                    return string.IsNullOrWhiteSpace(bed.displayName) ? "Bed" : bed.displayName;
+            }
+            foreach (var cryo in Object.FindObjectsByType<Cryobed>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            {
+                if (cryo == null) continue;
+                if ((cryo.SpawnPoint - linkedPos).sqrMagnitude < tolSq)
+                    return string.IsNullOrWhiteSpace(cryo.displayName) ? "Cryobed" : cryo.displayName;
+            }
+            foreach (var cryo in Object.FindObjectsByType<GridCryobed>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            {
+                if (cryo == null) continue;
+                if ((cryo.SpawnPoint - linkedPos).sqrMagnitude < tolSq)
+                    return string.IsNullOrWhiteSpace(cryo.blockName) ? "Grid Cryobed" : cryo.blockName;
+            }
+            return "Linked Spawn";
         }
 
         private static bool LinkedSpawnIsUnavailableCryobed(Vector3 linkedPos)

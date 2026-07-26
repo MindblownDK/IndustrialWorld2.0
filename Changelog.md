@@ -1,9 +1,38 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.26.5-dev`
+**Current Version:** `6.26.6-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.26.6-dev] Cryobed UI Live Stats, Oxygen Tank Visual & Spawn Fixes
+
+**Type:** PATCH — cryobed UI polish + respawn naming/world-spawn fixes. Save-compatible (no save schema change).
+
+**Added/Improved — Cryobed UI now live:**
+1. `CryobedConfigHud` now live-ticks: power, oxygen, availability, ownership and location refresh ~10Hz without needing to close/reopen.
+2. Oxygen is now rendered as a premium vertical tank graphic (border, fill, gloss, % label, color cues for low/empty/offline) instead of just a number. Grid Cryobeds show fill = `oxygenStored/oxygenCapacity`, static cryobeds show 100% when room oxygen is present.
+3. Tank fill color goes cyan → amber → red based on level/online state for instant readability.
+4. Status pill and panel border tint update live with availability.
+
+**Fixed — linked spawn name said "Linked Spawn" instead of actual cryobed name:**
+5. `DeathScreenHud` now resolves the linked spawn position to the actual Bed/Cryobed/GridCryobed at that spot and uses its custom name as the respawn choice title. Renaming a cryobed now correctly shows "My Bunker" instead of generic "Linked Spawn" on the death screen.
+6. Increased matching tolerance for linked spawn lookup so renamed beds are reliably found.
+
+**Fixed — world spawn falling back to 0,250,0:**
+7. `PlayerSpawner` now persists the FINAL grounded spawn position as the true world spawn for BOTH flat and sphere worlds. Previously flat saved a pre-raycast rough target and sphere never saved at all — so `worldSpawnInitialized` stayed false and the death screen fallback stayed at `0,250,0`.
+8. Added safeguard that replaces the old `0,250,0` parking placeholder if an old `spawn.json` still contains it.
+9. `Respawn()` no longer teleports to `0,250,0` sky when world spawn is uninitialized — it uses current position as safety fallback until true world spawn is known.
+10. `DeathScreenHud` world-spawn gathering tolerates non-zero legacy saved points even if `worldSpawnInitialized` is false.
+
+**Files touched:**
+- `Scripts/UI/CryobedConfigHud.cs`
+- `Scripts/UI/DeathScreenHud.cs`
+- `Scripts/Player/PlayerSpawner.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
 
 ---
 
