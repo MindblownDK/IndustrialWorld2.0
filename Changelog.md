@@ -1,7 +1,49 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.27.1-dev`
+**Current Version:** `6.27.2-dev`
+
+All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.27.2-dev] Pipe-Only Water for Biofarm, Diagonal/Vertical Pipe Fixes & Ghost Port Commit
+
+**Type:** PATCH — biofarm piping rules + pipe topology/placement fixes. Save-compatible.
+
+**Fixed — water pulled from adjacent tanks, now ONLY via pipes (as requested):**
+1. `Building.Biofarm` previously used `OverlapSphere` to find any `FluidNode` (tank) within 3.2 m, even without a pipe, plus voxel water fallback. Now it requires a nearby `WaterPipe` (`FluidNodeKind.Pipe`) whose network contains a `WaterTank` with water. `CheckWaterPiped()` and `ConsumePipedWater()` both enforce pipe-only.
+2. Removed voxel water (`WaterVoxel`) emergency source — biofarm now needs piped water from a tank via `WaterPipe` network, matching electrolyser/gas logic.
+3. `GridBiofarm` already pipe-only via `GridLiquidNetwork.DrawLiquidFor`, no change needed, but its visual arms now include biofarm.
+
+**Fixed — pipe placement issues where pipes connect diagonally on grid and land:**
+4. `PipeAdjacency` had `VerticalTolerance = 0.65` but checked `other1 <= tol && other2 <= tol` separately, allowing diagonal with dx=0.5, dz=0.5 (both <=0.65) to count as cardinal. Now uses Euclidean distance of non-dominant plane: `sqrt(other1²+other2²) <= effectiveTol`. Prevents diagonal: vertical with 0.5,0.5 has horiz dist 0.707 >0.65 blocked, while small drift 0.2,0.1 dist 0.22 allowed.
+5. Applied same Euclidean check to `IsCardinalLinkDelta` and `IsAxisAlignedWithinDelta`. The latter now computes dominant axis and checks `sqrt(other1²+other2²) <= effectiveTol` instead of counting active axes, so diagonal like (0.5,1.5,0.5) is blocked.
+
+**Fixed — pipes not connecting vertically when vertically in line on static (visually also):**
+6. Kept `VerticalTolerance = 0.65f` for Y-dominant links, allowing 0.4-0.5 m sideways drift from uneven terrain hit normals that previously broke vertical shafts.
+7. `BuildSystem.IsPlacementValid` now allows thin stacking blocks (`allowStacking = true` = pipes/cables) to ignore static world geometry (terrain MeshCollider). Previously any static overlap blocked placement, so starting a vertical column on rough ground failed. Dynamic rigidbody blocking still enforced.
+8. `WaterPipe` and `GasPipe` visual `GetNeighbourPositions` for both grid and free-placed pipes now include `Building.Biofarm` (static) and `GridBiofarm` (grid) as endpoints, so arms grow toward biofarm model. Also added worldEndpoint bridging for biofarm in both pipe types.
+
+**Fixed — ghost shows port but when placed port isn't added and pipe doesn't connect (on grid):**
+9. Root cause: `BuildSystem.TryGetGridTankVariablePortSnap` and `GridBuilder.TryGetGridTankVariablePortSnap` / `IsMatchingTankBlockForPipe` only accepted `GridLiquidTank`, `GridGasTank`, `GridCryobed` for variable ports. Biofarm was excluded, so ghost preview (which uses same method) showed a port ring but commit path returned false for biofarm family mismatch, or port was added but network didn't consider it connected.
+10. Now both `BuildSystem` and `GridBuilder` accept `GridBiofarm` (and `GridH2O2Generator`) for liquid+gas families. Added `GridBiofarm` to `IsMatchingTankBlockForPipe`, to `TryGetGridTankVariablePortSnap` liquid/gas branches, and to `WaterPipe`/`GasPipe` endpoint consideration (`GridLiquidTank`, `GridH2O2Generator`, `GridBiofarm` etc). Ensured `EnsureGridTankPorts` creates both `Port_GasIO` and `Port_LiquidIO` fixed ports on `Biofarm_Large` prefab plus variable `Port_GasIO_V`/`Port_LiquidIO_V` via `GridTankVariablePorts`.
+11. `WorldStatePersistence` already captures `GridTankVariablePorts` records, so variable ports persist across saves.
+
+**Files touched:**
+- `Scripts/Building/Biofarm.cs`
+- `Scripts/GridSystem/GridBiofarm.cs`
+- `Scripts/Networks/PipeAdjacency.cs`
+- `Scripts/Building/BuildSystem.cs`
+- `Scripts/GridSystem/GridBuilder.cs`
+- `Scripts/Fluids/WaterPipe.cs`
+- `Scripts/Gas/GasPipe.cs`
+- `Scripts/Player/PlayerInteractionTool.cs` (already includes biofarm in UI list from 6.27.1)
+- `Scripts/Editor/VoxelEngineSetupWindow.cs` (port markers from 6.27.0)
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
+
+---
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
 

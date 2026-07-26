@@ -10,6 +10,7 @@
 //   • Power + water + biomass = slow but reliable O2
 //   • Slower than industrial electrolyser but renewable and offline-friendly
 //   • Feeds gas tanks, cryobeds, life-support rooms via GasNetwork
+//   • Water MUST be piped via WaterPipe + WaterTank network (no adjacent-tank cheat)
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -44,7 +45,7 @@ namespace VoxelEngine.Building
 
         // Runtime state
         public float OxygenBuffer { get; private set; }
-        public float BiomassTimeRemaining { get; private set; } // seconds of fuel left from current biomass item
+        public float BiomassTimeRemaining { get; private set; }
         public bool IsRunning { get; private set; }
         public string Status { get; private set; } = "Idle";
         public float Buffer01 => bufferCapacity > 0 ? Mathf.Clamp01(OxygenBuffer / bufferCapacity) : 0f;
@@ -56,6 +57,8 @@ namespace VoxelEngine.Building
 
         private PortConfig _portConfig;
         private ItemPortContainer[] _portContainers;
+
+        private static readonly Collider[] s_waterProbe = new Collider[24];
 
         private void Awake()
         {
@@ -97,7 +100,6 @@ namespace VoxelEngine.Building
             EnsureContainers();
             float dt = Time.deltaTime;
 
-            // Power check
             bool hasPower = _power == null || _power.IsPowered;
             if (!hasPower)
             {
@@ -106,23 +108,20 @@ namespace VoxelEngine.Building
                 return;
             }
 
-            // Water check (every 1.5s to avoid per-frame sphere casts)
             _waterCheckTimer += dt;
-            if (_waterCheckTimer >= 1.5f)
+            if (_waterCheckTimer >= 1.2f)
             {
                 _waterCheckTimer = 0f;
-                _hasWaterConnection = CheckWaterSource();
+                _hasWaterConnection = CheckWaterPiped();
             }
 
-            // Need water if required
             if (!_hasWaterConnection)
             {
                 IsRunning = false;
-                Status = "No Water";
+                Status = "No Piped Water";
                 return;
             }
 
-            // Need biomass fuel
             if (BiomassTimeRemaining <= 0f)
             {
                 if (!TryConsumeBiomassItem())
@@ -133,38 +132,30 @@ namespace VoxelEngine.Building
                 }
             }
 
-            // Produce
             if (OxygenBuffer >= bufferCapacity - 0.01f)
             {
                 IsRunning = false;
                 Status = "Oxygen Full";
-                // Still push
             }
             else
             {
                 IsRunning = true;
                 Status = "Producing";
 
-                // Consume water
                 float needWater = waterConsumptionLps * dt;
-                if (!ConsumeWater(needWater))
+                if (!ConsumePipedWater(needWater))
                 {
-                    // Ran out mid-tick
                     IsRunning = false;
-                    Status = "No Water";
+                    Status = "No Piped Water";
                     _hasWaterConnection = false;
                     return;
                 }
 
-                // Burn biomass time
                 BiomassTimeRemaining -= dt;
-
-                // Produce oxygen
                 float produced = oxygenPerSecond * dt;
                 OxygenBuffer = Mathf.Min(bufferCapacity, OxygenBuffer + produced);
             }
 
-            // Push to gas tanks via pipes every 0.5s
             _pushTimer += dt;
             if (_pushTimer >= 0.5f)
             {
@@ -195,54 +186,49 @@ namespace VoxelEngine.Building
             if (item == null) return false;
             if (item is FoodItem) return true;
             if (item is SeedItem) return true;
-            // Allow generic biomass / organic resource items
             string id = item.itemId?.ToLowerInvariant() ?? "";
             if (id.Contains("biomass") || id.Contains("organic") || id.Contains("wheat") || id.Contains("corn") || id.Contains("carrot") || id.Contains("fiber") || id.Contains("algae") || id.Contains("compost"))
                 return true;
-            // Also accept items in Farming category
             if (!string.IsNullOrEmpty(item.category) && item.category.ToLowerInvariant().Contains("farm"))
                 return true;
             return false;
         }
 
-        private bool CheckWaterSource()
+        // Water MUST come via WaterPipe network that contains a WaterTank.
+        // Adjacent tanks without a pipe are intentionally ignored.
+        private bool CheckWaterPiped()
         {
-            var hits = Physics.OverlapSphere(transform.position, 3.2f);
-            foreach (var col in hits)
+            int hitCount = Physics.OverlapSphereNonAlloc(transform.position, 3.5f, s_waterProbe, ~0, QueryTriggerInteraction.Collide);
+            for (int i = 0; i < hitCount; i++)
             {
+                var col = s_waterProbe[i];
+                s_waterProbe[i] = null;
+                if (col == null) continue;
                 if (col.gameObject == gameObject) continue;
                 var node = col.GetComponent<FluidNode>();
-                if (node != null && node.network != null)
-                {
-                    foreach (var n in node.network.nodes)
-                        if (n is WaterTank t && t.liquidType == LiquidType.Water && t.water > 1f)
-                            return true;
-                }
-            }
-            // Accept voxel water nearby as emergency source (like sprinkler)
-            var world = VoxelEngine.Core.ActiveWorld.Current;
-            if (world != null)
-            {
-                var pos = world.WorldToVoxel(transform.position);
-                for (int dx = -2; dx <= 2; dx++)
-                for (int dz = -2; dz <= 2; dz++)
-                {
-                    var v = world.GetVoxelWorld(new Vector3Int(pos.x + dx, pos.y - 1, pos.z + dz));
-                    if (v.material == (byte)VoxelEngine.Materials.MaterialId.WaterVoxel)
+                if (node == null) continue;
+                if (node.Kind != FluidNodeKind.Pipe) continue; // need a pipe near biofarm
+                if (node.network == null) continue;
+                foreach (var n in node.network.nodes)
+                    if (n is WaterTank t && t.liquidType == LiquidType.Water && t.water > 1f)
                         return true;
-                }
             }
             return false;
         }
 
-        private bool ConsumeWater(float litres)
+        private bool ConsumePipedWater(float litres)
         {
-            var hits = Physics.OverlapSphere(transform.position, 3.2f);
-            foreach (var col in hits)
+            int hitCount = Physics.OverlapSphereNonAlloc(transform.position, 3.5f, s_waterProbe, ~0, QueryTriggerInteraction.Collide);
+            for (int i = 0; i < hitCount; i++)
             {
+                var col = s_waterProbe[i];
+                s_waterProbe[i] = null;
+                if (col == null) continue;
                 if (col.gameObject == gameObject) continue;
                 var node = col.GetComponent<FluidNode>();
-                if (node == null || node.network == null) continue;
+                if (node == null) continue;
+                if (node.Kind != FluidNodeKind.Pipe) continue;
+                if (node.network == null) continue;
                 foreach (var n in node.network.nodes)
                 {
                     if (n is WaterTank t && t.liquidType == LiquidType.Water && t.water >= litres)
@@ -250,19 +236,6 @@ namespace VoxelEngine.Building
                         t.TakeSome(litres);
                         return true;
                     }
-                }
-            }
-            // Voxel water is free but not consumed via tank; allow production
-            var world = VoxelEngine.Core.ActiveWorld.Current;
-            if (world != null)
-            {
-                var pos = world.WorldToVoxel(transform.position);
-                for (int dx = -2; dx <= 2; dx++)
-                for (int dz = -2; dz <= 2; dz++)
-                {
-                    var v = world.GetVoxelWorld(new Vector3Int(pos.x + dx, pos.y - 1, pos.z + dz));
-                    if (v.material == (byte)VoxelEngine.Materials.MaterialId.WaterVoxel)
-                        return true;
                 }
             }
             return false;

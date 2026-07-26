@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.27.1-dev`
-**Roadmap Version:** `6.27.1-dev`
+**Current Version:** `6.27.2-dev`
+**Roadmap Version:** `6.27.2-dev`
 **Date:** 2026-07-26
-**Status:** Passive Oxygen Generation (11.5) — COMPLETED + Variable Ports & Vertical Pipe Fix; World Management (11.7) — COMPLETED; Power, Vehicles & Combat (4.7.0) remains WORKING ON
+**Status:** Passive Oxygen Generation (11.5) — COMPLETED + Variable Ports & Pipe-Only Water Fix (6.27.2); World Management (11.7) — COMPLETED; Power, Vehicles & Combat (4.7.0) remains WORKING ON
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
 ---
@@ -1741,13 +1741,14 @@ For each version, these are the high-level Unity tasks you will perform manually
 - **6.24.0-dev:** Added Space Helmet and Oxygen Tank equipment items/recipes, Life Support equipment slots in Inventory, save/load for helmet/tank slots, and underwater oxygen reserve/drain reduction when helmet+tank are equipped.
 - **6.24.1-dev:** Equipment UI now places Jetpack Bay and Life Support side-by-side to preserve backpack room, removes extra hint text, and activates underwater oxygen drain using head-underwater/deep-swim checks. Remaining work: active oxygen-rich environment checks, offline death rules, cryobed power/oxygen validation, vacuum/room-pressure integration, and final Unity validation.
 
-### 11.5 Passive Oxygen Generation — ✅ COMPLETED (6.27.0-dev) + PATCH 6.27.1
+### 11.5 Passive Oxygen Generation — ✅ COMPLETED (6.27.0-dev) + PATCHES 6.27.1 & 6.27.2
 - Add an expensive Biofarm / oxygen garden system that passively generates oxygen over time.
 - The Biofarm should require power, water, biomass or plant inputs, and enough physical space to prevent cheap oxygen spam.
 - Static and Grid variants should connect to gas pipes and feed oxygen tanks, cryobeds, life support rooms, and future airtight spaces.
 - Output should be slower than industrial H2/O2 generation but reliable, renewable, and useful for offline survival infrastructure.
 - **6.27.0-dev:** Added static `Biofarm` (`Building/Biofarm.cs`) and grid `GridBiofarm` (`GridSystem/GridBiofarm.cs`) blocks: 65-70 W, 0.18-0.20 L/s water, 0.55 O₂ L/s, 45s per biomass, 260 L O₂ buffer + 180 L water buffer, biomass auto-pull from cargo/item pipes, water from liquid pipes/tanks, O₂ push via gas pipes into tanks/cryobeds. Added `Biomass` compressed crop item + recipes, premium UI panels (`MachineUIs.BiofarmPanel` / `GridBlockUI BiofarmPanel`), interaction via `PlayerInteractionTool`, non-destructive setup in Steps 11+12 (`Item_Biomass`, `Block_Biofarm`, `GItem_Biofarm` + port markers), research wiring into `res_farming` + `res_gas_processing`, and anti-spam via large prefab scale + triple input + slow rate.
 - **6.27.1-dev:** Fixed grid biofarm UI not opening (missing from `GridBlockHasUI`), added variable ports on all biofarms like grid tanks (`GridTankVariablePorts` for liquid+gas on `GridBiofarm` + `GridH2O2Generator`, port markers for gas+liquid, visual arms in `WaterPipe`/`GasPipe` for both static `Building.Biofarm` and grid `GridBiofarm`), and fixed vertical pipe connection on land (`PipeAdjacency` vertical tolerance 0.65m, `IsPlacementValid` allows thin stacking blocks to ignore terrain for vertical shafts).
+- **6.27.2-dev:** Enforced pipe-only water for biofarm (removed adjacent-tank cheat + voxel water fallback, now requires nearby `WaterPipe` whose network has a `WaterTank`), fixed diagonal pipe connections on grid and land by switching `PipeAdjacency` to Euclidean `sqrt(other1²+other2²)` checks for all axes (prevents diagonal with both offsets 0.5), and fixed grid ghost port not committing (added `GridBiofarm` to `TryGetGridTankVariablePortSnap` / `IsMatchingTankBlockForPipe` in both `BuildSystem` and `GridBuilder`, ensured `EnsureGridTankPorts` creates gas+liquid fixed ports and variable `Port_*_V` ports persist via `WorldStatePersistence`).
 
 ### 11.6 Multiplayer — LAST ROADMAP MILESTONE — ❌ MISSING
 - This is the final roadmap milestone after all single-player systems are complete.
