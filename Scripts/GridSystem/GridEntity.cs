@@ -238,6 +238,7 @@ namespace VoxelEngine.GridSystem
             UpdateDampeners();
             UpdateWheels();
             ApplyGravity();
+            StabilizeGroundAlignment();
 
             // Camera screenshake/FOV warp from the previous physics step's net acceleration.
             // Only fire when a player is actually controlling this grid so walking around or
@@ -469,10 +470,16 @@ namespace VoxelEngine.GridSystem
         {
             if (_rb == null) return;
             float mass = 0f;
+            Vector3 weightedPosSum = Vector3.zero;
+            float totalWeightForCOM = 0f;
+
             foreach (var kv in _blocks)
             {
                 if (kv.Value == null) continue;
-                mass += Mathf.Max(kv.Value.TotalMass, MinimumRuntimeBlockMass(kv.Value));
+                float m = Mathf.Max(kv.Value.TotalMass, MinimumRuntimeBlockMass(kv.Value));
+                mass += m;
+                weightedPosSum += kv.Value.transform.localPosition * m;
+                totalWeightForCOM += m;
             }
 
             var precisionLayer = PrecisionAttachments;
@@ -481,12 +488,21 @@ namespace VoxelEngine.GridSystem
                 foreach (var kv in precisionLayer.Blocks)
                 {
                     if (kv.Value == null) continue;
-                    mass += Mathf.Max(1f, kv.Value.TotalMass);
+                    float m = Mathf.Max(1f, kv.Value.TotalMass);
+                    mass += m;
+                    weightedPosSum += kv.Value.transform.localPosition * m;
+                    totalWeightForCOM += m;
                 }
             }
 
             TotalMass = mass;
             _rb.mass = Mathf.Max(1f, mass);
+            // Center of mass at average block local position prevents tipping on
+            // uneven builds and keeps planet-surface alignment stable.
+            if (totalWeightForCOM > 0.01f)
+                _rb.centerOfMass = weightedPosSum / totalWeightForCOM;
+            else
+                _rb.centerOfMass = Vector3.zero;
         }
 
         private float MinimumRuntimeBlockMass(GridBlock block)
@@ -859,15 +875,19 @@ namespace VoxelEngine.GridSystem
                 bool iceRecovery = IsRecoveringFromIceContact();
                 if (iceRecovery) brake *= IceGridBrakeMultiplier;
 
-                // On/just-after ice, dampeners brake only tangent drift. They must not
-                // fight the gravity-axis velocity, or a tilted grid can hover upward
-                // after losing contact with the ice.
+                // --- FIX: grids fell as if low-gravity because dampeners braked vertical fall ---
+                // When NOT in hover-hold mode, dampeners should only cancel HORIZONTAL drift
+                // (tangent to gravity), letting gravity cause natural fall. Previously they
+                // braked full velocity including vertical, so grids fell in slow-mo.
+                Vector3 gravity = CurrentGravityAcceleration();
                 Vector3 dampedVelocity = vel;
-                if (iceRecovery)
+                bool hasGravity = gravity.sqrMagnitude > 0.0001f;
+                bool isHoverHold = ShouldDampenerHoldHover();
+
+                if (hasGravity && (iceRecovery || !isHoverHold))
                 {
-                    Vector3 gravity = CurrentGravityAcceleration();
-                    if (gravity.sqrMagnitude > 0.0001f)
-                        dampedVelocity = Vector3.ProjectOnPlane(vel, gravity.normalized);
+                    // Brake only tangent drift, preserve gravity-axis motion
+                    dampedVelocity = Vector3.ProjectOnPlane(vel, gravity.normalized);
                 }
 
                 // Soften the brake at very low speeds so the ship coasts gently to a stop
@@ -877,10 +897,27 @@ namespace VoxelEngine.GridSystem
                 if (speed > 0.0001f)
                     _rb.AddForce(-dampedVelocity * brake * settle, ForceMode.Acceleration);
 
-                // Hard snap only when almost stopped, so the ship doesn't drift forever.
-                // During ice recovery never zero vertical/gravity velocity.
-                if (!iceRecovery && speed < 0.03f)
-                    _rb.linearVelocity = Vector3.zero;
+                // Hard snap only when almost stopped. For non-hover, only zero the
+                // tangent component so vertical fall isn't cancelled.
+                if (speed < 0.03f)
+                {
+                    if (isHoverHold || iceRecovery)
+                    {
+                        // In hover hold we want full stop; during ice recovery never zero vertical
+                        if (!iceRecovery)
+                            _rb.linearVelocity = Vector3.zero;
+                    }
+                    else if (hasGravity)
+                    {
+                        // Keep gravity component, zero horizontal drift
+                        Vector3 vertical = Vector3.Project(vel, gravity.normalized);
+                        _rb.linearVelocity = vertical;
+                    }
+                    else
+                    {
+                        _rb.linearVelocity = Vector3.zero;
+                    }
+                }
             }
 
             Vector3 angVel = _rb.angularVelocity;
@@ -889,6 +926,73 @@ namespace VoxelEngine.GridSystem
                 float angularBrake = _touchingIce ? 0.75f : 4f;
                 _rb.angularVelocity = Vector3.Lerp(angVel, Vector3.zero, angularBrake * Time.fixedDeltaTime);
             }
+        }
+
+        // ── Planet surface alignment for grounded grids ──────────────
+        // Grids placed on a spherical planet should stay aligned to the local
+        // surface normal instead of slowly tipping over. When the grid is grounded
+        // (landing gear locked or low velocity near surface) and not piloted, we
+        // gently slerp its up toward planet up.
+        private float _alignTimer;
+        private void StabilizeGroundAlignment()
+        {
+            if (!GravityProvider.IsRadial) return;
+            if (IsControlled) return;
+            if (_rb == null) return;
+
+            // Only stabilize when grounded-ish: landing gear locked, wheels grounded,
+            // or low vertical velocity near surface
+            bool hasLandingGear = false;
+            bool anyLocked = false;
+            bool anyGrounded = false;
+            foreach (var block in AllBlocks)
+            {
+                if (block is GridLandingGear lg)
+                {
+                    hasLandingGear = true;
+                    if (lg.IsLocked) anyLocked = true;
+                }
+                if (block is GridWheel wh && wh.IsGrounded) anyGrounded = true;
+            }
+
+            float vertSpeed = 0f;
+            Vector3 grav = CurrentGravityAcceleration();
+            if (grav.sqrMagnitude > 0.0001f)
+                vertSpeed = Mathf.Abs(Vector3.Dot(_rb.linearVelocity, grav.normalized));
+
+            bool nearGround = vertSpeed < 0.5f && _rb.linearVelocity.magnitude < 1.5f;
+            if (!anyLocked && !anyGrounded && !nearGround) return;
+
+            // Throttle alignment to 4 Hz to avoid fighting physics
+            _alignTimer += Time.fixedDeltaTime;
+            if (_alignTimer < 0.25f) return;
+            _alignTimer = 0f;
+
+            Vector3 planetUp = GravityProvider.GetUp(transform.position);
+            if (planetUp.sqrMagnitude < 0.0001f) return;
+
+            Vector3 currentUp = transform.up;
+            float angle = Vector3.Angle(currentUp, planetUp);
+            if (angle < 0.5f) return; // already aligned
+            if (angle > 45f) return; // too far, don't snap (likely in flight)
+
+            // Slerp toward surface-aligned rotation
+            Vector3 currentForward = transform.forward;
+            Vector3 desiredForward = Vector3.ProjectOnPlane(currentForward, planetUp);
+            if (desiredForward.sqrMagnitude < 0.001f)
+                desiredForward = Vector3.ProjectOnPlane(Vector3.forward, planetUp);
+            if (desiredForward.sqrMagnitude < 0.001f)
+                desiredForward = Vector3.ProjectOnPlane(Vector3.right, planetUp);
+            desiredForward.Normalize();
+
+            Quaternion desiredRot = Quaternion.LookRotation(desiredForward, planetUp);
+            // Gentle slerp, preserve position
+            Quaternion newRot = Quaternion.Slerp(transform.rotation, desiredRot, 0.08f);
+            _rb.MoveRotation(newRot);
+
+            // Damp angular velocity that would tip it over
+            if (_rb.angularVelocity.magnitude > 0.1f)
+                _rb.angularVelocity *= 0.85f;
         }
 
         // ── Wheels ─────────────────────────────────────────────────

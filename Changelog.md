@@ -1,7 +1,34 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.27.2-dev`
+**Current Version:** `6.27.3-dev`
+
+All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.27.3-dev] Grid Gravity & Planet Surface Alignment Fix
+
+**Type:** PATCH — critical grid physics fix. Save-compatible (no schema change).
+
+**Fixed — grids fall as if unaffected by gravity:**
+1. `GridEntity.UpdateDampeners` previously braked full velocity including vertical when `DampenersOn` and no thrust, so grids fell in slow-mo (0.5-1 m/s) as if low-gravity. Now when NOT in hover-hold mode (`ShouldDampenerHoldHover()` false), dampeners only brake tangent drift: `ProjectOnPlane(vel, gravity.normalized)`, preserving gravity-axis fall.
+2. Hard snap `linearVelocity = zero` when speed <0.03 now only zeroes tangent component when not hovering — vertical component preserved, so grids don't stop mid-air just before ground. In hover-hold mode, full zero for stable hover.
+3. `RecalculateMass()` now computes weighted average of block local positions and sets `Rigidbody.centerOfMass`, preventing uneven builds from tipping over due to offset COM.
+
+**Fixed — grids do not align with planet surface when placed:**
+4. Added `StabilizeGroundAlignment()` called every FixedUpdate (4 Hz throttle). On radial gravity (`GravityProvider.IsRadial`), when grid is grounded (landing gear locked OR wheels grounded OR low vert speed <0.5 + low total speed <1.5) and not piloted, it gently slerps `up` toward `GravityProvider.GetUp(position)` with 8% lerp and damps angular velocity. Prevents slow tip-over on slopes, keeps grids planted flush to surface.
+5. `BuildSurfacePlacementRotation` already used `GetUp` for new grids — validated and kept. New grids now also have `centerOfMass` set to average, making initial placement more stable.
+6. `GridBuilder` new grid creation already sets `Body.isKinematic = true` for 1 fixed frame then re-enables physics — ensures placement doesn't immediately collide and tip.
+
+**Files touched:**
+- `Scripts/GridSystem/GridEntity.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
+
+---
+
+### [6.27.2-dev] Pipe-Only Water for Biofarm, Diagonal/Vertical Pipe Fixes & Ghost Port Commit
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
 

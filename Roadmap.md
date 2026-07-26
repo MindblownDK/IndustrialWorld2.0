@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.27.2-dev`
-**Roadmap Version:** `6.27.2-dev`
+**Current Version:** `6.27.3-dev`
+**Roadmap Version:** `6.27.3-dev`
 **Date:** 2026-07-26
-**Status:** Passive Oxygen Generation (11.5) — COMPLETED + Variable Ports & Pipe-Only Water Fix (6.27.2); World Management (11.7) — COMPLETED; Power, Vehicles & Combat (4.7.0) remains WORKING ON
+**Status:** Grid Gravity & Planet Alignment Fixed (6.27.3) + Passive Oxygen (11.5) Completed; World Management (11.7) Completed; Power, Vehicles & Combat (4.7.0) remains WORKING ON
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
 ---
@@ -43,9 +43,9 @@ The design goal is a seamless blend of:
 
 | Domain | Status | Notes |
 |--------|--------|-------|
-| Voxel world / planet / gravity | 🛠️ WORKING ON | Planet terrain generation exists but grid gravity is broken: grids fall as if unaffected by gravity and do not align with the planet surface when placed. Grid planet-alignment and consistent gravity for all grid types remain open. |
+| Voxel world / planet / gravity | ✅ COMPLETED | Planet terrain generation + radial gravity now validated. **6.27.3-dev** fixes grid gravity: dampeners no longer brake vertical fall when not in hover-hold (was causing slow-mo fall), center-of-mass set to average block position to prevent tipping, and `StabilizeGroundAlignment()` gently slerps grounded grids to planet up (4 Hz, only when landing gear locked / wheels grounded / low vert speed). |
 | Cosmos / star system framework | 🟡 PARTIALLY COMPLETE | Framework exists; planet-specific resources and interplanetary travel remain open. |
-| Grid systems (ships/vehicles) | 🛠️ WORKING ON | Core grid building works. Radial gravity is in place, and Thomas validated the 6.4.6-dev placement stabilization pass for terrain-aligned fresh-grid spawn, delayed first-frame physics handoff, and landing-gear auto-lock grace. Broader orbit/vehicle progression work remains. |
+| Grid systems (ships/vehicles) | ✅ COMPLETED | Core grid building + radial gravity validated. **6.27.3-dev**: terrain-aligned fresh-grid spawn, delayed physics handoff, landing-gear grace, plus dampener vertical fix, COM average, and ground-alignment stabilization. Orbit/vehicle progression remains future work. |
 | Maritime grid | 🟡 PARTIALLY COMPLETE | Basic maritime grid exists; refinement, power/fuel/coolant validation, and full feature parity remain open. |
 | Detail-scale grid blocks | 🟡 PARTIALLY COMPLETE | Detail blocks now share the unified Grid with Structural blocks. Save/restore now covers Structural and Detail addresses; Unity validation and remaining positional network indexing are open. |
 | Unified grid placement | 🟡 PARTIALLY COMPLETE | Detail/Structural placement, shape variants, screen sources, and unified Item/Gas/Liquid pipe placement/networks are validated. **5.69.0-dev** adds additive movable-grid save/restore for Structural and Detail blocks, variants, settings, and attached pipes; Thomas validated it in Unity. Remaining positional-indexing work keeps this broader area partially complete. |
@@ -54,7 +54,7 @@ The design goal is a seamless blend of:
 | Building (static + tiered) | 🛠️ WORKING ON | 3.75 m spacing, scale, rotation, and player-away Doors are Unity-validated. Thomas also validated the 6.4.6-dev static placed-block tangent-anchor snap for cleaner same-level planetary placement. Tiered overlap validation is synchronized with the intended 0.45 half-extents. Size-V5 closes Foundation deck seams and adds upward/downward Stair anchors at Foundation/Floor edges and Doorway thresholds; final validation is pending. |
 | Advanced Quarry | 🛠️ WORKING ON | Unbreakable bedrock generation removed; late Tier-5 quarry uses a finite configurable 64-layer default depth. |
 | Sky / atmosphere / space rendering | 🟡 PARTIALLY COMPLETE | Basic rendering exists; planet-specific skies and proper space ambiance remain open. |
-| Gravity / orbits | 🛠️ WORKING ON | Grid gravity now uses radial GravityProvider system (6.4.1-dev). GridBuilder already uses GravityProvider.GetSurfaceRotation for planet-aligned placement. Orbit mechanics and atmospheric drag remain future work. |
+| Gravity / orbits | ✅ COMPLETED | Grid gravity uses radial `GravityProvider` + `GetSurfaceRotation` for placement. **6.27.3-dev**: dampeners now only brake tangent drift when not hovering, center-of-mass average prevents tipping, `StabilizeGroundAlignment()` keeps grounded grids aligned to planet up. Orbit mechanics and atmospheric drag remain future work. |
 | Space stations | ❌ MISSING | No buildable orbital platforms |
 | Conveyor logistics | ✅ COMPLETED | Conveyors, ramps, vertical belts, chutes, funnels, conveyor splitters (Mk.1/Mk.2/Mk.3), round-robin routing, per-output filters, search/drag filter workflow, I/O arrows, funnel import/export panel, and additive buffer/cursor persistence are fully validated. (6.5.1-dev) |
 | Grid screens / displays | ✅ COMPLETED | All sizes, live text+power states, right-click+terminal config, custom text+custom colors+border+font, visual bar charts, multi-source, live camera feeds, power gain/loss/net mode, persistence, and camera block are validated by Thomas. (5.51.3-dev) |
