@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.29.0-dev`
-**Roadmap Version:** `6.29.0-dev`
+**Current Version:** `6.29.2-dev`
+**Roadmap Version:** `6.29.2-dev`
 **Date:** 2026-07-26
-**Status:** Ruins & Blueprints (4.9.0) Partially Completed (6.29.0) + Compile Fixes (6.28.1) + Offline Survival (11.4) + Grid Gravity (6.27.3) + Passive Oxygen (11.5); World Management (11.7) Completed; Power, Vehicles & Combat (4.7.0) remains WORKING ON
+**Status:** RuinChest Fix (6.29.1) + Ruins & Blueprints (4.9.0) Partially Completed (6.29.0) + Compile Fixes (6.28.1) + Offline Survival (11.4) + Grid Gravity (6.27.3) + Passive Oxygen (11.5); World Management (11.7) Completed; Power, Vehicles & Combat (4.7.0) remains WORKING ON
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
 ---

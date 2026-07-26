@@ -1,60 +1,50 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.29.0-dev`
+**Current Version:** `6.29.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
 
 ---
 
-### [6.29.0-dev] Ruins of Dead Civilization & Blueprint Data Cores (4.9.0)
+### [6.29.2-dev] Ruins Step 11 NullRef Fix — Robust Prefab Creation
 
-**Type:** MINOR — new exploration loop, save-compatible (additive scatter + blueprint unlock file).
+**Type:** PATCH — editor setup crash fix, save-compatible.
 
-**Added — Blueprint Unlock System (`Exploration/BlueprintUnlockManager.cs`):**
-1. New singleton `BlueprintUnlockManager` with `EnsureInstance()` (DontDestroyOnLoad). Persists `blueprint_unlocks.json` in world folder (HashSet of unlocked recipe asset names like `Recipe_t90_Nacelle`).
-2. `IsUnlocked(recipe)` / `Unlock(recipeName)` + `BuildFeedbackHud` toast "Blueprint Restored".
-3. Integrated into `ResearchManager.IsRecipeUnlocked` — checks blueprint manager first, so blueprint-unlocked recipes appear as unlocked even without research node.
+**Fixed — NullReferenceException in Step 11 `MakeRuinPrefab`:**
+1. `root.AddComponent<RuinChest>()` could return null if RequireComponent fails or script not compiled — now ensures root has BoxCollider before AddComponent, checks for null after AddComponent, logs error and returns null prefab if still fails.
+2. `MakeColoredMat` could return null — now null-checked before assigning to renderer.
+3. `steelPlate`, `ironPlate`, `copperWire`, `circuit`, `coal`, `bpNacelle` etc captured from outer scope may be null if Step 10 not run — now builds component/Fuel/Blueprint lists via null-coalesced collection (only non-null items added, fallback to `ironIngot` if all plates missing).
+4. `SaveAsPrefabAsset` could return null if path invalid — returns null prefab handled.
+5. Ruin block creation `MakeBlk` now guarded: only creates block if prefab non-null.
+6. Biome scatter injection now checks `ruinWarehouse/Fac/ Bunker != null` before adding entries, avoids adding null prefabs to scatter.
+7. Added `UnityEngine.Random.Range` fully qualified to avoid ambiguity with `System.Random`.
 
-**Added — Blueprint Data Core Item (`Items/BlueprintDataCoreItem.cs`):**
-4. Subclass of `ResourceItem` (category Blueprints, 1 stack). Fields: `targetDisplayName`, `targetRecipeAssetName`, `targetRecipe` direct ref.
-5. `TryUnlock()` resolves asset name and calls manager. Used via RMB in `PlayerInteractionTool` (active hotbar blueprint → unlock → consume 1 → feedback). Shows "Already Unlocked" if already restored.
-
-**Added — Ruin Chest (`Exploration/RuinChest.cs`):**
-6. `RuinChest` MonoBehaviour with rusted visual, BoxCollider trigger, loot tables: `possibleComponents` (steelPlate, ironPlate, copperWire, circuit), `possibleFuel` (coal), `possibleBlueprints` (4 wind turbine cores). Rolls `minComponents`-`maxComponents` (2-5) random components + 60% fuel + 35% blueprint (guaranteed if no blueprint unlocked yet). Marks `isLooted` + 30 min respawn timer.
-7. Interaction via `PlayerInteractionTool` RMB: `FindObjectsByType<RuinChest>` parent search, calls `TryOpen(inventory)` → adds loot + feedback "Blueprint Core Found!".
-8. Visual style: rusted, overgrown, damaged versions of real blocks — 4 small cubes with rusted materials, plus chest point.
-
-**Added — Ruin Prefabs & Scatter (via Step 11):**
-9. Step 11 `BuildSurvivalAndLogisticsContent` now creates:
-   - 4 blueprint cores: `Item_Blueprint_Nacelle_t90` → `Recipe_t90_Nacelle`, `Gearbox`, `Blade`, `Tower` (tints amber, descriptions "Rusted data core... Right-click to restore. Found in collapsed warehouses").
-   - 3 ruin prefabs: `Ruin_WarehouseSmall` (3x2x3, 2-4 comps, 0.55,0.38,0.22 rust), `Ruin_FactoryCollapsed` (4x2.5x4, 3-5 comps), `Ruin_Bunker` (2.5x1.8x2.5, 2-3 comps) — each with root `RuinChest` + child chest collider for reliable interaction (any rusted cube hit → parent root → chest).
-   - 2 ruin blocks: `Block_RuinWarehouse`, `Block_RuinFactory` (placeable decoration, category Ruins, 250-300 HP).
-   - Injects ruins into biomes as very rare scatter (non-destructive append): Wasteland/Plains/Steppes/Desert get 0.0012/0.0009/0.0010 density for warehouse/factory/bunker with 0.9-1.4 scale. Checks existing scatter for "Ruin_" to avoid duplication, logs injection.
-10. No recipes for ruins — found, not crafted. Blueprints are found only in ruins, then consumed to unlock.
-
-**Integration:**
-11. `PlayerInteractionTool`: Added blueprint use (RMB active stack blueprint → TryUnlock → remove 1) and ruin chest open (RMB on `RuinChest` → `TryOpen`).
-12. `ResearchManager.Awake` now `EnsureInstance` for `BlueprintUnlockManager` so blueprint file loads on start.
-13. `ResearchManager.IsRecipeUnlocked` now checks blueprint manager first.
-
-**Manual Steps:**
-- Run **Tools → Voxel Engine → Voxel Engine Setup → 11. Build Survival + Industrial Logistics Content** once to create blueprint items + ruin prefabs + scatter injection + ruin blocks. Idempotent.
-- Ruins will appear in existing worlds after next chunk generation (new chunks) in Wasteland/Plains/Steppes/Desert with very low density — explore to find.
+**Result:** Step 11 `BuildSurvivalAndLogisticsContent` no longer throws NRE at `rootChest.ruinName = ...` (line 4191). If plates missing, ruins still spawn with fallback loot.
 
 **Files touched:**
-- `Scripts/Exploration/BlueprintUnlockManager.cs`
-- `Scripts/Items/BlueprintDataCoreItem.cs`
-- `Scripts/Exploration/RuinChest.cs`
-- `Scripts/Research/ResearchManager.cs`
-- `Scripts/Player/PlayerInteractionTool.cs`
 - `Scripts/Editor/VoxelEngineSetupWindow.cs`
 - `Scripts/Core/GameVersion.cs`
 - `Changelog.md`
 
 ---
 
-All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+### [6.29.1-dev] RuinChest Inventory Namespace Fix
+
+**Type:** PATCH — compile fix, save-compatible.
+
+**Fixed:**
+- `RuinChest.cs(46)` CS0234 `VoxelEngine.Player.Inventory` does not exist — `Inventory` lives in `VoxelEngine.Items`. Changed `TryOpen(VoxelEngine.Player.Inventory)` → `TryOpen(Inventory)` (with `using VoxelEngine.Items` already present). Interaction via `PlayerInteractionTool` now correctly passes `Items.Inventory`.
+
+**Files touched:**
+- `Scripts/Exploration/RuinChest.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
+
+---
+
+### [6.29.0-dev] Ruins of Dead Civilization & Blueprint Data Cores (4.9.0)
+
 
 ---
 
@@ -89,116 +79,16 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 
 ### [6.28.0-dev] Offline Survival & Room Oxygen (11.4 Completion)
 
-All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
-
----
-
-### [6.28.0-dev] Offline Survival & Room Oxygen (11.4 Completion)
-
-**Type:** MINOR — new save-compatible offline survival rules + room O₂ validation. No save schema break.
-
-**Added — Offline Survival Service (`Player/OfflineSurvivalService.cs`):**
-1. New singleton `OfflineSurvivalService` with `EnsureInstance()` (DontDestroyOnLoad). Saves `offline_state.json` in world folder on every `WorldStatePersistence.SaveAll` (quit/autosave): UTC timestamp, player pos, claimed cryobed pos/name.
-2. On next login (`PlayerSpawner.SpawnRoutine` after 1 frame for cryobed restore) it computes offline hours (clamped 0-720h, <2 min ignored to avoid save-spam). 
-3. **If claimed GridCryobed exists:** consumes `offlineOxygenPerHour * hours` from its `oxygenStored`. If enough, deducts and survives; if not, sets stored to 0 and dies. Checks `IsPowered` — no power = offline death. Logs reason.
-4. **If claimed Static Cryobed exists:** requires `IsPowered` + `HasOxygenEnvironment` (now checks nearby O₂). If fails, dies; else survives with room O₂ OK.
-5. **If no claimed cryobed:** checks oxygen-rich environment at logout pos via `IsOxygenRichEnvironment` — within 10 m of powered producing biofarm (static/grid), 6-7 m of gas tank with O₂ >5-10 L (static/grid), or 6 m of powered cryobed with O₂. If found, survives without cryobed.
-6. **If no cryobed and no O₂-rich env:** dies offline after `hours:0.0h`.
-7. On death, `PlayerSpawner` clears `hasBedSpawn`, saves sidecar, deletes offline file, and after control enabled triggers `PlayerStats.TakeDamage(9999)` → `DeathScreenHud` with world spawn fallback. Shows `BuildFeedbackHud` with reason (red) before death.
-
-**Improved — room oxygen for static Cryobed (`Building/Cryobed.cs`):**
-8. Previously `HasOxygenEnvironment => true` with TODO comment. Now implements `IsOxygenRichAt(pos)` shared logic: scans for powered producing biofarms (10 m), O₂ tanks with >5 L (7 m), grid cryobeds with O₂ (6 m). Returns true if any found. Used for `IsAvailableForRespawn` and `OxygenEstimateText` (now shows "Room O₂ OK · biofarm / tank / cryobed nearby" vs "No room O₂ · needs piped biofarm / O₂ tank within 8m").
-9. Updated `OxygenEstimateText` to reflect actual room O₂ status instead of placeholder.
-
-**Integration:**
-10. `WorldStatePersistence.SaveAll` now calls `OfflineSurvivalService.EnsureInstance().SaveOfflineState(playerPos)` after writing `world_state.json`.
-11. `PlayerSpawner.SpawnRoutine` now calls `CheckOfflineSurvivalAndConsume()` after initial yield, handles `offlineDied` flag: ignores saved pos, forces world spawn path, and after `ReadyForPlayerControl` triggers death with feedback HUD showing offline reason.
-12. Offline file auto-cleared on death to prevent re-trigger.
-
-**Manual Steps:** None — additive file `offline_state.json`, no prefab changes. Existing saves get offline file on next save.
-
-**Files touched:**
-- `Scripts/Player/OfflineSurvivalService.cs`
-- `Scripts/Player/PlayerSpawner.cs`
-- `Scripts/Building/Cryobed.cs`
-- `Scripts/Persistence/WorldStatePersistence.cs`
-- `Scripts/Core/GameVersion.cs`
-- `Changelog.md`
 
 ---
 
 ### [6.27.3-dev] Grid Gravity & Planet Surface Alignment Fix
 
-All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
-
----
-
-### [6.27.3-dev] Grid Gravity & Planet Surface Alignment Fix
-
-**Type:** PATCH — critical grid physics fix. Save-compatible (no schema change).
-
-**Fixed — grids fall as if unaffected by gravity:**
-1. `GridEntity.UpdateDampeners` previously braked full velocity including vertical when `DampenersOn` and no thrust, so grids fell in slow-mo (0.5-1 m/s) as if low-gravity. Now when NOT in hover-hold mode (`ShouldDampenerHoldHover()` false), dampeners only brake tangent drift: `ProjectOnPlane(vel, gravity.normalized)`, preserving gravity-axis fall.
-2. Hard snap `linearVelocity = zero` when speed <0.03 now only zeroes tangent component when not hovering — vertical component preserved, so grids don't stop mid-air just before ground. In hover-hold mode, full zero for stable hover.
-3. `RecalculateMass()` now computes weighted average of block local positions and sets `Rigidbody.centerOfMass`, preventing uneven builds from tipping over due to offset COM.
-
-**Fixed — grids do not align with planet surface when placed:**
-4. Added `StabilizeGroundAlignment()` called every FixedUpdate (4 Hz throttle). On radial gravity (`GravityProvider.IsRadial`), when grid is grounded (landing gear locked OR wheels grounded OR low vert speed <0.5 + low total speed <1.5) and not piloted, it gently slerps `up` toward `GravityProvider.GetUp(position)` with 8% lerp and damps angular velocity. Prevents slow tip-over on slopes, keeps grids planted flush to surface.
-5. `BuildSurfacePlacementRotation` already used `GetUp` for new grids — validated and kept. New grids now also have `centerOfMass` set to average, making initial placement more stable.
-6. `GridBuilder` new grid creation already sets `Body.isKinematic = true` for 1 fixed frame then re-enables physics — ensures placement doesn't immediately collide and tip.
-
-**Files touched:**
-- `Scripts/GridSystem/GridEntity.cs`
-- `Scripts/Core/GameVersion.cs`
-- `Changelog.md`
 
 ---
 
 ### [6.27.2-dev] Pipe-Only Water for Biofarm, Diagonal/Vertical Pipe Fixes & Ghost Port Commit
 
-All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
-
----
-
-### [6.27.2-dev] Pipe-Only Water for Biofarm, Diagonal/Vertical Pipe Fixes & Ghost Port Commit
-
-**Type:** PATCH — biofarm piping rules + pipe topology/placement fixes. Save-compatible.
-
-**Fixed — water pulled from adjacent tanks, now ONLY via pipes (as requested):**
-1. `Building.Biofarm` previously used `OverlapSphere` to find any `FluidNode` (tank) within 3.2 m, even without a pipe, plus voxel water fallback. Now it requires a nearby `WaterPipe` (`FluidNodeKind.Pipe`) whose network contains a `WaterTank` with water. `CheckWaterPiped()` and `ConsumePipedWater()` both enforce pipe-only.
-2. Removed voxel water (`WaterVoxel`) emergency source — biofarm now needs piped water from a tank via `WaterPipe` network, matching electrolyser/gas logic.
-3. `GridBiofarm` already pipe-only via `GridLiquidNetwork.DrawLiquidFor`, no change needed, but its visual arms now include biofarm.
-
-**Fixed — pipe placement issues where pipes connect diagonally on grid and land:**
-4. `PipeAdjacency` had `VerticalTolerance = 0.65` but checked `other1 <= tol && other2 <= tol` separately, allowing diagonal with dx=0.5, dz=0.5 (both <=0.65) to count as cardinal. Now uses Euclidean distance of non-dominant plane: `sqrt(other1²+other2²) <= effectiveTol`. Prevents diagonal: vertical with 0.5,0.5 has horiz dist 0.707 >0.65 blocked, while small drift 0.2,0.1 dist 0.22 allowed.
-5. Applied same Euclidean check to `IsCardinalLinkDelta` and `IsAxisAlignedWithinDelta`. The latter now computes dominant axis and checks `sqrt(other1²+other2²) <= effectiveTol` instead of counting active axes, so diagonal like (0.5,1.5,0.5) is blocked.
-
-**Fixed — pipes not connecting vertically when vertically in line on static (visually also):**
-6. Kept `VerticalTolerance = 0.65f` for Y-dominant links, allowing 0.4-0.5 m sideways drift from uneven terrain hit normals that previously broke vertical shafts.
-7. `BuildSystem.IsPlacementValid` now allows thin stacking blocks (`allowStacking = true` = pipes/cables) to ignore static world geometry (terrain MeshCollider). Previously any static overlap blocked placement, so starting a vertical column on rough ground failed. Dynamic rigidbody blocking still enforced.
-8. `WaterPipe` and `GasPipe` visual `GetNeighbourPositions` for both grid and free-placed pipes now include `Building.Biofarm` (static) and `GridBiofarm` (grid) as endpoints, so arms grow toward biofarm model. Also added worldEndpoint bridging for biofarm in both pipe types.
-
-**Fixed — ghost shows port but when placed port isn't added and pipe doesn't connect (on grid):**
-9. Root cause: `BuildSystem.TryGetGridTankVariablePortSnap` and `GridBuilder.TryGetGridTankVariablePortSnap` / `IsMatchingTankBlockForPipe` only accepted `GridLiquidTank`, `GridGasTank`, `GridCryobed` for variable ports. Biofarm was excluded, so ghost preview (which uses same method) showed a port ring but commit path returned false for biofarm family mismatch, or port was added but network didn't consider it connected.
-10. Now both `BuildSystem` and `GridBuilder` accept `GridBiofarm` (and `GridH2O2Generator`) for liquid+gas families. Added `GridBiofarm` to `IsMatchingTankBlockForPipe`, to `TryGetGridTankVariablePortSnap` liquid/gas branches, and to `WaterPipe`/`GasPipe` endpoint consideration (`GridLiquidTank`, `GridH2O2Generator`, `GridBiofarm` etc). Ensured `EnsureGridTankPorts` creates both `Port_GasIO` and `Port_LiquidIO` fixed ports on `Biofarm_Large` prefab plus variable `Port_GasIO_V`/`Port_LiquidIO_V` via `GridTankVariablePorts`.
-11. `WorldStatePersistence` already captures `GridTankVariablePorts` records, so variable ports persist across saves.
-
-**Files touched:**
-- `Scripts/Building/Biofarm.cs`
-- `Scripts/GridSystem/GridBiofarm.cs`
-- `Scripts/Networks/PipeAdjacency.cs`
-- `Scripts/Building/BuildSystem.cs`
-- `Scripts/GridSystem/GridBuilder.cs`
-- `Scripts/Fluids/WaterPipe.cs`
-- `Scripts/Gas/GasPipe.cs`
-- `Scripts/Player/PlayerInteractionTool.cs` (already includes biofarm in UI list from 6.27.1)
-- `Scripts/Editor/VoxelEngineSetupWindow.cs` (port markers from 6.27.0)
-- `Scripts/Core/GameVersion.cs`
-- `Changelog.md`
-
----
-
-All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
 
 ---
 
@@ -237,93 +127,11 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 
 ### [6.27.0-dev] Passive Oxygen Generation — Biofarm Oxygen Garden (11.5)
 
-All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
-
----
-
-### [6.27.0-dev] Passive Oxygen Generation — Biofarm Oxygen Garden (11.5)
-
-**Type:** MINOR — new save-compatible blocks for renewable oxygen. No save schema break.
-
-**Added — static Biofarm (oxygen garden):**
-1. Added `Biofarm` static block `Building/Biofarm.cs`: consumes power (65 W), water (0.18 L/s from fluid tanks/voxel water) and biomass (wheat/corn/carrot/seeds/biomass item) at 1 item per 45s.
-2. Produces oxygen at 0.55 L/s into internal 260 L buffer, slower than industrial electrolyser (~60 L/min vs 30 L/min) but reliable and renewable for offline survival.
-3. Pushes O₂ into nearby Gas Tanks / Cryobeds via `GasNetwork` (gas pipes). Visual grow-light point light.
-4. Added `Biomass` resource item (compressed crop) recipe: 2 wheat + 1 corn → 4 biomass at bench. Also accepts raw crops directly.
-
-**Added — grid Biofarm:**
-5. Added `GridBiofarm` ship block `GridSystem/GridBiofarm.cs`: Large 2.2×1.2×1.6 cell, 580 kg, needs grid power + water (from liquid tanks via `GridLiquidNetwork`) + biomass (from cargo via `GridItemNetwork`).
-6. Internal water 180 L, O₂ 260 L buffers, auto-pulls water/biomass, pushes O₂ via `GridGasNetwork` pipes into gas tanks / grid cryobeds.
-7. Implements `IGridDataProvider` so screens show live water/O₂/fuel time.
-
-**UI & Interaction:**
-8. Added `BiofarmPanel` in `MachineUIs.cs` (static) and `GridBlockUI BiofarmPanel` (grid): tanks gauges for water & O₂, stats (power, water use, O₂ rate, fuel time), biomass slot grid, premium green accent theme.
-9. `GameUIController` now opens biofarm on RMB (static) and via grid block UI (ship), watches biomass container for live refresh.
-10. `PlayerInteractionTool` RMB on biofarm opens its machine panel.
-
-**Setup (non-destructive):**
-11. Step 11 `BuildSurvivalAndLogisticsContent` now creates:
-    - `Item_Biomass` + recipe
-    - `Biofarm_Static` prefab + `Block_Biofarm` + recipe (8 steel, 6 glass, 3 circuits, 6 copper, 2 plastic — expensive to prevent spam)
-12. Step 12 `BuildGridSystemContent` now creates:
-    - `Biofarm_Large` grid prefab (`GridBiofarm`) + `GItem_Biofarm` + `Recipe_GBiofarm` (10 steel, 6 glass, 4 circuits, 8 copper)
-    - Ensures gas + liquid port markers on the prefab so pipes magnetically connect for O₂ out / water in.
-13. Farming research node `res_farming` now also unlocks `Recipe_Biomass`, `Recipe_Biofarm`, `Recipe_GBiofarm`. `res_gas_processing` also unlocks them.
-
-**Balance — anti-spam:**
-14. Prefab scale large (2.4×1.1×1.8 static, 2.2×1.2×1.6 grid) forces physical space.
-15. Power + water + biomass triple requirement, 45s per biomass, low O₂ rate prevents cheap O₂ spam vs electrolyser.
-
-**Manual Unity step:**
-- Run **Tools → Voxel Engine → Voxel Engine Setup → 11. Build Survival + Industrial Logistics Content** once (creates biomass + static biofarm)
-- Then run **12. Build Grid System Content (All Ship/Vehicle Blocks)** once (creates grid biofarm + ports)
-- Both steps idempotent, preserve existing balance values.
-
-**Files touched:**
-- `Scripts/Building/Biofarm.cs`
-- `Scripts/GridSystem/GridBiofarm.cs`
-- `Scripts/Editor/VoxelEngineSetupWindow.cs`
-- `Scripts/UI/MachineUIs.cs`
-- `Scripts/GridSystem/UI/GridBlockUI.cs`
-- `Scripts/UI/GameUIController.cs`
-- `Scripts/Player/PlayerInteractionTool.cs`
-- `Scripts/Core/GameVersion.cs`
-- `Changelog.md`
 
 ---
 
 ### [6.26.6-dev] Cryobed UI Live Stats, Oxygen Tank Visual & Spawn Fixes
 
-All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
-
----
-
-### [6.26.6-dev] Cryobed UI Live Stats, Oxygen Tank Visual & Spawn Fixes
-
-**Type:** PATCH — cryobed UI polish + respawn naming/world-spawn fixes. Save-compatible (no save schema change).
-
-**Added/Improved — Cryobed UI now live:**
-1. `CryobedConfigHud` now live-ticks: power, oxygen, availability, ownership and location refresh ~10Hz without needing to close/reopen.
-2. Oxygen is now rendered as a premium vertical tank graphic (border, fill, gloss, % label, color cues for low/empty/offline) instead of just a number. Grid Cryobeds show fill = `oxygenStored/oxygenCapacity`, static cryobeds show 100% when room oxygen is present.
-3. Tank fill color goes cyan → amber → red based on level/online state for instant readability.
-4. Status pill and panel border tint update live with availability.
-
-**Fixed — linked spawn name said "Linked Spawn" instead of actual cryobed name:**
-5. `DeathScreenHud` now resolves the linked spawn position to the actual Bed/Cryobed/GridCryobed at that spot and uses its custom name as the respawn choice title. Renaming a cryobed now correctly shows "My Bunker" instead of generic "Linked Spawn" on the death screen.
-6. Increased matching tolerance for linked spawn lookup so renamed beds are reliably found.
-
-**Fixed — world spawn falling back to 0,250,0:**
-7. `PlayerSpawner` now persists the FINAL grounded spawn position as the true world spawn for BOTH flat and sphere worlds. Previously flat saved a pre-raycast rough target and sphere never saved at all — so `worldSpawnInitialized` stayed false and the death screen fallback stayed at `0,250,0`.
-8. Added safeguard that replaces the old `0,250,0` parking placeholder if an old `spawn.json` still contains it.
-9. `Respawn()` no longer teleports to `0,250,0` sky when world spawn is uninitialized — it uses current position as safety fallback until true world spawn is known.
-10. `DeathScreenHud` world-spawn gathering tolerates non-zero legacy saved points even if `worldSpawnInitialized` is false.
-
-**Files touched:**
-- `Scripts/UI/CryobedConfigHud.cs`
-- `Scripts/UI/DeathScreenHud.cs`
-- `Scripts/Player/PlayerSpawner.cs`
-- `Scripts/Core/GameVersion.cs`
-- `Changelog.md`
 
 ---
 
@@ -4021,23 +3829,6 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 5. Use [+] and [−] zoom buttons — verify canvas scales smoothly
 6. Hover a ready node — verify the breathing glow is visible
 7. Try the category filters on the left — verify tree re-filters
-
-### [5.41.0-dev] GridBuilder Compile Fix + Shape Wheel Integration Readiness
-
-**Type:** PATCH — save-compatible bugfix (no save schema, balance, or API touch)
-
-**Fixed:**
-- GridBuilder.cs: Invalid token / type / tuple errors (CS1519, CS1031, CS8124, CS1026, CS1022) caused by misplaced closing brace in ShowGhost method — statements for collider stripping, material build, and positioning were incorrectly placed at class scope.
-- Restored correct nesting and indentation so ghost rebuild logic, cleanup, and transform application execute every frame.
-- GridShapeWheel.CurrentShape hook comment and GridBlockMeshBuilder remain ready for shape variants.
-
-**Roadmap Status:**
-- Grid shape variant wheel (4.7.0): **🛠️ WORKING ON** (foundation complete + compile error fixed; next step is non-destructive authored variants via Setup).
-
-**Manual Unity Steps (correct Voxel Engine Setup workflow):**
-1. Tools > Voxel Engine > Voxel Engine Setup → run **2. Spawn Player + UI in Scene** (non-destructive; ensures GridShapeWheel UIDocument at 610 is present).
-2. Equip grid armor/structural block → hold Build Wheel key — verify no errors and premium shape wheel shows.
-3. When authoring variants: use the next appropriate Setup step (Step 18 area) — non-destructive.
 
 ### [5.40.1-dev] Premium Wheel Text Cutoff Fixes + Grid Shape Variant Wheel Foundation
 

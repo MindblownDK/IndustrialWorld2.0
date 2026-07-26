@@ -4162,50 +4162,88 @@ namespace VoxelEngine.EditorTools
             {
                 string path = $"{MISC_PREFABS}/{name}.prefab";
                 var root = new GameObject(name);
+                if (root == null)
+                {
+                    Debug.LogError($"[Ruin] Failed to create root GameObject for {name}");
+                    return null;
+                }
+
+                // Ensure root has a collider for RuinChest RequireComponent
+                var rootCol = root.GetComponent<Collider>();
+                if (rootCol == null) root.AddComponent<BoxCollider>();
 
                 // Rusted shell — 4 small cubes forming a collapsed frame
                 for (int i = 0; i < 4; i++)
                 {
                     var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    if (cube == null) continue;
                     cube.name = $"Rusted{i}";
                     cube.transform.SetParent(root.transform, false);
                     cube.transform.localPosition = new Vector3(
-                        Random.Range(-size.x*0.3f, size.x*0.3f),
-                        Random.Range(0, size.y*0.5f),
-                        Random.Range(-size.z*0.3f, size.z*0.3f));
-                    cube.transform.localScale = Vector3.one * Random.Range(0.6f, 1.2f);
+                        UnityEngine.Random.Range(-size.x*0.3f, size.x*0.3f),
+                        UnityEngine.Random.Range(0, size.y*0.5f),
+                        UnityEngine.Random.Range(-size.z*0.3f, size.z*0.3f));
+                    cube.transform.localScale = Vector3.one * UnityEngine.Random.Range(0.6f, 1.2f);
                     var rend = cube.GetComponent<Renderer>();
-                    if (rend != null) rend.sharedMaterial = MakeColoredMat(MISC_PREFABS, $"Mat_{name}_{i}", rustColor * Random.Range(0.8f,1.1f));
+                    if (rend != null)
+                    {
+                        var mat = MakeColoredMat(MISC_PREFABS, $"Mat_{name}_{i}", rustColor * UnityEngine.Random.Range(0.8f,1.1f));
+                        if (mat != null) rend.sharedMaterial = mat;
+                    }
                 }
 
                 // Chest / loot point — add RuinChest on ROOT so any child collider hit finds it via GetComponentInParent
                 var chestGO = new GameObject("RuinChest");
                 chestGO.transform.SetParent(root.transform, false);
                 chestGO.transform.localPosition = new Vector3(0, 0.3f, 0);
-                var chestCol = chestGO.AddComponent<BoxCollider>();
-                chestCol.size = new Vector3(1.2f, 0.8f, 0.8f);
+                var chestCol = chestGO.GetComponent<Collider>();
+                if (chestCol == null) chestCol = chestGO.AddComponent<BoxCollider>();
                 chestCol.isTrigger = false;
+                if (chestCol is BoxCollider bc) bc.size = new Vector3(1.2f, 0.8f, 0.8f);
 
                 // Root also gets RuinChest for reliable interaction (any rusted cube hit → parent root → chest)
-                var rootChest = root.AddComponent<VoxelEngine.Exploration.RuinChest>();
+                var rootChest = root.GetComponent<VoxelEngine.Exploration.RuinChest>();
+                if (rootChest == null) rootChest = root.AddComponent<VoxelEngine.Exploration.RuinChest>();
+                if (rootChest == null)
+                {
+                    Debug.LogError($"[Ruin] Failed to add RuinChest to {name} root");
+                    UnityEngine.Object.DestroyImmediate(root);
+                    return null;
+                }
                 rootChest.ruinName = name.Replace("Ruin_", "").Replace("_", " ");
                 rootChest.minComponents = minComp;
                 rootChest.maxComponents = maxComp;
-                rootChest.possibleComponents = new VoxelEngine.Items.ItemDefinition[] { steelPlate, ironPlate, copperWire, circuit };
-                rootChest.possibleFuel = new VoxelEngine.Items.ItemDefinition[] { coal };
-                rootChest.possibleBlueprints = new VoxelEngine.Items.BlueprintDataCoreItem[] { bpNacelle, bpGearbox, bpBlade, bpTower };
+                // Use null-coalesced arrays to avoid null refs if plates missing
+                var comps = new System.Collections.Generic.List<VoxelEngine.Items.ItemDefinition>();
+                if (steelPlate != null) comps.Add(steelPlate);
+                if (ironPlate != null) comps.Add(ironPlate);
+                if (copperWire != null) comps.Add(copperWire);
+                if (circuit != null) comps.Add(circuit);
+                if (comps.Count == 0 && ironIngot != null) comps.Add(ironIngot);
+                rootChest.possibleComponents = comps.ToArray();
+                rootChest.possibleFuel = coal != null ? new VoxelEngine.Items.ItemDefinition[] { coal } : new VoxelEngine.Items.ItemDefinition[0];
+                var bps = new System.Collections.Generic.List<VoxelEngine.Items.BlueprintDataCoreItem>();
+                if (bpNacelle != null) bps.Add(bpNacelle);
+                if (bpGearbox != null) bps.Add(bpGearbox);
+                if (bpBlade != null) bps.Add(bpBlade);
+                if (bpTower != null) bps.Add(bpTower);
+                rootChest.possibleBlueprints = bps.ToArray();
 
                 // Child chest also gets a copy (visual) but root is authoritative
-                var childChest = chestGO.AddComponent<VoxelEngine.Exploration.RuinChest>();
-                childChest.ruinName = rootChest.ruinName;
-                childChest.minComponents = minComp;
-                childChest.maxComponents = maxComp;
-                childChest.possibleComponents = rootChest.possibleComponents;
-                childChest.possibleFuel = rootChest.possibleFuel;
-                childChest.possibleBlueprints = rootChest.possibleBlueprints;
+                var childChest = chestGO.GetComponent<VoxelEngine.Exploration.RuinChest>();
+                if (childChest == null) childChest = chestGO.AddComponent<VoxelEngine.Exploration.RuinChest>();
+                if (childChest != null)
+                {
+                    childChest.ruinName = rootChest.ruinName;
+                    childChest.minComponents = minComp;
+                    childChest.maxComponents = maxComp;
+                    childChest.possibleComponents = rootChest.possibleComponents;
+                    childChest.possibleFuel = rootChest.possibleFuel;
+                    childChest.possibleBlueprints = rootChest.possibleBlueprints;
+                }
 
                 var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
-                Object.DestroyImmediate(root);
+                UnityEngine.Object.DestroyImmediate(root);
                 return prefab;
             }
 
@@ -4214,12 +4252,18 @@ namespace VoxelEngine.EditorTools
             var ruinBunker = MakeRuinPrefab("Ruin_Bunker", new Color(0.40f,0.40f,0.42f), new Vector3(2.5f,1.8f,2.5f), 2, 3);
 
             // Ruin blocks (placeable decoration, not required for scatter but handy)
-            var blockRuinWarehouse = MakeBlk(MISC_BLOCKS, "Block_RuinWarehouse", "Rusted Warehouse Ruin",
-                "Collapsed warehouse from dead civilization. Contains loot and possibly a damaged blueprint core. Spawns rarely in Wasteland/Plains.",
-                new Color(0.55f,0.38f,0.22f), ruinWarehouse, "Ruins", hp: 250, miningTier: 1);
-            var blockRuinFactory = MakeBlk(MISC_BLOCKS, "Block_RuinFactory", "Collapsed Factory Ruin",
-                "Derelict factory, overgrown and rusted. Holds components and blueprint cores.",
-                new Color(0.45f,0.32f,0.20f), ruinFactory, "Ruins", hp: 300, miningTier: 1);
+            if (ruinWarehouse != null)
+            {
+                var blockRuinWarehouse = MakeBlk(MISC_BLOCKS, "Block_RuinWarehouse", "Rusted Warehouse Ruin",
+                    "Collapsed warehouse from dead civilization. Contains loot and possibly a damaged blueprint core. Spawns rarely in Wasteland/Plains.",
+                    new Color(0.55f,0.38f,0.22f), ruinWarehouse, "Ruins", hp: 250, miningTier: 1);
+            }
+            if (ruinFactory != null)
+            {
+                var blockRuinFactory = MakeBlk(MISC_BLOCKS, "Block_RuinFactory", "Collapsed Factory Ruin",
+                    "Derelict factory, overgrown and rusted. Holds components and blueprint cores.",
+                    new Color(0.45f,0.32f,0.20f), ruinFactory, "Ruins", hp: 300, miningTier: 1);
+            }
 
             // No recipes for ruins — they are found, not crafted.
 
@@ -4240,9 +4284,12 @@ namespace VoxelEngine.EditorTools
                         bool hasRuin = false;
                         foreach (var e in existing) if (e.prefab != null && e.prefab.name.Contains("Ruin_")) { hasRuin = true; break; }
                         if (hasRuin) continue;
-                        existing.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = ruinWarehouse, density = 0.0012f, minScale = 0.9f, maxScale = 1.3f, minHeight = 0, maxHeight = 9999 });
-                        existing.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = ruinFactory, density = 0.0009f, minScale = 0.9f, maxScale = 1.4f, minHeight = 0, maxHeight = 9999 });
-                        existing.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = ruinBunker, density = 0.0010f, minScale = 0.9f, maxScale = 1.2f, minHeight = 0, maxHeight = 9999 });
+                        if (ruinWarehouse != null)
+                            existing.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = ruinWarehouse, density = 0.0012f, minScale = 0.9f, maxScale = 1.3f, minHeight = 0, maxHeight = 9999 });
+                        if (ruinFactory != null)
+                            existing.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = ruinFactory, density = 0.0009f, minScale = 0.9f, maxScale = 1.4f, minHeight = 0, maxHeight = 9999 });
+                        if (ruinBunker != null)
+                            existing.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = ruinBunker, density = 0.0010f, minScale = 0.9f, maxScale = 1.2f, minHeight = 0, maxHeight = 9999 });
                         biome.scatter = existing.ToArray();
                         EditorUtility.SetDirty(biome);
                     }

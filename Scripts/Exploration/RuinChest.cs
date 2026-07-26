@@ -43,7 +43,7 @@ namespace VoxelEngine.Exploration
         }
 
         // Called by PlayerInteractionTool RMB
-        public bool TryOpen(VoxelEngine.Player.Inventory inventory)
+        public bool TryOpen(Inventory inventory)
         {
             if (isLooted)
             {
