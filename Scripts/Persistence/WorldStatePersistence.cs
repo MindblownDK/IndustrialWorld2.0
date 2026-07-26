@@ -141,8 +141,8 @@ namespace VoxelEngine.Persistence
                 {
                     VoxelEngine.Player.OfflineSurvivalService.EnsureInstance();
                     var inv = FindPlayerInventory();
-                    if (inv != null && OfflineSurvivalService.Instance != null)
-                        OfflineSurvivalService.Instance.SaveOfflineState(inv.transform.position);
+                    if (inv != null && VoxelEngine.Player.OfflineSurvivalService.Instance != null)
+                        VoxelEngine.Player.OfflineSurvivalService.Instance.SaveOfflineState(inv.transform.position);
                 }
                 catch (Exception ex2) { Debug.LogWarning("[WorldState] Offline save: " + ex2.Message); }
             }

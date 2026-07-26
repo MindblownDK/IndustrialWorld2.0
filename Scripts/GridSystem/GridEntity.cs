@@ -942,14 +942,12 @@ namespace VoxelEngine.GridSystem
 
             // Only stabilize when grounded-ish: landing gear locked, wheels grounded,
             // or low vertical velocity near surface
-            bool hasLandingGear = false;
             bool anyLocked = false;
             bool anyGrounded = false;
             foreach (var block in AllBlocks)
             {
                 if (block is GridLandingGear lg)
                 {
-                    hasLandingGear = true;
                     if (lg.IsLocked) anyLocked = true;
                 }
                 if (block is GridWheel wh && wh.IsGrounded) anyGrounded = true;

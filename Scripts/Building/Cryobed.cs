@@ -91,35 +91,35 @@ namespace VoxelEngine.Building
             const float cryobedRadius = 6f;
 
             // Static biofarms producing
-            foreach (var bf in Object.FindObjectsByType<Biofarm>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            foreach (var bf in Object.FindObjectsByType<Biofarm>(FindObjectsInactive.Exclude))
             {
                 if (bf == null || !bf.IsRunning) continue;
                 if ((bf.transform.position - pos).sqrMagnitude <= biofarmRadius * biofarmRadius)
                     return true;
             }
             // Grid biofarms producing
-            foreach (var bf in Object.FindObjectsByType<GridBiofarm>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            foreach (var bf in Object.FindObjectsByType<GridBiofarm>(FindObjectsInactive.Exclude))
             {
                 if (bf == null || !bf.IsProducing) continue;
                 if ((bf.transform.position - pos).sqrMagnitude <= biofarmRadius * biofarmRadius)
                     return true;
             }
             // Static gas tanks with O₂
-            foreach (var tank in Object.FindObjectsByType<GasTank>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            foreach (var tank in Object.FindObjectsByType<GasTank>(FindObjectsInactive.Exclude))
             {
                 if (tank == null || tank.storedGasType != GasType.Oxygen || tank.storedAmount < 5f) continue;
                 if ((tank.transform.position - pos).sqrMagnitude <= tankRadius * tankRadius)
                     return true;
             }
             // Grid gas tanks with O₂
-            foreach (var tank in Object.FindObjectsByType<GridGasTank>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            foreach (var tank in Object.FindObjectsByType<GridGasTank>(FindObjectsInactive.Exclude))
             {
                 if (tank == null || tank.gasType != GasType.Oxygen || tank.stored < 5f) continue;
                 if ((tank.transform.position - pos).sqrMagnitude <= tankRadius * tankRadius)
                     return true;
             }
             // Grid cryobeds with O₂ (even if not claimed)
-            foreach (var cryo in Object.FindObjectsByType<GridCryobed>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            foreach (var cryo in Object.FindObjectsByType<GridCryobed>(FindObjectsInactive.Exclude))
             {
                 if (cryo == null || !cryo.HasOxygenEnvironment || !cryo.IsPowered) continue;
                 if ((cryo.transform.position - pos).sqrMagnitude <= cryobedRadius * cryobedRadius)

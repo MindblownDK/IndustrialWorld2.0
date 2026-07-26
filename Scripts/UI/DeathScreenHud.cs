@@ -200,7 +200,7 @@ namespace VoxelEngine.UI
                 });
             }
 
-            foreach (var bed in Object.FindObjectsByType<Bed>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            foreach (var bed in Object.FindObjectsByType<Bed>(FindObjectsInactive.Exclude))
             {
                 if (bed == null) continue;
                 Vector3 pos = bed.transform.position + Vector3.up * 1.2f;
@@ -213,7 +213,7 @@ namespace VoxelEngine.UI
                 });
             }
 
-            foreach (var cryo in Object.FindObjectsByType<Cryobed>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            foreach (var cryo in Object.FindObjectsByType<Cryobed>(FindObjectsInactive.Exclude))
             {
                 if (cryo == null || !cryo.claimedByLocalPlayer || !cryo.IsAvailableForRespawn) continue;
                 Vector3 pos = cryo.SpawnPoint;
@@ -226,7 +226,7 @@ namespace VoxelEngine.UI
                 });
             }
 
-            foreach (var cryo in Object.FindObjectsByType<GridCryobed>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            foreach (var cryo in Object.FindObjectsByType<GridCryobed>(FindObjectsInactive.Exclude))
             {
                 if (cryo == null || !cryo.claimedByLocalPlayer || !cryo.IsAvailableForRespawn) continue;
                 Vector3 pos = cryo.SpawnPoint;
@@ -250,20 +250,20 @@ namespace VoxelEngine.UI
         private static string ResolveLinkedSpawnName(Vector3 linkedPos)
         {
             const float tolSq = 2.5f; // slightly larger tolerance for floating point
-            foreach (var bed in Object.FindObjectsByType<Bed>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            foreach (var bed in Object.FindObjectsByType<Bed>(FindObjectsInactive.Exclude))
             {
                 if (bed == null) continue;
                 Vector3 pos = bed.transform.position + Vector3.up * 1.2f;
                 if ((pos - linkedPos).sqrMagnitude < tolSq)
                     return string.IsNullOrWhiteSpace(bed.displayName) ? "Bed" : bed.displayName;
             }
-            foreach (var cryo in Object.FindObjectsByType<Cryobed>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            foreach (var cryo in Object.FindObjectsByType<Cryobed>(FindObjectsInactive.Exclude))
             {
                 if (cryo == null) continue;
                 if ((cryo.SpawnPoint - linkedPos).sqrMagnitude < tolSq)
                     return string.IsNullOrWhiteSpace(cryo.displayName) ? "Cryobed" : cryo.displayName;
             }
-            foreach (var cryo in Object.FindObjectsByType<GridCryobed>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            foreach (var cryo in Object.FindObjectsByType<GridCryobed>(FindObjectsInactive.Exclude))
             {
                 if (cryo == null) continue;
                 if ((cryo.SpawnPoint - linkedPos).sqrMagnitude < tolSq)
@@ -274,10 +274,10 @@ namespace VoxelEngine.UI
 
         private static bool LinkedSpawnIsUnavailableCryobed(Vector3 linkedPos)
         {
-            foreach (var cryo in Object.FindObjectsByType<Cryobed>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            foreach (var cryo in Object.FindObjectsByType<Cryobed>(FindObjectsInactive.Exclude))
                 if (cryo != null && (cryo.SpawnPoint - linkedPos).sqrMagnitude < 1.5f)
                     return !cryo.IsAvailableForRespawn;
-            foreach (var cryo in Object.FindObjectsByType<GridCryobed>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            foreach (var cryo in Object.FindObjectsByType<GridCryobed>(FindObjectsInactive.Exclude))
                 if (cryo != null && (cryo.SpawnPoint - linkedPos).sqrMagnitude < 1.5f)
                     return !cryo.IsAvailableForRespawn;
             return false;

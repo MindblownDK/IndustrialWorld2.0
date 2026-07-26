@@ -281,7 +281,7 @@ namespace VoxelEngine.Player
         private GridCryobed FindGridCryobedNear(Vector3 spawnPos, float tol = 2.5f)
         {
             float tolSq = tol * tol;
-            foreach (var cryo in FindObjectsByType<GridCryobed>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            foreach (var cryo in FindObjectsByType<GridCryobed>(FindObjectsInactive.Exclude))
             {
                 if (cryo == null) continue;
                 if ((cryo.SpawnPoint - spawnPos).sqrMagnitude < tolSq) return cryo;
@@ -292,7 +292,7 @@ namespace VoxelEngine.Player
         private Cryobed FindStaticCryobedNear(Vector3 spawnPos, float tol = 2.5f)
         {
             float tolSq = tol * tol;
-            foreach (var cryo in FindObjectsByType<Cryobed>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            foreach (var cryo in FindObjectsByType<Cryobed>(FindObjectsInactive.Exclude))
             {
                 if (cryo == null) continue;
                 if ((cryo.SpawnPoint - spawnPos).sqrMagnitude < tolSq) return cryo;
@@ -308,7 +308,7 @@ namespace VoxelEngine.Player
             const float cryobedRadius = 6f;
 
             // Static biofarms
-            foreach (var bf in FindObjectsByType<Building.Biofarm>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            foreach (var bf in FindObjectsByType<Building.Biofarm>(FindObjectsInactive.Exclude))
             {
                 if (bf == null || !bf.IsRunning) continue;
                 if ((bf.transform.position - pos).sqrMagnitude <= biofarmRadius * biofarmRadius)
@@ -316,7 +316,7 @@ namespace VoxelEngine.Player
             }
 
             // Grid biofarms
-            foreach (var bf in FindObjectsByType<GridBiofarm>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            foreach (var bf in FindObjectsByType<GridBiofarm>(FindObjectsInactive.Exclude))
             {
                 if (bf == null || !bf.IsProducing) continue;
                 if ((bf.transform.position - pos).sqrMagnitude <= biofarmRadius * biofarmRadius)
@@ -324,7 +324,7 @@ namespace VoxelEngine.Player
             }
 
             // Static gas tanks with O₂
-            foreach (var tank in FindObjectsByType<GasTank>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            foreach (var tank in FindObjectsByType<GasTank>(FindObjectsInactive.Exclude))
             {
                 if (tank == null) continue;
                 if (tank.storedGasType != GasType.Oxygen) continue;
@@ -334,7 +334,7 @@ namespace VoxelEngine.Player
             }
 
             // Grid gas tanks with O₂
-            foreach (var tank in FindObjectsByType<GridGasTank>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            foreach (var tank in FindObjectsByType<GridGasTank>(FindObjectsInactive.Exclude))
             {
                 if (tank == null) continue;
                 if (tank.gasType != GasType.Oxygen) continue;
@@ -344,7 +344,7 @@ namespace VoxelEngine.Player
             }
 
             // Grid cryobeds with O₂ (even if not claimed)
-            foreach (var cryo in FindObjectsByType<GridCryobed>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            foreach (var cryo in FindObjectsByType<GridCryobed>(FindObjectsInactive.Exclude))
             {
                 if (cryo == null || !cryo.HasOxygenEnvironment) continue;
                 if (!cryo.IsPowered) continue;
@@ -353,7 +353,7 @@ namespace VoxelEngine.Player
             }
 
             // Static cryobeds with O₂ (room O₂)
-            foreach (var cryo in FindObjectsByType<Cryobed>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            foreach (var cryo in FindObjectsByType<Cryobed>(FindObjectsInactive.Exclude))
             {
                 if (cryo == null || !cryo.IsAvailableForRespawn) continue;
                 if ((cryo.transform.position - pos).sqrMagnitude <= cryobedRadius * cryobedRadius)

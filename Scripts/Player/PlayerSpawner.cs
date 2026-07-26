@@ -56,11 +56,13 @@ namespace VoxelEngine.Player
             // This runs after WorldStatePersistence has restored placed cryobeds/biofarms.
             bool offlineDied = false;
             string offlineReason = "";
+
+            OfflineSurvivalService.EnsureInstance();
+            // Give one extra frame for grid blocks to restore from save before checking
+            yield return null;
+
             try
             {
-                OfflineSurvivalService.EnsureInstance();
-                // Give one extra frame for grid blocks to restore from save before checking
-                yield return null;
                 if (OfflineSurvivalService.Instance != null)
                 {
                     var offlineRes = OfflineSurvivalService.Instance.CheckOfflineSurvivalAndConsume();

@@ -1,7 +1,42 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.28.0-dev`
+**Current Version:** `6.28.1-dev`
+
+All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.28.1-dev] Compile Fixes — Obsolete API & Offline Service Wiring
+
+**Type:** PATCH — build fix, no gameplay change. Save-compatible.
+
+**Fixed — compile errors:**
+1. `WorldStatePersistence.cs(144)` CS0103 `OfflineSurvivalService` not found — added fully qualified `VoxelEngine.Player.OfflineSurvivalService` for both EnsureInstance and Instance checks.
+2. `PlayerSpawner.cs(63)` CS1626 Cannot yield inside try with catch — moved `yield return null` (grid restore frame) outside try block. Offline check now runs after extra frame, try only wraps the actual consume logic.
+3. `GridEntity.cs` CS0219 `hasLandingGear` assigned never used — removed unused variable, keeping `anyLocked`/`anyGrounded` checks.
+
+**Fixed — obsolete API warnings (CS0618):**
+4. Replaced all `FindObjectsByType<T>(FindObjectsInactive.Exclude, FindObjectsSortMode.None)` with `FindObjectsByType<T>(FindObjectsInactive.Exclude)` in:
+   - `DeathScreenHud.cs` (8 occurrences)
+   - `Building/Cryobed.cs` (5 occurrences)
+   - `Player/OfflineSurvivalService.cs` (8 occurrences)
+5. `VoxelCrestBlockFoamEmitter.cs(83)` CS0652 sbyte density <200 outside range — changed to `<100` (sbyte max 127) with comment.
+
+**Files touched:**
+- `Scripts/Persistence/WorldStatePersistence.cs`
+- `Scripts/Player/PlayerSpawner.cs`
+- `Scripts/GridSystem/GridEntity.cs`
+- `Scripts/Building/Cryobed.cs`
+- `Scripts/UI/DeathScreenHud.cs`
+- `Scripts/Player/OfflineSurvivalService.cs`
+- `Scripts/WaterSim/VoxelCrestBlockFoamEmitter.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
+
+---
+
+### [6.28.0-dev] Offline Survival & Room Oxygen (11.4 Completion)
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
 

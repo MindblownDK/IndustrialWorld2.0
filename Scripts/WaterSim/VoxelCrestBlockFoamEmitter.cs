@@ -80,7 +80,7 @@ namespace VoxelEngine.WaterSim
                 var vp = cVox + new Vector3Int(x, y, z);
                 var v = world.GetVoxelWorld(vp);
                 if (!v.IsSolid) continue;
-                if (addToPlacedBlocksOnly && v.density < 200) continue; // crude placed-block heuristic
+                if (addToPlacedBlocksOnly && v.density < 100) continue; // crude placed-block heuristic (sbyte max 127)
 
                 // Is this solid touching water?
                 bool touchesWater = false;
