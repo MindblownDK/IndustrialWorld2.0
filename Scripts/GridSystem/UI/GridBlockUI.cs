@@ -46,6 +46,7 @@ namespace VoxelEngine.GridSystem.UI
                 case GridElectricFurnace ef: return FurnacePanel(ef, slot);
                 case GridBeacon bc:         return BeaconPanel(bc);
                 case GridOreDetector od:    return OreDetectorPanel(od);
+                case GridCryobed cryo:      return CryobedPanel(cryo);
                 case GridSlidingDoor door:  return SlidingDoorPanel(door);
                 case VoxelEngine.Simulation.GridLightBlock gl: return GridLightPanel(gl);
                 default:                    return GenericPanel(block);
@@ -937,6 +938,54 @@ namespace VoxelEngine.GridSystem.UI
             }
             p.Add(T.Spacer(4));
             p.Add(T.Muted("Scans the terrain below for ore deposits. Updates every 2 seconds."));
+            return p;
+        }
+
+        // ── CRYOBED ───────────────────────────────────────────────────────
+        private static VisualElement CryobedPanel(GridCryobed cryo)
+        {
+            var p = T.MachinePanel();
+            var online = cryo.IsAvailableForRespawn;
+            var (hdr, _, _, _) = T.HeaderRow($"❄ {cryo.blockName}", cryo.AvailabilityText,
+                online ? T.AccentGreen : T.AccentAmber);
+            p.Add(hdr);
+            p.Add(T.AccentDivider(new Color(0.45f, 0.85f, 1f)));
+            p.Add(T.StatRow("⚡", "Power", cryo.PowerEstimateText, T.AccentGold));
+            p.Add(T.StatRow("◉", "Oxygen", cryo.OxygenEstimateText, T.AccentCyan));
+            p.Add(T.StatRow("⌂", "Ownership", cryo.claimedByLocalPlayer ? "Owned by you" : "Unclaimed", T.AccentTeal));
+            p.Add(T.Spacer(6));
+
+            var nameField = new TextField("Name") { value = cryo.blockName };
+            nameField.RegisterValueChangedCallback(evt =>
+            {
+                cryo.blockName = string.IsNullOrWhiteSpace(evt.newValue) ? "Grid Cryobed" : evt.newValue.Trim();
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            });
+            p.Add(nameField);
+            p.Add(T.Spacer(6));
+
+            var row = Row(); row.style.flexWrap = Wrap.Wrap;
+            row.Add(T.SmallButton(cryo.claimedByLocalPlayer ? "Claimed" : "Claim", () =>
+            {
+                cryo.ClaimAsSpawn();
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, online ? T.AccentCyan : T.BgSlot));
+            row.Add(T.SmallButton("Remove", () =>
+            {
+                cryo.claimedByLocalPlayer = false;
+                var session = VoxelEngine.Menu.WorldSession.Instance;
+                if (session != null && session.hasBedSpawn && (session.bedSpawnPoint - cryo.SpawnPoint).sqrMagnitude < 1.5f)
+                {
+                    session.hasBedSpawn = false;
+                    session.SaveSpawnSidecar();
+                }
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, T.AccentAmber));
+            row.Add(T.SmallButton("Transfer", () =>
+                VoxelEngine.UI.BuildFeedbackHud.Show("Transfer", "Multiplayer ownership transfer will unlock later", null, T.AccentAmber), T.AccentDim));
+            p.Add(row);
+            p.Add(T.Spacer(4));
+            p.Add(T.Muted("Gas pipes can install a variable oxygen port on the hull. Pump oxygen from H2/O2 generators into the cryobed for offline reserve."));
             return p;
         }
 

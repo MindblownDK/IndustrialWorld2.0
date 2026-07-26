@@ -562,7 +562,8 @@ namespace VoxelEngine.Building
             }
             else if (pipeFamily == VoxelEngine.Maritime.PipeFamily.Gas)
             {
-                if (targetBlock is not VoxelEngine.GridSystem.GridGasTank) return false;
+                if (targetBlock is not VoxelEngine.GridSystem.GridGasTank
+                    && targetBlock is not VoxelEngine.GridSystem.GridCryobed) return false;
                 tankFamily = VoxelEngine.GridSystem.GridTankPortFamily.Gas;
             }
             else return false;

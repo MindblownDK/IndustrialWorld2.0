@@ -14,10 +14,14 @@ namespace VoxelEngine.GridSystem
         public bool oxygenRequired = true;
         public bool poweredRequired = true;
         public float idleWatts = 35f;
+        public bool claimedByLocalPlayer;
+        public float oxygenCapacity = 120f;
+        public float oxygenStored;
+        public float offlineOxygenPerHour = 12f;
 
         public override float PowerDraw => Enabled && poweredRequired ? idleWatts : 0f;
         public bool IsPowered => !poweredRequired || Grid == null || Grid.HasPower;
-        public bool HasOxygenEnvironment => !oxygenRequired || (Grid != null && Grid.OxygenStored > 0.01f);
+        public bool HasOxygenEnvironment => !oxygenRequired || oxygenStored > 0.01f || (Grid != null && Grid.OxygenStored > 0.01f);
         public bool IsAvailableForRespawn => Enabled && IsPowered && HasOxygenEnvironment;
         public string AvailabilityText => IsAvailableForRespawn
             ? "ONLINE"
@@ -56,10 +60,10 @@ namespace VoxelEngine.GridSystem
             get
             {
                 if (!oxygenRequired) return "Oxygen optional";
-                float oxygen = Grid != null ? Grid.OxygenStored : 0f;
-                const float offlineOxygenPerHour = 12f;
-                return oxygen > 0.01f
-                    ? $"{oxygen:0} O₂ stored · ~{oxygen / offlineOxygenPerHour:0.0} h reserve"
+                float gridOxygen = Grid != null ? Grid.OxygenStored : 0f;
+                float total = oxygenStored + gridOxygen;
+                return total > 0.01f
+                    ? $"{oxygenStored:0}/{oxygenCapacity:0} internal + {gridOxygen:0} grid O₂ · ~{total / Mathf.Max(0.01f, offlineOxygenPerHour):0.0} h reserve"
                     : "No connected oxygen reserve";
             }
         }
@@ -70,10 +74,20 @@ namespace VoxelEngine.GridSystem
             if (string.IsNullOrEmpty(blockName) || blockName == "Armor Block") blockName = "Grid Cryobed";
         }
 
+        public float AddOxygen(float amount)
+        {
+            if (amount <= 0f) return 0f;
+            float space = Mathf.Max(0f, oxygenCapacity - oxygenStored);
+            float take = Mathf.Min(space, amount);
+            oxygenStored += take;
+            return take;
+        }
+
         public void ClaimAsSpawn()
         {
             var session = VoxelEngine.Menu.WorldSession.Instance;
             if (session == null) return;
+            claimedByLocalPlayer = true;
             session.bedSpawnPoint = SpawnPoint;
             session.hasBedSpawn = true;
             session.SaveSpawnSidecar();

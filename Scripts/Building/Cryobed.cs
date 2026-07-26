@@ -16,6 +16,7 @@ namespace VoxelEngine.Building
         public bool oxygenRequired = true;
         public bool poweredRequired = true;
         public float idleWatts = 35f;
+        public bool claimedByLocalPlayer;
 
         public bool IsPowered
         {
@@ -55,6 +56,7 @@ namespace VoxelEngine.Building
         {
             var session = VoxelEngine.Menu.WorldSession.Instance;
             if (session == null) return;
+            claimedByLocalPlayer = true;
             session.bedSpawnPoint = SpawnPoint;
             session.hasBedSpawn = true;
             session.SaveSpawnSidecar();

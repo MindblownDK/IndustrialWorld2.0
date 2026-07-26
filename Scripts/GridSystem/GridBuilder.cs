@@ -771,7 +771,7 @@ namespace VoxelEngine.GridSystem
         private static bool IsMatchingTankBlockForPipe(GridBlock block, PipeFamily family)
         {
             return (family == PipeFamily.Liquid && block is GridLiquidTank)
-                || (family == PipeFamily.Gas && block is GridGasTank);
+                || (family == PipeFamily.Gas && (block is GridGasTank || block is GridCryobed));
         }
 
         private bool TryGetGridTankVariablePortSnap(GridEntity grid, GridBlock targetBlock,
@@ -797,7 +797,7 @@ namespace VoxelEngine.GridSystem
             }
             else if (pipeFamily == PipeFamily.Gas)
             {
-                if (targetBlock is not GridGasTank) return false;
+                if (targetBlock is not GridGasTank && targetBlock is not GridCryobed) return false;
                 tankFamily = GridTankPortFamily.Gas;
             }
             else return false;

@@ -1,9 +1,46 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.26.2-dev`
+**Current Version:** `6.26.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.26.3-dev] Cryobed Ownership, Terminal & Oxygen Port Polish
+
+**Type:** PATCH — cryobed behavior/UI/connectivity fixes plus roadmap update. Save-compatible.
+
+**Fixed — cryobed ownership and respawn list:**
+1. Claiming a cryobed now marks that cryobed owned without clearing ownership on other cryobeds.
+2. Death screen lists claimed and currently available cryobeds, so multiple owned cryobeds can appear.
+3. The active linked spawn is hidden when it points at an unavailable cryobed, preventing unpowered Grid Cryobeds from remaining spawnable through the fallback linked-spawn entry.
+4. Claim button is disabled when the cryobed is unavailable, and the button row wraps with shorter labels so Close stays inside the panel.
+5. Escape now closes the Cryobed Control UI.
+6. Holding a placeable block no longer opens the Cryobed UI; block placement keeps priority.
+
+**Improved — Grid Cryobed terminal and oxygen:**
+7. Grid Cryobed now has a dedicated Ship Control / grid block panel with status, power estimate, oxygen estimate, rename, claim/remove ownership, and transfer placeholder controls.
+8. Gas pipes can now install variable gas ports on Grid Cryobeds, matching tank-style variable input.
+9. Grid Cryobeds have an internal oxygen buffer and can receive oxygen from connected gas pipe infrastructure; oxygen/power estimates now show reserve time.
+
+**Roadmap:**
+10. Added `11.5 Passive Oxygen Generation` for an expensive passive Biofarm / oxygen garden system that can feed tanks, cryobeds, and future airtight spaces.
+
+**Files touched:**
+- `Scripts/Building/Cryobed.cs`
+- `Scripts/GridSystem/GridCryobed.cs`
+- `Scripts/GridSystem/GridBuilder.cs`
+- `Scripts/GridSystem/GridGasNetwork.cs`
+- `Scripts/GridSystem/UI/GridBlockUI.cs`
+- `Scripts/Building/BuildSystem.cs`
+- `Scripts/UI/CryobedConfigHud.cs`
+- `Scripts/UI/DeathScreenHud.cs`
+- `Scripts/UI/GameUIController.cs`
+- `Scripts/Player/PlayerInteractionTool.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
+- `Roadmap.md`
 
 ---
 

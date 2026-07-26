@@ -172,12 +172,12 @@ namespace VoxelEngine.UI
                 accent = new Color(0.42f, 0.75f, 1.0f)
             });
 
-            if (session != null && session.hasBedSpawn)
+            if (session != null && session.hasBedSpawn && !LinkedSpawnIsUnavailableCryobed(session.bedSpawnPoint))
             {
                 AddUnique(list, new RespawnChoice
                 {
                     title = "Linked Spawn",
-                    detail = "Current bed / cryobed anchor · " + FormatPosition(session.bedSpawnPoint),
+                    detail = "Current active spawn · " + FormatPosition(session.bedSpawnPoint),
                     position = session.bedSpawnPoint,
                     accent = new Color(0.30f, 0.95f, 0.62f)
                 });
@@ -198,7 +198,7 @@ namespace VoxelEngine.UI
 
             foreach (var cryo in Object.FindObjectsByType<Cryobed>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
             {
-                if (cryo == null || !cryo.IsAvailableForRespawn) continue;
+                if (cryo == null || !cryo.claimedByLocalPlayer || !cryo.IsAvailableForRespawn) continue;
                 Vector3 pos = cryo.SpawnPoint;
                 AddUnique(list, new RespawnChoice
                 {
@@ -211,7 +211,7 @@ namespace VoxelEngine.UI
 
             foreach (var cryo in Object.FindObjectsByType<GridCryobed>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
             {
-                if (cryo == null || !cryo.IsAvailableForRespawn) continue;
+                if (cryo == null || !cryo.claimedByLocalPlayer || !cryo.IsAvailableForRespawn) continue;
                 Vector3 pos = cryo.SpawnPoint;
                 AddUnique(list, new RespawnChoice
                 {
@@ -223,6 +223,17 @@ namespace VoxelEngine.UI
             }
 
             return list;
+        }
+
+        private static bool LinkedSpawnIsUnavailableCryobed(Vector3 linkedPos)
+        {
+            foreach (var cryo in Object.FindObjectsByType<Cryobed>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+                if (cryo != null && (cryo.SpawnPoint - linkedPos).sqrMagnitude < 1.5f)
+                    return !cryo.IsAvailableForRespawn;
+            foreach (var cryo in Object.FindObjectsByType<GridCryobed>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+                if (cryo != null && (cryo.SpawnPoint - linkedPos).sqrMagnitude < 1.5f)
+                    return !cryo.IsAvailableForRespawn;
+            return false;
         }
 
         private static void AddUnique(List<RespawnChoice> list, RespawnChoice choice)

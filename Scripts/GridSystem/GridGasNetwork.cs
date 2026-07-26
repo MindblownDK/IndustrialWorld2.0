@@ -108,6 +108,15 @@ namespace VoxelEngine.GridSystem
                 if (filled >= litres) break;
                 filled += tank.Add(type, litres - filled);
             }
+            if (type == Gas.GasType.Oxygen && producer.Grid != null && filled < litres)
+            {
+                foreach (var cryobed in ConnectedCryobeds(producer.Grid))
+                {
+                    if (filled >= litres) break;
+                    if (cryobed == null || !cryobed.Enabled) continue;
+                    filled += cryobed.AddOxygen(litres - filled);
+                }
+            }
             return filled;
         }
 
@@ -349,6 +358,26 @@ namespace VoxelEngine.GridSystem
             float detail = GridSize.Small.CellSize();
             Vector3 localDelta = grid.transform.InverseTransformVector(b.transform.position - a.transform.position);
             return PipeAdjacency.IsCardinalLinkDelta(localDelta, detail, 5f, detail * 0.12f);
+        }
+
+        private static IEnumerable<GridCryobed> ConnectedCryobeds(GridEntity grid)
+        {
+            if (grid == null) yield break;
+            float detail = GridSize.Small.CellSize();
+            foreach (var block in grid.AllBlocks)
+            {
+                if (block is not GridCryobed cryo || !cryo.Enabled) continue;
+                foreach (var pipe in grid.AllBlocks)
+                {
+                    if (!IsGasPipe(pipe)) continue;
+                    if (IsTankPortWithinDetailLink(grid, pipe, cryo,
+                            VoxelEngine.Maritime.MaritimePorts.GasPrefixes, detail))
+                    {
+                        yield return cryo;
+                        break;
+                    }
+                }
+            }
         }
 
         private static bool IsTankPortWithinDetailLink(GridEntity grid, GridBlock pipe, GridBlock tank,

@@ -190,7 +190,7 @@ GameObject:
   m_Component:
   - component: {fileID: 9027978761779845527}
   - component: {fileID: 6947961807863015548}
-  - component: {fileID: 2400001011139339662}
+  - component: {fileID: 6250530189734550067}
   m_Layer: 0
   m_Name: Cryobed_Large
   m_TagString: Untagged
@@ -243,7 +243,7 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 2.5, y: 2.5, z: 2.5}
   m_Center: {x: 0, y: 0, z: 0}
---- !u!114 &2400001011139339662
+--- !u!114 &6250530189734550067
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -252,7 +252,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 3874595217539168157}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c25609dab69f0b547b0f10f4612db932, type: 3}
+  m_Script: {fileID: 11500000, guid: 7ab268f1de7ddb64892565d97c933d45, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.GridSystem.GridCryobed
   blockName: Grid Cryobed
@@ -264,6 +264,10 @@ MonoBehaviour:
   oxygenRequired: 1
   poweredRequired: 1
   idleWatts: 35
+  claimedByLocalPlayer: 0
+  oxygenCapacity: 120
+  oxygenStored: 0
+  offlineOxygenPerHour: 12
 --- !u!1 &5047267804930022374
 GameObject:
   m_ObjectHideFlags: 0

@@ -224,6 +224,7 @@ namespace VoxelEngine.UI
             RustStyleHud.Tick();
             BuildFeedbackHud.Tick();
             VoxelEngine.Weather.WeatherHud.Tick();
+            CryobedConfigHud.Tick();
             InteractionHud.Tick();
             WorldInspectionHud.Tick();
             VoxelEngine.GridSystem.GridPilotHud.Tick();

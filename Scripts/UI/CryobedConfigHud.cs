@@ -41,6 +41,15 @@ namespace VoxelEngine.UI
             Rebuild();
         }
 
+        public static void Tick()
+        {
+            if (_blocking && VoxelEngine.Settings.GameSettings.WasPressed(VoxelEngine.Settings.InputAction.Pause))
+            {
+                UIState.PauseConsumedFrame = Time.frameCount;
+                Close();
+            }
+        }
+
         public static void Close()
         {
             _staticBed = null; _gridBed = null;
@@ -75,12 +84,14 @@ namespace VoxelEngine.UI
 
             AddStat(panel, "Power", PowerText());
             AddStat(panel, "Oxygen", OxygenText());
-            AddStat(panel, "Ownership", IsClaimed() ? "Already claimed by you" : "Unclaimed / not active spawn");
+            AddStat(panel, "Ownership", IsOwned() ? (IsActiveSpawn() ? "Owned by you · active spawn" : "Owned by you") : "Unclaimed");
 
-            var buttons = new VisualElement(); buttons.style.flexDirection = FlexDirection.Row; buttons.style.marginTop = 12;
-            buttons.Add(MakeButton(IsClaimed() ? "Already Claimed" : "Claim", () => { Claim(); Rebuild(); }, online ? T.AccentCyan : Color.gray));
-            buttons.Add(MakeButton("Remove Ownership", () => { RemoveOwnership(); Rebuild(); }, new Color(0.95f,0.62f,0.18f)));
-            buttons.Add(MakeButton("Transfer (Later)", () => BuildFeedbackHud.Show("Transfer", "Multiplayer ownership transfer will unlock later", null, T.AccentAmber), new Color(0.55f,0.58f,0.66f)));
+            var buttons = new VisualElement(); buttons.style.flexDirection = FlexDirection.Row; buttons.style.flexWrap = Wrap.Wrap; buttons.style.marginTop = 12;
+            var claimButton = MakeButton(IsOwned() ? "Claimed" : "Claim", () => { Claim(); Rebuild(); }, online ? T.AccentCyan : Color.gray);
+            claimButton.SetEnabled(online);
+            buttons.Add(claimButton);
+            buttons.Add(MakeButton("Remove", () => { RemoveOwnership(); Rebuild(); }, new Color(0.95f,0.62f,0.18f)));
+            buttons.Add(MakeButton("Transfer", () => BuildFeedbackHud.Show("Transfer", "Multiplayer ownership transfer will unlock later", null, T.AccentAmber), new Color(0.55f,0.58f,0.66f)));
             buttons.Add(MakeButton("Close", Close, new Color(0.18f,0.22f,0.28f)));
             panel.Add(buttons);
         }
@@ -95,10 +106,17 @@ namespace VoxelEngine.UI
 
         private static Button MakeButton(string text, System.Action action, Color color)
         {
-            var b = new Button(action) { text = text }; b.style.height = 30; b.style.marginRight = 6; b.style.color = Color.white; b.style.backgroundColor = new StyleColor(color); b.style.unityFontStyleAndWeight = FontStyle.Bold; T.Radius(b, 6); return b;
+            var b = new Button(action) { text = text }; b.style.height = 30; b.style.minWidth = 78; b.style.marginRight = 6; b.style.marginBottom = 6; b.style.color = Color.white; b.style.backgroundColor = new StyleColor(color); b.style.unityFontStyleAndWeight = FontStyle.Bold; T.Radius(b, 6); return b;
         }
 
-        private static bool IsClaimed()
+        private static bool IsOwned()
+        {
+            if (_gridBed != null) return _gridBed.claimedByLocalPlayer;
+            if (_staticBed != null) return _staticBed.claimedByLocalPlayer;
+            return false;
+        }
+
+        private static bool IsActiveSpawn()
         {
             var session = VoxelEngine.Menu.WorldSession.Instance; if (session == null || !session.hasBedSpawn) return false;
             Vector3 pos = CurrentSpawnPos(); return (session.bedSpawnPoint - pos).sqrMagnitude < 1.5f;
@@ -112,8 +130,11 @@ namespace VoxelEngine.UI
         private static void Claim() { if (_gridBed != null) _gridBed.ClaimAsSpawn(); else _staticBed?.ClaimAsSpawn(); }
         private static void RemoveOwnership()
         {
-            var session = VoxelEngine.Menu.WorldSession.Instance; if (session == null) return;
-            if (IsClaimed()) { session.hasBedSpawn = false; session.SaveSpawnSidecar(); BuildFeedbackHud.Show("Cryobed", "Ownership removed", null, T.AccentAmber); }
+            if (_gridBed != null) _gridBed.claimedByLocalPlayer = false;
+            if (_staticBed != null) _staticBed.claimedByLocalPlayer = false;
+            var session = VoxelEngine.Menu.WorldSession.Instance;
+            if (session != null && IsActiveSpawn()) { session.hasBedSpawn = false; session.SaveSpawnSidecar(); }
+            BuildFeedbackHud.Show("Cryobed", "Ownership removed", null, T.AccentAmber);
         }
         private static void SetName(string value)
         {

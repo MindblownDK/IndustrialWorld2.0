@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.26.2-dev`
-**Roadmap Version:** `6.26.2-dev`
+**Current Version:** `6.26.3-dev`
+**Roadmap Version:** `6.26.3-dev`
 **Date:** 2026-07-24
 **Status:** World Management, Autosaves & Item Limits — COMPLETED; Power, Vehicles & Combat (4.7.0) remains WORKING ON
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -1740,14 +1740,20 @@ For each version, these are the high-level Unity tasks you will perform manually
 - **6.24.0-dev:** Added Space Helmet and Oxygen Tank equipment items/recipes, Life Support equipment slots in Inventory, save/load for helmet/tank slots, and underwater oxygen reserve/drain reduction when helmet+tank are equipped.
 - **6.24.1-dev:** Equipment UI now places Jetpack Bay and Life Support side-by-side to preserve backpack room, removes extra hint text, and activates underwater oxygen drain using head-underwater/deep-swim checks. Remaining work: active oxygen-rich environment checks, offline death rules, cryobed power/oxygen validation, vacuum/room-pressure integration, and final Unity validation.
 
-### 11.5 Multiplayer — LAST ROADMAP MILESTONE — ❌ MISSING
+### 11.5 Passive Oxygen Generation — ❌ MISSING
+- Add an expensive Biofarm / oxygen garden system that passively generates oxygen over time.
+- The Biofarm should require power, water, biomass or plant inputs, and enough physical space to prevent cheap oxygen spam.
+- Static and Grid variants should connect to gas pipes and feed oxygen tanks, cryobeds, life support rooms, and future airtight spaces.
+- Output should be slower than industrial H2/O2 generation but reliable, renewable, and useful for offline survival infrastructure.
+
+### 11.6 Multiplayer — LAST ROADMAP MILESTONE — ❌ MISSING
 - This is the final roadmap milestone after all single-player systems are complete.
 - Support self-hosted server creation on Windows and Linux.
 - Support LAN discovery/connection and direct connection to self-hosted servers.
 - Add player teams with invitations and team-only interaction permissions for Grid blocks and static blocks.
 - Add pirate and merchant NPC roles.
 
-### 11.6 World Management, Autosaves & Item Limits — ✅ COMPLETED
+### 11.7 World Management, Autosaves & Item Limits — ✅ COMPLETED
 - Add three visible autosave slots in the Saves panel, with safe load/restore flow.
 - Add Edit World for non-generation settings only: world name and dropped-item limit.
 - Default maximum active physical dropped items is 1000 and must be configurable in both Create World and Edit World.

@@ -401,10 +401,15 @@ namespace VoxelEngine.Player
                     return;
                 }
 
-                var cryobed = hit.collider.GetComponentInParent<VoxelEngine.Building.Cryobed>();
-                if (cryobed != null) { VoxelEngine.UI.CryobedConfigHud.Open(cryobed); return; }
-                var gridCryobed = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridCryobed>();
-                if (gridCryobed != null) { VoxelEngine.UI.CryobedConfigHud.Open(gridCryobed); return; }
+                bool holdingPlaceable = !inventory.ActiveStack.IsEmpty
+                    && (inventory.ActiveStack.item is BlockItem || inventory.ActiveStack.item is VoxelEngine.GridSystem.GridBlockItem);
+                if (!holdingPlaceable)
+                {
+                    var cryobed = hit.collider.GetComponentInParent<VoxelEngine.Building.Cryobed>();
+                    if (cryobed != null) { VoxelEngine.UI.CryobedConfigHud.Open(cryobed); return; }
+                    var gridCryobed = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridCryobed>();
+                    if (gridCryobed != null) { VoxelEngine.UI.CryobedConfigHud.Open(gridCryobed); return; }
+                }
                 var bed = hit.collider.GetComponentInParent<VoxelEngine.Building.Bed>();
                 if (bed != null) { bed.ClaimAsSpawn(); return; }
 
