@@ -73,25 +73,30 @@ namespace VoxelEngine.Player
             // (Left here so we never have a frame where Stamina goes negative.)
             if (Stamina < 0f) Stamina = 0f;
             // Hunger drains slowly over time.
-            Hunger -= Time.deltaTime * 0.08f; // ~5 min to go from 100 to 0
+            Hunger -= Time.deltaTime * 0.08f; // ~20 min to go from 100 to 0
             if (Hunger < 0f) { Hunger = 0f; TakeDamage(Time.deltaTime * 2f); }
-            // Oxygen: drains when head underwater, regens when not.
+
+            // Oxygen: drains when head underwater. A sealed helmet + oxygen tank
+            // extends reserve and slows drain; this is the foundation for the later
+            // vacuum/room-pressure life-support pass.
+            var equipment = GetComponent<PlayerEquipment>();
+            MaxOxygen = baseMaxOxygen + (equipment != null ? equipment.BonusOxygen : 0f);
             var ws = GetComponent<PlayerWaterState>();
             if (ws != null && ws.IsHeadUnderwater)
             {
-                Oxygen -= Time.deltaTime * 5f; // ~20 seconds of air
-                if (Oxygen < 0f) { Oxygen = 0f; TakeDamage(Time.deltaTime * 10f); } // drowning damage
+                float drainMul = equipment != null ? equipment.OxygenDrainMultiplier : 1f;
+                Oxygen -= Time.deltaTime * 5f * drainMul;
+                if (Oxygen < 0f) { Oxygen = 0f; TakeDamage(Time.deltaTime * 10f); }
             }
             else
             {
                 Oxygen = Mathf.Min(MaxOxygen, Oxygen + Time.deltaTime * 25f); // fast regen
-            } // starving = damage
+            }
+
             if (Health > MaxHealth)   Health = MaxHealth;
             if (Stamina > MaxStamina) Stamina = MaxStamina;
-            MaxHunger = baseMaxHunger;
-            Hunger = MaxHunger;
-            MaxOxygen = baseMaxOxygen;
-            Oxygen = MaxOxygen;
+            if (Hunger > MaxHunger)   Hunger = MaxHunger;
+            if (Oxygen > MaxOxygen)   Oxygen = MaxOxygen;
         }
 
         // ============================================================

@@ -14,17 +14,27 @@ namespace VoxelEngine.Player
     public sealed class PlayerEquipment : MonoBehaviour
     {
         public const int JetpackSlotCount = 2;
+        public const int HelmetSlotCount = 1;
+        public const int OxygenTankSlotCount = 1;
 
         [SerializeField] private ItemContainer _jetpackSlots;
+        [SerializeField] private ItemContainer _helmetSlots;
+        [SerializeField] private ItemContainer _oxygenTankSlots;
         private Inventory _inventory;
 
         public ItemContainer JetpackSlots
         {
-            get
-            {
-                EnsureContainers();
-                return _jetpackSlots;
-            }
+            get { EnsureContainers(); return _jetpackSlots; }
+        }
+
+        public ItemContainer HelmetSlots
+        {
+            get { EnsureContainers(); return _helmetSlots; }
+        }
+
+        public ItemContainer OxygenTankSlots
+        {
+            get { EnsureContainers(); return _oxygenTankSlots; }
         }
 
         private void Awake()
@@ -38,6 +48,14 @@ namespace VoxelEngine.Player
             if (_jetpackSlots == null) _jetpackSlots = new ItemContainer("Jetpack Slots", JetpackSlotCount);
             else _jetpackSlots.Resize(JetpackSlotCount);
             _jetpackSlots.AcceptFilter = (item, wanted) => item is JetpackItem ? Mathf.Min(1, wanted) : 0;
+
+            if (_helmetSlots == null) _helmetSlots = new ItemContainer("Helmet Slot", HelmetSlotCount);
+            else _helmetSlots.Resize(HelmetSlotCount);
+            _helmetSlots.AcceptFilter = (item, wanted) => item is SpaceHelmetItem ? Mathf.Min(1, wanted) : 0;
+
+            if (_oxygenTankSlots == null) _oxygenTankSlots = new ItemContainer("Oxygen Tank Slot", OxygenTankSlotCount);
+            else _oxygenTankSlots.Resize(OxygenTankSlotCount);
+            _oxygenTankSlots.AcceptFilter = (item, wanted) => item is OxygenTankItem ? Mathf.Min(1, wanted) : 0;
         }
 
         public bool HasUsableJetpack => GetBestJetpack() != null;
@@ -63,6 +81,32 @@ namespace VoxelEngine.Player
 
         public float BoostMultiplier => GetBestJetpack() != null
             ? Mathf.Max(1f, GetBestJetpack().boostMultiplier)
+            : 1f;
+
+        public SpaceHelmetItem EquippedHelmet
+        {
+            get
+            {
+                EnsureContainers();
+                var stack = _helmetSlots.GetSlot(0);
+                return stack != null && !stack.IsEmpty ? stack.item as SpaceHelmetItem : null;
+            }
+        }
+
+        public OxygenTankItem EquippedOxygenTank
+        {
+            get
+            {
+                EnsureContainers();
+                var stack = _oxygenTankSlots.GetSlot(0);
+                return stack != null && !stack.IsEmpty ? stack.item as OxygenTankItem : null;
+            }
+        }
+
+        public bool HasBreathingKit => EquippedHelmet != null && EquippedHelmet.sealedHelmet && EquippedOxygenTank != null;
+        public float BonusOxygen => HasBreathingKit ? Mathf.Max(0f, EquippedOxygenTank.bonusOxygen) : 0f;
+        public float OxygenDrainMultiplier => HasBreathingKit
+            ? Mathf.Clamp(EquippedOxygenTank.drainMultiplier * EquippedHelmet.oxygenEfficiency, 0.05f, 1f)
             : 1f;
 
         /// <summary>

@@ -1161,6 +1161,58 @@ namespace VoxelEngine.UI
             return box;
         }
 
+        private VisualElement BuildLifeSupportSlotsPanel(VoxelEngine.Player.PlayerEquipment equipment)
+        {
+            var box = new VisualElement();
+            box.style.marginTop = 2;
+            box.style.marginBottom = 10;
+            box.style.paddingLeft = 2;
+            box.style.paddingRight = 2;
+
+            var header = new VisualElement();
+            header.style.flexDirection = FlexDirection.Row;
+            header.style.alignItems = Align.Center;
+            header.style.justifyContent = Justify.FlexStart;
+            header.style.marginBottom = 6;
+
+            var title = new Label("LIFE SUPPORT");
+            title.style.fontSize = 10;
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            title.style.letterSpacing = 1.2f;
+            title.style.color = UITheme.AccentAmber;
+            header.Add(title);
+
+            bool online = equipment.HasBreathingKit;
+            var status = new Label(online ? "SEALED" : "OPEN");
+            status.style.marginLeft = 8;
+            status.style.fontSize = 9;
+            status.style.unityFontStyleAndWeight = FontStyle.Bold;
+            status.style.color = online ? new Color(0.30f, 0.95f, 0.55f) : new Color(0.95f, 0.62f, 0.18f);
+            status.style.backgroundColor = new StyleColor(new Color(0f, 0f, 0f, 0.32f));
+            status.style.paddingLeft = 7;
+            status.style.paddingRight = 7;
+            status.style.paddingTop = 2;
+            status.style.paddingBottom = 2;
+            SetBorderRadius(status, 9);
+            header.Add(status);
+            box.Add(header);
+
+            var slotRow = new VisualElement();
+            slotRow.style.flexDirection = FlexDirection.Row;
+            slotRow.style.flexWrap = Wrap.Wrap;
+            slotRow.Add(BuildSlot(equipment.HelmetSlots, 0, equipment.HelmetSlots.GetSlot(0), false));
+            slotRow.Add(BuildSlot(equipment.OxygenTankSlots, 0, equipment.OxygenTankSlots.GetSlot(0), false));
+            box.Add(slotRow);
+
+            var hint = new Label("Helmet + tank extends underwater air. Shift-click either item to equip.");
+            hint.style.whiteSpace = WhiteSpace.Normal;
+            hint.style.marginTop = 4;
+            hint.style.fontSize = 9;
+            hint.style.color = new Color(0.70f, 0.78f, 0.88f, 0.92f);
+            box.Add(hint);
+            return box;
+        }
+
         private VisualElement BuildInventoryWeightReadout()
         {
             var box = new VisualElement();
@@ -1254,7 +1306,10 @@ namespace VoxelEngine.UI
 
             var equipment = inventory != null ? inventory.GetComponent<VoxelEngine.Player.PlayerEquipment>() : null;
             if (equipment != null)
+            {
                 panel.Add(BuildJetpackSlotsPanel(equipment));
+                panel.Add(BuildLifeSupportSlotsPanel(equipment));
+            }
 
             // Backpack grid with sort button
             panel.Add(BuildSortableSlotGrid(inventory.container, Inventory.HOTBAR_SIZE, Inventory.TOTAL_SIZE));
@@ -3418,6 +3473,52 @@ namespace VoxelEngine.UI
 
             var equipment = inventory.GetComponent<VoxelEngine.Player.PlayerEquipment>();
             var jetpackSlots = equipment != null ? equipment.JetpackSlots : null;
+            var helmetSlots = equipment != null ? equipment.HelmetSlots : null;
+            var oxygenSlots = equipment != null ? equipment.OxygenTankSlots : null;
+
+            if (sourceC == inventory.container && srcStack.item is SpaceHelmetItem && helmetSlots != null)
+            {
+                var cloneHelmet = new ItemStack { item = srcStack.item, count = 1, durability = srcStack.durability, payload = srcStack.payload };
+                var leftoverHelmet = helmetSlots.Insert(cloneHelmet);
+                if (leftoverHelmet == null || leftoverHelmet.count <= 0)
+                {
+                    srcStack.count -= 1;
+                    sourceC.SetSlot(sourceIdx, srcStack.count <= 0 ? new ItemStack() : srcStack);
+                    BuildFeedbackHud.Show("Helmet Equipped", srcStack.item.displayName, srcStack.item.icon, srcStack.item.iconTint);
+                    Refresh();
+                }
+                else BuildFeedbackHud.Show("Helmet Slot Full", "Remove the current helmet first", srcStack.item.icon, Color.yellow);
+                return;
+            }
+
+            if (sourceC == inventory.container && srcStack.item is OxygenTankItem && oxygenSlots != null)
+            {
+                var cloneTank = new ItemStack { item = srcStack.item, count = 1, durability = srcStack.durability, payload = srcStack.payload };
+                var leftoverTank = oxygenSlots.Insert(cloneTank);
+                if (leftoverTank == null || leftoverTank.count <= 0)
+                {
+                    srcStack.count -= 1;
+                    sourceC.SetSlot(sourceIdx, srcStack.count <= 0 ? new ItemStack() : srcStack);
+                    BuildFeedbackHud.Show("Oxygen Tank Equipped", srcStack.item.displayName, srcStack.item.icon, srcStack.item.iconTint);
+                    Refresh();
+                }
+                else BuildFeedbackHud.Show("Oxygen Slot Full", "Remove the current tank first", srcStack.item.icon, Color.yellow);
+                return;
+            }
+
+            if ((helmetSlots != null && sourceC == helmetSlots) || (oxygenSlots != null && sourceC == oxygenSlots))
+            {
+                var cloneGear = new ItemStack { item = srcStack.item, count = srcStack.count, durability = srcStack.durability, payload = srcStack.payload };
+                var leftoverGear = inventory.container.Insert(cloneGear);
+                int movedGear = leftoverGear == null ? srcStack.count : (srcStack.count - leftoverGear.count);
+                if (movedGear > 0)
+                {
+                    if (movedGear >= srcStack.count) sourceC.SetSlot(sourceIdx, new ItemStack());
+                    else { srcStack.count -= movedGear; sourceC.SetSlot(sourceIdx, srcStack); }
+                    Refresh();
+                }
+                return;
+            }
 
             // Jetpack QoL: shift-click from either hotbar or backpack equips into the
             // dedicated jetpack slots before any external machine/storage routing.

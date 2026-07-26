@@ -225,6 +225,8 @@ namespace VoxelEngine.Persistence
                 rotY = inv.transform.eulerAngles.y,
                 container = SerializeContainer(inv.container),
                 jetpackSlots = equipment != null ? SerializeContainer(equipment.JetpackSlots) : null,
+                helmetSlots = equipment != null ? SerializeContainer(equipment.HelmetSlots) : null,
+                oxygenTankSlots = equipment != null ? SerializeContainer(equipment.OxygenTankSlots) : null,
                 activeHotbarIndex = inv.activeHotbarIndex
             };
             return true;
@@ -1038,6 +1040,8 @@ namespace VoxelEngine.Persistence
             var equipment = inv.GetComponent<VoxelEngine.Player.PlayerEquipment>();
             if (equipment == null) equipment = inv.gameObject.AddComponent<VoxelEngine.Player.PlayerEquipment>();
             if (save.player.jetpackSlots != null) DeserializeInto(equipment.JetpackSlots, save.player.jetpackSlots);
+            if (save.player.helmetSlots != null) DeserializeInto(equipment.HelmetSlots, save.player.helmetSlots);
+            if (save.player.oxygenTankSlots != null) DeserializeInto(equipment.OxygenTankSlots, save.player.oxygenTankSlots);
             inv.SetActiveHotbar(save.player.activeHotbarIndex);
         }
 
@@ -1632,6 +1636,9 @@ namespace VoxelEngine.Persistence
             // Additive in 6.22.1: two dedicated jetpack equipment slots.
             // Legacy saves leave this null and restore with empty slots.
             public SavedContainer jetpackSlots;
+            // Additive in 6.23.1: sealed helmet + oxygen tank equipment slots.
+            public SavedContainer helmetSlots;
+            public SavedContainer oxygenTankSlots;
             public int activeHotbarIndex;
         }
         [Serializable] private class SavedPlacedBlock

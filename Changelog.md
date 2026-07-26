@@ -1,9 +1,47 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.23.0-dev`
+**Current Version:** `6.24.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.24.0-dev] Life Support Equipment Foundation
+
+**Type:** MINOR — new save-compatible equipment items and oxygen behavior foundation. No save schema break.
+
+**Added — helmet + oxygen tank equipment:**
+1. Added `SpaceHelmetItem` and `OxygenTankItem` data assets.
+2. `PlayerEquipment` now has a sealed helmet slot and oxygen tank slot in addition to the two jetpack slots.
+3. Inventory now shows a lightweight `LIFE SUPPORT` section with helmet/tank slots and SEALED/OPEN status.
+4. Shift-clicking a Space Helmet or Oxygen Tank from hotbar/backpack equips it into the matching slot; shift-clicking the equipment slot returns it to inventory.
+5. Helmet/tank slots persist through save/load with additive player save fields.
+
+**Added — oxygen behavior foundation:**
+6. `PlayerStats` now uses equipped helmet+tank to extend max oxygen and reduce underwater drain.
+7. Fixed the old oxygen/hunger reset inside `PlayerStats.Update()` so oxygen and hunger state can actually change over time.
+
+**Setup:**
+8. Step 11 now creates Space Helmet and Oxygen Tank items/recipes non-destructively.
+
+**Roadmap:**
+9. Updated `11.4 Cryobeds, Offline Survival & Oxygen` with life-support equipment progress. Offline death/environment validation still remains open.
+
+**Manual Unity step:**
+- Run **Tools → Voxel Engine → Voxel Engine Setup → 11. Build Survival + Industrial Logistics Content** once to create/connect the Space Helmet and Oxygen Tank recipes.
+
+**Files touched:**
+- `Scripts/Items/SpaceHelmetItem.cs`
+- `Scripts/Items/OxygenTankItem.cs`
+- `Scripts/Player/PlayerEquipment.cs`
+- `Scripts/Player/PlayerStats.cs`
+- `Scripts/UI/GameUIController.cs`
+- `Scripts/Persistence/WorldStatePersistence.cs`
+- `Scripts/Editor/VoxelEngineSetupWindow.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
+- `Roadmap.md`
 
 ---
 
