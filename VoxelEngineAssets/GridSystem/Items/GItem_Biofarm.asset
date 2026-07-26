@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e230da79876505a41b25678102c74c13, type: 3}
+  m_Name: GItem_Biofarm
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.GridSystem.GridBlockItem
+  itemId: gitem_biofarm
+  displayName: Grid Biofarm
+  description: Ship-mounted oxygen garden. Slowly converts water + biomass (wheat/corn/seeds)
+    into piped oxygen for tanks & cryobeds. Needs power, water tanks via liquid pipes,
+    and biomass from cargo via item pipes. Reliable offline O2.
+  icon: {fileID: 0}
+  iconTint: {r: 0.35, g: 0.85, b: 0.45, a: 1}
+  maxStack: 20
+  massPerUnit: 1
+  category: Grid Blocks
+  viewmodelPrefab: {fileID: 0}
+  gridSize: 1
+  blockPrefab: {fileID: 5470073662122524944, guid: a0a99fb3b106e904f9e7749dcbe07595, type: 3}
+  blockMass: 4640
+  blockHP: 600
+  supportsShapeVariants: 0

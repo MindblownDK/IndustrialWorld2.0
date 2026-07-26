@@ -810,6 +810,47 @@ namespace VoxelEngine.UI
         }
 
         // ════════════════════════════════════════════════════════════
+        //                      BIOFARM (11.5)
+        // ════════════════════════════════════════════════════════════
+        public static VisualElement BiofarmPanel(VoxelEngine.Building.Biofarm bf, SlotBuilder slot)
+        {
+            bf.EnsureContainers();
+            var p = T.MachinePanel();
+            bool running = bf.IsRunning;
+            Color statusCol = running ? T.AccentGreen :
+                              bf.Status == "No Power" ? T.AccentRed :
+                              bf.Status == "No Water" ? T.AccentAmber :
+                              bf.Status == "No Biomass" ? T.AccentOrange : T.TextMuted;
+
+            p.Add(BuildHeader("🌿", "Biofarm Oxygen Garden", bf.Status.ToUpperInvariant(), statusCol, new Color(0.35f,0.85f,0.45f)));
+            p.Add(T.AccentDivider(new Color(0.35f,0.85f,0.45f)));
+
+            // Stats
+            p.Add(T.StatRow("⚡", "Power Draw", $"{bf.powerDraw:0} W", running ? T.AccentGreen : T.TextMuted));
+            p.Add(T.StatRow("💧", "Water Use", $"{bf.waterConsumptionLps:0.00} L/s", T.AccentCyan));
+            p.Add(T.StatRow("🌬", "O₂ Output", $"{bf.oxygenPerSecond:0.00} L/s (slow & reliable)", new Color(0.40f,0.90f,0.55f)));
+            p.Add(T.StatRow("⏳", "Biomass Time", bf.BiomassTimeRemaining > 0 ? $"{bf.BiomassTimeRemaining:0}s" : "Empty", T.AccentAmber));
+
+            p.Add(T.Divider());
+            p.Add(T.Subtitle("Oxygen Buffer"));
+            p.Add(TankRow(
+                T.TankGauge("O₂", bf.Buffer01, new Color(0.35f,0.85f,0.55f),
+                    $"{bf.OxygenBuffer:0}/{bf.bufferCapacity:0} L", 110, 100)
+            ));
+
+            p.Add(T.Divider());
+            p.Add(T.Subtitle("Biomass Input (Wheat/Corn/Carrot/Seeds/Biomass)"));
+            var grid = T.SlotGrid(bf.biomassInput.Size);
+            for (int i = 0; i < bf.biomassInput.Size; i++)
+                grid.Add(slot(bf.biomassInput, i, bf.biomassInput.GetSlot(i), false, true));
+            p.Add(grid);
+
+            p.Add(T.Spacer(8));
+            p.Add(T.Muted("Passive O₂: needs power + water pipes + biomass. Slower than electrolyser but renewable, ideal for cryobeds & offline survival."));
+            return p;
+        }
+
+        // ════════════════════════════════════════════════════════════
         //                        QUARRY
         // ════════════════════════════════════════════════════════════
         public static VisualElement QuarryPanel(Quarry q, SlotBuilder slot)

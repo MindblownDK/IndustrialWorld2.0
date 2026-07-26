@@ -453,6 +453,8 @@ namespace VoxelEngine.Player
                 if (hydroEngine != null) { UI.GameUIController.Instance?.OpenMachine(hydroEngine); return; }
                 var gasTank = hit.collider.GetComponentInParent<VoxelEngine.Gas.GasTank>();
                 if (gasTank != null) { UI.GameUIController.Instance?.OpenMachine(gasTank); return; }
+                var biofarm = hit.collider.GetComponentInParent<VoxelEngine.Building.Biofarm>();
+                if (biofarm != null) { UI.GameUIController.Instance?.OpenMachine(biofarm); return; }
                 var liquidPump = hit.collider.GetComponentInParent<VoxelEngine.Fluids.WaterPump>();
                 if (liquidPump != null) { UI.GameUIController.Instance?.OpenMachine(liquidPump); return; }
 

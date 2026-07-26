@@ -1,7 +1,64 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.26.6-dev`
+**Current Version:** `6.27.0-dev`
+
+All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.27.0-dev] Passive Oxygen Generation — Biofarm Oxygen Garden (11.5)
+
+**Type:** MINOR — new save-compatible blocks for renewable oxygen. No save schema break.
+
+**Added — static Biofarm (oxygen garden):**
+1. Added `Biofarm` static block `Building/Biofarm.cs`: consumes power (65 W), water (0.18 L/s from fluid tanks/voxel water) and biomass (wheat/corn/carrot/seeds/biomass item) at 1 item per 45s.
+2. Produces oxygen at 0.55 L/s into internal 260 L buffer, slower than industrial electrolyser (~60 L/min vs 30 L/min) but reliable and renewable for offline survival.
+3. Pushes O₂ into nearby Gas Tanks / Cryobeds via `GasNetwork` (gas pipes). Visual grow-light point light.
+4. Added `Biomass` resource item (compressed crop) recipe: 2 wheat + 1 corn → 4 biomass at bench. Also accepts raw crops directly.
+
+**Added — grid Biofarm:**
+5. Added `GridBiofarm` ship block `GridSystem/GridBiofarm.cs`: Large 2.2×1.2×1.6 cell, 580 kg, needs grid power + water (from liquid tanks via `GridLiquidNetwork`) + biomass (from cargo via `GridItemNetwork`).
+6. Internal water 180 L, O₂ 260 L buffers, auto-pulls water/biomass, pushes O₂ via `GridGasNetwork` pipes into gas tanks / grid cryobeds.
+7. Implements `IGridDataProvider` so screens show live water/O₂/fuel time.
+
+**UI & Interaction:**
+8. Added `BiofarmPanel` in `MachineUIs.cs` (static) and `GridBlockUI BiofarmPanel` (grid): tanks gauges for water & O₂, stats (power, water use, O₂ rate, fuel time), biomass slot grid, premium green accent theme.
+9. `GameUIController` now opens biofarm on RMB (static) and via grid block UI (ship), watches biomass container for live refresh.
+10. `PlayerInteractionTool` RMB on biofarm opens its machine panel.
+
+**Setup (non-destructive):**
+11. Step 11 `BuildSurvivalAndLogisticsContent` now creates:
+    - `Item_Biomass` + recipe
+    - `Biofarm_Static` prefab + `Block_Biofarm` + recipe (8 steel, 6 glass, 3 circuits, 6 copper, 2 plastic — expensive to prevent spam)
+12. Step 12 `BuildGridSystemContent` now creates:
+    - `Biofarm_Large` grid prefab (`GridBiofarm`) + `GItem_Biofarm` + `Recipe_GBiofarm` (10 steel, 6 glass, 4 circuits, 8 copper)
+    - Ensures gas + liquid port markers on the prefab so pipes magnetically connect for O₂ out / water in.
+13. Farming research node `res_farming` now also unlocks `Recipe_Biomass`, `Recipe_Biofarm`, `Recipe_GBiofarm`. `res_gas_processing` also unlocks them.
+
+**Balance — anti-spam:**
+14. Prefab scale large (2.4×1.1×1.8 static, 2.2×1.2×1.6 grid) forces physical space.
+15. Power + water + biomass triple requirement, 45s per biomass, low O₂ rate prevents cheap O₂ spam vs electrolyser.
+
+**Manual Unity step:**
+- Run **Tools → Voxel Engine → Voxel Engine Setup → 11. Build Survival + Industrial Logistics Content** once (creates biomass + static biofarm)
+- Then run **12. Build Grid System Content (All Ship/Vehicle Blocks)** once (creates grid biofarm + ports)
+- Both steps idempotent, preserve existing balance values.
+
+**Files touched:**
+- `Scripts/Building/Biofarm.cs`
+- `Scripts/GridSystem/GridBiofarm.cs`
+- `Scripts/Editor/VoxelEngineSetupWindow.cs`
+- `Scripts/UI/MachineUIs.cs`
+- `Scripts/GridSystem/UI/GridBlockUI.cs`
+- `Scripts/UI/GameUIController.cs`
+- `Scripts/Player/PlayerInteractionTool.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
+
+---
+
+### [6.26.6-dev] Cryobed UI Live Stats, Oxygen Tank Visual & Spawn Fixes
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
 

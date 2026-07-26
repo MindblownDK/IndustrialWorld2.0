@@ -46,6 +46,7 @@ namespace VoxelEngine.GridSystem.UI
                 case GridElectricFurnace ef: return FurnacePanel(ef, slot);
                 case GridBeacon bc:         return BeaconPanel(bc);
                 case GridOreDetector od:    return OreDetectorPanel(od);
+                case GridBiofarm bio:      return BiofarmPanel(bio, slot);
                 case GridCryobed cryo:      return CryobedPanel(cryo);
                 case GridSlidingDoor door:  return SlidingDoorPanel(door);
                 case VoxelEngine.Simulation.GridLightBlock gl: return GridLightPanel(gl);
@@ -986,6 +987,43 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(row);
             p.Add(T.Spacer(4));
             p.Add(T.Muted("Gas pipes can install a variable oxygen port on the hull. Pump oxygen from H2/O2 generators into the cryobed for offline reserve."));
+            return p;
+        }
+
+        // ── BIOFARM (11.5) ─────────────────────────────────────────────────────
+        private static VisualElement BiofarmPanel(GridBiofarm farm, MachineUIs.SlotBuilder slot)
+        {
+            if (farm.biomassInput == null) farm.OnPlaced();
+            var p = T.MachinePanel();
+            Color sc = farm.Status == "Producing" ? T.AccentGreen :
+                       farm.Status == "No Power" ? T.AccentRed : T.AccentAmber;
+            var (hdr, _, _, _) = T.HeaderRow($"🌿 {farm.blockName}", farm.Status.ToUpperInvariant(), sc);
+            p.Add(hdr);
+            p.Add(T.AccentDivider(new Color(0.35f, 0.85f, 0.45f)));
+
+            var gaugeRow = Row();
+            gaugeRow.style.justifyContent = Justify.SpaceAround;
+            gaugeRow.Add(T.TankGauge("Water", farm.WaterFill01, new Color(0.25f,0.55f,0.95f), $"{farm.waterStored:0}/{farm.waterCapacity:0} L", 60, 100));
+            gaugeRow.Add(T.TankGauge("O₂", farm.O2Fill01, new Color(0.35f,0.85f,0.55f), $"{farm.o2Stored:0}/{farm.o2Capacity:0} L", 60, 100));
+            p.Add(gaugeRow);
+            p.Add(T.Spacer(6));
+
+            p.Add(T.StatRow("⚡", "Power Draw", PowerFormat.Watts(farm.powerDraw), farm.IsProducing ? T.AccentGreen : T.TextMuted));
+            p.Add(T.StatRow("💧", "Water Use", $"{farm.waterConsumptionLps:0.00} L/s", T.AccentCyan));
+            p.Add(T.StatRow("🌬", "O₂ Rate", $"{farm.oxygenPerSecond:0.00} L/s", new Color(0.35f,0.85f,0.55f)));
+            p.Add(T.StatRow("⏳", "Fuel Time", farm.BiomassTimeRemaining > 0 ? $"{farm.BiomassTimeRemaining:0}s" : "Empty", T.AccentAmber));
+            p.Add(T.Spacer(4));
+
+            p.Add(GridUIHelpers.SectionTitle("Biomass Input (auto-pulled from cargo)"));
+            if (farm.biomassInput != null)
+                p.Add(GridUIHelpers.WeightHeader(MassUtil.ContainerMass(farm.biomassInput), "Biomass"));
+            var grid = T.SlotGrid(farm.biomassInput != null ? farm.biomassInput.Size : 4);
+            if (farm.biomassInput != null)
+                for (int i = 0; i < farm.biomassInput.Size; i++)
+                    grid.Add(slot(farm.biomassInput, i, farm.biomassInput.GetSlot(i), false, true));
+            p.Add(grid);
+            p.Add(T.Spacer(4));
+            p.Add(T.Muted("Passive O₂: needs grid power + water tanks + biomass (wheat/corn/seeds). Slower than electrolyser but renewable and ideal for ships & cryobeds."));
             return p;
         }
 

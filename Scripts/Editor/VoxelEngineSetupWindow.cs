@@ -4086,6 +4086,40 @@ namespace VoxelEngine.EditorTools
             AddRecipe(STORE_RECIPES, "Recipe_Cryobed", "Cryobed", blockCryobed, 1, VoxelEngine.Crafting.StationTier.Assembler, false,
                 ((VoxelEngine.Items.ItemDefinition)steelPlate, 6), ((VoxelEngine.Items.ItemDefinition)glass, 4), ((VoxelEngine.Items.ItemDefinition)circuit, 2), ((VoxelEngine.Items.ItemDefinition)copperWire, 6));
 
+            // ── Biomass (compressed organic matter for Biofarm) ──
+            var biomass = MakeRes(MISC_ITEMS, "Item_Biomass", "Biomass",
+                "Compressed organic matter from crops (wheat/corn/carrot/seed). Fuel for the Biofarm Oxygen Garden. 1 biomass = 45s of slow O₂ production.",
+                new Color(0.35f, 0.65f, 0.30f), VoxelEngine.Items.ResourceCategory.Misc, "Farming", maxStack: 200);
+            AddRecipe(FARM_RECIPES, "Recipe_Biomass", "Biomass x4", biomass, 4, VoxelEngine.Crafting.StationTier.CraftingBench, false,
+                ((VoxelEngine.Items.ItemDefinition)foodWheatRaw, 2), ((VoxelEngine.Items.ItemDefinition)foodCornRaw, 1));
+
+            // ── Static Biofarm (passive oxygen garden — 11.5) ──
+            var biofarmPrefab = MakePref(STORE_PREFABS, "Biofarm_Static",
+                new Color(0.32f, 0.72f, 0.42f), new Vector3(2.4f, 1.1f, 1.8f),
+                root =>
+                {
+                    var bf = root.AddComponent<VoxelEngine.Building.Biofarm>();
+                    bf.powerDraw = 65f;
+                    bf.waterConsumptionLps = 0.18f;
+                    bf.oxygenPerSecond = 0.55f;
+                    bf.secondsPerBiomass = 45f;
+                    bf.bufferCapacity = 260f;
+                    var power = root.AddComponent<VoxelEngine.Power.PowerConsumer>();
+                    power.wattsPerSecond = 65f;
+                    power.connectRadius = 2.0f;
+                    // Small leafy glow
+                    var light = new GameObject("Generated_GrowLight");
+                    light.transform.SetParent(root.transform, false);
+                    light.transform.localPosition = new Vector3(0f, 0.65f, 0f);
+                    var l = light.AddComponent<Light>();
+                    l.type = LightType.Point; l.color = new Color(0.35f, 0.85f, 0.45f); l.intensity = 0.9f; l.range = 3.5f;
+                });
+            var blockBiofarm = MakeBlk(STORE_BLOCKS, "Block_Biofarm", "Biofarm",
+                "Passive oxygen garden. Converts water + biomass (wheat/corn/carrot/biomass) into piped O₂ for tanks & cryobeds. Needs power, water pipes from a tank, and biomass via item pipes. Slower than electrolyser but renewable & ideal for offline survival.",
+                new Color(0.35f, 0.85f, 0.45f), biofarmPrefab, "Life Support", hp: 380, miningTier: 2);
+            AddRecipe(STORE_RECIPES, "Recipe_Biofarm", "Biofarm", blockBiofarm, 1, VoxelEngine.Crafting.StationTier.Assembler, false,
+                ((VoxelEngine.Items.ItemDefinition)steelPlate, 8), ((VoxelEngine.Items.ItemDefinition)glass, 6), ((VoxelEngine.Items.ItemDefinition)circuit, 3), ((VoxelEngine.Items.ItemDefinition)copperWire, 6), ((VoxelEngine.Items.ItemDefinition)plastic, 2));
+
             // Cooking recipes — happen at any Furnace (treated like a smelting recipe? simpler as bench recipes here).
             AddRecipe(FARM_RECIPES, "Recipe_Cook_Bread", "Bread", foodBread, 1, VoxelEngine.Crafting.StationTier.Furnace, false, ((VoxelEngine.Items.ItemDefinition)foodWheatRaw, 3));
             AddRecipe(FARM_RECIPES, "Recipe_Cook_Stew", "Vegetable Stew", foodStew, 1, VoxelEngine.Crafting.StationTier.Furnace, false, ((VoxelEngine.Items.ItemDefinition)foodCarrotRaw, 2), ((VoxelEngine.Items.ItemDefinition)foodCornRaw, 1));
@@ -4805,7 +4839,8 @@ root =>
             // Gas Processing.
             AppendUnlocks("res_gas_processing",
                 RGet("Recipe_Electrolyser"), RGet("Recipe_HydrogenEngine"),
-                RGet("Recipe_GasTank"), RGet("Recipe_GasPipe"), RGet("Recipe_GasPipe_Glass"));
+                RGet("Recipe_GasTank"), RGet("Recipe_GasPipe"), RGet("Recipe_GasPipe_Glass"),
+                RGet("Recipe_Biofarm"), RGet("Recipe_GBiofarm"), RGet("Recipe_Biomass"));
 
             // Nuclear Fission.
             AppendUnlocks("res_nuclear_fission",
@@ -4841,7 +4876,8 @@ root =>
                 };
                 var farmUnlocks = new List<VoxelEngine.Crafting.RecipeDefinition>();
                 foreach (var name in new[] { "Recipe_Hoe", "Recipe_TilledSoil", "Recipe_Sprinkler",
-                                             "Recipe_Harvester", "Recipe_Cook_Bread", "Recipe_Cook_Stew" })
+                                             "Recipe_Harvester", "Recipe_Cook_Bread", "Recipe_Cook_Stew",
+                                             "Recipe_Biomass", "Recipe_Biofarm", "Recipe_GBiofarm" })
                 {
                     var r = RGet(name);
                     if (r != null) farmUnlocks.Add(r);
@@ -5313,6 +5349,22 @@ root =>
             itemGridCryobed.description = "Grid-mounted sealed respawn/offline-survival bed foundation. Future life-support pass will require oxygen and power for offline survival.";
             EditorUtility.SetDirty(itemGridCryobed);
             AddGRecipe("Recipe_GCryobed", "Grid Cryobed", itemGridCryobed, (steelPlate, 8), (glass, 4), (circuit, 3), (copperWire, 8));
+
+            // -- 0c) Grid Biofarm (passive oxygen garden — 11.5) --
+            var gridBiofarmPref = MakeGPref<VoxelEngine.GridSystem.GridBiofarm>("Biofarm_Large", new Color(0.32f, 0.75f, 0.42f), new Vector3(2.2f, 1.2f, 1.6f),
+                c =>
+                {
+                    c.blockName = "Biofarm"; c.powerDraw = 70f; c.waterConsumptionLps = 0.20f;
+                    c.oxygenPerSecond = 0.55f; c.secondsPerBiomass = 45f;
+                    c.waterCapacity = 180f; c.o2Capacity = 260f;
+                });
+            var itemGridBiofarm = MakeGItem("GItem_Biofarm", "Grid Biofarm", new Color(0.35f, 0.85f, 0.45f), gridBiofarmPref, VoxelEngine.GridSystem.GridSize.Large, 580, 600);
+            itemGridBiofarm.description = "Ship-mounted oxygen garden. Slowly converts water + biomass (wheat/corn/seeds) into piped oxygen for tanks & cryobeds. Needs power, water tanks via liquid pipes, and biomass from cargo via item pipes. Reliable offline O2.";
+            EditorUtility.SetDirty(itemGridBiofarm);
+            AddGRecipe("Recipe_GBiofarm", "Grid Biofarm", itemGridBiofarm, (steelPlate, 10), (glass, 6), (circuit, 4), (copperWire, 8));
+            // Ensure gas + liquid ports so oxygen pipes can output and water pipes can input
+            EnsureGridTankPorts(gridBiofarmPref, "Biofarm_GasPortMarker", new Color(0.35f, 0.85f, 0.55f, 1f), "Port_GasIO", includeBottom: true);
+            EnsureGridTankPorts(gridBiofarmPref, "Biofarm_LiquidPortMarker", new Color(0.20f, 0.55f, 1.00f, 1f), "Port_LiquidIO", includeBottom: true);
 
             // -- 1) Cockpits --
             var cockSmallPref = MakeGPref<VoxelEngine.GridSystem.GridCockpit>("Cockpit_Small", new Color(0.2f, 0.4f, 0.8f), new Vector3(0.8f, 0.8f, 1.2f),
