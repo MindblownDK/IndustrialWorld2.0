@@ -1115,12 +1115,12 @@ namespace VoxelEngine.UI
             var row = new VisualElement();
             row.style.flexDirection = FlexDirection.Row;
             row.style.alignItems = Align.FlexStart;
+            row.style.justifyContent = Justify.SpaceBetween;
             row.style.marginTop = 4;
             row.style.marginBottom = 8;
 
             var jet = BuildJetpackSlotsPanel(equipment);
             var life = BuildLifeSupportSlotsPanel(equipment);
-            life.style.marginLeft = 12;
             row.Add(jet);
             row.Add(life);
             return row;

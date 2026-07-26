@@ -1,9 +1,26 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.24.3-dev`
+**Current Version:** `6.24.4-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.24.4-dev] Equipment Row Left/Right Alignment Fix
+
+**Type:** PATCH — inventory equipment layout correction. Save-compatible.
+
+**Fixed:**
+1. Jetpack Bay now anchors on the left side of the inventory equipment row.
+2. Life Support now anchors on the right side of the same row.
+3. Removed the compact/together layout from 6.24.3-dev that made both sections cluster on the left.
+
+**Files touched:**
+- `Scripts/UI/GameUIController.cs`
+- `Scripts/Core/GameVersion.cs`
+- `Changelog.md`
+- `Roadmap.md`
 
 ---
 
