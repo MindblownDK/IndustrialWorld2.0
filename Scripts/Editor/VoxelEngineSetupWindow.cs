@@ -4393,7 +4393,7 @@ namespace VoxelEngine.EditorTools
                 light.range = 20f;
                 light.shadows = LightShadows.None;
 
-                var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
+                var prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
                 UnityEngine.Object.DestroyImmediate(root);
                 return prefab;
             }

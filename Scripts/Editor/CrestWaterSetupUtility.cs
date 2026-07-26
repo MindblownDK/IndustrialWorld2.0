@@ -343,7 +343,7 @@ namespace VoxelEngine.EditorTools
                 return;
             }
 
-            var existing = UnityEngine.Object.FindFirstObjectByType(oceanType) as Component;
+            var existing = UnityEngine.Object.FindAnyObjectByType(oceanType) as Component;
             if (existing == null)
             {
                 var go = new GameObject("Crest Ocean");

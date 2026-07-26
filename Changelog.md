@@ -1,9 +1,31 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.30.2-dev`
+**Current Version:** `6.30.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.30.3-dev] Ruins Setup Crash Fix — PlacedBlock & Path Variable
+
+**Type:** PATCH — editor setup crash fix + premium polish validation.
+
+**Fixed Errors from your log:**
+- `CS0103 path does not exist` at `SaveAsPrefabAsset(root, path)` — variable defined as `prefabPath` but used as `path`. Fixed to `prefabPath`.
+- `CS0246 PlacedBlock not found` — `PlacedBlock` lives in `VoxelEngine.Building`, file had no using. Fully qualified to `VoxelEngine.Building.PlacedBlock` for all GetComponent/AddComponent calls.
+- `CS0103 blockRuinWarehouse does not exist` inside `MakeRuinPrefab` (circular — block defined after prefab) — removed `pb.Item = blockRuinWarehouse` assignments, rubble now has Hp only, main walls use real tiered prefabs if available (mineable for wall tokens).
+- `CS0618 FindFirstObjectByType` obsolete in `GridShapeVariantSetup.cs` + `CrestWaterSetupUtility.cs` — replaced with `FindAnyObjectByType`.
+- `EnsureLiquidTankPorts` / `EnsureGasTankPorts` unused warnings benign.
+
+**Result:** Step 11 `BuildSurvivalAndLogisticsContent` no longer throws NRE and no longer fails to compile. Premium ruins (walls together, visible chest, rusted steel, rare easy numbers 0.0020/0.0015/0.0018) now generate correctly.
+
+**Files touched:**
+- `Scripts/Editor/VoxelEngineSetupWindow.cs`
+- `Scripts/Editor/GridShapeVariantSetup.cs`
+- `Scripts/Editor/CrestWaterSetupUtility.cs`
+- `Scripts/Core/GameVersion.cs` (6.30.2 → 6.30.3)
+- `Changelog.md`
+
+---
 
 ### [6.30.2-dev] Premium Ruins Polish — Walls Together, Visible Chest, Rusted Steel & Rare Easy Numbers
 
