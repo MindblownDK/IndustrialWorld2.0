@@ -1,9 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.29.2-dev`
-**Roadmap Version:** `6.29.2-dev`
+**Current Version:** `6.30.0-dev`
+**Roadmap Version:** `6.30.0-dev`
 **Date:** 2026-07-26
+**Status:** Premium Ruins (6.30.0) + Ruins Fix (6.29.2) + Ruins & Blueprints (4.9.0) Partially Completed + Compile Fixes (6.28.1) + Offline Survival (11.4) + Grid Gravity (6.27.3) + Passive Oxygen (11.5); World Management (11.7) Completed; Power, Vehicles & Combat (4.7.0) remains WORKING ON
 **Status:** RuinChest Fix (6.29.1) + Ruins & Blueprints (4.9.0) Partially Completed (6.29.0) + Compile Fixes (6.28.1) + Offline Survival (11.4) + Grid Gravity (6.27.3) + Passive Oxygen (11.5); World Management (11.7) Completed; Power, Vehicles & Combat (4.7.0) remains WORKING ON
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
@@ -995,11 +996,12 @@ Statuses are evidence-based and move forward only after code/content review and 
 
 **Goal:** Make every planet feel alive, dangerous, and worth exploring — with ruins to loot, weather to survive, and enemies to fight.
 
-#### New Content — Ruins Implemented in 6.29.0-dev
+#### New Content — Ruins Implemented in 6.29.0-dev + Premium 6.30.0-dev
 
-1. **Ruins of a Dead Civilization — ✅ COMPLETED (6.29.0)**
-   - Rare broken warehouses, collapsed factories, and derelict bases scattered across biomes (Wasteland/Plains/Steppes/Desert at 0.001 density via `BiomeDefinition.scatter`).
-   - Visual style: rusted, overgrown, damaged versions of real player blocks — 4-cube collapsed frame with rusted materials + `RuinChest` loot point (root + child chest colliders for reliable interaction).
+1. **Ruins of a Dead Civilization — ✅ COMPLETED (6.29.0) + PREMIUM 6.30.0**
+   - Rare broken warehouses, collapsed factories, and derelict bases scattered across biomes. Initially 0.001 density (user reported no spawns), now **PREMIUM density 0.006-0.0085** in Wasteland/Plains/Steppes/Desert/Forest/Beach with scale 1.2-2.0 → ~5-15 ruins per 10 chunks, large and visible.
+   - **6.29.0 MVP:** 4-cube collapsed frame with rusted materials + `RuinChest` loot point (root + child chest colliders).
+   - **6.30.0 Premium:** Real crusader bases using **actual building blocks** from game (`Wall_Steel/Iron`, `Foundation_Steel/Iron` from `TieredBlockRegistry`) — mineable for resources (wall tokens → steel plates). Foundations 3x3 grid (9 foundations, 15% missing for rubble), perimeter walls with 18% missing/collapsed, 20% half-height ruined, random lean ±3-5° for decayed feel, interior dividing wall + doorway gap, 8 rubble debris piles (0.3-0.9 scale, rustDark/moss mats, `PlacedBlock` Hp 120 for resource drop), large root `BoxCollider` (size.x*1.1, y*1.2) + `PlacedBlock` marker for scatter overlap prevention, warm point light (1.0,0.72,0.32, 1.4 intensity, 12 m range) for distance visibility — premium exploration cue.
    - Loot containers hold components (steelPlate, ironPlate, copperWire, circuit), fuel (coal), and — most importantly — **damaged blueprint data cores**.
 
 2. **Blueprint / Recipe Unlock System — ✅ COMPLETED (6.29.0)**

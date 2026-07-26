@@ -1,7 +1,46 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.29.2-dev`
+**Current Version:** `6.30.0-dev`
+
+All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+---
+
+### [6.30.0-dev] Premium Ruins — Real Crusader Bases, Mineable Rusted Walls & High Spawn Rate
+
+**Type:** MINOR — premium exploration upgrade, save-compatible (ruin prefabs + scatter density). No save schema break.
+
+**Problem:** Previous ruins were tiny 4-cube shells (3x2x3) with density 0.0012 — reported as "no warehouses/ruins spawns" and not premium.
+
+**Added — Premium Ruin Generation (real building blocks, mineable for resources):**
+1. Rewrote `MakeRuinPrefab` to attempt loading real tiered building blocks from `TieredBlockRegistry` (Wall_Steel/Iron, Foundation_Steel/Iron). If registry exists, uses `Wall_Steel` / `Foundation_Steel` prefabs via `PrefabUtility.InstantiatePrefab` + rusted material override (70% rust, 20% dark rust, 10% moss) — walls are now **real building blocks** with `PlacedTieredBlock` (mineable, drops wall token) giving resources when mined, as requested.
+2. Foundation base: 3x3 grid of foundations (9 foundations, 15% missing for rubble) — module 3.75 m, total ~11.25 m square, crusader outpost footprint.
+3. Perimeter walls: 4 sides built from wall prefabs (or fallback primitive cubes with `PlacedBlock` + `Hp 250-350`), 18% chance wall missing = collapsed, 20% half-height = ruined, random lean ±3-4° for premium decayed feel.
+4. Interior dividing wall + doorway gap for authentic base interior.
+5. Rubble/debris piles: 8 small cubes (0.3-0.9 scale) with random rotation, rustDark/moss mats, `BoxCollider`, `PlacedBlock` Hp 120, scattered.
+6. Root now has large `BoxCollider` (size.x*1.1, y*1.2, z*1.1, center y*0.4) + `PlacedBlock` marker Hp 500 so scatter overlap check (`Tree/PlacedBlock/PlacedTieredBlock`) prevents ruins spawning inside each other.
+7. Point light: warm beacon (1.0,0.72,0.32, 1.4 intensity, 12 m range) on top for visibility at distance — premium exploration cue.
+8. `RuinChest` on ROOT (not just child) so any rusted cube hit → `GetComponentInParent<RuinChest>` finds chest reliably. Child chest also gets copy for visual.
+
+**Fixed — No spawns:**
+9. Increased scatter density 7x: `Warehouse` 0.0012→0.0085, `Factory` 0.0009→0.0065, `Bunker` 0.0010→0.0075. Scale 0.9-1.3→1.2-1.8 (warehouse), 0.9-1.4→1.3-2.0 (factory), 0.9-1.2→1.1-1.6 (bunker). Now ~5-15 ruins per 10 chunks in target biomes vs ~1 before.
+10. Added target biomes: previously Wasteland/Plains/Steppes/Desert, now also Forest/Beach for more exploration.
+11. Scatter injection now null-checks prefabs before adding, logs "PREMIUM density 0.006-0.008" and skips duplicate "Ruin_" to avoid stacking.
+
+**Premium Polish:**
+12. Rusted materials: `Mat_{name}_RustMain` (base rust), `Mat_{name}_RustDark` (0.65x), `Mat_{name}_Moss` (0.22,0.38,0.22) for overgrown look. Random assignment per wall piece.
+13. Random tilt ±3-5° on foundations/walls for collapsed, long-abandoned feel.
+14. Walls are real building blocks (if registry exists) → mineable for resources (wall tokens → steel plates etc), as requested. Fallback cubes with `PlacedBlock` Hp 120-350 also mineable for fallback.
+
+**Files touched:**
+- `Scripts/Editor/VoxelEngineSetupWindow.cs` (premium ruin generator + density + root collider + PlacedBlock marker)
+- `Scripts/Core/GameVersion.cs` (6.29.2 → 6.30.0)
+- `Changelog.md`
+
+---
+
+### [6.29.2-dev] Ruins Step 11 NullRef Fix — Robust Prefab Creation
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
 

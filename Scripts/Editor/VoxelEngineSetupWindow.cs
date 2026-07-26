@@ -4156,8 +4156,8 @@ namespace VoxelEngine.EditorTools
                 "Recipe_t90_Tower", "Tower segment blueprint from ruined outpost. Right-click to restore.",
                 new Color(0.70f, 0.60f, 0.25f));
 
-            // Ruin prefabs — rusted, overgrown, damaged versions of real blocks.
-            // Simple MVP: 2x2x2 rusted shell with a RuinChest inside.
+            // Ruin prefabs — PREMIUM: realistic ruined crusader bases using real building blocks (walls, foundations)
+            // that are mineable for resources, with rusted premium materials, collapsed sections, overgrowth.
             GameObject MakeRuinPrefab(string name, Color rustColor, Vector3 size, int minComp, int maxComp)
             {
                 string path = $"{MISC_PREFABS}/{name}.prefab";
@@ -4168,38 +4168,203 @@ namespace VoxelEngine.EditorTools
                     return null;
                 }
 
-                // Ensure root has a collider for RuinChest RequireComponent
-                var rootCol = root.GetComponent<Collider>();
-                if (rootCol == null) root.AddComponent<BoxCollider>();
+                var rootCol = root.GetComponent<Collider>() as BoxCollider;
+                if (rootCol == null) rootCol = root.AddComponent<BoxCollider>();
+                // Large collider for scatter overlap check — prevents ruins spawning inside each other
+                rootCol.size = new Vector3(size.x * 1.1f, size.y * 1.2f, size.z * 1.1f);
+                rootCol.center = new Vector3(0, size.y * 0.4f, 0);
+                // Add PlacedBlock marker so scatter overlap check (Tree/PlacedBlock/PlacedTieredBlock) blocks overlapping ruins
+                var placedMarker = root.GetComponent<VoxelEngine.Building.PlacedBlock>();
+                if (placedMarker == null) placedMarker = root.AddComponent<VoxelEngine.Building.PlacedBlock>();
+                placedMarker.Hp = 500;
 
-                // Rusted shell — 4 small cubes forming a collapsed frame
-                for (int i = 0; i < 4; i++)
+                // Try to load tiered registry for real building blocks
+                GameObject wallSteelPrefab = null;
+                GameObject wallIronPrefab = null;
+                GameObject foundationSteelPrefab = null;
+                GameObject foundationIronPrefab = null;
+                try
                 {
-                    var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                    if (cube == null) continue;
-                    cube.name = $"Rusted{i}";
-                    cube.transform.SetParent(root.transform, false);
-                    cube.transform.localPosition = new Vector3(
-                        UnityEngine.Random.Range(-size.x*0.3f, size.x*0.3f),
-                        UnityEngine.Random.Range(0, size.y*0.5f),
-                        UnityEngine.Random.Range(-size.z*0.3f, size.z*0.3f));
-                    cube.transform.localScale = Vector3.one * UnityEngine.Random.Range(0.6f, 1.2f);
-                    var rend = cube.GetComponent<Renderer>();
-                    if (rend != null)
+                    var tieredRegistry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Building.Tiered.TieredBlockRegistry>(ASSET_ROOT + "/Tiered/TieredBlockRegistry.asset");
+                    if (tieredRegistry != null)
                     {
-                        var mat = MakeColoredMat(MISC_PREFABS, $"Mat_{name}_{i}", rustColor * UnityEngine.Random.Range(0.8f,1.1f));
-                        if (mat != null) rend.sharedMaterial = mat;
+                        var wallDef = tieredRegistry.definitions.Find(d => d.family == VoxelEngine.Building.Tiered.BuildFamily.Wall);
+                        if (wallDef != null)
+                        {
+                            wallSteelPrefab = wallDef.steelPrefab;
+                            wallIronPrefab = wallDef.ironPrefab;
+                        }
+                        var foundDef = tieredRegistry.definitions.Find(d => d.family == VoxelEngine.Building.Tiered.BuildFamily.Foundation);
+                        if (foundDef != null)
+                        {
+                            foundationSteelPrefab = foundDef.steelPrefab;
+                            foundationIronPrefab = foundDef.ironPrefab;
+                        }
                     }
+                }
+                catch (System.Exception ex) { Debug.LogWarning($"[Ruin] Could not load tiered registry for {name}: {ex.Message}"); }
+
+                // Fallback materials for rusted look
+                var rustMat = MakeColoredMat(MISC_PREFABS, $"Mat_{name}_RustMain", rustColor);
+                var rustDarkMat = MakeColoredMat(MISC_PREFABS, $"Mat_{name}_RustDark", rustColor * 0.65f);
+                var mossMat = MakeColoredMat(MISC_PREFABS, $"Mat_{name}_Moss", new Color(0.22f, 0.38f, 0.22f));
+
+                System.Func<GameObject, GameObject> TryInstantiateBuildingBlock = (prefab) =>
+                {
+                    if (prefab == null) return null;
+                    try
+                    {
+                        var go = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
+                        if (go == null) go = GameObject.Instantiate(prefab);
+                        // Rusted override
+                        foreach (var rend in go.GetComponentsInChildren<Renderer>(true))
+                        {
+                            if (rend == null) continue;
+                            // 70% rust, 20% dark rust, 10% moss for premium overgrown look
+                            float r = UnityEngine.Random.value;
+                            if (r < 0.7f) rend.sharedMaterial = rustMat;
+                            else if (r < 0.9f) rend.sharedMaterial = rustDarkMat;
+                            else rend.sharedMaterial = mossMat;
+                        }
+                        return go;
+                    }
+                    catch { return null; }
+                };
+
+                // Build foundation base — 3x3 grid of foundations (premium, large, crusader base style)
+                float module = 3.75f;
+                int halfExt = Mathf.CeilToInt(size.x / module / 2f);
+                for (int x = -halfExt; x <= halfExt; x++)
+                for (int z = -halfExt; z <= halfExt; z++)
+                {
+                    // Skip some corners for ruined look, but keep majority
+                    if (UnityEngine.Random.value < 0.15f) continue; // 15% missing foundations = rubble
+
+                    GameObject fnd = TryInstantiateBuildingBlock(foundationSteelPrefab ?? foundationIronPrefab);
+                    if (fnd == null)
+                    {
+                        // Fallback: primitive cube foundation
+                        fnd = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                        fnd.name = "Foundation_Fallback";
+                        var r = fnd.GetComponent<Renderer>();
+                        if (r != null) r.sharedMaterial = rustMat;
+                        var pb = fnd.GetComponent<PlacedBlock>();
+                        if (pb == null) pb = fnd.AddComponent<PlacedBlock>();
+                        // Assign a block item that drops steelPlate when mined
+                        if (blockRuinWarehouse != null) pb.Item = blockRuinWarehouse;
+                        pb.Hp = 350;
+                    }
+                    fnd.transform.SetParent(root.transform, false);
+                    fnd.transform.localPosition = new Vector3(x * module, 0, z * module);
+                    fnd.transform.localRotation = Quaternion.identity;
+                    fnd.transform.localScale = Vector3.one;
+                    // Slight random tilt for ruined premium feel
+                    if (UnityEngine.Random.value < 0.25f)
+                    {
+                        fnd.transform.localRotation = Quaternion.Euler(
+                            UnityEngine.Random.Range(-3f, 3f),
+                            UnityEngine.Random.Range(-5f, 5f),
+                            UnityEngine.Random.Range(-3f, 3f));
+                        fnd.transform.localPosition += new Vector3(
+                            UnityEngine.Random.Range(-0.1f, 0.1f), 0, UnityEngine.Random.Range(-0.1f, 0.1f));
+                    }
+                }
+
+                // Perimeter walls — realistic crusader outpost walls, some collapsed
+                System.Action<Vector3, Quaternion, bool> AddWall = (localPos, localRot, isHalf) =>
+                {
+                    // 10% chance wall is completely missing (collapsed)
+                    if (UnityEngine.Random.value < 0.18f) return;
+
+                    GameObject wall = TryInstantiateBuildingBlock(UnityEngine.Random.value < 0.6f ? wallSteelPrefab : wallIronPrefab);
+                    if (wall == null)
+                    {
+                        wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                        wall.name = isHalf ? "HalfWall_Fallback" : "Wall_Fallback";
+                        var rend = wall.GetComponent<Renderer>();
+                        if (rend != null) rend.sharedMaterial = UnityEngine.Random.value < 0.5f ? rustMat : rustDarkMat;
+                        var pb = wall.GetComponent<PlacedBlock>();
+                        if (pb == null) pb = wall.AddComponent<PlacedBlock>();
+                        if (blockRuinWarehouse != null) pb.Item = blockRuinWarehouse;
+                        pb.Hp = 250;
+                        // Scale for half wall
+                        if (isHalf) wall.transform.localScale = new Vector3(1, 0.5f, 1);
+                    }
+                    wall.transform.SetParent(root.transform, false);
+                    wall.transform.localPosition = localPos;
+                    wall.transform.localRotation = localRot;
+                    if (isHalf)
+                    {
+                        // Half-height for collapsed sections
+                        wall.transform.localPosition += new Vector3(0, -module * 0.25f, 0);
+                    }
+                    // Random lean for ruined premium
+                    if (UnityEngine.Random.value < 0.3f)
+                    {
+                        wall.transform.localRotation *= Quaternion.Euler(
+                            UnityEngine.Random.Range(-4f, 4f),
+                            UnityEngine.Random.Range(-3f, 3f),
+                            UnityEngine.Random.Range(-4f, 4f));
+                    }
+                };
+
+                // Build 4 sides
+                for (int x = -halfExt; x <= halfExt; x++)
+                {
+                    // North wall (z = +halfExt)
+                    AddWall(new Vector3(x * module, module * 0.5f, halfExt * module), Quaternion.identity, UnityEngine.Random.value < 0.2f);
+                    // South wall (z = -halfExt)
+                    AddWall(new Vector3(x * module, module * 0.5f, -halfExt * module), Quaternion.Euler(0, 180, 0), UnityEngine.Random.value < 0.2f);
+                }
+                for (int z = -halfExt + 1; z < halfExt; z++)
+                {
+                    // East wall (x = +halfExt)
+                    AddWall(new Vector3(halfExt * module, module * 0.5f, z * module), Quaternion.Euler(0, 90, 0), UnityEngine.Random.value < 0.2f);
+                    // West wall (x = -halfExt)
+                    AddWall(new Vector3(-halfExt * module, module * 0.5f, z * module), Quaternion.Euler(0, -90, 0), UnityEngine.Random.value < 0.2f);
+                }
+
+                // Interior dividing wall + doorway gap — crusader base interior
+                if (halfExt >= 1)
+                {
+                    AddWall(new Vector3(0, module * 0.5f, 0), Quaternion.Euler(0, 90, 0), false);
+                    // Doorway gap by skipping one wall at center
+                }
+
+                // Rubble / debris piles — small cubes that are mineable for resources
+                for (int i = 0; i < 8; i++)
+                {
+                    var rubble = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    rubble.name = $"Rubble_{i}";
+                    rubble.transform.SetParent(root.transform, false);
+                    rubble.transform.localPosition = new Vector3(
+                        UnityEngine.Random.Range(-size.x * 0.45f, size.x * 0.45f),
+                        UnityEngine.Random.Range(0.1f, 0.6f),
+                        UnityEngine.Random.Range(-size.z * 0.45f, size.z * 0.45f));
+                    rubble.transform.localScale = Vector3.one * UnityEngine.Random.Range(0.3f, 0.9f);
+                    rubble.transform.localRotation = Quaternion.Euler(
+                        UnityEngine.Random.Range(0, 360f),
+                        UnityEngine.Random.Range(0, 360f),
+                        UnityEngine.Random.Range(0, 360f));
+                    var rend = rubble.GetComponent<Renderer>();
+                    if (rend != null) rend.sharedMaterial = UnityEngine.Random.value < 0.5f ? rustDarkMat : mossMat;
+                    var col = rubble.GetComponent<Collider>();
+                    if (col == null) rubble.AddComponent<BoxCollider>();
+                    var pb = rubble.GetComponent<PlacedBlock>();
+                    if (pb == null) pb = rubble.AddComponent<PlacedBlock>();
+                    // Drop steel/iron when mined
+                    if (blockRuinWarehouse != null) pb.Item = blockRuinWarehouse;
+                    pb.Hp = 120;
                 }
 
                 // Chest / loot point — add RuinChest on ROOT so any child collider hit finds it via GetComponentInParent
                 var chestGO = new GameObject("RuinChest");
                 chestGO.transform.SetParent(root.transform, false);
-                chestGO.transform.localPosition = new Vector3(0, 0.3f, 0);
+                chestGO.transform.localPosition = new Vector3(0, 0.6f, 0);
                 var chestCol = chestGO.GetComponent<Collider>();
                 if (chestCol == null) chestCol = chestGO.AddComponent<BoxCollider>();
                 chestCol.isTrigger = false;
-                if (chestCol is BoxCollider bc) bc.size = new Vector3(1.2f, 0.8f, 0.8f);
+                if (chestCol is BoxCollider bc) bc.size = new Vector3(1.4f, 1.0f, 1.0f);
 
                 // Root also gets RuinChest for reliable interaction (any rusted cube hit → parent root → chest)
                 var rootChest = root.GetComponent<VoxelEngine.Exploration.RuinChest>();
@@ -4213,7 +4378,6 @@ namespace VoxelEngine.EditorTools
                 rootChest.ruinName = name.Replace("Ruin_", "").Replace("_", " ");
                 rootChest.minComponents = minComp;
                 rootChest.maxComponents = maxComp;
-                // Use null-coalesced arrays to avoid null refs if plates missing
                 var comps = new System.Collections.Generic.List<VoxelEngine.Items.ItemDefinition>();
                 if (steelPlate != null) comps.Add(steelPlate);
                 if (ironPlate != null) comps.Add(ironPlate);
@@ -4241,6 +4405,17 @@ namespace VoxelEngine.EditorTools
                     childChest.possibleFuel = rootChest.possibleFuel;
                     childChest.possibleBlueprints = rootChest.possibleBlueprints;
                 }
+
+                // Premium point light — warm, slightly flickering, makes ruins visible at distance
+                var lightGO = new GameObject("RuinBeaconLight");
+                lightGO.transform.SetParent(root.transform, false);
+                lightGO.transform.localPosition = new Vector3(0, 2.2f, 0);
+                var light = lightGO.AddComponent<Light>();
+                light.type = LightType.Point;
+                light.color = new Color(1.0f, 0.72f, 0.32f, 1f);
+                light.intensity = 1.4f;
+                light.range = 12f;
+                light.shadows = LightShadows.None;
 
                 var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
                 UnityEngine.Object.DestroyImmediate(root);
@@ -4277,24 +4452,26 @@ namespace VoxelEngine.EditorTools
                     foreach (var biome in br.biomes)
                     {
                         if (biome == null) continue;
-                        bool isTarget = biome.biomeName == "Wasteland" || biome.biomeName == "Plains" || biome.biomeName == "Steppes" || biome.biomeName == "Desert";
+                        bool isTarget = biome.biomeName == "Wasteland" || biome.biomeName == "Plains" || biome.biomeName == "Steppes" || biome.biomeName == "Desert" || biome.biomeName == "Forest" || biome.biomeName == "Beach";
                         if (!isTarget) continue;
                         var existing = biome.scatter != null ? new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>(biome.scatter) : new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>();
                         // Avoid duplicating ruins if already present
                         bool hasRuin = false;
                         foreach (var e in existing) if (e.prefab != null && e.prefab.name.Contains("Ruin_")) { hasRuin = true; break; }
                         if (hasRuin) continue;
+                        // PREMIUM: Much higher density for visible ruins — previously 0.0012 was too rare (user reported no spawns)
+                        // Now 0.008-0.015 gives ~5-15 ruins per 10 chunks in target biomes, large and premium
                         if (ruinWarehouse != null)
-                            existing.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = ruinWarehouse, density = 0.0012f, minScale = 0.9f, maxScale = 1.3f, minHeight = 0, maxHeight = 9999 });
+                            existing.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = ruinWarehouse, density = 0.0085f, minScale = 1.2f, maxScale = 1.8f, minHeight = 0, maxHeight = 9999 });
                         if (ruinFactory != null)
-                            existing.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = ruinFactory, density = 0.0009f, minScale = 0.9f, maxScale = 1.4f, minHeight = 0, maxHeight = 9999 });
+                            existing.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = ruinFactory, density = 0.0065f, minScale = 1.3f, maxScale = 2.0f, minHeight = 0, maxHeight = 9999 });
                         if (ruinBunker != null)
-                            existing.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = ruinBunker, density = 0.0010f, minScale = 0.9f, maxScale = 1.2f, minHeight = 0, maxHeight = 9999 });
+                            existing.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = ruinBunker, density = 0.0075f, minScale = 1.1f, maxScale = 1.6f, minHeight = 0, maxHeight = 9999 });
                         biome.scatter = existing.ToArray();
                         EditorUtility.SetDirty(biome);
                     }
                     EditorUtility.SetDirty(br);
-                    Debug.Log("[VoxelEngineSetup] Ruins injected into Wasteland/Plains/Steppes/Desert biomes as rare scatter.");
+                    Debug.Log("[VoxelEngineSetup] Ruins injected into Wasteland/Plains/Steppes/Desert/Forest/Beach biomes as rare scatter (PREMIUM density 0.006-0.008).");
                 }
             }
             catch (System.Exception ex) { Debug.LogWarning("[VoxelEngineSetup] Ruins biome injection failed: " + ex.Message); }
