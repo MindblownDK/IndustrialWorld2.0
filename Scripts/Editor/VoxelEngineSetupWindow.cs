@@ -6657,130 +6657,6 @@ root =>
                 bandBox.size = size;
             }
 
-            void EnsureLiquidTankPorts()
-            {
-                string path = $"{PREFABS}/LiquidTank_Large.prefab";
-                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
-                if (prefab == null) return;
-
-                string matPath = $"{PREFABS}/Mats/LiquidPortMarker.mat";
-                var mat = AssetDatabase.LoadAssetAtPath<Material>(matPath);
-                if (mat == null)
-                {
-                    var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
-                    mat = new Material(shader) { name = "LiquidPortMarker" };
-                    if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", new Color(0.20f, 0.55f, 1.00f, 1f));
-                    else mat.color = new Color(0.20f, 0.55f, 1.00f, 1f);
-                    if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0.6f);
-                    if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.8f);
-                    EnsureFolder($"{PREFABS}/Mats");
-                    AssetDatabase.CreateAsset(mat, matPath);
-                    mat = AssetDatabase.LoadAssetAtPath<Material>(matPath);
-                }
-
-                (string name, Vector3 pos, Vector3 euler, Vector3 outward)[] ports =
-                {
-                    ("Port_LiquidIO_N",   new Vector3( 0.00f, -0.22f, -0.52f), new Vector3(90f, 0f, 0f),  Vector3.back),
-                    ("Port_LiquidIO_S",   new Vector3( 0.00f, -0.22f,  0.52f), new Vector3(90f, 0f, 0f),  Vector3.forward),
-                    ("Port_LiquidIO_E",   new Vector3( 0.52f, -0.22f,  0.00f), new Vector3(0f, 0f, 90f),  Vector3.right),
-                    ("Port_LiquidIO_W",   new Vector3(-0.52f, -0.22f,  0.00f), new Vector3(0f, 0f, 90f),  Vector3.left),
-                    ("Port_LiquidIO_Top", new Vector3( 0.00f,  0.55f,  0.00f), Vector3.zero,              Vector3.up),
-                };
-
-                bool dirty = false;
-                foreach (var (name, pos, euler, outward) in ports)
-                {
-                    var existing = prefab.transform.Find(name);
-                    if (existing != null)
-                    {
-                        if (existing.GetComponent<VoxelEngine.Maritime.MaritimePortFacing>() == null)
-                        {
-                            var tag = existing.gameObject.AddComponent<VoxelEngine.Maritime.MaritimePortFacing>();
-                            tag.localOutward = outward;
-                            dirty = true;
-                        }
-                        continue;
-                    }
-                    var port = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                    port.name = name;
-                    port.transform.SetParent(prefab.transform, false);
-                    port.transform.localPosition = pos;
-                    port.transform.localRotation = Quaternion.Euler(euler);
-                    port.transform.localScale = new Vector3(0.14f, 0.035f, 0.14f);
-                    var facing = port.AddComponent<VoxelEngine.Maritime.MaritimePortFacing>();
-                    facing.localOutward = outward;
-                    var col = port.GetComponent<Collider>();
-                    if (col != null) Object.DestroyImmediate(col);
-                    var renderer = port.GetComponent<Renderer>();
-                    if (renderer != null && mat != null) renderer.sharedMaterial = mat;
-                    dirty = true;
-                }
-                if (dirty) PrefabUtility.SavePrefabAsset(prefab);
-            }
-
-            void EnsureGasTankPorts()
-            {
-                string path = $"{PREFABS}/GasTank_Large.prefab";
-                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
-                if (prefab == null) return;
-
-                string matPath = $"{PREFABS}/Mats/GasPortMarker.mat";
-                var mat = AssetDatabase.LoadAssetAtPath<Material>(matPath);
-                if (mat == null)
-                {
-                    var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
-                    mat = new Material(shader) { name = "GasPortMarker" };
-                    if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", new Color(0.45f, 0.75f, 1.0f, 1f));
-                    else mat.color = new Color(0.45f, 0.75f, 1.0f, 1f);
-                    if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0.5f);
-                    if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.75f);
-                    if (mat.HasProperty("_EmissionColor")) { mat.EnableKeyword("_EMISSION"); mat.SetColor("_EmissionColor", new Color(0.15f, 0.35f, 0.55f, 1f)); }
-                    EnsureFolder($"{PREFABS}/Mats");
-                    AssetDatabase.CreateAsset(mat, matPath);
-                    mat = AssetDatabase.LoadAssetAtPath<Material>(matPath);
-                }
-
-                (string name, Vector3 pos, Vector3 euler, Vector3 outward)[] ports =
-                {
-                    ("Port_GasIO_N",   new Vector3( 0.00f, -0.22f, -0.52f), new Vector3(90f, 0f, 0f),  Vector3.back),
-                    ("Port_GasIO_S",   new Vector3( 0.00f, -0.22f,  0.52f), new Vector3(90f, 0f, 0f),  Vector3.forward),
-                    ("Port_GasIO_E",   new Vector3( 0.52f, -0.22f,  0.00f), new Vector3(0f, 0f, 90f),  Vector3.right),
-                    ("Port_GasIO_W",   new Vector3(-0.52f, -0.22f,  0.00f), new Vector3(0f, 0f, 90f),  Vector3.left),
-                    ("Port_GasIO_Top", new Vector3( 0.00f,  0.55f,  0.00f), Vector3.zero,              Vector3.up),
-                    ("Port_GasIO_Bottom", new Vector3( 0.00f, -0.55f,  0.00f), new Vector3(180f, 0f, 0f), Vector3.down),
-                };
-
-                bool dirty = false;
-                foreach (var (name, pos, euler, outward) in ports)
-                {
-                    var existing = prefab.transform.Find(name);
-                    if (existing != null)
-                    {
-                        if (existing.GetComponent<VoxelEngine.Maritime.MaritimePortFacing>() == null)
-                        {
-                            var tag = existing.gameObject.AddComponent<VoxelEngine.Maritime.MaritimePortFacing>();
-                            tag.localOutward = outward;
-                            dirty = true;
-                        }
-                        continue;
-                    }
-                    var port = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                    port.name = name;
-                    port.transform.SetParent(prefab.transform, false);
-                    port.transform.localPosition = pos;
-                    port.transform.localRotation = Quaternion.Euler(euler);
-                    port.transform.localScale = new Vector3(0.14f, 0.035f, 0.14f);
-                    var facing = port.AddComponent<VoxelEngine.Maritime.MaritimePortFacing>();
-                    facing.localOutward = outward;
-                    var col = port.GetComponent<Collider>();
-                    if (col != null) Object.DestroyImmediate(col);
-                    var renderer = port.GetComponent<Renderer>();
-                    if (renderer != null && mat != null) renderer.sharedMaterial = mat;
-                    dirty = true;
-                }
-                if (dirty) PrefabUtility.SavePrefabAsset(prefab);
-            }
-
             // Classic-network presence on the big grid tank: the classic liquid pipe
             // graph can now link to it (five-lattice-cell cardinal endpoint rule) and
             // content mirrors both ways. Create/link only — never reconfigures an
@@ -9518,7 +9394,7 @@ root =>
                 if (emissive)
                 {
                     if (mat.HasProperty("_EmissionColor")) mat.SetColor("_EmissionColor", tint);
-                    mat.globalIlluminationFlags = UnityEngine.Rendering.MaterialGlobalIlluminationFlags.RealtimeEmissive;
+                    mat.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
                     mat.EnableKeyword("_EMISSION");
                 }
                 AssetDatabase.CreateAsset(mat, path);
