@@ -4437,22 +4437,24 @@ namespace VoxelEngine.EditorTools
                         foreach (var e in existing) if (e.prefab != null && e.prefab.name.Contains("Ruin_")) { hasRuin = true; break; }
                         if (hasRuin) continue;
                         // PREMIUM RARE — easy numbers to tweak (user request: not 0.005(something) confusing)
-                        // These are probabilities per surface voxel: 0.002 = 0.2% = ~1 ruin per 500 surface voxels = somewhat rare
-                        // To make rarer: lower to 0.001, to make more common: raise to 0.004
-                        const float RUIN_DENSITY_WAREHOUSE = 0.0020f; // easy: 0.002 = rare, visible
-                        const float RUIN_DENSITY_FACTORY = 0.0015f;   // easy: 0.0015 = rarer
-                        const float RUIN_DENSITY_BUNKER = 0.0018f;    // easy: 0.0018 = rare
+                        // User said WAYYYY too frequent at 0.0085, then 0.002 still too frequent.
+                        // Now VERY RARE: 0.0008 = 0.08% per surface voxel = ~1 ruin per 6-8 chunks.
+                        // To make rarer: lower to 0.0004, to make more common: raise to 0.0015
+                        // EASY NUMBERS: 0.0008, 0.0005, 0.0006 — simple, readable, no 0.005(x) confusion
+                        const float RUIN_DENSITY_WAREHOUSE = 0.0008f; // easy: 0.0008 = rare
+                        const float RUIN_DENSITY_FACTORY = 0.0005f;   // easy: 0.0005 = very rare (factory is big)
+                        const float RUIN_DENSITY_BUNKER = 0.0006f;    // easy: 0.0006 = rare (bunker)
                         if (ruinWarehouse != null)
-                            existing.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = ruinWarehouse, density = RUIN_DENSITY_WAREHOUSE, minScale = 1.1f, maxScale = 1.5f, minHeight = 0, maxHeight = 9999 });
+                            existing.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = ruinWarehouse, density = RUIN_DENSITY_WAREHOUSE, minScale = 1.2f, maxScale = 1.6f, minHeight = 0, maxHeight = 9999 });
                         if (ruinFactory != null)
-                            existing.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = ruinFactory, density = RUIN_DENSITY_FACTORY, minScale = 1.2f, maxScale = 1.7f, minHeight = 0, maxHeight = 9999 });
+                            existing.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = ruinFactory, density = RUIN_DENSITY_FACTORY, minScale = 1.3f, maxScale = 1.8f, minHeight = 0, maxHeight = 9999 });
                         if (ruinBunker != null)
-                            existing.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = ruinBunker, density = RUIN_DENSITY_BUNKER, minScale = 1.0f, maxScale = 1.4f, minHeight = 0, maxHeight = 9999 });
+                            existing.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = ruinBunker, density = RUIN_DENSITY_BUNKER, minScale = 1.1f, maxScale = 1.5f, minHeight = 0, maxHeight = 9999 });
                         biome.scatter = existing.ToArray();
                         EditorUtility.SetDirty(biome);
                     }
                     EditorUtility.SetDirty(br);
-                    Debug.Log("[VoxelEngineSetup] Ruins injected into Wasteland/Plains/Steppes/Desert/Forest/Beach biomes as rare scatter — PREMIUM easy densities: 0.0020 / 0.0015 / 0.0018 (somewhat rare, not everywhere).");
+                    Debug.Log("[VoxelEngineSetup] Ruins injected — RARE easy densities: 0.0008 / 0.0005 / 0.0006 (somewhat rare, not everywhere). Change these 3 const floats at top of injection to tweak rarity easily.");
                 }
             }
             catch (System.Exception ex) { Debug.LogWarning("[VoxelEngineSetup] Ruins biome injection failed: " + ex.Message); }

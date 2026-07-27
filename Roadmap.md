@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.30.3-dev`
-**Roadmap Version:** `6.30.3-dev`
+**Current Version:** `6.31.0-dev`
+**Roadmap Version:** `6.31.0-dev`
 **Date:** 2026-07-26
 **Status:** Premium Ruins (6.30.0) + Ruins Fix (6.29.2) Crash Fix + RuinChest Fix (6.29.1) + Offline Survival (11.4) Completed + Grid Gravity Fixed (6.27.3) + Passive Oxygen (11.5); World Management (11.7) Completed; Power, Vehicles & Combat (4.7.0) remains WORKING ON
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -995,7 +995,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 
 **Goal:** Make every planet feel alive, dangerous, and worth exploring — with ruins to loot, weather to survive, and enemies to fight.
 
-#### New Content — Ruins Implemented in 6.29.0-dev + Premium 6.30.3-dev
+#### New Content — Ruins Implemented in 6.29.0-dev + Premium 6.31.0-dev
 
 1. **Ruins of a Dead Civilization — ✅ COMPLETED (6.29.0) + PREMIUM 6.30.0**
    - Rare broken warehouses, collapsed factories, and derelict bases scattered across biomes. Initially 0.001 density (user reported no spawns), now **PREMIUM density 0.006-0.0085** in Wasteland/Plains/Steppes/Desert/Forest/Beach with scale 1.2-2.0 → ~5-15 ruins per 10 chunks, large and visible.

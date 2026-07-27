@@ -34,6 +34,10 @@ namespace VoxelEngine.Exploration
         private void Update()
         {
             if (!isLooted) return;
+            // If world setting disables respawn, never reset
+            var session = Menu.WorldSession.Instance;
+            if (session != null && !session.allowRuinLootRespawn) return;
+
             _respawnTimer += Time.deltaTime;
             if (_respawnTimer >= respawnSeconds)
             {
@@ -47,7 +51,10 @@ namespace VoxelEngine.Exploration
         {
             if (isLooted)
             {
-                VoxelEngine.UI.BuildFeedbackHud.Show("Ruin Empty", "Already looted — respawns in 30 min", null, Color.gray);
+                var session = Menu.WorldSession.Instance;
+                bool respawnAllowed = session == null || session.allowRuinLootRespawn;
+                string msg = respawnAllowed ? "Already looted — respawns in 30 min" : "Already looted — respawning disabled in world settings";
+                VoxelEngine.UI.BuildFeedbackHud.Show("Ruin Empty", msg, null, Color.gray);
                 return false;
             }
 

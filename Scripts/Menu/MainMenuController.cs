@@ -42,6 +42,7 @@ namespace VoxelEngine.Menu
         private int    _newInventoryWeightPercent = WorldSession.DefaultInventoryWeightPercent;
         private int    _newContainerWeightPercent = WorldSession.DefaultContainerWeightPercent;
         private bool   _newShowDropVoidWarning = true;
+        private bool   _newAllowRuinLootRespawn = WorldSession.DefaultAllowRuinLootRespawn;
 
         // Edit-world form values. Only non-generation settings are editable here.
         private string _editOriginalName = string.Empty;
@@ -50,6 +51,7 @@ namespace VoxelEngine.Menu
         private int    _editInventoryWeightPercent = WorldSession.DefaultInventoryWeightPercent;
         private int    _editContainerWeightPercent = WorldSession.DefaultContainerWeightPercent;
         private bool   _editShowDropVoidWarning = true;
+        private bool   _editAllowRuinLootRespawn = WorldSession.DefaultAllowRuinLootRespawn;
         private string _menuStatus = string.Empty;
         private string _expandedAutosaveWorld = string.Empty;
 
@@ -543,6 +545,13 @@ namespace VoxelEngine.Menu
             dropWarnToggle.style.color = new StyleColor(T.TextSecondary);
             dropWarnToggle.RegisterValueChangedCallback(e => _newShowDropVoidWarning = e.newValue);
             scroll.Add(dropWarnToggle);
+
+            var ruinRespawnToggle = new Toggle("Allow Ruin Loot to Respawn (uncheck to disable respawning loot)");
+            ruinRespawnToggle.SetValueWithoutNotify(_newAllowRuinLootRespawn);
+            ruinRespawnToggle.style.marginTop = 8;
+            ruinRespawnToggle.style.color = new StyleColor(T.TextSecondary);
+            ruinRespawnToggle.RegisterValueChangedCallback(e => _newAllowRuinLootRespawn = e.newValue);
+            scroll.Add(ruinRespawnToggle);
             scroll.Add(T.Spacer(16));
 
             // ── Cosmos: solar-system picker + per-planet custom seeds ──
@@ -627,6 +636,13 @@ namespace VoxelEngine.Menu
             dropWarnToggle.style.color = new StyleColor(T.TextSecondary);
             dropWarnToggle.RegisterValueChangedCallback(e => _editShowDropVoidWarning = e.newValue);
             panel.Add(dropWarnToggle);
+
+            var ruinRespawnToggleEdit = new Toggle("Allow Ruin Loot to Respawn (uncheck to disable respawning loot)");
+            ruinRespawnToggleEdit.SetValueWithoutNotify(_editAllowRuinLootRespawn);
+            ruinRespawnToggleEdit.style.marginTop = 8;
+            ruinRespawnToggleEdit.style.color = new StyleColor(T.TextSecondary);
+            ruinRespawnToggleEdit.RegisterValueChangedCallback(e => _editAllowRuinLootRespawn = e.newValue);
+            panel.Add(ruinRespawnToggleEdit);
 
             panel.Add(T.Spacer(18));
             var row = new VisualElement();
@@ -713,6 +729,7 @@ namespace VoxelEngine.Menu
             _editInventoryWeightPercent = Mathf.Clamp(world.inventoryWeightPercent <= 0 ? WorldSession.DefaultInventoryWeightPercent : world.inventoryWeightPercent, 25, 1000);
             _editContainerWeightPercent = Mathf.Clamp(world.containerWeightPercent <= 0 ? WorldSession.DefaultContainerWeightPercent : world.containerWeightPercent, 25, 1000);
             _editShowDropVoidWarning = world.showDropVoidWarning;
+            _editAllowRuinLootRespawn = world.allowRuinLootRespawn;
             _menuStatus = string.Empty;
             _page = Page.EditWorld;
             BuildUI();
@@ -735,7 +752,7 @@ namespace VoxelEngine.Menu
                 finalName = requestedName;
             }
 
-            if (!_session.SaveWorldSettingsFor(finalName, _editMaxDroppedItems, _editInventoryWeightPercent, _editContainerWeightPercent, _editShowDropVoidWarning))
+            if (!_session.SaveWorldSettingsFor(finalName, _editMaxDroppedItems, _editInventoryWeightPercent, _editContainerWeightPercent, _editShowDropVoidWarning, _editAllowRuinLootRespawn))
             {
                 _menuStatus = "Error: Could not save world settings.";
                 BuildUI();
@@ -772,6 +789,7 @@ namespace VoxelEngine.Menu
             _session.inventoryWeightPercent = Mathf.Clamp(_newInventoryWeightPercent, 25, 1000);
             _session.containerWeightPercent = Mathf.Clamp(_newContainerWeightPercent, 25, 1000);
             _session.showDropVoidWarning = _newShowDropVoidWarning;
+            _session.allowRuinLootRespawn = _newAllowRuinLootRespawn;
             _session.SaveWorldSettings();
 
             // Persist the cosmos choice (system + per-planet seeds) so the same seeds

@@ -1,9 +1,34 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.30.3-dev`
+**Current Version:** `6.31.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.31.0-dev] World Setting — Disable Ruin Loot Respawn + Rare Ruins Easy Numbers
+
+**Type:** MINOR — new world setting + spawn tuning, save-compatible.
+
+**Added — Create/Edit World option to disable respawning loot:**
+1. `WorldSession` new bool `allowRuinLootRespawn` (default true) + `DefaultAllowRuinLootRespawn`. Added to `WorldSettingsData` as int `allowRuinLootRespawn` (1/-1) for JSON persistence.
+2. Updated `SaveWorldSettings`, `LoadWorldSettings`, `TryReadWorldSettings` (new overload with 6 out params), `SaveWorldSettingsFor` (new 6-param overload), `ListWorlds`, `WorldSummary` (new bool field).
+3. `MainMenuController`: new fields `_newAllowRuinLootRespawn` / `_editAllowRuinLootRespawn`, UI toggles in `BuildNewWorldPage` and `BuildEditWorldPage`: "Allow Ruin Loot to Respawn (uncheck to disable respawning loot)" — default checked. `StartEditWorld` and `ApplyWorldEdit` / `CreateAndLoadWorld` now save/load the toggle.
+4. `RuinChest`: `Update()` now checks `WorldSession.Instance.allowRuinLootRespawn` — if false, never respawns (stays looted forever). `TryOpen()` shows different feedback: "Already looted — respawning disabled in world settings" when disabled vs "respawns in 30 min" when enabled.
+
+**Fixed — Structures still WAYYYY too frequent:**
+5. Ruins density was 0.0085/0.0065/0.0075 (0.85%/0.65%/0.75% per surface voxel = 5-15 ruins per 10 chunks = EVERYWHERE). User requested rarer + easy numbers not 0.005(something) confusing.
+6. Now VERY RARE easy numbers: `RUIN_DENSITY_WAREHOUSE = 0.0008f` (0.08% = ~1 per 6-8 chunks), `FACTORY = 0.0005f` (0.05% = very rare, ~1 per 15 chunks), `BUNKER = 0.0006f` (0.06%). Defined as const floats at injection site with comment explaining math: 0.0008 = 0.08% per voxel, lower to 0.0004 for rarer, raise to 0.0015 for more common. Easy to change and look at.
+7. Increased scale slightly (1.2-1.6, 1.3-1.8, 1.1-1.5) for premium large look even when rare.
+
+**Files touched:**
+- `Scripts/Menu/WorldSession.cs`
+- `Scripts/Menu/MainMenuController.cs`
+- `Scripts/Exploration/RuinChest.cs`
+- `Scripts/Editor/VoxelEngineSetupWindow.cs` (density constants + rarity comment)
+- `Scripts/Core/GameVersion.cs` (6.30.3 → 6.31.0)
+- `Changelog.md`
+
+---
 
 ### [6.30.3-dev] Ruins Setup Crash Fix — PlacedBlock & Path Variable
 
