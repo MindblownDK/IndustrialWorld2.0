@@ -4169,229 +4169,484 @@ namespace VoxelEngine.EditorTools
             GameObject MakeRuinPrefab(string name, Color rustColor, Vector3 size, int minComp, int maxComp)
             {
                 string prefabPath = $"{MISC_PREFABS}/{name}.prefab";
-                var root = new GameObject(name);
-                if (root == null)
+
+                // ── Non-destructive: preserve any hand-tuned loot config / HP from a previous run ──
+                ItemDefinition[] keepComponents = null;
+                ItemDefinition[] keepFuel = null;
+                BlueprintDataCoreItem[] keepBlueprints = null;
+                int keepMinComp = minComp;
+                int keepMaxComp = maxComp;
+                string keepRuinName = null;
                 {
-                    Debug.LogError($"[Ruin] Failed to create root GameObject for {name}");
-                    return null;
+                    var existingPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+                    if (existingPrefab != null)
+                    {
+                        var prevChest = existingPrefab.GetComponent<VoxelEngine.Exploration.RuinChest>();
+                        if (prevChest != null)
+                        {
+                            if (prevChest.possibleComponents != null && prevChest.possibleComponents.Length > 0) keepComponents = prevChest.possibleComponents;
+                            if (prevChest.possibleFuel != null && prevChest.possibleFuel.Length > 0) keepFuel = prevChest.possibleFuel;
+                            if (prevChest.possibleBlueprints != null && prevChest.possibleBlueprints.Length > 0) keepBlueprints = prevChest.possibleBlueprints;
+                            if (prevChest.minComponents > 0) keepMinComp = prevChest.minComponents;
+                            if (prevChest.maxComponents > 0) keepMaxComp = prevChest.maxComponents;
+                            if (!string.IsNullOrEmpty(prevChest.ruinName)) keepRuinName = prevChest.ruinName;
+                        }
+                    }
                 }
+
+                var root = new GameObject(name);
+                if (root == null) { Debug.LogError($"[Ruin] Failed to create root GameObject for {name}"); return null; }
+
+                // ── Derive distinct architectural styles from the ruin name ──
+                bool   isFactory       = name.Contains("Factory");
+                bool   isBunker        = name.Contains("Bunker");
+                int    extent          = isFactory ? 2 : 1;                 // 5×5 grand fortress vs 3×3 outpost
+                float  module          = 3.75f;
+                float  wallHeight      = isBunker ? module * 0.62f : module; // bunker = squat, thick & fortified
+                bool   hasBattlements  = !isBunker;                          // bunkers get a flat reinforced lip, not crenellations
+                float  wallThick       = isBunker ? 0.55f : 0.30f;
+                float  pillarW         = module * 0.52f;
+                float  deckTopY        = 0.62f;
+                float  W               = extent * module;
+                float  footW           = (extent * 2 + 1) * module;
+                float  totalH          = deckTopY + wallHeight + (hasBattlements ? 1.25f : 0.35f);
 
                 var rootCol = root.GetComponent<Collider>() as BoxCollider;
                 if (rootCol == null) rootCol = root.AddComponent<BoxCollider>();
-                rootCol.size = new Vector3(size.x * 1.15f, size.y * 1.35f, size.z * 1.15f);
-                rootCol.center = new Vector3(0, size.y * 0.45f, 0);
-                var placedMarker = root.GetComponent<VoxelEngine.Building.PlacedBlock>();
-                if (placedMarker == null) placedMarker = root.AddComponent<VoxelEngine.Building.PlacedBlock>();
-                placedMarker.Hp = 600;
+                rootCol.size = new Vector3(footW * 1.12f, totalH * 1.12f, footW * 1.12f);
+                rootCol.center = new Vector3(0f, totalH * 0.5f, 0f);
+                var rootMarker = root.GetComponent<VoxelEngine.Building.PlacedBlock>();
+                if (rootMarker == null) rootMarker = root.AddComponent<VoxelEngine.Building.PlacedBlock>();
+                rootMarker.Hp = 600;
 
-                // Premium rusted metallic materials — not wood brown
-                var rustMain = MakeColoredMat(MISC_PREFABS, $"Mat_{name}_RustMain", new Color(0.66f, 0.34f, 0.18f));
-                var rustDark = MakeColoredMat(MISC_PREFABS, $"Mat_{name}_RustDark", new Color(0.42f, 0.24f, 0.14f));
-                var rustLight = MakeColoredMat(MISC_PREFABS, $"Mat_{name}_RustLight", new Color(0.78f, 0.50f, 0.28f));
-                var moss = MakeColoredMat(MISC_PREFABS, $"Mat_{name}_Moss", new Color(0.26f, 0.42f, 0.26f));
-                var metalTrim = MakeColoredMat(MISC_PREFABS, $"Mat_{name}_Trim", new Color(0.38f, 0.38f, 0.42f));
-                var chestMetal = MakeColoredMat(MISC_PREFABS, $"Mat_{name}_Chest", new Color(0.22f, 0.22f, 0.24f));
-
-                float module = 3.75f;
-                float foundationTop = 0.5f;
-                float wallHeight = module;
-                float wallThick = 0.24f;
-
-                int halfExtX = Mathf.Max(1, Mathf.FloorToInt((size.x * 0.5f) / module));
-                int halfExtZ = Mathf.Max(1, Mathf.FloorToInt((size.z * 0.5f) / module));
-
-                // === FOUNDATION BASE — exact grid, no gaps, all present for solid premium base (fixes scattered look) ===
-                for (int x = -halfExtX; x <= halfExtX; x++)
-                for (int z = -halfExtZ; z <= halfExtZ; z++)
+                // ══════════ PREMIUM PROCEDURAL MATERIALS ══════════
+                // Textures are shared across all 3 ruins for GPU batching; per-ruin rust tints come from _BaseColor.
+                Texture2D GetRuinTex(string texName, int style)
                 {
-                    var fnd = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                    fnd.name = $"Foundation_{x}_{z}";
-                    fnd.transform.SetParent(root.transform, false);
-                    fnd.transform.localPosition = new Vector3(x * module, foundationTop * 0.5f, z * module);
-                    fnd.transform.localScale = new Vector3(module * 0.99f, foundationTop, module * 0.99f);
-                    fnd.transform.localRotation = Quaternion.identity;
-                    var rend = fnd.GetComponent<Renderer>();
-                    if (rend != null)
+                    string texPath = $"{MISC_PREFABS}/{texName}.asset";
+                    var existing = AssetDatabase.LoadAssetAtPath<Texture2D>(texPath);
+                    if (existing != null) return existing;
+                    const int size = 128;
+                    var texture = new Texture2D(size, size, TextureFormat.RGBA32, false)
                     {
-                        // Premium variation: mostly rust, occasional dark rust / moss for overgrown
-                        float r = UnityEngine.Random.value;
-                        rend.sharedMaterial = r < 0.65f ? rustMain : r < 0.85f ? rustDark : moss;
-                    }
-                    var pb = fnd.GetComponent<VoxelEngine.Building.PlacedBlock>();
-                    if (pb == null) pb = fnd.AddComponent<VoxelEngine.Building.PlacedBlock>();
-                    pb.Hp = 380;
-                }
-
-                // Helper to create a wall piece at exact module position (walls together, not scattered)
-                System.Action<Vector3, Quaternion, bool, bool> CreateWall = (localPos, localRot, isHalf, isDoorway) =>
-                {
-                    if (isDoorway) return; // doorway gap — collapsed opening
-                    if (UnityEngine.Random.value < 0.15f) return; // 15% missing = ruined opening, less than before for more together look
-
-                    var wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                    wall.name = isHalf ? "HalfWall" : "Wall";
-                    wall.transform.SetParent(root.transform, false);
-                    wall.transform.localPosition = localPos;
-                    wall.transform.localRotation = localRot;
-
-                    float h = isHalf ? wallHeight * 0.55f : wallHeight;
-                    float yOffset = isHalf ? -wallHeight * 0.22f : 0f;
-                    // Wall size: module wide, wallHeight tall, thin — precise, no gaps
-                    wall.transform.localScale = new Vector3(module * 0.99f, h, wallThick);
-                    wall.transform.localPosition += new Vector3(0, yOffset, 0);
-
-                    var rend = wall.GetComponent<Renderer>();
-                    if (rend != null)
+                        name = texName, wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Bilinear
+                    };
+                    var px = new Color[size * size];
+                    for (int y = 0; y < size; y++)
+                    for (int x = 0; x < size; x++)
                     {
-                        float r = UnityEngine.Random.value;
-                        rend.sharedMaterial = r < 0.70f ? rustMain : r < 0.90f ? rustDark : rustLight;
+                        float nx = x / (float)size, ny = y / (float)size;
+                        float n = Mathf.PerlinNoise(nx * 8f + style * 4.7f, ny * 8f + style * 2.3f) - 0.5f;
+                        float pat = n;
+                        switch (style)
+                        {
+                            case 0: // rusted iron plating — vertical corrosion streaks, panel seams, rivets
+                                pat = n * 0.30f + Mathf.Sin(ny * 110f + n * 3f) * 0.045f;
+                                if (x % 48 < 2 || y % 48 < 2) pat -= 0.13f;
+                                int rx = x % 48, ry = y % 48;
+                                if ((rx < 4 && ry < 4) || (rx > 44 && ry > 44) || (rx < 4 && ry > 44) || (rx > 44 && ry < 4)) pat += 0.15f;
+                                break;
+                            case 1: // weathered crusader stone / concrete — mottled with dark fracture lines
+                                pat = n * 0.50f + Mathf.PerlinNoise(nx * 22f, ny * 22f) * 0.20f - 0.10f;
+                                if (Mathf.PerlinNoise(nx * 4f + 5f, ny * 4f + 5f) < 0.34f) pat -= 0.20f;
+                                break;
+                            case 2: // moss / overgrowth — clumpy with bare patches
+                                pat = (Mathf.PerlinNoise(nx * 10f, ny * 10f) - 0.5f) * 0.6f;
+                                if (Mathf.PerlinNoise(nx * 5f, ny * 5f) < 0.42f) pat -= 0.40f;
+                                break;
+                            case 3: // rotted timber — grain + plank gaps
+                                pat = n * 0.18f + Mathf.Sin((ny * 18f + n * 3f) * Mathf.PI) * 0.10f;
+                                if (x % 42 < 1) pat -= 0.14f;
+                                break;
+                            default: // faded cloth banner
+                                pat = n * 0.10f - 0.02f;
+                                if (y % 14 < 1) pat -= 0.06f;
+                                break;
+                        }
+                        Color c = Color.white * (1f + pat * 0.5f); // neutral greyscale; tint comes from the material
+                        c.a = 1f;
+                        px[y * size + x] = c;
                     }
+                    texture.SetPixels(px);
+                    texture.Apply(false, false);
+                    AssetDatabase.CreateAsset(texture, texPath);
+                    return texture;
+                }
 
-                    var pb = wall.GetComponent<VoxelEngine.Building.PlacedBlock>();
-                    if (pb == null) pb = wall.AddComponent<VoxelEngine.Building.PlacedBlock>();
-                    pb.Hp = isHalf ? 180 : 280;
+                Material MakeRuinMat(string matName, Texture2D tex, Color tint, float metallic, float smoothness)
+                {
+                    string path = $"{MISC_PREFABS}/{matName}.mat";
+                    var existing = AssetDatabase.LoadAssetAtPath<Material>(path);
+                    // Upgrade legacy flat materials (no base texture) once; preserve textured mats on later runs.
+                    bool isLegacyFlat = existing != null
+                        && existing.GetTexture("_BaseMap") == null
+                        && existing.GetTexture("_MainTex") == null;
+                    if (existing != null && !isLegacyFlat) return existing;
+                    if (isLegacyFlat) AssetDatabase.DeleteAsset(path);
 
-                    // Very slight lean for ruined premium (1.5-3 deg), not scattered
-                    if (UnityEngine.Random.value < 0.25f)
+                    var sh = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+                    var mat = new Material(sh) { name = matName, enableInstancing = true };
+                    if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", tint);
+                    else mat.color = tint;
+                    if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", tex);
+                    if (mat.HasProperty("_MainTex")) mat.SetTexture("_MainTex", tex);
+                    if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", metallic);
+                    if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", smoothness);
+                    AssetDatabase.CreateAsset(mat, path);
+                    return mat;
+                }
+
+                string shortName = name.Replace("Ruin_", "");
+                var texRust  = GetRuinTex("Tex_Ruin_RustPlate", 0);
+                var texStone = GetRuinTex("Tex_Ruin_Stone", 1);
+                var texMoss  = GetRuinTex("Tex_Ruin_Moss", 2);
+                var texWood  = GetRuinTex("Tex_Ruin_Wood", 3);
+                var texCloth = GetRuinTex("Tex_Ruin_Cloth", 4);
+
+                Color rustMain  = rustColor;
+                Color rustDark  = rustColor * 0.62f;  rustDark.a  = 1f;
+                Color rustLight = rustColor * 1.28f;  rustLight.a = 1f;
+
+                var matRustMain  = MakeRuinMat($"Mat_Ruin_{shortName}_RustMain",  texRust,  rustMain,  0.82f, 0.34f);
+                var matRustDark  = MakeRuinMat($"Mat_Ruin_{shortName}_RustDark",  texRust,  rustDark,  0.86f, 0.24f);
+                var matRustLight = MakeRuinMat($"Mat_Ruin_{shortName}_RustLight", texRust,  rustLight, 0.70f, 0.40f);
+                var matStone     = MakeRuinMat("Mat_Ruin_StoneWeathered", texStone, new Color(0.52f, 0.50f, 0.47f), 0.00f, 0.12f);
+                var matStoneDark = MakeRuinMat("Mat_Ruin_StoneDark",       texStone, new Color(0.40f, 0.39f, 0.37f), 0.00f, 0.10f);
+                var matMoss      = MakeRuinMat("Mat_Ruin_MossOvergrowth",  texMoss,  new Color(0.30f, 0.42f, 0.24f), 0.00f, 0.18f);
+                var matWood      = MakeRuinMat("Mat_Ruin_RotWood",         texWood,  new Color(0.30f, 0.20f, 0.12f), 0.00f, 0.22f);
+                var matBanner    = MakeRuinMat("Mat_Ruin_BannerFaded",     texCloth, new Color(0.86f, 0.82f, 0.72f), 0.00f, 0.30f);
+                var matChest     = MakeRuinMat("Mat_Ruin_ChestIron",       texRust,  new Color(0.20f, 0.20f, 0.22f), 0.90f, 0.30f);
+                var matChestTrim = MakeRuinMat("Mat_Ruin_ChestIronTrim",   texRust,  new Color(0.78f, 0.56f, 0.24f), 0.92f, 0.45f);
+
+                // ── Block helpers ──
+                GameObject AddBlock(string childName, Vector3 localPos, Vector3 localScale, Material mat, int hp, Quaternion rot)
+                {
+                    var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    go.name = childName;
+                    go.transform.SetParent(root.transform, false);
+                    go.transform.localPosition = localPos;
+                    go.transform.localRotation = rot;
+                    go.transform.localScale = localScale;
+                    if (mat != null) { var r = go.GetComponent<Renderer>(); if (r != null) r.sharedMaterial = mat; }
+                    var pb = go.GetComponent<VoxelEngine.Building.PlacedBlock>();
+                    if (pb == null) pb = go.AddComponent<VoxelEngine.Building.PlacedBlock>();
+                    pb.Hp = Mathf.Max(10, hp);
+                    return go;
+                }
+
+                GameObject AddDecor(string childName, Vector3 localPos, Vector3 localScale, Material mat, Quaternion rot)
+                {
+                    var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    go.name = childName;
+                    go.transform.SetParent(root.transform, false);
+                    go.transform.localPosition = localPos;
+                    go.transform.localRotation = rot;
+                    go.transform.localScale = localScale;
+                    if (mat != null) { var r = go.GetComponent<Renderer>(); if (r != null) r.sharedMaterial = mat; }
+                    var col = go.GetComponent<Collider>();
+                    if (col != null) UnityEngine.Object.DestroyImmediate(col);
+                    return go;
+                }
+
+                var wallMats = new[] { matRustMain, matRustDark, matRustLight };
+                Material WallMat() => wallMats[UnityEngine.Random.Range(0, wallMats.Length)];
+
+                // ══════════ FOUNDATION: stone plinth + paved deck ══════════
+                AddBlock("Foundation_Plinth", new Vector3(0f, 0.25f, 0f),
+                    new Vector3(footW + 0.9f, 0.5f, footW + 0.9f), matStoneDark, 420, Quaternion.identity);
+                AddBlock("Foundation_Deck", new Vector3(0f, 0.56f, 0f),
+                    new Vector3(footW, 0.12f, footW), matStone, 380, Quaternion.identity);
+                AddDecor("Foundation_Moss", new Vector3(-footW * 0.34f, deckTopY + 0.0f, -footW * 0.34f),
+                    new Vector3(footW * 0.42f, 0.05f, footW * 0.42f), matMoss, Quaternion.identity);
+                AddDecor("Foundation_Moss2", new Vector3(footW * 0.30f, deckTopY + 0.0f, footW * 0.32f),
+                    new Vector3(footW * 0.30f, 0.05f, footW * 0.30f), matMoss, Quaternion.Euler(0f, 35f, 0f));
+
+                // ══════════ CORNER PILLARS (quoins / tower bases) ══════════
+                float cornerH = wallHeight * (hasBattlements ? 1.18f : 1.0f);
+                float cornerY = deckTopY + cornerH * 0.5f;
+                float[] signs = { -1f, 1f };
+                foreach (float sx in signs)
+                foreach (float sz in signs)
+                    AddBlock($"Pillar_{(sx<0?"W":"E")}{(sz<0?"S":"N")}",
+                        new Vector3(sx * W, cornerY, sz * W),
+                        new Vector3(pillarW, cornerH, pillarW),
+                        UnityEngine.Random.value < 0.5f ? matStone : matStoneDark, 360, Quaternion.identity);
+
+                // ══════════ PERIMETER WALLS ══════════
+                float wallY = deckTopY + wallHeight * 0.5f;
+
+                void WallPanel(string label, float x, float z, bool alongX, bool ruined)
+                {
+                    Vector3 full = alongX ? new Vector3(module * 0.99f, wallHeight, wallThick) : new Vector3(wallThick, wallHeight, module * 0.99f);
+                    if (ruined)
                     {
-                        wall.transform.localRotation *= Quaternion.Euler(
-                            UnityEngine.Random.Range(-2.5f, 2.5f),
-                            UnityEngine.Random.Range(-1.5f, 1.5f),
-                            UnityEngine.Random.Range(-2.5f, 2.5f));
+                        Vector3 sill = alongX ? new Vector3(module * 0.99f, wallHeight * 0.34f, wallThick) : new Vector3(wallThick, wallHeight * 0.34f, module * 0.99f);
+                        AddBlock($"Sill_{label}", new Vector3(x, deckTopY + wallHeight * 0.17f, z), sill, matRustDark, 160, Quaternion.identity);
+                        return;
                     }
-                };
-
-                // === PERIMETER WALLS — exact module grid, together ===
-                for (int x = -halfExtX; x <= halfExtX; x++)
-                {
-                    // North wall (z = +halfExt)
-                    Vector3 posN = new Vector3(x * module, foundationTop + wallHeight * 0.5f, halfExtZ * module);
-                    bool doorwayN = (x == 0); // center doorway
-                    CreateWall(posN, Quaternion.identity, UnityEngine.Random.value < 0.12f, doorwayN);
-                    // South wall (z = -halfExt)
-                    Vector3 posS = new Vector3(x * module, foundationTop + wallHeight * 0.5f, -halfExtZ * module);
-                    CreateWall(posS, Quaternion.Euler(0, 180, 0), UnityEngine.Random.value < 0.12f, false);
-                }
-                for (int z = -halfExtZ + 1; z < halfExtZ; z++)
-                {
-                    // East wall (x = +halfExt)
-                    Vector3 posE = new Vector3(halfExtX * module, foundationTop + wallHeight * 0.5f, z * module);
-                    CreateWall(posE, Quaternion.Euler(0, 90, 0), UnityEngine.Random.value < 0.12f, false);
-                    // West wall (x = -halfExt)
-                    Vector3 posW = new Vector3(-halfExtX * module, foundationTop + wallHeight * 0.5f, z * module);
-                    CreateWall(posW, Quaternion.Euler(0, -90, 0), UnityEngine.Random.value < 0.12f, false);
+                    AddBlock($"Wall_{label}", new Vector3(x, wallY, z), full, WallMat(), 280, Quaternion.identity);
                 }
 
-                // Interior dividing wall — crusader base layout, with doorway gap
-                if (halfExtX >= 1 && halfExtZ >= 1)
+                // North & South walls (North center is reserved for the gateway)
+                for (int xi = -extent; xi <= extent; xi++)
                 {
-                    for (int x = -halfExtX + 1; x < halfExtX; x++)
+                    bool gatewayGap = (xi == 0);
+                    if (!gatewayGap)
+                        WallPanel($"N{xi}", xi * module, W, true, UnityEngine.Random.value < 0.13f);
+                    bool collapsed = isFactory && (xi >= -1 && xi <= 0);
+                    if (!collapsed)
+                        WallPanel($"S{xi}", xi * module, -W, true, UnityEngine.Random.value < 0.13f);
+                }
+                // East & West walls (skip corners — quoins live there)
+                for (int zi = -extent + 1; zi <= extent - 1; zi++)
+                {
+                    WallPanel($"E{zi}", W, zi * module, false, UnityEngine.Random.value < 0.13f);
+                    WallPanel($"W{zi}", -W, zi * module, false, UnityEngine.Random.value < 0.13f);
+                }
+
+                // ══════════ FRAMED GATEWAY (crusader portal on the North face) ══════════
+                {
+                    float postOff = module * 0.32f;
+                    AddBlock("DoorPost_L", new Vector3(-postOff, wallY, W), new Vector3(wallThick * 1.4f, wallHeight, wallThick * 1.4f), matStoneDark, 320, Quaternion.identity);
+                    AddBlock("DoorPost_R", new Vector3( postOff, wallY, W), new Vector3(wallThick * 1.4f, wallHeight, wallThick * 1.4f), matStoneDark, 320, Quaternion.identity);
+                    AddBlock("DoorLintel", new Vector3(0f, deckTopY + wallHeight * 0.92f, W), new Vector3(postOff * 2f + wallThick * 1.4f, wallHeight * 0.20f, wallThick * 1.5f), matRustMain, 280, Quaternion.identity);
+                    AddDecor("DoorKeystone", new Vector3(0f, deckTopY + wallHeight * 0.96f, W + wallThick * 0.35f), new Vector3(wallThick * 0.9f, wallHeight * 0.14f, 0.06f), matChestTrim, Quaternion.identity);
+                }
+
+                // ══════════ BATTLEMENTS + CORNER TOWER CAPS ══════════
+                if (hasBattlements)
+                {
+                    float merlonH = 0.95f;
+                    float merlonY = deckTopY + wallHeight + merlonH * 0.5f;
+                    float merlonW = module * 0.46f;
+
+                    void Merlon(string label, float x, float z, bool alongX)
                     {
-                        if (x == 0) continue; // doorway gap
-                        Vector3 pos = new Vector3(x * module, foundationTop + wallHeight * 0.5f, 0);
-                        CreateWall(pos, Quaternion.Euler(0, 90, 0), false, false);
+                        Vector3 full  = alongX ? new Vector3(merlonW, merlonH, wallThick * 1.4f) : new Vector3(wallThick * 1.4f, merlonH, merlonW);
+                        float roll = UnityEngine.Random.value;
+                        if (roll < 0.20f) return;                                              // missing merlon = open crenel (ruined)
+                        if (roll < 0.34f)
+                        {
+                            Vector3 half = alongX ? new Vector3(merlonW, merlonH * 0.5f, wallThick * 1.4f) : new Vector3(wallThick * 1.4f, merlonH * 0.5f, merlonW);
+                            AddBlock($"MerlonHalf_{label}", new Vector3(x, merlonY - merlonH * 0.25f, z), half, matRustDark, 120, Quaternion.identity);
+                            return;
+                        }
+                        AddBlock($"Merlon_{label}", new Vector3(x, merlonY, z), full, WallMat(), 200, Quaternion.identity);
+                    }
+
+                    for (int xi = -extent; xi <= extent; xi++)
+                    {
+                        if (xi == 0) continue; // gateway stays open
+                        if (((xi + 1000) & 1) == 0) Merlon($"N{xi}", xi * module, W, true);
+                        if (((xi + 1001) & 1) == 0) Merlon($"S{xi}", xi * module, -W, true);
+                    }
+                    for (int zi = -extent + 1; zi <= extent - 1; zi++)
+                    {
+                        if (((zi + 1000) & 1) == 0) Merlon($"E{zi}", W, zi * module, false);
+                        if (((zi + 1001) & 1) == 0) Merlon($"W{zi}", -W, zi * module, false);
+                    }
+                    // Iron corbel band running under the battlements (unifying crusader motif)
+                    AddDecor("Corbel_N", new Vector3(0f, deckTopY + wallHeight + 0.06f, W), new Vector3(footW, 0.12f, wallThick * 1.5f), matRustDark, Quaternion.identity);
+                    AddDecor("Corbel_S", new Vector3(0f, deckTopY + wallHeight + 0.06f, -W), new Vector3(footW, 0.12f, wallThick * 1.5f), matRustDark, Quaternion.identity);
+                    AddDecor("Corbel_E", new Vector3(W, deckTopY + wallHeight + 0.06f, 0f), new Vector3(wallThick * 1.5f, 0.12f, footW), matRustDark, Quaternion.identity);
+                    AddDecor("Corbel_W", new Vector3(-W, deckTopY + wallHeight + 0.06f, 0f), new Vector3(wallThick * 1.5f, 0.12f, footW), matRustDark, Quaternion.identity);
+
+                    // Tower caps capping the corner quoins
+                    foreach (float sx in signs)
+                    foreach (float sz in signs)
+                        AddBlock($"TowerCap_{(sx<0?"W":"E")}{(sz<0?"S":"N")}",
+                            new Vector3(sx * W, deckTopY + cornerH + 0.5f, sz * W),
+                            new Vector3(pillarW * 1.08f, 1.0f, pillarW * 1.08f), matStoneDark, 240, Quaternion.identity);
+                }
+                else
+                {
+                    // Bunker: flat reinforced roof lip instead of crenellations
+                    AddDecor("BunkerLip_N", new Vector3(0f, deckTopY + wallHeight + 0.02f, W), new Vector3(footW, 0.16f, wallThick * 1.8f), matRustDark, Quaternion.identity);
+                    AddDecor("BunkerLip_S", new Vector3(0f, deckTopY + wallHeight + 0.02f, -W), new Vector3(footW, 0.16f, wallThick * 1.8f), matRustDark, Quaternion.identity);
+                    AddDecor("BunkerLip_E", new Vector3(W, deckTopY + wallHeight + 0.02f, 0f), new Vector3(wallThick * 1.8f, 0.16f, footW), matRustDark, Quaternion.identity);
+                    AddDecor("BunkerLip_W", new Vector3(-W, deckTopY + wallHeight + 0.02f, 0f), new Vector3(wallThick * 1.8f, 0.16f, footW), matRustDark, Quaternion.identity);
+                    // Bunker also gets a flat roof slab for the squat fortress silhouette
+                    AddBlock("BunkerRoof", new Vector3(0f, deckTopY + wallHeight + 0.18f, 0f), new Vector3(footW * 0.92f, 0.2f, footW * 0.92f), matRustMain, 280, Quaternion.identity);
+                }
+
+                // ══════════ INTERIOR: broken columns (ruined chapel/cathedral feel) ══════════
+                {
+                    float colR = extent <= 1 ? module * 0.5f : module;
+                    float colH = wallHeight * 0.82f;
+                    int spot = 0;
+                    foreach (float cx in new float[] { -colR, colR })
+                    foreach (float cz in new float[] { -colR, colR })
+                    {
+                        bool standing = UnityEngine.Random.value < 0.55f;
+                        if (standing)
+                        {
+                            AddBlock($"ColBase_{spot}", new Vector3(cx, deckTopY + 0.1f, cz), new Vector3(0.62f, 0.2f, 0.62f), matStoneDark, 220, Quaternion.identity);
+                            AddBlock($"ColShaft_{spot}", new Vector3(cx, deckTopY + 0.2f + colH * 0.5f, cz), new Vector3(0.46f, colH, 0.46f), matStone, 200, Quaternion.identity);
+                            AddDecor($"ColCap_{spot}", new Vector3(cx, deckTopY + 0.2f + colH + 0.1f, cz), new Vector3(0.52f, 0.22f, 0.52f), matStone,
+                                Quaternion.Euler(UnityEngine.Random.Range(-8f, 8f), UnityEngine.Random.Range(0f, 90f), UnityEngine.Random.Range(-8f, 8f)));
+                        }
+                        else
+                        {
+                            // Fallen column lying on the deck, rolled outward from its base
+                            Vector3 fall = new Vector3(cx + (cx < 0 ? -0.7f : 0.7f), deckTopY + 0.3f, cz + (cz < 0 ? -0.7f : 0.7f));
+                            AddBlock($"ColFallen_{spot}", fall, new Vector3(0.46f, 0.46f, colH), matStone, 200,
+                                Quaternion.Euler(0f, UnityEngine.Random.Range(0f, 360f), 90f));
+                            AddBlock($"ColStub_{spot}", new Vector3(cx, deckTopY + 0.25f, cz), new Vector3(0.52f, 0.5f, 0.52f), matStoneDark, 200, Quaternion.identity);
+                        }
+                        spot++;
                     }
                 }
 
-                // Rubble / debris piles — small cubes on floor
-                for (int i = 0; i < 5; i++)
+                // ══════════ RUBBLE / DEBRIS ══════════
                 {
-                    var rubble = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                    rubble.name = $"Rubble_{i}";
-                    rubble.transform.SetParent(root.transform, false);
-                    rubble.transform.localPosition = new Vector3(
-                        UnityEngine.Random.Range(-halfExtX * module * 0.7f, halfExtX * module * 0.7f),
-                        foundationTop + 0.15f + UnityEngine.Random.Range(0.05f, 0.35f),
-                        UnityEngine.Random.Range(-halfExtZ * module * 0.7f, halfExtZ * module * 0.7f));
-                    rubble.transform.localScale = Vector3.one * UnityEngine.Random.Range(0.25f, 0.65f);
-                    rubble.transform.localRotation = Quaternion.Euler(
-                        UnityEngine.Random.Range(0, 360f),
-                        UnityEngine.Random.Range(0, 360f),
-                        UnityEngine.Random.Range(0, 360f));
-                    var rend = rubble.GetComponent<Renderer>();
-                    if (rend != null) rend.sharedMaterial = UnityEngine.Random.value < 0.5f ? rustDark : moss;
-                    var pb = rubble.GetComponent<VoxelEngine.Building.PlacedBlock>();
-                    if (pb == null) pb = rubble.AddComponent<VoxelEngine.Building.PlacedBlock>();
-                    pb.Hp = 80;
+                    int rubbleCount = isFactory ? 9 : isBunker ? 4 : 6;
+                    for (int i = 0; i < rubbleCount; i++)
+                    {
+                        float rx = UnityEngine.Random.Range(-W * 0.8f, W * 0.8f);
+                        float rz = UnityEngine.Random.Range(-W * 0.8f, W * 0.8f);
+                        if (Mathf.Abs(rx) < 1.3f && Mathf.Abs(rz) < 1.3f) continue; // keep the central dais clear
+                        float rs = UnityEngine.Random.Range(0.22f, 0.6f);
+                        float rr = UnityEngine.Random.value;
+                        Material rm = rr < 0.45f ? matStone : rr < 0.75f ? matRustDark : matMoss;
+                        AddBlock($"Rubble_{i}", new Vector3(rx, deckTopY + rs * 0.4f + 0.04f, rz), new Vector3(rs, rs * 0.8f, rs), rm, 80,
+                            Quaternion.Euler(UnityEngine.Random.Range(0f, 360f), UnityEngine.Random.Range(0f, 360f), UnityEngine.Random.Range(0f, 360f)));
+                    }
                 }
 
-                // === VISIBLE CHEST — premium, not invisible ===
+                // ══════════ COLLAPSED SECTION (factory only) — fallen wall blocks outside the South face ══════════
+                if (isFactory)
+                {
+                    for (int i = 0; i < 4; i++)
+                    {
+                        float cx = UnityEngine.Random.Range(-module * 0.9f, module * 0.9f);
+                        float cz = -W - UnityEngine.Random.Range(0.2f, 1.7f);
+                        float s = UnityEngine.Random.Range(0.5f, 1.1f);
+                        AddBlock($"CollapsedBlock_{i}", new Vector3(cx, 0.25f + s * 0.4f, cz), new Vector3(s, s * 0.8f, s),
+                            UnityEngine.Random.value < 0.5f ? matRustMain : matStone, 120,
+                            Quaternion.Euler(UnityEngine.Random.Range(-25f, 25f), UnityEngine.Random.Range(0f, 360f), UnityEngine.Random.Range(-25f, 25f)));
+                    }
+                }
+
+                // ══════════ BANNER POLE (crusader standard — non-bunker ruins) ══════════
+                if (hasBattlements)
+                {
+                    float bx = -W + pillarW * 0.5f, bz = -W + pillarW * 0.5f;
+                    AddBlock("BannerPole", new Vector3(bx, deckTopY + wallHeight * 0.5f, bz), new Vector3(0.12f, wallHeight, 0.12f), matWood, 120, Quaternion.identity);
+                    AddDecor("BannerFinial", new Vector3(bx, deckTopY + wallHeight + 0.12f, bz), new Vector3(0.22f, 0.22f, 0.22f), matChestTrim, Quaternion.identity);
+                    var cloth = AddDecor("BannerCloth", new Vector3(bx + 0.4f, deckTopY + wallHeight * 0.74f, bz), new Vector3(0.8f, wallHeight * 0.52f, 0.04f), matBanner, Quaternion.identity);
+                    cloth.transform.localRotation = Quaternion.Euler(0f, 90f, UnityEngine.Random.Range(-4f, 4f));
+                }
+
+                // ══════════ RELIC CHEST on a stone dais ══════════
+                AddDecor("DaisStep", new Vector3(0f, deckTopY + 0.01f, 0f), new Vector3(2.4f, 0.08f, 2.4f), matStone, Quaternion.identity);
+                AddBlock("Dais", new Vector3(0f, deckTopY + 0.15f, 0f), new Vector3(1.9f, 0.26f, 1.9f), matStoneDark, 300, Quaternion.identity);
+
+                float chestBaseY = deckTopY + 0.28f;
                 var chestGO = new GameObject("RuinChest_Visible");
                 chestGO.transform.SetParent(root.transform, false);
-                chestGO.transform.localPosition = new Vector3(0, foundationTop + 0.45f, 0);
+                chestGO.transform.localPosition = new Vector3(0f, chestBaseY + 0.36f, 0f);
                 chestGO.transform.localScale = new Vector3(1.0f, 0.7f, 0.8f);
-                var chestCol = chestGO.GetComponent<Collider>();
-                if (chestCol == null) chestCol = chestGO.AddComponent<BoxCollider>();
-                chestCol.isTrigger = false;
-                if (chestCol is BoxCollider bc) { bc.size = new Vector3(1.2f, 0.9f, 0.9f); bc.center = Vector3.zero; }
-
-                var chestMesh = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                chestMesh.name = "ChestMesh";
-                chestMesh.transform.SetParent(chestGO.transform, false);
-                chestMesh.transform.localPosition = Vector3.zero;
-                chestMesh.transform.localScale = Vector3.one;
-                var chestRend = chestMesh.GetComponent<Renderer>();
-                if (chestRend != null) chestRend.sharedMaterial = chestMetal;
-
-                // Glowing edge for chest to be visible at distance
-                var chestGlow = new GameObject("ChestGlow");
-                chestGlow.transform.SetParent(chestGO.transform, false);
-                chestGlow.transform.localPosition = new Vector3(0, 0.35f, 0);
-                var glowLight = chestGlow.AddComponent<Light>();
-                glowLight.type = LightType.Point;
-                glowLight.color = new Color(1.0f, 0.78f, 0.22f);
-                glowLight.intensity = 1.2f;
-                glowLight.range = 5f;
-
-                // Root chest for interaction
-                var rootChest = root.GetComponent<VoxelEngine.Exploration.RuinChest>();
-                if (rootChest == null) rootChest = root.AddComponent<VoxelEngine.Exploration.RuinChest>();
-                if (rootChest == null)
                 {
-                    Debug.LogError($"[Ruin] Failed to add RuinChest to {name} root");
-                    UnityEngine.Object.DestroyImmediate(root);
-                    return null;
+                    var chestCol = chestGO.GetComponent<Collider>() as BoxCollider;
+                    if (chestCol == null) chestCol = chestGO.AddComponent<BoxCollider>();
+                    chestCol.size = new Vector3(1.3f, 1.0f, 1.05f);
+                    chestCol.center = Vector3.zero;
+
+                    var chestBody = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    chestBody.name = "ChestBody";
+                    chestBody.transform.SetParent(chestGO.transform, false);
+                    chestBody.transform.localPosition = new Vector3(0f, 0f, 0f);
+                    chestBody.transform.localScale = new Vector3(1f, 0.85f, 1f);
+                    if (matChest != null) chestBody.GetComponent<Renderer>().sharedMaterial = matChest;
+
+                    var chestLid = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    chestLid.name = "ChestLid";
+                    chestLid.transform.SetParent(chestGO.transform, false);
+                    chestLid.transform.localPosition = new Vector3(0f, 0.5f, 0f);
+                    chestLid.transform.localScale = new Vector3(1.04f, 0.22f, 1.04f);
+                    if (matChest != null) chestLid.GetComponent<Renderer>().sharedMaterial = matChest;
+                    { var lc = chestLid.GetComponent<Collider>(); if (lc != null) UnityEngine.Object.DestroyImmediate(lc); }
+
+                    foreach (float strapX in new float[] { -0.35f, 0.35f })
+                    {
+                        var strap = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                        strap.name = $"ChestStrap_{strapX}";
+                        strap.transform.SetParent(chestGO.transform, false);
+                        strap.transform.localPosition = new Vector3(strapX, 0.05f, 0f);
+                        strap.transform.localScale = new Vector3(0.12f, 1.0f, 1.04f);
+                        if (matChestTrim != null) strap.GetComponent<Renderer>().sharedMaterial = matChestTrim;
+                        { var sc = strap.GetComponent<Collider>(); if (sc != null) UnityEngine.Object.DestroyImmediate(sc); }
+                    }
+                    var lockPlate = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    lockPlate.name = "ChestLock";
+                    lockPlate.transform.SetParent(chestGO.transform, false);
+                    lockPlate.transform.localPosition = new Vector3(0f, 0.05f, 0.52f);
+                    lockPlate.transform.localScale = new Vector3(0.22f, 0.28f, 0.07f);
+                    if (matChestTrim != null) lockPlate.GetComponent<Renderer>().sharedMaterial = matChestTrim;
+                    { var lc = lockPlate.GetComponent<Collider>(); if (lc != null) UnityEngine.Object.DestroyImmediate(lc); }
+
+                    var chestGlow = new GameObject("ChestGlow");
+                    chestGlow.transform.SetParent(chestGO.transform, false);
+                    chestGlow.transform.localPosition = new Vector3(0f, 0.5f, 0f);
+                    var gl = chestGlow.AddComponent<Light>();
+                    gl.type = LightType.Point;
+                    gl.color = new Color(1f, 0.78f, 0.22f);
+                    gl.intensity = 1.4f;
+                    gl.range = 6f;
+                    gl.shadows = LightShadows.None;
                 }
-                rootChest.ruinName = name.Replace("Ruin_", "").Replace("_", " ");
-                rootChest.minComponents = minComp;
-                rootChest.maxComponents = maxComp;
-                var comps = new System.Collections.Generic.List<VoxelEngine.Items.ItemDefinition>();
+
+                // ══════════ LOOT CONFIG (preserved if previously hand-tuned) ══════════
+                var comps = new System.Collections.Generic.List<ItemDefinition>();
                 if (steelPlate != null) comps.Add(steelPlate);
                 if (ironPlate != null) comps.Add(ironPlate);
                 if (copperWire != null) comps.Add(copperWire);
                 if (circuit != null) comps.Add(circuit);
                 if (comps.Count == 0 && ironIngot != null) comps.Add(ironIngot);
-                rootChest.possibleComponents = comps.ToArray();
-                rootChest.possibleFuel = coal != null ? new VoxelEngine.Items.ItemDefinition[] { coal } : new VoxelEngine.Items.ItemDefinition[0];
-                var bps = new System.Collections.Generic.List<VoxelEngine.Items.BlueprintDataCoreItem>();
+                var bps = new System.Collections.Generic.List<BlueprintDataCoreItem>();
                 if (bpNacelle != null) bps.Add(bpNacelle);
                 if (bpGearbox != null) bps.Add(bpGearbox);
                 if (bpBlade != null) bps.Add(bpBlade);
                 if (bpTower != null) bps.Add(bpTower);
-                rootChest.possibleBlueprints = bps.ToArray();
+                var fuel = (coal != null) ? new ItemDefinition[] { coal } : new ItemDefinition[0];
+
+                ItemDefinition[] finalComps = keepComponents ?? comps.ToArray();
+                ItemDefinition[] finalFuel = keepFuel ?? fuel;
+                BlueprintDataCoreItem[] finalBps = keepBlueprints ?? bps.ToArray();
+                string ruinDisplayName = !string.IsNullOrEmpty(keepRuinName) ? keepRuinName : name.Replace("Ruin_", "").Replace("_", " ");
+
+                var rootChest = root.GetComponent<VoxelEngine.Exploration.RuinChest>();
+                if (rootChest == null) rootChest = root.AddComponent<VoxelEngine.Exploration.RuinChest>();
+                if (rootChest == null) { Debug.LogError($"[Ruin] Failed to add RuinChest to {name} root"); UnityEngine.Object.DestroyImmediate(root); return null; }
+                rootChest.ruinName = ruinDisplayName;
+                rootChest.minComponents = keepMinComp;
+                rootChest.maxComponents = keepMaxComp;
+                rootChest.possibleComponents = finalComps;
+                rootChest.possibleFuel = finalFuel;
+                rootChest.possibleBlueprints = finalBps;
 
                 var childChest = chestGO.GetComponent<VoxelEngine.Exploration.RuinChest>();
                 if (childChest == null) childChest = chestGO.AddComponent<VoxelEngine.Exploration.RuinChest>();
                 if (childChest != null)
                 {
-                    childChest.ruinName = rootChest.ruinName;
-                    childChest.minComponents = minComp;
-                    childChest.maxComponents = maxComp;
-                    childChest.possibleComponents = rootChest.possibleComponents;
-                    childChest.possibleFuel = rootChest.possibleFuel;
-                    childChest.possibleBlueprints = rootChest.possibleBlueprints;
+                    childChest.ruinName = ruinDisplayName;
+                    childChest.minComponents = keepMinComp;
+                    childChest.maxComponents = keepMaxComp;
+                    childChest.possibleComponents = finalComps;
+                    childChest.possibleFuel = finalFuel;
+                    childChest.possibleBlueprints = finalBps;
                 }
 
-                // Beacon light for distance visibility
+                // ══════════ BEACON (long-range visibility) ══════════
                 var lightGO = new GameObject("RuinBeaconLight");
                 lightGO.transform.SetParent(root.transform, false);
-                lightGO.transform.localPosition = new Vector3(0, 3.2f, 0);
-                var light = lightGO.AddComponent<Light>();
-                light.type = LightType.Point;
-                light.color = new Color(1.0f, 0.72f, 0.32f, 1f);
-                light.intensity = 1.8f;
-                light.range = 20f;
-                light.shadows = LightShadows.None;
+                lightGO.transform.localPosition = new Vector3(0f, deckTopY + wallHeight + 1.4f, 0f);
+                var beacon = lightGO.AddComponent<Light>();
+                beacon.type = LightType.Point;
+                beacon.color = new Color(1f, 0.72f, 0.32f, 1f);
+                beacon.intensity = 1.8f;
+                beacon.range = 22f;
+                beacon.shadows = LightShadows.None;
 
                 var prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
                 UnityEngine.Object.DestroyImmediate(root);
