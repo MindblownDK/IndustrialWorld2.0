@@ -194,6 +194,19 @@ namespace VoxelEngine.Cosmos
             if (string.IsNullOrEmpty(biomeName)) return;
             string n = biomeName.ToLowerInvariant();
 
+            // ── Celestial world theming (Phase 2): themed biome name → themed surface material ──
+            if (n.Contains("moon") || n.Contains("lunar")) { data.surfaceMat = (byte)Materials.MaterialId.Stone; data.subsurfaceMat = (byte)Materials.MaterialId.Stone; return; }
+            if (n.Contains("mars") || n.Contains("martian")) { data.surfaceMat = (byte)Materials.MaterialId.MartianDust; data.subsurfaceMat = (byte)Materials.MaterialId.MartianDust; return; }
+            if (n.Contains("venus")) { data.surfaceMat = (byte)Materials.MaterialId.VenusAsh; data.subsurfaceMat = (byte)Materials.MaterialId.VenusAsh; return; }
+            if (n.Contains("acid")) { data.surfaceMat = (byte)Materials.MaterialId.AcidBog; data.subsurfaceMat = (byte)Materials.MaterialId.AcidBog; return; }
+            if (n.Contains("volcanic") || n.Contains("lava") || n.Contains("magma")) { data.surfaceMat = (byte)Materials.MaterialId.VolcanicBasalt; data.subsurfaceMat = (byte)Materials.MaterialId.VolcanicBasalt; return; }
+            if (n.Contains("crystal") || n.Contains("geode")) { data.surfaceMat = (byte)Materials.MaterialId.CrystalGeode; data.subsurfaceMat = (byte)Materials.MaterialId.CrystalGeode; return; }
+            if (n.Contains("pirate")) { data.surfaceMat = (byte)Materials.MaterialId.Clay; data.subsurfaceMat = (byte)Materials.MaterialId.Clay; return; }
+            if (n.Contains("desolate")) { data.surfaceMat = (byte)Materials.MaterialId.Clay; data.subsurfaceMat = (byte)Materials.MaterialId.Clay; return; }
+            if (n.Contains("greek") || n.Contains("marble")) { data.surfaceMat = (byte)Materials.MaterialId.Sand; data.subsurfaceMat = (byte)Materials.MaterialId.Sand; return; }
+            if (n.Contains("ice") || n.Contains("frozen") || n.Contains("glacial")) { data.surfaceMat = (byte)Materials.MaterialId.Ice; data.subsurfaceMat = (byte)Materials.MaterialId.Clay; return; }
+            if (n.Contains("water") || n.Contains("ocean")) { data.surfaceMat = (byte)Materials.MaterialId.Sand; data.subsurfaceMat = (byte)Materials.MaterialId.Sand; return; }
+
             if (n.Contains("forest") || n.Contains("meadow"))
             {
                 data.surfaceMat = (byte)Materials.MaterialId.Grass;

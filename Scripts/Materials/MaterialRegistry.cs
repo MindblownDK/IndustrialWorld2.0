@@ -77,6 +77,11 @@ namespace VoxelEngine.Materials
                 case MaterialId.CrudeOil:    return new Color(0.05f, 0.04f, 0.03f, 1f);
                 case MaterialId.Wood:        return new Color(0.40f, 0.28f, 0.18f, 1f);
                 case MaterialId.LegacySolidFloor:return new Color(0.46f, 0.46f, 0.49f, 1f);
+                case MaterialId.MartianDust:    return new Color(0.62f, 0.34f, 0.20f, 1f); // rust-red dust
+                case MaterialId.VenusAsh:       return new Color(0.72f, 0.62f, 0.26f, 1f); // sulfur-tan
+                case MaterialId.AcidBog:        return new Color(0.40f, 0.52f, 0.24f, 1f); // sickly green
+                case MaterialId.VolcanicBasalt: return new Color(0.14f, 0.12f, 0.13f, 1f); // black basalt
+                case MaterialId.CrystalGeode:   return new Color(0.56f, 0.48f, 0.84f, 1f); // prismatic purple
                 default:                     return Color.magenta; // genuine unknown — debug signal
             }
         }

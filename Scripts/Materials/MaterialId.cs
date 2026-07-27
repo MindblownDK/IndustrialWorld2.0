@@ -34,6 +34,13 @@ namespace VoxelEngine.Materials
         Lithium    = 21,
         Grass      = 22,   // green surface grass (Plains/Forest top layer)
 
+        // === Celestial world surface materials (Phase 2) ===
+        MartianDust    = 23,
+        VenusAsh       = 24,
+        AcidBog        = 25,
+        VolcanicBasalt = 26,
+        CrystalGeode   = 27,
+
         // === Add custom materials below this line ===
     }
 }

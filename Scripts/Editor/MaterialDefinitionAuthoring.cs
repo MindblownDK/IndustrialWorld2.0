@@ -149,6 +149,10 @@ namespace VoxelEngine.EditorTools
                 case MaterialId.Sand:     return 0;
                 case MaterialId.Ice:      return 0;
                 case MaterialId.Coal:     return 0;
+                // Celestial surface materials (Phase 2)
+                case MaterialId.MartianDust: return 0;
+                case MaterialId.VenusAsh:    return 0;
+                case MaterialId.AcidBog:     return 0;
                 // Ores — require progressively better tools.
                 case MaterialId.Uranium:  return 4;
                 case MaterialId.Platinum: return 4;

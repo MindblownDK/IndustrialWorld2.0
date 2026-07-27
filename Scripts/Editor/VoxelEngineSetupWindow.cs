@@ -9,6 +9,7 @@ using VoxelEngine.Materials;
 using VoxelEngine.Generation;
 using VoxelEngine.Biomes;
 using VoxelEngine.Simulation;
+using VoxelEngine.Cosmos;
 
 namespace VoxelEngine.EditorTools
 {
@@ -261,6 +262,16 @@ namespace VoxelEngine.EditorTools
                 "Re-runnable. Idempotent.");
             AddWizardButton(scroll, "20. Build Celestial Ruins (33 variants across 11 planets: Moon, Mars, Venus, Acid, Pirate, Greek, Ice, Water, Desolate, Volcanic, Crystal)", BuildCelestialRuinsContent, 72);
 
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 21 (Phase 2) wires the themed ruins to their own PLANETS so they spawn in-world (non-destructive):\n"
+                "  • 11 themed biomes with planet-correct surface materials + ruin scatter\n"
+                "  • Mars/Venus reconfigured + 8 new planets (Acid, Pirate, Greek, Ice, Water, Desolate, Volcanic, Crystal)\n"
+                "  • Moon wired to the Lunar biome; all planets appended to System_Sol\n"
+                "  • 5 new voxel surface materials (Martian Dust, Venus Ash, Acid Bog, Volcanic Basalt, Crystal Geode)\n"
+                "Run AFTER Steps 1 and 20. Re-runnable. Idempotent.");
+            AddWizardButton(scroll, "21. Build Celestial Worlds — Planets, Themed Biomes & Ruin Spawning (Phase 2)", BuildCelestialWorldsContent, 72);
+
             AddSpacer(scroll, 20);
         }
 
@@ -429,6 +440,13 @@ namespace VoxelEngine.EditorTools
             Make(MaterialId.Platinum,   "Platinum Ore",new Color(0.78f,0.80f,0.82f), 3.5f, itemMap[MaterialId.Platinum]);
             Make(MaterialId.Uranium,    "Uranium Ore", new Color(0.30f,0.55f,0.20f), 4.0f, itemMap[MaterialId.Uranium]);
             Make(MaterialId.CrudeOil,   "Crude Oil",   new Color(0.05f,0.04f,0.03f), 0.8f, itemMap[MaterialId.CrudeOil], fluid:true);
+
+            // ── Celestial world surface materials (Phase 2) — mine → Stone
+            Make(MaterialId.MartianDust,    "Martian Dust",    new Color(0.62f,0.34f,0.20f), 0.5f, itemMap[MaterialId.Stone]);
+            Make(MaterialId.VenusAsh,       "Venus Ash",       new Color(0.72f,0.62f,0.26f), 0.5f, itemMap[MaterialId.Stone]);
+            Make(MaterialId.AcidBog,        "Acid Bog",        new Color(0.40f,0.52f,0.24f), 0.5f, itemMap[MaterialId.Stone]);
+            Make(MaterialId.VolcanicBasalt, "Volcanic Basalt", new Color(0.14f,0.12f,0.13f), 1.2f, itemMap[MaterialId.Stone]);
+            Make(MaterialId.CrystalGeode,   "Crystal Geode",   new Color(0.56f,0.48f,0.84f), 0.9f, itemMap[MaterialId.Stone]);
 
             EditorUtility.SetDirty(registry);
 
@@ -4401,10 +4419,10 @@ namespace VoxelEngine.EditorTools
                     if (ruined)
                     {
                         Vector3 sill = alongX ? new Vector3(module * 0.99f, wallHeight * 0.34f, wallThick) : new Vector3(wallThick, wallHeight * 0.34f, module * 0.99f);
-                        AddBlock($"Sill_{label}", new Vector3(x, deckTopY + wallHeight * 0.17f, z), sill, matRustDark, 160, Quaternion.identity);
+                        AddBlock($"Sill_{label}", new Vector3(x, deckTopY + wallHeight * 0.17f, z), sill, matRustDark, 160);
                         return;
                     }
-                    AddBlock($"Wall_{label}", new Vector3(x, wallY, z), full, WallMat(), 280, Quaternion.identity);
+                    AddBlock($"Wall_{label}", new Vector3(x, wallY, z), full, WallMat(), 280);
                 }
 
                 // North & South walls (North center is reserved for the gateway)
@@ -4427,9 +4445,9 @@ namespace VoxelEngine.EditorTools
                 // ══════════ FRAMED GATEWAY (crusader portal on the North face) ══════════
                 {
                     float postOff = module * 0.32f;
-                    AddBlock("DoorPost_L", new Vector3(-postOff, wallY, W), new Vector3(wallThick * 1.4f, wallHeight, wallThick * 1.4f), matStoneDark, 320, Quaternion.identity);
-                    AddBlock("DoorPost_R", new Vector3( postOff, wallY, W), new Vector3(wallThick * 1.4f, wallHeight, wallThick * 1.4f), matStoneDark, 320, Quaternion.identity);
-                    AddBlock("DoorLintel", new Vector3(0f, deckTopY + wallHeight * 0.92f, W), new Vector3(postOff * 2f + wallThick * 1.4f, wallHeight * 0.20f, wallThick * 1.5f), matRustMain, 280, Quaternion.identity);
+                    AddBlock("DoorPost_L", new Vector3(-postOff, wallY, W), new Vector3(wallThick * 1.4f, wallHeight, wallThick * 1.4f), matStoneDark, 320);
+                    AddBlock("DoorPost_R", new Vector3( postOff, wallY, W), new Vector3(wallThick * 1.4f, wallHeight, wallThick * 1.4f), matStoneDark, 320);
+                    AddBlock("DoorLintel", new Vector3(0f, deckTopY + wallHeight * 0.92f, W), new Vector3(postOff * 2f + wallThick * 1.4f, wallHeight * 0.20f, wallThick * 1.5f), matRustMain, 280);
                     AddDecor("DoorKeystone", new Vector3(0f, deckTopY + wallHeight * 0.96f, W + wallThick * 0.35f), new Vector3(wallThick * 0.9f, wallHeight * 0.14f, 0.06f), matChestTrim, Quaternion.identity);
                 }
 
@@ -4448,10 +4466,10 @@ namespace VoxelEngine.EditorTools
                         if (roll < 0.34f)
                         {
                             Vector3 half = alongX ? new Vector3(merlonW, merlonH * 0.5f, wallThick * 1.4f) : new Vector3(wallThick * 1.4f, merlonH * 0.5f, merlonW);
-                            AddBlock($"MerlonHalf_{label}", new Vector3(x, merlonY - merlonH * 0.25f, z), half, matRustDark, 120, Quaternion.identity);
+                            AddBlock($"MerlonHalf_{label}", new Vector3(x, merlonY - merlonH * 0.25f, z), half, matRustDark, 120);
                             return;
                         }
-                        AddBlock($"Merlon_{label}", new Vector3(x, merlonY, z), full, WallMat(), 200, Quaternion.identity);
+                        AddBlock($"Merlon_{label}", new Vector3(x, merlonY, z), full, WallMat(), 200);
                     }
 
                     for (int xi = -extent; xi <= extent; xi++)
@@ -4486,7 +4504,7 @@ namespace VoxelEngine.EditorTools
                     AddDecor("BunkerLip_E", new Vector3(W, deckTopY + wallHeight + 0.02f, 0f), new Vector3(wallThick * 1.8f, 0.16f, footW), matRustDark, Quaternion.identity);
                     AddDecor("BunkerLip_W", new Vector3(-W, deckTopY + wallHeight + 0.02f, 0f), new Vector3(wallThick * 1.8f, 0.16f, footW), matRustDark, Quaternion.identity);
                     // Bunker also gets a flat roof slab for the squat fortress silhouette
-                    AddBlock("BunkerRoof", new Vector3(0f, deckTopY + wallHeight + 0.18f, 0f), new Vector3(footW * 0.92f, 0.2f, footW * 0.92f), matRustMain, 280, Quaternion.identity);
+                    AddBlock("BunkerRoof", new Vector3(0f, deckTopY + wallHeight + 0.18f, 0f), new Vector3(footW * 0.92f, 0.2f, footW * 0.92f), matRustMain, 280);
                 }
 
                 // ══════════ INTERIOR: broken columns (ruined chapel/cathedral feel) ══════════
@@ -4500,8 +4518,8 @@ namespace VoxelEngine.EditorTools
                         bool standing = UnityEngine.Random.value < 0.55f;
                         if (standing)
                         {
-                            AddBlock($"ColBase_{spot}", new Vector3(cx, deckTopY + 0.1f, cz), new Vector3(0.62f, 0.2f, 0.62f), matStoneDark, 220, Quaternion.identity);
-                            AddBlock($"ColShaft_{spot}", new Vector3(cx, deckTopY + 0.2f + colH * 0.5f, cz), new Vector3(0.46f, colH, 0.46f), matStone, 200, Quaternion.identity);
+                            AddBlock($"ColBase_{spot}", new Vector3(cx, deckTopY + 0.1f, cz), new Vector3(0.62f, 0.2f, 0.62f), matStoneDark, 220);
+                            AddBlock($"ColShaft_{spot}", new Vector3(cx, deckTopY + 0.2f + colH * 0.5f, cz), new Vector3(0.46f, colH, 0.46f), matStone, 200);
                             AddDecor($"ColCap_{spot}", new Vector3(cx, deckTopY + 0.2f + colH + 0.1f, cz), new Vector3(0.52f, 0.22f, 0.52f), matStone,
                                 Quaternion.Euler(UnityEngine.Random.Range(-8f, 8f), UnityEngine.Random.Range(0f, 90f), UnityEngine.Random.Range(-8f, 8f)));
                         }
@@ -4511,7 +4529,7 @@ namespace VoxelEngine.EditorTools
                             Vector3 fall = new Vector3(cx + (cx < 0 ? -0.7f : 0.7f), deckTopY + 0.3f, cz + (cz < 0 ? -0.7f : 0.7f));
                             AddBlock($"ColFallen_{spot}", fall, new Vector3(0.46f, 0.46f, colH), matStone, 200,
                                 Quaternion.Euler(0f, UnityEngine.Random.Range(0f, 360f), 90f));
-                            AddBlock($"ColStub_{spot}", new Vector3(cx, deckTopY + 0.25f, cz), new Vector3(0.52f, 0.5f, 0.52f), matStoneDark, 200, Quaternion.identity);
+                            AddBlock($"ColStub_{spot}", new Vector3(cx, deckTopY + 0.25f, cz), new Vector3(0.52f, 0.5f, 0.52f), matStoneDark, 200);
                         }
                         spot++;
                     }
@@ -4551,7 +4569,7 @@ namespace VoxelEngine.EditorTools
                 if (hasBattlements)
                 {
                     float bx = -W + pillarW * 0.5f, bz = -W + pillarW * 0.5f;
-                    AddBlock("BannerPole", new Vector3(bx, deckTopY + wallHeight * 0.5f, bz), new Vector3(0.12f, wallHeight, 0.12f), matWood, 120, Quaternion.identity);
+                    AddBlock("BannerPole", new Vector3(bx, deckTopY + wallHeight * 0.5f, bz), new Vector3(0.12f, wallHeight, 0.12f), matWood, 120);
                     AddDecor("BannerFinial", new Vector3(bx, deckTopY + wallHeight + 0.12f, bz), new Vector3(0.22f, 0.22f, 0.22f), matChestTrim, Quaternion.identity);
                     var cloth = AddDecor("BannerCloth", new Vector3(bx + 0.4f, deckTopY + wallHeight * 0.74f, bz), new Vector3(0.8f, wallHeight * 0.52f, 0.04f), matBanner, Quaternion.identity);
                     cloth.transform.localRotation = Quaternion.Euler(0f, 90f, UnityEngine.Random.Range(-4f, 4f));
@@ -4559,7 +4577,7 @@ namespace VoxelEngine.EditorTools
 
                 // ══════════ RELIC CHEST on a stone dais ══════════
                 AddDecor("DaisStep", new Vector3(0f, deckTopY + 0.01f, 0f), new Vector3(2.4f, 0.08f, 2.4f), matStone, Quaternion.identity);
-                AddBlock("Dais", new Vector3(0f, deckTopY + 0.15f, 0f), new Vector3(1.9f, 0.26f, 1.9f), matStoneDark, 300, Quaternion.identity);
+                AddBlock("Dais", new Vector3(0f, deckTopY + 0.15f, 0f), new Vector3(1.9f, 0.26f, 1.9f), matStoneDark, 300);
 
                 float chestBaseY = deckTopY + 0.28f;
                 var chestGO = new GameObject("RuinChest_Visible");
@@ -9500,15 +9518,25 @@ root =>
                 }
 
                 var root = new GameObject(name);
-                bool wantTall = name.Contains("Tower") || name.Contains("Spire");
-                bool wantLow  = name.Contains("Bunker") || name.Contains("Cache");
-                bool wantCollapsed = name.Contains("Outpost") || name.Contains("Wreck") || name.Contains("Camp") || name.Contains("Dissolved");
-                bool wantStilts = name.Contains("Stilt") || name.Contains("Platform");
-                bool wantSunken = name.Contains("Sunken");
 
-                float module = 3.75f;
-                float W = extent * module;
-                float footW = (extent * 2 + 1) * module;
+                // ── Per-variant architecture flags (every ruin gets a distinct silhouette) ──
+                float  module        = 3.75f;
+                bool   wantTall      = name.Contains("Tower") || name.Contains("Spire") || name.Contains("Citadel");
+                bool   wantLow       = name.Contains("Bunker") || name.Contains("Cache") || name.Contains("Vault");
+                bool   wantHeavyRuin = name.Contains("Wreck") || name.Contains("Camp") || name.Contains("Dissolved") || name.Contains("Dry") || name.Contains("Ash") || name.Contains("Frontier");
+                bool   wantStilts    = name.Contains("Stilt") || name.Contains("Platform");
+                bool   wantSunken    = name.Contains("Sunken");
+                bool   wantForge     = name.Contains("Forge") || name.Contains("Refinery");
+                bool   wantAntenna   = name.Contains("Listening") || name.Contains("Post") || name.Contains("Station");
+                bool   wantAltar     = name.Contains("Shrine") || name.Contains("Temple") || name.Contains("Oracle") || name.Contains("Treasury");
+                bool   wantShipwreck = name.Contains("Wreck") || name.Contains("Camp");
+                bool   wantBanner    = (archetype == "Fortress") && !wantLow && UnityEngine.Random.value < 0.6f;
+                bool   wantColumns   = (archetype == "Fortress") && extent >= 2 && !wantLow && UnityEngine.Random.value < 0.6f;
+
+                float  W             = extent * module;
+                float  footW         = (extent * 2 + 1) * module;
+                float  wallHeight    = (wantLow ? 0.6f : wantTall ? 1.3f : 1.0f) * module;
+                float  ruinChance    = wantHeavyRuin ? 0.30f : 0.13f;
 
                 // ── Block helpers ──
                 GameObject AddBlock(string childName, Vector3 localPos, Vector3 localScale, Material mat, int hp)
@@ -9525,11 +9553,7 @@ root =>
                     return go;
                 }
                 GameObject AddBlockRot(string childName, Vector3 localPos, Vector3 localScale, Material mat, int hp, Quaternion rot)
-                {
-                    var go = AddBlock(childName, localPos, localScale, mat, hp);
-                    go.transform.localRotation = rot;
-                    return go;
-                }
+                { var go = AddBlock(childName, localPos, localScale, mat, hp); go.transform.localRotation = rot; return go; }
                 GameObject AddDecor(string childName, Vector3 localPos, Vector3 localScale, Material mat, Quaternion rot)
                 {
                     var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -9554,19 +9578,14 @@ root =>
                 }
 
                 float deckTopY = 0.62f;
-                float wallHeight = wantLow ? module * 0.6f : module;
-
-                // Root collider/marker sized later by archetype; set sane defaults now.
                 var rootCol = root.AddComponent<BoxCollider>();
                 var rootMarker = root.AddComponent<VoxelEngine.Building.PlacedBlock>();
                 rootMarker.Hp = 600;
-
                 Material PM() => UnityEngine.Random.value < 0.7f ? M["primary"] : (UnityEngine.Random.value < 0.5f ? M["primaryDark"] : M["primaryLight"]);
 
                 // ── Foundation (shared two-tier plinth) ──
                 AddBlock("Foundation_Plinth", new Vector3(0, 0.25f, 0), new Vector3(footW + 0.9f, 0.5f, footW + 0.9f), M["stoneDark"], 420);
                 AddBlock("Foundation_Deck", new Vector3(0, 0.56f, 0), new Vector3(footW, 0.12f, footW), M["stone"], 380);
-                // Water world: elevate the whole compound on stilts descending into the sea
                 if (wantStilts)
                 {
                     foreach (float sx in new float[] { -1f, -0.35f, 0.35f, 1f })
@@ -9574,15 +9593,13 @@ root =>
                         AddBlock($"Stilt_{sx}_{sz}", new Vector3(sx * W, -0.9f, sz * W), new Vector3(0.3f, 2.6f, 0.3f), M["primaryDark"], 200);
                 }
 
-                float buildHeight = wallHeight; // updated per archetype for root collider
+                float buildHeight = wallHeight;
 
                 if (archetype == "Temple")
                 {
-                    // ── GREEK TEMPLE: stylobate already built; ring of fluted columns + entablature + pediment + cella ──
                     float colH = module * 1.05f;
                     float colY = deckTopY + colH * 0.5f;
                     float colR = 0.34f;
-                    // Perimeter columns on all four sides (Doric order)
                     for (int xi = -extent; xi <= extent; xi++)
                     {
                         AddPrim($"Col_N_{xi}", PrimitiveType.Cylinder, new Vector3(xi * module, colY, W), new Vector3(colR, colH * 0.5f, colR), M["stone"], 240, Quaternion.identity);
@@ -9593,47 +9610,36 @@ root =>
                         AddPrim($"Col_E_{zi}", PrimitiveType.Cylinder, new Vector3(W, colY, zi * module), new Vector3(colR, colH * 0.5f, colR), M["stone"], 240, Quaternion.identity);
                         AddPrim($"Col_W_{zi}", PrimitiveType.Cylinder, new Vector3(-W, colY, zi * module), new Vector3(colR, colH * 0.5f, colR), M["stone"], 240, Quaternion.identity);
                     }
-                    // Capitals (cube tops on columns)
                     float capY = deckTopY + colH;
-                    ActionColumnsCaps("N", W, true); ActionColumnsCaps("S", -W, true); ActionColumnsCaps("E", W, false); ActionColumnsCaps("W", -W, false);
-                    void ActionColumnsCaps(string side, float edge, bool alongX)
+                    void CapRow(string side, float edge, bool alongX)
                     {
-                        int lo = alongX ? -extent : -extent + 1;
-                        int hi = alongX ? extent : extent - 1;
+                        int lo = alongX ? -extent : -extent + 1, hi = alongX ? extent : extent - 1;
                         for (int i = lo; i <= hi; i++)
                         {
                             Vector3 p = alongX ? new Vector3(i * module, capY + 0.08f, edge) : new Vector3(edge, capY + 0.08f, i * module);
                             AddDecor($"Cap_{side}_{i}", p, new Vector3(colR * 1.8f, 0.16f, colR * 1.8f), M["stone"], Quaternion.identity);
                         }
                     }
-                    // Entablature (continuous beam on top of columns)
+                    CapRow("N", W, true); CapRow("S", -W, true); CapRow("E", W, false); CapRow("W", -W, false);
                     float entY = capY + 0.22f;
                     AddBlock("Entablature_N", new Vector3(0, entY, W), new Vector3(footW, 0.34f, 0.4f), M["accent"], 260);
                     AddBlock("Entablature_S", new Vector3(0, entY, -W), new Vector3(footW, 0.34f, 0.4f), M["accent"], 260);
                     AddBlock("Entablature_E", new Vector3(W, entY, 0), new Vector3(0.4f, 0.34f, footW), M["accent"], 260);
                     AddBlock("Entablature_W", new Vector3(-W, entY, 0), new Vector3(0.4f, 0.34f, footW), M["accent"], 260);
-                    // Pediment (triangular gable) on the two short ends (North & South)
-                    float pedBase = entY + 0.20f;
-                    float pedHalf = footW * 0.5f;
+                    float pedBase = entY + 0.20f, pedHalf = footW * 0.5f;
                     AddBlockRot("Pediment_NL", new Vector3(-pedHalf * 0.5f, pedBase + 0.5f, W), new Vector3(pedHalf, 0.16f, 0.5f), M["stone"], 220, Quaternion.Euler(0, 0, 14f));
                     AddBlockRot("Pediment_NR", new Vector3(pedHalf * 0.5f, pedBase + 0.5f, W), new Vector3(pedHalf, 0.16f, 0.5f), M["stone"], 220, Quaternion.Euler(0, 0, -14f));
                     AddBlockRot("Pediment_SL", new Vector3(-pedHalf * 0.5f, pedBase + 0.5f, -W), new Vector3(pedHalf, 0.16f, 0.5f), M["stone"], 220, Quaternion.Euler(0, 0, 14f));
                     AddBlockRot("Pediment_SR", new Vector3(pedHalf * 0.5f, pedBase + 0.5f, -W), new Vector3(pedHalf, 0.16f, 0.5f), M["stone"], 220, Quaternion.Euler(0, 0, -14f));
-                    // Cella (inner sanctuary walls) with an entrance gap on +Z
-                    float cellaH = colH * 0.86f;
-                    float cellaY = deckTopY + cellaH * 0.5f;
-                    float cellaW = W * 0.6f;
+                    float cellaH = colH * 0.86f, cellaY = deckTopY + cellaH * 0.5f, cellaW = W * 0.6f;
                     AddBlock("Cella_W", new Vector3(-cellaW, cellaY, 0), new Vector3(0.2f, cellaH, W * 1.2f), M["stoneDark"], 240);
                     AddBlock("Cella_E", new Vector3(cellaW, cellaY, 0), new Vector3(0.2f, cellaH, W * 1.2f), M["stoneDark"], 240);
                     AddBlock("Cella_N", new Vector3(0, cellaY, W * 0.6f), new Vector3(cellaW * 2, cellaH, 0.2f), M["stoneDark"], 240);
                     AddBlock("Cella_S", new Vector3(0, cellaY, -W * 0.6f), new Vector3(cellaW * 2, cellaH, 0.2f), M["stoneDark"], 240);
-                    // Gold offering plinth in the cella
-                    AddBlock("OfferingPlinth", new Vector3(0, deckTopY + 0.15f, 0), new Vector3(1.4f, 0.3f, 1.4f), M["accent"], 300);
                     buildHeight = colH + 1.4f;
                 }
                 else if (archetype == "Dome")
                 {
-                    // ── HABITAT DOME: octagonal wall ring + airlock + geodesic dome roof + antenna ──
                     float ringY = deckTopY + wallHeight * 0.5f;
                     for (int xi = -extent; xi <= extent; xi++)
                     {
@@ -9646,44 +9652,37 @@ root =>
                         AddBlock($"Wall_E_{zi}", new Vector3(W, ringY, zi * module), new Vector3(0.3f, wallHeight, module * 0.99f), PM(), 260);
                         AddBlock($"Wall_W_{zi}", new Vector3(-W, ringY, zi * module), new Vector3(0.3f, wallHeight, module * 0.99f), PM(), 260);
                     }
-                    // Airlock frame (doorway on +Z)
-                    AddBlock("Airlock_L", new Vector3(-0.45f, ringY, W), new Vector3(0.3f, wallHeight, 0.5f), M["primaryDark"], 280);
-                    AddBlock("Airlock_R", new Vector3(0.45f, ringY, W), new Vector3(0.3f, wallHeight, 0.5f), M["primaryDark"], 280);
-                    AddBlock("Airlock_Top", new Vector3(0, deckTopY + wallHeight - 0.15f, W), new Vector3(1.2f, 0.3f, 0.5f), M["accent"], 260);
-                    // Dome roof: stacked squashed spheres (stepped geodesic look)
+                    AddBlock("Airlock_L", new Vector3(-0.9f, ringY, W), new Vector3(0.3f, wallHeight, 0.5f), M["primaryDark"], 280);
+                    AddBlock("Airlock_R", new Vector3(0.9f, ringY, W), new Vector3(0.3f, wallHeight, 0.5f), M["primaryDark"], 280);
+                    AddBlock("Airlock_Top", new Vector3(0, deckTopY + wallHeight - 0.15f, W), new Vector3(2.1f, 0.3f, 0.5f), M["accent"], 260);
                     float domeBase = deckTopY + wallHeight;
                     float domeRadius = footW * 0.62f;
-                    for (int i = 0; i < 3; i++)
+                    int capCount = wantHeavyRuin ? 2 : 3; // heavy-ruin domes lost their crown
+                    for (int i = 0; i < capCount; i++)
                     {
                         float frac = 1f - i * 0.28f;
-                        AddPrim($"DomeCap_{i}", PrimitiveType.Sphere, new Vector3(0, domeBase + i * 0.5f, 0),
-                            new Vector3(domeRadius * frac, domeRadius * frac * 0.55f, domeRadius * frac), M["primary"], 280, Quaternion.identity);
+                        Quaternion tilt = wantHeavyRuin ? Quaternion.Euler(UnityEngine.Random.Range(-6f, 6f), 0, UnityEngine.Random.Range(-6f, 6f)) : Quaternion.identity;
+                        AddPrim($"DomeCap_{i}", PrimitiveType.Sphere, new Vector3(0, domeBase + i * 0.5f, 0), new Vector3(domeRadius * frac, domeRadius * frac * 0.55f, domeRadius * frac), M["primary"], 280, tilt);
                     }
-                    // Antenna spire
                     AddPrim("Antenna", PrimitiveType.Cylinder, new Vector3(W * 0.4f, domeBase + wallHeight * 0.6f, -W * 0.4f), new Vector3(0.05f, wallHeight * 0.6f, 0.05f), M["accent"], 160, Quaternion.identity);
                     AddDecor("AntennaTip", new Vector3(W * 0.4f, domeBase + wallHeight * 1.1f, -W * 0.4f), new Vector3(0.16f, 0.16f, 0.16f), M["accent"], Quaternion.identity);
-                    // Theme-specific dome accents
+                    if (wantAntenna) // comms array: extra masts
+                        for (int i = 0; i < 3; i++)
+                            AddPrim($"CommMast_{i}", PrimitiveType.Cylinder, new Vector3(-W * 0.4f + i * 0.5f, domeBase + wallHeight * 0.5f, W * 0.4f), new Vector3(0.04f, wallHeight * 0.9f, 0.04f), M["accent"], 140, Quaternion.Euler(0, 0, UnityEngine.Random.Range(-4f, 4f)));
                     if (theme == "Venus")
                         AddBlockRot("MeltDrip", new Vector3(W * 0.5f, deckTopY + 0.4f, W * 0.5f), new Vector3(0.3f, 0.9f, 0.3f), M["primaryLight"], 120, Quaternion.Euler(12f, 0f, 8f));
                     else if (theme == "Ice")
-                    {
-                        for (int i = 0; i < 4; i++)
-                        { float a = i / 4f * Mathf.PI * 2f; AddPrim($"IceSpike_{i}", PrimitiveType.Cube, new Vector3(Mathf.Cos(a) * domeRadius * 0.7f, domeBase + domeRadius * 0.3f, Mathf.Sin(a) * domeRadius * 0.7f), new Vector3(0.3f, 1.4f, 0.3f), M["accent"], 120, Quaternion.Euler(UnityEngine.Random.Range(-10f, 10f), 0f, UnityEngine.Random.Range(-10f, 10f))); }
-                    }
+                        for (int i = 0; i < 4; i++) { float a = i / 4f * Mathf.PI * 2f; AddPrim($"IceSpike_{i}", PrimitiveType.Cube, new Vector3(Mathf.Cos(a) * domeRadius * 0.7f, domeBase + domeRadius * 0.3f, Mathf.Sin(a) * domeRadius * 0.7f), new Vector3(0.3f, 1.4f, 0.3f), M["accent"], 120, Quaternion.Euler(UnityEngine.Random.Range(-10f, 10f), 0f, UnityEngine.Random.Range(-10f, 10f))); }
                     else if (theme == "Crystal")
-                    {
-                        for (int i = 0; i < 5; i++)
-                        { float a = i / 5f * Mathf.PI * 2f; AddPrim($"GeodeCluster_{i}", PrimitiveType.Cube, new Vector3(Mathf.Cos(a) * domeRadius * 0.8f, domeBase + domeRadius * 0.4f, Mathf.Sin(a) * domeRadius * 0.8f), new Vector3(0.34f, 1.0f, 0.34f), M["accent"], 120, Quaternion.Euler(UnityEngine.Random.Range(-15f, 15f), UnityEngine.Random.Range(0, 360f), UnityEngine.Random.Range(-15f, 15f))); }
-                    }
+                        for (int i = 0; i < 5; i++) { float a = i / 5f * Mathf.PI * 2f; AddPrim($"GeodeCluster_{i}", PrimitiveType.Cube, new Vector3(Mathf.Cos(a) * domeRadius * 0.8f, domeBase + domeRadius * 0.4f, Mathf.Sin(a) * domeRadius * 0.8f), new Vector3(0.34f, 1.0f, 0.34f), M["accent"], 120, Quaternion.Euler(UnityEngine.Random.Range(-15f, 15f), UnityEngine.Random.Range(0, 360f), UnityEngine.Random.Range(-15f, 15f))); }
                     else if (theme == "Volcanic")
                         AddDecor("MagmaVent", new Vector3(0, deckTopY + 0.07f, 0), new Vector3(footW * 0.5f, 0.06f, footW * 0.5f), M["accent"], Quaternion.identity);
                     else if (theme == "Water" && wantSunken)
                         AddDecor("AlgaeMat", new Vector3(0, deckTopY + 0.02f, 0), new Vector3(footW * 0.7f, 0.05f, footW * 0.5f), M["accent"], Quaternion.identity);
                     buildHeight = wallHeight + domeRadius * 0.55f * 3f * 0.5f + 1.5f;
                 }
-                else // Fortress (Mars / Acid / Pirate)
+                else // Fortress (Mars / Acid / Pirate / Ice / Water / Desolate / Volcanic / Crystal)
                 {
-                    // ── WALLED COMPOUND with corner pillars + gateway + optional battlements ──
                     float wallY = deckTopY + wallHeight * 0.5f;
                     float wallThick = wantLow ? 0.5f : 0.3f;
                     float cornerH = wallHeight * (wantTall ? 2.2f : 1.18f);
@@ -9696,7 +9695,7 @@ root =>
                     void WallPanel(string label, float x, float z, bool alongX)
                     {
                         Vector3 full = alongX ? new Vector3(module * 0.99f, wallHeight, wallThick) : new Vector3(wallThick, wallHeight, module * 0.99f);
-                        if (UnityEngine.Random.value < 0.13f)
+                        if (UnityEngine.Random.value < ruinChance)
                         {
                             Vector3 sill = alongX ? new Vector3(module * 0.99f, wallHeight * 0.34f, wallThick) : new Vector3(wallThick, wallHeight * 0.34f, module * 0.99f);
                             AddBlock($"Sill_{label}", new Vector3(x, deckTopY + wallHeight * 0.17f, z), sill, M["primaryDark"], 160);
@@ -9704,7 +9703,7 @@ root =>
                         }
                         AddBlock($"Wall_{label}", new Vector3(x, wallY, z), full, PM(), 260);
                     }
-                    bool collapsedSouth = wantCollapsed;
+                    bool collapsedSouth = wantHeavyRuin;
                     for (int xi = -extent; xi <= extent; xi++)
                     {
                         if (xi != 0) WallPanel($"N{xi}", xi * module, W, true);
@@ -9712,7 +9711,6 @@ root =>
                     }
                     for (int zi = -extent + 1; zi <= extent - 1; zi++)
                     { WallPanel($"E{zi}", W, zi * module, false); WallPanel($"W{zi}", -W, zi * module, false); }
-                    // Gateway
                     float off = module * 0.32f;
                     AddBlock("Gate_L", new Vector3(-off, wallY, W), new Vector3(wallThick * 1.5f, wallHeight, wallThick * 1.5f), M["stoneDark"], 300);
                     AddBlock("Gate_R", new Vector3(off, wallY, W), new Vector3(wallThick * 1.5f, wallHeight, wallThick * 1.5f), M["stoneDark"], 300);
@@ -9724,105 +9722,119 @@ root =>
                         for (int xi = -extent; xi <= extent; xi++)
                         {
                             if (xi == 0) continue;
-                            if (((xi + 1000) & 1) == 0 && UnityEngine.Random.value > 0.2f)
-                                AddBlock($"Merlon_N{xi}", new Vector3(xi * module, mY, W), new Vector3(mW, mH, wallThick * 1.4f), PM(), 200);
-                            if (((xi + 1001) & 1) == 0 && UnityEngine.Random.value > 0.2f)
-                                AddBlock($"Merlon_S{xi}", new Vector3(xi * module, mY, -W), new Vector3(mW, mH, wallThick * 1.4f), PM(), 200);
+                            if (((xi + 1000) & 1) == 0 && UnityEngine.Random.value > 0.2f) AddBlock($"Merlon_N{xi}", new Vector3(xi * module, mY, W), new Vector3(mW, mH, wallThick * 1.4f), PM(), 200);
+                            if (((xi + 1001) & 1) == 0 && UnityEngine.Random.value > 0.2f) AddBlock($"Merlon_S{xi}", new Vector3(xi * module, mY, -W), new Vector3(mW, mH, wallThick * 1.4f), PM(), 200);
                         }
                     }
-                    // Theme signature accents
+
+                    // Theme signature accents (unchanged flavour)
                     if (theme == "Mars")
-                    {
-                        // Dust drifts piled against the south walls
-                        for (int i = 0; i < 4; i++)
-                        {
-                            float dx = UnityEngine.Random.Range(-W * 0.8f, W * 0.8f);
-                            AddBlockRot($"DustDrift_{i}", new Vector3(dx, 0.35f, -W - 0.6f), new Vector3(module * 0.8f, 0.7f, 1.4f), M["stone"], 80,
-                                Quaternion.Euler(0, UnityEngine.Random.Range(0, 360f), -18f));
-                        }
-                    }
+                        for (int i = 0; i < 4; i++) { float dx = UnityEngine.Random.Range(-W * 0.8f, W * 0.8f); AddBlockRot($"DustDrift_{i}", new Vector3(dx, 0.35f, -W - 0.6f), new Vector3(module * 0.8f, 0.7f, 1.4f), M["stone"], 80, Quaternion.Euler(0, UnityEngine.Random.Range(0, 360f), -18f)); }
                     else if (theme == "Acid")
                     {
-                        // Crystal spikes + slime drips
-                        for (int i = 0; i < 5; i++)
-                        {
-                            float a = i / 5f * Mathf.PI * 2f;
-                            float rx = Mathf.Cos(a) * (W + 0.6f), rz = Mathf.Sin(a) * (W + 0.6f);
-                            float sh = UnityEngine.Random.Range(1.6f, 3.2f);
-                            AddPrim($"Crystal_{i}", PrimitiveType.Cube, new Vector3(rx, deckTopY + sh * 0.5f, rz), new Vector3(0.3f, sh, 0.3f), M["accent"], 120,
-                                Quaternion.Euler(UnityEngine.Random.Range(-12f, 12f), UnityEngine.Random.Range(0, 360f), UnityEngine.Random.Range(-12f, 12f)));
-                        }
-                        for (int i = 0; i < 4; i++)
-                            AddDecor($"SlimeDrip_{i}", new Vector3(UnityEngine.Random.Range(-W, W), deckTopY + wallHeight * 0.5f, W),
-                                new Vector3(0.08f, wallHeight * 0.8f, 0.08f), M["accent"], Quaternion.identity);
+                        for (int i = 0; i < 5; i++) { float a = i / 5f * Mathf.PI * 2f, rx = Mathf.Cos(a) * (W + 0.6f), rz = Mathf.Sin(a) * (W + 0.6f), sh = UnityEngine.Random.Range(1.6f, 3.2f); AddPrim($"Crystal_{i}", PrimitiveType.Cube, new Vector3(rx, deckTopY + sh * 0.5f, rz), new Vector3(0.3f, sh, 0.3f), M["accent"], 120, Quaternion.Euler(UnityEngine.Random.Range(-12f, 12f), UnityEngine.Random.Range(0, 360f), UnityEngine.Random.Range(-12f, 12f))); }
+                        for (int i = 0; i < 4; i++) AddDecor($"SlimeDrip_{i}", new Vector3(UnityEngine.Random.Range(-W, W), deckTopY + wallHeight * 0.5f, W), new Vector3(0.08f, wallHeight * 0.8f, 0.08f), M["accent"], Quaternion.identity);
                     }
                     else if (theme == "Pirate")
                     {
-                        // Neon sign on the south wall + skull emblem + junk piles
                         AddDecor("NeonSign", new Vector3(0, deckTopY + wallHeight * 0.7f, -W + 0.2f), new Vector3(2.0f, 0.6f, 0.06f), M["accent"], Quaternion.identity);
                         AddDecor("NeonSign2", new Vector3(0, deckTopY + wallHeight * 0.45f, -W + 0.2f), new Vector3(1.2f, 0.18f, 0.06f), M["primaryLight"], Quaternion.identity);
-                        // skull: head + two eye sockets
                         AddDecor("Skull", new Vector3(W, deckTopY + wallHeight + 0.4f, W), new Vector3(0.6f, 0.6f, 0.4f), M["stoneDark"], Quaternion.identity);
                         AddDecor("SkullEyeL", new Vector3(W - 0.14f, deckTopY + wallHeight + 0.45f, W + 0.21f), new Vector3(0.14f, 0.16f, 0.06f), M["accent"], Quaternion.identity);
                         AddDecor("SkullEyeR", new Vector3(W + 0.14f, deckTopY + wallHeight + 0.45f, W + 0.21f), new Vector3(0.14f, 0.16f, 0.06f), M["accent"], Quaternion.identity);
-                        for (int i = 0; i < 5; i++)
-                        {
-                            AddBlockRot($"Junk_{i}", new Vector3(UnityEngine.Random.Range(-W, W), deckTopY + 0.3f, UnityEngine.Random.Range(-W, W)),
-                                new Vector3(0.6f, 0.6f, 0.6f), PM(), 80, Quaternion.Euler(UnityEngine.Random.Range(0, 360f), UnityEngine.Random.Range(0, 360f), UnityEngine.Random.Range(0, 360f)));
-                        }
+                        for (int i = 0; i < 5; i++) AddBlockRot($"Junk_{i}", new Vector3(UnityEngine.Random.Range(-W, W), deckTopY + 0.3f, UnityEngine.Random.Range(-W, W)), new Vector3(0.6f, 0.6f, 0.6f), PM(), 80, Quaternion.Euler(UnityEngine.Random.Range(0, 360f), UnityEngine.Random.Range(0, 360f), UnityEngine.Random.Range(0, 360f)));
                     }
                     else if (theme == "Ice")
-                    {
-                        for (int i = 0; i < 5; i++)
-                            AddDecor($"Icicle_{i}", new Vector3(UnityEngine.Random.Range(-W, W), deckTopY + wallHeight * 0.45f, UnityEngine.Random.Range(-W, W)),
-                                new Vector3(0.12f, wallHeight * 0.5f, 0.12f), M["primaryLight"], Quaternion.identity);
-                    }
+                        for (int i = 0; i < 5; i++) AddDecor($"Icicle_{i}", new Vector3(UnityEngine.Random.Range(-W, W), deckTopY + wallHeight * 0.45f, UnityEngine.Random.Range(-W, W)), new Vector3(0.12f, wallHeight * 0.5f, 0.12f), M["primaryLight"], Quaternion.identity);
                     else if (theme == "Volcanic")
                     {
-                        for (int i = 0; i < 3; i++)
-                            AddDecor($"MagmaVent_{i}", new Vector3(UnityEngine.Random.Range(-W * 0.6f, W * 0.6f), deckTopY + 0.05f, UnityEngine.Random.Range(-W * 0.6f, W * 0.6f)),
-                                new Vector3(0.8f, 0.08f, 0.8f), M["accent"], Quaternion.identity);
+                        for (int i = 0; i < 3; i++) AddDecor($"MagmaVent_{i}", new Vector3(UnityEngine.Random.Range(-W * 0.6f, W * 0.6f), deckTopY + 0.05f, UnityEngine.Random.Range(-W * 0.6f, W * 0.6f)), new Vector3(0.8f, 0.08f, 0.8f), M["accent"], Quaternion.identity);
                         AddDecor("CharScorch", new Vector3(0, deckTopY + wallHeight * 0.5f, W), new Vector3(footW * 0.8f, wallHeight * 0.9f, 0.05f), M["stoneDark"], Quaternion.identity);
                     }
                     else if (theme == "Crystal")
-                    {
-                        for (int i = 0; i < 5; i++)
-                        { float a = i / 5f * Mathf.PI * 2f; float sh = UnityEngine.Random.Range(1.6f, 3.0f);
-                            AddPrim($"Geode_{i}", PrimitiveType.Cube, new Vector3(Mathf.Cos(a) * (W + 0.5f), deckTopY + sh * 0.5f, Mathf.Sin(a) * (W + 0.5f)), new Vector3(0.3f, sh, 0.3f), M["accent"], 120, Quaternion.Euler(UnityEngine.Random.Range(-12f, 12f), UnityEngine.Random.Range(0, 360f), UnityEngine.Random.Range(-12f, 12f))); }
-                    }
+                        for (int i = 0; i < 5; i++) { float a = i / 5f * Mathf.PI * 2f, sh = UnityEngine.Random.Range(1.6f, 3.0f); AddPrim($"Geode_{i}", PrimitiveType.Cube, new Vector3(Mathf.Cos(a) * (W + 0.5f), deckTopY + sh * 0.5f, Mathf.Sin(a) * (W + 0.5f)), new Vector3(0.3f, sh, 0.3f), M["accent"], 120, Quaternion.Euler(UnityEngine.Random.Range(-12f, 12f), UnityEngine.Random.Range(0, 360f), UnityEngine.Random.Range(-12f, 12f))); }
                     else if (theme == "Water")
-                    {
                         AddDecor("Barnacles", new Vector3(0, deckTopY + wallHeight * 0.3f, W), new Vector3(footW * 0.8f, wallHeight * 0.5f, 0.06f), M["accent"], Quaternion.identity);
-                    }
+
                     buildHeight = cornerH + (wantLow ? 0.3f : 1.0f);
-                    if (collapsedSouth) // spilled blocks outside the collapsed wall
-                        for (int i = 0; i < 3; i++)
+                    if (collapsedSouth)
+                        for (int i = 0; i < 4; i++) { float cs = UnityEngine.Random.Range(0.5f, 1.0f); AddBlockRot($"Collapse_{i}", new Vector3(UnityEngine.Random.Range(-module, module), 0.3f, -W - UnityEngine.Random.Range(0.3f, 1.7f)), new Vector3(cs, cs * 0.8f, cs), PM(), 120, Quaternion.Euler(UnityEngine.Random.Range(-25f, 25f), UnityEngine.Random.Range(0, 360f), UnityEngine.Random.Range(-25f, 25f))); }
+
+                    // Interior columns (some forts) — a few standing, a few toppled
+                    if (wantColumns)
+                    {
+                        float colR2 = module * 0.7f, colH2 = wallHeight * 0.8f; int spot = 0;
+                        foreach (float cx in new float[] { -colR2, colR2 }) foreach (float cz in new float[] { -colR2, colR2 })
                         {
-                            float s = UnityEngine.Random.Range(0.5f, 1.0f);
-                            AddBlockRot($"Collapse_{i}", new Vector3(UnityEngine.Random.Range(-module, module), 0.3f, -W - UnityEngine.Random.Range(0.3f, 1.5f)),
-                                new Vector3(s, s * 0.8f, s), PM(), 120, Quaternion.Euler(UnityEngine.Random.Range(-25f, 25f), UnityEngine.Random.Range(0, 360f), UnityEngine.Random.Range(-25f, 25f)));
+                            if (UnityEngine.Random.value < 0.5f) { AddBlock($"ColBase_{spot}", new Vector3(cx, deckTopY + 0.1f, cz), new Vector3(0.6f, 0.2f, 0.6f), M["stoneDark"], 200); AddBlock($"ColShaft_{spot}", new Vector3(cx, deckTopY + 0.2f + colH2 * 0.5f, cz), new Vector3(0.44f, colH2, 0.44f), M["stone"], 180); }
+                            else { AddBlockRot($"ColFallen_{spot}", new Vector3(cx + (cx < 0 ? -0.6f : 0.6f), deckTopY + 0.28f, cz + (cz < 0 ? -0.6f : 0.6f)), new Vector3(0.44f, 0.44f, colH2), M["stone"], 180, Quaternion.Euler(0f, UnityEngine.Random.Range(0, 360f), 90f)); AddBlock($"ColStub_{spot}", new Vector3(cx, deckTopY + 0.25f, cz), new Vector3(0.5f, 0.5f, 0.5f), M["stoneDark"], 180); }
+                            spot++;
                         }
+                    }
+
+                    // Banner standard
+                    if (wantBanner)
+                    {
+                        float bx = -W + pillarW * 0.5f, bz = -W + pillarW * 0.5f;
+                        AddBlock("BannerPole", new Vector3(bx, deckTopY + wallHeight * 0.5f, bz), new Vector3(0.12f, wallHeight, 0.12f), M["primaryDark"], 120);
+                        var cloth = AddDecor("BannerCloth", new Vector3(bx + 0.4f, deckTopY + wallHeight * 0.74f, bz), new Vector3(0.8f, wallHeight * 0.52f, 0.04f), M["accent"], Quaternion.identity);
+                        cloth.transform.localRotation = Quaternion.Euler(0f, 90f, UnityEngine.Random.Range(-4f, 4f));
+                    }
                 }
 
-                // ── Central dais + relic chest (all archetypes) ──
-                AddBlock("Dais", new Vector3(0, deckTopY + 0.15f, 0), new Vector3(1.7f, 0.3f, 1.7f), M["stoneDark"], 300);
-                // Rubble
-                int rubbleN = wantLow ? 3 : 6;
+                // ── Per-variant side/centerpiece features (NEW: silhouettes you can tell apart) ──
+                if (wantForge) // industrial chimney stack at a back corner
+                {
+                    float chx = -W + module * 0.5f, chz = -W + module * 0.5f, chH = wallHeight * 1.6f;
+                    AddPrim("Chimney", PrimitiveType.Cylinder, new Vector3(chx, deckTopY + chH * 0.5f, chz), new Vector3(0.5f, chH * 0.5f, 0.5f), M["primaryDark"], 200, Quaternion.identity);
+                    AddBlock("ChimneyCap", new Vector3(chx, deckTopY + chH, chz), new Vector3(0.7f, 0.25f, 0.7f), M["stoneDark"], 160);
+                    AddDecor("ChimneyGlow", new Vector3(chx, deckTopY + chH * 0.25f, chz), new Vector3(0.4f, 0.4f, 0.4f), M["accent"], Quaternion.identity);
+                    buildHeight = Mathf.Max(buildHeight, chH + deckTopY);
+                }
+                if (wantAntenna && archetype != "Dome") // comms mast (domes add their own array above)
+                {
+                    float ax = W - module * 0.5f, az = -W + module * 0.5f, aH = wallHeight * 2.0f;
+                    AddPrim("CommMast", PrimitiveType.Cylinder, new Vector3(ax, deckTopY + aH * 0.5f, az), new Vector3(0.06f, aH * 0.5f, 0.06f), M["accent"], 140, Quaternion.Euler(0, 0, UnityEngine.Random.Range(-3f, 3f)));
+                    AddDecor("CommDish", new Vector3(ax, deckTopY + aH * 0.8f, az), new Vector3(0.5f, 0.08f, 0.5f), M["primaryLight"], Quaternion.Euler(-30f, 0, 0));
+                    buildHeight = Mathf.Max(buildHeight, aH + deckTopY);
+                }
+                if (wantShipwreck) // crashed hull beside the compound
+                {
+                    float hx = W + module * 1.1f, hz = 0f;
+                    AddBlockRot("HullKeel", new Vector3(hx, 0.6f, hz), new Vector3(0.6f, 0.6f, module * 2.2f), M["primary"], 160, Quaternion.Euler(0, UnityEngine.Random.Range(-20f, 20f), 22f));
+                    AddBlockRot("HullDeck", new Vector3(hx, 1.2f, hz), new Vector3(1.0f, 0.2f, module * 2.0f), M["primaryDark"], 140, Quaternion.Euler(0, UnityEngine.Random.Range(-20f, 20f), 22f));
+                    AddPrim("HullNose", PrimitiveType.Sphere, new Vector3(hx, 0.9f, hz + module * 1.1f), new Vector3(0.7f, 0.6f, 0.9f), M["primary"], 140, Quaternion.Euler(0, UnityEngine.Random.Range(-20f, 20f), 22f));
+                }
+
+                // ── Central dais / altar + relic chest ──
+                if (wantAltar)
+                {
+                    AddBlock("Altar", new Vector3(0, deckTopY + 0.25f, 0), new Vector3(1.8f, 0.5f, 1.8f), M["stone"], 300);
+                    // Cult statue behind the chest
+                    AddPrim("StatueBase", PrimitiveType.Cube, new Vector3(0, deckTopY + 0.55f, -0.9f), new Vector3(0.5f, 0.2f, 0.5f), M["stoneDark"], 200, Quaternion.identity);
+                    AddPrim("StatueBody", PrimitiveType.Cylinder, new Vector3(0, deckTopY + 1.2f, -0.9f), new Vector3(0.22f, 0.55f, 0.22f), M["accent"], 160, Quaternion.identity);
+                    AddPrim("StatueHead", PrimitiveType.Sphere, new Vector3(0, deckTopY + 1.85f, -0.9f), new Vector3(0.26f, 0.26f, 0.26f), M["accent"], 140, Quaternion.identity);
+                }
+                else
+                {
+                    AddBlock("Dais", new Vector3(0, deckTopY + 0.15f, 0), new Vector3(1.7f, 0.3f, 1.7f), M["stoneDark"], 300);
+                }
+
+                // Rubble (scales with ruin level)
+                int rubbleN = wantLow ? 3 : (wantHeavyRuin ? 9 : 6);
                 for (int i = 0; i < rubbleN; i++)
                 {
                     float rxx = UnityEngine.Random.Range(-W * 0.7f, W * 0.7f), rzz = UnityEngine.Random.Range(-W * 0.7f, W * 0.7f);
                     if (Mathf.Abs(rxx) < 1.3f && Mathf.Abs(rzz) < 1.3f) continue;
-                    float rs = UnityEngine.Random.Range(0.22f, 0.55f);
-                    float rr = UnityEngine.Random.value;
+                    float rs = UnityEngine.Random.Range(0.22f, 0.55f), rr = UnityEngine.Random.value;
                     Material rm = rr < 0.4f ? M["stone"] : rr < 0.7f ? M["primaryDark"] : M["accent"];
-                    AddBlockRot($"Rubble_{i}", new Vector3(rxx, deckTopY + rs * 0.4f + 0.04f, rzz), new Vector3(rs, rs * 0.8f, rs), rm, 80,
-                        Quaternion.Euler(UnityEngine.Random.Range(0, 360f), UnityEngine.Random.Range(0, 360f), UnityEngine.Random.Range(0, 360f)));
+                    AddBlockRot($"Rubble_{i}", new Vector3(rxx, deckTopY + rs * 0.4f + 0.04f, rzz), new Vector3(rs, rs * 0.8f, rs), rm, 80, Quaternion.Euler(UnityEngine.Random.Range(0, 360f), UnityEngine.Random.Range(0, 360f), UnityEngine.Random.Range(0, 360f)));
                 }
 
-                // Visible relic chest
+                float chestY = deckTopY + (wantAltar ? 0.55f : 0.45f);
                 var chestGO = new GameObject("RuinChest_Visible");
                 chestGO.transform.SetParent(root.transform, false);
-                chestGO.transform.localPosition = new Vector3(0, deckTopY + 0.45f, 0);
+                chestGO.transform.localPosition = new Vector3(0, chestY, 0);
                 chestGO.transform.localScale = new Vector3(1.0f, 0.7f, 0.8f);
                 {
                     var cc = chestGO.AddComponent<BoxCollider>(); cc.size = new Vector3(1.3f, 1.0f, 1.05f);
@@ -9853,9 +9865,10 @@ root =>
                 childChest.ruinName = ruinDisplay; childChest.minComponents = keepMin; childChest.maxComponents = keepMax;
                 childChest.possibleComponents = finalComps; childChest.possibleFuel = finalFuel; childChest.possibleBlueprints = finalBps;
 
-                // Root collider sized to the build
+                // Root collider sized to the build (trigger → non-blocking, lets you walk inside)
                 rootCol.size = new Vector3(footW * 1.12f, buildHeight * 1.12f + deckTopY, footW * 1.12f);
                 rootCol.center = new Vector3(0, (buildHeight + deckTopY) * 0.5f, 0);
+                rootCol.isTrigger = true;
 
                 // Beacon
                 var lightGO = new GameObject("RuinBeaconLight"); lightGO.transform.SetParent(root.transform, false);
@@ -9864,6 +9877,7 @@ root =>
 
                 return PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
             }
+
 
             // ── Generate all 20 themed ruins ──
             var defs = new (string name, string theme, string arch, int extent, int minC, int maxC)[]
@@ -9958,6 +9972,134 @@ root =>
                 "Each ruin has a distinct silhouette (Temple / Dome / Fortress), themed textures, and themed loot.\n\n" +
                 "Placeable block items created under: " + CELEST_BLOCKS + "\n\n" +
                 "Phase 2 (planet + biome spawning wiring) is a separate step.",
+                "OK");
+        }
+
+        // ============================================================
+        //   STEP 21 - CELESTIAL WORLDS (Phase 2: planets + themed biomes + ruin spawning)
+        //   Wires every Phase-1 themed ruin to its own planet so it spawns in-world.
+        //   Non-destructive: appends planets to Sol, preserves hand-tuned biome scatter.
+        // ============================================================
+        private void BuildCelestialWorldsContent()
+        {
+            const string PLANETS_DIR = ASSET_ROOT + "/Planets";
+            const string BIOMES_DIR  = ASSET_ROOT + "/Biomes";
+            const string RUINS_DIR   = ASSET_ROOT + "/Survival/CelestialRuins";
+            EnsureFolder(PLANETS_DIR);
+            EnsureFolder(BIOMES_DIR);
+
+            GameObject LoadRuin(string ruinName)
+                => AssetDatabase.LoadAssetAtPath<GameObject>($"{RUINS_DIR}/{ruinName}.prefab");
+
+            // Create/update a themed biome: wide climate window + themed surface + ruin scatter.
+            BiomeDefinition MakeThemedBiome(string assetName, string displayName, Color debug, MaterialId surface, float density, params string[] ruinNames)
+            {
+                string path = $"{BIOMES_DIR}/{assetName}.asset";
+                var b = GetOrCreateAsset<BiomeDefinition>(path);
+                b.biomeName = displayName;
+                b.debugColor = debug;
+                b.minTemperature = 0f; b.maxTemperature = 1f;   // wide window → always qualifies on its planet
+                b.minHumidity = 0f;    b.maxHumidity = 1f;
+                b.priority = 5;
+                b.heightAmplitude = 10f; b.heightFrequency = 0.02f; b.ridgedness = 0.1f;
+                b.surfaceMaterial = surface; b.surfaceDepth = 1;
+                b.subsurfaceMaterial = surface; b.subsurfaceDepth = 5;
+                b.allowBeach = false; b.isOceanic = false;
+                // Scatter: non-destructive append of this world's themed ruins
+                var list = (b.scatter != null) ? new List<BiomeDefinition.ScatterEntry>(b.scatter) : new List<BiomeDefinition.ScatterEntry>();
+                foreach (var rn in ruinNames)
+                {
+                    var ruin = LoadRuin(rn);
+                    if (ruin == null) { Debug.LogWarning($"[CelestialWorlds] Ruin prefab not found: {rn} (run Step 20 first)"); continue; }
+                    bool has = false;
+                    foreach (var e in list) if (e.prefab == ruin) { has = true; break; }
+                    if (!has) list.Add(new BiomeDefinition.ScatterEntry { prefab = ruin, density = density, minScale = 1.1f, maxScale = 1.6f, minHeight = 0, maxHeight = 9999 });
+                }
+                b.scatter = list.ToArray();
+                EditorUtility.SetDirty(b);
+                return b;
+            }
+
+            // Create/update a planet. Non-destructive on ore lists; sets the fields that define the world.
+            PlanetTemplate MakePlanet(string assetName, string bodyName, float temp, float oxygen, float gravity, float radiusKm, bool grass, Color displayColor, params BiomeDefinition[] biomes)
+            {
+                string path = $"{PLANETS_DIR}/Planet_{assetName}.asset";
+                var p = GetOrCreateAsset<PlanetTemplate>(path);
+                p.body.bodyName = bodyName;
+                p.body.temperature = temp;
+                p.body.oxygenLevel = oxygen;
+                p.body.gravity = gravity;
+                p.body.radiusKm = radiusKm;
+                p.body.waterLevel = 96;
+                p.body.enableGrass = grass;
+                p.body.mountainScale = 1f;
+                p.body.displayColor = displayColor;
+                p.body.allowedBiomes = biomes;
+                EditorUtility.SetDirty(p);
+                return p;
+            }
+
+            // ── 11 themed biomes (surface material + ruin scatter) ──
+            var bMoon     = MakeThemedBiome("Biome_LunarHighlands", "Lunar Highlands",       new Color(0.60f,0.60f,0.65f), MaterialId.Stone,          0.0006f, "Ruin_Moon_HabitatDome","Ruin_Moon_Outpost","Ruin_Moon_ListeningPost");
+            var bMars     = MakeThemedBiome("Biome_MartianDust",    "Martian Dust Plains",    new Color(0.70f,0.40f,0.20f), MaterialId.MartianDust,    0.0006f, "Ruin_Mars_DustBunker","Ruin_Mars_Waystation","Ruin_Mars_Habitat","Ruin_Mars_FrontierOutpost");
+            var bVenus    = MakeThemedBiome("Biome_VenusianAsh",    "Venusian Ash Lowlands",  new Color(0.80f,0.70f,0.30f), MaterialId.VenusAsh,       0.0006f, "Ruin_Venus_PressureDome","Ruin_Venus_SulfurRefinery","Ruin_Venus_AshCitadel");
+            var bAcid     = MakeThemedBiome("Biome_AcidBog",        "Acid Bog",               new Color(0.40f,0.60f,0.25f), MaterialId.AcidBog,        0.0006f, "Ruin_Acid_CorrodedVault","Ruin_Acid_CrystalSpire","Ruin_Acid_DissolvedLab");
+            var bPirate   = MakeThemedBiome("Biome_PirateScrap",    "Pirate Scrap Badlands",  new Color(0.50f,0.45f,0.40f), MaterialId.Clay,           0.0007f, "Ruin_Pirate_ScrapFort","Ruin_Pirate_WreckCamp","Ruin_Pirate_NeonDen","Ruin_Pirate_LootCache","Ruin_Pirate_JunkTower");
+            var bGreek    = MakeThemedBiome("Biome_GreekMarble",    "Greek Marble Hills",     new Color(0.90f,0.88f,0.80f), MaterialId.Sand,           0.0006f, "Ruin_Greek_TreasuryTemple","Ruin_Greek_OracleShrine");
+            var bIce      = MakeThemedBiome("Biome_FrozenGlacier",  "Frozen Glacier",         new Color(0.80f,0.90f,1.00f), MaterialId.Ice,            0.0006f, "Ruin_Ice_GlacialDome","Ruin_Ice_FrozenBunker","Ruin_Ice_CryoStation");
+            var bWater    = MakeThemedBiome("Biome_OceanShelf",     "Ocean Shelf",            new Color(0.30f,0.50f,0.70f), MaterialId.Sand,           0.0006f, "Ruin_Water_StiltPlatform","Ruin_Water_SunkenDome");
+            var bDesolate = MakeThemedBiome("Biome_DesolateWastes", "Desolate Wastes",        new Color(0.60f,0.55f,0.45f), MaterialId.Clay,           0.0006f, "Ruin_Desolate_DryOutpost");
+            var bVolcanic = MakeThemedBiome("Biome_VolcanicBasalt", "Volcanic Basalt Plains", new Color(0.20f,0.10f,0.10f), MaterialId.VolcanicBasalt, 0.0006f, "Ruin_Volcanic_ObsidianCitadel","Ruin_Volcanic_MagmaForge","Ruin_Volcanic_CharredDome","Ruin_Volcanic_AshKeep");
+            var bCrystal  = MakeThemedBiome("Biome_CrystalGeode",   "Crystal Geode Flats",    new Color(0.60f,0.50f,0.90f), MaterialId.CrystalGeode,   0.0006f, "Ruin_Crystal_GeodeShrine","Ruin_Crystal_PrismSpire","Ruin_Crystal_LuminaTemple");
+
+            // ── Planets (Mars/Venus reconfigured + 8 new worlds) ──
+            var pMars     = MakePlanet("Mars",     "Mars",          5f,  0.02f, 0.38f, 6f, false, new Color(0.80f,0.40f,0.18f,1f), bMars);
+            var pVenus    = MakePlanet("Venus",    "Venus",         60f, 0.00f, 0.90f, 6f, false, new Color(0.85f,0.70f,0.25f,1f), bVenus);
+            var pAcid     = MakePlanet("Acid",     "Acid World",    30f, 0.15f, 0.90f, 6f, false, new Color(0.45f,0.65f,0.30f,1f), bAcid);
+            var pPirate   = MakePlanet("Pirate",   "Pirate World",  18f, 0.70f, 0.90f, 7f, false, new Color(0.50f,0.42f,0.32f,1f), bPirate);
+            var pGreek    = MakePlanet("Greek",    "Greek World",   20f, 1.00f, 1.00f, 7f, true,  new Color(0.92f,0.90f,0.78f,1f), bGreek);
+            var pIce      = MakePlanet("Ice",      "Ice World",    -30f, 0.10f, 0.50f, 6f, false, new Color(0.80f,0.90f,1.00f,1f), bIce);
+            var pWater    = MakePlanet("Water",    "Ocean World",   15f, 1.00f, 1.00f, 7f, false, new Color(0.20f,0.45f,0.75f,1f), bWater);
+            var pDesolate = MakePlanet("Desolate", "Desolate World",25f, 0.05f, 0.80f, 6f, false, new Color(0.65f,0.58f,0.45f,1f), bDesolate);
+            var pVolcanic = MakePlanet("Volcanic", "Volcanic World",70f, 0.05f, 0.90f, 6f, false, new Color(0.25f,0.10f,0.08f,1f), bVolcanic);
+            var pCrystal  = MakePlanet("Crystal",  "Crystal World", 10f, 0.25f, 0.70f, 6f, false, new Color(0.60f,0.50f,0.92f,1f), bCrystal);
+
+            // ── Moon: wire the lunar biome ──
+            var moon = AssetDatabase.LoadAssetAtPath<MoonTemplate>($"{PLANETS_DIR}/Moon_Earth.asset");
+            if (moon != null)
+            {
+                moon.body.allowedBiomes = new BiomeDefinition[] { bMoon };
+                moon.body.displayColor = new Color(0.70f, 0.70f, 0.72f, 1f);
+                EditorUtility.SetDirty(moon);
+            }
+
+            // ── Append all themed planets to System_Sol (non-destructive: only add missing) ──
+            string sysPath = $"{PLANETS_DIR}/System_Sol.asset";
+            var sys = AssetDatabase.LoadAssetAtPath<SolarSystemTemplate>(sysPath);
+            if (sys != null)
+            {
+                var list = (sys.planets != null) ? new List<PlanetTemplate>(sys.planets) : new List<PlanetTemplate>();
+                foreach (var p in new[] { pMars, pVenus, pAcid, pPirate, pGreek, pIce, pWater, pDesolate, pVolcanic, pCrystal })
+                    if (p != null && !list.Contains(p)) list.Add(p);
+                sys.planets = list.ToArray();
+                EditorUtility.SetDirty(sys);
+            }
+            else
+            {
+                Debug.LogWarning("[CelestialWorlds] System_Sol.asset not found — run 'Tools ▸ Voxel Engine ▸ Create Solar System (Sol)' first, then re-run this step.");
+            }
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Voxel Engine — Celestial Worlds (Phase 2)",
+                "Themed worlds wired:\n\n" +
+                "• 11 themed biomes (Lunar, Martian, Venusian, Acid, Pirate, Greek, Frozen, Ocean, Desolate, Volcanic, Crystal)\n" +
+                "• 10 planets configured (Mars/Venus reconfigured + 8 new) with themed terrain + ruin scatter\n" +
+                "• Moon wired to the Lunar biome\n" +
+                "• All appended to System_Sol\n\n" +
+                "New surface materials: Martian Dust, Venus Ash, Acid Bog, Volcanic Basalt, Crystal Geode.\n" +
+                "Ruins now spawn on their own world via biome scatter (~0.0006 density).\n\n" +
+                "IMPORTANT: re-run Step 1 (Create All Assets) once to register the 5 new materials in the MaterialRegistry, then create/visit a new world to see them.",
                 "OK");
         }
 
