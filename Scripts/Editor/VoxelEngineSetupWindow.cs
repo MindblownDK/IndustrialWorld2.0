@@ -4233,6 +4233,9 @@ namespace VoxelEngine.EditorTools
                 }
 
                 var root = new GameObject(name);
+                var salvageStone = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{ITEM_FOLDER}/Item_Stone.asset");
+                var salvageMetal = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{ITEM_FOLDER}/Item_IronIngot.asset");
+                var salvageWood = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{ITEM_FOLDER}/Item_WoodLog.asset");
                 if (root == null) { Debug.LogError($"[Ruin] Failed to create root GameObject for {name}"); return null; }
 
                 // ── Derive distinct architectural styles from the ruin name ──
@@ -4361,6 +4364,11 @@ namespace VoxelEngine.EditorTools
                     var pb = go.GetComponent<VoxelEngine.Building.PlacedBlock>();
                     if (pb == null) pb = go.AddComponent<VoxelEngine.Building.PlacedBlock>();
                     pb.Hp = Mathf.Max(10, hp);
+                    if (salvageStone != null || salvageMetal != null)
+                    {
+                        var rd = go.AddComponent<VoxelEngine.Exploration.RuinBlockDrop>();
+                        rd.salvage = (mat == matStone || mat == matStoneDark) ? salvageStone : salvageMetal;
+                    }
                     return go;
                 }
 
@@ -4581,6 +4589,11 @@ namespace VoxelEngine.EditorTools
                     if (chestCol == null) chestCol = chestGO.AddComponent<BoxCollider>();
                     chestCol.size = new Vector3(1.3f, 1.0f, 1.05f);
                     chestCol.center = Vector3.zero;
+                    var chestPB = chestGO.GetComponent<VoxelEngine.Building.PlacedBlock>();
+                    if (chestPB == null) chestPB = chestGO.AddComponent<VoxelEngine.Building.PlacedBlock>();
+                    chestPB.Hp = 120;
+                    var chestDrop = chestGO.AddComponent<VoxelEngine.Exploration.RuinBlockDrop>();
+                    chestDrop.salvage = salvageWood;
 
                     var chestBody = GameObject.CreatePrimitive(PrimitiveType.Cube);
                     chestBody.name = "ChestBody";
@@ -9481,6 +9494,7 @@ root =>
                 var M = matSet[theme];
                 var salvageStone = FindItem("Item_Stone");
                 var salvageMetal = FindItem("Item_IronIngot");
+                var salvageWood = FindItem("Item_WoodLog");
                 string prefabPath = $"{CELEST_PREFABS}/{name}.prefab";
                 Color beaconColor = theme switch
                 {
@@ -9851,6 +9865,11 @@ root =>
                 chestGO.transform.localScale = new Vector3(1.0f, 0.7f, 0.8f);
                 {
                     var cc = chestGO.AddComponent<BoxCollider>(); cc.size = new Vector3(1.3f, 1.0f, 1.05f);
+                    var chestPB = chestGO.GetComponent<VoxelEngine.Building.PlacedBlock>();
+                    if (chestPB == null) chestPB = chestGO.AddComponent<VoxelEngine.Building.PlacedBlock>();
+                    chestPB.Hp = 120;
+                    var chestDrop = chestGO.AddComponent<VoxelEngine.Exploration.RuinBlockDrop>();
+                    chestDrop.salvage = salvageWood;
                     var body = GameObject.CreatePrimitive(PrimitiveType.Cube); body.name = "ChestBody";
                     body.transform.SetParent(chestGO.transform, false); body.transform.localScale = new Vector3(1f, 0.85f, 1f);
                     body.GetComponent<Renderer>().sharedMaterial = M["chest"];

@@ -23,11 +23,16 @@ namespace VoxelEngine.Building
             if (Hp <= 0)
             {
                 DrainInventoriesToPlayerThenWorld(recipient);
-                if (Item != null)
+                var customDrop = GetComponentInChildren<ICustomBlockDrop>();
+                if (customDrop != null)
                 {
-                    var customDrop = GetComponentInChildren<ICustomBlockDrop>();
-                    var stack = customDrop != null ? customDrop.CreateBlockDrop(Item) : new ItemStack(Item, 1);
+                    // A custom drop (e.g. ruin salvage / chest wood) is honoured even when Item is null.
+                    var stack = customDrop.CreateBlockDrop(Item);
                     GiveToPlayerThenDrop(stack, recipient, transform.position + Vector3.up * 0.6f);
+                }
+                else if (Item != null)
+                {
+                    GiveToPlayerThenDrop(new ItemStack(Item, 1), recipient, transform.position + Vector3.up * 0.6f);
                 }
                 var gridBlock = GetComponent<VoxelEngine.GridSystem.GridBlock>();
                 if (gridBlock != null && gridBlock.IsPrecisionAttachment && gridBlock.Grid != null)
