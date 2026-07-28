@@ -44,6 +44,7 @@ namespace VoxelEngine.Player
         private Vector3 _curPos;
         private Quaternion _curRot;
         private bool   _posInit;
+        private Transform _swingPivot;
 
         private void Awake()
         {
@@ -149,11 +150,9 @@ namespace VoxelEngine.Player
             _curPos = Vector3.Lerp(_curPos, pos, 1f - Mathf.Exp(-dt * 14f));
             _curRot = Quaternion.Slerp(_curRot, rot, 1f - Mathf.Exp(-dt * 16f));
 
-            if (_swing == null)
-            {
-                anchor.localPosition = _curPos;
-                anchor.localRotation = _curRot;
-            }
+            // The anchor always reflects movement state; the swing arc runs on _swingPivot.
+            anchor.localPosition = _curPos;
+            anchor.localRotation = _curRot;
         }
 
         public void Refresh()
@@ -179,8 +178,17 @@ namespace VoxelEngine.Player
                 _viewModel = BuildViewmodelFor(item);
             }
 
-            _viewModel.transform.SetParent(anchor, false);
-            _viewModel.transform.localPosition = Vector3.zero;
+            // Parent the tool under a swing pivot at the grip so swings rotate around the
+            // grip and the BLADE/HEAD leads the arc (not the handle).
+            if (_swingPivot == null)
+            {
+                _swingPivot = new GameObject("SwingPivot").transform;
+                _swingPivot.SetParent(anchor, false);
+                _swingPivot.localPosition = new Vector3(0f, -0.12f, 0f);
+                _swingPivot.localRotation = Quaternion.identity;
+            }
+            _viewModel.transform.SetParent(_swingPivot, false);
+            _viewModel.transform.localPosition = new Vector3(0f, 0.12f, 0f);
             _viewModel.transform.localRotation = Quaternion.identity;
 
             // Make every renderer ignore world lighting overrides + put on a high render queue
@@ -208,35 +216,29 @@ namespace VoxelEngine.Player
 
         private IEnumerator SwingRoutine()
         {
-            Vector3 baseP = idleLocalPos;
-            Quaternion baseR = Quaternion.Euler(idleLocalEuler);
-            Vector3 toP   = swingLocalPos;
-            Quaternion toR = Quaternion.Euler(swingLocalEuler);
+            if (_swingPivot == null) yield break;
+            Quaternion baseR = Quaternion.identity;
+            Quaternion toR   = Quaternion.Euler(90f, 14f, 10f); // blade-led chop: sweeps from up to forward
 
-            // Forward (impact)
             float t = 0f;
             float halfDur = swingDuration * 0.4f;
             while (t < halfDur)
             {
                 t += Time.deltaTime;
                 float u = Mathf.SmoothStep(0, 1, t / halfDur);
-                anchor.localPosition = Vector3.Lerp(baseP, toP, u);
-                anchor.localRotation = Quaternion.Slerp(baseR, toR, u);
+                _swingPivot.localRotation = Quaternion.Slerp(baseR, toR, u);
                 yield return null;
             }
-            // Recover
             t = 0f;
             float recDur = swingDuration * 0.6f;
             while (t < recDur)
             {
                 t += Time.deltaTime;
                 float u = Mathf.SmoothStep(0, 1, t / recDur);
-                anchor.localPosition = Vector3.Lerp(toP, baseP, u);
-                anchor.localRotation = Quaternion.Slerp(toR, baseR, u);
+                _swingPivot.localRotation = Quaternion.Slerp(toR, baseR, u);
                 yield return null;
             }
-            anchor.localPosition = baseP;
-            anchor.localRotation = baseR;
+            _swingPivot.localRotation = baseR;
             _swing = null;
         }
 
