@@ -99,11 +99,20 @@ namespace VoxelEngine.Player
         private float  _lastGroundedTime;
         private bool   _crouched;
         private bool   _sliding;
+        private bool   _sprinting;
         private float  _smoothedEyeHeight;
         private float  _jetpackBoostCharge;
 
         // ===== Editor inspector helpers (for the in-inspector toggle button) =====
         [HideInInspector] public bool inspectorFlyToggle;
+
+        // ===== movement-state exposure (read by HeldToolView / animations) =====
+        public bool IsGrounded => _grounded;
+        public bool IsSliding => _sliding;
+        public bool IsSprinting => _sprinting;
+        public bool IsFlying => inspectorFlyToggle;
+        public Vector3 Velocity => _velocity;
+        public float LastAirDownSpeed => _lastAirDownSpeed;
 
         private void Awake()
         {
@@ -351,6 +360,7 @@ namespace VoxelEngine.Player
             float effSprint = PlayerStats.Instance != null ? PlayerStats.Instance.SprintMultiplier : sprintMultiplier;
             // Sprint also drains stamina; if stamina is empty, sprint is disabled.
             bool canSprint = sprintHeld && (PlayerStats.Instance == null || PlayerStats.Instance.Stamina > 0.1f);
+            _sprinting = canSprint && wish.y > 0.1f;
             if (canSprint && wish.y > 0.1f)
             {
                 speedMul = effSprint;

@@ -771,7 +771,10 @@ namespace VoxelEngine.Player
                         point = hit.point, direction = ray.direction, source = gameObject });
             }
             if (weapon.attackMode == VoxelEngine.Combat.WeaponItem.AttackMode.Ranged)
+            {
                 Debug.DrawRay(ray.origin, ray.direction * dist, Color.yellow, 0.08f); // tracer placeholder
+                GetComponent<VoxelEngine.Player.HeldToolView>()?.DoRecoil();
+            }
         }
 
         private void MineVoxel(Ray ray, RaycastHit hit)

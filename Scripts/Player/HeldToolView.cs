@@ -35,6 +35,10 @@ namespace VoxelEngine.Player
         private Coroutine _swing;
         private float _bobT;
         private CharacterController _cc;
+        private PlayerController _pc;
+        private bool   _wasGrounded;
+        private float  _landDip;
+        private float  _recoilT;
 
         private void Awake()
         {
@@ -46,6 +50,7 @@ namespace VoxelEngine.Player
             anchor.localPosition = idleLocalPos;
             anchor.localRotation = Quaternion.Euler(idleLocalEuler);
             _cc = GetComponentInParent<CharacterController>();
+            _pc = GetComponentInParent<PlayerController>();
         }
 
         private void Start()
@@ -71,13 +76,62 @@ namespace VoxelEngine.Player
 
         private void Update()
         {
-            // Subtle weapon-bob while moving so the viewmodel doesn't feel frozen.
-            if (_cc != null)
+            if (anchor == null) return;
+            float dt = Time.deltaTime;
+            Vector3 pos = idleLocalPos;
+            Quaternion rot = Quaternion.Euler(idleLocalEuler);
+
+            bool grounded = _pc != null ? _pc.IsGrounded : (_cc != null && _cc.isGrounded);
+            float hSpeed = _cc != null ? new Vector2(_cc.velocity.x, _cc.velocity.z).magnitude : 0f;
+            float vSpeed = _cc != null ? _cc.velocity.y : 0f;
+            bool sprint = _pc != null && _pc.IsSprinting;
+            bool slide  = _pc != null && _pc.IsSliding;
+            bool fly    = _pc != null && _pc.IsFlying;
+
+            // Landing impact dip (triggered the frame we touch down).
+            if (grounded && !_wasGrounded && _pc != null)
+                _landDip = Mathf.Clamp01(_pc.LastAirDownSpeed / 14f);
+            _wasGrounded = grounded;
+            _landDip = Mathf.MoveTowards(_landDip, 0f, dt * 4f);
+
+            if (fly)
             {
-                float speed = new Vector2(_cc.velocity.x, _cc.velocity.z).magnitude;
-                _bobT += Time.deltaTime * (1f + speed * 0.4f) * bobSpeedWalking;
-                float bob = Mathf.Sin(_bobT) * bobAmplitude * Mathf.Clamp01(speed * 0.3f);
-                anchor.localPosition = idleLocalPos + new Vector3(0, bob, 0);
+                // Fly: gentle drift sway + slight nose-up tilt.
+                _bobT += dt * 3f;
+                pos += new Vector3(Mathf.Sin(_bobT * 0.7f) * 0.012f, Mathf.Sin(_bobT) * 0.006f, 0f);
+                rot *= Quaternion.Euler(-12f, 0f, Mathf.Sin(_bobT * 0.5f) * 4f);
+            }
+            else if (!grounded)
+            {
+                // Air (jump/fall): drop slightly, tilt with vertical velocity.
+                pos += new Vector3(0f, -0.04f, 0.02f);
+                rot *= Quaternion.Euler(Mathf.Clamp(-vSpeed * 1.5f, -30f, 30f), 0f, 0f);
+            }
+            else
+            {
+                // Grounded locomotion bob (idle/walk/run).
+                _bobT += dt * (1f + hSpeed * 0.45f) * bobSpeedWalking;
+                float amp = bobAmplitude * Mathf.Clamp01(hSpeed * 0.3f) * (sprint ? 1.5f : 1f);
+                pos += new Vector3(0f, Mathf.Sin(_bobT) * amp, 0f);
+                if (sprint) { pos += new Vector3(0f, 0f, 0.03f); rot *= Quaternion.Euler(6f, 0f, 0f); }   // forward lean
+                if (slide)  { rot *= Quaternion.Euler(-18f, 0f, 8f); pos += new Vector3(0f, -0.05f, 0f); } // slide lean
+            }
+
+            // Landing dip + decaying ranged recoil layered on top.
+            pos += new Vector3(0f, -_landDip * 0.05f, 0f);
+            rot *= Quaternion.Euler(_landDip * 15f, 0f, 0f);
+            if (_recoilT > 0f)
+            {
+                _recoilT = Mathf.MoveTowards(_recoilT, 0f, dt * 6f);
+                rot *= Quaternion.Euler(_recoilT * 20f, 0f, 0f);
+                pos += new Vector3(0f, 0f, _recoilT * 0.04f);
+            }
+
+            // A running melee swing coroutine owns the anchor until it finishes.
+            if (_swing == null)
+            {
+                anchor.localPosition = pos;
+                anchor.localRotation = rot;
             }
         }
 
@@ -127,6 +181,9 @@ namespace VoxelEngine.Player
             if (_swing != null) StopCoroutine(_swing);
             _swing = StartCoroutine(SwingRoutine());
         }
+
+        // Called by the combat hook when a ranged weapon is fired.
+        public void DoRecoil() { _recoilT = 1f; }
 
         private IEnumerator SwingRoutine()
         {

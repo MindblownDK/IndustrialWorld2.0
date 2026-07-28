@@ -4,6 +4,7 @@
 // existing tool/hotbar/equipment pipeline, but is intercepted by the combat
 // dispatch in PlayerInteractionTool (LMB attacks instead of mining).
 
+using UnityEngine;
 using VoxelEngine.Items;
 
 namespace VoxelEngine.Combat
