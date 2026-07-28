@@ -10368,6 +10368,13 @@ root =>
             ghoul.drops = drops.ToArray();
             ghoul.minDrops = 1; ghoul.maxDrops = 2;
 
+            // Premium themed health bar (Ghoul theme: sickly green full → dark red low)
+            var hbar = root.AddComponent<VoxelEngine.Combat.CreatureHealthBar>();
+            hbar.target = ghoul;
+            hbar.fillColor = new Color(0.45f, 0.70f, 0.20f);
+            hbar.fillColorLow = new Color(0.70f, 0.10f, 0.05f);
+            hbar.borderColor = new Color(0.30f, 0.25f, 0.18f, 0.90f);
+
             PrefabUtility.SaveAsPrefabAsset(root, "Assets/Resources/Enemies/Ghoul.prefab");
             UnityEngine.Object.DestroyImmediate(root);
 
