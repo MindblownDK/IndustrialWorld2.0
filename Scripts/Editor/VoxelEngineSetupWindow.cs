@@ -10272,10 +10272,17 @@ root =>
         //   hostile creature. Wander/detect/chase/melee, radial-aligned,
         //   Damageable + loot, spawned rarely in home-world biomes.
         // ============================================================
+        // ============================================================
+        //   STEP 23 - ENEMIES (Combat Phase 2): remade Ghoul + proper
+        //   EnemySpawner. Detailed hunched creature; spawns top-level
+        //   near the player (not chunk-parented) so radial physics works.
+        // ============================================================
         private void BuildEnemyContent()
         {
-            const string ENEMY_PREFABS = ASSET_ROOT + "/Enemies";
-            EnsureFolder(ENEMY_PREFABS);
+            EnsureFolder("Assets/Resources");
+            EnsureFolder("Assets/Resources/Enemies");
+            const string ENEMY_MATS = ASSET_ROOT + "/Enemies";
+            EnsureFolder(ENEMY_MATS);
 
             ItemDefinition FindItem(string assetNameNoExt)
             {
@@ -10291,31 +10298,66 @@ root =>
             var ironIngot = FindItem("Item_IronIngot");
             var stone     = FindItem("Item_Stone");
 
-            var skin = MakeColoredMat(ENEMY_PREFABS, "Mat_GhoulSkin", new Color(0.42f, 0.52f, 0.34f));
-            var dark = MakeColoredMat(ENEMY_PREFABS, "Mat_GhoulDark", new Color(0.24f, 0.30f, 0.20f));
-            var eye  = MakeColoredMat(ENEMY_PREFABS, "Mat_GhoulEye",  new Color(0.95f, 0.18f, 0.12f));
+            var skin     = MakeColoredMat(ENEMY_MATS, "Mat_GhoulSkin",  new Color(0.42f, 0.47f, 0.37f)); // stony grey-green
+            var skinDark = MakeColoredMat(ENEMY_MATS, "Mat_GhoulDark",  new Color(0.26f, 0.30f, 0.22f)); // decay
+            var bone     = MakeColoredMat(ENEMY_MATS, "Mat_GhoulBone",  new Color(0.82f, 0.80f, 0.68f)); // teeth/claws
+            var eye      = MakeColoredMat(ENEMY_MATS, "Mat_GhoulEye",   new Color(0.98f, 0.16f, 0.12f)); // glowing red
 
             var root = new GameObject("Ghoul");
-            GameObject AddPart(string n, Vector3 pos, Vector3 scale, Material m)
+            GameObject AddPart(string n, Vector3 pos, Vector3 euler, Vector3 scale, Material m)
             {
                 var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
                 go.name = n; go.transform.SetParent(root.transform, false);
-                go.transform.localPosition = pos; go.transform.localScale = scale;
+                go.transform.localPosition = pos; go.transform.localEulerAngles = euler; go.transform.localScale = scale;
                 go.GetComponent<Renderer>().sharedMaterial = m;
                 var col = go.GetComponent<Collider>(); if (col != null) UnityEngine.Object.DestroyImmediate(col);
                 return go;
             }
-            AddPart("Body", new Vector3(0f, 0.90f, 0f),      new Vector3(0.62f, 0.90f, 0.36f), skin);
-            AddPart("Head", new Vector3(0f, 1.55f, 0.02f),    new Vector3(0.42f, 0.42f, 0.42f), dark);
-            AddPart("EyeL", new Vector3(-0.11f, 1.58f, 0.22f),new Vector3(0.08f, 0.08f, 0.04f), eye);
-            AddPart("EyeR", new Vector3( 0.11f, 1.58f, 0.22f),new Vector3(0.08f, 0.08f, 0.04f), eye);
-            AddPart("ArmL", new Vector3(-0.42f, 1.00f, 0f),   new Vector3(0.16f, 0.70f, 0.16f), skin);
-            AddPart("ArmR", new Vector3( 0.42f, 1.00f, 0f),   new Vector3(0.16f, 0.70f, 0.16f), skin);
-            AddPart("LegL", new Vector3(-0.16f, 0.30f, 0f),   new Vector3(0.20f, 0.60f, 0.20f), dark);
-            AddPart("LegR", new Vector3( 0.16f, 0.30f, 0f),   new Vector3(0.20f, 0.60f, 0.20f), dark);
+
+            // ── Hunched, gaunt, lanky ghoul (research-inspired silhouette) ──
+            // Splayed clawed legs
+            AddPart("ThighL", new Vector3(-0.12f, 0.32f, 0f),    new Vector3(0,0,-7),  new Vector3(0.15f, 0.34f, 0.15f), skin);
+            AddPart("ShinL",  new Vector3(-0.15f, 0.04f, 0.02f),  new Vector3(0,0,-4),  new Vector3(0.13f, 0.30f, 0.13f), skin);
+            AddPart("FootL",  new Vector3(-0.17f,-0.04f, 0.10f),  new Vector3(-22,0,0), new Vector3(0.13f, 0.07f, 0.26f), skinDark);
+            AddPart("ThighR", new Vector3( 0.12f, 0.32f, 0f),     new Vector3(0,0, 7),  new Vector3(0.15f, 0.34f, 0.15f), skin);
+            AddPart("ShinR",  new Vector3( 0.15f, 0.04f, 0.02f),  new Vector3(0,0, 4),  new Vector3(0.13f, 0.30f, 0.13f), skin);
+            AddPart("FootR",  new Vector3( 0.17f,-0.04f, 0.10f),  new Vector3(-22,0,0), new Vector3(0.13f, 0.07f, 0.26f), skinDark);
+            // Hips + hunched gaunt torso
+            AddPart("Hips",   new Vector3(0, 0.52f, 0f),          Vector3.zero,        new Vector3(0.34f, 0.22f, 0.26f), skinDark);
+            AddPart("Torso",  new Vector3(0, 0.95f, 0.06f),       new Vector3(20,0,0),  new Vector3(0.40f, 0.56f, 0.24f), skin);
+            AddPart("Rib1",   new Vector3(0, 1.02f, 0.18f),       new Vector3(20,0,0),  new Vector3(0.30f, 0.04f, 0.04f), skinDark);
+            AddPart("Rib2",   new Vector3(0, 0.90f, 0.18f),       new Vector3(20,0,0),  new Vector3(0.30f, 0.04f, 0.04f), skinDark);
+            AddPart("Rib3",   new Vector3(0, 0.78f, 0.17f),       new Vector3(20,0,0),  new Vector3(0.28f, 0.04f, 0.04f), skinDark);
+            AddPart("Hump",   new Vector3(0, 1.18f,-0.08f),       new Vector3(20,0,0),  new Vector3(0.30f, 0.22f, 0.18f), skinDark);
+            // Shoulders + long clawed arms hanging low
+            AddPart("ShldrL", new Vector3(-0.24f, 1.18f, 0.04f),  new Vector3(20,0,-12),new Vector3(0.18f, 0.16f, 0.18f), skinDark);
+            AddPart("ShldrR", new Vector3( 0.24f, 1.18f, 0.04f),  new Vector3(20,0, 12),new Vector3(0.18f, 0.16f, 0.18f), skinDark);
+            AddPart("UpArmL", new Vector3(-0.30f, 0.92f, 0.08f),  new Vector3(12,0,-6), new Vector3(0.12f, 0.36f, 0.12f), skin);
+            AddPart("ForArmL",new Vector3(-0.36f, 0.58f, 0.12f),  new Vector3(8,0,-4),  new Vector3(0.11f, 0.38f, 0.11f), skin);
+            AddPart("HandL",  new Vector3(-0.40f, 0.34f, 0.16f),  Vector3.zero,        new Vector3(0.12f, 0.12f, 0.13f), skinDark);
+            AddPart("ClawL1", new Vector3(-0.40f, 0.24f, 0.26f),  new Vector3(40,0,0),  new Vector3(0.04f, 0.04f, 0.14f), bone);
+            AddPart("ClawL2", new Vector3(-0.46f, 0.24f, 0.24f),  new Vector3(40,0,-20),new Vector3(0.04f, 0.04f, 0.14f), bone);
+            AddPart("UpArmR", new Vector3( 0.30f, 0.92f, 0.08f),  new Vector3(12,0, 6), new Vector3(0.12f, 0.36f, 0.12f), skin);
+            AddPart("ForArmR",new Vector3( 0.36f, 0.58f, 0.12f),  new Vector3(8,0, 4),  new Vector3(0.11f, 0.38f, 0.11f), skin);
+            AddPart("HandR",  new Vector3( 0.40f, 0.34f, 0.16f),  Vector3.zero,        new Vector3(0.12f, 0.12f, 0.13f), skinDark);
+            AddPart("ClawR1", new Vector3( 0.40f, 0.24f, 0.26f),  new Vector3(40,0,0),  new Vector3(0.04f, 0.04f, 0.14f), bone);
+            AddPart("ClawR2", new Vector3( 0.46f, 0.24f, 0.24f),  new Vector3(40,0, 20),new Vector3(0.04f, 0.04f, 0.14f), bone);
+            // Neck + elongated muzzle skull + jaw + teeth + glowing eyes
+            AddPart("Neck",   new Vector3(0, 1.32f, 0.12f),       new Vector3(24,0,0),  new Vector3(0.15f, 0.16f, 0.15f), skin);
+            AddPart("Head",   new Vector3(0, 1.44f, 0.20f),       new Vector3(18,0,0),  new Vector3(0.30f, 0.30f, 0.40f), skin);
+            AddPart("Brow",   new Vector3(0, 1.54f, 0.22f),       new Vector3(18,0,0),  new Vector3(0.30f, 0.08f, 0.20f), skinDark);
+            AddPart("Jaw",    new Vector3(0, 1.34f, 0.34f),       new Vector3(18,0,0),  new Vector3(0.24f, 0.10f, 0.22f), skinDark);
+            AddPart("Teeth1", new Vector3(-0.06f,1.40f, 0.42f),   new Vector3(18,0,0),  new Vector3(0.04f, 0.06f, 0.04f), bone);
+            AddPart("Teeth2", new Vector3( 0.00f,1.40f, 0.43f),   new Vector3(18,0,0),  new Vector3(0.04f, 0.07f, 0.04f), bone);
+            AddPart("Teeth3", new Vector3( 0.06f,1.40f, 0.42f),   new Vector3(18,0,0),  new Vector3(0.04f, 0.06f, 0.04f), bone);
+            AddPart("EyeL",   new Vector3(-0.10f,1.50f, 0.36f),   new Vector3(18,0,0),  new Vector3(0.07f, 0.05f, 0.04f), eye);
+            AddPart("EyeR",   new Vector3( 0.10f,1.50f, 0.36f),   new Vector3(18,0,0),  new Vector3(0.07f, 0.05f, 0.04f), eye);
+            // Decay patches
+            AddPart("PatchL", new Vector3(-0.18f,1.00f, 0.04f),   new Vector3(20,0,0),  new Vector3(0.10f, 0.14f, 0.05f), skinDark);
+            AddPart("PatchR", new Vector3( 0.18f,0.92f, 0.04f),   new Vector3(20,0,0),  new Vector3(0.08f, 0.12f, 0.05f), skinDark);
 
             var cap = root.AddComponent<CapsuleCollider>();
-            cap.height = 1.7f; cap.radius = 0.36f; cap.center = new Vector3(0f, 0.85f, 0f);
+            cap.height = 1.7f; cap.radius = 0.38f; cap.center = new Vector3(0f, 0.85f, 0.04f);
             var rb = root.AddComponent<Rigidbody>();
             rb.useGravity = false; rb.freezeRotation = true;
             var ghoul = root.AddComponent<VoxelEngine.Combat.EnemyGhoul>();
@@ -10326,25 +10368,22 @@ root =>
             ghoul.drops = drops.ToArray();
             ghoul.minDrops = 1; ghoul.maxDrops = 2;
 
-            var prefab = PrefabUtility.SaveAsPrefabAsset(root, ENEMY_PREFABS + "/Ghoul.prefab");
+            PrefabUtility.SaveAsPrefabAsset(root, "Assets/Resources/Enemies/Ghoul.prefab");
             UnityEngine.Object.DestroyImmediate(root);
 
-            // Spawn: inject into a few home-world biomes at low density (idempotent).
+            // Clean up stale Ghoul biome-scatter entries (the old chunk-parented approach is replaced by EnemySpawner).
             var br = AssetDatabase.LoadAssetAtPath<VoxelEngine.Biomes.BiomeRegistry>(ASSET_ROOT + "/BiomeRegistry.asset");
             if (br != null)
             {
                 foreach (var biome in br.biomes)
                 {
-                    if (biome == null) continue;
-                    if (biome.biomeName != "Wasteland" && biome.biomeName != "Forest" && biome.biomeName != "Desert") continue;
-                    var list = (biome.scatter != null)
-                        ? new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>(biome.scatter)
-                        : new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>();
-                    bool has = false;
-                    foreach (var e in list) if (e.prefab != null && e.prefab.name == "Ghoul") { has = true; break; }
-                    if (!has) list.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = prefab, density = 0.0003f, minScale = 0.9f, maxScale = 1.2f, minHeight = 0, maxHeight = 9999 });
-                    biome.scatter = list.ToArray();
-                    EditorUtility.SetDirty(biome);
+                    if (biome == null || biome.scatter == null) continue;
+                    var list = new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>(biome.scatter);
+                    if (list.RemoveAll(e => e.prefab != null && e.prefab.name == "Ghoul") > 0)
+                    {
+                        biome.scatter = list.ToArray();
+                        EditorUtility.SetDirty(biome);
+                    }
                 }
                 EditorUtility.SetDirty(br);
             }
@@ -10352,14 +10391,14 @@ root =>
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
             EditorUtility.DisplayDialog("Voxel Engine — Enemies (Combat Phase 2)",
-                "Built the Ghoul enemy:\n\n" +
-                "• Shambling hostile: wander → detect → chase → melee attack\n" +
-                "• Radial-gravity aligned (walks the spherical surface)\n" +
-                "• Damageable — kill it with the sword/pistol + drops iron/stone\n" +
-                "• Spawns rarely in Wasteland / Forest / Desert\n\n" +
-                "Watch your back — ghouls chase and hit!",
+                "Remade Ghoul + proper spawning:\n\n" +
+                "• Detailed hunched ghoul: gaunt ribbed torso, muzzle + jaw + teeth, long clawed arms, splayed clawed feet, glowing red eyes\n" +
+                "• Spawns automatically via EnemySpawner near the player (top-level, radial-aligned), capped at 5 alive\n" +
+                "• Saved to Resources/Enemies so it loads at runtime\n\n" +
+                "Ghouls now appear as you explore. Fight or flee!",
                 "OK");
         }
+
 
     }
 }
