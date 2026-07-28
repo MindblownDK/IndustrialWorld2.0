@@ -10384,22 +10384,25 @@ root =>
             hbar.fillColorLow = new Color(0.70f, 0.10f, 0.05f);
             hbar.borderColor = new Color(0.30f, 0.25f, 0.18f, 0.90f);
 
-            PrefabUtility.SaveAsPrefabAsset(root, "Assets/Resources/Enemies/Ghoul.prefab");
+            var prefab = PrefabUtility.SaveAsPrefabAsset(root, "Assets/Resources/Enemies/Ghoul.prefab");
             UnityEngine.Object.DestroyImmediate(root);
 
-            // Clean up stale Ghoul biome-scatter entries (the old chunk-parented approach is replaced by EnemySpawner).
+            // Inject Ghoul into home-world biomes for ambient spawning. The ghoul DETACHES from
+            // the chunk scatter parent on Awake (EnemyGhoul) so Rigidbody physics works on spheres.
             var br = AssetDatabase.LoadAssetAtPath<VoxelEngine.Biomes.BiomeRegistry>(ASSET_ROOT + "/BiomeRegistry.asset");
             if (br != null)
             {
                 foreach (var biome in br.biomes)
                 {
-                    if (biome == null || biome.scatter == null) continue;
-                    var list = new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>(biome.scatter);
-                    if (list.RemoveAll(e => e.prefab != null && e.prefab.name == "Ghoul") > 0)
-                    {
-                        biome.scatter = list.ToArray();
-                        EditorUtility.SetDirty(biome);
-                    }
+                    if (biome == null) continue;
+                    if (biome.biomeName != "Wasteland" && biome.biomeName != "Forest" && biome.biomeName != "Desert") continue;
+                    var list = (biome.scatter != null)
+                        ? new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>(biome.scatter)
+                        : new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>();
+                    list.RemoveAll(e => e.prefab != null && e.prefab.name == "Ghoul");
+                    list.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = prefab, density = 0.001f, minScale = 0.9f, maxScale = 1.2f, minHeight = 0, maxHeight = 9999 });
+                    biome.scatter = list.ToArray();
+                    EditorUtility.SetDirty(biome);
                 }
                 EditorUtility.SetDirty(br);
             }

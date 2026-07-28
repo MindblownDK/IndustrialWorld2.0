@@ -33,11 +33,20 @@ namespace VoxelEngine.Combat
         {
             maxHealth = Mathf.Max(maxHealth, 35f);
             base.Awake();
-            _rb = GetComponent<Rigidbody>();
-            _rb.useGravity = false;       // custom radial gravity
-            _rb.freezeRotation = true;    // we align manually
+
+            // CRITICAL: detach from any parent (the biome-scatter system instantiates us
+            // under chunk/__scatter, which moves with the rotating planet — but Rigidbody
+            // physics is world-space, so a chunk-parented body gets flung off the sphere).
+            // Root-level = correct physics on spherical worlds.
+            if (transform.parent != null)
+                transform.SetParent(null, true);
+
             _home = transform.position;
+            _rb = GetComponent<Rigidbody>();
+            _rb.useGravity = false;
+            _rb.freezeRotation = true;
             PickWander();
+            Debug.Log($"[Ghoul] Spawned at {transform.position}");
         }
 
         private void FixedUpdate()
