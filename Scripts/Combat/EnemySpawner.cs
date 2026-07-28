@@ -76,9 +76,9 @@ namespace VoxelEngine.Combat
 
             var go = Instantiate(ghoulPrefab, spawnPos, Quaternion.LookRotation(-tangent, up));
             var ghoul = go.GetComponent<EnemyGhoul>();
-            if (g != null)
+            if (ghoul != null)
             {
-                _alive.Add(g);
+                _alive.Add(ghoul);
                 Debug.Log($"[EnemySpawner] Spawned ghoul #{_alive.Count} at {spawnPos} (dist from player: {tangent.magnitude:F1}m)");
             }
             else

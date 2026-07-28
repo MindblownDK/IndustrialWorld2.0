@@ -1,9 +1,29 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.31.0-dev`
+**Current Version:** `6.41.6-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.41.6-dev] Enemy Spawner Compile Fix + Non-Destructive Ghoul Prefab
+
+**Type:** PATCH — compile fix + non-destructive editor behaviour, save-compatible.
+
+**Fixed — EnemySpawner.cs CS0103 (`The name 'g' does not exist in the current context`):**
+- In `EnemySpawner.Update()` the freshly-instantiated ghoul was captured into a local named `ghoul`, but the spawn block still referenced the old loop variable `g` (the cull loop's variable, which was out of scope). The 6.41.5 rename only touched the declaration, not the usages, so the assembly failed to compile — which is *why* no `[EnemySpawner]` / `[Ghoul] Spawned` logs appeared at all (none of the combat runtime could run). Both usages now correctly reference `ghoul` (`if (ghoul != null)` + `_alive.Add(ghoul)`). The build compiles again.
+
+**Fixed — Step 23 no longer deletes/overwrites your Ghoul prefab:**
+- `BuildEnemyContent` previously called `AssetDatabase.DeleteAsset("Assets/Resources/Enemies/Ghoul.prefab")` before regenerating — every run wiped the prefab and triggered the recurring **"API has changed"** prompt. Step 23 is now **non-destructive**: if `Resources/Enemies/Ghoul.prefab` already exists (including one you built or customized by hand), it is **preserved exactly** and reused for the biome scatter; the freshly-built scene object is simply discarded. The prefab is only created on a genuine first run. No more destroyed prefabs, no more "API has changed" on repeat runs.
+
+**Result:** Game now compiles. The `EnemySpawner` (auto-created via `RuntimeInitializeOnLoad`) and the biome-scatter Ghouls can actually run, so spawn diagnostics will finally show up in the Console. Build, run Step 23 (it will keep your existing Ghoul prefab), Play, and watch for the `[EnemySpawner] RuntimeInitialize` / `Awake — prefab=OK/NULL` / `Spawned ghoul #N` / `[Ghoul] Spawned at` logs.
+
+**Files touched:**
+- `Scripts/Combat/EnemySpawner.cs` (CS0103: `g` -> `ghoul`)
+- `Scripts/Editor/VoxelEngineSetupWindow.cs` (Step 23 non-destructive prefab handling)
+- `Scripts/Core/GameVersion.cs` (6.41.5 -> 6.41.6)
+- `Changelog.md`
+
+---
 
 ### [6.31.0-dev] World Setting — Disable Ruin Loot Respawn + Rare Ruins Easy Numbers
 

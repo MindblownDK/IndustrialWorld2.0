@@ -10384,9 +10384,23 @@ root =>
             hbar.fillColorLow = new Color(0.70f, 0.10f, 0.05f);
             hbar.borderColor = new Color(0.30f, 0.25f, 0.18f, 0.90f);
 
-            AssetDatabase.DeleteAsset("Assets/Resources/Enemies/Ghoul.prefab"); // force clean regen (stops "API has changed" prompt)
-            var prefab = PrefabUtility.SaveAsPrefabAsset(root, "Assets/Resources/Enemies/Ghoul.prefab");
-            UnityEngine.Object.DestroyImmediate(root);
+            // NON-DESTRUCTIVE: never delete or overwrite an existing Ghoul prefab.
+            // If the user has built or customized their own (Resources/Enemies/Ghoul), we
+            // preserve it exactly and reuse it for the biome scatter. This also stops the
+            // recurring "API has changed" prompt that deleting/regenerating the prefab caused.
+            const string ghoulPath = "Assets/Resources/Enemies/Ghoul.prefab";
+            GameObject prefab;
+            if (AssetDatabase.LoadMainAssetAtPath(ghoulPath) != null)
+            {
+                prefab = AssetDatabase.LoadAssetAtPath<GameObject>(ghoulPath);
+                UnityEngine.Object.DestroyImmediate(root); // discard freshly-built scene root
+                Debug.Log("[Step 23] Ghoul.prefab already exists — preserving it (not overwritten).");
+            }
+            else
+            {
+                prefab = PrefabUtility.SaveAsPrefabAsset(root, ghoulPath);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
 
             // Inject Ghoul into home-world biomes for ambient spawning. The ghoul DETACHES from
             // the chunk scatter parent on Awake (EnemyGhoul) so Rigidbody physics works on spheres.
