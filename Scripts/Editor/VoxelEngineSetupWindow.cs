@@ -281,6 +281,15 @@ namespace VoxelEngine.EditorTools
                 "Hold LMB with a weapon to attack. Re-runnable. Idempotent.");
             AddWizardButton(scroll, "22. Build Combat (Phase 1) — Damage Framework, Sword, Pistol, Training Dummy", BuildCombatContent, 72);
 
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 23 (Combat Phase 2) adds the first real enemy (non-destructive):\n"
+                "  • Ghoul — shambling hostile that wanders, detects you, chases, and melees\n"
+                "  • Radial-gravity aligned (spherical worlds), Damageable, drops loot\n"
+                "  • Spawns rarely in Wasteland / Forest / Desert\n"
+                "Re-runnable. Idempotent.");
+            AddWizardButton(scroll, "23. Build Enemies (Phase 2) — Ghoul (wander/chase/melee AI)", BuildEnemyContent, 72);
+
             AddSpacer(scroll, 20);
         }
 
@@ -10255,6 +10264,100 @@ root =>
                 "• Training Dummy — placeable target that takes damage and respawns\n" +
                 "• Recipes at the Assembler / Crafting Bench\n\n" +
                 "Try it: craft a sword, place a Training Dummy, and swing at it (LMB).",
+                "OK");
+        }
+
+        // ============================================================
+        //   STEP 23 - ENEMIES (Combat Phase 2): the Ghoul — first real
+        //   hostile creature. Wander/detect/chase/melee, radial-aligned,
+        //   Damageable + loot, spawned rarely in home-world biomes.
+        // ============================================================
+        private void BuildEnemyContent()
+        {
+            const string ENEMY_PREFABS = ASSET_ROOT + "/Enemies";
+            EnsureFolder(ENEMY_PREFABS);
+
+            ItemDefinition FindItem(string assetNameNoExt)
+            {
+                var guids = AssetDatabase.FindAssets(assetNameNoExt + " t:ItemDefinition");
+                foreach (var g in guids)
+                {
+                    var pp = AssetDatabase.GUIDToAssetPath(g);
+                    if (System.IO.Path.GetFileNameWithoutExtension(pp) == assetNameNoExt)
+                        return AssetDatabase.LoadAssetAtPath<ItemDefinition>(pp);
+                }
+                return null;
+            }
+            var ironIngot = FindItem("Item_IronIngot");
+            var stone     = FindItem("Item_Stone");
+
+            var skin = MakeColoredMat(ENEMY_PREFABS, "Mat_GhoulSkin", new Color(0.42f, 0.52f, 0.34f));
+            var dark = MakeColoredMat(ENEMY_PREFABS, "Mat_GhoulDark", new Color(0.24f, 0.30f, 0.20f));
+            var eye  = MakeColoredMat(ENEMY_PREFABS, "Mat_GhoulEye",  new Color(0.95f, 0.18f, 0.12f));
+
+            var root = new GameObject("Ghoul");
+            GameObject AddPart(string n, Vector3 pos, Vector3 scale, Material m)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                go.name = n; go.transform.SetParent(root.transform, false);
+                go.transform.localPosition = pos; go.transform.localScale = scale;
+                go.GetComponent<Renderer>().sharedMaterial = m;
+                var col = go.GetComponent<Collider>(); if (col != null) UnityEngine.Object.DestroyImmediate(col);
+                return go;
+            }
+            AddPart("Body", new Vector3(0f, 0.90f, 0f),      new Vector3(0.62f, 0.90f, 0.36f), skin);
+            AddPart("Head", new Vector3(0f, 1.55f, 0.02f),    new Vector3(0.42f, 0.42f, 0.42f), dark);
+            AddPart("EyeL", new Vector3(-0.11f, 1.58f, 0.22f),new Vector3(0.08f, 0.08f, 0.04f), eye);
+            AddPart("EyeR", new Vector3( 0.11f, 1.58f, 0.22f),new Vector3(0.08f, 0.08f, 0.04f), eye);
+            AddPart("ArmL", new Vector3(-0.42f, 1.00f, 0f),   new Vector3(0.16f, 0.70f, 0.16f), skin);
+            AddPart("ArmR", new Vector3( 0.42f, 1.00f, 0f),   new Vector3(0.16f, 0.70f, 0.16f), skin);
+            AddPart("LegL", new Vector3(-0.16f, 0.30f, 0f),   new Vector3(0.20f, 0.60f, 0.20f), dark);
+            AddPart("LegR", new Vector3( 0.16f, 0.30f, 0f),   new Vector3(0.20f, 0.60f, 0.20f), dark);
+
+            var cap = root.AddComponent<CapsuleCollider>();
+            cap.height = 1.7f; cap.radius = 0.36f; cap.center = new Vector3(0f, 0.85f, 0f);
+            var rb = root.AddComponent<Rigidbody>();
+            rb.useGravity = false; rb.freezeRotation = true;
+            var ghoul = root.AddComponent<VoxelEngine.Combat.EnemyGhoul>();
+            ghoul.maxHealth = 35f;
+            var drops = new System.Collections.Generic.List<VoxelEngine.Items.ItemDefinition>();
+            if (ironIngot != null) drops.Add(ironIngot);
+            if (stone != null) drops.Add(stone);
+            ghoul.drops = drops.ToArray();
+            ghoul.minDrops = 1; ghoul.maxDrops = 2;
+
+            var prefab = PrefabUtility.SaveAsPrefabAsset(root, ENEMY_PREFABS + "/Ghoul.prefab");
+            UnityEngine.Object.DestroyImmediate(root);
+
+            // Spawn: inject into a few home-world biomes at low density (idempotent).
+            var br = AssetDatabase.LoadAssetAtPath<VoxelEngine.Biomes.BiomeRegistry>(ASSET_ROOT + "/BiomeRegistry.asset");
+            if (br != null)
+            {
+                foreach (var biome in br.biomes)
+                {
+                    if (biome == null) continue;
+                    if (biome.biomeName != "Wasteland" && biome.biomeName != "Forest" && biome.biomeName != "Desert") continue;
+                    var list = (biome.scatter != null)
+                        ? new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>(biome.scatter)
+                        : new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>();
+                    bool has = false;
+                    foreach (var e in list) if (e.prefab != null && e.prefab.name == "Ghoul") { has = true; break; }
+                    if (!has) list.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = prefab, density = 0.0003f, minScale = 0.9f, maxScale = 1.2f, minHeight = 0, maxHeight = 9999 });
+                    biome.scatter = list.ToArray();
+                    EditorUtility.SetDirty(biome);
+                }
+                EditorUtility.SetDirty(br);
+            }
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Voxel Engine — Enemies (Combat Phase 2)",
+                "Built the Ghoul enemy:\n\n" +
+                "• Shambling hostile: wander → detect → chase → melee attack\n" +
+                "• Radial-gravity aligned (walks the spherical surface)\n" +
+                "• Damageable — kill it with the sword/pistol + drops iron/stone\n" +
+                "• Spawns rarely in Wasteland / Forest / Desert\n\n" +
+                "Watch your back — ghouls chase and hit!",
                 "OK");
         }
 
