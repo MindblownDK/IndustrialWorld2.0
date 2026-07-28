@@ -1,0 +1,538 @@
+// Assets/Scripts/VoxelEngine/UI/ItemFilterDialog.cs
+//
+// ╔══════════════════════════════════════════════════════════════════╗
+// ║   ITEM FILTER DIALOG — modal prompt for a face's item filter     ║
+// ║                                                                  ║
+// ║   • Whitelist / Blacklist toggle for the face.                   ║
+// ║   • Current items shown as chips with a delete ✕.                ║
+// ║   • Search box → live result list → click to add.               ║
+// ║   • DROP an item here from the inventory (drag-drop target).      ║
+// ║   • SHIFT-CLICK an inventory slot while open → adds that item     ║
+// ║     (GameUIController routes the click through TryCaptureItem).   ║
+// ╚══════════════════════════════════════════════════════════════════╝
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using UnityEngine;
+using UnityEngine.UIElements;
+using VoxelEngine.Items;
+using VoxelEngine.Transport;
+using T = VoxelEngine.UI.UITheme;
+// Disambiguate from UnityEngine.FilterMode (texture filter enum).
+using FilterMode = VoxelEngine.Transport.FilterMode;
+
+namespace VoxelEngine.UI
+{
+    public static class ItemFilterDialog
+    {
+        // While a dialog is open this captures items the player shift-clicks /
+        // drops from their inventory. GameUIController checks IsCapturing first.
+        private static Action<ItemDefinition> _captureSink;
+        private static Action _activeClose;
+        public static bool IsCapturing => _captureSink != null;
+
+        internal static bool CloseActive()
+        {
+            if (_activeClose == null) return false;
+            var close = _activeClose;
+            _activeClose = null;
+            close.Invoke();
+            return true;
+        }
+
+        /// <summary>Feed an item the player shift-clicked / dropped into the open dialog.</summary>
+        public static bool TryCaptureItem(ItemDefinition item)
+        {
+            if (_captureSink == null || item == null) return false;
+            _captureSink(item);
+            return true;
+        }
+
+        private static ItemDefinition[] _allItems;
+
+        /// <summary>
+        /// Open a single-item filter picker using the same searchable + inventory-capture
+        /// workflow as the main block filter dialog.
+        /// </summary>
+        public static void OpenSingle(VisualElement uiRoot, string titleText, Func<ItemDefinition> getCurrent, Action<ItemDefinition> onSet, Action onChanged)
+        {
+            if (uiRoot == null || onSet == null) return;
+            EnsureItems();
+            var panelRoot = uiRoot.panel?.visualTree ?? uiRoot;
+
+            var overlay = new VisualElement();
+            overlay.style.position = Position.Absolute;
+            overlay.style.left = 0; overlay.style.top = 0; overlay.style.right = 0; overlay.style.bottom = 0;
+            overlay.style.alignItems = Align.Center;
+            overlay.style.justifyContent = Justify.Center;
+            overlay.pickingMode = PickingMode.Ignore;
+
+            var dim = new VisualElement();
+            dim.style.position = Position.Absolute;
+            dim.style.left = 0; dim.style.top = 0; dim.style.right = 0; dim.style.bottom = 0;
+            dim.style.backgroundColor = new StyleColor(new Color(0, 0, 0, 0.45f));
+            dim.pickingMode = PickingMode.Ignore;
+            overlay.Add(dim);
+
+            void Close()
+            {
+                _captureSink = null;
+                _activeClose = null;
+                overlay.RemoveFromHierarchy();
+                PortConfigHud.IsAnyDropdownOpen = HasAncestorNamed(uiRoot, "ItemPortsOverlay");
+                onChanged?.Invoke();
+            }
+
+            var card = new VisualElement();
+            card.style.width = 380;
+            card.style.maxHeight = 520;
+            card.style.backgroundColor = new StyleColor(T.BgPanel);
+            card.style.paddingTop = 16; card.style.paddingBottom = 16;
+            card.style.paddingLeft = 16; card.style.paddingRight = 16;
+            T.Radius(card, 12f);
+            T.Border(card, 1, T.BorderBright);
+            overlay.Add(card);
+
+            var title = T.Subtitle(titleText);
+            title.style.marginTop = 0;
+            card.Add(title);
+
+            var currentWrap = new VisualElement();
+            currentWrap.style.flexDirection = FlexDirection.Row;
+            currentWrap.style.flexWrap = Wrap.Wrap;
+            currentWrap.style.marginTop = 10;
+            card.Add(currentWrap);
+
+            var searchLbl = new Label("SEARCH TO SET FILTER");
+            searchLbl.style.color = new StyleColor(T.TextMuted);
+            searchLbl.style.fontSize = 9;
+            searchLbl.style.unityFontStyleAndWeight = FontStyle.Bold;
+            searchLbl.style.letterSpacing = 1f;
+            searchLbl.style.marginTop = 12;
+            card.Add(searchLbl);
+
+            var search = new TextField { value = "" };
+            search.style.marginTop = 4;
+            search.style.height = 34;
+            search.style.fontSize = 13;
+            var inputEl = search.Q(TextField.textInputUssName);
+            if (inputEl != null)
+            {
+                inputEl.style.unityTextAlign = TextAnchor.MiddleLeft;
+                inputEl.style.paddingLeft = 8; inputEl.style.paddingRight = 8;
+                inputEl.style.paddingTop = 0; inputEl.style.paddingBottom = 0;
+            }
+            card.Add(search);
+
+            var resultsScroll = new ScrollView(ScrollViewMode.Vertical);
+            UITheme.StyleScroller(resultsScroll);
+            resultsScroll.style.marginTop = 6;
+            resultsScroll.style.maxHeight = 200;
+            card.Add(resultsScroll);
+
+            var drop = new VisualElement();
+            drop.style.marginTop = 10;
+            drop.style.height = 36;
+            drop.style.alignItems = Align.Center;
+            drop.style.justifyContent = Justify.Center;
+            drop.style.backgroundColor = new StyleColor(new Color(T.AccentCyan.r, T.AccentCyan.g, T.AccentCyan.b, 0.10f));
+            T.Radius(drop, 8f);
+            T.Border(drop, 1, new Color(T.AccentCyan.r, T.AccentCyan.g, T.AccentCyan.b, 0.4f));
+            var dropLbl = new Label("🖱  Click or drag an inventory item here to set the filter");
+            dropLbl.style.color = new StyleColor(T.TextSecondary);
+            dropLbl.style.fontSize = 11;
+            dropLbl.pickingMode = PickingMode.Ignore;
+            drop.Add(dropLbl);
+            card.Add(drop);
+
+            void RebuildCurrent()
+            {
+                currentWrap.Clear();
+                var current = getCurrent != null ? getCurrent() : null;
+                if (current == null)
+                {
+                    currentWrap.Add(T.Muted("Current filter: Any Item"));
+                    return;
+                }
+                currentWrap.Add(MakeChip(current, () =>
+                {
+                    onSet(null);
+                    RebuildCurrent();
+                }));
+            }
+
+            void SetItem(ItemDefinition item)
+            {
+                onSet(item);
+                RebuildCurrent();
+                onChanged?.Invoke();
+                drop.style.backgroundColor = new StyleColor(new Color(T.AccentGreen.r, T.AccentGreen.g, T.AccentGreen.b, 0.25f));
+                drop.schedule.Execute(() =>
+                    drop.style.backgroundColor = new StyleColor(new Color(T.AccentCyan.r, T.AccentCyan.g, T.AccentCyan.b, 0.10f))).StartingIn(180);
+            }
+
+            void Populate(string q)
+            {
+                resultsScroll.Clear();
+                q = (q ?? "").Trim().ToLowerInvariant();
+                if (q.Length == 0) return;
+                int shown = 0;
+                foreach (var it in _allItems)
+                {
+                    if (it == null) continue;
+                    if (!(it.displayName ?? "").ToLowerInvariant().Contains(q) &&
+                        !(it.itemId ?? "").ToLowerInvariant().Contains(q)) continue;
+                    resultsScroll.Add(MakeResultRow(it, () => { SetItem(it); search.value = ""; }));
+                    if (++shown >= 80) break;
+                }
+                if (shown == 0) resultsScroll.Add(T.Muted("No matching items."));
+            }
+
+            search.RegisterValueChangedCallback(e => Populate(e.newValue));
+
+            var done = new Button { text = "DONE" };
+            done.style.marginTop = 12; done.style.height = 32;
+            done.style.color = Color.white; done.style.fontSize = 12;
+            done.style.unityFontStyleAndWeight = FontStyle.Bold;
+            done.style.backgroundColor = new StyleColor(new Color(T.AccentCyan.r, T.AccentCyan.g, T.AccentCyan.b, 0.85f));
+            T.Radius(done, 7f);
+            done.clicked += Close;
+            card.Add(done);
+
+            RebuildCurrent();
+            Populate("");
+            _captureSink = SetItem;
+            _activeClose = Close;
+            PortConfigHud.IsAnyDropdownOpen = true;
+            panelRoot.Add(overlay);
+            search.schedule.Execute(() => search.Focus()).StartingIn(40);
+        }
+
+        /// <summary>
+        /// Open the modal filter editor for one face of a machine.
+        /// </summary>
+        public static void Open(VisualElement uiRoot, ItemPortRouting routing, CubeFace face, Action onChanged)
+        {
+            if (uiRoot == null || routing == null) return;
+            EnsureItems();   // build the searchable item list once, up front
+            var panelRoot = uiRoot.panel?.visualTree ?? uiRoot;
+
+            // ── Overlay ────────────────────────────────────────────
+            // Click-through backdrop so the player can still click items in their
+            // inventory to add them. Only the card captures clicks; close via ✕/DONE.
+            var overlay = new VisualElement();
+            overlay.style.position = Position.Absolute;
+            overlay.style.left = 0; overlay.style.top = 0; overlay.style.right = 0; overlay.style.bottom = 0;
+            overlay.style.alignItems = Align.Center;
+            overlay.style.justifyContent = Justify.Center;
+            overlay.pickingMode = PickingMode.Ignore;
+
+            var dim = new VisualElement();
+            dim.style.position = Position.Absolute;
+            dim.style.left = 0; dim.style.top = 0; dim.style.right = 0; dim.style.bottom = 0;
+            dim.style.backgroundColor = new StyleColor(new Color(0, 0, 0, 0.45f));
+            dim.pickingMode = PickingMode.Ignore;
+            overlay.Add(dim);
+
+            void Close()
+            {
+                _captureSink = null;
+                _activeClose = null;
+                overlay.RemoveFromHierarchy();
+                PortConfigHud.IsAnyDropdownOpen = HasAncestorNamed(uiRoot, "ItemPortsOverlay");
+                onChanged?.Invoke();
+            }
+
+            // ── Dialog card ────────────────────────────────────────
+            var card = new VisualElement();
+            card.style.width = 380;
+            card.style.maxHeight = 520;
+            card.style.backgroundColor = new StyleColor(T.BgPanel);
+            card.style.paddingTop = 16; card.style.paddingBottom = 16;
+            card.style.paddingLeft = 16; card.style.paddingRight = 16;
+            T.Radius(card, 12f);
+            T.Border(card, 1, T.BorderBright);
+            overlay.Add(card);
+
+            var title = T.Subtitle($"Filter · {FaceLabel(face)}");
+            title.style.marginTop = 0;
+            card.Add(title);
+
+            // ── Whitelist / Blacklist toggle ───────────────────────
+            var modeRow = new VisualElement();
+            modeRow.style.flexDirection = FlexDirection.Row;
+            modeRow.style.marginTop = 10; modeRow.style.marginBottom = 6;
+            card.Add(modeRow);
+
+            Button wlBtn = null, blBtn = null;
+            void RefreshModeButtons()
+            {
+                var mode = routing.GetFilterMode(face);
+                StyleModeButton(wlBtn, mode == FilterMode.Whitelist, T.AccentGreen);
+                StyleModeButton(blBtn, mode == FilterMode.Blacklist, T.AccentRed);
+            }
+            wlBtn = ModeButton("✓  WHITELIST", () => { routing.SetFilterMode(face, FilterMode.Whitelist); RefreshModeButtons(); onChanged?.Invoke(); });
+            blBtn = ModeButton("✕  BLACKLIST", () => { routing.SetFilterMode(face, FilterMode.Blacklist); RefreshModeButtons(); onChanged?.Invoke(); });
+            modeRow.Add(wlBtn); modeRow.Add(blBtn);
+            RefreshModeButtons();
+
+            var modeHint = T.Muted("Whitelist: only listed items pass.  Blacklist: listed items are blocked.");
+            modeHint.style.fontSize = 9;
+            card.Add(modeHint);
+
+            // ── Current chips ──────────────────────────────────────
+            var chips = new VisualElement();
+            chips.style.flexDirection = FlexDirection.Row;
+            chips.style.flexWrap = Wrap.Wrap;
+            chips.style.marginTop = 10;
+            card.Add(chips);
+
+            // ── Search field (labelled above so text never overlaps) ────
+            var searchLbl = new Label("SEARCH TO ADD");
+            searchLbl.style.color = new StyleColor(T.TextMuted);
+            searchLbl.style.fontSize = 9;
+            searchLbl.style.unityFontStyleAndWeight = FontStyle.Bold;
+            searchLbl.style.letterSpacing = 1f;
+            searchLbl.style.marginTop = 12;
+            card.Add(searchLbl);
+
+            var search = new TextField { value = "" };
+            search.style.marginTop = 4;
+            search.style.height = 34;               // tall enough so glyphs aren't clipped
+            search.style.fontSize = 13;
+            // The TextField's inner text element needs vertical centering + padding
+            // or ascenders/descenders get cut off on some Unity builds.
+            var inputEl = search.Q(TextField.textInputUssName);
+            if (inputEl != null)
+            {
+                inputEl.style.unityTextAlign = TextAnchor.MiddleLeft;
+                inputEl.style.paddingLeft = 8; inputEl.style.paddingRight = 8;
+                inputEl.style.paddingTop = 0; inputEl.style.paddingBottom = 0;
+            }
+            card.Add(search);
+
+            var resultsScroll = new ScrollView(ScrollViewMode.Vertical);
+            VoxelEngine.UI.UITheme.StyleScroller(resultsScroll);   // themed slim scrollbar
+            resultsScroll.style.marginTop = 6;
+            resultsScroll.style.maxHeight = 200;
+            card.Add(resultsScroll);
+
+            // ── Inventory-click hint ───────────────────────────────
+            var drop = new VisualElement();
+            drop.style.marginTop = 10;
+            drop.style.height = 36;
+            drop.style.alignItems = Align.Center;
+            drop.style.justifyContent = Justify.Center;
+            drop.style.backgroundColor = new StyleColor(new Color(T.AccentCyan.r, T.AccentCyan.g, T.AccentCyan.b, 0.10f));
+            T.Radius(drop, 8f);
+            T.Border(drop, 1, new Color(T.AccentCyan.r, T.AccentCyan.g, T.AccentCyan.b, 0.4f));
+            var dropLbl = new Label("🖱  Click an item in your inventory to add it");
+            dropLbl.style.color = new StyleColor(T.TextSecondary);
+            dropLbl.style.fontSize = 11;
+            dropLbl.pickingMode = PickingMode.Ignore;
+            drop.Add(dropLbl);
+            card.Add(drop);
+
+            // ── Local refresh helpers ──────────────────────────────
+            void RebuildChips()
+            {
+                chips.Clear();
+                var items = routing.GetFilter(face);
+                if (items.Count == 0)
+                    chips.Add(T.Muted("No items yet — search above or click an inventory item."));
+                foreach (var it in items)
+                    chips.Add(MakeChip(it, () => { routing.RemoveFilter(face, it); RebuildChips(); onChanged?.Invoke(); }));
+            }
+
+            void AddItem(ItemDefinition it)
+            {
+                if (it == null) return;
+                routing.AddFilter(face, it);
+                RebuildChips();
+                onChanged?.Invoke();
+                // Flash the drop zone to confirm.
+                drop.style.backgroundColor = new StyleColor(new Color(T.AccentGreen.r, T.AccentGreen.g, T.AccentGreen.b, 0.25f));
+                drop.schedule.Execute(() =>
+                    drop.style.backgroundColor = new StyleColor(new Color(T.AccentCyan.r, T.AccentCyan.g, T.AccentCyan.b, 0.10f))).StartingIn(180);
+            }
+
+            void Populate(string q)
+            {
+                resultsScroll.Clear();
+                q = (q ?? "").Trim().ToLowerInvariant();
+                if (q.Length == 0) return;   // empty search → no result list
+                var owned = new HashSet<ItemDefinition>(routing.GetFilter(face));
+                int shown = 0;
+                foreach (var it in _allItems)
+                {
+                    if (it == null || owned.Contains(it)) continue;
+                    if (!(it.displayName ?? "").ToLowerInvariant().Contains(q) &&
+                        !(it.itemId ?? "").ToLowerInvariant().Contains(q)) continue;
+                    resultsScroll.Add(MakeResultRow(it, () => { AddItem(it); search.value = ""; }));
+                    if (++shown >= 80) break;
+                }
+                if (shown == 0) resultsScroll.Add(T.Muted("No matching items."));
+            }
+
+            search.RegisterValueChangedCallback(e => Populate(e.newValue));
+
+            // ── Footer ─────────────────────────────────────────────
+            var done = new Button { text = "DONE" };
+            done.style.marginTop = 12; done.style.height = 32;
+            done.style.color = Color.white; done.style.fontSize = 12;
+            done.style.unityFontStyleAndWeight = FontStyle.Bold;
+            done.style.backgroundColor = new StyleColor(new Color(T.AccentCyan.r, T.AccentCyan.g, T.AccentCyan.b, 0.85f));
+            T.Radius(done, 7f);
+            done.clicked += Close;
+            card.Add(done);
+
+            RebuildChips();
+            Populate("");
+
+            // Capture inventory clicks while open (player clicks an item to add it).
+            _captureSink = AddItem;
+            _activeClose = Close;
+            PortConfigHud.IsAnyDropdownOpen = true;   // suspend the panel auto-refresh
+            panelRoot.Add(overlay);
+            search.schedule.Execute(() => search.Focus()).StartingIn(40);
+        }
+
+        // ── pieces ──────────────────────────────────────────────────
+        private static Button ModeButton(string text, Action onClick)
+        {
+            var b = new Button { text = text };
+            b.style.flexGrow = 1; b.style.height = 30; b.style.fontSize = 11;
+            b.style.unityFontStyleAndWeight = FontStyle.Bold;
+            b.style.marginRight = 6;
+            T.Radius(b, 7f);
+            b.clicked += onClick;
+            return b;
+        }
+
+        private static void StyleModeButton(Button b, bool active, Color accent)
+        {
+            if (b == null) return;
+            b.style.backgroundColor = new StyleColor(new Color(accent.r, accent.g, accent.b, active ? 0.85f : 0.14f));
+            b.style.color = new StyleColor(active ? Color.white : T.TextSecondary);
+            T.Border(b, 1, new Color(accent.r, accent.g, accent.b, active ? 0.7f : 0.3f));
+        }
+
+        private static VisualElement MakeChip(ItemDefinition item, Action onRemove)
+        {
+            var chip = new VisualElement();
+            chip.style.flexDirection = FlexDirection.Row;
+            chip.style.alignItems = Align.Center;
+            chip.style.height = 24;
+            chip.style.marginRight = 4; chip.style.marginBottom = 4;
+            chip.style.paddingLeft = 6; chip.style.paddingRight = 4;
+            chip.style.backgroundColor = new StyleColor(T.BgSlot);
+            T.Radius(chip, 7f);
+            T.Border(chip, 1, T.BorderDim);
+            AddIcon(chip, item, 16);
+            var name = new Label(item.displayName);
+            name.style.color = new StyleColor(T.TextPrimary);
+            name.style.fontSize = 10; name.style.marginRight = 4;
+            name.pickingMode = PickingMode.Ignore;
+            chip.Add(name);
+            var x = new Button { text = "✕" };
+            x.style.fontSize = 9; x.style.width = 16; x.style.height = 16;
+            x.style.paddingLeft = 0; x.style.paddingRight = 0; x.style.paddingTop = 0; x.style.paddingBottom = 0;
+            x.style.color = new StyleColor(T.TextDanger);
+            x.style.backgroundColor = new StyleColor(Color.clear);
+            x.clicked += () => onRemove?.Invoke();
+            chip.Add(x);
+            return chip;
+        }
+
+        private static VisualElement MakeResultRow(ItemDefinition item, Action onPick)
+        {
+            var row = new Button();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.style.height = 30; row.style.marginBottom = 2;
+            row.style.paddingLeft = 8; row.style.paddingRight = 8;
+            row.style.backgroundColor = new StyleColor(T.BgSlot);
+            T.Radius(row, 5f);
+            T.Border(row, 1, T.BorderDim);
+            AddIcon(row, item, 20);
+            var name = new Label(item.displayName);
+            name.style.color = new StyleColor(T.TextPrimary);
+            name.style.fontSize = 11; name.style.flexGrow = 1;
+            name.pickingMode = PickingMode.Ignore;
+            row.Add(name);
+            row.RegisterCallback<PointerEnterEvent>(_ => row.style.backgroundColor = new StyleColor(T.BgHover));
+            row.RegisterCallback<PointerLeaveEvent>(_ => row.style.backgroundColor = new StyleColor(T.BgSlot));
+            row.clicked += () => onPick?.Invoke();
+            return row;
+        }
+
+        private static void AddIcon(VisualElement parent, ItemDefinition item, float size)
+        {
+            if (item.icon != null)
+            {
+                var img = new Image { sprite = item.icon };
+                img.style.width = size; img.style.height = size; img.style.marginRight = 6;
+                img.pickingMode = PickingMode.Ignore;
+                parent.Add(img);
+            }
+            else
+            {
+                var box = new VisualElement();
+                box.style.width = size * 0.85f; box.style.height = size * 0.85f; box.style.marginRight = 6;
+                box.style.backgroundColor = new StyleColor(item.iconTint);
+                T.Radius(box, 3f);
+                box.pickingMode = PickingMode.Ignore;
+                parent.Add(box);
+            }
+        }
+
+        private static bool HasAncestorNamed(VisualElement element, string elementName)
+        {
+            for (var current = element; current != null; current = current.parent)
+                if (current.name == elementName) return true;
+            return false;
+        }
+
+        private static string FaceLabel(CubeFace f) => f switch
+        {
+            CubeFace.PosY => "TOP", CubeFace.NegY => "BOTTOM",
+            CubeFace.PosX => "RIGHT", CubeFace.NegX => "LEFT",
+            CubeFace.PosZ => "FRONT", CubeFace.NegZ => "BACK",
+            _ => f.ToString()
+        };
+
+        private static void EnsureItems()
+        {
+            // Item assets in this project don't live under a Resources/ folder, so
+            // Resources.LoadAll("") returns nothing. Instead harvest EVERY loaded
+            // ItemDefinition (those referenced by the recipe registry, block items,
+            // prefabs, etc. are all in memory once the game runs). Rebuilt each time
+            // the dialog opens (cheap, user-driven) so newly-loaded items appear.
+            var set = new HashSet<ItemDefinition>();
+
+            foreach (var it in Resources.FindObjectsOfTypeAll<ItemDefinition>())
+                if (it != null && !string.IsNullOrEmpty(it.itemId)) set.Add(it);
+
+            foreach (var it in Resources.LoadAll<ItemDefinition>(""))
+                if (it != null && !string.IsNullOrEmpty(it.itemId)) set.Add(it);
+
+            // Belt-and-suspenders: pull every item referenced by recipe registries
+            // so even items not otherwise loaded yet are searchable.
+            foreach (var reg in Resources.FindObjectsOfTypeAll<VoxelEngine.Crafting.RecipeRegistry>())
+            {
+                if (reg?.recipes == null) continue;
+                foreach (var r in reg.recipes)
+                {
+                    if (r == null) continue;
+                    if (r.outputItem != null && !string.IsNullOrEmpty(r.outputItem.itemId)) set.Add(r.outputItem);
+                    if (r.inputs != null)
+                        foreach (var ing in r.inputs)
+                            if (ing.item != null && !string.IsNullOrEmpty(ing.item.itemId)) set.Add(ing.item);
+                }
+            }
+
+            _allItems = set.OrderBy(i => i.displayName).ToArray();
+        }
+    }
+}

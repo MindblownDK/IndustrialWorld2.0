@@ -1,0 +1,192 @@
+// Assets/Scripts/VoxelEngine/Maritime/MaritimeBlockBase.cs
+//
+// Shared base for every grid block that participates in the maritime mechanical
+// network. Provides:
+//   • Default IMechanicalBlock implementations (override only what you need).
+//   • Neighbour-exhaust checking (engines choke without an exhaust pipe).
+//   • Liquid-fuel draw helper (scan grid tanks for a liquid type).
+//   • Solid-fuel draw helper (scan grid cargo for burnable items).
+
+using UnityEngine;
+using VoxelEngine.GridSystem;
+using VoxelEngine.Items;
+
+namespace VoxelEngine.Maritime
+{
+    /// <summary>Which fuel category an engine consumes.</summary>
+    public enum MaritimeFuelKind
+    {
+        /// <summary>Solid fuel items (wood logs, planks, coal) drawn from cargo.</summary>
+        Solid = 0,
+        /// <summary>Liquid fuel drawn from GridLiquidTank blocks.</summary>
+        Liquid = 1,
+    }
+
+    /// <summary>
+    /// Base class for all maritime propulsion / power blocks. Implements
+    /// <see cref="IMechanicalBlock"/> with sensible defaults so concrete blocks
+    /// only override the methods they care about.
+    /// </summary>
+    public abstract class MaritimeBlockBase : GridBlock, IMechanicalBlock
+    {
+        public abstract MechanicalNodeType NodeType { get; }
+
+        public virtual void PopulateMaritimeNode(ref MechanicalNode node) { }
+        public virtual void RefreshMaritimeNode(ref MechanicalNode node, float throttle) { }
+        public virtual void ApplyResults(in MechanicalNode node) { }
+
+        // ── Exhaust-pipe neighbour check ──────────────────────────────
+        private static readonly Vector3Int[] Faces =
+        {
+            new( 1, 0, 0), new(-1, 0, 0),
+            new( 0, 1, 0), new( 0,-1, 0),
+            new( 0, 0, 1), new( 0, 0,-1),
+        };
+
+        /// <summary>True if any of the 6 face-neighbours is an exhaust pipe — OR an
+        /// exhaust pipe sits close to one of this machine's exhaust ports / its body.
+        /// The port-aware fallback is required because modern machine models (and the
+        /// pipes snapped to their ports) legitimately span more than one lattice cell,
+        /// so pure face-neighbour checks miss a correctly attached pipe.</summary>
+        protected bool HasAdjacentExhaust()
+        {
+            if (Grid == null) return false;
+            foreach (var off in Faces)
+            {
+                var nb = Grid.GetBlock(GridPos + off);
+                if (nb is GridExhaustPipe) return true;
+            }
+            return IsExhaustPipeNearMachine();
+        }
+
+        // Scratch buffers for the physics proximity queries (prefab-overhang tolerant).
+        private static readonly Collider[] s_exhaustProbe = new Collider[8];
+        private static readonly System.Collections.Generic.List<Vector3> s_exhaustPorts = new(4);
+
+        /// <summary>World-space fallback: a GridExhaustPipe whose center is near one of
+        /// this machine's named <c>Port_ExhaustOutput*</c> transforms (or touching its
+        /// body) counts as adjacent, even when the pipe's lattice cell is not a direct
+        /// face-neighbour of this block's origin cell.</summary>
+        private bool IsExhaustPipeNearMachine()
+        {
+            float cs = Grid != null ? Grid.gridSize.CellSize() : 2.5f;
+            CollectExhaustPortPositions(cs);
+
+            int sampleCount = s_exhaustPorts.Count + 1; // every port + the body centre
+            for (int s = 0; s < sampleCount; s++)
+            {
+                Vector3 center = s < s_exhaustPorts.Count ? s_exhaustPorts[s] : transform.position;
+                float radius = s < s_exhaustPorts.Count ? cs * 0.65f : cs * 1.15f;
+                int hitCount = Physics.OverlapSphereNonAlloc(center, radius, s_exhaustProbe, ~0, QueryTriggerInteraction.Collide);
+                for (int i = 0; i < hitCount; i++)
+                {
+                    var col = s_exhaustProbe[i];
+                    if (col == null) continue;
+                    var pipe = col.GetComponentInParent<GridExhaustPipe>();
+                    if (pipe != null && pipe.Grid == Grid) return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>Fills the scratch list with the world positions of this machine's
+        /// <c>Port_ExhaustOutput*</c> transforms (up to 4).</summary>
+        private void CollectExhaustPortPositions(float cs)
+        {
+            s_exhaustPorts.Clear();
+            foreach (Transform child in transform.GetComponentsInChildren<Transform>(true))
+            {
+                if (s_exhaustPorts.Count >= 4) break;
+                if (child == null || child == transform) continue;
+                if (!child.name.StartsWith("Port_ExhaustOutput", System.StringComparison.Ordinal)) continue;
+                s_exhaustPorts.Add(child.position);
+            }
+        }
+
+        /// <summary>True if any face-neighbour is a turbocharger (for visual / chained checks).</summary>
+        protected bool HasAdjacentTurbo()
+        {
+            if (Grid == null) return false;
+            foreach (var off in Faces)
+            {
+                var nb = Grid.GetBlock(GridPos + off);
+                if (nb is GridTurbocharger) return true;
+            }
+            return false;
+        }
+
+        // ── Liquid-fuel draw ──────────────────────────────────────────
+        /// <summary>Pull up to <paramref name="litres"/> of the given liquid from the connected
+        /// liquid pipe network. Player MUST use pipes — no direct tank fallback.</summary>
+        protected float DrawLiquidFuel(LiquidType type, float litres)
+        {
+            if (Grid == null || litres <= 0f) return 0f;
+
+            // Pipe-connected draw via GridLiquidNetwork ONLY — no cheating without pipes.
+            if (GridLiquidNetwork.Instance != null)
+                return GridLiquidNetwork.Instance.DrawLiquidFor(this, type, litres);
+
+            return 0f;
+        }
+
+        /// <summary>Total available litres of a liquid through pipes only.</summary>
+        protected float AvailableLiquid(LiquidType type)
+        {
+            if (Grid == null) return 0f;
+
+            if (GridLiquidNetwork.Instance != null)
+                return GridLiquidNetwork.Instance.AvailableLiquidFor(this, type);
+
+            return 0f;
+        }
+
+        // ── Solid-fuel draw ───────────────────────────────────────────
+        /// <summary>Try to pull ONE fuel item from grid cargo containers.
+        /// Returns the fuelSeconds of the consumed item, or 0 if none found.</summary>
+        protected float DrawSolidFuel()
+        {
+            if (Grid == null) return 0f;
+            foreach (var kv in Grid.Blocks)
+            {
+                if (kv.Value is not GridCargoContainer cargo) continue;
+                var container = cargo.container;
+                if (container == null) continue;
+
+                // Scan slots for a burnable ResourceItem.
+                for (int s = 0; s < container.Size; s++)
+                {
+                    var stack = container.GetSlot(s);
+                    if (stack == null || stack.IsEmpty) continue;
+                    if (stack.item is not ResourceItem res) continue;
+                    if (res.fuelSeconds <= 0f) continue;
+
+                    int removed = container.Remove(res, 1);
+                    if (removed > 0) return res.fuelSeconds;
+                }
+            }
+            return 0f;
+        }
+
+        /// <summary>Total burn-seconds available in grid cargo.</summary>
+        protected float AvailableSolidFuel()
+        {
+            if (Grid == null) return 0f;
+            float total = 0f;
+            foreach (var kv in Grid.Blocks)
+            {
+                if (kv.Value is not GridCargoContainer cargo) continue;
+                var container = cargo.container;
+                if (container == null) continue;
+                for (int s = 0; s < container.Size; s++)
+                {
+                    var stack = container.GetSlot(s);
+                    if (stack == null || stack.IsEmpty) continue;
+                    if (stack.item is not ResourceItem res) continue;
+                    if (res.fuelSeconds <= 0f) continue;
+                    total += res.fuelSeconds * stack.count;
+                }
+            }
+            return total;
+        }
+    }
+}
