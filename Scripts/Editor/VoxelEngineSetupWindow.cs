@@ -274,10 +274,10 @@ namespace VoxelEngine.EditorTools
 
             AddSpacer(scroll, 6);
             AddInfo(scroll,
-                "Step 22 (Combat Phase 1) adds the damage framework, player weapons, and a test target (non-destructive):\n"
-                "  • IDamageable + DamageType + Damageable (reusable by enemies, dummies, grid blocks)\n"
-                "  • Iron Sword (melee, LMB swing) + Iron Pistol (ranged, LMB fire)\n"
-                "  • Training Dummy — placeable target that takes damage and respawns\n"
+                "Step 22 (Combat Phase 1) adds the damage framework, player weapons, and a test target (non-destructive):\n" +
+                "  • IDamageable + DamageType + Damageable (reusable by enemies, dummies, grid blocks)\n" +
+                "  • Iron Sword (melee, LMB swing) + Iron Pistol (ranged, LMB fire)\n" +
+                "  • Training Dummy — placeable target that takes damage and respawns\n" +
                 "Hold LMB with a weapon to attack. Re-runnable. Idempotent.");
             AddWizardButton(scroll, "22. Build Combat (Phase 1) — Damage Framework, Sword, Pistol, Training Dummy", BuildCombatContent, 72);
 

@@ -155,6 +155,7 @@ namespace VoxelEngine.WaterSim
             ClearMesh();
             if (_renderer != null) _renderer.enabled = false;
             return;
+#pragma warning disable CS0162 // legacy disabled render path retained for reference
 
             EnsureRuntimeObjects();
 
@@ -321,7 +322,7 @@ namespace VoxelEngine.WaterSim
             if (viewpoint != null) return viewpoint;
             if (_cachedViewpoint != null) return _cachedViewpoint;
             if (ActiveWorld.Current?.Viewer != null) return _cachedViewpoint = ActiveWorld.Current.Viewer;
-            var cam = Camera.main != null ? Camera.main : Object.FindFirstObjectByType<Camera>();
+            var cam = Camera.main != null ? Camera.main : Object.FindAnyObjectByType<Camera>();
             return _cachedViewpoint = cam != null ? cam.transform : null;
         }
 
@@ -355,4 +356,5 @@ namespace VoxelEngine.WaterSim
             if (_renderer != null) _renderer.enabled = true;
         }
     }
+#pragma warning restore CS0162
 }

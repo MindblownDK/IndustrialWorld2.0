@@ -212,7 +212,7 @@ namespace VoxelEngine.WaterSim
             var oceanType = System.Type.GetType("Crest.OceanRenderer, Crest");
             if (oceanType != null)
             {
-                _oceanRenderer = GetComponent(oceanType) ?? FindFirstObjectByType(oceanType) as Component;
+                _oceanRenderer = GetComponent(oceanType) ?? FindAnyObjectByType(oceanType) as Component;
                 if (_oceanRenderer != null)
                 {
                     _oceanBehaviour = _oceanRenderer as Behaviour;
@@ -245,7 +245,7 @@ namespace VoxelEngine.WaterSim
             if (world != null && world.Viewer != null)
                 return _cachedViewpoint = world.Viewer;
 
-            var cam = Camera.main != null ? Camera.main : Object.FindFirstObjectByType<Camera>();
+            var cam = Camera.main != null ? Camera.main : Object.FindAnyObjectByType<Camera>();
             _cachedViewpoint = cam != null ? cam.transform : null;
             return _cachedViewpoint;
         }
