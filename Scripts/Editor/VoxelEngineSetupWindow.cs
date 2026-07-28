@@ -4715,9 +4715,15 @@ namespace VoxelEngine.EditorTools
                         if (hasRuin)
                         {
                             // Re-run: sync existing ruin scatter density to the current rare value.
-                            foreach (var e in existing)
+                            for (int ri = 0; ri < existing.Count; ri++)
+                            {
+                                var e = existing[ri];
                                 if (e.prefab == ruinWarehouse || e.prefab == ruinFactory || e.prefab == ruinBunker)
+                                {
                                     e.density = 0.00008f;
+                                    existing[ri] = e;
+                                }
+                            }
                             biome.scatter = existing.ToArray();
                             EditorUtility.SetDirty(biome);
                             continue;
