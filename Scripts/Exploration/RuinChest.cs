@@ -1,12 +1,13 @@
 // Assets/Scripts/VoxelEngine/Exploration/RuinChest.cs
 //
-// Loot container found in ruins of dead civilization.
+// Loot container found in ruins of dead civilizations.
 // Visual: rusted, overgrown, damaged version of real player blocks.
-// Contains: components, fuel, and — most importantly — damaged blueprint data cores.
+// Behaviour: a normal slot-based chest. Walk inside, open it, and take what you
+// want (shift-click / drag-drop). Loot is rolled into the slots the first time
+// it is opened.
 
 using UnityEngine;
 using VoxelEngine.Items;
-using System.Collections.Generic;
 
 namespace VoxelEngine.Exploration
 {
@@ -14,106 +15,71 @@ namespace VoxelEngine.Exploration
     public class RuinChest : MonoBehaviour
     {
         [Header("Ruin Chest")]
-        public string ruinName = "Collapsed Warehouse";
+        public string ruinName = "Ruin";
+        [Tooltip("Inventory slot count shown when the chest is opened.")]
+        public int slots = 12;
+        [Tooltip("True once the chest has been generated (loot is inside).")]
         public bool isLooted = false;
-        public float respawnSeconds = 1800f; // 30 min respawn for ruins
-        private float _respawnTimer;
 
         [Header("Loot")]
-        [Tooltip("Possible component items to drop")]
+        [Tooltip("Possible component items to roll into the chest.")]
         public ItemDefinition[] possibleComponents;
-        [Tooltip("Fuel items")]
+        [Tooltip("Fuel items.")]
         public ItemDefinition[] possibleFuel;
-        [Tooltip("Blueprint cores that can be found here")]
+        [Tooltip("Blueprint cores that can be found here.")]
         public BlueprintDataCoreItem[] possibleBlueprints;
-
-        [Tooltip("Min/max components to spawn")]
+        [Tooltip("Min/max components to roll.")]
         public int minComponents = 2;
         public int maxComponents = 5;
 
-        private void Update()
-        {
-            if (!isLooted) return;
-            // If world setting disables respawn, never reset
-            var session = Menu.WorldSession.Instance;
-            if (session != null && !session.allowRuinLootRespawn) return;
+        /// <summary>Slot-based contents. Opened like any other container.</summary>
+        public ItemContainer container;
 
-            _respawnTimer += Time.deltaTime;
-            if (_respawnTimer >= respawnSeconds)
-            {
-                isLooted = false;
-                _respawnTimer = 0f;
-            }
+        private bool _populated;
+
+        private void Awake()
+        {
+            if (container == null)
+                container = new ItemContainer(string.IsNullOrEmpty(ruinName) ? "Ruin Cache" : ruinName + " Cache", Mathf.Max(6, slots));
         }
 
-        // Called by PlayerInteractionTool RMB
-        public bool TryOpen(Inventory inventory)
+        /// <summary>Called by PlayerInteractionTool RMB — opens the slot UI (rolls loot the first time).</summary>
+        public void Open()
         {
-            if (isLooted)
-            {
-                var session = Menu.WorldSession.Instance;
-                bool respawnAllowed = session == null || session.allowRuinLootRespawn;
-                string msg = respawnAllowed ? "Already looted — respawns in 30 min" : "Already looted — respawning disabled in world settings";
-                VoxelEngine.UI.BuildFeedbackHud.Show("Ruin Empty", msg, null, Color.gray);
-                return false;
-            }
+            PopulateOnce();
+            VoxelEngine.UI.GameUIController.Instance?.OpenContainer(container, null);
+        }
 
-            if (inventory == null) return false;
+        private void PopulateOnce()
+        {
+            if (_populated) return;
+            _populated = true;
+            if (container == null)
+                container = new ItemContainer(string.IsNullOrEmpty(ruinName) ? "Ruin Cache" : ruinName + " Cache", Mathf.Max(6, slots));
 
-            // Roll loot
-            int compCount = Random.Range(minComponents, maxComponents + 1);
-            for (int i = 0; i < compCount; i++)
+            if (possibleComponents != null && possibleComponents.Length > 0)
             {
-                if (possibleComponents == null || possibleComponents.Length == 0) break;
-                var item = possibleComponents[Random.Range(0, possibleComponents.Length)];
-                if (item == null) continue;
-                int amount = Random.Range(1, 4);
-                inventory.Add(item, amount);
-            }
-
-            // Fuel
-            if (possibleFuel != null && possibleFuel.Length > 0 && Random.value < 0.6f)
-            {
-                var fuel = possibleFuel[Random.Range(0, possibleFuel.Length)];
-                if (fuel != null) inventory.Add(fuel, Random.Range(1, 3));
-            }
-
-            // Blueprint — 35% chance, or guaranteed if first time
-            if (possibleBlueprints != null && possibleBlueprints.Length > 0)
-            {
-                bool shouldDropBlueprint = Random.value < 0.35f || !HasAnyBlueprintUnlocked();
-                if (shouldDropBlueprint)
+                int compCount = Random.Range(minComponents, maxComponents + 1);
+                for (int i = 0; i < compCount; i++)
                 {
-                    var bp = possibleBlueprints[Random.Range(0, possibleBlueprints.Length)];
-                    if (bp != null)
-                    {
-                        inventory.Add(bp, 1);
-                        VoxelEngine.UI.BuildFeedbackHud.Show("Blueprint Core Found!", bp.targetDisplayName, bp.icon, new Color(0.45f, 0.85f, 1f));
-                        Debug.Log($"[Ruin] Player found blueprint {bp.name} -> {bp.targetRecipeAssetName} in {ruinName}");
-                    }
+                    var item = possibleComponents[Random.Range(0, possibleComponents.Length)];
+                    if (item != null) container.Insert(new ItemStack(item, Random.Range(1, 4)));
                 }
             }
 
-            isLooted = true;
-            _respawnTimer = 0f;
-
-            VoxelEngine.UI.BuildFeedbackHud.Show($"Looted {ruinName}", $"Found components + fuel", null, new Color(0.95f, 0.72f, 0.25f));
-            return true;
-        }
-
-        private bool HasAnyBlueprintUnlocked()
-        {
-            if (possibleBlueprints == null) return true;
-            BlueprintUnlockManager.EnsureInstance();
-            var mgr = BlueprintUnlockManager.Instance;
-            if (mgr == null) return false;
-            foreach (var bp in possibleBlueprints)
+            if (possibleFuel != null && possibleFuel.Length > 0 && Random.value < 0.6f)
             {
-                if (bp == null) continue;
-                string assetName = bp.targetRecipe != null ? bp.targetRecipe.name : bp.targetRecipeAssetName;
-                if (!mgr.IsUnlocked(assetName)) return false;
+                var fuel = possibleFuel[Random.Range(0, possibleFuel.Length)];
+                if (fuel != null) container.Insert(new ItemStack(fuel, Random.Range(1, 3)));
             }
-            return true;
+
+            if (possibleBlueprints != null && possibleBlueprints.Length > 0 && Random.value < 0.4f)
+            {
+                var bp = possibleBlueprints[Random.Range(0, possibleBlueprints.Length)];
+                if (bp != null) container.Insert(new ItemStack(bp, 1));
+            }
+
+            isLooted = true;
         }
 
         private void OnDrawGizmosSelected()

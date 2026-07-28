@@ -398,7 +398,7 @@ namespace VoxelEngine.Player
 
                 // 1) Open container if looking at chest / furnace / crafting bench.
                 var ruinChest = hit.collider.GetComponentInParent<VoxelEngine.Exploration.RuinChest>();
-                if (ruinChest != null) { ruinChest.TryOpen(inventory); return; }
+                if (ruinChest != null) { ruinChest.Open(); return; }
 
                 var chest = hit.collider.GetComponentInParent<Chest>();
                 if (chest != null) { UI.GameUIController.Instance?.OpenContainer(chest.container, chest); return; }

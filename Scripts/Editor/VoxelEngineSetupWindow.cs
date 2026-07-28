@@ -9480,6 +9480,8 @@ root =>
             GameObject MakeCelestialRuin(string name, string theme, string archetype, int extent, int minComp, int maxComp)
             {
                 var M = matSet[theme];
+                var salvageStone = FindItem("Item_Stone");
+                var salvageMetal = FindItem("Item_IronIngot");
                 string prefabPath = $"{CELEST_PREFABS}/{name}.prefab";
                 Color beaconColor = theme switch
                 {
@@ -9550,6 +9552,11 @@ root =>
                     var pb = go.GetComponent<VoxelEngine.Building.PlacedBlock>();
                     if (pb == null) pb = go.AddComponent<VoxelEngine.Building.PlacedBlock>();
                     pb.Hp = Mathf.Max(10, hp);
+                    if (salvageStone != null || salvageMetal != null)
+                    {
+                        var rd = go.AddComponent<VoxelEngine.Exploration.RuinBlockDrop>();
+                        rd.salvage = (mat == M["stone"] || mat == M["stoneDark"]) ? salvageStone : salvageMetal;
+                    }
                     return go;
                 }
                 GameObject AddBlockRot(string childName, Vector3 localPos, Vector3 localScale, Material mat, int hp, Quaternion rot)
@@ -9574,13 +9581,15 @@ root =>
                     var pb = go.GetComponent<VoxelEngine.Building.PlacedBlock>();
                     if (pb == null) pb = go.AddComponent<VoxelEngine.Building.PlacedBlock>();
                     pb.Hp = Mathf.Max(10, hp);
+                    if (salvageStone != null || salvageMetal != null)
+                    {
+                        var rd = go.AddComponent<VoxelEngine.Exploration.RuinBlockDrop>();
+                        rd.salvage = (mat == M["stone"] || mat == M["stoneDark"]) ? salvageStone : salvageMetal;
+                    }
                     return go;
                 }
 
                 float deckTopY = 0.62f;
-                var rootCol = root.AddComponent<BoxCollider>();
-                var rootMarker = root.AddComponent<VoxelEngine.Building.PlacedBlock>();
-                rootMarker.Hp = 600;
                 Material PM() => UnityEngine.Random.value < 0.7f ? M["primary"] : (UnityEngine.Random.value < 0.5f ? M["primaryDark"] : M["primaryLight"]);
 
                 // ── Foundation (shared two-tier plinth) ──
@@ -9631,6 +9640,10 @@ root =>
                     AddBlockRot("Pediment_NR", new Vector3(pedHalf * 0.5f, pedBase + 0.5f, W), new Vector3(pedHalf, 0.16f, 0.5f), M["stone"], 220, Quaternion.Euler(0, 0, -14f));
                     AddBlockRot("Pediment_SL", new Vector3(-pedHalf * 0.5f, pedBase + 0.5f, -W), new Vector3(pedHalf, 0.16f, 0.5f), M["stone"], 220, Quaternion.Euler(0, 0, 14f));
                     AddBlockRot("Pediment_SR", new Vector3(pedHalf * 0.5f, pedBase + 0.5f, -W), new Vector3(pedHalf, 0.16f, 0.5f), M["stone"], 220, Quaternion.Euler(0, 0, -14f));
+                    // Sloped gable roof over the cella (ridge runs along X)
+                    AddBlockRot("Roof_N", new Vector3(0, pedBase + W * 0.16f, W * 0.5f), new Vector3(footW, 0.18f, W * 1.0f), M["primary"], 240, Quaternion.Euler(20f, 0, 0));
+                    AddBlockRot("Roof_S", new Vector3(0, pedBase + W * 0.16f, -W * 0.5f), new Vector3(footW, 0.18f, W * 1.0f), M["primary"], 240, Quaternion.Euler(-20f, 0, 0));
+                    AddBlock("RoofRidge", new Vector3(0, pedBase + W * 0.34f, 0), new Vector3(footW, 0.16f, 0.2f), M["accent"], 220);
                     float cellaH = colH * 0.86f, cellaY = deckTopY + cellaH * 0.5f, cellaW = W * 0.6f;
                     AddBlock("Cella_W", new Vector3(-cellaW, cellaY, 0), new Vector3(0.2f, cellaH, W * 1.2f), M["stoneDark"], 240);
                     AddBlock("Cella_E", new Vector3(cellaW, cellaY, 0), new Vector3(0.2f, cellaH, W * 1.2f), M["stoneDark"], 240);
@@ -9657,7 +9670,8 @@ root =>
                     AddBlock("Airlock_Top", new Vector3(0, deckTopY + wallHeight - 0.15f, W), new Vector3(2.1f, 0.3f, 0.5f), M["accent"], 260);
                     float domeBase = deckTopY + wallHeight;
                     float domeRadius = footW * 0.62f;
-                    int capCount = wantHeavyRuin ? 2 : 3; // heavy-ruin domes lost their crown
+                    AddPrim("DomeDrum", PrimitiveType.Cylinder, new Vector3(0, domeBase + 0.35f, 0), new Vector3(footW * 0.55f, 0.35f, footW * 0.55f), M["primaryDark"], 240, Quaternion.identity);
+                    int capCount = 3; // full dome — drum fills the eaves
                     for (int i = 0; i < capCount; i++)
                     {
                         float frac = 1f - i * 0.28f;
@@ -9856,19 +9870,11 @@ root =>
                 BlueprintDataCoreItem[] finalBps = keepB ?? LootBps(theme);
                 string ruinDisplay = !string.IsNullOrEmpty(keepName) ? keepName : name.Replace("Ruin_", "").Replace("_", " ");
 
-                var rootChest = root.GetComponent<VoxelEngine.Exploration.RuinChest>();
-                if (rootChest == null) rootChest = root.AddComponent<VoxelEngine.Exploration.RuinChest>();
-                rootChest.ruinName = ruinDisplay; rootChest.minComponents = keepMin; rootChest.maxComponents = keepMax;
-                rootChest.possibleComponents = finalComps; rootChest.possibleFuel = finalFuel; rootChest.possibleBlueprints = finalBps;
+                // (Root has no RuinChest — the lootable chest is the visible child inside the ruin.)
                 var childChest = chestGO.GetComponent<VoxelEngine.Exploration.RuinChest>();
                 if (childChest == null) childChest = chestGO.AddComponent<VoxelEngine.Exploration.RuinChest>();
                 childChest.ruinName = ruinDisplay; childChest.minComponents = keepMin; childChest.maxComponents = keepMax;
                 childChest.possibleComponents = finalComps; childChest.possibleFuel = finalFuel; childChest.possibleBlueprints = finalBps;
-
-                // Root collider sized to the build (trigger → non-blocking, lets you walk inside)
-                rootCol.size = new Vector3(footW * 1.12f, buildHeight * 1.12f + deckTopY, footW * 1.12f);
-                rootCol.center = new Vector3(0, (buildHeight + deckTopY) * 0.5f, 0);
-                rootCol.isTrigger = true;
 
                 // Beacon
                 var lightGO = new GameObject("RuinBeaconLight"); lightGO.transform.SetParent(root.transform, false);
@@ -10040,24 +10046,24 @@ root =>
             }
 
             // ── 11 themed biomes (surface material + ruin scatter) ──
-            var bMoon     = MakeThemedBiome("Biome_LunarHighlands", "Lunar Highlands",       new Color(0.60f,0.60f,0.65f), MaterialId.Stone,          0.0006f, "Ruin_Moon_HabitatDome","Ruin_Moon_Outpost","Ruin_Moon_ListeningPost");
-            var bMars     = MakeThemedBiome("Biome_MartianDust",    "Martian Dust Plains",    new Color(0.70f,0.40f,0.20f), MaterialId.MartianDust,    0.0006f, "Ruin_Mars_DustBunker","Ruin_Mars_Waystation","Ruin_Mars_Habitat","Ruin_Mars_FrontierOutpost");
-            var bVenus    = MakeThemedBiome("Biome_VenusianAsh",    "Venusian Ash Lowlands",  new Color(0.80f,0.70f,0.30f), MaterialId.VenusAsh,       0.0006f, "Ruin_Venus_PressureDome","Ruin_Venus_SulfurRefinery","Ruin_Venus_AshCitadel");
-            var bAcid     = MakeThemedBiome("Biome_AcidBog",        "Acid Bog",               new Color(0.40f,0.60f,0.25f), MaterialId.AcidBog,        0.0006f, "Ruin_Acid_CorrodedVault","Ruin_Acid_CrystalSpire","Ruin_Acid_DissolvedLab");
-            var bPirate   = MakeThemedBiome("Biome_PirateScrap",    "Pirate Scrap Badlands",  new Color(0.50f,0.45f,0.40f), MaterialId.Clay,           0.0007f, "Ruin_Pirate_ScrapFort","Ruin_Pirate_WreckCamp","Ruin_Pirate_NeonDen","Ruin_Pirate_LootCache","Ruin_Pirate_JunkTower");
-            var bGreek    = MakeThemedBiome("Biome_GreekMarble",    "Greek Marble Hills",     new Color(0.90f,0.88f,0.80f), MaterialId.Sand,           0.0006f, "Ruin_Greek_TreasuryTemple","Ruin_Greek_OracleShrine");
-            var bIce      = MakeThemedBiome("Biome_FrozenGlacier",  "Frozen Glacier",         new Color(0.80f,0.90f,1.00f), MaterialId.Ice,            0.0006f, "Ruin_Ice_GlacialDome","Ruin_Ice_FrozenBunker","Ruin_Ice_CryoStation");
-            var bWater    = MakeThemedBiome("Biome_OceanShelf",     "Ocean Shelf",            new Color(0.30f,0.50f,0.70f), MaterialId.Sand,           0.0006f, "Ruin_Water_StiltPlatform","Ruin_Water_SunkenDome");
-            var bDesolate = MakeThemedBiome("Biome_DesolateWastes", "Desolate Wastes",        new Color(0.60f,0.55f,0.45f), MaterialId.Clay,           0.0006f, "Ruin_Desolate_DryOutpost");
-            var bVolcanic = MakeThemedBiome("Biome_VolcanicBasalt", "Volcanic Basalt Plains", new Color(0.20f,0.10f,0.10f), MaterialId.VolcanicBasalt, 0.0006f, "Ruin_Volcanic_ObsidianCitadel","Ruin_Volcanic_MagmaForge","Ruin_Volcanic_CharredDome","Ruin_Volcanic_AshKeep");
-            var bCrystal  = MakeThemedBiome("Biome_CrystalGeode",   "Crystal Geode Flats",    new Color(0.60f,0.50f,0.90f), MaterialId.CrystalGeode,   0.0006f, "Ruin_Crystal_GeodeShrine","Ruin_Crystal_PrismSpire","Ruin_Crystal_LuminaTemple");
+            var bMoon     = MakeThemedBiome("Biome_LunarHighlands", "Lunar Highlands",       new Color(0.60f,0.60f,0.65f), MaterialId.Stone,          0.00008f, "Ruin_Moon_HabitatDome","Ruin_Moon_Outpost","Ruin_Moon_ListeningPost");
+            var bMars     = MakeThemedBiome("Biome_MartianDust",    "Martian Dust Plains",    new Color(0.70f,0.40f,0.20f), MaterialId.MartianDust,    0.00008f, "Ruin_Mars_DustBunker","Ruin_Mars_Waystation","Ruin_Mars_Habitat","Ruin_Mars_FrontierOutpost");
+            var bVenus    = MakeThemedBiome("Biome_VenusianAsh",    "Venusian Ash Lowlands",  new Color(0.80f,0.70f,0.30f), MaterialId.VenusAsh,       0.00008f, "Ruin_Venus_PressureDome","Ruin_Venus_SulfurRefinery","Ruin_Venus_AshCitadel");
+            var bAcid     = MakeThemedBiome("Biome_AcidBog",        "Acid Bog",               new Color(0.40f,0.60f,0.25f), MaterialId.AcidBog,        0.00008f, "Ruin_Acid_CorrodedVault","Ruin_Acid_CrystalSpire","Ruin_Acid_DissolvedLab");
+            var bPirate   = MakeThemedBiome("Biome_PirateScrap",    "Pirate Scrap Badlands",  new Color(0.50f,0.45f,0.40f), MaterialId.Clay,           0.00008f, "Ruin_Pirate_ScrapFort","Ruin_Pirate_WreckCamp","Ruin_Pirate_NeonDen","Ruin_Pirate_LootCache","Ruin_Pirate_JunkTower");
+            var bGreek    = MakeThemedBiome("Biome_GreekMarble",    "Olympian Marble Hills",     new Color(0.90f,0.88f,0.80f), MaterialId.Sand,           0.00008f, "Ruin_Greek_TreasuryTemple","Ruin_Greek_OracleShrine");
+            var bIce      = MakeThemedBiome("Biome_FrozenGlacier",  "Frozen Glacier",         new Color(0.80f,0.90f,1.00f), MaterialId.Ice,            0.00008f, "Ruin_Ice_GlacialDome","Ruin_Ice_FrozenBunker","Ruin_Ice_CryoStation");
+            var bWater    = MakeThemedBiome("Biome_OceanShelf",     "Ocean Shelf",            new Color(0.30f,0.50f,0.70f), MaterialId.Sand,           0.00008f, "Ruin_Water_StiltPlatform","Ruin_Water_SunkenDome");
+            var bDesolate = MakeThemedBiome("Biome_DesolateWastes", "Desolate Wastes",        new Color(0.60f,0.55f,0.45f), MaterialId.Clay,           0.00008f, "Ruin_Desolate_DryOutpost");
+            var bVolcanic = MakeThemedBiome("Biome_VolcanicBasalt", "Volcanic Basalt Plains", new Color(0.20f,0.10f,0.10f), MaterialId.VolcanicBasalt, 0.00008f, "Ruin_Volcanic_ObsidianCitadel","Ruin_Volcanic_MagmaForge","Ruin_Volcanic_CharredDome","Ruin_Volcanic_AshKeep");
+            var bCrystal  = MakeThemedBiome("Biome_CrystalGeode",   "Crystal Geode Flats",    new Color(0.60f,0.50f,0.90f), MaterialId.CrystalGeode,   0.00008f, "Ruin_Crystal_GeodeShrine","Ruin_Crystal_PrismSpire","Ruin_Crystal_LuminaTemple");
 
             // ── Planets (Mars/Venus reconfigured + 8 new worlds) ──
             var pMars     = MakePlanet("Mars",     "Mars",          5f,  0.02f, 0.38f, 6f, false, new Color(0.80f,0.40f,0.18f,1f), bMars);
             var pVenus    = MakePlanet("Venus",    "Venus",         60f, 0.00f, 0.90f, 6f, false, new Color(0.85f,0.70f,0.25f,1f), bVenus);
             var pAcid     = MakePlanet("Acid",     "Acid World",    30f, 0.15f, 0.90f, 6f, false, new Color(0.45f,0.65f,0.30f,1f), bAcid);
             var pPirate   = MakePlanet("Pirate",   "Pirate World",  18f, 0.70f, 0.90f, 7f, false, new Color(0.50f,0.42f,0.32f,1f), bPirate);
-            var pGreek    = MakePlanet("Greek",    "Greek World",   20f, 1.00f, 1.00f, 7f, true,  new Color(0.92f,0.90f,0.78f,1f), bGreek);
+            var pGreek    = MakePlanet("Olympus",    "Olympus",   20f, 1.00f, 1.00f, 7f, true,  new Color(0.92f,0.90f,0.78f,1f), bGreek);
             var pIce      = MakePlanet("Ice",      "Ice World",    -30f, 0.10f, 0.50f, 6f, false, new Color(0.80f,0.90f,1.00f,1f), bIce);
             var pWater    = MakePlanet("Water",    "Ocean World",   15f, 1.00f, 1.00f, 7f, false, new Color(0.20f,0.45f,0.75f,1f), bWater);
             var pDesolate = MakePlanet("Desolate", "Desolate World",25f, 0.05f, 0.80f, 6f, false, new Color(0.65f,0.58f,0.45f,1f), bDesolate);
@@ -10079,9 +10085,11 @@ root =>
             if (sys != null)
             {
                 var list = (sys.planets != null) ? new List<PlanetTemplate>(sys.planets) : new List<PlanetTemplate>();
+                list.RemoveAll(pl => pl != null && pl.body != null && pl.body.bodyName == "Greek"); // legacy Greek -> Olympus rename
                 foreach (var p in new[] { pMars, pVenus, pAcid, pPirate, pGreek, pIce, pWater, pDesolate, pVolcanic, pCrystal })
                     if (p != null && !list.Contains(p)) list.Add(p);
                 sys.planets = list.ToArray();
+                AssetDatabase.DeleteAsset($"{PLANETS_DIR}/Planet_Greek.asset"); // remove legacy asset (renamed to Olympus)
                 EditorUtility.SetDirty(sys);
             }
             else
