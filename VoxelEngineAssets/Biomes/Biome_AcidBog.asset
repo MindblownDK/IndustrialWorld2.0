@@ -1,0 +1,50 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c731d42220a11514daa3ec8913dbf5a1, type: 3}
+  m_Name: Biome_AcidBog
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Biomes.BiomeDefinition
+  biomeName: Acid Bog
+  debugColor: {r: 0.4, g: 0.6, b: 0.25, a: 1}
+  minTemperature: 0
+  maxTemperature: 1
+  minHumidity: 0
+  maxHumidity: 1
+  priority: 5
+  heightOffset: 0
+  heightAmplitude: 10
+  heightFrequency: 0.02
+  ridgedness: 0.1
+  surfaceMaterial: 25
+  surfaceDepth: 1
+  subsurfaceMaterial: 25
+  subsurfaceDepth: 5
+  allowBeach: 0
+  isOceanic: 0
+  scatter:
+  - prefab: {fileID: 8820862572106080545, guid: 18ab97ca4cb7ee446b788e70abcd8837, type: 3}
+    density: 0.0006
+    minScale: 1.1
+    maxScale: 1.6
+    minHeight: 0
+    maxHeight: 9999
+  - prefab: {fileID: 8699149342311932680, guid: 3669d025b28a41243a72721384b6e166, type: 3}
+    density: 0.0006
+    minScale: 1.1
+    maxScale: 1.6
+    minHeight: 0
+    maxHeight: 9999
+  - prefab: {fileID: 968369319107580982, guid: 035ffbab6e7e9354586e110367f06def, type: 3}
+    density: 0.0006
+    minScale: 1.1
+    maxScale: 1.6
+    minHeight: 0
+    maxHeight: 9999

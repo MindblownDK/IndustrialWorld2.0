@@ -1,0 +1,50 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c731d42220a11514daa3ec8913dbf5a1, type: 3}
+  m_Name: Biome_CrystalGeode
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Biomes.BiomeDefinition
+  biomeName: Crystal Geode Flats
+  debugColor: {r: 0.6, g: 0.5, b: 0.9, a: 1}
+  minTemperature: 0
+  maxTemperature: 1
+  minHumidity: 0
+  maxHumidity: 1
+  priority: 5
+  heightOffset: 0
+  heightAmplitude: 10
+  heightFrequency: 0.02
+  ridgedness: 0.1
+  surfaceMaterial: 27
+  surfaceDepth: 1
+  subsurfaceMaterial: 27
+  subsurfaceDepth: 5
+  allowBeach: 0
+  isOceanic: 0
+  scatter:
+  - prefab: {fileID: 3049297474730115902, guid: 1cb8a50a4f0b1164f957b7953150702c, type: 3}
+    density: 0.0006
+    minScale: 1.1
+    maxScale: 1.6
+    minHeight: 0
+    maxHeight: 9999
+  - prefab: {fileID: 8180299277612265648, guid: 4ac98e13ca3c43b4dadbee83d8556cfc, type: 3}
+    density: 0.0006
+    minScale: 1.1
+    maxScale: 1.6
+    minHeight: 0
+    maxHeight: 9999
+  - prefab: {fileID: 8610639196654990171, guid: 39dba91e792870046ae1993bb54f634a, type: 3}
+    density: 0.0006
+    minScale: 1.1
+    maxScale: 1.6
+    minHeight: 0
+    maxHeight: 9999

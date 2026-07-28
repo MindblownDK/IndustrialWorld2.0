@@ -15,20 +15,21 @@ MonoBehaviour:
   body:
     bodyName: Venus
     seed: 0
-    gravity: 1
-    oxygenLevel: 1
-    temperature: 15
+    gravity: 0.9
+    oxygenLevel: 0
+    temperature: 60
     windStrength: 1
     windGustiness: 0.4
     waterLevel: 96
     waterVolume: 1
     surfaceMode: 0
-    mountainScale: 1.1
+    mountainScale: 1
     continentScaleFactor: 1
-    enableGrass: 1
+    enableGrass: 0
     radiusKm: 6
-    displayColor: {r: 0.15460792, g: 0.052198302, b: 0.4811321, a: 0}
-    allowedBiomes: []
+    displayColor: {r: 0.85, g: 0.7, b: 0.25, a: 1}
+    allowedBiomes:
+    - {fileID: 11400000, guid: 231f77c45f9786b48a2d5a5405cc553b, type: 2}
     subSurfaceOres:
     - material: 7
       tier: 0
@@ -131,6 +132,7 @@ MonoBehaviour:
       maxDepth: 12
       abundance: 1
   solarSystem: {fileID: 11400000, guid: 9bb2dbc7a9af8df42b2c57567cac00f6, type: 2}
+  distanceFromSun: 0
   orbitalDistanceKm: {x: 1500, y: 6000}
   orbitSpeed: 1
   orbitPhaseDegrees: 0

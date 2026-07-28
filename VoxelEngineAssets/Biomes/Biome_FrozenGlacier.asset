@@ -1,0 +1,50 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c731d42220a11514daa3ec8913dbf5a1, type: 3}
+  m_Name: Biome_FrozenGlacier
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Biomes.BiomeDefinition
+  biomeName: Frozen Glacier
+  debugColor: {r: 0.8, g: 0.9, b: 1, a: 1}
+  minTemperature: 0
+  maxTemperature: 1
+  minHumidity: 0
+  maxHumidity: 1
+  priority: 5
+  heightOffset: 0
+  heightAmplitude: 10
+  heightFrequency: 0.02
+  ridgedness: 0.1
+  surfaceMaterial: 4
+  surfaceDepth: 1
+  subsurfaceMaterial: 4
+  subsurfaceDepth: 5
+  allowBeach: 0
+  isOceanic: 0
+  scatter:
+  - prefab: {fileID: 9060183139320642221, guid: 47af3b6878397314ca4bcf893f9d37b3, type: 3}
+    density: 0.0006
+    minScale: 1.1
+    maxScale: 1.6
+    minHeight: 0
+    maxHeight: 9999
+  - prefab: {fileID: 1477150513911358915, guid: 3a0f49bc15011ec4aa05811264927ce1, type: 3}
+    density: 0.0006
+    minScale: 1.1
+    maxScale: 1.6
+    minHeight: 0
+    maxHeight: 9999
+  - prefab: {fileID: 4944135901845105256, guid: 72545a3e5f39b3640b54ac271df4ed16, type: 3}
+    density: 0.0006
+    minScale: 1.1
+    maxScale: 1.6
+    minHeight: 0
+    maxHeight: 9999

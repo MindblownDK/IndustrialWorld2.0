@@ -15,20 +15,21 @@ MonoBehaviour:
   body:
     bodyName: Mars
     seed: 0
-    gravity: 1
-    oxygenLevel: 1
-    temperature: 15
+    gravity: 0.38
+    oxygenLevel: 0.02
+    temperature: 5
     windStrength: 1
     windGustiness: 0.4
     waterLevel: 96
     waterVolume: 1
     surfaceMode: 0
-    mountainScale: 1.1
+    mountainScale: 1
     continentScaleFactor: 1
-    enableGrass: 1
+    enableGrass: 0
     radiusKm: 6
-    displayColor: {r: 0.8018868, g: 0.40801153, b: 0.018912422, a: 0}
-    allowedBiomes: []
+    displayColor: {r: 0.8, g: 0.4, b: 0.18, a: 1}
+    allowedBiomes:
+    - {fileID: 11400000, guid: b3d79233fce1c164b9e3cf189bb5ea13, type: 2}
     subSurfaceOres:
     - material: 7
       tier: 0
@@ -131,6 +132,7 @@ MonoBehaviour:
       maxDepth: 12
       abundance: 1
   solarSystem: {fileID: 11400000, guid: 9bb2dbc7a9af8df42b2c57567cac00f6, type: 2}
+  distanceFromSun: 0
   orbitalDistanceKm: {x: 1500, y: 6000}
   orbitSpeed: 1
   orbitPhaseDegrees: 0

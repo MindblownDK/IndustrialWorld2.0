@@ -1,0 +1,56 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c731d42220a11514daa3ec8913dbf5a1, type: 3}
+  m_Name: Biome_MartianDust
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Biomes.BiomeDefinition
+  biomeName: Martian Dust Plains
+  debugColor: {r: 0.7, g: 0.4, b: 0.2, a: 1}
+  minTemperature: 0
+  maxTemperature: 1
+  minHumidity: 0
+  maxHumidity: 1
+  priority: 5
+  heightOffset: 0
+  heightAmplitude: 10
+  heightFrequency: 0.02
+  ridgedness: 0.1
+  surfaceMaterial: 23
+  surfaceDepth: 1
+  subsurfaceMaterial: 23
+  subsurfaceDepth: 5
+  allowBeach: 0
+  isOceanic: 0
+  scatter:
+  - prefab: {fileID: 6284360833060338884, guid: 8b49f90b024f7d04886fe1a182dbb5c2, type: 3}
+    density: 0.0006
+    minScale: 1.1
+    maxScale: 1.6
+    minHeight: 0
+    maxHeight: 9999
+  - prefab: {fileID: 3349625884057593732, guid: 3a29967c1fc7a4a4996b94a99572b505, type: 3}
+    density: 0.0006
+    minScale: 1.1
+    maxScale: 1.6
+    minHeight: 0
+    maxHeight: 9999
+  - prefab: {fileID: 6191587960612543176, guid: b2288e5771168de49b17c98091837273, type: 3}
+    density: 0.0006
+    minScale: 1.1
+    maxScale: 1.6
+    minHeight: 0
+    maxHeight: 9999
+  - prefab: {fileID: 8363224564570934540, guid: 6874c61d3e268104891a80315f3cb837, type: 3}
+    density: 0.0006
+    minScale: 1.1
+    maxScale: 1.6
+    minHeight: 0
+    maxHeight: 9999

@@ -1,0 +1,139 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e31bdbef80d75c740a51a94badbd6605, type: 3}
+  m_Name: Planet_Acid
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Cosmos.PlanetTemplate
+  body:
+    bodyName: Acid World
+    seed: 0
+    gravity: 0.9
+    oxygenLevel: 0.15
+    temperature: 30
+    windStrength: 1
+    windGustiness: 0.4
+    waterLevel: 96
+    waterVolume: 1
+    surfaceMode: 0
+    mountainScale: 1
+    continentScaleFactor: 1
+    enableGrass: 0
+    radiusKm: 6
+    displayColor: {r: 0.45, g: 0.65, b: 0.3, a: 1}
+    allowedBiomes:
+    - {fileID: 11400000, guid: 537ab35fc1f01504b96d00c4e955e50f, type: 2}
+    subSurfaceOres:
+    - material: 7
+      tier: 0
+      scale: 0.06
+      threshold: 0.45
+      minDepth: 4
+      maxDepth: 80
+      abundance: 1
+    - material: 8
+      tier: 0
+      scale: 0.07
+      threshold: 0.55
+      minDepth: 6
+      maxDepth: 70
+      abundance: 1
+    - material: 9
+      tier: 0
+      scale: 0.05
+      threshold: 0.5
+      minDepth: 4
+      maxDepth: 60
+      abundance: 1
+    - material: 10
+      tier: 0
+      scale: 0.08
+      threshold: 0.6
+      minDepth: 20
+      maxDepth: 120
+      abundance: 1
+    - material: 11
+      tier: 0
+      scale: 0.06
+      threshold: 0.55
+      minDepth: 4
+      maxDepth: 90
+      abundance: 1
+    - material: 12
+      tier: 0
+      scale: 0.09
+      threshold: 0.65
+      minDepth: 30
+      maxDepth: 140
+      abundance: 1
+    - material: 15
+      tier: 0
+      scale: 0.08
+      threshold: 0.62
+      minDepth: 15
+      maxDepth: 110
+      abundance: 1
+    - material: 21
+      tier: 0
+      scale: 0.07
+      threshold: 0.6
+      minDepth: 10
+      maxDepth: 100
+      abundance: 1
+    deepCoreOres:
+    - material: 13
+      tier: 1
+      scale: 0.1
+      threshold: 0.72
+      minDepth: 60
+      maxDepth: 200
+      abundance: 1
+    - material: 14
+      tier: 1
+      scale: 0.11
+      threshold: 0.78
+      minDepth: 80
+      maxDepth: 220
+      abundance: 1
+    - material: 16
+      tier: 1
+      scale: 0.12
+      threshold: 0.8
+      minDepth: 100
+      maxDepth: 240
+      abundance: 1
+    - material: 17
+      tier: 1
+      scale: 0.13
+      threshold: 0.82
+      minDepth: 120
+      maxDepth: 250
+      abundance: 1
+    specials:
+    - material: 18
+      tier: 2
+      scale: 0.04
+      threshold: 0.7
+      minDepth: 25
+      maxDepth: 90
+      abundance: 1
+    - material: 4
+      tier: 2
+      scale: 0.05
+      threshold: 0.65
+      minDepth: 0
+      maxDepth: 12
+      abundance: 1
+  solarSystem: {fileID: 0}
+  distanceFromSun: 0
+  orbitalDistanceKm: {x: 1500, y: 6000}
+  orbitSpeed: 1
+  orbitPhaseDegrees: 0
+  moons: []

@@ -4419,10 +4419,10 @@ namespace VoxelEngine.EditorTools
                     if (ruined)
                     {
                         Vector3 sill = alongX ? new Vector3(module * 0.99f, wallHeight * 0.34f, wallThick) : new Vector3(wallThick, wallHeight * 0.34f, module * 0.99f);
-                        AddBlock($"Sill_{label}", new Vector3(x, deckTopY + wallHeight * 0.17f, z), sill, matRustDark, 160);
+                        AddBlock($"Sill_{label}", new Vector3(x, deckTopY + wallHeight * 0.17f, z), sill, matRustDark, 160, Quaternion.identity);
                         return;
                     }
-                    AddBlock($"Wall_{label}", new Vector3(x, wallY, z), full, WallMat(), 280);
+                    AddBlock($"Wall_{label}", new Vector3(x, wallY, z), full, WallMat(), 280, Quaternion.identity);
                 }
 
                 // North & South walls (North center is reserved for the gateway)
@@ -4445,9 +4445,9 @@ namespace VoxelEngine.EditorTools
                 // ══════════ FRAMED GATEWAY (crusader portal on the North face) ══════════
                 {
                     float postOff = module * 0.32f;
-                    AddBlock("DoorPost_L", new Vector3(-postOff, wallY, W), new Vector3(wallThick * 1.4f, wallHeight, wallThick * 1.4f), matStoneDark, 320);
-                    AddBlock("DoorPost_R", new Vector3( postOff, wallY, W), new Vector3(wallThick * 1.4f, wallHeight, wallThick * 1.4f), matStoneDark, 320);
-                    AddBlock("DoorLintel", new Vector3(0f, deckTopY + wallHeight * 0.92f, W), new Vector3(postOff * 2f + wallThick * 1.4f, wallHeight * 0.20f, wallThick * 1.5f), matRustMain, 280);
+                    AddBlock("DoorPost_L", new Vector3(-postOff, wallY, W), new Vector3(wallThick * 1.4f, wallHeight, wallThick * 1.4f), matStoneDark, 320, Quaternion.identity);
+                    AddBlock("DoorPost_R", new Vector3( postOff, wallY, W), new Vector3(wallThick * 1.4f, wallHeight, wallThick * 1.4f), matStoneDark, 320, Quaternion.identity);
+                    AddBlock("DoorLintel", new Vector3(0f, deckTopY + wallHeight * 0.92f, W), new Vector3(postOff * 2f + wallThick * 1.4f, wallHeight * 0.20f, wallThick * 1.5f), matRustMain, 280, Quaternion.identity);
                     AddDecor("DoorKeystone", new Vector3(0f, deckTopY + wallHeight * 0.96f, W + wallThick * 0.35f), new Vector3(wallThick * 0.9f, wallHeight * 0.14f, 0.06f), matChestTrim, Quaternion.identity);
                 }
 
@@ -4466,10 +4466,10 @@ namespace VoxelEngine.EditorTools
                         if (roll < 0.34f)
                         {
                             Vector3 half = alongX ? new Vector3(merlonW, merlonH * 0.5f, wallThick * 1.4f) : new Vector3(wallThick * 1.4f, merlonH * 0.5f, merlonW);
-                            AddBlock($"MerlonHalf_{label}", new Vector3(x, merlonY - merlonH * 0.25f, z), half, matRustDark, 120);
+                            AddBlock($"MerlonHalf_{label}", new Vector3(x, merlonY - merlonH * 0.25f, z), half, matRustDark, 120, Quaternion.identity);
                             return;
                         }
-                        AddBlock($"Merlon_{label}", new Vector3(x, merlonY, z), full, WallMat(), 200);
+                        AddBlock($"Merlon_{label}", new Vector3(x, merlonY, z), full, WallMat(), 200, Quaternion.identity);
                     }
 
                     for (int xi = -extent; xi <= extent; xi++)
@@ -4504,7 +4504,7 @@ namespace VoxelEngine.EditorTools
                     AddDecor("BunkerLip_E", new Vector3(W, deckTopY + wallHeight + 0.02f, 0f), new Vector3(wallThick * 1.8f, 0.16f, footW), matRustDark, Quaternion.identity);
                     AddDecor("BunkerLip_W", new Vector3(-W, deckTopY + wallHeight + 0.02f, 0f), new Vector3(wallThick * 1.8f, 0.16f, footW), matRustDark, Quaternion.identity);
                     // Bunker also gets a flat roof slab for the squat fortress silhouette
-                    AddBlock("BunkerRoof", new Vector3(0f, deckTopY + wallHeight + 0.18f, 0f), new Vector3(footW * 0.92f, 0.2f, footW * 0.92f), matRustMain, 280);
+                    AddBlock("BunkerRoof", new Vector3(0f, deckTopY + wallHeight + 0.18f, 0f), new Vector3(footW * 0.92f, 0.2f, footW * 0.92f), matRustMain, 280, Quaternion.identity);
                 }
 
                 // ══════════ INTERIOR: broken columns (ruined chapel/cathedral feel) ══════════
@@ -4518,8 +4518,8 @@ namespace VoxelEngine.EditorTools
                         bool standing = UnityEngine.Random.value < 0.55f;
                         if (standing)
                         {
-                            AddBlock($"ColBase_{spot}", new Vector3(cx, deckTopY + 0.1f, cz), new Vector3(0.62f, 0.2f, 0.62f), matStoneDark, 220);
-                            AddBlock($"ColShaft_{spot}", new Vector3(cx, deckTopY + 0.2f + colH * 0.5f, cz), new Vector3(0.46f, colH, 0.46f), matStone, 200);
+                            AddBlock($"ColBase_{spot}", new Vector3(cx, deckTopY + 0.1f, cz), new Vector3(0.62f, 0.2f, 0.62f), matStoneDark, 220, Quaternion.identity);
+                            AddBlock($"ColShaft_{spot}", new Vector3(cx, deckTopY + 0.2f + colH * 0.5f, cz), new Vector3(0.46f, colH, 0.46f), matStone, 200, Quaternion.identity);
                             AddDecor($"ColCap_{spot}", new Vector3(cx, deckTopY + 0.2f + colH + 0.1f, cz), new Vector3(0.52f, 0.22f, 0.52f), matStone,
                                 Quaternion.Euler(UnityEngine.Random.Range(-8f, 8f), UnityEngine.Random.Range(0f, 90f), UnityEngine.Random.Range(-8f, 8f)));
                         }
@@ -4529,7 +4529,7 @@ namespace VoxelEngine.EditorTools
                             Vector3 fall = new Vector3(cx + (cx < 0 ? -0.7f : 0.7f), deckTopY + 0.3f, cz + (cz < 0 ? -0.7f : 0.7f));
                             AddBlock($"ColFallen_{spot}", fall, new Vector3(0.46f, 0.46f, colH), matStone, 200,
                                 Quaternion.Euler(0f, UnityEngine.Random.Range(0f, 360f), 90f));
-                            AddBlock($"ColStub_{spot}", new Vector3(cx, deckTopY + 0.25f, cz), new Vector3(0.52f, 0.5f, 0.52f), matStoneDark, 200);
+                            AddBlock($"ColStub_{spot}", new Vector3(cx, deckTopY + 0.25f, cz), new Vector3(0.52f, 0.5f, 0.52f), matStoneDark, 200, Quaternion.identity);
                         }
                         spot++;
                     }
@@ -4569,7 +4569,7 @@ namespace VoxelEngine.EditorTools
                 if (hasBattlements)
                 {
                     float bx = -W + pillarW * 0.5f, bz = -W + pillarW * 0.5f;
-                    AddBlock("BannerPole", new Vector3(bx, deckTopY + wallHeight * 0.5f, bz), new Vector3(0.12f, wallHeight, 0.12f), matWood, 120);
+                    AddBlock("BannerPole", new Vector3(bx, deckTopY + wallHeight * 0.5f, bz), new Vector3(0.12f, wallHeight, 0.12f), matWood, 120, Quaternion.identity);
                     AddDecor("BannerFinial", new Vector3(bx, deckTopY + wallHeight + 0.12f, bz), new Vector3(0.22f, 0.22f, 0.22f), matChestTrim, Quaternion.identity);
                     var cloth = AddDecor("BannerCloth", new Vector3(bx + 0.4f, deckTopY + wallHeight * 0.74f, bz), new Vector3(0.8f, wallHeight * 0.52f, 0.04f), matBanner, Quaternion.identity);
                     cloth.transform.localRotation = Quaternion.Euler(0f, 90f, UnityEngine.Random.Range(-4f, 4f));
@@ -4577,7 +4577,7 @@ namespace VoxelEngine.EditorTools
 
                 // ══════════ RELIC CHEST on a stone dais ══════════
                 AddDecor("DaisStep", new Vector3(0f, deckTopY + 0.01f, 0f), new Vector3(2.4f, 0.08f, 2.4f), matStone, Quaternion.identity);
-                AddBlock("Dais", new Vector3(0f, deckTopY + 0.15f, 0f), new Vector3(1.9f, 0.26f, 1.9f), matStoneDark, 300);
+                AddBlock("Dais", new Vector3(0f, deckTopY + 0.15f, 0f), new Vector3(1.9f, 0.26f, 1.9f), matStoneDark, 300, Quaternion.identity);
 
                 float chestBaseY = deckTopY + 0.28f;
                 var chestGO = new GameObject("RuinChest_Visible");
