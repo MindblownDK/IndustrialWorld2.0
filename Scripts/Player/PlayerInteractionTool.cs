@@ -321,6 +321,25 @@ namespace VoxelEngine.Player
 
             if (buildDown)
             {
+                // Armor equip (RMB an armor item in the hotbar → wear it; old armor returns to inventory).
+                {
+                    var armorStack = inventory.ActiveStack;
+                    if (!armorStack.IsEmpty && armorStack.item is VoxelEngine.Combat.ArmorItem armor)
+                    {
+                        var ps = GetComponentInParent<VoxelEngine.Player.PlayerStats>();
+                        if (ps != null)
+                        {
+                            if (ps.equippedArmor != null)
+                                inventory.container.Insert(new VoxelEngine.Items.ItemStack(ps.equippedArmor, 1));
+                            ps.equippedArmor = armor;
+                            inventory.container.Remove(armor, 1);
+                            inventory.container.RaiseChanged();
+                            VoxelEngine.UI.BuildFeedbackHud.Show("Equipped", armor.displayName, armor, new Color(0.4f, 0.8f, 1f));
+                        }
+                        return;
+                    }
+                }
+
                 // 0) Water Bucket placement.
                 var stackRmb = inventory.ActiveStack;
                 if (!stackRmb.IsEmpty && stackRmb.item is WaterBucket && stackRmb.durability > 0)

@@ -290,6 +290,15 @@ namespace VoxelEngine.EditorTools
                 "Re-runnable. Idempotent.");
             AddWizardButton(scroll, "23. Build Enemies (Phase 2) — Ghoul (wander/chase/melee AI)", BuildEnemyContent, 72);
 
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 24 builds 6 tiers of Crusader armor (non-destructive):\n"
+                "  Initiate's Gambeson → Squire's Leather → Knight's Chainmail →\n"
+                "  Templar's Plate → Paladin's Bulwark → Stellar Archon Plate\n"
+                "Each tier reduces more damage. Equip via RMB in hotbar.\n"
+                "Re-runnable. Idempotent.");
+            AddWizardButton(scroll, "24. Build Crusader Armor (6 Tiers: Initiate to Stellar Archon)", BuildArmorContent, 72);
+
             AddSpacer(scroll, 20);
         }
 
@@ -10406,6 +10415,98 @@ root =>
                 "OK");
         }
 
+
+        // ============================================================
+        //   STEP 24 - CRUSADER ARMOR (6 tiers): from Initiate's Gambeson
+        //   to the ultimate Stellar Archon Plate. Each tier reduces more
+        //   incoming damage. Equip via RMB in the hotbar.
+        // ============================================================
+        private void BuildArmorContent()
+        {
+            const string ARMOR_FOLDER = ASSET_ROOT + "/Combat/Armor";
+            EnsureFolder(ARMOR_FOLDER);
+
+            ItemDefinition FindItem(string assetNameNoExt)
+            {
+                var guids = AssetDatabase.FindAssets(assetNameNoExt + " t:ItemDefinition");
+                foreach (var g in guids)
+                {
+                    var pp = AssetDatabase.GUIDToAssetPath(g);
+                    if (System.IO.Path.GetFileNameWithoutExtension(pp) == assetNameNoExt)
+                        return AssetDatabase.LoadAssetAtPath<ItemDefinition>(pp);
+                }
+                return null;
+            }
+            var woodLog    = FindItem("Item_WoodLog");
+            var plank      = FindItem("Item_WoodenPlank");
+            var ironIngot  = FindItem("Item_IronIngot");
+            var steelIngot = FindItem("Item_SteelIngot");
+            var ironPlate  = FindItem("Item_IronPlate");
+            var steelPlate = FindItem("Item_SteelPlate");
+            var copperWire = FindItem("Item_CopperLVWire");
+            var goldWire   = FindItem("Item_GoldLVWire");
+            var circuit    = FindItem("Item_Circuit");
+            var advCircuit = FindItem("Item_AdvancedCircuit");
+
+            VoxelEngine.Combat.ArmorItem MakeArmor(string assetName, string display, string desc, int tier, float reduction, Color tint)
+            {
+                string path = $"{ARMOR_FOLDER}/{assetName}.asset";
+                var a = GetOrCreateAsset<VoxelEngine.Combat.ArmorItem>(path);
+                a.itemId = assetName.ToLower();
+                a.displayName = display;
+                a.description = desc;
+                a.tier = tier;
+                a.damageReduction = reduction;
+                a.iconTint = tint;
+                a.maxStack = 1;
+                a.massPerUnit = 2f + tier;
+                a.category = "Armor";
+                EditorUtility.SetDirty(a);
+                return a;
+            }
+
+            // ── 6 Tiers of Crusader Armor ──
+            var t1 = MakeArmor("Armor_InitiateGambeson", "Initiate's Gambeson",
+                "Quilted cloth of the newly sworn. Better than nothing — barely.",
+                1, 0.08f, new Color(0.50f, 0.45f, 0.38f));
+            var t2 = MakeArmor("Armor_SquireLeather", "Squire's Leather",
+                "Boiled leather over padded gambeson. A squire's first real protection.",
+                2, 0.15f, new Color(0.35f, 0.25f, 0.15f));
+            var t3 = MakeArmor("Armor_KnightChainmail", "Knight's Chainmail",
+                "Full chain hauberk under a tabard. The mark of a true Crusader Knight.",
+                3, 0.25f, new Color(0.70f, 0.72f, 0.75f));
+            var t4 = MakeArmor("Armor_TemplarPlate", "Templar's Plate",
+                "Steel plate with heraldic surcoat. The Templar stands where others fall.",
+                4, 0.38f, new Color(0.85f, 0.85f, 0.88f));
+            var t5 = MakeArmor("Armor_PaladinBulwark", "Paladin's Bulwark",
+                "Blessed reinforced plate with gold relic trim. Worn by the Order's finest.",
+                5, 0.50f, new Color(0.88f, 0.80f, 0.30f));
+            var t6 = MakeArmor("Armor_StellarArchon", "Stellar Archon Plate",
+                "Sealed void-metal armour with glowing energy relays. Worthy of the strongest Crusaders — the pinnacle of the Order.",
+                6, 0.62f, new Color(0.22f, 0.20f, 0.28f));
+
+            // ── Recipes (escalating difficulty) ──
+            AddRecipe("Recipe_Armor_InitiateGambeson", "Initiate's Gambeson", t1, 1, VoxelEngine.Crafting.StationTier.CraftingBench, true, (woodLog, 4), (plank, 4));
+            AddRecipe("Recipe_Armor_SquireLeather", "Squire's Leather", t2, 1, VoxelEngine.Crafting.StationTier.CraftingBench, true, (woodLog, 2), (ironIngot, 3));
+            AddRecipe("Recipe_Armor_KnightChainmail", "Knight's Chainmail", t3, 1, VoxelEngine.Crafting.StationTier.Assembler, true, (ironIngot, 5), (copperWire, 3));
+            AddRecipe("Recipe_Armor_TemplarPlate", "Templar's Plate", t4, 1, VoxelEngine.Crafting.StationTier.Assembler, true, (ironPlate, 5), (steelIngot, 3), (copperWire, 4));
+            AddRecipe("Recipe_Armor_PaladinBulwark", "Paladin's Bulwark", t5, 1, VoxelEngine.Crafting.StationTier.Assembler, true, (steelPlate, 8), (circuit, 3), (copperWire, 6));
+            AddRecipe("Recipe_Armor_StellarArchon", "Stellar Archon Plate", t6, 1, VoxelEngine.Crafting.StationTier.Assembler, true, (steelPlate, 12), (advCircuit, 4), (goldWire, 6));
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Voxel Engine — Crusader Armor (6 Tiers)",
+                "Built 6 tiers of Crusader armor:\n\n" +
+                "1. Initiate's Gambeson (8% reduction) — Crafting Bench\n" +
+                "2. Squire's Leather (15%) — Crafting Bench\n" +
+                "3. Knight's Chainmail (25%) — Assembler\n" +
+                "4. Templar's Plate (38%) — Assembler\n" +
+                "5. Paladin's Bulwark (50%) — Assembler\n" +
+                "6. Stellar Archon Plate (62%) — Assembler\n\n" +
+                "Equip: put the armor in your hotbar, select it, and press RMB. Old armor returns to your inventory.\n" +
+                "Incoming damage is now reduced by the equipped tier's percentage.",
+                "OK");
+        }
 
     }
 }

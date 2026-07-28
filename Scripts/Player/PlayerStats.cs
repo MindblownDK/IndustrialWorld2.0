@@ -16,6 +16,7 @@ namespace VoxelEngine.Player
 
         [Header("Baselines (before upgrades)")]
         public float baseMaxHealth      = 100f;
+        public VoxelEngine.Combat.ArmorItem equippedArmor; // currently worn Crusader armor
         public float baseMaxStamina     = 100f;
         public float baseDamage         = 5f;     // bare-hand contribution
         public float baseSprintMultiplier = 1.6f;
@@ -156,6 +157,7 @@ namespace VoxelEngine.Player
         public void TakeDamage(float amount)
         {
             if (amount <= 0) return;
+            if (equippedArmor != null) amount *= (1f - equippedArmor.damageReduction);
             Health = Mathf.Max(0, Health - amount);
             OnStatsChanged?.Invoke();
             if (Health <= 0) Die();
