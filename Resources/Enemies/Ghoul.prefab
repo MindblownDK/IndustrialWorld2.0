@@ -1001,8 +1001,8 @@ GameObject:
   - component: {fileID: 1306643948297702056}
   - component: {fileID: 9135068953416163909}
   - component: {fileID: 4340647336180906340}
-  - component: {fileID: 8006786569934620747}
-  - component: {fileID: 3587060123879963079}
+  - component: {fileID: 1967875203831115978}
+  - component: {fileID: 4668072299744033189}
   m_Layer: 0
   m_Name: Ghoul
   m_TagString: Untagged
@@ -1110,7 +1110,7 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 112
   m_CollisionDetection: 0
---- !u!114 &8006786569934620747
+--- !u!114 &1967875203831115978
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -1119,7 +1119,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 1287390282833052542}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 98fee9050c7fdcd4da51ff67ebdab3a8, type: 3}
+  m_Script: {fileID: 11500000, guid: 5d56a76635789034d8b5ecbb37b8e253, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Combat.EnemyGhoul
   maxHealth: 35
@@ -1140,7 +1140,7 @@ MonoBehaviour:
   attackCooldown: 1.1
   wanderRadius: 6
   wanderPause: 2.5
---- !u!114 &3587060123879963079
+--- !u!114 &4668072299744033189
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -1149,10 +1149,10 @@ MonoBehaviour:
   m_GameObject: {fileID: 1287390282833052542}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: db8a7338874a8174badce19b4933dd81, type: 3}
+  m_Script: {fileID: 11500000, guid: b105570af9cba524fa4bcdc133319674, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Combat.CreatureHealthBar
-  target: {fileID: 8006786569934620747}
+  target: {fileID: 1967875203831115978}
   showRange: 30
   heightAbove: 2.2
   fillColor: {r: 0.45, g: 0.7, b: 0.2, a: 1}

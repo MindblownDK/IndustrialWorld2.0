@@ -292,10 +292,10 @@ namespace VoxelEngine.EditorTools
 
             AddSpacer(scroll, 6);
             AddInfo(scroll,
-                "Step 24 builds 6 tiers of Crusader armor (non-destructive):\n"
-                "  Initiate's Gambeson → Squire's Leather → Knight's Chainmail →\n"
-                "  Templar's Plate → Paladin's Bulwark → Stellar Archon Plate\n"
-                "Each tier reduces more damage. Equip via RMB in hotbar.\n"
+                "Step 24 builds 6 tiers of Crusader armor (non-destructive):\n" +
+                "  Initiate's Gambeson → Squire's Leather → Knight's Chainmail →\n" +
+                "  Templar's Plate → Paladin's Bulwark → Stellar Archon Plate\n" +
+                "Each tier reduces more damage. Equip via RMB in hotbar.\n" +
                 "Re-runnable. Idempotent.");
             AddWizardButton(scroll, "24. Build Crusader Armor (6 Tiers: Initiate to Stellar Archon)", BuildArmorContent, 72);
 
