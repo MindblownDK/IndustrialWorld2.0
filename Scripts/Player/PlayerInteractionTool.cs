@@ -334,7 +334,7 @@ namespace VoxelEngine.Player
                             ps.equippedArmor = armor;
                             inventory.container.Remove(armor, 1);
                             inventory.container.RaiseChanged();
-                            VoxelEngine.UI.BuildFeedbackHud.Show("Equipped", armor.displayName, armor, new Color(0.4f, 0.8f, 1f));
+                            VoxelEngine.UI.BuildFeedbackHud.Show("Equipped", armor.displayName, armor.icon, new Color(0.4f, 0.8f, 1f));
                         }
                         return;
                     }
