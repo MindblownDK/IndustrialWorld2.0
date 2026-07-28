@@ -75,7 +75,7 @@ namespace VoxelEngine.Combat
             Vector3 spawnPos = ppos + tangent + up * 2.5f;
 
             var go = Instantiate(ghoulPrefab, spawnPos, Quaternion.LookRotation(-tangent, up));
-            var g = go.GetComponent<EnemyGhoul>();
+            var ghoul = go.GetComponent<EnemyGhoul>();
             if (g != null)
             {
                 _alive.Add(g);

@@ -10384,6 +10384,7 @@ root =>
             hbar.fillColorLow = new Color(0.70f, 0.10f, 0.05f);
             hbar.borderColor = new Color(0.30f, 0.25f, 0.18f, 0.90f);
 
+            AssetDatabase.DeleteAsset("Assets/Resources/Enemies/Ghoul.prefab"); // force clean regen (stops "API has changed" prompt)
             var prefab = PrefabUtility.SaveAsPrefabAsset(root, "Assets/Resources/Enemies/Ghoul.prefab");
             UnityEngine.Object.DestroyImmediate(root);
 
