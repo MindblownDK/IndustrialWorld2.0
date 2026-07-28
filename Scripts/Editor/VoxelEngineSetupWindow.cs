@@ -283,10 +283,10 @@ namespace VoxelEngine.EditorTools
 
             AddSpacer(scroll, 6);
             AddInfo(scroll,
-                "Step 23 (Combat Phase 2) adds the first real enemy (non-destructive):\n"
-                "  • Ghoul — shambling hostile that wanders, detects you, chases, and melees\n"
-                "  • Radial-gravity aligned (spherical worlds), Damageable, drops loot\n"
-                "  • Spawns rarely in Wasteland / Forest / Desert\n"
+                "Step 23 (Combat Phase 2) adds the first real enemy (non-destructive):\n" +
+                "  • Ghoul — shambling hostile that wanders, detects you, chases, and melees\n" +
+                "  • Radial-gravity aligned (spherical worlds), Damageable, drops loot\n" +
+                "  • Spawns rarely in Wasteland / Forest / Desert\n" +
                 "Re-runnable. Idempotent.");
             AddWizardButton(scroll, "23. Build Enemies (Phase 2) — Ghoul (wander/chase/melee AI)", BuildEnemyContent, 72);
 
