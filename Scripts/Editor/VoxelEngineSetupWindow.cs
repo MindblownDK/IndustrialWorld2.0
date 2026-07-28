@@ -10400,7 +10400,7 @@ root =>
                         ? new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>(biome.scatter)
                         : new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>();
                     list.RemoveAll(e => e.prefab != null && e.prefab.name == "Ghoul");
-                    list.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = prefab, density = 0.001f, minScale = 0.9f, maxScale = 1.2f, minHeight = 0, maxHeight = 9999 });
+                    list.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = prefab, density = 0.005f, minScale = 0.9f, maxScale = 1.2f, minHeight = 0, maxHeight = 9999 });
                     biome.scatter = list.ToArray();
                     EditorUtility.SetDirty(biome);
                 }

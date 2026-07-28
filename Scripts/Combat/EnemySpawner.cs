@@ -1,10 +1,7 @@
 // Assets/Scripts/VoxelEngine/Combat/EnemySpawner.cs
 //
-// Spawns enemy Ghouls near the player as TOP-LEVEL objects (not parented to chunks),
-// which is required because a Rigidbody enemy on a rotating spherical planet must live
-// in world/physics space — the static biome-scatter pipeline parents to chunks and
-// breaks dynamic physics bodies. Auto-creates itself at runtime; loads the Ghoul prefab
-// from Resources. Capped population + far-despawn so the world never floods.
+// Spawns enemy Ghouls near the player as TOP-LEVEL objects. Auto-creates at runtime.
+// Comprehensive logging so spawn issues are immediately diagnosable in the Console.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -13,22 +10,23 @@ namespace VoxelEngine.Combat
 {
     public class EnemySpawner : MonoBehaviour
     {
-        [Header("Spawning")]
         public GameObject ghoulPrefab;
-        public float spawnInterval = 14f;
+        public float spawnInterval = 10f;
         public int   maxAlive      = 5;
-        public float spawnNearMin  = 20f;
-        public float spawnNearMax  = 42f;
-        public float despawnRange  = 95f;
-        public float startGrace    = 6f;
+        public float spawnNearMin  = 18f;
+        public float spawnNearMax  = 36f;
+        public float despawnRange  = 90f;
+        public float startGrace    = 4f;
 
         private float _nextSpawn;
         private static readonly List<EnemyGhoul> _alive = new List<EnemyGhoul>();
+        private static bool _autoCreated;
 
         private void Awake()
         {
             if (ghoulPrefab == null) ghoulPrefab = Resources.Load<GameObject>("Enemies/Ghoul");
             _nextSpawn = Time.time + startGrace;
+            Debug.Log($"[EnemySpawner] Awake — prefab={(ghoulPrefab != null ? "OK" : "NULL")}, grace={startGrace}s");
         }
 
         private void Update()
@@ -37,7 +35,7 @@ namespace VoxelEngine.Combat
             if (player == null) return;
             Vector3 ppos = player.transform.position;
 
-            // Cull dead + despawn ones that wandered too far.
+            // Cull dead + despawn far
             for (int i = _alive.Count - 1; i >= 0; i--)
             {
                 var g = _alive[i];
@@ -51,44 +49,60 @@ namespace VoxelEngine.Combat
 
             if (Time.time < _nextSpawn) return;
             _nextSpawn = Time.time + spawnInterval;
+
             if (ghoulPrefab == null)
             {
                 ghoulPrefab = Resources.Load<GameObject>("Enemies/Ghoul");
-                if (ghoulPrefab == null) return;
+                if (ghoulPrefab == null)
+                {
+                    Debug.LogWarning("[EnemySpawner] Ghoul prefab not found in Resources/Enemies/Ghoul! Run Step 23 first.");
+                    return;
+                }
             }
-            if (_alive.Count >= maxAlive) return;
 
-            SpawnNearPlayer(ppos);
-        }
+            if (_alive.Count >= maxAlive)
+            {
+                Debug.Log($"[EnemySpawner] At cap ({maxAlive}). Skipping.");
+                return;
+            }
 
-        private void SpawnNearPlayer(Vector3 ppos)
-        {
+            // Spawn near the player — no raycast needed (radial gravity settles the ghoul onto the surface).
             Vector3 up = VoxelEngine.Cosmos.GravityProvider.GetUp(ppos);
-            // Pick a random direction in the local tangent plane (perpendicular to radial up).
             Vector3 rand = Random.onUnitSphere;
             Vector3 tangent = rand - Vector3.Project(rand, up);
             if (tangent.sqrMagnitude < 0.001f) return;
             tangent = tangent.normalized * Random.Range(spawnNearMin, spawnNearMax);
+            Vector3 spawnPos = ppos + tangent + up * 2.5f;
 
-            // Raycast "down" (toward the core) to find the surface, then place slightly above it.
-            Vector3 sample = ppos + tangent + up * 6f;
-            if (Physics.Raycast(sample, -up, out var hit, 14f, ~0, QueryTriggerInteraction.Ignore))
+            var go = Instantiate(ghoulPrefab, spawnPos, Quaternion.LookRotation(-tangent, up));
+            var g = go.GetComponent<EnemyGhoul>();
+            if (g != null)
             {
-                Vector3 spawnPos = hit.point + up * 0.6f;
-                var go = Instantiate(ghoulPrefab, spawnPos, Quaternion.LookRotation(-tangent, up));
-                var g = go.GetComponent<EnemyGhoul>();
-                if (g != null) _alive.Add(g);
+                _alive.Add(g);
+                Debug.Log($"[EnemySpawner] Spawned ghoul #{_alive.Count} at {spawnPos} (dist from player: {tangent.magnitude:F1}m)");
+            }
+            else
+            {
+                Debug.LogError("[EnemySpawner] Prefab has no EnemyGhoul component!");
+                Destroy(go);
             }
         }
 
-        // Auto-create one spawner per session (persists for the loaded scene).
         [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void AutoCreate()
         {
+            if (_autoCreated) return;
+            _autoCreated = true;
+            Debug.Log("[EnemySpawner] RuntimeInitialize — checking for existing spawner...");
             if (UnityEngine.Object.FindAnyObjectByType<EnemySpawner>() == null)
             {
                 var go = new GameObject("EnemySpawner");
                 go.AddComponent<EnemySpawner>();
+                Debug.Log("[EnemySpawner] Created new spawner GameObject.");
+            }
+            else
+            {
+                Debug.Log("[EnemySpawner] Spawner already exists.");
             }
         }
     }
