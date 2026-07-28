@@ -4247,15 +4247,7 @@ namespace VoxelEngine.EditorTools
                 float  deckTopY        = 0.62f;
                 float  W               = extent * module;
                 float  footW           = (extent * 2 + 1) * module;
-                float  totalH          = deckTopY + wallHeight + (hasBattlements ? 1.25f : 0.35f);
-
-                var rootCol = root.GetComponent<Collider>() as BoxCollider;
-                if (rootCol == null) rootCol = root.AddComponent<BoxCollider>();
-                rootCol.size = new Vector3(footW * 1.12f, totalH * 1.12f, footW * 1.12f);
-                rootCol.center = new Vector3(0f, totalH * 0.5f, 0f);
-                var rootMarker = root.GetComponent<VoxelEngine.Building.PlacedBlock>();
-                if (rootMarker == null) rootMarker = root.AddComponent<VoxelEngine.Building.PlacedBlock>();
-                rootMarker.Hp = 600;
+                // (Root is a plain folder — colliders are per-block; the lootable chest is the visible child inside.)
 
                 // ══════════ PREMIUM PROCEDURAL MATERIALS ══════════
                 // Textures are shared across all 3 ruins for GPU batching; per-ruin rust tints come from _BaseColor.
@@ -4653,15 +4645,7 @@ namespace VoxelEngine.EditorTools
                 BlueprintDataCoreItem[] finalBps = keepBlueprints ?? bps.ToArray();
                 string ruinDisplayName = !string.IsNullOrEmpty(keepRuinName) ? keepRuinName : name.Replace("Ruin_", "").Replace("_", " ");
 
-                var rootChest = root.GetComponent<VoxelEngine.Exploration.RuinChest>();
-                if (rootChest == null) rootChest = root.AddComponent<VoxelEngine.Exploration.RuinChest>();
-                if (rootChest == null) { Debug.LogError($"[Ruin] Failed to add RuinChest to {name} root"); UnityEngine.Object.DestroyImmediate(root); return null; }
-                rootChest.ruinName = ruinDisplayName;
-                rootChest.minComponents = keepMinComp;
-                rootChest.maxComponents = keepMaxComp;
-                rootChest.possibleComponents = finalComps;
-                rootChest.possibleFuel = finalFuel;
-                rootChest.possibleBlueprints = finalBps;
+                // (No root RuinChest — open the visible chest inside the ruin to loot it.)
 
                 var childChest = chestGO.GetComponent<VoxelEngine.Exploration.RuinChest>();
                 if (childChest == null) childChest = chestGO.AddComponent<VoxelEngine.Exploration.RuinChest>();
@@ -4728,15 +4712,24 @@ namespace VoxelEngine.EditorTools
                         // Avoid duplicating ruins if already present
                         bool hasRuin = false;
                         foreach (var e in existing) if (e.prefab != null && e.prefab.name.Contains("Ruin_")) { hasRuin = true; break; }
-                        if (hasRuin) continue;
+                        if (hasRuin)
+                        {
+                            // Re-run: sync existing ruin scatter density to the current rare value.
+                            foreach (var e in existing)
+                                if (e.prefab == ruinWarehouse || e.prefab == ruinFactory || e.prefab == ruinBunker)
+                                    e.density = 0.00008f;
+                            biome.scatter = existing.ToArray();
+                            EditorUtility.SetDirty(biome);
+                            continue;
+                        }
                         // PREMIUM RARE — easy numbers to tweak (user request: not 0.005(something) confusing)
                         // User said WAYYYY too frequent at 0.0085, then 0.002 still too frequent.
                         // Now VERY RARE: 0.0008 = 0.08% per surface voxel = ~1 ruin per 6-8 chunks.
                         // To make rarer: lower to 0.0004, to make more common: raise to 0.0015
                         // EASY NUMBERS: 0.0008, 0.0005, 0.0006 — simple, readable, no 0.005(x) confusion
-                        const float RUIN_DENSITY_WAREHOUSE = 0.0008f; // easy: 0.0008 = rare
-                        const float RUIN_DENSITY_FACTORY = 0.0005f;   // easy: 0.0005 = very rare (factory is big)
-                        const float RUIN_DENSITY_BUNKER = 0.0006f;    // easy: 0.0006 = rare (bunker)
+                        const float RUIN_DENSITY_WAREHOUSE = 0.00008f; // rare (~1 per 50+ chunks)
+                        const float RUIN_DENSITY_FACTORY = 0.00008f;   // rare
+                        const float RUIN_DENSITY_BUNKER = 0.00008f;    // rare
                         if (ruinWarehouse != null)
                             existing.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = ruinWarehouse, density = RUIN_DENSITY_WAREHOUSE, minScale = 1.2f, maxScale = 1.6f, minHeight = 0, maxHeight = 9999 });
                         if (ruinFactory != null)
@@ -4747,7 +4740,7 @@ namespace VoxelEngine.EditorTools
                         EditorUtility.SetDirty(biome);
                     }
                     EditorUtility.SetDirty(br);
-                    Debug.Log("[VoxelEngineSetup] Ruins injected — RARE easy densities: 0.0008 / 0.0005 / 0.0006 (somewhat rare, not everywhere). Change these 3 const floats at top of injection to tweak rarity easily.");
+                    Debug.Log("[VoxelEngineSetup] Crusader ruins injected/synced — rare density 0.00008 (~1 per 50+ chunks).");
                 }
             }
             catch (System.Exception ex) { Debug.LogWarning("[VoxelEngineSetup] Ruins biome injection failed: " + ex.Message); }
