@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.31.0-dev`
-**Roadmap Version:** `6.31.0-dev`
-**Date:** 2026-07-26
-**Status:** Premium Ruins (6.30.0) + Ruins Fix (6.29.2) Crash Fix + RuinChest Fix (6.29.1) + Offline Survival (11.4) Completed + Grid Gravity Fixed (6.27.3) + Passive Oxygen (11.5); World Management (11.7) Completed; Power, Vehicles & Combat (4.7.0) remains WORKING ON
+**Current Version:** `6.36.3-dev`
+**Roadmap Version:** `6.36.3-dev`
+**Date:** 2026-07-28
+**Status:** Celestial Ruins & Themed Worlds COMPLETED (6.32.0–6.36.3) — 33 themed ruins across 11 planets, slot-chest loot, breakable/salvage, per-block colliders; Crusader Ruins Premium (6.30.0); Offline Survival (11.4) Completed + Grid Gravity Fixed (6.27.3) + Passive Oxygen (11.5); World Management (11.7) Completed; Power, Vehicles & Combat (4.7.0) remains WORKING ON
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
 ---
@@ -71,7 +71,7 @@ The design goal is a seamless blend of:
 | Nuclear | 🟡 PARTIALLY COMPLETE | Nuclear foundations are present; endgame power, hazards, waste, and research gates remain open. |
 | Factory logistics | ✅ COMPLETED | Belts, chutes, Crusher, Electric Furnace, Assembler Mk.1–Mk.3, machine UIs, visual animations, and full runtime state persistence are implemented and validated. (5.42.0-dev) |
 | Progression / game loop | ❌ MISSING | No clear early→mid→endgame arc. |
-| Ruins / exploration rewards | ❌ MISSING | No dead-civilization POIs or blueprint gating |
+| Ruins / exploration rewards | ✅ COMPLETED | 33 themed ruin variants across 11 celestial worlds (Moon/Mars/Venus/Acid/Pirate/Olympus/Ice/Water/Desolate/Volcanic/Crystal) + 3 crusader ruins (Bunker/Warehouse/Factory). Slot-chest loot (shift-click/drag-drop), breakable/salvage drops, per-block colliders, rare biome scatter (~0.00008). (6.29.0–6.36.3) |
 | Water simulation | 🟡 PARTIALLY COMPLETE | Basic water exists; realistic flow, level, and physics remain open. |
 | Weather system | ❌ MISSING | No storms, wind variation, planetary climate |
 | Camera / trajectory tools | 🟡 PARTIALLY COMPLETE | Basic camera foundations exist; zoom-to-trajectory and orbit map remain open. |

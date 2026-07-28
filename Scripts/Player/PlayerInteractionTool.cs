@@ -139,6 +139,14 @@ namespace VoxelEngine.Player
             // ── WRENCH dispatch — short-circuits all other tool behaviour. ──
             //   LMB = connect/select  •  RMB = disconnect  •  Shift modifies both
             var heldStack = inventory.ActiveStack;
+            // ── WEAPON dispatch — LMB attacks with melee/ranged weapons (intercepts mining). ──
+            if (mineHeld && !heldStack.IsEmpty && heldStack.item is VoxelEngine.Combat.WeaponItem wep
+                && Time.time >= _nextHit)
+            {
+                HandleWeaponAttack(wep, ray);
+                _nextHit = Time.time + Mathf.Max(0.1f, wep.attackCooldown);
+                return;
+            }
             if (!heldStack.IsEmpty && heldStack.item is WrenchTool)
             {
                 if (_wrench == null) _wrench = new WrenchInteraction();
@@ -748,6 +756,22 @@ namespace VoxelEngine.Player
             tiered.Damage(damage, tier, inventory);
             _feedback?.Trigger(hit.point, hit.normal, new Color(0.7f, 0.7f, 0.75f));
             _nextHit = Time.time + 1f / Mathf.Max(0.1f, rate);
+        }
+
+        // ── COMBAT (Phase 1) — apply weapon damage to whatever IDamageable the crosshair hits. ──
+        private void HandleWeaponAttack(VoxelEngine.Combat.WeaponItem weapon, Ray ray)
+        {
+            float dist = Mathf.Max(0.5f, weapon.range);
+            if (TryRaycastIgnoringSelf(ray, out var hit, dist))
+            {
+                var d = hit.collider.GetComponentInParent<VoxelEngine.Combat.IDamageable>();
+                if (d != null && d.IsAlive)
+                    d.TakeDamage(new VoxelEngine.Combat.DamageEvent {
+                        amount = weapon.damage, type = weapon.damageType,
+                        point = hit.point, direction = ray.direction, source = gameObject });
+            }
+            if (weapon.attackMode == VoxelEngine.Combat.WeaponItem.AttackMode.Ranged)
+                Debug.DrawRay(ray.origin, ray.direction * dist, Color.yellow, 0.08f); // tracer placeholder
         }
 
         private void MineVoxel(Ray ray, RaycastHit hit)

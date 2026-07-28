@@ -272,6 +272,15 @@ namespace VoxelEngine.EditorTools
                 "Run AFTER Steps 1 and 20. Re-runnable. Idempotent.");
             AddWizardButton(scroll, "21. Build Celestial Worlds — Planets, Themed Biomes & Ruin Spawning (Phase 2)", BuildCelestialWorldsContent, 72);
 
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 22 (Combat Phase 1) adds the damage framework, player weapons, and a test target (non-destructive):\n"
+                "  • IDamageable + DamageType + Damageable (reusable by enemies, dummies, grid blocks)\n"
+                "  • Iron Sword (melee, LMB swing) + Iron Pistol (ranged, LMB fire)\n"
+                "  • Training Dummy — placeable target that takes damage and respawns\n"
+                "Hold LMB with a weapon to attack. Re-runnable. Idempotent.");
+            AddWizardButton(scroll, "22. Build Combat (Phase 1) — Damage Framework, Sword, Pistol, Training Dummy", BuildCombatContent, 72);
+
             AddSpacer(scroll, 20);
         }
 
@@ -10126,6 +10135,126 @@ root =>
                 "New surface materials: Martian Dust, Venus Ash, Acid Bog, Volcanic Basalt, Crystal Geode.\n" +
                 "Ruins now spawn on their own world via biome scatter (~0.0006 density).\n\n" +
                 "IMPORTANT: re-run Step 1 (Create All Assets) once to register the 5 new materials in the MaterialRegistry, then create/visit a new world to see them.",
+                "OK");
+        }
+
+        // ============================================================
+        //   STEP 22 - COMBAT (Phase 1): damage framework, Iron Sword,
+        //   Iron Pistol, and a placeable Training Dummy target.
+        // ============================================================
+        private void BuildCombatContent()
+        {
+            const string COMBAT_ROOT  = ASSET_ROOT + "/Combat";
+            const string COMBAT_ITEMS  = COMBAT_ROOT + "/Items";
+            const string COMBAT_BLOCKS = COMBAT_ROOT + "/Blocks";
+            const string COMBAT_PREFABS= COMBAT_ROOT + "/Prefabs";
+            EnsureFolder(COMBAT_ROOT);
+            EnsureFolder(COMBAT_ITEMS);
+            EnsureFolder(COMBAT_BLOCKS);
+            EnsureFolder(COMBAT_PREFABS);
+
+            ItemDefinition FindItem(string assetNameNoExt)
+            {
+                var guids = AssetDatabase.FindAssets(assetNameNoExt + " t:ItemDefinition");
+                foreach (var g in guids)
+                {
+                    var pp = AssetDatabase.GUIDToAssetPath(g);
+                    if (System.IO.Path.GetFileNameWithoutExtension(pp) == assetNameNoExt)
+                        return AssetDatabase.LoadAssetAtPath<ItemDefinition>(pp);
+                }
+                return null;
+            }
+            var ironIngot  = FindItem("Item_IronIngot");
+            var steelIngot = FindItem("Item_SteelIngot");
+            var ironPlate  = FindItem("Item_IronPlate");
+            var copperWire = FindItem("Item_CopperLVWire");
+            var stone      = FindItem("Item_Stone");
+
+            // ── Iron Sword (melee) ──
+            var sword = GetOrCreateAsset<VoxelEngine.Combat.WeaponItem>($"{COMBAT_ITEMS}/Weapon_IronSword.asset");
+            sword.itemId = "iron_sword";
+            sword.displayName = "Iron Sword";
+            sword.description = "Crusader melee sidearm. Hold LMB to swing. Damages dummies and (future) enemies.";
+            sword.toolType = VoxelEngine.Items.ToolType.Sword;
+            sword.attackMode = VoxelEngine.Combat.WeaponItem.AttackMode.Melee;
+            sword.damage = 40f;
+            sword.range = 3f;
+            sword.attackCooldown = 0.45f;
+            sword.damageType = VoxelEngine.Combat.DamageType.Melee;
+            sword.miningTier = 2;
+            sword.maxDurability = 500;
+            sword.strength = 40f;
+            sword.iconTint = new Color(0.82f, 0.84f, 0.9f);
+            sword.maxStack = 1;
+            sword.category = "Weapons";
+            EditorUtility.SetDirty(sword);
+
+            // ── Iron Pistol (ranged, no ammo yet — Phase 1) ──
+            var pistol = GetOrCreateAsset<VoxelEngine.Combat.WeaponItem>($"{COMBAT_ITEMS}/Weapon_IronPistol.asset");
+            pistol.itemId = "iron_pistol";
+            pistol.displayName = "Iron Pistol";
+            pistol.description = "Ranged sidearm. Hold LMB to fire (ammo system comes in a later combat phase).";
+            pistol.toolType = VoxelEngine.Items.ToolType.Other;
+            pistol.attackMode = VoxelEngine.Combat.WeaponItem.AttackMode.Ranged;
+            pistol.damage = 28f;
+            pistol.range = 70f;
+            pistol.attackCooldown = 0.28f;
+            pistol.damageType = VoxelEngine.Combat.DamageType.Kinetic;
+            pistol.miningTier = 2;
+            pistol.maxDurability = 600;
+            pistol.iconTint = new Color(0.55f, 0.55f, 0.6f);
+            pistol.maxStack = 1;
+            pistol.category = "Weapons";
+            EditorUtility.SetDirty(pistol);
+
+            // ── Training Dummy (placeable combat target) ──
+            string dummyPath = $"{COMBAT_PREFABS}/TrainingDummy.prefab";
+            var dummyMat = MakeColoredMat(COMBAT_PREFABS, "Mat_TrainingDummy", new Color(0.55f, 0.40f, 0.25f));
+            var dRoot = new GameObject("TrainingDummy");
+            var dCube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            dCube.name = "Mesh";
+            dCube.transform.SetParent(dRoot.transform, false);
+            dCube.transform.localScale = new Vector3(0.7f, 1.8f, 0.5f);
+            dCube.transform.localPosition = new Vector3(0f, 0.9f, 0f);
+            dCube.GetComponent<Renderer>().sharedMaterial = dummyMat;
+            var dPb = dCube.AddComponent<VoxelEngine.Building.PlacedBlock>();
+            dPb.Hp = 60;
+            dRoot.AddComponent<VoxelEngine.Combat.TrainingDummy>();
+            var dummyPrefab = PrefabUtility.SaveAsPrefabAsset(dRoot, dummyPath);
+            UnityEngine.Object.DestroyImmediate(dRoot);
+
+            var dummyBlock = GetOrCreateAsset<VoxelEngine.Items.BlockItem>($"{COMBAT_BLOCKS}/Block_TrainingDummy.asset");
+            dummyBlock.itemId = "block_training_dummy";
+            dummyBlock.displayName = "Training Dummy";
+            dummyBlock.description = "Placeable combat target. Swing/shoot it to test weapons — it squashes and respawns.";
+            dummyBlock.iconTint = new Color(0.7f, 0.5f, 0.3f);
+            dummyBlock.maxStack = 20;
+            dummyBlock.massPerUnit = 2f;
+            dummyBlock.placedPrefab = dummyPrefab;
+            dummyBlock.gridSize = Vector3Int.one;
+            dummyBlock.allowStacking = true;
+            dummyBlock.blockHealth = 60;
+            dummyBlock.miningTier = 1;
+            dummyBlock.category = "Combat";
+            EditorUtility.SetDirty(dummyBlock);
+
+            // ── Recipes ──
+            AddRecipe("Recipe_IronSword", "Iron Sword", sword, 1, VoxelEngine.Crafting.StationTier.Assembler, true,
+                (ironPlate, 3), (ironIngot, 2));
+            AddRecipe("Recipe_IronPistol", "Iron Pistol", pistol, 1, VoxelEngine.Crafting.StationTier.Assembler, true,
+                (ironPlate, 2), (copperWire, 3), (steelIngot, 1));
+            AddRecipe("Recipe_TrainingDummy", "Training Dummy", dummyBlock, 1, VoxelEngine.Crafting.StationTier.CraftingBench, true,
+                (stone, 4), (ironIngot, 1));
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Voxel Engine — Combat (Phase 1)",
+                "Combat foundation built:\n\n" +
+                "• Damage framework: IDamageable + DamageType + Damageable (reusable by enemies, dummies, grid blocks)\n" +
+                "• Iron Sword (melee) + Iron Pistol (ranged) — hold LMB to attack\n" +
+                "• Training Dummy — placeable target that takes damage and respawns\n" +
+                "• Recipes at the Assembler / Crafting Bench\n\n" +
+                "Try it: craft a sword, place a Training Dummy, and swing at it (LMB).",
                 "OK");
         }
 
