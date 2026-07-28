@@ -264,11 +264,11 @@ namespace VoxelEngine.EditorTools
 
             AddSpacer(scroll, 6);
             AddInfo(scroll,
-                "Step 21 (Phase 2) wires the themed ruins to their own PLANETS so they spawn in-world (non-destructive):\n"
-                "  • 11 themed biomes with planet-correct surface materials + ruin scatter\n"
-                "  • Mars/Venus reconfigured + 8 new planets (Acid, Pirate, Greek, Ice, Water, Desolate, Volcanic, Crystal)\n"
-                "  • Moon wired to the Lunar biome; all planets appended to System_Sol\n"
-                "  • 5 new voxel surface materials (Martian Dust, Venus Ash, Acid Bog, Volcanic Basalt, Crystal Geode)\n"
+                "Step 21 (Phase 2) wires the themed ruins to their own PLANETS so they spawn in-world (non-destructive):\n" +
+                "  • 11 themed biomes with planet-correct surface materials + ruin scatter\n" +
+                "  • Mars/Venus reconfigured + 8 new planets (Acid, Pirate, Greek, Ice, Water, Desolate, Volcanic, Crystal)\n" +
+                "  • Moon wired to the Lunar biome; all planets appended to System_Sol\n" +
+                "  • 5 new voxel surface materials (Martian Dust, Venus Ash, Acid Bog, Volcanic Basalt, Crystal Geode)\n" +
                 "Run AFTER Steps 1 and 20. Re-runnable. Idempotent.");
             AddWizardButton(scroll, "21. Build Celestial Worlds — Planets, Themed Biomes & Ruin Spawning (Phase 2)", BuildCelestialWorldsContent, 72);
 
