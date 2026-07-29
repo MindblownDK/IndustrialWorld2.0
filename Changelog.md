@@ -1,9 +1,31 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.43.0-dev`
+**Current Version:** `6.43.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.43.1-dev] Livestock Spawner — Retry-Load + Diagnostics
+
+**Type:** PATCH — spawner robustness + diagnostics (animals + AI confirmed working).
+
+**Context:** Passive animals (Cow/Sheep/Pig) work perfectly when spawned manually, but the `PassiveAnimalSpawner` wasn't auto-spawning them. Same shape of issue we resolved for the Ghoul.
+
+**Fixed — spawner now retries the prefab load every cycle:**
+- The spawner previously loaded `Resources.LoadAll<GameObject>("Livestock")` only once in `Awake`. If that came back empty (folder not yet populated, or load timing) it never retried, so it silently never spawned. It now re-attempts the load every spawn cycle — exactly how the working `EnemySpawner` keeps retrying its prefab load.
+- Added diagnostic logging so the Console shows exactly what's happening (to be trimmed back to just the genuine guards once spawning is confirmed): `[LivestockSpawner] RuntimeInitialize`, `Awake — prefabs=N`, `No prefabs found in Resources/Livestock — run Step 25 first` (the likely culprit if N=0), and `Spawned <species> #N`.
+
+**To diagnose:** recompile, **make sure Step 25 has been run** (so `Assets/Resources/Livestock/` contains Cow/Sheep/Pig prefabs), then Play and check the Console:
+- `Awake — prefabs=3` + `Spawned Cow #1…` → fixed, working.
+- `Awake — prefabs=0` / `No prefabs found` → the prefabs aren't in `Resources/Livestock` (re-run Step 25, or point the spawner at the right folder).
+- No `[LivestockSpawner]` logs at all → the spawner isn't being created (assembly/RuntimeInitialize issue).
+
+**Files touched:**
+- `Scripts/Fauna/PassiveAnimalSpawner.cs` (retry-load + diagnostics)
+- `Scripts/Core/GameVersion.cs` (6.43.0 -> 6.43.1)
+- `Changelog.md`
+
+---
 
 ### [6.43.0-dev] Phase 3c — Passive Livestock Foundation (Cow, Sheep, Pig)
 

@@ -13,7 +13,7 @@ GameObject:
   - component: {fileID: 6620793642433710110}
   - component: {fileID: 1986944125932984689}
   - component: {fileID: 7762317025446761124}
-  - component: {fileID: 1578376509541718089}
+  - component: {fileID: 6469463167653326597}
   m_Layer: 0
   m_Name: Wall_N_-1
   m_TagString: Untagged
@@ -129,7 +129,7 @@ MonoBehaviour:
   Item: {fileID: 0}
   Hp: 260
   onGrid: 1
---- !u!114 &1578376509541718089
+--- !u!114 &6469463167653326597
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -138,7 +138,150 @@ MonoBehaviour:
   m_GameObject: {fileID: 26645161529017208}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6638323f5ed5e1c4486a8b0ff985e692, type: 3}
+  m_Script: {fileID: 11500000, guid: 5e25220fbca4eb446ae5ef3da929e2ba, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Exploration.RuinBlockDrop
+  salvage: {fileID: 11400000, guid: 96a60523ff509c84ba84cf35f6084bde, type: 2}
+  count: 1
+--- !u!1 &85048875308374996
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 5717658197541776727}
+  - component: {fileID: 2590082717180346067}
+  - component: {fileID: 3362218098099574364}
+  - component: {fileID: 5716736226291047760}
+  - component: {fileID: 4869142340993104561}
+  - component: {fileID: 3128481245214741757}
+  m_Layer: 0
+  m_Name: Rubble_5
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &5717658197541776727
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 85048875308374996}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0.42666826, y: -0.049358573, z: 0.3162531, w: 0.8458735}
+  m_LocalPosition: {x: 0.79777944, y: 0.7671263, z: -1.6569648}
+  m_LocalScale: {x: 0.26781577, y: 0.21425262, z: 0.26781577}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 8029781515975587551}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!33 &2590082717180346067
+MeshFilter:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 85048875308374996}
+  m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!65 &3362218098099574364
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 85048875308374996}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 1, y: 1, z: 1}
+  m_Center: {x: 0, y: 0, z: 0}
+--- !u!23 &5716736226291047760
+MeshRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 85048875308374996}
+  m_Enabled: 1
+  m_CastShadows: 1
+  m_ReceiveShadows: 1
+  m_DynamicOccludee: 1
+  m_StaticShadowCaster: 0
+  m_MotionVectors: 1
+  m_LightProbeUsage: 1
+  m_ReflectionProbeUsage: 1
+  m_RayTracingMode: 2
+  m_RayTraceProcedural: 0
+  m_RayTracingAccelStructBuildFlagsOverride: 0
+  m_RayTracingAccelStructBuildFlags: 1
+  m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
+  m_RenderingLayerMask: 1
+  m_RendererPriority: 0
+  m_Materials:
+  - {fileID: 2100000, guid: 476800cd228cd964ea7762d269bc3703, type: 2}
+  m_StaticBatchInfo:
+    firstSubMesh: 0
+    subMeshCount: 0
+  m_StaticBatchRoot: {fileID: 0}
+  m_ProbeAnchor: {fileID: 0}
+  m_LightProbeVolumeOverride: {fileID: 0}
+  m_ScaleInLightmap: 1
+  m_ReceiveGI: 1
+  m_PreserveUVs: 1
+  m_IgnoreNormalsForChartDetection: 0
+  m_ImportantGI: 0
+  m_StitchLightmapSeams: 1
+  m_SelectedEditorRenderState: 3
+  m_MinimumChartSize: 4
+  m_AutoUVMaxDistance: 0.5
+  m_AutoUVMaxAngle: 89
+  m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
+  m_SortingLayerID: 0
+  m_SortingLayer: 0
+  m_SortingOrder: 0
+  m_MaskInteraction: 0
+  m_AdditionalVertexStreams: {fileID: 0}
+--- !u!114 &4869142340993104561
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 85048875308374996}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1f8b8158c33b76f4ea33ec446a9e15a3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.PlacedBlock
+  Item: {fileID: 0}
+  Hp: 80
+  onGrid: 1
+--- !u!114 &3128481245214741757
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 85048875308374996}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5e25220fbca4eb446ae5ef3da929e2ba, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Exploration.RuinBlockDrop
   salvage: {fileID: 11400000, guid: 96a60523ff509c84ba84cf35f6084bde, type: 2}
@@ -156,7 +299,7 @@ GameObject:
   - component: {fileID: 5757346871539116876}
   - component: {fileID: 6109898478789537369}
   - component: {fileID: 524837453225448076}
-  - component: {fileID: 7739454461645774422}
+  - component: {fileID: 8911700617012299987}
   m_Layer: 0
   m_Name: Wall_S_1
   m_TagString: Untagged
@@ -272,7 +415,7 @@ MonoBehaviour:
   Item: {fileID: 0}
   Hp: 260
   onGrid: 1
---- !u!114 &7739454461645774422
+--- !u!114 &8911700617012299987
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -281,7 +424,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 1180993791661044945}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6638323f5ed5e1c4486a8b0ff985e692, type: 3}
+  m_Script: {fileID: 11500000, guid: 5e25220fbca4eb446ae5ef3da929e2ba, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Exploration.RuinBlockDrop
   salvage: {fileID: 11400000, guid: 96a60523ff509c84ba84cf35f6084bde, type: 2}
@@ -299,7 +442,7 @@ GameObject:
   - component: {fileID: 4161143167817359269}
   - component: {fileID: 7578751533240483753}
   - component: {fileID: 5805023911158942462}
-  - component: {fileID: 7333835173775592993}
+  - component: {fileID: 4535108948639349710}
   m_Layer: 0
   m_Name: Foundation_Plinth
   m_TagString: Untagged
@@ -415,7 +558,7 @@ MonoBehaviour:
   Item: {fileID: 0}
   Hp: 420
   onGrid: 1
---- !u!114 &7333835173775592993
+--- !u!114 &4535108948639349710
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -424,7 +567,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 1964132093846475082}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6638323f5ed5e1c4486a8b0ff985e692, type: 3}
+  m_Script: {fileID: 11500000, guid: 5e25220fbca4eb446ae5ef3da929e2ba, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Exploration.RuinBlockDrop
   salvage: {fileID: 11400000, guid: 9225024033f905e4187afc15d721e060, type: 2}
@@ -539,7 +682,7 @@ GameObject:
   - component: {fileID: 6257478040858421913}
   - component: {fileID: 5138551146513987382}
   - component: {fileID: 731126109031735341}
-  - component: {fileID: 1776474839039701080}
+  - component: {fileID: 2728022930960463968}
   m_Layer: 0
   m_Name: Wall_S_-1
   m_TagString: Untagged
@@ -655,7 +798,7 @@ MonoBehaviour:
   Item: {fileID: 0}
   Hp: 260
   onGrid: 1
---- !u!114 &1776474839039701080
+--- !u!114 &2728022930960463968
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -664,7 +807,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 2144598184254355457}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6638323f5ed5e1c4486a8b0ff985e692, type: 3}
+  m_Script: {fileID: 11500000, guid: 5e25220fbca4eb446ae5ef3da929e2ba, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Exploration.RuinBlockDrop
   salvage: {fileID: 11400000, guid: 96a60523ff509c84ba84cf35f6084bde, type: 2}
@@ -682,7 +825,7 @@ GameObject:
   - component: {fileID: 8092358071437574313}
   - component: {fileID: 3291692138548994780}
   - component: {fileID: 5358658036779753213}
-  - component: {fileID: 5609482901127367796}
+  - component: {fileID: 1521158013962144616}
   m_Layer: 0
   m_Name: Antenna
   m_TagString: Untagged
@@ -800,7 +943,7 @@ MonoBehaviour:
   Item: {fileID: 0}
   Hp: 160
   onGrid: 1
---- !u!114 &5609482901127367796
+--- !u!114 &1521158013962144616
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -809,7 +952,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 2760718860745683821}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6638323f5ed5e1c4486a8b0ff985e692, type: 3}
+  m_Script: {fileID: 11500000, guid: 5e25220fbca4eb446ae5ef3da929e2ba, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Exploration.RuinBlockDrop
   salvage: {fileID: 11400000, guid: 96a60523ff509c84ba84cf35f6084bde, type: 2}
@@ -917,7 +1060,7 @@ GameObject:
   - component: {fileID: 8076317077818271408}
   - component: {fileID: 8632004123291185788}
   - component: {fileID: 6522536123801643789}
-  - component: {fileID: 7425336145463259835}
+  - component: {fileID: 1262256193732923105}
   m_Layer: 0
   m_Name: Wall_W_0
   m_TagString: Untagged
@@ -994,7 +1137,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: af2a982a91c63a245b98bd0822609adf, type: 2}
+  - {fileID: 2100000, guid: da4bb6bd15c992745b06ef79282f840e, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -1033,7 +1176,7 @@ MonoBehaviour:
   Item: {fileID: 0}
   Hp: 260
   onGrid: 1
---- !u!114 &7425336145463259835
+--- !u!114 &1262256193732923105
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -1042,153 +1185,10 @@ MonoBehaviour:
   m_GameObject: {fileID: 2860934078109176751}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6638323f5ed5e1c4486a8b0ff985e692, type: 3}
+  m_Script: {fileID: 11500000, guid: 5e25220fbca4eb446ae5ef3da929e2ba, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Exploration.RuinBlockDrop
   salvage: {fileID: 11400000, guid: 96a60523ff509c84ba84cf35f6084bde, type: 2}
-  count: 1
---- !u!1 &3191372122229145944
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1582139822828033798}
-  - component: {fileID: 3484753509237949640}
-  - component: {fileID: 3833923755277219536}
-  - component: {fileID: 8904352762854870231}
-  - component: {fileID: 807970598319064890}
-  - component: {fileID: 1933209717615479111}
-  m_Layer: 0
-  m_Name: Rubble_0
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &1582139822828033798
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3191372122229145944}
-  serializedVersion: 2
-  m_LocalRotation: {x: -0.54627395, y: -0.09960215, z: 0.71502894, w: 0.4247327}
-  m_LocalPosition: {x: -1.8259444, y: 0.75656885, z: -0.025183916}
-  m_LocalScale: {x: 0.24142216, y: 0.19313774, z: 0.24142216}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 8029781515975587551}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!33 &3484753509237949640
-MeshFilter:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3191372122229145944}
-  m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
---- !u!65 &3833923755277219536
-BoxCollider:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3191372122229145944}
-  m_Material: {fileID: 0}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_LayerOverridePriority: 0
-  m_IsTrigger: 0
-  m_ProvidesContacts: 0
-  m_Enabled: 1
-  serializedVersion: 3
-  m_Size: {x: 1, y: 1, z: 1}
-  m_Center: {x: 0, y: 0, z: 0}
---- !u!23 &8904352762854870231
-MeshRenderer:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3191372122229145944}
-  m_Enabled: 1
-  m_CastShadows: 1
-  m_ReceiveShadows: 1
-  m_DynamicOccludee: 1
-  m_StaticShadowCaster: 0
-  m_MotionVectors: 1
-  m_LightProbeUsage: 1
-  m_ReflectionProbeUsage: 1
-  m_RayTracingMode: 2
-  m_RayTraceProcedural: 0
-  m_RayTracingAccelStructBuildFlagsOverride: 0
-  m_RayTracingAccelStructBuildFlags: 1
-  m_SmallMeshCulling: 1
-  m_ForceMeshLod: -1
-  m_MeshLodSelectionBias: 0
-  m_RenderingLayerMask: 1
-  m_RendererPriority: 0
-  m_Materials:
-  - {fileID: 2100000, guid: 67eab0234b904ee429834365b4373572, type: 2}
-  m_StaticBatchInfo:
-    firstSubMesh: 0
-    subMeshCount: 0
-  m_StaticBatchRoot: {fileID: 0}
-  m_ProbeAnchor: {fileID: 0}
-  m_LightProbeVolumeOverride: {fileID: 0}
-  m_ScaleInLightmap: 1
-  m_ReceiveGI: 1
-  m_PreserveUVs: 1
-  m_IgnoreNormalsForChartDetection: 0
-  m_ImportantGI: 0
-  m_StitchLightmapSeams: 1
-  m_SelectedEditorRenderState: 3
-  m_MinimumChartSize: 4
-  m_AutoUVMaxDistance: 0.5
-  m_AutoUVMaxAngle: 89
-  m_LightmapParameters: {fileID: 0}
-  m_GlobalIlluminationMeshLod: 0
-  m_SortingLayerID: 0
-  m_SortingLayer: 0
-  m_SortingOrder: 0
-  m_MaskInteraction: 0
-  m_AdditionalVertexStreams: {fileID: 0}
---- !u!114 &807970598319064890
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3191372122229145944}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1f8b8158c33b76f4ea33ec446a9e15a3, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.PlacedBlock
-  Item: {fileID: 0}
-  Hp: 80
-  onGrid: 1
---- !u!114 &1933209717615479111
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3191372122229145944}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6638323f5ed5e1c4486a8b0ff985e692, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Exploration.RuinBlockDrop
-  salvage: {fileID: 11400000, guid: 9225024033f905e4187afc15d721e060, type: 2}
   count: 1
 --- !u!1 &3383970734440851092
 GameObject:
@@ -1203,7 +1203,7 @@ GameObject:
   - component: {fileID: 382336418340296156}
   - component: {fileID: 1189298816253912221}
   - component: {fileID: 1514711374274003505}
-  - component: {fileID: 8391490506303563824}
+  - component: {fileID: 8865535945650559386}
   m_Layer: 0
   m_Name: Wall_E_0
   m_TagString: Untagged
@@ -1280,7 +1280,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: c18c761e834327141bdf76282617155b, type: 2}
+  - {fileID: 2100000, guid: da4bb6bd15c992745b06ef79282f840e, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -1319,7 +1319,7 @@ MonoBehaviour:
   Item: {fileID: 0}
   Hp: 260
   onGrid: 1
---- !u!114 &8391490506303563824
+--- !u!114 &8865535945650559386
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -1328,7 +1328,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 3383970734440851092}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6638323f5ed5e1c4486a8b0ff985e692, type: 3}
+  m_Script: {fileID: 11500000, guid: 5e25220fbca4eb446ae5ef3da929e2ba, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Exploration.RuinBlockDrop
   salvage: {fileID: 11400000, guid: 96a60523ff509c84ba84cf35f6084bde, type: 2}
@@ -1346,7 +1346,7 @@ GameObject:
   - component: {fileID: 2268854563810208965}
   - component: {fileID: 6323019066616341580}
   - component: {fileID: 7353980139958916537}
-  - component: {fileID: 8353216783731033835}
+  - component: {fileID: 5046121056601836319}
   m_Layer: 0
   m_Name: DomeCap_1
   m_TagString: Untagged
@@ -1462,7 +1462,7 @@ MonoBehaviour:
   Item: {fileID: 0}
   Hp: 280
   onGrid: 1
---- !u!114 &8353216783731033835
+--- !u!114 &5046121056601836319
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -1471,7 +1471,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 3417835083055096890}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6638323f5ed5e1c4486a8b0ff985e692, type: 3}
+  m_Script: {fileID: 11500000, guid: 5e25220fbca4eb446ae5ef3da929e2ba, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Exploration.RuinBlockDrop
   salvage: {fileID: 11400000, guid: 96a60523ff509c84ba84cf35f6084bde, type: 2}
@@ -1487,7 +1487,7 @@ GameObject:
   - component: {fileID: 2729635789503819112}
   - component: {fileID: 3090551395384075630}
   - component: {fileID: 8459458150944899517}
-  - component: {fileID: 5005583244963172366}
+  - component: {fileID: 3270215143776122103}
   - component: {fileID: 636819322712926611}
   m_Layer: 0
   m_Name: RuinChest_Visible
@@ -1552,7 +1552,7 @@ MonoBehaviour:
   Item: {fileID: 0}
   Hp: 120
   onGrid: 1
---- !u!114 &5005583244963172366
+--- !u!114 &3270215143776122103
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -1561,7 +1561,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 3713996069415855304}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6638323f5ed5e1c4486a8b0ff985e692, type: 3}
+  m_Script: {fileID: 11500000, guid: 5e25220fbca4eb446ae5ef3da929e2ba, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Exploration.RuinBlockDrop
   salvage: {fileID: 11400000, guid: 0757598308dac2d4991806a8e934dd77, type: 2}
@@ -1609,7 +1609,7 @@ GameObject:
   - component: {fileID: 1069921960423567005}
   - component: {fileID: 6294274377379794818}
   - component: {fileID: 6452805021651083536}
-  - component: {fileID: 7756540884292465007}
+  - component: {fileID: 2111836936683007088}
   m_Layer: 0
   m_Name: DomeCap_0
   m_TagString: Untagged
@@ -1725,7 +1725,7 @@ MonoBehaviour:
   Item: {fileID: 0}
   Hp: 280
   onGrid: 1
---- !u!114 &7756540884292465007
+--- !u!114 &2111836936683007088
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -1734,7 +1734,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 3719099451039128890}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6638323f5ed5e1c4486a8b0ff985e692, type: 3}
+  m_Script: {fileID: 11500000, guid: 5e25220fbca4eb446ae5ef3da929e2ba, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Exploration.RuinBlockDrop
   salvage: {fileID: 11400000, guid: 96a60523ff509c84ba84cf35f6084bde, type: 2}
@@ -1842,7 +1842,7 @@ GameObject:
   - component: {fileID: 5162305917118456891}
   - component: {fileID: 3929189363566106576}
   - component: {fileID: 7553896513996433926}
-  - component: {fileID: 3639463488374381231}
+  - component: {fileID: 6035651654378460204}
   m_Layer: 0
   m_Name: Airlock_Top
   m_TagString: Untagged
@@ -1958,7 +1958,7 @@ MonoBehaviour:
   Item: {fileID: 0}
   Hp: 260
   onGrid: 1
---- !u!114 &3639463488374381231
+--- !u!114 &6035651654378460204
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -1967,7 +1967,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 4725854265832982567}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6638323f5ed5e1c4486a8b0ff985e692, type: 3}
+  m_Script: {fileID: 11500000, guid: 5e25220fbca4eb446ae5ef3da929e2ba, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Exploration.RuinBlockDrop
   salvage: {fileID: 11400000, guid: 96a60523ff509c84ba84cf35f6084bde, type: 2}
@@ -1985,7 +1985,7 @@ GameObject:
   - component: {fileID: 4621225624754117305}
   - component: {fileID: 3838226780625930930}
   - component: {fileID: 2150104870936184556}
-  - component: {fileID: 2004518045947555862}
+  - component: {fileID: 8898720741365957102}
   m_Layer: 0
   m_Name: DomeCap_2
   m_TagString: Untagged
@@ -2101,7 +2101,7 @@ MonoBehaviour:
   Item: {fileID: 0}
   Hp: 280
   onGrid: 1
---- !u!114 &2004518045947555862
+--- !u!114 &8898720741365957102
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -2110,7 +2110,150 @@ MonoBehaviour:
   m_GameObject: {fileID: 4876771037529401914}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6638323f5ed5e1c4486a8b0ff985e692, type: 3}
+  m_Script: {fileID: 11500000, guid: 5e25220fbca4eb446ae5ef3da929e2ba, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Exploration.RuinBlockDrop
+  salvage: {fileID: 11400000, guid: 96a60523ff509c84ba84cf35f6084bde, type: 2}
+  count: 1
+--- !u!1 &5232268375636798125
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1847156978776116707}
+  - component: {fileID: 7090128288273084159}
+  - component: {fileID: 8684138850301178400}
+  - component: {fileID: 6008038184501058208}
+  - component: {fileID: 4785054339037648911}
+  - component: {fileID: 8666584557144444686}
+  m_Layer: 0
+  m_Name: Rubble_1
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1847156978776116707
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5232268375636798125}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0.7519439, y: -0.1221003, z: 0.21029685, w: 0.6127374}
+  m_LocalPosition: {x: 1.3016189, y: 0.87738, z: -1.1744626}
+  m_LocalScale: {x: 0.54345006, y: 0.43476006, z: 0.54345006}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 8029781515975587551}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!33 &7090128288273084159
+MeshFilter:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5232268375636798125}
+  m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!65 &8684138850301178400
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5232268375636798125}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 1, y: 1, z: 1}
+  m_Center: {x: 0, y: 0, z: 0}
+--- !u!23 &6008038184501058208
+MeshRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5232268375636798125}
+  m_Enabled: 1
+  m_CastShadows: 1
+  m_ReceiveShadows: 1
+  m_DynamicOccludee: 1
+  m_StaticShadowCaster: 0
+  m_MotionVectors: 1
+  m_LightProbeUsage: 1
+  m_ReflectionProbeUsage: 1
+  m_RayTracingMode: 2
+  m_RayTraceProcedural: 0
+  m_RayTracingAccelStructBuildFlagsOverride: 0
+  m_RayTracingAccelStructBuildFlags: 1
+  m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
+  m_RenderingLayerMask: 1
+  m_RendererPriority: 0
+  m_Materials:
+  - {fileID: 2100000, guid: 476800cd228cd964ea7762d269bc3703, type: 2}
+  m_StaticBatchInfo:
+    firstSubMesh: 0
+    subMeshCount: 0
+  m_StaticBatchRoot: {fileID: 0}
+  m_ProbeAnchor: {fileID: 0}
+  m_LightProbeVolumeOverride: {fileID: 0}
+  m_ScaleInLightmap: 1
+  m_ReceiveGI: 1
+  m_PreserveUVs: 1
+  m_IgnoreNormalsForChartDetection: 0
+  m_ImportantGI: 0
+  m_StitchLightmapSeams: 1
+  m_SelectedEditorRenderState: 3
+  m_MinimumChartSize: 4
+  m_AutoUVMaxDistance: 0.5
+  m_AutoUVMaxAngle: 89
+  m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
+  m_SortingLayerID: 0
+  m_SortingLayer: 0
+  m_SortingOrder: 0
+  m_MaskInteraction: 0
+  m_AdditionalVertexStreams: {fileID: 0}
+--- !u!114 &4785054339037648911
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5232268375636798125}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1f8b8158c33b76f4ea33ec446a9e15a3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.PlacedBlock
+  Item: {fileID: 0}
+  Hp: 80
+  onGrid: 1
+--- !u!114 &8666584557144444686
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5232268375636798125}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5e25220fbca4eb446ae5ef3da929e2ba, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Exploration.RuinBlockDrop
   salvage: {fileID: 11400000, guid: 96a60523ff509c84ba84cf35f6084bde, type: 2}
@@ -2128,7 +2271,7 @@ GameObject:
   - component: {fileID: 1713054059997565093}
   - component: {fileID: 5719446700222910871}
   - component: {fileID: 3891229477086225866}
-  - component: {fileID: 5236183327621675578}
+  - component: {fileID: 2537118881945940335}
   m_Layer: 0
   m_Name: Airlock_R
   m_TagString: Untagged
@@ -2244,7 +2387,7 @@ MonoBehaviour:
   Item: {fileID: 0}
   Hp: 280
   onGrid: 1
---- !u!114 &5236183327621675578
+--- !u!114 &2537118881945940335
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -2253,7 +2396,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 5795532331261677385}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6638323f5ed5e1c4486a8b0ff985e692, type: 3}
+  m_Script: {fileID: 11500000, guid: 5e25220fbca4eb446ae5ef3da929e2ba, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Exploration.RuinBlockDrop
   salvage: {fileID: 11400000, guid: 96a60523ff509c84ba84cf35f6084bde, type: 2}
@@ -2271,7 +2414,7 @@ GameObject:
   - component: {fileID: 6915345379897962124}
   - component: {fileID: 2549502910751257962}
   - component: {fileID: 3147683882731231911}
-  - component: {fileID: 2055801917977539450}
+  - component: {fileID: 8351838196587209449}
   m_Layer: 0
   m_Name: Wall_N_1
   m_TagString: Untagged
@@ -2348,7 +2491,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: da4bb6bd15c992745b06ef79282f840e, type: 2}
+  - {fileID: 2100000, guid: c18c761e834327141bdf76282617155b, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -2387,7 +2530,7 @@ MonoBehaviour:
   Item: {fileID: 0}
   Hp: 260
   onGrid: 1
---- !u!114 &2055801917977539450
+--- !u!114 &8351838196587209449
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -2396,7 +2539,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 5855627028632979215}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6638323f5ed5e1c4486a8b0ff985e692, type: 3}
+  m_Script: {fileID: 11500000, guid: 5e25220fbca4eb446ae5ef3da929e2ba, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Exploration.RuinBlockDrop
   salvage: {fileID: 11400000, guid: 96a60523ff509c84ba84cf35f6084bde, type: 2}
@@ -2511,7 +2654,7 @@ GameObject:
   - component: {fileID: 1141204283562254439}
   - component: {fileID: 4935032742254334511}
   - component: {fileID: 7633390434091493290}
-  - component: {fileID: 9207097334822854928}
+  - component: {fileID: 8275386205611042796}
   m_Layer: 0
   m_Name: Dais
   m_TagString: Untagged
@@ -2627,7 +2770,7 @@ MonoBehaviour:
   Item: {fileID: 0}
   Hp: 300
   onGrid: 1
---- !u!114 &9207097334822854928
+--- !u!114 &8275386205611042796
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -2636,7 +2779,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 6381126836220395091}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6638323f5ed5e1c4486a8b0ff985e692, type: 3}
+  m_Script: {fileID: 11500000, guid: 5e25220fbca4eb446ae5ef3da929e2ba, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Exploration.RuinBlockDrop
   salvage: {fileID: 11400000, guid: 9225024033f905e4187afc15d721e060, type: 2}
@@ -2688,8 +2831,9 @@ Transform:
   - {fileID: 323412543899439459}
   - {fileID: 5177714397802848773}
   - {fileID: 7577200456819236693}
-  - {fileID: 1582139822828033798}
+  - {fileID: 1847156978776116707}
   - {fileID: 898494227188510852}
+  - {fileID: 5717658197541776727}
   - {fileID: 2729635789503819112}
   - {fileID: 5354383315756266303}
   m_Father: {fileID: 0}
@@ -2707,7 +2851,7 @@ GameObject:
   - component: {fileID: 8994910397819306210}
   - component: {fileID: 8461945697941159399}
   - component: {fileID: 3809343164352314565}
-  - component: {fileID: 3252169348937983726}
+  - component: {fileID: 5878321949459533666}
   m_Layer: 0
   m_Name: Foundation_Deck
   m_TagString: Untagged
@@ -2823,7 +2967,7 @@ MonoBehaviour:
   Item: {fileID: 0}
   Hp: 380
   onGrid: 1
---- !u!114 &3252169348937983726
+--- !u!114 &5878321949459533666
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -2832,7 +2976,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 7011912035374900981}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6638323f5ed5e1c4486a8b0ff985e692, type: 3}
+  m_Script: {fileID: 11500000, guid: 5e25220fbca4eb446ae5ef3da929e2ba, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Exploration.RuinBlockDrop
   salvage: {fileID: 11400000, guid: 9225024033f905e4187afc15d721e060, type: 2}
@@ -2850,7 +2994,7 @@ GameObject:
   - component: {fileID: 4930232670411499303}
   - component: {fileID: 5687468414984716049}
   - component: {fileID: 5457071264346648873}
-  - component: {fileID: 5800701791823189245}
+  - component: {fileID: 4975763959397829115}
   m_Layer: 0
   m_Name: Rubble_4
   m_TagString: Untagged
@@ -2866,9 +3010,9 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 7396229762500790641}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.052905217, y: 0.4358268, z: 0.7765053, w: -0.45199072}
-  m_LocalPosition: {x: 2.0820942, y: 0.8597978, z: 1.295445}
-  m_LocalScale: {x: 0.49949437, y: 0.3995955, z: 0.49949437}
+  m_LocalRotation: {x: -0.07981031, y: 0.096543014, z: 0.47262976, w: 0.87231356}
+  m_LocalPosition: {x: 1.0654036, y: 0.7767726, z: -2.3118858}
+  m_LocalScale: {x: 0.2919315, y: 0.23354521, z: 0.2919315}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 8029781515975587551}
@@ -2966,7 +3110,7 @@ MonoBehaviour:
   Item: {fileID: 0}
   Hp: 80
   onGrid: 1
---- !u!114 &5800701791823189245
+--- !u!114 &4975763959397829115
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -2975,7 +3119,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 7396229762500790641}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6638323f5ed5e1c4486a8b0ff985e692, type: 3}
+  m_Script: {fileID: 11500000, guid: 5e25220fbca4eb446ae5ef3da929e2ba, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Exploration.RuinBlockDrop
   salvage: {fileID: 11400000, guid: 9225024033f905e4187afc15d721e060, type: 2}
@@ -2993,7 +3137,7 @@ GameObject:
   - component: {fileID: 5310128069394354051}
   - component: {fileID: 2098618056895710898}
   - component: {fileID: 4280002360071370560}
-  - component: {fileID: 1224907324747837751}
+  - component: {fileID: 90258073503001075}
   m_Layer: 0
   m_Name: DomeDrum
   m_TagString: Untagged
@@ -3111,7 +3255,7 @@ MonoBehaviour:
   Item: {fileID: 0}
   Hp: 240
   onGrid: 1
---- !u!114 &1224907324747837751
+--- !u!114 &90258073503001075
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -3120,7 +3264,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 8126300088205602660}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6638323f5ed5e1c4486a8b0ff985e692, type: 3}
+  m_Script: {fileID: 11500000, guid: 5e25220fbca4eb446ae5ef3da929e2ba, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Exploration.RuinBlockDrop
   salvage: {fileID: 11400000, guid: 96a60523ff509c84ba84cf35f6084bde, type: 2}
@@ -3340,7 +3484,7 @@ GameObject:
   - component: {fileID: 4270486889193636722}
   - component: {fileID: 2545327593727229441}
   - component: {fileID: 5797227665377048759}
-  - component: {fileID: 5229220345321227768}
+  - component: {fileID: 3775455967793753004}
   m_Layer: 0
   m_Name: Airlock_L
   m_TagString: Untagged
@@ -3456,7 +3600,7 @@ MonoBehaviour:
   Item: {fileID: 0}
   Hp: 280
   onGrid: 1
---- !u!114 &5229220345321227768
+--- !u!114 &3775455967793753004
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -3465,7 +3609,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 8827244900005835241}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6638323f5ed5e1c4486a8b0ff985e692, type: 3}
+  m_Script: {fileID: 11500000, guid: 5e25220fbca4eb446ae5ef3da929e2ba, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Exploration.RuinBlockDrop
   salvage: {fileID: 11400000, guid: 96a60523ff509c84ba84cf35f6084bde, type: 2}
