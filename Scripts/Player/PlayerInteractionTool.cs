@@ -321,17 +321,25 @@ namespace VoxelEngine.Player
 
             if (buildDown)
             {
-                // Armor equip (RMB an armor item in the hotbar → wear it; old armor returns to inventory).
+                // Armor equip (RMB an armor item in the hotbar -> wear it). Routes through the
+                // dedicated armor equipment slot so the inventory UI and PlayerStats.equippedArmor
+                // (read by TakeDamage) stay perfectly in sync. Old armor returns to the inventory.
                 {
                     var armorStack = inventory.ActiveStack;
                     if (!armorStack.IsEmpty && armorStack.item is VoxelEngine.Combat.ArmorItem armor)
                     {
-                        var ps = GetComponentInParent<VoxelEngine.Player.PlayerStats>();
-                        if (ps != null)
+                        var equipment = inventory.GetComponent<VoxelEngine.Player.PlayerEquipment>();
+                        if (equipment != null)
                         {
-                            if (ps.equippedArmor != null)
-                                inventory.container.Insert(new VoxelEngine.Items.ItemStack(ps.equippedArmor, 1));
-                            ps.equippedArmor = armor;
+                            var armorSlots = equipment.ArmorSlots;
+                            // Return currently-equipped armor (if any) to the inventory first.
+                            var current = equipment.EquippedArmor;
+                            if (current != null)
+                            {
+                                armorSlots.SetSlot(0, new VoxelEngine.Items.ItemStack());             // clear -> sync sets equippedArmor = null
+                                inventory.container.Insert(new VoxelEngine.Items.ItemStack(current, 1));
+                            }
+                            armorSlots.SetSlot(0, new VoxelEngine.Items.ItemStack { item = armor, count = 1 }); // sync sets equippedArmor = armor
                             inventory.container.Remove(armor, 1);
                             inventory.container.RaiseChanged();
                             VoxelEngine.UI.BuildFeedbackHud.Show("Equipped", armor.displayName, armor.icon, new Color(0.4f, 0.8f, 1f));

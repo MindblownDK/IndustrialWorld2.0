@@ -6,6 +6,7 @@
 // PlayerController flight contract.
 
 using UnityEngine;
+using VoxelEngine.Combat;
 using VoxelEngine.Items;
 
 namespace VoxelEngine.Player
@@ -16,10 +17,12 @@ namespace VoxelEngine.Player
         public const int JetpackSlotCount = 2;
         public const int HelmetSlotCount = 1;
         public const int OxygenTankSlotCount = 1;
+        public const int ArmorSlotCount      = 1;
 
         [SerializeField] private ItemContainer _jetpackSlots;
         [SerializeField] private ItemContainer _helmetSlots;
         [SerializeField] private ItemContainer _oxygenTankSlots;
+        [SerializeField] private ItemContainer _armorSlots;
         private Inventory _inventory;
 
         public ItemContainer JetpackSlots
@@ -35,6 +38,11 @@ namespace VoxelEngine.Player
         public ItemContainer OxygenTankSlots
         {
             get { EnsureContainers(); return _oxygenTankSlots; }
+        }
+
+        public ItemContainer ArmorSlots
+        {
+            get { EnsureContainers(); return _armorSlots; }
         }
 
         private void Awake()
@@ -56,6 +64,14 @@ namespace VoxelEngine.Player
             if (_oxygenTankSlots == null) _oxygenTankSlots = new ItemContainer("Oxygen Tank Slot", OxygenTankSlotCount);
             else _oxygenTankSlots.Resize(OxygenTankSlotCount);
             _oxygenTankSlots.AcceptFilter = (item, wanted) => item is OxygenTankItem ? Mathf.Min(1, wanted) : 0;
+
+            if (_armorSlots == null) _armorSlots = new ItemContainer("Armor Slot", ArmorSlotCount);
+            else _armorSlots.Resize(ArmorSlotCount);
+            _armorSlots.AcceptFilter = (item, wanted) => item is ArmorItem ? Mathf.Min(1, wanted) : 0;
+            // Keep PlayerStats.equippedArmor (read by TakeDamage) in lock-step with the slot
+            // so drag-equip / shift-click / the legacy RMB path all agree on what's worn.
+            _armorSlots.OnChanged -= SyncEquippedArmor;
+            _armorSlots.OnChanged += SyncEquippedArmor;
         }
 
         public bool HasUsableJetpack => GetBestJetpack() != null;
@@ -101,6 +117,23 @@ namespace VoxelEngine.Player
                 var stack = _oxygenTankSlots.GetSlot(0);
                 return stack != null && !stack.IsEmpty ? stack.item as OxygenTankItem : null;
             }
+        }
+
+        /// <summary>Currently worn Crusader armor (drives PlayerStats damage mitigation).</summary>
+        public ArmorItem EquippedArmor
+        {
+            get
+            {
+                EnsureContainers();
+                var stack = _armorSlots.GetSlot(0);
+                return stack != null && !stack.IsEmpty ? stack.item as ArmorItem : null;
+            }
+        }
+
+        private void SyncEquippedArmor()
+        {
+            var ps = PlayerStats.Instance;
+            if (ps != null) ps.equippedArmor = EquippedArmor;
         }
 
         public bool HasBreathingKit => EquippedHelmet != null && EquippedHelmet.sealedHelmet && EquippedOxygenTank != null;

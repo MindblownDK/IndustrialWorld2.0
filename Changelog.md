@@ -1,9 +1,34 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.41.6-dev`
+**Current Version:** `6.42.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.42.0-dev] Armor Equipment Slots + Enemy Debug Cleanup
+
+**Type:** MINOR — new equipment UI (save-compatible) + combat debug cleanup.
+
+**Added — Armor equipment slots in the inventory UI:**
+1. `PlayerEquipment` gains a dedicated single-slot `ArmorSlots` `ItemContainer` (size 1) with an `AcceptFilter` that only accepts `ArmorItem` — mirroring the existing Jetpack / Helmet / Oxygen-tank slot pattern. New serialized field `_armorSlots` (persists across sessions like the other gear slots).
+2. New `EquippedArmor` property + a `SyncEquippedArmor()` hook: the slot's `OnChanged` keeps `PlayerStats.equippedArmor` (read by `TakeDamage` for `-(damageReduction)` mitigation) in lock-step, so **drag-equip, shift-click, and the legacy RMB path all agree** on what's worn. `TakeDamage` is unchanged.
+3. `GameUIController`: a premium slim **ARMOR** card docks to the **right of the inventory panel** (single drag/drop slot + a live "Tier N  − 42% damage" readout + equip hint). It is **hidden whenever crafting, Production Stats, the Recipe Browser, or any opened container/machine/terminal needs the space** (new `AnyCenterOrRightPanelOpen()` guard), so it never overlaps. The inventory + armor are now flex children of one left-dock row so the armor card always hugs the inventory's right edge at any screen size.
+4. **Three equip paths, all synced:** drag armor onto the slot; **shift-click** armor from the backpack (new `QuickTransfer` armor branch) to equip / shift-click the slot to return it; **RMB** an armor item in the hotbar (rewritten in `PlayerInteractionTool` to route through the slot). Dragging non-armor onto the slot is rejected by the `AcceptFilter`; swapping is honoured.
+
+**Removed — Combat diagnostic logging (ghouls now work, so the spam is gone):**
+5. `EnemySpawner`: stripped all `[EnemySpawner]` `Debug.Log` info spam (`RuntimeInitialize`, `Awake`, `At cap`, `Created new spawner`, `Spawned ghoul #N`). Kept only the two genuine runtime guards — `LogWarning` (prefab missing) and `LogError` (prefab missing its `EnemyGhoul` component) — which fire only on real misconfiguration. `EnemyGhoul`: removed the `[Ghoul] Spawned at` log. Tidied the empty `else` and the now-stale header comment.
+
+**Why MINOR:** introduces new persistent equipment state (`ArmorSlots`) and a new UI panel + interaction — save-compatible (old saves load with no armor equipped).
+
+**Files touched:**
+- `Scripts/Player/PlayerEquipment.cs` (`ArmorSlots` + `EquippedArmor` + `SyncEquippedArmor`)
+- `Scripts/UI/GameUIController.cs` (`BuildLeftArea`/`BuildArmorPanel`/`AnyCenterOrRightPanelOpen`, refactored `BuildLeftPanel` to a flex child, `QuickTransfer` armor branch)
+- `Scripts/Player/PlayerInteractionTool.cs` (RMB equip routed through the slot)
+- `Scripts/Combat/EnemySpawner.cs` + `Scripts/Combat/EnemyGhoul.cs` (debug cleanup)
+- `Scripts/Core/GameVersion.cs` (6.41.6 -> 6.42.0)
+- `Changelog.md`
+
+---
 
 ### [6.41.6-dev] Enemy Spawner Compile Fix + Non-Destructive Ghoul Prefab
 

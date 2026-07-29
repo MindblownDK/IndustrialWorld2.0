@@ -46,7 +46,6 @@ namespace VoxelEngine.Combat
             _rb.useGravity = false;
             _rb.freezeRotation = true;
             PickWander();
-            Debug.Log($"[Ghoul] Spawned at {transform.position}");
         }
 
         private void FixedUpdate()

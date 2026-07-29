@@ -1,7 +1,7 @@
 // Assets/Scripts/VoxelEngine/Combat/EnemySpawner.cs
 //
 // Spawns enemy Ghouls near the player as TOP-LEVEL objects. Auto-creates at runtime.
-// Comprehensive logging so spawn issues are immediately diagnosable in the Console.
+// Spawns near the player as a top-level object so radial physics works on spheres.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -26,7 +26,6 @@ namespace VoxelEngine.Combat
         {
             if (ghoulPrefab == null) ghoulPrefab = Resources.Load<GameObject>("Enemies/Ghoul");
             _nextSpawn = Time.time + startGrace;
-            Debug.Log($"[EnemySpawner] Awake — prefab={(ghoulPrefab != null ? "OK" : "NULL")}, grace={startGrace}s");
         }
 
         private void Update()
@@ -62,7 +61,6 @@ namespace VoxelEngine.Combat
 
             if (_alive.Count >= maxAlive)
             {
-                Debug.Log($"[EnemySpawner] At cap ({maxAlive}). Skipping.");
                 return;
             }
 
@@ -79,7 +77,6 @@ namespace VoxelEngine.Combat
             if (ghoul != null)
             {
                 _alive.Add(ghoul);
-                Debug.Log($"[EnemySpawner] Spawned ghoul #{_alive.Count} at {spawnPos} (dist from player: {tangent.magnitude:F1}m)");
             }
             else
             {
@@ -93,16 +90,10 @@ namespace VoxelEngine.Combat
         {
             if (_autoCreated) return;
             _autoCreated = true;
-            Debug.Log("[EnemySpawner] RuntimeInitialize — checking for existing spawner...");
             if (UnityEngine.Object.FindAnyObjectByType<EnemySpawner>() == null)
             {
                 var go = new GameObject("EnemySpawner");
                 go.AddComponent<EnemySpawner>();
-                Debug.Log("[EnemySpawner] Created new spawner GameObject.");
-            }
-            else
-            {
-                Debug.Log("[EnemySpawner] Spawner already exists.");
             }
         }
     }

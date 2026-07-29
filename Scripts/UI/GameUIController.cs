@@ -937,8 +937,9 @@ namespace VoxelEngine.UI
                 _root.pickingMode = PickingMode.Position;
                 _root.style.backgroundColor = new StyleColor(new Color(0,0,0,0.55f));
 
-                // Left panel — player inventory + crafting toggle
-                BuildLeftPanel(_root);
+                // Left area — player inventory, with the ARMOR equipment panel docking
+                // to its right when no crafting/container/stats panel occupies the space.
+                BuildLeftArea(_root);
 
                 // ── MASTER SHIP TERMINAL — rendered FIRST (lowest z-order) so the
                 // inventory stays on the left and, crucially, the crafting screen
@@ -1302,17 +1303,142 @@ namespace VoxelEngine.UI
             }
         }
 
-        // ----- LEFT panel -----
-        private void BuildLeftPanel(VisualElement root)
+        // ── LEFT DOCK ──────────────────────────────────────────────
+        // Inventory panel + (when nothing else needs the space) the slim ARMOR
+        // equipment panel docked to its right. Both are flex children of a single
+        // absolutely-positioned row, so the armor panel always hugs the inventory's
+        // right edge regardless of screen size / window scale.
+        private void BuildLeftArea(VisualElement root)
+        {
+            var row = new VisualElement();
+            row.style.position = Position.Absolute;
+            row.style.top = 12; row.style.bottom = 72;
+            row.style.left = 12;
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.FlexStart;
+            row.pickingMode = PickingMode.Ignore;   // empty gaps fall through to the dimmed backdrop
+            root.Add(row);
+
+            BuildLeftPanel(row);   // inventory (flex child — fills the row height)
+
+            if (!AnyCenterOrRightPanelOpen())
+            {
+                var gap = new VisualElement();
+                gap.style.width = 8;
+                gap.style.flexShrink = 0;
+                row.Add(gap);
+                row.Add(BuildArmorPanel());
+            }
+        }
+
+        // True when a center panel (crafting) or any right panel (production stats,
+        // recipe browser, or an opened container/machine/terminal) is shown — i.e. when
+        // the armor panel would overlap something. The armor panel only renders when false.
+        private bool AnyCenterOrRightPanelOpen()
+        {
+            if (CraftingScreen.Visible) return true;
+            if (_productionStatsOpen || _recipeBrowserOpen) return true;
+            if (_openGridTerminal != null) return true;
+            return _rightContainer != null || _openFurnace != null || _openElectric != null ||
+                   _openCoalGen != null || _openQuarry != null || _openReactor != null ||
+                   _openTurbine != null || _openPortReactor != null || _openProcessor != null ||
+                   _openReprocessor != null || _openElectrolyser != null || _openHydroEngine != null ||
+                   _openGasTank != null || _openWaterPump != null || _openBiofarm != null ||
+                   _openWindTurbine != null || _openStorageTerminal != null || _openServerRack != null ||
+                   _openPatternTerminal != null || _openCraftTerminal != null || _openImporter != null ||
+                   _openExporter != null || _openDiskManipulator != null || _openNAS != null ||
+                   _openPowerstation != null || _openStorageDrawer != null || _openDrawerController != null ||
+                   _openItemDisplay != null || _openCrusher != null || _openAssembler != null ||
+                   _openFunnel != null || _openSplitter != null || _openGridBlock != null ||
+                   _openOilRefinery != null || _openChemPlant != null || _openStation != null ||
+                   _openVoltageStation != null;
+        }
+
+        // Premium slim equipment card: a single drag/drop armor slot + a live
+        // damage-mitigation readout. Drag armor in to equip, drag it out (or
+        // shift-click) to unequip. Backed by PlayerEquipment.ArmorSlots, which keeps
+        // PlayerStats.equippedArmor (read by TakeDamage) in sync automatically.
+        private VisualElement BuildArmorPanel()
+        {
+            var equipment = inventory != null ? inventory.GetComponent<VoxelEngine.Player.PlayerEquipment>() : null;
+
+            var card = MakePanel();
+            card.style.width = 178;
+            card.style.flexShrink = 0;
+            card.style.paddingTop = 11; card.style.paddingBottom = 11;
+            card.style.paddingLeft = 11; card.style.paddingRight = 11;
+
+            var title = new Label("ARMOR");
+            title.style.fontSize = 11;
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            title.style.letterSpacing = 1.6f;
+            title.style.color = UITheme.AccentGold;
+            title.style.marginBottom = 9;
+            card.Add(title);
+
+            if (equipment != null)
+            {
+                var armorSlots = equipment.ArmorSlots;
+
+                var slotHost = new VisualElement();
+                slotHost.style.flexDirection = FlexDirection.Row;
+                slotHost.style.justifyContent = Justify.Center;
+                slotHost.style.marginBottom = 9;
+                slotHost.Add(BuildSlot(armorSlots, 0, armorSlots.GetSlot(0), false));
+                card.Add(slotHost);
+
+                var armor = equipment.EquippedArmor;
+
+                var readout = new VisualElement();
+                readout.style.backgroundColor = new StyleColor(new Color(0.07f, 0.09f, 0.13f, 0.85f));
+                SetBorderRadius(readout, 5);
+                readout.style.paddingTop = 7; readout.style.paddingBottom = 7;
+                readout.style.paddingLeft = 9; readout.style.paddingRight = 9;
+                readout.style.marginBottom = 7;
+
+                var name = new Label(armor != null ? armor.displayName : "Unequipped");
+                name.style.fontSize = 11;
+                name.style.unityFontStyleAndWeight = FontStyle.Bold;
+                name.style.color = armor != null ? new Color(0.40f, 0.88f, 1f) : new Color(0.62f, 0.64f, 0.70f);
+                name.style.whiteSpace = WhiteSpace.Normal;
+                name.style.marginBottom = 3;
+                readout.Add(name);
+
+                var stat = new Label(armor != null
+                    ? $"Tier {armor.tier}   -{armor.damageReduction * 100f:0}% damage"
+                    : "Drag armor here to equip");
+                stat.style.fontSize = 10;
+                stat.style.color = armor != null ? new Color(0.34f, 0.92f, 0.55f) : new Color(0.55f, 0.57f, 0.63f);
+                stat.style.whiteSpace = WhiteSpace.Normal;
+                readout.Add(stat);
+                card.Add(readout);
+
+                var hint = new Label("Shift-click to (un)equip");
+                hint.style.fontSize = 9;
+                hint.style.color = new Color(0.48f, 0.50f, 0.56f);
+                hint.style.unityTextAlign = TextAnchor.MiddleCenter;
+                card.Add(hint);
+            }
+            else
+            {
+                card.Add(MakeMutedLabel("(no equipment component)"));
+            }
+
+            return card;
+        }
+
+        private void BuildLeftPanel(VisualElement parent)
         {
             var panel = MakePanel();
-            panel.style.position = Position.Absolute;
-            panel.style.top = 12; panel.style.bottom = 72;
-            panel.style.left = 12;
-            panel.style.width = new StyleLength(new Length(32f, LengthUnit.Percent));
-            panel.style.minWidth = 240;
-            panel.style.maxWidth = new StyleLength(new Length(42f, LengthUnit.Percent));
-            root.Add(panel);
+            // Laid out as a flex child of the left-area row so the ARMOR panel can dock
+            // to its right. Stretches to the row height (the row is top:12 / bottom:72).
+            panel.style.flexShrink = 1;
+            panel.style.flexGrow   = 0;
+            panel.style.width      = new StyleLength(new Length(32f, LengthUnit.Percent));
+            panel.style.minWidth   = 240;
+            panel.style.maxWidth   = new StyleLength(new Length(42f, LengthUnit.Percent));
+            panel.style.height     = new StyleLength(new Length(100, LengthUnit.Percent));
+            parent.Add(panel);
 
             panel.Add(MakeTitle("Inventory"));
             panel.Add(BuildInventoryWeightReadout());
@@ -3485,6 +3611,7 @@ namespace VoxelEngine.UI
             var jetpackSlots = equipment != null ? equipment.JetpackSlots : null;
             var helmetSlots = equipment != null ? equipment.HelmetSlots : null;
             var oxygenSlots = equipment != null ? equipment.OxygenTankSlots : null;
+            var armorSlots  = equipment != null ? equipment.ArmorSlots      : null;
 
             if (sourceC == inventory.container && srcStack.item is SpaceHelmetItem && helmetSlots != null)
             {
@@ -3516,7 +3643,23 @@ namespace VoxelEngine.UI
                 return;
             }
 
-            if ((helmetSlots != null && sourceC == helmetSlots) || (oxygenSlots != null && sourceC == oxygenSlots))
+            if (sourceC == inventory.container && srcStack.item is VoxelEngine.Combat.ArmorItem && armorSlots != null)
+            {
+                var cloneArmor = new ItemStack { item = srcStack.item, count = 1, durability = srcStack.durability, payload = srcStack.payload };
+                var leftoverArmor = armorSlots.Insert(cloneArmor);
+                if (leftoverArmor == null || leftoverArmor.count <= 0)
+                {
+                    srcStack.count -= 1;
+                    sourceC.SetSlot(sourceIdx, srcStack.count <= 0 ? new ItemStack() : srcStack);
+                    BuildFeedbackHud.Show("Armor Equipped", srcStack.item.displayName, srcStack.item.icon, srcStack.item.iconTint);
+                    Refresh();
+                }
+                else BuildFeedbackHud.Show("Armor Slot Full", "Remove the current armor first", srcStack.item.icon, Color.yellow);
+                return;
+            }
+
+            if ((helmetSlots != null && sourceC == helmetSlots) || (oxygenSlots != null && sourceC == oxygenSlots) ||
+                (armorSlots != null && sourceC == armorSlots))
             {
                 var cloneGear = new ItemStack { item = srcStack.item, count = srcStack.count, durability = srcStack.durability, payload = srcStack.payload };
                 var leftoverGear = inventory.container.Insert(cloneGear);
