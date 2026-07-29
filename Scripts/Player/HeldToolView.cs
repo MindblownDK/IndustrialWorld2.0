@@ -282,6 +282,9 @@ namespace VoxelEngine.Player
             switch (item)
             {
                 // Weapons are more specific than ToolItem — handle before the tool cases.
+                case VoxelEngine.Combat.WeaponItem wpn when wpn.attackMode == VoxelEngine.Combat.WeaponItem.AttackMode.Ranged && wpn.range > 20f:
+                    BuildRifle(root, tint);
+                    break;
                 case VoxelEngine.Combat.WeaponItem wpn when wpn.attackMode == VoxelEngine.Combat.WeaponItem.AttackMode.Ranged:
                     BuildPistol(root, tint);
                     break;
@@ -406,17 +409,47 @@ namespace VoxelEngine.Player
 
         private static void BuildPistol(GameObject root, Color tint)
         {
-            Color wood = new Color(0.22f, 0.16f, 0.10f);
+            Color metal = new Color(0.35f, 0.36f, 0.38f);
+            Color dark  = new Color(0.16f, 0.16f, 0.18f);
+            Color gripC = new Color(0.20f, 0.14f, 0.09f);
+            // Slide (top)
+            AddPrimitive(root, PrimitiveType.Cube, new Vector3(0, 0.06f, 0.05f), Vector3.zero, new Vector3(0.05f, 0.05f, 0.22f), metal);
+            // Frame
+            AddPrimitive(root, PrimitiveType.Cube, new Vector3(0, 0.005f, 0.02f), Vector3.zero, new Vector3(0.044f, 0.04f, 0.15f), dark);
+            // Barrel / muzzle
+            AddPrimitive(root, PrimitiveType.Cylinder, new Vector3(0, 0.06f, 0.18f), new Vector3(90, 0, 0), new Vector3(0.02f, 0.03f, 0.02f), dark);
             // Grip (angled)
-            AddPrimitive(root, PrimitiveType.Cube, new Vector3(-0.02f, -0.10f, 0.01f), new Vector3(15, 0, 0), new Vector3(0.04f, 0.12f, 0.05f), wood);
-            // Body / frame
-            AddPrimitive(root, PrimitiveType.Cube, new Vector3(0, 0.02f, 0.02f), Vector3.zero, new Vector3(0.055f, 0.08f, 0.16f), tint);
-            // Barrel
-            AddPrimitive(root, PrimitiveType.Cylinder, new Vector3(0, 0.05f, 0.13f), new Vector3(90, 0, 0), new Vector3(0.024f, 0.05f, 0.024f), tint);
-            // Front sight
-            AddPrimitive(root, PrimitiveType.Cube, new Vector3(0, 0.075f, 0.05f), Vector3.zero, new Vector3(0.01f, 0.018f, 0.018f), Color.Lerp(tint, Color.white, 0.25f));
+            AddPrimitive(root, PrimitiveType.Cube, new Vector3(0, -0.07f, -0.03f), new Vector3(15, 0, 0), new Vector3(0.04f, 0.11f, 0.05f), gripC);
+            // Magazine
+            AddPrimitive(root, PrimitiveType.Cube, new Vector3(0, -0.085f, 0.035f), new Vector3(8, 0, 0), new Vector3(0.034f, 0.07f, 0.03f), dark);
             // Trigger guard
-            AddPrimitive(root, PrimitiveType.Cube, new Vector3(-0.02f, -0.035f, 0.045f), Vector3.zero, new Vector3(0.018f, 0.045f, 0.03f), wood);
+            AddPrimitive(root, PrimitiveType.Cube, new Vector3(0, -0.03f, 0.035f), Vector3.zero, new Vector3(0.016f, 0.04f, 0.03f), dark);
+            // Sights
+            AddPrimitive(root, PrimitiveType.Cube, new Vector3(0, 0.10f, 0.14f), Vector3.zero, new Vector3(0.008f, 0.018f, 0.012f), metal);
+            AddPrimitive(root, PrimitiveType.Cube, new Vector3(0, 0.10f, -0.03f), Vector3.zero, new Vector3(0.03f, 0.014f, 0.012f), metal);
+        }
+
+        private static void BuildRifle(GameObject root, Color tint)
+        {
+            Color metal = new Color(0.30f, 0.31f, 0.33f);
+            Color dark  = new Color(0.14f, 0.14f, 0.16f);
+            Color wood  = new Color(0.22f, 0.16f, 0.10f);
+            // Receiver (long body)
+            AddPrimitive(root, PrimitiveType.Cube, new Vector3(0, 0.04f, 0f), Vector3.zero, new Vector3(0.05f, 0.06f, 0.34f), metal);
+            // Long barrel
+            AddPrimitive(root, PrimitiveType.Cylinder, new Vector3(0, 0.06f, 0.24f), new Vector3(90, 0, 0), new Vector3(0.018f, 0.16f, 0.018f), dark);
+            // Muzzle
+            AddPrimitive(root, PrimitiveType.Cylinder, new Vector3(0, 0.06f, 0.37f), new Vector3(90, 0, 0), new Vector3(0.022f, 0.02f, 0.022f), dark);
+            // Stock
+            AddPrimitive(root, PrimitiveType.Cube, new Vector3(0, 0.02f, -0.21f), new Vector3(-5, 0, 0), new Vector3(0.05f, 0.09f, 0.12f), wood);
+            // Grip
+            AddPrimitive(root, PrimitiveType.Cube, new Vector3(0, -0.05f, -0.04f), new Vector3(15, 0, 0), new Vector3(0.04f, 0.09f, 0.05f), wood);
+            // Magazine (curved)
+            AddPrimitive(root, PrimitiveType.Cube, new Vector3(0, -0.085f, 0.06f), new Vector3(-12, 0, 0), new Vector3(0.034f, 0.11f, 0.05f), dark);
+            // Scope
+            AddPrimitive(root, PrimitiveType.Cylinder, new Vector3(0, 0.11f, 0.02f), new Vector3(90, 0, 0), new Vector3(0.018f, 0.13f, 0.018f), dark);
+            // Front sight
+            AddPrimitive(root, PrimitiveType.Cube, new Vector3(0, 0.09f, 0.22f), Vector3.zero, new Vector3(0.008f, 0.02f, 0.012f), metal);
         }
 
         private static void BuildGrenade(GameObject root, Color tint)

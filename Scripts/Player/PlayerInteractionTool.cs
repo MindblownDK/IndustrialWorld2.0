@@ -824,21 +824,76 @@ namespace VoxelEngine.Player
         }
 
         // ── COMBAT (Phase 1) — apply weapon damage to whatever IDamageable the crosshair hits. ──
+        private static Material _effectMat;
+        private static Material EffectMat
+        {
+            get
+            {
+                if (_effectMat == null)
+                {
+                    Shader sh = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Color") ?? Shader.Find("Sprites/Default");
+                    _effectMat = new Material(sh) { color = new Color(1f, 0.85f, 0.35f) };
+                }
+                return _effectMat;
+            }
+        }
+
+        private static void MuzzleFlash(Vector3 pos)
+        {
+            var go = new GameObject("MuzzleFlash");
+            go.transform.position = pos;
+            var sphere = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            Object.Destroy(sphere.GetComponent<Collider>());
+            sphere.transform.SetParent(go.transform, false);
+            sphere.transform.localScale = Vector3.one * 0.14f;
+            sphere.GetComponent<Renderer>().sharedMaterial = EffectMat;
+            var light = go.AddComponent<Light>();
+            light.type = LightType.Point; light.color = new Color(1f, 0.7f, 0.35f); light.range = 6f; light.intensity = 6f;
+            Object.Destroy(go, 0.07f);
+        }
+
+        private static void Tracer(Vector3 from, Vector3 to)
+        {
+            Vector3 dir = to - from;
+            float len = dir.magnitude;
+            if (len < 0.01f) return;
+            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            Object.Destroy(go.GetComponent<Collider>());
+            go.transform.position = (from + to) * 0.5f;
+            go.transform.rotation = Quaternion.LookRotation(dir);
+            go.transform.localScale = new Vector3(0.025f, 0.025f, len);
+            go.GetComponent<Renderer>().sharedMaterial = EffectMat;
+            Object.Destroy(go, 0.06f);
+        }
+
         private void HandleWeaponAttack(VoxelEngine.Combat.WeaponItem weapon, Ray ray)
         {
             float dist = Mathf.Max(0.5f, weapon.range);
 
             if (weapon.attackMode == VoxelEngine.Combat.WeaponItem.AttackMode.Ranged)
             {
+                // Ammo: spend one per shot if the weapon uses ammo. No ammo → no shot.
+                if (weapon.ammoItem != null &&
+                    inventory.container.Remove(weapon.ammoItem, Mathf.Max(1, weapon.ammoPerShot)) <= 0)
+                {
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Empty", "Out of " + weapon.ammoItem.displayName, weapon.ammoItem.icon, Color.yellow);
+                    return;
+                }
+                inventory.container.RaiseChanged();
+
+                Vector3 muzzle = ray.origin + ray.direction * 0.6f;
+                Vector3 hitPoint = ray.origin + ray.direction * dist;
                 if (TryRaycastIgnoringSelf(ray, out var hit, dist))
                 {
+                    hitPoint = hit.point;
                     var d = hit.collider.GetComponentInParent<VoxelEngine.Combat.IDamageable>();
                     if (d != null && d.IsAlive)
                         d.TakeDamage(new VoxelEngine.Combat.DamageEvent {
                             amount = weapon.damage, type = weapon.damageType,
                             point = hit.point, direction = ray.direction, source = gameObject });
                 }
-                Debug.DrawRay(ray.origin, ray.direction * dist, Color.yellow, 0.08f);
+                MuzzleFlash(muzzle);
+                Tracer(muzzle, hitPoint);
                 GetComponent<VoxelEngine.Player.HeldToolView>()?.DoRecoil();
                 return;
             }

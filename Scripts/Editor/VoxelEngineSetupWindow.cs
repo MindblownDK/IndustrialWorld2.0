@@ -11721,6 +11721,13 @@ root =>
             var steelIngot = FindItem("Item_SteelIngot");
             var copperWire = FindItem("Item_CopperLVWire");
 
+            // ── Ammo (bullets) — consumed by ranged weapons. ──
+            var bullets = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{COMBAT_ITEMS}/Item_Bullets.asset");
+            bullets.itemId = "item_bullets"; bullets.displayName = "Bullets";
+            bullets.description = "Standard ammunition for ranged weapons (pistol, rifle).";
+            bullets.iconTint = new Color(0.78f, 0.70f, 0.30f); bullets.maxStack = 99; bullets.massPerUnit = 0.05f; bullets.category = "Combat";
+            EditorUtility.SetDirty(bullets);
+
             var explosionMat = MakeColoredMat(COMBAT_MATS, "Mat_Explosion", new Color(1.0f, 0.45f, 0.10f));
 
             // ── Grenade (throwable explosive, consumable) ──
@@ -11752,6 +11759,10 @@ root =>
             rifle.attackCooldown = 0.35f;
             rifle.iconTint = new Color(0.42f, 0.42f, 0.44f);
             rifle.maxStack = 1; rifle.massPerUnit = 4f; rifle.category = "Combat";
+            rifle.ammoItem = bullets;
+            // Wire ammo onto the existing Iron Pistol too (created by Step 22).
+            var pistolItem = FindItem("Weapon_IronPistol");
+            if (pistolItem is VoxelEngine.Combat.WeaponItem pistol) { pistol.ammoItem = bullets; EditorUtility.SetDirty(pistol); }
             EditorUtility.SetDirty(rifle);
 
             // ── Recipes ──
@@ -11759,13 +11770,16 @@ root =>
                 (ironPlate, 2), (coal, 2));
             AddRecipe("Recipe_Rifle", "Iron Rifle", rifle, 1, VoxelEngine.Crafting.StationTier.Assembler, true,
                 (ironPlate, 4), (steelIngot, 3), (copperWire, 3));
+            AddRecipe("Recipe_Bullets", "Bullets", bullets, 8, VoxelEngine.Crafting.StationTier.Assembler, true,
+                (ironPlate, 1), (coal, 1));
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
             EditorUtility.DisplayDialog("Voxel Engine — Player Weapons (Phase 3k)",
                 "Player weapons built:\n\n" +
                 "• Grenade — throwable explosive (LMB to lob). Radial-gravity arc, fuse, AoE blast, chain reactions. Consumable (stack of 8). Craft at the Assembler.\n" +
-                "• Iron Rifle — long-range (50 m) semi-auto kinetic weapon. Reach flyers and bosses. Craft at the Assembler.\n\n" +
+                "• Iron Rifle — long-range (50 m) semi-auto kinetic weapon. Reach flyers and bosses. Craft at the Assembler.\n" +
+                "• Bullets — ammo for the pistol + rifle (spent per shot). Craft at the Assembler. Both guns now require ammo.\n\n" +
                 "Hold either in your hotbar and press LMB. The grenade is spent per throw; the rifle auto-fires while held.",
                 "OK");
         }

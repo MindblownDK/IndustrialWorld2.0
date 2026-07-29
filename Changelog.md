@@ -1,9 +1,34 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.52.6-dev`
+**Current Version:** `6.53.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.53.0-dev] Pass 2 — Gun Viewmodels + Muzzle Flash/Tracer + Ammo
+
+**Type:** MINOR — weapon polish + ammo system (save-compatible). The second half of the weapons pass.
+
+**Gun viewmodels (now read as guns):**
+1. `HeldToolView` rebuilt the **pistol** (slide, frame, barrel/muzzle, angled grip, magazine, trigger guard, front + rear sights) and added a dedicated **rifle** viewmodel (long receiver + long barrel, stock, grip, curved magazine, scope, sight). The viewmodel switch now routes long-range (`range > 20`) Ranged weapons to the rifle, others to the pistol.
+
+**See them shoot:**
+2. **Muzzle flash** (a bright sphere + a brief point light at the muzzle) and a **tracer** (a thin beam from muzzle to the hit point) now fire on every Ranged shot, in `HandleWeaponAttack`.
+
+**Ammo system:**
+3. `WeaponItem` gains `ammoItem` + `ammoPerShot`. Ranged weapons spend ammo per shot; **out of ammo = no shot** (with an "Empty" prompt).
+4. **Bullets** item + an Assembler recipe (iron plate + coal → 8 bullets). Step 33 wires the **rifle and the existing Iron Pistol** to use bullets (re-run Step 33 to apply).
+
+**To use:** recompile → re-run **Step 33** (creates Bullets + wires ammo onto the pistol & rifle) → craft Bullets at the Assembler → your guns now clearly look like guns, flash + tracer on fire, and consume bullets.
+
+**Files touched:**
+- `Scripts/Combat/WeaponItem.cs` (`ammoItem`/`ammoPerShot`)
+- `Scripts/Player/HeldToolView.cs` (rebuilt pistol + new rifle + switch routing)
+- `Scripts/Player/PlayerInteractionTool.cs` (ammo spend, muzzle flash, tracer, EffectMat/MuzzleFlash/Tracer)
+- `Scripts/Editor/VoxelEngineSetupWindow.cs` (Step 33: Bullets item + recipe + pistol/rifle ammo wiring)
+- `Scripts/Core/GameVersion.cs` (6.52.6 -> 6.53.0), `Changelog.md`
+
+---
 
 ### [6.52.6-dev] Explosion material fix — no more purple/magenta particles
 

@@ -28,6 +28,12 @@ namespace VoxelEngine.Combat
         [Tooltip("Seconds between attacks (auto-fire while LMB is held).")]
         public float attackCooldown = 0.5f;
 
+        [Header("Ammo (Ranged weapons)")]
+        [Tooltip("Ammo item consumed per shot. Leave null for no ammo requirement.")]
+        public ItemDefinition ammoItem;
+        [Tooltip("Ammo consumed per shot.")]
+        public int ammoPerShot = 1;
+
         [Header("Thrown / Explosive (AttackMode.Thrown)")]
         [Tooltip("Explosion radius in metres.")]
         public float explosionRadius = 5f;
