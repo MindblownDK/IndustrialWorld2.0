@@ -1120,22 +1120,6 @@ namespace VoxelEngine.UI
             return wrapper;
         }
 
-        private VisualElement BuildEquipmentRow(VoxelEngine.Player.PlayerEquipment equipment)
-        {
-            var row = new VisualElement();
-            row.style.flexDirection = FlexDirection.Row;
-            row.style.alignItems = Align.FlexStart;
-            row.style.justifyContent = Justify.SpaceBetween;
-            row.style.marginTop = 4;
-            row.style.marginBottom = 8;
-
-            var jet = BuildJetpackSlotsPanel(equipment);
-            var life = BuildLifeSupportSlotsPanel(equipment);
-            row.Add(jet);
-            row.Add(life);
-            return row;
-        }
-
         private VisualElement BuildJetpackSlotsPanel(VoxelEngine.Player.PlayerEquipment equipment)
         {
             var box = new VisualElement();
@@ -1327,7 +1311,7 @@ namespace VoxelEngine.UI
                 gap.style.width = 8;
                 gap.style.flexShrink = 0;
                 row.Add(gap);
-                row.Add(BuildArmorPanel());
+                row.Add(BuildEquipmentPanel());
             }
         }
 
@@ -1354,27 +1338,29 @@ namespace VoxelEngine.UI
                    _openVoltageStation != null;
         }
 
-        // Premium slim equipment card: a single drag/drop armor slot + a live
-        // damage-mitigation readout. Drag armor in to equip, drag it out (or
-        // shift-click) to unequip. Backed by PlayerEquipment.ArmorSlots, which keeps
-        // PlayerStats.equippedArmor (read by TakeDamage) in sync automatically.
-        private VisualElement BuildArmorPanel()
+        // Premium equipment panel docked to the right of the inventory: ARMOR +
+        // JETPACK BAY + LIFE SUPPORT, grouped in one card. Hidden whenever a center
+        // panel (crafting) or any right panel (production stats, recipe browser, or an
+        // opened container/machine/terminal) needs the space. The armor slot syncs
+        // PlayerStats.equippedArmor (read by TakeDamage) automatically.
+        private VisualElement BuildEquipmentPanel()
         {
             var equipment = inventory != null ? inventory.GetComponent<VoxelEngine.Player.PlayerEquipment>() : null;
 
             var card = MakePanel();
-            card.style.width = 178;
+            card.style.width = 184;
             card.style.flexShrink = 0;
-            card.style.paddingTop = 11; card.style.paddingBottom = 11;
+            card.style.paddingTop = 11; card.style.paddingBottom = 12;
             card.style.paddingLeft = 11; card.style.paddingRight = 11;
 
-            var title = new Label("ARMOR");
-            title.style.fontSize = 11;
-            title.style.unityFontStyleAndWeight = FontStyle.Bold;
-            title.style.letterSpacing = 1.6f;
-            title.style.color = UITheme.AccentGold;
-            title.style.marginBottom = 9;
-            card.Add(title);
+            // ── ARMOR ───────────────────────────────────────────
+            var armorTitle = new Label("ARMOR");
+            armorTitle.style.fontSize = 11;
+            armorTitle.style.unityFontStyleAndWeight = FontStyle.Bold;
+            armorTitle.style.letterSpacing = 1.6f;
+            armorTitle.style.color = UITheme.AccentGold;
+            armorTitle.style.marginBottom = 7;
+            card.Add(armorTitle);
 
             if (equipment != null)
             {
@@ -1383,41 +1369,42 @@ namespace VoxelEngine.UI
                 var slotHost = new VisualElement();
                 slotHost.style.flexDirection = FlexDirection.Row;
                 slotHost.style.justifyContent = Justify.Center;
-                slotHost.style.marginBottom = 9;
+                slotHost.style.marginBottom = 7;
                 slotHost.Add(BuildSlot(armorSlots, 0, armorSlots.GetSlot(0), false));
                 card.Add(slotHost);
 
                 var armor = equipment.EquippedArmor;
+                if (armor != null)
+                {
+                    var readout = new VisualElement();
+                    readout.style.backgroundColor = new StyleColor(new Color(0.07f, 0.09f, 0.13f, 0.85f));
+                    SetBorderRadius(readout, 5);
+                    readout.style.paddingTop = 6; readout.style.paddingBottom = 6;
+                    readout.style.paddingLeft = 9; readout.style.paddingRight = 9;
+                    readout.style.marginBottom = 10;
+                    readout.style.flexDirection = FlexDirection.Row;
+                    readout.style.justifyContent = Justify.Center;
 
-                var readout = new VisualElement();
-                readout.style.backgroundColor = new StyleColor(new Color(0.07f, 0.09f, 0.13f, 0.85f));
-                SetBorderRadius(readout, 5);
-                readout.style.paddingTop = 7; readout.style.paddingBottom = 7;
-                readout.style.paddingLeft = 9; readout.style.paddingRight = 9;
-                readout.style.marginBottom = 7;
+                    var stat = new Label($"Tier {armor.tier}   -{armor.damageReduction * 100f:0}% damage");
+                    stat.style.fontSize = 10;
+                    stat.style.unityFontStyleAndWeight = FontStyle.Bold;
+                    stat.style.color = new Color(0.34f, 0.92f, 0.55f);
+                    stat.style.whiteSpace = WhiteSpace.Normal;
+                    readout.Add(stat);
+                    card.Add(readout);
+                }
+                else
+                {
+                    var air = new VisualElement();
+                    air.style.height = 6;
+                    card.Add(air);
+                }
 
-                var name = new Label(armor != null ? armor.displayName : "Unequipped");
-                name.style.fontSize = 11;
-                name.style.unityFontStyleAndWeight = FontStyle.Bold;
-                name.style.color = armor != null ? new Color(0.40f, 0.88f, 1f) : new Color(0.62f, 0.64f, 0.70f);
-                name.style.whiteSpace = WhiteSpace.Normal;
-                name.style.marginBottom = 3;
-                readout.Add(name);
+                // ── JETPACK BAY ─────────────────────────────────
+                card.Add(BuildJetpackSlotsPanel(equipment));
 
-                var stat = new Label(armor != null
-                    ? $"Tier {armor.tier}   -{armor.damageReduction * 100f:0}% damage"
-                    : "Drag armor here to equip");
-                stat.style.fontSize = 10;
-                stat.style.color = armor != null ? new Color(0.34f, 0.92f, 0.55f) : new Color(0.55f, 0.57f, 0.63f);
-                stat.style.whiteSpace = WhiteSpace.Normal;
-                readout.Add(stat);
-                card.Add(readout);
-
-                var hint = new Label("Shift-click to (un)equip");
-                hint.style.fontSize = 9;
-                hint.style.color = new Color(0.48f, 0.50f, 0.56f);
-                hint.style.unityTextAlign = TextAnchor.MiddleCenter;
-                card.Add(hint);
+                // ── LIFE SUPPORT ────────────────────────────────
+                card.Add(BuildLifeSupportSlotsPanel(equipment));
             }
             else
             {
@@ -1442,10 +1429,6 @@ namespace VoxelEngine.UI
 
             panel.Add(MakeTitle("Inventory"));
             panel.Add(BuildInventoryWeightReadout());
-
-            var equipment = inventory != null ? inventory.GetComponent<VoxelEngine.Player.PlayerEquipment>() : null;
-            if (equipment != null)
-                panel.Add(BuildEquipmentRow(equipment));
 
             // Backpack grid with sort button
             panel.Add(BuildSortableSlotGrid(inventory.container, Inventory.HOTBAR_SIZE, Inventory.TOTAL_SIZE));

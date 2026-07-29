@@ -1,9 +1,27 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.42.0-dev`
+**Current Version:** `6.42.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.42.1-dev] Equipment Panel — Jetpack Bay + Life Support Moved In; Armor Readout Trimmed
+
+**Type:** PATCH — UI refinement of the 6.42.0 equipment panel, save-compatible.
+
+**Changed — One grouped equipment panel:**
+1. The right-side card is now a full **equipment panel** (renamed `BuildArmorPanel` -> `BuildEquipmentPanel`) holding **ARMOR + JETPACK BAY + LIFE SUPPORT** together, instead of armor-only. The Jetpack Bay and Life Support rows were lifted out of the inventory panel (`BuildLeftPanel`) and dropped the now-unused `BuildEquipmentRow` wrapper. The inventory panel is now just title / weight / backpack grid / toggles.
+2. **Removed the `"Unequipped"` text** and the **`"Shift-click to (un)equip"` hint** from the armor section. When no armor is worn the slot simply sits empty; when armor is worn it shows a compact centered `"Tier N  − 42% damage"` pill. The Jetpack/Life-Support status pills (`ONLINE`/`EMPTY`, `SEALED`/`OPEN`) are untouched.
+3. Card widened slightly (178 -> 184 px) so the 2-slot Jetpack/Life-Support rows breathe.
+
+**Behaviour note:** because all gear now lives in the equipment panel, it hides (alongside the panel) whenever a center panel (crafting) or any right panel (production stats, recipe browser, container/machine) is open — same rule as before. The gear is reachable again the moment those close.
+
+**Files touched:**
+- `Scripts/UI/GameUIController.cs` (`BuildEquipmentPanel`, removed `BuildEquipmentRow`, trimmed armor readout)
+- `Scripts/Core/GameVersion.cs` (6.42.0 -> 6.42.1)
+- `Changelog.md`
+
+---
 
 ### [6.42.0-dev] Armor Equipment Slots + Enemy Debug Cleanup
 
