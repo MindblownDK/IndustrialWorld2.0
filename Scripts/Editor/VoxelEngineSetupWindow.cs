@@ -327,6 +327,13 @@ namespace VoxelEngine.EditorTools
                 "  • Spawns rarely in Mountains/Steppes. Re-runnable. Idempotent.");
             AddWizardButton(scroll, "28. Build Mythical Enemy — Griffin (Phase 3f, flying)", BuildGriffinContent, 40);
 
+            AddInfo(scroll,
+                "Step 29 builds the Karkadann mythical enemy (Combat Phase 3g, non-destructive):\n" +
+                "  • Massive armored brute that telegraphs then CHARGES in a straight line\n" +
+                "  • Heavy frontal armor — flank/rear it for full damage; trample + knockback\n" +
+                "  • Spawns rarely in Steppes/Desert. Re-runnable. Idempotent.");
+            AddWizardButton(scroll, "29. Build Mythical Enemy — Karkadann (Phase 3g, charger)", BuildKarkadannContent, 40);
+
             AddSpacer(scroll, 20);
         }
 
@@ -11108,6 +11115,147 @@ root =>
                 "Spawns rarely in Mountains/Steppes (biome scatter). Saved to Resources/Enemies.",
                 "OK");
         }
+
+        // ============================================================
+        //   STEP 29 - MYTHICAL ENEMY: KARKADANN (Combat Phase 3g). A
+        //   massive armored horned brute that telegraphs then CHARGES
+        //   in a straight line (trample + knockback). Heavy frontal
+        //   armor — flank/rear it for full damage. Radial-aligned;
+        //   detaches from the chunk on Awake. Non-destructive.
+        //   Re-runnable. Idempotent.
+        // ============================================================
+        private void BuildKarkadannContent()
+        {
+            EnsureFolder("Assets/Resources");
+            EnsureFolder("Assets/Resources/Enemies");
+            const string FAUNA_ROOT  = ASSET_ROOT + "/Fauna";
+            const string FAUNA_ITEMS = FAUNA_ROOT + "/Items";
+            const string FAUNA_MATS  = FAUNA_ROOT + "/Materials";
+            EnsureFolder(FAUNA_ROOT);
+            EnsureFolder(FAUNA_ITEMS);
+            EnsureFolder(FAUNA_MATS);
+
+            // ── Drop items ──
+            var hornFragment = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{FAUNA_ITEMS}/Item_KarkadannHorn.asset");
+            hornFragment.itemId = "item_karkadann_horn"; hornFragment.displayName = "Karkadann Horn Fragment";
+            hornFragment.description = "A shard of a Karkadann's great horn. A high-impact armor and heavy-machinery material.";
+            hornFragment.iconTint = new Color(0.88f, 0.82f, 0.66f); hornFragment.maxStack = 20; hornFragment.massPerUnit = 1.0f; hornFragment.category = "Resources";
+            EditorUtility.SetDirty(hornFragment);
+
+            var platedHide = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{FAUNA_ITEMS}/Item_PlatedHide.asset");
+            platedHide.itemId = "item_plated_hide"; platedHide.displayName = "Plated Hide";
+            platedHide.description = "Thick armored plates from a Karkadann. The toughest armor and machinery material.";
+            platedHide.iconTint = new Color(0.42f, 0.40f, 0.38f); platedHide.maxStack = 30; platedHide.massPerUnit = 1.2f; platedHide.category = "Resources";
+            EditorUtility.SetDirty(platedHide);
+
+            // ── Materials ──
+            var hideGrey  = MakeColoredMat(FAUNA_MATS, "Mat_KarkadannHide",  new Color(0.46f, 0.43f, 0.40f));
+            var hideDark  = MakeColoredMat(FAUNA_MATS, "Mat_KarkadannDark",  new Color(0.26f, 0.24f, 0.22f));
+            var plateDark = MakeColoredMat(FAUNA_MATS, "Mat_KarkadannPlate", new Color(0.20f, 0.18f, 0.17f));
+            var ivory     = MakeColoredMat(FAUNA_MATS, "Mat_KarkadannHorn",  new Color(0.88f, 0.82f, 0.66f));
+            var hoofDark  = MakeColoredMat(FAUNA_MATS, "Mat_KarkadannHoof",  new Color(0.12f, 0.11f, 0.10f));
+            var eyeRed    = MakeColoredMat(FAUNA_MATS, "Mat_KarkadannEye",   new Color(0.85f, 0.18f, 0.14f));
+
+            void AddPart(GameObject root, string n, Vector3 pos, Vector3 euler, Vector3 scale, Material m)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                go.name = n; go.transform.SetParent(root.transform, false);
+                go.transform.localPosition = pos; go.transform.localEulerAngles = euler; go.transform.localScale = scale;
+                go.GetComponent<Renderer>().sharedMaterial = m;
+                var col = go.GetComponent<Collider>(); if (col != null) UnityEngine.Object.DestroyImmediate(col);
+            }
+
+            var root = new GameObject("Karkadann");
+            // ── Big bulky body ──
+            AddPart(root, "Body",  new Vector3(0f, 1.15f, 0f),    Vector3.zero, new Vector3(0.95f, 1.0f, 2.0f),  hideGrey);
+            AddPart(root, "Chest", new Vector3(0f, 1.10f, 0.85f), Vector3.zero, new Vector3(1.00f, 1.0f, 0.6f),  hideGrey);
+            AddPart(root, "Rump",  new Vector3(0f, 1.20f, -0.9f), Vector3.zero, new Vector3(1.00f, 0.95f, 0.6f), hideGrey);
+            AddPart(root, "Belly", new Vector3(0f, 0.70f, 0f),    Vector3.zero, new Vector3(0.80f, 0.40f, 1.6f), hideDark);
+            AddPart(root, "Hump",  new Vector3(0f, 1.70f, 0.5f),  Vector3.zero, new Vector3(0.90f, 0.50f, 0.7f), hideDark);
+            // ── Spinal armor plates ──
+            AddPart(root, "Plate1", new Vector3(0f, 1.75f, 0.10f),  Vector3.zero, new Vector3(0.70f, 0.22f, 0.5f), plateDark);
+            AddPart(root, "Plate2", new Vector3(0f, 1.70f, -0.30f), Vector3.zero, new Vector3(0.70f, 0.22f, 0.5f), plateDark);
+            AddPart(root, "Plate3", new Vector3(0f, 1.62f, -0.65f), Vector3.zero, new Vector3(0.65f, 0.22f, 0.45f),plateDark);
+            // ── Head + great horn ──
+            AddPart(root, "Head",   new Vector3(0f, 1.20f, 1.2f),  new Vector3(-10f, 0f, 0f), new Vector3(0.70f, 0.70f, 0.70f), hideGrey);
+            AddPart(root, "Snout",  new Vector3(0f, 1.05f, 1.55f), new Vector3(-10f, 0f, 0f), new Vector3(0.50f, 0.40f, 0.40f), hideGrey);
+            AddPart(root, "Horn",   new Vector3(0f, 1.62f, 1.30f), new Vector3(-25f, 0f, 0f), new Vector3(0.18f, 0.55f, 0.18f), ivory);
+            AddPart(root, "HornTip",new Vector3(0f, 1.92f, 1.45f), new Vector3(-25f, 0f, 0f), new Vector3(0.12f, 0.28f, 0.12f), ivory);
+            AddPart(root, "SideHornL", new Vector3(-0.26f, 1.50f, 1.25f), new Vector3(-10f, 0f, -22f), new Vector3(0.10f, 0.32f, 0.10f), ivory);
+            AddPart(root, "SideHornR", new Vector3( 0.26f, 1.50f, 1.25f), new Vector3(-10f, 0f,  22f), new Vector3(0.10f, 0.32f, 0.10f), ivory);
+            AddPart(root, "EarL", new Vector3(-0.36f, 1.46f, 1.10f), Vector3.zero, new Vector3(0.12f, 0.08f, 0.20f), hideGrey);
+            AddPart(root, "EarR", new Vector3( 0.36f, 1.46f, 1.10f), Vector3.zero, new Vector3(0.12f, 0.08f, 0.20f), hideGrey);
+            AddPart(root, "EyeL", new Vector3(-0.23f, 1.30f, 1.42f), Vector3.zero, new Vector3(0.06f, 0.06f, 0.04f), eyeRed);
+            AddPart(root, "EyeR", new Vector3( 0.23f, 1.30f, 1.42f), Vector3.zero, new Vector3(0.06f, 0.06f, 0.04f), eyeRed);
+            // ── Thick legs + hooves ──
+            AddPart(root, "LegFL", new Vector3(-0.35f, 0.55f,  0.7f), Vector3.zero, new Vector3(0.28f, 1.1f, 0.32f), hideGrey);
+            AddPart(root, "LegFR", new Vector3( 0.35f, 0.55f,  0.7f), Vector3.zero, new Vector3(0.28f, 1.1f, 0.32f), hideGrey);
+            AddPart(root, "LegBL", new Vector3(-0.35f, 0.55f, -0.7f), Vector3.zero, new Vector3(0.28f, 1.1f, 0.32f), hideGrey);
+            AddPart(root, "LegBR", new Vector3( 0.35f, 0.55f, -0.7f), Vector3.zero, new Vector3(0.28f, 1.1f, 0.32f), hideGrey);
+            AddPart(root, "HoofFL", new Vector3(-0.35f, 0.06f,  0.7f), Vector3.zero, new Vector3(0.32f, 0.14f, 0.36f), hoofDark);
+            AddPart(root, "HoofFR", new Vector3( 0.35f, 0.06f,  0.7f), Vector3.zero, new Vector3(0.32f, 0.14f, 0.36f), hoofDark);
+            AddPart(root, "HoofBL", new Vector3(-0.35f, 0.06f, -0.7f), Vector3.zero, new Vector3(0.32f, 0.14f, 0.36f), hoofDark);
+            AddPart(root, "HoofBR", new Vector3( 0.35f, 0.06f, -0.7f), Vector3.zero, new Vector3(0.32f, 0.14f, 0.36f), hoofDark);
+            // ── Tail ──
+            AddPart(root, "Tail",     new Vector3(0f, 1.10f, -1.25f), new Vector3(20f, 0f, 0f), new Vector3(0.12f, 0.12f, 0.4f),  hideGrey);
+            AddPart(root, "TailTuft", new Vector3(0f, 1.0f, -1.55f),  Vector3.zero,            new Vector3(0.16f, 0.16f, 0.16f), hideDark);
+
+            var cap = root.AddComponent<CapsuleCollider>();
+            cap.height = 1.9f; cap.radius = 0.7f; cap.center = new Vector3(0f, 1.1f, 0f);
+            var rb = root.AddComponent<Rigidbody>();
+            rb.useGravity = false; rb.freezeRotation = true;
+            var kark = root.AddComponent<VoxelEngine.Combat.EnemyKarkadann>();
+            kark.drops = new VoxelEngine.Items.ItemDefinition[] { hornFragment, platedHide };
+            kark.minDrops = 1; kark.maxDrops = 3; kark.dropCount = 1;
+            var hbar = root.AddComponent<VoxelEngine.Combat.CreatureHealthBar>();
+            hbar.target = kark;
+            hbar.fillColor = new Color(0.60f, 0.52f, 0.46f);
+            hbar.fillColorLow = new Color(0.80f, 0.20f, 0.15f);
+
+            const string path = "Assets/Resources/Enemies/Karkadann.prefab";
+            GameObject prefab;
+            if (AssetDatabase.LoadMainAssetAtPath(path) != null)
+            {
+                prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+            else
+            {
+                prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+
+            // Inject into open-ground biome scatter (reliable spawn path; same as the Ghoul).
+            var br = AssetDatabase.LoadAssetAtPath<VoxelEngine.Biomes.BiomeRegistry>(ASSET_ROOT + "/BiomeRegistry.asset");
+            if (br != null && prefab != null)
+            {
+                foreach (var biome in br.biomes)
+                {
+                    if (biome == null) continue;
+                    if (biome.biomeName != "Steppes" && biome.biomeName != "Desert") continue;
+                    var list = (biome.scatter != null)
+                        ? new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>(biome.scatter)
+                        : new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>();
+                    list.RemoveAll(e => e.prefab != null && e.prefab.name == "Karkadann");
+                    list.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = prefab, density = 0.002f, minScale = 0.95f, maxScale = 1.15f, minHeight = 0, maxHeight = 9999 });
+                    biome.scatter = list.ToArray();
+                    EditorUtility.SetDirty(biome);
+                }
+                EditorUtility.SetDirty(br);
+            }
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Voxel Engine — Mythical Enemy: Karkadann (Phase 3g)",
+                "The Karkadann is built:\n\n" +
+                "• Massive armored brute: bulky body, spinal plates, great horn + side horns (~30 parts)\n" +
+                "• Telegraphs (paws the ground) then CHARGES in a straight line — dodge it or get trampled + knocked back\n" +
+                "• Heavy FRONTAL ARMOR (60% reduced from the front); flank/rear it, or hit it while it recovers from a missed charge\n" +
+                "• Drops Karkadann Horn Fragment + Plated Hide\n\n" +
+                "Spawns rarely in Steppes/Desert (biome scatter). Saved to Resources/Enemies.",
+                "OK");
+        }
+
 
 
 

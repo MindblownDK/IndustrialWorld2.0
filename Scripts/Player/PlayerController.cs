@@ -119,6 +119,9 @@ namespace VoxelEngine.Player
         /// <summary>Zero the internal velocity (used when mounting / dismounting a mount).</summary>
         public void ResetVelocity() => _velocity = Vector3.zero;
 
+        /// <summary>Apply an external velocity impulse (e.g. a Karkadann charge knockback). Decays via normal friction.</summary>
+        public void ApplyImpulse(Vector3 worldImpulse) => _velocity += worldImpulse;
+
         private void Awake()
         {
             _cc = GetComponent<CharacterController>();

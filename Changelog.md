@@ -1,9 +1,32 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.46.0-dev`
+**Current Version:** `6.47.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.47.0-dev] Phase 3g — Mythical Enemy: Karkadann (charge + frontal armor)
+
+**Type:** MINOR — new hostile creature + knockback hook (save-compatible). Phase 3g of the Combat pillar.
+
+**Added — the Karkadann (heavy bruiser):**
+1. `Scripts/Combat/EnemyKarkadann.cs` (new) — a massive armored brute with a **telegraphed straight-line CHARGE**: it paws the ground (windup), locks a line on your current position, then sprints; **dodge it or it tramples you for heavy damage + knockback**, then it's briefly stunned (a damage window). **Heavy FRONTAL ARMOR** (60% reduced from the front) via a `TakeDamage` override that checks the hit direction vs. its facing — so you must **flank/rear it for full damage** (the armor is disabled while it's recovering from a missed charge). Reuses `Damageable` + `CreatureHealthBar`; radial-aligned; detaches from the chunk on Awake.
+2. `PlayerController.ApplyImpulse(Vector3)` — small new hook so the charge knockback shoves the player (decays via normal friction).
+3. **Step 29 (wizard):** a premium ~30-part model (bulky body, spinal armor plates, great central horn + side horns, thick legs + hooves, red eyes), `EnemyKarkadann` (140 HP), drops **Karkadann Horn Fragment + Plated Hide**, saved non-destructively to `Resources/Enemies/Karkadann.prefab`, injected into **Steppes/Desert** biome scatter (rare, density 0.002).
+
+**To play:** run Step 29 → explore **Steppes/Desert** → a Karkadann may appear. It will paw the ground (telegraph) then charge — sidestep the line, then punish its recovery, or flank it to bypass the frontal armor.
+
+**Why MINOR:** new enemy + new player knockback API — save-compatible.
+
+**Tunable (prefab):** `chargeRange`, `chargeWindup`, `chargeSpeed`, `chargeDamage`, `chargeKnockback`, `chargeCooldown`, `frontalArmorReduction`, `recoverTime`.
+
+**Files touched:**
+- `Scripts/Combat/EnemyKarkadann.cs` (new)
+- `Scripts/Player/PlayerController.cs` (`ApplyImpulse`)
+- `Scripts/Editor/VoxelEngineSetupWindow.cs` (Step 29 `BuildKarkadannContent` + button)
+- `Scripts/Core/GameVersion.cs` (6.46.0 -> 6.47.0), `Roadmap.md` + `Changelog.md`
+
+---
 
 ### [6.46.0-dev] Phase 3f — Mythical Enemy: Griffin (flying, dive-bomb)
 
