@@ -1,9 +1,23 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.52.3-dev`
+**Current Version:** `6.52.4-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.52.4-dev] Explosion compile fix — MinMaxCurve (CS0029)
+
+**Type:** PATCH — compile fix (save-compatible).
+
+The 6.52.3 fix used bare `new AnimationCurve(...)` assigned to the particle size-over-lifetime curve, but there is **no implicit conversion** from `AnimationCurve` to `ParticleSystem.MinMaxCurve` → `CS0029`. Now explicitly wrapped: `new ParticleSystem.MinMaxCurve(new AnimationCurve(...))` in both the smoke and fire size curves.
+
+Recompile and the particle grenade explosions should build and run.
+
+**Files touched:**
+- `Scripts/Combat/Explosion.cs` (wrap AnimationCurve in MinMaxCurve)
+- `Scripts/Core/GameVersion.cs` (6.52.3 -> 6.52.4), `Changelog.md`
+
+---
 
 ### [6.52.3-dev] Explosion compile fixes (unblocks 6.52.1 particle VFX + 6.52.2 throw-anywhere)
 
