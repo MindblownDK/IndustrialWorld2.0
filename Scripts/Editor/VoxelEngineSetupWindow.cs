@@ -348,6 +348,13 @@ namespace VoxelEngine.EditorTools
                 "  • Spawns VERY rarely in Mountains/Steppes. Re-runnable. Idempotent.");
             AddWizardButton(scroll, "31. Build Mythical Mini-Boss — Roc (Phase 3i)", BuildRocContent, 40);
 
+            AddInfo(scroll,
+                "Step 32 builds the Basilisk mythical enemy (Combat Phase 3j, non-destructive):\n" +
+                "  • Serpentine beast with a PETRIFYING GAZE (cone slow) + venomous bite\n" +
+                "  • Circle-strafe to break the gaze. Drops Basilisk Scale + Petrified Eye\n" +
+                "  • Spawns rarely in Forest/Steppes. Re-runnable. Idempotent.");
+            AddWizardButton(scroll, "32. Build Mythical Enemy — Basilisk (Phase 3j, petrify gaze)", BuildBasiliskContent, 40);
+
             AddSpacer(scroll, 20);
         }
 
@@ -11538,6 +11545,144 @@ root =>
                 "Spawns VERY rarely in Mountains/Steppes (biome scatter). Saved to Resources/Enemies.",
                 "OK");
         }
+
+        // ============================================================
+        //   STEP 32 - MYTHICAL ENEMY: BASILISK (Combat Phase 3j). A
+        //   large serpentine beast with a PETRIFYING GAZE (forward cone
+        //   that slows you — circle-strafe to break it) and a venomous
+        //   bite. Radial-aligned; detaches from the chunk on Awake.
+        //   Non-destructive. Re-runnable. Idempotent.
+        // ============================================================
+        private void BuildBasiliskContent()
+        {
+            EnsureFolder("Assets/Resources");
+            EnsureFolder("Assets/Resources/Enemies");
+            const string FAUNA_ROOT  = ASSET_ROOT + "/Fauna";
+            const string FAUNA_ITEMS = FAUNA_ROOT + "/Items";
+            const string FAUNA_MATS  = FAUNA_ROOT + "/Materials";
+            EnsureFolder(FAUNA_ROOT);
+            EnsureFolder(FAUNA_ITEMS);
+            EnsureFolder(FAUNA_MATS);
+
+            // ── Drop items ──
+            var scale = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{FAUNA_ITEMS}/Item_BasiliskScale.asset");
+            scale.itemId = "item_basilisk_scale"; scale.displayName = "Basilisk Scale";
+            scale.description = "A shimmering scale from a Basilisk. A resilient material for toxin-resistant armor.";
+            scale.iconTint = new Color(0.40f, 0.52f, 0.28f); scale.maxStack = 30; scale.massPerUnit = 0.4f; scale.category = "Resources";
+            EditorUtility.SetDirty(scale);
+
+            var eye = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{FAUNA_ITEMS}/Item_PetrifiedEye.asset");
+            eye.itemId = "item_petrified_eye"; eye.displayName = "Petrified Eye";
+            eye.description = "A fossilized Basilisk eye that still holds a trace of its gaze. A prized alchemy and relic reagent.";
+            eye.iconTint = new Color(0.95f, 0.82f, 0.18f); eye.maxStack = 10; eye.massPerUnit = 0.3f; eye.category = "Resources";
+            EditorUtility.SetDirty(eye);
+
+            // ── Materials ──
+            var scaleBody = MakeColoredMat(FAUNA_MATS, "Mat_BasiliskBody", new Color(0.40f, 0.50f, 0.28f));
+            var bellyDark = MakeColoredMat(FAUNA_MATS, "Mat_BasiliskBelly",new Color(0.28f, 0.32f, 0.20f));
+            var crestRed  = MakeColoredMat(FAUNA_MATS, "Mat_BasiliskCrest",new Color(0.80f, 0.20f, 0.18f));
+            var eyeGlow   = MakeColoredMat(FAUNA_MATS, "Mat_BasiliskEye",  new Color(1.00f, 0.85f, 0.15f));
+            var fangPale  = MakeColoredMat(FAUNA_MATS, "Mat_BasiliskFang", new Color(0.85f, 0.82f, 0.70f));
+
+            void AddPart(GameObject root, string n, Vector3 pos, Vector3 euler, Vector3 scale2, Material m)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                go.name = n; go.transform.SetParent(root.transform, false);
+                go.transform.localPosition = pos; go.transform.localEulerAngles = euler; go.transform.localScale = scale2;
+                go.GetComponent<Renderer>().sharedMaterial = m;
+                var col = go.GetComponent<Collider>(); if (col != null) UnityEngine.Object.DestroyImmediate(col);
+            }
+
+            var root = new GameObject("Basilisk");
+            // ── Long sinuous body (segmented, tapering to a tail) ──
+            AddPart(root, "Seg1", new Vector3(0f, 0.70f, 0.70f),  Vector3.zero, new Vector3(0.50f, 0.50f, 0.60f), scaleBody);
+            AddPart(root, "Seg2", new Vector3(0f, 0.65f, 0.20f),  Vector3.zero, new Vector3(0.50f, 0.50f, 0.60f), scaleBody);
+            AddPart(root, "Seg3", new Vector3(0f, 0.60f, -0.30f), Vector3.zero, new Vector3(0.48f, 0.48f, 0.60f), scaleBody);
+            AddPart(root, "Seg4", new Vector3(0f, 0.55f, -0.80f), Vector3.zero, new Vector3(0.44f, 0.44f, 0.60f), scaleBody);
+            AddPart(root, "Seg5", new Vector3(0f, 0.50f, -1.30f), Vector3.zero, new Vector3(0.38f, 0.38f, 0.55f), scaleBody);
+            AddPart(root, "Seg6", new Vector3(0f, 0.46f, -1.75f), Vector3.zero, new Vector3(0.30f, 0.30f, 0.50f), scaleBody);
+            AddPart(root, "TailTip", new Vector3(0f, 0.42f, -2.10f), Vector3.zero, new Vector3(0.20f, 0.20f, 0.40f), scaleBody);
+            AddPart(root, "Belly", new Vector3(0f, 0.42f, -0.30f), Vector3.zero, new Vector3(0.36f, 0.18f, 2.2f), bellyDark);
+            // ── Dorsal crest spikes ──
+            AddPart(root, "Crest1", new Vector3(0f, 0.95f, 0.50f), new Vector3(-15f, 0f, 0f), new Vector3(0.06f, 0.22f, 0.10f), crestRed);
+            AddPart(root, "Crest2", new Vector3(0f, 0.92f, 0.00f), new Vector3(-15f, 0f, 0f), new Vector3(0.06f, 0.24f, 0.10f), crestRed);
+            AddPart(root, "Crest3", new Vector3(0f, 0.88f, -0.50f),new Vector3(-15f, 0f, 0f), new Vector3(0.06f, 0.22f, 0.10f), crestRed);
+            AddPart(root, "Crest4", new Vector3(0f, 0.84f, -1.00f),new Vector3(-15f, 0f, 0f), new Vector3(0.06f, 0.20f, 0.10f), crestRed);
+            // ── Head + frill + snout + fangs ──
+            AddPart(root, "Head",   new Vector3(0f, 0.85f, 1.05f), new Vector3(-6f, 0f, 0f), new Vector3(0.45f, 0.45f, 0.55f), scaleBody);
+            AddPart(root, "Frill",  new Vector3(0f, 1.06f, 0.92f), new Vector3(-10f, 0f, 0f),new Vector3(0.52f, 0.34f, 0.08f), crestRed);
+            AddPart(root, "Snout",  new Vector3(0f, 0.78f, 1.38f), Vector3.zero,            new Vector3(0.32f, 0.28f, 0.30f), scaleBody);
+            AddPart(root, "Jaw",    new Vector3(0f, 0.70f, 1.32f), Vector3.zero,            new Vector3(0.30f, 0.10f, 0.25f), bellyDark);
+            AddPart(root, "FangL",  new Vector3(-0.08f, 0.70f, 1.46f), new Vector3(15f, 0f, 0f), new Vector3(0.04f, 0.13f, 0.04f), fangPale);
+            AddPart(root, "FangR",  new Vector3( 0.08f, 0.70f, 1.46f), new Vector3(15f, 0f, 0f), new Vector3(0.04f, 0.13f, 0.04f), fangPale);
+            AddPart(root, "EyeL",   new Vector3(-0.17f, 0.93f, 1.16f), Vector3.zero, new Vector3(0.07f, 0.07f, 0.04f), eyeGlow);
+            AddPart(root, "EyeR",   new Vector3( 0.17f, 0.93f, 1.16f), Vector3.zero, new Vector3(0.07f, 0.07f, 0.04f), eyeGlow);
+            // ── Four small clawed legs ──
+            AddPart(root, "LegFL", new Vector3(-0.28f, 0.30f, 0.55f), Vector3.zero, new Vector3(0.10f, 0.55f, 0.12f), scaleBody);
+            AddPart(root, "PawFL", new Vector3(-0.28f, 0.06f, 0.55f), Vector3.zero, new Vector3(0.14f, 0.10f, 0.16f), bellyDark);
+            AddPart(root, "LegFR", new Vector3( 0.28f, 0.30f, 0.55f), Vector3.zero, new Vector3(0.10f, 0.55f, 0.12f), scaleBody);
+            AddPart(root, "PawFR", new Vector3( 0.28f, 0.06f, 0.55f), Vector3.zero, new Vector3(0.14f, 0.10f, 0.16f), bellyDark);
+            AddPart(root, "LegBL", new Vector3(-0.26f, 0.30f, -0.55f),Vector3.zero, new Vector3(0.10f, 0.55f, 0.12f), scaleBody);
+            AddPart(root, "PawBL", new Vector3(-0.26f, 0.06f, -0.55f),Vector3.zero, new Vector3(0.14f, 0.10f, 0.16f), bellyDark);
+            AddPart(root, "LegBR", new Vector3( 0.26f, 0.30f, -0.55f),Vector3.zero, new Vector3(0.10f, 0.55f, 0.12f), scaleBody);
+            AddPart(root, "PawBR", new Vector3( 0.26f, 0.06f, -0.55f),Vector3.zero, new Vector3(0.14f, 0.10f, 0.16f), bellyDark);
+
+            var cap = root.AddComponent<CapsuleCollider>();
+            cap.height = 2.4f; cap.radius = 0.45f; cap.center = new Vector3(0f, 0.6f, -0.3f);
+            var rb = root.AddComponent<Rigidbody>();
+            rb.useGravity = false; rb.freezeRotation = true;
+            var basilisk = root.AddComponent<VoxelEngine.Combat.EnemyBasilisk>();
+            basilisk.drops = new VoxelEngine.Items.ItemDefinition[] { scale, eye };
+            basilisk.minDrops = 1; basilisk.maxDrops = 2; basilisk.dropCount = 1;
+            var hbar = root.AddComponent<VoxelEngine.Combat.CreatureHealthBar>();
+            hbar.target = basilisk;
+            hbar.fillColor = new Color(0.50f, 0.70f, 0.30f);
+            hbar.fillColorLow = new Color(0.70f, 0.20f, 0.20f);
+
+            const string path = "Assets/Resources/Enemies/Basilisk.prefab";
+            GameObject prefab;
+            if (AssetDatabase.LoadMainAssetAtPath(path) != null)
+            {
+                prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+            else
+            {
+                prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+
+            // Inject into forest/open-ground biome scatter (reliable spawn path; same as the Ghoul).
+            var br = AssetDatabase.LoadAssetAtPath<VoxelEngine.Biomes.BiomeRegistry>(ASSET_ROOT + "/BiomeRegistry.asset");
+            if (br != null && prefab != null)
+            {
+                foreach (var biome in br.biomes)
+                {
+                    if (biome == null) continue;
+                    if (biome.biomeName != "Forest" && biome.biomeName != "Steppes") continue;
+                    var list = (biome.scatter != null)
+                        ? new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>(biome.scatter)
+                        : new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>();
+                    list.RemoveAll(e => e.prefab != null && e.prefab.name == "Basilisk");
+                    list.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = prefab, density = 0.0025f, minScale = 0.95f, maxScale = 1.15f, minHeight = 0, maxHeight = 9999 });
+                    biome.scatter = list.ToArray();
+                    EditorUtility.SetDirty(biome);
+                }
+                EditorUtility.SetDirty(br);
+            }
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Voxel Engine — Mythical Enemy: Basilisk (Phase 3j)",
+                "The Basilisk is built:\n\n" +
+                "• Large serpentine beast: segmented body + tail, dorsal crest, frilled head, fangs, glowing eyes (~30 parts)\n" +
+                "• PETRIFYING GAZE — forward cone that slows you (turn toward stone); circle-strafe to break it\n" +
+                "• Venomous bite applies poison\n" +
+                "• Drops Basilisk Scale + (rare) Petrified Eye\n\n" +
+                "Spawns rarely in Forest/Steppes (biome scatter). Saved to Resources/Enemies.",
+                "OK");
+        }
+
 
 
 

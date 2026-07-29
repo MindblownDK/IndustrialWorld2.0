@@ -122,6 +122,17 @@ namespace VoxelEngine.Player
         /// <summary>Apply an external velocity impulse (e.g. a Karkadann charge knockback). Decays via normal friction.</summary>
         public void ApplyImpulse(Vector3 worldImpulse) => _velocity += worldImpulse;
 
+        // Petrify (Basilisk gaze): temporary movement slow.
+        private float _petrifySlow;
+        private float _petrifyTimer;
+        private float PetrifySpeedMul => _petrifyTimer > 0f ? Mathf.Max(0.1f, 1f - _petrifySlow) : 1f;
+        /// <summary>Apply a temporary movement slow (e.g. a Basilisk's petrifying gaze). slowFraction 0=none, 1=frozen.</summary>
+        public void ApplyPetrify(float slowFraction, float duration)
+        {
+            _petrifySlow   = Mathf.Max(_petrifySlow, Mathf.Clamp01(slowFraction));
+            _petrifyTimer  = Mathf.Max(_petrifyTimer, duration);
+        }
+
         private void Awake()
         {
             _cc = GetComponent<CharacterController>();
@@ -217,6 +228,9 @@ namespace VoxelEngine.Player
             }
 
             UpdateLook();
+
+            // Petrify slow decay (Basilisk gaze, etc.).
+            if (_petrifyTimer > 0f) { _petrifyTimer -= Time.deltaTime; if (_petrifyTimer <= 0f) _petrifySlow = 0f; }
 
             // While riding a mount, the mount drives movement — suspend our own locomotion
             // (but keep mouse-look + camera height so the rider can look around).
@@ -385,7 +399,7 @@ namespace VoxelEngine.Player
                 PlayerStats.Instance?.RegenStamina(dt);
             }
 
-            float targetSpeed = walkSpeed * speedMul;
+            float targetSpeed = walkSpeed * speedMul * PetrifySpeedMul;
             // Horizontal velocity lives on the local ground plane (perp to `up`).
             Vector3 horiz = Vector3.ProjectOnPlane(_velocity, up);
 

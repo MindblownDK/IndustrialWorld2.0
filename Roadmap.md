@@ -88,7 +88,7 @@ The design goal is a seamless blend of:
 | Armor crafting/upgrades | 🟡 PARTIALLY COMPLETE | Early foundations exist; armor station, jetpack, hazmat, heat, and oxygen upgrades remain open. |
 | Crusader player identity | ❌ MISSING | Player faction, heraldry, armor presentation, and Order progression need implementation |
 | Passive livestock | 🚧 IN PROGRESS | **6.43.0-dev:** Cow/Sheep/Pig + `PassiveAnimal` framework + spawner/temperate scatter done. **6.44.0-dev:** rideable horse (mount, full WASD steer, gallop, jump) done. Breeding/needs/husbandry + population limits remain. |
-| Mythical enemies / bosses | 🚧 IN PROGRESS | **6.41.x:** Ghoul. **6.45:** Manticore. **6.46:** Griffin. **6.47:** Karkadann. **6.48:** Ifrit Djinn. **6.49.0-dev:** Roc (first mini-boss — dive/gust/enrage). Leviathan (sea boss) and Basilisk-class remain. |
+| Mythical enemies / bosses | ✅ ROSTER COMPLETE (Leviathan sea-boss pending water/naval) | **6.41:** Ghoul. **6.45:** Manticore. **6.46:** Griffin. **6.47:** Karkadann. **6.48:** Ifrit Djinn. **6.49:** Roc mini-boss. **6.50.0-dev:** Basilisk (petrify gaze). All listed land mythical enemies + 1 boss done; Leviathan (sea serpent boss) remains pending water/naval combat support. |
 | Boss relic loot gates | ❌ MISSING | Higher-tier bosses must award relics required by selected late-game research and megastructures |
 | Pollution / industrial threat | ❌ MISSING | Emissions do not yet contaminate regions or attract escalating enemy attacks to their source |
 | Planetary ecology registry | ❌ MISSING | Each planet needs themed hostile, passive, elite, and boss populations adapted to local hazards |

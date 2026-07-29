@@ -1,9 +1,32 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.49.0-dev`
+**Current Version:** `6.50.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.50.0-dev] Phase 3j — Mythical Enemy: Basilisk (petrifying gaze + venom)
+
+**Type:** MINOR — new creature + petrify/slow status (save-compatible). Phase 3j of the Combat pillar.
+
+**Added — the Basilisk (completes the listed mythical roster):**
+1. `Scripts/Combat/EnemyBasilisk.cs` (new) — a large serpentine beast whose signature is a **PETRIFYING GAZE**: a forward cone (range + half-angle) that applies a movement **slow** to the player (turning them toward stone). Dodge by **circle-strafing to its flank/rear** (it turns slowly) or outranging it. Also delivers a **venomous bite** (applies the existing poison DoT). Reuses `Damageable` + `CreatureHealthBar`; radial-aligned; detaches from the chunk on Awake.
+2. **Petrify/slow status** in `PlayerController` — `ApplyPetrify(slowFraction, duration)` reduces the walk/sprint target speed (decays over time). Cleanly hooked as a multiplier on the existing target-speed line.
+3. **Step 32 (wizard):** a premium ~30-part serpent model (segmented body tapering to a tail, dorsal crest spikes, frilled horned head with fangs + glowing eyes, four clawed legs), `EnemyBasilisk` (90 HP), drops **Basilisk Scale + (rare) Petrified Eye**, saved non-destructively to `Resources/Enemies/Basilisk.prefab`, injected into **Forest/Steppes** biome scatter (rare, density 0.0025).
+
+**To fight it:** run Step 32 → explore **Forest/Steppes** → a Basilisk may appear. Keep moving sideways to break its gaze cone, then punish — its bite also poisons.
+
+**Why MINOR:** new enemy + new petrify status — save-compatible.
+
+**Tunable (prefab):** `gazeCooldown`/`gazeRange`/`gazeHalfAngle`/`petrifySlow`/`petrifyDuration`, `biteDamage`/`bitePoisonDps`/`biteCooldown`.
+
+**Files touched:**
+- `Scripts/Combat/EnemyBasilisk.cs` (new)
+- `Scripts/Player/PlayerController.cs` (`ApplyPetrify` + slow hook)
+- `Scripts/Editor/VoxelEngineSetupWindow.cs` (Step 32 `BuildBasiliskContent` + button)
+- `Scripts/Core/GameVersion.cs` (6.49.0 -> 6.50.0), `Roadmap.md` + `Changelog.md`
+
+---
 
 ### [6.49.0-dev] Phase 3i — Mythical Mini-Boss: Roc (first boss)
 
