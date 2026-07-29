@@ -1,9 +1,23 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.52.4-dev`
+**Current Version:** `6.52.5-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.52.5-dev] Explosion compile fix — MinMaxCurve curve constructor (CS1503)
+
+**Type:** PATCH — compile fix (save-compatible).
+
+Follow-up to 6.52.4: `ParticleSystem.MinMaxCurve` has no single-`AnimationCurve` constructor in this Unity version (only `(float)`, `(float,float)`, and `(float multiplier, AnimationCurve)`), so `new MinMaxCurve(curve)` tried to convert the curve to `float` → `CS1503`. Fixed by using the multiplier constructor: `new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(...))` for both the smoke and fire size curves.
+
+Re-audited the rest of the particle setup — all other assignments use valid conversions (float→MinMaxCurve, Color/Gradient→MinMaxGradient) and every module is captured in a local, so no further conversion/CS1612 issues are expected.
+
+**Files touched:**
+- `Scripts/Combat/Explosion.cs` (`MinMaxCurve(1f, AnimationCurve)`)
+- `Scripts/Core/GameVersion.cs` (6.52.4 -> 6.52.5), `Changelog.md`
+
+---
 
 ### [6.52.4-dev] Explosion compile fix — MinMaxCurve (CS0029)
 
