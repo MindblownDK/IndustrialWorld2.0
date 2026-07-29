@@ -306,6 +306,13 @@ namespace VoxelEngine.EditorTools
                 "  • Non-destructive: existing prefabs preserved. Re-runnable. Idempotent.");
             AddWizardButton(scroll, "25. Build Passive Livestock (Phase 3c) — Cow, Sheep, Pig", BuildLivestockContent, 40);
 
+            AddInfo(scroll,
+                "Step 26 builds the rideable horse (Combat Phase 3d, non-destructive):\n" +
+                "  • Look at a horse + H to mount; WASD ride, Shift gallop, Space jump, F dismount\n" +
+                "  • Radial-aligned; grazes when riderless; spawns in Plains/Steppes\n" +
+                "Re-runnable. Idempotent.");
+            AddWizardButton(scroll, "26. Build Rideable Horse (Phase 3d) — mount & steer", BuildHorseContent, 40);
+
             AddSpacer(scroll, 20);
         }
 
@@ -10649,6 +10656,141 @@ root =>
                 "Saved to Resources/Livestock (existing prefabs preserved). Harvest with weapons for meat, hide, and wool.",
                 "OK");
         }
+
+        // ============================================================
+        //   STEP 26 - RIDEABLE HORSE (Combat Phase 3d): a mountable
+        //   quadruped. Graze/wander when riderless; look + press the
+        //   cockpit key to mount, then WASD to ride, Shift to gallop,
+        //   Space to jump, F to dismount. Non-destructive: existing
+        //   prefabs preserved. Re-runnable. Idempotent.
+        // ============================================================
+        private void BuildHorseContent()
+        {
+            EnsureFolder("Assets/Resources");
+            EnsureFolder("Assets/Resources/Livestock");
+            const string FAUNA_ROOT  = ASSET_ROOT + "/Fauna";
+            const string FAUNA_ITEMS = FAUNA_ROOT + "/Items";
+            const string FAUNA_MATS  = FAUNA_ROOT + "/Materials";
+            EnsureFolder(FAUNA_ROOT);
+            EnsureFolder(FAUNA_ITEMS);
+            EnsureFolder(FAUNA_MATS);
+
+            // Reuse the livestock product items (created by Step 25; idempotent here).
+            var rawMeat = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{FAUNA_ITEMS}/Item_RawMeat.asset");
+            var hide    = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{FAUNA_ITEMS}/Item_Hide.asset");
+
+            var bodyMat  = MakeColoredMat(FAUNA_MATS, "Mat_HorseBody",  new Color(0.40f, 0.26f, 0.16f)); // bay brown
+            var darkMat  = MakeColoredMat(FAUNA_MATS, "Mat_HorseDark",  new Color(0.16f, 0.11f, 0.07f)); // mane/tail/hooves
+            var whiteMat = MakeColoredMat(FAUNA_MATS, "Mat_HorseWhite", new Color(0.90f, 0.88f, 0.82f)); // blaze/socks
+            var tanMat   = MakeColoredMat(FAUNA_MATS, "Mat_HorseTan",   new Color(0.62f, 0.46f, 0.32f)); // muzzle
+            var eyeBlk   = MakeColoredMat(FAUNA_MATS, "Mat_AnimalEye",  new Color(0.05f, 0.05f, 0.05f));
+
+            void AddPart(GameObject root, string n, Vector3 pos, Vector3 euler, Vector3 scale, Material m)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                go.name = n; go.transform.SetParent(root.transform, false);
+                go.transform.localPosition = pos; go.transform.localEulerAngles = euler; go.transform.localScale = scale;
+                go.GetComponent<Renderer>().sharedMaterial = m;
+                var col = go.GetComponent<Collider>(); if (col != null) UnityEngine.Object.DestroyImmediate(col);
+            }
+
+            var root = new GameObject("Horse");
+            // ── Body, chest, rump, belly ──
+            AddPart(root, "Body",  new Vector3(0f, 1.15f, 0f),    Vector3.zero,            new Vector3(0.72f, 0.72f, 1.85f), bodyMat);
+            AddPart(root, "Chest", new Vector3(0f, 1.10f, 0.62f),  Vector3.zero,            new Vector3(0.78f, 0.78f, 0.5f),  bodyMat);
+            AddPart(root, "Rump",  new Vector3(0f, 1.18f, -0.62f), Vector3.zero,            new Vector3(0.80f, 0.78f, 0.5f),  bodyMat);
+            AddPart(root, "Belly", new Vector3(0f, 0.85f, 0f),     Vector3.zero,            new Vector3(0.58f, 0.30f, 1.4f),  darkMat);
+            // ── Neck + head + muzzle + ears + face ──
+            AddPart(root, "Neck",   new Vector3(0f, 1.45f, 0.78f), new Vector3(-38f, 0f, 0f), new Vector3(0.46f, 0.78f, 0.46f), bodyMat);
+            AddPart(root, "Head",   new Vector3(0f, 1.78f, 0.98f), new Vector3(-15f, 0f, 0f), new Vector3(0.42f, 0.50f, 0.55f), bodyMat);
+            AddPart(root, "Muzzle", new Vector3(0f, 1.64f, 1.22f), new Vector3(-10f, 0f, 0f), new Vector3(0.32f, 0.32f, 0.22f), tanMat);
+            AddPart(root, "NostrilL", new Vector3(-0.08f, 1.66f, 1.32f), Vector3.zero, new Vector3(0.04f, 0.05f, 0.03f), eyeBlk);
+            AddPart(root, "NostrilR", new Vector3( 0.08f, 1.66f, 1.32f), Vector3.zero, new Vector3(0.04f, 0.05f, 0.03f), eyeBlk);
+            AddPart(root, "Blaze",  new Vector3(0f, 1.80f, 1.25f), new Vector3(-15f, 0f, 0f), new Vector3(0.06f, 0.34f, 0.04f), whiteMat);
+            AddPart(root, "EyeL",   new Vector3(-0.14f, 1.84f, 1.10f), Vector3.zero, new Vector3(0.06f, 0.07f, 0.04f), eyeBlk);
+            AddPart(root, "EyeR",   new Vector3( 0.14f, 1.84f, 1.10f), Vector3.zero, new Vector3(0.06f, 0.07f, 0.04f), eyeBlk);
+            AddPart(root, "EarL",   new Vector3(-0.13f, 2.04f, 0.93f), new Vector3(0f, 0f, -8f),  new Vector3(0.09f, 0.18f, 0.07f), bodyMat);
+            AddPart(root, "EarR",   new Vector3( 0.13f, 2.04f, 0.93f), new Vector3(0f, 0f,  8f),  new Vector3(0.09f, 0.18f, 0.07f), bodyMat);
+            AddPart(root, "Forelock", new Vector3(0f, 2.02f, 0.98f), Vector3.zero, new Vector3(0.16f, 0.16f, 0.12f), darkMat);
+            // ── Mane (row of tufts along the neck) ──
+            AddPart(root, "Mane1", new Vector3(0f, 1.72f, 0.60f), new Vector3(-30f, 0f, 0f), new Vector3(0.16f, 0.24f, 0.12f), darkMat);
+            AddPart(root, "Mane2", new Vector3(0f, 1.80f, 0.72f), new Vector3(-30f, 0f, 0f), new Vector3(0.16f, 0.24f, 0.12f), darkMat);
+            AddPart(root, "Mane3", new Vector3(0f, 1.88f, 0.84f), new Vector3(-30f, 0f, 0f), new Vector3(0.16f, 0.22f, 0.12f), darkMat);
+            AddPart(root, "Mane4", new Vector3(0f, 1.94f, 0.95f), new Vector3(-30f, 0f, 0f), new Vector3(0.15f, 0.20f, 0.12f), darkMat);
+            // ── Legs (4) ──
+            AddPart(root, "LegFL", new Vector3(-0.22f, 0.55f,  0.60f), Vector3.zero, new Vector3(0.18f, 1.1f, 0.20f), bodyMat);
+            AddPart(root, "LegFR", new Vector3( 0.22f, 0.55f,  0.60f), Vector3.zero, new Vector3(0.18f, 1.1f, 0.20f), bodyMat);
+            AddPart(root, "LegBL", new Vector3(-0.22f, 0.55f, -0.62f), Vector3.zero, new Vector3(0.18f, 1.1f, 0.20f), bodyMat);
+            AddPart(root, "LegBR", new Vector3( 0.22f, 0.55f, -0.62f), Vector3.zero, new Vector3(0.18f, 1.1f, 0.20f), bodyMat);
+            // ── White socks (front) + hooves ──
+            AddPart(root, "SockFL", new Vector3(-0.22f, 0.20f,  0.60f), Vector3.zero, new Vector3(0.20f, 0.30f, 0.22f), whiteMat);
+            AddPart(root, "SockFR", new Vector3( 0.22f, 0.20f,  0.60f), Vector3.zero, new Vector3(0.20f, 0.30f, 0.22f), whiteMat);
+            AddPart(root, "HoofFL", new Vector3(-0.22f, 0.06f,  0.60f), Vector3.zero, new Vector3(0.22f, 0.12f, 0.24f), darkMat);
+            AddPart(root, "HoofFR", new Vector3( 0.22f, 0.06f,  0.60f), Vector3.zero, new Vector3(0.22f, 0.12f, 0.24f), darkMat);
+            AddPart(root, "HoofBL", new Vector3(-0.22f, 0.06f, -0.62f), Vector3.zero, new Vector3(0.22f, 0.12f, 0.24f), darkMat);
+            AddPart(root, "HoofBR", new Vector3( 0.22f, 0.06f, -0.62f), Vector3.zero, new Vector3(0.22f, 0.12f, 0.24f), darkMat);
+            // ── Tail (flowing tufts from the rump) ──
+            AddPart(root, "Tail1", new Vector3(0f, 1.20f, -0.86f), new Vector3( 20f, 0f, 0f), new Vector3(0.16f, 0.50f, 0.12f), darkMat);
+            AddPart(root, "Tail2", new Vector3(0f, 0.92f, -0.90f), new Vector3( 35f, 0f, 0f), new Vector3(0.14f, 0.40f, 0.12f), darkMat);
+            AddPart(root, "Tail3", new Vector3(0f, 0.70f, -0.86f), new Vector3( 45f, 0f, 0f), new Vector3(0.12f, 0.30f, 0.12f), darkMat);
+
+            var cap = root.AddComponent<CapsuleCollider>();
+            cap.height = 1.9f; cap.radius = 0.5f; cap.center = new Vector3(0f, 1.05f, 0f);
+            var rb = root.AddComponent<Rigidbody>();
+            rb.useGravity = false; rb.freezeRotation = true;
+            var horse = root.AddComponent<VoxelEngine.Fauna.RideableAnimal>();
+            horse.maxHealth = 45f;
+            horse.seatLocalPos = new Vector3(0f, 0.6f, 0f);   // rider eye ~2.25 m (tunable)
+            horse.drops = new VoxelEngine.Items.ItemDefinition[] { rawMeat, hide };
+            horse.minDrops = 1; horse.maxDrops = 2; horse.dropCount = 1;
+            var hbar = root.AddComponent<VoxelEngine.Combat.CreatureHealthBar>();
+            hbar.target = horse;
+            hbar.fillColor = new Color(0.55f, 0.78f, 0.90f);
+            hbar.fillColorLow = new Color(0.80f, 0.35f, 0.25f);
+
+            const string horsePath = "Assets/Resources/Livestock/Horse.prefab";
+            GameObject horsePrefab;
+            if (AssetDatabase.LoadMainAssetAtPath(horsePath) != null)
+            {
+                horsePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(horsePath);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+            else
+            {
+                horsePrefab = PrefabUtility.SaveAsPrefabAsset(root, horsePath);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+
+            // Inject into open-plains biome scatter (reliable spawn path; same as livestock/Ghoul).
+            var br = AssetDatabase.LoadAssetAtPath<VoxelEngine.Biomes.BiomeRegistry>(ASSET_ROOT + "/BiomeRegistry.asset");
+            if (br != null && horsePrefab != null)
+            {
+                foreach (var biome in br.biomes)
+                {
+                    if (biome == null) continue;
+                    if (biome.biomeName != "Plains" && biome.biomeName != "Steppes") continue;
+                    var list = (biome.scatter != null)
+                        ? new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>(biome.scatter)
+                        : new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>();
+                    list.RemoveAll(e => e.prefab != null && e.prefab.name == "Horse");
+                    list.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = horsePrefab, density = 0.003f, minScale = 0.95f, maxScale = 1.15f, minHeight = 0, maxHeight = 9999 });
+                    biome.scatter = list.ToArray();
+                    EditorUtility.SetDirty(biome);
+                }
+                EditorUtility.SetDirty(br);
+            }
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Voxel Engine — Rideable Horse (Phase 3d)",
+                "Rideable horse built:\n\n" +
+                "• Premium bay horse: arched neck, mane, flowing tail, blaze + white socks, hooves\n" +
+                "• Graze/wander when riderless; radial-aligned (spherical worlds)\n" +
+                "• Look at a horse + press H to mount. WASD to ride, Shift to gallop, Space to jump, F to dismount\n\n" +
+                "Spawns in Plains/Steppes (biome scatter) + via the livestock spawner. Saved to Resources/Livestock.",
+                "OK");
+        }
+
 
 
 

@@ -12,7 +12,7 @@ using VoxelEngine.Combat;
 
 namespace VoxelEngine.Fauna
 {
-    public enum AnimalSpecies { Cow, Sheep, Pig }
+    public enum AnimalSpecies { Cow, Sheep, Pig, Horse }
 
     [RequireComponent(typeof(Rigidbody))]
     public class PassiveAnimal : Damageable
@@ -30,7 +30,7 @@ namespace VoxelEngine.Fauna
         [Tooltip("How long the animal keeps running after being hit.")]
         public float fleeDuration   = 4f;
 
-        private Rigidbody _rb;
+        protected Rigidbody _rb;
         private Vector3 _home;
         private Vector3 _wanderTarget;
         private float _nextWanderAt;
@@ -69,7 +69,7 @@ namespace VoxelEngine.Fauna
             _wanderTarget = transform.position + away.normalized * wanderRadius * 1.5f;
         }
 
-        private void FixedUpdate()
+        protected virtual void FixedUpdate()
         {
             float dt = Time.fixedDeltaTime;
             Vector3 pos = transform.position;

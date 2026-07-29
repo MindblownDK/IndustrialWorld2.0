@@ -87,7 +87,7 @@ The design goal is a seamless blend of:
 | Painting / finishes | ❌ MISSING | No block painting or material finishes |
 | Armor crafting/upgrades | 🟡 PARTIALLY COMPLETE | Early foundations exist; armor station, jetpack, hazmat, heat, and oxygen upgrades remain open. |
 | Crusader player identity | ❌ MISSING | Player faction, heraldry, armor presentation, and Order progression need implementation |
-| Passive livestock | 🚧 IN PROGRESS | **6.43.0-dev:** Cow, Sheep, Pig creature framework (`PassiveAnimal`) + `PassiveAnimalSpawner` + drops (meat/hide/wool) done — Phase 3c foundation. Breeding/needs/husbandry + rideable horses remain. |
+| Passive livestock | 🚧 IN PROGRESS | **6.43.0-dev:** Cow/Sheep/Pig + `PassiveAnimal` framework + spawner/temperate scatter done. **6.44.0-dev:** rideable horse (mount, full WASD steer, gallop, jump) done. Breeding/needs/husbandry + population limits remain. |
 | Mythical enemies / bosses | 🚧 IN PROGRESS | **6.41.x:** Ghoul implemented (wander/chase/melee, radial AI, `EnemySpawner`). Griffin, Roc, Manticore, Karkadann, Ifrit Djinn, Leviathan, and Basilisk-class encounters remain. |
 | Boss relic loot gates | ❌ MISSING | Higher-tier bosses must award relics required by selected late-game research and megastructures |
 | Pollution / industrial threat | ❌ MISSING | Emissions do not yet contaminate regions or attract escalating enemy attacks to their source |

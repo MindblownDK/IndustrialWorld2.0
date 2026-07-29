@@ -111,8 +111,13 @@ namespace VoxelEngine.Player
         public bool IsSliding => _sliding;
         public bool IsSprinting => _sprinting;
         public bool IsFlying => inspectorFlyToggle;
+        /// <summary>True while riding a mount: locomotion is suspended, but mouse-look + camera stay live.</summary>
+        public bool IsMounted;
         public Vector3 Velocity => _velocity;
         public float LastAirDownSpeed => _lastAirDownSpeed;
+
+        /// <summary>Zero the internal velocity (used when mounting / dismounting a mount).</summary>
+        public void ResetVelocity() => _velocity = Vector3.zero;
 
         private void Awake()
         {
@@ -209,17 +214,23 @@ namespace VoxelEngine.Player
             }
 
             UpdateLook();
-            UpdateFlyToggle();
 
-            if (GameSettings.FlyMode && !HasFlightPermission())
+            // While riding a mount, the mount drives movement — suspend our own locomotion
+            // (but keep mouse-look + camera height so the rider can look around).
+            if (!IsMounted)
             {
-                GameSettings.FlyMode = false;
-                _yaw = transform.rotation.eulerAngles.y;
-                VoxelEngine.UI.BuildFeedbackHud.Show("Flight Offline", "No jetpack equipped", null, Color.yellow);
-            }
+                UpdateFlyToggle();
 
-            if (GameSettings.FlyMode) FlyUpdate();
-            else                      WalkUpdate();
+                if (GameSettings.FlyMode && !HasFlightPermission())
+                {
+                    GameSettings.FlyMode = false;
+                    _yaw = transform.rotation.eulerAngles.y;
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Flight Offline", "No jetpack equipped", null, Color.yellow);
+                }
+
+                if (GameSettings.FlyMode) FlyUpdate();
+                else                      WalkUpdate();
+            }
 
             UpdateCameraHeight();
         }

@@ -105,7 +105,22 @@ namespace VoxelEngine.Player
                 }
                 else
                 {
-                    VoxelEngine.UI.InteractionHud.Hide();
+                    // Mountable creature (horse): look at it and press the cockpit key to ride.
+                    var horse = hit.collider.GetComponentInParent<VoxelEngine.Fauna.RideableAnimal>();
+                    if (horse != null && horse.Rider == null)
+                    {
+                        string mountKey = GameSettings.GetKey(InputAction.EnterCockpit);
+                        VoxelEngine.UI.InteractionHud.Show(mountKey, "Mount Horse");
+                        if (GameSettings.WasPressed(InputAction.EnterCockpit))
+                        {
+                            var pc = GetComponentInParent<VoxelEngine.Player.PlayerController>();
+                            if (pc != null) horse.Enter(pc);
+                        }
+                    }
+                    else
+                    {
+                        VoxelEngine.UI.InteractionHud.Hide();
+                    }
                 }
             }
             else

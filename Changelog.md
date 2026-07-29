@@ -1,9 +1,37 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.43.2-dev`
+**Current Version:** `6.44.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.44.0-dev] Phase 3d — Rideable Horse (mount, WASD steer, gallop, jump)
+
+**Type:** MINOR — new mountable-creature feature (save-compatible). Phase 3d of the Combat pillar.
+
+**Added — Rideable horses with full WASD steering:**
+1. `Scripts/Fauna/RideableAnimal.cs` (new) — extends `PassiveAnimal`. A riderless horse grazes/wanders/flees like any livestock; look at it and press **H** (the cockpit/enter key) to mount. Mount/dismount mirrors the proven `GridCockpit.Enter/Exit` contract: the player's CharacterController is disabled and the rider is parented to the horse so they ride along.
+2. **Full WASD steering on the spherical surface** — the horse's Rigidbody is driven by the rider's input (steered relative to where the rider looks), with **Shift to gallop** and **Space to jump** (radial-up impulse, self-collider-ignoring ground probe). **F** dismounts and drops the player beside the horse. Radial-gravity aligned, so riding works anywhere on a planet.
+3. `PlayerController` gains `public bool IsMounted` + `ResetVelocity()`; while mounted its own locomotion is suspended but mouse-look + camera stay live (so you can look around while riding). `PassiveAnimal` is now subclass-friendly (`protected _rb`, `virtual FixedUpdate`, `Horse` added to the species enum).
+4. `PlayerInteractionTool` shows a `[H] Mount Horse` prompt when you look at a riderless horse (parallel to the cockpit prompt) and mounts on key press.
+5. **Step 26 (wizard):** builds a premium bay horse model (arched neck, mane, flowing tail, blaze + white socks, hooves, ~30 parts), wires a `RideableAnimal` (45 HP, drops Raw Meat + Hide, calm blue health bar), saves non-destructively to `Resources/Livestock/Horse.prefab`, and injects it into **Plains/Steppes** biome scatter (density 0.003). The livestock spawner picks it up automatically.
+
+**Bundled cleanup:** stripped the `PassiveAnimalSpawner` diagnostic logs back to just the genuine `LogWarning`/`LogError` guards (livestock spawning confirmed working).
+
+**To play:** run Step 26 → find a horse in Plains/Steppes → look at it + press **H**. WASD to ride, Shift to gallop, Space to jump, F to dismount.
+
+**Why MINOR:** new mountable creature + new player locomotion state — save-compatible.
+
+**Tunable:** the rider seat height is `RideableAnimal.seatLocalPos` (default rider-eye ~2.25 m) on the prefab — adjust if the view sits too high/low.
+
+**Files touched:**
+- `Scripts/Fauna/RideableAnimal.cs` (new), `Scripts/Fauna/PassiveAnimal.cs` (extensibility), `Scripts/Fauna/PassiveAnimalSpawner.cs` (diagnostics stripped)
+- `Scripts/Player/PlayerController.cs` (`IsMounted`/`ResetVelocity`/locomotion suspension)
+- `Scripts/Player/PlayerInteractionTool.cs` (mount prompt + `horse.Enter`)
+- `Scripts/Editor/VoxelEngineSetupWindow.cs` (Step 26 `BuildHorseContent` + button)
+- `Scripts/Core/GameVersion.cs` (6.43.2 -> 6.44.0), `Roadmap.md` + `Changelog.md`
+
+---
 
 ### [6.43.2-dev] Livestock Now Spawn via Temperate Biome Scatter + Spawner Scene Fix
 

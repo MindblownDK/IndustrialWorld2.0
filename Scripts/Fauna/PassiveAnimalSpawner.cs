@@ -8,9 +8,6 @@
 // NOTE: livestock ALSO spawn via temperate biome scatter (Step 25 injects them into
 // Forest/Plains/Steppes) — that is the primary, reliable spawn path (same as the
 // Ghoul). This near-player spawner is a population-capped supplement.
-//
-// (Diagnostic logging included while spawn issues are being diagnosed — to be
-//  trimmed back to just the genuine guards once spawning is confirmed working.)
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -28,7 +25,6 @@ namespace VoxelEngine.Fauna
         public float startGrace    = 6f;
 
         private float _nextSpawn;
-        private float _nextHeartbeat;
         private static readonly List<PassiveAnimal> _alive = new List<PassiveAnimal>();
         private static bool _autoCreated;
 
@@ -43,20 +39,11 @@ namespace VoxelEngine.Fauna
         {
             LoadPrefabs();
             _nextSpawn = Time.time + startGrace;
-            Debug.Log($"[LivestockSpawner] Awake — prefabs={(animalPrefabs != null ? animalPrefabs.Length : 0)}, grace={startGrace}s");
         }
 
         private void Update()
         {
             var player = VoxelEngine.Player.PlayerStats.Instance;
-
-            // Throttled heartbeat — confirms Update is running in the live scene.
-            if (Time.time >= _nextHeartbeat)
-            {
-                _nextHeartbeat = Time.time + 5f;
-                Debug.Log($"[LivestockSpawner] tick — player={(player != null ? "OK" : "NULL")}, alive={_alive.Count}, nextSpawn in {Mathf.Max(0f, _nextSpawn - Time.time):F1}s, prefabs={(animalPrefabs != null ? animalPrefabs.Length : 0)}");
-            }
-
             if (player == null) return;
             Vector3 ppos = player.transform.position;
 
@@ -94,11 +81,7 @@ namespace VoxelEngine.Fauna
             var prefab = animalPrefabs[Random.Range(0, animalPrefabs.Length)];
             var go = Instantiate(prefab, spawnPos, Quaternion.LookRotation(-tangent, up));
             var animal = go.GetComponent<PassiveAnimal>();
-            if (animal != null)
-            {
-                _alive.Add(animal);
-                Debug.Log($"[LivestockSpawner] Spawned {animal.species} #{_alive.Count} at {spawnPos}");
-            }
+            if (animal != null) _alive.Add(animal);
             else
             {
                 Debug.LogError("[LivestockSpawner] Prefab has no PassiveAnimal component!");
@@ -111,17 +94,11 @@ namespace VoxelEngine.Fauna
         {
             if (_autoCreated) return;
             _autoCreated = true;
-            Debug.Log("[LivestockSpawner] RuntimeInitialize — checking for existing spawner...");
             if (UnityEngine.Object.FindAnyObjectByType<PassiveAnimalSpawner>() == null)
             {
                 var go = new GameObject("PassiveAnimalSpawner");
                 go.AddComponent<PassiveAnimalSpawner>();
-                UnityEngine.Object.DontDestroyOnLoad(go);   // survives MainMenu -> Game scene transition
-                Debug.Log("[LivestockSpawner] Created new spawner GameObject (DontDestroyOnLoad).");
-            }
-            else
-            {
-                Debug.Log("[LivestockSpawner] Spawner already exists.");
+                UnityEngine.Object.DontDestroyOnLoad(go);
             }
         }
     }
