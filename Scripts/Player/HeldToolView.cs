@@ -285,6 +285,9 @@ namespace VoxelEngine.Player
                 case VoxelEngine.Combat.WeaponItem wpn when wpn.attackMode == VoxelEngine.Combat.WeaponItem.AttackMode.Ranged:
                     BuildPistol(root, tint);
                     break;
+                case VoxelEngine.Combat.WeaponItem wpn when wpn.attackMode == VoxelEngine.Combat.WeaponItem.AttackMode.Thrown:
+                    BuildGrenade(root, tint);
+                    break;
                 case VoxelEngine.Combat.WeaponItem wpn:
                     BuildSword(root, tint);
                     break;
@@ -414,6 +417,23 @@ namespace VoxelEngine.Player
             AddPrimitive(root, PrimitiveType.Cube, new Vector3(0, 0.075f, 0.05f), Vector3.zero, new Vector3(0.01f, 0.018f, 0.018f), Color.Lerp(tint, Color.white, 0.25f));
             // Trigger guard
             AddPrimitive(root, PrimitiveType.Cube, new Vector3(-0.02f, -0.035f, 0.045f), Vector3.zero, new Vector3(0.018f, 0.045f, 0.03f), wood);
+        }
+
+        private static void BuildGrenade(GameObject root, Color tint)
+        {
+            Color body = (tint != Color.white) ? tint : new Color(0.30f, 0.34f, 0.20f); // military green-steel
+            Color dark = new Color(0.16f, 0.18f, 0.12f);
+            Color fuse = new Color(1.0f, 0.55f, 0.12f); // lit fuse tip
+            // Oval body
+            AddPrimitive(root, PrimitiveType.Sphere, new Vector3(0f, 0f, 0f), Vector3.zero, new Vector3(0.072f, 0.092f, 0.072f), body);
+            // Segmented belt around the middle
+            AddPrimitive(root, PrimitiveType.Cylinder, new Vector3(0f, 0.0f, 0f), new Vector3(90f, 0f, 0f), new Vector3(0.075f, 0.012f, 0.075f), dark);
+            // Top neck + cap
+            AddPrimitive(root, PrimitiveType.Cylinder, new Vector3(0f, 0.078f, 0f), Vector3.zero, new Vector3(0.034f, 0.03f, 0.034f), dark);
+            // Pull lever (spoon) on the side
+            AddPrimitive(root, PrimitiveType.Cube, new Vector3(0.05f, 0.075f, 0f), new Vector3(0f, 0f, -22f), new Vector3(0.012f, 0.062f, 0.03f), dark);
+            // Lit fuse tip
+            AddPrimitive(root, PrimitiveType.Sphere, new Vector3(0f, 0.115f, 0f), Vector3.zero, Vector3.one * 0.02f, fuse);
         }
 
         private static void BuildBlockCube(GameObject root, Color tint)

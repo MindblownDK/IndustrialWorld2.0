@@ -11733,6 +11733,7 @@ root =>
             grenade.attackCooldown = 0.8f;
             grenade.explosionRadius = 5f;
             grenade.explosionDamage = 80f;
+            grenade.voxelDamageRadius = 2.5f;
             grenade.fuseTime = 1.6f;
             grenade.throwForce = 13f;
             grenade.explosionMaterial = explosionMat;

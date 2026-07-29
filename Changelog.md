@@ -1,9 +1,34 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.51.0-dev`
+**Current Version:** `6.52.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.52.0-dev] Real Explosions — Pretty VFX + Camera Shake + Voxel/Block Damage + Grenade Viewmodel
+
+**Type:** MINOR — combat feel overhaul (save-compatible). First half of the weapons polish the player requested.
+
+**Better explosions (Explosion.cs, new):**
+1. Centralized detonation used by grenades (and any future explosive): applies Explosive damage to creatures + the player + **placed blocks** (`PlacedBlock.Damage`), then **carves a voxel-terrain crater** via the `IVoxelWorld` API (spherical-world safe — `SphereWorld.WorldToVoxel` handles the planet transform), fires a **distance-based camera shake**, and plays a **multi-layer VFX**.
+2. **Pretty VFX (ExplosionFX)** — bright flash, fireball, expanding shockwave ring, lingering smoke, a fading point light, and 8 flung debris bits (arcing on radial gravity). Scale/destroy animated (no alpha needed).
+3. **Camera shake** — new on-foot event-shake channel in `CameraFeedback` (`AddShake`), stronger the closer you are to the blast, **togglable via a new `GameSettings.ScreenShake` setting** (on by default). Works while walking AND piloting.
+4. **`WeaponItem.voxelDamageRadius`** (default 2.5 m, capped) controls the crater size per explosive; chain reactions still work.
+
+**Fixed — grenade viewmodel:** the HeldToolView switch only mapped Ranged→pistol / else→sword, so the Throwable grenade rendered as a sword. Added a `Thrown→BuildGrenade` case with a proper grenade viewmodel (oval body, segmented belt, top cap, pull lever, lit fuse tip).
+
+**To use:** recompile (everything is automatic; `voxelDamageRadius` defaults to 2.5 even without re-running Step 33). Throw a grenade into terrain/structures and watch the crater + shake + flash.
+
+**Next pass (already noted):** gun viewmodels for the rifle/pistol (so they read clearly as guns), a visible muzzle flash / tracer so you can see them fire, and an ammo system (pistol/rifle consume bullets).
+
+**Files touched:**
+- `Scripts/Combat/Explosion.cs` (new: `Explosion` + `ExplosionFX`), `Scripts/Combat/BombProjectile.cs` (delegates to `Explosion`), `Scripts/Combat/WeaponItem.cs` (`voxelDamageRadius`)
+- `Scripts/Player/CameraFeedback.cs` (event shake + `AddShake`), `Scripts/Settings/GameSettings.cs` (`ScreenShake`)
+- `Scripts/Player/HeldToolView.cs` (`BuildGrenade` + `Thrown` case)
+- `Scripts/Player/PlayerInteractionTool.cs` (pass `voxelDamageRadius`), `Scripts/Editor/VoxelEngineSetupWindow.cs` (Step 33)
+- `Scripts/Core/GameVersion.cs` (6.51.0 -> 6.52.0), `Changelog.md`
+
+---
 
 ### [6.51.0-dev] Phase 3k — Player Weapons: Grenade + Iron Rifle
 

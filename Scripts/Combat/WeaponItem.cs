@@ -31,6 +31,8 @@ namespace VoxelEngine.Combat
         [Header("Thrown / Explosive (AttackMode.Thrown)")]
         [Tooltip("Explosion radius in metres.")]
         public float explosionRadius = 5f;
+        [Tooltip("Radius (metres) of the voxel-terrain crater carved on detonation. 0 = no terrain damage.")]
+        public float voxelDamageRadius = 2.5f;
         [Tooltip("Explosive damage applied to every Damageable in the radius.")]
         public float explosionDamage = 80f;
         [Tooltip("Fuse seconds before the thrown bomb detonates.")]

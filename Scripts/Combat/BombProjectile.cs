@@ -1,14 +1,12 @@
 // Assets/Scripts/VoxelEngine/Combat/BombProjectile.cs
 //
 // A thrown bomb (grenade). Launched with an initial velocity, arcs under RADIAL gravity
-// (correct on spherical worlds), and detonates when its fuse runs out — dealing
-// Explosive damage to every Damageable (and the player) within the radius, and
-// chain-detonating any other bombs caught in the blast. Includes a self-expanding
-// explosion VFX.
+// (correct on spherical worlds), and detonates when its fuse runs out. Detonation is
+// delegated to the centralized Explosion helper: AoE damage to creatures/player/blocks,
+// a voxel-terrain crater, distance-based camera shake, and a multi-layer VFX. Bombs
+// caught in a blast chain-detonate.
 
-using System.Collections.Generic;
 using UnityEngine;
-using VoxelEngine.Player;
 
 namespace VoxelEngine.Combat
 {
@@ -18,6 +16,7 @@ namespace VoxelEngine.Combat
         public float fuse   = 1.6f;
         public float radius = 5f;
         public float damage = 80f;
+        public float voxelDamageRadius = 2.5f;
         public Material explosionMaterial;
 
         private Rigidbody _rb;
@@ -26,7 +25,7 @@ namespace VoxelEngine.Combat
         private GameObject _owner;
 
         public static BombProjectile Spawn(Vector3 pos, Vector3 velocity, GameObject owner, Material mat,
-                                           float radius, float damage, float fuse, Material bodyMat)
+                                           float radius, float damage, float fuse, float voxelDamageRadius, Material bodyMat)
         {
             var go = new GameObject("Bomb");
             go.transform.position = pos;
@@ -46,7 +45,7 @@ namespace VoxelEngine.Combat
 
             var bp = go.AddComponent<BombProjectile>();
             bp._rb = rb;
-            bp.radius = radius; bp.damage = damage; bp.fuse = fuse;
+            bp.radius = radius; bp.damage = damage; bp.fuse = fuse; bp.voxelDamageRadius = voxelDamageRadius;
             bp.explosionMaterial = mat; bp._owner = owner; bp._timer = fuse;
             return bp;
         }
@@ -66,56 +65,18 @@ namespace VoxelEngine.Combat
             if (_detonated) return;
             _detonated = true;
             Vector3 pos = transform.position;
-            Vector3 up = VoxelEngine.Cosmos.GravityProvider.GetUp(pos);
 
-            // AoE: every Damageable in the radius takes Explosive damage. Chain-detonate other bombs.
+            // Chain-detonate any other bombs caught in the blast first.
             var cols = Physics.OverlapSphere(pos, radius, ~0, QueryTriggerInteraction.Ignore);
-            var damaged = new HashSet<IDamageable>();
             foreach (var c in cols)
             {
-                var d = c.GetComponentInParent<IDamageable>();
-                if (d != null && d.IsAlive) damaged.Add(d);
-
                 var other = c.GetComponentInParent<BombProjectile>();
-                if (other != null && other != this) other.Detonate();   // chain reaction
+                if (other != null && other != this) other.Detonate();
             }
-            foreach (var d in damaged)
-                d.TakeDamage(new DamageEvent { amount = damage, type = DamageType.Explosive,
-                    point = pos, direction = up, source = _owner });
 
-            // Self-damage risk: the player is not an IDamageable, so check directly.
-            var ps = PlayerStats.Instance;
-            if (ps != null && Vector3.Distance(pos, ps.transform.position) <= radius)
-                ps.TakeDamage(damage);
-
-            ExplosionVFX.Spawn(pos, explosionMaterial, radius * 0.7f, 0.35f);
+            // Full explosion (damage + voxel crater + camera shake + VFX).
+            Explosion.Detonate(pos, radius, damage, _owner, voxelDamageRadius, explosionMaterial);
             Destroy(gameObject);
-        }
-    }
-
-    // Quick expanding sphere used as the explosion visual.
-    public class ExplosionVFX : MonoBehaviour
-    {
-        private float _t, _dur, _maxRadius;
-
-        public static void Spawn(Vector3 pos, Material mat, float maxRadius, float dur)
-        {
-            var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            go.name = "Explosion";
-            go.transform.position = pos;
-            go.transform.localScale = Vector3.zero;
-            var col = go.GetComponent<Collider>(); if (col != null) Destroy(col);
-            var ren = go.GetComponent<Renderer>(); if (mat != null) ren.sharedMaterial = mat;
-            var vfx = go.AddComponent<ExplosionVFX>();
-            vfx._dur = Mathf.Max(0.05f, dur); vfx._maxRadius = maxRadius;
-        }
-
-        private void Update()
-        {
-            _t += Time.deltaTime;
-            float k = Mathf.Clamp01(_t / _dur);
-            transform.localScale = Vector3.one * (_maxRadius * 2f * k);   // grow to diameter
-            if (k >= 1f) Destroy(gameObject);
         }
     }
 }
