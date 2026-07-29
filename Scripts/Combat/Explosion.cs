@@ -1,10 +1,10 @@
 // Assets/Scripts/VoxelEngine/Combat/Explosion.cs
 //
 // Centralized explosion: applies Explosive damage to creatures + the player + placed
-// blocks, CARVES A CRATER in the voxel terrain (works on spherical worlds via the
-// IVoxelWorld interface), fires a distance-based camera shake (respects the ScreenShake
-// setting), and plays a multi-layer "pretty" VFX (flash + fireball + shockwave ring +
-// smoke + point light + debris). Used by grenades and any future explosive.
+// blocks, CARVES A CRATER in the voxel terrain (spherical-world safe via IVoxelWorld),
+// fires a distance-based camera shake (respects GameSettings.ScreenShake), and plays a
+// REAL particle-based VFX. The VFX is scale-driven — a grenade (scale ~1) is a quick
+// blast; a big bomb (scale ~3-5) rises into a billowing mushroom cloud.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -28,7 +28,6 @@ namespace VoxelEngine.Combat
             {
                 var d = c.GetComponentInParent<IDamageable>();
                 if (d != null && d.IsAlive) damaged.Add(d);
-
                 var pb = c.GetComponentInParent<VoxelEngine.Building.PlacedBlock>();
                 if (pb != null) brokenBlocks.Add(pb);
             }
@@ -38,8 +37,7 @@ namespace VoxelEngine.Combat
             {
                 try { pb.Damage(Mathf.RoundToInt(damage), null); } catch { /* best-effort */ }
             }
-
-            var ps = PlayerStats.Instance;   // the player isn't an IDamageable — handle directly
+            var ps = PlayerStats.Instance;   // the player isn't an IDamageable
             if (ps != null && Vector3.Distance(pos, ps.transform.position) <= radius)
                 ps.TakeDamage(damage);
 
@@ -64,7 +62,7 @@ namespace VoxelEngine.Combat
                 catch { /* never let a terrain edit crash the explosion */ }
             }
 
-            // ── 3. Distance-based camera shake (respects the ScreenShake setting). ──
+            // ── 3. Distance-based camera shake. ──
             if (ps != null)
             {
                 float dist = Vector3.Distance(pos, ps.transform.position);
@@ -72,134 +70,175 @@ namespace VoxelEngine.Combat
                 CameraFeedback.AddShake(shake);
             }
 
-            // ── 4. Pretty multi-layer VFX. ──
-            if (baseMat != null) ExplosionFX.Spawn(pos, up, baseMat, radius);
+            // ── 4. Particle VFX (scale grows with blast radius → mushroom clouds on big bombs). ──
+            float scale = Mathf.Clamp(radius / 5f, 0.6f, 10f);
+            ExplosionFX.Spawn(pos, up, scale, baseMat);
         }
     }
 
-    // Multi-layer explosion visual: bright flash → fireball → shockwave ring → smoke,
-    // a brief point light, and flung debris. Scale/destroy animated (no alpha needed).
+    // Real particle explosion: bright core, fireball, embers, a rising/billowing smoke
+    // column (mushroom at large scale), a shockwave ring, a light flash, and debris.
     public class ExplosionFX : MonoBehaviour
     {
-        private float _t, _dur;
-        private float _radius;
-        private Transform _flash, _fire, _smoke, _ring;
         private Light _light;
-        private Material[] _mats;
-        private List<Rigidbody> _debris = new List<Rigidbody>();
+        private float _t, _maxLife, _lightDur, _scale;
+        private readonly List<Rigidbody> _debris = new List<Rigidbody>();
 
-        public static void Spawn(Vector3 pos, Vector3 up, Material baseMat, float radius, float dur = 0.9f)
+        public static void Spawn(Vector3 pos, Vector3 up, float scale, Material baseMat)
         {
             var go = new GameObject("ExplosionFX");
             go.transform.position = pos;
             var fx = go.AddComponent<ExplosionFX>();
-            fx._dur = dur; fx._radius = Mathf.Max(1f, radius);
+            fx._scale = scale;
+            fx._maxLife = 2.2f * scale + 1.5f;
+            fx._lightDur = 0.35f * Mathf.Sqrt(scale);
 
-            var flashMat  = new Material(baseMat); flashMat.color  = new Color(1.0f, 0.95f, 0.75f);
-            var fireMat   = new Material(baseMat); fireMat.color   = new Color(1.0f, 0.45f, 0.10f);
-            var smokeMat  = new Material(baseMat); smokeMat.color  = new Color(0.22f, 0.20f, 0.19f);
-            var debrisMat = new Material(baseMat); debrisMat.color = new Color(0.35f, 0.30f, 0.26f);
-            fx._mats = new[] { flashMat, fireMat, smokeMat, debrisMat };
+            Vector3 g = VoxelEngine.Cosmos.GravityProvider.GetGravity(pos);   // radial gravity acceleration
 
-            fx._flash = MakeSphere("Flash", go.transform, flashMat);
-            fx._fire  = MakeSphere("Fire",  go.transform, fireMat);
-            fx._smoke = MakeSphere("Smoke", go.transform, smokeMat);
+            Burst(go.transform, "Core",   count: R(10, 14, scale), life: 0.16f, speed: R(1, 3, scale), size: 0.5f * scale, color: new Color(1f, 0.97f, 0.8f), gravity: Vector3.zero, shapeR: 0.1f, fadeStart: 0.5f);
+            Burst(go.transform, "Fire",   count: R(26, 34, scale), life: 0.45f * scale, speed: R(3, 7, scale), size: 0.42f * scale, color: new Color(1f, 0.45f, 0.12f), gravity: Vector3.zero, shapeR: 0.2f, fadeStart: 0.3f, grow: 1.8f);
+            Burst(go.transform, "Embers", count: R(40, 60, scale), life: 0.9f * scale, speed: R(7, 14, scale), size: 0.07f * scale, color: new Color(1f, 0.75f, 0.25f), gravity: g, shapeR: 0.15f, fadeStart: 0.4f);
+            Shockwave(go.transform, up, scale);
+            Smoke(go.transform, up, g, scale);
+            for (int i = 0; i < Mathf.RoundToInt(6 * scale); i++) fx.AddDebris(g, scale, baseMat);
 
-            var ringGo = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            Object.Destroy(ringGo.GetComponent<Collider>());
-            ringGo.transform.SetParent(go.transform, false);
-            ringGo.transform.localPosition = Vector3.zero;
-            ringGo.transform.localRotation = Quaternion.FromToRotation(Vector3.up, up);
-            ringGo.GetComponent<Renderer>().sharedMaterial = fireMat;
-            fx._ring = ringGo.transform;
-
-            var lightGo = new GameObject("BlastLight"); lightGo.transform.SetParent(go.transform, false);
-            fx._light = lightGo.AddComponent<Light>();
+            var lg = new GameObject("BlastLight"); lg.transform.SetParent(go.transform, false);
+            fx._light = lg.AddComponent<Light>();
             fx._light.type = LightType.Point;
-            fx._light.color = new Color(1f, 0.6f, 0.3f);
-            fx._light.range = radius * 2.5f;
-            fx._light.intensity = 10f;
-
-            for (int i = 0; i < 8; i++) fx.SpawnDebris(go.transform, up, debrisMat);
+            fx._light.color = new Color(1f, 0.62f, 0.32f);
+            fx._light.range = 8f * scale;
+            fx._light.intensity = 12f * Mathf.Sqrt(scale);
         }
 
-        private static Transform MakeSphere(string n, Transform parent, Material m)
+        // One radial burst of billboarding particles.
+        private static void Burst(Transform parent, string name, int count, float life, float speed, float size,
+                                  Color color, Vector3 gravity, float shapeR, float fadeStart, float grow = 1f)
         {
-            var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            Object.Destroy(go.GetComponent<Collider>());
-            go.name = n; go.transform.SetParent(parent, false); go.transform.localPosition = Vector3.zero;
-            go.transform.localScale = Vector3.zero;
-            go.GetComponent<Renderer>().sharedMaterial = m;
-            return go.transform;
+            var ps = AddPS(parent, name);
+            var m = ps.main;
+            m.startLifetime = Mathf.Max(0.05f, life);
+            m.startSpeed = new ParticleSystem.MinMaxCurve(speed * 0.5f, speed);
+            m.startSize = Mathf.Max(0.02f, size);
+            m.startColor = color;
+            m.gravityModifier = 0f;
+            var sh = ps.shape; sh.enabled = true; sh.shapeType = ParticleSystemShapeType.Sphere; sh.radius = Mathf.Max(0.02f, shapeR);
+            ColorOverLife(ps, color, fadeStart, grow);
+            if (gravity.sqrMagnitude > 0.0001f) AddForce(ps, gravity);
+            ps.emission.SetBursts(new[] { new ParticleSystem.Burst(0f, (short)Mathf.Max(1, count)) });
         }
 
-        private void SpawnDebris(Transform parent, Vector3 up, Material m)
+        // Flat expanding ring of particles lying on the surface.
+        private static void Shockwave(Transform parent, Vector3 up, float scale)
+        {
+            var ps = AddPS(parent, "Shockwave");
+            var m = ps.main;
+            m.startLifetime = 0.32f;
+            m.startSpeed = new ParticleSystem.MinMaxCurve(10f * scale, 16f * scale);
+            m.startSize = 0.16f * scale;
+            m.startColor = new Color(1f, 0.7f, 0.35f, 0.85f);
+            var sh = ps.shape; sh.enabled = true; sh.shapeType = ParticleSystemShapeType.Circle; sh.radius = 0.2f * scale;
+            sh.alignToDirection = false;
+            ps.transform.rotation = Quaternion.LookRotation(up);   // lie flat on the surface
+            ColorOverLife(ps, new Color(1f, 0.7f, 0.35f), 0.2f, 1f);
+            ps.emission.SetBursts(new[] { new ParticleSystem.Burst(0f, (short)Mathf.RoundToInt(40 * scale)) });
+        }
+
+        // Rising, billowing smoke — the mushroom-cloud column. Buoyant (rises against gravity).
+        private static void Smoke(Transform parent, Vector3 up, Vector3 g, float scale)
+        {
+            var ps = AddPS(parent, "Smoke");
+            var m = ps.main;
+            m.startLifetime = Mathf.Max(0.6f, 1.8f * scale);
+            m.startSpeed = new ParticleSystem.MinMaxCurve(1f * scale, 4f * scale);
+            m.startSize = new ParticleSystem.MinMaxCurve(0.4f * scale, 0.9f * scale);
+            m.startColor = new Color(0.24f, 0.22f, 0.21f, 0.85f);
+            m.gravityModifier = 0f;
+            var sh = ps.shape; sh.enabled = true; sh.shapeType = ParticleSystemShapeType.Sphere; sh.radius = 0.4f * scale;
+            // Buoyancy: rise against gravity (stronger & longer on big bombs → mushroom).
+            AddForce(ps, -g * 0.6f);
+            // Billow.
+            var n = ps.noise; n.enabled = true; n.strength = 1.2f * scale; n.frequency = 0.4f; n.scrollSpeed = 1f;
+            // Grow as it rises + fade late.
+            var so = ps.sizeOverLifetime; so.enabled = true;
+            so.size = new ParticleSystem.AnimationCurve(new[] { new Keyframe(0f, 0.4f), new Keyframe(1f, 1.6f) });
+            ColorOverLife(ps, new Color(0.24f, 0.22f, 0.21f), 0.55f, 1f);
+            ps.emission.SetBursts(new[] { new ParticleSystem.Burst(0f, (short)Mathf.RoundToInt(30 * scale)) });
+        }
+
+        private void AddDebris(Vector3 g, float scale, Material mat)
         {
             var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
             Object.Destroy(go.GetComponent<Collider>());
-            go.transform.SetParent(parent, false);
-            go.transform.localScale = Vector3.one * Random.Range(0.08f, 0.16f);
-            var ren = go.GetComponent<Renderer>(); ren.sharedMaterial = m;
+            go.transform.SetParent(transform, false);
+            go.transform.localScale = Vector3.one * Random.Range(0.08f, 0.18f) * scale;
+            var ren = go.GetComponent<Renderer>(); if (mat != null) ren.sharedMaterial = mat;
             var rb = go.AddComponent<Rigidbody>();
-            rb.useGravity = false;
-            Vector3 dir = (Random.onUnitSphere + up * 0.4f).normalized;
-            rb.linearVelocity = dir * Random.Range(4f, 9f);
+            rb.useGravity = false;                         // radial gravity applied manually in Update (sphere-correct)
+            rb.linearVelocity = (Random.onUnitSphere + transform.up * 0.4f) * Random.Range(5f, 11f) * scale;
             _debris.Add(rb);
         }
+
+        // ---- particle helpers ----
+        private static ParticleSystem AddPS(Transform parent, string name)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            var ps = go.AddComponent<ParticleSystem>();
+            var main = ps.main;
+            main.simulationSpace = ParticleSystemSimulationSpace.World;
+            main.playOnAwake = true;
+            main.loop = false;
+            main.maxParticles = 800;
+            ps.emission.enabled = true;
+            ps.emission.rateOverTime = 0f;   // burst-only (no continuous fountain)
+            // Default particle material is transparent in URP — leave it so alpha fade works.
+            return ps;
+        }
+
+        private static void AddForce(ParticleSystem ps, Vector3 worldAccel)
+        {
+            var f = ps.forceOverLifetime;
+            f.enabled = true;
+            f.space = ParticleSystemSimulationSpace.World;
+            f.x = new ParticleSystem.MinMaxCurve(worldAccel.x);
+            f.y = new ParticleSystem.MinMaxCurve(worldAccel.y);
+            f.z = new ParticleSystem.MinMaxCurve(worldAccel.z);
+        }
+
+        private static void ColorOverLife(ParticleSystem ps, Color color, float fadeStart, float grow)
+        {
+            var c = ps.colorOverLifetime; c.enabled = true;
+            var grad = new Gradient();
+            grad.SetKeys(
+                new[] { new GradientColorKey(color, 0f), new GradientColorKey(color, 1f) },
+                new[] { new GradientAlphaKey(1f, 0f),
+                        new GradientAlphaKey(1f, Mathf.Clamp01(fadeStart)),
+                        new GradientAlphaKey(0f, 1f) });
+            c.color = grad;
+            if (grow != 1f)
+            {
+                var s = ps.sizeOverLifetime; s.enabled = true;
+                s.size = new ParticleSystem.AnimationCurve(new[] { new Keyframe(0f, 1f / grow), new Keyframe(1f, 1f) });
+            }
+        }
+
+        private static int R(int min, int max, float scale) => Mathf.Clamp(Mathf.RoundToInt(Random.Range(min, max) * scale), 1, 300);
+        private static float R(float min, float max, float scale) => Random.Range(min, max) * scale;
 
         private void Update()
         {
             float dt = Time.deltaTime;
             _t += dt;
-            float r = _radius;
-
-            // Flash: instant bright pop, gone by 0.12s.
-            if (_flash != null)
-            {
-                float fk = Mathf.Clamp01(_t / 0.10f);
-                _flash.localScale = Vector3.one * (r * (0.5f + fk * 1.1f) * 2f);
-                if (_t > 0.12f) { Destroy(_flash.gameObject); _flash = null; }
-            }
-            // Fireball: grow then collapse by ~0.5s.
-            if (_fire != null)
-            {
-                float fk = Mathf.Clamp01(_t / 0.45f);
-                float s = (fk < 0.4f ? fk / 0.4f : 1f - (fk - 0.4f) / 0.6f);
-                _fire.localScale = Vector3.one * (r * 0.9f * Mathf.Clamp01(s) * 2f);
-                if (_t > 0.5f) { Destroy(_fire.gameObject); _fire = null; }
-            }
-            // Shockwave ring: expand outward fast, gone by 0.3s.
-            if (_ring != null)
-            {
-                float fk = Mathf.Clamp01(_t / 0.25f);
-                _ring.localScale = new Vector3(r * (0.3f + fk * 1.4f), 0.12f, r * (0.3f + fk * 1.4f));
-                if (_t > 0.3f) { Destroy(_ring.gameObject); _ring = null; }
-            }
-            // Point light: intensity fades.
-            if (_light != null) _light.intensity = Mathf.Lerp(10f, 0f, Mathf.Clamp01(_t / 0.4f));
-
-            // Debris: integrate radial gravity so it arcs on spheres, despawn after life.
+            if (_light != null) _light.intensity = Mathf.Lerp(12f * Mathf.Sqrt(_scale), 0f, Mathf.Clamp01(_t / Mathf.Max(0.05f, _lightDur)));
+            // Radial gravity on debris chunks (sphere-correct).
             Vector3 g = VoxelEngine.Cosmos.GravityProvider.GetGravity(transform.position);
             for (int i = _debris.Count - 1; i >= 0; i--)
             {
                 var rb = _debris[i];
                 if (rb == null) { _debris.RemoveAt(i); continue; }
                 rb.linearVelocity += g * dt;
-                if (_t > _dur) Destroy(rb.gameObject);
             }
-            // Smoke lingers, slow growth.
-            if (_smoke != null)
-            {
-                float fk = Mathf.Clamp01(_t / 0.6f);
-                _smoke.localScale = Vector3.one * (r * (0.4f + fk * 0.7f) * 2f);
-            }
-
-            if (_t >= _dur) Destroy(gameObject);
-        }
-
-        private void OnDestroy()
-        {
-            if (_mats != null) foreach (var m in _mats) if (m != null) Destroy(m);
+            if (_t >= _maxLife) Destroy(gameObject);
         }
     }
 }

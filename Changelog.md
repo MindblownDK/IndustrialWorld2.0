@@ -1,9 +1,29 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.52.0-dev`
+**Current Version:** `6.52.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.52.1-dev] Real Particle Explosions (mushroom-cloud-ready)
+
+**Type:** PATCH — VFX overhaul of the 6.52.0 explosion (save-compatible).
+
+**Replaced the scale-animated primitive VFX with a real Unity ParticleSystem explosion**, scale-driven so the same system does a grenade today and a mushroom-cloud mega-bomb later:
+- **Bright core** + **expanding fireball** (additive-style, fading).
+- **Flying embers** + **debris chunks** that fall on radial gravity (sphere-correct).
+- **Rising, billowing smoke column** (buoyant — accelerates upward against radial gravity + turbulence) — the mushroom-cloud foundation; taller/wider at larger blast scales.
+- **Flat shockwave ring** expanding along the surface.
+- **Light flash** that fades.
+- Burst-only emission (`rateOverTime = 0`), world-space simulation, alpha-fade via the default URP particle material.
+
+`Explosion.Detonate` now derives a `scale` from the blast radius (`radius / 5`, clamped 0.6–10), so bigger explosives automatically produce bigger, taller, mushroom-ier clouds — set up for future big bombs.
+
+**Files touched:**
+- `Scripts/Combat/Explosion.cs` (`ExplosionFX` rewritten with ParticleSystems; debris radial-gravity)
+- `Scripts/Core/GameVersion.cs` (6.52.0 -> 6.52.1), `Changelog.md`
+
+---
 
 ### [6.52.0-dev] Real Explosions — Pretty VFX + Camera Shake + Voxel/Block Damage + Grenade Viewmodel
 
