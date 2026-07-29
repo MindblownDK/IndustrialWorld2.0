@@ -1,9 +1,23 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.52.5-dev`
+**Current Version:** `6.52.6-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.52.6-dev] Explosion material fix — no more purple/magenta particles
+
+**Type:** PATCH — visual fix (save-compatible).
+
+The particle explosions rendered **purple/magenta** because a runtime-created `ParticleSystem` has no material assigned. Now each system is given a shared **transparent particle material** (built once, reused) so the per-particle colours (fire, smoke, embers, shockwave) actually show:
+- Tries `Universal Render Pipeline/Particles/Unlit`, then falls back to `Sprites/Default` / `Unlit/Color`.
+- Configured for transparent alpha-blend (`_Surface=1`, `_Blend=0`, plus `_SrcBlend`/`_DstBlend`/`_ZWrite`/render-queue so it blends regardless of how the URP shader drives blend state).
+
+**Files touched:**
+- `Scripts/Combat/Explosion.cs` (shared transparent particle material)
+- `Scripts/Core/GameVersion.cs` (6.52.5 -> 6.52.6), `Changelog.md`
+
+---
 
 ### [6.52.5-dev] Explosion compile fix — MinMaxCurve curve constructor (CS1503)
 

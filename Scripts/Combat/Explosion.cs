@@ -179,6 +179,33 @@ namespace VoxelEngine.Combat
         }
 
         // ---- particle helpers ----
+        // Runtime-created ParticleSystems have no material (they render magenta). Build one
+        // shared transparent particle material so the per-particle colours actually show.
+        private static Material _particleMat;
+        private static Material ParticleMaterial
+        {
+            get
+            {
+                if (_particleMat == null)
+                {
+                    Shader sh = Shader.Find("Universal Render Pipeline/Particles/Unlit")
+                             ?? Shader.Find("Universal Render Pipeline/Unlit")
+                             ?? Shader.Find("Sprites/Default")
+                             ?? Shader.Find("Unlit/Color");
+                    _particleMat = new Material(sh) { color = Color.white };
+                    // Transparent alpha-blend (covers URP enum- and int-driven blend configs).
+                    if (_particleMat.HasProperty("_Surface")) _particleMat.SetFloat("_Surface", 1f);
+                    if (_particleMat.HasProperty("_Blend"))   _particleMat.SetFloat("_Blend", 0f);
+                    _particleMat.SetOverrideTag("RenderType", "Transparent");
+                    _particleMat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+                    _particleMat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+                    _particleMat.SetInt("_ZWrite", 0);
+                    _particleMat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+                }
+                return _particleMat;
+            }
+        }
+
         private static ParticleSystem AddPS(Transform parent, string name)
         {
             var go = new GameObject(name);
@@ -192,7 +219,8 @@ namespace VoxelEngine.Combat
             var em = ps.emission;
             em.enabled = true;
             em.rateOverTime = 0f;   // burst-only (no continuous fountain)
-            // Default particle material is transparent in URP — leave it so alpha fade works.
+            // Assign a transparent particle material (a runtime PS has none → magenta otherwise).
+            ps.GetComponent<ParticleSystemRenderer>().sharedMaterial = ParticleMaterial;
             return ps;
         }
 
