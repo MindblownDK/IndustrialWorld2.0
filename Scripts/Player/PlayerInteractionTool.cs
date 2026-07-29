@@ -141,8 +141,29 @@ namespace VoxelEngine.Player
                 }
             }
 
+            var heldStack = inventory.ActiveStack;
+
+            // ── WEAPON dispatch — LMB attacks with melee/ranged/thrown weapons, even when
+            //    aiming at open sky (each mode does its own hit detection). ──
+            if (mineHeld && !heldStack.IsEmpty && heldStack.item is VoxelEngine.Combat.WeaponItem wep
+                && Time.time >= _nextHit)
+            {
+                HandleWeaponAttack(wep, ray);
+                _nextHit = Time.time + Mathf.Max(0.1f, wep.attackCooldown);
+                return;
+            }
+
             if (!hasHit)
             {
+                // Mining tools still play their swing when aimed at the sky (nothing to hit).
+                if (mineHeld && Time.time >= _nextHit
+                    && !heldStack.IsEmpty && heldStack.item is ToolItem mt
+                    && (mt.toolType == ToolType.Pickaxe || mt.toolType == ToolType.Axe))
+                {
+                    GetComponent<VoxelEngine.Player.HeldToolView>()?.DoSwing();
+                    _nextHit = Time.time + 1f / Mathf.Max(0.1f, mt.fireRate);
+                    return;
+                }
                 // Unified pipes: extending a run by aiming at its open end has to work
                 // even when the camera ray slips between the thin arm/cap visuals and
                 // hits nothing at all. The BuildSystem ghost previews this exact chain
@@ -164,15 +185,6 @@ namespace VoxelEngine.Player
 
             // ── WRENCH dispatch — short-circuits all other tool behaviour. ──
             //   LMB = connect/select  •  RMB = disconnect  •  Shift modifies both
-            var heldStack = inventory.ActiveStack;
-            // ── WEAPON dispatch — LMB attacks with melee/ranged weapons (intercepts mining). ──
-            if (mineHeld && !heldStack.IsEmpty && heldStack.item is VoxelEngine.Combat.WeaponItem wep
-                && Time.time >= _nextHit)
-            {
-                HandleWeaponAttack(wep, ray);
-                _nextHit = Time.time + Mathf.Max(0.1f, wep.attackCooldown);
-                return;
-            }
             if (!heldStack.IsEmpty && heldStack.item is WrenchTool)
             {
                 if (_wrench == null) _wrench = new WrenchInteraction();

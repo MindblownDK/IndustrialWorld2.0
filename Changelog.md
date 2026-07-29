@@ -1,9 +1,24 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.52.1-dev`
+**Current Version:** `6.52.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.52.2-dev] Fire/Swing Anywhere — weapons & tools work aiming at the sky
+
+**Type:** PATCH — interaction fix (save-compatible).
+
+**Fixed — weapons/tools only worked when aiming at the ground.** The crosshair-hit gate (`if (!hasHit) { … return; }`) ran *before* the weapon/tool dispatch, so looking at open sky did nothing — you couldn't throw a grenade, fire, or swing at the sky.
+- Moved the **WEAPON dispatch** above the `!hasHit` gate. Each weapon mode does its own hit detection, so grenades throw, guns fire, and swords swing regardless of where you aim (they just hit nothing if the sky is empty).
+- Mining tools (pickaxe/axe) now **still play their swing animation** when aimed at the sky (no block to hit, but the tool feels responsive instead of dead).
+- Pipes/blocks are unchanged (still need a surface / open pipe end).
+
+**Files touched:**
+- `Scripts/Player/PlayerInteractionTool.cs` (weapon dispatch moved before `!hasHit`; tool-swing-at-sky)
+- `Scripts/Core/GameVersion.cs` (6.52.1 -> 6.52.2), `Changelog.md`
+
+---
 
 ### [6.52.1-dev] Real Particle Explosions (mushroom-cloud-ready)
 
