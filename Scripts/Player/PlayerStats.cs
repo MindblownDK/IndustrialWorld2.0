@@ -20,6 +20,9 @@ namespace VoxelEngine.Player
         // Poison damage-over-time (venomous creatures); bypasses armor.
         private float _poisonTimer;
         private float _poisonDps;
+        // Burn damage-over-time (fire creatures); ESCALATES with armor (heated plate burns hotter).
+        private float _burnTimer;
+        private float _burnDps;
         public float baseMaxStamina     = 100f;
         public float baseDamage         = 5f;     // bare-hand contribution
         public float baseSprintMultiplier = 1.6f;
@@ -109,6 +112,18 @@ namespace VoxelEngine.Player
                 if (Health <= 0f) Die();
             }
 
+            // Burn: fire DoT that bypasses armor AND escalates with it (heavier plate burns hotter).
+            if (_burnTimer > 0f)
+            {
+                _burnTimer -= Time.deltaTime;
+                float armorFactor = (equippedArmor != null ? equippedArmor.damageReduction : 0f);
+                float effective = _burnDps * (1f + armorFactor * 1.5f);
+                Health = Mathf.Max(0f, Health - effective * Time.deltaTime);
+                OnStatsChanged?.Invoke();
+                if (_burnTimer <= 0f) _burnDps = 0f;
+                if (Health <= 0f) Die();
+            }
+
             if (Health > MaxHealth)   Health = MaxHealth;
             if (Stamina > MaxStamina) Stamina = MaxStamina;
             if (Hunger > MaxHunger)   Hunger = MaxHunger;
@@ -181,6 +196,14 @@ namespace VoxelEngine.Player
             if (dps <= 0f || duration <= 0f) return;
             _poisonDps   = Mathf.Max(_poisonDps, dps);
             _poisonTimer = Mathf.Max(_poisonTimer, duration);
+            OnStatsChanged?.Invoke();
+        }
+        /// <summary>Apply a burn damage-over-time effect. Burns ESCALATE with worn armor (heated steel hurts more). Refreshes/extends an active burn.</summary>
+        public void ApplyBurn(float dps, float duration)
+        {
+            if (dps <= 0f || duration <= 0f) return;
+            _burnDps   = Mathf.Max(_burnDps, dps);
+            _burnTimer = Mathf.Max(_burnTimer, duration);
             OnStatsChanged?.Invoke();
         }
 

@@ -334,6 +334,13 @@ namespace VoxelEngine.EditorTools
                 "  • Spawns rarely in Steppes/Desert. Re-runnable. Idempotent.");
             AddWizardButton(scroll, "29. Build Mythical Enemy — Karkadann (Phase 3g, charger)", BuildKarkadannContent, 40);
 
+            AddInfo(scroll,
+                "Step 30 builds the Ifrit Djinn mythical enemy (Combat Phase 3h, non-destructive):\n" +
+                "  • Fire spirit caster: fireballs + teleport-blink + fire walls (AoE)\n" +
+                "  • Ignites an armor-escalating BURN (heavier armor burns hotter)\n" +
+                "  • Spawns rarely in Desert/Wasteland. Re-runnable. Idempotent.");
+            AddWizardButton(scroll, "30. Build Mythical Enemy — Ifrit Djinn (Phase 3h, caster)", BuildIfritContent, 40);
+
             AddSpacer(scroll, 20);
         }
 
@@ -11255,6 +11262,141 @@ root =>
                 "Spawns rarely in Steppes/Desert (biome scatter). Saved to Resources/Enemies.",
                 "OK");
         }
+
+        // ============================================================
+        //   STEP 30 - MYTHICAL ENEMY: IFRIIT DJINN (Combat Phase 3h).
+        //   A high-tier fire spirit caster. Kites, hurls fireballs,
+        //   teleport-blinks around you, and raises fire walls (AoE);
+        //   ignites an armor-escalating burn. Radial-aligned; detaches
+        //   from the chunk on Awake. Non-destructive. Re-runnable.
+        // ============================================================
+        private void BuildIfritContent()
+        {
+            EnsureFolder("Assets/Resources");
+            EnsureFolder("Assets/Resources/Enemies");
+            const string FAUNA_ROOT  = ASSET_ROOT + "/Fauna";
+            const string FAUNA_ITEMS = FAUNA_ROOT + "/Items";
+            const string FAUNA_MATS  = FAUNA_ROOT + "/Materials";
+            EnsureFolder(FAUNA_ROOT);
+            EnsureFolder(FAUNA_ITEMS);
+            EnsureFolder(FAUNA_MATS);
+
+            // ── Drop items ──
+            var ember = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{FAUNA_ITEMS}/Item_IfritEmber.asset");
+            ember.itemId = "item_ifrit_ember"; ember.displayName = "Ifrit Ember";
+            ember.description = "A still-burning ember from a slain Ifrit. Required for advanced thermal, fusion, and stellar research.";
+            ember.iconTint = new Color(1.0f, 0.45f, 0.10f); ember.maxStack = 10; ember.massPerUnit = 0.4f; ember.category = "Resources";
+            EditorUtility.SetDirty(ember);
+
+            var ash = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{FAUNA_ITEMS}/Item_Ash.asset");
+            ash.itemId = "item_ash"; ash.displayName = "Ash";
+            ash.description = "Cold ash left by fire creatures. A basic alchemy and absorbent material.";
+            ash.iconTint = new Color(0.30f, 0.28f, 0.27f); ash.maxStack = 60; ash.massPerUnit = 0.1f; ash.category = "Resources";
+            EditorUtility.SetDirty(ash);
+
+            // ── Materials ──
+            var emberCore   = MakeColoredMat(FAUNA_MATS, "Mat_IfritCore",   new Color(0.90f, 0.35f, 0.10f));
+            var emberBright = MakeColoredMat(FAUNA_MATS, "Mat_IfritBright", new Color(1.00f, 0.75f, 0.15f));
+            var smokeDark   = MakeColoredMat(FAUNA_MATS, "Mat_IfritSmoke",  new Color(0.18f, 0.14f, 0.16f));
+            var hornDark    = MakeColoredMat(FAUNA_MATS, "Mat_IfritHorn",   new Color(0.25f, 0.20f, 0.18f));
+            var eyeGlow     = MakeColoredMat(FAUNA_MATS, "Mat_IfritEye",    new Color(1.00f, 0.95f, 0.60f));
+            var fireballMat = MakeColoredMat(FAUNA_MATS, "Mat_IfritFireball",new Color(1.00f, 0.50f, 0.10f));
+            var firewallMat = MakeColoredMat(FAUNA_MATS, "Mat_IfritFirewall",new Color(0.95f, 0.35f, 0.10f));
+
+            void AddPart(GameObject root, string n, Vector3 pos, Vector3 euler, Vector3 scale, Material m)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                go.name = n; go.transform.SetParent(root.transform, false);
+                go.transform.localPosition = pos; go.transform.localEulerAngles = euler; go.transform.localScale = scale;
+                go.GetComponent<Renderer>().sharedMaterial = m;
+                var col = go.GetComponent<Collider>(); if (col != null) UnityEngine.Object.DestroyImmediate(col);
+            }
+
+            var root = new GameObject("Ifrit");
+            // ── Body: ember core + wispy base (no legs) ──
+            AddPart(root, "Core",    new Vector3(0f, 1.0f, 0f),    Vector3.zero, new Vector3(0.50f, 1.0f, 0.50f), emberCore);
+            AddPart(root, "Wisps",   new Vector3(0f, 0.4f, 0f),    Vector3.zero, new Vector3(0.35f, 0.6f, 0.35f), smokeDark);
+            AddPart(root, "ChestGlow",new Vector3(0f, 1.1f, 0.05f),Vector3.zero, new Vector3(0.45f, 0.5f, 0.40f), emberBright);
+            AddPart(root, "SmokeL",  new Vector3(-0.30f, 0.5f, 0f), Vector3.zero, new Vector3(0.12f, 0.5f, 0.12f), smokeDark);
+            AddPart(root, "SmokeR",  new Vector3( 0.30f, 0.5f, 0f), Vector3.zero, new Vector3(0.12f, 0.5f, 0.12f), smokeDark);
+            // ── Shoulders + flame arms ──
+            AddPart(root, "ShldrL", new Vector3(-0.30f, 1.35f, 0f), Vector3.zero, new Vector3(0.22f, 0.22f, 0.22f), emberCore);
+            AddPart(root, "ShldrR", new Vector3( 0.30f, 1.35f, 0f), Vector3.zero, new Vector3(0.22f, 0.22f, 0.22f), emberCore);
+            AddPart(root, "ArmL",   new Vector3(-0.42f, 1.0f, 0.05f),Vector3.zero,new Vector3(0.14f, 0.5f, 0.14f),  emberBright);
+            AddPart(root, "HandL",  new Vector3(-0.46f, 0.7f, 0.1f), Vector3.zero,new Vector3(0.16f, 0.16f, 0.16f), emberCore);
+            AddPart(root, "ArmR",   new Vector3( 0.42f, 1.0f, 0.05f),Vector3.zero,new Vector3(0.14f, 0.5f, 0.14f),  emberBright);
+            AddPart(root, "HandR",  new Vector3( 0.46f, 0.7f, 0.1f), Vector3.zero,new Vector3(0.16f, 0.16f, 0.16f), emberCore);
+            // ── Neck + head + glowing face ──
+            AddPart(root, "Neck",     new Vector3(0f, 1.55f, 0.05f), Vector3.zero, new Vector3(0.22f, 0.25f, 0.22f), emberCore);
+            AddPart(root, "Head",     new Vector3(0f, 1.75f, 0.08f), Vector3.zero, new Vector3(0.32f, 0.36f, 0.32f), emberCore);
+            AddPart(root, "FaceGlow", new Vector3(0f, 1.76f, 0.22f), Vector3.zero, new Vector3(0.24f, 0.28f, 0.06f), emberBright);
+            AddPart(root, "EyeL", new Vector3(-0.09f, 1.81f, 0.23f), Vector3.zero, new Vector3(0.05f, 0.05f, 0.03f), eyeGlow);
+            AddPart(root, "EyeR", new Vector3( 0.09f, 1.81f, 0.23f), Vector3.zero, new Vector3(0.05f, 0.05f, 0.03f), eyeGlow);
+            // ── Swept-back horns + flame crest ──
+            AddPart(root, "HornL",   new Vector3(-0.12f, 2.0f, 0.02f),  new Vector3(20f, 0f, -25f), new Vector3(0.08f, 0.28f, 0.08f), hornDark);
+            AddPart(root, "HornR",   new Vector3( 0.12f, 2.0f, 0.02f),  new Vector3(20f, 0f,  25f), new Vector3(0.08f, 0.28f, 0.08f), hornDark);
+            AddPart(root, "Crest1",  new Vector3(0f, 2.05f, 0.0f),  new Vector3(-15f, 0f, 0f), new Vector3(0.10f, 0.32f, 0.10f), emberBright);
+            AddPart(root, "Crest2",  new Vector3(-0.08f, 2.0f, -0.05f),new Vector3(-25f, 0f, -10f),new Vector3(0.08f, 0.26f, 0.08f), emberBright);
+            AddPart(root, "Crest3",  new Vector3( 0.08f, 2.0f, -0.05f),new Vector3(-25f, 0f,  10f),new Vector3(0.08f, 0.26f, 0.08f), emberBright);
+
+            var cap = root.AddComponent<CapsuleCollider>();
+            cap.height = 1.7f; cap.radius = 0.4f; cap.center = new Vector3(0f, 1.0f, 0f);
+            var rb = root.AddComponent<Rigidbody>();
+            rb.useGravity = false; rb.freezeRotation = true;
+            var ifrit = root.AddComponent<VoxelEngine.Combat.EnemyIfrit>();
+            ifrit.fireballMaterial = fireballMat;
+            ifrit.firewallMaterial = firewallMat;
+            ifrit.drops = new VoxelEngine.Items.ItemDefinition[] { ember, ash };
+            ifrit.minDrops = 1; ifrit.maxDrops = 2; ifrit.dropCount = 1;
+            var hbar = root.AddComponent<VoxelEngine.Combat.CreatureHealthBar>();
+            hbar.target = ifrit;
+            hbar.fillColor = new Color(0.95f, 0.40f, 0.10f);
+            hbar.fillColorLow = new Color(0.60f, 0.10f, 0.10f);
+
+            const string path = "Assets/Resources/Enemies/Ifrit.prefab";
+            GameObject prefab;
+            if (AssetDatabase.LoadMainAssetAtPath(path) != null)
+            {
+                prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+            else
+            {
+                prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+
+            // Inject into hot biome scatter (reliable spawn path; same as the Ghoul).
+            var br = AssetDatabase.LoadAssetAtPath<VoxelEngine.Biomes.BiomeRegistry>(ASSET_ROOT + "/BiomeRegistry.asset");
+            if (br != null && prefab != null)
+            {
+                foreach (var biome in br.biomes)
+                {
+                    if (biome == null) continue;
+                    if (biome.biomeName != "Desert" && biome.biomeName != "Wasteland") continue;
+                    var list = (biome.scatter != null)
+                        ? new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>(biome.scatter)
+                        : new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>();
+                    list.RemoveAll(e => e.prefab != null && e.prefab.name == "Ifrit");
+                    list.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = prefab, density = 0.002f, minScale = 0.95f, maxScale = 1.15f, minHeight = 0, maxHeight = 9999 });
+                    biome.scatter = list.ToArray();
+                    EditorUtility.SetDirty(biome);
+                }
+                EditorUtility.SetDirty(br);
+            }
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Voxel Engine — Mythical Enemy: Ifrit Djinn (Phase 3h)",
+                "The Ifrit Djinn is built:\n\n" +
+                "• Fire spirit: ember body, wispy base, flame arms, horned head with a flame crest (~24 parts)\n" +
+                "• Kites, hurls fireballs, teleport-blinks around you, and raises fire walls (AoE)\n" +
+                "• Ignites an armor-escalating BURN (heavier armor burns hotter)\n" +
+                "• Drops Ifrit Ember + Ash\n\n" +
+                "Spawns rarely in Desert/Wasteland (biome scatter). Saved to Resources/Enemies.",
+                "OK");
+        }
+
 
 
 

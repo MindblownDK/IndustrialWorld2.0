@@ -1,9 +1,34 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.47.0-dev`
+**Current Version:** `6.48.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.48.0-dev] Phase 3h — Mythical Enemy: Ifrit Djinn (caster: fireballs + teleport + fire walls)
+
+**Type:** MINOR — new caster creature + fire/burn/teleport/AoE systems (save-compatible). Phase 3h of the Combat pillar.
+
+**Added — the Ifrit Djinn (spellcaster, completes the archetype set):**
+1. `Scripts/Combat/EnemyIfrit.cs` (new) — a high-tier fire spirit that KITES at range and cycles three abilities: **hurls fireballs**, **teleport-blinks** to reposition around you, and **raises fire walls** (lingering AoE) at your feet. Fragile (50 HP) but deadly. Reuses `Damageable` + `CreatureHealthBar`; radial-aligned; detaches from the chunk on Awake.
+2. `Scripts/Combat/Fireball.cs` (new) — fire projectile (adapted from the Manticore spike) that deals fire damage + ignites a burn; passes through the caster.
+3. `Scripts/Combat/FireWallHazard.cs` (new) — a flat glowing fire patch laid on the surface (oriented to radial up) that burns the player while they stand in it, then dissipates.
+4. **Burn status** in `PlayerStats` (`ApplyBurn`) — a fire DoT that **bypasses armor AND escalates with it** (heavier plate burns hotter, per the lore — `dps × (1 + armorReduction × 1.5)`). Mirrors the Manticore's poison.
+5. **Step 30 (wizard):** a premium ~24-part fire-spirit model (ember core, wispy base, flame arms, horned head with a flickering flame crest), `EnemyIfrit`, drops **Ifrit Ember + Ash**, saved non-destructively to `Resources/Enemies/Ifrit.prefab`, injected into **Desert/Wasteland** biome scatter (rare, density 0.002).
+
+**To play:** run Step 30 → explore **Desert/Wasteland** → an Ifrit may appear. It kites and throws fire — keep moving out of fire walls, dodge fireballs, and burst it down fast (it's squishy) before the burn stacks.
+
+**Why MINOR:** new enemy + projectile + AoE hazard + teleport + new status — all save-compatible.
+
+**Tunable (prefab):** `castRange`, `fireballCooldown`/`fireballsPerCast`/`fireballBurnDps`, `teleportCooldown`/`teleportRange`, `firewallCooldown`/`firewallDuration`/`firewallBurnDps`/`firewallRadius`.
+
+**Files touched:**
+- `Scripts/Combat/EnemyIfrit.cs` (new), `Scripts/Combat/Fireball.cs` (new), `Scripts/Combat/FireWallHazard.cs` (new)
+- `Scripts/Player/PlayerStats.cs` (`ApplyBurn` + armor-escalating burn tick)
+- `Scripts/Editor/VoxelEngineSetupWindow.cs` (Step 30 `BuildIfritContent` + button)
+- `Scripts/Core/GameVersion.cs` (6.47.0 -> 6.48.0), `Roadmap.md` + `Changelog.md`
+
+---
 
 ### [6.47.0-dev] Phase 3g — Mythical Enemy: Karkadann (charge + frontal armor)
 
