@@ -1,9 +1,21 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.53.2-dev`
+**Current Version:** `6.53.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.53.3-dev] Compile fix — MuzzleWorldPosition uses .transform (CS1061)
+
+**Type:** PATCH — compile fix (save-compatible).
+
+`_viewModel` is a `GameObject`, so `MuzzleWorldPosition` must call `_viewModel.transform.TransformPoint(...)` (TransformPoint is on Transform, not GameObject).
+
+**Files touched:**
+- `Scripts/Player/HeldToolView.cs` (`_viewModel.transform.TransformPoint`)
+- `Scripts/Core/GameVersion.cs` (6.53.2 -> 6.53.3), `Changelog.md`
+
+---
 
 ### [6.53.2-dev] Muzzle flash at the gun + visible tracers
 

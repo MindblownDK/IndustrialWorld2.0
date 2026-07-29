@@ -222,7 +222,7 @@ namespace VoxelEngine.Player
         public void DoRecoil() { _recoilT = 1f; }
 
         /// <summary>World position of the held weapon's muzzle (for muzzle flash / tracers).</summary>
-        public Vector3 MuzzleWorldPosition => _viewModel != null ? _viewModel.TransformPoint(_muzzleLocalOffset) : transform.position + transform.forward * 0.5f;
+        public Vector3 MuzzleWorldPosition => _viewModel != null ? _viewModel.transform.TransformPoint(_muzzleLocalOffset) : transform.position + transform.forward * 0.5f;
 
         private IEnumerator SwingRoutine()
         {
