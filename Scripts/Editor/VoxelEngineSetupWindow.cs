@@ -341,6 +341,13 @@ namespace VoxelEngine.EditorTools
                 "  • Spawns rarely in Desert/Wasteland. Re-runnable. Idempotent.");
             AddWizardButton(scroll, "30. Build Mythical Enemy — Ifrit Djinn (Phase 3h, caster)", BuildIfritContent, 40);
 
+            AddInfo(scroll,
+                "Step 31 builds the ROC mini-boss (Combat Phase 3i, non-destructive):\n" +
+                "  • Colossal flying bird — dive-bombs + wing-gust AoE; ENRAGES below 50% HP\n" +
+                "  • Guaranteed boss loot: Giant Pinions + Roc Storm Core\n" +
+                "  • Spawns VERY rarely in Mountains/Steppes. Re-runnable. Idempotent.");
+            AddWizardButton(scroll, "31. Build Mythical Mini-Boss — Roc (Phase 3i)", BuildRocContent, 40);
+
             AddSpacer(scroll, 20);
         }
 
@@ -11396,6 +11403,142 @@ root =>
                 "Spawns rarely in Desert/Wasteland (biome scatter). Saved to Resources/Enemies.",
                 "OK");
         }
+
+        // ============================================================
+        //   STEP 31 - MYTHICAL MINI-BOSS: ROC (Combat Phase 3i). A
+        //   colossal bird of prey. Circles, dive-bombs with massive
+        //   talons, beats its wings for an AoE gust, and ENRAGES
+        //   below 50% HP. Guaranteed boss loot (Giant Pinions + Roc
+        //   Storm Core). Very rare. Non-destructive. Re-runnable.
+        // ============================================================
+        private void BuildRocContent()
+        {
+            EnsureFolder("Assets/Resources");
+            EnsureFolder("Assets/Resources/Enemies");
+            const string FAUNA_ROOT  = ASSET_ROOT + "/Fauna";
+            const string FAUNA_ITEMS = FAUNA_ROOT + "/Items";
+            const string FAUNA_MATS  = FAUNA_ROOT + "/Materials";
+            EnsureFolder(FAUNA_ROOT);
+            EnsureFolder(FAUNA_ITEMS);
+            EnsureFolder(FAUNA_MATS);
+
+            // ── Drop items ──
+            var pinion = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{FAUNA_ITEMS}/Item_GiantPinion.asset");
+            pinion.itemId = "item_giant_pinion"; pinion.displayName = "Giant Pinion";
+            pinion.description = "A colossal flight feather from a Roc. A premium material for advanced flight and weather-control equipment.";
+            pinion.iconTint = new Color(0.42f, 0.32f, 0.22f); pinion.maxStack = 20; pinion.massPerUnit = 0.8f; pinion.category = "Resources";
+            EditorUtility.SetDirty(pinion);
+
+            var stormCore = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{FAUNA_ITEMS}/Item_RocStormCore.asset");
+            stormCore.itemId = "item_roc_storm_core"; stormCore.displayName = "Roc Storm Core";
+            stormCore.description = "A crackling core of wind and sand harvested from a slain Roc. Required by advanced flight and weather-control research.";
+            stormCore.iconTint = new Color(0.65f, 0.75f, 0.85f); stormCore.maxStack = 5; stormCore.massPerUnit = 1.5f; stormCore.category = "Resources";
+            EditorUtility.SetDirty(stormCore);
+
+            // ── Materials ──
+            var bodyDark   = MakeColoredMat(FAUNA_MATS, "Mat_RocBody",   new Color(0.32f, 0.24f, 0.18f));
+            var featherDark= MakeColoredMat(FAUNA_MATS, "Mat_RocDark",   new Color(0.26f, 0.20f, 0.15f));
+            var featherMid = MakeColoredMat(FAUNA_MATS, "Mat_RocFeather",new Color(0.40f, 0.30f, 0.22f));
+            var beakGold   = MakeColoredMat(FAUNA_MATS, "Mat_RocBeak",   new Color(0.80f, 0.65f, 0.20f));
+            var eyeGold    = MakeColoredMat(FAUNA_MATS, "Mat_RocEye",    new Color(0.95f, 0.80f, 0.20f));
+            var dustMat    = MakeColoredMat(FAUNA_MATS, "Mat_RocDust",   new Color(0.70f, 0.60f, 0.45f));
+
+            void AddPart(GameObject root, string n, Vector3 pos, Vector3 euler, Vector3 scale, Material m)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                go.name = n; go.transform.SetParent(root.transform, false);
+                go.transform.localPosition = pos; go.transform.localEulerAngles = euler; go.transform.localScale = scale;
+                go.GetComponent<Renderer>().sharedMaterial = m;
+                var col = go.GetComponent<Collider>(); if (col != null) UnityEngine.Object.DestroyImmediate(col);
+            }
+
+            var root = new GameObject("Roc");
+            // ── Body + chest + tail fan ──
+            AddPart(root, "Body",  new Vector3(0f, 1.6f, 0f),    Vector3.zero,           new Vector3(0.7f, 0.8f, 1.2f),  bodyDark);
+            AddPart(root, "Chest", new Vector3(0f, 1.5f, 0.5f),   Vector3.zero,           new Vector3(0.7f, 0.7f, 0.5f),  bodyDark);
+            AddPart(root, "Tail",  new Vector3(0f, 1.7f, -0.8f),  new Vector3(10f, 0f, 0f),new Vector3(0.10f, 0.5f, 0.8f), featherDark);
+            // ── Head + hooked beak + crest ──
+            AddPart(root, "Head",      new Vector3(0f, 2.1f, 0.85f), new Vector3(-10f, 0f, 0f), new Vector3(0.40f, 0.40f, 0.45f), bodyDark);
+            AddPart(root, "BeakUpper", new Vector3(0f, 2.05f, 1.15f),new Vector3(-10f, 0f, 0f), new Vector3(0.12f, 0.14f, 0.30f), beakGold);
+            AddPart(root, "BeakLower", new Vector3(0f, 1.98f, 1.10f),Vector3.zero,             new Vector3(0.10f, 0.06f, 0.18f), beakGold);
+            AddPart(root, "Crest",     new Vector3(0f, 2.32f, 0.78f),new Vector3(-25f, 0f, 0f), new Vector3(0.08f, 0.22f, 0.12f), featherDark);
+            AddPart(root, "EyeL", new Vector3(-0.14f, 2.18f, 0.98f), Vector3.zero, new Vector3(0.06f, 0.06f, 0.04f), eyeGold);
+            AddPart(root, "EyeR", new Vector3( 0.14f, 2.18f, 0.98f), Vector3.zero, new Vector3(0.06f, 0.06f, 0.04f), eyeGold);
+            // ── Colossal spread wings ──
+            AddPart(root, "WingLBase", new Vector3(-0.8f, 1.80f, 0.10f), new Vector3(0f, 0f, 20f),  new Vector3(0.12f, 0.7f, 1.6f),  featherDark);
+            AddPart(root, "WingLMid",  new Vector3(-1.5f, 1.95f, 0.0f),  new Vector3(0f, 0f, 30f),  new Vector3(0.10f, 0.5f, 1.2f),  featherMid);
+            AddPart(root, "WingLTip",  new Vector3(-2.2f, 2.10f, -0.1f), new Vector3(0f, 0f, 40f),  new Vector3(0.08f, 0.35f, 0.8f), featherMid);
+            AddPart(root, "WingRBase", new Vector3( 0.8f, 1.80f, 0.10f), new Vector3(0f, 0f, -20f), new Vector3(0.12f, 0.7f, 1.6f),  featherDark);
+            AddPart(root, "WingRMid",  new Vector3( 1.5f, 1.95f, 0.0f),  new Vector3(0f, 0f, -30f), new Vector3(0.10f, 0.5f, 1.2f),  featherMid);
+            AddPart(root, "WingRTip",  new Vector3( 2.2f, 2.10f, -0.1f), new Vector3(0f, 0f, -40f), new Vector3(0.08f, 0.35f, 0.8f), featherMid);
+            // ── Massive talons (forelegs) ──
+            AddPart(root, "TalonLegL", new Vector3(-0.2f, 0.85f, 0.30f), Vector3.zero, new Vector3(0.14f, 0.85f, 0.14f), bodyDark);
+            AddPart(root, "TalonFootL",new Vector3(-0.2f, 0.32f, 0.30f), Vector3.zero, new Vector3(0.24f, 0.12f, 0.30f), beakGold);
+            AddPart(root, "ClawL1",    new Vector3(-0.28f, 0.22f, 0.46f),new Vector3(40f, 0f, 0f), new Vector3(0.05f, 0.05f, 0.16f), featherDark);
+            AddPart(root, "ClawL2",    new Vector3(-0.12f, 0.20f, 0.48f),new Vector3(40f, 0f, 0f), new Vector3(0.05f, 0.05f, 0.16f), featherDark);
+            AddPart(root, "TalonLegR", new Vector3( 0.2f, 0.85f, 0.30f), Vector3.zero, new Vector3(0.14f, 0.85f, 0.14f), bodyDark);
+            AddPart(root, "TalonFootR",new Vector3( 0.2f, 0.32f, 0.30f), Vector3.zero, new Vector3(0.24f, 0.12f, 0.30f), beakGold);
+            AddPart(root, "ClawR1",    new Vector3( 0.28f, 0.22f, 0.46f),new Vector3(40f, 0f, 0f), new Vector3(0.05f, 0.05f, 0.16f), featherDark);
+            AddPart(root, "ClawR2",    new Vector3( 0.12f, 0.20f, 0.48f),new Vector3(40f, 0f, 0f), new Vector3(0.05f, 0.05f, 0.16f), featherDark);
+
+            var cap = root.AddComponent<CapsuleCollider>();
+            cap.height = 2.5f; cap.radius = 0.7f; cap.center = new Vector3(0f, 1.5f, 0f);
+            var rb = root.AddComponent<Rigidbody>();
+            rb.useGravity = false; rb.freezeRotation = true;
+            var roc = root.AddComponent<VoxelEngine.Combat.EnemyRoc>();
+            roc.dustMaterial = dustMat;
+            roc.stormCore = stormCore;
+            roc.drops = new VoxelEngine.Items.ItemDefinition[] { pinion };
+            roc.minDrops = 2; roc.maxDrops = 4; roc.dropCount = 1;
+            var hbar = root.AddComponent<VoxelEngine.Combat.CreatureHealthBar>();
+            hbar.target = roc;
+            hbar.fillColor = new Color(0.90f, 0.30f, 0.15f);
+            hbar.fillColorLow = new Color(0.50f, 0.10f, 0.10f);
+
+            const string path = "Assets/Resources/Enemies/Roc.prefab";
+            GameObject prefab;
+            if (AssetDatabase.LoadMainAssetAtPath(path) != null)
+            {
+                prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+            else
+            {
+                prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+
+            // Very rare mini-boss spawn (reliable scatter path; same as the Ghoul).
+            var br = AssetDatabase.LoadAssetAtPath<VoxelEngine.Biomes.BiomeRegistry>(ASSET_ROOT + "/BiomeRegistry.asset");
+            if (br != null && prefab != null)
+            {
+                foreach (var biome in br.biomes)
+                {
+                    if (biome == null) continue;
+                    if (biome.biomeName != "Mountains" && biome.biomeName != "Steppes") continue;
+                    var list = (biome.scatter != null)
+                        ? new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>(biome.scatter)
+                        : new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>();
+                    list.RemoveAll(e => e.prefab != null && e.prefab.name == "Roc");
+                    list.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = prefab, density = 0.0008f, minScale = 0.95f, maxScale = 1.15f, minHeight = 0, maxHeight = 9999 });
+                    biome.scatter = list.ToArray();
+                    EditorUtility.SetDirty(biome);
+                }
+                EditorUtility.SetDirty(br);
+            }
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Voxel Engine — Mythical Mini-Boss: Roc (Phase 3i)",
+                "The Roc mini-boss is built:\n\n" +
+                "• Colossal bird of prey: huge spread wings, hooked beak, massive talons (~28 parts)\n" +
+                "• FLIES — circles overhead, dive-bombs with huge talons, beats wings for an AoE gust (damage + knockback + dust ring)\n" +
+                "• ENRAGES below 50% HP (faster, shorter cooldowns); 350 HP\n" +
+                "• Drops Giant Pinions + a guaranteed Roc Storm Core\n\n" +
+                "Spawns VERY rarely in Mountains/Steppes (biome scatter). Saved to Resources/Enemies.",
+                "OK");
+        }
+
 
 
 

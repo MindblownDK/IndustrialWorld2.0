@@ -1,9 +1,30 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.48.0-dev`
+**Current Version:** `6.49.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.49.0-dev] Phase 3i — Mythical Mini-Boss: Roc (first boss)
+
+**Type:** MINOR — first boss creature + enrage phase (save-compatible). Phase 3i of the Combat pillar.
+
+**Added — the Roc, the game's first mini-boss:**
+1. `Scripts/Combat/EnemyRoc.cs` (new) — a colossal bird of prey. Boss-tier flight AI: it CIRCLES overhead at altitude, **dive-bombs with massive talons**, and periodically **beats its wings for a GUST** (AoE damage + knockback to anything within `gustRadius`, plus a dust-ring visual). **ENRAGES below 50% HP** (×1.3 speed, ×0.6 cooldowns). 350 HP. Reuses `Damageable` + `CreatureHealthBar`; radial-aware; detaches from the chunk on Awake; uses `PlayerController.ApplyImpulse` for the gust knockback.
+2. **Step 31 (wizard):** a premium ~28-part colossal model (huge spread wings with feather rows, hooked beak, crest, massive taloned forelegs), `EnemyRoc`, **guaranteed boss loot** — Giant Pinions (2–4) + a guaranteed **Roc Storm Core** (via a `Die` override) — saved non-destructively to `Resources/Enemies/Roc.prefab`, injected into **Mountains/Steppes** biome scatter at **very rare** density (0.0008).
+
+**To fight it:** run Step 31 → explore **Mountains/Steppes** (it's rare) → if a Roc appears, expect a long fight: dodge its dive-bombs, stay out of the gust radius, and push through its enrage phase for the guaranteed Storm Core.
+
+**Why MINOR:** new boss creature + enrage mechanic — save-compatible.
+
+**Tunable (prefab):** `hoverHeight`/`orbitRadius`/`orbitSpeed`, `diveCooldown`/`diveDamage`, `gustCooldown`/`gustRadius`/`gustDamage`/`gustKnockback`, `enrageThreshold`/`enrageSpeedMul`/`enrageCooldownMul`.
+
+**Files touched:**
+- `Scripts/Combat/EnemyRoc.cs` (new)
+- `Scripts/Editor/VoxelEngineSetupWindow.cs` (Step 31 `BuildRocContent` + button)
+- `Scripts/Core/GameVersion.cs` (6.48.0 -> 6.49.0), `Roadmap.md` + `Changelog.md`
+
+---
 
 ### [6.48.0-dev] Phase 3h — Mythical Enemy: Ifrit Djinn (caster: fireballs + teleport + fire walls)
 
