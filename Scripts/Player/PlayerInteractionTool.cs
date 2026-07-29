@@ -832,7 +832,9 @@ namespace VoxelEngine.Player
                 if (_effectMat == null)
                 {
                     Shader sh = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Color") ?? Shader.Find("Sprites/Default");
-                    _effectMat = new Material(sh) { color = new Color(1f, 0.85f, 0.35f) };
+                    _effectMat = new Material(sh);
+                    _effectMat.color = new Color(1f, 0.85f, 0.35f);
+                    if (_effectMat.HasProperty("_BaseColor")) _effectMat.SetColor("_BaseColor", new Color(1f, 0.85f, 0.35f));
                 }
                 return _effectMat;
             }
@@ -861,9 +863,9 @@ namespace VoxelEngine.Player
             Object.Destroy(go.GetComponent<Collider>());
             go.transform.position = (from + to) * 0.5f;
             go.transform.rotation = Quaternion.LookRotation(dir);
-            go.transform.localScale = new Vector3(0.025f, 0.025f, len);
+            go.transform.localScale = new Vector3(0.05f, 0.05f, len);
             go.GetComponent<Renderer>().sharedMaterial = EffectMat;
-            Object.Destroy(go, 0.06f);
+            Object.Destroy(go, 0.12f);
         }
 
         private void HandleWeaponAttack(VoxelEngine.Combat.WeaponItem weapon, Ray ray)
@@ -881,7 +883,8 @@ namespace VoxelEngine.Player
                 }
                 inventory.container.RaiseChanged();
 
-                Vector3 muzzle = ray.origin + ray.direction * 0.6f;
+                var hv = GetComponent<VoxelEngine.Player.HeldToolView>();
+                Vector3 muzzle = hv != null ? hv.MuzzleWorldPosition : ray.origin + ray.direction * 0.6f;
                 Vector3 impact = ray.origin + ray.direction * dist;
                 if (TryRaycastIgnoringSelf(ray, out var hit, dist))
                 {

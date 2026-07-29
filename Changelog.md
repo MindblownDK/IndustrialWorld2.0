@@ -1,9 +1,24 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.53.1-dev`
+**Current Version:** `6.53.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.53.2-dev] Muzzle flash at the gun + visible tracers
+
+**Type:** PATCH — weapon VFX fix (save-compatible).
+
+**Fixed — muzzle flash was at the crosshair, not the gun.** It was spawned at the camera (`ray.origin + forward`), i.e. the screen center. Now it spawns at the **held weapon's actual muzzle**: `HeldToolView` stores a per-weapon muzzle offset (set in `Refresh` from the item — pistol vs rifle barrel tips) and exposes `MuzzleWorldPosition`; the flash + tracer now originate there.
+
+**Fixed — tracers were invisible.** The effect material wasn't showing its colour (URP/Unlit uses `_BaseColor`, not `_Color`) and the tracer was too thin/brief. Now: `_BaseColor` is set (bright yellow), and the tracer is thicker (0.05) and lasts longer (0.12s) so the shot reads as a clear beam from the gun to the target.
+
+**Files touched:**
+- `Scripts/Player/HeldToolView.cs` (`_muzzleLocalOffset` + `MuzzleWorldPosition`)
+- `Scripts/Player/PlayerInteractionTool.cs` (muzzle from the gun, `_BaseColor`, thicker tracer)
+- `Scripts/Core/GameVersion.cs` (6.53.1 -> 6.53.2), `Changelog.md`
+
+---
 
 ### [6.53.1-dev] Compile fix — Ranged `hitPoint` renamed to `impact` (CS0136)
 

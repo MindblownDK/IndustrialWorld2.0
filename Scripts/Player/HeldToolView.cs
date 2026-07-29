@@ -45,6 +45,7 @@ namespace VoxelEngine.Player
         private Quaternion _curRot;
         private bool   _posInit;
         private Transform _swingPivot;
+        private Vector3 _muzzleLocalOffset = new Vector3(0f, 0.05f, 0.2f);
 
         private void Awake()
         {
@@ -191,6 +192,12 @@ namespace VoxelEngine.Player
             _viewModel.transform.localPosition = new Vector3(0f, 0.12f, 0f);
             _viewModel.transform.localRotation = Quaternion.identity;
 
+            // Muzzle offset (muzzle flash / tracers) — gun barrel tips.
+            if (item is VoxelEngine.Combat.WeaponItem mw && mw.attackMode == VoxelEngine.Combat.WeaponItem.AttackMode.Ranged)
+                _muzzleLocalOffset = mw.range > 20f ? new Vector3(0f, 0.06f, 0.40f) : new Vector3(0f, 0.06f, 0.22f);
+            else
+                _muzzleLocalOffset = new Vector3(0f, 0.05f, 0.2f);
+
             // Make every renderer ignore world lighting overrides + put on a high render queue
             // so it draws on top of nothing weird (still respects depth though).
             foreach (var r in _viewModel.GetComponentsInChildren<Renderer>(true))
@@ -213,6 +220,9 @@ namespace VoxelEngine.Player
 
         // Called by the combat hook when a ranged weapon is fired.
         public void DoRecoil() { _recoilT = 1f; }
+
+        /// <summary>World position of the held weapon's muzzle (for muzzle flash / tracers).</summary>
+        public Vector3 MuzzleWorldPosition => _viewModel != null ? _viewModel.TransformPoint(_muzzleLocalOffset) : transform.position + transform.forward * 0.5f;
 
         private IEnumerator SwingRoutine()
         {
