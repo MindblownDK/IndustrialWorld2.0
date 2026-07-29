@@ -320,6 +320,13 @@ namespace VoxelEngine.EditorTools
                 "  • Spawns rarely in Desert/Wasteland. Re-runnable. Idempotent.");
             AddWizardButton(scroll, "27. Build Mythical Enemy — Manticore (Phase 3e)", BuildManticoreContent, 40);
 
+            AddInfo(scroll,
+                "Step 28 builds the Griffin mythical enemy (Combat Phase 3f, non-destructive):\n" +
+                "  • Heraldic lion-eagle that FLIES — circles overhead, then dive-bombs\n" +
+                "  • Drops Griffin Feathers + Talons; rare Griffin Heart\n" +
+                "  • Spawns rarely in Mountains/Steppes. Re-runnable. Idempotent.");
+            AddWizardButton(scroll, "28. Build Mythical Enemy — Griffin (Phase 3f, flying)", BuildGriffinContent, 40);
+
             AddSpacer(scroll, 20);
         }
 
@@ -10954,6 +10961,154 @@ root =>
                 "Spawns rarely in Desert/Wasteland (biome scatter). Saved to Resources/Enemies.",
                 "OK");
         }
+
+        // ============================================================
+        //   STEP 28 - MYTHICAL ENEMY: GRIFFIN (Combat Phase 3f). A
+        //   heraldic lion-eagle that FLIES — circles overhead then
+        //   dive-bombs with its talons. Radial-aware; detaches from
+        //   the chunk on Awake. Rarely drops a Griffin Heart. Non-
+        //   destructive. Re-runnable. Idempotent.
+        // ============================================================
+        private void BuildGriffinContent()
+        {
+            EnsureFolder("Assets/Resources");
+            EnsureFolder("Assets/Resources/Enemies");
+            const string FAUNA_ROOT  = ASSET_ROOT + "/Fauna";
+            const string FAUNA_ITEMS = FAUNA_ROOT + "/Items";
+            const string FAUNA_MATS  = FAUNA_ROOT + "/Materials";
+            EnsureFolder(FAUNA_ROOT);
+            EnsureFolder(FAUNA_ITEMS);
+            EnsureFolder(FAUNA_MATS);
+
+            // ── Drop items ──
+            var feather = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{FAUNA_ITEMS}/Item_GriffinFeather.asset");
+            feather.itemId = "item_griffin_feather"; feather.displayName = "Griffin Feather";
+            feather.description = "A long flight feather from a Griffin. Used in aerial equipment and fletching.";
+            feather.iconTint = new Color(0.55f, 0.42f, 0.24f); feather.maxStack = 40; feather.massPerUnit = 0.1f; feather.category = "Resources";
+            EditorUtility.SetDirty(feather);
+
+            var talon = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{FAUNA_ITEMS}/Item_GriffinTalon.asset");
+            talon.itemId = "item_griffin_talon"; talon.displayName = "Griffin Talon";
+            talon.description = "A curved raptorial talon. A sharp crafting reagent for piercing weapons.";
+            talon.iconTint = new Color(0.85f, 0.72f, 0.22f); talon.maxStack = 30; talon.massPerUnit = 0.2f; talon.category = "Resources";
+            EditorUtility.SetDirty(talon);
+
+            var heart = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{FAUNA_ITEMS}/Item_GriffinHeart.asset");
+            heart.itemId = "item_griffin_heart"; heart.displayName = "Griffin Heart";
+            heart.description = "A rare, still-warm heart of a slain Griffin. Required for advanced aerial research.";
+            heart.iconTint = new Color(0.80f, 0.20f, 0.25f); heart.maxStack = 5; heart.massPerUnit = 1.0f; heart.category = "Resources";
+            EditorUtility.SetDirty(heart);
+
+            // ── Materials ──
+            var eagleBrown = MakeColoredMat(FAUNA_MATS, "Mat_GriffinEagle", new Color(0.50f, 0.36f, 0.20f));
+            var eagleDark  = MakeColoredMat(FAUNA_MATS, "Mat_GriffinDark",  new Color(0.30f, 0.22f, 0.14f));
+            var lionTawny  = MakeColoredMat(FAUNA_MATS, "Mat_GriffinLion",  new Color(0.62f, 0.48f, 0.26f));
+            var lionDark   = MakeColoredMat(FAUNA_MATS, "Mat_GriffinLionDk",new Color(0.20f, 0.16f, 0.12f));
+            var gold       = MakeColoredMat(FAUNA_MATS, "Mat_GriffinGold",  new Color(0.85f, 0.70f, 0.20f));
+            var eyeGold    = MakeColoredMat(FAUNA_MATS, "Mat_GriffinEye",   new Color(0.95f, 0.80f, 0.20f));
+
+            void AddPart(GameObject root, string n, Vector3 pos, Vector3 euler, Vector3 scale, Material m)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                go.name = n; go.transform.SetParent(root.transform, false);
+                go.transform.localPosition = pos; go.transform.localEulerAngles = euler; go.transform.localScale = scale;
+                go.GetComponent<Renderer>().sharedMaterial = m;
+                var col = go.GetComponent<Collider>(); if (col != null) UnityEngine.Object.DestroyImmediate(col);
+            }
+
+            var root = new GameObject("Griffin");
+            // ── Body: eagle chest + lion hindquarters ──
+            AddPart(root, "Chest", new Vector3(0f, 1.0f, 0.40f),  Vector3.zero, new Vector3(0.50f, 0.60f, 0.50f), eagleBrown);
+            AddPart(root, "Torso", new Vector3(0f, 1.0f, -0.30f), Vector3.zero, new Vector3(0.50f, 0.55f, 0.90f), lionTawny);
+            AddPart(root, "Rump",  new Vector3(0f, 1.0f, -0.85f), Vector3.zero, new Vector3(0.50f, 0.50f, 0.40f), lionTawny);
+            // ── Eagle head + beak + crest ──
+            AddPart(root, "Head",      new Vector3(0f, 1.40f, 0.75f), new Vector3(-12f, 0f, 0f), new Vector3(0.30f, 0.32f, 0.34f), eagleBrown);
+            AddPart(root, "BeakUpper", new Vector3(0f, 1.36f, 1.00f), new Vector3(-12f, 0f, 0f), new Vector3(0.10f, 0.10f, 0.20f), gold);
+            AddPart(root, "BeakLower", new Vector3(0f, 1.30f, 0.97f), new Vector3(-12f, 0f, 0f), new Vector3(0.08f, 0.05f, 0.12f), gold);
+            AddPart(root, "Crest",     new Vector3(0f, 1.56f, 0.70f), new Vector3(-20f, 0f, 0f), new Vector3(0.08f, 0.20f, 0.12f), eagleDark);
+            AddPart(root, "EyeL", new Vector3(-0.10f, 1.45f, 0.86f), Vector3.zero, new Vector3(0.04f, 0.04f, 0.03f), eyeGold);
+            AddPart(root, "EyeR", new Vector3( 0.10f, 1.45f, 0.86f), Vector3.zero, new Vector3(0.04f, 0.04f, 0.03f), eyeGold);
+            // ── Wings (spread from the shoulders) ──
+            AddPart(root, "WingLBase",  new Vector3(-0.42f, 1.18f, 0.20f), new Vector3(0f, 0f, 28f),  new Vector3(0.10f, 0.50f, 0.75f), eagleDark);
+            AddPart(root, "WingLTip",   new Vector3(-0.85f, 1.32f, 0.05f), new Vector3(0f, 0f, 42f),  new Vector3(0.08f, 0.30f, 0.55f), eagleBrown);
+            AddPart(root, "WingLFeather",new Vector3(-0.70f, 0.95f, 0.0f), new Vector3(0f, 0f, 35f),  new Vector3(0.06f, 0.55f, 0.12f), eagleBrown);
+            AddPart(root, "WingRBase",  new Vector3( 0.42f, 1.18f, 0.20f), new Vector3(0f, 0f, -28f), new Vector3(0.10f, 0.50f, 0.75f), eagleDark);
+            AddPart(root, "WingRTip",   new Vector3( 0.85f, 1.32f, 0.05f), new Vector3(0f, 0f, -42f), new Vector3(0.08f, 0.30f, 0.55f), eagleBrown);
+            AddPart(root, "WingRFeather",new Vector3( 0.70f, 0.95f, 0.0f), new Vector3(0f, 0f, -35f), new Vector3(0.06f, 0.55f, 0.12f), eagleBrown);
+            // ── Eagle talons (front legs) ──
+            AddPart(root, "TalonLegL", new Vector3(-0.16f, 0.55f, 0.40f), Vector3.zero, new Vector3(0.10f, 0.50f, 0.10f), gold);
+            AddPart(root, "TalonFootL",new Vector3(-0.16f, 0.22f, 0.40f), Vector3.zero, new Vector3(0.18f, 0.10f, 0.22f), gold);
+            AddPart(root, "ClawL1",    new Vector3(-0.22f, 0.16f, 0.50f), new Vector3(40f, 0f, 0f), new Vector3(0.04f, 0.04f, 0.12f), eagleDark);
+            AddPart(root, "ClawL2",    new Vector3(-0.10f, 0.14f, 0.52f), new Vector3(40f, 0f, 0f), new Vector3(0.04f, 0.04f, 0.12f), eagleDark);
+            AddPart(root, "TalonLegR", new Vector3( 0.16f, 0.55f, 0.40f), Vector3.zero, new Vector3(0.10f, 0.50f, 0.10f), gold);
+            AddPart(root, "TalonFootR",new Vector3( 0.16f, 0.22f, 0.40f), Vector3.zero, new Vector3(0.18f, 0.10f, 0.22f), gold);
+            AddPart(root, "ClawR1",    new Vector3( 0.22f, 0.16f, 0.50f), new Vector3(40f, 0f, 0f), new Vector3(0.04f, 0.04f, 0.12f), eagleDark);
+            AddPart(root, "ClawR2",    new Vector3( 0.10f, 0.14f, 0.52f), new Vector3(40f, 0f, 0f), new Vector3(0.04f, 0.04f, 0.12f), eagleDark);
+            // ── Lion hind legs ──
+            AddPart(root, "HindLegL", new Vector3(-0.20f, 0.58f, -0.70f), Vector3.zero, new Vector3(0.14f, 0.55f, 0.16f), lionTawny);
+            AddPart(root, "HindPawL", new Vector3(-0.20f, 0.22f, -0.70f), Vector3.zero, new Vector3(0.18f, 0.12f, 0.22f), lionDark);
+            AddPart(root, "HindLegR", new Vector3( 0.20f, 0.58f, -0.70f), Vector3.zero, new Vector3(0.14f, 0.55f, 0.16f), lionTawny);
+            AddPart(root, "HindPawR", new Vector3( 0.20f, 0.22f, -0.70f), Vector3.zero, new Vector3(0.18f, 0.12f, 0.22f), lionDark);
+            // ── Tufted tail ──
+            AddPart(root, "Tail",     new Vector3(0f, 1.0f, -1.10f), new Vector3(18f, 0f, 0f), new Vector3(0.08f, 0.08f, 0.32f), lionTawny);
+            AddPart(root, "TailTuft", new Vector3(0f, 1.10f, -1.38f), Vector3.zero,           new Vector3(0.12f, 0.12f, 0.12f), lionDark);
+
+            var cap = root.AddComponent<CapsuleCollider>();
+            cap.height = 1.5f; cap.radius = 0.45f; cap.center = new Vector3(0f, 1.0f, 0f);
+            var rb = root.AddComponent<Rigidbody>();
+            rb.useGravity = false; rb.freezeRotation = true;
+            var griffin = root.AddComponent<VoxelEngine.Combat.EnemyGriffin>();
+            griffin.griffinHeart = heart;
+            griffin.drops = new VoxelEngine.Items.ItemDefinition[] { feather, talon };
+            griffin.minDrops = 1; griffin.maxDrops = 3; griffin.dropCount = 1;
+            var hbar = root.AddComponent<VoxelEngine.Combat.CreatureHealthBar>();
+            hbar.target = griffin;
+            hbar.fillColor = new Color(0.90f, 0.70f, 0.20f);
+            hbar.fillColorLow = new Color(0.80f, 0.30f, 0.20f);
+
+            const string griffinPath = "Assets/Resources/Enemies/Griffin.prefab";
+            GameObject griffinPrefab;
+            if (AssetDatabase.LoadMainAssetAtPath(griffinPath) != null)
+            {
+                griffinPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(griffinPath);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+            else
+            {
+                griffinPrefab = PrefabUtility.SaveAsPrefabAsset(root, griffinPath);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+
+            // Inject into mountains/open-plains biome scatter (reliable spawn path; same as the Ghoul).
+            var br = AssetDatabase.LoadAssetAtPath<VoxelEngine.Biomes.BiomeRegistry>(ASSET_ROOT + "/BiomeRegistry.asset");
+            if (br != null && griffinPrefab != null)
+            {
+                foreach (var biome in br.biomes)
+                {
+                    if (biome == null) continue;
+                    if (biome.biomeName != "Mountains" && biome.biomeName != "Steppes") continue;
+                    var list = (biome.scatter != null)
+                        ? new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>(biome.scatter)
+                        : new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>();
+                    list.RemoveAll(e => e.prefab != null && e.prefab.name == "Griffin");
+                    list.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = griffinPrefab, density = 0.0025f, minScale = 0.95f, maxScale = 1.15f, minHeight = 0, maxHeight = 9999 });
+                    biome.scatter = list.ToArray();
+                    EditorUtility.SetDirty(biome);
+                }
+                EditorUtility.SetDirty(br);
+            }
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Voxel Engine — Mythical Enemy: Griffin (Phase 3f)",
+                "The Griffin is built:\n\n" +
+                "• Heraldic lion-eagle: eagle head + beak, spread wings, taloned forelegs, lion hindquarters (~30 parts)\n" +
+                "• FLIES — circles overhead then dive-bombs with its talons\n" +
+                "• Drops Griffin Feathers + Talons; rare Griffin Heart (~20%)\n\n" +
+                "Spawns rarely in Mountains/Steppes (biome scatter). Saved to Resources/Enemies.",
+                "OK");
+        }
+
 
 
 

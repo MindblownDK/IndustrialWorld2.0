@@ -1,9 +1,30 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.45.0-dev`
+**Current Version:** `6.46.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.46.0-dev] Phase 3f — Mythical Enemy: Griffin (flying, dive-bomb)
+
+**Type:** MINOR — new flying hostile creature (save-compatible). Phase 3f of the Combat pillar.
+
+**Added — the Griffin (first aerial enemy):**
+1. `Scripts/Combat/EnemyGriffin.cs` (new) — a heraldic lion-eagle that **flies**. New dimension: it holds an altitude above the player, **circles overhead** (orbiting in the tangent plane), then periodically **dive-bombs** to strike with its talons before climbing back. Patrol-wanders high when no target is near. Radial-aware (orbits relative to radial up), no-gravity Rigidbody under its own steering, and detaches from the chunk parent on Awake — so flight is correct on rotating spheres. Reuses `Damageable` + `CreatureHealthBar`.
+2. **Step 28 (wizard):** a premium ~30-part model (eagle head + hooked beak + crest, spread wings with feather rows, gold taloned forelegs, lion hindquarters, tufted tail), `EnemyGriffin` (55 HP), drops **Griffin Feather + Griffin Talon** plus a rare **Griffin Heart** (~20%, via a `Die` override), saved non-destructively to `Resources/Enemies/Griffin.prefab`, injected into **Mountains/Steppes** biome scatter (rare, density 0.0025).
+
+**To play:** run Step 28 → explore **Mountains/Steppes** → a Griffin may appear overhead. It will circle and dive-bomb you; shoot it down (it's airborne, so aim up) for feathers, talons, and a rare heart.
+
+**Why MINOR:** new flying enemy + new flight AI — save-compatible.
+
+**Tunable (on the prefab):** `hoverHeight` (circling altitude), `orbitRadius`/`orbitSpeed`, `diveSpeed`, `diveCooldown`, `attackDamage`, `heartDropChance`. The Griffin banks but stays upright for now (no pitch) — a pitched/rolling flight model is a possible follow-up.
+
+**Files touched:**
+- `Scripts/Combat/EnemyGriffin.cs` (new)
+- `Scripts/Editor/VoxelEngineSetupWindow.cs` (Step 28 `BuildGriffinContent` + button)
+- `Scripts/Core/GameVersion.cs` (6.45.0 -> 6.46.0), `Roadmap.md` + `Changelog.md`
+
+---
 
 ### [6.45.0-dev] Phase 3e — Mythical Enemy: Manticore (tail spikes + venom)
 
