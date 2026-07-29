@@ -1,9 +1,21 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.53.0-dev`
+**Current Version:** `6.53.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.53.1-dev] Compile fix — Ranged `hitPoint` renamed to `impact` (CS0136)
+
+**Type:** PATCH — compile fix (save-compatible).
+
+The 6.53.0 Ranged branch declared a local `hitPoint`, colliding with the Melee branch's `hitPoint` in the same method → `CS0136`. Renamed the Ranged one to `impact`.
+
+**Files touched:**
+- `Scripts/Player/PlayerInteractionTool.cs` (Ranged `hitPoint` → `impact`)
+- `Scripts/Core/GameVersion.cs` (6.53.0 -> 6.53.1), `Changelog.md`
+
+---
 
 ### [6.53.0-dev] Pass 2 — Gun Viewmodels + Muzzle Flash/Tracer + Ammo
 

@@ -882,10 +882,10 @@ namespace VoxelEngine.Player
                 inventory.container.RaiseChanged();
 
                 Vector3 muzzle = ray.origin + ray.direction * 0.6f;
-                Vector3 hitPoint = ray.origin + ray.direction * dist;
+                Vector3 impact = ray.origin + ray.direction * dist;
                 if (TryRaycastIgnoringSelf(ray, out var hit, dist))
                 {
-                    hitPoint = hit.point;
+                    impact = hit.point;
                     var d = hit.collider.GetComponentInParent<VoxelEngine.Combat.IDamageable>();
                     if (d != null && d.IsAlive)
                         d.TakeDamage(new VoxelEngine.Combat.DamageEvent {
@@ -893,7 +893,7 @@ namespace VoxelEngine.Player
                             point = hit.point, direction = ray.direction, source = gameObject });
                 }
                 MuzzleFlash(muzzle);
-                Tracer(muzzle, hitPoint);
+                Tracer(muzzle, impact);
                 GetComponent<VoxelEngine.Player.HeldToolView>()?.DoRecoil();
                 return;
             }
