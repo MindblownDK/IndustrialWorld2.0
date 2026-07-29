@@ -87,8 +87,8 @@ The design goal is a seamless blend of:
 | Painting / finishes | ❌ MISSING | No block painting or material finishes |
 | Armor crafting/upgrades | 🟡 PARTIALLY COMPLETE | Early foundations exist; armor station, jetpack, hazmat, heat, and oxygen upgrades remain open. |
 | Crusader player identity | ❌ MISSING | Player faction, heraldry, armor presentation, and Order progression need implementation |
-| Passive livestock | ❌ MISSING | Breedable cows, sheep, and pigs need husbandry, food, and population systems |
-| Mythical enemies / bosses | ❌ MISSING | Griffin, Roc, Manticore, Karkadann, Ghouls, Ifrit Djinn, Leviathan, and Basilisk-class encounters are planned |
+| Passive livestock | 🚧 IN PROGRESS | **6.43.0-dev:** Cow, Sheep, Pig creature framework (`PassiveAnimal`) + `PassiveAnimalSpawner` + drops (meat/hide/wool) done — Phase 3c foundation. Breeding/needs/husbandry + rideable horses remain. |
+| Mythical enemies / bosses | 🚧 IN PROGRESS | **6.41.x:** Ghoul implemented (wander/chase/melee, radial AI, `EnemySpawner`). Griffin, Roc, Manticore, Karkadann, Ifrit Djinn, Leviathan, and Basilisk-class encounters remain. |
 | Boss relic loot gates | ❌ MISSING | Higher-tier bosses must award relics required by selected late-game research and megastructures |
 | Pollution / industrial threat | ❌ MISSING | Emissions do not yet contaminate regions or attract escalating enemy attacks to their source |
 | Planetary ecology registry | ❌ MISSING | Each planet needs themed hostile, passive, elite, and boss populations adapted to local hazards |
@@ -469,7 +469,7 @@ A late-game **Jump Drive** provides charged, coordinate-based faster-than-light 
 |---------|-------|------------------|-------|-------------------|
 | **4.5.0** | Factory Foundations | 🛠️ **WORKING ON** | Conveyor belts, chutes, basic machines, grid lights, machine UI | Medium — prefab generation, animation clips |
 | **4.6.0** | Production Lines & UI Revolution | 🛠️ **WORKING ON** | Assemblers, recipe chains, UI theme system, research UI overhaul | Medium — recipes, themes, panels |
-| **4.7.0** | Power, Vehicles & Combat | 🛠️ **WORKING ON** (Infrastructure pass complete) | Engines, batteries, damage, armor slots, bombs, grid weapons, armor blocks | High — combat prefabs, physics |
+| **4.7.0** | Power, Vehicles & Combat | 🛠️ **WORKING ON** (Combat phases 1–3c in progress) | Engines, batteries, damage framework, Iron Sword/Pistol, Training Dummy, Ghoul enemy, 6-tier Crusader armor + equipment panel, passive livestock (Cow/Sheep/Pig) | High — combat prefabs, physics |
 | **4.8.0** | Logistics 2.0, Screens & Trajectory | 🛠️ **WORKING ON** | Trains, drones, configurable screens, trajectory camera, orbit map (`M`) | High — train track, camera rigs, panels |
 | **4.9.0** | Living Worlds | 🟡 **PARTIALLY COMPLETE** | Ruins, weather, water flow, enemies, planet skies, gravity/orbit fixes | Very High — worldgen, AI, fluids, rendering |
 | **5.0.0** | Orbital Expansion | 🟡 **PARTIALLY COMPLETE** | Rockets, space stations, asteroid mining, orbital cargo, space ambiance | Very High — new scene/zone system |
@@ -1641,7 +1641,7 @@ For each version, these are the high-level Unity tasks you will perform manually
 6. Create blueprint data core item and research restoration UI.
 7. Author weather VFX and climate profiles per planet type.
 8. Implement water flow materials and simulation settings.
-9. Create passive livestock prefabs and husbandry definitions: cows, sheep, pigs, breeding needs, products, and population limits.
+9. 🚧 **6.43.0-dev** delivered passive livestock prefabs (Cow/Sheep/Pig) + spawner + products (meat/hide/wool). Remaining: breeding needs, husbandry definitions, and population limits.
 10. Create mythical enemy prefabs and AI profiles: Griffin, Roc, Manticore, Karkadann, Ghouls, Ifrit Djinn, Leviathan, and Cockatrice/Basilisk.
 11. Author tiered enemy loot tables, guaranteed Boss Relic Cores, boss research gates, and first-kill progression records.
 12. Build static missile turret and flak cannon prefabs.

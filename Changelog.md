@@ -1,9 +1,34 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.42.1-dev`
+**Current Version:** `6.43.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.43.0-dev] Phase 3c — Passive Livestock Foundation (Cow, Sheep, Pig)
+
+**Type:** MINOR — new creatures + items (save-compatible). Phase 3c of the Combat pillar.
+
+**Added — Peaceful, harvestable livestock:**
+1. `Scripts/Fauna/PassiveAnimal.cs` — new base creature extending `Damageable`. Wanders a home radius on the spherical surface (radial gravity + upright alignment, detaches from the chunk-scatter parent on Awake — same proven physics as the Ghoul), then **bolts away from whatever hurt it** for a few seconds (uses `DamageEvent.source`/`direction`). Species enum `{ Cow, Sheep, Pig }`. Designed as a clean base a future `RideableAnimal` (full WASD-steered horse) can extend.
+2. `Scripts/Fauna/PassiveAnimalSpawner.cs` — auto-created via `RuntimeInitializeOnLoad`; loads every prefab under `Resources/Livestock`, spawns a capped population (8) near the player as top-level objects, despawns stragglers >95 m. Same reliable pattern as `EnemySpawner` (no debug spam).
+3. **Step 25 (wizard):** builds three premium, web-inspired quadruped models — **Cow** (stocky chestnut, horns, udder, white belly + black patches, ~24 parts), **Sheep** (fluffy cream fleece, narrow dark face, ~17 parts), **Pig** (pink, flat snout, nostrils, floppy ears, curly tail, ~20 parts). Each gets a CapsuleCollider + no-gravity Rigidbody + `PassiveAnimal` (species/health/drops) + a calm-themed `CreatureHealthBar`. Saved non-destructively to `Resources/Livestock/` (existing prefabs preserved).
+4. New animal-product items in `VoxelEngineAssets/Fauna/Items`: **Raw Meat**, **Animal Hide**, **Wool** (icon-tinted). Drops: Cow→meat+hide, Sheep→meat+wool, Pig→meat.
+
+**How to play:** run `Tools > Voxel Engine > Voxel Engine Setup` → **Step 25**. Cows, sheep, and pigs then roam near you as you explore; swing/shoot to harvest them for meat, hide, and wool (they flee when hit).
+
+**Why MINOR:** adds new creature prefabs + a new spawner + new items — all save-compatible (nothing touches existing save data).
+
+**Next (Phase 3c cont.):** rideable horses (full WASD-steered mount), breeding/needs/population, and husbandry automation.
+
+**Files touched:**
+- `Scripts/Fauna/PassiveAnimal.cs` (new)
+- `Scripts/Fauna/PassiveAnimalSpawner.cs` (new)
+- `Scripts/Editor/VoxelEngineSetupWindow.cs` (Step 25 `BuildLivestockContent` + button)
+- `Scripts/Core/GameVersion.cs` (6.42.1 -> 6.43.0)
+- `Roadmap.md` + `Changelog.md`
+
+---
 
 ### [6.42.1-dev] Equipment Panel — Jetpack Bay + Life Support Moved In; Armor Readout Trimmed
 

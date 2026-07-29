@@ -299,6 +299,13 @@ namespace VoxelEngine.EditorTools
                 "Re-runnable. Idempotent.");
             AddWizardButton(scroll, "24. Build Crusader Armor (6 Tiers: Initiate to Stellar Archon)", BuildArmorContent, 72);
 
+            AddInfo(scroll,
+                "Step 25 builds passive livestock (Combat Phase 3c, non-destructive):\n" +
+                "  • Cow, Sheep, Pig — peaceful quadrupeds that wander + flee, radial-aligned\n" +
+                "  • Drop Raw Meat, Hide, Wool; auto-spawn near the player via PassiveAnimalSpawner\n" +
+                "  • Non-destructive: existing prefabs preserved. Re-runnable. Idempotent.");
+            AddWizardButton(scroll, "25. Build Passive Livestock (Phase 3c) — Cow, Sheep, Pig", BuildLivestockContent, 40);
+
             AddSpacer(scroll, 20);
         }
 
@@ -10432,6 +10439,189 @@ root =>
                 "Ghouls now appear as you explore. Fight or flee!",
                 "OK");
         }
+
+        // ============================================================
+        //   STEP 25 - PASSIVE LIVESTOCK (Combat Phase 3c): peaceful
+        //   fauna — Cow, Sheep, Pig. Wander + flee AI, radial-aligned,
+        //   drop Raw Meat / Hide / Wool. Auto-spawns near the player via
+        //   PassiveAnimalSpawner. Non-destructive: existing prefabs are
+        //   preserved; re-runnable and idempotent.
+        // ============================================================
+        private void BuildLivestockContent()
+        {
+            EnsureFolder("Assets/Resources");
+            EnsureFolder("Assets/Resources/Livestock");
+            const string FAUNA_ROOT  = ASSET_ROOT + "/Fauna";
+            const string FAUNA_ITEMS = FAUNA_ROOT + "/Items";
+            const string FAUNA_MATS  = FAUNA_ROOT + "/Materials";
+            EnsureFolder(FAUNA_ROOT);
+            EnsureFolder(FAUNA_ITEMS);
+            EnsureFolder(FAUNA_MATS);
+
+            // ── Animal-product items ────────────────────────────────
+            var rawMeat = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{FAUNA_ITEMS}/Item_RawMeat.asset");
+            rawMeat.itemId = "item_raw_meat"; rawMeat.displayName = "Raw Meat";
+            rawMeat.description = "Fresh meat harvested from livestock. Cook it at a furnace for safe, filling food.";
+            rawMeat.iconTint = new Color(0.80f, 0.34f, 0.30f); rawMeat.maxStack = 40; rawMeat.massPerUnit = 0.5f; rawMeat.category = "Food";
+            EditorUtility.SetDirty(rawMeat);
+
+            var hide = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{FAUNA_ITEMS}/Item_Hide.asset");
+            hide.itemId = "item_hide"; hide.displayName = "Animal Hide";
+            hide.description = "Tough hide from cattle. A leatherworking and low-tier armor material.";
+            hide.iconTint = new Color(0.58f, 0.42f, 0.28f); hide.maxStack = 40; hide.massPerUnit = 0.6f; hide.category = "Resources";
+            EditorUtility.SetDirty(hide);
+
+            var wool = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{FAUNA_ITEMS}/Item_Wool.asset");
+            wool.itemId = "item_wool"; wool.displayName = "Wool";
+            wool.description = "Soft fleece sheared from sheep. Used for textiles, insulation, and banners.";
+            wool.iconTint = new Color(0.92f, 0.90f, 0.82f); wool.maxStack = 64; wool.massPerUnit = 0.2f; wool.category = "Resources";
+            EditorUtility.SetDirty(wool);
+
+            // ── Materials ───────────────────────────────────────────
+            var cowBody  = MakeColoredMat(FAUNA_MATS, "Mat_CowBody",   new Color(0.46f, 0.30f, 0.18f));
+            var cowWhite = MakeColoredMat(FAUNA_MATS, "Mat_CowWhite",  new Color(0.90f, 0.88f, 0.82f));
+            var cowDark  = MakeColoredMat(FAUNA_MATS, "Mat_CowDark",   new Color(0.14f, 0.11f, 0.09f));
+            var cowPink  = MakeColoredMat(FAUNA_MATS, "Mat_CowPink",   new Color(0.86f, 0.56f, 0.58f));
+            var cowHorn  = MakeColoredMat(FAUNA_MATS, "Mat_CowHorn",   new Color(0.88f, 0.82f, 0.66f));
+
+            var woolMat  = MakeColoredMat(FAUNA_MATS, "Mat_Wool",      new Color(0.93f, 0.91f, 0.84f));
+            var woolDk   = MakeColoredMat(FAUNA_MATS, "Mat_SheepDark", new Color(0.30f, 0.26f, 0.22f));
+            var woolTan  = MakeColoredMat(FAUNA_MATS, "Mat_SheepLeg",  new Color(0.50f, 0.40f, 0.30f));
+
+            var pigBody  = MakeColoredMat(FAUNA_MATS, "Mat_PigBody",   new Color(0.93f, 0.66f, 0.68f));
+            var pigDark  = MakeColoredMat(FAUNA_MATS, "Mat_PigDark",   new Color(0.78f, 0.46f, 0.50f));
+            var pigHoof  = MakeColoredMat(FAUNA_MATS, "Mat_PigHoof",   new Color(0.26f, 0.20f, 0.18f));
+            var eyeBlk   = MakeColoredMat(FAUNA_MATS, "Mat_AnimalEye", new Color(0.05f, 0.05f, 0.05f));
+
+            // ── Build helpers ───────────────────────────────────────
+            void AddPart(GameObject root, string n, Vector3 pos, Vector3 euler, Vector3 scale, Material m)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                go.name = n; go.transform.SetParent(root.transform, false);
+                go.transform.localPosition = pos; go.transform.localEulerAngles = euler; go.transform.localScale = scale;
+                go.GetComponent<Renderer>().sharedMaterial = m;
+                var col = go.GetComponent<Collider>(); if (col != null) UnityEngine.Object.DestroyImmediate(col);
+            }
+
+            void FinishAndSave(GameObject root, string prefabPath, VoxelEngine.Fauna.AnimalSpecies species,
+                float health, float capH, float capR, Vector3 capC,
+                VoxelEngine.Items.ItemDefinition[] dropsArr, int minD, int maxD, Color barFill, Color barLow)
+            {
+                var cap = root.AddComponent<CapsuleCollider>();
+                cap.height = capH; cap.radius = capR; cap.center = capC;
+                var rb = root.AddComponent<Rigidbody>();
+                rb.useGravity = false; rb.freezeRotation = true;
+                var animal = root.AddComponent<VoxelEngine.Fauna.PassiveAnimal>();
+                animal.species = species;
+                animal.maxHealth = health;
+                animal.drops = dropsArr; animal.minDrops = minD; animal.maxDrops = maxD; animal.dropCount = 1;
+                var hbar = root.AddComponent<VoxelEngine.Combat.CreatureHealthBar>();
+                hbar.target = animal;
+                hbar.fillColor = barFill; hbar.fillColorLow = barLow;
+
+                // NON-DESTRUCTIVE: preserve an existing prefab (user may have customized it).
+                if (AssetDatabase.LoadMainAssetAtPath(prefabPath) != null)
+                    UnityEngine.Object.DestroyImmediate(root);
+                else
+                {
+                    PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+                    UnityEngine.Object.DestroyImmediate(root);
+                }
+            }
+
+            // ── COW (stocky chestnut, white belly, black patches, horns) ──
+            var cow = new GameObject("Cow");
+            AddPart(cow, "Body",      new Vector3(0f, 0.95f, 0f),      Vector3.zero,              new Vector3(0.85f, 0.78f, 1.6f),  cowBody);
+            AddPart(cow, "BackPatch", new Vector3(0f, 1.22f, -0.25f),  Vector3.zero,              new Vector3(0.72f, 0.22f, 0.7f),   cowDark);
+            AddPart(cow, "Hump",      new Vector3(0f, 1.25f, 0.45f),   Vector3.zero,              new Vector3(0.68f, 0.22f, 0.55f),  cowBody);
+            AddPart(cow, "Belly",     new Vector3(0f, 0.66f, 0.02f),   Vector3.zero,              new Vector3(0.7f, 0.28f, 1.2f),    cowWhite);
+            AddPart(cow, "Neck",      new Vector3(0f, 1.05f, 0.78f),   new Vector3(-18f, 0f, 0f),  new Vector3(0.5f, 0.5f, 0.5f),     cowBody);
+            AddPart(cow, "Head",      new Vector3(0f, 1.18f, 1.02f),   new Vector3(-12f, 0f, 0f),  new Vector3(0.55f, 0.52f, 0.52f),  cowBody);
+            AddPart(cow, "Muzzle",    new Vector3(0f, 1.06f, 1.28f),   new Vector3(-12f, 0f, 0f),  new Vector3(0.44f, 0.34f, 0.2f),   cowPink);
+            AddPart(cow, "HornL",     new Vector3(-0.16f, 1.45f, 0.98f), new Vector3(-30f, 0f, -25f), new Vector3(0.07f, 0.16f, 0.07f), cowHorn);
+            AddPart(cow, "HornR",     new Vector3(0.16f, 1.45f, 0.98f),  new Vector3(-30f, 0f, 25f),  new Vector3(0.07f, 0.16f, 0.07f), cowHorn);
+            AddPart(cow, "EarL",      new Vector3(-0.34f, 1.22f, 0.95f), new Vector3(0f, 0f, -20f),   new Vector3(0.13f, 0.07f, 0.2f),   cowBody);
+            AddPart(cow, "EarR",      new Vector3(0.34f, 1.22f, 0.95f),  new Vector3(0f, 0f, 20f),    new Vector3(0.13f, 0.07f, 0.2f),   cowBody);
+            AddPart(cow, "EyeL",      new Vector3(-0.16f, 1.28f, 1.22f), Vector3.zero,              new Vector3(0.06f, 0.07f, 0.04f),  eyeBlk);
+            AddPart(cow, "EyeR",      new Vector3(0.16f, 1.28f, 1.22f),  Vector3.zero,              new Vector3(0.06f, 0.07f, 0.04f),  eyeBlk);
+            AddPart(cow, "LegFL", new Vector3(-0.26f, 0.36f, 0.55f),  Vector3.zero, new Vector3(0.2f, 0.72f, 0.22f), cowBody);
+            AddPart(cow, "LegFR", new Vector3(0.26f, 0.36f, 0.55f),   Vector3.zero, new Vector3(0.2f, 0.72f, 0.22f), cowBody);
+            AddPart(cow, "LegBL", new Vector3(-0.26f, 0.36f, -0.55f), Vector3.zero, new Vector3(0.2f, 0.72f, 0.22f), cowBody);
+            AddPart(cow, "LegBR", new Vector3(0.26f, 0.36f, -0.55f),  Vector3.zero, new Vector3(0.2f, 0.72f, 0.22f), cowBody);
+            AddPart(cow, "HoofFL", new Vector3(-0.26f, 0.04f, 0.55f), Vector3.zero, new Vector3(0.22f, 0.1f, 0.24f), cowDark);
+            AddPart(cow, "HoofFR", new Vector3(0.26f, 0.04f, 0.55f),  Vector3.zero, new Vector3(0.22f, 0.1f, 0.24f), cowDark);
+            AddPart(cow, "HoofBL", new Vector3(-0.26f, 0.04f, -0.55f),Vector3.zero, new Vector3(0.22f, 0.1f, 0.24f), cowDark);
+            AddPart(cow, "HoofBR", new Vector3(0.26f, 0.04f, -0.55f), Vector3.zero, new Vector3(0.22f, 0.1f, 0.24f), cowDark);
+            AddPart(cow, "Tail",     new Vector3(0f, 1.05f, -0.86f),  new Vector3(20f, 0f, 0f), new Vector3(0.08f, 0.4f, 0.08f),  cowBody);
+            AddPart(cow, "TailTuft", new Vector3(0f, 0.82f, -0.95f),  Vector3.zero,            new Vector3(0.12f, 0.12f, 0.12f), cowDark);
+            AddPart(cow, "Udder",    new Vector3(0f, 0.55f, -0.35f),  Vector3.zero,            new Vector3(0.36f, 0.24f, 0.42f), cowPink);
+            FinishAndSave(cow, "Assets/Resources/Livestock/Cow.prefab", VoxelEngine.Fauna.AnimalSpecies.Cow,
+                30f, 1.5f, 0.5f, new Vector3(0f, 0.78f, 0f),
+                new VoxelEngine.Items.ItemDefinition[] { rawMeat, hide }, 1, 3,
+                new Color(0.50f, 0.75f, 0.40f), new Color(0.80f, 0.35f, 0.25f));
+
+            // ── SHEEP (fluffy cream fleece, narrow dark face) ──
+            var sheep = new GameObject("Sheep");
+            AddPart(sheep, "WoolBody", new Vector3(0f, 0.72f, 0f),      Vector3.zero, new Vector3(0.8f, 0.78f, 1.1f),   woolMat);
+            AddPart(sheep, "WoolTop",  new Vector3(0f, 1.02f, 0f),      Vector3.zero, new Vector3(0.7f, 0.3f, 0.95f),    woolMat);
+            AddPart(sheep, "WoolL",    new Vector3(-0.42f, 0.74f, 0f),  Vector3.zero, new Vector3(0.22f, 0.55f, 0.85f),  woolMat);
+            AddPart(sheep, "WoolR",    new Vector3(0.42f, 0.74f, 0f),   Vector3.zero, new Vector3(0.22f, 0.55f, 0.85f),  woolMat);
+            AddPart(sheep, "WoolRump", new Vector3(0f, 0.78f, -0.5f),   Vector3.zero, new Vector3(0.7f, 0.6f, 0.3f),     woolMat);
+            AddPart(sheep, "Head",     new Vector3(0f, 0.86f, 0.62f),   new Vector3(-10f, 0f, 0f), new Vector3(0.32f, 0.42f, 0.4f),   woolDk);
+            AddPart(sheep, "Snout",    new Vector3(0f, 0.78f, 0.84f),   new Vector3(-10f, 0f, 0f), new Vector3(0.26f, 0.22f, 0.16f),  woolDk);
+            AddPart(sheep, "Topknot",  new Vector3(0f, 1.02f, 0.6f),    Vector3.zero, new Vector3(0.34f, 0.2f, 0.36f),   woolMat);
+            AddPart(sheep, "EarL", new Vector3(-0.2f, 0.9f, 0.6f), new Vector3(0f, 0f, -15f), new Vector3(0.1f, 0.18f, 0.06f), woolDk);
+            AddPart(sheep, "EarR", new Vector3(0.2f, 0.9f, 0.6f),  new Vector3(0f, 0f, 15f),  new Vector3(0.1f, 0.18f, 0.06f), woolDk);
+            AddPart(sheep, "EyeL", new Vector3(-0.1f, 0.9f, 0.78f), Vector3.zero, new Vector3(0.05f, 0.06f, 0.04f), eyeBlk);
+            AddPart(sheep, "EyeR", new Vector3(0.1f, 0.9f, 0.78f),  Vector3.zero, new Vector3(0.05f, 0.06f, 0.04f), eyeBlk);
+            AddPart(sheep, "LegFL", new Vector3(-0.22f, 0.27f, 0.38f),  Vector3.zero, new Vector3(0.12f, 0.5f, 0.12f), woolTan);
+            AddPart(sheep, "LegFR", new Vector3(0.22f, 0.27f, 0.38f),   Vector3.zero, new Vector3(0.12f, 0.5f, 0.12f), woolTan);
+            AddPart(sheep, "LegBL", new Vector3(-0.22f, 0.27f, -0.38f), Vector3.zero, new Vector3(0.12f, 0.5f, 0.12f), woolTan);
+            AddPart(sheep, "LegBR", new Vector3(0.22f, 0.27f, -0.38f),  Vector3.zero, new Vector3(0.12f, 0.5f, 0.12f), woolTan);
+            FinishAndSave(sheep, "Assets/Resources/Livestock/Sheep.prefab", VoxelEngine.Fauna.AnimalSpecies.Sheep,
+                18f, 1.1f, 0.42f, new Vector3(0f, 0.6f, 0f),
+                new VoxelEngine.Items.ItemDefinition[] { rawMeat, wool }, 1, 2,
+                new Color(0.60f, 0.80f, 0.55f), new Color(0.80f, 0.40f, 0.30f));
+
+            // ── PIG (pink, flat snout, floppy ears, curly tail) ──
+            var pig = new GameObject("Pig");
+            AddPart(pig, "Body",    new Vector3(0f, 0.6f, 0f),      Vector3.zero, new Vector3(0.66f, 0.6f, 1.15f), pigBody);
+            AddPart(pig, "Belly",   new Vector3(0f, 0.42f, 0f),     Vector3.zero, new Vector3(0.5f, 0.18f, 0.9f),  pigDark);
+            AddPart(pig, "Head",    new Vector3(0f, 0.66f, 0.6f),   Vector3.zero, new Vector3(0.5f, 0.5f, 0.45f),  pigBody);
+            AddPart(pig, "Snout",   new Vector3(0f, 0.6f, 0.86f),   Vector3.zero, new Vector3(0.36f, 0.3f, 0.12f),  pigDark);
+            AddPart(pig, "NostrilL",new Vector3(-0.09f, 0.6f, 0.93f),Vector3.zero,new Vector3(0.05f, 0.06f, 0.03f), eyeBlk);
+            AddPart(pig, "NostrilR",new Vector3(0.09f, 0.6f, 0.93f), Vector3.zero,new Vector3(0.05f, 0.06f, 0.03f), eyeBlk);
+            AddPart(pig, "EarL", new Vector3(-0.28f, 0.86f, 0.58f), new Vector3(0f, 0f, -30f), new Vector3(0.13f, 0.2f, 0.07f), pigDark);
+            AddPart(pig, "EarR", new Vector3(0.28f, 0.86f, 0.58f),  new Vector3(0f, 0f, 30f),  new Vector3(0.13f, 0.2f, 0.07f), pigDark);
+            AddPart(pig, "EyeL", new Vector3(-0.15f, 0.78f, 0.74f), Vector3.zero, new Vector3(0.05f, 0.06f, 0.04f), eyeBlk);
+            AddPart(pig, "EyeR", new Vector3(0.15f, 0.78f, 0.74f),  Vector3.zero, new Vector3(0.05f, 0.06f, 0.04f), eyeBlk);
+            AddPart(pig, "LegFL", new Vector3(-0.2f, 0.28f, 0.4f),  Vector3.zero, new Vector3(0.17f, 0.5f, 0.19f), pigBody);
+            AddPart(pig, "LegFR", new Vector3(0.2f, 0.28f, 0.4f),   Vector3.zero, new Vector3(0.17f, 0.5f, 0.19f), pigBody);
+            AddPart(pig, "LegBL", new Vector3(-0.2f, 0.28f, -0.4f), Vector3.zero, new Vector3(0.17f, 0.5f, 0.19f), pigBody);
+            AddPart(pig, "LegBR", new Vector3(0.2f, 0.28f, -0.4f),  Vector3.zero, new Vector3(0.17f, 0.5f, 0.19f), pigBody);
+            AddPart(pig, "HoofFL", new Vector3(-0.2f, 0.05f, 0.4f), Vector3.zero, new Vector3(0.19f, 0.1f, 0.21f), pigHoof);
+            AddPart(pig, "HoofFR", new Vector3(0.2f, 0.05f, 0.4f),  Vector3.zero, new Vector3(0.19f, 0.1f, 0.21f), pigHoof);
+            AddPart(pig, "HoofBL", new Vector3(-0.2f, 0.05f, -0.4f),Vector3.zero, new Vector3(0.19f, 0.1f, 0.21f), pigHoof);
+            AddPart(pig, "HoofBR", new Vector3(0.2f, 0.05f, -0.4f), Vector3.zero, new Vector3(0.19f, 0.1f, 0.21f), pigHoof);
+            AddPart(pig, "Tail1", new Vector3(0f, 0.7f, -0.6f),     Vector3.zero,             new Vector3(0.07f, 0.07f, 0.18f), pigBody);
+            AddPart(pig, "Tail2", new Vector3(0.06f, 0.78f, -0.68f),new Vector3(0f, 40f, 0f),  new Vector3(0.06f, 0.06f, 0.12f), pigBody);
+            FinishAndSave(pig, "Assets/Resources/Livestock/Pig.prefab", VoxelEngine.Fauna.AnimalSpecies.Pig,
+                16f, 1.0f, 0.42f, new Vector3(0f, 0.55f, 0f),
+                new VoxelEngine.Items.ItemDefinition[] { rawMeat }, 1, 2,
+                new Color(0.85f, 0.55f, 0.60f), new Color(0.80f, 0.30f, 0.35f));
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Voxel Engine — Passive Livestock (Phase 3c)",
+                "Peaceful livestock built:\n\n" +
+                "• Cow — stocky chestnut with horns; drops Raw Meat + Hide\n" +
+                "• Sheep — fluffy cream fleece; drops Raw Meat + Wool\n" +
+                "• Pig — pink with a flat snout; drops Raw Meat\n\n" +
+                "They wander the surface, flee when hit, and auto-spawn near the player via PassiveAnimalSpawner.\n" +
+                "Saved to Resources/Livestock (existing prefabs preserved). Harvest with weapons for meat, hide, and wool.",
+                "OK");
+        }
+
 
 
         // ============================================================
