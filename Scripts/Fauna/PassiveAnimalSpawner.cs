@@ -1,10 +1,13 @@
 // Assets/Scripts/VoxelEngine/Fauna/PassiveAnimalSpawner.cs
 //
 // Spawns passive livestock near the player as TOP-LEVEL objects and auto-creates
-// itself at runtime. Loads every prefab under Resources/Livestock (Cow / Sheep /
-// Pig), caps the live population, and despawns animals that wander too far away.
-// Same proven pattern as EnemySpawner — top-level + radial gravity settle the
-// animals onto the spherical surface correctly.
+// itself at runtime (DontDestroyOnLoad so it survives the MainMenu -> Game scene
+// transition). Loads every prefab under Resources/Livestock (Cow / Sheep / Pig),
+// caps the live population, and despawns animals that wander too far away.
+//
+// NOTE: livestock ALSO spawn via temperate biome scatter (Step 25 injects them into
+// Forest/Plains/Steppes) — that is the primary, reliable spawn path (same as the
+// Ghoul). This near-player spawner is a population-capped supplement.
 //
 // (Diagnostic logging included while spawn issues are being diagnosed — to be
 //  trimmed back to just the genuine guards once spawning is confirmed working.)
@@ -25,6 +28,7 @@ namespace VoxelEngine.Fauna
         public float startGrace    = 6f;
 
         private float _nextSpawn;
+        private float _nextHeartbeat;
         private static readonly List<PassiveAnimal> _alive = new List<PassiveAnimal>();
         private static bool _autoCreated;
 
@@ -45,6 +49,14 @@ namespace VoxelEngine.Fauna
         private void Update()
         {
             var player = VoxelEngine.Player.PlayerStats.Instance;
+
+            // Throttled heartbeat — confirms Update is running in the live scene.
+            if (Time.time >= _nextHeartbeat)
+            {
+                _nextHeartbeat = Time.time + 5f;
+                Debug.Log($"[LivestockSpawner] tick — player={(player != null ? "OK" : "NULL")}, alive={_alive.Count}, nextSpawn in {Mathf.Max(0f, _nextSpawn - Time.time):F1}s, prefabs={(animalPrefabs != null ? animalPrefabs.Length : 0)}");
+            }
+
             if (player == null) return;
             Vector3 ppos = player.transform.position;
 
@@ -63,7 +75,6 @@ namespace VoxelEngine.Fauna
             if (Time.time < _nextSpawn) return;
             _nextSpawn = Time.time + spawnInterval;
 
-            // Retry the load every cycle if the folder was empty at Awake (mirrors EnemySpawner).
             if (!LoadPrefabs())
             {
                 Debug.LogWarning("[LivestockSpawner] No prefabs found in Resources/Livestock — run Step 25 first.");
@@ -105,7 +116,8 @@ namespace VoxelEngine.Fauna
             {
                 var go = new GameObject("PassiveAnimalSpawner");
                 go.AddComponent<PassiveAnimalSpawner>();
-                Debug.Log("[LivestockSpawner] Created new spawner GameObject.");
+                UnityEngine.Object.DontDestroyOnLoad(go);   // survives MainMenu -> Game scene transition
+                Debug.Log("[LivestockSpawner] Created new spawner GameObject (DontDestroyOnLoad).");
             }
             else
             {

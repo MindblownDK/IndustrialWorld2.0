@@ -10503,7 +10503,7 @@ root =>
                 var col = go.GetComponent<Collider>(); if (col != null) UnityEngine.Object.DestroyImmediate(col);
             }
 
-            void FinishAndSave(GameObject root, string prefabPath, VoxelEngine.Fauna.AnimalSpecies species,
+            GameObject FinishAndSave(GameObject root, string prefabPath, VoxelEngine.Fauna.AnimalSpecies species,
                 float health, float capH, float capR, Vector3 capC,
                 VoxelEngine.Items.ItemDefinition[] dropsArr, int minD, int maxD, Color barFill, Color barLow)
             {
@@ -10521,12 +10521,14 @@ root =>
 
                 // NON-DESTRUCTIVE: preserve an existing prefab (user may have customized it).
                 if (AssetDatabase.LoadMainAssetAtPath(prefabPath) != null)
-                    UnityEngine.Object.DestroyImmediate(root);
-                else
                 {
-                    PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+                    var existing = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
                     UnityEngine.Object.DestroyImmediate(root);
+                    return existing;
                 }
+                var saved = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+                UnityEngine.Object.DestroyImmediate(root);
+                return saved;
             }
 
             // ── COW (stocky chestnut, white belly, black patches, horns) ──
@@ -10555,7 +10557,7 @@ root =>
             AddPart(cow, "Tail",     new Vector3(0f, 1.05f, -0.86f),  new Vector3(20f, 0f, 0f), new Vector3(0.08f, 0.4f, 0.08f),  cowBody);
             AddPart(cow, "TailTuft", new Vector3(0f, 0.82f, -0.95f),  Vector3.zero,            new Vector3(0.12f, 0.12f, 0.12f), cowDark);
             AddPart(cow, "Udder",    new Vector3(0f, 0.55f, -0.35f),  Vector3.zero,            new Vector3(0.36f, 0.24f, 0.42f), cowPink);
-            FinishAndSave(cow, "Assets/Resources/Livestock/Cow.prefab", VoxelEngine.Fauna.AnimalSpecies.Cow,
+            var cowPrefab = FinishAndSave(cow, "Assets/Resources/Livestock/Cow.prefab", VoxelEngine.Fauna.AnimalSpecies.Cow,
                 30f, 1.5f, 0.5f, new Vector3(0f, 0.78f, 0f),
                 new VoxelEngine.Items.ItemDefinition[] { rawMeat, hide }, 1, 3,
                 new Color(0.50f, 0.75f, 0.40f), new Color(0.80f, 0.35f, 0.25f));
@@ -10578,7 +10580,7 @@ root =>
             AddPart(sheep, "LegFR", new Vector3(0.22f, 0.27f, 0.38f),   Vector3.zero, new Vector3(0.12f, 0.5f, 0.12f), woolTan);
             AddPart(sheep, "LegBL", new Vector3(-0.22f, 0.27f, -0.38f), Vector3.zero, new Vector3(0.12f, 0.5f, 0.12f), woolTan);
             AddPart(sheep, "LegBR", new Vector3(0.22f, 0.27f, -0.38f),  Vector3.zero, new Vector3(0.12f, 0.5f, 0.12f), woolTan);
-            FinishAndSave(sheep, "Assets/Resources/Livestock/Sheep.prefab", VoxelEngine.Fauna.AnimalSpecies.Sheep,
+            var sheepPrefab = FinishAndSave(sheep, "Assets/Resources/Livestock/Sheep.prefab", VoxelEngine.Fauna.AnimalSpecies.Sheep,
                 18f, 1.1f, 0.42f, new Vector3(0f, 0.6f, 0f),
                 new VoxelEngine.Items.ItemDefinition[] { rawMeat, wool }, 1, 2,
                 new Color(0.60f, 0.80f, 0.55f), new Color(0.80f, 0.40f, 0.30f));
@@ -10605,10 +10607,36 @@ root =>
             AddPart(pig, "HoofBR", new Vector3(0.2f, 0.05f, -0.4f), Vector3.zero, new Vector3(0.19f, 0.1f, 0.21f), pigHoof);
             AddPart(pig, "Tail1", new Vector3(0f, 0.7f, -0.6f),     Vector3.zero,             new Vector3(0.07f, 0.07f, 0.18f), pigBody);
             AddPart(pig, "Tail2", new Vector3(0.06f, 0.78f, -0.68f),new Vector3(0f, 40f, 0f),  new Vector3(0.06f, 0.06f, 0.12f), pigBody);
-            FinishAndSave(pig, "Assets/Resources/Livestock/Pig.prefab", VoxelEngine.Fauna.AnimalSpecies.Pig,
+            var pigPrefab = FinishAndSave(pig, "Assets/Resources/Livestock/Pig.prefab", VoxelEngine.Fauna.AnimalSpecies.Pig,
                 16f, 1.0f, 0.42f, new Vector3(0f, 0.55f, 0f),
                 new VoxelEngine.Items.ItemDefinition[] { rawMeat }, 1, 2,
                 new Color(0.85f, 0.55f, 0.60f), new Color(0.80f, 0.30f, 0.35f));
+
+            // ── Inject livestock into temperate biome scatter (the reliable spawn path —
+            //    same mechanism as the Ghoul). PassiveAnimal detaches from the chunk
+            //    parent on Awake, so Rigidbody physics stays correct on rotating spheres.
+            var livestockPrefabs = new System.Collections.Generic.List<GameObject>();
+            if (cowPrefab   != null) livestockPrefabs.Add(cowPrefab);
+            if (sheepPrefab != null) livestockPrefabs.Add(sheepPrefab);
+            if (pigPrefab   != null) livestockPrefabs.Add(pigPrefab);
+            var biomeRegistry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Biomes.BiomeRegistry>(ASSET_ROOT + "/BiomeRegistry.asset");
+            if (biomeRegistry != null && livestockPrefabs.Count > 0)
+            {
+                foreach (var biome in biomeRegistry.biomes)
+                {
+                    if (biome == null) continue;
+                    if (biome.biomeName != "Forest" && biome.biomeName != "Plains" && biome.biomeName != "Steppes") continue;
+                    var list = (biome.scatter != null)
+                        ? new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>(biome.scatter)
+                        : new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>();
+                    list.RemoveAll(e => e.prefab != null && (e.prefab.name == "Cow" || e.prefab.name == "Sheep" || e.prefab.name == "Pig"));
+                    foreach (var pf in livestockPrefabs)
+                        list.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = pf, density = 0.004f, minScale = 0.9f, maxScale = 1.15f, minHeight = 0, maxHeight = 9999 });
+                    biome.scatter = list.ToArray();
+                    EditorUtility.SetDirty(biome);
+                }
+                EditorUtility.SetDirty(biomeRegistry);
+            }
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();

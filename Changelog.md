@@ -1,9 +1,31 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.43.1-dev`
+**Current Version:** `6.43.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.43.2-dev] Livestock Now Spawn via Temperate Biome Scatter + Spawner Scene Fix
+
+**Type:** PATCH — spawn-path fix (animals confirmed working when spawned manually).
+
+**Root cause:** the `PassiveAnimalSpawner` loaded its 3 prefabs fine (`Awake — prefabs=3`) and self-created, but never reached a spawn. Two issues:
+1. **Scene persistence** — the spawner was created via `RuntimeInitializeOnLoadMethod(AfterSceneLoad)` (which fires once, after the FIRST scene — i.e. the main menu) but was NOT `DontDestroyOnLoad`, so it was destroyed on the MainMenu → Game transition and never existed in the live world. Now marked `DontDestroyOnLoad`.
+2. **No biome presence** — unlike the Ghoul (which the player actually sees via biome scatter), livestock had no scatter entry, so the reliable spawn path was missing entirely.
+
+**Fixed:**
+3. **Step 25 now injects Cow, Sheep & Pig into temperate biome scatter** (Forest, Plains, Steppes) at density 0.004 each — the proven, reliable spawn mechanism the Ghoul uses. `PassiveAnimal` already detaches from the chunk parent on Awake, so Rigidbody physics stays correct on rotating spheres. Idempotent (removes stale entries by name before re-adding).
+4. **Spawner hardened:** `DontDestroyOnLoad` so it survives into the game scene, plus a throttled 5 s heartbeat log (`[LivestockSpawner] tick — player=OK/NULL, alive=N, nextSpawn in Xs`) and the existing `Spawned <species> #N` log.
+
+**To use:** recompile → re-run **Step 25** (it now wires the biome scatter) → explore Forest/Plains/Steppes. Livestock will appear as ambient biome fauna; the near-player spawner tops them up near you (capped at 8). Heartbeat logs confirm the spawner is alive in-scene — say the word and I'll strip all diagnostics once you see animals.
+
+**Files touched:**
+- `Scripts/Editor/VoxelEngineSetupWindow.cs` (Step 25: `FinishAndSave` returns prefabs; temperate biome scatter injection)
+- `Scripts/Fauna/PassiveAnimalSpawner.cs` (`DontDestroyOnLoad` + heartbeat)
+- `Scripts/Core/GameVersion.cs` (6.43.1 -> 6.43.2)
+- `Changelog.md`
+
+---
 
 ### [6.43.1-dev] Livestock Spawner — Retry-Load + Diagnostics
 
