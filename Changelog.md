@@ -1,9 +1,35 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.50.0-dev`
+**Current Version:** `6.51.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.51.0-dev] Phase 3k — Player Weapons: Grenade + Iron Rifle
+
+**Type:** MINOR — new player weapons incl. throwable explosives (save-compatible). Phase 3k of the Combat pillar.
+
+**Added — player offense to fight the roster you built:**
+1. **Throwable Grenade** — `WeaponItem` with a new `AttackMode.Thrown`. Hold it + **LMB to lob**; it arcs on **radial gravity** (correct on spheres), fuses, then **detonates** — dealing `DamageType.Explosive` to every `IDamageable` in the radius (and self-damaging the player if caught in the blast), **chain-detonating other grenades** caught in the blast, with a self-expanding explosion VFX. **Consumable** (stack of 8).
+2. **Iron Rifle** — a long-range (50 m) semi-auto kinetic `WeaponItem` (Ranged) for hitting flyers/bosses the pistol can't reach.
+3. `Scripts/Combat/BombProjectile.cs` (new) — the thrown bomb (radial-gravity arc + fuse + AoE detonation + chain reactions) plus `ExplosionVFX` (expanding blast sphere).
+4. `WeaponItem` gains the `Thrown` mode, explosion fields (`explosionRadius/Damage/fuseTime/throwForce/explosionMaterial`), and a maxStack-based `IsStackable` so the grenade stacks/consumes while the sword/pistol stay unique. `HandleWeaponAttack` gets a `Thrown` branch that spawns the bomb and spends one from the active stack.
+5. **Step 33 (wizard):** creates the Grenade + Iron Rifle items, an explosion material, and Assembler recipes (Grenade: iron plate + coal; Rifle: iron plate + steel + copper wire).
+
+**To play:** run Step 33 → craft a Grenade and/or Iron Rifle at the Assembler → hotbar them → LMB. Lob grenades at groups (watch the chain reactions) and pick off flyers/bosses with the rifle.
+
+**Why MINOR:** new consumable weapon type + new projectile/AoE — save-compatible.
+
+**Tunable:** grenade `explosionRadius/Damage/fuseTime/throwForce` (on the item), rifle `damage/range/attackCooldown`.
+
+**Files touched:**
+- `Scripts/Combat/WeaponItem.cs` (Thrown mode + explosion fields + IsStackable)
+- `Scripts/Combat/BombProjectile.cs` (new: bomb + ExplosionVFX)
+- `Scripts/Player/PlayerInteractionTool.cs` (`HandleWeaponAttack` Thrown branch)
+- `Scripts/Editor/VoxelEngineSetupWindow.cs` (Step 33 `BuildExplosiveContent` + button)
+- `Scripts/Core/GameVersion.cs` (6.50.0 -> 6.51.0), `Changelog.md`
+
+---
 
 ### [6.50.0-dev] Phase 3j — Mythical Enemy: Basilisk (petrifying gaze + venom)
 

@@ -355,6 +355,13 @@ namespace VoxelEngine.EditorTools
                 "  • Spawns rarely in Forest/Steppes. Re-runnable. Idempotent.");
             AddWizardButton(scroll, "32. Build Mythical Enemy — Basilisk (Phase 3j, petrify gaze)", BuildBasiliskContent, 40);
 
+            AddInfo(scroll,
+                "Step 33 builds PLAYER WEAPONS (Combat Phase 3k, non-destructive):\n" +
+                "  • Grenade — throwable explosive (AoE + chain reactions), consumable\n" +
+                "  • Iron Rifle — long-range semi-auto. Both crafted at the Assembler\n" +
+                "Re-runnable. Idempotent.");
+            AddWizardButton(scroll, "33. Build Player Weapons — Grenade + Rifle (Phase 3k)", BuildExplosiveContent, 40);
+
             AddSpacer(scroll, 20);
         }
 
@@ -11682,6 +11689,86 @@ root =>
                 "Spawns rarely in Forest/Steppes (biome scatter). Saved to Resources/Enemies.",
                 "OK");
         }
+
+        // ============================================================
+        //   STEP 33 - PLAYER WEAPONS (Combat Phase 3k): a throwable
+        //   GRENADE (Explosive AoE, chain reactions, consumable) and
+        //   an IRON RIFLE (long-range semi-auto). Non-destructive.
+        //   Re-runnable. Idempotent.
+        // ============================================================
+        private void BuildExplosiveContent()
+        {
+            const string COMBAT_ROOT  = ASSET_ROOT + "/Combat";
+            const string COMBAT_ITEMS = COMBAT_ROOT + "/Items";
+            const string COMBAT_MATS  = COMBAT_ROOT + "/Materials";
+            EnsureFolder(COMBAT_ROOT);
+            EnsureFolder(COMBAT_ITEMS);
+            EnsureFolder(COMBAT_MATS);
+
+            ItemDefinition FindItem(string assetNameNoExt)
+            {
+                var guids = AssetDatabase.FindAssets(assetNameNoExt + " t:ItemDefinition");
+                foreach (var g in guids)
+                {
+                    var pp = AssetDatabase.GUIDToAssetPath(g);
+                    if (System.IO.Path.GetFileNameWithoutExtension(pp) == assetNameNoExt)
+                        return AssetDatabase.LoadAssetAtPath<ItemDefinition>(pp);
+                }
+                return null;
+            }
+            var ironPlate  = FindItem("Item_IronPlate");
+            var coal       = FindItem("Item_Coal");
+            var steelIngot = FindItem("Item_SteelIngot");
+            var copperWire = FindItem("Item_CopperLVWire");
+
+            var explosionMat = MakeColoredMat(COMBAT_MATS, "Mat_Explosion", new Color(1.0f, 0.45f, 0.10f));
+
+            // ── Grenade (throwable explosive, consumable) ──
+            var grenade = GetOrCreateAsset<VoxelEngine.Combat.WeaponItem>($"{COMBAT_ITEMS}/Weapon_Grenade.asset");
+            grenade.itemId = "weapon_grenade"; grenade.displayName = "Grenade";
+            grenade.description = "Throwable explosive. Lob it (LMB) and duck — blasts every creature in a radius, and chain-detonates other grenades.";
+            grenade.attackMode = VoxelEngine.Combat.WeaponItem.AttackMode.Thrown;
+            grenade.damageType = VoxelEngine.Combat.DamageType.Explosive;
+            grenade.damage = 0f;                  // explosionDamage is used instead
+            grenade.attackCooldown = 0.8f;
+            grenade.explosionRadius = 5f;
+            grenade.explosionDamage = 80f;
+            grenade.fuseTime = 1.6f;
+            grenade.throwForce = 13f;
+            grenade.explosionMaterial = explosionMat;
+            grenade.iconTint = new Color(0.32f, 0.46f, 0.22f);
+            grenade.maxStack = 8; grenade.massPerUnit = 0.5f; grenade.category = "Combat";
+            EditorUtility.SetDirty(grenade);
+
+            // ── Iron Rifle (long-range semi-auto) ──
+            var rifle = GetOrCreateAsset<VoxelEngine.Combat.WeaponItem>($"{COMBAT_ITEMS}/Weapon_Rifle.asset");
+            rifle.itemId = "weapon_rifle"; rifle.displayName = "Iron Rifle";
+            rifle.description = "Long-range semi-auto kinetic rifle. Reach flyers and bosses the pistol can't.";
+            rifle.attackMode = VoxelEngine.Combat.WeaponItem.AttackMode.Ranged;
+            rifle.damageType = VoxelEngine.Combat.DamageType.Kinetic;
+            rifle.damage = 45f;
+            rifle.range = 50f;
+            rifle.attackCooldown = 0.35f;
+            rifle.iconTint = new Color(0.42f, 0.42f, 0.44f);
+            rifle.maxStack = 1; rifle.massPerUnit = 4f; rifle.category = "Combat";
+            EditorUtility.SetDirty(rifle);
+
+            // ── Recipes ──
+            AddRecipe("Recipe_Grenade", "Grenade", grenade, 1, VoxelEngine.Crafting.StationTier.Assembler, true,
+                (ironPlate, 2), (coal, 2));
+            AddRecipe("Recipe_Rifle", "Iron Rifle", rifle, 1, VoxelEngine.Crafting.StationTier.Assembler, true,
+                (ironPlate, 4), (steelIngot, 3), (copperWire, 3));
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Voxel Engine — Player Weapons (Phase 3k)",
+                "Player weapons built:\n\n" +
+                "• Grenade — throwable explosive (LMB to lob). Radial-gravity arc, fuse, AoE blast, chain reactions. Consumable (stack of 8). Craft at the Assembler.\n" +
+                "• Iron Rifle — long-range (50 m) semi-auto kinetic weapon. Reach flyers and bosses. Craft at the Assembler.\n\n" +
+                "Hold either in your hotbar and press LMB. The grenade is spent per throw; the rifle auto-fires while held.",
+                "OK");
+        }
+
 
 
 

@@ -469,7 +469,7 @@ A late-game **Jump Drive** provides charged, coordinate-based faster-than-light 
 |---------|-------|------------------|-------|-------------------|
 | **4.5.0** | Factory Foundations | 🛠️ **WORKING ON** | Conveyor belts, chutes, basic machines, grid lights, machine UI | Medium — prefab generation, animation clips |
 | **4.6.0** | Production Lines & UI Revolution | 🛠️ **WORKING ON** | Assemblers, recipe chains, UI theme system, research UI overhaul | Medium — recipes, themes, panels |
-| **4.7.0** | Power, Vehicles & Combat | 🛠️ **WORKING ON** (Combat phases 1–3c in progress) | Engines, batteries, damage framework, Iron Sword/Pistol, Training Dummy, Ghoul enemy, 6-tier Crusader armor + equipment panel, passive livestock (Cow/Sheep/Pig) | High — combat prefabs, physics |
+| **4.7.0** | Power, Vehicles & Combat | 🛠️ **WORKING ON** (Combat phases 1–3c in progress) | Engines, batteries, damage framework, Iron Sword/Pistol, Training Dummy, Ghoul enemy, 6-tier Crusader armor + equipment panel, passive livestock (Cow/Sheep/Pig), 6 mythical enemies + Roc boss, grenade + rifle | High — combat prefabs, physics |
 | **4.8.0** | Logistics 2.0, Screens & Trajectory | 🛠️ **WORKING ON** | Trains, drones, configurable screens, trajectory camera, orbit map (`M`) | High — train track, camera rigs, panels |
 | **4.9.0** | Living Worlds | 🟡 **PARTIALLY COMPLETE** | Ruins, weather, water flow, enemies, planet skies, gravity/orbit fixes | Very High — worldgen, AI, fluids, rendering |
 | **5.0.0** | Orbital Expansion | 🟡 **PARTIALLY COMPLETE** | Rockets, space stations, asteroid mining, orbital cargo, space ambiance | Very High — new scene/zone system |

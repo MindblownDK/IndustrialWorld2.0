@@ -831,6 +831,20 @@ namespace VoxelEngine.Player
                 return;
             }
 
+            if (weapon.attackMode == VoxelEngine.Combat.WeaponItem.AttackMode.Thrown)
+            {
+                Vector3 up = VoxelEngine.Cosmos.GravityProvider.GetUp(ray.origin);
+                Vector3 origin = ray.origin + ray.direction * 1.2f;
+                Vector3 throwVel = ray.direction * weapon.throwForce + up * 3.2f; // forward + upward arc
+                VoxelEngine.Combat.BombProjectile.Spawn(origin, throwVel, gameObject, weapon.explosionMaterial,
+                    weapon.explosionRadius, weapon.explosionDamage, weapon.fuseTime, weapon.explosionMaterial);
+                GetComponent<VoxelEngine.Player.HeldToolView>()?.DoRecoil();
+                inventory.container.Remove(weapon, 1);   // consumable: spend one grenade
+                inventory.container.RaiseChanged();
+                return;
+            }
+
+
             // ── Melee: play the swing, then damage the closest target in front.
             GetComponent<VoxelEngine.Player.HeldToolView>()?.DoSwing();
 

@@ -1,0 +1,40 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e0860d37204086a4f9f151cbc039765a, type: 3}
+  m_Name: Weapon_Grenade
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Combat.WeaponItem
+  itemId: weapon_grenade
+  displayName: Grenade
+  description: "Throwable explosive. Lob it (LMB) and duck \u2014 blasts every creature
+    in a radius, and chain-detonates other grenades."
+  icon: {fileID: 0}
+  iconTint: {r: 0.32, g: 0.46, b: 0.22, a: 1}
+  maxStack: 8
+  massPerUnit: 0.5
+  category: Combat
+  viewmodelPrefab: {fileID: 0}
+  toolType: 4
+  miningTier: 1
+  strength: 60
+  brushRadius: 1.4
+  fireRate: 5
+  maxDurability: 150
+  attackMode: 2
+  damage: 0
+  range: 2.5
+  damageType: 2
+  attackCooldown: 0.8
+  explosionRadius: 5
+  explosionDamage: 80
+  fuseTime: 1.6
+  throwForce: 13
+  explosionMaterial: {fileID: 2100000, guid: f2ef0d4c2e800904fa00bdacefc716ad, type: 2}
