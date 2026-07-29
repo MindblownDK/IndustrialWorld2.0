@@ -1,9 +1,25 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.52.2-dev`
+**Current Version:** `6.52.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.52.3-dev] Explosion compile fixes (unblocks 6.52.1 particle VFX + 6.52.2 throw-anywhere)
+
+**Type:** PATCH — compile fix (save-compatible).
+
+The 6.52.1 particle-explosion code had two compile errors that blocked the whole assembly — which is why neither the new grenade VFX nor the 6.52.2 "throw/fire anywhere" fix took effect:
+- `CS0426 ParticleSystem.AnimationCurve` doesn't exist — replaced with `UnityEngine.AnimationCurve` (implicit conversion to the curve module), in the smoke + fire size-over-life curves.
+- `CS1612` modifying `ps.emission.enabled`/`rateOverTime` directly (emission is a value-typed module) — now captured in a local first.
+
+After recompile: real particle grenade explosions AND throw/fire/swing at the sky are both live.
+
+**Files touched:**
+- `Scripts/Combat/Explosion.cs` (AnimationCurve + emission-capture fixes)
+- `Scripts/Core/GameVersion.cs` (6.52.2 -> 6.52.3), `Changelog.md`
+
+---
 
 ### [6.52.2-dev] Fire/Swing Anywhere — weapons & tools work aiming at the sky
 

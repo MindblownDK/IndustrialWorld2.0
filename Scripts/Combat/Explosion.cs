@@ -160,7 +160,7 @@ namespace VoxelEngine.Combat
             var n = ps.noise; n.enabled = true; n.strength = 1.2f * scale; n.frequency = 0.4f; n.scrollSpeed = 1f;
             // Grow as it rises + fade late.
             var so = ps.sizeOverLifetime; so.enabled = true;
-            so.size = new ParticleSystem.AnimationCurve(new[] { new Keyframe(0f, 0.4f), new Keyframe(1f, 1.6f) });
+            so.size = new AnimationCurve(new[] { new Keyframe(0f, 0.4f), new Keyframe(1f, 1.6f) });
             ColorOverLife(ps, new Color(0.24f, 0.22f, 0.21f), 0.55f, 1f);
             ps.emission.SetBursts(new[] { new ParticleSystem.Burst(0f, (short)Mathf.RoundToInt(30 * scale)) });
         }
@@ -189,8 +189,9 @@ namespace VoxelEngine.Combat
             main.playOnAwake = true;
             main.loop = false;
             main.maxParticles = 800;
-            ps.emission.enabled = true;
-            ps.emission.rateOverTime = 0f;   // burst-only (no continuous fountain)
+            var em = ps.emission;
+            em.enabled = true;
+            em.rateOverTime = 0f;   // burst-only (no continuous fountain)
             // Default particle material is transparent in URP — leave it so alpha fade works.
             return ps;
         }
@@ -218,7 +219,7 @@ namespace VoxelEngine.Combat
             if (grow != 1f)
             {
                 var s = ps.sizeOverLifetime; s.enabled = true;
-                s.size = new ParticleSystem.AnimationCurve(new[] { new Keyframe(0f, 1f / grow), new Keyframe(1f, 1f) });
+                s.size = new AnimationCurve(new[] { new Keyframe(0f, 1f / grow), new Keyframe(1f, 1f) });
             }
         }
 
