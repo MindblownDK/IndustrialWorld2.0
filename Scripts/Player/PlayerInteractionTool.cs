@@ -109,8 +109,7 @@ namespace VoxelEngine.Player
                     var horse = hit.collider.GetComponentInParent<VoxelEngine.Fauna.RideableAnimal>();
                     if (horse != null && horse.Rider == null)
                     {
-                        string mountKey = GameSettings.GetKey(InputAction.EnterCockpit);
-                        VoxelEngine.UI.InteractionHud.Show(mountKey, "Mount Horse");
+                        VoxelEngine.UI.InteractionHud.Show("H / RMB", "Mount Horse");
                         if (GameSettings.WasPressed(InputAction.EnterCockpit))
                         {
                             var pc = GetComponentInParent<VoxelEngine.Player.PlayerController>();
@@ -129,6 +128,18 @@ namespace VoxelEngine.Player
             }
 
             if (!mineHeld && !buildHeld && !buildDown) return;
+
+            // RMB on a rideable horse mounts it (takes priority over building/placing).
+            if (buildDown && hasHit)
+            {
+                var rmbHorse = hit.collider.GetComponentInParent<VoxelEngine.Fauna.RideableAnimal>();
+                if (rmbHorse != null && rmbHorse.Rider == null)
+                {
+                    var pc = GetComponentInParent<VoxelEngine.Player.PlayerController>();
+                    if (pc != null && !pc.IsMounted) rmbHorse.Enter(pc);
+                    return;
+                }
+            }
 
             if (!hasHit)
             {

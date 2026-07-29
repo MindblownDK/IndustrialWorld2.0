@@ -17,6 +17,9 @@ namespace VoxelEngine.Player
         [Header("Baselines (before upgrades)")]
         public float baseMaxHealth      = 100f;
         public VoxelEngine.Combat.ArmorItem equippedArmor; // currently worn Crusader armor
+        // Poison damage-over-time (venomous creatures); bypasses armor.
+        private float _poisonTimer;
+        private float _poisonDps;
         public float baseMaxStamina     = 100f;
         public float baseDamage         = 5f;     // bare-hand contribution
         public float baseSprintMultiplier = 1.6f;
@@ -96,6 +99,16 @@ namespace VoxelEngine.Player
                 Oxygen = Mathf.Min(MaxOxygen, Oxygen + Time.deltaTime * 25f); // fast regen
             }
 
+            // Poison: damage-over-time that bypasses armor (Manticore venom, etc.).
+            if (_poisonTimer > 0f)
+            {
+                _poisonTimer -= Time.deltaTime;
+                Health = Mathf.Max(0f, Health - _poisonDps * Time.deltaTime);
+                OnStatsChanged?.Invoke();
+                if (_poisonTimer <= 0f) _poisonDps = 0f;
+                if (Health <= 0f) Die();
+            }
+
             if (Health > MaxHealth)   Health = MaxHealth;
             if (Stamina > MaxStamina) Stamina = MaxStamina;
             if (Hunger > MaxHunger)   Hunger = MaxHunger;
@@ -161,6 +174,14 @@ namespace VoxelEngine.Player
             Health = Mathf.Max(0, Health - amount);
             OnStatsChanged?.Invoke();
             if (Health <= 0) Die();
+        }
+        /// <summary>Apply a venom damage-over-time effect that bypasses armor. Refreshes/extends an active poison.</summary>
+        public void ApplyPoison(float dps, float duration)
+        {
+            if (dps <= 0f || duration <= 0f) return;
+            _poisonDps   = Mathf.Max(_poisonDps, dps);
+            _poisonTimer = Mathf.Max(_poisonTimer, duration);
+            OnStatsChanged?.Invoke();
         }
 
         public void Heal(float amount)

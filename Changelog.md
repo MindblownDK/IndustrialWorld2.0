@@ -1,9 +1,44 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.44.0-dev`
+**Current Version:** `6.45.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.45.0-dev] Phase 3e — Mythical Enemy: Manticore (tail spikes + venom)
+
+**Type:** MINOR — new hostile creature + poison status system (save-compatible). Phase 3e of the Combat pillar.
+
+**Added — the Manticore:**
+1. `Scripts/Combat/EnemyManticore.cs` (new) — a lion-bodied predator with a humanoid face and a venomous scorpion tail. Reuses the Ghoul's proven radial movement; wanders → detects → chases, then **fires volleys of toxic tail spikes at range** (firing band) and **claws in melee** when close. Faces the player to aim. Radial-gravity aligned + chunk-detach on Awake (works on rotating spheres).
+2. `Scripts/Combat/ManticoreSpike.cs` (new) — a lightweight, non-physical projectile (raycast continuous-collision) that deals kinetic damage and applies an **armor-bypassing poison DoT**; passes through the firing Manticore.
+3. **Poison status** in `PlayerStats`: new `ApplyPoison(dps, duration)` + a tick in `Update` that drains HP directly (bypasses Crusader armor mitigation), refreshes/extends an active poison. So venom can wear down even heavily-armored Crusaders.
+4. **Step 27 (wizard):** a premium ~35-part model (lion body + paws, dark mane, pale humanoid face with glowing eyes, bat wings, a 6-segment curved scorpion tail with a green venom stinger), `EnemyManticore` (80 HP), drops **Venom Gland / Manticore Spike / Armored Hide**, calm→red health bar, saved non-destructively to `Resources/Enemies/Manticore.prefab`, and injected into **Desert/Wasteland** biome scatter (density 0.003).
+
+**To play:** run Step 27 → explore Desert/Wasteland → a Manticore may appear. It will volley spikes (each can poison you) and claw up close. Kill it for venom, spikes, and armored hide.
+
+**Why MINOR:** new hostile creature + new projectile + new status effect — all save-compatible.
+
+**Files touched:**
+- `Scripts/Combat/EnemyManticore.cs` (new), `Scripts/Combat/ManticoreSpike.cs` (new)
+- `Scripts/Player/PlayerStats.cs` (`ApplyPoison` + poison tick)
+- `Scripts/Editor/VoxelEngineSetupWindow.cs` (Step 27 `BuildManticoreContent` + button)
+- `Scripts/Core/GameVersion.cs` (6.44.1 -> 6.45.0), `Roadmap.md` + `Changelog.md`
+
+---
+
+### [6.44.1-dev] Horse — RMB-to-Mount
+
+**Type:** PATCH — QoL addition to the rideable horse.
+
+**Added:** you can now **right-click (RMB) a horse to mount it**, in addition to **H**. RMB-on-horse takes priority over building/placing (handled before the build handler, with an early return), so it never also places a block. The on-screen prompt now reads `[H / RMB] Mount Horse`. H-mount and the `F`/RMB-free dismount are unchanged.
+
+**Files touched:**
+- `Scripts/Player/PlayerInteractionTool.cs` (RMB mount priority check + prompt)
+- `Scripts/Core/GameVersion.cs` (6.44.0 -> 6.44.1)
+- `Changelog.md`
+
+---
 
 ### [6.44.0-dev] Phase 3d — Rideable Horse (mount, WASD steer, gallop, jump)
 

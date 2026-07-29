@@ -313,6 +313,13 @@ namespace VoxelEngine.EditorTools
                 "Re-runnable. Idempotent.");
             AddWizardButton(scroll, "26. Build Rideable Horse (Phase 3d) — mount & steer", BuildHorseContent, 40);
 
+            AddInfo(scroll,
+                "Step 27 builds the Manticore mythical enemy (Combat Phase 3e, non-destructive):\n" +
+                "  • Lion body, humanoid face, bat wings, venomous scorpion tail\n" +
+                "  • Fires toxic tail spikes (armor-bypassing poison) + claws in melee\n" +
+                "  • Spawns rarely in Desert/Wasteland. Re-runnable. Idempotent.");
+            AddWizardButton(scroll, "27. Build Mythical Enemy — Manticore (Phase 3e)", BuildManticoreContent, 40);
+
             AddSpacer(scroll, 20);
         }
 
@@ -10790,6 +10797,164 @@ root =>
                 "Spawns in Plains/Steppes (biome scatter) + via the livestock spawner. Saved to Resources/Livestock.",
                 "OK");
         }
+
+        // ============================================================
+        //   STEP 27 - MYTHICAL ENEMY: MANTICORE (Combat Phase 3e). A
+        //   lion-bodied predator with a humanoid face and a venomous
+        //   scorpion tail. Fires toxic tail spikes at range + claws in
+        //   melee; spikes apply an armor-bypassing poison DoT. Radial-
+        //   aligned; detaches from the chunk on Awake. Non-destructive.
+        //   Re-runnable. Idempotent.
+        // ============================================================
+        private void BuildManticoreContent()
+        {
+            EnsureFolder("Assets/Resources");
+            EnsureFolder("Assets/Resources/Enemies");
+            const string FAUNA_ROOT  = ASSET_ROOT + "/Fauna";
+            const string FAUNA_ITEMS = FAUNA_ROOT + "/Items";
+            const string FAUNA_MATS  = FAUNA_ROOT + "/Materials";
+            EnsureFolder(FAUNA_ROOT);
+            EnsureFolder(FAUNA_ITEMS);
+            EnsureFolder(FAUNA_MATS);
+
+            // ── Drop items ──
+            var venomGland = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{FAUNA_ITEMS}/Item_VenomGland.asset");
+            venomGland.itemId = "item_venom_gland"; venomGland.displayName = "Venom Gland";
+            venomGland.description = "A pulsing gland of Manticore venom. Alchemy and toxin-resistance material.";
+            venomGland.iconTint = new Color(0.50f, 0.85f, 0.25f); venomGland.maxStack = 20; venomGland.massPerUnit = 0.3f; venomGland.category = "Resources";
+            EditorUtility.SetDirty(venomGland);
+
+            var tailSpike = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{FAUNA_ITEMS}/Item_ManticoreSpike.asset");
+            tailSpike.itemId = "item_manticore_spike"; tailSpike.displayName = "Manticore Spike";
+            tailSpike.description = "A barbed chitin tail spike. A crafting reagent for armor-piercing gear.";
+            tailSpike.iconTint = new Color(0.25f, 0.20f, 0.30f); tailSpike.maxStack = 40; tailSpike.massPerUnit = 0.2f; tailSpike.category = "Resources";
+            EditorUtility.SetDirty(tailSpike);
+
+            var armoredHide = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{FAUNA_ITEMS}/Item_ArmoredHide.asset");
+            armoredHide.itemId = "item_armored_hide"; armoredHide.displayName = "Armored Hide";
+            armoredHide.description = "Tough plated hide from a Manticore. A high-impact armor and machinery material.";
+            armoredHide.iconTint = new Color(0.50f, 0.38f, 0.22f); armoredHide.maxStack = 40; armoredHide.massPerUnit = 0.8f; armoredHide.category = "Resources";
+            EditorUtility.SetDirty(armoredHide);
+
+            // ── Materials ──
+            var tawny     = MakeColoredMat(FAUNA_MATS, "Mat_ManticoreTawny", new Color(0.62f, 0.48f, 0.26f));
+            var tan       = MakeColoredMat(FAUNA_MATS, "Mat_ManticoreTan",   new Color(0.72f, 0.60f, 0.40f));
+            var mane      = MakeColoredMat(FAUNA_MATS, "Mat_ManticoreMane",  new Color(0.20f, 0.16f, 0.12f));
+            var face      = MakeColoredMat(FAUNA_MATS, "Mat_ManticoreFace",  new Color(0.86f, 0.78f, 0.68f));
+            var eye       = MakeColoredMat(FAUNA_MATS, "Mat_ManticoreEye",   new Color(0.95f, 0.20f, 0.10f));
+            var chitin    = MakeColoredMat(FAUNA_MATS, "Mat_ManticoreChitin",new Color(0.18f, 0.14f, 0.22f));
+            var venom     = MakeColoredMat(FAUNA_MATS, "Mat_ManticoreVenom", new Color(0.55f, 0.90f, 0.25f));
+            var wing      = MakeColoredMat(FAUNA_MATS, "Mat_ManticoreWing",  new Color(0.22f, 0.18f, 0.28f));
+            var dark      = MakeColoredMat(FAUNA_MATS, "Mat_ManticoreDark",  new Color(0.10f, 0.09f, 0.08f));
+            var spikeMat  = MakeColoredMat(FAUNA_MATS, "Mat_ManticoreSpike", new Color(0.22f, 0.18f, 0.28f));
+
+            void AddPart(GameObject root, string n, Vector3 pos, Vector3 euler, Vector3 scale, Material m)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                go.name = n; go.transform.SetParent(root.transform, false);
+                go.transform.localPosition = pos; go.transform.localEulerAngles = euler; go.transform.localScale = scale;
+                go.GetComponent<Renderer>().sharedMaterial = m;
+                var col = go.GetComponent<Collider>(); if (col != null) UnityEngine.Object.DestroyImmediate(col);
+            }
+
+            var root = new GameObject("Manticore");
+            // ── Lion body ──
+            AddPart(root, "Torso", new Vector3(0f, 0.95f, 0f),    Vector3.zero, new Vector3(0.60f, 0.65f, 1.5f),  tawny);
+            AddPart(root, "Chest", new Vector3(0f, 0.92f, 0.55f), Vector3.zero, new Vector3(0.66f, 0.66f, 0.45f), tawny);
+            AddPart(root, "Rump",  new Vector3(0f, 0.95f, -0.55f),Vector3.zero, new Vector3(0.66f, 0.66f, 0.45f), tawny);
+            AddPart(root, "Belly", new Vector3(0f, 0.70f, 0f),    Vector3.zero, new Vector3(0.50f, 0.25f, 1.1f),  tan);
+            // ── Legs (upper + lower + paw) ×4 ──
+            AddPart(root, "UpArmL",  new Vector3(-0.24f, 0.55f,  0.5f), Vector3.zero, new Vector3(0.16f, 0.55f, 0.18f), tawny);
+            AddPart(root, "LoArmL",  new Vector3(-0.24f, 0.22f,  0.5f), Vector3.zero, new Vector3(0.14f, 0.45f, 0.16f), tawny);
+            AddPart(root, "PawFL",   new Vector3(-0.24f, 0.05f,  0.5f), Vector3.zero, new Vector3(0.18f, 0.10f, 0.22f), dark);
+            AddPart(root, "UpArmR",  new Vector3( 0.24f, 0.55f,  0.5f), Vector3.zero, new Vector3(0.16f, 0.55f, 0.18f), tawny);
+            AddPart(root, "LoArmR",  new Vector3( 0.24f, 0.22f,  0.5f), Vector3.zero, new Vector3(0.14f, 0.45f, 0.16f), tawny);
+            AddPart(root, "PawFR",   new Vector3( 0.24f, 0.05f,  0.5f), Vector3.zero, new Vector3(0.18f, 0.10f, 0.22f), dark);
+            AddPart(root, "UpLegL",  new Vector3(-0.24f, 0.55f, -0.5f), Vector3.zero, new Vector3(0.16f, 0.55f, 0.18f), tawny);
+            AddPart(root, "LoLegL",  new Vector3(-0.24f, 0.22f, -0.5f), Vector3.zero, new Vector3(0.14f, 0.45f, 0.16f), tawny);
+            AddPart(root, "PawBL",   new Vector3(-0.24f, 0.05f, -0.5f), Vector3.zero, new Vector3(0.18f, 0.10f, 0.22f), dark);
+            AddPart(root, "UpLegR",  new Vector3( 0.24f, 0.55f, -0.5f), Vector3.zero, new Vector3(0.16f, 0.55f, 0.18f), tawny);
+            AddPart(root, "LoLegR",  new Vector3( 0.24f, 0.22f, -0.5f), Vector3.zero, new Vector3(0.14f, 0.45f, 0.16f), tawny);
+            AddPart(root, "PawBR",   new Vector3( 0.24f, 0.05f, -0.5f), Vector3.zero, new Vector3(0.18f, 0.10f, 0.22f), dark);
+            // ── Head + mane + humanoid face ──
+            AddPart(root, "Head",    new Vector3(0f, 1.15f, 0.78f), new Vector3(-15f, 0f, 0f), new Vector3(0.40f, 0.42f, 0.45f), tawny);
+            AddPart(root, "Mane",    new Vector3(0f, 1.22f, 0.6f),  Vector3.zero,            new Vector3(0.62f, 0.58f, 0.42f), mane);
+            AddPart(root, "FacePlate",new Vector3(0f, 1.16f, 1.0f), new Vector3(-15f, 0f, 0f), new Vector3(0.30f, 0.36f, 0.08f), face);
+            AddPart(root, "Brow",    new Vector3(0f, 1.30f, 0.99f), new Vector3(-15f, 0f, 0f), new Vector3(0.30f, 0.06f, 0.08f), mane);
+            AddPart(root, "EyeL",    new Vector3(-0.09f, 1.22f, 1.05f), new Vector3(-15f, 0f, 0f), new Vector3(0.05f, 0.05f, 0.03f), eye);
+            AddPart(root, "EyeR",    new Vector3( 0.09f, 1.22f, 1.05f), new Vector3(-15f, 0f, 0f), new Vector3(0.05f, 0.05f, 0.03f), eye);
+            AddPart(root, "Nose",    new Vector3(0f, 1.12f, 1.05f), new Vector3(-15f, 0f, 0f), new Vector3(0.06f, 0.05f, 0.04f), dark);
+            AddPart(root, "Mouth",   new Vector3(0f, 1.05f, 1.03f), new Vector3(-15f, 0f, 0f), new Vector3(0.13f, 0.03f, 0.04f), dark);
+            AddPart(root, "EarL",    new Vector3(-0.2f, 1.36f, 0.72f), new Vector3(0f, 0f, -10f), new Vector3(0.10f, 0.16f, 0.06f), tawny);
+            AddPart(root, "EarR",    new Vector3( 0.2f, 1.36f, 0.72f), new Vector3(0f, 0f,  10f), new Vector3(0.10f, 0.16f, 0.06f), tawny);
+            // ── Bat wings (folded on the shoulders) ──
+            AddPart(root, "WingL", new Vector3(-0.42f, 1.16f, 0.05f), new Vector3(0f, -10f, 28f),  new Vector3(0.55f, 0.45f, 0.06f), wing);
+            AddPart(root, "WingR", new Vector3( 0.42f, 1.16f, 0.05f), new Vector3(0f,  10f, -28f), new Vector3(0.55f, 0.45f, 0.06f), wing);
+            // ── Scorpion tail (curved up + forward over the back, stinger aiming ahead) ──
+            AddPart(root, "Seg1", new Vector3(0f, 1.08f, -0.72f), new Vector3( 25f, 0f, 0f), new Vector3(0.16f, 0.16f, 0.18f), chitin);
+            AddPart(root, "Seg2", new Vector3(0f, 1.30f, -0.88f), new Vector3( 55f, 0f, 0f), new Vector3(0.15f, 0.15f, 0.17f), chitin);
+            AddPart(root, "Seg3", new Vector3(0f, 1.55f, -0.74f), new Vector3( 90f, 0f, 0f), new Vector3(0.14f, 0.14f, 0.16f), chitin);
+            AddPart(root, "Seg4", new Vector3(0f, 1.62f, -0.45f), new Vector3(120f, 0f, 0f), new Vector3(0.13f, 0.13f, 0.15f), chitin);
+            AddPart(root, "Seg5", new Vector3(0f, 1.52f, -0.18f), new Vector3(145f, 0f, 0f), new Vector3(0.12f, 0.12f, 0.14f), chitin);
+            AddPart(root, "Stinger", new Vector3(0f, 1.36f, 0.02f), new Vector3(165f, 0f, 0f), new Vector3(0.10f, 0.26f, 0.10f), venom);
+
+            var cap = root.AddComponent<CapsuleCollider>();
+            cap.height = 1.6f; cap.radius = 0.5f; cap.center = new Vector3(0f, 0.95f, 0f);
+            var rb = root.AddComponent<Rigidbody>();
+            rb.useGravity = false; rb.freezeRotation = true;
+            var manticore = root.AddComponent<VoxelEngine.Combat.EnemyManticore>();
+            manticore.spikeMaterial = spikeMat;
+            manticore.drops = new VoxelEngine.Items.ItemDefinition[] { venomGland, tailSpike, armoredHide };
+            manticore.minDrops = 1; manticore.maxDrops = 3; manticore.dropCount = 1;
+            var hbar = root.AddComponent<VoxelEngine.Combat.CreatureHealthBar>();
+            hbar.target = manticore;
+            hbar.fillColor = new Color(0.70f, 0.25f, 0.60f);
+            hbar.fillColorLow = new Color(0.80f, 0.15f, 0.10f);
+
+            const string manticorePath = "Assets/Resources/Enemies/Manticore.prefab";
+            GameObject manticorePrefab;
+            if (AssetDatabase.LoadMainAssetAtPath(manticorePath) != null)
+            {
+                manticorePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(manticorePath);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+            else
+            {
+                manticorePrefab = PrefabUtility.SaveAsPrefabAsset(root, manticorePath);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+
+            // Inject into desert/wasteland biome scatter (reliable spawn path; same as the Ghoul).
+            var br = AssetDatabase.LoadAssetAtPath<VoxelEngine.Biomes.BiomeRegistry>(ASSET_ROOT + "/BiomeRegistry.asset");
+            if (br != null && manticorePrefab != null)
+            {
+                foreach (var biome in br.biomes)
+                {
+                    if (biome == null) continue;
+                    if (biome.biomeName != "Desert" && biome.biomeName != "Wasteland") continue;
+                    var list = (biome.scatter != null)
+                        ? new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>(biome.scatter)
+                        : new System.Collections.Generic.List<VoxelEngine.Biomes.BiomeDefinition.ScatterEntry>();
+                    list.RemoveAll(e => e.prefab != null && e.prefab.name == "Manticore");
+                    list.Add(new VoxelEngine.Biomes.BiomeDefinition.ScatterEntry { prefab = manticorePrefab, density = 0.003f, minScale = 0.95f, maxScale = 1.15f, minHeight = 0, maxHeight = 9999 });
+                    biome.scatter = list.ToArray();
+                    EditorUtility.SetDirty(biome);
+                }
+                EditorUtility.SetDirty(br);
+            }
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Voxel Engine — Mythical Enemy: Manticore (Phase 3e)",
+                "The Manticore is built:\n\n" +
+                "• Lion body, humanoid face, bat wings, and a venomous scorpion tail (~35 parts)\n" +
+                "• Fires volleys of toxic tail spikes at range + claws in melee\n" +
+                "• Spikes apply an armor-bypassing poison DoT (PlayerStats.ApplyPoison)\n" +
+                "• Drops Venom Gland, Manticore Spike, Armored Hide\n\n" +
+                "Spawns rarely in Desert/Wasteland (biome scatter). Saved to Resources/Enemies.",
+                "OK");
+        }
+
 
 
 
