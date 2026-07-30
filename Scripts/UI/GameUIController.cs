@@ -222,6 +222,7 @@ namespace VoxelEngine.UI
             // Live-update the open furnace panel in-place every frame (no rebuild needed).
             TickFurnaceLiveUI();
             PlayerHud.Tick();
+            BombHud.Tick(inventory);
             RustStyleHud.Tick();
             BuildFeedbackHud.Tick();
             VoxelEngine.Weather.WeatherHud.Tick();
@@ -926,6 +927,7 @@ namespace VoxelEngine.UI
             BuildCostHud.EnsureMounted(_root);
             DeathScreenHud.EnsureMounted(_root);
             CryobedConfigHud.EnsureMounted(_root);
+            BombHud.EnsureMounted(_root);
 
             // (We poll mouse buttons in Update() — much more reliable than RegisterCallback.)
 

@@ -1,9 +1,23 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.55.0-dev`
+**Current Version:** `6.56.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.56.0-dev] Bomb Timer UI — fuse slider + floating countdown numbers
+
+**Type:** MINOR — new bomb UI (save-compatible).
+
+**Added `Scripts/UI/BombHud.cs`** (mounted + ticked in GameUIController):
+1. **Fuse slider** — while you hold an explosive (Powder Keg / Tsar / Antimatter), a small panel appears with a **slider (1–30 s) + live number**. Dragging it writes `ExplosiveBlock.NextFuse`, so the next bomb you place uses that fuse.
+2. **Floating countdown numbers** — each placed bomb in view shows its **remaining fuse (seconds)** floating above it, colour-shifting green → red as it nears zero (a throttled scan + world→screen projection; sphere-correct offset via radial up).
+
+**Files touched:**
+- `Scripts/UI/BombHud.cs` (new), `Scripts/UI/GameUIController.cs` (mount + tick)
+- `Scripts/Core/GameVersion.cs` (6.55.0 -> 6.56.0), `Changelog.md`
+
+---
 
 ### [6.55.0-dev] Tsar Bomb + Antimatter Bomb (star-death sequence) + fuse glow + fixes
 
