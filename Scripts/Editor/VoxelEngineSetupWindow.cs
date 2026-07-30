@@ -369,6 +369,12 @@ namespace VoxelEngine.EditorTools
                 "  • Craft at the Assembler. Re-runnable. Idempotent.");
             AddWizardButton(scroll, "34. Build Powder Keg (big bomb, mushroom cloud)", BuildPowderKegContent, 40);
 
+            AddInfo(scroll,
+                "Step 35 builds the TSAR BOMB (~10x the keg, non-destructive): ginormous mushroom cloud + huge crater.\n" +
+                "Step 36 builds the ANTIMATTER BOMB (~40x the Tsar): star-death sequence (expand -> contract -> white glow -> MASSIVE blast). Re-runnable.");
+            AddWizardButton(scroll, "35. Build Tsar Bomb (huge bomb, ~10x keg)", BuildTsarBombContent, 40);
+            AddWizardButton(scroll, "36. Build Antimatter Bomb (ultimate, ~40x tsar)", BuildAntimatterBombContent, 40);
+
             AddSpacer(scroll, 20);
         }
 
@@ -11905,6 +11911,169 @@ root =>
                 "Place it, step back, and watch the mushroom cloud.",
                 "OK");
         }
+
+        // ============================================================
+        //   STEP 35 - TSAR BOMB (huge bomb, ~10x the Powder Keg).
+        //   Placeable; fuses then a GINORMOUS mushroom-cloud blast +
+        //   large crater. Shoot/chain to detonate early. Non-destructive.
+        // ============================================================
+        private void BuildTsarBombContent()
+        {
+            const string COMBAT_ROOT  = ASSET_ROOT + "/Combat";
+            const string COMBAT_ITEMS = COMBAT_ROOT + "/Items";
+            const string COMBAT_BLOCKS= COMBAT_ROOT + "/Blocks";
+            const string COMBAT_PREFABS=COMBAT_ROOT + "/Prefabs";
+            const string COMBAT_MATS  = COMBAT_ROOT + "/Materials";
+            EnsureFolder(COMBAT_ROOT); EnsureFolder(COMBAT_ITEMS); EnsureFolder(COMBAT_BLOCKS); EnsureFolder(COMBAT_PREFABS); EnsureFolder(COMBAT_MATS);
+
+            ItemDefinition FindItem(string n)
+            {
+                var guids = AssetDatabase.FindAssets(n + " t:ItemDefinition");
+                foreach (var g in guids) { var pp = AssetDatabase.GUIDToAssetPath(g); if (System.IO.Path.GetFileNameWithoutExtension(pp) == n) return AssetDatabase.LoadAssetAtPath<ItemDefinition>(pp); }
+                return null;
+            }
+            var steelIngot = FindItem("Item_SteelIngot");
+            var ironPlate  = FindItem("Item_IronPlate");
+            var coal       = FindItem("Item_Coal");
+
+            var steelBody = MakeColoredMat(COMBAT_MATS, "Mat_TsarBody", new Color(0.36f, 0.38f, 0.41f));
+            var darkSteel = MakeColoredMat(COMBAT_MATS, "Mat_TsarDark", new Color(0.20f, 0.21f, 0.23f));
+            var redTip    = MakeColoredMat(COMBAT_MATS, "Mat_TsarRed",  new Color(0.80f, 0.15f, 0.10f));
+            var explosionMat = MakeColoredMat(COMBAT_MATS, "Mat_Explosion", new Color(1.0f, 0.45f, 0.10f));
+
+            void AddPart(GameObject root, string n, Vector3 pos, Vector3 euler, Vector3 scale, Material m)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                go.name = n; go.transform.SetParent(root.transform, false);
+                go.transform.localPosition = pos; go.transform.localEulerAngles = euler; go.transform.localScale = scale;
+                go.GetComponent<Renderer>().sharedMaterial = m;
+                var col = go.GetComponent<Collider>(); if (col != null) UnityEngine.Object.DestroyImmediate(col);
+            }
+
+            var root = new GameObject("TsarBomb");
+            AddPart(root, "Body",   new Vector3(0f, 0.85f, 0f), Vector3.zero, new Vector3(1.1f, 1.4f, 1.1f), steelBody);
+            AddPart(root, "Collar", new Vector3(0f, 1.4f, 0f),  Vector3.zero, new Vector3(1.2f, 0.2f, 1.2f), darkSteel);
+            AddPart(root, "Nose",   new Vector3(0f, 1.75f, 0f), Vector3.zero, new Vector3(0.5f, 0.6f, 0.5f),  redTip);
+            AddPart(root, "NoseBand",new Vector3(0f, 1.5f, 0f), Vector3.zero, new Vector3(0.6f, 0.1f, 0.6f),  darkSteel);
+            AddPart(root, "BandMid",new Vector3(0f, 0.95f, 0f), Vector3.zero, new Vector3(1.18f, 0.15f, 1.18f), darkSteel);
+            AddPart(root, "Base",   new Vector3(0f, 0.15f, 0f), Vector3.zero, new Vector3(1.0f, 0.2f, 1.0f),   darkSteel);
+            AddPart(root, "Stripe", new Vector3(0f, 1.1f, 0.56f),Vector3.zero,new Vector3(0.6f, 0.18f, 0.02f), redTip);
+            AddPart(root, "Fin1", new Vector3(0.62f, 0.35f, 0f), new Vector3(0f, 0f, 25f), new Vector3(0.1f, 0.45f, 0.4f), darkSteel);
+            AddPart(root, "Fin2", new Vector3(-0.62f, 0.35f, 0f),new Vector3(0f, 0f, -25f),new Vector3(0.1f, 0.45f, 0.4f), darkSteel);
+            AddPart(root, "Fin3", new Vector3(0f, 0.35f, 0.62f), new Vector3(25f, 0f, 0f), new Vector3(0.4f, 0.45f, 0.1f), darkSteel);
+            AddPart(root, "Fin4", new Vector3(0f, 0.35f, -0.62f),new Vector3(-25f, 0f, 0f),new Vector3(0.4f, 0.45f, 0.1f), darkSteel);
+
+            var cap = root.AddComponent<CapsuleCollider>();
+            cap.height = 1.9f; cap.radius = 0.7f; cap.center = new Vector3(0f, 0.85f, 0f);
+            var bomb = root.AddComponent<VoxelEngine.Combat.ExplosiveBlock>();
+            bomb.fuse = 7f; bomb.explosionRadius = 40f; bomb.explosionDamage = 2500f; bomb.voxelDamageRadius = 8f;
+            bomb.explosionMaterial = explosionMat;
+
+            const string path = ASSET_ROOT + "/Combat/Prefabs/TsarBomb.prefab";
+            GameObject prefab;
+            if (AssetDatabase.LoadMainAssetAtPath(path) != null) { prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path); UnityEngine.Object.DestroyImmediate(root); }
+            else { prefab = PrefabUtility.SaveAsPrefabAsset(root, path); UnityEngine.Object.DestroyImmediate(root); }
+
+            var block = GetOrCreateAsset<VoxelEngine.Items.BlockItem>($"{COMBAT_BLOCKS}/Block_TsarBomb.asset");
+            block.itemId = "block_tsar_bomb"; block.displayName = "Tsar Bomb";
+            block.description = "Ginormous placeable explosive. ~10× the Powder Keg. Fuses ~7 s, then a colossal mushroom-cloud blast + huge crater. Stand very far back.";
+            block.iconTint = new Color(0.36f, 0.38f, 0.41f);
+            block.maxStack = 4; block.massPerUnit = 12f;
+            block.placedPrefab = prefab; block.gridSize = Vector3Int.one; block.allowStacking = true; block.blockHealth = 80; block.miningTier = 2; block.category = "Combat";
+            EditorUtility.SetDirty(block);
+
+            AddRecipe("Recipe_TsarBomb", "Tsar Bomb", block, 1, VoxelEngine.Crafting.StationTier.Assembler, true,
+                (steelIngot, 8), (ironPlate, 8), (coal, 12));
+
+            AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Voxel Engine — Tsar Bomb",
+                "The Tsar Bomb is built:\n\n• Huge steel bomb (~12 parts), ~10× the Powder Keg\n• Radius 40, damage 2500, big voxel crater, giant mushroom cloud\n• Fuses ~7 s; shoot/chain to detonate early\n• Craft at the Assembler (steel + iron plate + coal)", "OK");
+        }
+
+        // ============================================================
+        //   STEP 36 - ANTIMATTER BOMB (the ultimate explosive, ~40x
+        //   the Tsar). Runs a "star-death" sequence: core sphere
+        //   EXPANDS slowly → CONTRACTS fast → blinding WHITE GLOW →
+        //   MASSIVE detonation. Placeable; fuses or chains. Non-
+        //   destructive. Re-runnable. Idempotent.
+        // ============================================================
+        private void BuildAntimatterBombContent()
+        {
+            const string COMBAT_ROOT  = ASSET_ROOT + "/Combat";
+            const string COMBAT_ITEMS = COMBAT_ROOT + "/Items";
+            const string COMBAT_BLOCKS= COMBAT_ROOT + "/Blocks";
+            const string COMBAT_PREFABS=COMBAT_ROOT + "/Prefabs";
+            const string COMBAT_MATS  = COMBAT_ROOT + "/Materials";
+            EnsureFolder(COMBAT_ROOT); EnsureFolder(COMBAT_ITEMS); EnsureFolder(COMBAT_BLOCKS); EnsureFolder(COMBAT_PREFABS); EnsureFolder(COMBAT_MATS);
+
+            ItemDefinition FindItem(string n)
+            {
+                var guids = AssetDatabase.FindAssets(n + " t:ItemDefinition");
+                foreach (var g in guids) { var pp = AssetDatabase.GUIDToAssetPath(g); if (System.IO.Path.GetFileNameWithoutExtension(pp) == n) return AssetDatabase.LoadAssetAtPath<ItemDefinition>(pp); }
+                return null;
+            }
+            var advCircuit = FindItem("Item_AdvancedCircuit");
+            var steelPlate = FindItem("Item_SteelPlate");
+            var goldWire   = FindItem("Item_GoldLVWire");
+
+            var cageMat  = MakeColoredMat(COMBAT_MATS, "Mat_AntiCage", new Color(0.30f, 0.32f, 0.36f));
+            var strutMat = MakeColoredMat(COMBAT_MATS, "Mat_AntiStrut",new Color(0.42f, 0.44f, 0.50f));
+            var coreMat  = MakeColoredMat(COMBAT_MATS, "Mat_AntiCore", new Color(0.55f, 0.30f, 0.95f)); // containment violet
+            var blastMat = MakeColoredMat(COMBAT_MATS, "Mat_AntiBlast",new Color(0.75f, 0.85f, 1.0f));  // white-blue blast
+
+            void AddPart(GameObject root, string n, Vector3 pos, Vector3 euler, Vector3 scale, Material m)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                go.name = n; go.transform.SetParent(root.transform, false);
+                go.transform.localPosition = pos; go.transform.localEulerAngles = euler; go.transform.localScale = scale;
+                go.GetComponent<Renderer>().sharedMaterial = m;
+                var col = go.GetComponent<Collider>(); if (col != null) UnityEngine.Object.DestroyImmediate(col);
+            }
+
+            var root = new GameObject("AntimatterBomb");
+            // Glowing containment core
+            var core = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            core.name = "Core"; core.transform.SetParent(root.transform, false);
+            core.transform.localPosition = new Vector3(0f, 0.65f, 0f); core.transform.localScale = Vector3.one * 0.45f;
+            core.GetComponent<Renderer>().sharedMaterial = coreMat;
+            var ccol = core.GetComponent<Collider>(); if (ccol != null) UnityEngine.Object.DestroyImmediate(ccol);
+            // Containment cage: 4 vertical struts + top/bottom plates + a mid band
+            AddPart(root, "StrutFL", new Vector3(-0.45f, 0.65f, 0.45f), Vector3.zero, new Vector3(0.07f, 1.0f, 0.07f), strutMat);
+            AddPart(root, "StrutFR", new Vector3( 0.45f, 0.65f, 0.45f), Vector3.zero, new Vector3(0.07f, 1.0f, 0.07f), strutMat);
+            AddPart(root, "StrutBL", new Vector3(-0.45f, 0.65f,-0.45f), Vector3.zero, new Vector3(0.07f, 1.0f, 0.07f), strutMat);
+            AddPart(root, "StrutBR", new Vector3( 0.45f, 0.65f,-0.45f), Vector3.zero, new Vector3(0.07f, 1.0f, 0.07f), strutMat);
+            AddPart(root, "TopPlate", new Vector3(0f, 1.16f, 0f), Vector3.zero, new Vector3(1.0f, 0.08f, 1.0f), cageMat);
+            AddPart(root, "Base",    new Vector3(0f, 0.14f, 0f), Vector3.zero, new Vector3(1.0f, 0.15f, 1.0f), cageMat);
+            AddPart(root, "MidBand", new Vector3(0f, 0.65f, 0f), Vector3.zero, new Vector3(1.0f, 0.06f, 1.0f), strutMat);
+
+            var cap = root.AddComponent<CapsuleCollider>();
+            cap.height = 1.4f; cap.radius = 0.65f; cap.center = new Vector3(0f, 0.65f, 0f);
+            var bomb = root.AddComponent<VoxelEngine.Combat.AntimatterBomb>();
+            bomb.fuse = 8f; bomb.explosionRadius = 80f; bomb.explosionDamage = 30000f; bomb.voxelDamageRadius = 10f;
+            bomb.coreMaterial = coreMat; bomb.explosionMaterial = blastMat;
+
+            const string path = ASSET_ROOT + "/Combat/Prefabs/AntimatterBomb.prefab";
+            GameObject prefab;
+            if (AssetDatabase.LoadMainAssetAtPath(path) != null) { prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path); UnityEngine.Object.DestroyImmediate(root); }
+            else { prefab = PrefabUtility.SaveAsPrefabAsset(root, path); UnityEngine.Object.DestroyImmediate(root); }
+
+            var block = GetOrCreateAsset<VoxelEngine.Items.BlockItem>($"{COMBAT_BLOCKS}/Block_AntimatterBomb.asset");
+            block.itemId = "block_antimatter_bomb"; block.displayName = "Antimatter Bomb";
+            block.description = "The ultimate explosive. ~40× a Tsar. Runs a star-death sequence — core swells, collapses to a point, blinding white glow, then a MASSIVE detonation. Do NOT be anywhere nearby.";
+            block.iconTint = new Color(0.55f, 0.30f, 0.95f);
+            block.maxStack = 1; block.massPerUnit = 30f;
+            block.placedPrefab = prefab; block.gridSize = Vector3Int.one; block.allowStacking = true; block.blockHealth = 120; block.miningTier = 3; block.category = "Combat";
+            EditorUtility.SetDirty(block);
+
+            AddRecipe("Recipe_AntimatterBomb", "Antimatter Bomb", block, 1, VoxelEngine.Crafting.StationTier.Assembler, true,
+                (advCircuit, 4), (steelPlate, 12), (goldWire, 8));
+
+            AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Voxel Engine — Antimatter Bomb",
+                "The Antimatter Bomb is built:\n\n• Glowing violet core in a containment cage (~9 parts)\n• Star-death sequence: EXPAND slowly → CONTRACT fast → WHITE GLOW → MASSIVE blast (radius 80, damage 30000)\n• Fuses ~8 s; shoot/chain to trigger early\n• Craft at the Assembler (advanced circuit + steel plate + gold wire) — very expensive", "OK");
+        }
+
+
 
 
 

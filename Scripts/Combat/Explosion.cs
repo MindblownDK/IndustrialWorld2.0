@@ -48,7 +48,7 @@ namespace VoxelEngine.Combat
                 try
                 {
                     Vector3Int center = world.WorldToVoxel(pos);
-                    int vr = Mathf.Clamp(Mathf.RoundToInt(voxelDamageRadius / VoxelConstants.VOXEL_SIZE), 0, 4);
+                    int vr = Mathf.Clamp(Mathf.RoundToInt(voxelDamageRadius / VoxelConstants.VOXEL_SIZE), 0, 12);
                     int vr2 = vr * vr;
                     for (int dx = -vr; dx <= vr; dx++)
                     for (int dy = -vr; dy <= vr; dy++)

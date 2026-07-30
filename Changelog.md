@@ -1,9 +1,31 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.54.0-dev`
+**Current Version:** `6.55.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.55.0-dev] Tsar Bomb + Antimatter Bomb (star-death sequence) + fuse glow + fixes
+
+**Type:** MINOR — new mega-explosives + antimatter animation (save-compatible).
+
+**Fixed — false "Hit dmg" feedback:** `ExplosiveBlock` now overrides `OnHit` to suppress the misleading damage readout when a keg takes explosion/chain damage.
+
+**Bigger craters:** raised the voxel-crater cap in `Explosion` (4 -> 12) so bigger bombs carve bigger holes.
+
+**Fuse countdown glow:** every bomb now has a pulsing point-light that blinks faster and shifts green -> red as the fuse runs out (a visible urgency timer). Bombs also honour a new `ExplosiveBlock.NextFuse` static (for the upcoming fuse-slider UI).
+
+**Tsar Bomb (Step 35) — ~10x the Powder Keg:** placeable steel bomb; radius 40, damage 2500, big voxel crater, **ginormous mushroom cloud**. Fuses ~7 s; shoot/chain to detonate early. Crafted at the Assembler (steel + iron plate + coal).
+
+**Antimatter Bomb (Step 36) — ~40x the Tsar, the ultimate:** runs a **"star-death" sequence** instead of an instant blast — a core sphere **EXPANDS slowly** (the doomed star swelling), **CONTRACTS fast** (collapse) to a tiny point, a **blinding WHITE GLOW**, then a **MASSIVE detonation** (radius 80, damage 30000) with a colossal white flash + light. Glowing violet core in a containment cage. Fuses ~8 s; shoot/chain to trigger early. Crafted at the Assembler (advanced circuit + steel plate + gold wire) — very expensive.
+
+**Files touched:**
+- `Scripts/Combat/ExplosiveBlock.cs` (OnHit suppress + NextFuse + fuse glow), `Scripts/Combat/Explosion.cs` (crater cap 12)
+- `Scripts/Combat/AntimatterBomb.cs` (new: star-death sequence)
+- `Scripts/Editor/VoxelEngineSetupWindow.cs` (Steps 35 + 36)
+- `Scripts/Core/GameVersion.cs` (6.54.0 -> 6.55.0), `Changelog.md`
+
+---
 
 ### [6.54.0-dev] Powder Keg — placeable big bomb (mushroom cloud)
 
