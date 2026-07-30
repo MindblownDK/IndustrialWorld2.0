@@ -1,9 +1,32 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.57.0-dev`
+**Current Version:** `6.58.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.58.0-dev] Heavy Artillery — Cannon (auto-targeting by faction) + targeting UI
+
+**Type:** MINOR — new heavy weapon system + targeting UI (save-compatible).
+
+**Added the Artillery system** (`Artillery.cs`, `ArtilleryShell.cs`, `ArtilleryHud.cs`):
+1. `Artillery` — placeable heavy weapon that **auto-targets by a faction filter** (`[Flags] TargetFilter { Enemies, Players, Passive }` — any combination). Scans for matching targets in range + LOS, aims its rotating head, and fires:
+   - **Minigun** variant = rapid hitscan + tracer.
+   - **Cannon / Gustav** variants = arcing shells (`ArtilleryShell`) that detonate via the centralized Explosion.
+2. **Targeting UI** (`ArtilleryHud`) — when you look at an artillery piece, a panel shows checkboxes for **Target Enemies / Players / Passive**, an **Auto-Fire** toggle, and ammo + variant. Set any faction combination. The RMB reload also handles artillery.
+3. **Step 38 (wizard):** the **Heavy Cannon** — a howitzer on a split-trail carriage with wheels + a long barrel (~12 parts), auto-targeting, arcing explosive shells (damage 60, blast 8), 200 HP. Craft at the Assembler.
+
+**To use:** run Step 38 → craft → place → reload with Bullets (RMB) → look at it to configure targeting (Enemies/Players/Passive) → it auto-fires.
+
+**Coming next:** the **Minigun** + **Schwerer Gustav** variants (massive railway gun), and **cockpit manual control** (first/third person — use cockpit logic).
+
+**Files touched:**
+- `Scripts/Combat/Artillery.cs` (new), `Scripts/Combat/ArtilleryShell.cs` (new), `Scripts/UI/ArtilleryHud.cs` (new)
+- `Scripts/UI/GameUIController.cs` (mount + tick), `Scripts/Player/PlayerInteractionTool.cs` (reload)
+- `Scripts/Editor/VoxelEngineSetupWindow.cs` (Step 38)
+- `Scripts/Core/GameVersion.cs` (6.57.0 -> 6.58.0), `Changelog.md`
+
+---
 
 ### [6.57.0-dev] Auto Turret — automated defense
 

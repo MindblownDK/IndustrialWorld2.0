@@ -381,6 +381,12 @@ namespace VoxelEngine.EditorTools
                 "  • Reload with Bullets (RMB). Re-runnable. Idempotent.");
             AddWizardButton(scroll, "37. Build Auto Turret (defense)", BuildTurretContent, 40);
 
+            AddInfo(scroll,
+                "Step 38 builds the HEAVY CANNON (auto-targeting artillery, non-destructive):\n" +
+                "  • Fires arcing explosive shells; configurable faction targeting\n" +
+                "  • Minigun + Schwerer Gustav + cockpit control coming next. Re-runnable.");
+            AddWizardButton(scroll, "38. Build Heavy Artillery — Cannon", BuildArtilleryCannonContent, 40);
+
             AddSpacer(scroll, 20);
         }
 
@@ -12160,6 +12166,107 @@ root =>
             EditorUtility.DisplayDialog("Voxel Engine — Auto Turret",
                 "The Auto Turret is built:\n\n• Placeable defense turret (base + pillar + rotating head with barrel)\n• Auto-targets hostile creatures (Ghouls, Manticores, Griffins, Roc, etc.) in range + line of sight\n• Fires hitscan shots with tracer + muzzle flash\n• 80 HP; reload by holding Bullets + RMB\n• Craft at the Assembler (iron plate + circuit + copper wire)", "OK");
         }
+
+        // ============================================================
+        //   STEP 38 - HEAVY ARTILLERY: CANNON (howitzer). Auto-targets
+        //   by faction filter; fires arcing explosive shells. Reload
+        //   with Bullets (RMB). Targeting UI shown when looking at it.
+        //   Non-destructive. Re-runnable. Idempotent.
+        // ============================================================
+        private void BuildArtilleryCannonContent()
+        {
+            const string COMBAT_ROOT  = ASSET_ROOT + "/Combat";
+            const string COMBAT_ITEMS = COMBAT_ROOT + "/Items";
+            const string COMBAT_BLOCKS= COMBAT_ROOT + "/Blocks";
+            const string COMBAT_PREFABS=COMBAT_ROOT + "/Prefabs";
+            const string COMBAT_MATS  = COMBAT_ROOT + "/Materials";
+            EnsureFolder(COMBAT_ROOT); EnsureFolder(COMBAT_ITEMS); EnsureFolder(COMBAT_BLOCKS); EnsureFolder(COMBAT_PREFABS); EnsureFolder(COMBAT_MATS);
+
+            ItemDefinition FindItem(string n)
+            {
+                var guids = AssetDatabase.FindAssets(n + " t:ItemDefinition");
+                foreach (var g in guids) { var pp = AssetDatabase.GUIDToAssetPath(g); if (System.IO.Path.GetFileNameWithoutExtension(pp) == n) return AssetDatabase.LoadAssetAtPath<ItemDefinition>(pp); }
+                return null;
+            }
+            var ironPlate  = FindItem("Item_IronPlate");
+            var steelIngot = FindItem("Item_SteelIngot");
+            var circuit    = FindItem("Item_Circuit");
+            var copperWire = FindItem("Item_CopperLVWire");
+
+            var body       = MakeColoredMat(COMBAT_MATS, "Mat_ArtilleryBody", new Color(0.32f, 0.34f, 0.16f));
+            var dark       = MakeColoredMat(COMBAT_MATS, "Mat_ArtilleryDark", new Color(0.18f, 0.18f, 0.16f));
+            var barrel     = MakeColoredMat(COMBAT_MATS, "Mat_ArtilleryBarrel",new Color(0.22f, 0.22f, 0.24f));
+            var shellMat   = MakeColoredMat(COMBAT_MATS, "Mat_Shell",         new Color(0.25f, 0.25f, 0.28f));
+            var explosionMat = MakeColoredMat(COMBAT_MATS, "Mat_Explosion",   new Color(1.0f, 0.45f, 0.10f));
+
+            void AddPart(GameObject parent, string n, Vector3 pos, Vector3 euler, Vector3 scale, Material m)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                go.name = n; go.transform.SetParent(parent.transform, false);
+                go.transform.localPosition = pos; go.transform.localEulerAngles = euler; go.transform.localScale = scale;
+                go.GetComponent<Renderer>().sharedMaterial = m;
+                var col = go.GetComponent<Collider>(); if (col != null) UnityEngine.Object.DestroyImmediate(col);
+            }
+            void AddCyl(GameObject parent, string n, Vector3 pos, Vector3 euler, Vector3 scale, Material m)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                go.name = n; go.transform.SetParent(parent.transform, false);
+                go.transform.localPosition = pos; go.transform.localEulerAngles = euler; go.transform.localScale = scale;
+                go.GetComponent<Renderer>().sharedMaterial = m;
+                var col = go.GetComponent<Collider>(); if (col != null) UnityEngine.Object.DestroyImmediate(col);
+            }
+
+            var root = new GameObject("ArtilleryCannon");
+            // Carriage base + split trails
+            AddPart(root, "Base",   new Vector3(0f, 0.1f, 0f),    Vector3.zero, new Vector3(0.9f, 0.2f, 1.2f), body);
+            AddPart(root, "TrailL", new Vector3(-0.35f, 0.1f, -0.8f),new Vector3(15,0,-15), new Vector3(0.15f, 0.12f, 0.8f), body);
+            AddPart(root, "TrailR", new Vector3( 0.35f, 0.1f, -0.8f),new Vector3(15,0, 15), new Vector3(0.15f, 0.12f, 0.8f), body);
+            // Wheels
+            AddCyl(root, "WheelL", new Vector3(-0.5f, 0.2f, 0f), new Vector3(0,0,90), new Vector3(0.35f, 0.06f, 0.35f), dark);
+            AddCyl(root, "WheelR", new Vector3( 0.5f, 0.2f, 0f), new Vector3(0,0,90), new Vector3(0.35f, 0.06f, 0.35f), dark);
+
+            // Rotating head (breech + long barrel + recoil + sight)
+            var headGo = new GameObject("Head");
+            headGo.transform.SetParent(root.transform, false);
+            headGo.transform.localPosition = new Vector3(0f, 0.45f, 0.1f);
+            AddPart(headGo, "Breech",  new Vector3(0f, 0f, 0f),     Vector3.zero, new Vector3(0.4f, 0.35f, 0.4f), barrel);
+            AddPart(headGo, "Barrel",  new Vector3(0f, 0.05f, 0.8f),Vector3.zero, new Vector3(0.18f, 0.18f, 1.4f), barrel);
+            AddPart(headGo, "Recoil",  new Vector3(0f, 0.18f, 0.5f),Vector3.zero, new Vector3(0.1f, 0.1f, 0.9f), dark);
+            AddPart(headGo, "Sight",   new Vector3(0f, 0.22f, 0.1f),Vector3.zero, new Vector3(0.06f, 0.06f, 0.1f), dark);
+            var muzzleGo = new GameObject("Muzzle");
+            muzzleGo.transform.SetParent(headGo.transform, false);
+            muzzleGo.transform.localPosition = new Vector3(0f, 0.05f, 1.55f);
+
+            var cap = root.AddComponent<CapsuleCollider>();
+            cap.height = 1.5f; cap.radius = 0.5f; cap.center = new Vector3(0f, 0.5f, 0f);
+            var art = root.AddComponent<VoxelEngine.Combat.Artillery>();
+            art.variant = VoxelEngine.Combat.ArtilleryVariant.Cannon;
+            art.range = 70f; art.fireCooldown = 2.5f; art.damage = 60f; art.explosionRadius = 8f; art.shellSpeed = 35f;
+            art.maxAmmo = 30; art.ammo = 0;
+            art.shellMat = shellMat; art.explosionMat = explosionMat;
+            art.head = headGo.transform; art.muzzle = muzzleGo.transform;
+
+            const string path = ASSET_ROOT + "/Combat/Prefabs/ArtilleryCannon.prefab";
+            GameObject prefab;
+            if (AssetDatabase.LoadMainAssetAtPath(path) != null) { prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path); UnityEngine.Object.DestroyImmediate(root); }
+            else { prefab = PrefabUtility.SaveAsPrefabAsset(root, path); UnityEngine.Object.DestroyImmediate(root); }
+
+            var block = GetOrCreateAsset<VoxelEngine.Items.BlockItem>($"{COMBAT_BLOCKS}/Block_ArtilleryCannon.asset");
+            block.itemId = "block_artillery_cannon"; block.displayName = "Heavy Cannon";
+            block.description = "Heavy howitzer artillery. Auto-targets by faction filter, fires arcing explosive shells. Reload with Bullets (RMB). Look at it to configure targeting.";
+            block.iconTint = new Color(0.32f, 0.34f, 0.16f);
+            block.maxStack = 4; block.massPerUnit = 20f;
+            block.placedPrefab = prefab; block.gridSize = Vector3Int.one; block.allowStacking = true; block.blockHealth = 200; block.miningTier = 2; block.category = "Combat";
+            EditorUtility.SetDirty(block);
+
+            AddRecipe("Recipe_ArtilleryCannon", "Heavy Cannon", block, 1, VoxelEngine.Crafting.StationTier.Assembler, true,
+                (ironPlate, 10), (steelIngot, 5), (circuit, 3), (copperWire, 6));
+
+            AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Voxel Engine — Heavy Cannon Artillery",
+                "The Heavy Cannon is built:\n\n• Howitzer on a split-trail carriage with wheels + long barrel (~12 parts)\n• Auto-targets by faction (Enemies/Players/Passive — configurable when looking at it)\n• Fires arcing explosive shells (damage 60, blast radius 8)\n• 200 HP; reload with Bullets (RMB)\n• Craft at the Assembler (iron + steel + circuit + copper wire)", "OK");
+        }
+
 
 
 

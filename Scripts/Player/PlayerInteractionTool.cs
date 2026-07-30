@@ -141,22 +141,26 @@ namespace VoxelEngine.Player
                 }
             }
 
-            // RMB a turret while holding Bullets -> reload it.
-            if (buildDown && hasHit)
+            // RMB a turret/artillery while holding Bullets -> reload it.
+            if (buildDown && hasHit && !inventory.ActiveStack.IsEmpty && inventory.ActiveStack.item.itemId == "item_bullets")
             {
                 var turret = hit.collider.GetComponentInParent<VoxelEngine.Combat.Turret>();
-                if (turret != null && !inventory.ActiveStack.IsEmpty && inventory.ActiveStack.item.itemId == "item_bullets")
+                var artillery = turret == null ? hit.collider.GetComponentInParent<VoxelEngine.Combat.Artillery>() : null;
+                if (turret != null || artillery != null)
                 {
-                    int want = turret.maxAmmo - turret.ammo;
+                    int max = turret != null ? turret.maxAmmo : artillery.maxAmmo;
+                    int cur = turret != null ? turret.ammo : artillery.ammo;
+                    int want = max - cur;
                     if (want > 0)
                     {
                         int got = inventory.container.Remove(inventory.ActiveStack.item, want);
-                        turret.ammo += got;
+                        if (turret != null) turret.ammo += got; else artillery.ammo += got;
                         inventory.container.RaiseChanged();
-                        VoxelEngine.UI.BuildFeedbackHud.Show("Turret", $"Reloaded +{got} ({turret.ammo}/{turret.maxAmmo})", null, new Color(0.4f, 0.8f, 1f));
+                        int now = turret != null ? turret.ammo : artillery.ammo;
+                        VoxelEngine.UI.BuildFeedbackHud.Show(turret != null ? "Turret" : "Artillery", $"Reloaded +{got} ({now}/{max})", null, new Color(0.4f, 0.8f, 1f));
                     }
                     else
-                        VoxelEngine.UI.BuildFeedbackHud.Show("Turret", "Already full", null, Color.yellow);
+                        VoxelEngine.UI.BuildFeedbackHud.Show("Reload", "Already full", null, Color.yellow);
                     return;
                 }
             }
