@@ -141,6 +141,26 @@ namespace VoxelEngine.Player
                 }
             }
 
+            // RMB a turret while holding Bullets -> reload it.
+            if (buildDown && hasHit)
+            {
+                var turret = hit.collider.GetComponentInParent<VoxelEngine.Combat.Turret>();
+                if (turret != null && !inventory.ActiveStack.IsEmpty && inventory.ActiveStack.item.itemId == "item_bullets")
+                {
+                    int want = turret.maxAmmo - turret.ammo;
+                    if (want > 0)
+                    {
+                        int got = inventory.container.Remove(inventory.ActiveStack.item, want);
+                        turret.ammo += got;
+                        inventory.container.RaiseChanged();
+                        VoxelEngine.UI.BuildFeedbackHud.Show("Turret", $"Reloaded +{got} ({turret.ammo}/{turret.maxAmmo})", null, new Color(0.4f, 0.8f, 1f));
+                    }
+                    else
+                        VoxelEngine.UI.BuildFeedbackHud.Show("Turret", "Already full", null, Color.yellow);
+                    return;
+                }
+            }
+
             var heldStack = inventory.ActiveStack;
 
             // ── WEAPON dispatch — LMB attacks with melee/ranged/thrown weapons, even when

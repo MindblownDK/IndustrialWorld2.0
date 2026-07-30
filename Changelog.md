@@ -1,9 +1,29 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.56.0-dev`
+**Current Version:** `6.57.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.57.0-dev] Auto Turret — automated defense
+
+**Type:** MINOR — new defensive structure (save-compatible).
+
+**Added `Scripts/Combat/Turret.cs`** — a placeable automated defense turret:
+- Scans for hostile creatures (any `Damageable` whose type starts with "Enemy" — Ghoul, Manticore, Griffin, Karkadann, Ifrit, Basilisk, Roc) within range + **line of sight**, picks the nearest, and **rotates its head to track** them (radial-aware, aims in the tangent plane).
+- Fires **hitscan shots** with a tracer + muzzle flash. 80 HP.
+- Runs on an **ammo magazine** — reload by **holding Bullets + RMB the turret**.
+
+**Step 37 (wizard):** turret model (base + pillar + rotating head with barrel + sight + muzzle marker), `Turret` component (head/muzzle wired), a placeable `BlockItem`, and an Assembler recipe (iron plate + circuit + copper wire).
+
+**To use:** run Step 37 → craft an Auto Turret → place it near your base → reload with Bullets (RMB) → it defends against the creature roster.
+
+**Files touched:**
+- `Scripts/Combat/Turret.cs` (new), `Scripts/Player/PlayerInteractionTool.cs` (RMB reload)
+- `Scripts/Editor/VoxelEngineSetupWindow.cs` (Step 37)
+- `Scripts/Core/GameVersion.cs` (6.56.0 -> 6.57.0), `Changelog.md`
+
+---
 
 ### [6.56.0-dev] Bomb Timer UI — fuse slider + floating countdown numbers
 

@@ -375,6 +375,12 @@ namespace VoxelEngine.EditorTools
             AddWizardButton(scroll, "35. Build Tsar Bomb (huge bomb, ~10x keg)", BuildTsarBombContent, 40);
             AddWizardButton(scroll, "36. Build Antimatter Bomb (ultimate, ~40x tsar)", BuildAntimatterBombContent, 40);
 
+            AddInfo(scroll,
+                "Step 37 builds the AUTO TURRET (non-destructive):\n" +
+                "  • Placeable defense; auto-targets hostile creatures + fires hitscan shots\n" +
+                "  • Reload with Bullets (RMB). Re-runnable. Idempotent.");
+            AddWizardButton(scroll, "37. Build Auto Turret (defense)", BuildTurretContent, 40);
+
             AddSpacer(scroll, 20);
         }
 
@@ -12072,6 +12078,89 @@ root =>
             EditorUtility.DisplayDialog("Voxel Engine — Antimatter Bomb",
                 "The Antimatter Bomb is built:\n\n• Glowing violet core in a containment cage (~9 parts)\n• Star-death sequence: EXPAND slowly → CONTRACT fast → WHITE GLOW → MASSIVE blast (radius 80, damage 30000)\n• Fuses ~8 s; shoot/chain to trigger early\n• Craft at the Assembler (advanced circuit + steel plate + gold wire) — very expensive", "OK");
         }
+
+        // ============================================================
+        //   STEP 37 - AUTO TURRET. A placeable automated defense
+        //   that targets hostile creatures (Ghouls, Manticores,
+        //   Griffins, etc.) and fires hitscan shots. Reload with
+        //   Bullets (RMB). Non-destructive. Re-runnable. Idempotent.
+        // ============================================================
+        private void BuildTurretContent()
+        {
+            const string COMBAT_ROOT  = ASSET_ROOT + "/Combat";
+            const string COMBAT_ITEMS = COMBAT_ROOT + "/Items";
+            const string COMBAT_BLOCKS= COMBAT_ROOT + "/Blocks";
+            const string COMBAT_PREFABS=COMBAT_ROOT + "/Prefabs";
+            const string COMBAT_MATS  = COMBAT_ROOT + "/Materials";
+            EnsureFolder(COMBAT_ROOT); EnsureFolder(COMBAT_ITEMS); EnsureFolder(COMBAT_BLOCKS); EnsureFolder(COMBAT_PREFABS); EnsureFolder(COMBAT_MATS);
+
+            ItemDefinition FindItem(string n)
+            {
+                var guids = AssetDatabase.FindAssets(n + " t:ItemDefinition");
+                foreach (var g in guids) { var pp = AssetDatabase.GUIDToAssetPath(g); if (System.IO.Path.GetFileNameWithoutExtension(pp) == n) return AssetDatabase.LoadAssetAtPath<ItemDefinition>(pp); }
+                return null;
+            }
+            var ironPlate = FindItem("Item_IronPlate");
+            var circuit   = FindItem("Item_Circuit");
+            var copperWire= FindItem("Item_CopperLVWire");
+
+            var body      = MakeColoredMat(COMBAT_MATS, "Mat_TurretBody", new Color(0.36f, 0.38f, 0.42f));
+            var dark      = MakeColoredMat(COMBAT_MATS, "Mat_TurretDark", new Color(0.20f, 0.21f, 0.24f));
+            var gun       = MakeColoredMat(COMBAT_MATS, "Mat_TurretGun",  new Color(0.28f, 0.28f, 0.30f));
+
+            void AddPart(GameObject parent, string n, Vector3 pos, Vector3 euler, Vector3 scale, Material m)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                go.name = n; go.transform.SetParent(parent.transform, false);
+                go.transform.localPosition = pos; go.transform.localEulerAngles = euler; go.transform.localScale = scale;
+                go.GetComponent<Renderer>().sharedMaterial = m;
+                var col = go.GetComponent<Collider>(); if (col != null) UnityEngine.Object.DestroyImmediate(col);
+            }
+
+            var root = new GameObject("Turret");
+            AddPart(root, "Base",   new Vector3(0f, 0.15f, 0f), Vector3.zero, new Vector3(0.8f, 0.3f, 0.8f),  body);
+            AddPart(root, "Pillar", new Vector3(0f, 0.6f, 0f),  Vector3.zero, new Vector3(0.25f, 0.6f, 0.25f), dark);
+            AddPart(root, "Collar", new Vector3(0f, 0.9f, 0f),  Vector3.zero, new Vector3(0.35f, 0.1f, 0.35f), dark);
+
+            // Rotating head (the turret yaw-tracks its target).
+            var headGo = new GameObject("Head");
+            headGo.transform.SetParent(root.transform, false);
+            headGo.transform.localPosition = new Vector3(0f, 1.0f, 0f);
+            AddPart(headGo, "HeadBody", new Vector3(0f, 0f, 0f),     Vector3.zero, new Vector3(0.45f, 0.35f, 0.45f), gun);
+            AddPart(headGo, "Barrel",   new Vector3(0f, 0.05f, 0.3f),Vector3.zero, new Vector3(0.14f, 0.14f, 0.6f),  dark);
+            AddPart(headGo, "Sight",    new Vector3(0f, 0.16f, 0.1f),Vector3.zero, new Vector3(0.06f, 0.06f, 0.1f),   body);
+
+            var muzzleGo = new GameObject("Muzzle");
+            muzzleGo.transform.SetParent(headGo.transform, false);
+            muzzleGo.transform.localPosition = new Vector3(0f, 0.05f, 0.65f);
+
+            var cap = root.AddComponent<CapsuleCollider>();
+            cap.height = 1.4f; cap.radius = 0.4f; cap.center = new Vector3(0f, 0.6f, 0f);
+            var turret = root.AddComponent<VoxelEngine.Combat.Turret>();
+            turret.head = headGo.transform;
+            turret.muzzle = muzzleGo.transform;
+
+            const string path = ASSET_ROOT + "/Combat/Prefabs/Turret.prefab";
+            GameObject prefab;
+            if (AssetDatabase.LoadMainAssetAtPath(path) != null) { prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path); UnityEngine.Object.DestroyImmediate(root); }
+            else { prefab = PrefabUtility.SaveAsPrefabAsset(root, path); UnityEngine.Object.DestroyImmediate(root); }
+
+            var block = GetOrCreateAsset<VoxelEngine.Items.BlockItem>($"{COMBAT_BLOCKS}/Block_Turret.asset");
+            block.itemId = "block_turret"; block.displayName = "Auto Turret";
+            block.description = "Automated defense turret. Scans for hostile creatures and fires hitscan shots. Reload it by holding Bullets and pressing RMB.";
+            block.iconTint = new Color(0.36f, 0.38f, 0.42f);
+            block.maxStack = 10; block.massPerUnit = 5f;
+            block.placedPrefab = prefab; block.gridSize = Vector3Int.one; block.allowStacking = true; block.blockHealth = 80; block.miningTier = 1; block.category = "Combat";
+            EditorUtility.SetDirty(block);
+
+            AddRecipe("Recipe_Turret", "Auto Turret", block, 1, VoxelEngine.Crafting.StationTier.Assembler, true,
+                (ironPlate, 6), (circuit, 2), (copperWire, 4));
+
+            AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Voxel Engine — Auto Turret",
+                "The Auto Turret is built:\n\n• Placeable defense turret (base + pillar + rotating head with barrel)\n• Auto-targets hostile creatures (Ghouls, Manticores, Griffins, Roc, etc.) in range + line of sight\n• Fires hitscan shots with tracer + muzzle flash\n• 80 HP; reload by holding Bullets + RMB\n• Craft at the Assembler (iron plate + circuit + copper wire)", "OK");
+        }
+
 
 
 
