@@ -123,7 +123,7 @@ namespace VoxelEngine.Combat
                 {
                     float s = (ps.transform.position - transform.position).sqrMagnitude;
                     Vector3 tp = ps.transform.position + VoxelEngine.Cosmos.GravityProvider.GetUp(ps.transform.position) * 0.5f;
-                    if (s <= range * range && s < bestSqr && HasLOS(from, tp, ps.gameObject))
+                    if (s <= range * range && s < bestSqr && HasLOS(from, tp, ps))
                     {
                         _targetT = ps.transform; _targetD = null; _targetP = ps;
                     }

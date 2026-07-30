@@ -1,10 +1,8 @@
 // Assets/Scripts/VoxelEngine/Combat/Turret.cs
 //
-// A placeable automated turret. Scans for hostile creatures (any Damageable whose type
-// name starts with "Enemy") within range and line of sight, rotates its head to track the
-// nearest one, and fires hitscan shots (with a tracer + muzzle flash). Runs on an internal
-// ammo magazine reloaded by the player (RMB the turret while holding Bullets). Radial-aware
-// (aims in the tangent plane of the sphere). Extends Damageable so it can be destroyed.
+// A placeable automated turret. Auto-targets based on a faction filter (Enemies /
+// Players / Passive), fires hitscan shots, reloadable with Bullets. The filter +
+// auto-mode are configurable via the ArtilleryHud UI (same panel as Artillery).
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -19,13 +17,15 @@ namespace VoxelEngine.Combat
         public float damage       = 20f;
         public int   maxAmmo      = 100;
         public int   ammo         = 0;
+        public TargetFilter filter = TargetFilter.Enemies;
+        public bool autoMode      = true;
         [Tooltip("Rotating head (yaws toward the target).")]
         public Transform head;
         [Tooltip("Barrel muzzle (tracer/flash origin).")]
         public Transform muzzle;
 
         private float _nextFire, _retargetAt;
-        private Damageable _target;
+        private Transform _target;
         private static Material _fxMat;
 
         protected override void Awake()
@@ -50,61 +50,79 @@ namespace VoxelEngine.Combat
 
         private void Update()
         {
-            // Re-target periodically or if the current target is gone/out of range.
-            if (Time.time >= _retargetAt || _target == null || !_target.IsAlive || !InRange(_target))
+            if (!autoMode || ammo <= 0) return;
+
+            if (Time.time >= _retargetAt || _target == null || !InRange(_target))
             {
                 _retargetAt = Time.time + 0.35f;
                 _target = FindTarget();
             }
-
             if (_target == null) return;
-            Vector3 up = VoxelEngine.Cosmos.GravityProvider.GetUp(transform.position);
 
+            Vector3 up = VoxelEngine.Cosmos.GravityProvider.GetUp(transform.position);
             if (head != null)
             {
-                Vector3 to = _target.transform.position - head.position;
+                Vector3 to = _target.position - head.position;
                 Quaternion look = Quaternion.LookRotation(Vector3.ProjectOnPlane(to, up).normalized, up);
                 head.rotation = Quaternion.Slerp(head.rotation, look, 0.2f);
             }
 
-            if (ammo > 0 && Time.time >= _nextFire)
+            if (Time.time >= _nextFire)
             {
                 _nextFire = Time.time + fireCooldown;
-                Fire(_target.transform.position + up * 0.6f, up);
+                Fire(_target.position + up * 0.6f);
             }
         }
 
-        private bool InRange(Damageable d) => d != null && (d.transform.position - transform.position).sqrMagnitude <= range * range;
+        private bool InRange(Transform t) => t != null && (t.position - transform.position).sqrMagnitude <= range * range;
 
-        private static bool IsHostile(Damageable d) => d != null && d.GetType().Name.StartsWith("Enemy");
-
-        private Damageable FindTarget()
+        private Transform FindTarget()
         {
-            Damageable best = null;
+            Transform best = null;
             float bestSqr = range * range;
-            var cols = Physics.OverlapSphere(transform.position, range, ~0, QueryTriggerInteraction.Ignore);
-            var seen = new HashSet<Damageable>();
             Vector3 up = VoxelEngine.Cosmos.GravityProvider.GetUp(transform.position);
             Vector3 from = (muzzle != null ? muzzle.position : transform.position) + up * 0.2f;
+
+            var cols = Physics.OverlapSphere(transform.position, range, ~0, QueryTriggerInteraction.Ignore);
+            var seen = new HashSet<Damageable>();
             foreach (var c in cols)
             {
                 var d = c.GetComponentInParent<Damageable>();
-                if (d == null || !d.IsAlive || !seen.Add(d) || !IsHostile(d)) continue;
+                if (d == null || !d.IsAlive || !seen.Add(d)) continue;
+                TargetFilter ff = d is VoxelEngine.Fauna.PassiveAnimal ? TargetFilter.Passive
+                                : (d.GetType().Name.StartsWith("Enemy") ? TargetFilter.Enemies : TargetFilter.None);
+                if ((filter & ff) == TargetFilter.None) continue;
                 Vector3 to = d.transform.position + up * 0.5f;
                 Vector3 dir = to - from;
-                // Line of sight: skip if terrain blocks the shot.
                 if (Physics.Raycast(from, dir.normalized, out var hit, dir.magnitude, ~0, QueryTriggerInteraction.Ignore))
                     if (hit.collider.GetComponentInParent<Damageable>() != d) continue;
                 float sqr = (d.transform.position - transform.position).sqrMagnitude;
-                if (sqr < bestSqr) { bestSqr = sqr; best = d; }
+                if (sqr < bestSqr) { bestSqr = sqr; best = d.transform; }
+            }
+
+            if ((filter & TargetFilter.Players) != 0)
+            {
+                var ps = VoxelEngine.Player.PlayerStats.Instance;
+                if (ps != null && ps.Health > 0)
+                {
+                    float s = (ps.transform.position - transform.position).sqrMagnitude;
+                    Vector3 to = ps.transform.position + up * 0.5f;
+                    Vector3 dir = to - from;
+                    if (s <= range * range && s < bestSqr &&
+                        (!Physics.Raycast(from, dir.normalized, out var hit2, dir.magnitude, ~0, QueryTriggerInteraction.Ignore)
+                         || hit2.collider.GetComponentInParent<VoxelEngine.Player.PlayerStats>() == ps))
+                    {
+                        best = ps.transform;
+                    }
+                }
             }
             return best;
         }
 
-        private void Fire(Vector3 aimPoint, Vector3 up)
+        private void Fire(Vector3 aimPoint)
         {
             ammo--;
-            Vector3 origin = muzzle != null ? muzzle.position : transform.position + up * 1.2f;
+            Vector3 origin = muzzle != null ? muzzle.position : transform.position;
             Vector3 dir = (aimPoint - origin).normalized;
             Vector3 end;
             if (Physics.Raycast(origin, dir, out var hit, range, ~0, QueryTriggerInteraction.Ignore))
@@ -113,6 +131,8 @@ namespace VoxelEngine.Combat
                 var d = hit.collider.GetComponentInParent<Damageable>();
                 if (d != null && d.IsAlive)
                     d.TakeDamage(new DamageEvent { amount = damage, type = DamageType.Kinetic, point = hit.point, direction = dir, source = gameObject });
+                var ps = hit.collider.GetComponentInParent<VoxelEngine.Player.PlayerStats>();
+                if (ps != null) ps.TakeDamage(damage);
             }
             else end = origin + dir * range;
 

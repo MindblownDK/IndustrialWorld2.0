@@ -131,9 +131,9 @@ namespace VoxelEngine.UI
                 if (scan)
                 {
                     _bombs.Clear();
-                    foreach (var k in Object.FindObjectsByType<VoxelEngine.Combat.ExplosiveBlock>(FindObjectsSortMode.None))
+                    foreach (var k in Object.FindObjectsByType<VoxelEngine.Combat.ExplosiveBlock>())
                         if (k != null && k.isActiveAndEnabled) _bombs.Add(k);
-                    foreach (var a in Object.FindObjectsByType<VoxelEngine.Combat.AntimatterBomb>(FindObjectsSortMode.None))
+                    foreach (var a in Object.FindObjectsByType<VoxelEngine.Combat.AntimatterBomb>())
                         if (a != null && a.isActiveAndEnabled) _bombs.Add(a);
                 }
 

@@ -1,9 +1,26 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.58.0-dev`
+**Current Version:** `6.59.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.59.0-dev] Turret UI (faction targeting) + Turret filter/autoMode
+
+**Type:** MINOR — turret targeting upgrade (save-compatible).
+
+**Turret upgraded** (`Turret.cs`): now has the same `TargetFilter` (Enemies / Players / Passive) + `autoMode` fields as Artillery. Its `FindTarget` scans by faction (including player targeting) instead of a hardcoded "Enemy" check.
+
+**ArtilleryHud extended** to handle BOTH Artillery AND Turret — look at either defense piece to configure its faction filter + auto-fire toggle + see ammo. The UI auto-detects which type you're looking at and shows the right title + stats.
+
+**To use:** look at a placed Auto Turret → the panel appears with Target Enemies / Players / Passive checkboxes + Auto-Fire toggle + ammo. Configure targeting for both turrets AND artillery from the same UI.
+
+**Files touched:**
+- `Scripts/Combat/Turret.cs` (filter + autoMode + faction-based targeting)
+- `Scripts/UI/ArtilleryHud.cs` (handles both Artillery + Turret)
+- `Scripts/Core/GameVersion.cs` (6.58.0 -> 6.59.0), `Changelog.md`
+
+---
 
 ### [6.58.0-dev] Heavy Artillery — Cannon (auto-targeting by faction) + targeting UI
 
