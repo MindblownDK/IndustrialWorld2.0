@@ -1,9 +1,30 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.53.3-dev`
+**Current Version:** `6.54.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.54.0-dev] Powder Keg — placeable big bomb (mushroom cloud)
+
+**Type:** MINOR — new placeable explosive (save-compatible).
+
+**Added — the Powder Keg (the big bomb with the mushroom cloud):**
+1. `Scripts/Combat/ExplosiveBlock.cs` (new) — a placeable high-yield explosive. **Fuses ~5 s after placement** then detonates in a big blast via the centralized `Explosion` (creature/player/placed-block damage + a large **voxel crater** + camera shake + the scale-driven **mushroom-cloud particle VFX**). It also **detonates immediately if shot or caught in another blast** (extends `Damageable`, so weapons/explosions trigger it) → **chain reactions** with grenades and other kegs.
+2. **Step 34 (wizard):** a ~9-part wooden-barrel model (body, top/bottom, metal bands, bung, glowing fuse, danger label), `ExplosiveBlock` (radius 12, damage 250, voxel crater 4), a placeable `BlockItem` (`Block_PowderKeg`), and an Assembler recipe (plank + coal + iron). Saved non-destructively.
+
+**To use:** run Step 34 → craft a Powder Keg at the Assembler → place it → step back → big mushroom-cloud blast + crater. Or shoot it (or drop a grenade next to it) to set it off early — kegs chain-react.
+
+**Why MINOR:** new placeable explosive + crater at scale — save-compatible.
+
+**Tunable (prefab):** `fuse`, `explosionRadius`, `explosionDamage`, `voxelDamageRadius`.
+
+**Files touched:**
+- `Scripts/Combat/ExplosiveBlock.cs` (new)
+- `Scripts/Editor/VoxelEngineSetupWindow.cs` (Step 34 `BuildPowderKegContent` + button)
+- `Scripts/Core/GameVersion.cs` (6.53.3 -> 6.54.0), `Changelog.md`
+
+---
 
 ### [6.53.3-dev] Compile fix — MuzzleWorldPosition uses .transform (CS1061)
 

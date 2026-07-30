@@ -362,6 +362,13 @@ namespace VoxelEngine.EditorTools
                 "Re-runnable. Idempotent.");
             AddWizardButton(scroll, "33. Build Player Weapons — Grenade + Rifle (Phase 3k)", BuildExplosiveContent, 40);
 
+            AddInfo(scroll,
+                "Step 34 builds the Powder Keg (big bomb, non-destructive):\n" +
+                "  • Placeable high-yield explosive — fuses then a big mushroom-cloud blast\n" +
+                "  • Voxel crater + camera shake; shoot/chain to detonate early\n" +
+                "  • Craft at the Assembler. Re-runnable. Idempotent.");
+            AddWizardButton(scroll, "34. Build Powder Keg (big bomb, mushroom cloud)", BuildPowderKegContent, 40);
+
             AddSpacer(scroll, 20);
         }
 
@@ -11783,6 +11790,122 @@ root =>
                 "Hold either in your hotbar and press LMB. The grenade is spent per throw; the rifle auto-fires while held.",
                 "OK");
         }
+
+        // ============================================================
+        //   STEP 34 - POWDER KEG (big bomb). A placeable high-yield
+        //   explosive: place it, it fuses (~5s) and detonates in a big
+        //   mushroom-cloud blast (creature/player/block damage + a voxel
+        //   crater + camera shake). Shoot it / catch it in a blast to
+        //   set it off early (chain reactions). Non-destructive.
+        //   Re-runnable. Idempotent.
+        // ============================================================
+        private void BuildPowderKegContent()
+        {
+            const string COMBAT_ROOT  = ASSET_ROOT + "/Combat";
+            const string COMBAT_ITEMS = COMBAT_ROOT + "/Items";
+            const string COMBAT_BLOCKS= COMBAT_ROOT + "/Blocks";
+            const string COMBAT_PREFABS=COMBAT_ROOT + "/Prefabs";
+            const string COMBAT_MATS  = COMBAT_ROOT + "/Materials";
+            EnsureFolder(COMBAT_ROOT);
+            EnsureFolder(COMBAT_ITEMS);
+            EnsureFolder(COMBAT_BLOCKS);
+            EnsureFolder(COMBAT_PREFABS);
+            EnsureFolder(COMBAT_MATS);
+
+            ItemDefinition FindItem(string assetNameNoExt)
+            {
+                var guids = AssetDatabase.FindAssets(assetNameNoExt + " t:ItemDefinition");
+                foreach (var g in guids)
+                {
+                    var pp = AssetDatabase.GUIDToAssetPath(g);
+                    if (System.IO.Path.GetFileNameWithoutExtension(pp) == assetNameNoExt)
+                        return AssetDatabase.LoadAssetAtPath<ItemDefinition>(pp);
+                }
+                return null;
+            }
+            var plank     = FindItem("Item_WoodenPlank");
+            var coal      = FindItem("Item_Coal");
+            var ironIngot = FindItem("Item_IronIngot");
+
+            var kegWood   = MakeColoredMat(COMBAT_MATS, "Mat_KegWood", new Color(0.42f, 0.27f, 0.14f));
+            var metal     = MakeColoredMat(COMBAT_MATS, "Mat_KegMetal",new Color(0.30f, 0.30f, 0.32f));
+            var fuseGlow  = MakeColoredMat(COMBAT_MATS, "Mat_KegFuse", new Color(1.0f, 0.55f, 0.12f));
+            var labelDark = MakeColoredMat(COMBAT_MATS, "Mat_KegLabel",new Color(0.12f, 0.10f, 0.08f));
+            // Reuse the orange explosion material (created by Step 33; idempotent here).
+            var explosionMat = MakeColoredMat(COMBAT_MATS, "Mat_Explosion", new Color(1.0f, 0.45f, 0.10f));
+
+            void AddPart(GameObject root, string n, Vector3 pos, Vector3 euler, Vector3 scale, Material m)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                go.name = n; go.transform.SetParent(root.transform, false);
+                go.transform.localPosition = pos; go.transform.localEulerAngles = euler; go.transform.localScale = scale;
+                go.GetComponent<Renderer>().sharedMaterial = m;
+                var col = go.GetComponent<Collider>(); if (col != null) UnityEngine.Object.DestroyImmediate(col);
+            }
+
+            var root = new GameObject("PowderKeg");
+            // ── Barrel body + top/bottom ──
+            AddPart(root, "Body",   new Vector3(0f, 0.5f, 0f),  Vector3.zero, new Vector3(0.8f, 1.0f, 0.8f), kegWood);
+            AddPart(root, "Top",    new Vector3(0f, 1.0f, 0f),  Vector3.zero, new Vector3(0.74f, 0.14f, 0.74f), kegWood);
+            AddPart(root, "Bottom", new Vector3(0f, 0.1f, 0f),  Vector3.zero, new Vector3(0.74f, 0.14f, 0.74f), kegWood);
+            // ── Metal bands ──
+            AddPart(root, "BandTop", new Vector3(0f, 0.82f, 0f), Vector3.zero, new Vector3(0.86f, 0.10f, 0.86f), metal);
+            AddPart(root, "BandBot", new Vector3(0f, 0.28f, 0f), Vector3.zero, new Vector3(0.86f, 0.10f, 0.86f), metal);
+            // ── Bung + glowing fuse + danger label ──
+            AddPart(root, "Bung",   new Vector3(0f, 1.09f, 0f),  Vector3.zero, new Vector3(0.16f, 0.06f, 0.16f), metal);
+            AddPart(root, "Fuse",   new Vector3(0f, 1.22f, 0f),  Vector3.zero, new Vector3(0.05f, 0.22f, 0.05f), fuseGlow);
+            AddPart(root, "Label",  new Vector3(0f, 0.55f, 0.41f),Vector3.zero, new Vector3(0.22f, 0.22f, 0.02f), labelDark);
+
+            var cap = root.AddComponent<CapsuleCollider>();
+            cap.height = 1.2f; cap.radius = 0.5f; cap.center = new Vector3(0f, 0.55f, 0f);
+            var keg = root.AddComponent<VoxelEngine.Combat.ExplosiveBlock>();
+            keg.fuse = 5f;
+            keg.explosionRadius = 12f;
+            keg.explosionDamage = 250f;
+            keg.voxelDamageRadius = 4f;
+            keg.explosionMaterial = explosionMat;
+
+            const string kegPath = ASSET_ROOT + "/Combat/Prefabs/PowderKeg.prefab";
+            GameObject kegPrefab;
+            if (AssetDatabase.LoadMainAssetAtPath(kegPath) != null)
+            {
+                kegPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(kegPath);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+            else
+            {
+                kegPrefab = PrefabUtility.SaveAsPrefabAsset(root, kegPath);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+
+            var block = GetOrCreateAsset<VoxelEngine.Items.BlockItem>($"{COMBAT_BLOCKS}/Block_PowderKeg.asset");
+            block.itemId = "block_powder_keg"; block.displayName = "Powder Keg";
+            block.description = "Placeable high-yield explosive. Fuses ~5 s after placement, then a massive blast. Shoot it (or catch it in a blast) to set it off early. Chain-reacts with other explosives.";
+            block.iconTint = new Color(0.42f, 0.27f, 0.14f);
+            block.maxStack = 16; block.massPerUnit = 3f;
+            block.placedPrefab = kegPrefab;
+            block.gridSize = Vector3Int.one;
+            block.allowStacking = true;
+            block.blockHealth = 40;
+            block.miningTier = 1;
+            block.category = "Combat";
+            EditorUtility.SetDirty(block);
+
+            AddRecipe("Recipe_PowderKeg", "Powder Keg", block, 1, VoxelEngine.Crafting.StationTier.Assembler, true,
+                (plank, 4), (coal, 6), (ironIngot, 3));
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Voxel Engine — Powder Keg (big bomb)",
+                "The Powder Keg is built:\n\n" +
+                "• Placeable wooden barrel of explosives (~9 parts) with a glowing fuse\n" +
+                "• Fuses ~5 s after placement → big mushroom-cloud blast (radius 12, damage 250) + large voxel crater + camera shake\n" +
+                "• Shoot it, or catch it in a grenade/keg blast, to detonate it early (chain reactions)\n" +
+                "• Craft at the Assembler (plank + coal + iron)\n\n" +
+                "Place it, step back, and watch the mushroom cloud.",
+                "OK");
+        }
+
 
 
 
