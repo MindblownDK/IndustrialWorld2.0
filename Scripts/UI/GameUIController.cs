@@ -223,7 +223,6 @@ namespace VoxelEngine.UI
             TickFurnaceLiveUI();
             PlayerHud.Tick();
             BombHud.Tick(inventory);
-            ArtilleryHud.Tick(Camera.main, 5f);
             RustStyleHud.Tick();
             BuildFeedbackHud.Tick();
             VoxelEngine.Weather.WeatherHud.Tick();
@@ -929,7 +928,6 @@ namespace VoxelEngine.UI
             DeathScreenHud.EnsureMounted(_root);
             CryobedConfigHud.EnsureMounted(_root);
             BombHud.EnsureMounted(_root);
-            ArtilleryHud.EnsureMounted(_root);
 
             // (We poll mouse buttons in Update() — much more reliable than RegisterCallback.)
 
@@ -1076,6 +1074,7 @@ namespace VoxelEngine.UI
                 else if (_openFunnel           != null) _root.Add(MachineUIs.FunnelPanel(_openFunnel));
                 else if (_openSplitter         != null) _root.Add(MachineUIs.SplitterPanel(_openSplitter, BuildSlot));
                 else if (_openVoltageStation   != null) _root.Add(VoxelEngine.Simulation.VoltageStationUI.BuildPanel(_openVoltageStation));
+                else if (_openDefense != null) BuildDefensePanel(_root, _openDefense);
                 else if (_openStation  != null) BuildRightStationCrafting(_root, _openStation);
             }
             else
@@ -1296,6 +1295,114 @@ namespace VoxelEngine.UI
         // equipment panel docked to its right. Both are flex children of a single
         // absolutely-positioned row, so the armor panel always hugs the inventory's
         // right edge regardless of screen size / window scale.
+
+        private Component _openDefense;
+
+        public void OpenDefense(Component d)
+        {
+            if (!_inventoryOpen) UIState.PushBlock();
+            _rightContainer = null; _openFurnace = null; _openElectric = null; _openCoalGen = null;
+            _openQuarry = null; _openReactor = null; _openStation = null; _recipeBrowserOpen = false;
+            _productionStatsOpen = false; _openChest = null; _openGridTerminal = null;
+            _openDefense = d;
+            _inventoryOpen = true;
+            Refresh();
+        }
+
+        private void BuildDefensePanel(VisualElement root, Component defense)
+        {
+            var panel = MakePanel();
+            panel.style.position = Position.Absolute;
+            panel.style.top = 24; panel.style.bottom = 92;
+            panel.style.right = 18;
+            panel.style.width = new StyleLength(new Length(28f, LengthUnit.Percent));
+            panel.style.minWidth = 280; panel.style.maxWidth = 400;
+            root.Add(panel);
+
+            bool isArt = defense is VoxelEngine.Combat.Artillery;
+            var art = defense as VoxelEngine.Combat.Artillery;
+            var tur = defense as VoxelEngine.Combat.Turret;
+
+            string name = isArt ? art.variant.ToString() : "Auto Turret";
+            panel.Add(MakeTitle(name));
+
+            int ammo = isArt ? art.ammo : tur.ammo;
+            int maxAmmo = isArt ? art.maxAmmo : tur.maxAmmo;
+            var info = new Label($"Ammo: {ammo} / {maxAmmo}");
+            info.style.color = Color.white; info.style.fontSize = 12; info.style.marginBottom = 6;
+            panel.Add(info);
+
+            // Reload
+            var reloadBtn = new Button(() =>
+            {
+                VoxelEngine.Items.ItemDefinition bullets = null;
+                for (int i = 0; i < inventory.container.Slots.Count; i++)
+                {
+                    var s = inventory.container.GetSlot(i);
+                    if (s != null && !s.IsEmpty && s.item != null && s.item.itemId == "item_bullets") { bullets = s.item; break; }
+                }
+                if (bullets == null) { VoxelEngine.UI.BuildFeedbackHud.Show("No Bullets", "Craft Bullets at the Assembler", null, Color.yellow); return; }
+                int want = maxAmmo - (isArt ? art.ammo : tur.ammo);
+                if (want <= 0) return;
+                int got = inventory.container.Remove(bullets, want);
+                if (isArt) art.ammo += got; else tur.ammo += got;
+                inventory.container.RaiseChanged();
+                Refresh();
+            }) { text = "Reload from Inventory" };
+            StyleBtn(reloadBtn);
+            panel.Add(reloadBtn);
+
+            panel.Add(MakeSubtitle("Targeting"));
+            VoxelEngine.Combat.TargetFilter curFilter = isArt ? art.filter : tur.filter;
+            panel.Add(MakeDefenseToggle("Target Enemies", VoxelEngine.Combat.TargetFilter.Enemies, curFilter, isArt, art, tur));
+            panel.Add(MakeDefenseToggle("Target Players", VoxelEngine.Combat.TargetFilter.Players, curFilter, isArt, art, tur));
+            panel.Add(MakeDefenseToggle("Target Passive", VoxelEngine.Combat.TargetFilter.Passive, curFilter, isArt, art, tur));
+
+            bool autoF = isArt ? art.autoMode : tur.autoMode;
+            var autoT = new Toggle("Auto-Fire") { value = autoF };
+            autoT.style.color = Color.white; autoT.style.marginBottom = 6;
+            autoT.RegisterValueChangedCallback(e => { if (isArt) art.autoMode = e.newValue; else tur.autoMode = e.newValue; Refresh(); });
+            panel.Add(autoT);
+
+            // Shell type (Artillery only — Cannon / Gustav)
+            if (isArt && art.variant != VoxelEngine.Combat.ArtilleryVariant.Minigun)
+            {
+                panel.Add(MakeSubtitle("Shell Type"));
+                foreach (VoxelEngine.Combat.ShellType st in System.Enum.GetValues(typeof(VoxelEngine.Combat.ShellType)))
+                {
+                    var captured = st;
+                    var btn = new Button(() => { art.shellType = captured; Refresh(); }) { text = captured.ToString() };
+                    if (art.shellType == st) btn.style.backgroundColor = new StyleColor(new Color(0.2f, 0.55f, 0.9f));
+                    else btn.style.backgroundColor = new StyleColor(new Color(0.14f, 0.14f, 0.2f));
+                    StyleBtn(btn);
+                    panel.Add(btn);
+                }
+            }
+        }
+
+        private Toggle MakeDefenseToggle(string label, VoxelEngine.Combat.TargetFilter flag,
+                                         VoxelEngine.Combat.TargetFilter cur, bool isArt,
+                                         VoxelEngine.Combat.Artillery art, VoxelEngine.Combat.Turret tur)
+        {
+            var t = new Toggle(label) { value = (cur & flag) != 0 };
+            t.style.color = Color.white; t.style.marginBottom = 2;
+            t.RegisterValueChangedCallback(e =>
+            {
+                var f = isArt ? art.filter : tur.filter;
+                if (e.newValue) f |= flag; else f &= ~flag;
+                if (isArt) art.filter = f; else tur.filter = f;
+                Refresh();
+            });
+            return t;
+        }
+
+        private void StyleBtn(Button b)
+        {
+            b.style.minHeight = 26; b.style.fontSize = 11; b.style.color = Color.white;
+            b.style.unityFontStyleAndWeight = FontStyle.Bold; b.style.marginBottom = 4;
+            SetBorderRadius(b, 4); ZeroBorder(b);
+        }
+
         private void BuildLeftArea(VisualElement root)
         {
             var row = new VisualElement();

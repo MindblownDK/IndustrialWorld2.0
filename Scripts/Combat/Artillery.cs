@@ -16,6 +16,8 @@ namespace VoxelEngine.Combat
 
     public enum ArtilleryVariant { Minigun, Cannon, Gustav }
 
+    public enum ShellType { Standard, Explosive, Scatter }
+
     public class Artillery : Damageable
     {
         [Header("Variant")]
@@ -30,6 +32,7 @@ namespace VoxelEngine.Combat
         public float minigunDamage = 6f;
         public float explosionRadius = 8f;     // cannon/gustav shell blast (0 for minigun)
         public float shellSpeed = 35f;
+        public ShellType shellType = ShellType.Standard;
         public int maxAmmo = 30;
         public int ammo = 0;
         public Material shellMat;
@@ -167,7 +170,7 @@ namespace VoxelEngine.Combat
             else
             {
                 Vector3 dir = (aimPoint - origin).normalized;
-                ArtilleryShell.Spawn(origin, dir * shellSpeed, gameObject, shellMat, explosionRadius, damage, explosionMat);
+                ArtilleryShell.Spawn(origin, dir * shellSpeed, gameObject, shellMat, explosionRadius, damage, explosionMat, shellType);
                 Flash(origin);
             }
         }
