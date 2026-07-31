@@ -387,6 +387,13 @@ namespace VoxelEngine.EditorTools
                 "  • Minigun + Schwerer Gustav + cockpit control coming next. Re-runnable.");
             AddWizardButton(scroll, "38. Build Heavy Artillery — Cannon", BuildArtilleryCannonContent, 40);
 
+            AddInfo(scroll,
+                "Step 39: Minigun Turret (6-barrel rapid-fire, uses Bullets).\n" +
+                "Step 40: Schwerer Gustav (colossal 800mm railway gun).\n" +
+                "Both auto-target by faction + use the defense panel. Re-runnable.");
+            AddWizardButton(scroll, "39. Build Minigun Turret (rapid-fire)", BuildArtilleryMinigunContent, 40);
+            AddWizardButton(scroll, "40. Build Schwerer Gustav (massive railway gun)", BuildArtilleryGustavContent, 40);
+
             AddSpacer(scroll, 20);
         }
 
@@ -12293,6 +12300,179 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
             EditorUtility.DisplayDialog("Voxel Engine — Heavy Cannon Artillery",
                 "The Heavy Cannon is built:\n\n• Howitzer on a split-trail carriage with wheels + long barrel (~12 parts)\n• Auto-targets by faction (Enemies/Players/Passive — configurable when looking at it)\n• Fires arcing explosive shells (damage 60, blast radius 8)\n• 200 HP; reload with Bullets (RMB)\n• Craft at the Assembler (iron + steel + circuit + copper wire)", "OK");
         }
+
+        private void BuildArtilleryMinigunContent()
+        {
+            const string COMBAT_ROOT  = ASSET_ROOT + "/Combat";
+            const string COMBAT_ITEMS = COMBAT_ROOT + "/Items";
+            const string COMBAT_BLOCKS= COMBAT_ROOT + "/Blocks";
+            const string COMBAT_PREFABS=COMBAT_ROOT + "/Prefabs";
+            const string COMBAT_MATS  = COMBAT_ROOT + "/Materials";
+            EnsureFolder(COMBAT_ROOT); EnsureFolder(COMBAT_ITEMS); EnsureFolder(COMBAT_BLOCKS); EnsureFolder(COMBAT_PREFABS); EnsureFolder(COMBAT_MATS);
+
+            ItemDefinition FindItem(string n)
+            {
+                var guids = AssetDatabase.FindAssets(n + " t:ItemDefinition");
+                foreach (var g in guids) { var pp = AssetDatabase.GUIDToAssetPath(g); if (System.IO.Path.GetFileNameWithoutExtension(pp) == n) return AssetDatabase.LoadAssetAtPath<ItemDefinition>(pp); }
+                return null;
+            }
+            var ironPlate = FindItem("Item_IronPlate");
+            var circuit   = FindItem("Item_Circuit");
+            var copperWire= FindItem("Item_CopperLVWire");
+
+            var body    = MakeColoredMat(COMBAT_MATS, "Mat_MinigunBody", new Color(0.28f, 0.28f, 0.30f));
+            var dark    = MakeColoredMat(COMBAT_MATS, "Mat_MinigunDark", new Color(0.18f, 0.18f, 0.20f));
+            var barrel  = MakeColoredMat(COMBAT_MATS, "Mat_MinigunBarrel",new Color(0.22f, 0.22f, 0.24f));
+
+            void AddPart(GameObject parent, string n, Vector3 pos, Vector3 euler, Vector3 scale, Material m)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                go.name = n; go.transform.SetParent(parent.transform, false);
+                go.transform.localPosition = pos; go.transform.localEulerAngles = euler; go.transform.localScale = scale;
+                go.GetComponent<Renderer>().sharedMaterial = m;
+                var col = go.GetComponent<Collider>(); if (col != null) UnityEngine.Object.DestroyImmediate(col);
+            }
+
+            var root = new GameObject("ArtilleryMinigun");
+            AddPart(root, "Base",   new Vector3(0f, 0.1f, 0f), Vector3.zero, new Vector3(0.6f, 0.2f, 0.6f), body);
+            AddPart(root, "Pillar", new Vector3(0f, 0.45f, 0f),Vector3.zero, new Vector3(0.18f, 0.5f, 0.18f), dark);
+            AddPart(root, "Collar", new Vector3(0f, 0.72f, 0f),Vector3.zero, new Vector3(0.3f, 0.1f, 0.3f), dark);
+
+            var headGo = new GameObject("Head");
+            headGo.transform.SetParent(root.transform, false);
+            headGo.transform.localPosition = new Vector3(0f, 0.85f, 0f);
+            AddPart(headGo, "Body",    new Vector3(0f, 0f, 0f),      Vector3.zero, new Vector3(0.3f, 0.25f, 0.3f), body);
+            AddPart(headGo, "AmmoBox", new Vector3(0f, 0.12f, -0.12f),Vector3.zero, new Vector3(0.25f, 0.18f, 0.12f), dark);
+            AddPart(headGo, "Motor",   new Vector3(0f, 0f, -0.08f),  Vector3.zero, new Vector3(0.16f, 0.16f, 0.1f), dark);
+            AddPart(headGo, "Sight",   new Vector3(0f, 0.14f, 0.04f),Vector3.zero, new Vector3(0.04f, 0.04f, 0.08f), body);
+            // 6 barrels in a hexagon
+            for (int i = 0; i < 6; i++)
+            {
+                float a = i * Mathf.PI / 3f;
+                AddPart(headGo, "Barrel" + i,
+                    new Vector3(Mathf.Cos(a) * 0.06f, Mathf.Sin(a) * 0.06f, 0.18f),
+                    Vector3.zero, new Vector3(0.03f, 0.03f, 0.35f), barrel);
+            }
+            var muzzleGo = new GameObject("Muzzle");
+            muzzleGo.transform.SetParent(headGo.transform, false);
+            muzzleGo.transform.localPosition = new Vector3(0f, 0f, 0.4f);
+
+            var cap = root.AddComponent<CapsuleCollider>();
+            cap.height = 1.0f; cap.radius = 0.3f; cap.center = new Vector3(0f, 0.5f, 0f);
+            var art = root.AddComponent<VoxelEngine.Combat.Artillery>();
+            art.variant = VoxelEngine.Combat.ArtilleryVariant.Minigun;
+            art.range = 50f; art.fireCooldown = 0.08f; art.minigunDamage = 6f;
+            art.head = headGo.transform; art.muzzle = muzzleGo.transform;
+
+            const string path = ASSET_ROOT + "/Combat/Prefabs/ArtilleryMinigun.prefab";
+            GameObject prefab;
+            if (AssetDatabase.LoadMainAssetAtPath(path) != null) { prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path); UnityEngine.Object.DestroyImmediate(root); }
+            else { prefab = PrefabUtility.SaveAsPrefabAsset(root, path); UnityEngine.Object.DestroyImmediate(root); }
+
+            var block = GetOrCreateAsset<VoxelEngine.Items.BlockItem>($"{COMBAT_BLOCKS}/Block_ArtilleryMinigun.asset");
+            block.itemId = "block_artillery_minigun"; block.displayName = "Minigun Turret";
+            block.description = "Rapid-fire 6-barrel minigun turret. Uses Bullets (load into magazine). Auto-targets by faction filter.";
+            block.iconTint = new Color(0.28f, 0.28f, 0.30f);
+            block.maxStack = 4; block.massPerUnit = 15f;
+            block.placedPrefab = prefab; block.gridSize = Vector3Int.one; block.allowStacking = true; block.blockHealth = 150; block.miningTier = 2; block.category = "Combat";
+            EditorUtility.SetDirty(block);
+
+            AddRecipe("Recipe_ArtilleryMinigun", "Minigun Turret", block, 1, VoxelEngine.Crafting.StationTier.Assembler, true,
+                (ironPlate, 8), (circuit, 4), (copperWire, 8));
+
+            AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Voxel Engine — Minigun Turret",
+                "The Minigun Turret is built:\n\n• 6-barrel Gatling-style turret (~14 parts)\n• Rapid-fire hitscan (12 shots/sec, 6 dmg each)\n• Uses Bullets (load into magazine via the defense panel)\n• Auto-targets by faction\n• Craft at the Assembler", "OK");
+        }
+
+        private void BuildArtilleryGustavContent()
+        {
+            const string COMBAT_ROOT  = ASSET_ROOT + "/Combat";
+            const string COMBAT_ITEMS = COMBAT_ROOT + "/Items";
+            const string COMBAT_BLOCKS= COMBAT_ROOT + "/Blocks";
+            const string COMBAT_PREFABS=COMBAT_ROOT + "/Prefabs";
+            const string COMBAT_MATS  = COMBAT_ROOT + "/Materials";
+            EnsureFolder(COMBAT_ROOT); EnsureFolder(COMBAT_ITEMS); EnsureFolder(COMBAT_BLOCKS); EnsureFolder(COMBAT_PREFABS); EnsureFolder(COMBAT_MATS);
+
+            ItemDefinition FindItem(string n)
+            {
+                var guids = AssetDatabase.FindAssets(n + " t:ItemDefinition");
+                foreach (var g in guids) { var pp = AssetDatabase.GUIDToAssetPath(g); if (System.IO.Path.GetFileNameWithoutExtension(pp) == n) return AssetDatabase.LoadAssetAtPath<ItemDefinition>(pp); }
+                return null;
+            }
+            var steelPlate = FindItem("Item_SteelPlate");
+            var advCircuit = FindItem("Item_AdvancedCircuit");
+            var steelIngot = FindItem("Item_SteelIngot");
+
+            var railMat   = MakeColoredMat(COMBAT_MATS, "Mat_GustavRail", new Color(0.25f, 0.24f, 0.22f));
+            var steelMat  = MakeColoredMat(COMBAT_MATS, "Mat_GustavSteel",new Color(0.30f, 0.30f, 0.33f));
+            var barrelMat = MakeColoredMat(COMBAT_MATS, "Mat_GustavBarrel",new Color(0.20f, 0.20f, 0.23f));
+            var shellMat  = MakeColoredMat(COMBAT_MATS, "Mat_Shell",      new Color(0.25f, 0.25f, 0.28f));
+            var explosionMat = MakeColoredMat(COMBAT_MATS, "Mat_Explosion", new Color(1.0f, 0.45f, 0.10f));
+
+            void AddPart(GameObject parent, string n, Vector3 pos, Vector3 euler, Vector3 scale, Material m)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                go.name = n; go.transform.SetParent(parent.transform, false);
+                go.transform.localPosition = pos; go.transform.localEulerAngles = euler; go.transform.localScale = scale;
+                go.GetComponent<Renderer>().sharedMaterial = m;
+                var col = go.GetComponent<Collider>(); if (col != null) UnityEngine.Object.DestroyImmediate(col);
+            }
+
+            var root = new GameObject("ArtilleryGustav");
+            // Massive railway flatcar
+            AddPart(root, "Flatcar", new Vector3(0f, 0.6f, 0f),   Vector3.zero, new Vector3(3.0f, 0.4f, 8.0f), railMat);
+            AddPart(root, "FrontBogie", new Vector3(0f, 0.2f, 2.5f),Vector3.zero,new Vector3(2.0f, 0.5f, 1.5f), steelMat);
+            AddPart(root, "RearBogie",  new Vector3(0f, 0.2f, -2.5f),Vector3.zero,new Vector3(2.0f, 0.5f, 1.5f), steelMat);
+            AddPart(root, "Rail",       new Vector3(0f, 0.1f, 0f), Vector3.zero, new Vector3(1.5f, 0.1f, 9.0f), railMat);
+            // Trunnion mount
+            AddPart(root, "Trunnion", new Vector3(0f, 1.3f, 0f),  Vector3.zero, new Vector3(1.5f, 0.9f, 1.2f), steelMat);
+
+            var headGo = new GameObject("Head");
+            headGo.transform.SetParent(root.transform, false);
+            headGo.transform.localPosition = new Vector3(0f, 1.8f, 0f);
+            // Breech (massive)
+            AddPart(headGo, "Breech",    new Vector3(0f, 0f, -0.6f), Vector3.zero, new Vector3(1.0f, 1.0f, 0.8f), steelMat);
+            // Colossal barrel (800mm — the largest gun ever built)
+            AddPart(headGo, "BarrelBase",new Vector3(0f, 0f, 0.2f),  Vector3.zero, new Vector3(0.7f, 0.7f, 1.0f), barrelMat);
+            AddPart(headGo, "Barrel",    new Vector3(0f, 0f, 3.8f),  Vector3.zero, new Vector3(0.5f, 0.5f, 6.0f), barrelMat);
+            AddPart(headGo, "BarrelTip", new Vector3(0f, 0f, 7.0f),  Vector3.zero, new Vector3(0.55f, 0.55f, 0.3f), barrelMat);
+            // Lifting frame
+            AddPart(headGo, "FrameL", new Vector3(-0.7f, 0.8f, 1.0f), Vector3.zero, new Vector3(0.1f, 1.5f, 0.1f), steelMat);
+            AddPart(headGo, "FrameR", new Vector3( 0.7f, 0.8f, 1.0f), Vector3.zero, new Vector3(0.1f, 1.5f, 0.1f), steelMat);
+            var muzzleGo = new GameObject("Muzzle");
+            muzzleGo.transform.SetParent(headGo.transform, false);
+            muzzleGo.transform.localPosition = new Vector3(0f, 0f, 7.3f);
+
+            var cap = root.AddComponent<CapsuleCollider>();
+            cap.height = 3.0f; cap.radius = 1.5f; cap.center = new Vector3(0f, 1.5f, 0f);
+            var art = root.AddComponent<VoxelEngine.Combat.Artillery>();
+            art.variant = VoxelEngine.Combat.ArtilleryVariant.Gustav;
+            art.range = 120f; art.fireCooldown = 12f; art.damage = 500f; art.explosionRadius = 30f; art.shellSpeed = 25f;
+            art.shellMat = shellMat; art.explosionMat = explosionMat;
+            art.head = headGo.transform; art.muzzle = muzzleGo.transform;
+
+            const string path = ASSET_ROOT + "/Combat/Prefabs/ArtilleryGustav.prefab";
+            GameObject prefab;
+            if (AssetDatabase.LoadMainAssetAtPath(path) != null) { prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path); UnityEngine.Object.DestroyImmediate(root); }
+            else { prefab = PrefabUtility.SaveAsPrefabAsset(root, path); UnityEngine.Object.DestroyImmediate(root); }
+
+            var block = GetOrCreateAsset<VoxelEngine.Items.BlockItem>($"{COMBAT_BLOCKS}/Block_ArtilleryGustav.asset");
+            block.itemId = "block_artillery_gustav"; block.displayName = "Schwerer Gustav";
+            block.description = "The largest gun ever built. Colossal 800mm railway gun. Fires massive shells that level a huge area. Load shells via the magazine.";
+            block.iconTint = new Color(0.25f, 0.24f, 0.22f);
+            block.maxStack = 1; block.massPerUnit = 100f;
+            block.placedPrefab = prefab; block.gridSize = new Vector3Int(3, 3, 7); block.allowStacking = false; block.blockHealth = 500; block.miningTier = 3; block.category = "Combat";
+            EditorUtility.SetDirty(block);
+
+            AddRecipe("Recipe_ArtilleryGustav", "Schwerer Gustav", block, 1, VoxelEngine.Crafting.StationTier.Assembler, true,
+                (steelPlate, 30), (advCircuit, 5), (steelIngot, 15));
+
+            AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Voxel Engine — Schwerer Gustav",
+                "The SCHWERER GUSTAV is built:\n\n• Colossal 800mm railway gun on a flatcar (~14 parts)\n• Range 120m, damage 500, explosion radius 30\n• Slow fire rate (12s reload) — each shell is devastating\n• Load shells via the magazine (Standard / Explosive / Scatter)\n• 500 HP. Craft at the Assembler (steel plate + advanced circuit + steel ingot)", "OK");
+        }
+
 
 
 

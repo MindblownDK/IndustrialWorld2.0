@@ -48,7 +48,8 @@ namespace VoxelEngine.Combat
                 {
                     _shellMag = new ItemContainer("Shells", 3);
                     _shellMag.AcceptFilter = (item, wanted) =>
-                        item != null && item.itemId != null && item.itemId.StartsWith("item_shell")
+                        item != null && item.itemId != null &&
+                        (item.itemId.StartsWith("item_shell") || item.itemId == "item_bullets")
                             ? Mathf.Min(wanted, item.maxStack) : 0;
                 }
                 return _shellMag;
