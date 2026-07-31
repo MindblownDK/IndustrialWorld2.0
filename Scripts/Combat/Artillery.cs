@@ -8,6 +8,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.Items;
+using VoxelEngine.Settings;
 
 namespace VoxelEngine.Combat
 {
@@ -57,6 +58,10 @@ namespace VoxelEngine.Combat
         }
 
         private float _nextFire, _retargetAt;
+        private VoxelEngine.Player.PlayerController _pilot;
+        private Transform _origParent;
+        private bool _firstPerson = true;
+        public static Artillery ActiveArtilleryCockpit { get; private set; }
         private Transform _targetT;
         private Damageable _targetD;
         private VoxelEngine.Player.PlayerStats _targetP;
@@ -86,6 +91,7 @@ namespace VoxelEngine.Combat
 
         private void Update()
         {
+            if (_pilot != null) { CockpitUpdate(); return; }
             if (!autoMode) return;
 
             if (Time.time >= _retargetAt || !Valid(_targetT))
@@ -257,6 +263,87 @@ namespace VoxelEngine.Combat
             go.transform.localScale = new Vector3(0.05f, 0.05f, len);
             go.GetComponent<Renderer>().sharedMaterial = FxMat;
             Object.Destroy(go, 0.06f);
+        }
+
+        // ── COCKPIT (manual control) ───────────────────────────
+        // Uses the horse-mount pattern: IsMounted suspends locomotion but keeps
+        // mouse-look alive so the player aims the turret with the mouse.
+
+        public void EnterCockpit(VoxelEngine.Player.PlayerController player)
+        {
+            if (_pilot != null) return;
+            _pilot = player;
+            ActiveArtilleryCockpit = this;
+
+            player.ResetVelocity();
+            player.IsMounted = true;
+            var cc = player.GetComponent<CharacterController>();
+            if (cc != null) cc.enabled = false;
+            var rb = player.GetComponent<Rigidbody>();
+            if (rb != null) rb.isKinematic = true;
+
+            _origParent = player.transform.parent;
+            player.transform.SetParent(transform, worldPositionStays: true);
+            Vector3 up = VoxelEngine.Cosmos.GravityProvider.GetUp(transform.position);
+            player.transform.position = transform.position + up * 1.8f - head.forward * 1.5f;
+
+            VoxelEngine.UI.BuildFeedbackHud.Show(variant.ToString(),
+                "Mouse: aim   LMB: fire   G: view   F: exit", null, new Color(0.5f, 0.8f, 1f));
+        }
+
+        public void ExitCockpit()
+        {
+            if (_pilot == null) return;
+            var player = _pilot;
+            Vector3 up = VoxelEngine.Cosmos.GravityProvider.GetUp(transform.position);
+
+            player.transform.SetParent(_origParent, worldPositionStays: true);
+            player.transform.position = transform.position + up * 1.5f + head.right * 2.5f;
+
+            var cc = player.GetComponent<CharacterController>();
+            if (cc != null) cc.enabled = true;
+            var rb = player.GetComponent<Rigidbody>();
+            if (rb != null) rb.isKinematic = false;
+            player.ResetVelocity();
+            player.IsMounted = false;
+            _pilot = null;
+            ActiveArtilleryCockpit = null;
+        }
+
+        private void CockpitUpdate()
+        {
+            var player = _pilot;
+            if (player == null) return;
+
+            if (GameSettings.WasPressed(InputAction.ExitCockpit)) { ExitCockpit(); return; }
+            if (GameSettings.WasPressed(InputAction.BuildToggleGrid)) _firstPerson = !_firstPerson;
+
+            Vector3 up = VoxelEngine.Cosmos.GravityProvider.GetUp(transform.position);
+
+            // The turret head follows where the player looks.
+            if (head != null)
+            {
+                Quaternion look = Quaternion.LookRotation(player.transform.forward, up);
+                head.rotation = Quaternion.Slerp(head.rotation, look, aimSpeed * 2f * Time.deltaTime);
+            }
+
+            // Fire (LMB).
+            if (GameSettings.IsHeld(InputAction.Mine) && Time.time >= _nextFire)
+            {
+                _nextFire = Time.time + fireCooldown;
+                Vector3 aimPoint = (muzzle != null ? muzzle.position : head.position) + head.forward * range;
+                Fire(aimPoint);
+            }
+        }
+
+        private void LateUpdate()
+        {
+            // First-person gunsight camera (overrides the player's eye position).
+            if (_pilot != null && _firstPerson && _pilot.playerCamera != null)
+            {
+                _pilot.playerCamera.transform.position = muzzle != null ? muzzle.position : head.position;
+                _pilot.playerCamera.transform.rotation = head.rotation;
+            }
         }
     }
 }

@@ -67,6 +67,7 @@ namespace VoxelEngine.Player
             // While piloting a ship, the cockpit owns left-click (drill/weapon) — don't
             // let the on-foot tool mine/break the world.
             if (VoxelEngine.GridSystem.GridCockpit.AnyPilotSeatActive) return;
+            if (VoxelEngine.Combat.Artillery.ActiveArtilleryCockpit != null) return;   // artillery cockpit owns LMB
             IsGrinding = false; // reset each frame — HandleGrind sets it true when active
             if (world      == null) world      = VoxelEngine.Core.ActiveWorld.Current;
             if (inventory  == null) inventory  = GetComponentInParent<Inventory>();
@@ -118,7 +119,22 @@ namespace VoxelEngine.Player
                     }
                     else
                     {
-                        VoxelEngine.UI.InteractionHud.Hide();
+                        // Artillery cockpit entry (look + H).
+                        var artCockpit = hit.collider.GetComponentInParent<VoxelEngine.Combat.Artillery>();
+                        if (artCockpit != null && VoxelEngine.Combat.Artillery.ActiveArtilleryCockpit == null)
+                        {
+                            string ckey = GameSettings.GetKey(InputAction.EnterCockpit);
+                            VoxelEngine.UI.InteractionHud.Show(ckey, "Enter Artillery");
+                            if (GameSettings.WasPressed(InputAction.EnterCockpit))
+                            {
+                                var pc = GetComponentInParent<VoxelEngine.Player.PlayerController>();
+                                if (pc != null) artCockpit.EnterCockpit(pc);
+                            }
+                        }
+                        else
+                        {
+                            VoxelEngine.UI.InteractionHud.Hide();
+                        }
                     }
                 }
             }
