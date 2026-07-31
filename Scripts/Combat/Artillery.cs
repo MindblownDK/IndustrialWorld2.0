@@ -330,9 +330,17 @@ namespace VoxelEngine.Combat
             // Fire (LMB).
             if (GameSettings.IsHeld(InputAction.Mine) && Time.time >= _nextFire)
             {
-                _nextFire = Time.time + fireCooldown;
-                Vector3 aimPoint = (muzzle != null ? muzzle.position : head.position) + head.forward * range;
-                Fire(aimPoint);
+                if (HasAmmo())
+                {
+                    _nextFire = Time.time + fireCooldown;
+                    Vector3 aimPoint = (muzzle != null ? muzzle.position : head.position) + head.forward * range;
+                    Fire(aimPoint);
+                }
+                else
+                {
+                    _nextFire = Time.time + 2f;   // throttle the "empty" warning
+                    VoxelEngine.UI.BuildFeedbackHud.Show("No Shells", "Exit (F) and load via the panel (H)", null, Color.yellow);
+                }
             }
         }
 

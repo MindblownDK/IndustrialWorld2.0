@@ -123,12 +123,10 @@ namespace VoxelEngine.Player
                         var artCockpit = hit.collider.GetComponentInParent<VoxelEngine.Combat.Artillery>();
                         if (artCockpit != null && VoxelEngine.Combat.Artillery.ActiveArtilleryCockpit == null)
                         {
-                            string ckey = GameSettings.GetKey(InputAction.EnterCockpit);
-                            VoxelEngine.UI.InteractionHud.Show(ckey, "Enter Artillery");
+                            VoxelEngine.UI.InteractionHud.Show("H", "Configure (RMB to enter)");
                             if (GameSettings.WasPressed(InputAction.EnterCockpit))
                             {
-                                var pc = GetComponentInParent<VoxelEngine.Player.PlayerController>();
-                                if (pc != null) artCockpit.EnterCockpit(pc);
+                                VoxelEngine.UI.GameUIController.Instance?.OpenDefense(artCockpit);
                             }
                         }
                         else
@@ -157,14 +155,20 @@ namespace VoxelEngine.Player
                 }
             }
 
-            // RMB a turret/artillery -> open the defense control panel (targeting, reload, shells).
+            // RMB an artillery -> enter cockpit. RMB a turret -> open defense panel.
             if (buildDown && hasHit)
             {
-                Component def = hit.collider.GetComponentInParent<VoxelEngine.Combat.Artillery>();
-                if (def == null) def = hit.collider.GetComponentInParent<VoxelEngine.Combat.Turret>();
-                if (def != null)
+                var artRmb = hit.collider.GetComponentInParent<VoxelEngine.Combat.Artillery>();
+                if (artRmb != null && VoxelEngine.Combat.Artillery.ActiveArtilleryCockpit == null)
                 {
-                    VoxelEngine.UI.GameUIController.Instance?.OpenDefense(def);
+                    var pcRmb = GetComponentInParent<VoxelEngine.Player.PlayerController>();
+                    if (pcRmb != null) artRmb.EnterCockpit(pcRmb);
+                    return;
+                }
+                var turretRmb = hit.collider.GetComponentInParent<VoxelEngine.Combat.Turret>();
+                if (turretRmb != null)
+                {
+                    VoxelEngine.UI.GameUIController.Instance?.OpenDefense(turretRmb);
                     return;
                 }
             }
