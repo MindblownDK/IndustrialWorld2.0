@@ -12192,6 +12192,7 @@ root =>
             var steelIngot = FindItem("Item_SteelIngot");
             var circuit    = FindItem("Item_Circuit");
             var copperWire = FindItem("Item_CopperLVWire");
+            var coal       = FindItem("Item_Coal");
 
             var body       = MakeColoredMat(COMBAT_MATS, "Mat_ArtilleryBody", new Color(0.32f, 0.34f, 0.16f));
             var dark       = MakeColoredMat(COMBAT_MATS, "Mat_ArtilleryDark", new Color(0.18f, 0.18f, 0.16f));
@@ -12242,7 +12243,6 @@ root =>
             var art = root.AddComponent<VoxelEngine.Combat.Artillery>();
             art.variant = VoxelEngine.Combat.ArtilleryVariant.Cannon;
             art.range = 70f; art.fireCooldown = 2.5f; art.damage = 60f; art.explosionRadius = 8f; art.shellSpeed = 35f;
-            art.maxAmmo = 30; art.ammo = 0;
             art.shellMat = shellMat; art.explosionMat = explosionMat;
             art.head = headGo.transform; art.muzzle = muzzleGo.transform;
 
@@ -12253,7 +12253,7 @@ root =>
 
             var block = GetOrCreateAsset<VoxelEngine.Items.BlockItem>($"{COMBAT_BLOCKS}/Block_ArtilleryCannon.asset");
             block.itemId = "block_artillery_cannon"; block.displayName = "Heavy Cannon";
-            block.description = "Heavy howitzer artillery. Auto-targets by faction filter, fires arcing explosive shells. Reload with Bullets (RMB). Look at it to configure targeting.";
+            block.description = "Heavy howitzer artillery. Auto-targets by faction filter, fires arcing explosive shells (loaded via the magazine). RMB to open the defense panel.";
             block.iconTint = new Color(0.32f, 0.34f, 0.16f);
             block.maxStack = 4; block.massPerUnit = 20f;
             block.placedPrefab = prefab; block.gridSize = Vector3Int.one; block.allowStacking = true; block.blockHealth = 200; block.miningTier = 2; block.category = "Combat";
@@ -12262,7 +12262,34 @@ root =>
             AddRecipe("Recipe_ArtilleryCannon", "Heavy Cannon", block, 1, VoxelEngine.Crafting.StationTier.Assembler, true,
                 (ironPlate, 10), (steelIngot, 5), (circuit, 3), (copperWire, 6));
 
-            AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
+            
+            // ── Artillery shells (items loaded into the magazine) ──
+            var shellStd = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{COMBAT_ITEMS}/Item_ShellStandard.asset");
+            shellStd.itemId = "item_shell_standard"; shellStd.displayName = "Standard Shell";
+            shellStd.description = "Standard artillery shell. Direct blast on impact.";
+            shellStd.iconTint = new Color(0.30f, 0.30f, 0.32f); shellStd.maxStack = 20; shellStd.massPerUnit = 2f; shellStd.category = "Combat";
+            EditorUtility.SetDirty(shellStd);
+
+            var shellExp = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{COMBAT_ITEMS}/Item_ShellExplosive.asset");
+            shellExp.itemId = "item_shell_explosive"; shellExp.displayName = "Explosive Shell";
+            shellExp.description = "High-explosive artillery shell. 1.5x bigger blast + voxel crater.";
+            shellExp.iconTint = new Color(0.80f, 0.30f, 0.10f); shellExp.maxStack = 20; shellExp.massPerUnit = 2.5f; shellExp.category = "Combat";
+            EditorUtility.SetDirty(shellExp);
+
+            var shellSct = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{COMBAT_ITEMS}/Item_ShellScatter.asset");
+            shellSct.itemId = "item_shell_scatter"; shellSct.displayName = "Scatter Shell";
+            shellSct.description = "Cluster artillery shell. Bursts into sub-munitions over an area.";
+            shellSct.iconTint = new Color(0.30f, 0.50f, 0.80f); shellSct.maxStack = 20; shellSct.massPerUnit = 2.5f; shellSct.category = "Combat";
+            EditorUtility.SetDirty(shellSct);
+
+            AddRecipe("Recipe_ShellStandard", "Standard Shell", shellStd, 4, VoxelEngine.Crafting.StationTier.Assembler, true,
+                (ironPlate, 2), (coal, 1));
+            AddRecipe("Recipe_ShellExplosive", "Explosive Shell", shellExp, 2, VoxelEngine.Crafting.StationTier.Assembler, true,
+                (ironPlate, 3), (coal, 2), (steelIngot, 1));
+            AddRecipe("Recipe_ShellScatter", "Scatter Shell", shellSct, 2, VoxelEngine.Crafting.StationTier.Assembler, true,
+                (ironPlate, 2), (circuit, 1), (copperWire, 2));
+
+AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
             EditorUtility.DisplayDialog("Voxel Engine — Heavy Cannon Artillery",
                 "The Heavy Cannon is built:\n\n• Howitzer on a split-trail carriage with wheels + long barrel (~12 parts)\n• Auto-targets by faction (Enemies/Players/Passive — configurable when looking at it)\n• Fires arcing explosive shells (damage 60, blast radius 8)\n• 200 HP; reload with Bullets (RMB)\n• Craft at the Assembler (iron + steel + circuit + copper wire)", "OK");
         }

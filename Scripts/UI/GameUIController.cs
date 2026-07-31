@@ -1326,58 +1326,53 @@ namespace VoxelEngine.UI
             string name = isArt ? art.variant.ToString() : "Auto Turret";
             panel.Add(MakeTitle(name));
 
-            int ammo = isArt ? art.ammo : tur.ammo;
-            int maxAmmo = isArt ? art.maxAmmo : tur.maxAmmo;
-            var info = new Label($"Ammo: {ammo} / {maxAmmo}");
-            info.style.color = Color.white; info.style.fontSize = 12; info.style.marginBottom = 6;
-            panel.Add(info);
-
-            // Reload
-            var reloadBtn = new Button(() =>
+            if (isArt)
             {
-                VoxelEngine.Items.ItemDefinition bullets = null;
-                for (int i = 0; i < inventory.container.Slots.Count; i++)
-                {
-                    var s = inventory.container.GetSlot(i);
-                    if (s != null && !s.IsEmpty && s.item != null && s.item.itemId == "item_bullets") { bullets = s.item; break; }
-                }
-                if (bullets == null) { VoxelEngine.UI.BuildFeedbackHud.Show("No Bullets", "Craft Bullets at the Assembler", null, Color.yellow); return; }
-                int want = maxAmmo - (isArt ? art.ammo : tur.ammo);
-                if (want <= 0) return;
-                int got = inventory.container.Remove(bullets, want);
-                if (isArt) art.ammo += got; else tur.ammo += got;
-                inventory.container.RaiseChanged();
-                Refresh();
-            }) { text = "Reload from Inventory" };
-            StyleBtn(reloadBtn);
-            panel.Add(reloadBtn);
+                // Shell magazine — drag shells in. The loaded shell item determines the type.
+                panel.Add(MakeSubtitle("Shells (drag in)"));
+                WatchContainer(art.ShellMagazine);
+                panel.Add(BuildSortableSlotGrid(art.ShellMagazine, showSort: false));
+            }
+            else
+            {
+                // Turret: ammo display + reload button.
+                var info = new Label($"Ammo: {tur.ammo} / {tur.maxAmmo}");
+                info.style.color = Color.white; info.style.fontSize = 12; info.style.marginBottom = 6;
+                panel.Add(info);
 
+                var reloadBtn = new Button(() =>
+                {
+                    VoxelEngine.Items.ItemDefinition bullets = null;
+                    for (int i = 0; i < inventory.container.Slots.Count; i++)
+                    {
+                        var sl = inventory.container.GetSlot(i);
+                        if (sl != null && !sl.IsEmpty && sl.item != null && sl.item.itemId == "item_bullets") { bullets = sl.item; break; }
+                    }
+                    if (bullets == null) { VoxelEngine.UI.BuildFeedbackHud.Show("No Bullets", "Craft Bullets at the Assembler", null, Color.yellow); return; }
+                    int want = tur.maxAmmo - tur.ammo;
+                    if (want <= 0) return;
+                    int got = inventory.container.Remove(bullets, want);
+                    tur.ammo += got;
+                    inventory.container.RaiseChanged();
+                    Refresh();
+                }) { text = "Reload from Inventory" };
+                StyleBtn(reloadBtn);
+                panel.Add(reloadBtn);
+            }
+
+            // Targeting (both types).
             panel.Add(MakeSubtitle("Targeting"));
             VoxelEngine.Combat.TargetFilter curFilter = isArt ? art.filter : tur.filter;
             panel.Add(MakeDefenseToggle("Target Enemies", VoxelEngine.Combat.TargetFilter.Enemies, curFilter, isArt, art, tur));
             panel.Add(MakeDefenseToggle("Target Players", VoxelEngine.Combat.TargetFilter.Players, curFilter, isArt, art, tur));
             panel.Add(MakeDefenseToggle("Target Passive", VoxelEngine.Combat.TargetFilter.Passive, curFilter, isArt, art, tur));
 
+            // Auto toggle (both types).
             bool autoF = isArt ? art.autoMode : tur.autoMode;
             var autoT = new Toggle("Auto-Fire") { value = autoF };
             autoT.style.color = Color.white; autoT.style.marginBottom = 6;
             autoT.RegisterValueChangedCallback(e => { if (isArt) art.autoMode = e.newValue; else tur.autoMode = e.newValue; Refresh(); });
             panel.Add(autoT);
-
-            // Shell type (Artillery only — Cannon / Gustav)
-            if (isArt && art.variant != VoxelEngine.Combat.ArtilleryVariant.Minigun)
-            {
-                panel.Add(MakeSubtitle("Shell Type"));
-                foreach (VoxelEngine.Combat.ShellType st in System.Enum.GetValues(typeof(VoxelEngine.Combat.ShellType)))
-                {
-                    var captured = st;
-                    var btn = new Button(() => { art.shellType = captured; Refresh(); }) { text = captured.ToString() };
-                    if (art.shellType == st) btn.style.backgroundColor = new StyleColor(new Color(0.2f, 0.55f, 0.9f));
-                    else btn.style.backgroundColor = new StyleColor(new Color(0.14f, 0.14f, 0.2f));
-                    StyleBtn(btn);
-                    panel.Add(btn);
-                }
-            }
         }
 
         private Toggle MakeDefenseToggle(string label, VoxelEngine.Combat.TargetFilter flag,

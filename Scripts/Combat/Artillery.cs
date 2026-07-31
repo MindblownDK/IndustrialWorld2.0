@@ -1,21 +1,19 @@
 // Assets/Scripts/VoxelEngine/Combat/Artillery.cs
 //
-// Heavy artillery — Minigun, Cannon, and Schwerer Gustav. Auto-targets based on a
-// faction filter (Enemies / Players / Passive, any combination), aims its head, and
-// fires: Minigun = rapid hitscan + tracer; Cannon/Gustav = arcing shells that detonate
-// (Gustav = colossal blast). Reloadable with Bullets (RMB). Placeable; Damageable.
-// Manual cockpit control (first/third person) comes in a follow-up pass.
+// Heavy artillery — Minigun, Cannon, and Schwerer Gustav. Auto-targets by faction
+// filter, aims its head, and fires: Minigun = rapid hitscan; Cannon/Gustav = arcing
+// shells (Standard / Explosive / Scatter). Shells are ITEMS loaded into a magazine
+// (drag-drop via the defense panel). Placeable; Damageable.
 
 using System.Collections.Generic;
 using UnityEngine;
+using VoxelEngine.Items;
 
 namespace VoxelEngine.Combat
 {
     [System.Flags]
     public enum TargetFilter { None = 0, Enemies = 1, Players = 2, Passive = 4 }
-
     public enum ArtilleryVariant { Minigun, Cannon, Gustav }
-
     public enum ShellType { Standard, Explosive, Scatter }
 
     public class Artillery : Damageable
@@ -28,20 +26,34 @@ namespace VoxelEngine.Combat
         [Header("Combat")]
         public float range = 70f;
         public float fireCooldown = 2.5f;
-        public float damage = 60f;             // shell/explosive damage (minigun overrides via minigunDamage)
+        public float damage = 60f;
         public float minigunDamage = 6f;
-        public float explosionRadius = 8f;     // cannon/gustav shell blast (0 for minigun)
+        public float explosionRadius = 8f;
         public float shellSpeed = 35f;
-        public ShellType shellType = ShellType.Standard;
-        public int maxAmmo = 30;
-        public int ammo = 0;
         public Material shellMat;
         public Material explosionMat;
 
         [Header("Turret")]
-        public Transform head;    // rotates to aim (yaw + pitch)
-        public Transform muzzle;  // shell/tracer origin
+        public Transform head;
+        public Transform muzzle;
         public float aimSpeed = 3f;
+
+        [SerializeField] private ItemContainer _shellMag;
+
+        public ItemContainer ShellMagazine
+        {
+            get
+            {
+                if (_shellMag == null)
+                {
+                    _shellMag = new ItemContainer("Shells", 3);
+                    _shellMag.AcceptFilter = (item, wanted) =>
+                        item != null && item.itemId != null && item.itemId.StartsWith("item_shell")
+                            ? Mathf.Min(wanted, item.maxStack) : 0;
+                }
+                return _shellMag;
+            }
+        }
 
         private float _nextFire, _retargetAt;
         private Transform _targetT;
@@ -53,6 +65,8 @@ namespace VoxelEngine.Combat
         {
             maxHealth = Mathf.Max(maxHealth, 200f);
             base.Awake();
+            // Touch the magazine so the AcceptFilter is set even before the UI opens.
+            _ = ShellMagazine;
         }
 
         private static Material FxMat
@@ -72,7 +86,6 @@ namespace VoxelEngine.Combat
         private void Update()
         {
             if (!autoMode) return;
-            if (ammo <= 0) return;
 
             if (Time.time >= _retargetAt || !Valid(_targetT))
             {
@@ -89,11 +102,46 @@ namespace VoxelEngine.Combat
                 head.rotation = Quaternion.Slerp(head.rotation, look, aimSpeed * Time.deltaTime);
             }
 
-            if (Time.time >= _nextFire)
+            if (Time.time >= _nextFire && HasAmmo())
             {
                 _nextFire = Time.time + fireCooldown;
                 Fire(_targetT.position + up * 0.6f);
             }
+        }
+
+        private bool HasAmmo()
+        {
+            for (int i = 0; i < ShellMagazine.Slots.Count; i++)
+            {
+                var s = ShellMagazine.GetSlot(i);
+                if (s != null && !s.IsEmpty) return true;
+            }
+            return false;
+        }
+
+        /// <summary>Consume one shell from the magazine. Returns the item consumed + its ShellType.</summary>
+        private bool ConsumeShell(out ItemDefinition item, out ShellType type)
+        {
+            item = null; type = ShellType.Standard;
+            for (int i = 0; i < ShellMagazine.Slots.Count; i++)
+            {
+                var s = ShellMagazine.GetSlot(i);
+                if (s == null || s.IsEmpty) continue;
+                item = s.item;
+                s.count--;
+                ShellMagazine.SetSlot(i, s.count <= 0 ? new ItemStack() : s);
+                type = ShellTypeFromItem(item);
+                return true;
+            }
+            return false;
+        }
+
+        private static ShellType ShellTypeFromItem(ItemDefinition item)
+        {
+            if (item == null || string.IsNullOrEmpty(item.itemId)) return ShellType.Standard;
+            if (item.itemId.Contains("explosive")) return ShellType.Explosive;
+            if (item.itemId.Contains("scatter")) return ShellType.Scatter;
+            return ShellType.Standard;
         }
 
         private bool Valid(Transform t) => t != null && (t.position - transform.position).sqrMagnitude <= range * range;
@@ -141,16 +189,16 @@ namespace VoxelEngine.Combat
             if (mag < 0.01f) return true;
             if (Physics.Raycast(from, dir.normalized, out var hit, mag, ~0, QueryTriggerInteraction.Ignore))
             {
-                // Hit is OK if it's the target itself (or part of it).
                 if (ignore != null && hit.collider.GetComponentInParent(ignore.GetType()) != null) return true;
-                return false; // something else blocks
+                return false;
             }
             return true;
         }
 
         private void Fire(Vector3 aimPoint)
         {
-            ammo--;
+            if (!ConsumeShell(out var item, out var shellType)) return;
+
             Vector3 origin = muzzle != null ? muzzle.position : transform.position;
             Vector3 up = VoxelEngine.Cosmos.GravityProvider.GetUp(transform.position);
 
@@ -170,7 +218,8 @@ namespace VoxelEngine.Combat
             else
             {
                 Vector3 dir = (aimPoint - origin).normalized;
-                ArtilleryShell.Spawn(origin, dir * shellSpeed, gameObject, shellMat, explosionRadius, damage, explosionMat, shellType);
+                ArtilleryShell.Spawn(origin, dir * shellSpeed, gameObject, shellMat,
+                    explosionRadius, damage, explosionMat, shellType);
                 Flash(origin);
             }
         }
@@ -183,8 +232,6 @@ namespace VoxelEngine.Combat
             var ps = col.GetComponentInParent<VoxelEngine.Player.PlayerStats>();
             if (ps != null) ps.TakeDamage(dmg);
         }
-
-        public int Load(int count) { int add = Mathf.Min(count, maxAmmo - ammo); ammo += add; return add; }
 
         private static void Flash(Vector3 pos)
         {
