@@ -2011,10 +2011,6 @@ namespace VoxelEngine.Persistence
             public float currentHP;
             // Cosmetic paint finish id (byte). 0 = none / legacy unpainted.
             public int paintFinish;
-            // World GasTank bulk contents (additive).
-            public int gasType;
-            public float gasStoredAmount;
-            public int gasSelectedType;
             public bool enabled = true;
             public bool hasShapeVariant;
             public int shapeVariant;
@@ -2046,6 +2042,10 @@ namespace VoxelEngine.Persistence
             public bool cryobedClaimed;
             // Cosmetic paint finish id (byte). 0 = none / legacy unpainted.
             public int paintFinish;
+            // World GasTank bulk contents (additive).
+            public int gasType;
+            public float gasStoredAmount;
+            public int gasSelectedType;
             // Wind turbine part condition (0..100). 0 = "not set" (legacy saves)
             // and restores as factory-new. Only written for WindTurbinePart blocks.
             public float windCondition;

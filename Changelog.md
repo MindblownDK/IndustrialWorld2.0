@@ -1,9 +1,21 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.75.0-dev`
+**Current Version:** `6.75.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.75.1-dev] Compile fix — gas fields on SavedPlacedBlock
+
+**Type:** PATCH — compile fix (save-compatible).
+
+Gas tank bulk save fields (`gasType`, `gasSelectedType`, `gasStoredAmount`) were incorrectly added to `SavedGridBlock`. Moved them onto `SavedPlacedBlock` where capture/restore actually use them (CS1061).
+
+**Files touched:**
+- `Scripts/Persistence/WorldStatePersistence.cs`
+- `Scripts/Core/GameVersion.cs` (6.75.0 → 6.75.1), `Changelog.md`
+
+---
 
 ### [6.75.0-dev] Gas tanks — type select, portable H₂ dock, Shift-fill; jetpack refill fix
 
