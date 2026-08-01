@@ -1,9 +1,25 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.78.3-dev`
+**Current Version:** `6.78.4-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.78.4-dev] Simpler, Bolder Item Icons — Readability Tune
+
+**Type:** PATCH — art polish (save-compatible).
+
+#### 🎨 Icons: less detail, more readable
+- **Less micro-detail, same item**: every icon got a *simplify* pass — painterly micro-texture is melted down into big, flat poster shapes with a tight palette (14 colours), so the item reads instantly at 51 px instead of dissolving into noise. Still pretty — just no longer busy.
+- **Studio glow removed**: the big soft halo that surrounded each item is gone. The item itself now fills the slot edge-to-edge (this also kills the "foggy" look).
+- **Clean silhouette + subtle cool rim**: icons sit on smooth, healed cut-out shapes (no more interior speckle holes or lumpy outlines) with a faint light rim that separates them from the dark slot background.
+- **Future batches generate simpler from the start**: the icon pipeline prompt now asks for bold, chunky, minimal-detail shapes with no rim glow — new icons will need far less fixing afterwards.
+
+#### Files touched
+- `VoxelEngineAssets/GridSystem/Textures/ItemIcons/*.png` (all 10 reprocessed)
+- `Scripts/Core/GameVersion.cs` (6.78.3 → 6.78.4), `Changelog.md`
+
+---
 
 ### [6.78.3-dev] Readable Icons, Live Item Badges & Idle Auto-Refuel
 
