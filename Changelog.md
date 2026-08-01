@@ -1,9 +1,37 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.64.0-dev`
+**Current Version:** `6.65.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.65.0-dev] Anti-Air Turret — flak vs flyers (Griffin / Roc)
+
+**Type:** MINOR — new defensive structure (save-compatible).
+
+**Added the Anti-Air Turret** (`Scripts/Combat/AntiAirTurret.cs`) — next piece of the Base Defense Turret Network (roadmap §4.8):
+1. Fast **dual-barrel** flak turret with radar dish silhouette.
+2. **Aerial preference:** prioritises Griffins, Rocs, and high-altitude targets; optional **Aerial Only** toggle on the defense panel.
+3. Fires **proximity-burst flak** (`FlakRound`) that detonates near flyers (small burst, no terrain crater).
+4. 3-round bursts with short pauses; leads moving targets using rigidbody velocity.
+5. Ammo: **AA Rounds** (preferred) or **Bullets** fallback via the shared defense panel magazine.
+6. **Step 44 (wizard):** prefab, block, AA Rounds item + Assembler recipes. Non-destructive / re-runnable.
+
+**UI harden:** defense panel filter/auto helpers refactored so new turret kinds no longer grow the toggle signature.
+
+**Persistence (additive):** AA ammo magazine + filter/autoMode + `preferAerial` flag.
+
+**To use:** run Step 44 → craft Anti-Air Turret + AA Rounds → place with sky LOS → RMB → load rounds → Auto-Fire → spawn a Griffin/Roc overhead.
+
+**Files touched:**
+- `Scripts/Combat/AntiAirTurret.cs` (new — turret + FlakRound)
+- `Scripts/Editor/VoxelEngineSetupWindow.cs` (Step 44)
+- `Scripts/UI/GameUIController.cs` (panel + helpers)
+- `Scripts/Player/PlayerInteractionTool.cs`
+- `Scripts/Persistence/WorldStatePersistence.cs`
+- `Scripts/Core/GameVersion.cs` (6.64.0 → 6.65.0), `Changelog.md`
+
+---
 
 ### [6.64.0-dev] Giant Shell Turret — siege / boss killer
 

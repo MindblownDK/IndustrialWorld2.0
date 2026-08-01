@@ -1324,6 +1324,7 @@ namespace VoxelEngine.UI
             else if (d is VoxelEngine.Combat.FlamethrowerTurret flameWatch) WatchContainer(flameWatch.FuelMagazine);
             else if (d is VoxelEngine.Combat.MortarTurret mortarWatch) WatchContainer(mortarWatch.ShellMagazine);
             else if (d is VoxelEngine.Combat.GiantShellTurret giantWatch) WatchContainer(giantWatch.ShellMagazine);
+            else if (d is VoxelEngine.Combat.AntiAirTurret aaWatch) WatchContainer(aaWatch.AmmoMagazine);
             UnlockCursor();
             Refresh();
         }
@@ -1343,20 +1344,35 @@ namespace VoxelEngine.UI
             var flame  = defense as VoxelEngine.Combat.FlamethrowerTurret;
             var mortar = defense as VoxelEngine.Combat.MortarTurret;
             var giant  = defense as VoxelEngine.Combat.GiantShellTurret;
+            var aa     = defense as VoxelEngine.Combat.AntiAirTurret;
 
             string name = art != null ? art.variant.ToString()
                         : flame != null ? "Flamethrower Turret"
                         : mortar != null ? "Mortar Turret"
                         : giant != null ? "Giant Shell Turret"
+                        : aa != null ? "Anti-Air Turret"
                         : "Auto Turret";
             panel.Add(MakeTitle(name));
 
             if (art != null)
             {
-                // Shell magazine — drag shells in. The loaded shell item determines the type.
                 panel.Add(MakeSubtitle("Shells (drag in)"));
                 WatchContainer(art.ShellMagazine);
                 panel.Add(BuildSortableSlotGrid(art.ShellMagazine, showSort: false));
+            }
+            else if (aa != null)
+            {
+                panel.Add(MakeSubtitle("AA Rounds (or Bullets)"));
+                WatchContainer(aa.AmmoMagazine);
+                panel.Add(BuildSortableSlotGrid(aa.AmmoMagazine, showSort: false));
+                var hint = new Label("Fast flak — prefers aerial targets (Griffin / Roc). Proximity burst.");
+                hint.style.color = new Color(0.55f, 0.85f, 1f);
+                hint.style.fontSize = 10; hint.style.marginBottom = 4; hint.style.whiteSpace = WhiteSpace.Normal;
+                panel.Add(hint);
+                var airOnly = new Toggle("Aerial Only") { value = aa.preferAerialOnly };
+                airOnly.style.color = Color.white; airOnly.style.marginBottom = 6;
+                airOnly.RegisterValueChangedCallback(e => { aa.preferAerialOnly = e.newValue; Refresh(); });
+                panel.Add(airOnly);
             }
             else if (giant != null)
             {
@@ -1380,7 +1396,6 @@ namespace VoxelEngine.UI
             }
             else if (flame != null)
             {
-                // Fuel magazine — Flame Canisters (preferred) or Coal (weaker).
                 float fuel = flame.FuelSeconds;
                 float maxF = Mathf.Max(0.01f, flame.MaxFuelDisplay);
                 var fuelInfo = new Label($"Fuel buffer: {fuel:0.0}s  ({Mathf.Clamp01(fuel / maxF) * 100f:0}%)");
@@ -1393,7 +1408,6 @@ namespace VoxelEngine.UI
             }
             else if (tur != null)
             {
-                // Turret: ammo display + reload button.
                 var info = new Label($"Ammo: {tur.ammo} / {tur.maxAmmo}");
                 info.style.color = Color.white; info.style.fontSize = 12; info.style.marginBottom = 6;
                 panel.Add(info);
@@ -1418,63 +1432,73 @@ namespace VoxelEngine.UI
                 panel.Add(reloadBtn);
             }
 
-            // Targeting (all defense types).
+            // Targeting (all defense types) — resolve filter/auto via helpers so new
+            // turret kinds don't grow the toggle signature forever.
             panel.Add(MakeSubtitle("Targeting"));
-            VoxelEngine.Combat.TargetFilter curFilter =
-                art != null ? art.filter
-                : flame != null ? flame.filter
-                : mortar != null ? mortar.filter
-                : giant != null ? giant.filter
-                : tur != null ? tur.filter
-                : VoxelEngine.Combat.TargetFilter.Enemies;
-            panel.Add(MakeDefenseToggle("Target Enemies", VoxelEngine.Combat.TargetFilter.Enemies, curFilter, art, tur, flame, mortar, giant));
-            panel.Add(MakeDefenseToggle("Target Players", VoxelEngine.Combat.TargetFilter.Players, curFilter, art, tur, flame, mortar, giant));
-            panel.Add(MakeDefenseToggle("Target Passive", VoxelEngine.Combat.TargetFilter.Passive, curFilter, art, tur, flame, mortar, giant));
+            var curFilter = GetDefenseFilter(defense);
+            panel.Add(MakeDefenseToggle("Target Enemies", VoxelEngine.Combat.TargetFilter.Enemies, curFilter, defense));
+            panel.Add(MakeDefenseToggle("Target Players", VoxelEngine.Combat.TargetFilter.Players, curFilter, defense));
+            panel.Add(MakeDefenseToggle("Target Passive", VoxelEngine.Combat.TargetFilter.Passive, curFilter, defense));
 
-            // Auto toggle (all defense types).
-            bool autoF = art != null ? art.autoMode
-                       : flame != null ? flame.autoMode
-                       : mortar != null ? mortar.autoMode
-                       : giant != null ? giant.autoMode
-                       : tur != null && tur.autoMode;
+            bool autoF = GetDefenseAuto(defense);
             var autoT = new Toggle("Auto-Fire") { value = autoF };
             autoT.style.color = Color.white; autoT.style.marginBottom = 6;
-            autoT.RegisterValueChangedCallback(e =>
-            {
-                if (art != null) art.autoMode = e.newValue;
-                else if (flame != null) flame.autoMode = e.newValue;
-                else if (mortar != null) mortar.autoMode = e.newValue;
-                else if (giant != null) giant.autoMode = e.newValue;
-                else if (tur != null) tur.autoMode = e.newValue;
-                Refresh();
-            });
+            autoT.RegisterValueChangedCallback(e => { SetDefenseAuto(defense, e.newValue); Refresh(); });
             panel.Add(autoT);
         }
 
+        private static VoxelEngine.Combat.TargetFilter GetDefenseFilter(Component d)
+        {
+            if (d is VoxelEngine.Combat.Artillery a) return a.filter;
+            if (d is VoxelEngine.Combat.FlamethrowerTurret f) return f.filter;
+            if (d is VoxelEngine.Combat.MortarTurret m) return m.filter;
+            if (d is VoxelEngine.Combat.GiantShellTurret g) return g.filter;
+            if (d is VoxelEngine.Combat.AntiAirTurret aa) return aa.filter;
+            if (d is VoxelEngine.Combat.Turret t) return t.filter;
+            return VoxelEngine.Combat.TargetFilter.Enemies;
+        }
+
+        private static void SetDefenseFilter(Component d, VoxelEngine.Combat.TargetFilter f)
+        {
+            if (d is VoxelEngine.Combat.Artillery a) a.filter = f;
+            else if (d is VoxelEngine.Combat.FlamethrowerTurret fl) fl.filter = f;
+            else if (d is VoxelEngine.Combat.MortarTurret m) m.filter = f;
+            else if (d is VoxelEngine.Combat.GiantShellTurret g) g.filter = f;
+            else if (d is VoxelEngine.Combat.AntiAirTurret aa) aa.filter = f;
+            else if (d is VoxelEngine.Combat.Turret t) t.filter = f;
+        }
+
+        private static bool GetDefenseAuto(Component d)
+        {
+            if (d is VoxelEngine.Combat.Artillery a) return a.autoMode;
+            if (d is VoxelEngine.Combat.FlamethrowerTurret f) return f.autoMode;
+            if (d is VoxelEngine.Combat.MortarTurret m) return m.autoMode;
+            if (d is VoxelEngine.Combat.GiantShellTurret g) return g.autoMode;
+            if (d is VoxelEngine.Combat.AntiAirTurret aa) return aa.autoMode;
+            if (d is VoxelEngine.Combat.Turret t) return t.autoMode;
+            return true;
+        }
+
+        private static void SetDefenseAuto(Component d, bool v)
+        {
+            if (d is VoxelEngine.Combat.Artillery a) a.autoMode = v;
+            else if (d is VoxelEngine.Combat.FlamethrowerTurret f) f.autoMode = v;
+            else if (d is VoxelEngine.Combat.MortarTurret m) m.autoMode = v;
+            else if (d is VoxelEngine.Combat.GiantShellTurret g) g.autoMode = v;
+            else if (d is VoxelEngine.Combat.AntiAirTurret aa) aa.autoMode = v;
+            else if (d is VoxelEngine.Combat.Turret t) t.autoMode = v;
+        }
+
         private Toggle MakeDefenseToggle(string label, VoxelEngine.Combat.TargetFilter flag,
-                                         VoxelEngine.Combat.TargetFilter cur,
-                                         VoxelEngine.Combat.Artillery art,
-                                         VoxelEngine.Combat.Turret tur,
-                                         VoxelEngine.Combat.FlamethrowerTurret flame,
-                                         VoxelEngine.Combat.MortarTurret mortar,
-                                         VoxelEngine.Combat.GiantShellTurret giant)
+                                         VoxelEngine.Combat.TargetFilter cur, Component defense)
         {
             var t = new Toggle(label) { value = (cur & flag) != 0 };
             t.style.color = Color.white; t.style.marginBottom = 2;
             t.RegisterValueChangedCallback(e =>
             {
-                var f = art != null ? art.filter
-                      : flame != null ? flame.filter
-                      : mortar != null ? mortar.filter
-                      : giant != null ? giant.filter
-                      : tur != null ? tur.filter
-                      : VoxelEngine.Combat.TargetFilter.None;
+                var f = GetDefenseFilter(defense);
                 if (e.newValue) f |= flag; else f &= ~flag;
-                if (art != null) art.filter = f;
-                else if (flame != null) flame.filter = f;
-                else if (mortar != null) mortar.filter = f;
-                else if (giant != null) giant.filter = f;
-                else if (tur != null) tur.filter = f;
+                SetDefenseFilter(defense, f);
                 Refresh();
             });
             return t;

@@ -415,6 +415,13 @@ namespace VoxelEngine.EditorTools
                 "  • Auto-targets by faction via the defense panel. Re-runnable.");
             AddWizardButton(scroll, "43. Build Giant Shell Turret (siege)", BuildGiantShellTurretContent, 40);
 
+            AddInfo(scroll,
+                "Step 44 builds the ANTI-AIR TURRET (flak vs flyers, non-destructive):\n" +
+                "  • Fast dual-barrel tracking; prefers Griffins / Rocs / high-altitude targets\n" +
+                "  • Proximity-burst flak rounds (AA Rounds or Bullets fallback)\n" +
+                "  • Aerial-Only toggle on the defense panel. Re-runnable.");
+            AddWizardButton(scroll, "44. Build Anti-Air Turret (flak)", BuildAntiAirTurretContent, 40);
+
             AddSpacer(scroll, 20);
         }
 
@@ -12861,6 +12868,120 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
                 "• 280 HP. Craft at the Assembler\n" +
                 "• Also crafts Giant Shells (steel + iron + coal)", "OK");
         }
+
+        // ============================================================
+        //   STEP 44 - ANTI-AIR TURRET. Fast dual-barrel flak for aerial
+        //   threats (Griffin, Roc, high-altitude). Proximity fuse rounds.
+        //   Non-destructive. Re-runnable. Idempotent.
+        // ============================================================
+        private void BuildAntiAirTurretContent()
+        {
+            const string COMBAT_ROOT   = ASSET_ROOT + "/Combat";
+            const string COMBAT_ITEMS  = COMBAT_ROOT + "/Items";
+            const string COMBAT_BLOCKS = COMBAT_ROOT + "/Blocks";
+            const string COMBAT_PREFABS= COMBAT_ROOT + "/Prefabs";
+            const string COMBAT_MATS   = COMBAT_ROOT + "/Materials";
+            EnsureFolder(COMBAT_ROOT); EnsureFolder(COMBAT_ITEMS); EnsureFolder(COMBAT_BLOCKS); EnsureFolder(COMBAT_PREFABS); EnsureFolder(COMBAT_MATS);
+
+            ItemDefinition FindItem(string n)
+            {
+                var guids = AssetDatabase.FindAssets(n + " t:ItemDefinition");
+                foreach (var g in guids) { var pp = AssetDatabase.GUIDToAssetPath(g); if (System.IO.Path.GetFileNameWithoutExtension(pp) == n) return AssetDatabase.LoadAssetAtPath<ItemDefinition>(pp); }
+                return null;
+            }
+            var ironPlate  = FindItem("Item_IronPlate");
+            var steelIngot = FindItem("Item_SteelIngot");
+            var circuit    = FindItem("Item_Circuit");
+            var copperWire = FindItem("Item_CopperLVWire");
+            var coal       = FindItem("Item_Coal");
+
+            var body   = MakeColoredMat(COMBAT_MATS, "Mat_AABody",   new Color(0.25f, 0.32f, 0.38f));
+            var dark   = MakeColoredMat(COMBAT_MATS, "Mat_AADark",   new Color(0.14f, 0.16f, 0.18f));
+            var barrel = MakeColoredMat(COMBAT_MATS, "Mat_AABarrel", new Color(0.20f, 0.22f, 0.26f));
+            var round  = MakeColoredMat(COMBAT_MATS, "Mat_AARound",  new Color(0.55f, 0.90f, 1.0f));
+            var boom   = MakeColoredMat(COMBAT_MATS, "Mat_Explosion",new Color(1.0f, 0.45f, 0.10f));
+            var tracer = MakeColoredMat(COMBAT_MATS, "Mat_AATracer", new Color(0.45f, 0.95f, 1.0f));
+
+            void AddPart(GameObject parent, string n, Vector3 pos, Vector3 euler, Vector3 scale, Material m)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                go.name = n; go.transform.SetParent(parent.transform, false);
+                go.transform.localPosition = pos; go.transform.localEulerAngles = euler; go.transform.localScale = scale;
+                go.GetComponent<Renderer>().sharedMaterial = m;
+                var col = go.GetComponent<Collider>(); if (col != null) UnityEngine.Object.DestroyImmediate(col);
+            }
+            void AddCyl(GameObject parent, string n, Vector3 pos, Vector3 euler, Vector3 scale, Material m)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                go.name = n; go.transform.SetParent(parent.transform, false);
+                go.transform.localPosition = pos; go.transform.localEulerAngles = euler; go.transform.localScale = scale;
+                go.GetComponent<Renderer>().sharedMaterial = m;
+                var col = go.GetComponent<Collider>(); if (col != null) UnityEngine.Object.DestroyImmediate(col);
+            }
+
+            var root = new GameObject("AntiAirTurret");
+            AddPart(root, "Base",    new Vector3(0f, 0.12f, 0f), Vector3.zero, new Vector3(1.0f, 0.24f, 1.0f), body);
+            AddCyl (root, "Pedestal",new Vector3(0f, 0.5f, 0f),  Vector3.zero, new Vector3(0.35f, 0.35f, 0.35f), dark);
+            AddPart(root, "Radar",   new Vector3(0f, 0.95f, -0.25f), Vector3.zero, new Vector3(0.5f, 0.08f, 0.5f), body);
+            AddPart(root, "Dish",    new Vector3(0f, 1.05f, -0.25f), Vector3.zero, new Vector3(0.35f, 0.06f, 0.2f), tracer);
+
+            var headGo = new GameObject("Head");
+            headGo.transform.SetParent(root.transform, false);
+            headGo.transform.localPosition = new Vector3(0f, 0.85f, 0.05f);
+            AddPart(headGo, "HeadBody", new Vector3(0f, 0f, 0f), Vector3.zero, new Vector3(0.55f, 0.35f, 0.45f), body);
+            // Dual barrels
+            AddCyl (headGo, "BarrelL", new Vector3(-0.12f, 0.05f, 0.55f), new Vector3(90,0,0), new Vector3(0.1f, 0.55f, 0.1f), barrel);
+            AddCyl (headGo, "BarrelR", new Vector3( 0.12f, 0.05f, 0.55f), new Vector3(90,0,0), new Vector3(0.1f, 0.55f, 0.1f), barrel);
+            AddPart(headGo, "Mantlet", new Vector3(0f, 0.05f, 0.25f), Vector3.zero, new Vector3(0.4f, 0.25f, 0.12f), dark);
+            AddPart(headGo, "Sight",   new Vector3(0f, 0.22f, 0.1f), Vector3.zero, new Vector3(0.08f, 0.08f, 0.12f), tracer);
+
+            var muzzleGo = new GameObject("Muzzle");
+            muzzleGo.transform.SetParent(headGo.transform, false);
+            muzzleGo.transform.localPosition = new Vector3(0f, 0.05f, 1.15f);
+
+            var cap = root.AddComponent<CapsuleCollider>();
+            cap.height = 1.5f; cap.radius = 0.5f; cap.center = new Vector3(0f, 0.65f, 0f);
+            var aa = root.AddComponent<VoxelEngine.Combat.AntiAirTurret>();
+            aa.range = 55f; aa.fireCooldown = 0.28f; aa.damage = 14f; aa.proximityRadius = 3.2f;
+            aa.shellSpeed = 55f; aa.aimSpeed = 9f; aa.preferAerialOnly = true;
+            aa.shellMat = round; aa.explosionMat = boom; aa.tracerMat = tracer;
+            aa.head = headGo.transform; aa.muzzle = muzzleGo.transform;
+
+            const string path = ASSET_ROOT + "/Combat/Prefabs/AntiAirTurret.prefab";
+            GameObject prefab;
+            if (AssetDatabase.LoadMainAssetAtPath(path) != null) { prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path); UnityEngine.Object.DestroyImmediate(root); }
+            else { prefab = PrefabUtility.SaveAsPrefabAsset(root, path); UnityEngine.Object.DestroyImmediate(root); }
+
+            var block = GetOrCreateAsset<VoxelEngine.Items.BlockItem>($"{COMBAT_BLOCKS}/Block_AntiAirTurret.asset");
+            block.itemId = "block_anti_air_turret"; block.displayName = "Anti-Air Turret";
+            block.description = "Fast dual-barrel flak turret. Prefers aerial targets (Griffin, Roc, high-altitude). Fires proximity-burst AA Rounds. Configure via the defense panel (RMB).";
+            block.iconTint = new Color(0.25f, 0.45f, 0.55f);
+            block.maxStack = 4; block.massPerUnit = 12f;
+            block.placedPrefab = prefab; block.gridSize = Vector3Int.one; block.allowStacking = true; block.blockHealth = 140; block.miningTier = 2; block.category = "Combat";
+            EditorUtility.SetDirty(block);
+
+            var aaRounds = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{COMBAT_ITEMS}/Item_AARounds.asset");
+            aaRounds.itemId = "item_aa_rounds"; aaRounds.displayName = "AA Rounds";
+            aaRounds.description = "Proximity-fuse anti-air rounds for the Anti-Air Turret. Burst near flyers.";
+            aaRounds.iconTint = new Color(0.45f, 0.9f, 1.0f); aaRounds.maxStack = 50; aaRounds.massPerUnit = 0.4f; aaRounds.category = "Combat";
+            EditorUtility.SetDirty(aaRounds);
+
+            AddRecipe("Recipe_AntiAirTurret", "Anti-Air Turret", block, 1, VoxelEngine.Crafting.StationTier.Assembler, true,
+                (ironPlate, 10), (steelIngot, 4), (circuit, 3), (copperWire, 6));
+            AddRecipe("Recipe_AARounds", "AA Rounds", aaRounds, 10, VoxelEngine.Crafting.StationTier.Assembler, true,
+                (ironPlate, 1), (copperWire, 2), (coal, 1));
+
+            AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Voxel Engine — Anti-Air Turret",
+                "The Anti-Air Turret is built:\n\n" +
+                "• Dual-barrel flak turret with radar dish (~12 parts)\n" +
+                "• Fast tracking, range ~55 m, proximity-burst flak\n" +
+                "• Prefers aerial targets (Griffin / Roc / high altitude)\n" +
+                "• Aerial-Only toggle on the defense panel\n" +
+                "• Uses AA Rounds (Bullets also accepted as fallback)\n" +
+                "• 140 HP. Craft at the Assembler", "OK");
+        }
+
 
 
 

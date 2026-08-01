@@ -497,6 +497,21 @@ namespace VoxelEngine.Persistence
                 return;
             }
 
+            var aa = go.GetComponentInChildren<VoxelEngine.Combat.AntiAirTurret>(true);
+            if (aa != null)
+            {
+                entry.defenseState = new SavedDefenseState
+                {
+                    filter = (int)aa.filter,
+                    autoMode = aa.autoMode,
+                    ammo = 0,
+                    fuelSeconds = 0f,
+                    preferAerial = aa.preferAerialOnly,
+                    hasPreferAerial = true
+                };
+                return;
+            }
+
             var tur = go.GetComponentInChildren<VoxelEngine.Combat.Turret>(true);
             if (tur != null)
             {
@@ -770,6 +785,10 @@ namespace VoxelEngine.Persistence
             var giant = go.GetComponentInChildren<VoxelEngine.Combat.GiantShellTurret>();
             if (giant != null)
                 return SerializeContainer(giant.ShellMagazine);
+
+            var aa = go.GetComponentInChildren<VoxelEngine.Combat.AntiAirTurret>();
+            if (aa != null)
+                return SerializeContainer(aa.AmmoMagazine);
 
             return null;
         }
@@ -1452,6 +1471,15 @@ namespace VoxelEngine.Persistence
                 return;
             }
 
+            var aa = go.GetComponentInChildren<VoxelEngine.Combat.AntiAirTurret>(true);
+            if (aa != null)
+            {
+                aa.filter = (VoxelEngine.Combat.TargetFilter)state.filter;
+                aa.autoMode = state.autoMode;
+                if (state.hasPreferAerial) aa.preferAerialOnly = state.preferAerial;
+                return;
+            }
+
             var tur = go.GetComponentInChildren<VoxelEngine.Combat.Turret>(true);
             if (tur != null)
             {
@@ -1677,7 +1705,14 @@ namespace VoxelEngine.Persistence
 
             var giant = go.GetComponentInChildren<VoxelEngine.Combat.GiantShellTurret>();
             if (giant != null)
+            {
                 DeserializeInto(giant.ShellMagazine, sc);
+                return;
+            }
+
+            var aa = go.GetComponentInChildren<VoxelEngine.Combat.AntiAirTurret>();
+            if (aa != null)
+                DeserializeInto(aa.AmmoMagazine, sc);
         }
 
         private void RestoreDrawer(VoxelEngine.Storage.StorageDrawer drawer, SavedContainer sc)

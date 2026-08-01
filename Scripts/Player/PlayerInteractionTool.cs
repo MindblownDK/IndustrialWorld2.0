@@ -183,6 +183,12 @@ namespace VoxelEngine.Player
                     VoxelEngine.UI.GameUIController.Instance?.OpenDefense(giantRmb);
                     return;
                 }
+                var aaRmb = hit.collider.GetComponentInParent<VoxelEngine.Combat.AntiAirTurret>();
+                if (aaRmb != null)
+                {
+                    VoxelEngine.UI.GameUIController.Instance?.OpenDefense(aaRmb);
+                    return;
+                }
                 var turretRmb = hit.collider.GetComponentInParent<VoxelEngine.Combat.Turret>();
                 if (turretRmb != null)
                 {
