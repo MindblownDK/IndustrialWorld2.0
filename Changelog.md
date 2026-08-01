@@ -1,9 +1,37 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.68.0-dev`
+**Current Version:** `6.69.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.69.0-dev] Defense ammo policy — Conserve Ammo + Reserve Stock
+
+**Type:** MINOR — defense configuration (save-compatible).
+
+**Every automated defense piece now supports a factory-style ammo policy** (roadmap §4.8 turret UI: conserve-ammo + reserve stock):
+
+1. **`IDefenseFirePolicy` + `DefenseFirePolicy`** in `DefenseLogistics.cs`
+   - `ConserveAmmo` toggle
+   - `ReserveStock` (0–50 units)
+   - Auto-fire stops once stock is **at or below** the reserve
+   - **Manual artillery cockpit fire ignores the reserve** (you can still dump shells by hand)
+2. Wired on Auto Turret, Artillery (Minigun/Cannon/Gustav), Flamethrower, Mortar, Giant Shell, Anti-Air, Energy/Relic.
+3. **Defense panel** — new Ammo Policy section: Conserve toggle + Reserve −/+ steppers + hint.
+4. **World inspection** — shows `rN` when conserve is on, and `HOLD rN` while auto-fire is withheld at the reserve (also marks LOW).
+5. **Persistence (additive)** — `SavedDefenseState.conserveAmmo` / `reserveStock` / `hasAmmoPolicy` (legacy saves leave policy off).
+
+**To use:** RMB a turret → enable **Conserve Ammo** → set **Reserve** (e.g. 5) → auto-fire holds the last 5 units for emergencies. Resupply above the reserve to resume. Artillery cockpit LMB still fires reserved shells.
+
+**Files touched:**
+- `Scripts/Combat/DefenseLogistics.cs` (policy API)
+- `Scripts/Combat/Turret.cs`, `Artillery.cs`, `FlamethrowerTurret.cs`, `MortarTurret.cs`, `GiantShellTurret.cs`, `AntiAirTurret.cs`, `EnergyRelicTurret.cs`
+- `Scripts/Combat/DefenseStatus.cs` (inspection HOLD/rN)
+- `Scripts/UI/GameUIController.cs` (panel controls)
+- `Scripts/Persistence/WorldStatePersistence.cs` (save/restore)
+- `Scripts/Core/GameVersion.cs` (6.68.0 → 6.69.0), `Changelog.md`, `Roadmap.md`
+
+---
 
 ### [6.68.0-dev] Defense status — inspection, low-ammo toasts, look prompts
 

@@ -12,7 +12,7 @@ using VoxelEngine.Transport;
 
 namespace VoxelEngine.Combat
 {
-    public class Turret : Damageable, IItemConsumer, IDirectItemPortEndpoint
+    public class Turret : Damageable, IItemConsumer, IDirectItemPortEndpoint, IDefenseFirePolicy
     {
         [Header("Turret")]
         public float range        = 22f;
@@ -22,7 +22,15 @@ namespace VoxelEngine.Combat
         public int   ammo         = 0;
         public TargetFilter filter = TargetFilter.Enemies;
         public bool autoMode      = true;
-        [Tooltip("Rotating head (yaws toward the target).")]
+        
+        [Header("Ammo Policy")]
+        public bool conserveAmmo = false;
+        public int reserveStock = 0;
+        public bool ConserveAmmo { get => conserveAmmo; set => conserveAmmo = value; }
+        public int ReserveStock { get => DefenseFirePolicy.ClampReserve(reserveStock); set => reserveStock = DefenseFirePolicy.ClampReserve(value); }
+        public int CurrentStock => ammo;
+
+[Tooltip("Rotating head (yaws toward the target).")]
         public Transform head;
         [Tooltip("Barrel muzzle (tracer/flash origin).")]
         public Transform muzzle;
@@ -54,6 +62,7 @@ namespace VoxelEngine.Combat
         private void Update()
         {
             if (!autoMode || ammo <= 0) return;
+            if (!DefenseFirePolicy.CanAutoSpend(this)) return;
 
             if (Time.time >= _retargetAt || _target == null || !InRange(_target))
             {

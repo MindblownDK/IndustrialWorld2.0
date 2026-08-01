@@ -13,7 +13,7 @@ using VoxelEngine.Transport;
 
 namespace VoxelEngine.Combat
 {
-    public class GiantShellTurret : Damageable, IItemConsumer, IDirectItemPortEndpoint, IInventoryInterface
+    public class GiantShellTurret : Damageable, IItemConsumer, IDirectItemPortEndpoint, IInventoryInterface, IDefenseFirePolicy
     {
         [Header("Combat")]
         public float range = 90f;
@@ -32,7 +32,18 @@ namespace VoxelEngine.Combat
         public TargetFilter filter = TargetFilter.Enemies;
         public bool autoMode = true;
 
-        [SerializeField] private ItemContainer _shellMag;
+        
+        [Header("Ammo Policy")]
+        [Tooltip("When enabled, auto-fire stops once stock reaches the reserve.")]
+        public bool conserveAmmo = false;
+        [Tooltip("Units kept in reserve while Conserve Ammo is on (magazine count / bullets).")]
+        public int reserveStock = 0;
+
+        public bool ConserveAmmo { get => conserveAmmo; set => conserveAmmo = value; }
+        public int ReserveStock { get => DefenseFirePolicy.ClampReserve(reserveStock); set => reserveStock = DefenseFirePolicy.ClampReserve(value); }
+        public int CurrentStock => DefenseStatus.CountMagazine(ShellMagazine);
+
+[SerializeField] private ItemContainer _shellMag;
 
         public ItemContainer ShellMagazine
         {
@@ -83,6 +94,7 @@ namespace VoxelEngine.Combat
         private void Update()
         {
             if (!autoMode) return;
+            if (!DefenseFirePolicy.CanAutoSpend(this)) return;
             if (!HasAmmo()) return;
 
             if (Time.time >= _retargetAt || !Valid(_targetT))

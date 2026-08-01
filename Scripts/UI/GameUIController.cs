@@ -1474,6 +1474,48 @@ namespace VoxelEngine.UI
             autoT.style.color = Color.white; autoT.style.marginBottom = 6;
             autoT.RegisterValueChangedCallback(e => { SetDefenseAuto(defense, e.newValue); Refresh(); });
             panel.Add(autoT);
+
+            // Conserve-ammo / reserve stock (all IDefenseFirePolicy defenses).
+            if (defense is VoxelEngine.Combat.IDefenseFirePolicy policy)
+            {
+                panel.Add(MakeSubtitle("Ammo Policy"));
+                var cons = new Toggle("Conserve Ammo") { value = policy.ConserveAmmo };
+                cons.style.color = Color.white; cons.style.marginBottom = 4;
+                cons.RegisterValueChangedCallback(e => { policy.ConserveAmmo = e.newValue; Refresh(); });
+                panel.Add(cons);
+
+                var row = new VisualElement();
+                row.style.flexDirection = FlexDirection.Row;
+                row.style.alignItems = Align.Center;
+                row.style.marginBottom = 6;
+                var rLab = new Label($"Reserve: {policy.ReserveStock}");
+                rLab.style.color = Color.white; rLab.style.fontSize = 11;
+                rLab.style.flexGrow = 1; rLab.style.minWidth = 90;
+                row.Add(rLab);
+
+                void bump(int delta)
+                {
+                    policy.ReserveStock = policy.ReserveStock + delta;
+                    Refresh();
+                }
+                var minus = new Button(() => bump(-1)) { text = "−" };
+                var plus  = new Button(() => bump(+1)) { text = "+" };
+                StyleBtn(minus); StyleBtn(plus);
+                minus.style.width = 34; plus.style.width = 34;
+                minus.style.marginBottom = 0; plus.style.marginBottom = 0;
+                minus.style.marginRight = 4;
+                row.Add(minus); row.Add(plus);
+                panel.Add(row);
+
+                var hint = new Label(policy.ConserveAmmo
+                    ? "Auto-fire stops at the reserve. Manual artillery cockpit still fires."
+                    : "Reserve ignored while Conserve Ammo is off.");
+                hint.style.color = new Color(0.7f, 0.75f, 0.8f);
+                hint.style.fontSize = 10;
+                hint.style.whiteSpace = WhiteSpace.Normal;
+                hint.style.marginBottom = 4;
+                panel.Add(hint);
+            }
         }
 
         private static VoxelEngine.Combat.TargetFilter GetDefenseFilter(Component d)

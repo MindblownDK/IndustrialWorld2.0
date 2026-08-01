@@ -19,14 +19,25 @@ namespace VoxelEngine.Combat
     public enum ArtilleryVariant { Minigun, Cannon, Gustav }
     public enum ShellType { Standard, Explosive, Scatter }
 
-    public class Artillery : Damageable, IItemConsumer, IDirectItemPortEndpoint, IInventoryInterface
+    public class Artillery : Damageable, IItemConsumer, IDirectItemPortEndpoint, IInventoryInterface, IDefenseFirePolicy
     {
         [Header("Variant")]
         public ArtilleryVariant variant = ArtilleryVariant.Cannon;
         public TargetFilter filter = TargetFilter.Enemies;
         public bool autoMode = true;
 
-        [Header("Combat")]
+        
+        [Header("Ammo Policy")]
+        [Tooltip("When enabled, auto-fire stops once stock reaches the reserve.")]
+        public bool conserveAmmo = false;
+        [Tooltip("Units kept in reserve while Conserve Ammo is on (magazine count / bullets).")]
+        public int reserveStock = 0;
+
+        public bool ConserveAmmo { get => conserveAmmo; set => conserveAmmo = value; }
+        public int ReserveStock { get => DefenseFirePolicy.ClampReserve(reserveStock); set => reserveStock = DefenseFirePolicy.ClampReserve(value); }
+        public int CurrentStock => DefenseStatus.CountMagazine(ShellMagazine);
+
+[Header("Combat")]
         public float range = 70f;
         public float fireCooldown = 2.5f;
         public float damage = 60f;
@@ -95,6 +106,7 @@ namespace VoxelEngine.Combat
         {
             if (_pilot != null) { CockpitUpdate(); return; }
             if (!autoMode) return;
+            if (!DefenseFirePolicy.CanAutoSpend(this)) return;
 
             if (Time.time >= _retargetAt || !Valid(_targetT))
             {

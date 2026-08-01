@@ -99,4 +99,43 @@ namespace VoxelEngine.Combat
         public static bool CanAcceptInput(IDefenseAmmoSink sink)
             => sink?.DefenseMagazine != null;
     }
+
+    /// <summary>
+    /// Conserve-ammo / reserve-stock policy shared by every automated defense piece.
+    /// When conserve is on, auto-fire stops once stock is at or below the reserve.
+    /// Manual cockpit fire (artillery) intentionally ignores the reserve.
+    /// </summary>
+    public interface IDefenseFirePolicy
+    {
+        bool ConserveAmmo { get; set; }
+        int ReserveStock { get; set; }
+        /// <summary>Current usable stock units (magazine count, bullets, or fuel cans).</summary>
+        int CurrentStock { get; }
+    }
+
+    public static class DefenseFirePolicy
+    {
+        public const int DefaultReserve = 0;
+        public const int MaxReserveClamp = 50;
+
+        /// <summary>
+        /// True when auto-fire is allowed to spend another unit.
+        /// Manual fire should call with respectReserve: false.
+        /// </summary>
+        public static bool CanAutoSpend(IDefenseFirePolicy p)
+        {
+            if (p == null) return true;
+            if (!p.ConserveAmmo) return p.CurrentStock > 0;
+            return p.CurrentStock > Mathf.Max(0, p.ReserveStock);
+        }
+
+        public static int ClampReserve(int v) => Mathf.Clamp(v, 0, MaxReserveClamp);
+
+        public static string Describe(IDefenseFirePolicy p)
+        {
+            if (p == null) return "";
+            if (!p.ConserveAmmo) return "Reserve off";
+            return $"Reserve {Mathf.Max(0, p.ReserveStock)}";
+        }
+    }
 }

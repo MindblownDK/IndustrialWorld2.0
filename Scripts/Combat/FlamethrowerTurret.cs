@@ -14,7 +14,7 @@ using VoxelEngine.Transport;
 
 namespace VoxelEngine.Combat
 {
-    public class FlamethrowerTurret : Damageable, IItemConsumer, IDirectItemPortEndpoint, IInventoryInterface
+    public class FlamethrowerTurret : Damageable, IItemConsumer, IDirectItemPortEndpoint, IInventoryInterface, IDefenseFirePolicy
     {
         [Header("Combat")]
         public float range = 11f;
@@ -36,7 +36,18 @@ namespace VoxelEngine.Combat
         public TargetFilter filter = TargetFilter.Enemies;
         public bool autoMode = true;
 
-        [SerializeField] private ItemContainer _fuelMag;
+        
+        [Header("Ammo Policy")]
+        [Tooltip("When enabled, auto-fire stops once stock reaches the reserve.")]
+        public bool conserveAmmo = false;
+        [Tooltip("Units kept in reserve while Conserve Ammo is on (magazine count / bullets).")]
+        public int reserveStock = 0;
+
+        public bool ConserveAmmo { get => conserveAmmo; set => conserveAmmo = value; }
+        public int ReserveStock { get => DefenseFirePolicy.ClampReserve(reserveStock); set => reserveStock = DefenseFirePolicy.ClampReserve(value); }
+        public int CurrentStock => DefenseStatus.CountMagazine(FuelMagazine) + (_fuelSeconds > 0.5f ? 1 : 0);
+
+[SerializeField] private ItemContainer _fuelMag;
         [SerializeField] private float _fuelSeconds;
 
         public float FuelSeconds => _fuelSeconds;
@@ -93,6 +104,7 @@ namespace VoxelEngine.Combat
         private void Update()
         {
             if (!autoMode) return;
+            if (!DefenseFirePolicy.CanAutoSpend(this)) return;
 
             // Top up continuous fuel from the magazine when empty.
             if (_fuelSeconds <= 0f) TryConsumeFuelCanister();

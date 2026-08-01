@@ -443,6 +443,22 @@ namespace VoxelEngine.Persistence
             CaptureDefenseRuntime(go, entry);
         }
 
+        
+        private static void WriteAmmoPolicy(SavedDefenseState state, VoxelEngine.Combat.IDefenseFirePolicy p)
+        {
+            if (state == null || p == null) return;
+            state.conserveAmmo = p.ConserveAmmo;
+            state.reserveStock = p.ReserveStock;
+            state.hasAmmoPolicy = true;
+        }
+
+        private static void ReadAmmoPolicy(SavedDefenseState state, VoxelEngine.Combat.IDefenseFirePolicy p)
+        {
+            if (state == null || p == null || !state.hasAmmoPolicy) return;
+            p.ConserveAmmo = state.conserveAmmo;
+            p.ReserveStock = state.reserveStock;
+        }
+
         private static void CaptureDefenseRuntime(GameObject go, SavedPlacedBlock entry)
         {
             var art = go.GetComponentInChildren<VoxelEngine.Combat.Artillery>(true);
@@ -455,6 +471,7 @@ namespace VoxelEngine.Persistence
                     ammo = 0,
                     fuelSeconds = 0f
                 };
+                WriteAmmoPolicy(entry.defenseState, art);
                 return;
             }
 
@@ -468,6 +485,7 @@ namespace VoxelEngine.Persistence
                     ammo = 0,
                     fuelSeconds = flame.CaptureFuelSeconds()
                 };
+                WriteAmmoPolicy(entry.defenseState, flame);
                 return;
             }
 
@@ -481,6 +499,7 @@ namespace VoxelEngine.Persistence
                     ammo = 0,
                     fuelSeconds = 0f
                 };
+                WriteAmmoPolicy(entry.defenseState, mortar);
                 return;
             }
 
@@ -494,6 +513,7 @@ namespace VoxelEngine.Persistence
                     ammo = 0,
                     fuelSeconds = 0f
                 };
+                WriteAmmoPolicy(entry.defenseState, giant);
                 return;
             }
 
@@ -509,6 +529,7 @@ namespace VoxelEngine.Persistence
                     preferAerial = aa.preferAerialOnly,
                     hasPreferAerial = true
                 };
+                WriteAmmoPolicy(entry.defenseState, aa);
                 return;
             }
 
@@ -522,6 +543,7 @@ namespace VoxelEngine.Persistence
                     ammo = 0,
                     fuelSeconds = 0f
                 };
+                WriteAmmoPolicy(entry.defenseState, energy);
                 return;
             }
 
@@ -535,6 +557,7 @@ namespace VoxelEngine.Persistence
                     ammo = tur.ammo,
                     fuelSeconds = 0f
                 };
+                WriteAmmoPolicy(entry.defenseState, tur);
             }
         }
 
@@ -1460,6 +1483,7 @@ namespace VoxelEngine.Persistence
             {
                 art.filter = (VoxelEngine.Combat.TargetFilter)state.filter;
                 art.autoMode = state.autoMode;
+                ReadAmmoPolicy(state, art);
                 return;
             }
 
@@ -1468,6 +1492,7 @@ namespace VoxelEngine.Persistence
             {
                 flame.filter = (VoxelEngine.Combat.TargetFilter)state.filter;
                 flame.autoMode = state.autoMode;
+                ReadAmmoPolicy(state, flame);
                 flame.RestoreFuelSeconds(state.fuelSeconds);
                 return;
             }
@@ -1477,6 +1502,7 @@ namespace VoxelEngine.Persistence
             {
                 mortar.filter = (VoxelEngine.Combat.TargetFilter)state.filter;
                 mortar.autoMode = state.autoMode;
+                ReadAmmoPolicy(state, mortar);
                 return;
             }
 
@@ -1485,6 +1511,7 @@ namespace VoxelEngine.Persistence
             {
                 giant.filter = (VoxelEngine.Combat.TargetFilter)state.filter;
                 giant.autoMode = state.autoMode;
+                ReadAmmoPolicy(state, giant);
                 return;
             }
 
@@ -1493,6 +1520,7 @@ namespace VoxelEngine.Persistence
             {
                 aa.filter = (VoxelEngine.Combat.TargetFilter)state.filter;
                 aa.autoMode = state.autoMode;
+                ReadAmmoPolicy(state, aa);
                 if (state.hasPreferAerial) aa.preferAerialOnly = state.preferAerial;
                 return;
             }
@@ -1502,6 +1530,7 @@ namespace VoxelEngine.Persistence
             {
                 energy.filter = (VoxelEngine.Combat.TargetFilter)state.filter;
                 energy.autoMode = state.autoMode;
+                ReadAmmoPolicy(state, energy);
                 return;
             }
 
@@ -1510,6 +1539,7 @@ namespace VoxelEngine.Persistence
             {
                 tur.filter = (VoxelEngine.Combat.TargetFilter)state.filter;
                 tur.autoMode = state.autoMode;
+                ReadAmmoPolicy(state, tur);
                 tur.ammo = UnityEngine.Mathf.Max(0, state.ammo);
             }
         }
@@ -1950,6 +1980,9 @@ namespace VoxelEngine.Persistence
             public float fuelSeconds;   // Flamethrower continuous fuel buffer
             public bool preferAerial = true; // Anti-Air aerial-only mode (additive)
             public bool hasPreferAerial;     // legacy saves leave this false
+            public bool conserveAmmo;        // additive ammo policy
+            public int reserveStock;         // additive reserve units
+            public bool hasAmmoPolicy;       // legacy saves leave false
         }
         [Serializable] private class SavedMaritimePorts
         {

@@ -31,27 +31,29 @@ namespace VoxelEngine.Combat
             info = default;
             if (c == null) return false;
 
-            if (c is Artillery art) { Fill(ref info, art.variant.ToString(), art.autoMode, art.filter, CountMagazine(art.ShellMagazine), 6, art); info.status = $"Shells: {CountMagazine(art.ShellMagazine)} · {FilterLabel(art.filter)}"; return true; }
-            if (c is Turret tur) { Fill(ref info, "Auto Turret", tur.autoMode, tur.filter, tur.ammo, tur.maxAmmo, tur); info.status = $"Ammo: {tur.ammo}/{tur.maxAmmo} · {FilterLabel(tur.filter)}"; info.isEmpty = tur.ammo <= 0; info.isLow = tur.ammo > 0 && tur.ammo <= Mathf.Max(5, tur.maxAmmo / 5); return true; }
+            if (c is Artillery art) { Fill(ref info, art.variant.ToString(), art.autoMode, art.filter, CountMagazine(art.ShellMagazine), 6, art); info.status = $"Shells: {CountMagazine(art.ShellMagazine)} · {FilterLabel(art.filter)}{PolicySuffix(art)}"; ApplyReserveLow(ref info, art); return true; }
+            if (c is Turret tur) { Fill(ref info, "Auto Turret", tur.autoMode, tur.filter, tur.ammo, tur.maxAmmo, tur); info.status = $"Ammo: {tur.ammo}/{tur.maxAmmo} · {FilterLabel(tur.filter)}{PolicySuffix(tur)}"; info.isEmpty = tur.ammo <= 0; info.isLow = tur.ammo > 0 && tur.ammo <= Mathf.Max(5, tur.maxAmmo / 5); ApplyReserveLow(ref info, tur); return true; }
             if (c is FlamethrowerTurret flame)
             {
                 int fuelItems = CountMagazine(flame.FuelMagazine);
                 float fuelSec = flame.FuelSeconds;
                 Fill(ref info, "Flamethrower Turret", flame.autoMode, flame.filter, fuelItems, 6, flame);
-                info.status = $"Fuel: {fuelSec:0.0}s + {fuelItems} cans · {FilterLabel(flame.filter)}";
+                info.status = $"Fuel: {fuelSec:0.0}s + {fuelItems} cans · {FilterLabel(flame.filter)}{PolicySuffix(flame)}";
                 info.isEmpty = fuelSec <= 0.05f && fuelItems <= 0;
                 info.isLow = !info.isEmpty && fuelSec < 3f && fuelItems <= 1;
+                ApplyReserveLow(ref info, flame);
                 return true;
             }
-            if (c is MortarTurret mortar) { Fill(ref info, "Mortar Turret", mortar.autoMode, mortar.filter, CountMagazine(mortar.ShellMagazine), 6, mortar); info.status = $"Shells: {CountMagazine(mortar.ShellMagazine)} · {FilterLabel(mortar.filter)}"; return true; }
-            if (c is GiantShellTurret giant) { Fill(ref info, "Giant Shell Turret", giant.autoMode, giant.filter, CountMagazine(giant.ShellMagazine), 4, giant); info.status = $"Giant Shells: {CountMagazine(giant.ShellMagazine)} · {FilterLabel(giant.filter)}"; return true; }
+            if (c is MortarTurret mortar) { Fill(ref info, "Mortar Turret", mortar.autoMode, mortar.filter, CountMagazine(mortar.ShellMagazine), 6, mortar); info.status = $"Shells: {CountMagazine(mortar.ShellMagazine)} · {FilterLabel(mortar.filter)}{PolicySuffix(mortar)}"; ApplyReserveLow(ref info, mortar); return true; }
+            if (c is GiantShellTurret giant) { Fill(ref info, "Giant Shell Turret", giant.autoMode, giant.filter, CountMagazine(giant.ShellMagazine), 4, giant); info.status = $"Giant Shells: {CountMagazine(giant.ShellMagazine)} · {FilterLabel(giant.filter)}{PolicySuffix(giant)}"; ApplyReserveLow(ref info, giant); return true; }
             if (c is AntiAirTurret aa)
             {
                 Fill(ref info, "Anti-Air Turret", aa.autoMode, aa.filter, CountMagazine(aa.AmmoMagazine), 12, aa);
-                info.status = $"AA Ammo: {CountMagazine(aa.AmmoMagazine)} · {(aa.preferAerialOnly ? "Aerial" : "All")} · {FilterLabel(aa.filter)}";
+                info.status = $"AA Ammo: {CountMagazine(aa.AmmoMagazine)} · {(aa.preferAerialOnly ? "Aerial" : "All")} · {FilterLabel(aa.filter)}{PolicySuffix(aa)}";
+                ApplyReserveLow(ref info, aa);
                 return true;
             }
-            if (c is EnergyRelicTurret energy) { Fill(ref info, "Energy / Relic Turret", energy.autoMode, energy.filter, CountMagazine(energy.CellMagazine), 8, energy); info.status = $"Cells: {CountMagazine(energy.CellMagazine)} · {FilterLabel(energy.filter)}"; return true; }
+            if (c is EnergyRelicTurret energy) { Fill(ref info, "Energy / Relic Turret", energy.autoMode, energy.filter, CountMagazine(energy.CellMagazine), 8, energy); info.status = $"Cells: {CountMagazine(energy.CellMagazine)} · {FilterLabel(energy.filter)}{PolicySuffix(energy)}"; ApplyReserveLow(ref info, energy); return true; }
 
             // Also accept any child Damageable host looked at via collider.
             var d = c.GetComponentInParent<Damageable>();
