@@ -56,6 +56,7 @@ namespace VoxelEngine.UI
             if (!_blocking)
             {
                 UIState.PushBlock();
+                UIState.PushHardPause();   // you're dead — freeze player control (world keeps its own time)
                 _blocking = true;
             }
             if (_overlay != null) Rebuild();
@@ -68,6 +69,7 @@ namespace VoxelEngine.UI
             if (_overlay != null) _overlay.style.display = DisplayStyle.None;
             if (_blocking)
             {
+                UIState.PopHardPause();
                 UIState.PopBlock();
                 _blocking = false;
             }

@@ -75,6 +75,7 @@ namespace VoxelEngine.Menu
         {
             _open = true;
             VoxelEngine.UI.UIState.PushBlock();
+            VoxelEngine.UI.UIState.PushHardPause();   // pause menu = the ONLY time-freezing UI
             _savedTS   = Time.timeScale;
             _savedLock = Cursor.lockState;
             _savedVis  = Cursor.visible;
@@ -89,6 +90,7 @@ namespace VoxelEngine.Menu
         private void Close()
         {
             _open = false;
+            VoxelEngine.UI.UIState.PopHardPause();
             VoxelEngine.UI.UIState.PopBlock();
             Time.timeScale   = _savedTS;
             Cursor.lockState = _savedLock;

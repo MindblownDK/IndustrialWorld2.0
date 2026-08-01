@@ -45,6 +45,9 @@ namespace VoxelEngine.UI
         {
             _blockCount = 0;
             IsBlocking = false;
+            _hardPauseCount = 0;
+            IsHardPause = false;
+            TextInputActive = false;
             PauseConsumedFrame = -1;
         }
 
@@ -68,5 +71,30 @@ namespace VoxelEngine.UI
                 Cursor.visible   = false;
             }
         }
+
+        // ── Hard pause (pause menu / death screen) ──────────────────────────
+        // Soft UIs (inventory, machine panels, wheels, ...) NO LONGER freeze the
+        // player — the world keeps running while they are open (multiplayer-ready
+        // behaviour). Only a HARD pause stops gameplay: the pause menu also zeros
+        // Time.timeScale itself.
+        public static bool IsHardPause { get; private set; }
+        private static int _hardPauseCount;
+
+        public static void PushHardPause()
+        {
+            _hardPauseCount++;
+            IsHardPause = _hardPauseCount > 0;
+        }
+        public static void PopHardPause()
+        {
+            _hardPauseCount = System.Math.Max(0, _hardPauseCount - 1);
+            IsHardPause = _hardPauseCount > 0;
+        }
+
+        // ── Keyboard capture by UI text fields ──────────────────────────────
+        // Set by UI panels while a text field owns the keyboard (recipe search).
+        // PlayerController ignores movement / jetpack keys while this is true so
+        // typing "w a s d" into the search bar doesn't fly the player around.
+        public static bool TextInputActive { get; set; }
     }
 }

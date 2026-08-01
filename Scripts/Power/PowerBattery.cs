@@ -94,7 +94,10 @@ namespace VoxelEngine.Power
             else return 0f;
 
             charge = Mathf.Max(0f, charge - moved);
-            ChargeSlot.SetSlot(0, stack);
+            // NOTE: no ChargeSlot.SetSlot here — the stack was mutated IN PLACE
+            // (GetSlot returns the stored reference). SetSlot fires OnChanged every
+            // frame while charging, which rebuilds the battery panel each tick and
+            // made the segment gauge flash/reset. All UI reads the stack live.
             IsChargingItem = true;
             return moved;
         }

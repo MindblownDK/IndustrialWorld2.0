@@ -217,26 +217,38 @@ namespace VoxelEngine.Player
                 return;
             }
 
-            // While a menu is open: stop look + movement entirely. Camera stays put.
-            // Do not keep applying radial gravity here: on curved planets opening
-            // inventory on a steep surface could slide/pull the controller sideways.
-            if (VoxelEngine.UI.UIState.IsBlocking)
+            // UI gating (multiplayer-ready: the world never freezes — only a HARD pause
+            // stops the player, and only because the pause menu zeroes timeScale):
+            //   • HARD pause (pause menu / death screen) → old behaviour: full freeze.
+            //   • Soft UI (inventory, machine panels, wheels, …) → KEEPS SIMULATING:
+            //     gravity, inertial damping and jetpack flight/fuel drain continue
+            //     while you browse; only INPUT is silenced (movement/thrust keys and
+            //     mouse-look belong to the UI now).
+            if (VoxelEngine.UI.UIState.IsHardPause)
             {
                 _velocity = Vector3.zero;
                 _sliding = false;
                 return;
             }
+            bool softUiOpen = VoxelEngine.UI.UIState.IsBlocking;
 
-            UpdateLook();
+            if (!softUiOpen) UpdateLook();
+            else { _sliding = false; }   // no slide tricks while browsing a menu
 
             // Petrify slow decay (Basilisk gaze, etc.).
             if (_petrifyTimer > 0f) { _petrifyTimer -= Time.deltaTime; if (_petrifyTimer <= 0f) _petrifySlow = 0f; }
 
             // While riding a mount, the mount drives movement — suspend our own locomotion
             // (but keep mouse-look + camera height so the rider can look around).
+            // A soft UI (inventory, machine panel, …) no longer freezes ANY of this:
+            // FlyUpdate/WalkUpdate keep running with input silenced (GetMoveInput and
+            // the held-key gates return zero while a UI is blocking), so gravity,
+            // inertial damping and jetpack fuel drain all continue behind the menu —
+            // hovering mid-air with the inventory open burns H₂ exactly like it should.
             if (!IsMounted)
             {
-                UpdateFlyToggle();
+                if (!VoxelEngine.UI.UIState.TextInputActive)
+                    UpdateFlyToggle();   // no jetpack toggling mid-search-typing
 
                 if (GameSettings.FlyMode && !HasFlightPermission())
                 {
@@ -386,8 +398,9 @@ namespace VoxelEngine.Player
             if (wishDir.sqrMagnitude > 0.001f) wishDir = wishDir.normalized;
 
             // -- crouch / slide state machine --
-            bool crouchHeld = GameSettings.IsHeld(InputAction.Crouch);
-            bool sprintHeld = GameSettings.IsHeld(InputAction.Sprint);
+            bool uiLocked = VoxelEngine.UI.UIState.IsBlocking || VoxelEngine.UI.UIState.TextInputActive;
+            bool crouchHeld = !uiLocked && GameSettings.IsHeld(InputAction.Crouch);
+            bool sprintHeld = !uiLocked && GameSettings.IsHeld(InputAction.Sprint);
             UpdateCrouchSlide(crouchHeld, sprintHeld);
 
             // -- target horizontal speed --
@@ -593,8 +606,9 @@ namespace VoxelEngine.Player
             //   Space = up, C = down (relative to where you're looking/rolled)
             //   Q / E = roll (handled in the fly-look branch)
             Vector3 wishDir = transform.right * wish.x + transform.forward * wish.y;
-            if (GameSettings.IsHeld(InputAction.Up)) wishDir += transform.up;
-            if (GameSettings.IsHeld(InputAction.Crouch)) wishDir -= transform.up;
+            bool uiLocked = VoxelEngine.UI.UIState.IsBlocking || VoxelEngine.UI.UIState.TextInputActive;
+            if (!uiLocked && GameSettings.IsHeld(InputAction.Up)) wishDir += transform.up;
+            if (!uiLocked && GameSettings.IsHeld(InputAction.Crouch)) wishDir -= transform.up;
 
             var equipment = GetComponent<PlayerEquipment>();
             bool researchFlight = PlayerStats.Instance != null && PlayerStats.Instance.HasFlightUnlocked;
@@ -605,7 +619,8 @@ namespace VoxelEngine.Player
             var jets = equipment != null ? equipment.GetJetpackSummary() : PlayerEquipment.JetpackSummary.Empty;
             // No equipment component at all (dev/research flight) keeps free boost; with
             // equipment, boost only engages when the drive pack reports afterburner fuel.
-            bool boosting = GameSettings.IsHeld(InputAction.Sprint) && (equipment == null || jets.canBoost);
+            bool boosting = (equipment == null || jets.canBoost)
+                            && !uiLocked && GameSettings.IsHeld(InputAction.Sprint);
             if (equipment != null)
             {
                 if (!researchFlight && !jets.canFly)
@@ -675,6 +690,9 @@ namespace VoxelEngine.Player
         // ============================================================
         private static Vector2 GetMoveInput()
         {
+            // Any blocking UI owns the keyboard — physics keeps running, but the
+            // player's movement keys are silenced (so typing/search never steers).
+            if (VoxelEngine.UI.UIState.IsBlocking || VoxelEngine.UI.UIState.TextInputActive) return Vector2.zero;
             float x = (GameSettings.IsHeld(InputAction.Right) ? 1 : 0) - (GameSettings.IsHeld(InputAction.Left) ? 1 : 0);
             float y = (GameSettings.IsHeld(InputAction.Forward) ? 1 : 0) - (GameSettings.IsHeld(InputAction.Back) ? 1 : 0);
             return new Vector2(x, y);

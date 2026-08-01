@@ -1,9 +1,40 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.77.0-dev`
+**Current Version:** `6.78.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.78.0-dev] Live World (No UI Pause), Battery Numbers & AAA Icons — Batch 1
+
+**Type:** MINOR — gameplay-flow change + UI features + content (save-compatible, no save-format changes).
+
+#### ⏱ The world no longer pauses when a UI opens
+- Opening the **inventory or any machine panel no longer freezes the game** — the physics simulation keeps running while you browse: gravity, walking inertia, and **jetpack flight + fuel drain continue** (hovering mid-air with the inventory open now actually burns H₂, like it should). Multiplayer-ready behaviour.
+- **Only the pause menu hard-pauses** (it also stops time). The death screen freezes player control without stopping the world.
+- Player **input is silenced** while any blocking UI is open (movement/thrust keys and mouse-look belong to the UI) — you keep hovering in place, but can't steer blind. Typing in search fields never moves the player, and jetpack toggling is suppressed mid-typing.
+- Mouse-look stays suspended while the cursor belongs to a UI, exactly as before.
+
+#### 🔋 Battery & jetpack numbers everywhere
+- **Jetpack bay**: new per-pack chips under the fuel bars showing exact **H₂ ml `cur / cap`** and **charge %** for every equipped jetpack — the Hybrid shows both pools, updating live every frame.
+- **Slot badges**: jetpack slots show their **ml + % badges** on the icon itself; **Portable Batteries now show a % charge badge** + fill bar on every slot (inventory, hotbar, docks).
+- **Battery gauge fix**: the 12-segment gauge no longer drops to 0 while a docked device is charging — the dock used to rebuild the whole panel every frame (kick-starting the sweep from 0 each tick). Docs now update silently; the gauge plays its power-on sweep only when you genuinely open a battery.
+- **Grid (ship/base) batteries got the same premium 12-segment gauge** with the eased power-on sweep, color-coded % and live stored-Wh readout — the cool animation now plays on every battery type.
+
+#### 🎨 AAA item icons — batch 1 (of 8)
+- New premium icon pipeline: hi-res stylized icons on the signature dark slate backdrop, family-colored accents matching the UI.
+- **First 10 items shipped**: Hydrogen Boost Pack, Atmospheric Jetpack, Hybrid Jetpack, Portable Hydrogen Tank, Portable Battery, Coal, Iron Ore, Iron Ingot, Copper Ingot, Steel Ingot.
+- The remaining 61 items (science packs, tools, ingots, ship parts…) land in the next batches — the pipeline is in place, so each future update ships more.
+
+#### Files touched
+- `Scripts/UI/UIState.cs`, `Scripts/Menu/InGamePauseMenu.cs`, `Scripts/UI/DeathScreenHud.cs`
+- `Scripts/Player/PlayerController.cs`
+- `Scripts/Power/PowerBattery.cs`
+- `Scripts/UI/GameUIController.cs`, `Scripts/GridSystem/UI/GridBlockUI.cs`
+- `Scripts/Core/GameVersion.cs` (6.77.0 → 6.78.0), `Changelog.md`
+- `VoxelEngineAssets/GridSystem/Textures/ItemIcons/*.png` (10 new) + sprite metas + icon refs in 10 item `.asset` files
+
+---
 
 ### [6.77.0-dev] Battery Device Charger, Dual-Fuel Jetpacks & Flash-Free HUD
 

@@ -233,16 +233,10 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(hdr);
             p.Add(T.AccentDivider(T.AccentGreen));
 
-            var gaugeRow = Row();
-            gaugeRow.style.justifyContent = Justify.Center;
-            gaugeRow.Add(T.TankGauge("Charge", bat.Fill01, new Color(0.3f, 0.85f, 0.4f),
-                $"{PowerFormat.WattHours(bat.storedWh)} / {PowerFormat.WattHours(bat.capacityWh)}", 70, 120));
-            p.Add(gaugeRow);
+            // Premium segmented charge gauge — same look as the world battery panel:
+            // eased power-on sweep on open, color-coded %, live tracking.
+            p.Add(BuildBatterySegmentGauge(bat));
             p.Add(T.Spacer(6));
-
-            var (fill, _) = T.ProgressBar(bat.Fill01, T.AccentGreen, 8, true);
-            p.Add(fill);
-            p.Add(T.Spacer(4));
             p.Add(T.StatRow("⚡", "Max Charge", PowerFormat.Watts(bat.maxChargeRate), T.AccentCyan));
             p.Add(T.StatRow("🔌", "Max Discharge", PowerFormat.Watts(bat.maxDischargeRate), T.AccentAmber));
             p.Add(T.StatRow("↘", "Charging Now", PowerFormat.Watts(bat.CurrentChargeWatts), T.AccentGreen));
@@ -261,6 +255,85 @@ namespace VoxelEngine.GridSystem.UI
                 p.Add(T.StatRow("⚖", "Grid Balance", PowerFormat.Watts(bat.Grid.PowerBalance),
                     bat.Grid.PowerBalance >= 0 ? T.AccentGreen : T.AccentRed));
             return p;
+        }
+
+        /// <summary>
+        /// 12-segment eased battery gauge for grid (ship/base) batteries — mirrors the
+        /// world-battery panel look. Self-animating: eases from 0 on mount (power-on
+        /// sweep) and then tracks fill + stored/capacity + % live every 30 ms.
+        /// </summary>
+        private static VisualElement BuildBatterySegmentGauge(GridBattery bat)
+        {
+            const int SegCount = 12;
+            var gaugeRow = Row();
+            gaugeRow.style.alignItems = Align.Center;
+            gaugeRow.style.marginTop = 4;
+            gaugeRow.style.marginBottom = 2;
+            gaugeRow.pickingMode = PickingMode.Ignore;
+
+            var segTrack = new VisualElement();
+            segTrack.style.flexDirection = FlexDirection.Row;
+            segTrack.style.flexGrow = 1;
+            segTrack.style.height = 26;
+            segTrack.style.paddingTop = 3;  segTrack.style.paddingBottom = 3;
+            segTrack.style.paddingLeft = 3; segTrack.style.paddingRight = 3;
+            segTrack.style.backgroundColor = new StyleColor(new Color(0.04f, 0.045f, 0.065f, 0.98f));
+            T.Radius(segTrack, 7);
+            segTrack.pickingMode = PickingMode.Ignore;
+
+            var off = new Color(0.14f, 0.16f, 0.22f);
+            var segs = new VisualElement[SegCount];
+            for (int i = 0; i < SegCount; i++)
+            {
+                var seg = new VisualElement();
+                seg.style.flexGrow = 1;
+                seg.style.marginRight = i < SegCount - 1 ? 2 : 0;
+                seg.style.backgroundColor = new StyleColor(off);
+                T.Radius(seg, 2);
+                seg.pickingMode = PickingMode.Ignore;
+                segs[i] = seg;
+                segTrack.Add(seg);
+            }
+            gaugeRow.Add(segTrack);
+
+            var pct = new Label("0%");
+            pct.style.width = 58;
+            pct.style.fontSize = 18;
+            pct.style.unityFontStyleAndWeight = FontStyle.Bold;
+            pct.style.unityTextAlign = TextAnchor.MiddleRight;
+            pct.style.color = T.TextPrimary;
+            pct.style.marginLeft = 10;
+            pct.pickingMode = PickingMode.Ignore;
+            gaugeRow.Add(pct);
+
+            var stored = new Label("—");
+            stored.style.fontSize = 10;
+            stored.style.color = T.TextMuted;
+            stored.style.unityTextAlign = TextAnchor.MiddleCenter;
+            stored.pickingMode = PickingMode.Ignore;
+
+            float smooth = 0f;   // eased fill — drives the power-on sweep on mount
+            gaugeRow.schedule.Execute(() =>
+            {
+                if (bat == null) return;
+                float fill = bat.Fill01;
+                smooth = Mathf.MoveTowards(smooth, fill, 0.03f * 1.2f);   // ~1.1 s sweep
+                Color col = fill > 0.5f ? new Color(0.30f, 0.85f, 0.40f)
+                          : fill > 0.25f ? T.AccentAmber : T.AccentRed;
+                int lit = Mathf.RoundToInt(smooth * SegCount);
+                for (int i = 0; i < SegCount; i++)
+                    segs[i].style.backgroundColor = new StyleColor(
+                        i < lit ? new Color(col.r, col.g, col.b, 0.88f) : off);
+                pct.text = $"{fill * 100f:0}%";
+                pct.style.color = new StyleColor(col);
+                stored.text = $"{PowerFormat.WattHours(bat.storedWh)} / {PowerFormat.WattHours(bat.capacityWh)}";
+            }).Every(30);
+
+            var box = new VisualElement();
+            box.pickingMode = PickingMode.Ignore;
+            box.Add(gaugeRow);
+            box.Add(stored);
+            return box;
         }
 
         // ── CARGO CONTAINER ─────────────────────────────────────────────────────

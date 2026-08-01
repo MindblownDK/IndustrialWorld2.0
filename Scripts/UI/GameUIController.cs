@@ -247,8 +247,14 @@ namespace VoxelEngine.UI
         private Label         _jbH2Label;
         private VisualElement _jbPRow, _jbPFill;
         private Label         _jbPLabel;
+        // Per-pack live chips: H₂ ml + charge % for each equipped jetpack, kept in
+        // sync every frame (hybrids show both pools). Rows sized to SlotCount.
+        private VisualElement[] _jbPackRows;
+        private Label[]         _jbPackH2;
+        private Label[]         _jbPackPwr;
         // Battery panel live refs (set by BuildRightPowerBattery).
         private VisualElement[] _battSegments;
+        private bool            _batterySweepPending;   // one-shot: play the power-on sweep on fresh open
         private Label         _battPct;
         private Label         _battChargeRow;
         private Label         _battInRow;
@@ -256,6 +262,7 @@ namespace VoxelEngine.UI
         private Label         _battStatus;
         private Label         _battDockRow;
         private float         _battSegSmooth;    // eased segment fill (0..1)
+        private float         _battDockIconAccum; // throttled dock-icon refresh while charging
         private float         _furnaceTickAccum;
         private float         _recipeRefreshAccum;
         private float         _machineRefreshAccum;
@@ -270,6 +277,9 @@ namespace VoxelEngine.UI
         private void Update()
         {
             if (!HasLivePanel()) return;
+
+            // Keyboard capture state — suppress player movement/jetpack keys while typing.
+            VoxelEngine.UI.UIState.TextInputActive = _searchHasFocus || RecipeBrowserUI.IsSearchFocused;
 
             // Live-update the open furnace panel in-place every frame (no rebuild needed).
             TickFurnaceLiveUI();
@@ -775,6 +785,7 @@ namespace VoxelEngine.UI
                 case VoxelEngine.Gas.HydrogenEngine he: _openHydroEngine = he; break;
                 case VoxelEngine.Gas.GasTank gt: _openGasTank = gt; gt.EnsureContainers(); WatchContainer(gt.PortableSlot); break;
                 case VoxelEngine.Power.PowerBattery pb:
+                    if (_openPowerBattery != pb) _batterySweepPending = true;   // fresh open → power-on sweep
                     _openPowerBattery = pb;
                     pb.EnsureContainers();
                     WatchContainer(pb.ChargeSlot);
@@ -1277,10 +1288,83 @@ namespace VoxelEngine.UI
                 summary.powerCap > 0, "Power", summary.power, summary.powerCap, "Wh", new Color(0.45f, 0.9f, 0.6f));
             if (_jbPRow != null) box.Add(_jbPRow);
 
+            // ── Per-pack chips: exact H₂ ml + charge % for each equipped pack ──
+            int slotCount = VoxelEngine.Player.PlayerEquipment.JetpackSlotCount;
+            _jbPackRows = new VisualElement[slotCount];
+            _jbPackH2   = new Label[slotCount];
+            _jbPackPwr  = new Label[slotCount];
+            var chipsCol = new VisualElement();
+            chipsCol.style.marginTop = 5;
+            chipsCol.style.marginLeft = 2;
+            chipsCol.style.marginRight = 2;
+            for (int i = 0; i < slotCount; i++)
+            {
+                var s = equipment.JetpackSlots.GetSlot(i);
+                if (s == null || s.IsEmpty || s.item is not VoxelEngine.Items.JetpackItem jp) continue;
+
+                var chip = new VisualElement();
+                chip.style.flexDirection = FlexDirection.Row;
+                chip.style.alignItems = Align.Center;
+                chip.style.marginBottom = 3;
+                chip.style.paddingLeft = 6; chip.style.paddingRight = 6;
+                chip.style.paddingTop = 3;  chip.style.paddingBottom = 3;
+                chip.style.backgroundColor = new StyleColor(new Color(0.05f, 0.06f, 0.085f, 0.85f));
+                SetBorderRadius(chip, 6);
+                chip.style.borderLeftWidth = 2;
+                chip.style.borderLeftColor = new StyleColor(GetJetpackFamilyColor(jp.family));
+                chip.pickingMode = PickingMode.Ignore;
+
+                var name = new Label(jp.displayName);
+                name.style.fontSize = 9;
+                name.style.color = new StyleColor(UITheme.TextSecondary);
+                name.style.flexGrow = 1;
+                name.style.overflow = Overflow.Hidden;
+                name.style.whiteSpace = WhiteSpace.NoWrap;
+                name.style.textOverflow = TextOverflow.Ellipsis;
+                name.pickingMode = PickingMode.Ignore;
+                chip.Add(name);
+
+                if (jp.HydrogenCapacityMl > 0)
+                {
+                    var h2 = new Label();
+                    h2.style.fontSize = 9;
+                    h2.style.unityFontStyleAndWeight = FontStyle.Bold;
+                    h2.style.color = new StyleColor(new Color(0.35f, 0.85f, 1f));
+                    h2.style.marginLeft = 8;
+                    h2.pickingMode = PickingMode.Ignore;
+                    chip.Add(h2);
+                    _jbPackH2[i] = h2;
+                }
+                if (jp.PowerCapacityMl > 0)
+                {
+                    var pwr = new Label();
+                    pwr.style.fontSize = 9;
+                    pwr.style.unityFontStyleAndWeight = FontStyle.Bold;
+                    pwr.style.color = new StyleColor(new Color(0.45f, 0.9f, 0.6f));
+                    pwr.style.marginLeft = 8;
+                    pwr.pickingMode = PickingMode.Ignore;
+                    chip.Add(pwr);
+                    _jbPackPwr[i] = pwr;
+                }
+                chipsCol.Add(chip);
+                _jbPackRows[i] = chip;
+            }
+            if (_jbPackRows != null)
+                box.Add(chipsCol);
+
             // Push real values into the fresh elements immediately.
             TickJetpackBayLiveUI();
             return box;
         }
+
+        /// <summary>Icon/accent color per jetpack family (matches the bay slot icon).</summary>
+        private static Color GetJetpackFamilyColor(VoxelEngine.Items.JetpackFamily family) => family switch
+        {
+            VoxelEngine.Items.JetpackFamily.HydrogenBoost => new Color(0.35f, 0.85f, 1f),
+            VoxelEngine.Items.JetpackFamily.Atmospheric   => new Color(0.45f, 0.9f, 0.6f),
+            VoxelEngine.Items.JetpackFamily.Hybrid        => new Color(0.72f, 0.55f, 1f),
+            _                                             => UITheme.TextSecondary,
+        };
 
         /// <summary>One labelled mini bar for the jetpack bay. Returns (row, fill, label);
         /// row is null when the pool type isn't equipped.</summary>
@@ -1473,7 +1557,11 @@ namespace VoxelEngine.UI
                 "Dock a Portable Battery or a power-fed jetpack (Atmospheric / Hybrid) to charge it from stored energy. " +
                 "You can also hold the device and RMB the battery — Shift tops it to 100%."));
 
-            _battSegSmooth = 0f; // power-on sweep
+            // Power-on sweep: only on a FRESH open. Rebuilds while the panel stays
+            // open (dock insert/remove, telemetry) must keep the smoothed value —
+            // otherwise the gauge visibly resets to 0, which looked broken while
+            // a device was charging (the dock used to rebuild the panel every tick).
+            if (_batterySweepPending) { _battSegSmooth = 0f; _batterySweepPending = false; }
             TickBatteryLiveUI();
             return p;
         }
@@ -1520,6 +1608,22 @@ namespace VoxelEngine.UI
         {
             var pb = _openPowerBattery;
             if (pb == null || _battSegments == null) return;
+
+            // The dock slot's fill bar / % badge should climb while a device charges.
+            // The dock no longer raises OnChanged per-tick (that rebuilt the whole
+            // panel every frame and reset the gauge — the "flashes to 0" bug), so we
+            // raise a gentle ~3 Hz refresh instead, never mid-drag.
+            if (pb.IsChargingItem && !_dragSource.active)
+            {
+                _battDockIconAccum += Time.unscaledDeltaTime;
+                if (_battDockIconAccum >= 0.33f)
+                {
+                    _battDockIconAccum = 0f;
+                    pb.ChargeSlot.RaiseChanged();
+                    return;   // Refresh() rebuilds + re-ticks us fresh
+                }
+            }
+            else _battDockIconAccum = 0f;
 
             float fill = pb.Fill01;
             _battSegSmooth = Mathf.MoveTowards(_battSegSmooth, fill, Time.unscaledDeltaTime * 1.2f);
@@ -2996,6 +3100,23 @@ namespace VoxelEngine.UI
             return col;
         }
 
+        /// <summary>Shared style for the tiny top-left slot badges (ml / % badges on
+        /// tanks, jetpacks, portable batteries).</summary>
+        private static void StyleSlotBadge(Label lbl, float top, Color accent)
+        {
+            lbl.style.position = Position.Absolute;
+            lbl.style.left = 3; lbl.style.top = top;
+            lbl.style.fontSize = 8;
+            lbl.style.color = Color.white;
+            lbl.style.unityFontStyleAndWeight = FontStyle.Bold;
+            lbl.style.backgroundColor = new StyleColor(new Color(0, 0, 0, 0.60f));
+            lbl.style.paddingLeft = 2; lbl.style.paddingRight = 2;
+            lbl.style.borderLeftWidth = 2;
+            lbl.style.borderLeftColor = new StyleColor(accent);
+            SetBorderRadius(lbl, 2);
+            lbl.pickingMode = PickingMode.Ignore;
+        }
+
         // ── Progress bar / pill / divider — all routed through UITheme ───────
         private VisualElement MakeItemFillBar(float frac, Color fillColor)
         {
@@ -3514,13 +3635,53 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                     mlLbl.pickingMode = PickingMode.Ignore;
                     slot.Add(mlLbl);
                 }
-                // Jetpack combined fuel (H₂ + power, both pools)
+                // Jetpack combined fuel (H₂ + power, both pools) — bar + per-pool badges.
                 else if (stack.item is VoxelEngine.Items.JetpackItem jp)
                 {
                     int cap = Mathf.Max(1, jp.HydrogenCapacityMl + jp.PowerCapacityMl);
                     int cur = VoxelEngine.Items.JetpackItem.GetH2Ml(stack) + VoxelEngine.Items.JetpackItem.GetPowerMl(stack);
                     float frac = Mathf.Clamp01(cur / (float)cap);
                     slot.Add(MakeItemFillBar(frac, Color.Lerp(Color.red, new Color(0.4f, 0.9f, 1f), frac)));
+
+                    int h2Cap = jp.HydrogenCapacityMl;
+                    int pCap  = jp.PowerCapacityMl;
+                    float top = 2f;
+                    if (h2Cap > 0)
+                    {
+                        int ml = VoxelEngine.Items.JetpackItem.GetH2Ml(stack);
+                        var h2Lbl = new Label(ml >= 1000 ? $"{ml / 1000f:0.0}L" : $"{ml}ml");
+                        h2Lbl.name = "jp-h2";
+                        StyleSlotBadge(h2Lbl, top, new Color(0.4f, 0.9f, 1f));
+                        slot.Add(h2Lbl);
+                        top += 11f;
+                    }
+                    if (pCap > 0)
+                    {
+                        float pct = Mathf.Clamp01(VoxelEngine.Items.JetpackItem.GetPowerMl(stack) / (float)pCap) * 100f;
+                        var pwrLbl = new Label($"{pct:0}%");
+                        pwrLbl.name = "jp-pwr";
+                        StyleSlotBadge(pwrLbl, top, new Color(0.55f, 1f, 0.7f));
+                        slot.Add(pwrLbl);
+                    }
+                }
+                // Portable Battery charge (Wh) — fill bar + readable % badge.
+                else if (VoxelEngine.Items.PortableBatteryItem.IsPortableBattery(stack.item))
+                {
+                    float frac = VoxelEngine.Items.PortableBatteryItem.Fill01(stack);
+                    var pwrCol = new Color(0.45f, 0.9f, 0.6f);
+                    slot.Add(MakeItemFillBar(frac, Color.Lerp(new Color(0.85f, 0.3f, 0.15f), pwrCol, frac)));
+                    var pctLbl = new Label($"{Mathf.RoundToInt(frac * 100f)}%");
+                    pctLbl.name = "pbat-pct";
+                    pctLbl.style.position = Position.Absolute;
+                    pctLbl.style.left = 3; pctLbl.style.top = 2;
+                    pctLbl.style.fontSize = 9;
+                    pctLbl.style.color = Color.white;
+                    pctLbl.style.unityFontStyleAndWeight = FontStyle.Bold;
+                    pctLbl.style.backgroundColor = new StyleColor(new Color(0, 0, 0, 0.55f));
+                    pctLbl.style.paddingLeft = 2; pctLbl.style.paddingRight = 2;
+                    SetBorderRadius(pctLbl, 2);
+                    pctLbl.pickingMode = PickingMode.Ignore;
+                    slot.Add(pctLbl);
                 }
                 // Tooltip on hover (only when the panel is interactive — otherwise hotbar
                 // slots in the corner of the screen would pop tooltips constantly).
