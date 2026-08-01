@@ -1,9 +1,32 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.78.2-dev`
+**Current Version:** `6.78.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.78.3-dev] Readable Icons, Live Item Badges & Idle Auto-Refuel
+
+**Type:** PATCH — fixes + polish (save-compatible).
+
+#### 🎨 Icons — actually readable this time
+- **Recropped with a stricter art threshold**: the soft vignette matte still counted as "art" in the bounding box, leaving the real artwork at only ~70 % of the frame. Icons are now recropped so the item itself fills the frame.
+- **Larger in-slot rendering**: item icons now render at 51 px inside the 56 px slot (was 44) with `ScaleToFit` — a big readability jump.
+
+#### ⛽ Item badges update live
+- The ml / % badges printed **on the jetpack slot icons** were baked at panel build — a draining pack kept showing its old values (found: the per-pack chip tick had never landed — that's part of what you saw).
+- The chip rows AND the on-item badges are now re-stamped **every frame** — equipped packs visibly drain on bars, chips and item icons alike, no rebuilds.
+
+#### 🔋 Idle auto-refuel — no more "open the inventory to charge"
+- The 10 % → 100 % auto-refuel only ticked mid-flight or on inventory open. PlayerEquipment now runs a slow **0.5 Hz idle check**, so a jetpack at 10 % quietly sips from your freshly charged portable battery even while you're standing around. (Hard-paused with the pause menu, as expected.)
+
+#### Files touched
+- `Scripts/UI/GameUIController.cs`
+- `Scripts/Player/PlayerEquipment.cs`
+- `VoxelEngineAssets/GridSystem/Textures/ItemIcons/*.png` (recrop pass)
+- `Scripts/Core/GameVersion.cs` (6.78.2 → 6.78.3), `Changelog.md`
+
+---
 
 ### [6.78.2-dev] Refuel Toast De-Spam & Readable Icons
 

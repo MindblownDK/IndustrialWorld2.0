@@ -1270,6 +1270,7 @@ namespace VoxelEngine.UI
         private VisualElement BuildJetpackSlotsPanel(VoxelEngine.Player.PlayerEquipment equipment)
         {
             var box = new VisualElement();
+            box.name = "jetpack-bay";   // lets TickJetpackBayLiveUI find the live badges
             box.style.marginTop = 6;
             box.style.marginBottom = 10;
             box.style.paddingTop = 2;
@@ -1485,6 +1486,65 @@ namespace VoxelEngine.UI
                 _jbPLabel.text = $"Power  {summary.power} / {summary.powerCap} Wh";
                 _jbPFill.style.width = new StyleLength(new Length(
                     summary.powerCap > 0 ? Mathf.Clamp01(summary.power / (float)summary.powerCap) * 100f : 0f, LengthUnit.Percent));
+            }
+
+            // ── Per-pack chips + on-item badges: re-stamped EVERY FRAME so a
+            // draining pack visibly drains everywhere (bars, chips AND the item
+            // icon's own ml / % badges) without rebuilding anything.
+            if (_jbPackRows != null)
+            {
+                var slots = equipment.JetpackSlots;
+                for (int i = 0; i < _jbPackRows.Length && i < slots.Size; i++)
+                {
+                    var chip = _jbPackRows[i];
+                    if (chip == null) continue;
+                    var s = slots.GetSlot(i);
+                    if (s == null || s.IsEmpty || s.item is not VoxelEngine.Items.JetpackItem jp)
+                    { chip.style.display = DisplayStyle.None; continue; }
+                    chip.style.display = DisplayStyle.Flex;
+
+                    var h2 = _jbPackH2 != null && i < _jbPackH2.Length ? _jbPackH2[i] : null;
+                    if (h2 != null)
+                    {
+                        int h2Cap = jp.HydrogenCapacityMl;
+                        h2.text = $"H₂ {VoxelEngine.Items.JetpackItem.GetH2Ml(s)} / {h2Cap} ml";
+                        h2.style.display = h2Cap > 0 ? DisplayStyle.Flex : DisplayStyle.None;
+                    }
+                    var pwr = _jbPackPwr != null && i < _jbPackPwr.Length ? _jbPackPwr[i] : null;
+                    if (pwr != null)
+                    {
+                        int pCap = jp.PowerCapacityMl;
+                        float pct = pCap > 0
+                            ? Mathf.Clamp01(VoxelEngine.Items.JetpackItem.GetPowerMl(s) / (float)pCap) * 100f : 0f;
+                        pwr.text = $"PWR {pct:0}%";
+                        pwr.style.display = pCap > 0 ? DisplayStyle.Flex : DisplayStyle.None;
+                    }
+                }
+            }
+
+            var bay = _contentLayer != null ? _contentLayer.Q("jetpack-bay") : null;
+            if (bay != null)
+            {
+                var slotsC = equipment.JetpackSlots;
+                for (int i = 0; i < slotsC.Size; i++)
+                {
+                    var s = slotsC.GetSlot(i);
+                    var jp = (s != null && !s.IsEmpty) ? s.item as VoxelEngine.Items.JetpackItem : null;
+                    var h2Badge = bay.Q<Label>($"jp-h2-{i}");
+                    if (h2Badge != null)
+                    {
+                        int ml = jp != null ? VoxelEngine.Items.JetpackItem.GetH2Ml(s) : 0;
+                        h2Badge.text = jp == null ? "" : (ml >= 1000 ? $"{ml / 1000f:0.0}L" : $"{ml}ml");
+                    }
+                    var pwrBadge = bay.Q<Label>($"jp-pwr-{i}");
+                    if (pwrBadge != null)
+                    {
+                        int pCap = jp != null ? jp.PowerCapacityMl : 0;
+                        float pct = pCap > 0
+                            ? Mathf.Clamp01(VoxelEngine.Items.JetpackItem.GetPowerMl(s) / (float)pCap) * 100f : 0f;
+                        pwrBadge.text = pCap > 0 ? $"{pct:0}%" : "";
+                    }
+                }
             }
         }
 
@@ -3564,7 +3624,11 @@ namespace VoxelEngine.UI
                 if (stack.item.icon != null)
                 {
                     var img = new Image { sprite = stack.item.icon };
-                    img.style.width = 44; img.style.height = 44;
+                    // Fill the slot: the generated icons are tight-cropped, so a
+                    // larger image reads instantly even at a glance. ScaleToFit keeps
+                    // aspect for any legacy non-square sprite.
+                    img.scaleMode = ScaleMode.ScaleToFit;
+                    img.style.width = 51; img.style.height = 51;
                     img.pickingMode = PickingMode.Ignore;   // children must not steal events
                     slot.Add(img);
                 }
@@ -3688,7 +3752,7 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                     {
                         int ml = VoxelEngine.Items.JetpackItem.GetH2Ml(stack);
                         var h2Lbl = new Label(ml >= 1000 ? $"{ml / 1000f:0.0}L" : $"{ml}ml");
-                        h2Lbl.name = "jp-h2";
+                        h2Lbl.name = $"jp-h2-{index}";   // named for the bay's live tick
                         StyleSlotBadge(h2Lbl, top, new Color(0.4f, 0.9f, 1f));
                         slot.Add(h2Lbl);
                         top += 11f;
@@ -3697,7 +3761,7 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                     {
                         float pct = Mathf.Clamp01(VoxelEngine.Items.JetpackItem.GetPowerMl(stack) / (float)pCap) * 100f;
                         var pwrLbl = new Label($"{pct:0}%");
-                        pwrLbl.name = "jp-pwr";
+                        pwrLbl.name = $"jp-pwr-{index}"; // named for the bay's live tick
                         StyleSlotBadge(pwrLbl, top, new Color(0.55f, 1f, 0.7f));
                         slot.Add(pwrLbl);
                     }

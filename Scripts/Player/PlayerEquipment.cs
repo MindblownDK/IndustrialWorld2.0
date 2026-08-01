@@ -599,6 +599,21 @@ namespace VoxelEngine.Player
             }
         }
 
+        // ── Idle auto-refuel ────────────────────────────────────────
+        // The 10% → 100% rule should work ANYWHERE — not just mid-flight ticks
+        // or when the inventory opens. Charge a portable battery, walk around
+        // with it, and a thirsty pack sips from it on its own. Slow 0.5 Hz tick
+        // so this costs nothing; hard pause freezes it with the world.
+        private float _idleRefuelAccum;
+
+        private void Update()
+        {
+            _idleRefuelAccum += Time.deltaTime;
+            if (_idleRefuelAccum < 2f) return;
+            _idleRefuelAccum = 0f;
+            TryAutoRefuelFromInventory(force: false);
+        }
+
         // ── Inventory refuel ────────────────────────────────────────
 
         /// <summary>
