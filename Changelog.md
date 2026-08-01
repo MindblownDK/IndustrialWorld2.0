@@ -1,9 +1,33 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.78.4-dev`
+**Current Version:** `6.78.5-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.78.5-dev] Icon Batch 2 & Backgrounds Fully Removed
+
+**Type:** PATCH — art batch + polish (save-compatible).
+
+#### 🖼️ Icon batch 2 — ten new items got art
+- **New icons**: Science T1 / T2 / T3 (green, blue and purple flasks), Hammer, Iron Pickaxe, Water Bucket, Charged Cell, Stone, Wood Log and Wooden Plank.
+- Made with the new **bold, minimal style** — flat chunky shapes, no painted shadows, pure-black keying — so they stay crisp at 51 px with almost no cleanup.
+- All ten auto-bound to their item assets (icon references patched by the item-Id keyed pipeline).
+
+#### 🧽 Backgrounds on the original 10 — fully removed (for real this time)
+- Root cause: the AI had *painted* dark "shadow plates" behind the items as **opaque paint**, hugging the object — no flood-fill could reach them. That's the dark slab you kept seeing behind the coal, ingots, battery, tank and jetpacks.
+- New pipeline surgery removes them:
+  - **dark-plate killer** — flat, dark, textureless paint has no brush texture, so it dies while textured art survives;
+  - **grabCut colour split** — separates the lit object from its painted shadow by colour;
+  - then the usual halo strip, silhouette heal, tight re-crop and rim.
+- Icons are now free-standing, tighter and noticeably more visible in their slots. Stray letterbox frames on the Hammer and Science T1 sources were trimmed as well.
+
+#### Files touched
+- `VoxelEngineAssets/GridSystem/Textures/ItemIcons/` (+10 new PNGs & metas, 10 reprocessed)
+- 10 `ItemDefinition` assets (icon references auto-bound)
+- `Scripts/Core/GameVersion.cs` (6.78.4 → 6.78.5), `Changelog.md`
+
+---
 
 ### [6.78.4-dev] Simpler, Bolder Item Icons — Readability Tune
 
