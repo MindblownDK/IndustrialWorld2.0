@@ -1322,6 +1322,8 @@ namespace VoxelEngine.UI
             // Watch magazines so drag-drop refreshes live.
             if (d is VoxelEngine.Combat.Artillery artWatch) WatchContainer(artWatch.ShellMagazine);
             else if (d is VoxelEngine.Combat.FlamethrowerTurret flameWatch) WatchContainer(flameWatch.FuelMagazine);
+            else if (d is VoxelEngine.Combat.MortarTurret mortarWatch) WatchContainer(mortarWatch.ShellMagazine);
+            else if (d is VoxelEngine.Combat.GiantShellTurret giantWatch) WatchContainer(giantWatch.ShellMagazine);
             UnlockCursor();
             Refresh();
         }
@@ -1336,12 +1338,16 @@ namespace VoxelEngine.UI
             panel.style.minWidth = 280; panel.style.maxWidth = 400;
             root.Add(panel);
 
-            var art   = defense as VoxelEngine.Combat.Artillery;
-            var tur   = defense as VoxelEngine.Combat.Turret;
-            var flame = defense as VoxelEngine.Combat.FlamethrowerTurret;
+            var art    = defense as VoxelEngine.Combat.Artillery;
+            var tur    = defense as VoxelEngine.Combat.Turret;
+            var flame  = defense as VoxelEngine.Combat.FlamethrowerTurret;
+            var mortar = defense as VoxelEngine.Combat.MortarTurret;
+            var giant  = defense as VoxelEngine.Combat.GiantShellTurret;
 
             string name = art != null ? art.variant.ToString()
                         : flame != null ? "Flamethrower Turret"
+                        : mortar != null ? "Mortar Turret"
+                        : giant != null ? "Giant Shell Turret"
                         : "Auto Turret";
             panel.Add(MakeTitle(name));
 
@@ -1351,6 +1357,26 @@ namespace VoxelEngine.UI
                 panel.Add(MakeSubtitle("Shells (drag in)"));
                 WatchContainer(art.ShellMagazine);
                 panel.Add(BuildSortableSlotGrid(art.ShellMagazine, showSort: false));
+            }
+            else if (giant != null)
+            {
+                panel.Add(MakeSubtitle("Giant Shells (one per shot)"));
+                WatchContainer(giant.ShellMagazine);
+                panel.Add(BuildSortableSlotGrid(giant.ShellMagazine, showSort: false));
+                var hint = new Label("Siege gun — prefers bosses/high-HP. Slow aim, huge blast.");
+                hint.style.color = new Color(0.85f, 0.7f, 0.45f);
+                hint.style.fontSize = 10; hint.style.marginBottom = 6; hint.style.whiteSpace = WhiteSpace.Normal;
+                panel.Add(hint);
+            }
+            else if (mortar != null)
+            {
+                panel.Add(MakeSubtitle("Mortar Shells (Explosive / Smoke / Illum)"));
+                WatchContainer(mortar.ShellMagazine);
+                panel.Add(BuildSortableSlotGrid(mortar.ShellMagazine, showSort: false));
+                var hint = new Label("Indirect fire — no LOS needed. Min range ~8 m.");
+                hint.style.color = new Color(0.75f, 0.78f, 0.82f);
+                hint.style.fontSize = 10; hint.style.marginBottom = 6; hint.style.whiteSpace = WhiteSpace.Normal;
+                panel.Add(hint);
             }
             else if (flame != null)
             {
@@ -1395,19 +1421,30 @@ namespace VoxelEngine.UI
             // Targeting (all defense types).
             panel.Add(MakeSubtitle("Targeting"));
             VoxelEngine.Combat.TargetFilter curFilter =
-                art != null ? art.filter : flame != null ? flame.filter : tur != null ? tur.filter : VoxelEngine.Combat.TargetFilter.Enemies;
-            panel.Add(MakeDefenseToggle("Target Enemies", VoxelEngine.Combat.TargetFilter.Enemies, curFilter, art, tur, flame));
-            panel.Add(MakeDefenseToggle("Target Players", VoxelEngine.Combat.TargetFilter.Players, curFilter, art, tur, flame));
-            panel.Add(MakeDefenseToggle("Target Passive", VoxelEngine.Combat.TargetFilter.Passive, curFilter, art, tur, flame));
+                art != null ? art.filter
+                : flame != null ? flame.filter
+                : mortar != null ? mortar.filter
+                : giant != null ? giant.filter
+                : tur != null ? tur.filter
+                : VoxelEngine.Combat.TargetFilter.Enemies;
+            panel.Add(MakeDefenseToggle("Target Enemies", VoxelEngine.Combat.TargetFilter.Enemies, curFilter, art, tur, flame, mortar, giant));
+            panel.Add(MakeDefenseToggle("Target Players", VoxelEngine.Combat.TargetFilter.Players, curFilter, art, tur, flame, mortar, giant));
+            panel.Add(MakeDefenseToggle("Target Passive", VoxelEngine.Combat.TargetFilter.Passive, curFilter, art, tur, flame, mortar, giant));
 
             // Auto toggle (all defense types).
-            bool autoF = art != null ? art.autoMode : flame != null ? flame.autoMode : tur != null && tur.autoMode;
+            bool autoF = art != null ? art.autoMode
+                       : flame != null ? flame.autoMode
+                       : mortar != null ? mortar.autoMode
+                       : giant != null ? giant.autoMode
+                       : tur != null && tur.autoMode;
             var autoT = new Toggle("Auto-Fire") { value = autoF };
             autoT.style.color = Color.white; autoT.style.marginBottom = 6;
             autoT.RegisterValueChangedCallback(e =>
             {
                 if (art != null) art.autoMode = e.newValue;
                 else if (flame != null) flame.autoMode = e.newValue;
+                else if (mortar != null) mortar.autoMode = e.newValue;
+                else if (giant != null) giant.autoMode = e.newValue;
                 else if (tur != null) tur.autoMode = e.newValue;
                 Refresh();
             });
@@ -1418,16 +1455,25 @@ namespace VoxelEngine.UI
                                          VoxelEngine.Combat.TargetFilter cur,
                                          VoxelEngine.Combat.Artillery art,
                                          VoxelEngine.Combat.Turret tur,
-                                         VoxelEngine.Combat.FlamethrowerTurret flame)
+                                         VoxelEngine.Combat.FlamethrowerTurret flame,
+                                         VoxelEngine.Combat.MortarTurret mortar,
+                                         VoxelEngine.Combat.GiantShellTurret giant)
         {
             var t = new Toggle(label) { value = (cur & flag) != 0 };
             t.style.color = Color.white; t.style.marginBottom = 2;
             t.RegisterValueChangedCallback(e =>
             {
-                var f = art != null ? art.filter : flame != null ? flame.filter : tur != null ? tur.filter : VoxelEngine.Combat.TargetFilter.None;
+                var f = art != null ? art.filter
+                      : flame != null ? flame.filter
+                      : mortar != null ? mortar.filter
+                      : giant != null ? giant.filter
+                      : tur != null ? tur.filter
+                      : VoxelEngine.Combat.TargetFilter.None;
                 if (e.newValue) f |= flag; else f &= ~flag;
                 if (art != null) art.filter = f;
                 else if (flame != null) flame.filter = f;
+                else if (mortar != null) mortar.filter = f;
+                else if (giant != null) giant.filter = f;
                 else if (tur != null) tur.filter = f;
                 Refresh();
             });

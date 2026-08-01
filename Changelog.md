@@ -1,9 +1,61 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.62.0-dev`
+**Current Version:** `6.64.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.64.0-dev] Giant Shell Turret — siege / boss killer
+
+**Type:** MINOR — new defensive structure (save-compatible).
+
+**Added the Giant Shell Turret** (`Scripts/Combat/GiantShellTurret.cs`) — next piece of the Base Defense Turret Network (roadmap §4.8):
+1. Placeable **siege gun** on a traverse ring. Slow tracking, long range (~90 m), devastating single shots.
+2. Fires factory-built **Giant Shells** one at a time (magazine via the defense panel). Huge blast (radius 14) + voxel crater.
+3. **Boss preference:** when several enemies are in range + LOS, scores by HP and boss-like type names so Rocs / elites are prioritised over fodder.
+4. Must be roughly on-target (aim cone) before firing — reads as a heavy, deliberate weapon.
+5. **Step 43 (wizard):** massive barrel model, component wiring, placeable `BlockItem`, Giant Shell item + Assembler recipes. Non-destructive / re-runnable.
+
+**Defense panel / RMB / persistence** extended for the giant shell magazine + filter/autoMode (additive).
+
+**To use:** run Step 43 → craft Giant Shell Turret + Giant Shells at the Assembler → place with clear LOS to the approach → RMB → load shells → Auto-Fire → it saves the big shells for high-HP threats.
+
+**Files touched:**
+- `Scripts/Combat/GiantShellTurret.cs` (new — turret + GiantShell projectile)
+- `Scripts/Editor/VoxelEngineSetupWindow.cs` (Step 43)
+- `Scripts/UI/GameUIController.cs`, `Scripts/Player/PlayerInteractionTool.cs`
+- `Scripts/Persistence/WorldStatePersistence.cs`
+- `Scripts/Core/GameVersion.cs` (6.63.0 → 6.64.0), `Changelog.md`
+
+---
+
+### [6.63.0-dev] Mortar Turret — indirect fire (Explosive / Smoke / Illumination)
+
+**Type:** MINOR — new defensive structure (save-compatible).
+
+**Added the Mortar Turret** (`Scripts/Combat/MortarTurret.cs` + `MortarShell.cs`) — next piece of the Base Defense Turret Network (roadmap §4.8):
+1. Placeable bipod mortar that **auto-targets by faction filter** and lobs **high-arc shells** under radial gravity.
+2. **No line of sight required** — fires over walls and terrain. Min range ~8 m / max ~55 m so it won't drop on itself.
+3. **Three shell types** loaded via the defense panel magazine:
+   - **Explosive** — blast + small voxel crater
+   - **Smoke** — lingering smoke cloud (cover / marker)
+   - **Illumination** — bright falling flare that lights the battlefield
+4. Analytic lob velocity with peak-height aiming so arcs read cleanly on spherical worlds.
+5. **Step 42 (wizard):** bipod + elevated tube model, `MortarTurret` component, placeable `BlockItem`, three shell items + Assembler recipes. Non-destructive / re-runnable.
+
+**Defense panel / persistence / RMB** extended for the mortar (same shared panel as Artillery / Auto Turret / Flamethrower). Magazines + filter/autoMode save additively.
+
+**To use:** run Step 42 → craft Mortar Turret + shells at the Assembler → place behind cover → RMB → drag shells in → Auto-Fire → it lobs over walls onto hostiles.
+
+**Files touched:**
+- `Scripts/Combat/MortarTurret.cs` (new), `Scripts/Combat/MortarShell.cs` (new)
+- `Scripts/Editor/VoxelEngineSetupWindow.cs` (Step 42)
+- `Scripts/UI/GameUIController.cs` (defense panel)
+- `Scripts/Player/PlayerInteractionTool.cs` (RMB open)
+- `Scripts/Persistence/WorldStatePersistence.cs` (magazine + defense state)
+- `Scripts/Core/GameVersion.cs` (6.62.0 → 6.63.0), `Changelog.md`
+
+---
 
 ### [6.62.0-dev] Flamethrower Turret — close-range area denial + defense save/UI harden
 

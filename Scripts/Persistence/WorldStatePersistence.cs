@@ -471,6 +471,32 @@ namespace VoxelEngine.Persistence
                 return;
             }
 
+            var mortar = go.GetComponentInChildren<VoxelEngine.Combat.MortarTurret>(true);
+            if (mortar != null)
+            {
+                entry.defenseState = new SavedDefenseState
+                {
+                    filter = (int)mortar.filter,
+                    autoMode = mortar.autoMode,
+                    ammo = 0,
+                    fuelSeconds = 0f
+                };
+                return;
+            }
+
+            var giant = go.GetComponentInChildren<VoxelEngine.Combat.GiantShellTurret>(true);
+            if (giant != null)
+            {
+                entry.defenseState = new SavedDefenseState
+                {
+                    filter = (int)giant.filter,
+                    autoMode = giant.autoMode,
+                    ammo = 0,
+                    fuelSeconds = 0f
+                };
+                return;
+            }
+
             var tur = go.GetComponentInChildren<VoxelEngine.Combat.Turret>(true);
             if (tur != null)
             {
@@ -736,6 +762,14 @@ namespace VoxelEngine.Persistence
             var flamethrower = go.GetComponentInChildren<VoxelEngine.Combat.FlamethrowerTurret>();
             if (flamethrower != null)
                 return SerializeContainer(flamethrower.FuelMagazine);
+
+            var mortar = go.GetComponentInChildren<VoxelEngine.Combat.MortarTurret>();
+            if (mortar != null)
+                return SerializeContainer(mortar.ShellMagazine);
+
+            var giant = go.GetComponentInChildren<VoxelEngine.Combat.GiantShellTurret>();
+            if (giant != null)
+                return SerializeContainer(giant.ShellMagazine);
 
             return null;
         }
@@ -1402,6 +1436,22 @@ namespace VoxelEngine.Persistence
                 return;
             }
 
+            var mortar = go.GetComponentInChildren<VoxelEngine.Combat.MortarTurret>(true);
+            if (mortar != null)
+            {
+                mortar.filter = (VoxelEngine.Combat.TargetFilter)state.filter;
+                mortar.autoMode = state.autoMode;
+                return;
+            }
+
+            var giant = go.GetComponentInChildren<VoxelEngine.Combat.GiantShellTurret>(true);
+            if (giant != null)
+            {
+                giant.filter = (VoxelEngine.Combat.TargetFilter)state.filter;
+                giant.autoMode = state.autoMode;
+                return;
+            }
+
             var tur = go.GetComponentInChildren<VoxelEngine.Combat.Turret>(true);
             if (tur != null)
             {
@@ -1613,7 +1663,21 @@ namespace VoxelEngine.Persistence
 
             var flamethrower = go.GetComponentInChildren<VoxelEngine.Combat.FlamethrowerTurret>();
             if (flamethrower != null)
+            {
                 DeserializeInto(flamethrower.FuelMagazine, sc);
+                return;
+            }
+
+            var mortar = go.GetComponentInChildren<VoxelEngine.Combat.MortarTurret>();
+            if (mortar != null)
+            {
+                DeserializeInto(mortar.ShellMagazine, sc);
+                return;
+            }
+
+            var giant = go.GetComponentInChildren<VoxelEngine.Combat.GiantShellTurret>();
+            if (giant != null)
+                DeserializeInto(giant.ShellMagazine, sc);
         }
 
         private void RestoreDrawer(VoxelEngine.Storage.StorageDrawer drawer, SavedContainer sc)

@@ -401,6 +401,20 @@ namespace VoxelEngine.EditorTools
                 "  • Auto-targets by faction. Re-runnable. Idempotent.");
             AddWizardButton(scroll, "41. Build Flamethrower Turret (area denial)", BuildFlamethrowerTurretContent, 40);
 
+            AddInfo(scroll,
+                "Step 42 builds the MORTAR TURRET (indirect fire, non-destructive):\n" +
+                "  • High-arc shells over walls/terrain — no line of sight required\n" +
+                "  • Explosive / Smoke / Illumination shells via the defense panel\n" +
+                "  • Auto-targets by faction. Re-runnable. Idempotent.");
+            AddWizardButton(scroll, "42. Build Mortar Turret (indirect fire)", BuildMortarTurretContent, 40);
+
+            AddInfo(scroll,
+                "Step 43 builds the GIANT SHELL TURRET (siege / boss killer, non-destructive):\n" +
+                "  • Slow-tracking heavy barrel; fires factory-built Giant Shells one at a time\n" +
+                "  • Prefers high-HP / boss targets; huge blast + crater\n" +
+                "  • Auto-targets by faction via the defense panel. Re-runnable.");
+            AddWizardButton(scroll, "43. Build Giant Shell Turret (siege)", BuildGiantShellTurretContent, 40);
+
             AddSpacer(scroll, 20);
         }
 
@@ -12599,6 +12613,256 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
                 "• 100 HP. Craft at the Assembler\n" +
                 "• Also crafts Flame Canisters (iron plate + coal)", "OK");
         }
+
+        // ============================================================
+        //   STEP 42 - MORTAR TURRET. Indirect high-arc fire over walls
+        //   and terrain. Explosive / Smoke / Illumination shells loaded
+        //   via the defense panel. No LOS required. Non-destructive.
+        // ============================================================
+        private void BuildMortarTurretContent()
+        {
+            const string COMBAT_ROOT   = ASSET_ROOT + "/Combat";
+            const string COMBAT_ITEMS  = COMBAT_ROOT + "/Items";
+            const string COMBAT_BLOCKS = COMBAT_ROOT + "/Blocks";
+            const string COMBAT_PREFABS= COMBAT_ROOT + "/Prefabs";
+            const string COMBAT_MATS   = COMBAT_ROOT + "/Materials";
+            EnsureFolder(COMBAT_ROOT); EnsureFolder(COMBAT_ITEMS); EnsureFolder(COMBAT_BLOCKS); EnsureFolder(COMBAT_PREFABS); EnsureFolder(COMBAT_MATS);
+
+            ItemDefinition FindItem(string n)
+            {
+                var guids = AssetDatabase.FindAssets(n + " t:ItemDefinition");
+                foreach (var g in guids) { var pp = AssetDatabase.GUIDToAssetPath(g); if (System.IO.Path.GetFileNameWithoutExtension(pp) == n) return AssetDatabase.LoadAssetAtPath<ItemDefinition>(pp); }
+                return null;
+            }
+            var ironPlate  = FindItem("Item_IronPlate");
+            var steelIngot = FindItem("Item_SteelIngot");
+            var circuit    = FindItem("Item_Circuit");
+            var copperWire = FindItem("Item_CopperLVWire");
+            var coal       = FindItem("Item_Coal");
+
+            var body   = MakeColoredMat(COMBAT_MATS, "Mat_MortarBody",   new Color(0.30f, 0.32f, 0.22f));
+            var dark   = MakeColoredMat(COMBAT_MATS, "Mat_MortarDark",   new Color(0.18f, 0.18f, 0.16f));
+            var tube   = MakeColoredMat(COMBAT_MATS, "Mat_MortarTube",   new Color(0.24f, 0.24f, 0.26f));
+            var shell  = MakeColoredMat(COMBAT_MATS, "Mat_MortarShell",  new Color(0.28f, 0.30f, 0.22f));
+            var boom   = MakeColoredMat(COMBAT_MATS, "Mat_Explosion",    new Color(1.0f, 0.45f, 0.10f));
+            var smoke  = MakeColoredMat(COMBAT_MATS, "Mat_MortarSmoke",  new Color(0.45f, 0.45f, 0.42f));
+            var flare  = MakeColoredMat(COMBAT_MATS, "Mat_MortarFlare",  new Color(1.0f, 0.92f, 0.55f));
+
+            void AddPart(GameObject parent, string n, Vector3 pos, Vector3 euler, Vector3 scale, Material m)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                go.name = n; go.transform.SetParent(parent.transform, false);
+                go.transform.localPosition = pos; go.transform.localEulerAngles = euler; go.transform.localScale = scale;
+                go.GetComponent<Renderer>().sharedMaterial = m;
+                var col = go.GetComponent<Collider>(); if (col != null) UnityEngine.Object.DestroyImmediate(col);
+            }
+            void AddCyl(GameObject parent, string n, Vector3 pos, Vector3 euler, Vector3 scale, Material m)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                go.name = n; go.transform.SetParent(parent.transform, false);
+                go.transform.localPosition = pos; go.transform.localEulerAngles = euler; go.transform.localScale = scale;
+                go.GetComponent<Renderer>().sharedMaterial = m;
+                var col = go.GetComponent<Collider>(); if (col != null) UnityEngine.Object.DestroyImmediate(col);
+            }
+
+            var root = new GameObject("MortarTurret");
+            AddPart(root, "BasePlate", new Vector3(0f, 0.06f, 0f), Vector3.zero, new Vector3(0.9f, 0.12f, 0.9f), body);
+            AddPart(root, "BipodL",    new Vector3(-0.35f, 0.35f, 0.15f), new Vector3(0, 0, 25), new Vector3(0.08f, 0.7f, 0.08f), dark);
+            AddPart(root, "BipodR",    new Vector3( 0.35f, 0.35f, 0.15f), new Vector3(0, 0,-25), new Vector3(0.08f, 0.7f, 0.08f), dark);
+            AddPart(root, "Trail",     new Vector3(0f, 0.12f, -0.45f), new Vector3(15, 0, 0), new Vector3(0.12f, 0.08f, 0.7f), body);
+            AddPart(root, "AmmoBox",   new Vector3(0.45f, 0.25f, -0.1f), Vector3.zero, new Vector3(0.28f, 0.22f, 0.35f), dark);
+
+            var headGo = new GameObject("Head");
+            headGo.transform.SetParent(root.transform, false);
+            headGo.transform.localPosition = new Vector3(0f, 0.55f, 0.05f);
+            headGo.transform.localEulerAngles = new Vector3(-55f, 0f, 0f);
+            AddCyl (headGo, "Tube",       new Vector3(0f, 0f, 0.45f), new Vector3(90, 0, 0), new Vector3(0.22f, 0.55f, 0.22f), tube);
+            AddCyl (headGo, "Breech",     new Vector3(0f, 0f, -0.15f), new Vector3(90, 0, 0), new Vector3(0.28f, 0.18f, 0.28f), body);
+            AddPart(headGo, "Sight",      new Vector3(0.12f, 0.12f, 0.1f), Vector3.zero, new Vector3(0.05f, 0.08f, 0.12f), dark);
+            AddPart(headGo, "MuzzleRing", new Vector3(0f, 0f, 1.05f), Vector3.zero, new Vector3(0.26f, 0.26f, 0.06f), dark);
+
+            var muzzleGo = new GameObject("Muzzle");
+            muzzleGo.transform.SetParent(headGo.transform, false);
+            muzzleGo.transform.localPosition = new Vector3(0f, 0f, 1.15f);
+
+            var cap = root.AddComponent<CapsuleCollider>();
+            cap.height = 1.3f; cap.radius = 0.45f; cap.center = new Vector3(0f, 0.5f, 0f);
+            var mt = root.AddComponent<VoxelEngine.Combat.MortarTurret>();
+            mt.range = 55f; mt.minRange = 8f; mt.fireCooldown = 3.2f;
+            mt.damage = 45f; mt.explosionRadius = 7f; mt.shellSpeed = 22f; mt.lobHeight = 18f;
+            mt.shellMat = shell; mt.explosionMat = boom; mt.smokeMat = smoke; mt.flareMat = flare;
+            mt.head = headGo.transform; mt.muzzle = muzzleGo.transform;
+
+            const string path = ASSET_ROOT + "/Combat/Prefabs/MortarTurret.prefab";
+            GameObject prefab;
+            if (AssetDatabase.LoadMainAssetAtPath(path) != null) { prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path); UnityEngine.Object.DestroyImmediate(root); }
+            else { prefab = PrefabUtility.SaveAsPrefabAsset(root, path); UnityEngine.Object.DestroyImmediate(root); }
+
+            var block = GetOrCreateAsset<VoxelEngine.Items.BlockItem>($"{COMBAT_BLOCKS}/Block_MortarTurret.asset");
+            block.itemId = "block_mortar_turret"; block.displayName = "Mortar Turret";
+            block.description = "Indirect-fire mortar. Lobs Explosive, Smoke, or Illumination shells over walls and terrain (no LOS needed). Load shells via the defense panel (RMB).";
+            block.iconTint = new Color(0.30f, 0.32f, 0.22f);
+            block.maxStack = 4; block.massPerUnit = 10f;
+            block.placedPrefab = prefab; block.gridSize = Vector3Int.one; block.allowStacking = true; block.blockHealth = 120; block.miningTier = 2; block.category = "Combat";
+            EditorUtility.SetDirty(block);
+
+            var shExp = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{COMBAT_ITEMS}/Item_MortarExplosive.asset");
+            shExp.itemId = "item_mortar_explosive"; shExp.displayName = "Mortar Shell (Explosive)";
+            shExp.description = "High-explosive mortar round. Lobs over walls; detonates on impact with a modest crater.";
+            shExp.iconTint = new Color(0.80f, 0.35f, 0.12f); shExp.maxStack = 20; shExp.massPerUnit = 1.8f; shExp.category = "Combat";
+            EditorUtility.SetDirty(shExp);
+
+            var shSmoke = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{COMBAT_ITEMS}/Item_MortarSmoke.asset");
+            shSmoke.itemId = "item_mortar_smoke"; shSmoke.displayName = "Mortar Shell (Smoke)";
+            shSmoke.description = "Smoke mortar round. Deploys a lingering smoke cloud for cover and marking.";
+            shSmoke.iconTint = new Color(0.55f, 0.55f, 0.52f); shSmoke.maxStack = 20; shSmoke.massPerUnit = 1.5f; shSmoke.category = "Combat";
+            EditorUtility.SetDirty(shSmoke);
+
+            var shIllum = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{COMBAT_ITEMS}/Item_MortarIllum.asset");
+            shIllum.itemId = "item_mortar_illum"; shIllum.displayName = "Mortar Shell (Illumination)";
+            shIllum.description = "Illumination mortar round. Deploys a bright falling flare that lights the battlefield.";
+            shIllum.iconTint = new Color(1.0f, 0.92f, 0.55f); shIllum.maxStack = 20; shIllum.massPerUnit = 1.5f; shIllum.category = "Combat";
+            EditorUtility.SetDirty(shIllum);
+
+            AddRecipe("Recipe_MortarTurret", "Mortar Turret", block, 1, VoxelEngine.Crafting.StationTier.Assembler, true,
+                (ironPlate, 8), (steelIngot, 4), (circuit, 2), (copperWire, 4));
+            AddRecipe("Recipe_MortarExplosive", "Mortar Shell (Explosive)", shExp, 4, VoxelEngine.Crafting.StationTier.Assembler, true,
+                (ironPlate, 2), (coal, 2));
+            AddRecipe("Recipe_MortarSmoke", "Mortar Shell (Smoke)", shSmoke, 4, VoxelEngine.Crafting.StationTier.Assembler, true,
+                (ironPlate, 1), (coal, 1), (copperWire, 1));
+            AddRecipe("Recipe_MortarIllum", "Mortar Shell (Illumination)", shIllum, 4, VoxelEngine.Crafting.StationTier.Assembler, true,
+                (ironPlate, 1), (circuit, 1), (copperWire, 2));
+
+            AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Voxel Engine — Mortar Turret",
+                "The Mortar Turret is built:\n\n" +
+                "• Bipod mortar with elevating tube (~12 parts)\n" +
+                "• Indirect high-arc fire (range ~8–55 m, no LOS needed)\n" +
+                "• Shells: Explosive / Smoke / Illumination\n" +
+                "• Auto-targets by faction via the defense panel (RMB)\n" +
+                "• 120 HP. Craft at the Assembler\n" +
+                "• Also crafts all three mortar shell types", "OK");
+        }
+
+        // ============================================================
+        //   STEP 43 - GIANT SHELL TURRET. Slow siege gun for bosses
+        //   and fortified positions. Fires factory-built Giant Shells
+        //   one at a time. Prefers high-HP targets. Non-destructive.
+        // ============================================================
+        private void BuildGiantShellTurretContent()
+        {
+            const string COMBAT_ROOT   = ASSET_ROOT + "/Combat";
+            const string COMBAT_ITEMS  = COMBAT_ROOT + "/Items";
+            const string COMBAT_BLOCKS = COMBAT_ROOT + "/Blocks";
+            const string COMBAT_PREFABS= COMBAT_ROOT + "/Prefabs";
+            const string COMBAT_MATS   = COMBAT_ROOT + "/Materials";
+            EnsureFolder(COMBAT_ROOT); EnsureFolder(COMBAT_ITEMS); EnsureFolder(COMBAT_BLOCKS); EnsureFolder(COMBAT_PREFABS); EnsureFolder(COMBAT_MATS);
+
+            ItemDefinition FindItem(string n)
+            {
+                var guids = AssetDatabase.FindAssets(n + " t:ItemDefinition");
+                foreach (var g in guids) { var pp = AssetDatabase.GUIDToAssetPath(g); if (System.IO.Path.GetFileNameWithoutExtension(pp) == n) return AssetDatabase.LoadAssetAtPath<ItemDefinition>(pp); }
+                return null;
+            }
+            var ironPlate  = FindItem("Item_IronPlate");
+            var steelPlate = FindItem("Item_SteelPlate");
+            var steelIngot = FindItem("Item_SteelIngot");
+            var circuit    = FindItem("Item_Circuit");
+            var advCircuit = FindItem("Item_AdvancedCircuit");
+            var coal       = FindItem("Item_Coal");
+
+            var body   = MakeColoredMat(COMBAT_MATS, "Mat_GiantShellBody",   new Color(0.28f, 0.26f, 0.22f));
+            var dark   = MakeColoredMat(COMBAT_MATS, "Mat_GiantShellDark",   new Color(0.16f, 0.15f, 0.14f));
+            var barrel = MakeColoredMat(COMBAT_MATS, "Mat_GiantShellBarrel", new Color(0.22f, 0.22f, 0.24f));
+            var shell  = MakeColoredMat(COMBAT_MATS, "Mat_GiantShellRound",  new Color(0.32f, 0.30f, 0.26f));
+            var boom   = MakeColoredMat(COMBAT_MATS, "Mat_Explosion",        new Color(1.0f, 0.45f, 0.10f));
+
+            void AddPart(GameObject parent, string n, Vector3 pos, Vector3 euler, Vector3 scale, Material m)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                go.name = n; go.transform.SetParent(parent.transform, false);
+                go.transform.localPosition = pos; go.transform.localEulerAngles = euler; go.transform.localScale = scale;
+                go.GetComponent<Renderer>().sharedMaterial = m;
+                var col = go.GetComponent<Collider>(); if (col != null) UnityEngine.Object.DestroyImmediate(col);
+            }
+            void AddCyl(GameObject parent, string n, Vector3 pos, Vector3 euler, Vector3 scale, Material m)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                go.name = n; go.transform.SetParent(parent.transform, false);
+                go.transform.localPosition = pos; go.transform.localEulerAngles = euler; go.transform.localScale = scale;
+                go.GetComponent<Renderer>().sharedMaterial = m;
+                var col = go.GetComponent<Collider>(); if (col != null) UnityEngine.Object.DestroyImmediate(col);
+            }
+
+            var root = new GameObject("GiantShellTurret");
+            AddPart(root, "Base",      new Vector3(0f, 0.2f, 0f),  Vector3.zero, new Vector3(1.6f, 0.4f, 1.6f), body);
+            AddPart(root, "Skirt",     new Vector3(0f, 0.45f, 0f), Vector3.zero, new Vector3(1.3f, 0.15f, 1.3f), dark);
+            AddCyl (root, "Ring",      new Vector3(0f, 0.6f, 0f),  Vector3.zero, new Vector3(1.1f, 0.12f, 1.1f), body);
+            AddPart(root, "BraceL",    new Vector3(-0.7f, 0.5f, -0.5f), new Vector3(0, 20, 0), new Vector3(0.15f, 0.5f, 0.8f), dark);
+            AddPart(root, "BraceR",    new Vector3( 0.7f, 0.5f, -0.5f), new Vector3(0,-20, 0), new Vector3(0.15f, 0.5f, 0.8f), dark);
+            AddPart(root, "ShellRack", new Vector3(0.85f, 0.55f, 0.2f), Vector3.zero, new Vector3(0.35f, 0.5f, 0.7f), dark);
+
+            var headGo = new GameObject("Head");
+            headGo.transform.SetParent(root.transform, false);
+            headGo.transform.localPosition = new Vector3(0f, 0.95f, 0f);
+            AddPart(headGo, "Cradle",     new Vector3(0f, 0f, -0.1f), Vector3.zero, new Vector3(0.7f, 0.55f, 0.8f), body);
+            AddPart(headGo, "Breech",     new Vector3(0f, 0.05f, -0.55f), Vector3.zero, new Vector3(0.55f, 0.5f, 0.5f), dark);
+            AddCyl (headGo, "Barrel",     new Vector3(0f, 0.08f, 1.1f), new Vector3(90, 0, 0), new Vector3(0.38f, 1.3f, 0.38f), barrel);
+            AddCyl (headGo, "BarrelTip",  new Vector3(0f, 0.08f, 2.5f), new Vector3(90, 0, 0), new Vector3(0.42f, 0.18f, 0.42f), dark);
+            AddPart(headGo, "RecoilRail", new Vector3(0f, 0.35f, 0.6f), Vector3.zero, new Vector3(0.12f, 0.12f, 1.4f), dark);
+            AddPart(headGo, "Sight",      new Vector3(0.2f, 0.35f, 0.1f), Vector3.zero, new Vector3(0.08f, 0.1f, 0.15f), body);
+
+            var muzzleGo = new GameObject("Muzzle");
+            muzzleGo.transform.SetParent(headGo.transform, false);
+            muzzleGo.transform.localPosition = new Vector3(0f, 0.08f, 2.75f);
+
+            var cap = root.AddComponent<CapsuleCollider>();
+            cap.height = 2.2f; cap.radius = 0.85f; cap.center = new Vector3(0f, 0.9f, 0f);
+            var gt = root.AddComponent<VoxelEngine.Combat.GiantShellTurret>();
+            gt.range = 90f; gt.fireCooldown = 8f; gt.damage = 280f; gt.explosionRadius = 14f;
+            gt.shellSpeed = 42f; gt.aimConeDegrees = 8f; gt.aimSpeed = 1.4f;
+            gt.shellMat = shell; gt.explosionMat = boom;
+            gt.head = headGo.transform; gt.muzzle = muzzleGo.transform;
+
+            const string path = ASSET_ROOT + "/Combat/Prefabs/GiantShellTurret.prefab";
+            GameObject prefab;
+            if (AssetDatabase.LoadMainAssetAtPath(path) != null) { prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path); UnityEngine.Object.DestroyImmediate(root); }
+            else { prefab = PrefabUtility.SaveAsPrefabAsset(root, path); UnityEngine.Object.DestroyImmediate(root); }
+
+            var block = GetOrCreateAsset<VoxelEngine.Items.BlockItem>($"{COMBAT_BLOCKS}/Block_GiantShellTurret.asset");
+            block.itemId = "block_giant_shell_turret"; block.displayName = "Giant Shell Turret";
+            block.description = "Siege turret for bosses and fortified positions. Slow aim, devastating single shells. Load Giant Shells via the defense panel (RMB). Prefers high-HP targets.";
+            block.iconTint = new Color(0.28f, 0.26f, 0.22f);
+            block.maxStack = 2; block.massPerUnit = 35f;
+            block.placedPrefab = prefab; block.gridSize = new Vector3Int(2, 2, 2); block.allowStacking = false; block.blockHealth = 280; block.miningTier = 3; block.category = "Combat";
+            EditorUtility.SetDirty(block);
+
+            var giantShell = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{COMBAT_ITEMS}/Item_GiantShell.asset");
+            giantShell.itemId = "item_giant_shell"; giantShell.displayName = "Giant Shell";
+            giantShell.description = "Factory-built heavy siege shell. One round levels a wide area — load into a Giant Shell Turret.";
+            giantShell.iconTint = new Color(0.35f, 0.32f, 0.25f); giantShell.maxStack = 10; giantShell.massPerUnit = 8f; giantShell.category = "Combat";
+            EditorUtility.SetDirty(giantShell);
+
+            AddRecipe("Recipe_GiantShellTurret", "Giant Shell Turret", block, 1, VoxelEngine.Crafting.StationTier.Assembler, true,
+                (steelPlate != null ? steelPlate : ironPlate, 16),
+                (steelIngot, 10),
+                (advCircuit != null ? advCircuit : circuit, 4),
+                (ironPlate, 8));
+            AddRecipe("Recipe_GiantShell", "Giant Shell", giantShell, 2, VoxelEngine.Crafting.StationTier.Assembler, true,
+                (steelIngot, 3), (ironPlate, 4), (coal, 3));
+
+            AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Voxel Engine — Giant Shell Turret",
+                "The Giant Shell Turret is built:\n\n" +
+                "• Massive siege gun on a traverse ring (~14 parts)\n" +
+                "• Slow tracking, range ~90 m, damage 280, blast radius 14\n" +
+                "• Fires factory-built Giant Shells one at a time\n" +
+                "• Prefers bosses / high-HP targets when several are in range\n" +
+                "• 280 HP. Craft at the Assembler\n" +
+                "• Also crafts Giant Shells (steel + iron + coal)", "OK");
+        }
+
+
 
 
 
