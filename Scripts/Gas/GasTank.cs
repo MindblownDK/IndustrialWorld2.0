@@ -53,13 +53,21 @@ namespace VoxelEngine.Gas
             {
                 PortableSlot = new ItemContainer("Portable H₂ Dock", 1);
                 PortableSlot.AcceptFilter = (item, wanted) =>
-                    HydrogenCanisterItem.IsPortableHydrogenTank(item) ? Mathf.Min(1, wanted) : 0;
+                {
+                    if (HydrogenCanisterItem.IsPortableHydrogenTank(item)) return Mathf.Min(1, wanted);
+                    if (item is VoxelEngine.Items.JetpackItem jp && (jp.usesHydrogen || jp.family == VoxelEngine.Items.JetpackFamily.HydrogenBoost || jp.family == VoxelEngine.Items.JetpackFamily.Hybrid)) return Mathf.Min(1, wanted);
+                    return 0;
+                };
             }
             else
             {
                 PortableSlot.Resize(1);
                 PortableSlot.AcceptFilter = (item, wanted) =>
-                    HydrogenCanisterItem.IsPortableHydrogenTank(item) ? Mathf.Min(1, wanted) : 0;
+                {
+                    if (HydrogenCanisterItem.IsPortableHydrogenTank(item)) return Mathf.Min(1, wanted);
+                    if (item is VoxelEngine.Items.JetpackItem jp && (jp.usesHydrogen || jp.family == VoxelEngine.Items.JetpackFamily.HydrogenBoost || jp.family == VoxelEngine.Items.JetpackFamily.Hybrid)) return Mathf.Min(1, wanted);
+                    return 0;
+                };
             }
         }
 
@@ -125,6 +133,22 @@ namespace VoxelEngine.Gas
             if (stack == null || stack.IsEmpty) return;
             float rate = Mathf.Max(1f, portableFillRateMlPerSecond) * dt;
             float got = FillPortable(stack, rate);
+            if (got <= 0f && stack.item is VoxelEngine.Items.JetpackItem jp && (jp.usesHydrogen || jp.family == VoxelEngine.Items.JetpackFamily.HydrogenBoost || jp.family == VoxelEngine.Items.JetpackFamily.Hybrid))
+            {
+                int cap = jp.FuelCapacityMl;
+                int space = Mathf.Max(0, cap - stack.durability);
+                if (space > 0 && storedAmount > 0f)
+                {
+                    float want = Mathf.Min(rate, space);
+                    float taken = TryTake(GasType.Hydrogen, want);
+                    if (taken > 0f)
+                    {
+                        stack.durability = Mathf.Min(cap, stack.durability + Mathf.RoundToInt(taken));
+                        got = taken;
+                        PortableSlot.SetSlot(0, stack);
+                    }
+                }
+            }
             if (got > 0f) PortableSlot.SetSlot(0, stack);
         }
     }

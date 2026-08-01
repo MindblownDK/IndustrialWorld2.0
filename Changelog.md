@@ -6544,3 +6544,24 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 - No code or Unity scenes modified in this deliverable.
 - All future feature work targets the `Dev` branch and follows Semantic Versioning 2.0.0.
 - Game titles are referenced only as genre descriptions; no external game names are written into shipped code or assets.
+
+---
+## [6.76.0] Jetpack Fuel Fix + Portable Battery System — 2026-08-01
+**Branch:** dev | **Type:** MINOR (new system, save-compatible) + PATCH fixes
+
+### Fixes (PATCH)
+- Jetpack hydrogen refuel from Portable Hydrogen Tanks restored — defensive inventory reference checks and immediate replay recharge on equip (`PlayerEquipment.EnsureAllJetpackFuelInitialized`).
+- Atmospheric / Hybrid jetpack power side fixed — charged cells recognized and consumed; portable batteries added as reusable power source; UI fuel label shows `W` for power packs instead of wrong `ml`.
+- Charged Cell item (`Item_ChargedCell.asset`) verified via Step 47 wizard — itemId `item_charged_cell` preserved.
+
+### New System (MINOR)
+- **Portable Battery** (`Item_PortableBattery.asset`) — rechargeable power bank (3000 ml / Wh, stack=1). Crafted at Assembler (Iron + Copper Wire).
+- Battery draws charge from world `PowerBattery` blocks via RMB interaction (`PlayerInteractionTool` — same flow as hydrogen tank from Gas Tank).
+- Power jetpacks (Atmospheric / Hybrid) pull charge from inventory Portable Batteries the same way they draw H₂ from tanks (`TryRechargeSlot` — battery takes ml without destroying item).
+- Charged Cells remain as disposable backup if no battery is present.
+
+### Manual Unity Steps
+1. Open Unity Editor → **Tools ▸ Voxel Engine ▸ Setup Wizard** → click **Step 47** (`BuildJetpackFuelContent`) to refresh jetpack assets + author `Item_PortableBattery.asset` + recipe.
+2. Optional physical charging cradle: create `Assets/VoxelEngineAssets/Prefabs/PortableBatteryCradle.prefab` (cube, 0.5×0.3×0.5, blue accent) with `ItemContainer` (Size=2, accepts `JetpackItem`).
+3. Battery block recharge is already coded in `PlayerInteractionTool.cs` — no prefab changes needed.
+4. Push to `/dev` — version is `6.76.0`.

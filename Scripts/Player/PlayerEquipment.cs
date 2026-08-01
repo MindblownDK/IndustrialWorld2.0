@@ -140,6 +140,20 @@ namespace VoxelEngine.Player
                 || pack.family == JetpackFamily.Atmospheric
                 || pack.family == JetpackFamily.Hybrid);
 
+
+        /// <summary>Defensive: old assets may miss flags — infer from family.</summary>
+        public static void FixOldJetpackFlags(JetpackItem pack)
+        {
+            if (pack == null) return;
+            if (!pack.usesHydrogen && !pack.usesPower)
+            {
+                pack.usesHydrogen = pack.family == JetpackFamily.HydrogenBoost || pack.family == JetpackFamily.Hybrid;
+                pack.usesPower = pack.family == JetpackFamily.Atmospheric || pack.family == JetpackFamily.Hybrid;
+            }
+            if (pack.autoRechargeThreshold <= 0.001f) pack.autoRechargeThreshold = 0.10f;
+            if (pack.chargedCellRefuelMl <= 0) pack.chargedCellRefuelMl = 350;
+        }
+
         public static void EnsureJetpackFuel(ItemStack stack)
         {
             if (stack == null || stack.IsEmpty || stack.item is not JetpackItem pack) return;
@@ -148,13 +162,27 @@ namespace VoxelEngine.Player
             // here, or load-from-save would top up drained packs.
             if (stack.durability > cap) stack.durability = cap;
             if (stack.durability < 0) stack.durability = 0;
+            // Defensive: old assets may have cap <= 0 — set from family if needed.
+            if (cap <= 0 && stack.item is JetpackItem p)
+            {
+                int def = p.family == VoxelEngine.Items.JetpackFamily.Hybrid ? 1200 : (p.family == VoxelEngine.Items.JetpackFamily.Atmospheric ? 1000 : 800);
+                p.fuelCapacityMl = def;
+                cap = def;
+                if (stack.durability > cap) stack.durability = cap;
+            }
         }
 
         public void EnsureAllJetpackFuelInitialized()
         {
             EnsureContainers();
             for (int i = 0; i < _jetpackSlots.Size; i++)
-                EnsureJetpackFuel(_jetpackSlots.GetSlot(i));
+            {
+                var s = _jetpackSlots.GetSlot(i);
+                EnsureJetpackFuel(s);
+                if (s != null && !s.IsEmpty && s.item is JetpackItem p) FixOldJetpackFlags(p);
+            }
+            // Defensive: try replay recharge so inventory tanks/cells/batteries work right after equip.
+            TryAutoRefuelFromInventory(force: true);
         }
 
         /// <summary>
@@ -303,13 +331,31 @@ namespace VoxelEngine.Player
                     int taken = HydrogenCanisterItem.TryTakeMl(s, space);
                     if (taken <= 0) continue;
                     inv.SetSlot(i, s); // write back reduced tank fill (ml)
+                    inv.RaiseChanged(); // force live inventory refresh
                     stack.durability += taken;
                     space -= taken;
                     restored += taken;
                 }
             }
 
-            // 2) Power side — consume charged cells (disposable energy cartridges).
+            // 2) Power side — portable rechargeable batteries (reusable, like tanks).
+            if (PackUsesPower(pack) && space > 0)
+            {
+                for (int i = 0; i < inv.Size && space > 0; i++)
+                {
+                    var s = inv.GetSlot(i);
+                    if (s == null || s.IsEmpty || s.item == null) continue;
+                    if (!PortableBatteryItem.IsPortableBattery(s.item)) continue;
+                    int taken = PortableBatteryItem.TryTakeMl(s, space);
+                    if (taken <= 0) continue;
+                    inv.SetSlot(i, s); // write back reduced charge
+                    stack.durability += taken;
+                    space -= taken;
+                    restored += taken;
+                }
+            }
+
+            // 3) Power side — disposable charged cells (single-use cartridges).
             if (PackUsesPower(pack) && space > 0)
             {
                 for (int i = 0; i < inv.Size && space > 0; i++)

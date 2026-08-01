@@ -13310,8 +13310,27 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
                 "• Portable Hydrogen Tank — RMB a Hydrogen Gas Tank to fill\n" +
                 "• H₂/Hybrid packs auto-recharge from inventory tanks at ≤10% fuel\n" +
                 "• Charged Cells feed Atmospheric / Hybrid power side\n" +
-                "• Jetpack Bay shows fuel bar (ONLINE / LOW / DRY)\n" +
-                "• Empty pack drops you out of flight (unless flight research is unlocked)", "OK");
+                "• Portable Battery — rechargeable power bank for jetpacks (fill from Battery blocks)\n" +
+                "• Jetpack Bay shows fuel bar (ONLINE / LOW / DRY)", "OK");
+
+            // ===== Portable Battery (new step inside 47 — non-destructive) =====
+            EnsureFolder(ITEMS);
+            var battery = GetOrCreateAsset<VoxelEngine.Items.PortableBatteryItem>($"{ITEMS}/Item_PortableBattery.asset");
+            battery.itemId = VoxelEngine.Items.PortableBatteryItem.ItemId;
+            battery.displayName = "Portable Battery";
+            battery.description = "Rechargeable power bank for Atmospheric / Hybrid jetpacks. Fill from a world Battery block (RMB). Jetpacks draw charge from inventory batteries the same way they draw H₂ from tanks.";
+            battery.iconTint = new Color(0.45f, 0.75f, 0.95f);
+            battery.maxStack = 1;
+            battery.massPerUnit = 7f;
+            battery.category = "Equipment";
+            battery.capacityMl = 3000;
+            battery.fillRateMlPerUse = 300f;
+            EditorUtility.SetDirty(battery);
+            AddRecipe("Recipe_PortableBattery", "Portable Battery", battery, 1, VoxelEngine.Crafting.StationTier.Assembler, true,
+                (ironPlate != null ? ironPlate : steelPlate, 4),
+                (copperWire, 3));
+
+            AssetDatabase.SaveAssets();
         }
 
 

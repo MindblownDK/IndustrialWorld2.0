@@ -202,7 +202,10 @@ namespace VoxelEngine.UI
                                  Color.Lerp(T.AccentRed, T.AccentAmber, t / 0.25f);
             fill.style.backgroundColor = new StyleColor(new Color(displayColor.r, displayColor.g, displayColor.b, 0.28f));
 
-            if (!Mathf.Approximately(curMl, prev))
+            bool shouldUpdate = !Mathf.Approximately(curMl, prev);
+            // Prevent flash to 0 when fuel briefly drains during recharge cycle.
+            if (curMl < 10f && prev > 100f && (prev - curMl) > 50f) shouldUpdate = false;
+            if (shouldUpdate)
             {
                 label.text = FormatMl(curMl);
                 prev = curMl;

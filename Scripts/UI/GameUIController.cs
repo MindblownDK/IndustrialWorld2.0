@@ -574,6 +574,7 @@ namespace VoxelEngine.UI
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _openCrusher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             _openDefense = null;
+            _openPowerBattery = null;
             UnwatchAllContainers();
             if (c is ItemContainer ic) WatchContainer(ic);
             UnlockCursor();
@@ -595,6 +596,7 @@ namespace VoxelEngine.UI
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _openCrusher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             _openDefense = null;
+            _openPowerBattery = null;
             _openStation    = f.GetComponent<CraftingStation>();
             _inventoryOpen  = true;
             UnwatchAllContainers();
@@ -619,6 +621,7 @@ namespace VoxelEngine.UI
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _openCrusher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             _openDefense = null;
+            _openPowerBattery = null;
             _openStation    = ef.GetComponent<CraftingStation>();
             _inventoryOpen  = true;
             UnwatchAllContainers();
@@ -642,6 +645,7 @@ namespace VoxelEngine.UI
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _openCrusher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             _openDefense = null;
+            _openPowerBattery = null;
             _inventoryOpen  = true;
             UnwatchAllContainers();
             if (fuel != null) { fuel.EnsureContainers(); WatchContainer(fuel.fuelC); }
@@ -661,6 +665,7 @@ namespace VoxelEngine.UI
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _openCrusher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             _openDefense = null;
+            _openPowerBattery = null;
             _inventoryOpen  = true;
             UnwatchAllContainers();
             if (quarry != null) { quarry.EnsureOutputPublic(); quarry.EnsureUpgrades(); WatchContainer(quarry.Output); WatchContainer(quarry.upgradeC); }
@@ -685,6 +690,7 @@ namespace VoxelEngine.UI
             _openCrusher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             _openVoltageStation = null;
             _openDefense = null;
+            _openPowerBattery = null;
             _inventoryOpen = true;
             UnwatchAllContainers();
 
@@ -713,6 +719,7 @@ namespace VoxelEngine.UI
                     WatchContainer(el.iceInputC); break;
                 case VoxelEngine.Gas.HydrogenEngine he: _openHydroEngine = he; break;
                 case VoxelEngine.Gas.GasTank gt: _openGasTank = gt; gt.EnsureContainers(); WatchContainer(gt.PortableSlot); break;
+                case VoxelEngine.Power.PowerBattery pb: _openPowerBattery = pb; break;
                 case VoxelEngine.Fluids.WaterPump wp: _openWaterPump = wp; wp.ScanSource(); break;
                 case VoxelEngine.Building.Biofarm bf:
                     _openBiofarm = bf; bf.EnsureContainers();
@@ -803,6 +810,7 @@ namespace VoxelEngine.UI
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _openCrusher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             _openDefense = null;
+            _openPowerBattery = null;
             _openGridTerminal = grid; _terminalTab = -1;
             _inventoryOpen = true;
             UnwatchAllContainers();
@@ -828,6 +836,7 @@ namespace VoxelEngine.UI
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _openCrusher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             _openDefense = null;
+            _openPowerBattery = null;
             _inventoryOpen  = true;
             // Lazy-create a queue on the station so progress survives panel closure/reopen.
             _activeQueue    = st.GetComponent<CraftQueue>();
@@ -862,6 +871,7 @@ namespace VoxelEngine.UI
             _openStorageTerminal = null; _openServerRack = null;
             _openCrusher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             _openDefense = null;
+            _openPowerBattery = null;
             _productionStatsOpen = false;
             _recipeBrowserOpen = false;
             _activeQueue    = null;
@@ -1089,6 +1099,7 @@ namespace VoxelEngine.UI
                 else if (_openSplitter         != null) _root.Add(MachineUIs.SplitterPanel(_openSplitter, BuildSlot));
                 else if (_openVoltageStation   != null) _root.Add(VoxelEngine.Simulation.VoltageStationUI.BuildPanel(_openVoltageStation));
                 else if (_openDefense != null) BuildDefensePanel(_root, _openDefense);
+                else if (_openPowerBattery != null) { var pbPanel = MakePanel(); pbPanel.style.position = Position.Absolute; pbPanel.style.top = 24; pbPanel.style.bottom = 92; pbPanel.style.right = 18; pbPanel.style.width = 320; pbPanel.style.minWidth = 280; pbPanel.Add(MakeTitle("Power Station / Battery")); pbPanel.Add(MakeSubtitle("Charge: " + (_openPowerBattery.charge.ToString("F0") + " Wh / " + _openPowerBattery.capacityWattHours.ToString("F0") + " Wh"))); pbPanel.Add(MakeMutedLabel("Place Portable Battery in inventory to charge. RMB holds battery while looking at this station to fill.")); _root.Add(pbPanel); }
                 else if (_openStation  != null) BuildRightStationCrafting(_root, _openStation);
             }
             else
@@ -1189,42 +1200,39 @@ namespace VoxelEngine.UI
             slots.style.marginLeft = 2;
             box.Add(slots);
 
-            // Fuel bar + readout (hydrogen / charged cells).
-            if (fuelCap > 0)
+            // ── Dual fuel bars: Hydrogen (ml) shown only if a H₂ pack equipped;
+            // Wattage (W) shown only if a power pack equipped. Hybrid contributes to both.
+            bool anyH2 = false, anyPower = false;
+            int h2FuelU = 0, h2FuelCap = 0; float h2Fuel01 = 0f;
+            int pFuelU = 0, pFuelCap = 0; float pFuel01 = 0f;
+            for (int i = 0; i < equipment.JetpackSlots.Size; i++)
             {
-                var fuelRow = new VisualElement();
-                fuelRow.style.marginTop = 6;
-                fuelRow.style.marginLeft = 2;
-                fuelRow.style.marginRight = 2;
-
-                var fuelLab = new Label($"Fuel  {fuelU} / {fuelCap} ml");
-                fuelLab.style.fontSize = 9;
-                fuelLab.style.color = new Color(0.75f, 0.82f, 0.9f);
-                fuelLab.style.marginBottom = 3;
-                fuelRow.Add(fuelLab);
-
-                var track = new VisualElement();
-                track.style.height = 6;
-                track.style.backgroundColor = new StyleColor(new Color(0.08f, 0.1f, 0.14f, 0.95f));
-                SetBorderRadius(track, 3);
-                track.style.overflow = Overflow.Hidden;
-
-                var fill = new VisualElement();
-                fill.style.height = 6;
-                fill.style.width = new StyleLength(new Length(Mathf.Clamp01(fuel01) * 100f, LengthUnit.Percent));
-                fill.style.backgroundColor = new StyleColor(statusCol);
-                track.Add(fill);
-                fuelRow.Add(track);
-
-                var hint = new Label("Recharges at ≤10% from Portable H₂ Tanks / Charged Cells");
-                hint.style.fontSize = 8;
-                hint.style.color = new Color(0.55f, 0.6f, 0.68f);
-                hint.style.marginTop = 3;
-                hint.style.whiteSpace = WhiteSpace.Normal;
-                fuelRow.Add(hint);
-
-                box.Add(fuelRow);
+                var s = equipment.JetpackSlots.GetSlot(i);
+                if (s == null || s.IsEmpty || s.item is not JetpackItem p) continue;
+                bool usesH2 = VoxelEngine.Player.PlayerEquipment.PackUsesHydrogen(p);
+                bool usesP = VoxelEngine.Player.PlayerEquipment.PackUsesPower(p);
+                if (usesH2) { anyH2 = true; if (s.durability > h2FuelU) { h2FuelU = s.durability; h2FuelCap = p.FuelCapacity; h2Fuel01 = s.durability / (float)Mathf.Max(1, p.FuelCapacity); } }
+                if (usesP) { anyPower = true; if (s.durability > pFuelU) { pFuelU = s.durability; pFuelCap = p.FuelCapacity; pFuel01 = s.durability / (float)Mathf.Max(1, p.FuelCapacity); } }
             }
+
+            if (anyH2 && h2FuelCap > 0)
+            {
+                var h2Row = new VisualElement(); h2Row.style.marginTop = 4; h2Row.style.marginLeft = 2; h2Row.style.marginRight = 2;
+                h2Row.Add(new Label($"H₂ Fuel  {h2FuelU} / {h2FuelCap} ml") { style = { fontSize = 9, color = new Color(0.35f,0.85f,1f), marginBottom = 3 } });
+                var h2Track = new VisualElement(); h2Track.style.height = 6; h2Track.style.backgroundColor = new StyleColor(new Color(0.08f,0.1f,0.14f,0.95f)); SetBorderRadius(h2Track,3); h2Track.style.overflow = Overflow.Hidden;
+                var h2Fill = new VisualElement(); h2Fill.style.height = 6; h2Fill.style.width = new StyleLength(new Length(Mathf.Clamp01(h2Fuel01)*100f, LengthUnit.Percent)); h2Fill.style.backgroundColor = new StyleColor(new Color(0.35f,0.85f,1f)); SetBorderRadius(h2Fill,3); h2Track.Add(h2Fill); h2Row.Add(h2Track);
+                box.Add(h2Row);
+            }
+            if (anyPower && pFuelCap > 0)
+            {
+                var pRow = new VisualElement(); pRow.style.marginTop = 4; pRow.style.marginLeft = 2; pRow.style.marginRight = 2;
+                pRow.Add(new Label($"Power  {pFuelU} / {pFuelCap} W") { style = { fontSize = 9, color = new Color(0.45f,0.9f,0.6f), marginBottom = 3 } });
+                var pTrack = new VisualElement(); pTrack.style.height = 6; pTrack.style.backgroundColor = new StyleColor(new Color(0.08f,0.1f,0.14f,0.95f)); SetBorderRadius(pTrack,3); pTrack.style.overflow = Overflow.Hidden;
+                var pFill = new VisualElement(); pFill.style.height = 6; pFill.style.width = new StyleLength(new Length(Mathf.Clamp01(pFuel01)*100f, LengthUnit.Percent)); pFill.style.backgroundColor = new StyleColor(new Color(0.45f,0.9f,0.6f)); SetBorderRadius(pFill,3); pTrack.Add(pFill); pRow.Add(pTrack);
+                box.Add(pRow);
+            }
+
+            // (Old single-bar block replaced by the dual bars above — keep header/status/slots intact)
 
             return box;
         }
@@ -1358,6 +1366,7 @@ namespace VoxelEngine.UI
         // right edge regardless of screen size / window scale.
 
         private Component _openDefense;
+        private VoxelEngine.Power.PowerBattery _openPowerBattery;
 
         public void OpenDefense(Component d)
         {

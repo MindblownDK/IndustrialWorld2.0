@@ -717,6 +717,41 @@ namespace VoxelEngine.Player
                     if (gasTank != null) { UI.GameUIController.Instance?.OpenMachine(gasTank); return; }
                     if (gridGas != null) { UI.GameUIController.Instance?.OpenMachine(gridGas); return; }
                 }
+
+                // Portable Battery — fill from world Battery block (PowerBattery).
+                var powerBattery = hit.collider.GetComponentInParent<VoxelEngine.Power.PowerBattery>();
+                var activeBattery = inventory != null ? inventory.ActiveStack : null;
+                bool holdingBattery = activeBattery != null && !activeBattery.IsEmpty && VoxelEngine.Items.PortableBatteryItem.IsPortableBattery(activeBattery.item);
+                if (holdingBattery && powerBattery != null && powerBattery.charge > 10f)
+                {
+                    int space = VoxelEngine.Items.PortableBatteryItem.GetCapacityMl(activeBattery) - VoxelEngine.Items.PortableBatteryItem.GetStoredMl(activeBattery);
+                    if (space > 0)
+                    {
+                        float want = Mathf.Min(space * 1f, powerBattery.charge);
+                        float took = Mathf.Min(want, VoxelEngine.Items.PortableBatteryItem.DefaultFillRateMl(activeBattery.item));
+                        if (IsShiftHeld()) took = want;
+                        int add = Mathf.RoundToInt(took);
+                        if (add > 0)
+                        {
+                            VoxelEngine.Items.PortableBatteryItem.TryAddMl(activeBattery, add);
+                            powerBattery.charge = Mathf.Max(0f, powerBattery.charge - add);
+                            inventory.container.SetSlot(inventory.activeHotbarIndex, activeBattery);
+                            inventory.container.RaiseChanged();
+                            int stored = VoxelEngine.Items.PortableBatteryItem.GetStoredMl(activeBattery);
+                            int cap = VoxelEngine.Items.PortableBatteryItem.GetCapacityMl(activeBattery);
+                            string storedTxt = stored >= 1000 ? $"{stored/1000f:0.0} L" : $"{stored} ml";
+                            string capTxt = cap >= 1000 ? $"{cap/1000f:0.0} L" : $"{cap} ml";
+                            VoxelEngine.UI.BuildFeedbackHud.Show("Portable Battery", $"+{add} ml  ·  {storedTxt} / {capTxt}", null, new Color(0.45f, 0.75f, 0.95f));
+                        }
+                        else
+                        {
+                            VoxelEngine.UI.BuildFeedbackHud.Show("Portable Battery", "Battery full or no charge", null, Color.yellow);
+                        }
+                        return;
+                    }
+                }
+                if (powerBattery != null) { UI.GameUIController.Instance?.OpenMachine(powerBattery); return; }
+
                 var biofarm = hit.collider.GetComponentInParent<VoxelEngine.Building.Biofarm>();
                 if (biofarm != null) { UI.GameUIController.Instance?.OpenMachine(biofarm); return; }
                 var liquidPump = hit.collider.GetComponentInParent<VoxelEngine.Fluids.WaterPump>();
