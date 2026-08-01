@@ -592,10 +592,31 @@ namespace VoxelEngine.Player
             if (GameSettings.IsHeld(InputAction.Crouch)) wishDir -= transform.up;
 
             var equipment = GetComponent<PlayerEquipment>();
+
+            // Fuel/charge accounting: drain while flying; cut flight if the pack runs dry
+            // and no research-only flight permission remains.
+            bool boosting = GameSettings.IsHeld(InputAction.Sprint);
+            if (equipment != null)
+            {
+                bool fueled = equipment.TryConsumeFlightFuel(dt, boosting);
+                if (!fueled && (PlayerStats.Instance == null || !PlayerStats.Instance.HasFlightUnlocked))
+                {
+                    GameSettings.FlyMode = false;
+                    _velocity = Vector3.zero;
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Jetpack", "Out of fuel — insert Hydrogen/Charged Cells", null, new Color(1f, 0.7f, 0.25f));
+                    return;
+                }
+                // If research flight is unlocked, allow unfueled flight without boost.
+                if (!fueled) boosting = false;
+            }
+
             var pack = equipment != null ? equipment.GetBestJetpack() : null;
+            // Prefer the fueled pack for multipliers.
+            var fueledStack = equipment != null ? equipment.GetBestJetpackStack(requireFuel: true) : null;
+            if (fueledStack != null && fueledStack.item is VoxelEngine.Items.JetpackItem fp) pack = fp;
+
             float packSpeed = pack != null ? Mathf.Max(0.1f, pack.flightSpeedMultiplier) : 1f;
             float packBoost = pack != null ? Mathf.Max(1f, pack.boostMultiplier) : 1f;
-            bool boosting = GameSettings.IsHeld(InputAction.Sprint);
             if (pack != null && pack.family == VoxelEngine.Items.JetpackFamily.HydrogenBoost)
             {
                 // Hydrogen boost packs spool briefly instead of instantly hitting max

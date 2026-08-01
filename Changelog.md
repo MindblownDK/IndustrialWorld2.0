@@ -1,9 +1,35 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.71.0-dev`
+**Current Version:** `6.72.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.72.0-dev] Jetpack fuel accounting — Hydrogen/Charged Cells + Bay readout
+
+**Type:** MINOR — jetpack progression (save-compatible).
+
+**Jetpack Families remaining work (roadmap 11.3):** fuel/power accounting is live.
+
+1. **`JetpackItem`** — `fuelCapacity`, `drainPerSecond`, `boostDrainPerSecond`, cell refuel amounts. Runtime charge stored on `ItemStack.durability` (saved).
+2. **`PlayerEquipment`**
+   - Fuel-aware `HasUsableJetpack` / best-pack selection
+   - `TryConsumeFlightFuel` while flying (boost drains faster)
+   - **Auto-refuel** from inventory: Hydrogen Cells → H₂/Hybrid, Charged Cells → Atmospheric/Hybrid
+3. **`PlayerController.FlyUpdate`** — drains fuel each frame; empty pack exits fly mode (unless flight research unlocked) with a toast.
+4. **Jetpack Bay UI** — ONLINE / LOW / DRY pill + fuel bar `current/max` + auto-refuel hint.
+5. **Step 47** — tunes all three jetpack families + authors Hydrogen Cell (+ ensures Charged Cell). Non-destructive.
+
+**To use:** run Step 47 (or re-run Step 12 then 47) → craft Hydrogen Cells / Charged Cells → equip a jetpack → fly. Watch the Bay fuel bar drop; keep cells in inventory to auto-siphon. Boost (Sprint) drains faster.
+
+**Files touched:**
+- `Scripts/Items/JetpackItem.cs`
+- `Scripts/Player/PlayerEquipment.cs`, `PlayerController.cs`
+- `Scripts/UI/GameUIController.cs` (Jetpack Bay)
+- `Scripts/Editor/VoxelEngineSetupWindow.cs` (Step 47 + jetpack defaults)
+- `Scripts/Core/GameVersion.cs` (6.71.0 → 6.72.0), `Changelog.md`, `Roadmap.md`
+
+---
 
 ### [6.71.0-dev] Painting System — 15 cosmetic finishes + Paint Tool
 

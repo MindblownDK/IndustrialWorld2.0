@@ -34,7 +34,10 @@ namespace VoxelEngine.Items
         {
             this.item       = item;
             this.count      = count;
-            this.durability = (item is ToolItem t) ? t.maxDurability : 0;
+            // Tools track wear; jetpacks track fuel/charge (0..fuelCapacity).
+            this.durability = item is ToolItem t ? t.maxDurability
+                            : item is JetpackItem j ? j.FuelCapacity
+                            : 0;
         }
 
         public ItemStack Clone()

@@ -436,6 +436,14 @@ namespace VoxelEngine.EditorTools
                 "  • Finishes are cosmetic only and save with the world. Re-runnable.");
             AddWizardButton(scroll, "46. Build Paint Tool (cosmetic finishes)", BuildPaintToolContent, 40);
 
+            AddInfo(scroll,
+                "Step 47 refreshes JETPACK FUEL accounting (non-destructive):\n" +
+                "  • Fuel capacity / drain rates on all three jetpack families\n" +
+                "  • Hydrogen Cell item + recipe (auto-feeds H₂ / Hybrid packs)\n" +
+                "  • Charged Cells (from Energy Turret step) feed Atmospheric / Hybrid\n" +
+                "  • Re-runnable. Does not strip existing jetpack assets.");
+            AddWizardButton(scroll, "47. Refresh Jetpack Fuel Accounting", BuildJetpackFuelContent, 40);
+
             AddSpacer(scroll, 20);
         }
 
@@ -6136,6 +6144,18 @@ root =>
                 item.supportsVacuum = vacuum;
                 item.usesHydrogen = hydrogen;
                 item.usesPower = power;
+                // Fuel/charge defaults (roadmap 11.3 accounting).
+                item.fuelCapacity = family == VoxelEngine.Items.JetpackFamily.HydrogenBoost ? 80
+                                  : family == VoxelEngine.Items.JetpackFamily.Atmospheric ? 100
+                                  : 120;
+                item.drainPerSecond = family == VoxelEngine.Items.JetpackFamily.HydrogenBoost ? 3.2f
+                                    : family == VoxelEngine.Items.JetpackFamily.Atmospheric ? 2.2f
+                                    : 2.6f;
+                item.boostDrainPerSecond = family == VoxelEngine.Items.JetpackFamily.HydrogenBoost ? 5.5f
+                                         : family == VoxelEngine.Items.JetpackFamily.Atmospheric ? 3.5f
+                                         : 4.2f;
+                item.hydrogenCellRefuel = 40;
+                item.chargedCellRefuel = 35;
                 EditorUtility.SetDirty(item);
                 return item;
             }
@@ -6149,6 +6169,19 @@ root =>
             AddGRecipe("Recipe_JetpackHydrogenBoost", "Hydrogen Boost Pack", jetHydrogen, (steelPlate, 4), (copperWire, 8), (circuit, 2));
             AddGRecipe("Recipe_JetpackAtmospheric", "Atmospheric Jetpack", jetAtmospheric, (steelPlate, 6), (copperWire, 10), (circuit, 3));
             AddGRecipe("Recipe_JetpackHybrid", "Hybrid Jetpack", jetHybrid, (steelPlate, 10), (copperWire, 16), (advCircuit ?? circuit, 3), (lithium, 2));
+
+            // Hydrogen Cell — portable jetpack fuel (siphoned automatically while flying).
+            var h2cell = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{ITEMS}/Item_HydrogenCell.asset");
+            h2cell.itemId = "item_hydrogen_cell";
+            h2cell.displayName = "Hydrogen Cell";
+            h2cell.description = "Compressed hydrogen cartridge. Auto-feeds equipped Hydrogen/Hybrid jetpacks during flight.";
+            h2cell.iconTint = new Color(0.45f, 0.9f, 1f);
+            h2cell.maxStack = 40;
+            h2cell.massPerUnit = 0.8f;
+            h2cell.category = "Equipment";
+            EditorUtility.SetDirty(h2cell);
+            AddGRecipe("Recipe_HydrogenCell", "Hydrogen Cell", h2cell, (steelPlate, 1), (copperWire, 2));
+
 
             // -- 0b) Grid Cryobed (offline-survival foundation) --
             var gridCryobedPref = MakeGPref<VoxelEngine.GridSystem.GridCryobed>("Cryobed_Large", new Color(0.28f, 0.62f, 0.82f), new Vector3(2.2f, 0.75f, 1.1f),
@@ -13190,6 +13223,90 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
                 "• Cosmetic only — saved with the world (additive)\\n" +
                 "• HUD swatch appears while the tool is held", "OK");
         }
+
+        // ============================================================
+        //   STEP 47 - JETPACK FUEL ACCOUNTING. Sets capacity/drain on
+        //   jetpack families and authors Hydrogen Cells. Non-destructive.
+        // ============================================================
+        private void BuildJetpackFuelContent()
+        {
+            const string ITEMS = ASSET_ROOT + "/GridSystem/Items";
+            const string COMBAT_ITEMS = ASSET_ROOT + "/Combat/Items";
+            EnsureFolder(ITEMS);
+            EnsureFolder(COMBAT_ITEMS);
+
+            ItemDefinition FindItem(string n)
+            {
+                var guids = AssetDatabase.FindAssets(n + " t:ItemDefinition");
+                foreach (var g in guids)
+                {
+                    var pp = AssetDatabase.GUIDToAssetPath(g);
+                    if (System.IO.Path.GetFileNameWithoutExtension(pp) == n)
+                        return AssetDatabase.LoadAssetAtPath<ItemDefinition>(pp);
+                }
+                return null;
+            }
+
+            void TuneJetpack(string assetName, int cap, float drain, float boostDrain)
+            {
+                var path = $"{ITEMS}/{assetName}.asset";
+                var pack = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.JetpackItem>(path);
+                if (pack == null)
+                {
+                    // Fallback search
+                    pack = FindItem(assetName) as VoxelEngine.Items.JetpackItem;
+                }
+                if (pack == null) return;
+                pack.fuelCapacity = cap;
+                pack.drainPerSecond = drain;
+                pack.boostDrainPerSecond = boostDrain;
+                pack.hydrogenCellRefuel = 40;
+                pack.chargedCellRefuel = 35;
+                EditorUtility.SetDirty(pack);
+            }
+
+            TuneJetpack("Equip_JetpackHydrogenBoost", 80, 3.2f, 5.5f);
+            TuneJetpack("Equip_JetpackAtmospheric", 100, 2.2f, 3.5f);
+            TuneJetpack("Equip_JetpackHybrid", 120, 2.6f, 4.2f);
+
+            var steelPlate = FindItem("Item_SteelPlate");
+            var copperWire = FindItem("Item_CopperLVWire");
+            var ironPlate  = FindItem("Item_IronPlate");
+
+            var h2cell = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{ITEMS}/Item_HydrogenCell.asset");
+            h2cell.itemId = "item_hydrogen_cell";
+            h2cell.displayName = "Hydrogen Cell";
+            h2cell.description = "Compressed hydrogen cartridge. Auto-feeds equipped Hydrogen/Hybrid jetpacks during flight.";
+            h2cell.iconTint = new Color(0.45f, 0.9f, 1f);
+            h2cell.maxStack = 40;
+            h2cell.massPerUnit = 0.8f;
+            h2cell.category = "Equipment";
+            EditorUtility.SetDirty(h2cell);
+            AddRecipe("Recipe_HydrogenCell", "Hydrogen Cell", h2cell, 4, VoxelEngine.Crafting.StationTier.Assembler, true,
+                (steelPlate != null ? steelPlate : ironPlate, 1), (copperWire, 2));
+
+            // Ensure Charged Cell exists for atmospheric/hybrid (authored by Energy Turret step too).
+            var cell = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{COMBAT_ITEMS}/Item_ChargedCell.asset");
+            if (string.IsNullOrEmpty(cell.itemId)) cell.itemId = "item_charged_cell";
+            if (string.IsNullOrEmpty(cell.displayName)) cell.displayName = "Charged Cell";
+            if (string.IsNullOrEmpty(cell.description))
+                cell.description = "Compact energy cell. Feeds Atmospheric/Hybrid jetpacks and Energy/Relic turrets.";
+            cell.iconTint = new Color(0.4f, 0.85f, 1f);
+            if (cell.maxStack < 2) cell.maxStack = 40;
+            cell.category = string.IsNullOrEmpty(cell.category) ? "Combat" : cell.category;
+            EditorUtility.SetDirty(cell);
+
+            AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Voxel Engine — Jetpack Fuel",
+                "Jetpack fuel accounting is ready:\\n\\n" +
+                "• Hydrogen Boost / Atmospheric / Hybrid capacity + drain tuned\\n" +
+                "• Hydrogen Cell craftable at the Assembler\\n" +
+                "• Charged Cells feed Atmospheric / Hybrid packs\\n" +
+                "• Equipped packs auto-siphon cells from inventory while flying\\n" +
+                "• Jetpack Bay shows fuel bar (ONLINE / LOW / DRY)\\n" +
+                "• Empty pack drops you out of flight (unless flight research is unlocked)", "OK");
+        }
+
 
 
 

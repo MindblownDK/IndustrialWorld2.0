@@ -74,30 +74,199 @@ namespace VoxelEngine.Player
             _armorSlots.OnChanged += SyncEquippedArmor;
         }
 
-        public bool HasUsableJetpack => GetBestJetpack() != null;
+        public bool HasUsableJetpack => GetBestJetpackStack(requireFuel: true) != null;
 
-        public JetpackItem GetBestJetpack()
+        /// <summary>Best equipped pack definition (may be empty of fuel).</summary>
+        public JetpackItem GetBestJetpack() => GetBestJetpackStack(requireFuel: false)?.item as JetpackItem;
+
+        /// <summary>Best equipped pack that still has fuel/charge (or needs none).</summary>
+        public ItemStack GetBestJetpackStack(bool requireFuel = true)
         {
             EnsureContainers();
-            JetpackItem best = null;
+            EnsureAllJetpackFuelInitialized();
+            ItemStack best = null;
             float bestScore = float.MinValue;
             for (int i = 0; i < _jetpackSlots.Size; i++)
             {
                 var stack = _jetpackSlots.GetSlot(i);
                 if (stack == null || stack.IsEmpty || stack.item is not JetpackItem pack) continue;
+                EnsureJetpackFuel(stack);
+                if (requireFuel && NeedsFuel(pack) && stack.durability <= 0) continue;
                 float score = pack.flightSpeedMultiplier + pack.boostMultiplier * 0.25f;
-                if (score > bestScore) { bestScore = score; best = pack; }
+                // Prefer packs with more remaining fuel when scores are close.
+                score += Mathf.Clamp01(stack.durability / (float)Mathf.Max(1, pack.FuelCapacity)) * 0.05f;
+                if (score > bestScore) { bestScore = score; best = stack; }
             }
             return best;
         }
 
-        public float FlightSpeedMultiplier => GetBestJetpack() != null
-            ? Mathf.Max(0.1f, GetBestJetpack().flightSpeedMultiplier)
-            : 1f;
+        public float FlightSpeedMultiplier
+        {
+            get
+            {
+                var s = GetBestJetpackStack(requireFuel: true);
+                var pack = s?.item as JetpackItem;
+                return pack != null ? Mathf.Max(0.1f, pack.flightSpeedMultiplier) : 1f;
+            }
+        }
 
-        public float BoostMultiplier => GetBestJetpack() != null
-            ? Mathf.Max(1f, GetBestJetpack().boostMultiplier)
-            : 1f;
+        public float BoostMultiplier
+        {
+            get
+            {
+                var s = GetBestJetpackStack(requireFuel: true);
+                var pack = s?.item as JetpackItem;
+                return pack != null ? Mathf.Max(1f, pack.boostMultiplier) : 1f;
+            }
+        }
+
+        public static bool NeedsFuel(JetpackItem pack)
+            => pack != null && (pack.usesHydrogen || pack.usesPower);
+
+        public static void EnsureJetpackFuel(ItemStack stack)
+        {
+            if (stack == null || stack.IsEmpty || stack.item is not JetpackItem pack) return;
+            int cap = pack.FuelCapacity;
+            // Durability is authoritative fuel (saved). Clamp only — never refill empties
+            // here, or load-from-save would top up drained packs (payload is NonSerialized).
+            // New stacks are filled in ItemStack's constructor via JetpackItem.FuelCapacity.
+            if (stack.durability > cap) stack.durability = cap;
+            if (stack.durability < 0) stack.durability = 0;
+        }
+
+        public void EnsureAllJetpackFuelInitialized()
+        {
+            EnsureContainers();
+            for (int i = 0; i < _jetpackSlots.Size; i++)
+                EnsureJetpackFuel(_jetpackSlots.GetSlot(i));
+        }
+
+        /// <summary>
+        /// Drain fuel from the best usable pack. Returns false if no fuel remains
+        /// (caller should cut flight). Auto-siphons cells from inventory when empty.
+        /// </summary>
+        public bool TryConsumeFlightFuel(float dt, bool boosting)
+        {
+            if (dt <= 0f) return HasUsableJetpack;
+            EnsureContainers();
+            TryAutoRefuelFromInventory();
+
+            int slotIndex = -1;
+            ItemStack stack = null;
+            JetpackItem pack = null;
+            float bestScore = float.MinValue;
+            for (int i = 0; i < _jetpackSlots.Size; i++)
+            {
+                var s = _jetpackSlots.GetSlot(i);
+                if (s == null || s.IsEmpty || s.item is not JetpackItem p) continue;
+                EnsureJetpackFuel(s);
+                if (NeedsFuel(p) && s.durability <= 0) continue;
+                float score = p.flightSpeedMultiplier + p.boostMultiplier * 0.25f;
+                if (score > bestScore) { bestScore = score; slotIndex = i; stack = s; pack = p; }
+            }
+            if (stack == null || pack == null) return false;
+            if (!NeedsFuel(pack)) return true;
+
+            float drain = Mathf.Max(0f, pack.drainPerSecond);
+            if (boosting) drain += Mathf.Max(0f, pack.boostDrainPerSecond);
+            float cost = drain * dt;
+            if (cost <= 0f) return true;
+
+            var box = stack.payload as JetpackFuelBox;
+            if (box == null) { box = new JetpackFuelBox(); stack.payload = box; }
+            box.frac += cost;
+            int whole = Mathf.FloorToInt(box.frac);
+            if (whole > 0)
+            {
+                box.frac -= whole;
+                stack.durability = Mathf.Max(0, stack.durability - whole);
+                _jetpackSlots.SetSlot(slotIndex, stack);
+            }
+            return stack.durability > 0;
+        }
+
+        /// <summary>Remaining fuel 0..1 for the best pack (1 if unfuelled type).</summary>
+        public float BestJetpackFuel01
+        {
+            get
+            {
+                var stack = GetBestJetpackStack(requireFuel: false);
+                if (stack == null || stack.item is not JetpackItem pack) return 0f;
+                EnsureJetpackFuel(stack);
+                if (!NeedsFuel(pack)) return 1f;
+                return Mathf.Clamp01(stack.durability / (float)pack.FuelCapacity);
+            }
+        }
+
+        public int BestJetpackFuelUnits
+        {
+            get
+            {
+                var stack = GetBestJetpackStack(requireFuel: false);
+                if (stack == null) return 0;
+                EnsureJetpackFuel(stack);
+                return Mathf.Max(0, stack.durability);
+            }
+        }
+
+        public int BestJetpackFuelCapacity
+        {
+            get
+            {
+                var pack = GetBestJetpack();
+                return pack != null ? pack.FuelCapacity : 0;
+            }
+        }
+
+        /// <summary>Siphon hydrogen/charged cells from player inventory into equipped packs.</summary>
+        public int TryAutoRefuelFromInventory()
+        {
+            EnsureContainers();
+            if (_inventory == null) _inventory = GetComponent<Inventory>();
+            if (_inventory == null || _inventory.container == null) return 0;
+            int total = 0;
+            for (int i = 0; i < _jetpackSlots.Size; i++)
+            {
+                var stack = _jetpackSlots.GetSlot(i);
+                if (stack == null || stack.IsEmpty || stack.item is not JetpackItem pack) continue;
+                EnsureJetpackFuel(stack);
+                if (!NeedsFuel(pack)) continue;
+                int space = pack.FuelCapacity - stack.durability;
+                if (space <= 0) continue;
+                total += RefuelStackFromInventory(i, stack, pack, space);
+            }
+            return total;
+        }
+
+        private int RefuelStackFromInventory(int slotIndex, ItemStack stack, JetpackItem pack, int space)
+        {
+            int restored = 0;
+            var inv = _inventory.container;
+            for (int i = 0; i < inv.Size && space > 0; i++)
+            {
+                var s = inv.GetSlot(i);
+                if (s == null || s.IsEmpty || s.item == null) continue;
+                if (!pack.AcceptsFuelItem(s.item)) continue;
+                int per = pack.RefuelAmountFor(s.item);
+                if (per <= 0) continue;
+                // Consume one cell at a time.
+                int got = inv.Remove(s.item, 1);
+                if (got <= 0) continue;
+                int add = Mathf.Min(space, per);
+                stack.durability += add;
+                space -= add;
+                restored += add;
+            }
+            if (restored > 0)
+            {
+                if (stack.payload == null) stack.payload = new JetpackFuelBox();
+                _jetpackSlots.SetSlot(slotIndex, stack);
+            }
+            return restored;
+        }
+
+        /// <summary>Fractional fuel accumulator (not serialized — durability is).</summary>
+        private sealed class JetpackFuelBox { public float frac; }
 
         public SpaceHelmetItem EquippedHelmet
         {

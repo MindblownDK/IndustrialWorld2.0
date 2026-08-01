@@ -1159,11 +1159,21 @@ namespace VoxelEngine.UI
             title.style.color = UITheme.AccentCyan;
             header.Add(title);
 
-            var status = new Label(equipment.HasUsableJetpack ? "ONLINE" : "EMPTY");
+            equipment.EnsureAllJetpackFuelInitialized();
+            float fuel01 = equipment.BestJetpackFuel01;
+            int fuelU = equipment.BestJetpackFuelUnits;
+            int fuelCap = equipment.BestJetpackFuelCapacity;
+            bool online = equipment.HasUsableJetpack;
+            string statusText = !online ? "EMPTY" : (fuel01 <= 0.05f ? "DRY" : (fuel01 < 0.25f ? "LOW" : "ONLINE"));
+            Color statusCol = statusText == "ONLINE" ? new Color(0.30f, 0.95f, 0.55f)
+                             : statusText == "LOW" ? new Color(1f, 0.78f, 0.25f)
+                             : new Color(0.95f, 0.45f, 0.25f);
+
+            var status = new Label(statusText);
             status.style.marginLeft = 8;
             status.style.fontSize = 9;
             status.style.unityFontStyleAndWeight = FontStyle.Bold;
-            status.style.color = equipment.HasUsableJetpack ? new Color(0.30f, 0.95f, 0.55f) : new Color(0.95f, 0.62f, 0.18f);
+            status.style.color = statusCol;
             status.style.backgroundColor = new StyleColor(new Color(0f, 0f, 0f, 0.32f));
             status.style.paddingLeft = 7;
             status.style.paddingRight = 7;
@@ -1177,6 +1187,43 @@ namespace VoxelEngine.UI
                 VoxelEngine.Player.PlayerEquipment.JetpackSlotCount, showSort: false);
             slots.style.marginLeft = 2;
             box.Add(slots);
+
+            // Fuel bar + readout (hydrogen / charged cells).
+            if (fuelCap > 0)
+            {
+                var fuelRow = new VisualElement();
+                fuelRow.style.marginTop = 6;
+                fuelRow.style.marginLeft = 2;
+                fuelRow.style.marginRight = 2;
+
+                var fuelLab = new Label($"Fuel  {fuelU}/{fuelCap}");
+                fuelLab.style.fontSize = 9;
+                fuelLab.style.color = new Color(0.75f, 0.82f, 0.9f);
+                fuelLab.style.marginBottom = 3;
+                fuelRow.Add(fuelLab);
+
+                var track = new VisualElement();
+                track.style.height = 6;
+                track.style.backgroundColor = new StyleColor(new Color(0.08f, 0.1f, 0.14f, 0.95f));
+                SetBorderRadius(track, 3);
+                track.style.overflow = Overflow.Hidden;
+
+                var fill = new VisualElement();
+                fill.style.height = 6;
+                fill.style.width = new StyleLength(new Length(Mathf.Clamp01(fuel01) * 100f, LengthUnit.Percent));
+                fill.style.backgroundColor = new StyleColor(statusCol);
+                track.Add(fill);
+                fuelRow.Add(track);
+
+                var hint = new Label("Auto-refuels from Hydrogen / Charged Cells in inventory");
+                hint.style.fontSize = 8;
+                hint.style.color = new Color(0.55f, 0.6f, 0.68f);
+                hint.style.marginTop = 3;
+                hint.style.whiteSpace = WhiteSpace.Normal;
+                fuelRow.Add(hint);
+
+                box.Add(fuelRow);
+            }
 
             return box;
         }
