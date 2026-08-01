@@ -2648,6 +2648,25 @@ namespace VoxelEngine.UI
         }
 
         // ── Progress bar / pill / divider — all routed through UITheme ───────
+        private VisualElement MakeItemFillBar(float frac, Color fillColor)
+        {
+            var bar = new VisualElement();
+            bar.style.position = Position.Absolute;
+            bar.style.left = 4; bar.style.right = 4; bar.style.bottom = 2;
+            bar.style.height = 4;
+            bar.style.backgroundColor = new StyleColor(new Color(0.15f, 0.15f, 0.18f, 0.85f));
+            SetBorderRadius(bar, 2);
+            bar.pickingMode = PickingMode.Ignore;
+            var fill = new VisualElement();
+            fill.style.height = 4;
+            fill.style.width = new StyleLength(new Length(Mathf.Clamp01(frac) * 100f, LengthUnit.Percent));
+            fill.style.backgroundColor = new StyleColor(fillColor);
+            SetBorderRadius(fill, 2);
+            fill.pickingMode = PickingMode.Ignore;
+            bar.Add(fill);
+            return bar;
+        }
+
         private (VisualElement bar, VisualElement fill) MakeProgressBarWithFill(
             float t, Color fillColor, float width, float height, bool fillFlexGrow = false)
         {

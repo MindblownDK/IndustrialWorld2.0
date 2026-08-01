@@ -1,9 +1,21 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.74.0-dev`
+**Current Version:** `6.74.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.74.1-dev] Compile fix — MakeItemFillBar helper
+
+**Type:** PATCH — compile fix (save-compatible).
+
+Added missing `MakeItemFillBar` private helper on `GameUIController` used by inventory slot fill bars for tools, Portable Hydrogen Tanks, and jetpacks (CS0103).
+
+**Files touched:**
+- `Scripts/UI/GameUIController.cs`
+- `Scripts/Core/GameVersion.cs` (6.74.0 → 6.74.1), `Changelog.md`
+
+---
 
 ### [6.74.0-dev] Portable Hydrogen Tank (ml) + H₂ vitals bar; stamina removed
 
