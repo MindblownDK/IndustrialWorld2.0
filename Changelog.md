@@ -1,9 +1,25 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.66.0-dev`
+**Current Version:** `6.66.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.66.1-dev] Compile fix — AntiAir IsAerial + SavedDefenseState preferAerial
+
+**Type:** PATCH — compile fixes (save-compatible).
+
+1. `AntiAirTurret.IsAerial` is an instance method again so it can read `minAltitude` (CS0120).
+2. `SavedDefenseState` now includes additive `preferAerial` / `hasPreferAerial` fields used by AA save/restore (CS0117 / CS1061).
+3. `FlamethrowerTurret.SpawnGroundFire` no longer assigns `pos = pos` (CS1717).
+
+**Files touched:**
+- `Scripts/Combat/AntiAirTurret.cs`
+- `Scripts/Combat/FlamethrowerTurret.cs`
+- `Scripts/Persistence/WorldStatePersistence.cs`
+- `Scripts/Core/GameVersion.cs` (6.66.0 → 6.66.1), `Changelog.md`
+
+---
 
 ### [6.66.0-dev] Energy / Relic Turret — late-tier electrical beam defense
 

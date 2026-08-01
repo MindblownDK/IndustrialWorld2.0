@@ -163,7 +163,7 @@ namespace VoxelEngine.Combat
             return HasLOS(from, t.position + up * 0.4f, t);
         }
 
-        private static bool IsAerial(Damageable d, Vector3 up)
+        private bool IsAerial(Damageable d, Vector3 up)
         {
             if (d == null) return false;
             string n = d.GetType().Name;

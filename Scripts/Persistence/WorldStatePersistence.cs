@@ -1948,6 +1948,8 @@ namespace VoxelEngine.Persistence
             public bool autoMode = true;
             public int ammo;            // Auto Turret magazine count
             public float fuelSeconds;   // Flamethrower continuous fuel buffer
+            public bool preferAerial = true; // Anti-Air aerial-only mode (additive)
+            public bool hasPreferAerial;     // legacy saves leave this false
         }
         [Serializable] private class SavedMaritimePorts
         {

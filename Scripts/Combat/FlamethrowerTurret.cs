@@ -321,8 +321,7 @@ namespace VoxelEngine.Combat
             Vector3 start = pos + up * 2f;
             if (Physics.Raycast(start, down, out var hit, 6f, ~0, QueryTriggerInteraction.Ignore))
                 pos = hit.point + up * 0.05f;
-            else
-                pos = pos; // leave floating only if no ground
+            // else leave pos as-is (no ground under the spray)
 
             Material mat = groundFireMat != null ? groundFireMat : (flameMat != null ? flameMat : FxMat);
             FireWallHazard.Spawn(pos, up, mat, dur: 3.2f, dps: burnDps * 0.85f, radius: 1.35f);
