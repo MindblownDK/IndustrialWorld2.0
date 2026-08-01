@@ -132,6 +132,7 @@ namespace VoxelEngine.Combat
                 if (s == null || s.IsEmpty) continue;
                 s.count--;
                 ShellMagazine.SetSlot(i, s.count <= 0 ? new ItemStack() : s);
+                if (!HasAmmo()) DefenseStatus.NotifyEmpty("Giant Shell Turret");
                 return true;
             }
             return false;

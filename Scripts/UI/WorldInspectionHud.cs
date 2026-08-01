@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.UIElements;
 using VoxelEngine.Building;
 using VoxelEngine.Building.Tiered;
+using VoxelEngine.Combat;
 using VoxelEngine.Core;
 using VoxelEngine.GridSystem;
 using VoxelEngine.Items;
@@ -261,6 +262,21 @@ namespace VoxelEngine.UI
         {
             info = default;
             if (hit.collider == null) return false;
+
+            // Automated defense network — ammo, filter, auto/manual, HP.
+            var defense = hit.collider.GetComponentInParent<Damageable>();
+            if (defense != null && DefenseStatus.TryDescribe(defense, out var dInfo))
+            {
+                info.title = dInfo.title;
+                info.detail = dInfo.detail;
+                info.status = dInfo.isEmpty
+                    ? $"EMPTY · {dInfo.status}"
+                    : (dInfo.isLow ? $"LOW · {dInfo.status}" : dInfo.status);
+                info.showHealth = dInfo.showHealth;
+                info.health01 = dInfo.health01;
+                info.healthText = dInfo.healthText;
+                return true;
+            }
 
             var conveyor = hit.collider.GetComponentInParent<ConveyorBelt>();
             if (conveyor != null)

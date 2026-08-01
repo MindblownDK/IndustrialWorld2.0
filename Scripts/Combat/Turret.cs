@@ -125,6 +125,7 @@ namespace VoxelEngine.Combat
         private void Fire(Vector3 aimPoint)
         {
             ammo--;
+            if (ammo <= 0) DefenseStatus.NotifyEmpty("Auto Turret");
             Vector3 origin = muzzle != null ? muzzle.position : transform.position;
             Vector3 dir = (aimPoint - origin).normalized;
             Vector3 end;

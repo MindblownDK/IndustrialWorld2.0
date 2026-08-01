@@ -1,9 +1,34 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.67.0-dev`
+**Current Version:** `6.68.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.68.0-dev] Defense status — inspection, low-ammo toasts, look prompts
+
+**Type:** MINOR — defense UX / situational awareness (save-compatible).
+
+**Automated defenses now report their state clearly in the world:**
+
+1. **`DefenseStatus.cs`** — shared describe / prompt / empty-toast helpers for every defense kind.
+2. **World inspection overlay** — looking at a turret shows title, AUTO/MANUAL, ammo/fuel/cells, faction filter, EMPTY/LOW prefix, and HP bar.
+3. **Empty-ammo toasts** — when a defense piece fires its last round (or flamethrower runs dry mid-engage), a throttled feed toast asks for belt/pipe/panel resupply.
+4. **Look prompts** — non-artillery defenses show `RMB · Configure defense`; artillery keeps `H · Configure (RMB to enter)`.
+5. **Defense panel stock strip** — OPEN panel shows EMPTY / LOW / STOCKED with the live ammo line.
+
+**Wired empty notifies on:** Auto Turret, Artillery, Mortar, Giant Shell, Anti-Air, Energy/Relic, Flamethrower.
+
+**Roadmap snapshot:** Weapons/combat + player armor rows updated to match shipped 6.42–6.67 defense/combat content (were stale MISSING).
+
+**Files touched:**
+- `Scripts/Combat/DefenseStatus.cs` (new)
+- `Scripts/Combat/Turret.cs`, `Artillery.cs`, `MortarTurret.cs`, `GiantShellTurret.cs`, `AntiAirTurret.cs`, `EnergyRelicTurret.cs`, `FlamethrowerTurret.cs`
+- `Scripts/UI/WorldInspectionHud.cs`, `Scripts/UI/GameUIController.cs`
+- `Scripts/Player/PlayerInteractionTool.cs`
+- `Scripts/Core/GameVersion.cs` (6.67.0 → 6.68.0), `Changelog.md`, `Roadmap.md`
+
+---
 
 ### [6.67.0-dev] Automated Defense Ammo Logistics — belts/pipes refill turrets
 

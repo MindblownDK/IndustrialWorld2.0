@@ -96,7 +96,12 @@ namespace VoxelEngine.Combat
 
             // Top up continuous fuel from the magazine when empty.
             if (_fuelSeconds <= 0f) TryConsumeFuelCanister();
-            if (_fuelSeconds <= 0f) return;
+            if (_fuelSeconds <= 0f)
+            {
+                // Only toast when we would have engaged (have a recent target request).
+                if (_targetT != null) DefenseStatus.NotifyEmpty("Flamethrower Turret");
+                return;
+            }
 
             if (Time.time >= _retargetAt || !Valid(_targetT))
             {

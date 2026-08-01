@@ -4,7 +4,7 @@
 **Current Version:** `6.36.3-dev`
 **Roadmap Version:** `6.36.3-dev`
 **Date:** 2026-07-28
-**Status:** Celestial Ruins & Themed Worlds COMPLETED (6.32.0–6.36.3) — 33 themed ruins across 11 planets, slot-chest loot, breakable/salvage, per-block colliders; Crusader Ruins Premium (6.30.0); Offline Survival (11.4) Completed + Grid Gravity Fixed (6.27.3) + Passive Oxygen (11.5); World Management (11.7) Completed; Power, Vehicles & Combat (4.7.0) remains WORKING ON
+**Status:** Celestial Ruins & Themed Worlds COMPLETED (6.32.0–6.36.3) — 33 themed ruins across 11 planets, slot-chest loot, breakable/salvage, per-block colliders; Crusader Ruins Premium (6.30.0); Offline Survival (11.4) Completed + Grid Gravity Fixed (6.27.3) + Passive Oxygen (11.5); World Management (11.7) Completed; Power, Vehicles & Combat (4.7.0) remains WORKING ON — base defense network + ammo logistics + status UX shipped (6.57–6.68); vehicle power validation and remaining life-support/paint still open
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
 ---
@@ -61,7 +61,7 @@ The design goal is a seamless blend of:
 | Grid lighting | ✅ COMPLETED | Detail/Structural single and dual spotlights, Structural LED strip, premium segmented/clean LED visuals, screen data providers, configuration UI, visible chase animation, motion activation, and SavedLightingConfig persistence are fully validated. (5.58.0-dev) |
 | Sloped / armored grid blocks | ✅ COMPLETED | Cube, Slope, Half Block, Half Slope, Corner, and Inverted Slope variants are implemented and validated with textured meshes, collision, ghosts, and rotation. |
 | Grid shape variant wheel | ✅ COMPLETED | Thomas validated all six structural variants, textured collision meshes, accurate ghosts, and the corrected radial-wheel slice alignment in 5.63.2-dev. Step 18 remains the non-destructive authoring path. |
-| Player armor slots | ❌ MISSING | No equipable armor system |
+| Player armor slots | ✅ COMPLETED | **6.42.0-dev:** equipable Crusader armor slots + equipment panel; 6 tiers authored via Step 24. Armor-station upgrade modules remain future work. |
 | Crafting / items / storage | 🛠️ WORKING ON | Core systems exist. **6.16.0-dev** adds global 900-unit matter stacks, player/container weight limits, matter-conversion storage GB usage, and inventory-weight UI; deeper recipe chains and storage progression remain open. |
 | Research / tech tree | 🟡 PARTIALLY COMPLETE | Core research exists; era expansion and final research UI validation remain open. |
 | UI / UX | 🛠️ WORKING ON | Runtime crisp UI scaling, responsive machine panels, build-wheel fit, recipe validation tooling, drop-limit notifications, inventory-weight readout, and terminal search are active; broad screen-size validation remains required. |
@@ -78,7 +78,7 @@ The design goal is a seamless blend of:
 | UI theming | ✅ COMPLETED | Theme definitions, 10 enriched assets, runtime USS variables, Interface tab controls, copy/import/reset, and theme override support are implemented and documented. |
 | Research UI | 🛠️ WORKING ON | Spatial pan/zoom canvas with era labels, glowing connectors, zoom controls, and bottom detail panel (5.41.0-dev) |
 | Damage / destruction | 🛠️ WORKING ON | **6.26.0-dev:** Player death flow now has a premium death screen and selectable respawn anchors. Grid/static block destruction remains open. |
-| Weapons / combat | ❌ MISSING | No swords, guns, missiles, turrets |
+| Weapons / combat | 🟡 PARTIALLY COMPLETE | Personal weapons (sword/pistol/rifle/grenade), mythical roster + Roc, bombs, full base defense network (Auto/Artillery/Flame/Mortar/Giant/AA/Energy) + ammo logistics (6.57–6.68). Missiles, grid weapons parity, and conserve-ammo UI remain open. |
 | Radiation system | ❌ MISSING | No reactor radiation, waste, or hazmat protection |
 | Heat system | ❌ MISSING | No atmospheric entry heat, block heat tolerance, heatshields |
 | Oxygen / life support | ❌ MISSING | No underwater/space suffocation, helmets, tanks |
@@ -469,7 +469,7 @@ A late-game **Jump Drive** provides charged, coordinate-based faster-than-light 
 |---------|-------|------------------|-------|-------------------|
 | **4.5.0** | Factory Foundations | 🛠️ **WORKING ON** | Conveyor belts, chutes, basic machines, grid lights, machine UI | Medium — prefab generation, animation clips |
 | **4.6.0** | Production Lines & UI Revolution | 🛠️ **WORKING ON** | Assemblers, recipe chains, UI theme system, research UI overhaul | Medium — recipes, themes, panels |
-| **4.7.0** | Power, Vehicles & Combat | 🛠️ **WORKING ON** (Combat + base defense in progress) | Engines, batteries, damage framework, Iron Sword/Pistol, Training Dummy, Ghoul enemy, 6-tier Crusader armor + equipment panel, passive livestock (Cow/Sheep/Pig), 6 mythical enemies + Roc boss, grenade + rifle, Auto Turret, Heavy Cannon/Minigun/Gustav, Flamethrower Turret (6.62.0), Mortar Turret (6.63.0), Giant Shell Turret (6.64.0), Anti-Air Turret (6.65.0), Energy / Relic Turret (6.66.0), automated ammo logistics (6.67.0) | High — combat prefabs, physics |
+| **4.7.0** | Power, Vehicles & Combat | 🛠️ **WORKING ON** (Combat + base defense in progress) | Engines, batteries, damage framework, Iron Sword/Pistol, Training Dummy, Ghoul enemy, 6-tier Crusader armor + equipment panel, passive livestock (Cow/Sheep/Pig), 6 mythical enemies + Roc boss, grenade + rifle, Auto Turret, Heavy Cannon/Minigun/Gustav, Flamethrower Turret (6.62.0), Mortar Turret (6.63.0), Giant Shell Turret (6.64.0), Anti-Air Turret (6.65.0), Energy / Relic Turret (6.66.0), automated ammo logistics (6.67.0), defense status UX (6.68.0) | High — combat prefabs, physics |
 | **4.8.0** | Logistics 2.0, Screens & Trajectory | 🛠️ **WORKING ON** | Trains, drones, configurable screens, trajectory camera, orbit map (`M`) | High — train track, camera rigs, panels |
 | **4.9.0** | Living Worlds | 🟡 **PARTIALLY COMPLETE** | Ruins, weather, water flow, enemies, planet skies, gravity/orbit fixes | Very High — worldgen, AI, fluids, rendering |
 | **5.0.0** | Orbital Expansion | 🟡 **PARTIALLY COMPLETE** | Rockets, space stations, asteroid mining, orbital cargo, space ambiance | Very High — new scene/zone system |

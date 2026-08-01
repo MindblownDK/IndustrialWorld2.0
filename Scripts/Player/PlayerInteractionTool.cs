@@ -119,14 +119,22 @@ namespace VoxelEngine.Player
                     }
                     else
                     {
-                        // Artillery cockpit entry (look + H).
-                        var artCockpit = hit.collider.GetComponentInParent<VoxelEngine.Combat.Artillery>();
-                        if (artCockpit != null && VoxelEngine.Combat.Artillery.ActiveArtilleryCockpit == null)
+                        // Defense pieces: look prompt + H opens the shared defense panel.
+                        // Artillery also offers RMB cockpit entry (handled below).
+                        var defenseHit = hit.collider.GetComponentInParent<VoxelEngine.Combat.Damageable>();
+                        if (defenseHit != null &&
+                            VoxelEngine.Combat.DefenseStatus.TryGetLookPrompt(defenseHit, out string defPrompt) &&
+                            VoxelEngine.Combat.Artillery.ActiveArtilleryCockpit == null)
                         {
-                            VoxelEngine.UI.InteractionHud.Show("H", "Configure (RMB to enter)");
-                            if (GameSettings.WasPressed(InputAction.EnterCockpit))
+                            bool isArtillery = defenseHit is VoxelEngine.Combat.Artillery ||
+                                               defenseHit.GetComponentInParent<VoxelEngine.Combat.Artillery>() != null;
+                            string key = isArtillery ? "H" : "RMB";
+                            VoxelEngine.UI.InteractionHud.Show(key, defPrompt);
+                            if (isArtillery && GameSettings.WasPressed(InputAction.EnterCockpit))
                             {
-                                VoxelEngine.UI.GameUIController.Instance?.OpenDefense(artCockpit);
+                                var art = defenseHit as VoxelEngine.Combat.Artillery
+                                       ?? defenseHit.GetComponentInParent<VoxelEngine.Combat.Artillery>();
+                                if (art != null) VoxelEngine.UI.GameUIController.Instance?.OpenDefense(art);
                             }
                         }
                         else

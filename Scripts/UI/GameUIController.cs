@@ -1357,6 +1357,22 @@ namespace VoxelEngine.UI
                         : "Auto Turret";
             panel.Add(MakeTitle(name));
 
+            // Live stock strip (EMPTY / LOW / OK) from shared DefenseStatus.
+            if (VoxelEngine.Combat.DefenseStatus.TryDescribe(defense, out var stockInfo))
+            {
+                string stockLabel = stockInfo.isEmpty ? "EMPTY" : (stockInfo.isLow ? "LOW" : "STOCKED");
+                Color stockCol = stockInfo.isEmpty ? new Color(1f, 0.35f, 0.3f)
+                                : stockInfo.isLow ? new Color(1f, 0.75f, 0.25f)
+                                : new Color(0.45f, 0.9f, 0.55f);
+                var stock = new Label($"{stockLabel}  ·  {stockInfo.status}");
+                stock.style.color = stockCol;
+                stock.style.fontSize = 11;
+                stock.style.unityFontStyleAndWeight = FontStyle.Bold;
+                stock.style.marginBottom = 8;
+                stock.style.whiteSpace = WhiteSpace.Normal;
+                panel.Add(stock);
+            }
+
             if (art != null)
             {
                 panel.Add(MakeSubtitle("Shells (drag in)"));

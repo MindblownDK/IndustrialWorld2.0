@@ -151,6 +151,7 @@ namespace VoxelEngine.Combat
                 if (s == null || s.IsEmpty) continue;
                 s.count--;
                 AmmoMagazine.SetSlot(i, s.count <= 0 ? new ItemStack() : s);
+                if (!HasAmmo()) DefenseStatus.NotifyEmpty("Anti-Air Turret");
                 return true;
             }
             return false;

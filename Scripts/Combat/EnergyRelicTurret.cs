@@ -160,6 +160,7 @@ namespace VoxelEngine.Combat
                     s.count--;
                     CellMagazine.SetSlot(i, s.count <= 0 ? new ItemStack() : s);
                     isRelic = relic;
+                    if (!HasAmmo()) DefenseStatus.NotifyEmpty("Energy / Relic Turret");
                     return true;
                 }
             }

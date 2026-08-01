@@ -140,6 +140,7 @@ namespace VoxelEngine.Combat
                 s.count--;
                 ShellMagazine.SetSlot(i, s.count <= 0 ? new ItemStack() : s);
                 type = ShellTypeFromItem(item);
+                if (!HasAmmo()) DefenseStatus.NotifyEmpty("Mortar Turret");
                 return true;
             }
             return false;
