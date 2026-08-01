@@ -1325,6 +1325,7 @@ namespace VoxelEngine.UI
             else if (d is VoxelEngine.Combat.MortarTurret mortarWatch) WatchContainer(mortarWatch.ShellMagazine);
             else if (d is VoxelEngine.Combat.GiantShellTurret giantWatch) WatchContainer(giantWatch.ShellMagazine);
             else if (d is VoxelEngine.Combat.AntiAirTurret aaWatch) WatchContainer(aaWatch.AmmoMagazine);
+            else if (d is VoxelEngine.Combat.EnergyRelicTurret energyWatch) WatchContainer(energyWatch.CellMagazine);
             UnlockCursor();
             Refresh();
         }
@@ -1345,12 +1346,14 @@ namespace VoxelEngine.UI
             var mortar = defense as VoxelEngine.Combat.MortarTurret;
             var giant  = defense as VoxelEngine.Combat.GiantShellTurret;
             var aa     = defense as VoxelEngine.Combat.AntiAirTurret;
+            var energy = defense as VoxelEngine.Combat.EnergyRelicTurret;
 
             string name = art != null ? art.variant.ToString()
                         : flame != null ? "Flamethrower Turret"
                         : mortar != null ? "Mortar Turret"
                         : giant != null ? "Giant Shell Turret"
                         : aa != null ? "Anti-Air Turret"
+                        : energy != null ? "Energy / Relic Turret"
                         : "Auto Turret";
             panel.Add(MakeTitle(name));
 
@@ -1359,6 +1362,16 @@ namespace VoxelEngine.UI
                 panel.Add(MakeSubtitle("Shells (drag in)"));
                 WatchContainer(art.ShellMagazine);
                 panel.Add(BuildSortableSlotGrid(art.ShellMagazine, showSort: false));
+            }
+            else if (energy != null)
+            {
+                panel.Add(MakeSubtitle("Cells (Charged / Relic Capacitor)"));
+                WatchContainer(energy.CellMagazine);
+                panel.Add(BuildSortableSlotGrid(energy.CellMagazine, showSort: false));
+                var hint = new Label("Electrical beam. Relic Capacitors = heavier charged shot.");
+                hint.style.color = new Color(0.7f, 0.55f, 1f);
+                hint.style.fontSize = 10; hint.style.marginBottom = 6; hint.style.whiteSpace = WhiteSpace.Normal;
+                panel.Add(hint);
             }
             else if (aa != null)
             {
@@ -1454,6 +1467,7 @@ namespace VoxelEngine.UI
             if (d is VoxelEngine.Combat.MortarTurret m) return m.filter;
             if (d is VoxelEngine.Combat.GiantShellTurret g) return g.filter;
             if (d is VoxelEngine.Combat.AntiAirTurret aa) return aa.filter;
+            if (d is VoxelEngine.Combat.EnergyRelicTurret e) return e.filter;
             if (d is VoxelEngine.Combat.Turret t) return t.filter;
             return VoxelEngine.Combat.TargetFilter.Enemies;
         }
@@ -1465,6 +1479,7 @@ namespace VoxelEngine.UI
             else if (d is VoxelEngine.Combat.MortarTurret m) m.filter = f;
             else if (d is VoxelEngine.Combat.GiantShellTurret g) g.filter = f;
             else if (d is VoxelEngine.Combat.AntiAirTurret aa) aa.filter = f;
+            else if (d is VoxelEngine.Combat.EnergyRelicTurret e) e.filter = f;
             else if (d is VoxelEngine.Combat.Turret t) t.filter = f;
         }
 
@@ -1475,6 +1490,7 @@ namespace VoxelEngine.UI
             if (d is VoxelEngine.Combat.MortarTurret m) return m.autoMode;
             if (d is VoxelEngine.Combat.GiantShellTurret g) return g.autoMode;
             if (d is VoxelEngine.Combat.AntiAirTurret aa) return aa.autoMode;
+            if (d is VoxelEngine.Combat.EnergyRelicTurret e) return e.autoMode;
             if (d is VoxelEngine.Combat.Turret t) return t.autoMode;
             return true;
         }
@@ -1486,6 +1502,7 @@ namespace VoxelEngine.UI
             else if (d is VoxelEngine.Combat.MortarTurret m) m.autoMode = v;
             else if (d is VoxelEngine.Combat.GiantShellTurret g) g.autoMode = v;
             else if (d is VoxelEngine.Combat.AntiAirTurret aa) aa.autoMode = v;
+            else if (d is VoxelEngine.Combat.EnergyRelicTurret e) e.autoMode = v;
             else if (d is VoxelEngine.Combat.Turret t) t.autoMode = v;
         }
 

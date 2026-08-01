@@ -1,9 +1,37 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.65.0-dev`
+**Current Version:** `6.66.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.66.0-dev] Energy / Relic Turret — late-tier electrical beam defense
+
+**Type:** MINOR — new defensive structure (save-compatible).
+
+**Added the Energy / Relic Turret** (`Scripts/Combat/EnergyRelicTurret.cs`) — final named turret in the Base Defense Turret Network (roadmap §4.8):
+1. Placeable late-tier turret with a **spinning relic crystal**, core glow, and emitter fins.
+2. Fires **hitscan Electrical beams** (DamageType.Electrical) with a bright beam + muzzle/impact sparks.
+3. Ammo magazine accepts:
+   - **Charged Cell** — standard beam (damage 28)
+   - **Relic Capacitor** — heavier violet charged shot (damage 70), preferred when available
+4. Faction filter + Auto-Fire via the shared defense panel; slight preference for higher-HP elites.
+5. **Step 45 (wizard):** prefab, block, Charged Cell + Relic Capacitor items, Assembler recipes. Non-destructive / re-runnable.
+
+**Persistence (additive):** cell magazine + filter/autoMode save/restore like the other defense pieces.
+
+**To use:** run Step 45 → craft Energy / Relic Turret + Charged Cells (and optional Relic Capacitors) → place → RMB → load cells → Auto-Fire.
+
+**Defense network status:** Light Gun (Auto Turret), Heavy Ballistic (Minigun/Cannon/Gustav), Flamethrower, Mortar, Giant Shell, Anti-Air, Energy/Relic — all authored. Next roadmap slice: automated ammo logistics.
+
+**Files touched:**
+- `Scripts/Combat/EnergyRelicTurret.cs` (new)
+- `Scripts/Editor/VoxelEngineSetupWindow.cs` (Step 45)
+- `Scripts/UI/GameUIController.cs`, `Scripts/Player/PlayerInteractionTool.cs`
+- `Scripts/Persistence/WorldStatePersistence.cs`
+- `Scripts/Core/GameVersion.cs` (6.65.0 → 6.66.0), `Changelog.md`
+
+---
 
 ### [6.65.0-dev] Anti-Air Turret — flak vs flyers (Griffin / Roc)
 

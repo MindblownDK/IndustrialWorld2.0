@@ -512,6 +512,19 @@ namespace VoxelEngine.Persistence
                 return;
             }
 
+            var energy = go.GetComponentInChildren<VoxelEngine.Combat.EnergyRelicTurret>(true);
+            if (energy != null)
+            {
+                entry.defenseState = new SavedDefenseState
+                {
+                    filter = (int)energy.filter,
+                    autoMode = energy.autoMode,
+                    ammo = 0,
+                    fuelSeconds = 0f
+                };
+                return;
+            }
+
             var tur = go.GetComponentInChildren<VoxelEngine.Combat.Turret>(true);
             if (tur != null)
             {
@@ -789,6 +802,10 @@ namespace VoxelEngine.Persistence
             var aa = go.GetComponentInChildren<VoxelEngine.Combat.AntiAirTurret>();
             if (aa != null)
                 return SerializeContainer(aa.AmmoMagazine);
+
+            var energy = go.GetComponentInChildren<VoxelEngine.Combat.EnergyRelicTurret>();
+            if (energy != null)
+                return SerializeContainer(energy.CellMagazine);
 
             return null;
         }
@@ -1480,6 +1497,14 @@ namespace VoxelEngine.Persistence
                 return;
             }
 
+            var energy = go.GetComponentInChildren<VoxelEngine.Combat.EnergyRelicTurret>(true);
+            if (energy != null)
+            {
+                energy.filter = (VoxelEngine.Combat.TargetFilter)state.filter;
+                energy.autoMode = state.autoMode;
+                return;
+            }
+
             var tur = go.GetComponentInChildren<VoxelEngine.Combat.Turret>(true);
             if (tur != null)
             {
@@ -1712,7 +1737,14 @@ namespace VoxelEngine.Persistence
 
             var aa = go.GetComponentInChildren<VoxelEngine.Combat.AntiAirTurret>();
             if (aa != null)
+            {
                 DeserializeInto(aa.AmmoMagazine, sc);
+                return;
+            }
+
+            var energy = go.GetComponentInChildren<VoxelEngine.Combat.EnergyRelicTurret>();
+            if (energy != null)
+                DeserializeInto(energy.CellMagazine, sc);
         }
 
         private void RestoreDrawer(VoxelEngine.Storage.StorageDrawer drawer, SavedContainer sc)

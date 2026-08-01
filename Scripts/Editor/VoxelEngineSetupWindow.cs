@@ -422,6 +422,13 @@ namespace VoxelEngine.EditorTools
                 "  • Aerial-Only toggle on the defense panel. Re-runnable.");
             AddWizardButton(scroll, "44. Build Anti-Air Turret (flak)", BuildAntiAirTurretContent, 40);
 
+            AddInfo(scroll,
+                "Step 45 builds the ENERGY / RELIC TURRET (late-tier electrical, non-destructive):\n" +
+                "  • Hitscan Electrical beams; spinning relic crystal + core glow\n" +
+                "  • Charged Cells (standard) / Relic Capacitors (heavy shot)\n" +
+                "  • Defense panel magazine + faction targeting. Re-runnable.");
+            AddWizardButton(scroll, "45. Build Energy / Relic Turret", BuildEnergyRelicTurretContent, 40);
+
             AddSpacer(scroll, 20);
         }
 
@@ -12981,6 +12988,145 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
                 "• Uses AA Rounds (Bullets also accepted as fallback)\n" +
                 "• 140 HP. Craft at the Assembler", "OK");
         }
+
+        // ============================================================
+        //   STEP 45 - ENERGY / RELIC TURRET. Late-tier electrical beam
+        //   defense. Charged Cells + Relic Capacitors. Non-destructive.
+        // ============================================================
+        private void BuildEnergyRelicTurretContent()
+        {
+            const string COMBAT_ROOT   = ASSET_ROOT + "/Combat";
+            const string COMBAT_ITEMS  = COMBAT_ROOT + "/Items";
+            const string COMBAT_BLOCKS = COMBAT_ROOT + "/Blocks";
+            const string COMBAT_PREFABS= COMBAT_ROOT + "/Prefabs";
+            const string COMBAT_MATS   = COMBAT_ROOT + "/Materials";
+            EnsureFolder(COMBAT_ROOT); EnsureFolder(COMBAT_ITEMS); EnsureFolder(COMBAT_BLOCKS); EnsureFolder(COMBAT_PREFABS); EnsureFolder(COMBAT_MATS);
+
+            ItemDefinition FindItem(string n)
+            {
+                var guids = AssetDatabase.FindAssets(n + " t:ItemDefinition");
+                foreach (var g in guids) { var pp = AssetDatabase.GUIDToAssetPath(g); if (System.IO.Path.GetFileNameWithoutExtension(pp) == n) return AssetDatabase.LoadAssetAtPath<ItemDefinition>(pp); }
+                return null;
+            }
+            var ironPlate  = FindItem("Item_IronPlate");
+            var steelPlate = FindItem("Item_SteelPlate");
+            var steelIngot = FindItem("Item_SteelIngot");
+            var circuit    = FindItem("Item_Circuit");
+            var advCircuit = FindItem("Item_AdvancedCircuit");
+            var goldWire   = FindItem("Item_GoldLVWire");
+            var copperWire = FindItem("Item_CopperLVWire");
+
+            var body   = MakeColoredMat(COMBAT_MATS, "Mat_EnergyBody",   new Color(0.18f, 0.20f, 0.28f));
+            var dark   = MakeColoredMat(COMBAT_MATS, "Mat_EnergyDark",   new Color(0.10f, 0.11f, 0.14f));
+            var accent = MakeColoredMat(COMBAT_MATS, "Mat_EnergyAccent", new Color(0.35f, 0.75f, 0.95f));
+            var relic  = MakeColoredMat(COMBAT_MATS, "Mat_RelicCrystal", new Color(0.70f, 0.40f, 1.0f));
+            var beam   = MakeColoredMat(COMBAT_MATS, "Mat_EnergyBeam",   new Color(0.45f, 0.90f, 1.0f));
+
+            void AddPart(GameObject parent, string n, Vector3 pos, Vector3 euler, Vector3 scale, Material m)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                go.name = n; go.transform.SetParent(parent.transform, false);
+                go.transform.localPosition = pos; go.transform.localEulerAngles = euler; go.transform.localScale = scale;
+                go.GetComponent<Renderer>().sharedMaterial = m;
+                var col = go.GetComponent<Collider>(); if (col != null) UnityEngine.Object.DestroyImmediate(col);
+            }
+            void AddCyl(GameObject parent, string n, Vector3 pos, Vector3 euler, Vector3 scale, Material m)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                go.name = n; go.transform.SetParent(parent.transform, false);
+                go.transform.localPosition = pos; go.transform.localEulerAngles = euler; go.transform.localScale = scale;
+                go.GetComponent<Renderer>().sharedMaterial = m;
+                var col = go.GetComponent<Collider>(); if (col != null) UnityEngine.Object.DestroyImmediate(col);
+            }
+            void AddSphere(GameObject parent, string n, Vector3 pos, Vector3 scale, Material m)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                go.name = n; go.transform.SetParent(parent.transform, false);
+                go.transform.localPosition = pos; go.transform.localScale = scale;
+                go.GetComponent<Renderer>().sharedMaterial = m;
+                var col = go.GetComponent<Collider>(); if (col != null) UnityEngine.Object.DestroyImmediate(col);
+            }
+
+            var root = new GameObject("EnergyRelicTurret");
+            AddPart(root, "Base",     new Vector3(0f, 0.12f, 0f), Vector3.zero, new Vector3(1.05f, 0.24f, 1.05f), body);
+            AddCyl (root, "Pillar",   new Vector3(0f, 0.55f, 0f), Vector3.zero, new Vector3(0.32f, 0.4f, 0.32f), dark);
+            AddPart(root, "Ring",     new Vector3(0f, 0.85f, 0f), Vector3.zero, new Vector3(0.7f, 0.08f, 0.7f), accent);
+            AddPart(root, "CellBay",  new Vector3(0.45f, 0.4f, -0.15f), Vector3.zero, new Vector3(0.28f, 0.35f, 0.4f), dark);
+
+            var headGo = new GameObject("Head");
+            headGo.transform.SetParent(root.transform, false);
+            headGo.transform.localPosition = new Vector3(0f, 1.05f, 0f);
+            AddPart(headGo, "HeadBody", new Vector3(0f, 0f, 0f), Vector3.zero, new Vector3(0.55f, 0.4f, 0.5f), body);
+            AddCyl (headGo, "Emitter",  new Vector3(0f, 0.05f, 0.45f), new Vector3(90,0,0), new Vector3(0.18f, 0.35f, 0.18f), accent);
+            AddPart(headGo, "FinsL",    new Vector3(-0.28f, 0.1f, 0.05f), new Vector3(0,0,15), new Vector3(0.06f, 0.35f, 0.25f), dark);
+            AddPart(headGo, "FinsR",    new Vector3( 0.28f, 0.1f, 0.05f), new Vector3(0,0,-15), new Vector3(0.06f, 0.35f, 0.25f), dark);
+
+            // Spinning relic crystal (child of head so it aims with the barrel).
+            var crystalGo = new GameObject("Crystal");
+            crystalGo.transform.SetParent(headGo.transform, false);
+            crystalGo.transform.localPosition = new Vector3(0f, 0.35f, -0.05f);
+            AddSphere(crystalGo, "Core", Vector3.zero, Vector3.one * 0.28f, relic);
+            AddPart(crystalGo, "ShardA", new Vector3(0f, 0.18f, 0f), new Vector3(0,0,45), new Vector3(0.08f, 0.25f, 0.08f), accent);
+            AddPart(crystalGo, "ShardB", new Vector3(0f, -0.18f, 0f), new Vector3(0,0,-45), new Vector3(0.08f, 0.25f, 0.08f), accent);
+
+            var muzzleGo = new GameObject("Muzzle");
+            muzzleGo.transform.SetParent(headGo.transform, false);
+            muzzleGo.transform.localPosition = new Vector3(0f, 0.05f, 0.85f);
+
+            var cap = root.AddComponent<CapsuleCollider>();
+            cap.height = 1.7f; cap.radius = 0.55f; cap.center = new Vector3(0f, 0.75f, 0f);
+            var et = root.AddComponent<VoxelEngine.Combat.EnergyRelicTurret>();
+            et.range = 48f; et.fireCooldown = 0.55f; et.cellDamage = 28f; et.relicDamage = 70f;
+            et.aimSpeed = 5.5f; et.beamMat = beam; et.coreMat = relic; et.muzzleMat = accent;
+            et.head = headGo.transform; et.muzzle = muzzleGo.transform; et.crystal = crystalGo.transform;
+
+            const string path = ASSET_ROOT + "/Combat/Prefabs/EnergyRelicTurret.prefab";
+            GameObject prefab;
+            if (AssetDatabase.LoadMainAssetAtPath(path) != null) { prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path); UnityEngine.Object.DestroyImmediate(root); }
+            else { prefab = PrefabUtility.SaveAsPrefabAsset(root, path); UnityEngine.Object.DestroyImmediate(root); }
+
+            var block = GetOrCreateAsset<VoxelEngine.Items.BlockItem>($"{COMBAT_BLOCKS}/Block_EnergyRelicTurret.asset");
+            block.itemId = "block_energy_relic_turret"; block.displayName = "Energy / Relic Turret";
+            block.description = "Late-tier electrical beam turret. Consumes Charged Cells (standard) or Relic Capacitors (heavy charged shot). Configure via the defense panel (RMB).";
+            block.iconTint = new Color(0.45f, 0.55f, 0.95f);
+            block.maxStack = 2; block.massPerUnit = 18f;
+            block.placedPrefab = prefab; block.gridSize = Vector3Int.one; block.allowStacking = true; block.blockHealth = 180; block.miningTier = 3; block.category = "Combat";
+            EditorUtility.SetDirty(block);
+
+            var cell = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{COMBAT_ITEMS}/Item_ChargedCell.asset");
+            cell.itemId = "item_charged_cell"; cell.displayName = "Charged Cell";
+            cell.description = "Compact energy cell for the Energy / Relic Turret. Standard electrical beam shot.";
+            cell.iconTint = new Color(0.4f, 0.85f, 1f); cell.maxStack = 40; cell.massPerUnit = 0.6f; cell.category = "Combat";
+            EditorUtility.SetDirty(cell);
+
+            var capItem = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{COMBAT_ITEMS}/Item_RelicCapacitor.asset");
+            capItem.itemId = "item_relic_capacitor"; capItem.displayName = "Relic Capacitor";
+            capItem.description = "Exotic relic capacitor. Feeds a heavier charged beam from the Energy / Relic Turret.";
+            capItem.iconTint = new Color(0.75f, 0.4f, 1f); capItem.maxStack = 20; capItem.massPerUnit = 1.2f; capItem.category = "Combat";
+            EditorUtility.SetDirty(capItem);
+
+            AddRecipe("Recipe_EnergyRelicTurret", "Energy / Relic Turret", block, 1, VoxelEngine.Crafting.StationTier.Assembler, true,
+                (steelPlate != null ? steelPlate : ironPlate, 12),
+                (advCircuit != null ? advCircuit : circuit, 4),
+                (goldWire != null ? goldWire : copperWire, 8),
+                (steelIngot, 6));
+            AddRecipe("Recipe_ChargedCell", "Charged Cell", cell, 8, VoxelEngine.Crafting.StationTier.Assembler, true,
+                (circuit, 1), (copperWire != null ? copperWire : goldWire, 2), (ironPlate, 1));
+            AddRecipe("Recipe_RelicCapacitor", "Relic Capacitor", capItem, 2, VoxelEngine.Crafting.StationTier.Assembler, true,
+                (advCircuit != null ? advCircuit : circuit, 2),
+                (goldWire != null ? goldWire : copperWire, 4),
+                (steelIngot, 2));
+
+            AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Voxel Engine — Energy / Relic Turret",
+                "The Energy / Relic Turret is built:\n\n" +
+                "• Crystal-core beam turret with spinning relic (~14 parts)\n" +
+                "• Hitscan Electrical damage (cells 28 / relic capacitors 70)\n" +
+                "• Range ~48 m, glowing beam + impact sparks\n" +
+                "• Load Charged Cells or Relic Capacitors via the defense panel\n" +
+                "• 180 HP. Craft at the Assembler", "OK");
+        }
+
 
 
 
