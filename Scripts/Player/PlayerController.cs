@@ -242,7 +242,12 @@ namespace VoxelEngine.Player
                 {
                     GameSettings.FlyMode = false;
                     _yaw = transform.rotation.eulerAngles.y;
-                    VoxelEngine.UI.BuildFeedbackHud.Show("Flight Offline", "No jetpack equipped", null, Color.yellow);
+                    var equipment = GetComponent<PlayerEquipment>();
+                    var jets = equipment != null ? equipment.GetJetpackSummary() : PlayerEquipment.JetpackSummary.Empty;
+                    string why = jets.anyPack && !string.IsNullOrEmpty(jets.offlineReason)
+                        ? jets.offlineReason
+                        : "No jetpack equipped";
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Flight Offline", why, null, Color.yellow);
                 }
 
                 if (GameSettings.FlyMode) FlyUpdate();
@@ -327,9 +332,14 @@ namespace VoxelEngine.Player
                 }
                 else
                 {
-                    string detail = equippedNow ? "Jetpack equipped, but flight remains locked" : "Research flight or equip a jetpack in one of the two slots.";
+                    var jets = equipment != null ? equipment.GetJetpackSummary() : PlayerEquipment.JetpackSummary.Empty;
+                    string detail;
+                    if (jets.anyPack && !string.IsNullOrEmpty(jets.offlineReason))
+                        detail = jets.offlineReason; // e.g. "No atmosphere — engine can't ignite here"
+                    else
+                        detail = equippedNow ? "Jetpack equipped, but flight remains locked" : "Research flight or equip a jetpack in one of the two slots.";
                     VoxelEngine.UI.BuildFeedbackHud.Show("Flight Locked", detail, null, Color.yellow);
-                    Debug.Log("[Player] Flight is locked. Research it or equip a jetpack.");
+                    Debug.Log("[Player] Flight is locked. " + detail);
                 }
             }
         }
@@ -570,6 +580,9 @@ namespace VoxelEngine.Player
         // ============================================================
         //                          FLY MODE
         // ============================================================
+        // Rate-limit for jetpack offline toasts so a dry pack doesn't spam every frame.
+        private float _nextJetpackFeedbackTime;
+
         private void FlyUpdate()
         {
             float dt = Time.deltaTime;
@@ -584,31 +597,36 @@ namespace VoxelEngine.Player
             if (GameSettings.IsHeld(InputAction.Crouch)) wishDir -= transform.up;
 
             var equipment = GetComponent<PlayerEquipment>();
+            bool researchFlight = PlayerStats.Instance != null && PlayerStats.Instance.HasFlightUnlocked;
 
-            // Fuel/charge accounting: drain while flying; cut flight if the pack runs dry
-            // and no research-only flight permission remains.
-            bool boosting = GameSettings.IsHeld(InputAction.Sprint);
+            // Fuel/charge accounting: drain while flying; cut flight when no legal,
+            // fueled pack remains (no atmosphere / dry tanks) and no research-only
+            // flight permission remains.
+            var jets = equipment != null ? equipment.GetJetpackSummary() : PlayerEquipment.JetpackSummary.Empty;
+            // No equipment component at all (dev/research flight) keeps free boost; with
+            // equipment, boost only engages when the drive pack reports afterburner fuel.
+            bool boosting = GameSettings.IsHeld(InputAction.Sprint) && (equipment == null || jets.canBoost);
             if (equipment != null)
             {
-                bool fueled = equipment.TryConsumeFlightFuel(dt, boosting);
-                if (!fueled && (PlayerStats.Instance == null || !PlayerStats.Instance.HasFlightUnlocked))
+                if (!researchFlight && !jets.canFly)
                 {
-                    GameSettings.FlyMode = false;
-                    _velocity = Vector3.zero;
-                    VoxelEngine.UI.BuildFeedbackHud.Show("Jetpack", "Out of fuel — fill Portable H₂ Tanks / Charged Cells", null, new Color(1f, 0.7f, 0.25f));
+                    CutJetpackFlight(jets.offlineReason);
+                    return;
+                }
+
+                bool fueled = equipment.TryConsumeFlightFuel(dt, boosting);
+                if (!fueled && !researchFlight)
+                {
+                    CutJetpackFlight("Out of fuel — fill Portable H₂ Tanks / Batteries / Cells");
                     return;
                 }
                 // If research flight is unlocked, allow unfueled flight without boost.
                 if (!fueled) boosting = false;
             }
 
-            var pack = equipment != null ? equipment.GetBestJetpack() : null;
-            // Prefer the fueled pack for multipliers.
-            var fueledStack = equipment != null ? equipment.GetBestJetpackStack(requireFuel: true) : null;
-            if (fueledStack != null && fueledStack.item is VoxelEngine.Items.JetpackItem fp) pack = fp;
-
-            float packSpeed = pack != null ? Mathf.Max(0.1f, pack.flightSpeedMultiplier) : 1f;
-            float packBoost = pack != null ? Mathf.Max(1f, pack.boostMultiplier) : 1f;
+            float packSpeed = jets.speedMul > 0f ? jets.speedMul : 1f;
+            float packBoost = jets.boostMul > 0f ? jets.boostMul : 1f;
+            var pack = jets.drivePack;
             if (pack != null && pack.family == VoxelEngine.Items.JetpackFamily.HydrogenBoost)
             {
                 // Hydrogen boost packs spool briefly instead of instantly hitting max
@@ -628,6 +646,18 @@ namespace VoxelEngine.Player
             // Inertial-dampener feel: smooth toward target, no gravity in fly mode.
             _velocity = Vector3.Lerp(_velocity, wishVel, 1f - Mathf.Exp(-12f * dt));
             _cc.Move(_velocity * dt);
+        }
+
+        /// <summary>Kill fly-mode with a single, rate-limited explanation toast.</summary>
+        private void CutJetpackFlight(string reason)
+        {
+            GameSettings.FlyMode = false;
+            _velocity = Vector3.zero;
+            _yaw = transform.rotation.eulerAngles.y;
+            if (Time.unscaledTime < _nextJetpackFeedbackTime) return;
+            _nextJetpackFeedbackTime = Time.unscaledTime + 1.5f;
+            if (string.IsNullOrEmpty(reason)) reason = "Jetpack offline";
+            VoxelEngine.UI.BuildFeedbackHud.Show("Jetpack Offline", reason, null, new Color(1f, 0.7f, 0.25f));
         }
 
         // ============================================================

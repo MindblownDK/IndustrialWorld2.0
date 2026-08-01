@@ -4,6 +4,14 @@
 // jetpack equipment slots and a quick-equip path from the active inventory item.
 // Full armor UI/oxygen/fuel persistence can build on this without changing the
 // PlayerController flight contract.
+//
+// ── Jetpack fuel model (dual-pool, save-compatible) ─────────────────
+//   • H₂ pool    → ItemStack.durability (ml) on packs that burn hydrogen.
+//   • Power pool → ItemStack.charge (Wh) on hybrids; packs that ONLY use
+//                  power keep their charge in durability (legacy stacks okay).
+//   • Hybrid: power cruises, H₂ cruises AND unlocks shift boost.
+//   • Atmospheric packs only ignite inside an atmosphere; hydrogen works
+//     everywhere; two identical packs fly faster and drain as one big tank.
 
 using UnityEngine;
 using VoxelEngine.Combat;
@@ -18,6 +26,13 @@ namespace VoxelEngine.Player
         public const int HelmetSlotCount = 1;
         public const int OxygenTankSlotCount = 1;
         public const int ArmorSlotCount      = 1;
+
+        /// <summary>Speed bonus while two identical usable packs are equipped.</summary>
+        public const float TwinSpeedBonus = 1.35f;
+        /// <summary>Boost bonus while two identical usable packs are equipped.</summary>
+        public const float TwinBoostBonus = 1.20f;
+        /// <summary>Air density (kg/m³) below which a pack counts as "in vacuum".</summary>
+        public const float AtmosphereDensityThreshold = 0.08f;
 
         [SerializeField] private ItemContainer _jetpackSlots;
         [SerializeField] private ItemContainer _helmetSlots;
@@ -74,72 +89,202 @@ namespace VoxelEngine.Player
             _armorSlots.OnChanged += SyncEquippedArmor;
         }
 
-        public bool HasUsableJetpack => GetBestJetpackStack(requireFuel: true) != null;
+        // ════════════════════════════════════════════════════════════
+        //                     JETPACK FLIGHT STATE
+        // ════════════════════════════════════════════════════════════
 
-        /// <summary>Best equipped pack definition (may be empty of fuel).</summary>
-        public JetpackItem GetBestJetpack() => GetBestJetpackStack(requireFuel: false)?.item as JetpackItem;
+        /// <summary>Immutable snapshot of the equipped packs for one frame —
+        /// single source of truth for the controller, the HUD and the bay UI.</summary>
+        public readonly struct JetpackSummary
+        {
+            public readonly bool anyPack;
+            public readonly bool canFly;
+            public readonly bool canBoost;
+            public readonly bool twinActive;
+            public readonly float speedMul;
+            public readonly float boostMul;
+            public readonly int h2;
+            public readonly int h2Cap;
+            public readonly int power;
+            public readonly int powerCap;
+            public readonly JetpackItem drivePack;
+            public readonly string offlineReason;
 
-        /// <summary>Best equipped pack that still has fuel/charge (or needs none).</summary>
-        public ItemStack GetBestJetpackStack(bool requireFuel = true)
+            public JetpackSummary(
+                bool anyPack, bool canFly, bool canBoost, bool twinActive,
+                float speedMul, float boostMul,
+                int h2, int h2Cap, int power, int powerCap,
+                JetpackItem drivePack, string offlineReason)
+            {
+                this.anyPack = anyPack; this.canFly = canFly; this.canBoost = canBoost;
+                this.twinActive = twinActive;
+                this.speedMul = speedMul; this.boostMul = boostMul;
+                this.h2 = h2; this.h2Cap = h2Cap; this.power = power; this.powerCap = powerCap;
+                this.drivePack = drivePack; this.offlineReason = offlineReason;
+            }
+
+            public static readonly JetpackSummary Empty = new JetpackSummary(
+                false, false, false, false, 1f, 1f, 0, 0, 0, 0, null, "No jetpack equipped");
+        }
+
+        private JetpackSummary _summaryCache;
+        private int _summaryCachedFrame = -1;
+
+        /// <summary>Frame-cached snapshot — safe to call from UI and controller alike.</summary>
+        public JetpackSummary GetJetpackSummary()
+        {
+            if (_summaryCachedFrame != Time.frameCount)
+            {
+                _summaryCache = BuildSummary();
+                _summaryCachedFrame = Time.frameCount;
+            }
+            return _summaryCache;
+        }
+
+        /// <summary>True when the pack may ignite at the player's current position.</summary>
+        public bool EnvironmentOk(JetpackItem pack)
+        {
+            if (pack == null) return false;
+            float density = VoxelEngine.GridSystem.AtmosphereManager.GetAirDensity(transform.position);
+            bool inAtmosphere = density >= AtmosphereDensityThreshold;
+            return inAtmosphere ? pack.supportsAtmosphere : pack.supportsVacuum;
+        }
+
+        private static bool PackHasFuel(JetpackItem pack, ItemStack stack)
+        {
+            if (pack == null || stack == null || stack.IsEmpty) return false;
+            if (!NeedsFuel(pack)) return true;
+            return JetpackItem.GetH2Ml(stack) > 0 || JetpackItem.GetPowerMl(stack) > 0;
+        }
+
+        /// <summary>Shift boost on the Hybrid is a hydrogen afterburner — the power
+        /// cell alone only cruises. Pure packs boost on their own fuel.</summary>
+        private static bool PackCanBoost(JetpackItem pack, ItemStack stack)
+        {
+            if (pack == null || stack == null || stack.IsEmpty) return false;
+            bool hybrid = pack.UsesHydrogenEffective && pack.UsesPowerEffective;
+            if (hybrid) return JetpackItem.GetH2Ml(stack) > 0;
+            if (pack.UsesHydrogenEffective) return JetpackItem.GetH2Ml(stack) > 0;
+            if (pack.UsesPowerEffective) return JetpackItem.GetPowerMl(stack) > 0;
+            return true; // unfuelled legacy pack
+        }
+
+        private JetpackSummary BuildSummary()
         {
             EnsureContainers();
-            EnsureAllJetpackFuelInitialized();
-            ItemStack best = null;
+            NormalizeAllJetpacks();
+
+            int h2 = 0, h2Cap = 0, power = 0, powerCap = 0;
+            bool anyPack = false, anyEnvBlocked = false;
+            ItemStack bestStack = null;
+            JetpackItem bestPack = null;
             float bestScore = float.MinValue;
+
             for (int i = 0; i < _jetpackSlots.Size; i++)
             {
-                var stack = _jetpackSlots.GetSlot(i);
-                if (stack == null || stack.IsEmpty || stack.item is not JetpackItem pack) continue;
-                EnsureJetpackFuel(stack);
-                if (requireFuel && NeedsFuel(pack) && stack.durability <= 0) continue;
+                var s = _jetpackSlots.GetSlot(i);
+                if (s == null || s.IsEmpty || s.item is not JetpackItem p) continue;
+                anyPack = true;
+                int pH2 = JetpackItem.GetH2Ml(s);
+                int pPw = JetpackItem.GetPowerMl(s);
+                h2 += pH2; h2Cap += p.HydrogenCapacityMl;
+                power += pPw; powerCap += p.PowerCapacityMl;
+
+                if (!EnvironmentOk(p)) { anyEnvBlocked = true; continue; }
+                if (!PackHasFuel(p, s)) continue;
+
+                float score = p.flightSpeedMultiplier + p.boostMultiplier * 0.25f
+                            + Mathf.Clamp01((pH2 + pPw) / (float)Mathf.Max(1, p.HydrogenCapacityMl + p.PowerCapacityMl)) * 0.05f;
+                if (score > bestScore) { bestScore = score; bestStack = s; bestPack = p; }
+            }
+
+            if (!anyPack) return JetpackSummary.Empty;
+
+            // Twin drive: two identical packs, both usable in this environment with fuel.
+            bool twin = false;
+            if (_jetpackSlots.Size >= 2)
+            {
+                var a = _jetpackSlots.GetSlot(0);
+                var b = _jetpackSlots.GetSlot(1);
+                if (a != null && b != null && !a.IsEmpty && !b.IsEmpty
+                    && a.item == b.item && a.item is JetpackItem tp
+                    && EnvironmentOk(tp) && PackHasFuel(tp, a) && PackHasFuel(tp, b))
+                    twin = true;
+            }
+
+            if (bestPack == null)
+            {
+                string why = anyEnvBlocked ? "No atmosphere — engine can't ignite here"
+                                           : "Out of fuel — fill Portable H₂ Tanks / Batteries";
+                return new JetpackSummary(true, false, false, false, 1f, 1f,
+                    h2, h2Cap, power, powerCap, null, why);
+            }
+
+            bool canBoost = PackCanBoost(bestPack, bestStack);
+            float speed = Mathf.Max(0.1f, bestPack.flightSpeedMultiplier) * (twin ? TwinSpeedBonus : 1f);
+            float boost = Mathf.Max(1f, bestPack.boostMultiplier) * (twin ? TwinBoostBonus : 1f);
+            return new JetpackSummary(true, true, canBoost, twin, speed, boost,
+                h2, h2Cap, power, powerCap, bestPack, null);
+        }
+
+        /// <summary>Environment-aware: a usable pack is equipped AND can ignite here.</summary>
+        public bool HasUsableJetpack => GetJetpackSummary().canFly;
+
+        /// <summary>Best equipped pack definition (may be empty of fuel — for display).</summary>
+        public JetpackItem GetBestJetpack()
+        {
+            EnsureContainers();
+            JetpackItem best = null;
+            float bestScore = float.MinValue;
+            for (int i = 0; i < JetpackSlots.Size; i++)
+            {
+                var s = JetpackSlots.GetSlot(i);
+                if (s == null || s.IsEmpty || s.item is not JetpackItem pack) continue;
                 float score = pack.flightSpeedMultiplier + pack.boostMultiplier * 0.25f;
-                // Prefer packs with more remaining fuel when scores are close.
-                score += Mathf.Clamp01(stack.durability / (float)Mathf.Max(1, pack.FuelCapacity)) * 0.05f;
-                if (score > bestScore) { bestScore = score; best = stack; }
+                if (score > bestScore) { bestScore = score; best = pack; }
             }
             return best;
         }
 
-        public float FlightSpeedMultiplier
+        /// <summary>Legacy accessor — best equipped pack stack (optionally requiring fuel).</summary>
+        public ItemStack GetBestJetpackStack(bool requireFuel = true)
         {
-            get
+            EnsureContainers();
+            EnsureAllJetpackFuelInitialized();
+            var summary = GetJetpackSummary();
+            if (requireFuel)
             {
-                var s = GetBestJetpackStack(requireFuel: true);
-                var pack = s?.item as JetpackItem;
-                return pack != null ? Mathf.Max(0.1f, pack.flightSpeedMultiplier) : 1f;
+                if (summary.drivePack == null) return null;
+                for (int i = 0; i < _jetpackSlots.Size; i++)
+                {
+                    var s = _jetpackSlots.GetSlot(i);
+                    if (s != null && !s.IsEmpty && s.item == summary.drivePack && PackHasFuel(summary.drivePack, s))
+                        return s;
+                }
+                return null;
             }
+            var def = GetBestJetpack();
+            if (def == null) return null;
+            for (int i = 0; i < _jetpackSlots.Size; i++)
+            {
+                var s = _jetpackSlots.GetSlot(i);
+                if (s != null && !s.IsEmpty && s.item == def) return s;
+            }
+            return null;
         }
 
-        public float BoostMultiplier
-        {
-            get
-            {
-                var s = GetBestJetpackStack(requireFuel: true);
-                var pack = s?.item as JetpackItem;
-                return pack != null ? Mathf.Max(1f, pack.boostMultiplier) : 1f;
-            }
-        }
+        public float FlightSpeedMultiplier => GetJetpackSummary().speedMul;
+        public float BoostMultiplier => GetJetpackSummary().boostMul;
+        public bool CanBoostNow => GetJetpackSummary().canBoost;
 
         public static bool NeedsFuel(JetpackItem pack)
         {
             if (pack == null) return false;
-            if (pack.usesHydrogen || pack.usesPower) return true;
-            // Old assets may lack flags — infer from family.
-            return pack.family == JetpackFamily.HydrogenBoost
-                || pack.family == JetpackFamily.Hybrid
-                || pack.family == JetpackFamily.Atmospheric;
+            return pack.UsesHydrogenEffective || pack.UsesPowerEffective;
         }
 
-        public static bool PackUsesHydrogen(JetpackItem pack)
-            => pack != null && (pack.usesHydrogen
-                || pack.family == JetpackFamily.HydrogenBoost
-                || pack.family == JetpackFamily.Hybrid);
-
-        public static bool PackUsesPower(JetpackItem pack)
-            => pack != null && (pack.usesPower
-                || pack.family == JetpackFamily.Atmospheric
-                || pack.family == JetpackFamily.Hybrid);
-
+        public static bool PackUsesHydrogen(JetpackItem pack) => pack != null && pack.UsesHydrogenEffective;
+        public static bool PackUsesPower(JetpackItem pack) => pack != null && pack.UsesPowerEffective;
 
         /// <summary>Defensive: old assets may miss flags — infer from family.</summary>
         public static void FixOldJetpackFlags(JetpackItem pack)
@@ -154,106 +299,272 @@ namespace VoxelEngine.Player
             if (pack.chargedCellRefuelMl <= 0) pack.chargedCellRefuelMl = 350;
         }
 
+        /// <summary>
+        /// Clamp invalid pool values (never destroys fuel — an over-full legacy stack
+        /// stays over-full until it drains or its overflow is spilled into inventory
+        /// tanks by <see cref="EnsureAllJetpackFuelInitialized"/>).
+        /// </summary>
         public static void EnsureJetpackFuel(ItemStack stack)
         {
             if (stack == null || stack.IsEmpty || stack.item is not JetpackItem pack) return;
-            int cap = pack.FuelCapacity;
-            // Durability is authoritative fuel (saved). Clamp only — never refill empties
-            // here, or load-from-save would top up drained packs.
-            if (stack.durability > cap) stack.durability = cap;
             if (stack.durability < 0) stack.durability = 0;
-            // Defensive: old assets may have cap <= 0 — set from family if needed.
-            if (cap <= 0 && stack.item is JetpackItem p)
-            {
-                int def = p.family == VoxelEngine.Items.JetpackFamily.Hybrid ? 1200 : (p.family == VoxelEngine.Items.JetpackFamily.Atmospheric ? 1000 : 800);
-                p.fuelCapacityMl = def;
-                cap = def;
-                if (stack.durability > cap) stack.durability = cap;
-            }
+            if (stack.charge < 0) stack.charge = 0;
+            // Hidden pools must stay zeroed (charge on a pack with no power cell).
+            if (!pack.UsesPowerEffective && stack.charge != 0) stack.charge = 0;
         }
 
         public void EnsureAllJetpackFuelInitialized()
+        {
+            NormalizeAllJetpacks();
+            // Defensive: replay recharge so inventory tanks/cells/batteries work right after equip.
+            TryAutoRefuelFromInventory(force: true);
+        }
+
+        /// <summary>Flag-fix + pool clamp + overflow spill on every equipped pack.
+        /// Pure data hygiene — never refuels, never voids.</summary>
+        private void NormalizeAllJetpacks()
         {
             EnsureContainers();
             for (int i = 0; i < _jetpackSlots.Size; i++)
             {
                 var s = _jetpackSlots.GetSlot(i);
+                if (s == null || s.IsEmpty || s.item is not JetpackItem p) continue;
+                FixOldJetpackFlags(p);
                 EnsureJetpackFuel(s);
-                if (s != null && !s.IsEmpty && s.item is JetpackItem p) FixOldJetpackFlags(p);
+                SpillOverflowToInventory(s, p);
             }
-            // Defensive: try replay recharge so inventory tanks/cells/batteries work right after equip.
-            TryAutoRefuelFromInventory(force: true);
         }
 
         /// <summary>
-        /// Drain fuel from the best usable pack. Returns false if no fuel remains
-        /// (caller should cut flight). Auto-recharges from inventory canisters/cells
-        /// when fuel drops to the pack's recharge threshold (default 10%).
+        /// Legacy stacks can carry MORE fuel than the tank holds (e.g. a 2000 ml fill
+        /// on a 1200 ml pack). Never void it: spill the excess back into matching
+        /// portable containers (H₂ tanks / portable batteries); only keep the
+        /// remainder on the pack when there is nowhere for it to go.
         /// </summary>
-        public bool TryConsumeFlightFuel(float dt, bool boosting)
+        private void SpillOverflowToInventory(ItemStack stack, JetpackItem pack)
         {
-            if (dt <= 0f) return HasUsableJetpack;
+            if (_inventory == null) _inventory = GetComponent<Inventory>();
+            var inv = _inventory != null ? _inventory.container : null;
+            if (inv == null) return;
+
+            int h2Over = JetpackItem.GetH2Ml(stack) - pack.HydrogenCapacityMl;
+            if (h2Over > 0)
+            {
+                for (int i = 0; i < inv.Size && h2Over > 0; i++)
+                {
+                    var s = inv.GetSlot(i);
+                    if (s == null || s.IsEmpty || !HydrogenCanisterItem.IsPortableHydrogenTank(s.item)) continue;
+                    int moved = HydrogenCanisterItem.TryAddMl(s, h2Over);
+                    if (moved <= 0) continue;
+                    h2Over -= moved;
+                    JetpackItem.SetH2Ml(stack, JetpackItem.GetH2Ml(stack) - moved);
+                    inv.SetSlot(i, s);
+                }
+                if (h2Over <= 0) inv.RaiseChanged();
+            }
+
+            int pwOver = JetpackItem.GetPowerMl(stack) - pack.PowerCapacityMl;
+            if (pwOver > 0)
+            {
+                for (int i = 0; i < inv.Size && pwOver > 0; i++)
+                {
+                    var s = inv.GetSlot(i);
+                    if (s == null || s.IsEmpty || !PortableBatteryItem.IsPortableBattery(s.item)) continue;
+                    int moved = PortableBatteryItem.TryAddMl(s, pwOver);
+                    if (moved <= 0) continue;
+                    pwOver -= moved;
+                    JetpackItem.SetPowerMl(stack, JetpackItem.GetPowerMl(stack) - moved);
+                    inv.SetSlot(i, s);
+                }
+                if (pwOver <= 0) inv.RaiseChanged();
+            }
+        }
+
+        /// <summary>
+        /// Drain fuel from the drive pack for one flight tick. Returns false when no
+        /// fueled, environment-legal pack remains (caller should cut flight).
+        /// <paramref name="wantBoost"/> only engages the hydrogen afterburner when
+        /// the drive pack actually has H₂ — hybrid power-cell flight never boosts.
+        /// </summary>
+        public bool TryConsumeFlightFuel(float dt, bool wantBoost)
+        {
             EnsureContainers();
+            if (dt <= 0f) return HasUsableJetpack;
             // Top up any pack already at/under threshold before selecting.
             TryAutoRefuelFromInventory(force: false);
 
-            int slotIndex = -1;
-            ItemStack stack = null;
-            JetpackItem pack = null;
+            ItemStack driveStack = null;
+            JetpackItem drivePack = null;
             float bestScore = float.MinValue;
             for (int i = 0; i < _jetpackSlots.Size; i++)
             {
                 var s = _jetpackSlots.GetSlot(i);
                 if (s == null || s.IsEmpty || s.item is not JetpackItem p) continue;
                 EnsureJetpackFuel(s);
-                if (NeedsFuel(p) && s.durability <= 0)
-                {
-                    // Last chance: try recharge before skipping.
-                    TryRechargeSlot(i, s, p, force: true);
-                    s = _jetpackSlots.GetSlot(i);
-                    if (s == null || s.IsEmpty || s.durability <= 0) continue;
-                    p = s.item as JetpackItem;
-                    if (p == null) continue;
-                }
+                if (!EnvironmentOk(p)) continue;
+                if (!PackHasFuel(p, s)) continue;
                 float score = p.flightSpeedMultiplier + p.boostMultiplier * 0.25f;
-                if (score > bestScore) { bestScore = score; slotIndex = i; stack = s; pack = p; }
+                if (score > bestScore) { bestScore = score; driveStack = s; drivePack = p; }
             }
-            if (stack == null || pack == null) return false;
-            if (!NeedsFuel(pack)) return true;
+            if (driveStack == null || drivePack == null) return false;
+            if (!NeedsFuel(drivePack)) return true;
 
-            // Recharge from inventory canisters/cells once at/under threshold.
-            float cap = Mathf.Max(1, pack.FuelCapacityMl);
-            float frac = stack.durability / cap;
-            float threshold = pack.RechargeThreshold; // clamped ≥ 1%
-            if (frac <= threshold + 0.001f)
-                TryRechargeSlot(slotIndex, stack, pack, force: true);
+            bool boosting = wantBoost && PackCanBoost(drivePack, driveStack);
+            bool hybrid = drivePack.UsesHydrogenEffective && drivePack.UsesPowerEffective;
 
-            // Re-read after possible recharge.
-            stack = _jetpackSlots.GetSlot(slotIndex);
-            if (stack == null || stack.IsEmpty || stack.item is not JetpackItem pack2) return false;
-            pack = pack2;
-            EnsureJetpackFuel(stack);
-            if (stack.durability <= 0) return false;
+            float cruise = Mathf.Max(0f, drivePack.drainMlPerSecond > 0f ? drivePack.drainMlPerSecond : drivePack.drainPerSecond);
+            float boostDrain = Mathf.Max(0f, drivePack.boostDrainMlPerSecond > 0f ? drivePack.boostDrainMlPerSecond : drivePack.boostDrainPerSecond);
 
-            float drain = Mathf.Max(0f, pack.drainMlPerSecond > 0f ? pack.drainMlPerSecond : pack.drainPerSecond);
-            if (boosting) drain += Mathf.Max(0f, pack.boostDrainMlPerSecond > 0f ? pack.boostDrainMlPerSecond : pack.boostDrainPerSecond);
-            float cost = drain * dt;
-            if (cost <= 0f) return true;
-
-            var box = stack.payload as JetpackFuelBox;
-            if (box == null) { box = new JetpackFuelBox(); stack.payload = box; }
-            box.frac += cost;
-            int whole = Mathf.FloorToInt(box.frac);
-            if (whole > 0)
+            // Twin drive: two identical packs share the work — drain the fuller one
+            // so the pair behaves like one tank with double capacity.
+            ItemStack drainStack = driveStack;
+            var summary = GetJetpackSummary();
+            if (summary.twinActive && _jetpackSlots.Size >= 2)
             {
-                box.frac -= whole;
-                stack.durability = Mathf.Max(0, stack.durability - whole);
-                _jetpackSlots.SetSlot(slotIndex, stack);
+                var a = _jetpackSlots.GetSlot(0);
+                var b = _jetpackSlots.GetSlot(1);
+                if (a != null && b != null && !a.IsEmpty && !b.IsEmpty && a.item == b.item)
+                {
+                    if (hybrid && boosting)
+                    {
+                        if (JetpackItem.GetH2Ml(b) > JetpackItem.GetH2Ml(a)) drainStack = b;
+                    }
+                    else
+                    {
+                        int aTotal = JetpackItem.GetH2Ml(a) + JetpackItem.GetPowerMl(a);
+                        int bTotal = JetpackItem.GetH2Ml(b) + JetpackItem.GetPowerMl(b);
+                        if (bTotal > aTotal) drainStack = b;
+                    }
+                    drivePack = drainStack.item as JetpackItem ?? drivePack;
+                }
             }
-            return stack.durability > 0;
+
+            var box = drainStack.payload as JetpackFuelBox;
+            if (box == null) { box = new JetpackFuelBox(); drainStack.payload = box; }
+
+            if (hybrid)
+            {
+                if (boosting)
+                {
+                    // H₂ afterburner — the whole burn comes from the hydrogen tank.
+                    DrainPool(drainStack, h2: true, cruise + boostDrain, dt, box);
+                }
+                else if (JetpackItem.GetPowerMl(drainStack) > 0)
+                {
+                    DrainPool(drainStack, h2: false, cruise, dt, box);
+                }
+                else
+                {
+                    DrainPool(drainStack, h2: true, cruise, dt, box);
+                }
+            }
+            else if (drivePack.UsesHydrogenEffective)
+            {
+                DrainPool(drainStack, h2: true, boosting ? cruise + boostDrain : cruise, dt, box);
+            }
+            else if (drivePack.UsesPowerEffective)
+            {
+                DrainPool(drainStack, h2: false, boosting ? cruise + boostDrain : cruise, dt, box);
+            }
+
+            if (PackHasFuel(drivePack, drainStack)) return true;
+            // Drained pack ran dry — another equipped pack may still be fueled.
+            _summaryCachedFrame = -1;
+            return GetJetpackSummary().canFly;
         }
 
-        /// <summary>Remaining fuel 0..1 for the best pack (1 if unfuelled type).</summary>
+        private static void DrainPool(ItemStack stack, bool h2, float ratePerSecond, float dt, JetpackFuelBox box)
+        {
+            float cost = Mathf.Max(0f, ratePerSecond) * dt;
+            if (cost <= 0f) return;
+            if (h2)
+            {
+                box.fracH2 += cost;
+                int whole = Mathf.FloorToInt(box.fracH2);
+                if (whole <= 0) return;
+                box.fracH2 -= whole;
+                JetpackItem.TakeH2(stack, whole);
+            }
+            else
+            {
+                box.fracPower += cost;
+                int whole = Mathf.FloorToInt(box.fracPower);
+                if (whole <= 0) return;
+                box.fracPower -= whole;
+                JetpackItem.TakePower(stack, whole);
+            }
+        }
+
+        // ── Aggregate pool getters (HUD / jetpack bay display) ──────
+
+        /// <summary>Summed H₂ (ml) across all equipped packs.</summary>
+        public int TotalH2Ml
+        {
+            get
+            {
+                EnsureContainers();
+                int sum = 0;
+                for (int i = 0; i < JetpackSlots.Size; i++)
+                {
+                    var s = JetpackSlots.GetSlot(i);
+                    sum += JetpackItem.GetH2Ml(s);
+                }
+                return sum;
+            }
+        }
+
+        public int TotalH2CapacityMl
+        {
+            get
+            {
+                EnsureContainers();
+                int sum = 0;
+                for (int i = 0; i < JetpackSlots.Size; i++)
+                {
+                    var s = JetpackSlots.GetSlot(i);
+                    if (s != null && !s.IsEmpty && s.item is JetpackItem p) sum += p.HydrogenCapacityMl;
+                }
+                return sum;
+            }
+        }
+
+        /// <summary>Summed power charge (Wh) across all equipped packs.</summary>
+        public int TotalPowerMl
+        {
+            get
+            {
+                EnsureContainers();
+                int sum = 0;
+                for (int i = 0; i < JetpackSlots.Size; i++)
+                {
+                    var s = JetpackSlots.GetSlot(i);
+                    sum += JetpackItem.GetPowerMl(s);
+                }
+                return sum;
+            }
+        }
+
+        public int TotalPowerCapacityMl
+        {
+            get
+            {
+                EnsureContainers();
+                int sum = 0;
+                for (int i = 0; i < JetpackSlots.Size; i++)
+                {
+                    var s = JetpackSlots.GetSlot(i);
+                    if (s != null && !s.IsEmpty && s.item is JetpackItem p) sum += p.PowerCapacityMl;
+                }
+                return sum;
+            }
+        }
+
+        public bool AnyHydrogenPackEquipped => TotalH2CapacityMl > 0;
+        public bool AnyPowerPackEquipped => TotalPowerCapacityMl > 0;
+
+        // ── Legacy fuel getters (kept for older UI call sites) ──────
+
+        /// <summary>Remaining fuel 0..1 for the best pack (its dominant pool).</summary>
         public float BestJetpackFuel01
         {
             get
@@ -262,7 +573,9 @@ namespace VoxelEngine.Player
                 if (stack == null || stack.item is not JetpackItem pack) return 0f;
                 EnsureJetpackFuel(stack);
                 if (!NeedsFuel(pack)) return 1f;
-                return Mathf.Clamp01(stack.durability / (float)pack.FuelCapacity);
+                if (pack.UsesHydrogenEffective)
+                    return Mathf.Clamp01(JetpackItem.GetH2Ml(stack) / (float)Mathf.Max(1, pack.HydrogenCapacityMl));
+                return Mathf.Clamp01(JetpackItem.GetPowerMl(stack) / (float)Mathf.Max(1, pack.PowerCapacityMl));
             }
         }
 
@@ -271,9 +584,8 @@ namespace VoxelEngine.Player
             get
             {
                 var stack = GetBestJetpackStack(requireFuel: false);
-                if (stack == null) return 0;
-                EnsureJetpackFuel(stack);
-                return Mathf.Max(0, stack.durability);
+                if (stack == null || stack.item is not JetpackItem pack) return 0;
+                return pack.UsesHydrogenEffective ? JetpackItem.GetH2Ml(stack) : JetpackItem.GetPowerMl(stack);
             }
         }
 
@@ -281,15 +593,18 @@ namespace VoxelEngine.Player
         {
             get
             {
-                var pack = GetBestJetpack();
-                return pack != null ? pack.FuelCapacity : 0;
+                var stack = GetBestJetpackStack(requireFuel: false);
+                if (stack == null || stack.item is not JetpackItem pack) return 0;
+                return Mathf.Max(pack.HydrogenCapacityMl, pack.PowerCapacityMl);
             }
         }
 
+        // ── Inventory refuel ────────────────────────────────────────
+
         /// <summary>
-        /// Recharge equipped packs from inventory. Hydrogen/Hybrid pull from
-        /// Hydrogen Canisters; Atmospheric/Hybrid pull from Charged Cells.
-        /// Normally only runs at/under the pack threshold (10%).
+        /// Recharge equipped packs from inventory. H₂ tanks top up the hydrogen
+        /// pool; portable batteries and charged cells top up the power cell.
+        /// Normally only runs at/under the pack's recharge threshold (10%).
         /// </summary>
         public int TryAutoRefuelFromInventory(bool force = false)
         {
@@ -302,8 +617,13 @@ namespace VoxelEngine.Player
                 if (stack == null || stack.IsEmpty || stack.item is not JetpackItem pack) continue;
                 EnsureJetpackFuel(stack);
                 if (!NeedsFuel(pack)) continue;
-                float frac = stack.durability / (float)Mathf.Max(1, pack.FuelCapacityMl);
-                if (!force && frac > pack.RechargeThreshold + 0.001f) continue;
+
+                float threshold = pack.RechargeThreshold;
+                bool h2Low = pack.UsesHydrogenEffective
+                    && JetpackItem.GetH2Ml(stack) <= threshold * Mathf.Max(1, pack.HydrogenCapacityMl) + 0.001f;
+                bool pwLow = pack.UsesPowerEffective
+                    && JetpackItem.GetPowerMl(stack) <= threshold * Mathf.Max(1, pack.PowerCapacityMl) + 0.001f;
+                if (!force && !h2Low && !pwLow) continue;
                 total += TryRechargeSlot(i, stack, pack, force: true);
             }
             return total;
@@ -314,15 +634,13 @@ namespace VoxelEngine.Player
             if (_inventory == null) _inventory = GetComponent<Inventory>();
             if (_inventory == null || _inventory.container == null) return 0;
             EnsureJetpackFuel(stack);
-            int space = pack.FuelCapacity - stack.durability;
-            if (space <= 0) return 0;
-
-            int restored = 0;
             var inv = _inventory.container;
+            int restored = 0;
 
             // 1) Hydrogen side — siphon Portable Hydrogen Tanks (do not destroy the tank).
-            if (PackUsesHydrogen(pack))
+            if (pack.UsesHydrogenEffective)
             {
+                int space = Mathf.Max(0, pack.HydrogenCapacityMl - JetpackItem.GetH2Ml(stack));
                 for (int i = 0; i < inv.Size && space > 0; i++)
                 {
                     var s = inv.GetSlot(i);
@@ -331,16 +649,18 @@ namespace VoxelEngine.Player
                     int taken = HydrogenCanisterItem.TryTakeMl(s, space);
                     if (taken <= 0) continue;
                     inv.SetSlot(i, s); // write back reduced tank fill (ml)
-                    inv.RaiseChanged(); // force live inventory refresh
-                    stack.durability += taken;
-                    space -= taken;
-                    restored += taken;
+                    int added = JetpackItem.AddH2(stack, taken);
+                    // Extremely defensive: over-full legacy stacks can't accept — hand the fuel back.
+                    if (added < taken) HydrogenCanisterItem.TryAddMl(s, taken - added);
+                    space -= added;
+                    restored += added;
                 }
             }
 
             // 2) Power side — portable rechargeable batteries (reusable, like tanks).
-            if (PackUsesPower(pack) && space > 0)
+            if (pack.UsesPowerEffective)
             {
+                int space = Mathf.Max(0, pack.PowerCapacityMl - JetpackItem.GetPowerMl(stack));
                 for (int i = 0; i < inv.Size && space > 0; i++)
                 {
                     var s = inv.GetSlot(i);
@@ -349,25 +669,30 @@ namespace VoxelEngine.Player
                     int taken = PortableBatteryItem.TryTakeMl(s, space);
                     if (taken <= 0) continue;
                     inv.SetSlot(i, s); // write back reduced charge
-                    stack.durability += taken;
-                    space -= taken;
-                    restored += taken;
+                    int added = JetpackItem.AddPower(stack, taken);
+                    if (added < taken) PortableBatteryItem.TryAddMl(s, taken - added);
+                    space -= added;
+                    restored += added;
                 }
             }
 
             // 3) Power side — disposable charged cells (single-use cartridges).
-            if (PackUsesPower(pack) && space > 0)
+            if (pack.UsesPowerEffective)
             {
+                int space = Mathf.Max(0, pack.PowerCapacityMl - JetpackItem.GetPowerMl(stack));
                 for (int i = 0; i < inv.Size && space > 0; i++)
                 {
                     var s = inv.GetSlot(i);
                     if (s == null || s.IsEmpty || s.item == null) continue;
                     if (!JetpackItem.IsPowerFuelItem(s.item)) continue;
                     int per = Mathf.Max(1, pack.chargedCellRefuelMl > 0 ? pack.chargedCellRefuelMl : pack.chargedCellRefuel);
+                    // Only crack a cell open when it fits entirely — never void charge.
+                    // (Smaller gaps are closed by portable batteries instead.)
+                    if (space < per) break;
                     int got = inv.Remove(s.item, 1);
                     if (got <= 0) continue;
                     int add = Mathf.Min(space, per);
-                    stack.durability += add;
+                    JetpackItem.AddPower(stack, add);
                     space -= add;
                     restored += add;
                 }
@@ -375,15 +700,15 @@ namespace VoxelEngine.Player
 
             if (restored > 0)
             {
-                if (stack.payload == null) stack.payload = new JetpackFuelBox();
                 _jetpackSlots.SetSlot(slotIndex, stack);
                 inv.RaiseChanged();
+                _summaryCachedFrame = -1;
             }
             return restored;
         }
 
-        /// <summary>Fractional fuel accumulator (not serialized — durability is).</summary>
-        private sealed class JetpackFuelBox { public float frac; }
+        /// <summary>Fractional fuel accumulators (not serialized — pools are).</summary>
+        private sealed class JetpackFuelBox { public float fracH2; public float fracPower; }
 
         public SpaceHelmetItem EquippedHelmet
         {
@@ -405,7 +730,7 @@ namespace VoxelEngine.Player
             }
         }
 
-        /// <summary>Currently worn Crusader armor (drives PlayerStats damage mitigation).</summary>
+        /// <summary>Currently worn armor (drives PlayerStats damage mitigation).</summary>
         public ArmorItem EquippedArmor
         {
             get
@@ -430,7 +755,7 @@ namespace VoxelEngine.Player
 
         /// <summary>
         /// If the active hotbar stack is a JetpackItem, move one into the first free
-        /// jetpack slot. Returns true when an item was equipped this call.
+        /// jetpack slot — fuel pools travel WITH the pack (quick-equip never voids).
         /// </summary>
         public bool TryQuickEquipActiveJetpack()
         {
@@ -444,8 +769,16 @@ namespace VoxelEngine.Player
             {
                 var slot = _jetpackSlots.GetSlot(i);
                 if (slot != null && !slot.IsEmpty) continue;
-                _jetpackSlots.SetSlot(i, new ItemStack { item = pack, count = 1 });
+                _jetpackSlots.SetSlot(i, new ItemStack
+                {
+                    item = pack,
+                    count = 1,
+                    durability = active.durability,
+                    charge = active.charge,
+                    payload = active.payload,
+                });
                 _inventory.container.Remove(pack, 1);
+                _summaryCachedFrame = -1;
                 VoxelEngine.UI.BuildFeedbackHud.Show("Jetpack Equipped", pack.displayName, pack.icon, pack.iconTint);
                 return true;
             }

@@ -163,11 +163,11 @@ namespace VoxelEngine.GridSystem.UI
             if (tank.IsHydrogenMode && slot != null)
             {
                 p.Add(T.Spacer(8));
-                p.Add(GridUIHelpers.SectionTitle("Portable H₂ Tank Dock"));
+                p.Add(GridUIHelpers.SectionTitle("H₂ Fill Dock"));
                 var dock = T.SlotGrid(1);
                 dock.Add(slot(tank.PortableSlot, 0, tank.PortableSlot.GetSlot(0), false, true));
                 p.Add(dock);
-                p.Add(T.Muted("Place a Portable Hydrogen Tank here to fill it from bulk ship H₂."));
+                p.Add(T.Muted("Place a Portable Hydrogen Tank or a hydrogen jetpack (Hydrogen Boost / Hybrid) here to fill it from bulk ship H₂."));
             }
 
             return p;

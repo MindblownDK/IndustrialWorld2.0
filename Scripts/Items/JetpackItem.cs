@@ -37,8 +37,12 @@ namespace VoxelEngine.Items
         public bool usesPower = false;
 
         [Header("Fuel (metric — millilitres)")]
-        [Tooltip("Internal fuel tank capacity in millilitres (ml).")]
+        [Tooltip("Internal hydrogen fuel tank capacity in millilitres (ml).")]
         public int fuelCapacityMl = 1000;
+        [Tooltip("Internal power cell capacity in watt-hours (Wh) for packs that run on " +
+                 "power (Atmospheric / Hybrid). The Hybrid flies and boosts on H₂, but can " +
+                 "also cruise on this cell alone — shift boost stays H₂-only.")]
+        public int powerCapacityMl = 0;
         [Tooltip("Millilitres drained per second while flying (not boosting).")]
         public float drainMlPerSecond = 25f;
         [Tooltip("Extra ml/s drained while boosting (Sprint).")]
@@ -100,5 +104,100 @@ namespace VoxelEngine.Items
 
         public bool NeedsHydrogen => usesHydrogen;
         public bool NeedsPower => usesPower;
+
+        // ════════════════════════════════════════════════════════════
+        //   DUAL-FUEL POOLS (11.3+) — H₂ tank + power cell per pack
+        // ════════════════════════════════════════════════════════════
+        // Capability flags are authoritative, but legacy assets may not have
+        // them set — fall back to the family so old packs keep working.
+        public bool UsesHydrogenEffective =>
+            usesHydrogen || family == JetpackFamily.HydrogenBoost || family == JetpackFamily.Hybrid;
+        public bool UsesPowerEffective =>
+            usesPower || family == JetpackFamily.Atmospheric || family == JetpackFamily.Hybrid;
+
+        /// <summary>Hydrogen tank capacity (ml) for this pack — 0 when it burns no H₂.</summary>
+        public int HydrogenCapacityMl => UsesHydrogenEffective ? FuelCapacityMl : 0;
+
+        /// <summary>Power cell capacity (Wh) for this pack — 0 when it draws no power.</summary>
+        public int PowerCapacityMl
+        {
+            get
+            {
+                if (!UsesPowerEffective) return 0;
+                if (powerCapacityMl > 0) return powerCapacityMl;
+                // Legacy assets predate the field: pure-power packs stored charge in the
+                // old single-pool capacity, hybrids get a modest emergency cell.
+                if (UsesHydrogenEffective) return 600;
+                return Mathf.Max(1, FuelCapacityMl);
+            }
+        }
+
+        // ── Per-stack pool access ──────────────────────────────────
+        // Storage layout (save-compatible):
+        //   • H₂ pool        → ItemStack.durability (packs that use H₂)
+        //   • power pool     → ItemStack.charge on hybrids, ItemStack.durability
+        //                      on pure-power packs (legacy stacks stay valid).
+        public static int GetH2Ml(ItemStack s)
+            => s == null || s.IsEmpty || s.item is not JetpackItem p || !p.UsesHydrogenEffective
+                ? 0 : Mathf.Max(0, s.durability);
+
+        public static int GetPowerMl(ItemStack s)
+        {
+            if (s == null || s.IsEmpty || s.item is not JetpackItem p || !p.UsesPowerEffective) return 0;
+            return Mathf.Max(0, p.UsesHydrogenEffective ? s.charge : s.durability);
+        }
+
+        public static void SetH2Ml(ItemStack s, int ml)
+        {
+            if (s == null || s.IsEmpty || s.item is not JetpackItem p || !p.UsesHydrogenEffective) return;
+            s.durability = Mathf.Max(0, ml);
+        }
+
+        public static void SetPowerMl(ItemStack s, int ml)
+        {
+            if (s == null || s.IsEmpty || s.item is not JetpackItem p || !p.UsesPowerEffective) return;
+            if (p.UsesHydrogenEffective) s.charge = Mathf.Max(0, ml);
+            else s.durability = Mathf.Max(0, ml);
+        }
+
+        /// <summary>Adds H₂ up to tank capacity. Returns ml actually stored.</summary>
+        public static int AddH2(ItemStack s, int ml)
+        {
+            if (ml <= 0 || s == null || s.IsEmpty || s.item is not JetpackItem p) return 0;
+            int space = Mathf.Max(0, p.HydrogenCapacityMl - GetH2Ml(s));
+            int add = Mathf.Min(space, ml);
+            if (add > 0) SetH2Ml(s, GetH2Ml(s) + add);
+            return add;
+        }
+
+        /// <summary>Adds power up to cell capacity. Returns Wh actually stored.</summary>
+        public static int AddPower(ItemStack s, int ml)
+        {
+            if (ml <= 0 || s == null || s.IsEmpty || s.item is not JetpackItem p) return 0;
+            int space = Mathf.Max(0, p.PowerCapacityMl - GetPowerMl(s));
+            int add = Mathf.Min(space, ml);
+            if (add > 0) SetPowerMl(s, GetPowerMl(s) + add);
+            return add;
+        }
+
+        /// <summary>Removes up to <paramref name="ml"/> of H₂. Returns ml taken.</summary>
+        public static int TakeH2(ItemStack s, int ml)
+        {
+            if (ml <= 0) return 0;
+            int have = GetH2Ml(s);
+            int take = Mathf.Min(have, ml);
+            if (take > 0) SetH2Ml(s, have - take);
+            return take;
+        }
+
+        /// <summary>Removes up to <paramref name="ml"/> of power. Returns Wh taken.</summary>
+        public static int TakePower(ItemStack s, int ml)
+        {
+            if (ml <= 0) return 0;
+            int have = GetPowerMl(s);
+            int take = Mathf.Min(have, ml);
+            if (take > 0) SetPowerMl(s, have - take);
+            return take;
+        }
     }
 }

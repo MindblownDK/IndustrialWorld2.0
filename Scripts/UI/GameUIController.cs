@@ -45,6 +45,15 @@ namespace VoxelEngine.UI
         // UI state
         private UIDocument _doc;
         private VisualElement _root;
+        // Layered UI — created once in Awake, never cleared by Refresh():
+        //   _contentLayer : hotbar + panels — rebuilt on every Refresh().
+        //   _hudLayer     : vitals / interaction / feedback HUDs — PERSISTENT so
+        //                   scrolling the hotbar or any container change no longer
+        //                   destroys & recreates them (kills the visible HUD flash).
+        //   _topLayer     : tooltip overlay — always rendered above both.
+        private VisualElement _contentLayer;
+        private VisualElement _hudLayer;
+        private VisualElement _topLayer;
         private VisualElement _itemPortsOverlay;
         private bool _inventoryOpen;
         public bool IsInventoryOpen => _inventoryOpen;
@@ -153,12 +162,38 @@ namespace VoxelEngine.UI
             _root.style.width = new StyleLength(new Length(100, LengthUnit.Percent));
             _root.style.height = new StyleLength(new Length(100, LengthUnit.Percent));
             _root.pickingMode = PickingMode.Ignore;
+            EnsureUiLayers();
+
             // Wire premium click/hover audio for the whole in-game UI in one place.
             VoxelEngine.FX.UiAudio.Attach(_root);
 
             // Keep input polling even if Unity isn't the foreground app — fixes "game
             // not focused" feeling on some Windows setups where the Editor steals focus.
             Application.runInBackground = true;
+        }
+
+        /// <summary>Creates the three persistent UI layers exactly once (idempotent).</summary>
+        private void EnsureUiLayers()
+        {
+            if (_root == null) _root = _doc != null ? _doc.rootVisualElement : GetComponent<UIDocument>().rootVisualElement;
+            if (_contentLayer != null && _contentLayer.parent == _root) return;
+            _root.Clear();
+
+            _contentLayer = MakeFullscreenLayer("ContentLayer");
+            _hudLayer     = MakeFullscreenLayer("HudLayer");
+            _topLayer     = MakeFullscreenLayer("TopLayer");
+            _root.Add(_contentLayer);
+            _root.Add(_hudLayer);
+            _root.Add(_topLayer);
+
+            static VisualElement MakeFullscreenLayer(string layerName)
+            {
+                var v = new VisualElement { name = layerName };
+                v.style.position = Position.Absolute;
+                v.style.left = 0; v.style.top = 0; v.style.right = 0; v.style.bottom = 0;
+                v.pickingMode = PickingMode.Ignore;
+                return v;
+            }
         }
 
         private void Start()
@@ -204,6 +239,23 @@ namespace VoxelEngine.UI
         private VisualElement _liveStatusPill;
         private Label         _liveStatusLabel;
         private Label         _liveWattLabel;
+        // Jetpack bay live refs (set by BuildJetpackSlotsPanel; poked every frame so
+        // the H₂ / power bars track flight drain WITHOUT a destructive rebuild).
+        private VisualElement _jbStatusPill;
+        private Label         _jbStatus;
+        private VisualElement _jbH2Row, _jbH2Fill;
+        private Label         _jbH2Label;
+        private VisualElement _jbPRow, _jbPFill;
+        private Label         _jbPLabel;
+        // Battery panel live refs (set by BuildRightPowerBattery).
+        private VisualElement[] _battSegments;
+        private Label         _battPct;
+        private Label         _battChargeRow;
+        private Label         _battInRow;
+        private Label         _battOutRow;
+        private Label         _battStatus;
+        private Label         _battDockRow;
+        private float         _battSegSmooth;    // eased segment fill (0..1)
         private float         _furnaceTickAccum;
         private float         _recipeRefreshAccum;
         private float         _machineRefreshAccum;
@@ -221,10 +273,13 @@ namespace VoxelEngine.UI
 
             // Live-update the open furnace panel in-place every frame (no rebuild needed).
             TickFurnaceLiveUI();
+            // Live-update the jetpack bay bars + battery panel HUD (no rebuilds → no flash).
+            TickJetpackBayLiveUI();
+            TickBatteryLiveUI();
             PlayerHud.Tick();
             BombHud.Tick(inventory);
             PaintHud.Tick(inventory);
-            RustStyleHud.Tick();
+            VitalsHud.Tick();
             BuildFeedbackHud.Tick();
             VoxelEngine.Weather.WeatherHud.Tick();
             CryobedConfigHud.Tick();
@@ -719,7 +774,11 @@ namespace VoxelEngine.UI
                     WatchContainer(el.iceInputC); break;
                 case VoxelEngine.Gas.HydrogenEngine he: _openHydroEngine = he; break;
                 case VoxelEngine.Gas.GasTank gt: _openGasTank = gt; gt.EnsureContainers(); WatchContainer(gt.PortableSlot); break;
-                case VoxelEngine.Power.PowerBattery pb: _openPowerBattery = pb; break;
+                case VoxelEngine.Power.PowerBattery pb:
+                    _openPowerBattery = pb;
+                    pb.EnsureContainers();
+                    WatchContainer(pb.ChargeSlot);
+                    break;
                 case VoxelEngine.Fluids.WaterPump wp: _openWaterPump = wp; wp.ScanSource(); break;
                 case VoxelEngine.Building.Biofarm bf:
                     _openBiofarm = bf; bf.EnsureContainers();
@@ -925,36 +984,48 @@ namespace VoxelEngine.UI
             _liveFlame = null; _liveSmeltFill = null; _liveFuelFill = null;
             _liveSmeltLabel = null; _liveFuelStat = null;
             _liveStatusPill = null; _liveStatusLabel = null; _liveWattLabel = null;
+            _jbStatus = null; _jbStatusPill = null;
+            _jbH2Row = null; _jbH2Fill = null; _jbH2Label = null;
+            _jbPRow = null; _jbPFill = null; _jbPLabel = null;
+            _battPct = null; _battChargeRow = null; _battInRow = null; _battOutRow = null;
+            _battStatus = null; _battDockRow = null; _battSegments = null;
 
-            _root.Clear();
+            EnsureUiLayers();
+
+            // ONLY the content layer is rebuilt — the HUD + tooltip layers persist
+            // across refreshes so vitals/HUD never flash on scroll or container ticks.
+            _contentLayer.Clear();
+            _contentLayer.pickingMode = PickingMode.Ignore;
+            _hudLayer.pickingMode = PickingMode.Ignore;
             if (inventory == null) return;
 
-            // (Re)mount the tooltip overlay; it lives at the root and is invisible until hovered.
-            Tooltip.EnsureMounted(_root);
-            PlayerHud.EnsureMounted(_root);
-            RecipePinHud.EnsureMounted(_root);
-            ResearchHud.EnsureMounted(_root);
-            UpgradePromptHud.EnsureMounted(_root);
+            // (Re)mount the tooltip + every HUD — they no-op when already mounted,
+            // which is exactly what keeps them flash-free.
+            Tooltip.EnsureMounted(_topLayer);
+            PlayerHud.EnsureMounted(_hudLayer);
+            RecipePinHud.EnsureMounted(_hudLayer);
+            ResearchHud.EnsureMounted(_hudLayer);
+            UpgradePromptHud.EnsureMounted(_hudLayer);
 
-            VoxelEngine.GridSystem.UI.BlockRotationHud.EnsureMounted(_root);
-            VoxelEngine.GridSystem.UI.ShipToolHud.EnsureMounted(_root);
-            RustStyleHud.EnsureMounted(_root);
-            InteractionHud.EnsureMounted(_root);
-            WorldInspectionHud.EnsureMounted(_root);
-            BuildFeedbackHud.EnsureMounted(_root);
-            VoxelEngine.Weather.WeatherHud.EnsureMounted(_root);
-            VoxelEngine.GridSystem.GridPilotHud.EnsureMounted(_root);
-            GrinderHud.EnsureMounted(_root);
-            BuildCostHud.EnsureMounted(_root);
-            DeathScreenHud.EnsureMounted(_root);
-            CryobedConfigHud.EnsureMounted(_root);
-            BombHud.EnsureMounted(_root);
-            PaintHud.EnsureMounted(_root);
+            VoxelEngine.GridSystem.UI.BlockRotationHud.EnsureMounted(_hudLayer);
+            VoxelEngine.GridSystem.UI.ShipToolHud.EnsureMounted(_hudLayer);
+            VitalsHud.EnsureMounted(_hudLayer);
+            InteractionHud.EnsureMounted(_hudLayer);
+            WorldInspectionHud.EnsureMounted(_hudLayer);
+            BuildFeedbackHud.EnsureMounted(_hudLayer);
+            VoxelEngine.Weather.WeatherHud.EnsureMounted(_hudLayer);
+            VoxelEngine.GridSystem.GridPilotHud.EnsureMounted(_hudLayer);
+            GrinderHud.EnsureMounted(_hudLayer);
+            BuildCostHud.EnsureMounted(_hudLayer);
+            DeathScreenHud.EnsureMounted(_hudLayer);
+            CryobedConfigHud.EnsureMounted(_hudLayer);
+            BombHud.EnsureMounted(_hudLayer);
+            PaintHud.EnsureMounted(_hudLayer);
 
             // (We poll mouse buttons in Update() — much more reliable than RegisterCallback.)
 
             // Hotbar (always on)
-            BuildHotbar(_root);
+            BuildHotbar(_contentLayer);
 
             if (_inventoryOpen)
             {
@@ -963,7 +1034,7 @@ namespace VoxelEngine.UI
 
                 // Left area — player inventory, with the ARMOR equipment panel docking
                 // to its right when no crafting/container/stats panel occupies the space.
-                BuildLeftArea(_root);
+                BuildLeftArea(_contentLayer);
 
                 // ── MASTER SHIP TERMINAL — rendered FIRST (lowest z-order) so the
                 // inventory stays on the left and, crucially, the crafting screen
@@ -1009,7 +1080,7 @@ namespace VoxelEngine.UI
                     card.style.marginTop = 12; card.style.marginBottom = 12; card.style.marginRight = 12;
                     overlay.Add(card);
 
-                    _root.Add(overlay);
+                    _contentLayer.Add(overlay);
                 }
 
                 // Center panel — crafting screen (toggle-driven,
@@ -1054,53 +1125,53 @@ namespace VoxelEngine.UI
                 // the gap between the inventory and the right panel.
                 if (CraftingScreen.Visible && _openStation == null)
                 {
-                    BuildCenterCrafting(_root, aRightPanelIsOpen);
+                    BuildCenterCrafting(_contentLayer, aRightPanelIsOpen);
                     _craftPanelWasVisible = true;
                 }
                 else _craftPanelWasVisible = false;
 
                 // Right panel — container or station
-                if (_productionStatsOpen) _root.Add(ProductionStatsUI.BuildPanel());
-                else if (_recipeBrowserOpen) _root.Add(RecipeBrowserUI.BuildPanel(recipeRegistry, inventory));
-                else if (_rightContainer != null) BuildRightContainer(_root, _rightContainer);
-                else if (_openFurnace  != null) BuildRightFurnace(_root, _openFurnace);
-                else if (_openElectric != null) BuildRightElectricFurnace(_root, _openElectric);
-                else if (_openCoalGen  != null) BuildRightCoalGenerator(_root, _openCoalGen);
-                else if (_openQuarry   != null) { var mp = MachineUIs.QuarryPanel(_openQuarry, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openQuarry); }
-                else if (_openReactor  != null) { var mp = MachineUIs.ReactorCorePanel(_openReactor, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openReactor); }
-                else if (_openTurbine  != null) _root.Add(MachineUIs.SteamTurbinePanel(_openTurbine));
-                else if (_openPortReactor != null) { var mp = MachineUIs.PortableReactorPanel(_openPortReactor, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openPortReactor); }
-                else if (_openProcessor != null) { var mp = MachineUIs.UraniumProcessorPanel(_openProcessor, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openProcessor); }
-                else if (_openReprocessor != null) { var mp = MachineUIs.WasteReprocessorPanel(_openReprocessor, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openReprocessor); }
-                else if (_openElectrolyser != null) { var mp = MachineUIs.ElectrolyserPanel(_openElectrolyser, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openElectrolyser); }
-                else if (_openHydroEngine != null) _root.Add(MachineUIs.HydrogenEnginePanel(_openHydroEngine));
-                else if (_openGasTank != null) { _openGasTank.EnsureContainers(); _root.Add(MachineUIs.GasTankPanel(_openGasTank, BuildSlot)); }
-                else if (_openWaterPump != null) _root.Add(VoxelEngine.UI.FluidPumpUI.BuildPanel(_openWaterPump));
-                else if (_openBiofarm != null) { var mp = MachineUIs.BiofarmPanel(_openBiofarm, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openBiofarm); }
-                else if (_openWindTurbine != null) _root.Add(VoxelEngine.Power.Wind.WindTurbineUI.BuildPanel(_openWindTurbine, inventory));
-                else if (_openStorageTerminal  != null) _root.Add(VoxelEngine.Storage.StorageUI.BuildTerminalPanel(_openStorageTerminal, BuildSlot, inventory));
-                else if (_openServerRack       != null) _root.Add(VoxelEngine.Storage.StorageUI.BuildServerPanel(_openServerRack, BuildSlot));
-                else if (_openPatternTerminal  != null) _root.Add(VoxelEngine.Storage.StorageUI.BuildPatternTerminalPanel(_openPatternTerminal, recipeRegistry, inventory));
-                else if (_openCraftTerminal    != null) _root.Add(VoxelEngine.Storage.StorageUI.CreateCraftingTerminalPanel(_openCraftTerminal, inventory));
-                else if (_openImporter         != null) _root.Add(VoxelEngine.Storage.StorageUI.BuildImporterPanel(_openImporter, BuildSlot));
-                else if (_openExporter         != null) _root.Add(VoxelEngine.Storage.StorageUI.BuildExporterPanel(_openExporter, BuildSlot));
-                else if (_openDiskManipulator  != null) _root.Add(VoxelEngine.Storage.StorageUI.BuildDiskManipulatorPanel(_openDiskManipulator, BuildSlot));
-                else if (_openNAS              != null) _root.Add(VoxelEngine.Storage.StorageUI.BuildNASPanel(_openNAS, BuildSlot));
-                else if (_openPowerstation     != null) _root.Add(BuildPowerstationPanel(_openPowerstation));
-                else if (_openStorageDrawer   != null) _root.Add(VoxelEngine.Storage.StorageUI.BuildDrawerPanel(_openStorageDrawer, BuildSlot));
-                else if (_openDrawerController!= null) { var mp = VoxelEngine.Storage.StorageUI.BuildDrawerControllerPanel(_openDrawerController); _root.Add(mp); AppendItemPorts(mp, _openDrawerController); }
-                else if (_openItemDisplay     != null) _root.Add(VoxelEngine.Storage.StorageUI.BuildItemDisplayPanel(_openItemDisplay, BuildSlot));
-                else if (_openGridBlock        != null) { var mp = VoxelEngine.GridSystem.UI.GridBlockUI.BuildPanel(_openGridBlock, BuildSlot); _root.Add(mp); if (_openGridBlock is VoxelEngine.Transport.IItemPortHost) AppendItemPorts(mp, _openGridBlock); }
-                else if (_openOilRefinery      != null) { var mp = VoxelEngine.Crafting.ProcessorUI.OilRefineryPanel(_openOilRefinery, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openOilRefinery); }
-                else if (_openChemPlant        != null) { var mp = VoxelEngine.Crafting.ProcessorUI.ChemicalPlantPanel(_openChemPlant, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openChemPlant); }
-                else if (_openCrusher          != null) { var mp = MachineUIs.CrusherPanel(_openCrusher, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openCrusher); }
-                else if (_openAssembler        != null) { var mp = MachineUIs.AssemblerPanel(_openAssembler, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openAssembler); }
-                else if (_openFunnel           != null) _root.Add(MachineUIs.FunnelPanel(_openFunnel));
-                else if (_openSplitter         != null) _root.Add(MachineUIs.SplitterPanel(_openSplitter, BuildSlot));
-                else if (_openVoltageStation   != null) _root.Add(VoxelEngine.Simulation.VoltageStationUI.BuildPanel(_openVoltageStation));
-                else if (_openDefense != null) BuildDefensePanel(_root, _openDefense);
-                else if (_openPowerBattery != null) { var pbPanel = MakePanel(); pbPanel.style.position = Position.Absolute; pbPanel.style.top = 24; pbPanel.style.bottom = 92; pbPanel.style.right = 18; pbPanel.style.width = 320; pbPanel.style.minWidth = 280; pbPanel.Add(MakeTitle("Power Station / Battery")); pbPanel.Add(MakeSubtitle("Charge: " + (_openPowerBattery.charge.ToString("F0") + " Wh / " + _openPowerBattery.capacityWattHours.ToString("F0") + " Wh"))); pbPanel.Add(MakeMutedLabel("Place Portable Battery in inventory to charge. RMB holds battery while looking at this station to fill.")); _root.Add(pbPanel); }
-                else if (_openStation  != null) BuildRightStationCrafting(_root, _openStation);
+                if (_productionStatsOpen) _contentLayer.Add(ProductionStatsUI.BuildPanel());
+                else if (_recipeBrowserOpen) _contentLayer.Add(RecipeBrowserUI.BuildPanel(recipeRegistry, inventory));
+                else if (_rightContainer != null) BuildRightContainer(_contentLayer, _rightContainer);
+                else if (_openFurnace  != null) BuildRightFurnace(_contentLayer, _openFurnace);
+                else if (_openElectric != null) BuildRightElectricFurnace(_contentLayer, _openElectric);
+                else if (_openCoalGen  != null) BuildRightCoalGenerator(_contentLayer, _openCoalGen);
+                else if (_openQuarry   != null) { var mp = MachineUIs.QuarryPanel(_openQuarry, BuildSlot); _contentLayer.Add(mp); AppendItemPorts(mp, _openQuarry); }
+                else if (_openReactor  != null) { var mp = MachineUIs.ReactorCorePanel(_openReactor, BuildSlot); _contentLayer.Add(mp); AppendItemPorts(mp, _openReactor); }
+                else if (_openTurbine  != null) _contentLayer.Add(MachineUIs.SteamTurbinePanel(_openTurbine));
+                else if (_openPortReactor != null) { var mp = MachineUIs.PortableReactorPanel(_openPortReactor, BuildSlot); _contentLayer.Add(mp); AppendItemPorts(mp, _openPortReactor); }
+                else if (_openProcessor != null) { var mp = MachineUIs.UraniumProcessorPanel(_openProcessor, BuildSlot); _contentLayer.Add(mp); AppendItemPorts(mp, _openProcessor); }
+                else if (_openReprocessor != null) { var mp = MachineUIs.WasteReprocessorPanel(_openReprocessor, BuildSlot); _contentLayer.Add(mp); AppendItemPorts(mp, _openReprocessor); }
+                else if (_openElectrolyser != null) { var mp = MachineUIs.ElectrolyserPanel(_openElectrolyser, BuildSlot); _contentLayer.Add(mp); AppendItemPorts(mp, _openElectrolyser); }
+                else if (_openHydroEngine != null) _contentLayer.Add(MachineUIs.HydrogenEnginePanel(_openHydroEngine));
+                else if (_openGasTank != null) { _openGasTank.EnsureContainers(); _contentLayer.Add(MachineUIs.GasTankPanel(_openGasTank, BuildSlot)); }
+                else if (_openWaterPump != null) _contentLayer.Add(VoxelEngine.UI.FluidPumpUI.BuildPanel(_openWaterPump));
+                else if (_openBiofarm != null) { var mp = MachineUIs.BiofarmPanel(_openBiofarm, BuildSlot); _contentLayer.Add(mp); AppendItemPorts(mp, _openBiofarm); }
+                else if (_openWindTurbine != null) _contentLayer.Add(VoxelEngine.Power.Wind.WindTurbineUI.BuildPanel(_openWindTurbine, inventory));
+                else if (_openStorageTerminal  != null) _contentLayer.Add(VoxelEngine.Storage.StorageUI.BuildTerminalPanel(_openStorageTerminal, BuildSlot, inventory));
+                else if (_openServerRack       != null) _contentLayer.Add(VoxelEngine.Storage.StorageUI.BuildServerPanel(_openServerRack, BuildSlot));
+                else if (_openPatternTerminal  != null) _contentLayer.Add(VoxelEngine.Storage.StorageUI.BuildPatternTerminalPanel(_openPatternTerminal, recipeRegistry, inventory));
+                else if (_openCraftTerminal    != null) _contentLayer.Add(VoxelEngine.Storage.StorageUI.CreateCraftingTerminalPanel(_openCraftTerminal, inventory));
+                else if (_openImporter         != null) _contentLayer.Add(VoxelEngine.Storage.StorageUI.BuildImporterPanel(_openImporter, BuildSlot));
+                else if (_openExporter         != null) _contentLayer.Add(VoxelEngine.Storage.StorageUI.BuildExporterPanel(_openExporter, BuildSlot));
+                else if (_openDiskManipulator  != null) _contentLayer.Add(VoxelEngine.Storage.StorageUI.BuildDiskManipulatorPanel(_openDiskManipulator, BuildSlot));
+                else if (_openNAS              != null) _contentLayer.Add(VoxelEngine.Storage.StorageUI.BuildNASPanel(_openNAS, BuildSlot));
+                else if (_openPowerstation     != null) _contentLayer.Add(BuildPowerstationPanel(_openPowerstation));
+                else if (_openStorageDrawer   != null) _contentLayer.Add(VoxelEngine.Storage.StorageUI.BuildDrawerPanel(_openStorageDrawer, BuildSlot));
+                else if (_openDrawerController!= null) { var mp = VoxelEngine.Storage.StorageUI.BuildDrawerControllerPanel(_openDrawerController); _contentLayer.Add(mp); AppendItemPorts(mp, _openDrawerController); }
+                else if (_openItemDisplay     != null) _contentLayer.Add(VoxelEngine.Storage.StorageUI.BuildItemDisplayPanel(_openItemDisplay, BuildSlot));
+                else if (_openGridBlock        != null) { var mp = VoxelEngine.GridSystem.UI.GridBlockUI.BuildPanel(_openGridBlock, BuildSlot); _contentLayer.Add(mp); if (_openGridBlock is VoxelEngine.Transport.IItemPortHost) AppendItemPorts(mp, _openGridBlock); }
+                else if (_openOilRefinery      != null) { var mp = VoxelEngine.Crafting.ProcessorUI.OilRefineryPanel(_openOilRefinery, BuildSlot); _contentLayer.Add(mp); AppendItemPorts(mp, _openOilRefinery); }
+                else if (_openChemPlant        != null) { var mp = VoxelEngine.Crafting.ProcessorUI.ChemicalPlantPanel(_openChemPlant, BuildSlot); _contentLayer.Add(mp); AppendItemPorts(mp, _openChemPlant); }
+                else if (_openCrusher          != null) { var mp = MachineUIs.CrusherPanel(_openCrusher, BuildSlot); _contentLayer.Add(mp); AppendItemPorts(mp, _openCrusher); }
+                else if (_openAssembler        != null) { var mp = MachineUIs.AssemblerPanel(_openAssembler, BuildSlot); _contentLayer.Add(mp); AppendItemPorts(mp, _openAssembler); }
+                else if (_openFunnel           != null) _contentLayer.Add(MachineUIs.FunnelPanel(_openFunnel));
+                else if (_openSplitter         != null) _contentLayer.Add(MachineUIs.SplitterPanel(_openSplitter, BuildSlot));
+                else if (_openVoltageStation   != null) _contentLayer.Add(VoxelEngine.Simulation.VoltageStationUI.BuildPanel(_openVoltageStation));
+                else if (_openDefense != null) BuildDefensePanel(_contentLayer, _openDefense);
+                else if (_openPowerBattery != null) _contentLayer.Add(BuildRightPowerBattery(_openPowerBattery));
+                else if (_openStation  != null) BuildRightStationCrafting(_contentLayer, _openStation);
             }
             else
             {
@@ -1172,27 +1243,21 @@ namespace VoxelEngine.UI
             header.Add(title);
 
             equipment.EnsureAllJetpackFuelInitialized();
-            float fuel01 = equipment.BestJetpackFuel01;
-            int fuelU = equipment.BestJetpackFuelUnits;
-            int fuelCap = equipment.BestJetpackFuelCapacity;
-            bool online = equipment.HasUsableJetpack;
-            string statusText = !online ? "EMPTY" : (fuel01 <= 0.05f ? "DRY" : (fuel01 < 0.25f ? "LOW" : "ONLINE"));
-            Color statusCol = statusText == "ONLINE" ? new Color(0.30f, 0.95f, 0.55f)
-                             : statusText == "LOW" ? new Color(1f, 0.78f, 0.25f)
-                             : new Color(0.95f, 0.45f, 0.25f);
+            var summary = equipment.GetJetpackSummary();
 
-            var status = new Label(statusText);
-            status.style.marginLeft = 8;
-            status.style.fontSize = 9;
-            status.style.unityFontStyleAndWeight = FontStyle.Bold;
-            status.style.color = statusCol;
-            status.style.backgroundColor = new StyleColor(new Color(0f, 0f, 0f, 0.32f));
-            status.style.paddingLeft = 7;
-            status.style.paddingRight = 7;
-            status.style.paddingTop = 2;
-            status.style.paddingBottom = 2;
-            SetBorderRadius(status, 9);
-            header.Add(status);
+            _jbStatusPill = new VisualElement();
+            _jbStatusPill.style.marginLeft = 8;
+            _jbStatusPill.style.paddingLeft = 7;
+            _jbStatusPill.style.paddingRight = 7;
+            _jbStatusPill.style.paddingTop = 2;
+            _jbStatusPill.style.paddingBottom = 2;
+            SetBorderRadius(_jbStatusPill, 9);
+            _jbStatusPill.style.backgroundColor = new StyleColor(new Color(0f, 0f, 0f, 0.32f));
+            _jbStatus = new Label("");
+            _jbStatus.style.fontSize = 9;
+            _jbStatus.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _jbStatusPill.Add(_jbStatus);
+            header.Add(_jbStatusPill);
             box.Add(header);
 
             var slots = BuildSortableSlotGrid(equipment.JetpackSlots, 0,
@@ -1200,41 +1265,315 @@ namespace VoxelEngine.UI
             slots.style.marginLeft = 2;
             box.Add(slots);
 
-            // ── Dual fuel bars: Hydrogen (ml) shown only if a H₂ pack equipped;
-            // Wattage (W) shown only if a power pack equipped. Hybrid contributes to both.
-            bool anyH2 = false, anyPower = false;
-            int h2FuelU = 0, h2FuelCap = 0; float h2Fuel01 = 0f;
-            int pFuelU = 0, pFuelCap = 0; float pFuel01 = 0f;
-            for (int i = 0; i < equipment.JetpackSlots.Size; i++)
-            {
-                var s = equipment.JetpackSlots.GetSlot(i);
-                if (s == null || s.IsEmpty || s.item is not JetpackItem p) continue;
-                bool usesH2 = VoxelEngine.Player.PlayerEquipment.PackUsesHydrogen(p);
-                bool usesP = VoxelEngine.Player.PlayerEquipment.PackUsesPower(p);
-                if (usesH2) { anyH2 = true; if (s.durability > h2FuelU) { h2FuelU = s.durability; h2FuelCap = p.FuelCapacity; h2Fuel01 = s.durability / (float)Mathf.Max(1, p.FuelCapacity); } }
-                if (usesP) { anyPower = true; if (s.durability > pFuelU) { pFuelU = s.durability; pFuelCap = p.FuelCapacity; pFuel01 = s.durability / (float)Mathf.Max(1, p.FuelCapacity); } }
-            }
+            // ── Dual fuel bars: Hydrogen (ml) + Power (Wh) — shown whenever a pack
+            // with that pool TYPE is equipped, even at 0 (an empty Atmospheric cell
+            // still renders its bar instead of disappearing). Twin packs sum, so the
+            // displayed capacity doubles exactly like the real combined tank does.
+            (_jbH2Row, _jbH2Fill, _jbH2Label) = BuildJetpackFuelBar(
+                summary.h2Cap > 0, "H₂ Fuel", summary.h2, summary.h2Cap, "ml", new Color(0.35f, 0.85f, 1f));
+            if (_jbH2Row != null) box.Add(_jbH2Row);
 
-            if (anyH2 && h2FuelCap > 0)
-            {
-                var h2Row = new VisualElement(); h2Row.style.marginTop = 4; h2Row.style.marginLeft = 2; h2Row.style.marginRight = 2;
-                h2Row.Add(new Label($"H₂ Fuel  {h2FuelU} / {h2FuelCap} ml") { style = { fontSize = 9, color = new Color(0.35f,0.85f,1f), marginBottom = 3 } });
-                var h2Track = new VisualElement(); h2Track.style.height = 6; h2Track.style.backgroundColor = new StyleColor(new Color(0.08f,0.1f,0.14f,0.95f)); SetBorderRadius(h2Track,3); h2Track.style.overflow = Overflow.Hidden;
-                var h2Fill = new VisualElement(); h2Fill.style.height = 6; h2Fill.style.width = new StyleLength(new Length(Mathf.Clamp01(h2Fuel01)*100f, LengthUnit.Percent)); h2Fill.style.backgroundColor = new StyleColor(new Color(0.35f,0.85f,1f)); SetBorderRadius(h2Fill,3); h2Track.Add(h2Fill); h2Row.Add(h2Track);
-                box.Add(h2Row);
-            }
-            if (anyPower && pFuelCap > 0)
-            {
-                var pRow = new VisualElement(); pRow.style.marginTop = 4; pRow.style.marginLeft = 2; pRow.style.marginRight = 2;
-                pRow.Add(new Label($"Power  {pFuelU} / {pFuelCap} W") { style = { fontSize = 9, color = new Color(0.45f,0.9f,0.6f), marginBottom = 3 } });
-                var pTrack = new VisualElement(); pTrack.style.height = 6; pTrack.style.backgroundColor = new StyleColor(new Color(0.08f,0.1f,0.14f,0.95f)); SetBorderRadius(pTrack,3); pTrack.style.overflow = Overflow.Hidden;
-                var pFill = new VisualElement(); pFill.style.height = 6; pFill.style.width = new StyleLength(new Length(Mathf.Clamp01(pFuel01)*100f, LengthUnit.Percent)); pFill.style.backgroundColor = new StyleColor(new Color(0.45f,0.9f,0.6f)); SetBorderRadius(pFill,3); pTrack.Add(pFill); pRow.Add(pTrack);
-                box.Add(pRow);
-            }
+            (_jbPRow, _jbPFill, _jbPLabel) = BuildJetpackFuelBar(
+                summary.powerCap > 0, "Power", summary.power, summary.powerCap, "Wh", new Color(0.45f, 0.9f, 0.6f));
+            if (_jbPRow != null) box.Add(_jbPRow);
 
-            // (Old single-bar block replaced by the dual bars above — keep header/status/slots intact)
-
+            // Push real values into the fresh elements immediately.
+            TickJetpackBayLiveUI();
             return box;
+        }
+
+        /// <summary>One labelled mini bar for the jetpack bay. Returns (row, fill, label);
+        /// row is null when the pool type isn't equipped.</summary>
+        private static (VisualElement row, VisualElement fill, Label label) BuildJetpackFuelBar(
+            bool visible, string name, int cur, int cap, string unit, Color accent)
+        {
+            if (!visible) return (null, null, null);
+            var row = new VisualElement();
+            row.style.marginTop = 4; row.style.marginLeft = 2; row.style.marginRight = 2;
+
+            var label = new Label($"{name}  {cur} / {cap} {unit}");
+            label.style.fontSize = 9;
+            label.style.color = accent;
+            label.style.marginBottom = 3;
+            row.Add(label);
+
+            var track = new VisualElement();
+            track.style.height = 6;
+            track.style.backgroundColor = new StyleColor(new Color(0.08f, 0.1f, 0.14f, 0.95f));
+            SetBorderRadius(track, 3);
+            track.style.overflow = Overflow.Hidden;
+
+            var fill = new VisualElement();
+            fill.style.height = 6;
+            fill.style.width = new StyleLength(new Length(cap > 0 ? Mathf.Clamp01(cur / (float)cap) * 100f : 0f, LengthUnit.Percent));
+            fill.style.backgroundColor = new StyleColor(accent);
+            SetBorderRadius(fill, 3);
+            track.Add(fill);
+            row.Add(track);
+            return (row, fill, label);
+        }
+
+        /// <summary>Frame-cheap in-place update of the jetpack bay status + dual bars.
+        /// Runs every Update so flight drain shows live WITHOUT rebuilding the panel.</summary>
+        private void TickJetpackBayLiveUI()
+        {
+            if (!_inventoryOpen || inventory == null) return;
+            var equipment = inventory.GetComponent<VoxelEngine.Player.PlayerEquipment>();
+            if (equipment == null) return;
+            var summary = equipment.GetJetpackSummary();
+
+            if (_jbStatus != null)
+            {
+                string statusText;
+                Color statusCol;
+                if (!summary.anyPack)            { statusText = "EMPTY"; statusCol = new Color(0.95f, 0.45f, 0.25f); }
+                else if (!summary.canFly)
+                {
+                    bool envBlocked = summary.offlineReason != null && summary.offlineReason.Contains("atmosphere");
+                    statusText = envBlocked ? "NO ATMOS" : "DRY";
+                    statusCol = envBlocked ? new Color(1f, 0.62f, 0.25f) : new Color(0.95f, 0.45f, 0.25f);
+                }
+                else if (summary.twinActive)     { statusText = "TWIN ×2"; statusCol = new Color(0.72f, 0.55f, 1f); }
+                else
+                {
+                    float frac = 1f;
+                    int totCap = summary.h2Cap + summary.powerCap;
+                    if (totCap > 0) frac = (summary.h2 + summary.power) / (float)totCap;
+                    statusText = frac <= 0.05f ? "DRY" : frac < 0.25f ? "LOW" : "ONLINE";
+                    statusCol = statusText == "ONLINE" ? new Color(0.30f, 0.95f, 0.55f)
+                              : statusText == "LOW" ? new Color(1f, 0.78f, 0.25f)
+                              : new Color(0.95f, 0.45f, 0.25f);
+                }
+                _jbStatus.text = statusText;
+                _jbStatus.style.color = statusCol;
+            }
+
+            // Hide a bar entirely if its pool type left the bay (pack swapped out).
+            if (_jbH2Row != null) _jbH2Row.style.display = summary.h2Cap > 0 ? DisplayStyle.Flex : DisplayStyle.None;
+            if (_jbPRow != null) _jbPRow.style.display = summary.powerCap > 0 ? DisplayStyle.Flex : DisplayStyle.None;
+
+            if (_jbH2Fill != null)
+            {
+                _jbH2Label.text = $"H₂ Fuel  {summary.h2} / {summary.h2Cap} ml";
+                _jbH2Fill.style.width = new StyleLength(new Length(
+                    summary.h2Cap > 0 ? Mathf.Clamp01(summary.h2 / (float)summary.h2Cap) * 100f : 0f, LengthUnit.Percent));
+            }
+            if (_jbPFill != null)
+            {
+                _jbPLabel.text = $"Power  {summary.power} / {summary.powerCap} Wh";
+                _jbPFill.style.width = new StyleLength(new Length(
+                    summary.powerCap > 0 ? Mathf.Clamp01(summary.power / (float)summary.powerCap) * 100f : 0f, LengthUnit.Percent));
+            }
+        }
+
+        // ════════════════════════════════════════════════════════════
+        //                  BATTERY PANEL (6.77 rework)
+        // ════════════════════════════════════════════════════════════
+        // Segmented, eased charge gauge + live in/out flow stats + the device
+        // charger dock. Everything below updates in place via TickBatteryLiveUI —
+        // no destructive 4 Hz rebuild, so the panel never flashes or eats clicks.
+
+        private const int BatterySegmentCount = 12;
+        private static readonly Color BatteryGreen = new(0.30f, 0.95f, 0.55f);
+        private static readonly Color BatteryAmber = new(1.00f, 0.78f, 0.25f);
+        private static readonly Color BatteryRed   = new(0.95f, 0.35f, 0.25f);
+        private static readonly Color BatteryOff   = new(0.10f, 0.11f, 0.15f, 0.95f);
+
+        private VisualElement BuildRightPowerBattery(VoxelEngine.Power.PowerBattery pb)
+        {
+            pb.EnsureContainers();
+            var p = UITheme.MachinePanel();
+
+            // ── Header: badge + title + live status pill ──────────────
+            var head = new VisualElement();
+            head.style.flexDirection = FlexDirection.Row;
+            head.style.alignItems = Align.Center;
+            head.style.marginBottom = 8;
+            head.Add(UITheme.IconBadge("🔋", new Color(0.45f, 0.75f, 0.95f)));
+            var title = UITheme.Title("Battery");
+            title.style.flexGrow = 1;
+            head.Add(title);
+            _battStatus = new Label("IDLE");
+            _battStatus.style.fontSize = 10;
+            _battStatus.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _battStatus.style.letterSpacing = 1.2f;
+            _battStatus.style.color = UITheme.TextSecondary;
+            _battStatus.style.paddingLeft = 9; _battStatus.style.paddingRight = 9;
+            _battStatus.style.paddingTop = 3;  _battStatus.style.paddingBottom = 3;
+            _battStatus.style.backgroundColor = new StyleColor(new Color(0f, 0f, 0f, 0.30f));
+            SetBorderRadius(_battStatus, 12);
+            head.Add(_battStatus);
+            p.Add(head);
+            p.Add(UITheme.AccentDivider(new Color(0.45f, 0.75f, 0.95f)));
+
+            // ── Segmented charge gauge + big % ────────────────────────
+            var gaugeRow = new VisualElement();
+                gaugeRow.style.flexDirection = FlexDirection.Row;
+                gaugeRow.style.alignItems = Align.Center;
+                gaugeRow.style.marginTop = 4;
+                gaugeRow.style.marginBottom = 2;
+                gaugeRow.pickingMode = PickingMode.Ignore;
+
+            var segTrack = new VisualElement();
+                segTrack.style.flexDirection = FlexDirection.Row;
+                segTrack.style.flexGrow = 1;
+                segTrack.style.height = 26;
+                segTrack.style.paddingTop = 3; segTrack.style.paddingBottom = 3;
+                segTrack.style.paddingLeft = 3; segTrack.style.paddingRight = 3;
+                segTrack.style.backgroundColor = new StyleColor(new Color(0.04f, 0.045f, 0.065f, 0.98f));
+                SetBorderRadius(segTrack, 7);
+                segTrack.pickingMode = PickingMode.Ignore;
+
+            _battSegments = new VisualElement[BatterySegmentCount];
+            for (int i = 0; i < BatterySegmentCount; i++)
+            {
+                var seg = new VisualElement();
+                seg.style.flexGrow = 1;
+                seg.style.marginRight = i < BatterySegmentCount - 1 ? 2 : 0;
+                seg.style.backgroundColor = new StyleColor(BatteryOff);
+                SetBorderRadius(seg, 2);
+                seg.pickingMode = PickingMode.Ignore;
+                _battSegments[i] = seg;
+                segTrack.Add(seg);
+            }
+            gaugeRow.Add(segTrack);
+
+            _battPct = new Label("0%");
+            _battPct.style.width = 58;
+            _battPct.style.fontSize = 18;
+            _battPct.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _battPct.style.unityTextAlign = TextAnchor.MiddleRight;
+            _battPct.style.color = UITheme.TextPrimary;
+            _battPct.style.marginLeft = 10;
+            _battPct.pickingMode = PickingMode.Ignore;
+            gaugeRow.Add(_battPct);
+            p.Add(gaugeRow);
+
+            // ── Live flow stats ───────────────────────────────────────
+            p.Add(UITheme.Spacer(6));
+            _battChargeRow = BuildBatteryStatRow(p, "🔋", "Stored", UITheme.TextPrimary);
+            _battInRow  = BuildBatteryStatRow(p, "⬇", "Power In", BatteryGreen);
+            _battOutRow = BuildBatteryStatRow(p, "⬆", "Power Out", BatteryAmber);
+
+            // ── Device charger dock ───────────────────────────────────
+            p.Add(UITheme.Divider());
+            p.Add(UITheme.Subtitle("Device Charger"));
+            var dockGrid = UITheme.SlotGrid(1);
+            dockGrid.Add(BuildSlot(pb.ChargeSlot, 0, pb.ChargeSlot.GetSlot(0), false));
+            p.Add(dockGrid);
+            _battDockRow = new Label("No device docked");
+            _battDockRow.style.fontSize = 10;
+            _battDockRow.style.color = UITheme.TextMuted;
+            _battDockRow.style.marginTop = 5;
+            _battDockRow.pickingMode = PickingMode.Ignore;
+            p.Add(_battDockRow);
+
+            p.Add(UITheme.Spacer(8));
+            p.Add(UITheme.Muted(
+                "Dock a Portable Battery or a power-fed jetpack (Atmospheric / Hybrid) to charge it from stored energy. " +
+                "You can also hold the device and RMB the battery — Shift tops it to 100%."));
+
+            _battSegSmooth = 0f; // power-on sweep
+            TickBatteryLiveUI();
+            return p;
+        }
+
+        /// <summary>Icon + label + right-aligned stat value row; returns the value label.</summary>
+        private static Label BuildBatteryStatRow(VisualElement parent, string icon, string label, Color valueColor)
+        {
+            var row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.style.marginBottom = 5;
+            row.style.minHeight = 20;
+            row.pickingMode = PickingMode.Ignore;
+
+            var ico = new Label(icon);
+            ico.style.fontSize = 12;
+            ico.style.color = new StyleColor(valueColor);
+            ico.style.marginRight = 7;
+            ico.style.minWidth = 18;
+            ico.style.unityTextAlign = TextAnchor.MiddleCenter;
+            ico.pickingMode = PickingMode.Ignore;
+            row.Add(ico);
+
+            var lbl = new Label(label);
+            lbl.style.color = new StyleColor(UITheme.TextSecondary);
+            lbl.style.fontSize = 11;
+            lbl.style.flexGrow = 1;
+            lbl.pickingMode = PickingMode.Ignore;
+            row.Add(lbl);
+
+            var val = new Label("—");
+            val.style.color = new StyleColor(valueColor);
+            val.style.fontSize = 11;
+            val.style.unityFontStyleAndWeight = FontStyle.Bold;
+            val.pickingMode = PickingMode.Ignore;
+            row.Add(val);
+
+            parent.Add(row);
+            return val;
+        }
+
+        /// <summary>Frame-cheap in-place battery panel update — segments, %, flows, dock.</summary>
+        private void TickBatteryLiveUI()
+        {
+            var pb = _openPowerBattery;
+            if (pb == null || _battSegments == null) return;
+
+            float fill = pb.Fill01;
+            _battSegSmooth = Mathf.MoveTowards(_battSegSmooth, fill, Time.unscaledDeltaTime * 1.2f);
+
+            Color col = fill > 0.5f ? BatteryGreen : fill > 0.25f ? BatteryAmber : BatteryRed;
+            int lit = Mathf.RoundToInt(_battSegSmooth * _battSegments.Length);
+            for (int i = 0; i < _battSegments.Length; i++)
+            {
+                var seg = _battSegments[i];
+                if (seg == null) continue;
+                seg.style.backgroundColor = new StyleColor(
+                    i < lit ? new Color(col.r, col.g, col.b, 0.88f) : BatteryOff);
+            }
+
+            if (_battPct != null)
+            {
+                _battPct.text = $"{fill * 100f:0}%";
+                _battPct.style.color = new StyleColor(col);
+            }
+            if (_battChargeRow != null)
+                _battChargeRow.text = $"{pb.charge:0} / {pb.capacityWattHours:0} Wh";
+            if (_battInRow != null)
+                _battInRow.text = $"{pb.lastChargeInW:0} / {pb.ioRate:0} W";
+            if (_battOutRow != null)
+                _battOutRow.text = $"{pb.lastDischargeOutW:0} / {pb.ioRate:0} W";
+
+            if (_battStatus != null)
+            {
+                string text; Color statusCol;
+                if (pb.lastChargeInW > 0.5f)       { text = "CHARGING";     statusCol = BatteryGreen; }
+                else if (pb.lastDischargeOutW > 0.5f) { text = "DISCHARGING"; statusCol = BatteryAmber; }
+                else if (pb.IsChargingItem)        { text = "DOCK +";       statusCol = new Color(0.45f, 0.75f, 0.95f); }
+                else if (fill >= 0.999f)           { text = "FULL";         statusCol = BatteryGreen; }
+                else                               { text = "IDLE";         statusCol = UITheme.TextSecondary; }
+                _battStatus.text = text;
+                _battStatus.style.color = new StyleColor(statusCol);
+            }
+
+            if (_battDockRow != null)
+            {
+                pb.GetDockedItemCharge(out int stored, out int capacity);
+                var docked = pb.ChargeSlot.GetSlot(0);
+                if (docked == null || docked.IsEmpty || capacity <= 0)
+                {
+                    _battDockRow.text = "No device docked — drop a Portable Battery or power jetpack.";
+                    _battDockRow.style.color = new StyleColor(UITheme.TextMuted);
+                }
+                else
+                {
+                    float f01 = Mathf.Clamp01(stored / (float)capacity);
+                    _battDockRow.text = $"{docked.item.displayName}  ·  {stored} / {capacity} Wh  ({f01 * 100f:0}%)";
+                    _battDockRow.style.color = new StyleColor(f01 >= 0.999f ? BatteryGreen : new Color(0.45f, 0.75f, 0.95f));
+                }
+            }
         }
 
         private VisualElement BuildLifeSupportSlotsPanel(VoxelEngine.Player.PlayerEquipment equipment)
@@ -3175,11 +3514,12 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                     mlLbl.pickingMode = PickingMode.Ignore;
                     slot.Add(mlLbl);
                 }
-                // Jetpack internal fuel (ml)
+                // Jetpack combined fuel (H₂ + power, both pools)
                 else if (stack.item is VoxelEngine.Items.JetpackItem jp)
                 {
-                    int cap = Mathf.Max(1, jp.FuelCapacityMl);
-                    float frac = Mathf.Clamp01(stack.durability / (float)cap);
+                    int cap = Mathf.Max(1, jp.HydrogenCapacityMl + jp.PowerCapacityMl);
+                    int cur = VoxelEngine.Items.JetpackItem.GetH2Ml(stack) + VoxelEngine.Items.JetpackItem.GetPowerMl(stack);
+                    float frac = Mathf.Clamp01(cur / (float)cap);
                     slot.Add(MakeItemFillBar(frac, Color.Lerp(Color.red, new Color(0.4f, 0.9f, 1f), frac)));
                 }
                 // Tooltip on hover (only when the panel is interactive — otherwise hotbar
@@ -3650,6 +3990,7 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                     item = stack.item,
                     count = spawnCount,
                     durability = stack.durability,
+                    charge = stack.charge,
                     payload = stack.payload
                 };
                 dropped = VoxelEngine.Items.DroppedItem.Spawn(spawnStack, spawnPos, tossDir);
@@ -3673,7 +4014,7 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                 int droppedCount = dropped != null ? dropped.stack.count : 0;
                 int remaining = Mathf.Max(0, stack.count - droppedCount);
                 var retained = remaining > 0
-                    ? new ItemStack { item = stack.item, count = remaining, durability = stack.durability, payload = stack.payload }
+                    ? new ItemStack { item = stack.item, count = remaining, durability = stack.durability, charge = stack.charge, payload = stack.payload }
                     : new ItemStack();
                 c.SetSlot(idx, retained);
             }
@@ -4081,7 +4422,7 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
 
             if (sourceC == inventory.container && srcStack.item is SpaceHelmetItem && helmetSlots != null)
             {
-                var cloneHelmet = new ItemStack { item = srcStack.item, count = 1, durability = srcStack.durability, payload = srcStack.payload };
+                var cloneHelmet = new ItemStack { item = srcStack.item, count = 1, durability = srcStack.durability, charge = srcStack.charge, payload = srcStack.payload };
                 var leftoverHelmet = helmetSlots.Insert(cloneHelmet);
                 if (leftoverHelmet == null || leftoverHelmet.count <= 0)
                 {
@@ -4096,7 +4437,7 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
 
             if (sourceC == inventory.container && srcStack.item is OxygenTankItem && oxygenSlots != null)
             {
-                var cloneTank = new ItemStack { item = srcStack.item, count = 1, durability = srcStack.durability, payload = srcStack.payload };
+                var cloneTank = new ItemStack { item = srcStack.item, count = 1, durability = srcStack.durability, charge = srcStack.charge, payload = srcStack.payload };
                 var leftoverTank = oxygenSlots.Insert(cloneTank);
                 if (leftoverTank == null || leftoverTank.count <= 0)
                 {
@@ -4111,7 +4452,7 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
 
             if (sourceC == inventory.container && srcStack.item is VoxelEngine.Combat.ArmorItem && armorSlots != null)
             {
-                var cloneArmor = new ItemStack { item = srcStack.item, count = 1, durability = srcStack.durability, payload = srcStack.payload };
+                var cloneArmor = new ItemStack { item = srcStack.item, count = 1, durability = srcStack.durability, charge = srcStack.charge, payload = srcStack.payload };
                 var leftoverArmor = armorSlots.Insert(cloneArmor);
                 if (leftoverArmor == null || leftoverArmor.count <= 0)
                 {
@@ -4127,7 +4468,7 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
             if ((helmetSlots != null && sourceC == helmetSlots) || (oxygenSlots != null && sourceC == oxygenSlots) ||
                 (armorSlots != null && sourceC == armorSlots))
             {
-                var cloneGear = new ItemStack { item = srcStack.item, count = srcStack.count, durability = srcStack.durability, payload = srcStack.payload };
+                var cloneGear = new ItemStack { item = srcStack.item, count = srcStack.count, durability = srcStack.durability, charge = srcStack.charge, payload = srcStack.payload };
                 var leftoverGear = inventory.container.Insert(cloneGear);
                 int movedGear = leftoverGear == null ? srcStack.count : (srcStack.count - leftoverGear.count);
                 if (movedGear > 0)
@@ -4139,11 +4480,69 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                 return;
             }
 
+            // Gas dock QoL: with a hydrogen Gas Tank open (world or grid), shift-clicking
+            // a portable H₂ tank or a hydrogen jetpack docks it for filling (before the
+            // jetpack auto-equip routing below can claim the pack).
+            IItemContainer openGasDock = null;
+            if (_openGasTank != null && _openGasTank.IsHydrogenMode)
+            {
+                _openGasTank.EnsureContainers();
+                openGasDock = _openGasTank.PortableSlot;
+            }
+            else if (_openGridBlock is VoxelEngine.GridSystem.GridGasTank openGridGas && openGridGas.IsHydrogenMode)
+            {
+                openGridGas.EnsureContainers();
+                openGasDock = openGridGas.PortableSlot;
+            }
+            if (sourceC == inventory.container && openGasDock != null)
+            {
+                bool dockable = VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(srcStack.item)
+                    || (srcStack.item is JetpackItem jpg && jpg.UsesHydrogenEffective);
+                if (dockable)
+                {
+                    var cloneDock = new ItemStack { item = srcStack.item, count = 1, durability = srcStack.durability, charge = srcStack.charge, payload = srcStack.payload };
+                    var leftoverDock = openGasDock.Insert(cloneDock);
+                    if (leftoverDock == null || leftoverDock.count <= 0)
+                    {
+                        srcStack.count -= 1;
+                        sourceC.SetSlot(sourceIdx, srcStack.count <= 0 ? new ItemStack() : srcStack);
+                        BuildFeedbackHud.Show("Docked — Filling H₂", srcStack.item.displayName, srcStack.item.icon, srcStack.item.iconTint);
+                        Refresh();
+                    }
+                    else BuildFeedbackHud.Show("Dock Occupied", "Remove the docked item first", srcStack.item.icon, Color.yellow);
+                    return;
+                }
+            }
+
+            // Battery dock QoL: with a Battery open, shift-clicking chargeable
+            // devices (Portable Batteries / power jetpacks) docks them for charging
+            // before the jetpack auto-equip routing below can claim the pack.
+            if (sourceC == inventory.container && _openPowerBattery != null)
+            {
+                bool chargeable = VoxelEngine.Items.PortableBatteryItem.IsPortableBattery(srcStack.item)
+                    || (srcStack.item is JetpackItem jpq && jpq.UsesPowerEffective);
+                if (chargeable)
+                {
+                    _openPowerBattery.EnsureContainers();
+                    var cloneCharge = new ItemStack { item = srcStack.item, count = 1, durability = srcStack.durability, charge = srcStack.charge, payload = srcStack.payload };
+                    var leftoverCharge = _openPowerBattery.ChargeSlot.Insert(cloneCharge);
+                    if (leftoverCharge == null || leftoverCharge.count <= 0)
+                    {
+                        srcStack.count -= 1;
+                        sourceC.SetSlot(sourceIdx, srcStack.count <= 0 ? new ItemStack() : srcStack);
+                        BuildFeedbackHud.Show("Docked for Charging", srcStack.item.displayName, srcStack.item.icon, srcStack.item.iconTint);
+                        Refresh();
+                    }
+                    else BuildFeedbackHud.Show("Charger Occupied", "Remove the docked device first", srcStack.item.icon, Color.yellow);
+                    return;
+                }
+            }
+
             // Jetpack QoL: shift-click from either hotbar or backpack equips into the
             // dedicated jetpack slots before any external machine/storage routing.
             if (sourceC == inventory.container && srcStack.item is JetpackItem && jetpackSlots != null)
             {
-                var cloneJet = new ItemStack { item = srcStack.item, count = 1, durability = srcStack.durability, payload = srcStack.payload };
+                var cloneJet = new ItemStack { item = srcStack.item, count = 1, durability = srcStack.durability, charge = srcStack.charge, payload = srcStack.payload };
                 var leftoverJet = jetpackSlots.Insert(cloneJet);
                 if (leftoverJet == null || leftoverJet.count <= 0)
                 {
@@ -4160,7 +4559,7 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
             // Shift-clicking a jetpack slot sends it back to normal inventory.
             if (jetpackSlots != null && sourceC == jetpackSlots)
             {
-                var cloneBack = new ItemStack { item = srcStack.item, count = srcStack.count, durability = srcStack.durability, payload = srcStack.payload };
+                var cloneBack = new ItemStack { item = srcStack.item, count = srcStack.count, durability = srcStack.durability, charge = srcStack.charge, payload = srcStack.payload };
                 var leftoverBack = inventory.container.Insert(cloneBack);
                 int movedBack = leftoverBack == null ? srcStack.count : (srcStack.count - leftoverBack.count);
                 if (movedBack > 0)
@@ -4186,7 +4585,7 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                         Refresh();
                         return;
                     }
-                    var clone1 = new ItemStack { item = srcStack.item, count = srcStack.count, durability = srcStack.durability, payload = srcStack.payload };
+                    var clone1 = new ItemStack { item = srcStack.item, count = srcStack.count, durability = srcStack.durability, charge = srcStack.charge, payload = srcStack.payload };
                     var leftover1 = explicitDest.Insert(clone1);
                     int moved1 = leftover1 == null ? srcStack.count : (srcStack.count - leftover1.count);
                     if (moved1 > 0)
@@ -4214,7 +4613,7 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                         ? (Inventory.TOTAL_SIZE - Inventory.HOTBAR_SIZE)
                         : Inventory.HOTBAR_SIZE;
 
-                    var clone2 = new ItemStack { item = srcStack.item, count = srcStack.count, durability = srcStack.durability, payload = srcStack.payload };
+                    var clone2 = new ItemStack { item = srcStack.item, count = srcStack.count, durability = srcStack.durability, charge = srcStack.charge, payload = srcStack.payload };
                     var leftover2 = ic.InsertRange(clone2, destStart, destCount);
                     int moved2 = leftover2 == null ? srcStack.count : (srcStack.count - leftover2.count);
                     if (moved2 > 0)
@@ -4272,7 +4671,7 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
             IItemContainer dest = ResolveQuickTransferDestination(sourceC, srcStack.item);
             if (dest == null) return;
 
-            var clone = new ItemStack { item = srcStack.item, count = srcStack.count, durability = srcStack.durability, payload = srcStack.payload };
+            var clone = new ItemStack { item = srcStack.item, count = srcStack.count, durability = srcStack.durability, charge = srcStack.charge, payload = srcStack.payload };
             var leftover = dest.Insert(clone);
             int moved = leftover == null ? srcStack.count : (srcStack.count - leftover.count);
             if (moved <= 0) return;
@@ -4363,6 +4762,11 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                     return dock.container;
                 case VoxelEngine.GridSystem.GridDrill drill:
                     return drill.buffer;
+                // Grid gas tank: portable H₂ tanks + hydrogen jetpacks dock here
+                // (the slot's own AcceptFilter guards the types).
+                case VoxelEngine.GridSystem.GridGasTank gridGas:
+                    gridGas.EnsureContainers();
+                    return gridGas.PortableSlot;
                 case VoxelEngine.GridSystem.GridWeapon weapon:
                     return weapon.ammo;
                 case VoxelEngine.GridSystem.GridH2O2Generator h2:

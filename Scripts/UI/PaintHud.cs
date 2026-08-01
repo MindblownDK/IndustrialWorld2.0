@@ -27,7 +27,7 @@ namespace VoxelEngine.UI
             _card = new VisualElement { name = "PaintHud" };
             _card.style.position = Position.Absolute;
             _card.style.left = 18;
-            _card.style.bottom = 16 + RustStyleHud.TOTAL_HEIGHT + 12;
+            _card.style.bottom = 16 + VitalsHud.TOTAL_HEIGHT + 12;
             _card.style.width = 220;
             _card.style.paddingLeft = 12;
             _card.style.paddingRight = 12;

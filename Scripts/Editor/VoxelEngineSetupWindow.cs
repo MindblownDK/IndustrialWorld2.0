@@ -2531,7 +2531,12 @@ namespace VoxelEngine.EditorTools
             var prefabPipeSc = MakePowerPrefabInternal<VoxelEngine.Power.PowerCable>("EnergyPipe_Superconductor", pipeSuper.tint, new Vector3(0.25f, 0.25f, 1f), c => { c.wire = pipeSuper; });
 
             var genPrefab = MakePowerPrefabInternal<VoxelEngine.Power.PowerGenerator>("Generator_Coal", new Color(0.30f, 0.30f, 0.32f), new Vector3(1.5f, 1.5f, 1.5f), g => { g.wattsPerSecond = 800f; g.isOn = false; g.connectRadius = 1.8f; });
-            var batPrefab = MakePowerPrefabInternal<VoxelEngine.Power.PowerBattery>("Battery_Basic", new Color(0.20f, 0.50f, 0.85f), new Vector3(0.8f, 1.2f, 0.8f), b => { b.capacityWattHours = 10000f; b.ioRate = 200f; b.connectRadius = 1.5f; });
+            var batPrefab = MakePowerPrefabInternal<VoxelEngine.Power.PowerBattery>("Battery_Basic", new Color(0.20f, 0.50f, 0.85f), new Vector3(0.8f, 1.2f, 0.8f), b =>
+            {
+                b.capacityWattHours = 10000f; b.ioRate = 200f; b.connectRadius = 1.5f;
+                // Device charger (6.77): only seed a default — never overwrite a tuned value.
+                if (b.itemChargeRateWatts <= 0f) b.itemChargeRateWatts = 500f;
+            });
             var lightPrefab = MakePowerPrefabInternal<VoxelEngine.Power.PowerConsumer>("Light_Basic", new Color(1f, 0.95f, 0.6f), new Vector3(0.3f, 0.3f, 0.3f), c => { c.wattsPerSecond = 10f; c.connectRadius = 1.5f; });
 
             // ── Block Item Helper ──
@@ -6150,6 +6155,12 @@ root =>
                 item.fuelCapacityMl = family == VoxelEngine.Items.JetpackFamily.HydrogenBoost ? 800
                                     : family == VoxelEngine.Items.JetpackFamily.Atmospheric ? 1000
                                     : 1200;
+                // Dual-fuel model (6.77): the power cell is a SEPARATE pool from the
+                // H₂ tank. Only set when unset so re-runs never clobber balance tweaks.
+                if (item.powerCapacityMl <= 0)
+                    item.powerCapacityMl = family == VoxelEngine.Items.JetpackFamily.Atmospheric ? 1000
+                                         : family == VoxelEngine.Items.JetpackFamily.Hybrid ? 600
+                                         : 0;
                 item.drainMlPerSecond = family == VoxelEngine.Items.JetpackFamily.HydrogenBoost ? 32f
                                       : family == VoxelEngine.Items.JetpackFamily.Atmospheric ? 22f
                                       : 26f;
@@ -6163,7 +6174,7 @@ root =>
             }
 
             var jetHydrogen = MakeJetpack("Equip_JetpackHydrogenBoost", "jetpack_hydrogen_boost", "Hydrogen Boost Pack",
-                VoxelEngine.Items.JetpackFamily.HydrogenBoost, new Color(0.45f, 0.85f, 1.00f), 1.05f, 1.35f, true, false, true, false);
+                VoxelEngine.Items.JetpackFamily.HydrogenBoost, new Color(0.45f, 0.85f, 1.00f), 1.05f, 1.35f, true, true, true, false);
             var jetAtmospheric = MakeJetpack("Equip_JetpackAtmospheric", "jetpack_atmospheric", "Atmospheric Jetpack",
                 VoxelEngine.Items.JetpackFamily.Atmospheric, new Color(0.95f, 0.62f, 0.18f), 1.00f, 1.10f, true, false, false, true);
             var jetHybrid = MakeJetpack("Equip_JetpackHybrid", "jetpack_hybrid", "Hybrid Jetpack",

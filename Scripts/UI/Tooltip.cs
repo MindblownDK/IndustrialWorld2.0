@@ -250,6 +250,28 @@ namespace VoxelEngine.UI
             {
                 return $"Burns for:  {r.fuelSeconds:0.0}s";
             }
+            if (item is JetpackItem jp)
+            {
+                var sb = new System.Text.StringBuilder();
+                if (jp.UsesHydrogenEffective)
+                    sb.AppendLine($"H₂ Tank:    {JetpackItem.GetH2Ml(stack)} / {jp.HydrogenCapacityMl} ml");
+                if (jp.UsesPowerEffective)
+                    sb.AppendLine($"Power Cell: {JetpackItem.GetPowerMl(stack)} / {jp.PowerCapacityMl} Wh");
+                sb.AppendLine($"Speed ×{jp.flightSpeedMultiplier:0.##}   Boost ×{jp.boostMultiplier:0.##}");
+                string env = jp.supportsAtmosphere && jp.supportsVacuum ? "Atmosphere + Vacuum"
+                           : jp.supportsVacuum ? "Vacuum only"
+                           : "Atmosphere only";
+                sb.Append($"Operates:   {env}");
+                return sb.ToString();
+            }
+            if (HydrogenCanisterItem.IsPortableHydrogenTank(item))
+            {
+                return $"H₂ Stored:  {HydrogenCanisterItem.GetStoredMl(stack)} / {HydrogenCanisterItem.GetCapacityMl(stack)} ml";
+            }
+            if (PortableBatteryItem.IsPortableBattery(item))
+            {
+                return $"Charge:     {PortableBatteryItem.GetStoredMl(stack)} / {PortableBatteryItem.GetCapacityMl(stack)} Wh";
+            }
             return string.Empty;
         }
     }

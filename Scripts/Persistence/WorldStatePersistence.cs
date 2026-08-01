@@ -301,6 +301,12 @@ namespace VoxelEngine.Persistence
                     entry.gasSelectedType = (int)gst.selectedGasType;
                     entry.gasStoredAmount = gst.storedAmount;
                 }
+                var worldBattery = pb.GetComponentInChildren<VoxelEngine.Power.PowerBattery>();
+                if (worldBattery != null)
+                {
+                    entry.hasBatteryCharge = true;
+                    entry.batteryCharge = worldBattery.charge;
+                }
                 CaptureFactoryRuntime(pb.gameObject, entry);
                 save.placedBlocks.Add(entry);
             }
@@ -870,6 +876,15 @@ namespace VoxelEngine.Persistence
                 return sc;
             }
 
+            // World battery block — persist the device-charger dock contents.
+            // Bulk charge lives on SavedPlacedBlock (batteryCharge fields).
+            var powerBattery = go.GetComponentInChildren<VoxelEngine.Power.PowerBattery>();
+            if (powerBattery != null)
+            {
+                powerBattery.EnsureContainers();
+                return SerializeContainer(powerBattery.ChargeSlot);
+            }
+
             var gridGas = go.GetComponentInChildren<VoxelEngine.GridSystem.GridGasTank>();
             if (gridGas != null)
             {
@@ -933,7 +948,8 @@ namespace VoxelEngine.Persistence
             {
                 itemId = s == null || s.IsEmpty ? "" : s.item.itemId,
                 count = s == null || s.IsEmpty ? 0 : s.count,
-                durability = s == null || s.IsEmpty ? 0 : s.durability
+                durability = s == null || s.IsEmpty ? 0 : s.durability,
+                charge = s == null || s.IsEmpty ? 0 : s.charge
             };
             if (s != null && s.payload is VoxelEngine.Storage.StorageDrawer.DrawerItemPayload payload)
             {
@@ -1376,6 +1392,12 @@ namespace VoxelEngine.Persistence
                     if (gst.storedAmount <= 0f && gst.selectedGasType != VoxelEngine.Gas.GasType.None)
                         gst.storedGasType = gst.selectedGasType;
                 }
+                if (sb.hasBatteryCharge)
+                {
+                    var worldBattery = go.GetComponentInChildren<VoxelEngine.Power.PowerBattery>();
+                    if (worldBattery != null)
+                        worldBattery.charge = Mathf.Clamp(sb.batteryCharge, 0f, Mathf.Max(1f, worldBattery.capacityWattHours));
+                }
             }
         }
 
@@ -1765,6 +1787,14 @@ namespace VoxelEngine.Persistence
                 return;
             }
 
+            var powerBattery = go.GetComponentInChildren<VoxelEngine.Power.PowerBattery>();
+            if (powerBattery != null)
+            {
+                powerBattery.EnsureContainers();
+                DeserializeInto(powerBattery.ChargeSlot, sc);
+                return;
+            }
+
             var gridGas = go.GetComponentInChildren<VoxelEngine.GridSystem.GridGasTank>();
             if (gridGas != null)
             {
@@ -1896,7 +1926,7 @@ namespace VoxelEngine.Persistence
                 var e = sc.entries[idx];
                 if (string.IsNullOrEmpty(e.itemId) || e.count <= 0) { drawer.upgradeSlots.SetSlot(i, new ItemStack()); continue; }
                 if (!_itemById.TryGetValue(e.itemId, out var item)) { drawer.upgradeSlots.SetSlot(i, new ItemStack()); continue; }
-                drawer.upgradeSlots.SetSlot(i, new ItemStack { item = item, count = e.count, durability = e.durability });
+                drawer.upgradeSlots.SetSlot(i, new ItemStack { item = item, count = e.count, durability = e.durability, charge = e.charge });
             }
             drawer.RefreshDisplay();
         }
@@ -1936,7 +1966,7 @@ namespace VoxelEngine.Persistence
             }
 
             if (!_itemById.TryGetValue(e.itemId, out var item)) return new ItemStack();
-            return new ItemStack { item = item, count = e.count, durability = e.durability };
+            return new ItemStack { item = item, count = e.count, durability = e.durability, charge = e.charge };
         }
 
         private void DeserializeInto(ItemContainer c, SavedContainer sc)
@@ -2046,6 +2076,10 @@ namespace VoxelEngine.Persistence
             public int gasType;
             public float gasStoredAmount;
             public int gasSelectedType;
+            // World PowerBattery bulk charge (additive). Legacy saves leave
+            // hasBatteryCharge false and the block keeps its prefab charge.
+            public bool hasBatteryCharge;
+            public float batteryCharge;
             // Wind turbine part condition (0..100). 0 = "not set" (legacy saves)
             // and restores as factory-new. Only written for WindTurbinePart blocks.
             public float windCondition;
@@ -2192,6 +2226,9 @@ namespace VoxelEngine.Persistence
         [Serializable] private class SavedStack
         {
             public string itemId; public int count; public int durability;
+            // Secondary per-instance pool (additive, save-compatible — legacy saves
+            // deserialize as 0). Hybrid jetpacks store their power cell (Wh) here.
+            public int charge;
             public bool isPackedDrawer;
             public string packedOriginalItemId;
             public string drawerInstanceId;

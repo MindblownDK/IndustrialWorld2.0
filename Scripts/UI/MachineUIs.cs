@@ -834,19 +834,19 @@ namespace VoxelEngine.UI
             p.Add(T.StatRow("📤", "Allow Output",  t.allowOutput  ? "YES" : "NO",
                 t.allowOutput  ? T.AccentGreen : T.AccentRed));
 
-            // Portable Hydrogen Tank dock — only when configured for H₂.
+            // Portable Hydrogen Tank + hydrogen jetpack dock — only when configured for H₂.
             if (t.IsHydrogenMode && slot != null)
             {
                 p.Add(T.Divider());
-                p.Add(T.Subtitle("Portable H₂ Tank Dock"));
+                p.Add(T.Subtitle("H₂ Fill Dock"));
                 var dock = T.SlotGrid(1);
                 dock.Add(slot(t.PortableSlot, 0, t.PortableSlot.GetSlot(0), false, true));
                 p.Add(dock);
-                p.Add(T.Muted("Place a Portable Hydrogen Tank here to fill it from bulk H₂ automatically."));
+                p.Add(T.Muted("Drop a Portable Hydrogen Tank or a hydrogen jetpack (Hydrogen Boost / Hybrid) here to fill it from bulk H₂ automatically."));
             }
 
             p.Add(T.Spacer(8));
-            p.Add(T.Muted("Stores a single gas type. Connect via gas pipes. Hold a Portable H₂ Tank and RMB (Shift = fill 100%)."));
+            p.Add(T.Muted("Stores a single gas type. Connect via gas pipes. Hold a Portable H₂ Tank or hydrogen jetpack and RMB (Shift = fill 100%)."));
             return p;
         }
 

@@ -666,10 +666,13 @@ namespace VoxelEngine.Player
                 var gridGas = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridGasTank>();
                 if (gasTank != null || gridGas != null)
                 {
-                    // Holding a Portable Hydrogen Tank → fill from bulk H₂ (Shift = fill 100%).
+                    // Holding a Portable Hydrogen Tank or a hydrogen jetpack →
+                    // fill it from bulk H₂ (Shift = fill to 100%).
                     var active = inventory != null ? inventory.ActiveStack : null;
                     bool holdingPortable = active != null && !active.IsEmpty
                         && VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(active.item);
+                    var heldPack = active != null && !active.IsEmpty ? active.item as VoxelEngine.Items.JetpackItem : null;
+                    bool holdingPack = heldPack != null && heldPack.UsesHydrogenEffective;
                     bool worldH2 = gasTank != null && gasTank.EffectiveType == VoxelEngine.Gas.GasType.Hydrogen && gasTank.storedAmount > 0f;
                     bool gridH2 = gridGas != null && gridGas.IsHydrogenMode && gridGas.stored > 0f;
                     if (holdingPortable && (worldH2 || gridH2))
@@ -714,14 +717,79 @@ namespace VoxelEngine.Player
                         return;
                     }
 
+                    // Holding a hydrogen jetpack (Hydrogen Boost / Hybrid) → top up its tank.
+                    if (holdingPack && (worldH2 || gridH2))
+                    {
+                        float got = 0f;
+                        int packSpace = heldPack.HydrogenCapacityMl - VoxelEngine.Items.JetpackItem.GetH2Ml(active);
+                        if (packSpace > 0)
+                        {
+                            float want = IsShiftHeld() ? packSpace : VoxelEngine.Items.HydrogenCanisterItem.DefaultFillRateMl(null);
+                            got = worldH2 ? gasTank.FillJetpack(active, want) : gridGas.FillJetpack(active, want);
+                        }
+
+                        if (got > 0f)
+                        {
+                            inventory.container.SetSlot(inventory.activeHotbarIndex, active);
+                            inventory.container.RaiseChanged();
+                            int storedMl = VoxelEngine.Items.JetpackItem.GetH2Ml(active);
+                            int capMl = heldPack.HydrogenCapacityMl;
+                            string storedTxt = storedMl >= 1000 ? $"{storedMl/1000f:0.0} L" : $"{storedMl} ml";
+                            string capTxt = capMl >= 1000 ? $"{capMl/1000f:0.0} L" : $"{capMl} ml";
+                            VoxelEngine.UI.BuildFeedbackHud.Show(
+                                heldPack.displayName,
+                                $"H₂ +{got:0} ml  ·  {storedTxt} / {capTxt}",
+                                heldPack.icon,
+                                new Color(0.45f, 0.9f, 1f));
+                        }
+                        else
+                        {
+                            VoxelEngine.UI.BuildFeedbackHud.Show(heldPack.displayName, "Tank full or no hydrogen", heldPack.icon, Color.yellow);
+                        }
+                        return;
+                    }
+
                     if (gasTank != null) { UI.GameUIController.Instance?.OpenMachine(gasTank); return; }
                     if (gridGas != null) { UI.GameUIController.Instance?.OpenMachine(gridGas); return; }
                 }
 
-                // Portable Battery — fill from world Battery block (PowerBattery).
+                // Portable Battery / power jetpack — fill from world Battery block (PowerBattery).
                 var powerBattery = hit.collider.GetComponentInParent<VoxelEngine.Power.PowerBattery>();
                 var activeBattery = inventory != null ? inventory.ActiveStack : null;
                 bool holdingBattery = activeBattery != null && !activeBattery.IsEmpty && VoxelEngine.Items.PortableBatteryItem.IsPortableBattery(activeBattery.item);
+                var heldPowerPack = activeBattery != null && !activeBattery.IsEmpty ? activeBattery.item as VoxelEngine.Items.JetpackItem : null;
+                bool holdingPowerPack = heldPowerPack != null && heldPowerPack.UsesPowerEffective;
+                if (holdingPowerPack && powerBattery != null && powerBattery.charge > 10f)
+                {
+                    int space = heldPowerPack.PowerCapacityMl - VoxelEngine.Items.JetpackItem.GetPowerMl(activeBattery);
+                    if (space > 0)
+                    {
+                        float want = Mathf.Min(space * 1f, powerBattery.charge);
+                        // Power jetpacks sip a chunk per click; Shift tops the cell to 100%.
+                        float took = IsShiftHeld() ? want : Mathf.Min(want, 400f);
+                        int add = Mathf.RoundToInt(took);
+                        if (add > 0)
+                        {
+                            VoxelEngine.Items.JetpackItem.AddPower(activeBattery, add);
+                            powerBattery.charge = Mathf.Max(0f, powerBattery.charge - add);
+                            inventory.container.SetSlot(inventory.activeHotbarIndex, activeBattery);
+                            inventory.container.RaiseChanged();
+                            int stored = VoxelEngine.Items.JetpackItem.GetPowerMl(activeBattery);
+                            int cap = heldPowerPack.PowerCapacityMl;
+                            VoxelEngine.UI.BuildFeedbackHud.Show(
+                                heldPowerPack.displayName,
+                                $"⚡ +{add} Wh  ·  {stored} / {cap} Wh",
+                                heldPowerPack.icon,
+                                new Color(0.45f, 0.9f, 0.6f));
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        VoxelEngine.UI.BuildFeedbackHud.Show(heldPowerPack.displayName, "Power cell already full", heldPowerPack.icon, Color.yellow);
+                        return;
+                    }
+                }
                 if (holdingBattery && powerBattery != null && powerBattery.charge > 10f)
                 {
                     int space = VoxelEngine.Items.PortableBatteryItem.GetCapacityMl(activeBattery) - VoxelEngine.Items.PortableBatteryItem.GetStoredMl(activeBattery);
@@ -739,9 +807,9 @@ namespace VoxelEngine.Player
                             inventory.container.RaiseChanged();
                             int stored = VoxelEngine.Items.PortableBatteryItem.GetStoredMl(activeBattery);
                             int cap = VoxelEngine.Items.PortableBatteryItem.GetCapacityMl(activeBattery);
-                            string storedTxt = stored >= 1000 ? $"{stored/1000f:0.0} L" : $"{stored} ml";
-                            string capTxt = cap >= 1000 ? $"{cap/1000f:0.0} L" : $"{cap} ml";
-                            VoxelEngine.UI.BuildFeedbackHud.Show("Portable Battery", $"+{add} ml  ·  {storedTxt} / {capTxt}", null, new Color(0.45f, 0.75f, 0.95f));
+                            string storedTxt = stored >= 1000 ? $"{stored/1000f:0.0} kWh" : $"{stored} Wh";
+                            string capTxt = cap >= 1000 ? $"{cap/1000f:0.0} kWh" : $"{cap} Wh";
+                            VoxelEngine.UI.BuildFeedbackHud.Show("Portable Battery", $"⚡ +{add} Wh  ·  {storedTxt} / {capTxt}", null, new Color(0.45f, 0.75f, 0.95f));
                         }
                         else
                         {

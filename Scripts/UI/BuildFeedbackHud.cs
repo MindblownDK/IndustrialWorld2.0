@@ -40,7 +40,7 @@ namespace VoxelEngine.UI
             _container = new VisualElement { name = "FeedbackHud" };
             _container.style.position      = Position.Absolute;
             _container.style.right         = 18;
-            _container.style.bottom        = 16 + RustStyleHud.TOTAL_HEIGHT + 8;
+            _container.style.bottom        = 16 + VitalsHud.TOTAL_HEIGHT + 8;
             _container.style.width         = 250;
             _container.style.flexDirection = FlexDirection.ColumnReverse;
             _container.style.alignItems    = Align.Stretch;

@@ -1,9 +1,54 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.75.1-dev`
+**Current Version:** `6.77.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.77.0-dev] Battery Device Charger, Dual-Fuel Jetpacks & Flash-Free HUD
+
+**Type:** MINOR — new systems (device-charger dock, dual-fuel jetpacks, environment & twin-pack rules, PWR HUD pill) — fully save-compatible. All save changes are additive; legacy packs, tanks and batteries load unchanged.
+
+#### 🔋 Battery block rework
+- **Device Charger dock** on the world Battery: accepts **Portable Batteries** and **power-fed jetpacks (Atmospheric / Hybrid)** — trickles block charge into the item's cell at 500 W (1 unit = 1 Wh). Shift-click a chargeable device while the battery panel is open to dock it instantly.
+- **RMB top-up**: hold a power jetpack and RMB the battery for +400 Wh (Shift = fill to 100%).
+- **New battery panel**: animated 12-segment charge gauge with eased power-on sweep and color-coded % (green → amber → red), live **Stored Wh**, **Power In `cur / max W`**, **Power Out `cur / max W`** (per-battery network telemetry), status pill (CHARGING / DISCHARGING / DOCK+ / FULL / IDLE) and a live docked-device readout. Updates in place every frame — no rebuild flicker, no eaten clicks.
+- Battery charge now **persists in the save file** (additive fields).
+
+#### 🚀 Jetpacks — dual-fuel, environment & twin rules
+- **Separate H₂ tank + power cell per pack** (H₂ in `durability`, hybrid power cell in the new additive `charge` pool). Hybrid: **1200 ml H₂ + 600 Wh cell**. Atmospheric: **1000 Wh cell**. Hydrogen Boost: **800 ml H₂**.
+- **Hybrid flight rules**: power cell alone cruises (fly, no shift); H₂ alone flies **and** unlocks the shift afterburner; with both, cruise sips power and boosting burns H₂.
+- **Atmospheric jetpack only ignites inside an atmosphere** (air-density check on planets/moons/flat worlds). Trying to fly in vacuum shows *"No atmosphere — engine can't ignite here"*.
+- **Hydrogen Boost now works everywhere** (atmosphere + vacuum) and stays the thirstiest pack per ml.
+- **Twin drive**: two identical fueled packs equipped = **×1.35 speed, ×1.20 boost**, and the pair drains the fuller tank first so capacity behaves as one doubled tank. Bay status pill shows `TWIN ×2`.
+- Jetpack bay bars are now **summed across both slots**, always visible when that pool type is equipped (an empty Atmospheric cell shows its 0 Wh bar instead of rendering nothing) and **update live every frame**.
+- New packs start **empty** — fuel/charge only comes from real sources (H₂ tanks, batteries, cells, docks).
+- **No more voided fuel**: over-capacity legacy stacks (e.g. 2000 ml crammed into a 1200 ml pack) spill the excess back into your portable tanks/batteries instead of being silently clamped; quick-equip (F), shift-click equip/unequip, machine routing and world drops all carry the pack's full fuel pools (H₂ + Wh) with the stack; charged cells are only consumed when they fit entirely.
+
+#### 🛢 Gas tanks — hydrogen jetpacks welcome
+- World **and** grid H₂ Fill Docks accept **Hydrogen Boost / Hybrid jetpacks** next to Portable Hydrogen Tanks (auto-fill from bulk, only ever taking what fits).
+- **RMB with a hydrogen jetpack** on an H₂ tank tops up the pack (Shift = 100%).
+- Shift-click docking into the open H₂ tank / battery panel (QoL routing before auto-equip).
+
+#### 🖥 HUD — flash-free + new PWR pill
+- **UI reworked into persistent layers** (content / HUD / tooltip): scrolling the hotbar, sorting, crafting or any container tick no longer destroys & recreates the HUD — the flicker is gone.
+- **Vitals HUD**: H₂ bar now counts **inventory tanks + fuel inside the equipped jetpacks** (fixes "0 with 1200 in the pack").
+- **New PWR pill docked to the LEFT of the OXY bar** whenever a power-fed jetpack is equipped — shows live charge %.
+- Item tooltips now show jetpack pools (H₂ ml + Power Wh), speed/boost multipliers and operating environment, plus tank/battery contents.
+- Portable Battery RMB feedback now reports Wh.
+
+#### Files touched
+- `Scripts/Items/ItemStack.cs`, `Scripts/Items/JetpackItem.cs`
+- `Scripts/Player/PlayerEquipment.cs`, `Scripts/Player/PlayerController.cs`, `Scripts/Player/PlayerInteractionTool.cs`
+- `Scripts/Power/PowerBattery.cs`, `Scripts/Power/PowerNetworkManager.cs`
+- `Scripts/Gas/GasTank.cs`, `Scripts/GridSystem/GridGasTank.cs`, `Scripts/GridSystem/UI/GridBlockUI.cs`
+- `Scripts/UI/GameUIController.cs`, `Scripts/UI/VitalsHud.cs` (renamed from `RustStyleHud.cs`), `Scripts/UI/MachineUIs.cs`, `Scripts/UI/Tooltip.cs`, `Scripts/UI/BuildFeedbackHud.cs`, `Scripts/UI/PaintHud.cs`, `Scripts/UI/PlayerHud.cs`
+- `Scripts/Persistence/WorldStatePersistence.cs`
+- `Scripts/Editor/VoxelEngineSetupWindow.cs`
+- `VoxelEngineAssets/GridSystem/Items/Equip_Jetpack*.asset`
+- `Scripts/Core/GameVersion.cs` (6.75.1 → 6.77.0), `Changelog.md`
+
+---
 
 ### [6.75.1-dev] Compile fix — gas fields on SavedPlacedBlock
 

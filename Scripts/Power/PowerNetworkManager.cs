@@ -281,6 +281,9 @@ namespace VoxelEngine.Power
                             // Battery can supply up to ioRate from current charge.
                             batteryCap   += Mathf.Min(b.ioRate, b.charge / Mathf.Max(0.0001f, dt) * 3600f); // W from Wh
                             batteryStore += Mathf.Min(b.ioRate, (b.capacityWattHours - b.charge) / Mathf.Max(0.0001f, dt) * 3600f);
+                            // Per-battery flow telemetry for the UI (W in/out this tick).
+                            b.lastChargeInW = 0f;
+                            b.lastDischargeOutW = 0f;
                             break;
                     }
                 }
@@ -314,6 +317,7 @@ namespace VoxelEngine.Power
                             float wh   = pull * dt / 3600f;
                             wh = Mathf.Min(wh, b.charge);
                             b.charge -= wh;
+                            b.lastDischargeOutW = wh > 0f ? wh * 3600f / dt : 0f;
                             net_fromBattery -= pull;
                         }
                         if (net_toBattery > 0)
@@ -322,6 +326,7 @@ namespace VoxelEngine.Power
                             float wh   = push * dt / 3600f;
                             wh = Mathf.Min(wh, b.capacityWattHours - b.charge);
                             b.charge += wh;
+                            b.lastChargeInW = wh > 0f ? wh * 3600f / dt : 0f;
                             net_toBattery -= push;
                         }
                         if (net_fromBattery <= 0 && net_toBattery <= 0) break;

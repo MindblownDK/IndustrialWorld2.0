@@ -52,23 +52,16 @@ namespace VoxelEngine.Gas
             if (PortableSlot == null)
             {
                 PortableSlot = new ItemContainer("Portable H₂ Dock", 1);
-                PortableSlot.AcceptFilter = (item, wanted) =>
-                {
-                    if (HydrogenCanisterItem.IsPortableHydrogenTank(item)) return Mathf.Min(1, wanted);
-                    if (item is VoxelEngine.Items.JetpackItem jp && (jp.usesHydrogen || jp.family == VoxelEngine.Items.JetpackFamily.HydrogenBoost || jp.family == VoxelEngine.Items.JetpackFamily.Hybrid)) return Mathf.Min(1, wanted);
-                    return 0;
-                };
             }
-            else
+            else PortableSlot.Resize(1);
+            // Accepts Portable Hydrogen Tanks AND any hydrogen-fed jetpack
+            // (Hydrogen Boost / Hybrid) — both fill straight from bulk H₂.
+            PortableSlot.AcceptFilter = (item, wanted) =>
             {
-                PortableSlot.Resize(1);
-                PortableSlot.AcceptFilter = (item, wanted) =>
-                {
-                    if (HydrogenCanisterItem.IsPortableHydrogenTank(item)) return Mathf.Min(1, wanted);
-                    if (item is VoxelEngine.Items.JetpackItem jp && (jp.usesHydrogen || jp.family == VoxelEngine.Items.JetpackFamily.HydrogenBoost || jp.family == VoxelEngine.Items.JetpackFamily.Hybrid)) return Mathf.Min(1, wanted);
-                    return 0;
-                };
-            }
+                if (HydrogenCanisterItem.IsPortableHydrogenTank(item)) return Mathf.Min(1, wanted);
+                if (item is VoxelEngine.Items.JetpackItem jp && jp.UsesHydrogenEffective) return Mathf.Min(1, wanted);
+                return 0;
+            };
         }
 
         /// <summary>Player-selected gas type. Fails if tank holds a different gas.</summary>
@@ -125,6 +118,20 @@ namespace VoxelEngine.Gas
             return taken;
         }
 
+        /// <summary>Fill a hydrogen jetpack stack from bulk H₂. Returns ml transferred.</summary>
+        public float FillJetpack(ItemStack pack, float maxMl)
+        {
+            if (pack == null || pack.IsEmpty || pack.item is not VoxelEngine.Items.JetpackItem jp) return 0f;
+            if (!jp.UsesHydrogenEffective) return 0f;
+            if (EffectiveType != GasType.Hydrogen || storedAmount <= 0f || !allowOutput) return 0f;
+            int space = jp.HydrogenCapacityMl - VoxelEngine.Items.JetpackItem.GetH2Ml(pack);
+            if (space <= 0) return 0f;
+            float want = Mathf.Min(maxMl, space);
+            float taken = TryTake(GasType.Hydrogen, want);
+            if (taken <= 0f) return 0f;
+            return VoxelEngine.Items.JetpackItem.AddH2(pack, Mathf.RoundToInt(taken));
+        }
+
         private void TickPortableDock(float dt)
         {
             EnsureContainers();
@@ -133,20 +140,17 @@ namespace VoxelEngine.Gas
             if (stack == null || stack.IsEmpty) return;
             float rate = Mathf.Max(1f, portableFillRateMlPerSecond) * dt;
             float got = FillPortable(stack, rate);
-            if (got <= 0f && stack.item is VoxelEngine.Items.JetpackItem jp && (jp.usesHydrogen || jp.family == VoxelEngine.Items.JetpackFamily.HydrogenBoost || jp.family == VoxelEngine.Items.JetpackFamily.Hybrid))
+            if (got <= 0f && stack.item is VoxelEngine.Items.JetpackItem jp && jp.UsesHydrogenEffective)
             {
-                int cap = jp.FuelCapacityMl;
-                int space = Mathf.Max(0, cap - stack.durability);
-                if (space > 0 && storedAmount > 0f)
+                // Hydrogen jetpack in the dock — fill its H₂ tank straight from bulk,
+                // taking ONLY what fits (never drawing ml the pack would void).
+                int space = Mathf.Max(0, jp.HydrogenCapacityMl - VoxelEngine.Items.JetpackItem.GetH2Ml(stack));
+                if (space > 0)
                 {
                     float want = Mathf.Min(rate, space);
                     float taken = TryTake(GasType.Hydrogen, want);
                     if (taken > 0f)
-                    {
-                        stack.durability = Mathf.Min(cap, stack.durability + Mathf.RoundToInt(taken));
-                        got = taken;
-                        PortableSlot.SetSlot(0, stack);
-                    }
+                        got = VoxelEngine.Items.JetpackItem.AddH2(stack, Mathf.RoundToInt(taken));
                 }
             }
             if (got > 0f) PortableSlot.SetSlot(0, stack);

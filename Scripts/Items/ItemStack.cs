@@ -16,7 +16,15 @@ namespace VoxelEngine.Items
         public ItemDefinition item;
         public int            count;
         // Per-instance state (for ToolItem we store remaining durability here).
+        // For jetpacks this is the PRIMARY fuel pool: hydrogen (ml) on packs that
+        // burn H₂, or power (Wh) on pure-power packs. Hybrid packs also carry a
+        // secondary power pool in <see cref="charge"/>.
         public int            durability;
+        // Secondary per-instance pool (additive / save-compatible). Hybrid jetpacks
+        // store their power charge (Wh) here so the power side is tracked
+        // independently from the hydrogen tank. 0 on legacy stacks → refills
+        // from portable batteries / charged cells exactly like an empty pack.
+        public int            charge;
 
         /// <summary>
         /// Per-instance state object for items that carry their own runtime data
@@ -34,10 +42,11 @@ namespace VoxelEngine.Items
         {
             this.item       = item;
             this.count      = count;
-            // Tools track wear; jetpacks track fuel/charge (0..fuelCapacity).
-            this.durability = item is ToolItem t ? t.maxDurability
-                            : item is JetpackItem j ? j.FuelCapacity
-                            : 0;
+            // Tools track wear. Jetpacks start on EMPTY tanks — fuel/charge must
+            // come from real sources (H₂ tanks, batteries, cells, world docks)
+            // instead of materialising a full pack out of thin air.
+            this.durability = item is ToolItem t ? t.maxDurability : 0;
+            this.charge     = 0;
         }
 
         public ItemStack Clone()
@@ -47,6 +56,7 @@ namespace VoxelEngine.Items
                 item       = item,
                 count      = count,
                 durability = durability,
+                charge     = charge,
                 payload    = payload,        // share reference — the payload object IS the state
             };
         }

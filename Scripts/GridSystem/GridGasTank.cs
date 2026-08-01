@@ -51,8 +51,13 @@ namespace VoxelEngine.GridSystem
                 PortableSlot = new ItemContainer("Portable H₂ Dock", 1);
             }
             else PortableSlot.Resize(1);
+            // Accepts Portable Hydrogen Tanks AND any hydrogen-fed jetpack.
             PortableSlot.AcceptFilter = (item, wanted) =>
-                HydrogenCanisterItem.IsPortableHydrogenTank(item) ? Mathf.Min(1, wanted) : 0;
+            {
+                if (HydrogenCanisterItem.IsPortableHydrogenTank(item)) return Mathf.Min(1, wanted);
+                if (item is JetpackItem jp && jp.UsesHydrogenEffective) return Mathf.Min(1, wanted);
+                return 0;
+            };
         }
 
         public bool SetGasType(Gas.GasType t)
@@ -98,13 +103,38 @@ namespace VoxelEngine.GridSystem
             return taken;
         }
 
+        /// <summary>Fill a hydrogen jetpack stack from bulk ship H₂. Returns ml transferred.</summary>
+        public float FillJetpack(ItemStack pack, float maxMl)
+        {
+            if (!IsHydrogenMode || pack == null || pack.IsEmpty) return 0f;
+            if (pack.item is not JetpackItem jp || !jp.UsesHydrogenEffective) return 0f;
+            int space = jp.HydrogenCapacityMl - JetpackItem.GetH2Ml(pack);
+            if (space <= 0 || stored <= 0f) return 0f;
+            float want = Mathf.Min(maxMl, space, stored);
+            float taken = Draw(want, ignoreStockpile: true);
+            if (taken <= 0f) return 0f;
+            return JetpackItem.AddH2(pack, Mathf.RoundToInt(taken));
+        }
+
         private void TickPortableDock(float dt)
         {
             EnsureContainers();
             if (dt <= 0f || stored <= 0f) return;
             var stack = PortableSlot.GetSlot(0);
             if (stack == null || stack.IsEmpty) return;
-            float got = FillPortable(stack, Mathf.Max(1f, portableFillRateMlPerSecond) * dt);
+            float rate = Mathf.Max(1f, portableFillRateMlPerSecond) * dt;
+            float got = FillPortable(stack, rate);
+            if (got <= 0f && stack.item is JetpackItem jp && jp.UsesHydrogenEffective)
+            {
+                // Hydrogen jetpack in the dock — fill only what fits, never voiding ml.
+                int space = Mathf.Max(0, jp.HydrogenCapacityMl - JetpackItem.GetH2Ml(stack));
+                if (space > 0)
+                {
+                    float want = Mathf.Min(rate, space, stored);
+                    float taken = Draw(want, ignoreStockpile: true);
+                    if (taken > 0f) got = JetpackItem.AddH2(stack, Mathf.RoundToInt(taken));
+                }
+            }
             if (got > 0f) PortableSlot.SetSlot(0, stack);
         }
 
