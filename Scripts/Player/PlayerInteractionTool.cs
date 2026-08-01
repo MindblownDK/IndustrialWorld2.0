@@ -155,7 +155,7 @@ namespace VoxelEngine.Player
                 }
             }
 
-            // RMB an artillery -> enter cockpit. RMB a turret -> open defense panel.
+            // RMB an artillery -> enter cockpit. RMB a turret / flamethrower -> open defense panel.
             if (buildDown && hasHit)
             {
                 var artRmb = hit.collider.GetComponentInParent<VoxelEngine.Combat.Artillery>();
@@ -163,6 +163,12 @@ namespace VoxelEngine.Player
                 {
                     var pcRmb = GetComponentInParent<VoxelEngine.Player.PlayerController>();
                     if (pcRmb != null) artRmb.EnterCockpit(pcRmb);
+                    return;
+                }
+                var flameRmb = hit.collider.GetComponentInParent<VoxelEngine.Combat.FlamethrowerTurret>();
+                if (flameRmb != null)
+                {
+                    VoxelEngine.UI.GameUIController.Instance?.OpenDefense(flameRmb);
                     return;
                 }
                 var turretRmb = hit.collider.GetComponentInParent<VoxelEngine.Combat.Turret>();

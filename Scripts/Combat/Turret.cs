@@ -2,7 +2,7 @@
 //
 // A placeable automated turret. Auto-targets based on a faction filter (Enemies /
 // Players / Passive), fires hitscan shots, reloadable with Bullets. The filter +
-// auto-mode are configurable via the ArtilleryHud UI (same panel as Artillery).
+// auto-mode are configurable via the shared defense panel (same UI as Artillery / Flamethrower).
 
 using System.Collections.Generic;
 using UnityEngine;

@@ -394,6 +394,13 @@ namespace VoxelEngine.EditorTools
             AddWizardButton(scroll, "39. Build Minigun Turret (rapid-fire)", BuildArtilleryMinigunContent, 40);
             AddWizardButton(scroll, "40. Build Schwerer Gustav (massive railway gun)", BuildArtilleryGustavContent, 40);
 
+            AddInfo(scroll,
+                "Step 41 builds the FLAMETHROWER TURRET (close-range area denial, non-destructive):\n" +
+                "  • Continuous cone of fire + lingering ground fire patches\n" +
+                "  • Fuelled by Flame Canisters (or Coal fallback) via the defense panel\n" +
+                "  • Auto-targets by faction. Re-runnable. Idempotent.");
+            AddWizardButton(scroll, "41. Build Flamethrower Turret (area denial)", BuildFlamethrowerTurretContent, 40);
+
             AddSpacer(scroll, 20);
         }
 
@@ -12472,6 +12479,127 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
             EditorUtility.DisplayDialog("Voxel Engine — Schwerer Gustav",
                 "The SCHWERER GUSTAV is built:\n\n• Colossal 800mm railway gun on a flatcar (~14 parts)\n• Range 120m, damage 500, explosion radius 30\n• Slow fire rate (12s reload) — each shell is devastating\n• Load shells via the magazine (Standard / Explosive / Scatter)\n• 500 HP. Craft at the Assembler (steel plate + advanced circuit + steel ingot)", "OK");
         }
+
+        // ============================================================
+        //   STEP 41 - FLAMETHROWER TURRET. Close-range area denial.
+        //   Continuous cone of fire + ground fire patches. Fuelled by
+        //   Flame Canisters (preferred) or Coal (weaker). Uses the
+        //   shared defense panel. Non-destructive. Re-runnable.
+        // ============================================================
+        private void BuildFlamethrowerTurretContent()
+        {
+            const string COMBAT_ROOT   = ASSET_ROOT + "/Combat";
+            const string COMBAT_ITEMS  = COMBAT_ROOT + "/Items";
+            const string COMBAT_BLOCKS = COMBAT_ROOT + "/Blocks";
+            const string COMBAT_PREFABS= COMBAT_ROOT + "/Prefabs";
+            const string COMBAT_MATS   = COMBAT_ROOT + "/Materials";
+            EnsureFolder(COMBAT_ROOT); EnsureFolder(COMBAT_ITEMS); EnsureFolder(COMBAT_BLOCKS); EnsureFolder(COMBAT_PREFABS); EnsureFolder(COMBAT_MATS);
+
+            ItemDefinition FindItem(string n)
+            {
+                var guids = AssetDatabase.FindAssets(n + " t:ItemDefinition");
+                foreach (var g in guids) { var pp = AssetDatabase.GUIDToAssetPath(g); if (System.IO.Path.GetFileNameWithoutExtension(pp) == n) return AssetDatabase.LoadAssetAtPath<ItemDefinition>(pp); }
+                return null;
+            }
+            var ironPlate  = FindItem("Item_IronPlate");
+            var steelIngot = FindItem("Item_SteelIngot");
+            var circuit    = FindItem("Item_Circuit");
+            var copperWire = FindItem("Item_CopperLVWire");
+            var coal       = FindItem("Item_Coal");
+
+            var body   = MakeColoredMat(COMBAT_MATS, "Mat_FlameTurretBody",  new Color(0.38f, 0.22f, 0.14f));
+            var dark   = MakeColoredMat(COMBAT_MATS, "Mat_FlameTurretDark",  new Color(0.18f, 0.16f, 0.14f));
+            var tank   = MakeColoredMat(COMBAT_MATS, "Mat_FlameTurretTank",  new Color(0.55f, 0.18f, 0.10f));
+            var nozzle = MakeColoredMat(COMBAT_MATS, "Mat_FlameTurretNozzle",new Color(0.25f, 0.25f, 0.28f));
+            var flame  = MakeColoredMat(COMBAT_MATS, "Mat_FlameSpray",       new Color(1.0f, 0.45f, 0.12f));
+            var ground = MakeColoredMat(COMBAT_MATS, "Mat_GroundFire",       new Color(1.0f, 0.35f, 0.08f));
+
+            void AddPart(GameObject parent, string n, Vector3 pos, Vector3 euler, Vector3 scale, Material m)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                go.name = n; go.transform.SetParent(parent.transform, false);
+                go.transform.localPosition = pos; go.transform.localEulerAngles = euler; go.transform.localScale = scale;
+                go.GetComponent<Renderer>().sharedMaterial = m;
+                var col = go.GetComponent<Collider>(); if (col != null) UnityEngine.Object.DestroyImmediate(col);
+            }
+            void AddCyl(GameObject parent, string n, Vector3 pos, Vector3 euler, Vector3 scale, Material m)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                go.name = n; go.transform.SetParent(parent.transform, false);
+                go.transform.localPosition = pos; go.transform.localEulerAngles = euler; go.transform.localScale = scale;
+                go.GetComponent<Renderer>().sharedMaterial = m;
+                var col = go.GetComponent<Collider>(); if (col != null) UnityEngine.Object.DestroyImmediate(col);
+            }
+
+            var root = new GameObject("FlamethrowerTurret");
+            // Wide base + dual fuel tanks
+            AddPart(root, "Base",     new Vector3(0f, 0.12f, 0f), Vector3.zero, new Vector3(0.95f, 0.24f, 0.95f), body);
+            AddPart(root, "Pillar",   new Vector3(0f, 0.55f, 0f), Vector3.zero, new Vector3(0.28f, 0.55f, 0.28f), dark);
+            AddCyl (root, "TankL",    new Vector3(-0.38f, 0.55f, -0.15f), Vector3.zero, new Vector3(0.28f, 0.35f, 0.28f), tank);
+            AddCyl (root, "TankR",    new Vector3( 0.38f, 0.55f, -0.15f), Vector3.zero, new Vector3(0.28f, 0.35f, 0.28f), tank);
+            AddPart(root, "HoseL",    new Vector3(-0.25f, 0.85f, 0.05f), new Vector3(0,0,35), new Vector3(0.06f, 0.06f, 0.35f), dark);
+            AddPart(root, "HoseR",    new Vector3( 0.25f, 0.85f, 0.05f), new Vector3(0,0,-35), new Vector3(0.06f, 0.06f, 0.35f), dark);
+            AddPart(root, "Warning",  new Vector3(0f, 0.28f, 0.48f), Vector3.zero, new Vector3(0.25f, 0.12f, 0.04f), flame);
+
+            // Rotating head with dual nozzles
+            var headGo = new GameObject("Head");
+            headGo.transform.SetParent(root.transform, false);
+            headGo.transform.localPosition = new Vector3(0f, 0.95f, 0.05f);
+            AddPart(headGo, "HeadBody",  new Vector3(0f, 0f, 0f),      Vector3.zero, new Vector3(0.5f, 0.32f, 0.45f), body);
+            AddPart(headGo, "Shield",    new Vector3(0f, 0.05f, 0.28f), Vector3.zero, new Vector3(0.55f, 0.28f, 0.08f), dark);
+            AddCyl (headGo, "NozzleL",   new Vector3(-0.12f, 0.02f, 0.45f), new Vector3(90,0,0), new Vector3(0.12f, 0.28f, 0.12f), nozzle);
+            AddCyl (headGo, "NozzleR",   new Vector3( 0.12f, 0.02f, 0.45f), new Vector3(90,0,0), new Vector3(0.12f, 0.28f, 0.12f), nozzle);
+            AddPart(headGo, "PilotLight",new Vector3(0f, 0.12f, 0.55f), Vector3.zero, new Vector3(0.06f, 0.06f, 0.06f), flame);
+
+            var muzzleGo = new GameObject("Muzzle");
+            muzzleGo.transform.SetParent(headGo.transform, false);
+            muzzleGo.transform.localPosition = new Vector3(0f, 0.02f, 0.75f);
+
+            var cap = root.AddComponent<CapsuleCollider>();
+            cap.height = 1.5f; cap.radius = 0.5f; cap.center = new Vector3(0f, 0.65f, 0f);
+            var ft = root.AddComponent<VoxelEngine.Combat.FlamethrowerTurret>();
+            ft.range = 11f; ft.coneHalfAngle = 28f; ft.tickInterval = 0.18f;
+            ft.damagePerTick = 7f; ft.burnDps = 5f; ft.burnDuration = 2.5f;
+            ft.fuelSecondsPerCanister = 8f; ft.coalSecondsBonus = 2.5f;
+            ft.flameMat = flame; ft.groundFireMat = ground;
+            ft.head = headGo.transform; ft.muzzle = muzzleGo.transform;
+
+            const string path = ASSET_ROOT + "/Combat/Prefabs/FlamethrowerTurret.prefab";
+            GameObject prefab;
+            if (AssetDatabase.LoadMainAssetAtPath(path) != null) { prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path); UnityEngine.Object.DestroyImmediate(root); }
+            else { prefab = PrefabUtility.SaveAsPrefabAsset(root, path); UnityEngine.Object.DestroyImmediate(root); }
+
+            var block = GetOrCreateAsset<VoxelEngine.Items.BlockItem>($"{COMBAT_BLOCKS}/Block_FlamethrowerTurret.asset");
+            block.itemId = "block_flamethrower_turret"; block.displayName = "Flamethrower Turret";
+            block.description = "Close-range area-denial turret. Sprays a continuous cone of fire and leaves ground-fire patches. Load Flame Canisters (or Coal) via the defense panel (RMB).";
+            block.iconTint = new Color(0.85f, 0.35f, 0.12f);
+            block.maxStack = 4; block.massPerUnit = 8f;
+            block.placedPrefab = prefab; block.gridSize = Vector3Int.one; block.allowStacking = true; block.blockHealth = 100; block.miningTier = 2; block.category = "Combat";
+            EditorUtility.SetDirty(block);
+
+            // Flame Canister ammo item
+            var canister = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{COMBAT_ITEMS}/Item_FlameCanister.asset");
+            canister.itemId = "item_flame_canister"; canister.displayName = "Flame Canister";
+            canister.description = "Pressurized flammable fuel canister. Feeds Flamethrower Turrets (~8 s of continuous fire each).";
+            canister.iconTint = new Color(0.90f, 0.40f, 0.12f); canister.maxStack = 20; canister.massPerUnit = 1.5f; canister.category = "Combat";
+            EditorUtility.SetDirty(canister);
+
+            AddRecipe("Recipe_FlamethrowerTurret", "Flamethrower Turret", block, 1, VoxelEngine.Crafting.StationTier.Assembler, true,
+                (ironPlate, 8), (steelIngot, 3), (circuit, 2), (copperWire, 4));
+            AddRecipe("Recipe_FlameCanister", "Flame Canister", canister, 4, VoxelEngine.Crafting.StationTier.Assembler, true,
+                (ironPlate, 1), (coal, 3));
+
+            AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Voxel Engine — Flamethrower Turret",
+                "The Flamethrower Turret is built:\n\n" +
+                "• Dual-nozzle turret with fuel tanks (~14 parts)\n" +
+                "• Continuous cone of fire (range ~11 m) + lingering ground fire\n" +
+                "• Fuelled by Flame Canisters (8 s each) or Coal (weaker)\n" +
+                "• Auto-targets by faction via the defense panel (RMB)\n" +
+                "• 100 HP. Craft at the Assembler\n" +
+                "• Also crafts Flame Canisters (iron plate + coal)", "OK");
+        }
+
 
 
 

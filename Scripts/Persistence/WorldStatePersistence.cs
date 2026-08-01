@@ -440,6 +440,48 @@ namespace VoxelEngine.Persistence
 
             CaptureMaritimePorts(go, entry);
             CaptureLightingRuntime(go, entry);
+            CaptureDefenseRuntime(go, entry);
+        }
+
+        private static void CaptureDefenseRuntime(GameObject go, SavedPlacedBlock entry)
+        {
+            var art = go.GetComponentInChildren<VoxelEngine.Combat.Artillery>(true);
+            if (art != null)
+            {
+                entry.defenseState = new SavedDefenseState
+                {
+                    filter = (int)art.filter,
+                    autoMode = art.autoMode,
+                    ammo = 0,
+                    fuelSeconds = 0f
+                };
+                return;
+            }
+
+            var flame = go.GetComponentInChildren<VoxelEngine.Combat.FlamethrowerTurret>(true);
+            if (flame != null)
+            {
+                entry.defenseState = new SavedDefenseState
+                {
+                    filter = (int)flame.filter,
+                    autoMode = flame.autoMode,
+                    ammo = 0,
+                    fuelSeconds = flame.CaptureFuelSeconds()
+                };
+                return;
+            }
+
+            var tur = go.GetComponentInChildren<VoxelEngine.Combat.Turret>(true);
+            if (tur != null)
+            {
+                entry.defenseState = new SavedDefenseState
+                {
+                    filter = (int)tur.filter,
+                    autoMode = tur.autoMode,
+                    ammo = tur.ammo,
+                    fuelSeconds = 0f
+                };
+            }
         }
 
         /// <summary>Capture a maritime engine's player-installed variable service
@@ -684,6 +726,16 @@ namespace VoxelEngine.Persistence
                     return SerializeContainer(generatorModules);
                 return null;
             }
+
+            // Defense magazines (artillery shells / flamethrower fuel). Additive —
+            // legacy saves leave these null and magazines start empty.
+            var artillery = go.GetComponentInChildren<VoxelEngine.Combat.Artillery>();
+            if (artillery != null)
+                return SerializeContainer(artillery.ShellMagazine);
+
+            var flamethrower = go.GetComponentInChildren<VoxelEngine.Combat.FlamethrowerTurret>();
+            if (flamethrower != null)
+                return SerializeContainer(flamethrower.FuelMagazine);
 
             return null;
         }
@@ -1326,6 +1378,37 @@ namespace VoxelEngine.Persistence
 
             RestoreMaritimePorts(go, saved.maritimePorts);
             RestoreLightingRuntime(go, saved.lightingConfig);
+            RestoreDefenseRuntime(go, saved.defenseState);
+        }
+
+        private static void RestoreDefenseRuntime(GameObject go, SavedDefenseState state)
+        {
+            if (state == null || go == null) return;
+
+            var art = go.GetComponentInChildren<VoxelEngine.Combat.Artillery>(true);
+            if (art != null)
+            {
+                art.filter = (VoxelEngine.Combat.TargetFilter)state.filter;
+                art.autoMode = state.autoMode;
+                return;
+            }
+
+            var flame = go.GetComponentInChildren<VoxelEngine.Combat.FlamethrowerTurret>(true);
+            if (flame != null)
+            {
+                flame.filter = (VoxelEngine.Combat.TargetFilter)state.filter;
+                flame.autoMode = state.autoMode;
+                flame.RestoreFuelSeconds(state.fuelSeconds);
+                return;
+            }
+
+            var tur = go.GetComponentInChildren<VoxelEngine.Combat.Turret>(true);
+            if (tur != null)
+            {
+                tur.filter = (VoxelEngine.Combat.TargetFilter)state.filter;
+                tur.autoMode = state.autoMode;
+                tur.ammo = UnityEngine.Mathf.Max(0, state.ammo);
+            }
         }
 
         /// <summary>Re-materialise a maritime engine's saved variable service ports.
@@ -1518,7 +1601,19 @@ namespace VoxelEngine.Persistence
                 maritimeGenerator.EnsureModuleSlots();
                 if (maritimeGenerator.ModuleSlots != null)
                     DeserializeInto(maritimeGenerator.ModuleSlots, sc);
+                return;
             }
+
+            var artillery = go.GetComponentInChildren<VoxelEngine.Combat.Artillery>();
+            if (artillery != null)
+            {
+                DeserializeInto(artillery.ShellMagazine, sc);
+                return;
+            }
+
+            var flamethrower = go.GetComponentInChildren<VoxelEngine.Combat.FlamethrowerTurret>();
+            if (flamethrower != null)
+                DeserializeInto(flamethrower.FuelMagazine, sc);
         }
 
         private void RestoreDrawer(VoxelEngine.Storage.StorageDrawer drawer, SavedContainer sc)
@@ -1712,6 +1807,16 @@ namespace VoxelEngine.Persistence
             // ports. Additive — legacy saves leave it null and engines keep their
             // authored ports exactly as before.
             public SavedMaritimePorts maritimePorts;
+            // Defense runtime (turret ammo / filter / autoMode / fuel buffer). Null for
+            // non-defense blocks. Additive — legacy saves leave it null.
+            public SavedDefenseState defenseState;
+        }
+        [Serializable] private class SavedDefenseState
+        {
+            public int filter;          // TargetFilter flags
+            public bool autoMode = true;
+            public int ammo;            // Auto Turret magazine count
+            public float fuelSeconds;   // Flamethrower continuous fuel buffer
         }
         [Serializable] private class SavedMaritimePorts
         {

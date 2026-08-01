@@ -1,9 +1,39 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.59.0-dev`
+**Current Version:** `6.62.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.62.0-dev] Flamethrower Turret — close-range area denial + defense save/UI harden
+
+**Type:** MINOR — new defensive structure + defense persistence (save-compatible).
+
+**Added the Flamethrower Turret** (`Scripts/Combat/FlamethrowerTurret.cs`) — next piece of the Base Defense Turret Network (roadmap §4.8):
+1. Placeable dual-nozzle turret that **auto-targets by faction filter** (Enemies / Players / Passive) and sprays a **continuous cone of fire** while fuel lasts.
+2. **Fire damage + burn** on creatures/players inside the cone; randomly seeds short-lived **ground-fire patches** (`FireWallHazard`) for area denial.
+3. **Fuel magazine** accepts **Flame Canisters** (~8 s each) or **Coal** (weaker fallback). Continuous buffer drains while engaged; canisters auto-feed when empty.
+4. **Step 41 (wizard):** model (base + dual tanks + dual nozzles + pilot light), `FlamethrowerTurret` component, placeable `BlockItem`, Flame Canister item + Assembler recipes. Non-destructive / re-runnable.
+
+**Defense panel upgraded** to handle Artillery + Auto Turret + Flamethrower (fuel buffer readout + fuel slots + targeting + auto-fire). RMB opens the panel on turrets/flamethrowers; artillery still uses RMB for cockpit / H for the panel.
+
+**Persistence (additive):**
+- Artillery shell magazine + Flamethrower fuel magazine now save/restore via `TryFindContainer` / `RestoreContainer`.
+- New `SavedDefenseState` captures filter / autoMode / turret ammo / flamethrower fuel buffer (legacy saves leave it null).
+
+**UI harden:** `_openDefense` is cleared on `CloseAll` and when opening other panels, so the defense panel no longer sticks after Esc.
+
+**To use:** run Step 41 → craft Flamethrower Turret + Flame Canisters at the Assembler → place → RMB → drag canisters into Fuel → enable Auto-Fire → it burns swarms at close range.
+
+**Files touched:**
+- `Scripts/Combat/FlamethrowerTurret.cs` (new)
+- `Scripts/Editor/VoxelEngineSetupWindow.cs` (Step 41)
+- `Scripts/UI/GameUIController.cs` (defense panel + open/close harden)
+- `Scripts/Player/PlayerInteractionTool.cs` (RMB open)
+- `Scripts/Persistence/WorldStatePersistence.cs` (magazines + defense state)
+- `Scripts/Core/GameVersion.cs` (6.61.5 → 6.62.0), `Changelog.md`
+
+---
 
 ### [6.59.0-dev] Turret UI (faction targeting) + Turret filter/autoMode
 

@@ -572,6 +572,7 @@ namespace VoxelEngine.UI
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _openCrusher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
+            _openDefense = null;
             UnwatchAllContainers();
             if (c is ItemContainer ic) WatchContainer(ic);
             UnlockCursor();
@@ -592,6 +593,7 @@ namespace VoxelEngine.UI
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _openCrusher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
+            _openDefense = null;
             _openStation    = f.GetComponent<CraftingStation>();
             _inventoryOpen  = true;
             UnwatchAllContainers();
@@ -615,6 +617,7 @@ namespace VoxelEngine.UI
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _openCrusher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
+            _openDefense = null;
             _openStation    = ef.GetComponent<CraftingStation>();
             _inventoryOpen  = true;
             UnwatchAllContainers();
@@ -637,6 +640,7 @@ namespace VoxelEngine.UI
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _openCrusher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
+            _openDefense = null;
             _inventoryOpen  = true;
             UnwatchAllContainers();
             if (fuel != null) { fuel.EnsureContainers(); WatchContainer(fuel.fuelC); }
@@ -655,6 +659,7 @@ namespace VoxelEngine.UI
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _openCrusher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
+            _openDefense = null;
             _inventoryOpen  = true;
             UnwatchAllContainers();
             if (quarry != null) { quarry.EnsureOutputPublic(); quarry.EnsureUpgrades(); WatchContainer(quarry.Output); WatchContainer(quarry.upgradeC); }
@@ -678,6 +683,7 @@ namespace VoxelEngine.UI
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _openCrusher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             _openVoltageStation = null;
+            _openDefense = null;
             _inventoryOpen = true;
             UnwatchAllContainers();
 
@@ -794,6 +800,7 @@ namespace VoxelEngine.UI
             _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _openCrusher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
+            _openDefense = null;
             _openGridTerminal = grid; _terminalTab = -1;
             _inventoryOpen = true;
             UnwatchAllContainers();
@@ -818,6 +825,7 @@ namespace VoxelEngine.UI
             _openImporter = null; _openExporter = null; _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _openCrusher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
+            _openDefense = null;
             _inventoryOpen  = true;
             // Lazy-create a queue on the station so progress survives panel closure/reopen.
             _activeQueue    = st.GetComponent<CraftQueue>();
@@ -851,6 +859,7 @@ namespace VoxelEngine.UI
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _openStorageTerminal = null; _openServerRack = null;
             _openCrusher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
+            _openDefense = null;
             _productionStatsOpen = false;
             _recipeBrowserOpen = false;
             _activeQueue    = null;
@@ -1005,7 +1014,8 @@ namespace VoxelEngine.UI
                     _openExporter != null || _openDiskManipulator != null || _openNAS != null ||
                     _openPowerstation != null || _openStorageDrawer != null ||
                     _openDrawerController != null || _openItemDisplay != null ||
-                    _openCrusher != null || _openAssembler != null || _openFunnel != null || _openSplitter != null;
+                    _openCrusher != null || _openAssembler != null || _openFunnel != null || _openSplitter != null ||
+                    _openDefense != null;
                 if ((anyRightTargetOpen || CraftingScreen.Visible) && (_productionStatsOpen || _recipeBrowserOpen))
                 {
                     _productionStatsOpen = false;
@@ -1022,7 +1032,8 @@ namespace VoxelEngine.UI
                     _openExporter != null || _openDiskManipulator != null || _openNAS != null ||
                     _openPowerstation != null || _openStorageDrawer != null ||
                     _openDrawerController != null || _openItemDisplay != null ||
-                    _openCrusher != null || _openAssembler != null || _openFunnel != null || _openSplitter != null;
+                    _openCrusher != null || _openAssembler != null || _openFunnel != null || _openSplitter != null ||
+                    _openDefense != null;
                 // The station pane (_openStation) renders its OWN crafting list on
                 // the right, so we suppress the center panel only in that case.
                 // For every other right panel (chest / furnace / storage terminal)
@@ -1304,8 +1315,14 @@ namespace VoxelEngine.UI
             _rightContainer = null; _openFurnace = null; _openElectric = null; _openCoalGen = null;
             _openQuarry = null; _openReactor = null; _openStation = null; _recipeBrowserOpen = false;
             _productionStatsOpen = false; _openChest = null; _openGridTerminal = null;
+            _openCrusher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             _openDefense = d;
             _inventoryOpen = true;
+            UnwatchAllContainers();
+            // Watch magazines so drag-drop refreshes live.
+            if (d is VoxelEngine.Combat.Artillery artWatch) WatchContainer(artWatch.ShellMagazine);
+            else if (d is VoxelEngine.Combat.FlamethrowerTurret flameWatch) WatchContainer(flameWatch.FuelMagazine);
+            UnlockCursor();
             Refresh();
         }
 
@@ -1319,21 +1336,36 @@ namespace VoxelEngine.UI
             panel.style.minWidth = 280; panel.style.maxWidth = 400;
             root.Add(panel);
 
-            bool isArt = defense is VoxelEngine.Combat.Artillery;
-            var art = defense as VoxelEngine.Combat.Artillery;
-            var tur = defense as VoxelEngine.Combat.Turret;
+            var art   = defense as VoxelEngine.Combat.Artillery;
+            var tur   = defense as VoxelEngine.Combat.Turret;
+            var flame = defense as VoxelEngine.Combat.FlamethrowerTurret;
 
-            string name = isArt ? art.variant.ToString() : "Auto Turret";
+            string name = art != null ? art.variant.ToString()
+                        : flame != null ? "Flamethrower Turret"
+                        : "Auto Turret";
             panel.Add(MakeTitle(name));
 
-            if (isArt)
+            if (art != null)
             {
                 // Shell magazine — drag shells in. The loaded shell item determines the type.
                 panel.Add(MakeSubtitle("Shells (drag in)"));
                 WatchContainer(art.ShellMagazine);
                 panel.Add(BuildSortableSlotGrid(art.ShellMagazine, showSort: false));
             }
-            else
+            else if (flame != null)
+            {
+                // Fuel magazine — Flame Canisters (preferred) or Coal (weaker).
+                float fuel = flame.FuelSeconds;
+                float maxF = Mathf.Max(0.01f, flame.MaxFuelDisplay);
+                var fuelInfo = new Label($"Fuel buffer: {fuel:0.0}s  ({Mathf.Clamp01(fuel / maxF) * 100f:0}%)");
+                fuelInfo.style.color = fuel > 0.5f ? new Color(1f, 0.7f, 0.3f) : new Color(1f, 0.4f, 0.3f);
+                fuelInfo.style.fontSize = 12; fuelInfo.style.marginBottom = 4;
+                panel.Add(fuelInfo);
+                panel.Add(MakeSubtitle("Fuel (Flame Canister / Coal)"));
+                WatchContainer(flame.FuelMagazine);
+                panel.Add(BuildSortableSlotGrid(flame.FuelMagazine, showSort: false));
+            }
+            else if (tur != null)
             {
                 // Turret: ammo display + reload button.
                 var info = new Label($"Ammo: {tur.ammo} / {tur.maxAmmo}");
@@ -1360,32 +1392,43 @@ namespace VoxelEngine.UI
                 panel.Add(reloadBtn);
             }
 
-            // Targeting (both types).
+            // Targeting (all defense types).
             panel.Add(MakeSubtitle("Targeting"));
-            VoxelEngine.Combat.TargetFilter curFilter = isArt ? art.filter : tur.filter;
-            panel.Add(MakeDefenseToggle("Target Enemies", VoxelEngine.Combat.TargetFilter.Enemies, curFilter, isArt, art, tur));
-            panel.Add(MakeDefenseToggle("Target Players", VoxelEngine.Combat.TargetFilter.Players, curFilter, isArt, art, tur));
-            panel.Add(MakeDefenseToggle("Target Passive", VoxelEngine.Combat.TargetFilter.Passive, curFilter, isArt, art, tur));
+            VoxelEngine.Combat.TargetFilter curFilter =
+                art != null ? art.filter : flame != null ? flame.filter : tur != null ? tur.filter : VoxelEngine.Combat.TargetFilter.Enemies;
+            panel.Add(MakeDefenseToggle("Target Enemies", VoxelEngine.Combat.TargetFilter.Enemies, curFilter, art, tur, flame));
+            panel.Add(MakeDefenseToggle("Target Players", VoxelEngine.Combat.TargetFilter.Players, curFilter, art, tur, flame));
+            panel.Add(MakeDefenseToggle("Target Passive", VoxelEngine.Combat.TargetFilter.Passive, curFilter, art, tur, flame));
 
-            // Auto toggle (both types).
-            bool autoF = isArt ? art.autoMode : tur.autoMode;
+            // Auto toggle (all defense types).
+            bool autoF = art != null ? art.autoMode : flame != null ? flame.autoMode : tur != null && tur.autoMode;
             var autoT = new Toggle("Auto-Fire") { value = autoF };
             autoT.style.color = Color.white; autoT.style.marginBottom = 6;
-            autoT.RegisterValueChangedCallback(e => { if (isArt) art.autoMode = e.newValue; else tur.autoMode = e.newValue; Refresh(); });
+            autoT.RegisterValueChangedCallback(e =>
+            {
+                if (art != null) art.autoMode = e.newValue;
+                else if (flame != null) flame.autoMode = e.newValue;
+                else if (tur != null) tur.autoMode = e.newValue;
+                Refresh();
+            });
             panel.Add(autoT);
         }
 
         private Toggle MakeDefenseToggle(string label, VoxelEngine.Combat.TargetFilter flag,
-                                         VoxelEngine.Combat.TargetFilter cur, bool isArt,
-                                         VoxelEngine.Combat.Artillery art, VoxelEngine.Combat.Turret tur)
+                                         VoxelEngine.Combat.TargetFilter cur,
+                                         VoxelEngine.Combat.Artillery art,
+                                         VoxelEngine.Combat.Turret tur,
+                                         VoxelEngine.Combat.FlamethrowerTurret flame)
         {
             var t = new Toggle(label) { value = (cur & flag) != 0 };
             t.style.color = Color.white; t.style.marginBottom = 2;
             t.RegisterValueChangedCallback(e =>
             {
-                var f = isArt ? art.filter : tur.filter;
+                var f = art != null ? art.filter : flame != null ? flame.filter : tur != null ? tur.filter : VoxelEngine.Combat.TargetFilter.None;
                 if (e.newValue) f |= flag; else f &= ~flag;
-                if (isArt) art.filter = f; else tur.filter = f;
+                if (art != null) art.filter = f;
+                else if (flame != null) flame.filter = f;
+                else if (tur != null) tur.filter = f;
                 Refresh();
             });
             return t;
@@ -1441,7 +1484,7 @@ namespace VoxelEngine.UI
                    _openItemDisplay != null || _openCrusher != null || _openAssembler != null ||
                    _openFunnel != null || _openSplitter != null || _openGridBlock != null ||
                    _openOilRefinery != null || _openChemPlant != null || _openStation != null ||
-                   _openVoltageStation != null;
+                   _openVoltageStation != null || _openDefense != null;
         }
 
         // Premium equipment panel docked to the right of the inventory: ARMOR +
