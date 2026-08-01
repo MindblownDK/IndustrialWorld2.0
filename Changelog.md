@@ -1,9 +1,33 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.72.0-dev`
+**Current Version:** `6.73.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.73.0-dev] Hydrogen Canister — refillable H₂ tanks for jetpacks
+
+**Type:** MINOR — jetpack fuel redesign (save-compatible).
+
+**Replaces disposable Hydrogen Cells with refillable Hydrogen Canisters:**
+
+1. **`HydrogenCanisterItem`** — portable tank; fill stored in `ItemStack.durability` (0..capacity, default 200).
+2. **Fill from world** — hold canister, **RMB a Hydrogen Gas Tank** to transfer H₂ into the canister (repeat until full).
+3. **Jetpack auto-recharge at ≤10%** — equipped Hydrogen Boost / Hybrid packs pull H₂ from inventory canisters when fuel drops to the threshold (does **not** destroy the canister; just drains it).
+4. Atmospheric / Hybrid still use **Charged Cells** for the power side.
+5. Jetpack Bay hint updated. Step 47 authors the canister + tunes packs.
+
+**To use:** run Step 47 → craft Hydrogen Canister → produce H₂ into a Gas Tank (Electrolyser) → RMB tank with canister equipped to fill → equip H₂/Hybrid jetpack + keep canisters in inventory → fly; at 10% the pack tops up from canisters.
+
+**Files touched:**
+- `Scripts/Items/HydrogenCanisterItem.cs` (new)
+- `Scripts/Items/JetpackItem.cs` (threshold, no cell refuel)
+- `Scripts/Player/PlayerEquipment.cs` (canister siphon at ≤10%)
+- `Scripts/Player/PlayerInteractionTool.cs` (RMB fill from GasTank)
+- `Scripts/UI/GameUIController.cs`, `Scripts/Editor/VoxelEngineSetupWindow.cs`
+- `Scripts/Core/GameVersion.cs` (6.72.0 → 6.73.0), `Changelog.md`, `Roadmap.md`
+
+---
 
 ### [6.72.0-dev] Jetpack fuel accounting — Hydrogen/Charged Cells + Bay readout
 

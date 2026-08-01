@@ -663,7 +663,37 @@ namespace VoxelEngine.Player
                 var hydroEngine = hit.collider.GetComponentInParent<VoxelEngine.Gas.HydrogenEngine>();
                 if (hydroEngine != null) { UI.GameUIController.Instance?.OpenMachine(hydroEngine); return; }
                 var gasTank = hit.collider.GetComponentInParent<VoxelEngine.Gas.GasTank>();
-                if (gasTank != null) { UI.GameUIController.Instance?.OpenMachine(gasTank); return; }
+                if (gasTank != null)
+                {
+                    // Holding a Hydrogen Canister → fill it from the tank instead of opening UI.
+                    var active = inventory != null ? inventory.ActiveStack : null;
+                    if (active != null && !active.IsEmpty && VoxelEngine.Items.HydrogenCanisterItem.IsCanister(active.item)
+                        && gasTank.storedGasType == VoxelEngine.Gas.GasType.Hydrogen && gasTank.storedAmount > 0f)
+                    {
+                        float rate = (active.item as VoxelEngine.Items.HydrogenCanisterItem)?.fillRatePerUse ?? 40f;
+                        float got = VoxelEngine.Items.HydrogenCanisterItem.FillFromGasTank(active, gasTank, rate);
+                        if (got > 0f)
+                        {
+                            // Write the modified hotbar stack back.
+                            inventory.container.SetSlot(inventory.activeHotbarIndex, active);
+                            inventory.container.RaiseChanged();
+                            int stored = VoxelEngine.Items.HydrogenCanisterItem.GetStored(active);
+                            int cap = VoxelEngine.Items.HydrogenCanisterItem.GetCapacity(active);
+                            VoxelEngine.UI.BuildFeedbackHud.Show(
+                                "Hydrogen Canister",
+                                $"+{got:0} H₂  ·  {stored}/{cap}",
+                                null,
+                                new Color(0.45f, 0.9f, 1f));
+                        }
+                        else
+                        {
+                            VoxelEngine.UI.BuildFeedbackHud.Show("Hydrogen Canister", "Canister full or tank empty", null, Color.yellow);
+                        }
+                        return;
+                    }
+                    UI.GameUIController.Instance?.OpenMachine(gasTank);
+                    return;
+                }
                 var biofarm = hit.collider.GetComponentInParent<VoxelEngine.Building.Biofarm>();
                 if (biofarm != null) { UI.GameUIController.Instance?.OpenMachine(biofarm); return; }
                 var liquidPump = hit.collider.GetComponentInParent<VoxelEngine.Fluids.WaterPump>();

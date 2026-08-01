@@ -1,8 +1,11 @@
 // Assets/Scripts/VoxelEngine/Items/JetpackItem.cs
 //
 // Player equipment item for Jetpack Families. Runtime fuel/charge is stored on the
-// ItemStack.durability field (0..fuelCapacity). Hydrogen packs siphon Hydrogen Cells
-// from inventory; power packs siphon Charged Cells.
+// ItemStack.durability field (0..fuelCapacity).
+//
+// Hydrogen / Hybrid packs recharge from refillable Hydrogen Canisters in inventory
+// once fuel drops to the recharge threshold (default 10%).
+// Atmospheric / Hybrid packs still siphon Charged Cells for the power side.
 
 using UnityEngine;
 
@@ -40,34 +43,21 @@ namespace VoxelEngine.Items
         public float drainPerSecond = 2.5f;
         [Tooltip("Extra fuel units drained per second while boosting (Sprint).")]
         public float boostDrainPerSecond = 4f;
-        [Tooltip("Fuel restored by one Hydrogen Cell (hydrogen packs).")]
-        public int hydrogenCellRefuel = 40;
+        [Tooltip("When remaining fuel fraction drops to this value (or below), auto-recharge from inventory canisters/cells.")]
+        [Range(0.01f, 0.5f)]
+        public float autoRechargeThreshold = 0.10f;
         [Tooltip("Fuel restored by one Charged Cell (power packs).")]
         public int chargedCellRefuel = 35;
 
         public override bool IsStackable => false;
 
         public int FuelCapacity => Mathf.Max(1, fuelCapacity);
-
-        public static bool IsHydrogenFuelItem(ItemDefinition item)
-            => item != null && item.itemId == "item_hydrogen_cell";
+        public float RechargeThreshold => Mathf.Clamp(autoRechargeThreshold, 0.01f, 0.5f);
 
         public static bool IsPowerFuelItem(ItemDefinition item)
             => item != null && (item.itemId == "item_charged_cell" || item.itemId == "item_energy_cell");
 
-        public bool AcceptsFuelItem(ItemDefinition item)
-        {
-            if (item == null) return false;
-            if (usesHydrogen && IsHydrogenFuelItem(item)) return true;
-            if (usesPower && IsPowerFuelItem(item)) return true;
-            return false;
-        }
-
-        public int RefuelAmountFor(ItemDefinition item)
-        {
-            if (IsHydrogenFuelItem(item)) return Mathf.Max(1, hydrogenCellRefuel);
-            if (IsPowerFuelItem(item)) return Mathf.Max(1, chargedCellRefuel);
-            return 0;
-        }
+        public bool NeedsHydrogen => usesHydrogen;
+        public bool NeedsPower => usesPower;
     }
 }

@@ -128,8 +128,7 @@ namespace VoxelEngine.Player
             if (stack == null || stack.IsEmpty || stack.item is not JetpackItem pack) return;
             int cap = pack.FuelCapacity;
             // Durability is authoritative fuel (saved). Clamp only — never refill empties
-            // here, or load-from-save would top up drained packs (payload is NonSerialized).
-            // New stacks are filled in ItemStack's constructor via JetpackItem.FuelCapacity.
+            // here, or load-from-save would top up drained packs.
             if (stack.durability > cap) stack.durability = cap;
             if (stack.durability < 0) stack.durability = 0;
         }
@@ -143,13 +142,13 @@ namespace VoxelEngine.Player
 
         /// <summary>
         /// Drain fuel from the best usable pack. Returns false if no fuel remains
-        /// (caller should cut flight). Auto-siphons cells from inventory when empty.
+        /// (caller should cut flight). Auto-recharges from inventory canisters/cells
+        /// when fuel drops to the pack's recharge threshold (default 10%).
         /// </summary>
         public bool TryConsumeFlightFuel(float dt, bool boosting)
         {
             if (dt <= 0f) return HasUsableJetpack;
             EnsureContainers();
-            TryAutoRefuelFromInventory();
 
             int slotIndex = -1;
             ItemStack stack = null;
@@ -160,12 +159,32 @@ namespace VoxelEngine.Player
                 var s = _jetpackSlots.GetSlot(i);
                 if (s == null || s.IsEmpty || s.item is not JetpackItem p) continue;
                 EnsureJetpackFuel(s);
-                if (NeedsFuel(p) && s.durability <= 0) continue;
+                if (NeedsFuel(p) && s.durability <= 0)
+                {
+                    // Last chance: try recharge before skipping.
+                    TryRechargeSlot(i, s, p, force: true);
+                    s = _jetpackSlots.GetSlot(i);
+                    if (s == null || s.IsEmpty || s.durability <= 0) continue;
+                    p = s.item as JetpackItem;
+                    if (p == null) continue;
+                }
                 float score = p.flightSpeedMultiplier + p.boostMultiplier * 0.25f;
                 if (score > bestScore) { bestScore = score; slotIndex = i; stack = s; pack = p; }
             }
             if (stack == null || pack == null) return false;
             if (!NeedsFuel(pack)) return true;
+
+            // Recharge from inventory canisters/cells once at/under threshold.
+            float frac = stack.durability / (float)Mathf.Max(1, pack.FuelCapacity);
+            if (frac <= pack.RechargeThreshold)
+                TryRechargeSlot(slotIndex, stack, pack, force: true);
+
+            // Re-read after possible recharge.
+            stack = _jetpackSlots.GetSlot(slotIndex);
+            if (stack == null || stack.IsEmpty || stack.item is not JetpackItem pack2) return false;
+            pack = pack2;
+            EnsureJetpackFuel(stack);
+            if (stack.durability <= 0) return false;
 
             float drain = Mathf.Max(0f, pack.drainPerSecond);
             if (boosting) drain += Mathf.Max(0f, pack.boostDrainPerSecond);
@@ -218,12 +237,15 @@ namespace VoxelEngine.Player
             }
         }
 
-        /// <summary>Siphon hydrogen/charged cells from player inventory into equipped packs.</summary>
-        public int TryAutoRefuelFromInventory()
+        /// <summary>
+        /// Recharge equipped packs from inventory. Hydrogen/Hybrid pull from
+        /// Hydrogen Canisters; Atmospheric/Hybrid pull from Charged Cells.
+        /// Normally only runs at/under the pack threshold (10%).
+        /// </summary>
+        public int TryAutoRefuelFromInventory(bool force = false)
         {
             EnsureContainers();
             if (_inventory == null) _inventory = GetComponent<Inventory>();
-            if (_inventory == null || _inventory.container == null) return 0;
             int total = 0;
             for (int i = 0; i < _jetpackSlots.Size; i++)
             {
@@ -231,32 +253,58 @@ namespace VoxelEngine.Player
                 if (stack == null || stack.IsEmpty || stack.item is not JetpackItem pack) continue;
                 EnsureJetpackFuel(stack);
                 if (!NeedsFuel(pack)) continue;
-                int space = pack.FuelCapacity - stack.durability;
-                if (space <= 0) continue;
-                total += RefuelStackFromInventory(i, stack, pack, space);
+                float frac = stack.durability / (float)Mathf.Max(1, pack.FuelCapacity);
+                if (!force && frac > pack.RechargeThreshold) continue;
+                total += TryRechargeSlot(i, stack, pack, force: true);
             }
             return total;
         }
 
-        private int RefuelStackFromInventory(int slotIndex, ItemStack stack, JetpackItem pack, int space)
+        private int TryRechargeSlot(int slotIndex, ItemStack stack, JetpackItem pack, bool force)
         {
+            if (_inventory == null) _inventory = GetComponent<Inventory>();
+            if (_inventory == null || _inventory.container == null) return 0;
+            EnsureJetpackFuel(stack);
+            int space = pack.FuelCapacity - stack.durability;
+            if (space <= 0) return 0;
+
             int restored = 0;
             var inv = _inventory.container;
-            for (int i = 0; i < inv.Size && space > 0; i++)
+
+            // 1) Hydrogen side — siphon refillable canisters (do not destroy the canister).
+            if (pack.usesHydrogen)
             {
-                var s = inv.GetSlot(i);
-                if (s == null || s.IsEmpty || s.item == null) continue;
-                if (!pack.AcceptsFuelItem(s.item)) continue;
-                int per = pack.RefuelAmountFor(s.item);
-                if (per <= 0) continue;
-                // Consume one cell at a time.
-                int got = inv.Remove(s.item, 1);
-                if (got <= 0) continue;
-                int add = Mathf.Min(space, per);
-                stack.durability += add;
-                space -= add;
-                restored += add;
+                for (int i = 0; i < inv.Size && space > 0; i++)
+                {
+                    var s = inv.GetSlot(i);
+                    if (s == null || s.IsEmpty || !HydrogenCanisterItem.IsCanister(s.item)) continue;
+                    int taken = HydrogenCanisterItem.TryTake(s, space);
+                    if (taken <= 0) continue;
+                    inv.SetSlot(i, s); // write back reduced canister fill
+                    stack.durability += taken;
+                    space -= taken;
+                    restored += taken;
+                }
             }
+
+            // 2) Power side — consume charged cells (disposable energy cartridges).
+            if (pack.usesPower && space > 0)
+            {
+                for (int i = 0; i < inv.Size && space > 0; i++)
+                {
+                    var s = inv.GetSlot(i);
+                    if (s == null || s.IsEmpty || s.item == null) continue;
+                    if (!JetpackItem.IsPowerFuelItem(s.item)) continue;
+                    int per = Mathf.Max(1, pack.chargedCellRefuel);
+                    int got = inv.Remove(s.item, 1);
+                    if (got <= 0) continue;
+                    int add = Mathf.Min(space, per);
+                    stack.durability += add;
+                    space -= add;
+                    restored += add;
+                }
+            }
+
             if (restored > 0)
             {
                 if (stack.payload == null) stack.payload = new JetpackFuelBox();

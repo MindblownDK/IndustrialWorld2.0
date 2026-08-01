@@ -439,8 +439,9 @@ namespace VoxelEngine.EditorTools
             AddInfo(scroll,
                 "Step 47 refreshes JETPACK FUEL accounting (non-destructive):\n" +
                 "  • Fuel capacity / drain rates on all three jetpack families\n" +
-                "  • Hydrogen Cell item + recipe (auto-feeds H₂ / Hybrid packs)\n" +
-                "  • Charged Cells (from Energy Turret step) feed Atmospheric / Hybrid\n" +
+                "  • Refillable Hydrogen Canister (fill from world H₂ Gas Tanks)\n" +
+                "  • H₂/Hybrid packs auto-recharge from canisters at ≤10% fuel\n" +
+                "  • Charged Cells feed Atmospheric / Hybrid power side\n" +
                 "  • Re-runnable. Does not strip existing jetpack assets.");
             AddWizardButton(scroll, "47. Refresh Jetpack Fuel Accounting", BuildJetpackFuelContent, 40);
 
@@ -6154,7 +6155,7 @@ root =>
                 item.boostDrainPerSecond = family == VoxelEngine.Items.JetpackFamily.HydrogenBoost ? 5.5f
                                          : family == VoxelEngine.Items.JetpackFamily.Atmospheric ? 3.5f
                                          : 4.2f;
-                item.hydrogenCellRefuel = 40;
+                item.autoRechargeThreshold = 0.10f;
                 item.chargedCellRefuel = 35;
                 EditorUtility.SetDirty(item);
                 return item;
@@ -6170,17 +6171,19 @@ root =>
             AddGRecipe("Recipe_JetpackAtmospheric", "Atmospheric Jetpack", jetAtmospheric, (steelPlate, 6), (copperWire, 10), (circuit, 3));
             AddGRecipe("Recipe_JetpackHybrid", "Hybrid Jetpack", jetHybrid, (steelPlate, 10), (copperWire, 16), (advCircuit ?? circuit, 3), (lithium, 2));
 
-            // Hydrogen Cell — portable jetpack fuel (siphoned automatically while flying).
-            var h2cell = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{ITEMS}/Item_HydrogenCell.asset");
-            h2cell.itemId = "item_hydrogen_cell";
-            h2cell.displayName = "Hydrogen Cell";
-            h2cell.description = "Compressed hydrogen cartridge. Auto-feeds equipped Hydrogen/Hybrid jetpacks during flight.";
-            h2cell.iconTint = new Color(0.45f, 0.9f, 1f);
-            h2cell.maxStack = 40;
-            h2cell.massPerUnit = 0.8f;
-            h2cell.category = "Equipment";
-            EditorUtility.SetDirty(h2cell);
-            AddGRecipe("Recipe_HydrogenCell", "Hydrogen Cell", h2cell, (steelPlate, 1), (copperWire, 2));
+            // Hydrogen Canister — refillable portable H₂ tank for jetpacks.
+            var h2can = GetOrCreateAsset<VoxelEngine.Items.HydrogenCanisterItem>($"{ITEMS}/Item_HydrogenCanister.asset");
+            h2can.itemId = VoxelEngine.Items.HydrogenCanisterItem.ItemId;
+            h2can.displayName = "Hydrogen Canister";
+            h2can.description = "Refillable hydrogen tank. RMB a world Hydrogen Gas Tank to fill. Equipped H₂/Hybrid jetpacks auto-recharge from canisters in your inventory when fuel drops to 10%.";
+            h2can.iconTint = new Color(0.35f, 0.85f, 1f);
+            h2can.maxStack = 1;
+            h2can.massPerUnit = 4f;
+            h2can.category = "Equipment";
+            h2can.capacity = 200;
+            h2can.fillRatePerUse = 40f;
+            EditorUtility.SetDirty(h2can);
+            AddGRecipe("Recipe_HydrogenCanister", "Hydrogen Canister", h2can, (steelPlate, 3), (copperWire, 4), (circuit, 1));
 
 
             // -- 0b) Grid Cryobed (offline-survival foundation) --
@@ -13260,7 +13263,7 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
                 pack.fuelCapacity = cap;
                 pack.drainPerSecond = drain;
                 pack.boostDrainPerSecond = boostDrain;
-                pack.hydrogenCellRefuel = 40;
+                pack.autoRechargeThreshold = 0.10f;
                 pack.chargedCellRefuel = 35;
                 EditorUtility.SetDirty(pack);
             }
@@ -13273,17 +13276,19 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
             var copperWire = FindItem("Item_CopperLVWire");
             var ironPlate  = FindItem("Item_IronPlate");
 
-            var h2cell = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{ITEMS}/Item_HydrogenCell.asset");
-            h2cell.itemId = "item_hydrogen_cell";
-            h2cell.displayName = "Hydrogen Cell";
-            h2cell.description = "Compressed hydrogen cartridge. Auto-feeds equipped Hydrogen/Hybrid jetpacks during flight.";
-            h2cell.iconTint = new Color(0.45f, 0.9f, 1f);
-            h2cell.maxStack = 40;
-            h2cell.massPerUnit = 0.8f;
-            h2cell.category = "Equipment";
-            EditorUtility.SetDirty(h2cell);
-            AddRecipe("Recipe_HydrogenCell", "Hydrogen Cell", h2cell, 4, VoxelEngine.Crafting.StationTier.Assembler, true,
-                (steelPlate != null ? steelPlate : ironPlate, 1), (copperWire, 2));
+            var h2can = GetOrCreateAsset<VoxelEngine.Items.HydrogenCanisterItem>($"{ITEMS}/Item_HydrogenCanister.asset");
+            h2can.itemId = VoxelEngine.Items.HydrogenCanisterItem.ItemId;
+            h2can.displayName = "Hydrogen Canister";
+            h2can.description = "Refillable hydrogen tank. RMB a world Hydrogen Gas Tank to fill. H₂/Hybrid jetpacks auto-recharge from inventory canisters at ≤10% fuel.";
+            h2can.iconTint = new Color(0.35f, 0.85f, 1f);
+            h2can.maxStack = 1;
+            h2can.massPerUnit = 4f;
+            h2can.category = "Equipment";
+            h2can.capacity = 200;
+            h2can.fillRatePerUse = 40f;
+            EditorUtility.SetDirty(h2can);
+            AddRecipe("Recipe_HydrogenCanister", "Hydrogen Canister", h2can, 1, VoxelEngine.Crafting.StationTier.Assembler, true,
+                (steelPlate != null ? steelPlate : ironPlate, 3), (copperWire, 4));
 
             // Ensure Charged Cell exists for atmospheric/hybrid (authored by Energy Turret step too).
             var cell = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{COMBAT_ITEMS}/Item_ChargedCell.asset");

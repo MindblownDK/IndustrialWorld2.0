@@ -1215,7 +1215,7 @@ namespace VoxelEngine.UI
                 track.Add(fill);
                 fuelRow.Add(track);
 
-                var hint = new Label("Auto-refuels from Hydrogen / Charged Cells in inventory");
+                var hint = new Label("Recharges at ≤10% from H₂ Canisters / Charged Cells");
                 hint.style.fontSize = 8;
                 hint.style.color = new Color(0.55f, 0.6f, 0.68f);
                 hint.style.marginTop = 3;
