@@ -1,9 +1,40 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.70.1-dev`
+**Current Version:** `6.71.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.71.0-dev] Painting System — 15 cosmetic finishes + Paint Tool
+
+**Type:** MINOR — new cosmetic tool/system (save-compatible).
+
+**Painting System (roadmap §4.7 item 17):**
+1. **`PaintFinish` catalogue** — 15 finishes (matte white/black, industrial grey, steel, chrome, carbon, rust, copper, brass, hazard yellow, crusader blue, signal red, forest green, gloss white, futuristic teal).
+2. **`BlockPaint`** — runtime component on static `PlacedBlock`, `GridBlock`, and tiered builds. Caches originals so clear restores the look.
+3. **`PaintToolItem`** — hand tool:
+   - **LMB** paints the looked-at block with the selected finish
+   - **RMB** cycles finish
+   - **Shift+RMB** clears finish (restores original materials)
+4. **`PaintHud`** — left-side swatch + name while the tool is held.
+5. **World inspection** — shows finish name on painted static/grid blocks.
+6. **Persistence (additive)** — `paintFinish` on `SavedPlacedBlock` + `SavedGridBlock` (0 = none / legacy).
+7. **Step 46 (wizard)** — Paint Tool asset + Crafting Bench recipe (non-destructive).
+
+**Cosmetic only** — no mass/armor/stats change.
+
+**To use:** run Step 46 → craft Paint Tool → equip → RMB to pick a finish → LMB a chest/wall/grid block → colour updates. Save/reload keeps the finish.
+
+**Files touched:**
+- `Scripts/Building/PaintFinish.cs`, `BlockPaint.cs` (new)
+- `Scripts/Items/PaintToolItem.cs` (new)
+- `Scripts/UI/PaintHud.cs` (new)
+- `Scripts/Player/PlayerInteractionTool.cs`, `Scripts/UI/GameUIController.cs`, `Scripts/UI/WorldInspectionHud.cs`
+- `Scripts/Persistence/WorldStatePersistence.cs`
+- `Scripts/Editor/VoxelEngineSetupWindow.cs` (Step 46)
+- `Scripts/Core/GameVersion.cs` (6.70.1 → 6.71.0), `Changelog.md`, `Roadmap.md`
+
+---
 
 ### [6.70.1-dev] Compile fix — restore DefenseStatus helper methods
 

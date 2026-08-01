@@ -223,6 +223,7 @@ namespace VoxelEngine.UI
             TickFurnaceLiveUI();
             PlayerHud.Tick();
             BombHud.Tick(inventory);
+            PaintHud.Tick(inventory);
             RustStyleHud.Tick();
             BuildFeedbackHud.Tick();
             VoxelEngine.Weather.WeatherHud.Tick();
@@ -937,6 +938,7 @@ namespace VoxelEngine.UI
             DeathScreenHud.EnsureMounted(_root);
             CryobedConfigHud.EnsureMounted(_root);
             BombHud.EnsureMounted(_root);
+            PaintHud.EnsureMounted(_root);
 
             // (We poll mouse buttons in Update() — much more reliable than RegisterCallback.)
 

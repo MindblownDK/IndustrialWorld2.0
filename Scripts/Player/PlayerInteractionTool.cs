@@ -223,6 +223,56 @@ namespace VoxelEngine.Player
                 return;
             }
 
+            // ── PAINT TOOL — LMB paints looked-at block; RMB cycles finish; Shift+RMB clears. ──
+            if (!heldStack.IsEmpty && heldStack.item is PaintToolItem)
+            {
+                if (buildDown && Time.time >= _nextHit)
+                {
+                    if (IsShiftHeld())
+                    {
+                        if (hasHit)
+                        {
+                            var host = hit.collider.GetComponentInParent<Component>();
+                            VoxelEngine.Building.BlockPaint.TryPaint(host, VoxelEngine.Building.PaintFinishId.None);
+                        }
+                        VoxelEngine.UI.BuildFeedbackHud.Show("Paint", "Cleared finish", null, Color.white);
+                    }
+                    else
+                    {
+                        PaintToolItem.Cycle(1);
+                        VoxelEngine.UI.BuildFeedbackHud.Show("Paint", PaintToolItem.SelectedName, null, PaintToolItem.SelectedColor);
+                    }
+                    _nextHit = Time.time + 0.12f;
+                    return;
+                }
+
+                if (mineDown && hasHit && Time.time >= _nextHit)
+                {
+                    PaintToolItem.EnsureSelected();
+                    var host = hit.collider.GetComponentInParent<Component>();
+                    bool ok = VoxelEngine.Building.BlockPaint.TryPaint(host, PaintToolItem.SelectedFinish);
+                    if (ok)
+                    {
+                        GetComponent<VoxelEngine.Player.HeldToolView>()?.DoSwing();
+                        VoxelEngine.UI.BuildFeedbackHud.Show(
+                            "Painted",
+                            PaintToolItem.SelectedName,
+                            null,
+                            PaintToolItem.SelectedColor);
+                        ConsumeDurability(heldStack);
+                    }
+                    else
+                    {
+                        VoxelEngine.UI.BuildFeedbackHud.Show("Paint", "Nothing paintable here", null, Color.yellow);
+                    }
+                    _nextHit = Time.time + 1f / Mathf.Max(0.1f, ((PaintToolItem)heldStack.item).fireRate);
+                    return;
+                }
+
+                // Swallow held clicks so paint tool never mines/places by accident.
+                if (mineHeld || buildHeld) return;
+            }
+
             if (!hasHit)
             {
                 // Mining tools still play their swing when aimed at the sky (nothing to hit).

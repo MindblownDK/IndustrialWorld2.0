@@ -429,6 +429,13 @@ namespace VoxelEngine.EditorTools
                 "  • Defense panel magazine + faction targeting. Re-runnable.");
             AddWizardButton(scroll, "45. Build Energy / Relic Turret", BuildEnergyRelicTurretContent, 40);
 
+            AddInfo(scroll,
+                "Step 46 builds the PAINT TOOL + 15 cosmetic finishes (non-destructive):\n" +
+                "  • Hand tool: LMB paints looked-at static/grid blocks\n" +
+                "  • RMB cycles finish, Shift+RMB clears\n" +
+                "  • Finishes are cosmetic only and save with the world. Re-runnable.");
+            AddWizardButton(scroll, "46. Build Paint Tool (cosmetic finishes)", BuildPaintToolContent, 40);
+
             AddSpacer(scroll, 20);
         }
 
@@ -13126,6 +13133,64 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
                 "• Load Charged Cells or Relic Capacitors via the defense panel\n" +
                 "• 180 HP. Craft at the Assembler", "OK");
         }
+
+        // ============================================================
+        //   STEP 46 - PAINT TOOL. Cosmetic finishes for static + grid
+        //   blocks. LMB paint, RMB cycle, Shift+RMB clear. Saves with
+        //   the world. Non-destructive. Re-runnable.
+        // ============================================================
+        private void BuildPaintToolContent()
+        {
+            const string ITEMS = ASSET_ROOT + "/Items";
+            const string TOOLS = ASSET_ROOT + "/Tools";
+            EnsureFolder(ITEMS); EnsureFolder(TOOLS);
+
+            ItemDefinition FindItem(string n)
+            {
+                var guids = AssetDatabase.FindAssets(n + " t:ItemDefinition");
+                foreach (var g in guids)
+                {
+                    var pp = AssetDatabase.GUIDToAssetPath(g);
+                    if (System.IO.Path.GetFileNameWithoutExtension(pp) == n)
+                        return AssetDatabase.LoadAssetAtPath<ItemDefinition>(pp);
+                }
+                return null;
+            }
+            var ironIngot  = FindItem("Item_IronIngot");
+            var ironPlate  = FindItem("Item_IronPlate");
+            var copperWire = FindItem("Item_CopperLVWire");
+
+            var tool = GetOrCreateAsset<VoxelEngine.Items.PaintToolItem>($"{TOOLS}/Tool_Paint.asset");
+            tool.itemId = "tool_paint";
+            tool.displayName = "Paint Tool";
+            tool.description = "Apply cosmetic finishes to placed blocks and grid blocks. LMB paints, RMB cycles finish, Shift+RMB clears. Cosmetic only — saves with the world.";
+            tool.iconTint = new Color(0.85f, 0.55f, 0.25f);
+            tool.maxStack = 1;
+            tool.massPerUnit = 1.5f;
+            tool.category = "Tools";
+            tool.toolType = VoxelEngine.Items.ToolType.Other;
+            tool.fireRate = 6f;
+            tool.strength = 1f;
+            tool.maxDurability = 0; // infinite for MVP cosmetics
+            tool.defaultFinish = VoxelEngine.Building.PaintFinishId.IndustrialGrey;
+            EditorUtility.SetDirty(tool);
+
+            AddRecipe("Recipe_PaintTool", "Paint Tool", tool, 1, VoxelEngine.Crafting.StationTier.CraftingBench, true,
+                (ironIngot != null ? ironIngot : ironPlate, 2),
+                (ironPlate, 1),
+                (copperWire, 2));
+
+            AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Voxel Engine — Paint Tool",
+                "The Paint Tool is ready:\\n\\n" +
+                "• Craft at the Crafting Bench (iron + copper wire)\\n" +
+                "• 15 finishes: matte/metal/rust/chrome/hazard/crusader colours\\n" +
+                "• LMB = paint looked-at static or grid block\\n" +
+                "• RMB = cycle finish · Shift+RMB = clear · Scroll = cycle\\n" +
+                "• Cosmetic only — saved with the world (additive)\\n" +
+                "• HUD swatch appears while the tool is held", "OK");
+        }
+
 
 
 

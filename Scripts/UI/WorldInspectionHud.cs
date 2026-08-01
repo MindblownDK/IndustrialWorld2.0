@@ -328,6 +328,11 @@ namespace VoxelEngine.UI
                 info.title = string.IsNullOrWhiteSpace(gridBlock.blockName) ? gridBlock.name : gridBlock.blockName;
                 info.detail = "GRID BLOCK";
                 info.status = DescribePower(gridBlock.gameObject);
+                var gpf = gridBlock.GetComponent<BlockPaint>();
+                if (gpf != null && gpf.Finish != PaintFinishId.None)
+                    info.status = string.IsNullOrEmpty(info.status)
+                        ? $"Finish: {PaintFinishCatalog.DisplayName(gpf.Finish)}"
+                        : $"{info.status} · {PaintFinishCatalog.DisplayName(gpf.Finish)}";
                 info.showHealth = gridBlock.maxHP > 0f;
                 info.health01 = gridBlock.maxHP > 0f ? Mathf.Clamp01(gridBlock.currentHP / gridBlock.maxHP) : 0f;
                 info.healthText = $"{Mathf.Max(0f, gridBlock.currentHP):0}/{gridBlock.maxHP:0}";
@@ -355,6 +360,11 @@ namespace VoxelEngine.UI
                     ? "PLACED BLOCK"
                     : placedBlock.Item.category.ToUpperInvariant();
                 info.status = DescribePower(placedBlock.gameObject);
+                var pf = placedBlock.GetComponent<BlockPaint>();
+                if (pf != null && pf.Finish != PaintFinishId.None)
+                    info.status = string.IsNullOrEmpty(info.status)
+                        ? $"Finish: {PaintFinishCatalog.DisplayName(pf.Finish)}"
+                        : $"{info.status} · {PaintFinishCatalog.DisplayName(pf.Finish)}";
                 ApplyPlacedHealth(placedBlock, ref info);
                 return true;
             }

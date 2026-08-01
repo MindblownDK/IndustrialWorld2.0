@@ -292,6 +292,8 @@ namespace VoxelEngine.Persistence
                     entry.hasExplicitConveyorShape = true;
                     entry.conveyorShape = (int)conveyor.shape;
                 }
+                var paint = pb.GetComponent<VoxelEngine.Building.BlockPaint>();
+                if (paint != null) entry.paintFinish = (int)paint.Finish;
                 CaptureFactoryRuntime(pb.gameObject, entry);
                 save.placedBlocks.Add(entry);
             }
@@ -1155,6 +1157,11 @@ namespace VoxelEngine.Persistence
                 }
                 block.currentHP = saved.currentHP > 0f ? saved.currentHP : block.maxHP;
                 block.Enabled = saved.enabled;
+                if (saved.paintFinish != 0)
+                {
+                    var gp = block.GetComponent<VoxelEngine.Building.BlockPaint>() ?? block.gameObject.AddComponent<VoxelEngine.Building.BlockPaint>();
+                    gp.Finish = (VoxelEngine.Building.PaintFinishId)saved.paintFinish;
+                }
                 if (block is GridCryobed restoredGridCryo)
                 {
                     restoredGridCryo.claimedByLocalPlayer = saved.cryobedClaimed;
@@ -1204,6 +1211,11 @@ namespace VoxelEngine.Persistence
                 // OnPlaced initializes defaults, so reapply persisted state afterwards.
                 block.currentHP = saved.currentHP > 0f ? saved.currentHP : block.maxHP;
                 block.Enabled = saved.enabled;
+                if (saved.paintFinish != 0)
+                {
+                    var gp = block.GetComponent<VoxelEngine.Building.BlockPaint>() ?? block.gameObject.AddComponent<VoxelEngine.Building.BlockPaint>();
+                    gp.Finish = (VoxelEngine.Building.PaintFinishId)saved.paintFinish;
+                }
                 if (saved.container != null) RestoreContainer(go, saved.container);
                 if (saved.runtime != null) RestoreFactoryRuntime(go, saved.runtime);
             }
@@ -1326,6 +1338,11 @@ namespace VoxelEngine.Persistence
                 }
                 if (sb.container != null) RestoreContainer(go, sb.container);
                 RestoreFactoryRuntime(go, sb);
+                if (sb.paintFinish != 0)
+                {
+                    var paint = go.GetComponent<VoxelEngine.Building.BlockPaint>() ?? go.AddComponent<VoxelEngine.Building.BlockPaint>();
+                    paint.Finish = (VoxelEngine.Building.PaintFinishId)sb.paintFinish;
+                }
             }
         }
 
@@ -1943,6 +1960,8 @@ namespace VoxelEngine.Persistence
             public bool hasLocalPose;
             public Vector3 localPosition;
             public float currentHP;
+            // Cosmetic paint finish id (byte). 0 = none / legacy unpainted.
+            public int paintFinish;
             public bool enabled = true;
             public bool hasShapeVariant;
             public int shapeVariant;
@@ -1972,6 +1991,8 @@ namespace VoxelEngine.Persistence
             public SavedContainer container;
             public string customName;
             public bool cryobedClaimed;
+            // Cosmetic paint finish id (byte). 0 = none / legacy unpainted.
+            public int paintFinish;
             // Wind turbine part condition (0..100). 0 = "not set" (legacy saves)
             // and restores as factory-new. Only written for WindTurbinePart blocks.
             public float windCondition;
