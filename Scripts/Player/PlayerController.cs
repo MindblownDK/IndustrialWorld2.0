@@ -386,18 +386,11 @@ namespace VoxelEngine.Player
             else if (_crouched)      speedMul = crouchMultiplier;
             // Use research-modified sprint multiplier if PlayerStats is available.
             float effSprint = PlayerStats.Instance != null ? PlayerStats.Instance.SprintMultiplier : sprintMultiplier;
-            // Sprint also drains stamina; if stamina is empty, sprint is disabled.
-            bool canSprint = sprintHeld && (PlayerStats.Instance == null || PlayerStats.Instance.Stamina > 0.1f);
+            // Stamina removed — sprint is always available when held.
+            bool canSprint = sprintHeld;
             _sprinting = canSprint && wish.y > 0.1f;
             if (canSprint && wish.y > 0.1f)
-            {
                 speedMul = effSprint;
-                PlayerStats.Instance?.DrainStamina(dt);
-            }
-            else
-            {
-                PlayerStats.Instance?.RegenStamina(dt);
-            }
 
             float targetSpeed = walkSpeed * speedMul * PetrifySpeedMul;
             // Horizontal velocity lives on the local ground plane (perp to `up`).
@@ -436,8 +429,7 @@ namespace VoxelEngine.Player
             // -- jump (allowed while sliding, while preserving slide momentum) --
             // Plain crouch with no slide = no jump (you'd just bonk your head).
             bool jumpAllowed = canCoyote && (!_crouched || _sliding);
-            if (GameSettings.WasPressed(InputAction.Jump) && jumpAllowed
-                && (PlayerStats.Instance == null || PlayerStats.Instance.TrySpendStamina(PlayerStats.Instance.staminaJumpCost)))
+            if (GameSettings.WasPressed(InputAction.Jump) && jumpAllowed)
             {
                 float gravMag = GravVec.magnitude;
                 _velocity = Vector3.ProjectOnPlane(_velocity, up) + up * Mathf.Sqrt(2f * gravMag * jumpHeight);
@@ -603,7 +595,7 @@ namespace VoxelEngine.Player
                 {
                     GameSettings.FlyMode = false;
                     _velocity = Vector3.zero;
-                    VoxelEngine.UI.BuildFeedbackHud.Show("Jetpack", "Out of fuel — insert Hydrogen/Charged Cells", null, new Color(1f, 0.7f, 0.25f));
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Jetpack", "Out of fuel — fill Portable H₂ Tanks / Charged Cells", null, new Color(1f, 0.7f, 0.25f));
                     return;
                 }
                 // If research flight is unlocked, allow unfueled flight without boost.

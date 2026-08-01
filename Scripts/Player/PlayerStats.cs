@@ -1,6 +1,7 @@
 // Assets/Scripts/VoxelEngine/Player/PlayerStats.cs
 //
-// Central player stats: HP, stamina, damage bonus, sprint multiplier, inventory size.
+// Central player stats: HP, hunger, oxygen, damage bonus, sprint multiplier, inventory size.
+// Stamina removed from gameplay (6.74) — fields kept inert for save compatibility.
 // Listens to ResearchManager to recompute when player upgrades unlock.
 
 using System;
@@ -252,14 +253,8 @@ namespace VoxelEngine.Player
         // ============================================================
         //                       Stamina hooks
         // ============================================================
-        public bool TrySpendStamina(float amount)
-        {
-            if (Stamina < amount) return false;
-            Stamina -= amount;
-            OnStatsChanged?.Invoke();
-            return true;
-        }
-        public void RegenStamina(float dt) { Stamina = Mathf.Min(MaxStamina, Stamina + staminaRegen * dt); }
-        public void DrainStamina(float dt) { Stamina = Mathf.Max(0,         Stamina - staminaSprintDrain * dt); }
+        public bool TrySpendStamina(float amount) { return true; /* stamina removed */ }
+        public void RegenStamina(float dt) { /* stamina removed */ }
+        public void DrainStamina(float dt) { /* stamina removed */ }
     }
 }

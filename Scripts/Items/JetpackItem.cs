@@ -1,11 +1,11 @@
 // Assets/Scripts/VoxelEngine/Items/JetpackItem.cs
 //
-// Player equipment item for Jetpack Families. Runtime fuel/charge is stored on the
-// ItemStack.durability field (0..fuelCapacity).
+// Player equipment item for Jetpack Families. Runtime fuel is stored on
+// ItemStack.durability as millilitres (0..fuelCapacityMl).
 //
-// Hydrogen / Hybrid packs recharge from refillable Hydrogen Canisters in inventory
+// Hydrogen / Hybrid packs recharge from Portable Hydrogen Tanks in inventory
 // once fuel drops to the recharge threshold (default 10%).
-// Atmospheric / Hybrid packs still siphon Charged Cells for the power side.
+// Atmospheric / Hybrid packs siphon Charged Cells for the power side.
 
 using UnityEngine;
 
@@ -36,22 +36,45 @@ namespace VoxelEngine.Items
         [Tooltip("True for power/ion packs (Atmospheric / Hybrid).")]
         public bool usesPower = false;
 
-        [Header("Fuel / Charge")]
-        [Tooltip("Maximum fuel/charge units stored on the equipped stack (durability).")]
-        public int fuelCapacity = 100;
-        [Tooltip("Fuel units drained per second while flying (not boosting).")]
-        public float drainPerSecond = 2.5f;
-        [Tooltip("Extra fuel units drained per second while boosting (Sprint).")]
-        public float boostDrainPerSecond = 4f;
-        [Tooltip("When remaining fuel fraction drops to this value (or below), auto-recharge from inventory canisters/cells.")]
+        [Header("Fuel (metric — millilitres)")]
+        [Tooltip("Internal fuel tank capacity in millilitres (ml).")]
+        public int fuelCapacityMl = 1000;
+        [Tooltip("Millilitres drained per second while flying (not boosting).")]
+        public float drainMlPerSecond = 25f;
+        [Tooltip("Extra ml/s drained while boosting (Sprint).")]
+        public float boostDrainMlPerSecond = 40f;
+        [Tooltip("When remaining fuel fraction drops to this value (or below), auto-recharge from inventory tanks/cells.")]
         [Range(0.01f, 0.5f)]
         public float autoRechargeThreshold = 0.10f;
-        [Tooltip("Fuel restored by one Charged Cell (power packs).")]
-        public int chargedCellRefuel = 35;
+        [Tooltip("Millilitres restored by one Charged Cell (power packs).")]
+        public int chargedCellRefuelMl = 350;
+
+        // ── Back-compat aliases (older code / wizard) ─────────────────
+        public int fuelCapacity
+        {
+            get => fuelCapacityMl;
+            set => fuelCapacityMl = value;
+        }
+        public float drainPerSecond
+        {
+            get => drainMlPerSecond;
+            set => drainMlPerSecond = value;
+        }
+        public float boostDrainPerSecond
+        {
+            get => boostDrainMlPerSecond;
+            set => boostDrainMlPerSecond = value;
+        }
+        public int chargedCellRefuel
+        {
+            get => chargedCellRefuelMl;
+            set => chargedCellRefuelMl = value;
+        }
 
         public override bool IsStackable => false;
 
-        public int FuelCapacity => Mathf.Max(1, fuelCapacity);
+        public int FuelCapacityMl => Mathf.Max(1, fuelCapacityMl);
+        public int FuelCapacity => FuelCapacityMl;
         public float RechargeThreshold => Mathf.Clamp(autoRechargeThreshold, 0.01f, 0.5f);
 
         public static bool IsPowerFuelItem(ItemDefinition item)

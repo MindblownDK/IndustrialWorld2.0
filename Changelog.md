@@ -1,9 +1,31 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.73.0-dev`
+**Current Version:** `6.74.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.74.0-dev] Portable Hydrogen Tank (ml) + H₂ vitals bar; stamina removed
+
+**Type:** MINOR — jetpack fuel UX + vitals overhaul (save-compatible).
+
+1. **Renamed** Hydrogen Canister → **Portable Hydrogen Tank** (`item_portable_hydrogen_tank`).
+2. **Metric units** — tank capacity / fill / jetpack fuel all use **millilitres (ml)** (display switches to L at ≥1000 ml).
+3. **Item looks like a tank** — procedural bottle icon (body, neck, valve, liquid level) + bottom fill bar + ml label in inventory/hotbar.
+4. **Jetpack refill fixed** — H₂/Hybrid packs always treat hydrogen family as hydrogen-fuelled (even if old assets had flags wrong); siphon Portable H₂ Tanks at ≤10% without destroying them.
+5. **Vitals HUD** — **Stamina bar removed**; replaced with **H₂** bar showing total ml across all Portable Hydrogen Tanks in inventory.
+6. **Stamina gameplay removed** — sprint/jump no longer gated or drained by stamina (fields kept inert for old saves).
+
+**To use:** run Step 47 → craft Portable Hydrogen Tank → fill from a Hydrogen Gas Tank (RMB) → equip H₂ jetpack + keep tanks in inventory → fly; at 10% the pack pulls ml from tanks. Watch the H₂ vitals bar on the right.
+
+**Files touched:**
+- `Scripts/Items/HydrogenCanisterItem.cs`, `JetpackItem.cs`
+- `Scripts/Player/PlayerEquipment.cs`, `PlayerController.cs`, `PlayerStats.cs`
+- `Scripts/UI/RustStyleHud.cs`, `GameUIController.cs`
+- `Scripts/Player/PlayerInteractionTool.cs`, `Scripts/Editor/VoxelEngineSetupWindow.cs`
+- `Scripts/Core/GameVersion.cs` (6.73.0 → 6.74.0), `Changelog.md`, `Roadmap.md`
+
+---
 
 ### [6.73.0-dev] Hydrogen Canister — refillable H₂ tanks for jetpacks
 

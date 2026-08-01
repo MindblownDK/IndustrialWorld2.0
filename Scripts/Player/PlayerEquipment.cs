@@ -121,7 +121,24 @@ namespace VoxelEngine.Player
         }
 
         public static bool NeedsFuel(JetpackItem pack)
-            => pack != null && (pack.usesHydrogen || pack.usesPower);
+        {
+            if (pack == null) return false;
+            if (pack.usesHydrogen || pack.usesPower) return true;
+            // Old assets may lack flags — infer from family.
+            return pack.family == JetpackFamily.HydrogenBoost
+                || pack.family == JetpackFamily.Hybrid
+                || pack.family == JetpackFamily.Atmospheric;
+        }
+
+        public static bool PackUsesHydrogen(JetpackItem pack)
+            => pack != null && (pack.usesHydrogen
+                || pack.family == JetpackFamily.HydrogenBoost
+                || pack.family == JetpackFamily.Hybrid);
+
+        public static bool PackUsesPower(JetpackItem pack)
+            => pack != null && (pack.usesPower
+                || pack.family == JetpackFamily.Atmospheric
+                || pack.family == JetpackFamily.Hybrid);
 
         public static void EnsureJetpackFuel(ItemStack stack)
         {
@@ -175,8 +192,10 @@ namespace VoxelEngine.Player
             if (!NeedsFuel(pack)) return true;
 
             // Recharge from inventory canisters/cells once at/under threshold.
-            float frac = stack.durability / (float)Mathf.Max(1, pack.FuelCapacity);
-            if (frac <= pack.RechargeThreshold)
+            float cap = Mathf.Max(1, pack.FuelCapacityMl);
+            float frac = stack.durability / cap;
+            float threshold = pack.RechargeThreshold; // clamped ≥ 1%
+            if (frac <= threshold + 0.001f)
                 TryRechargeSlot(slotIndex, stack, pack, force: true);
 
             // Re-read after possible recharge.
@@ -186,8 +205,8 @@ namespace VoxelEngine.Player
             EnsureJetpackFuel(stack);
             if (stack.durability <= 0) return false;
 
-            float drain = Mathf.Max(0f, pack.drainPerSecond);
-            if (boosting) drain += Mathf.Max(0f, pack.boostDrainPerSecond);
+            float drain = Mathf.Max(0f, pack.drainMlPerSecond > 0f ? pack.drainMlPerSecond : pack.drainPerSecond);
+            if (boosting) drain += Mathf.Max(0f, pack.boostDrainMlPerSecond > 0f ? pack.boostDrainMlPerSecond : pack.boostDrainPerSecond);
             float cost = drain * dt;
             if (cost <= 0f) return true;
 
@@ -253,8 +272,8 @@ namespace VoxelEngine.Player
                 if (stack == null || stack.IsEmpty || stack.item is not JetpackItem pack) continue;
                 EnsureJetpackFuel(stack);
                 if (!NeedsFuel(pack)) continue;
-                float frac = stack.durability / (float)Mathf.Max(1, pack.FuelCapacity);
-                if (!force && frac > pack.RechargeThreshold) continue;
+                float frac = stack.durability / (float)Mathf.Max(1, pack.FuelCapacityMl);
+                if (!force && frac > pack.RechargeThreshold + 0.001f) continue;
                 total += TryRechargeSlot(i, stack, pack, force: true);
             }
             return total;
@@ -271,16 +290,17 @@ namespace VoxelEngine.Player
             int restored = 0;
             var inv = _inventory.container;
 
-            // 1) Hydrogen side — siphon refillable canisters (do not destroy the canister).
-            if (pack.usesHydrogen)
+            // 1) Hydrogen side — siphon Portable Hydrogen Tanks (do not destroy the tank).
+            if (PackUsesHydrogen(pack))
             {
                 for (int i = 0; i < inv.Size && space > 0; i++)
                 {
                     var s = inv.GetSlot(i);
-                    if (s == null || s.IsEmpty || !HydrogenCanisterItem.IsCanister(s.item)) continue;
-                    int taken = HydrogenCanisterItem.TryTake(s, space);
+                    if (s == null || s.IsEmpty || s.item == null) continue;
+                    if (!HydrogenCanisterItem.IsPortableHydrogenTank(s.item)) continue;
+                    int taken = HydrogenCanisterItem.TryTakeMl(s, space);
                     if (taken <= 0) continue;
-                    inv.SetSlot(i, s); // write back reduced canister fill
+                    inv.SetSlot(i, s); // write back reduced tank fill (ml)
                     stack.durability += taken;
                     space -= taken;
                     restored += taken;
@@ -288,14 +308,14 @@ namespace VoxelEngine.Player
             }
 
             // 2) Power side — consume charged cells (disposable energy cartridges).
-            if (pack.usesPower && space > 0)
+            if (PackUsesPower(pack) && space > 0)
             {
                 for (int i = 0; i < inv.Size && space > 0; i++)
                 {
                     var s = inv.GetSlot(i);
                     if (s == null || s.IsEmpty || s.item == null) continue;
                     if (!JetpackItem.IsPowerFuelItem(s.item)) continue;
-                    int per = Mathf.Max(1, pack.chargedCellRefuel);
+                    int per = Mathf.Max(1, pack.chargedCellRefuelMl > 0 ? pack.chargedCellRefuelMl : pack.chargedCellRefuel);
                     int got = inv.Remove(s.item, 1);
                     if (got <= 0) continue;
                     int add = Mathf.Min(space, per);

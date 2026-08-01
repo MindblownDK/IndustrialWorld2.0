@@ -1196,7 +1196,7 @@ namespace VoxelEngine.UI
                 fuelRow.style.marginLeft = 2;
                 fuelRow.style.marginRight = 2;
 
-                var fuelLab = new Label($"Fuel  {fuelU}/{fuelCap}");
+                var fuelLab = new Label($"Fuel  {fuelU} / {fuelCap} ml");
                 fuelLab.style.fontSize = 9;
                 fuelLab.style.color = new Color(0.75f, 0.82f, 0.9f);
                 fuelLab.style.marginBottom = 3;
@@ -1215,7 +1215,7 @@ namespace VoxelEngine.UI
                 track.Add(fill);
                 fuelRow.Add(track);
 
-                var hint = new Label("Recharges at ≤10% from H₂ Canisters / Charged Cells");
+                var hint = new Label("Recharges at ≤10% from Portable H₂ Tanks / Charged Cells");
                 hint.style.fontSize = 8;
                 hint.style.color = new Color(0.55f, 0.6f, 0.68f);
                 hint.style.marginTop = 3;
@@ -3041,6 +3041,61 @@ namespace VoxelEngine.UI
                     img.pickingMode = PickingMode.Ignore;   // children must not steal events
                     slot.Add(img);
                 }
+else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.item))
+                {
+                    // Procedural hydrogen tank bottle icon.
+                    var icon = new VisualElement();
+                    icon.style.width = 40; icon.style.height = 44;
+                    icon.pickingMode = PickingMode.Ignore;
+
+                    var body = new VisualElement();
+                    body.style.position = Position.Absolute;
+                    body.style.left = 8; body.style.right = 8;
+                    body.style.top = 10; body.style.bottom = 4;
+                    body.style.backgroundColor = new StyleColor(new Color(0.22f, 0.48f, 0.62f));
+                    SetBorderRadius(body, 8);
+                    body.pickingMode = PickingMode.Ignore;
+                    icon.Add(body);
+
+                    var stripe = new VisualElement();
+                    stripe.style.position = Position.Absolute;
+                    stripe.style.left = 8; stripe.style.right = 8;
+                    stripe.style.top = 22; stripe.style.height = 6;
+                    stripe.style.backgroundColor = new StyleColor(new Color(0.45f, 0.9f, 1f, 0.85f));
+                    stripe.pickingMode = PickingMode.Ignore;
+                    icon.Add(stripe);
+
+                    var neck = new VisualElement();
+                    neck.style.position = Position.Absolute;
+                    neck.style.left = 15; neck.style.width = 10;
+                    neck.style.top = 4; neck.style.height = 10;
+                    neck.style.backgroundColor = new StyleColor(new Color(0.55f, 0.58f, 0.62f));
+                    SetBorderRadius(neck, 2);
+                    neck.pickingMode = PickingMode.Ignore;
+                    icon.Add(neck);
+
+                    var valve = new VisualElement();
+                    valve.style.position = Position.Absolute;
+                    valve.style.left = 12; valve.style.width = 16;
+                    valve.style.top = 1; valve.style.height = 5;
+                    valve.style.backgroundColor = new StyleColor(new Color(0.75f, 0.78f, 0.82f));
+                    SetBorderRadius(valve, 2);
+                    valve.pickingMode = PickingMode.Ignore;
+                    icon.Add(valve);
+
+                    float fill01 = VoxelEngine.Items.HydrogenCanisterItem.Fill01(stack);
+                    var liquid = new VisualElement();
+                    liquid.style.position = Position.Absolute;
+                    liquid.style.left = 10; liquid.style.right = 10;
+                    liquid.style.bottom = 6;
+                    liquid.style.height = Mathf.Max(2, fill01 * 28f);
+                    liquid.style.backgroundColor = new StyleColor(new Color(0.35f, 0.85f, 1f, 0.55f));
+                    SetBorderRadius(liquid, 6);
+                    liquid.pickingMode = PickingMode.Ignore;
+                    icon.Add(liquid);
+
+                    slot.Add(icon);
+                }
                 else
                 {
                     var box = new VisualElement();
@@ -3050,7 +3105,7 @@ namespace VoxelEngine.UI
                     box.pickingMode = PickingMode.Ignore;
                     slot.Add(box);
                 }
-                // Stack count — show always (even for "1") so the player sees how much is in the stack.
+                                // Stack count — show always (even for "1") so the player sees how much is in the stack.
                 if (stack.count > 0)
                 {
                     var count = new Label(stack.count.ToString());
@@ -3070,18 +3125,33 @@ namespace VoxelEngine.UI
                 if (stack.item is ToolItem tool && tool.maxDurability > 0)
                 {
                     float frac = stack.durability / (float)tool.maxDurability;
-                    var bar = new VisualElement();
-                    bar.style.position = Position.Absolute;
-                    bar.style.left = 4; bar.style.right = 4; bar.style.bottom = 2;
-                    bar.style.height = 3;
-                    bar.style.backgroundColor = new StyleColor(new Color(0.2f,0.2f,0.2f,0.7f));
-                    bar.pickingMode = PickingMode.Ignore;
-                    var fill = new VisualElement();
-                    fill.style.height = 3;
-                    fill.style.width = new StyleLength(new Length(Mathf.Clamp01(frac) * 100, LengthUnit.Percent));
-                    fill.style.backgroundColor = new StyleColor(Color.Lerp(Color.red, Color.green, frac));
-                    bar.Add(fill);
-                    slot.Add(bar);
+                    slot.Add(MakeItemFillBar(frac, Color.Lerp(Color.red, Color.green, frac)));
+                }
+                // Portable Hydrogen Tank fill (ml)
+                else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.item))
+                {
+                    float frac = VoxelEngine.Items.HydrogenCanisterItem.Fill01(stack);
+                    var h2Col = new Color(0.35f, 0.85f, 1f);
+                    slot.Add(MakeItemFillBar(frac, Color.Lerp(new Color(0.8f, 0.2f, 0.15f), h2Col, frac)));
+                    int ml = VoxelEngine.Items.HydrogenCanisterItem.GetStoredMl(stack);
+                    var mlLbl = new Label(ml >= 1000 ? $"{ml / 1000f:0.0}L" : $"{ml}ml");
+                    mlLbl.style.position = Position.Absolute;
+                    mlLbl.style.left = 3; mlLbl.style.top = 2;
+                    mlLbl.style.fontSize = 9;
+                    mlLbl.style.color = Color.white;
+                    mlLbl.style.unityFontStyleAndWeight = FontStyle.Bold;
+                    mlLbl.style.backgroundColor = new StyleColor(new Color(0, 0, 0, 0.55f));
+                    mlLbl.style.paddingLeft = 2; mlLbl.style.paddingRight = 2;
+                    SetBorderRadius(mlLbl, 2);
+                    mlLbl.pickingMode = PickingMode.Ignore;
+                    slot.Add(mlLbl);
+                }
+                // Jetpack internal fuel (ml)
+                else if (stack.item is VoxelEngine.Items.JetpackItem jp)
+                {
+                    int cap = Mathf.Max(1, jp.FuelCapacityMl);
+                    float frac = Mathf.Clamp01(stack.durability / (float)cap);
+                    slot.Add(MakeItemFillBar(frac, Color.Lerp(Color.red, new Color(0.4f, 0.9f, 1f), frac)));
                 }
                 // Tooltip on hover (only when the panel is interactive — otherwise hotbar
                 // slots in the corner of the screen would pop tooltips constantly).

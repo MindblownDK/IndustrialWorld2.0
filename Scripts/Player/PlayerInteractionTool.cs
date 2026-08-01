@@ -665,29 +665,30 @@ namespace VoxelEngine.Player
                 var gasTank = hit.collider.GetComponentInParent<VoxelEngine.Gas.GasTank>();
                 if (gasTank != null)
                 {
-                    // Holding a Hydrogen Canister → fill it from the tank instead of opening UI.
+                    // Holding a Portable Hydrogen Tank → fill it from the tank instead of opening UI.
                     var active = inventory != null ? inventory.ActiveStack : null;
                     if (active != null && !active.IsEmpty && VoxelEngine.Items.HydrogenCanisterItem.IsCanister(active.item)
                         && gasTank.storedGasType == VoxelEngine.Gas.GasType.Hydrogen && gasTank.storedAmount > 0f)
                     {
-                        float rate = (active.item as VoxelEngine.Items.HydrogenCanisterItem)?.fillRatePerUse ?? 40f;
+                        float rate = VoxelEngine.Items.HydrogenCanisterItem.DefaultFillRateMl(active.item);
                         float got = VoxelEngine.Items.HydrogenCanisterItem.FillFromGasTank(active, gasTank, rate);
                         if (got > 0f)
                         {
-                            // Write the modified hotbar stack back.
                             inventory.container.SetSlot(inventory.activeHotbarIndex, active);
                             inventory.container.RaiseChanged();
-                            int stored = VoxelEngine.Items.HydrogenCanisterItem.GetStored(active);
-                            int cap = VoxelEngine.Items.HydrogenCanisterItem.GetCapacity(active);
+                            int stored = VoxelEngine.Items.HydrogenCanisterItem.GetStoredMl(active);
+                            int cap = VoxelEngine.Items.HydrogenCanisterItem.GetCapacityMl(active);
+                            string storedTxt = stored >= 1000 ? $"{stored/1000f:0.0} L" : $"{stored} ml";
+                            string capTxt = cap >= 1000 ? $"{cap/1000f:0.0} L" : $"{cap} ml";
                             VoxelEngine.UI.BuildFeedbackHud.Show(
-                                "Hydrogen Canister",
-                                $"+{got:0} H₂  ·  {stored}/{cap}",
+                                "Portable H₂ Tank",
+                                $"+{got:0} ml  ·  {storedTxt} / {capTxt}",
                                 null,
                                 new Color(0.45f, 0.9f, 1f));
                         }
                         else
                         {
-                            VoxelEngine.UI.BuildFeedbackHud.Show("Hydrogen Canister", "Canister full or tank empty", null, Color.yellow);
+                            VoxelEngine.UI.BuildFeedbackHud.Show("Portable H₂ Tank", "Tank full or no hydrogen", null, Color.yellow);
                         }
                         return;
                     }
