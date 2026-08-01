@@ -13290,7 +13290,7 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
             h2can.fillRateMlPerUse = 250f;
             EditorUtility.SetDirty(h2can);
             AddRecipe("Recipe_PortableHydrogenTank", "Portable Hydrogen Tank", h2can, 1, VoxelEngine.Crafting.StationTier.Assembler, true,
-                (steelPlate != null ? steelPlate : ironPlate, 3), (copperWire, 4))
+                (steelPlate != null ? steelPlate : ironPlate, 3), (copperWire, 4));
 
             // Ensure Charged Cell exists for atmospheric/hybrid (authored by Energy Turret step too).
             var cell = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{COMBAT_ITEMS}/Item_ChargedCell.asset");
@@ -13305,12 +13305,12 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
 
             AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
             EditorUtility.DisplayDialog("Voxel Engine — Jetpack Fuel",
-                "Jetpack fuel accounting is ready:\\n\\n" +
-                "• Hydrogen Boost / Atmospheric / Hybrid capacity + drain tuned\\n" +
-                "• Hydrogen Cell craftable at the Assembler\\n" +
-                "• Charged Cells feed Atmospheric / Hybrid packs\\n" +
-                "• Equipped packs auto-siphon cells from inventory while flying\\n" +
-                "• Jetpack Bay shows fuel bar (ONLINE / LOW / DRY)\\n" +
+                "Jetpack fuel accounting is ready:\n\n" +
+                "• Hydrogen Boost / Atmospheric / Hybrid capacity + drain tuned (ml)\n" +
+                "• Portable Hydrogen Tank — RMB a Hydrogen Gas Tank to fill\n" +
+                "• H₂/Hybrid packs auto-recharge from inventory tanks at ≤10% fuel\n" +
+                "• Charged Cells feed Atmospheric / Hybrid power side\n" +
+                "• Jetpack Bay shows fuel bar (ONLINE / LOW / DRY)\n" +
                 "• Empty pack drops you out of flight (unless flight research is unlocked)", "OK");
         }
 

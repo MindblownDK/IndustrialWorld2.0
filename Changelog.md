@@ -1,9 +1,21 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.74.1-dev`
+**Current Version:** `6.74.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.74.2-dev] Compile fix — missing semicolon in Step 47 setup
+
+**Type:** PATCH — compile fix (save-compatible).
+
+Fixed CS1002 in `VoxelEngineSetupWindow.BuildJetpackFuelContent` (missing `;` after `AddRecipe` for Portable Hydrogen Tank) and refreshed the Step 47 dialog text.
+
+**Files touched:**
+- `Scripts/Editor/VoxelEngineSetupWindow.cs`
+- `Scripts/Core/GameVersion.cs` (6.74.1 → 6.74.2), `Changelog.md`
+
+---
 
 ### [6.74.1-dev] Compile fix — MakeItemFillBar helper
 
