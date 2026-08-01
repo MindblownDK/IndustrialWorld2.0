@@ -1,9 +1,27 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.78.6-dev`
+**Current Version:** `6.78.7-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.78.7-dev] Icon Batch 3 — Food, Wires & Axe
+
+**Type:** PATCH — art batch (save-compatible).
+
+#### 🍞 Icon batch 3 — ten more items got sticker-style icons
+- **Farming** (new category): crusty bread loaf, red & blue berries, carrot, corn on the cob, potato, wheat sheaf, and a **berry seed packet** — drawn with seeds spilling out, so function reads at a glance.
+- **Industrial / HighVoltage** (HighVoltage = new category): bright copper wire spool and a heavy black HV cable with hazard-yellow connectors — the two cable families are now visually distinct.
+- **Tools**: the iron axe joins the iron pickaxe.
+- All generated as die-cut stickers on white → zero background by construction, bold readable shapes at 51 px, auto-bound by itemId as usual.
+- **Coverage: 30 / 398 itemIds.**
+
+#### Files touched
+- `VoxelEngineAssets/ItemIcons/{Farming,Industrial,HighVoltage,Tools}/` (+10 PNGs & metas)
+- 10 definition assets (icon references auto-bound by itemId)
+- `Scripts/Core/GameVersion.cs` (6.78.6 → 6.78.7), `Changelog.md`
+
+---
 
 ### [6.78.6-dev] Zero-Background Sticker Icons & Category Folders
 
