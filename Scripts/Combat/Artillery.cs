@@ -9,6 +9,8 @@ using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.Items;
 using VoxelEngine.Settings;
+using VoxelEngine.Simulation;
+using VoxelEngine.Transport;
 
 namespace VoxelEngine.Combat
 {
@@ -17,7 +19,7 @@ namespace VoxelEngine.Combat
     public enum ArtilleryVariant { Minigun, Cannon, Gustav }
     public enum ShellType { Standard, Explosive, Scatter }
 
-    public class Artillery : Damageable
+    public class Artillery : Damageable, IItemConsumer, IDirectItemPortEndpoint, IInventoryInterface
     {
         [Header("Variant")]
         public ArtilleryVariant variant = ArtilleryVariant.Cannon;
@@ -353,5 +355,22 @@ namespace VoxelEngine.Combat
                 _pilot.playerCamera.transform.rotation = head.rotation;
             }
         }
-    }
+    
+        // ── Factory logistics (belts / chutes / funnels / item pipes) ──
+        public ItemContainer GetInputContainer() => ShellMagazine;
+        public ItemContainer GetOutputContainer() => null;
+        public bool HasOutputReady => false;
+        public bool CanAcceptInput => true;
+
+        public int GetInputCapacity(ItemDefinition item)
+            => DefenseLogistics.GetMagazineCapacity(ShellMagazine, item);
+
+        public int TryInsert(ItemDefinition item, int count)
+            => DefenseLogistics.InsertIntoMagazine(ShellMagazine, item, count);
+
+        public bool IsFaceConnectable(Vector3 fromWorldPos) => true;
+        public int TryAcceptFromPipe(Vector3 pipeWorldPos, ItemDefinition item, int count)
+            => TryInsert(item, count);
+
+}
 }

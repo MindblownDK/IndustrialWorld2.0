@@ -9,10 +9,12 @@ using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.Items;
 using VoxelEngine.Player;
+using VoxelEngine.Simulation;
+using VoxelEngine.Transport;
 
 namespace VoxelEngine.Combat
 {
-    public class EnergyRelicTurret : Damageable
+    public class EnergyRelicTurret : Damageable, IItemConsumer, IDirectItemPortEndpoint, IInventoryInterface
     {
         [Header("Combat")]
         public float range = 48f;
@@ -347,5 +349,19 @@ namespace VoxelEngine.Combat
             Object.Destroy(inst, 0.15f);
             Object.Destroy(go, 0.1f);
         }
-    }
+    
+        // ── Factory logistics ──
+        public ItemContainer GetInputContainer() => CellMagazine;
+        public ItemContainer GetOutputContainer() => null;
+        public bool HasOutputReady => false;
+        public bool CanAcceptInput => true;
+        public int GetInputCapacity(ItemDefinition item)
+            => DefenseLogistics.GetMagazineCapacity(CellMagazine, item);
+        public int TryInsert(ItemDefinition item, int count)
+            => DefenseLogistics.InsertIntoMagazine(CellMagazine, item, count);
+        public bool IsFaceConnectable(Vector3 fromWorldPos) => true;
+        public int TryAcceptFromPipe(Vector3 pipeWorldPos, ItemDefinition item, int count)
+            => TryInsert(item, count);
+
+}
 }

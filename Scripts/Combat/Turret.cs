@@ -6,10 +6,13 @@
 
 using System.Collections.Generic;
 using UnityEngine;
+using VoxelEngine.Items;
+using VoxelEngine.Simulation;
+using VoxelEngine.Transport;
 
 namespace VoxelEngine.Combat
 {
-    public class Turret : Damageable
+    public class Turret : Damageable, IItemConsumer, IDirectItemPortEndpoint
     {
         [Header("Turret")]
         public float range        = 22f;
@@ -167,5 +170,17 @@ namespace VoxelEngine.Combat
             go.GetComponent<Renderer>().sharedMaterial = FxMat;
             Object.Destroy(go, 0.08f);
         }
-    }
+    
+        // ── Factory logistics (bullets → integer magazine counter) ──
+        public int GetInputCapacity(ItemDefinition item)
+            => DefenseLogistics.GetBulletCapacity(ammo, maxAmmo, item);
+
+        public int TryInsert(ItemDefinition item, int count)
+            => DefenseLogistics.InsertBullets(ref ammo, maxAmmo, item, count);
+
+        public bool IsFaceConnectable(Vector3 fromWorldPos) => true;
+        public int TryAcceptFromPipe(Vector3 pipeWorldPos, ItemDefinition item, int count)
+            => TryInsert(item, count);
+
+}
 }

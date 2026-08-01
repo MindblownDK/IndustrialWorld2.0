@@ -8,10 +8,12 @@ using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.Items;
 using VoxelEngine.Player;
+using VoxelEngine.Simulation;
+using VoxelEngine.Transport;
 
 namespace VoxelEngine.Combat
 {
-    public class AntiAirTurret : Damageable
+    public class AntiAirTurret : Damageable, IItemConsumer, IDirectItemPortEndpoint, IInventoryInterface
     {
         [Header("Combat")]
         public float range = 55f;
@@ -309,7 +311,21 @@ namespace VoxelEngine.Combat
             go.GetComponent<Renderer>().sharedMaterial = tracerMat != null ? tracerMat : FxMat;
             Object.Destroy(go, 0.06f);
         }
-    }
+    
+        // ── Factory logistics ──
+        public ItemContainer GetInputContainer() => AmmoMagazine;
+        public ItemContainer GetOutputContainer() => null;
+        public bool HasOutputReady => false;
+        public bool CanAcceptInput => true;
+        public int GetInputCapacity(ItemDefinition item)
+            => DefenseLogistics.GetMagazineCapacity(AmmoMagazine, item);
+        public int TryInsert(ItemDefinition item, int count)
+            => DefenseLogistics.InsertIntoMagazine(AmmoMagazine, item, count);
+        public bool IsFaceConnectable(Vector3 fromWorldPos) => true;
+        public int TryAcceptFromPipe(Vector3 pipeWorldPos, ItemDefinition item, int count)
+            => TryInsert(item, count);
+
+}
 
     /// <summary>
     /// Fast flak round with a proximity fuse. Detonates when near any Damageable

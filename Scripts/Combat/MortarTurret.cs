@@ -9,12 +9,14 @@ using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.Items;
 using VoxelEngine.Player;
+using VoxelEngine.Simulation;
+using VoxelEngine.Transport;
 
 namespace VoxelEngine.Combat
 {
     public enum MortarShellType { Explosive, Smoke, Illumination }
 
-    public class MortarTurret : Damageable
+    public class MortarTurret : Damageable, IItemConsumer, IDirectItemPortEndpoint, IInventoryInterface
     {
         [Header("Combat")]
         public float range = 55f;
@@ -261,5 +263,19 @@ namespace VoxelEngine.Combat
             l.type = LightType.Point; l.color = new Color(1f, 0.65f, 0.25f); l.range = 6f; l.intensity = 5f;
             Object.Destroy(go, 0.08f);
         }
-    }
+    
+        // ── Factory logistics ──
+        public ItemContainer GetInputContainer() => ShellMagazine;
+        public ItemContainer GetOutputContainer() => null;
+        public bool HasOutputReady => false;
+        public bool CanAcceptInput => true;
+        public int GetInputCapacity(ItemDefinition item)
+            => DefenseLogistics.GetMagazineCapacity(ShellMagazine, item);
+        public int TryInsert(ItemDefinition item, int count)
+            => DefenseLogistics.InsertIntoMagazine(ShellMagazine, item, count);
+        public bool IsFaceConnectable(Vector3 fromWorldPos) => true;
+        public int TryAcceptFromPipe(Vector3 pipeWorldPos, ItemDefinition item, int count)
+            => TryInsert(item, count);
+
+}
 }

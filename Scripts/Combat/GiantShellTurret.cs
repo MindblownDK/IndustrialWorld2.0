@@ -8,10 +8,12 @@ using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.Items;
 using VoxelEngine.Player;
+using VoxelEngine.Simulation;
+using VoxelEngine.Transport;
 
 namespace VoxelEngine.Combat
 {
-    public class GiantShellTurret : Damageable
+    public class GiantShellTurret : Damageable, IItemConsumer, IDirectItemPortEndpoint, IInventoryInterface
     {
         [Header("Combat")]
         public float range = 90f;
@@ -258,7 +260,21 @@ namespace VoxelEngine.Combat
             l.type = LightType.Point; l.color = new Color(1f, 0.6f, 0.2f); l.range = 12f; l.intensity = 10f;
             Object.Destroy(go, 0.12f);
         }
-    }
+    
+        // ── Factory logistics ──
+        public ItemContainer GetInputContainer() => ShellMagazine;
+        public ItemContainer GetOutputContainer() => null;
+        public bool HasOutputReady => false;
+        public bool CanAcceptInput => true;
+        public int GetInputCapacity(ItemDefinition item)
+            => DefenseLogistics.GetMagazineCapacity(ShellMagazine, item);
+        public int TryInsert(ItemDefinition item, int count)
+            => DefenseLogistics.InsertIntoMagazine(ShellMagazine, item, count);
+        public bool IsFaceConnectable(Vector3 fromWorldPos) => true;
+        public int TryAcceptFromPipe(Vector3 pipeWorldPos, ItemDefinition item, int count)
+            => TryInsert(item, count);
+
+}
 
     /// <summary>
     /// Massive siege shell. Arcs gently under radial gravity, detonates on impact

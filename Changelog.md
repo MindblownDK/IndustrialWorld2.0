@@ -1,9 +1,42 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.66.1-dev`
+**Current Version:** `6.67.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.67.0-dev] Automated Defense Ammo Logistics — belts/pipes refill turrets
+
+**Type:** MINOR — factory logistics for all defense magazines (save-compatible).
+
+**Defense pieces now accept factory ammo automatically** via the existing belt / chute / funnel / item-pipe network — no more mandatory drag-drop reloads once a supply line is built.
+
+1. Shared helper `Scripts/Combat/DefenseLogistics.cs` — capacity + insert that honours each magazine's `AcceptFilter`.
+2. Every placeable defense sink implements:
+   - `IItemConsumer` → conveyor belts, chutes, funnels deposit ammo
+   - `IDirectItemPortEndpoint` → item pipes push ammo on contact
+   - `IInventoryInterface` (magazine-based) → chute/funnel inventory path
+3. Wired on:
+   - Auto Turret (Bullets → integer ammo counter)
+   - Artillery / Minigun / Gustav (shells + bullets magazine)
+   - Flamethrower (Flame Canisters / Coal)
+   - Mortar (mortar shells)
+   - Giant Shell Turret (giant shells)
+   - Anti-Air (AA Rounds / Bullets)
+   - Energy / Relic (Charged Cells / Relic Capacitors)
+
+**Filters still apply** — a mortar will not eat AA rounds; a flamethrower will not eat shells. Wrong items are refused (capacity 0).
+
+**To use:** point a belt, chute, funnel, or item pipe at a placed defense piece and supply the matching ammo from an assembler/chest. Watch the defense panel magazine fill without opening it.
+
+**Manual panel reload still works** (RMB → drag, or Auto Turret "Reload from Inventory").
+
+**Files touched:**
+- `Scripts/Combat/DefenseLogistics.cs` (new)
+- `Scripts/Combat/Turret.cs`, `Artillery.cs`, `FlamethrowerTurret.cs`, `MortarTurret.cs`, `GiantShellTurret.cs`, `AntiAirTurret.cs`, `EnergyRelicTurret.cs`
+- `Scripts/Core/GameVersion.cs` (6.66.1 → 6.67.0), `Changelog.md`, `Roadmap.md`
+
+---
 
 ### [6.66.1-dev] Compile fix — AntiAir IsAerial + SavedDefenseState preferAerial
 

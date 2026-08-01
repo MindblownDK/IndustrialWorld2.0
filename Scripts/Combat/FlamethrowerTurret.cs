@@ -9,10 +9,12 @@ using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.Items;
 using VoxelEngine.Player;
+using VoxelEngine.Simulation;
+using VoxelEngine.Transport;
 
 namespace VoxelEngine.Combat
 {
-    public class FlamethrowerTurret : Damageable
+    public class FlamethrowerTurret : Damageable, IItemConsumer, IDirectItemPortEndpoint, IInventoryInterface
     {
         [Header("Combat")]
         public float range = 11f;
@@ -330,5 +332,19 @@ namespace VoxelEngine.Combat
         // ── Persistence helpers (used by WorldStatePersistence) ──────────
         public float CaptureFuelSeconds() => _fuelSeconds;
         public void RestoreFuelSeconds(float seconds) => _fuelSeconds = Mathf.Max(0f, seconds);
-    }
+    
+        // ── Factory logistics ──
+        public ItemContainer GetInputContainer() => FuelMagazine;
+        public ItemContainer GetOutputContainer() => null;
+        public bool HasOutputReady => false;
+        public bool CanAcceptInput => true;
+        public int GetInputCapacity(ItemDefinition item)
+            => DefenseLogistics.GetMagazineCapacity(FuelMagazine, item);
+        public int TryInsert(ItemDefinition item, int count)
+            => DefenseLogistics.InsertIntoMagazine(FuelMagazine, item, count);
+        public bool IsFaceConnectable(Vector3 fromWorldPos) => true;
+        public int TryAcceptFromPipe(Vector3 pipeWorldPos, ItemDefinition item, int count)
+            => TryInsert(item, count);
+
+}
 }
