@@ -663,15 +663,36 @@ namespace VoxelEngine.Player
                 var hydroEngine = hit.collider.GetComponentInParent<VoxelEngine.Gas.HydrogenEngine>();
                 if (hydroEngine != null) { UI.GameUIController.Instance?.OpenMachine(hydroEngine); return; }
                 var gasTank = hit.collider.GetComponentInParent<VoxelEngine.Gas.GasTank>();
-                if (gasTank != null)
+                var gridGas = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridGasTank>();
+                if (gasTank != null || gridGas != null)
                 {
-                    // Holding a Portable Hydrogen Tank → fill it from the tank instead of opening UI.
+                    // Holding a Portable Hydrogen Tank → fill from bulk H₂ (Shift = fill 100%).
                     var active = inventory != null ? inventory.ActiveStack : null;
-                    if (active != null && !active.IsEmpty && VoxelEngine.Items.HydrogenCanisterItem.IsCanister(active.item)
-                        && gasTank.storedGasType == VoxelEngine.Gas.GasType.Hydrogen && gasTank.storedAmount > 0f)
+                    bool holdingPortable = active != null && !active.IsEmpty
+                        && VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(active.item);
+                    bool worldH2 = gasTank != null && gasTank.EffectiveType == VoxelEngine.Gas.GasType.Hydrogen && gasTank.storedAmount > 0f;
+                    bool gridH2 = gridGas != null && gridGas.IsHydrogenMode && gridGas.stored > 0f;
+                    if (holdingPortable && (worldH2 || gridH2))
                     {
-                        float rate = VoxelEngine.Items.HydrogenCanisterItem.DefaultFillRateMl(active.item);
-                        float got = VoxelEngine.Items.HydrogenCanisterItem.FillFromGasTank(active, gasTank, rate);
+                        float got = 0f;
+                        if (IsShiftHeld())
+                        {
+                            // Fill completely in one action.
+                            int space = VoxelEngine.Items.HydrogenCanisterItem.GetCapacityMl(active)
+                                      - VoxelEngine.Items.HydrogenCanisterItem.GetStoredMl(active);
+                            if (space > 0)
+                            {
+                                if (worldH2) got = gasTank.FillPortable(active, space);
+                                else got = gridGas.FillPortable(active, space);
+                            }
+                        }
+                        else
+                        {
+                            float rate = VoxelEngine.Items.HydrogenCanisterItem.DefaultFillRateMl(active.item);
+                            if (worldH2) got = gasTank.FillPortable(active, rate);
+                            else got = gridGas.FillPortable(active, rate);
+                        }
+
                         if (got > 0f)
                         {
                             inventory.container.SetSlot(inventory.activeHotbarIndex, active);
@@ -692,8 +713,9 @@ namespace VoxelEngine.Player
                         }
                         return;
                     }
-                    UI.GameUIController.Instance?.OpenMachine(gasTank);
-                    return;
+
+                    if (gasTank != null) { UI.GameUIController.Instance?.OpenMachine(gasTank); return; }
+                    if (gridGas != null) { UI.GameUIController.Instance?.OpenMachine(gridGas); return; }
                 }
                 var biofarm = hit.collider.GetComponentInParent<VoxelEngine.Building.Biofarm>();
                 if (biofarm != null) { UI.GameUIController.Instance?.OpenMachine(biofarm); return; }

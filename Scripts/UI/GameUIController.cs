@@ -712,7 +712,7 @@ namespace VoxelEngine.UI
                     _openElectrolyser = el; el.EnsureContainers();
                     WatchContainer(el.iceInputC); break;
                 case VoxelEngine.Gas.HydrogenEngine he: _openHydroEngine = he; break;
-                case VoxelEngine.Gas.GasTank gt: _openGasTank = gt; break;
+                case VoxelEngine.Gas.GasTank gt: _openGasTank = gt; gt.EnsureContainers(); WatchContainer(gt.PortableSlot); break;
                 case VoxelEngine.Fluids.WaterPump wp: _openWaterPump = wp; wp.ScanSource(); break;
                 case VoxelEngine.Building.Biofarm bf:
                     _openBiofarm = bf; bf.EnsureContainers();
@@ -747,6 +747,7 @@ namespace VoxelEngine.UI
                     else if (gb is VoxelEngine.GridSystem.GridPortableReactor gpr) { if (gpr.fuelC == null) gpr.OnPlaced(); WatchContainer(gpr.fuelC); WatchContainer(gpr.iceC); WatchContainer(gpr.wasteC); }
                     else if (gb is VoxelEngine.GridSystem.GridDrill gdr) { if (gdr.buffer == null) gdr.OnPlaced(); WatchContainer(gdr.buffer); }
                     else if (gb is VoxelEngine.GridSystem.GridElectricFurnace gef) { if (gef.inputC == null) gef.OnPlaced(); WatchContainer(gef.inputC); WatchContainer(gef.outputC); }
+                    else if (gb is VoxelEngine.GridSystem.GridGasTank ggt) { ggt.EnsureContainers(); WatchContainer(ggt.PortableSlot); }
                     break;
                 case VoxelEngine.Storage.StorageTerminal st2: _openStorageTerminal = st2; break;
                 case VoxelEngine.Storage.PatternTerminal pt2: _openPatternTerminal = pt2; break;
@@ -1063,7 +1064,7 @@ namespace VoxelEngine.UI
                 else if (_openReprocessor != null) { var mp = MachineUIs.WasteReprocessorPanel(_openReprocessor, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openReprocessor); }
                 else if (_openElectrolyser != null) { var mp = MachineUIs.ElectrolyserPanel(_openElectrolyser, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openElectrolyser); }
                 else if (_openHydroEngine != null) _root.Add(MachineUIs.HydrogenEnginePanel(_openHydroEngine));
-                else if (_openGasTank != null) _root.Add(MachineUIs.GasTankPanel(_openGasTank));
+                else if (_openGasTank != null) { _openGasTank.EnsureContainers(); _root.Add(MachineUIs.GasTankPanel(_openGasTank, BuildSlot)); }
                 else if (_openWaterPump != null) _root.Add(VoxelEngine.UI.FluidPumpUI.BuildPanel(_openWaterPump));
                 else if (_openBiofarm != null) { var mp = MachineUIs.BiofarmPanel(_openBiofarm, BuildSlot); _root.Add(mp); AppendItemPorts(mp, _openBiofarm); }
                 else if (_openWindTurbine != null) _root.Add(VoxelEngine.Power.Wind.WindTurbineUI.BuildPanel(_openWindTurbine, inventory));

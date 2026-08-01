@@ -1,9 +1,40 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.74.2-dev`
+**Current Version:** `6.75.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.75.0-dev] Gas tanks — type select, portable H₂ dock, Shift-fill; jetpack refill fix
+
+**Type:** MINOR — gas logistics + jetpack fuel fix (save-compatible).
+
+1. **World GasTank**
+   - **Gas type selector** in the tank UI (Hydrogen / Oxygen / Steam / Exhaust) — change while empty.
+   - **Portable H₂ Tank dock** slot when the tank is set to Hydrogen — drop a portable tank in to auto-fill from bulk.
+   - Bulk gas type/amount saved on placed blocks.
+2. **Grid GasTank**
+   - Existing type selector kept; **Portable H₂ dock** added when type is Hydrogen.
+3. **Fill controls**
+   - RMB portable tank on H₂ tank → fill tick (250 ml).
+   - **Shift+RMB** → fill portable tank to **100%** in one action.
+   - Works on world and grid hydrogen tanks.
+4. **Jetpack refill fix**
+   - Runtime capacity migration for old packs.
+   - Recharge threshold defaults to 10% if unset.
+   - Hydrogen family always treated as H₂-fuelled.
+   - Auto-recharge runs every flight tick at/under threshold; inventory UI refreshes after siphon.
+
+**To use:** open a Gas Tank → pick **Hydrogen** → pipe H₂ in → put Portable Hydrogen Tank in the dock (or Shift+RMB the tank while holding it). Equip H₂ jetpack with filled portable tanks in inventory → fly; at ≤10% the pack pulls ml from the tanks.
+
+**Files touched:**
+- `Scripts/Gas/GasTank.cs`, `Scripts/GridSystem/GridGasTank.cs`
+- `Scripts/UI/MachineUIs.cs`, `Scripts/GridSystem/UI/GridBlockUI.cs`, `Scripts/UI/GameUIController.cs`
+- `Scripts/Player/PlayerInteractionTool.cs`, `PlayerEquipment.cs`, `Scripts/Items/JetpackItem.cs`
+- `Scripts/Persistence/WorldStatePersistence.cs`
+- `Scripts/Core/GameVersion.cs` (6.74.2 → 6.75.0), `Changelog.md`
+
+---
 
 ### [6.74.2-dev] Compile fix — missing semicolon in Step 47 setup
 

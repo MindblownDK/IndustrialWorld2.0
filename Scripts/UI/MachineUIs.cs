@@ -773,16 +773,19 @@ namespace VoxelEngine.UI
         // ════════════════════════════════════════════════════════════
         //                       GAS TANK
         // ════════════════════════════════════════════════════════════
-        public static VisualElement GasTankPanel(GasTank t)
+        public static VisualElement GasTankPanel(GasTank t, SlotBuilder slot = null)
         {
+            t.EnsureContainers();
             var p = T.MachinePanel();
 
-            string gasName  = t.storedGasType == GasType.None ? "Empty" : t.storedGasType.ToString();
-            Color  gasColor = t.storedGasType switch
+            var displayType = t.EffectiveType;
+            string gasName  = displayType == GasType.None ? "Empty" : displayType.ToString();
+            Color  gasColor = displayType switch
             {
                 GasType.Hydrogen => new Color(0.28f, 0.68f, 1f),
                 GasType.Oxygen   => new Color(0.90f, 0.38f, 0.28f),
                 GasType.Steam    => new Color(0.82f, 0.82f, 0.88f),
+                GasType.ExhaustGas => new Color(0.55f, 0.45f, 0.35f),
                 _                => T.TextMuted
             };
 
@@ -799,13 +802,51 @@ namespace VoxelEngine.UI
             ));
             p.Add(T.Divider());
 
+            // Gas type selector (change freely when empty / matching).
+            p.Add(T.Subtitle("Gas Type"));
+            var typeRow = new VisualElement();
+            typeRow.style.flexDirection = FlexDirection.Row;
+            typeRow.style.flexWrap = Wrap.Wrap;
+            typeRow.style.marginBottom = 6;
+            foreach (GasType gt in System.Enum.GetValues(typeof(GasType)))
+            {
+                if (gt == GasType.None) continue;
+                var captured = gt;
+                bool active = t.selectedGasType == gt || (t.selectedGasType == GasType.None && t.storedGasType == gt);
+                var btn = T.SmallButton(gt.ToString(), () =>
+                {
+                    if (t.TrySetSelectedGasType(captured))
+                        GameUIController.Instance?.RefreshCurrentPanel();
+                    else
+                        BuildFeedbackHud.Show("Gas Tank", "Empty the tank before changing type", null, Color.yellow);
+                }, active ? T.AccentCyan : (Color?)null);
+                bool lockedOther = t.storedAmount > 0.001f && t.storedGasType != GasType.None && t.storedGasType != gt;
+                btn.SetEnabled(!lockedOther);
+                typeRow.Add(btn);
+            }
+            p.Add(typeRow);
+            if (t.storedAmount > 0.001f)
+                p.Add(T.Muted("Empty the tank to switch to a different gas type."));
+
+            p.Add(T.Spacer(4));
             p.Add(T.StatRow("📥", "Accept Input",  t.acceptInput  ? "YES" : "NO",
                 t.acceptInput  ? T.AccentGreen : T.AccentRed));
             p.Add(T.StatRow("📤", "Allow Output",  t.allowOutput  ? "YES" : "NO",
                 t.allowOutput  ? T.AccentGreen : T.AccentRed));
 
+            // Portable Hydrogen Tank dock — only when configured for H₂.
+            if (t.IsHydrogenMode && slot != null)
+            {
+                p.Add(T.Divider());
+                p.Add(T.Subtitle("Portable H₂ Tank Dock"));
+                var dock = T.SlotGrid(1);
+                dock.Add(slot(t.PortableSlot, 0, t.PortableSlot.GetSlot(0), false, true));
+                p.Add(dock);
+                p.Add(T.Muted("Place a Portable Hydrogen Tank here to fill it from bulk H₂ automatically."));
+            }
+
             p.Add(T.Spacer(8));
-            p.Add(T.Muted("Stores a single gas type. Connect via gas pipes to machines."));
+            p.Add(T.Muted("Stores a single gas type. Connect via gas pipes. Hold a Portable H₂ Tank and RMB (Shift = fill 100%)."));
             return p;
         }
 

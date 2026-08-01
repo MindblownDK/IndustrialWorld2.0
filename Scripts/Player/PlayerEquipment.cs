@@ -166,6 +166,8 @@ namespace VoxelEngine.Player
         {
             if (dt <= 0f) return HasUsableJetpack;
             EnsureContainers();
+            // Top up any pack already at/under threshold before selecting.
+            TryAutoRefuelFromInventory(force: false);
 
             int slotIndex = -1;
             ItemStack stack = null;
@@ -329,6 +331,7 @@ namespace VoxelEngine.Player
             {
                 if (stack.payload == null) stack.payload = new JetpackFuelBox();
                 _jetpackSlots.SetSlot(slotIndex, stack);
+                inv.RaiseChanged();
             }
             return restored;
         }

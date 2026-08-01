@@ -294,6 +294,13 @@ namespace VoxelEngine.Persistence
                 }
                 var paint = pb.GetComponent<VoxelEngine.Building.BlockPaint>();
                 if (paint != null) entry.paintFinish = (int)paint.Finish;
+                var gst = pb.GetComponentInChildren<VoxelEngine.Gas.GasTank>();
+                if (gst != null)
+                {
+                    entry.gasType = (int)gst.storedGasType;
+                    entry.gasSelectedType = (int)gst.selectedGasType;
+                    entry.gasStoredAmount = gst.storedAmount;
+                }
                 CaptureFactoryRuntime(pb.gameObject, entry);
                 save.placedBlocks.Add(entry);
             }
@@ -854,6 +861,22 @@ namespace VoxelEngine.Persistence
             if (energy != null)
                 return SerializeContainer(energy.CellMagazine);
 
+            var gasTank = go.GetComponentInChildren<VoxelEngine.Gas.GasTank>();
+            if (gasTank != null)
+            {
+                gasTank.EnsureContainers();
+                var sc = SerializeContainer(gasTank.PortableSlot);
+                // Encode bulk gas in custom fields via first empty - use SavedPlacedBlock instead.
+                return sc;
+            }
+
+            var gridGas = go.GetComponentInChildren<VoxelEngine.GridSystem.GridGasTank>();
+            if (gridGas != null)
+            {
+                gridGas.EnsureContainers();
+                return SerializeContainer(gridGas.PortableSlot);
+            }
+
             return null;
         }
 
@@ -1343,6 +1366,16 @@ namespace VoxelEngine.Persistence
                     var paint = go.GetComponent<VoxelEngine.Building.BlockPaint>() ?? go.AddComponent<VoxelEngine.Building.BlockPaint>();
                     paint.Finish = (VoxelEngine.Building.PaintFinishId)sb.paintFinish;
                 }
+                var gst = go.GetComponentInChildren<VoxelEngine.Gas.GasTank>();
+                if (gst != null)
+                {
+                    gst.EnsureContainers();
+                    gst.selectedGasType = (VoxelEngine.Gas.GasType)sb.gasSelectedType;
+                    gst.storedGasType = (VoxelEngine.Gas.GasType)sb.gasType;
+                    gst.storedAmount = Mathf.Max(0f, sb.gasStoredAmount);
+                    if (gst.storedAmount <= 0f && gst.selectedGasType != VoxelEngine.Gas.GasType.None)
+                        gst.storedGasType = gst.selectedGasType;
+                }
             }
         }
 
@@ -1724,6 +1757,22 @@ namespace VoxelEngine.Persistence
                 return;
             }
 
+            var gasTank = go.GetComponentInChildren<VoxelEngine.Gas.GasTank>();
+            if (gasTank != null)
+            {
+                gasTank.EnsureContainers();
+                DeserializeInto(gasTank.PortableSlot, sc);
+                return;
+            }
+
+            var gridGas = go.GetComponentInChildren<VoxelEngine.GridSystem.GridGasTank>();
+            if (gridGas != null)
+            {
+                gridGas.EnsureContainers();
+                DeserializeInto(gridGas.PortableSlot, sc);
+                return;
+            }
+
             var chest = go.GetComponentInChildren<Chest>();
             if (chest != null)
             {
@@ -1962,6 +2011,10 @@ namespace VoxelEngine.Persistence
             public float currentHP;
             // Cosmetic paint finish id (byte). 0 = none / legacy unpainted.
             public int paintFinish;
+            // World GasTank bulk contents (additive).
+            public int gasType;
+            public float gasStoredAmount;
+            public int gasSelectedType;
             public bool enabled = true;
             public bool hasShapeVariant;
             public int shapeVariant;

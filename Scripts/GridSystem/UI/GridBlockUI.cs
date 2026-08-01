@@ -29,7 +29,7 @@ namespace VoxelEngine.GridSystem.UI
             switch (block)
             {
                 case GridLiquidTank lt:     return LiquidTankPanel(lt);
-                case GridGasTank gt:        return GasTankPanel(gt);
+                case GridGasTank gt:        return GasTankPanel(gt, slot);
                 case GridH2O2Generator h2:  return H2O2Panel(h2, slot);
                 case GridBattery bat:       return BatteryPanel(bat);
                 case GridCargoContainer cc: return CargoPanel(cc, slot);
@@ -114,8 +114,9 @@ namespace VoxelEngine.GridSystem.UI
         }
 
         // ── GAS TANK ──────────────────────────────────────────────────────────
-        private static VisualElement GasTankPanel(GridGasTank tank)
+        private static VisualElement GasTankPanel(GridGasTank tank, MachineUIs.SlotBuilder slot = null)
         {
+            tank.EnsureContainers();
             var p = T.MachinePanel();
             var (hdr, _, _, _) = T.HeaderRow($"🛢 Gas Tank · {tank.gasType}",
                 tank.Fill01 >= 0.99f ? "FULL" : "OK",
@@ -143,6 +144,7 @@ namespace VoxelEngine.GridSystem.UI
                 var btn = T.SmallButton(gt.ToString(), () =>
                 {
                     if (tank.SetGasType(captured)) VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+                    else VoxelEngine.UI.BuildFeedbackHud.Show("Gas Tank", "Empty the tank before changing type", null, Color.yellow);
                 }, active ? T.AccentCyan : (Color?)null);
                 btn.SetEnabled(tank.stored <= 0.001f || active);
                 typeRow.Add(btn);
@@ -156,6 +158,18 @@ namespace VoxelEngine.GridSystem.UI
             modeRow.Add(T.SmallButton("Stockpile", () => { tank.mode = GridTankMode.Stockpile; VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel(); },
                 tank.mode == GridTankMode.Stockpile ? T.AccentAmber : T.BgSlot));
             p.Add(modeRow);
+
+            // Portable H₂ dock when configured for hydrogen.
+            if (tank.IsHydrogenMode && slot != null)
+            {
+                p.Add(T.Spacer(8));
+                p.Add(GridUIHelpers.SectionTitle("Portable H₂ Tank Dock"));
+                var dock = T.SlotGrid(1);
+                dock.Add(slot(tank.PortableSlot, 0, tank.PortableSlot.GetSlot(0), false, true));
+                p.Add(dock);
+                p.Add(T.Muted("Place a Portable Hydrogen Tank here to fill it from bulk ship H₂."));
+            }
+
             return p;
         }
 

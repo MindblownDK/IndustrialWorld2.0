@@ -73,9 +73,27 @@ namespace VoxelEngine.Items
 
         public override bool IsStackable => false;
 
-        public int FuelCapacityMl => Mathf.Max(1, fuelCapacityMl);
+        public int FuelCapacityMl
+        {
+            get
+            {
+                // Migrate tiny pre-ml capacities (e.g. 80) into millilitres.
+                int v = fuelCapacityMl;
+                if (v > 0 && v < 50) v *= 10;
+                if (v <= 0) v = 1000;
+                return v;
+            }
+        }
         public int FuelCapacity => FuelCapacityMl;
-        public float RechargeThreshold => Mathf.Clamp(autoRechargeThreshold, 0.01f, 0.5f);
+        public float RechargeThreshold
+        {
+            get
+            {
+                float t = autoRechargeThreshold;
+                if (t <= 0.001f) t = 0.10f; // old assets
+                return Mathf.Clamp(t, 0.01f, 0.5f);
+            }
+        }
 
         public static bool IsPowerFuelItem(ItemDefinition item)
             => item != null && (item.itemId == "item_charged_cell" || item.itemId == "item_energy_cell");
