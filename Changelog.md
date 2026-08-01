@@ -1,9 +1,24 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.70.0-dev`
+**Current Version:** `6.70.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.70.1-dev] Compile fix — restore DefenseStatus helper methods
+
+**Type:** PATCH — compile fix (save-compatible).
+
+Restored missing private helpers in `DefenseStatus.cs` that `TryDescribe` calls:
+- `PolicySuffix` (conserve/reserve readout)
+- `EngagementSuffix` (range/arc readout)
+- `ApplyReserveLow` (HOLD marks LOW)
+
+**Files touched:**
+- `Scripts/Combat/DefenseStatus.cs`
+- `Scripts/Core/GameVersion.cs` (6.70.0 → 6.70.1), `Changelog.md`
+
+---
 
 ### [6.70.0-dev] Defense engagement — range slider + firing arc
 

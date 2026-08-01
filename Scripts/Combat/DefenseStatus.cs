@@ -136,5 +136,26 @@ namespace VoxelEngine.Combat
             if (a) parts.Add("Passive");
             return string.Join("+", parts);
         }
+
+        private static string PolicySuffix(IDefenseFirePolicy p)
+        {
+            if (p == null || !p.ConserveAmmo) return "";
+            bool holding = p.CurrentStock > 0 && !DefenseFirePolicy.CanAutoSpend(p);
+            return holding ? $" · HOLD r{p.ReserveStock}" : $" · r{p.ReserveStock}";
+        }
+
+        private static string EngagementSuffix(Component c)
+        {
+            if (c is IDefenseEngagement e) return " · " + DefenseEngagement.Describe(e);
+            return "";
+        }
+
+        private static void ApplyReserveLow(ref Info info, IDefenseFirePolicy p)
+        {
+            if (p == null || !p.ConserveAmmo) return;
+            // Holding at reserve counts as LOW so the player sees why auto-fire stopped.
+            if (p.CurrentStock > 0 && !DefenseFirePolicy.CanAutoSpend(p))
+                info.isLow = true;
+        }
     }
 }
