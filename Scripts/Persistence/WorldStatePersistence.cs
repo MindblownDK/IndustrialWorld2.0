@@ -459,6 +459,21 @@ namespace VoxelEngine.Persistence
             p.ReserveStock = state.reserveStock;
         }
 
+        private static void WriteEngagement(SavedDefenseState state, VoxelEngine.Combat.IDefenseEngagement e)
+        {
+            if (state == null || e == null) return;
+            state.engagementRange = e.EngagementRange;
+            state.firingArcDegrees = e.FiringArcDegrees;
+            state.hasEngagement = true;
+        }
+
+        private static void ReadEngagement(SavedDefenseState state, VoxelEngine.Combat.IDefenseEngagement e)
+        {
+            if (state == null || e == null || !state.hasEngagement) return;
+            e.EngagementRange = state.engagementRange;
+            e.FiringArcDegrees = state.firingArcDegrees;
+        }
+
         private static void CaptureDefenseRuntime(GameObject go, SavedPlacedBlock entry)
         {
             var art = go.GetComponentInChildren<VoxelEngine.Combat.Artillery>(true);
@@ -472,6 +487,7 @@ namespace VoxelEngine.Persistence
                     fuelSeconds = 0f
                 };
                 WriteAmmoPolicy(entry.defenseState, art);
+                WriteEngagement(entry.defenseState, art);
                 return;
             }
 
@@ -486,6 +502,7 @@ namespace VoxelEngine.Persistence
                     fuelSeconds = flame.CaptureFuelSeconds()
                 };
                 WriteAmmoPolicy(entry.defenseState, flame);
+                WriteEngagement(entry.defenseState, flame);
                 return;
             }
 
@@ -500,6 +517,7 @@ namespace VoxelEngine.Persistence
                     fuelSeconds = 0f
                 };
                 WriteAmmoPolicy(entry.defenseState, mortar);
+                WriteEngagement(entry.defenseState, mortar);
                 return;
             }
 
@@ -514,6 +532,7 @@ namespace VoxelEngine.Persistence
                     fuelSeconds = 0f
                 };
                 WriteAmmoPolicy(entry.defenseState, giant);
+                WriteEngagement(entry.defenseState, giant);
                 return;
             }
 
@@ -530,6 +549,7 @@ namespace VoxelEngine.Persistence
                     hasPreferAerial = true
                 };
                 WriteAmmoPolicy(entry.defenseState, aa);
+                WriteEngagement(entry.defenseState, aa);
                 return;
             }
 
@@ -544,6 +564,7 @@ namespace VoxelEngine.Persistence
                     fuelSeconds = 0f
                 };
                 WriteAmmoPolicy(entry.defenseState, energy);
+                WriteEngagement(entry.defenseState, energy);
                 return;
             }
 
@@ -558,6 +579,7 @@ namespace VoxelEngine.Persistence
                     fuelSeconds = 0f
                 };
                 WriteAmmoPolicy(entry.defenseState, tur);
+                WriteEngagement(entry.defenseState, tur);
             }
         }
 
@@ -1484,6 +1506,7 @@ namespace VoxelEngine.Persistence
                 art.filter = (VoxelEngine.Combat.TargetFilter)state.filter;
                 art.autoMode = state.autoMode;
                 ReadAmmoPolicy(state, art);
+                ReadEngagement(state, art);
                 return;
             }
 
@@ -1493,6 +1516,7 @@ namespace VoxelEngine.Persistence
                 flame.filter = (VoxelEngine.Combat.TargetFilter)state.filter;
                 flame.autoMode = state.autoMode;
                 ReadAmmoPolicy(state, flame);
+                ReadEngagement(state, flame);
                 flame.RestoreFuelSeconds(state.fuelSeconds);
                 return;
             }
@@ -1503,6 +1527,7 @@ namespace VoxelEngine.Persistence
                 mortar.filter = (VoxelEngine.Combat.TargetFilter)state.filter;
                 mortar.autoMode = state.autoMode;
                 ReadAmmoPolicy(state, mortar);
+                ReadEngagement(state, mortar);
                 return;
             }
 
@@ -1512,6 +1537,7 @@ namespace VoxelEngine.Persistence
                 giant.filter = (VoxelEngine.Combat.TargetFilter)state.filter;
                 giant.autoMode = state.autoMode;
                 ReadAmmoPolicy(state, giant);
+                ReadEngagement(state, giant);
                 return;
             }
 
@@ -1521,6 +1547,7 @@ namespace VoxelEngine.Persistence
                 aa.filter = (VoxelEngine.Combat.TargetFilter)state.filter;
                 aa.autoMode = state.autoMode;
                 ReadAmmoPolicy(state, aa);
+                ReadEngagement(state, aa);
                 if (state.hasPreferAerial) aa.preferAerialOnly = state.preferAerial;
                 return;
             }
@@ -1531,6 +1558,7 @@ namespace VoxelEngine.Persistence
                 energy.filter = (VoxelEngine.Combat.TargetFilter)state.filter;
                 energy.autoMode = state.autoMode;
                 ReadAmmoPolicy(state, energy);
+                ReadEngagement(state, energy);
                 return;
             }
 
@@ -1540,6 +1568,7 @@ namespace VoxelEngine.Persistence
                 tur.filter = (VoxelEngine.Combat.TargetFilter)state.filter;
                 tur.autoMode = state.autoMode;
                 ReadAmmoPolicy(state, tur);
+                ReadEngagement(state, tur);
                 tur.ammo = UnityEngine.Mathf.Max(0, state.ammo);
             }
         }
@@ -1983,6 +2012,9 @@ namespace VoxelEngine.Persistence
             public bool conserveAmmo;        // additive ammo policy
             public int reserveStock;         // additive reserve units
             public bool hasAmmoPolicy;       // legacy saves leave false
+            public float engagementRange;    // additive engagement range
+            public float firingArcDegrees;   // additive firing arc
+            public bool hasEngagement;       // legacy saves leave false
         }
         [Serializable] private class SavedMaritimePorts
         {

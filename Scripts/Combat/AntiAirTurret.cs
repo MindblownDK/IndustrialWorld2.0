@@ -13,7 +13,7 @@ using VoxelEngine.Transport;
 
 namespace VoxelEngine.Combat
 {
-    public class AntiAirTurret : Damageable, IItemConsumer, IDirectItemPortEndpoint, IInventoryInterface, IDefenseFirePolicy
+    public class AntiAirTurret : Damageable, IItemConsumer, IDirectItemPortEndpoint, IInventoryInterface, IDefenseFirePolicy, IDefenseEngagement
     {
         [Header("Combat")]
         public float range = 55f;
@@ -42,6 +42,25 @@ namespace VoxelEngine.Combat
         public bool ConserveAmmo { get => conserveAmmo; set => conserveAmmo = value; }
         public int ReserveStock { get => DefenseFirePolicy.ClampReserve(reserveStock); set => reserveStock = DefenseFirePolicy.ClampReserve(value); }
         public int CurrentStock => DefenseStatus.CountMagazine(AmmoMagazine);
+
+
+        [Header("Engagement")]
+        [Tooltip("Max distance auto-fire will engage. Capped by the weapon's physical range.")]
+        public float engagementRange = -1f;
+        [Tooltip("Horizontal firing arc in degrees (360 = all around). Centred on placed facing.")]
+        public float firingArcDegrees = 360f;
+
+        public float MaxRange => range;
+        public float EngagementRange
+        {
+            get => engagementRange < 0f ? range : DefenseEngagement.ClampRange(engagementRange, range);
+            set => engagementRange = DefenseEngagement.ClampRange(value, range);
+        }
+        public float FiringArcDegrees
+        {
+            get => DefenseEngagement.ClampArc(firingArcDegrees <= 0f ? 360f : firingArcDegrees);
+            set => firingArcDegrees = DefenseEngagement.ClampArc(value);
+        }
 
 public bool preferAerialOnly = true; // when true, ignore grounded fodder if any aerial is available
 
@@ -72,6 +91,8 @@ public bool preferAerialOnly = true; // when true, ignore grounded fodder if any
 
         protected override void Awake()
         {
+            if (engagementRange < 0f) engagementRange = range;
+
             maxHealth = Mathf.Max(maxHealth, 140f);
             base.Awake();
             _ = AmmoMagazine;
@@ -172,7 +193,7 @@ public bool preferAerialOnly = true; // when true, ignore grounded fodder if any
         private bool Valid(Transform t)
         {
             if (t == null) return false;
-            if ((t.position - transform.position).sqrMagnitude > range * range) return false;
+            if (!DefenseEngagement.IsInEngagement(this, t.position)) return false;
             Vector3 from = muzzle != null ? muzzle.position : transform.position;
             Vector3 up = VoxelEngine.Cosmos.GravityProvider.GetUp(t.position);
             return HasLOS(from, t.position + up * 0.4f, t);
@@ -206,7 +227,7 @@ public bool preferAerialOnly = true; // when true, ignore grounded fodder if any
             bool anyAerial = false;
             var candidates = new List<(Transform t, Damageable d, PlayerStats p, float score, bool aerial)>();
 
-            var cols = Physics.OverlapSphere(transform.position, range, ~0, QueryTriggerInteraction.Ignore);
+            var cols = Physics.OverlapSphere(transform.position, EngagementRange, ~0, QueryTriggerInteraction.Ignore);
             var seen = new HashSet<Damageable>();
             foreach (var c in cols)
             {

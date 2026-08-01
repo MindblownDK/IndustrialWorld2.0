@@ -1,9 +1,38 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.69.0-dev`
+**Current Version:** `6.70.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.70.0-dev] Defense engagement — range slider + firing arc
+
+**Type:** MINOR — defense configuration (save-compatible).
+
+**Every automated defense piece now exposes engagement range and a horizontal firing arc** (roadmap §4.8 turret UI: engagement range + firing arc):
+
+1. **`IDefenseEngagement` + `DefenseEngagement`** in `DefenseLogistics.cs`
+   - `EngagementRange` — player cap on auto-acquire distance (clamped to the weapon's physical max range)
+   - `FiringArcDegrees` — full cone width 15–360°, centred on the **placed forward** facing, projected on the local tangent plane (spherical-world safe)
+   - `IsInEngagement` used by Valid/InRange so out-of-arc targets are ignored
+2. Wired on Auto Turret, Artillery, Flamethrower, Mortar, Giant Shell, Anti-Air, Energy/Relic.
+3. **Defense panel → Engagement** — Range slider + Arc slider with live labels.
+4. **World inspection** — appends `Range Xm · Arc Y°` (or `360°`).
+5. **Persistence (additive)** — `engagementRange` / `firingArcDegrees` / `hasEngagement` on `SavedDefenseState`.
+
+**Notes:** Arc is horizontal only (elevation unrestricted). Mortar still respects its min-range floor. Physical muzzle velocity / shell arc unchanged — only target selection is gated.
+
+**To use:** place a turret facing a lane → RMB → set Arc to ~90° and Range below max → enemies behind the turret or beyond the slider are ignored. Rotate the block to aim the cone.
+
+**Files touched:**
+- `Scripts/Combat/DefenseLogistics.cs` (engagement API)
+- `Scripts/Combat/Turret.cs`, `Artillery.cs`, `FlamethrowerTurret.cs`, `MortarTurret.cs`, `GiantShellTurret.cs`, `AntiAirTurret.cs`, `EnergyRelicTurret.cs`
+- `Scripts/Combat/DefenseStatus.cs`
+- `Scripts/UI/GameUIController.cs`
+- `Scripts/Persistence/WorldStatePersistence.cs`
+- `Scripts/Core/GameVersion.cs` (6.69.0 → 6.70.0), `Changelog.md`, `Roadmap.md`
+
+---
 
 ### [6.69.0-dev] Defense ammo policy — Conserve Ammo + Reserve Stock
 

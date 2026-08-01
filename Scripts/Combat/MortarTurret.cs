@@ -16,7 +16,7 @@ namespace VoxelEngine.Combat
 {
     public enum MortarShellType { Explosive, Smoke, Illumination }
 
-    public class MortarTurret : Damageable, IItemConsumer, IDirectItemPortEndpoint, IInventoryInterface, IDefenseFirePolicy
+    public class MortarTurret : Damageable, IItemConsumer, IDirectItemPortEndpoint, IInventoryInterface, IDefenseFirePolicy, IDefenseEngagement
     {
         [Header("Combat")]
         public float range = 55f;
@@ -49,6 +49,25 @@ namespace VoxelEngine.Combat
         public int ReserveStock { get => DefenseFirePolicy.ClampReserve(reserveStock); set => reserveStock = DefenseFirePolicy.ClampReserve(value); }
         public int CurrentStock => DefenseStatus.CountMagazine(ShellMagazine);
 
+
+        [Header("Engagement")]
+        [Tooltip("Max distance auto-fire will engage. Capped by the weapon's physical range.")]
+        public float engagementRange = -1f;
+        [Tooltip("Horizontal firing arc in degrees (360 = all around). Centred on placed facing.")]
+        public float firingArcDegrees = 360f;
+
+        public float MaxRange => range;
+        public float EngagementRange
+        {
+            get => engagementRange < 0f ? range : DefenseEngagement.ClampRange(engagementRange, range);
+            set => engagementRange = DefenseEngagement.ClampRange(value, range);
+        }
+        public float FiringArcDegrees
+        {
+            get => DefenseEngagement.ClampArc(firingArcDegrees <= 0f ? 360f : firingArcDegrees);
+            set => firingArcDegrees = DefenseEngagement.ClampArc(value);
+        }
+
 [SerializeField] private ItemContainer _shellMag;
 
         public ItemContainer ShellMagazine
@@ -74,6 +93,8 @@ namespace VoxelEngine.Combat
 
         protected override void Awake()
         {
+            if (engagementRange < 0f) engagementRange = range;
+
             maxHealth = Mathf.Max(maxHealth, 120f);
             base.Awake();
             _ = ShellMagazine;
@@ -171,16 +192,18 @@ namespace VoxelEngine.Combat
         {
             if (t == null) return false;
             float sqr = (t.position - transform.position).sqrMagnitude;
-            return sqr <= range * range && sqr >= minRange * minRange;
+            float eng = EngagementRange;
+            if (sqr > eng * eng || sqr < minRange * minRange) return false;
+            return DefenseEngagement.IsInEngagement(this, t.position);
         }
 
         private void FindTarget()
         {
             _targetT = null; _targetD = null; _targetP = null;
-            float bestSqr = range * range;
+            float bestSqr = EngagementRange * EngagementRange;
             float minSqr = minRange * minRange;
 
-            var cols = Physics.OverlapSphere(transform.position, range, ~0, QueryTriggerInteraction.Ignore);
+            var cols = Physics.OverlapSphere(transform.position, EngagementRange, ~0, QueryTriggerInteraction.Ignore);
             var seen = new HashSet<Damageable>();
             foreach (var c in cols)
             {
@@ -192,8 +215,8 @@ namespace VoxelEngine.Combat
                 float s = (d.transform.position - transform.position).sqrMagnitude;
                 if (s < minSqr || s > bestSqr) continue;
                 // Prefer targets closer to mid-range so the lob is comfortable.
-                float score = Mathf.Abs(s - (range * 0.45f) * (range * 0.45f));
-                float bestScore = Mathf.Abs(bestSqr - (range * 0.45f) * (range * 0.45f));
+                float score = Mathf.Abs(s - (EngagementRange * 0.45f) * (EngagementRange * 0.45f));
+                float bestScore = Mathf.Abs(bestSqr - (EngagementRange * 0.45f) * (EngagementRange * 0.45f));
                 if (_targetT == null || score < bestScore || s < bestSqr)
                 {
                     bestSqr = s;
@@ -207,7 +230,7 @@ namespace VoxelEngine.Combat
                 if (ps != null && ps.Health > 0)
                 {
                     float s = (ps.transform.position - transform.position).sqrMagnitude;
-                    if (s >= minSqr && s <= range * range && (_targetT == null || s < bestSqr))
+                    if (s >= minSqr && s <= EngagementRange * EngagementRange && (_targetT == null || s < bestSqr))
                     {
                         _targetT = ps.transform; _targetD = null; _targetP = ps;
                     }

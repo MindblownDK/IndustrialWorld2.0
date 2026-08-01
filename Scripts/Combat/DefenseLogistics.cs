@@ -138,4 +138,65 @@ namespace VoxelEngine.Combat
             return $"Reserve {Mathf.Max(0, p.ReserveStock)}";
         }
     }
+
+    /// <summary>
+    /// Engagement range + horizontal firing arc for automated defenses.
+    /// Arc is centred on the block's placed forward (transform.forward), projected
+    /// onto the local tangent plane so it works on spherical worlds.
+    /// </summary>
+    public interface IDefenseEngagement
+    {
+        /// <summary>Hard maximum range the weapon can physically reach.</summary>
+        float MaxRange { get; }
+        /// <summary>Player-configured engagement range (clamped to MaxRange).</summary>
+        float EngagementRange { get; set; }
+        /// <summary>Full cone width in degrees (360 = omnidirectional). Clamped 15–360.</summary>
+        float FiringArcDegrees { get; set; }
+        Transform transform { get; }
+    }
+
+    public static class DefenseEngagement
+    {
+        public const float MinArc = 15f;
+        public const float MaxArc = 360f;
+        public const float MinEngage = 2f;
+
+        public static float ClampRange(float value, float maxRange)
+            => Mathf.Clamp(value, MinEngage, Mathf.Max(MinEngage, maxRange));
+
+        public static float ClampArc(float value)
+            => Mathf.Clamp(value, MinArc, MaxArc);
+
+        /// <summary>
+        /// True if <paramref name="targetPos"/> is within engagement range AND inside
+        /// the horizontal firing arc. Arc 360° disables the angle check.
+        /// </summary>
+        public static bool IsInEngagement(IDefenseEngagement e, Vector3 targetPos)
+        {
+            if (e == null || e.transform == null) return false;
+            Vector3 self = e.transform.position;
+            float eng = ClampRange(e.EngagementRange, e.MaxRange);
+            float sqr = (targetPos - self).sqrMagnitude;
+            if (sqr > eng * eng) return false;
+
+            float arc = ClampArc(e.FiringArcDegrees);
+            if (arc >= 359.5f) return true;
+
+            Vector3 up = VoxelEngine.Cosmos.GravityProvider.GetUp(self);
+            Vector3 fwd = Vector3.ProjectOnPlane(e.transform.forward, up);
+            Vector3 to  = Vector3.ProjectOnPlane(targetPos - self, up);
+            if (fwd.sqrMagnitude < 0.0001f || to.sqrMagnitude < 0.0001f) return true;
+            float ang = Vector3.Angle(fwd.normalized, to.normalized);
+            return ang <= arc * 0.5f;
+        }
+
+        public static string Describe(IDefenseEngagement e)
+        {
+            if (e == null) return "";
+            float eng = ClampRange(e.EngagementRange, e.MaxRange);
+            float arc = ClampArc(e.FiringArcDegrees);
+            if (arc >= 359.5f) return $"Range {eng:0}m · 360°";
+            return $"Range {eng:0}m · Arc {arc:0}°";
+        }
+    }
 }

@@ -1516,6 +1516,47 @@ namespace VoxelEngine.UI
                 hint.style.marginBottom = 4;
                 panel.Add(hint);
             }
+
+            // Engagement range + firing arc.
+            if (defense is VoxelEngine.Combat.IDefenseEngagement eng)
+            {
+                panel.Add(MakeSubtitle("Engagement"));
+                float maxR = Mathf.Max(2f, eng.MaxRange);
+                var rangeLab = new Label($"Range: {eng.EngagementRange:0} m  (max {maxR:0})");
+                rangeLab.style.color = Color.white; rangeLab.style.fontSize = 11; rangeLab.style.marginBottom = 2;
+                panel.Add(rangeLab);
+                var rangeSlider = new Slider(2f, maxR) { value = eng.EngagementRange };
+                rangeSlider.style.marginBottom = 8;
+                rangeSlider.RegisterValueChangedCallback(e =>
+                {
+                    eng.EngagementRange = e.newValue;
+                    rangeLab.text = $"Range: {eng.EngagementRange:0} m  (max {maxR:0})";
+                });
+                panel.Add(rangeSlider);
+
+                var arcLab = new Label(eng.FiringArcDegrees >= 359.5f
+                    ? "Arc: 360° (omni)"
+                    : $"Arc: {eng.FiringArcDegrees:0}°");
+                arcLab.style.color = Color.white; arcLab.style.fontSize = 11; arcLab.style.marginBottom = 2;
+                panel.Add(arcLab);
+                var arcSlider = new Slider(15f, 360f) { value = eng.FiringArcDegrees };
+                arcSlider.style.marginBottom = 6;
+                arcSlider.RegisterValueChangedCallback(e =>
+                {
+                    eng.FiringArcDegrees = e.newValue;
+                    arcLab.text = eng.FiringArcDegrees >= 359.5f
+                        ? "Arc: 360° (omni)"
+                        : $"Arc: {eng.FiringArcDegrees:0}°";
+                });
+                panel.Add(arcSlider);
+
+                var eHint = new Label("Arc is centred on the turret's placed facing. 360° = all directions.");
+                eHint.style.color = new Color(0.7f, 0.75f, 0.8f);
+                eHint.style.fontSize = 10;
+                eHint.style.whiteSpace = WhiteSpace.Normal;
+                eHint.style.marginBottom = 4;
+                panel.Add(eHint);
+            }
         }
 
         private static VoxelEngine.Combat.TargetFilter GetDefenseFilter(Component d)

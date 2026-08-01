@@ -14,7 +14,7 @@ using VoxelEngine.Transport;
 
 namespace VoxelEngine.Combat
 {
-    public class EnergyRelicTurret : Damageable, IItemConsumer, IDirectItemPortEndpoint, IInventoryInterface, IDefenseFirePolicy
+    public class EnergyRelicTurret : Damageable, IItemConsumer, IDirectItemPortEndpoint, IInventoryInterface, IDefenseFirePolicy, IDefenseEngagement
     {
         [Header("Combat")]
         public float range = 48f;
@@ -47,6 +47,25 @@ namespace VoxelEngine.Combat
         public int ReserveStock { get => DefenseFirePolicy.ClampReserve(reserveStock); set => reserveStock = DefenseFirePolicy.ClampReserve(value); }
         public int CurrentStock => DefenseStatus.CountMagazine(CellMagazine);
 
+
+        [Header("Engagement")]
+        [Tooltip("Max distance auto-fire will engage. Capped by the weapon's physical range.")]
+        public float engagementRange = -1f;
+        [Tooltip("Horizontal firing arc in degrees (360 = all around). Centred on placed facing.")]
+        public float firingArcDegrees = 360f;
+
+        public float MaxRange => range;
+        public float EngagementRange
+        {
+            get => engagementRange < 0f ? range : DefenseEngagement.ClampRange(engagementRange, range);
+            set => engagementRange = DefenseEngagement.ClampRange(value, range);
+        }
+        public float FiringArcDegrees
+        {
+            get => DefenseEngagement.ClampArc(firingArcDegrees <= 0f ? 360f : firingArcDegrees);
+            set => firingArcDegrees = DefenseEngagement.ClampArc(value);
+        }
+
 [SerializeField] private ItemContainer _cellMag;
         private float _nextFire, _retargetAt;
         private Transform _targetT;
@@ -75,6 +94,8 @@ namespace VoxelEngine.Combat
 
         protected override void Awake()
         {
+            if (engagementRange < 0f) engagementRange = range;
+
             maxHealth = Mathf.Max(maxHealth, 180f);
             base.Awake();
             _ = CellMagazine;
@@ -182,7 +203,7 @@ namespace VoxelEngine.Combat
         private bool Valid(Transform t)
         {
             if (t == null) return false;
-            if ((t.position - transform.position).sqrMagnitude > range * range) return false;
+            if (!DefenseEngagement.IsInEngagement(this, t.position)) return false;
             Vector3 from = muzzle != null ? muzzle.position : transform.position;
             Vector3 up = VoxelEngine.Cosmos.GravityProvider.GetUp(t.position);
             return HasLOS(from, t.position + up * 0.5f, t);
@@ -191,10 +212,10 @@ namespace VoxelEngine.Combat
         private void FindTarget()
         {
             _targetT = null; _targetD = null; _targetP = null;
-            float bestSqr = range * range;
+            float bestSqr = EngagementRange * EngagementRange;
             Vector3 from = muzzle != null ? muzzle.position : transform.position;
 
-            var cols = Physics.OverlapSphere(transform.position, range, ~0, QueryTriggerInteraction.Ignore);
+            var cols = Physics.OverlapSphere(transform.position, EngagementRange, ~0, QueryTriggerInteraction.Ignore);
             var seen = new HashSet<Damageable>();
             foreach (var c in cols)
             {
@@ -225,7 +246,7 @@ namespace VoxelEngine.Combat
                     float s = (ps.transform.position - transform.position).sqrMagnitude;
                     Vector3 up = VoxelEngine.Cosmos.GravityProvider.GetUp(ps.transform.position);
                     Vector3 tp = ps.transform.position + up * 0.5f;
-                    if (s <= range * range && s < bestSqr && HasLOS(from, tp, ps))
+                    if (s <= EngagementRange * EngagementRange && s < bestSqr && HasLOS(from, tp, ps))
                     {
                         _targetT = ps.transform; _targetD = null; _targetP = ps;
                     }
