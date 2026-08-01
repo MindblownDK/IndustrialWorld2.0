@@ -1,9 +1,28 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.78.1-dev`
+**Current Version:** `6.78.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.78.2-dev] Refuel Toast De-Spam & Readable Icons
+
+**Type:** PATCH — fixes + art polish (save-compatible).
+
+#### 🔕 "Jetpack Refuelled" toast no longer spams
+- The toast fired on ANY pool hitting 10% — including the *power* cell, so it could trigger with a full H₂ bar — and micro-sips from a nearly-empty battery re-fired it potentially every tick.
+- Now it only shows for **meaningful refuels** (a pool actually leaving the red zone: ≤10% → >25%), **names the fuel** (H₂ / PWR / both) and is hard rate-limited to **once per 45 s**.
+
+#### 🎨 Icons — from "mysterious dark blob" to genuinely readable
+- **Tight auto-crop**: each icon is cropped to its art bounding box so the item fills the frame instead of floating tiny in a dark square.
+- **Adaptive brightness lift**: dark gunmetal/slate art measured far below readable luminance on the dark slot background — every icon now gets a measured lift (×1.30 typical) so coal, ingots and jetpacks read instantly at 44 px.
+
+#### Files touched
+- `Scripts/Player/PlayerEquipment.cs`
+- `VoxelEngineAssets/GridSystem/Textures/ItemIcons/*.png` (crop + brightness passes)
+- `Scripts/Core/GameVersion.cs` (6.78.1 → 6.78.2), `Changelog.md`
+
+---
 
 ### [6.78.1-dev] Inventory-Stability Fix, Icon Binding & Jetpack Auto-Charge Polish
 

@@ -611,6 +611,7 @@ namespace VoxelEngine.Player
             EnsureContainers();
             if (_inventory == null) _inventory = GetComponent<Inventory>();
             int total = 0;
+            bool meaningfulH2 = false, meaningfulPwr = false;
             for (int i = 0; i < _jetpackSlots.Size; i++)
             {
                 var stack = _jetpackSlots.GetSlot(i);
@@ -619,22 +620,40 @@ namespace VoxelEngine.Player
                 if (!NeedsFuel(pack)) continue;
 
                 float threshold = pack.RechargeThreshold;
+                int h2Cap = Mathf.Max(1, pack.HydrogenCapacityMl);
+                int pCap  = Mathf.Max(1, pack.PowerCapacityMl);
                 bool h2Low = pack.UsesHydrogenEffective
-                    && JetpackItem.GetH2Ml(stack) <= threshold * Mathf.Max(1, pack.HydrogenCapacityMl) + 0.001f;
+                    && JetpackItem.GetH2Ml(stack) <= threshold * h2Cap + 0.001f;
                 bool pwLow = pack.UsesPowerEffective
-                    && JetpackItem.GetPowerMl(stack) <= threshold * Mathf.Max(1, pack.PowerCapacityMl) + 0.001f;
+                    && JetpackItem.GetPowerMl(stack) <= threshold * pCap + 0.001f;
                 if (!force && !h2Low && !pwLow) continue;
+
+                int before = total;
                 total += TryRechargeSlot(i, stack, pack, force: true);
+                if (total <= before) continue;
+
+                // Only count it as a REAL refuel when the pool actually left the red
+                // zone (≤10% → >25%). Trickles that keep the pack empty would
+                // otherwise re-fire the toast every single tick.
+                if (h2Low && JetpackItem.GetH2Ml(stack)  > 0.25f * h2Cap) meaningfulH2  = true;
+                if (pwLow && JetpackItem.GetPowerMl(stack) > 0.25f * pCap) meaningfulPwr = true;
             }
             // Automatic (not UI-opening) top-ups get a small heads-up so the player
-            // understands their portable tanks/batteries got sipped at the 10% mark.
-            if (!force && total > 0)
+            // understands their portable tanks/batteries got sipped at the 10% mark —
+            // gated to meaningful refuels + a cooldown, so it can never spam.
+            if (!force && (meaningfulH2 || meaningfulPwr) && Time.unscaledTime >= _nextRefuelToastTime)
+            {
+                _nextRefuelToastTime = Time.unscaledTime + 45f;
+                string fuel = meaningfulH2 && meaningfulPwr ? "H₂ + PWR" : meaningfulH2 ? "H₂" : "PWR";
                 VoxelEngine.UI.BuildFeedbackHud.Show(
                     "Jetpack Refuelled",
-                    $"Hit 10% — topped up to 100%  ·  +{total} from tanks / batteries",
+                    $"{fuel} hit 10% — topped up to 100% from your portable {(meaningfulH2 ? "tanks" : "batteries")}",
                     null, new Color(0.45f, 0.9f, 1f));
+            }
             return total;
         }
+
+        private float _nextRefuelToastTime;
 
         private int TryRechargeSlot(int slotIndex, ItemStack stack, JetpackItem pack, bool force)
         {
