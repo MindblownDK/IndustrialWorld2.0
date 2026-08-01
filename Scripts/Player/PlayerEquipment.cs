@@ -626,6 +626,13 @@ namespace VoxelEngine.Player
                 if (!force && !h2Low && !pwLow) continue;
                 total += TryRechargeSlot(i, stack, pack, force: true);
             }
+            // Automatic (not UI-opening) top-ups get a small heads-up so the player
+            // understands their portable tanks/batteries got sipped at the 10% mark.
+            if (!force && total > 0)
+                VoxelEngine.UI.BuildFeedbackHud.Show(
+                    "Jetpack Refuelled",
+                    $"Hit 10% — topped up to 100%  ·  +{total} from tanks / batteries",
+                    null, new Color(0.45f, 0.9f, 1f));
             return total;
         }
 

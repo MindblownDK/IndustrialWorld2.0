@@ -1,9 +1,41 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.78.0-dev`
+**Current Version:** `6.78.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.78.1-dev] Inventory-Stability Fix, Icon Binding & Jetpack Auto-Charge Polish
+
+**Type:** PATCH — critical UI fix + behaviour polish + art pipeline (save-compatible).
+
+#### 🛠 Fix: inventory UI breaking when gas moves while open
+- **Root cause:** refueling a jetpack from a portable H₂ tank (or any container mutation) fired while the inventory panel was *mid-build* — `Refresh()` re-entered itself, cleared the still-running layout and left half-built panels (missing/gone slots).
+- **Fix:** (1) `Refresh()` is now re-entrancy-guarded — nested calls are deferred one frame and coalesced; (2) jetpack ensure/refuel runs when the inventory **opens**, before any UI builds, never during layout.
+
+#### 🚀 Jetpack auto-charge (verified + feedback)
+- Confirmed the 10% rule end-to-end: reaching **≤10% auto-refills the jetpack's cell back to 100%** as long as the player carries a **portable battery** (charged cells still work as fallback, H₂ tanks cover the hydrogen pool). Runs in-flight and on inventory open.
+- Auto (in-flight) top-ups now show a small heads-up ("Jetpack Refuelled — hit 10%, topped up to 100%") so the sipped batteries never feel invisible.
+
+#### 🖥 Vitals HUD — PWR now counts everything you carry
+- The PWR pill (left of OXY) is now **jetpack power cells + all portable batteries in the inventory**, mirroring how the H₂ pill counts tanks + pack fuel. Visible whenever any carried power pool exists.
+
+#### 🎨 Icons — transparency, hand-painted pass & bulletproof binding
+- All 10 batch-1 icons re-processed: **real transparent backgrounds** (edge-flood keying + halo cleanup + soft vignette so they dissolve into the UI) and a **painterly stylize pass** for a more hand-made, less AI-render feel.
+- **Binding is now keyed by `itemId`, not asset filename** — and the offline pipeline re-ran over the WHOLE assets tree, binding **all 23 duplicate definitions** of the icon'd items in every folder (root fix for "image on the wrong item").
+- New in-engine double-check: **Tools ▸ Voxel Engine ▸ Sync Item Icons (ItemIcons folder)** rebinds every ItemDefinition by itemId and prints a coverage report (`Scripts/Editor/ItemIconSync.cs`).
+- Future batches use a pure-black-background hand-painted prompt for perfect keying.
+- Census taken for planning: the game has **398 unique items**; icon batches will ship hero-items-first (handhelds, resources, tools, armor) across upcoming updates.
+
+#### Files touched
+- `Scripts/UI/GameUIController.cs`
+- `Scripts/Player/PlayerEquipment.cs`
+- `Scripts/UI/VitalsHud.cs`
+- `Scripts/Editor/ItemIconSync.cs` (new)
+- `VoxelEngineAssets/GridSystem/Textures/ItemIcons/*.png` (re-processed) + metas + icon refs in 12 item `.asset` files (all duplicates covered)
+- `Scripts/Core/GameVersion.cs` (6.78.0 → 6.78.1), `Changelog.md`
+
+---
 
 ### [6.78.0-dev] Live World (No UI Pause), Battery Numbers & AAA Icons — Batch 1
 

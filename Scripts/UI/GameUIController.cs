@@ -501,6 +501,11 @@ namespace VoxelEngine.UI
             _openDiskManipulator = null; _openNAS             = null;
             _openPowerstation = null; _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
 
+            // Normalize + auto-refuel equipped jetpacks BEFORE building the UI:
+            // pulling H₂/charge from portable containers mutates the inventory and
+            // must never happen mid-build (re-entering Refresh mangled slot grids).
+            inventory?.GetComponent<VoxelEngine.Player.PlayerEquipment>()?.EnsureAllJetpackFuelInitialized();
+
             UnlockCursor();
             Refresh();
         }
@@ -975,6 +980,15 @@ namespace VoxelEngine.UI
             Refresh();
         }
 
+        // ── Refresh re-entrancy guard ──────────────────────────────────────────
+        // Building the panel can MUTATE containers (jetpack auto-refuel pulls gas
+        // from portable tanks; docking bumps raise OnChanged). If those mutations
+        // re-entered Refresh mid-build, the old tree was cleared UNDER the still-
+        // running build → half-built panels (missing slots). Any nested Refresh is
+        // deferred to the next frame instead — always converging, never corrupting.
+        private bool _refreshing;
+        private bool _refreshQueued;
+
         private void Refresh()
         {
             // Container changes can arrive while logistics is moving items. Keep the
@@ -982,6 +996,29 @@ namespace VoxelEngine.UI
             // latest container state is rebuilt immediately when the overlay closes.
             if (_itemPortsOverlay != null && _itemPortsOverlay.parent != null) return;
             if (_dropVoidOverlay != null && _dropVoidOverlay.parent != null) return;
+            if (_refreshing)
+            {
+                _refreshQueued = true;
+                if (_root != null && _root.panel != null)
+                    _root.schedule.Execute(() =>
+                    {
+                        if (!_refreshQueued) return;
+                        _refreshQueued = false;
+                        Refresh();
+                    });
+                else _refreshQueued = false;
+                return;
+            }
+            _refreshing = true;
+            try
+            {
+                RefreshInternal();
+            }
+            finally { _refreshing = false; }
+        }
+
+        private void RefreshInternal()
+        {
             if (_itemPortsOverlay != null)
             {
                 _itemPortsOverlay = null;
@@ -1253,7 +1290,8 @@ namespace VoxelEngine.UI
             title.style.color = UITheme.AccentCyan;
             header.Add(title);
 
-            equipment.EnsureAllJetpackFuelInitialized();
+            // NOTE: ensure/auto-refuel is done by OpenInventory BEFORE the build —
+            // doing it here mutated containers mid-layout (broken slot grids).
             var summary = equipment.GetJetpackSummary();
 
             _jbStatusPill = new VisualElement();

@@ -7,8 +7,9 @@
 // ║                                                                ║
 // ║   H₂  = portable tanks in inventory + fuel left in equipped  ║
 // ║         hydrogen jetpacks.                                     ║
-// ║   PWR = compact % pill docked to the LEFT of the OXY bar,      ║
-// ║         visible only while a power-fed jetpack is equipped.    ║
+// ║   PWR = compact % pill docked to the LEFT of the OXY bar —     ║
+// ║         jetpack power cells + inventory portable batteries.    ║
+// ║         Visible while ANY carried power pool exists.           ║
 // ║   Everything updates in place via Tick() — the HUD is NEVER    ║
 // ║   rebuilt on scroll/container churn (mounted on the HUD layer) ║
 // ╚══════════════════════════════════════════════════════════════════╝
@@ -149,18 +150,36 @@ namespace VoxelEngine.UI
             return inv != null ? inv.GetComponent<PlayerEquipment>() : null;
         }
 
-        /// <summary>Energy-jetpack charge, summed across equipped power packs.</summary>
+        /// <summary>Carried energy: equipped jetpack power cells + portable batteries
+        /// in the player inventory (same spirit as the H₂ bar).</summary>
         private static bool GetPlayerPowerMl(out int currentWh, out int capacityWh)
         {
             currentWh = 0;
             capacityWh = 0;
             var equipment = FindPlayerEquipment();
-            if (equipment == null) return false;
-            var summary = equipment.GetJetpackSummary();
-            if (!summary.anyPack || summary.powerCap <= 0) return false;
-            currentWh = summary.power;
-            capacityWh = summary.powerCap;
-            return true;
+            if (equipment != null)
+            {
+                var summary = equipment.GetJetpackSummary();
+                if (summary.anyPack && summary.powerCap > 0)
+                {
+                    currentWh += summary.power;
+                    capacityWh += summary.powerCap;
+                }
+            }
+            var inv = FindInventory();
+            if (inv != null && inv.container != null)
+            {
+                inv.container.EnsureValid();
+                for (int i = 0; i < inv.container.Size; i++)
+                {
+                    var s = inv.container.GetSlot(i);
+                    if (s == null || s.IsEmpty || s.item == null) continue;
+                    if (!PortableBatteryItem.IsPortableBattery(s.item)) continue;
+                    currentWh += PortableBatteryItem.GetStoredMl(s);
+                    capacityWh += PortableBatteryItem.GetCapacityMl(s);
+                }
+            }
+            return capacityWh > 0;
         }
 
         // ──────────────────────────────────────────────────────────────
