@@ -1,9 +1,29 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.78.5-dev`
+**Current Version:** `6.78.6-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.78.6-dev] Zero-Background Sticker Icons & Category Folders
+
+**Type:** PATCH — art overhaul + asset reorganization (save-compatible).
+
+#### ✂️ Icons re-created with ZERO background — prevented at creation, not patched after
+- All 10 painterly originals (coal, iron/copper/steel ingots, iron ore, 3 jetpacks, portable battery, portable hydrogen tank) were **regenerated as die-cut sticker art on a plain white background**. The AI paints no glow clouds or shadow plates onto white — so there is quite literally no background left to remove; one white-key pass and they're crystal clean.
+- New permanent house style, hitting the whole checklist: **premium** flat-vector look with soft **hand-painted** strokes (human, not AI-flavoured), **simple** bold shapes with **no unnecessary detail**, one clean white sticker rim that pops on dark slots, and subjects drawn from each item's **name and function** — the three jetpacks are unmistakably three different packs now (olive twin turbines / violet hybrid core / white H₂ bottles).
+- The style prompt is baked into the pipeline as the template for every future batch.
+
+#### 🗂️ Icons moved out of GridSystem into category folders
+- All item icons now live at `VoxelEngineAssets/ItemIcons/<Category>/<itemId>.png` — category follows the module folder of the item's definition asset (`Items`, `GridSystem`, `Tools`, `Combat`, `Factory`, `Industrial`).
+- Sprite GUIDs are item-Id keyed, so every icon reference survived the move untouched — folder metas included for clean version control. The old `GridSystem/Textures/ItemIcons` folder is gone; all tooling now walks the category tree.
+
+#### Files touched
+- `VoxelEngineAssets/ItemIcons/**` (new structure; 10 regenerated + 10 moved, with metas)
+- `VoxelEngineAssets/GridSystem/Textures/ItemIcons/` (removed)
+- `Scripts/Core/GameVersion.cs` (6.78.5 → 6.78.6), `Changelog.md`
+
+---
 
 ### [6.78.5-dev] Icon Batch 2 & Backgrounds Fully Removed
 
