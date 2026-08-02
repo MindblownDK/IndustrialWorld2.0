@@ -82,8 +82,10 @@ namespace VoxelEngine.Maritime
         public float MaxRPM;
         /// <summary>Current RPM — written by the propagation job, read by buoyancy.</summary>
         public float CurrentRPM;
-        /// <summary>0..1 throttle / fuel authority. &lt;=0 ⇒ engine off / shaft dead.</summary>
+        /// <summary>0..1 actual fuel/power authority delivered this tick. &lt;=0 ⇒ engine off / shaft dead.</summary>
         public float FuelAvailable01;
+        /// <summary>0..1 requested electrical authority. Electrical propellers retain this separately so the grid can bill commanded demand while thrust uses delivered power.</summary>
+        public float PowerCommand01;
 
         // ── Gearbox ──────────────────────────────────────────────────
         /// <summary>Speed multiplier (≥1 = faster, less torque). 1 = direct shaft.</summary>

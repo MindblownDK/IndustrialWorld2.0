@@ -1,9 +1,23 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.80.4-dev`
+**Current Version:** `6.80.5-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.80.5-dev] Maritime Power Chain Stabilization
+
+**Type:** PATCH — vehicle power accounting and diagnostics, save-compatible.
+
+- Fixed maritime generator and electrical-propeller **double counting** in `GridEntity`: each block now enters the grid ledger exactly once through its normal `PowerOutput` / `PowerDraw` contract.
+- Electrical propellers now declare their **commanded** watt draw independently from delivered power, so a power deficit no longer alternates between zero and full demand.
+- Added grid-level `PowerAvailability01` and unserved-watt telemetry. Electrical propellers use this resolved service fraction for real RPM/thrust on the following physics tick.
+- Electrical propellers now report correct RPM and demand even when no mechanical shaft source exists, as expected for grid-powered pods.
+- Expanded electrical-propeller UI and terminal status with command, delivered watts, and grid-service percentage for clear validation.
+
+**Validation target:** build a grid with a maritime generator, battery, and electrical propeller; then test normal, partial-power, and no-power states without flicker or doubled power totals.
+
+---
 
 ### [6.80.4-dev] Armor Stations — Unity Validation Recorded
 

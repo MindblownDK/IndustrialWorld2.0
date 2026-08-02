@@ -598,8 +598,17 @@ namespace VoxelEngine.Maritime
             var p = T.MachinePanel();
 
             bool spinning = ep.CurrentRPM > 1f;
-            string status = spinning ? "● SPINNING" : "○ STOPPED";
-            Color statusColor = spinning ? T.AccentGreen : T.AccentDim;
+            bool commanded = ep.CommandedPowerWatts > 0.01f;
+            bool powerLimited = commanded && ep.PowerAvailability01 < 0.99f;
+            string status = !ep.Enabled ? "○ OFFLINE"
+                : !commanded ? "○ STANDBY"
+                : powerLimited ? $"◐ POWER {ep.PowerAvailability01 * 100f:0}%"
+                : spinning ? "● SPINNING"
+                : "○ STOPPED";
+            Color statusColor = !ep.Enabled ? T.AccentDim
+                : powerLimited ? T.AccentAmber
+                : spinning ? T.AccentGreen
+                : T.AccentDim;
 
             var (hdr, _, _, _) = T.HeaderRow("⚡ Electrical Propeller", status, statusColor);
             p.Add(hdr);
@@ -612,11 +621,16 @@ namespace VoxelEngine.Maritime
 
             p.Add(T.Spacer(4));
             p.Add(GridUIHelpers.SectionTitle("Power"));
-            p.Add(T.StatRow("⚡", "Power Usage", PowerFormat.Watts(ep.PowerDraw), T.AccentGold));
-            p.Add(T.StatRow("📊", "Rated Max", PowerFormat.Watts(ep.powerDrawWatts), T.AccentAmber));
+            p.Add(T.StatRow("⌁", "Command", PowerFormat.Watts(ep.CommandedPowerWatts), T.AccentGold));
+            p.Add(T.StatRow("⚡", "Delivered", PowerFormat.Watts(ep.DeliveredPowerWatts),
+                ep.PowerAvailability01 >= 0.99f ? T.AccentGreen : T.AccentAmber));
+            p.Add(T.StatRow("📊", "Grid Service", $"{ep.PowerAvailability01 * 100f:0}%", T.AccentCyan));
+            p.Add(T.StatRow("▣", "Rated Max", PowerFormat.Watts(ep.powerDrawWatts), T.AccentAmber));
+            var (powerBar, _) = T.ProgressBar(ep.PowerAvailability01, T.AccentCyan, 6, false);
+            p.Add(powerBar);
 
             p.Add(T.Spacer(6));
-            p.Add(T.Muted("Driven by grid electricity — fast spin-up, no shaft needed. " +
+            p.Add(T.Muted("Commanded draw is billed once by the grid power bus. Delivered power sets real RPM and thrust. " +
                           "Must be below the waterline to generate thrust."));
 
             return p;

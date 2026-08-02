@@ -984,7 +984,11 @@ namespace VoxelEngine.GridSystem.UI
             if (block is VoxelEngine.Maritime.GridPropeller prop)
                 return prop.CurrentRPM > 1f ? $"{prop.CurrentRPM:0} RPM" : "Stopped";
             if (block is VoxelEngine.Maritime.GridElectricalPropeller ep)
+            {
+                if (ep.CommandedPowerWatts <= 0.01f) return "Standby";
+                if (ep.PowerAvailability01 < 0.99f) return $"POWER {ep.PowerAvailability01 * 100f:0}%";
                 return ep.CurrentRPM > 1f ? $"{ep.CurrentRPM:0} RPM" : "Stopped";
+            }
             if (block is VoxelEngine.Maritime.GridTurbocharger tc)
                 return tc.IsConnected ? $"{tc.BoostPressure:0.#} bar" : "Disconnected";
             if (block is VoxelEngine.Maritime.GridBilgePump bp)

@@ -111,17 +111,29 @@ namespace VoxelEngine.Maritime
             float busRpm = torque > 0.0001f ? rpmWeighted / torque : rpmMax;
             float busTorque = torque;
 
-            // If there's no live source the whole chain is idle — zero every node's RPM.
+            // A shaft chain without an engine/waterwheel is idle, except electrical
+            // propellers: they are grid-powered pods and must still report their
+            // commanded demand/RPM without a mechanical source on the construct.
             if (!haveSource)
             {
                 for (int i = chain.StartIndex; i < end; i++)
                 {
                     var n = Nodes[i];
-                    n.CurrentRPM = 0f;
                     n.ElectricityOutput = 0f;
-                    n.ElectricityDemand = 0f;
                     n.ShaftTorque = 0f;
                     n.ShaftRpm = 0f;
+                    if (n.Type == MechanicalNodeType.ElectricalPropeller)
+                    {
+                        float command01 = math.saturate(n.PowerCommand01);
+                        float delivered01 = math.saturate(n.FuelAvailable01);
+                        n.CurrentRPM = n.MaxRPM * delivered01;
+                        n.ElectricityDemand = n.MaxTorque * command01;
+                    }
+                    else
+                    {
+                        n.CurrentRPM = 0f;
+                        n.ElectricityDemand = 0f;
+                    }
                     Nodes[i] = n;
                 }
                 return;
@@ -208,12 +220,18 @@ namespace VoxelEngine.Maritime
                     }
 
                     case MechanicalNodeType.ElectricalPropeller:
-                        // Driven by electricity, not by shaft torque — handled in BuoyancyJob.
-                        node.CurrentRPM = 0f;
+                    {
+                        // Driven by the grid, not shaft torque. Demand tracks the pilot's
+                        // command while RPM/thrust use the actual resolved grid service
+                        // fraction supplied on the prior GridEntity power tick.
+                        float command01 = math.saturate(node.PowerCommand01);
+                        float delivered01 = math.saturate(node.FuelAvailable01);
+                        node.CurrentRPM = node.MaxRPM * delivered01;
                         node.ShaftTorque = inTorque;
                         node.ShaftRpm = inRpm;
-                        node.ElectricityDemand = node.MaxTorque; // used as a watt demand proxy
+                        node.ElectricityDemand = node.MaxTorque * command01;
                         break;
+                    }
 
                     default:
                         node.CurrentRPM = 0f;

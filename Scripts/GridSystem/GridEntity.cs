@@ -65,7 +65,12 @@ namespace VoxelEngine.GridSystem
         public float PowerConsumed  { get; private set; }
         public float PowerBalance   => PowerGenerated - PowerConsumed;
         public bool  HasPower       => PowerBalance >= -0.1f;
+        /// <summary>Fraction of non-battery grid demand supplied during the latest fixed tick.</summary>
+        public float PowerAvailability01 { get; private set; } = 1f;
+        /// <summary>Requested non-battery watts that could not be supplied this fixed tick.</summary>
+        public float UnservedPowerWatts { get; private set; }
         private readonly List<GridBattery> _batteryScratch = new(8);
+        private readonly List<GridElectricalPropeller> _electricalPropellerScratch = new(8);
 
         // ── Gas storage (shared across grid) ───────────────────────
         public float HydrogenStored { get; set; }
@@ -551,6 +556,8 @@ namespace VoxelEngine.GridSystem
             float o2Stored = 0f;
             var batteries = _batteryScratch;
             batteries.Clear();
+            var electricalPropellers = _electricalPropellerScratch;
+            electricalPropellers.Clear();
 
             foreach (var block in AllBlocks)
             {
@@ -570,6 +577,9 @@ namespace VoxelEngine.GridSystem
 
                 generatedWatts += Mathf.Max(0f, block.PowerOutput);
                 consumedWatts += Mathf.Max(0f, block.PowerDraw);
+
+                if (block is GridElectricalPropeller electricalPropeller)
+                    electricalPropellers.Add(electricalPropeller);
 
                 if (block is GridGasTank gasTank)
                 {
@@ -594,28 +604,21 @@ namespace VoxelEngine.GridSystem
                 }
             }
 
-            // ── Maritime power sync ───────────────────────────────────
-            // MaritimePropulsionSystem computes generator and electrical-propeller
-            // totals from the mechanical propagation job. By this point (our
-            // FixedUpdate runs AFTER the maritime system's), its
-            // ElectricityGenerated / ElectricityDemand include every maritime
-            // generator's shaft-to-electricity output and every electrical
-            // propeller's load. We add these into the grid-wide pool so batteries
-            // see the full picture.
+            // ── Maritime power ledger ─────────────────────────────────
+            // Maritime generator output and electrical-propeller demand are already
+            // exposed through each GridBlock's PowerOutput / PowerDraw and were
+            // counted above. The propulsion-system totals remain telemetry only;
+            // adding them again here would double-bill both sides of the power bus.
             var maritime = Maritime;
-            if (maritime != null)
-            {
-                generatedWatts += maritime.ElectricityGenerated;
-                consumedWatts += maritime.ElectricityDemand;
-            }
 
-            // Log the full power chain once for validation in the Unity console.
-            // Filter repeats so the log doesn't spam: key stats every 120 frames.
+            // Log the independent block ledger beside the mechanical telemetry so
+            // a validation run can spot any future accounting mismatch without
+            // changing the actual power calculation.
             if ((Time.frameCount & 127) == 0 && Debug.isDebugBuild)
             {
                 Debug.Log($"[{gameObject.name}] GRID POWER: gen={generatedWatts:F1}W draw={consumedWatts:F1}W " +
-                    $"maritimeGen={maritime?.ElectricityGenerated ?? 0f:F1}W " +
-                    $"maritimeDemand={maritime?.ElectricityDemand ?? 0f:F1}W " +
+                    $"mechanicalTelemetry gen={maritime?.ElectricityGenerated ?? 0f:F1}W " +
+                    $"demand={maritime?.ElectricityDemand ?? 0f:F1}W " +
                     $"batteries={_batteryScratch.Count}");
             }
 
@@ -627,6 +630,17 @@ namespace VoxelEngine.GridSystem
             // 1) Meet real grid load.
             totalBatteryDischarge += SupplyDemandFromBatteries(batteries, GridBatteryMode.Discharge, ref remainingDemand, dt);
             totalBatteryDischarge += SupplyDemandFromBatteries(batteries, GridBatteryMode.Auto, ref remainingDemand, dt);
+
+            // Resolve actual service level before any surplus is diverted into
+            // battery charging. Electrical propellers use this next tick as their
+            // delivered-power fraction, preventing a no-power/full-power oscillation.
+            float suppliedConsumerWatts = Mathf.Max(0f, consumedWatts - remainingDemand);
+            PowerAvailability01 = consumedWatts > 0.01f
+                ? Mathf.Clamp01(suppliedConsumerWatts / consumedWatts)
+                : 1f;
+            UnservedPowerWatts = Mathf.Max(0f, remainingDemand);
+            for (int i = 0; i < electricalPropellers.Count; i++)
+                electricalPropellers[i]?.SetGridPowerAvailability(PowerAvailability01);
 
             // 2) Work out how much surplus can be used for charging.
             float externalSurplus = Mathf.Max(0f, generatedWatts - consumedWatts);
