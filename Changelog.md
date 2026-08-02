@@ -1,9 +1,20 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.80.3-dev`
+**Current Version:** `6.80.4-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.80.4-dev] Armor Stations — Unity Validation Recorded
+
+**Type:** PATCH — validation/documentation status update, save-compatible.
+
+- Thomas confirmed the Armor Station and Armor Upgrade Station workflow works in Unity.
+- Validation covers focused station recipes, timed upgrade installation, per-piece armor state, anvil presentation, equipment interaction, and persistence flow.
+- The armor-workstation implementation is now Unity-validated; broader radiation, heat, and life-support roadmap systems remain separate open scope.
+- Thomas also confirmed the 6.80.3 mountain-footing and dry-spawn safety behavior works in Unity.
+
+---
 
 ### [6.80.3-dev] Fix — Mountain Footing + Dry Spawn Safety
 
