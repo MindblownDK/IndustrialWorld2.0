@@ -22,6 +22,9 @@ namespace VoxelEngine.Combat
             // the Assembler even if the wizard didn't stamp it.
             tier = StationTier.ArmorStation;
             if (string.IsNullOrEmpty(displayName)) displayName = "Armor Station";
+            // Exclusive: the Armor Station only lists recipes that require exactly the
+            // ArmorStation tier (armour + upgrade modules), never every unlocked recipe.
+            exclusiveRecipes = true;
         }
     }
 }

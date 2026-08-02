@@ -1,9 +1,32 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.79.0-dev`
+**Current Version:** `6.79.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.79.1-dev] Armor Station Now Exclusive — Only Armour Recipes
+
+**Type:** PATCH — behaviour/balance fix, save-compatible. No schema or API change.
+
+#### 🛡️ Armor Station shows only armour
+- Fixed: the Armor Station listed **every unlocked recipe** (because its tier ranks above the Assembler). It now lists **only armour recipes**.
+- Added `CraftingStation.exclusiveRecipes` — when set, the station's recipe list is filtered to recipes that require **exactly** its tier. The Armor Station sets this, so it shows only the 6 armour tiers + the upgrade modules + the Hazmat seal.
+
+#### 🔒 All armour is crafted only at the Armor Station
+- The six Crusader armour recipes (Initiate's Gambeson → Stellar Archon Plate) moved from Crafting Bench / Assembler to **Armor Station** only.
+- The generic inventory crafting browser is now capped at the Assembler, so Armor-Station-tier recipes never appear there — even when standing next to an Armor Station. You must open the Armor Station to craft or upgrade armour.
+- Rerun Step 24 and Step 48 to refresh the armour/module recipe gating (non-destructive; balance values untouched).
+
+#### Files touched
+- `Scripts/Crafting/CraftingStation.cs` — added `exclusiveRecipes`
+- `Scripts/Crafting/Crafter.cs` — added `AvailableRecipesForStation`
+- `Scripts/Combat/ArmorStation.cs` — marks itself exclusive
+- `Scripts/UI/GameUIController.cs` — station panel uses exclusive filter; center browser capped at Assembler
+- `Scripts/Editor/VoxelEngineSetupWindow.cs` — Step 24 armour recipes → Armor Station
+- `Scripts/Core/GameVersion.cs` — Patch 0 → 1
+
+---
 
 ### [6.79.0-dev] Armor Station + Armour Upgrade Modules
 

@@ -13447,24 +13447,25 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
                 "Sealed void-metal armour with glowing energy relays. Worthy of the strongest Crusaders — the pinnacle of the Order.",
                 6, 0.62f, new Color(0.22f, 0.20f, 0.28f));
 
-            // ── Recipes (escalating difficulty) ──
-            AddRecipe("Recipe_Armor_InitiateGambeson", "Initiate's Gambeson", t1, 1, VoxelEngine.Crafting.StationTier.CraftingBench, true, (woodLog, 4), (plank, 4));
-            AddRecipe("Recipe_Armor_SquireLeather", "Squire's Leather", t2, 1, VoxelEngine.Crafting.StationTier.CraftingBench, true, (woodLog, 2), (ironIngot, 3));
-            AddRecipe("Recipe_Armor_KnightChainmail", "Knight's Chainmail", t3, 1, VoxelEngine.Crafting.StationTier.Assembler, true, (ironIngot, 5), (copperWire, 3));
-            AddRecipe("Recipe_Armor_TemplarPlate", "Templar's Plate", t4, 1, VoxelEngine.Crafting.StationTier.Assembler, true, (ironPlate, 5), (steelIngot, 3), (copperWire, 4));
-            AddRecipe("Recipe_Armor_PaladinBulwark", "Paladin's Bulwark", t5, 1, VoxelEngine.Crafting.StationTier.Assembler, true, (steelPlate, 8), (circuit, 3), (copperWire, 6));
-            AddRecipe("Recipe_Armor_StellarArchon", "Stellar Archon Plate", t6, 1, VoxelEngine.Crafting.StationTier.Assembler, true, (steelPlate, 12), (advCircuit, 4), (goldWire, 6));
+            // ── Recipes (escalating difficulty) — all armour is crafted ONLY at the Armor Station ──
+            AddRecipe("Recipe_Armor_InitiateGambeson", "Initiate's Gambeson", t1, 1, VoxelEngine.Crafting.StationTier.ArmorStation, true, (woodLog, 4), (plank, 4));
+            AddRecipe("Recipe_Armor_SquireLeather", "Squire's Leather", t2, 1, VoxelEngine.Crafting.StationTier.ArmorStation, true, (woodLog, 2), (ironIngot, 3));
+            AddRecipe("Recipe_Armor_KnightChainmail", "Knight's Chainmail", t3, 1, VoxelEngine.Crafting.StationTier.ArmorStation, true, (ironIngot, 5), (copperWire, 3));
+            AddRecipe("Recipe_Armor_TemplarPlate", "Templar's Plate", t4, 1, VoxelEngine.Crafting.StationTier.ArmorStation, true, (ironPlate, 5), (steelIngot, 3), (copperWire, 4));
+            AddRecipe("Recipe_Armor_PaladinBulwark", "Paladin's Bulwark", t5, 1, VoxelEngine.Crafting.StationTier.ArmorStation, true, (steelPlate, 8), (circuit, 3), (copperWire, 6));
+            AddRecipe("Recipe_Armor_StellarArchon", "Stellar Archon Plate", t6, 1, VoxelEngine.Crafting.StationTier.ArmorStation, true, (steelPlate, 12), (advCircuit, 4), (goldWire, 6));
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
             EditorUtility.DisplayDialog("Voxel Engine — Crusader Armor (6 Tiers)",
                 "Built 6 tiers of Crusader armor:\n\n" +
-                "1. Initiate's Gambeson (8% reduction) — Crafting Bench\n" +
-                "2. Squire's Leather (15%) — Crafting Bench\n" +
-                "3. Knight's Chainmail (25%) — Assembler\n" +
-                "4. Templar's Plate (38%) — Assembler\n" +
-                "5. Paladin's Bulwark (50%) — Assembler\n" +
-                "6. Stellar Archon Plate (62%) — Assembler\n\n" +
+                "1. Initiate's Gambeson (8% reduction)\n" +
+                "2. Squire's Leather (15%)\n" +
+                "3. Knight's Chainmail (25%)\n" +
+                "4. Templar's Plate (38%)\n" +
+                "5. Paladin's Bulwark (50%)\n" +
+                "6. Stellar Archon Plate (62%)\n\n" +
+                "All six are crafted ONLY at the Armor Station (Step 48) — not at the bench or assembler.\n" +
                 "Equip: put the armor in your hotbar, select it, and press RMB. Old armor returns to your inventory.\n" +
                 "Incoming damage is now reduced by the equipped tier's percentage.",
                 "OK");
@@ -13526,6 +13527,7 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
             var asComp = EnsureComponent<VoxelEngine.Combat.ArmorStation>(root);
             asComp.tier = VoxelEngine.Crafting.StationTier.ArmorStation;
             asComp.displayName = "Armor Station";
+            asComp.exclusiveRecipes = true;   // only armour recipes show at this station
             var stationPrefab = PrefabUtility.SaveAsPrefabAsset(root, stationPath);
             if (root != null)
             {

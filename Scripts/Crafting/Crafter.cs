@@ -83,5 +83,33 @@ namespace VoxelEngine.Crafting
             }
             return list;
         }
+
+        /// <summary>
+        /// Recipes shown at a specific station. An <c>exclusiveRecipes</c> station (e.g. the
+        /// Armor Station) lists ONLY recipes that require exactly its tier — armour and upgrade
+        /// modules — instead of every recipe up to its tier. A normal station lists every recipe
+        /// up to its tier.
+        /// </summary>
+        public static List<RecipeDefinition> AvailableRecipesForStation(RecipeRegistry registry, CraftingStation station)
+        {
+            if (station == null) return AvailableRecipes(registry, StationTier.None);
+            if (!station.exclusiveRecipes) return AvailableRecipes(registry, station.tier);
+
+            var list = new List<RecipeDefinition>();
+            if (registry == null) return list;
+            var rm = VoxelEngine.Research.ResearchManager.Instance;
+            foreach (var r in registry.recipes)
+            {
+                if (r == null) continue;
+                if (r.requiredStation != station.tier) continue;
+                if (rm != null)
+                {
+                    if (!rm.IsRecipeUnlocked(r)) continue;
+                }
+                else if (!r.unlockedByDefault) continue;
+                list.Add(r);
+            }
+            return list;
+        }
     }
 }
