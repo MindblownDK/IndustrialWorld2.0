@@ -24,9 +24,13 @@ namespace VoxelEngine.Player
         public float maxWaitSeconds = 12f;
         [Tooltip("World-space radius to search around (0,0) when finding a fresh world-spawn.")]
         public int searchRadius = 32;
+        [Tooltip("Maximum nearby terrain columns/directions tested when relocating an unsafe water spawn.")]
+        [Range(8, 64)] public int drySpawnSearchAttempts = 24;
 
         private CharacterController _cc;
         private const float SpawnGroundClearance = 1.15f;
+        private const float DrySeaClearance = 0.25f;
+        private readonly RaycastHit[] _spawnRayHits = new RaycastHit[16];
         public  bool ReadyForPlayerControl { get; private set; }
 
         private void Awake()
@@ -120,9 +124,10 @@ namespace VoxelEngine.Player
                     bool foundLand = false;
                     Vector3 bestSpawn = body.transform.position + body.transform.up * (body.SurfaceRadius + 30f);
 
-                    for (int i = 0; i < 16; i++)
+                    int initialSamples = Mathf.Max(16, drySpawnSearchAttempts);
+                    for (int i = 0; i < initialSamples; i++)
                     {
-                        float angle = i * (360f / 16f);
+                        float angle = i * (360f / initialSamples);
                         Vector3 sampleDir = Quaternion.AngleAxis(angle, body.transform.up) * (equator + body.transform.up * 0.55f);
                         sampleDir = math.normalizesafe(sampleDir, body.transform.up);
 
@@ -134,22 +139,10 @@ namespace VoxelEngine.Player
                             float seaRadius = body.SeaRadius;
                             if (hitRadius > seaRadius + 3f)
                             {
-                                var world = VoxelEngine.Core.ActiveWorld.Current;
-                                bool isWater = false;
-                                if (world != null)
+                                Vector3 candidate = hit.point + sampleDir * SpawnGroundClearance;
+                                if (!IsSpawnInWater(candidate))
                                 {
-                                    var voxelCoord = world.WorldToVoxel(hit.point - sampleDir * 0.5f);
-                                    var v = world.GetVoxelWorld(voxelCoord);
-                                    if (v.material == (byte)VoxelEngine.Materials.MaterialId.WaterVoxel ||
-                                        v.material == (byte)VoxelEngine.Materials.MaterialId.WaterLiquid ||
-                                        v.waterLevel > 0)
-                                    {
-                                        isWater = true;
-                                    }
-                                }
-                                if (!isWater)
-                                {
-                                    bestSpawn = hit.point + sampleDir * SpawnGroundClearance;
+                                    bestSpawn = candidate;
                                     foundLand = true;
                                     break;
                                 }
@@ -261,6 +254,12 @@ namespace VoxelEngine.Player
             SetPosition(LiftSavedPositionOutOfGround(transform.position));
             yield return null;
 
+            // A save, bed, or fresh-world target must never release the player into
+            // a water volume. When the selected column is wet, relocate while the
+            // controller remains disabled and chunks continue streaming.
+            if (!savedInSpace)
+                yield return EnsureDrySpawn(transform.position);
+
             // For any fresh-world first spawn (flat OR sphere), persist the FINAL grounded
             // position as the true world spawn. This fixes the 0,250,0 bug where the death
             // screen and initial spawn fell back to the parking placeholder instead of the
@@ -369,6 +368,7 @@ namespace VoxelEngine.Player
             yield return null;
             yield return null;
             SetPosition(SnapToGround(transform.position));
+            yield return EnsureDrySpawn(transform.position);
             EnableController();
             ReadyForPlayerControl = true;
         }
@@ -465,11 +465,189 @@ namespace VoxelEngine.Player
         private void SetPosition(Vector3 p) { transform.position = p; }
 
         /// <summary>
+        /// Ensures a fresh, bed, saved, or respawn location never releases the
+        /// player inside water. The controller stays disabled while candidate chunks
+        /// stream and each candidate is raycast onto dry, walkable ground.
+        /// </summary>
+        private IEnumerator EnsureDrySpawn(Vector3 preferred)
+        {
+            if (!IsSpawnInWater(transform.position)) yield break;
+
+            int attempts = Mathf.Max(8, drySpawnSearchAttempts);
+            Debug.LogWarning("[PlayerSpawner] Selected spawn is wet; searching nearby dry ground.");
+            for (int attempt = 0; attempt < attempts; attempt++)
+            {
+                Vector3 candidate = GetDrySpawnCandidate(preferred, attempt);
+                if (attempt > 0)
+                {
+                    SetPosition(GetSpawnParkingPosition(candidate));
+                    yield return WaitForChunkAt(VoxelCoordOf(candidate), 1.5f);
+                }
+
+                if (!TryFindDryGround(candidate, out Vector3 dryGround)) continue;
+                SetPosition(dryGround);
+                yield return null;
+                if (IsSpawnInWater(transform.position)) continue;
+
+                PersistDrySpawnRelocation(preferred, transform.position);
+                Debug.Log("[PlayerSpawner] Relocated wet spawn to dry ground at " + transform.position);
+                yield break;
+            }
+
+            // A fully oceanic body has no valid terrain candidate. Keep the player
+            // above the water rather than deliberately placing them inside it and
+            // leave a clear error for world-authoring diagnostics.
+            Vector3 up = VoxelEngine.Cosmos.GravityProvider.ActiveBody != null
+                ? VoxelEngine.Cosmos.GravityProvider.ActiveBody.UpAt(preferred)
+                : Vector3.up;
+            SetPosition(preferred + up * 4f);
+            Debug.LogError("[PlayerSpawner] No dry spawn terrain was found after the bounded safety search. Player was held above the selected water column; add reachable land to this world.");
+        }
+
+        private Vector3 GetDrySpawnCandidate(Vector3 preferred, int attempt)
+        {
+            var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
+            if (body == null)
+            {
+                if (attempt == 0) return preferred;
+                int n = attempt - 1;
+                float ring = Mathf.Min(Mathf.Max(4f, searchRadius), 4f + (n / 8 + 1) * 4f);
+                float angle = n * 137.507764f * Mathf.Deg2Rad;
+                return new Vector3(
+                    preferred.x + Mathf.Cos(angle) * ring,
+                    Mathf.Max(preferred.y, 250f),
+                    preferred.z + Mathf.Sin(angle) * ring);
+            }
+
+            if (attempt == 0) return preferred;
+            Vector3 center = body.transform.position;
+            Vector3 preferredDirection = preferred - center;
+            if (preferredDirection.sqrMagnitude < 0.0001f) preferredDirection = body.transform.up;
+            preferredDirection.Normalize();
+
+            Vector3 reference = Mathf.Abs(Vector3.Dot(preferredDirection, body.transform.up)) > 0.9f
+                ? body.transform.right
+                : body.transform.up;
+            Vector3 tangentA = Vector3.Cross(reference, preferredDirection).normalized;
+            Vector3 tangentB = Vector3.Cross(preferredDirection, tangentA).normalized;
+            int sample = attempt - 1;
+            float polar = Mathf.Min(1.30f, 0.10f + 0.14f * Mathf.Sqrt(sample + 1f));
+            float azimuth = sample * 2.39996323f;
+            Vector3 ringDirection = tangentA * Mathf.Cos(azimuth) + tangentB * Mathf.Sin(azimuth);
+            Vector3 direction = (preferredDirection * Mathf.Cos(polar) + ringDirection * Mathf.Sin(polar)).normalized;
+            return center + direction * (body.SurfaceRadius + 40f);
+        }
+
+        private Vector3 GetSpawnParkingPosition(Vector3 candidate)
+        {
+            var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
+            if (body == null) return new Vector3(candidate.x, Mathf.Max(candidate.y, 250f), candidate.z);
+            Vector3 up = body.UpAt(candidate);
+            return body.transform.position + up * (body.SurfaceRadius + 40f);
+        }
+
+        private void PersistDrySpawnRelocation(Vector3 previousSpawn, Vector3 drySpawn)
+        {
+            var session = Menu.WorldSession.Instance;
+            if (session == null) return;
+
+            // The original saved/bed/world target may differ from the snapped feet
+            // position by the controller clearance, so use a modest tolerance.
+            const float MatchDistance = 10f;
+            bool changed = false;
+            if (session.hasBedSpawn && Vector3.Distance(session.bedSpawnPoint, previousSpawn) <= MatchDistance)
+            {
+                session.bedSpawnPoint = drySpawn;
+                changed = true;
+            }
+            else if (session.worldSpawnInitialized && Vector3.Distance(session.worldSpawnPoint, previousSpawn) <= MatchDistance)
+            {
+                session.worldSpawnPoint = drySpawn;
+                changed = true;
+            }
+
+            if (changed) session.SaveSpawnSidecar();
+        }
+
+        private bool TryFindDryGround(Vector3 candidate, out Vector3 dryGround)
+        {
+            dryGround = candidate;
+            var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
+            Vector3 up = body != null ? body.UpAt(candidate) : Vector3.up;
+            if (up.sqrMagnitude < 0.0001f) up = Vector3.up;
+            up.Normalize();
+
+            Vector3 origin = candidate + up * 120f;
+            float rayDistance = body != null ? 320f : 512f;
+            int count = Physics.RaycastNonAlloc(origin, -up, _spawnRayHits, rayDistance, ~0, QueryTriggerInteraction.Ignore);
+            float nearest = float.PositiveInfinity;
+            for (int i = 0; i < count; i++)
+            {
+                var hit = _spawnRayHits[i];
+                if (hit.collider == null || IsOwnCollider(hit.collider) || IsLiquidSurfaceCollider(hit.collider)) continue;
+                if (Vector3.Dot(hit.normal, up) < 0.12f || hit.distance >= nearest) continue;
+
+                Vector3 testSpawn = hit.point + up * SpawnGroundClearance;
+                if (IsSpawnInWater(testSpawn)) continue;
+
+                nearest = hit.distance;
+                dryGround = testSpawn;
+            }
+            return nearest < float.PositiveInfinity;
+        }
+
+        private bool IsSpawnInWater(Vector3 feetPosition)
+        {
+            var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
+            Vector3 up = body != null ? body.UpAt(feetPosition) : Vector3.up;
+            if (up.sqrMagnitude < 0.0001f) up = Vector3.up;
+            up.Normalize();
+
+            if (body != null && Vector3.Distance(feetPosition, body.transform.position) <= body.SeaRadius + DrySeaClearance)
+                return true;
+
+            var world = VoxelEngine.Core.ActiveWorld.Current;
+            if (world == null) return false;
+            float height = Mathf.Max(_cc != null ? _cc.height : 1.85f, 1.85f);
+            for (int i = 0; i <= 4; i++)
+            {
+                Vector3 sample = feetPosition + up * (height * i / 4f + 0.05f);
+                if (IsLiquidVoxel(world.GetVoxelWorld(world.WorldToVoxel(sample)))) return true;
+            }
+            return false;
+        }
+
+        private bool IsOwnCollider(Collider collider)
+        {
+            if (collider == null) return false;
+            return collider.transform == transform || collider.transform.IsChildOf(transform) || transform.IsChildOf(collider.transform);
+        }
+
+        private static bool IsLiquidSurfaceCollider(Collider collider)
+        {
+            if (collider == null) return false;
+            string name = collider.gameObject.name;
+            return name.IndexOf("LiquidSurface", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || name.IndexOf("WaterSurface", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || name.IndexOf("Ocean", System.StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static bool IsLiquidVoxel(Voxel voxel)
+        {
+            return voxel.waterLevel > 0
+                || voxel.material == (byte)VoxelEngine.Materials.MaterialId.WaterVoxel
+                || voxel.material == (byte)VoxelEngine.Materials.MaterialId.WaterLiquid
+                || voxel.material == (byte)VoxelEngine.Materials.MaterialId.CrudeOil;
+        }
+
+        /// <summary>
         /// Raycast straight down from above to find the top of the meshed terrain.
         /// Returns target unchanged if nothing is hit.
         /// </summary>
         private Vector3 SnapToGround(Vector3 target)
         {
+            if (TryFindDryGround(target, out Vector3 dryGround)) return dryGround;
+
             var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
             Vector3 from, dir, lift;
             if (body != null)
@@ -538,16 +716,22 @@ namespace VoxelEngine.Player
                         var v = world.GetVoxelWorld(new Vector3Int(wx, wy, wz));
                         if (v.density > 0)
                         {
-                            // Skip water voxels.
-                            if (v.material == (byte)Materials.MaterialId.WaterVoxel ||
-                                v.material == (byte)Materials.MaterialId.WaterLiquid) continue;
+                            // Skip every liquid representation, including a
+                            // waterLevel carried by an otherwise legacy voxel.
+                            if (IsLiquidVoxel(v)) continue;
                             topY = wy; break;
                         }
                     }
                     if (topY < 0) continue;
                     if (topY < seaLevel) continue;
+
+                    // A solid seabed can still have a water column above it. Test
+                    // the complete controller volume, not only the top solid voxel.
+                    Vector3 candidate = new Vector3(wx + 0.5f, topY + SpawnGroundClearance, wz + 0.5f);
+                    if (IsSpawnInWater(candidate)) continue;
+
                     // Found a valid spot — return immediately (closest-first scan guarantees this is nearest).
-                    return new Vector3(wx + 0.5f, topY + 0.05f, wz + 0.5f);
+                    return candidate;
                 }
             }
             // Fall back: just above the origin's XZ at sea-level + buffer.

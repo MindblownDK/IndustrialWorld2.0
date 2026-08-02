@@ -1,9 +1,20 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.80.2-dev`
+**Current Version:** `6.80.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.80.3-dev] Fix — Mountain Footing + Dry Spawn Safety
+
+**Type:** PATCH — movement/spawn reliability, save-compatible.
+
+- **Mountain footing:** added capped ahead-of-player terrain assistance plus post-move terrain recovery to keep the CharacterController above walkable mountain meshes instead of sinking into uphill terrain.
+- **No water spawns:** fresh worlds, bed spawns, saved positions, and respawns now validate the full player volume for water before control is released.
+- **Dry-ground relocation:** a wet candidate keeps the controller disabled while nearby terrain candidates stream, then relocates to a raycasted dry surface. Flat-world selection now rejects submerged seabeds; spherical selection samples more land candidates and rejects liquid surfaces.
+- Existing save coordinates remain compatible. High-altitude/space saves are intentionally preserved and bypass ground/water relocation.
+
+---
 
 ### [6.80.2-dev] Fix — Armor Station Recipe, Anvil & Equipment UX
 

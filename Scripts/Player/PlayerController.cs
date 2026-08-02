@@ -45,6 +45,16 @@ namespace VoxelEngine.Player
         [Tooltip("Slide friction multiplier while sliding on Ice voxels.")]
         [Range(0.05f, 1f)] public float iceSlideFrictionMultiplier = 0.35f;
 
+        [Header("Terrain Support")]
+        [Tooltip("Small clearance kept between the controller feet and terrain to prevent uphill mesh penetration.")]
+        [Range(0.01f, 0.20f)] public float terrainFootClearance = 0.06f;
+        [Tooltip("Distance ahead of the player sampled for a walkable uphill surface.")]
+        [Range(0.25f, 1.50f)] public float uphillProbeDistance = 0.80f;
+        [Tooltip("Largest natural uphill rise the controller may assist in one movement frame.")]
+        [Range(0.20f, 1.50f)] public float maxUphillAssistRise = 0.90f;
+        [Tooltip("Minimum local-up component of a surface normal that counts as walkable terrain.")]
+        [Range(0.05f, 0.95f)] public float walkableGroundNormalMin = 0.18f;
+
         [Header("Jump / Gravity")]
         public float jumpHeight = 1.4f;
         public float gravity = -22f;
@@ -102,6 +112,8 @@ namespace VoxelEngine.Player
         private bool   _sprinting;
         private float  _smoothedEyeHeight;
         private float  _jetpackBoostCharge;
+        // Reused by terrain support probes to avoid per-frame raycast allocations.
+        private readonly RaycastHit[] _terrainProbeHits = new RaycastHit[12];
 
         // ===== Editor inspector helpers (for the in-inspector toggle button) =====
         [HideInInspector] public bool inspectorFlyToggle;
@@ -537,16 +549,22 @@ namespace VoxelEngine.Player
                     _velocity += GravVec * dt;
             }
 
+            // Probe slightly ahead before the horizontal move. This gives the
+            // CharacterController a controlled lift onto natural mountain terrain
+            // instead of allowing its downward stick velocity to push into a slope.
+            if (!inWater && wishDir.sqrMagnitude > 0.001f)
+                AssistTerrainAscent(up, wishDir, Mathf.Max(0.25f, horiz.magnitude * dt));
+
             // -- move --
-            // Anti-stick on spheres: when grounded under radial gravity, add a small lift along
-            // the local up so the capsule clears terrain micro-bumps and can slide freely. The
-            // CharacterController's collision resolution can leave the capsule slightly embedded
-            // in the curved terrain, which blocks all horizontal movement. 0.015m per frame is
-            // enough to lift clear without visibly floating.
+            // Keep the small radial anti-stick lift, then run a post-move footing
+            // recovery below for both flat and spherical terrain.
             Vector3 moveVec = _velocity * dt;
             if (_grounded && GravityProvider.IsRadial)
                 moveVec += up * 0.015f;
             _cc.Move(moveVec);
+
+            if (!inWater)
+                RecoverTerrainFooting(up);
         }
 
         private void ApplyFallDamage(float impactDownSpeed)
@@ -725,6 +743,96 @@ namespace VoxelEngine.Player
 
         /// <summary>The vertical (along-up) component of velocity, as a signed scalar.</summary>
         private float VerticalSpeed(Vector3 up) => Vector3.Dot(_velocity, up);
+
+        /// <summary>
+        /// Raises the capsule just enough to meet a walkable mountain surface sampled
+        /// ahead of the player. This is deliberately capped so cliffs remain cliffs.
+        /// </summary>
+        private void AssistTerrainAscent(Vector3 up, Vector3 wishDirection, float travelDistance)
+        {
+            if (_cc == null || wishDirection.sqrMagnitude < 0.0001f) return;
+
+            float footClearance = Mathf.Clamp(terrainFootClearance, 0.01f, 0.20f);
+            float maxRise = Mathf.Max(0.20f, maxUphillAssistRise);
+            float maxProbe = Mathf.Max(0.25f, uphillProbeDistance);
+            float probeDistance = Mathf.Clamp(
+                Mathf.Max(travelDistance * 1.5f, _cc.radius * 0.85f),
+                0.25f,
+                maxProbe);
+            Vector3 ahead = transform.position + wishDirection.normalized * probeDistance;
+            if (!TryGetWalkableGround(ahead, up, maxRise + footClearance, out var hit)) return;
+
+            float rise = Vector3.Dot(hit.point - transform.position, up) + footClearance;
+            if (rise <= footClearance * 0.5f || rise > maxRise) return;
+
+            _cc.Move(up * rise);
+            if (VerticalSpeed(up) < 0f)
+                _velocity = Vector3.ProjectOnPlane(_velocity, up);
+        }
+
+        /// <summary>
+        /// Corrects a controller that has been nudged fractionally into a terrain mesh
+        /// after a move. This runs after collision resolution so uphill traversal stays
+        /// smooth without snapping the player upward while airborne.
+        /// </summary>
+        private void RecoverTerrainFooting(Vector3 up)
+        {
+            if (_cc == null) return;
+            float footClearance = Mathf.Clamp(terrainFootClearance, 0.01f, 0.20f);
+            float maxRise = Mathf.Max(0.20f, maxUphillAssistRise);
+            float recoveryBelow = Mathf.Max(0.35f, maxRise);
+            if (!TryGetWalkableGround(transform.position, up, recoveryBelow, out var hit)) return;
+
+            float feetAboveGround = Vector3.Dot(transform.position - hit.point, up);
+            float correction = footClearance - feetAboveGround;
+            if (correction <= 0.001f) return;
+
+            // Recover a bad overlap over a few frames rather than teleporting up
+            // a cliff in one frame.
+            correction = Mathf.Min(correction, maxRise);
+            _cc.Move(up * correction);
+            if (VerticalSpeed(up) < 0f)
+                _velocity = Vector3.ProjectOnPlane(_velocity, up);
+            _grounded = true;
+        }
+
+        private bool TryGetWalkableGround(Vector3 feetPosition, Vector3 up, float belowFeet, out RaycastHit bestHit)
+        {
+            bestHit = default;
+            if (_cc == null || up.sqrMagnitude < 0.0001f) return false;
+
+            up.Normalize();
+            float probeHeight = Mathf.Max(_cc.height + 0.35f, 2.25f);
+            Vector3 origin = feetPosition + up * probeHeight;
+            float distance = probeHeight + Mathf.Max(0.1f, belowFeet);
+            int count = Physics.RaycastNonAlloc(origin, -up, _terrainProbeHits, distance, ~0, QueryTriggerInteraction.Ignore);
+            float bestDistance = float.PositiveInfinity;
+
+            for (int i = 0; i < count; i++)
+            {
+                var hit = _terrainProbeHits[i];
+                var collider = hit.collider;
+                if (collider == null) continue;
+                if (collider.transform == transform || collider.transform.IsChildOf(transform) || transform.IsChildOf(collider.transform)) continue;
+                if (IsLiquidSurfaceCollider(collider)) continue;
+                if (Vector3.Dot(hit.normal, up) < Mathf.Clamp(walkableGroundNormalMin, 0.05f, 0.95f)) continue;
+                if (hit.distance >= bestDistance) continue;
+
+                bestDistance = hit.distance;
+                bestHit = hit;
+            }
+
+            return bestDistance < float.PositiveInfinity;
+        }
+
+        private static bool IsLiquidSurfaceCollider(Collider collider)
+        {
+            if (collider == null) return false;
+            string name = collider.gameObject.name;
+            return name.IndexOf("LiquidSurface", System.StringComparison.OrdinalIgnoreCase) >= 0
+                   || name.IndexOf("WaterSurface", System.StringComparison.OrdinalIgnoreCase) >= 0
+                   || name.IndexOf("Ocean", System.StringComparison.OrdinalIgnoreCase) >= 0;
+        }
 
         /// <summary>
         /// Radial ground check for spherical bodies. Casts a ray RADIAL-DOWN (along -up) from the

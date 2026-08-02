@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.80.2-dev`
-**Roadmap Version:** `6.80.2-dev`
+**Current Version:** `6.80.3-dev`
+**Roadmap Version:** `6.80.3-dev`
 **Date:** 2026-08-02
-**Status:** Celestial Ruins & Themed Worlds COMPLETED (6.32.0–6.36.3) — 33 themed ruins across 11 planets, slot-chest loot, breakable/salvage, per-block colliders; Crusader Ruins Premium (6.30.0); Offline Survival (11.4) Completed + Grid Gravity Fixed (6.27.3) + Passive Oxygen (11.5); World Management (11.7) Completed; Power, Vehicles & Combat (4.7.0) remains WORKING ON — base defense network + ammo logistics + status UX shipped (6.57–6.68), jetpack fuel (6.72–6.77) + Armor Stations and timed upgrades (6.80.0-dev; 6.80.1-dev compile repair; 6.80.2-dev recipe/anvil/equipment UX fixes) implemented; Unity validation, vehicle power validation, and remaining life-support/paint still open
+**Status:** Celestial Ruins & Themed Worlds COMPLETED (6.32.0–6.36.3) — 33 themed ruins across 11 planets, slot-chest loot, breakable/salvage, per-block colliders; Crusader Ruins Premium (6.30.0); Offline Survival (11.4) Completed + Grid Gravity Fixed (6.27.3) + Passive Oxygen (11.5); World Management (11.7) Completed; Power, Vehicles & Combat (4.7.0) remains WORKING ON — base defense network + ammo logistics + status UX shipped (6.57–6.68), jetpack fuel (6.72–6.77) + Armor Stations and timed upgrades (6.80.0-dev; 6.80.1-dev compile repair; 6.80.2-dev recipe/anvil/equipment UX fixes) implemented; 6.80.3-dev hardens mountain footing and dry spawn safety; Unity validation, vehicle power validation, and remaining life-support/paint still open
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
 ---
@@ -1714,6 +1714,7 @@ For each version, these are the high-level Unity tasks you will perform manually
 - A missing player record is ignored safely and is never interpreted as a static block position.
 - Invalid player coordinates now fall back to a safe bed/world/body spawn without overwriting the last known-good save.
 - **6.14.7-dev:** `WorldStatePersistence.RestorePlayer` validates saved player position and rotation before touching the live player transform, restores inventory at the safe fallback when needed, and logs the recovery as non-destructive.
+- **6.80.3-dev:** `PlayerSpawner` now validates the complete player volume for water on fresh, bed, saved, and respawn targets; wet candidates stream/search for dry terrain while control is disabled. PlayerController also gains capped uphill terrain assistance and post-move footing recovery to prevent mountain-mesh penetration.
 
 ### 11.2 Ice Friction — ✅ COMPLETED
 - Ice surfaces use low-friction physics for players, static loose blocks, and movable Grids.
