@@ -13,10 +13,16 @@ MonoBehaviour:
   m_Name: Proc_SynthesiseMGO
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Crafting.ProcessingRecipe
   displayName: 
-  category: Refinery
+  category: Chemistry
   inputs: []
   outputs: []
-  fluidInputs: []
-  fluidOutputs: []
-  secondsPerBatch: 8
+  fluidInputs:
+  - liquid: 3
+    litres: 2
+  - liquid: 0
+    litres: 2
+  fluidOutputs:
+  - liquid: 5
+    litres: 3
+  secondsPerBatch: 10
   powerDrawMultiplier: 1

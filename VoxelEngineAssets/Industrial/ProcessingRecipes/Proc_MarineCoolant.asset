@@ -13,10 +13,16 @@ MonoBehaviour:
   m_Name: Proc_MarineCoolant
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Crafting.ProcessingRecipe
   displayName: 
-  category: Refinery
+  category: Chemistry
   inputs: []
   outputs: []
-  fluidInputs: []
-  fluidOutputs: []
-  secondsPerBatch: 8
+  fluidInputs:
+  - liquid: 0
+    litres: 8
+  - liquid: 2
+    litres: 1
+  fluidOutputs:
+  - liquid: 6
+    litres: 8
+  secondsPerBatch: 10
   powerDrawMultiplier: 1

@@ -13,10 +13,14 @@ MonoBehaviour:
   m_Name: Proc_MakePlastic
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Crafting.ProcessingRecipe
   displayName: 
-  category: Refinery
+  category: Chemistry
   inputs: []
-  outputs: []
-  fluidInputs: []
+  outputs:
+  - item: {fileID: 11400000, guid: 211d2cf6c421ac647b36c0a6f8a32168, type: 2}
+    count: 2
+  fluidInputs:
+  - liquid: 1
+    litres: 4
   fluidOutputs: []
-  secondsPerBatch: 8
+  secondsPerBatch: 10
   powerDrawMultiplier: 1

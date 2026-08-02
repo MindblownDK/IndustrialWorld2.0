@@ -1,9 +1,52 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.78.46-dev`
+**Current Version:** `6.78.47-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.78.47-dev] Real Recipes for Retired Stubs + Full Recipe Health Audit
+
+**Type:** PATCH — content/data (recipes), save-compatible.
+
+#### 🔨 Retired stubs are back — fully authored & re-registered (9)
+Named by their output item's `displayName`, all unlocked by default:
+| Recipe | Cost | Station | Time |
+|---|---|---|---|
+| 🪵 Wooden Plank ×3 | 1 Wood Log | Hand | 1s |
+| ⛏️ Wooden Pickaxe | 3 Plank + 2 Log | Hand | 3s |
+| 🪓 Wooden Axe | 3 Plank + 2 Log | Hand | 3s |
+| 🪓 Iron Axe | 3 Iron Ingot + 2 Plank | Assembler | 4s |
+| 📦 Chest | 8 Plank | Hand | 4s |
+| 🛏️ Bed | 6 Plank + 3 Wool | Hand | 5s |
+| 🛠️ Crafting Bench | 6 Plank + 2 Stone | Hand | 5s |
+| ⚙️ Grinder Tool | 2 Iron Ingot + 1 Iron Gear + 1 Plank | Crafting Bench | 4s |
+| 📏 Leveling Tool | 2 Plank + 1 Iron Ingot | Crafting Bench | 3s |
+
+Costs follow the established tool convention (Iron Pickaxe = 3 material + 2 planks).
+
+#### 🏭 Hollow processing recipes authored (7) — oil chain is real now
+Both refs confirmed wired into refinery & chem plant prefabs (in-place asset edits):
+- 🛢️ Refine Crude Oil: 10L Crude → 6L Refined Oil
+- ⛽ Make Liquid Fuel: 5L Refined → 5L Liquid Fuel
+- 🟤 Refine Heavy Fuel Oil: 8L Crude → 5L HFO
+- 🚢 Refine Marine Gas Oil: 6L Refined → 4L MGO
+- ⚗️ Synthesise MGO: 2L Fuel + 2L Water → 3L MGO
+- ❄️ Marine Coolant: 8L Water + 1L Refined → 8L Coolant
+- 🧱 Make Plastic: 4L Crude → 2 Plastic item
+
+#### 🔍 Full audit results
+- ✅ **0** recipes output ruin blocks (ruins remain exploration-only)
+- ✅ **0** recipes output mob drops (fauna loot stays drop-only)
+- ✅ MachineRecipes 7/7 healthy · ProcessingRecipes now 7/7 with real I/O
+- Registry: 238 entries, every one craftable
+
+#### Files touched
+- 9 recipe assets rewritten + re-added to `RecipeRegistry.asset`
+- 7 `Industrial/ProcessingRecipes/*.asset` authored
+- `Scripts/Core/GameVersion.cs` — Patch 46 → 47
+
+---
 
 ### [6.78.46-dev] Hollow Recipes Can Never Surface (Code-Enforced)
 
