@@ -972,7 +972,11 @@ namespace VoxelEngine.GridSystem.UI
             if (block == null) return "Missing";
             if (!block.Enabled) return "Offline";
             if (block is VoxelEngine.Maritime.GridMaritimeEngine eng)
+            {
+                if (eng.IsOverstressShutdown) return "OVERSTRESSED";
+                if (eng.CriticalFailure) return "CRITICAL HEAT";
                 return eng.IsRunning ? $"{eng.CurrentRPM:0} RPM" : eng.HasExhaust ? "Idle" : "NO EXHAUST";
+            }
             if (block is VoxelEngine.Maritime.GridMaritimeGenerator gen)
                 return PowerFormat.Watts(gen.GeneratedWatts);
             if (block is VoxelEngine.Maritime.GridGearbox gb)

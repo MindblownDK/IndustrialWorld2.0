@@ -1,9 +1,37 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.1.0-dev`
+**Current Version:** `7.2.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.2.0-dev] Armor Capacity Progression & Overstress Protection
+
+**Type:** MINOR — save-compatible armor progression rules and maritime drivetrain protection.
+
+#### 🛡️ Armor tier now matters for upgrade capacity
+- Armor tier now defines both normal-module ceiling and installed-upgrade capacity:
+  - **T1 armor:** 1 slot, accepts modules through T1.
+  - **T2 armor:** 2 slots, accepts modules through T2.
+  - **T3 armor:** 3 slots, accepts modules through T3.
+  - **T4 armor:** 4 slots, accepts modules through T4.
+  - **T5 armor:** 5 slots, accepts modules through T5 and Hazmat.
+  - **T6 armor:** 6 slots, accepts modules through T5 and Hazmat.
+- Raising the tier of an already installed upgrade branch does not consume an additional slot; installing a new branch does.
+- Armor Upgrade Station validation, mid-process validation, and completion now enforce these rules.
+- Armor Station UI now shows slot usage, maximum accepted module tier, Hazmat eligibility, and a module compatibility explanation before installation.
+- Existing installed armor state remains readable and is not silently stripped from legacy stacks.
+
+#### ⛔ 100% stress protective shutdown
+- Engines now trip into **OVERSTRESSED — STOPPED** at 100% mechanical stress.
+- The drivetrain shaft stops instead of sustaining a free overload. Reduce the generator/propeller load, toggle the engine **OFF**, then **ON** to reset the protective trip.
+- Engine panel, grid terminal, and screen telemetry report the overload state explicitly.
+
+#### 🟨 Corrected belt width
+- Corrected the reinforced belt geometry so width expands across the pulley/shaft face rather than making the belt loop taller.
+- Updated pulleys and shaft-placement surface to match the genuinely wider belt profile.
+
+---
 
 ### [7.1.0-dev] Belt Take-Off Placement, Real Load Stress & Save Recovery
 

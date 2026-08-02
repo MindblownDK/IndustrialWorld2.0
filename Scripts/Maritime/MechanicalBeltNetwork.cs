@@ -597,24 +597,25 @@ namespace VoxelEngine.Maritime
             Vector3 side = Vector3.Cross(shaftAxis, direction).normalized;
             if (side.sqrMagnitude < 0.0001f) return;
 
-            // Reinforced marine belt: deliberately broad twin runs and larger pulleys
-            // so a high-torque drivetrain reads as engineered equipment, not a thin
-            // decorative cable.
-            float runGap = Mathf.Max(0.11f, cellSize * 0.17f);
-            float runWidth = Mathf.Max(0.070f, cellSize * 0.090f);
-            float thickness = Mathf.Max(0.032f, cellSize * 0.032f);
+            // A belt's real width runs ALONG the pulley/shaft axis. The prior pass
+            // enlarged the loop-plane separation instead, which made the belt look
+            // taller. Keep the top/bottom run separation compact and make the band
+            // itself dramatically wider across the pulley face.
+            float runGap = Mathf.Max(0.055f, cellSize * 0.085f);
+            float radialThickness = Mathf.Max(0.026f, cellSize * 0.030f);
+            float axialBeltWidth = Mathf.Max(0.22f, cellSize * 0.30f);
             Quaternion rotation = Quaternion.LookRotation(direction, shaftAxis);
             Vector3 center = (start + end) * 0.5f;
 
             CreateVisualCube("Belt_Run_A", center + side * runGap, rotation,
-                new Vector3(runWidth, thickness, length), BeltMaterial);
+                new Vector3(radialThickness, axialBeltWidth, length), BeltMaterial);
             CreateVisualCube("Belt_Run_B", center - side * runGap, rotation,
-                new Vector3(runWidth, thickness, length), BeltMaterial);
+                new Vector3(radialThickness, axialBeltWidth, length), BeltMaterial);
 
             // A short central travel marker keeps the dark rubber legible against
             // iron hulls without turning the belt into a glowing cable.
             CreateVisualCube("Belt_TravelMarker", center, rotation,
-                new Vector3(runWidth * 0.65f, thickness * 0.60f, Mathf.Min(length * 0.26f, cellSize * 0.55f)), IndicatorMaterial);
+                new Vector3(radialThickness * 0.70f, axialBeltWidth * 0.72f, Mathf.Min(length * 0.26f, cellSize * 0.55f)), IndicatorMaterial);
             CreatePlacementSurface(center, rotation, length, cellSize, ownerLink);
         }
 
@@ -635,8 +636,8 @@ namespace VoxelEngine.Maritime
             // Broad aim surface spanning both reinforced belt runs. It participates
             // only in GridBuilder's dedicated trigger raycast, never ship physics.
             collider.size = new Vector3(
-                Mathf.Max(cellSize * 0.72f, 0.75f),
-                Mathf.Max(cellSize * 0.32f, 0.30f),
+                Mathf.Max(cellSize * 0.30f, 0.34f),
+                Mathf.Max(cellSize * 0.78f, 0.85f),
                 length + Mathf.Max(cellSize * 0.10f, 0.08f));
 
             var placement = surface.AddComponent<MechanicalBeltPlacementSurface>();
@@ -653,7 +654,9 @@ namespace VoxelEngine.Maritime
             pulley.transform.localPosition = localPosition;
             pulley.transform.localRotation = Quaternion.FromToRotation(Vector3.up, axisLocal);
             float radius = Mathf.Max(0.14f, cellSize * 0.165f);
-            float width = Mathf.Max(0.070f, cellSize * 0.060f);
+            // Cylinder Y becomes the shaft axis after rotation: widen it across
+            // the pulley face, not radially/taller in the belt loop plane.
+            float width = Mathf.Max(0.18f, cellSize * 0.20f);
             pulley.transform.localScale = new Vector3(radius * 2f, width, radius * 2f);
             DisableCollider(pulley);
             var renderer = pulley.GetComponent<MeshRenderer>();

@@ -257,8 +257,14 @@ namespace VoxelEngine.Maritime
         /// <summary>Unclamped downstream torque demand / available torque. Values above one mean the engine is bogging under overload.</summary>
         public float MechanicalLoadRatio { get; private set; }
 
-        /// <summary>True when the engine is overstressed (torque demand exceeds safe limits).</summary>
-        public bool IsOverstressed => Stress01 > 0.92f;
+        /// <summary>True when the engine is approaching its continuous mechanical-load limit.</summary>
+        public bool IsOverstressed => Stress01 >= 0.92f;
+        /// <summary>
+        /// Protective overload trip. Reaching 100% stress stops the engine instead
+        /// of allowing a free sustained overload; toggle the engine OFF then ON after
+        /// reducing mechanical load to reset the breaker.
+        /// </summary>
+        public bool IsOverstressShutdown { get; private set; }
 
         /// <summary>Number of turbochargers connected to this engine (for UI).</summary>
         public int ConnectedTurboCount { get; private set; }
@@ -643,6 +649,11 @@ namespace VoxelEngine.Maritime
             EnsureModuleSlots();
             RefreshModuleTotals();
 
+            // Explicitly toggling an engine OFF resets a protective mechanical
+            // overload trip. The player must then reduce the load/gear and re-enable
+            // it rather than letting an impossible generator bank flicker on/off.
+            if (!Enabled) IsOverstressShutdown = false;
+
             float requestedThrottle = Enabled && idleWhenEnabled
                 ? Mathf.Max(throttle, idleThrottleFraction)
                 : throttle;
@@ -676,7 +687,7 @@ namespace VoxelEngine.Maritime
 
             // Seized engines stay down until repaired — cooling alone is not enough.
             // Without oxygen (and no Closed-Cycle AIP module) there is no combustion.
-            if (!Enabled || !HasExhaust || exhaustChoked || CriticalFailure
+            if (!Enabled || IsOverstressShutdown || !HasExhaust || exhaustChoked || CriticalFailure
                 || (needsCoolant && !HasCoolant) || (RequiresExternalOxygen && !HasOxygen))
             {
                 node.FuelAvailable01 = 0f;
@@ -766,6 +777,13 @@ namespace VoxelEngine.Maritime
                 + overload * 0.55f
                 + ExhaustFill01 * 0.20f
                 + Heat01 * 0.14f);
+
+            if (Stress01 >= 0.999f)
+            {
+                IsOverstressShutdown = true;
+                IsRunning = false;
+                CurrentTorque = 0f;
+            }
         }
 
         /// <summary>Scan only named turbo attachment slots and compute stacked boost.</summary>
@@ -1103,6 +1121,7 @@ namespace VoxelEngine.Maritime
         {
             string status =
                 CriticalFailure ? "CRITICAL HEAT — SHAFT STOPPED" :
+                IsOverstressShutdown ? "OVERSTRESSED — SHAFT STOPPED" :
                 IsOverheating ? "KNOCKING — OVERHEATING" :
                 OxygenStarved ? "OXYGEN STARVED" :
                 IsRunning ? "RUNNING" :
@@ -1114,6 +1133,7 @@ namespace VoxelEngine.Maritime
             return
                 $"ENGINE {status}\n" +
                 $"{CurrentRPM:0} RPM · {CurrentTorque:0} N·m\n" +
+                $"LOAD {MechanicalLoadRatio * 100f:0}% · STRESS {Stress01 * 100f:0}%\n" +
                 $"{fuel}\n" +
                 $"HEAT {Heat01 * 100f:0}% ({TemperatureC:0}°C)\n" +
                 $"EXHAUST {ExhaustFill01 * 100f:0}%\n" +

@@ -58,7 +58,7 @@ namespace VoxelEngine.UI
             panel.Add(UITheme.Divider());
             BuildArmorTelemetry(panel, armorStack, armor);
             panel.Add(UITheme.Spacer(6));
-            BuildModulePreview(panel, station, module);
+            BuildModulePreview(panel, station, armorStack, module);
             panel.Add(UITheme.Spacer(10));
 
             if (station.IsUpgrading)
@@ -161,10 +161,15 @@ namespace VoxelEngine.UI
                 return;
             }
 
+            int usedSlots = ArmorUpgrades.GetInstalledUpgradeCount(armorStack);
+            int maxSlots = ArmorUpgrades.GetMaxUpgradeSlots(armorStack);
+            int maxModuleTier = ArmorUpgrades.GetMaxModuleTier(armorStack);
             var identity = UITheme.StatRow("◈", armor.displayName,
                 $"Tier {armor.tier} · {armor.damageReduction * 100f:0}% physical reduction",
                 UITheme.AccentGold);
             panel.Add(identity);
+            panel.Add(UITheme.StatRow("▣", "Upgrade Capacity", $"{usedSlots} / {maxSlots} slots used · modules up to T{maxModuleTier}",
+                usedSlots >= maxSlots ? UITheme.AccentAmber : UITheme.AccentCyan));
 
             var grid = new VisualElement();
             grid.style.flexDirection = FlexDirection.Row;
@@ -196,7 +201,9 @@ namespace VoxelEngine.UI
 
             var hazmat = new Label(ArmorUpgrades.HasHazmat(armorStack)
                 ? "HAZMAT SEAL · RADIATION IMMUNE"
-                : "HAZMAT SEAL · NOT INSTALLED");
+                : armor.tier >= ArmorUpgrades.HazmatMinimumArmorTier
+                    ? "HAZMAT SEAL · AVAILABLE (USES ONE SLOT)"
+                    : $"HAZMAT SEAL · REQUIRES T{ArmorUpgrades.HazmatMinimumArmorTier} ARMOR");
             hazmat.style.fontSize = 9;
             hazmat.style.unityFontStyleAndWeight = FontStyle.Bold;
             hazmat.style.color = new StyleColor(ArmorUpgrades.HasHazmat(armorStack) ? UITheme.AccentGreen : UITheme.TextMuted);
@@ -204,12 +211,13 @@ namespace VoxelEngine.UI
             panel.Add(hazmat);
         }
 
-        private static void BuildModulePreview(VisualElement panel, ArmorUpgradeStation station, ArmorUpgradeItem module)
+        private static void BuildModulePreview(VisualElement panel, ArmorUpgradeStation station,
+            ItemStack armorStack, ArmorUpgradeItem module)
         {
             panel.Add(UITheme.Subtitle("Module Preview"));
             if (module == null)
             {
-                panel.Add(UITheme.Muted("Insert a crafted module. Higher tiers take longer to install."));
+                panel.Add(UITheme.Muted("Insert a crafted module. Better armor provides more slots and accepts higher module tiers."));
                 return;
             }
 
@@ -225,6 +233,14 @@ namespace VoxelEngine.UI
             description.style.whiteSpace = WhiteSpace.Normal;
             description.style.marginTop = 3;
             panel.Add(description);
+
+            if (armorStack != null && !armorStack.IsEmpty)
+            {
+                bool compatible = ArmorUpgrades.CanApply(armorStack, module, out string reason);
+                panel.Add(UITheme.StatRow(compatible ? "✓" : "!", "Armor Compatibility",
+                    compatible ? "READY TO INSTALL" : reason,
+                    compatible ? UITheme.AccentGreen : UITheme.AccentAmber));
+            }
         }
 
         private static void BuildProgress(VisualElement panel, ArmorUpgradeStation station)

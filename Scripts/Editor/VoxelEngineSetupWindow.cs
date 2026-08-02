@@ -452,6 +452,7 @@ namespace VoxelEngine.EditorTools
                 "  • Armor Station — premium armory workbench for armor and module crafting\n" +
                 "  • Armor Upgrade Station — premium anvil for timed module installation\n" +
                 "  • Five module families × five tiers plus the Hazmat seal\n" +
+                "  • Armor tier controls capacity: T1→1 slot/T1 modules through T6→6 slots/T5 modules; Hazmat requires T5+\n" +
                 "  • Installation base time is 30 seconds: T1 30s through T5/Hazmat 150s\n" +
                 "  • Repairs missing links while preserving existing recipe costs, craft times, materials, and prefab custom work.\n" +
                 "Re-runnable. Idempotent.");
@@ -12584,7 +12585,7 @@ root =>
             AddRecipe("Recipe_ArtilleryCannon", "Heavy Cannon", block, 1, VoxelEngine.Crafting.StationTier.Assembler, true,
                 (ironPlate, 10), (steelIngot, 5), (circuit, 3), (copperWire, 6));
 
-            
+
             // ── Artillery shells (items loaded into the magazine) ──
             var shellStd = GetOrCreateAsset<VoxelEngine.Items.ItemDefinition>($"{COMBAT_ITEMS}/Item_ShellStandard.asset");
             shellStd.itemId = "item_shell_standard"; shellStd.displayName = "Standard Shell";
@@ -14370,6 +14371,7 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
                 "• Armor Station: dedicated armor and module crafting\n" +
                 "• Armor Upgrade Station: premium anvil workflow\n" +
                 "• Installation duration: T1 30s, T2 60s, T3 90s, T4 120s, T5/Hazmat 150s\n" +
+                "• Armor tier gates capacity: T1→1 slot/T1 modules through T6→6 slots/T5 modules; Hazmat requires T5+\n" +
                 "• Upgrade progress and installed modules persist through save/load\n\n" +
                 $"Step 48 summary — generated elements/assets: {createdAssets}, repaired links: {repairedLinks}, preserved existing assets: {preservedAssets}.\n" +
                 "Run this step a second time to verify the non-destructive path.";

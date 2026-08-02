@@ -71,9 +71,10 @@ namespace VoxelEngine.Maritime
             // ── Status determination ──────────────────────────────────
             string status;
             Color statusColor;
-            if (eng.CriticalFailure)      { status = "⛔ CRITICAL HEAT"; statusColor = T.AccentRed; }
-            else if (eng.IsOverheating)   { status = "⚠ OVERHEATING"; statusColor = T.AccentAmber; }
-            else if (eng.IsOverstressed)  { status = "⚠ OVERSTRESSED"; statusColor = T.AccentRed; }
+            if (eng.CriticalFailure)            { status = "⛔ CRITICAL HEAT"; statusColor = T.AccentRed; }
+            else if (eng.IsOverstressShutdown)  { status = "⛔ OVERSTRESSED — STOPPED"; statusColor = T.AccentRed; }
+            else if (eng.IsOverheating)         { status = "⚠ OVERHEATING"; statusColor = T.AccentAmber; }
+            else if (eng.IsOverstressed)        { status = "⚠ HIGH MECHANICAL LOAD"; statusColor = T.AccentAmber; }
             else if (!eng.HasExhaust)    { status = "⚠ NO EXHAUST";  statusColor = T.AccentRed; }
             else if (eng.OxygenStarved)  { status = "⚠ NO OXYGEN";  statusColor = T.AccentRed; }
             else if (eng.ExhaustFill01 >= 0.99f) { status = "⛔ CHOKED"; statusColor = T.AccentRed; }
@@ -194,6 +195,8 @@ namespace VoxelEngine.Maritime
             p.Add(T.StatRow("📈", "Stress", $"{eng.Stress01 * 100f:0}%", stressColor));
             var (stressBar, _) = T.ProgressBar(eng.Stress01, stressColor, 6, false);
             p.Add(stressBar);
+            if (eng.IsOverstressShutdown)
+                p.Add(T.Muted("OVERSTRESSED: engine protection tripped. Reduce generator/propeller load, then toggle the engine OFF and ON to reset."));
 
             // ── Heat ──────────────────────────────────────────────────
             p.Add(T.Spacer(6));

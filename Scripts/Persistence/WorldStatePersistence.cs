@@ -489,7 +489,7 @@ namespace VoxelEngine.Persistence
             CaptureDefenseRuntime(go, entry);
         }
 
-        
+
         private static void WriteAmmoPolicy(SavedDefenseState state, VoxelEngine.Combat.IDefenseFirePolicy p)
         {
             if (state == null || p == null) return;
