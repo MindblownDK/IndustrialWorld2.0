@@ -53,6 +53,14 @@ namespace VoxelEngine.GridSystem
 
         // ── Physics ────────────────────────────────────────────────
         private Rigidbody _rb;
+        // Save restore keeps physics asleep for two fixed ticks so the restored
+        // rotation cannot be overwritten by gravity, docking contact, or surface
+        // alignment while blocks/colliders are still being reconstructed.
+        private int _restorePoseTicks;
+        private Vector3 _restorePosition;
+        private Quaternion _restoreRotation;
+        private Vector3 _restoreVelocity;
+        private Vector3 _restoreAngularVelocity;
         private bool _touchingIce;
         private float _lastIceContactTime = -999f;
         private const float IceGridBrakeMultiplier = 0.18f;
@@ -232,6 +240,22 @@ namespace VoxelEngine.GridSystem
 
         private void FixedUpdate()
         {
+            if (_restorePoseTicks > 0 && _rb != null)
+            {
+                _rb.isKinematic = true;
+                _rb.position = _restorePosition;
+                _rb.rotation = _restoreRotation;
+                transform.SetPositionAndRotation(_restorePosition, _restoreRotation);
+                _restorePoseTicks--;
+                if (_restorePoseTicks == 0)
+                {
+                    _rb.isKinematic = false;
+                    _rb.linearVelocity = _restoreVelocity;
+                    _rb.angularVelocity = _restoreAngularVelocity;
+                }
+                return;
+            }
+
             // Belt-and-braces: generated/loaded grids should never use Unity's built-in
             // gravity because this class applies planet gravity manually.
             if (_rb != null) _rb.useGravity = false;
@@ -448,6 +472,47 @@ namespace VoxelEngine.GridSystem
         {
             float cs = gridSize.CellSize();
             return transform.TransformPoint(new Vector3(gridPos.x, gridPos.y, gridPos.z) * cs);
+        }
+
+        /// <summary>
+        /// Applies a saved movable-grid pose atomically. Physics stays kinematic for
+        /// two fixed ticks while child blocks/colliders finish restoring, preventing
+        /// a saved ship from snapping upright or receiving an unwanted torque.
+        /// </summary>
+        public void RestorePersistentPose(Vector3 position, Quaternion rotation,
+            Vector3 velocity, Vector3 angularVelocity)
+        {
+            float rotationLengthSqr = rotation.x * rotation.x + rotation.y * rotation.y
+                                    + rotation.z * rotation.z + rotation.w * rotation.w;
+            if (!IsFiniteQuaternion(rotation) || rotationLengthSqr < 0.0001f)
+                rotation = GravityProvider.IsRadial
+                    ? GravityProvider.GetSurfaceRotation(position)
+                    : Quaternion.identity;
+            rotation = rotation.normalized;
+
+            _restorePosition = position;
+            _restoreRotation = rotation;
+            _restoreVelocity = velocity;
+            _restoreAngularVelocity = angularVelocity;
+            _restorePoseTicks = 2;
+
+            transform.SetPositionAndRotation(position, rotation);
+            if (_rb != null)
+            {
+                _rb.isKinematic = true;
+                _rb.position = position;
+                _rb.rotation = rotation;
+                _rb.linearVelocity = Vector3.zero;
+                _rb.angularVelocity = Vector3.zero;
+            }
+        }
+
+        private static bool IsFiniteQuaternion(Quaternion value)
+        {
+            return !float.IsNaN(value.x) && !float.IsNaN(value.y)
+                && !float.IsNaN(value.z) && !float.IsNaN(value.w)
+                && !float.IsInfinity(value.x) && !float.IsInfinity(value.y)
+                && !float.IsInfinity(value.z) && !float.IsInfinity(value.w);
         }
 
         /// <summary>

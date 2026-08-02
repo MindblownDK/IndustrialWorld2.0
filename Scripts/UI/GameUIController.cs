@@ -125,6 +125,7 @@ namespace VoxelEngine.UI
         private DragSource _dragSource;
         private VisualElement _dragGhost;
         private VisualElement _dropVoidOverlay;
+        private VisualElement _tankTypeVoidOverlay;
 
         private struct DragSource
         {
@@ -966,6 +967,7 @@ namespace VoxelEngine.UI
         {
             CloseItemPortsOverlay();
             CloseDropVoidOverlay();
+            CloseTankTypeVoidConfirmation();
             if (_inventoryOpen) UIState.PopBlock();
             _inventoryOpen  = false;
             _rightContainer = null; _openChest = null;
@@ -4308,6 +4310,85 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
             if (_dropVoidOverlay != null && _dropVoidOverlay.parent != null)
                 _dropVoidOverlay.RemoveFromHierarchy();
             _dropVoidOverlay = null;
+        }
+
+        /// <summary>
+        /// Confirms an intentional type change that discards a non-empty tank.
+        /// Grid tank panels use this instead of silently blocking type changes or
+        /// silently deleting stored material.
+        /// </summary>
+        public void ShowTankTypeVoidConfirmation(string resourceLabel, string nextType, float storedAmount,
+            System.Action confirmVoidAndChange)
+        {
+            if (_root == null || confirmVoidAndChange == null) return;
+            if (_tankTypeVoidOverlay != null && _tankTypeVoidOverlay.parent != null) return;
+
+            var overlay = new VisualElement { name = "TankTypeVoidConfirmOverlay" };
+            overlay.style.position = Position.Absolute;
+            overlay.style.left = 0; overlay.style.top = 0; overlay.style.right = 0; overlay.style.bottom = 0;
+            overlay.style.alignItems = Align.Center;
+            overlay.style.justifyContent = Justify.Center;
+            overlay.pickingMode = PickingMode.Position;
+
+            var dim = new VisualElement();
+            dim.style.position = Position.Absolute;
+            dim.style.left = 0; dim.style.top = 0; dim.style.right = 0; dim.style.bottom = 0;
+            dim.style.backgroundColor = new StyleColor(new Color(0.02f, 0.025f, 0.04f, 0.70f));
+            dim.pickingMode = PickingMode.Position;
+            overlay.Add(dim);
+
+            var card = MakePanel();
+            card.style.width = 480;
+            card.style.maxWidth = Length.Percent(90);
+            card.style.paddingTop = 20;
+            card.style.paddingBottom = 18;
+            card.style.paddingLeft = 22;
+            card.style.paddingRight = 22;
+            card.pickingMode = PickingMode.Position;
+            overlay.Add(card);
+
+            card.Add(MakeTitle($"Void {resourceLabel}?"));
+            card.Add(UITheme.AccentDivider(UITheme.AccentRed));
+            var message = new Label($"This tank contains {storedAmount:0.##} units of {resourceLabel.ToLowerInvariant()}. " +
+                                    $"Changing it to {nextType} will permanently void the stored {resourceLabel.ToLowerInvariant()}.");
+            message.style.whiteSpace = WhiteSpace.Normal;
+            message.style.color = new StyleColor(UITheme.TextSecondary);
+            message.style.fontSize = 12;
+            message.style.marginBottom = 16;
+            card.Add(message);
+
+            var row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.justifyContent = Justify.FlexEnd;
+            row.style.alignItems = Align.Center;
+
+            var cancel = UITheme.ActionButton("CANCEL", () =>
+            {
+                CloseTankTypeVoidConfirmation();
+                BuildFeedbackHud.Show("Type change cancelled", $"Stored {resourceLabel.ToLowerInvariant()} was kept.", null, UITheme.AccentCyan);
+            }, UITheme.BgHover);
+            cancel.style.marginRight = 8;
+            row.Add(cancel);
+
+            var confirm = UITheme.ActionButton($"VOID {resourceLabel.ToUpperInvariant()}", () =>
+            {
+                CloseTankTypeVoidConfirmation();
+                confirmVoidAndChange();
+                RefreshCurrentPanel();
+            }, UITheme.AccentRed);
+            row.Add(confirm);
+            card.Add(row);
+
+            _tankTypeVoidOverlay = overlay;
+            _root.Add(overlay);
+            overlay.BringToFront();
+        }
+
+        private void CloseTankTypeVoidConfirmation()
+        {
+            if (_tankTypeVoidOverlay != null && _tankTypeVoidOverlay.parent != null)
+                _tankTypeVoidOverlay.RemoveFromHierarchy();
+            _tankTypeVoidOverlay = null;
         }
 
         private void CompleteDropFromSlot(IItemContainer c, int idx, bool allowVoidOverflow)

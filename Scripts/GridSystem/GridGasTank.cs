@@ -88,6 +88,9 @@ namespace VoxelEngine.GridSystem
             return take;
         }
 
+        /// <summary>Voids the complete internal gas reserve for an explicit type-change confirmation.</summary>
+        public void Drain() => stored = 0f;
+
         /// <summary>Fill a portable H₂ tank from bulk. Returns ml transferred.</summary>
         public float FillPortable(ItemStack portable, float maxMl)
         {

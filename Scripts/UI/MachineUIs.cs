@@ -836,18 +836,27 @@ namespace VoxelEngine.UI
                 bool active = t.selectedGasType == gt || (t.selectedGasType == GasType.None && t.storedGasType == gt);
                 var btn = T.SmallButton(gt.ToString(), () =>
                 {
-                    if (t.TrySetSelectedGasType(captured))
-                        GameUIController.Instance?.RefreshCurrentPanel();
-                    else
-                        BuildFeedbackHud.Show("Gas Tank", "Empty the tank before changing type", null, Color.yellow);
+                    if (active) return;
+                    if (t.storedAmount <= 0.001f)
+                    {
+                        if (t.TrySetSelectedGasType(captured))
+                            GameUIController.Instance?.RefreshCurrentPanel();
+                        return;
+                    }
+
+                    GameUIController.Instance?.ShowTankTypeVoidConfirmation(
+                        "Gas", captured.ToString(), t.storedAmount, () =>
+                        {
+                            t.Drain();
+                            t.TrySetSelectedGasType(captured);
+                            BuildFeedbackHud.Show("Gas tank changed", captured.ToString(), null, T.AccentCyan);
+                        });
                 }, active ? T.AccentCyan : (Color?)null);
-                bool lockedOther = t.storedAmount > 0.001f && t.storedGasType != GasType.None && t.storedGasType != gt;
-                btn.SetEnabled(!lockedOther);
                 typeRow.Add(btn);
             }
             p.Add(typeRow);
             if (t.storedAmount > 0.001f)
-                p.Add(T.Muted("Empty the tank to switch to a different gas type."));
+                p.Add(T.Muted("Selecting another type asks whether to void gas or cancel."));
 
             p.Add(T.Spacer(4));
             p.Add(T.StatRow("📥", "Accept Input",  t.acceptInput  ? "YES" : "NO",

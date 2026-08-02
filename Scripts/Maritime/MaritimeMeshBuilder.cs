@@ -33,7 +33,9 @@ namespace VoxelEngine.Maritime
         //      fuel/coolant/oxygen/item service ports REMOVED from all three engines
         //      (exhaust + shaft ports stay) — those services now use player-placed
         //      color-coded variable ports.
-        public const int Version = 24;
+        // v25: gearbox/generator/propeller/chain mechanical ports carry explicit
+        //      outward vectors so visual snapping and drivetrain direction agree.
+        public const int Version = 25;
         private static Shader Lit => Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
         public static System.Func<Material, string, Material> MaterialPersister;
         private static int _matCounter;
@@ -225,8 +227,10 @@ namespace VoxelEngine.Maritime
             var tail = Cyl(r, hubMat, new Vector3(0, 0, -cs * 0.04f), cs * 0.09f, cs * 0.20f);
             tail.transform.localRotation = Quaternion.Euler(90, 0, 0);
             // Shaft input ports (gold — where rotation comes in). Names preserved.
-            Port(r, "Port_ShaftInput", PortShaft, new Vector3(0, 0, -cs * 0.46f), new Vector3(cs * 0.12f, cs * 0.12f, cs * 0.04f));
-            Port(r, "Rotation input point 0", PortShaft, new Vector3(0, 0, -cs * 0.52f), new Vector3(cs * 0.16f, cs * 0.16f, cs * 0.06f));
+            Port(r, "Port_ShaftInput", PortShaft, new Vector3(0, 0, -cs * 0.46f),
+                new Vector3(cs * 0.12f, cs * 0.12f, cs * 0.04f), PrimitiveType.Cube, Vector3.back);
+            Port(r, "Rotation input point 0", PortShaft, new Vector3(0, 0, -cs * 0.52f),
+                new Vector3(cs * 0.16f, cs * 0.16f, cs * 0.06f), PrimitiveType.Cube, Vector3.back);
             Box(r, Steel, new Vector3(0, -cs * 0.35f, -cs * 0.2f), new Vector3(cs * 0.1f, cs * 0.3f, cs * 0.15f));
         }
 
@@ -1007,8 +1011,10 @@ namespace VoxelEngine.Maritime
             Box(r, Steel, new Vector3(length * 0.28f, -height * 0.48f, 0), new Vector3(cs * 0.16f, height * 0.34f, cs * 0.24f));
             Box(r, GlowOrange, new Vector3(0, height * 0.40f, 0), new Vector3(length * 0.32f, cs * 0.05f, cs * 0.16f));
 
-            Port(r, "Port_RotationInput", PortShaft, new Vector3(-length * 0.56f, 0, 0), new Vector3(cs * 0.06f, cs * 0.16f, cs * 0.16f));
-            Port(r, "Port_RotationOutput", PortShaft, new Vector3(length * 0.56f, 0, 0), new Vector3(cs * 0.06f, cs * 0.16f, cs * 0.16f));
+            Port(r, "Port_RotationInput", PortShaft, new Vector3(-length * 0.56f, 0, 0),
+                new Vector3(cs * 0.06f, cs * 0.16f, cs * 0.16f), PrimitiveType.Cube, Vector3.left);
+            Port(r, "Port_RotationOutput", PortShaft, new Vector3(length * 0.56f, 0, 0),
+                new Vector3(cs * 0.06f, cs * 0.16f, cs * 0.16f), PrimitiveType.Cube, Vector3.right);
             Port(r, "Propeller mount point 0", PortTurbo, new Vector3(0, 0, width * 0.54f), new Vector3(cs * 0.18f, cs * 0.18f, cs * 0.06f));
             Port(r, "Propeller mount point 1", PortTurbo, new Vector3(0, 0, -width * 0.54f), new Vector3(cs * 0.18f, cs * 0.18f, cs * 0.06f));
         }
@@ -1061,6 +1067,14 @@ namespace VoxelEngine.Maritime
             inShaft.transform.localRotation = Quaternion.Euler(90, 0, 0);
             var outShaft = Cyl(r, Brass, new Vector3(0, 0, cs * 0.46f), cs * 0.07f, cs * 0.12f);
             outShaft.transform.localRotation = Quaternion.Euler(90, 0, 0);
+
+            // Explicit mechanical locators make shaft snapping deterministic. Runtime
+            // treats gearbox ends as bidirectional carriers, so whichever side is
+            // fed becomes the input and the opposite side carries the output.
+            Port(r, "Port_ShaftInput", PortShaft, new Vector3(0, 0, -cs * 0.52f),
+                new Vector3(cs * 0.14f, cs * 0.14f, cs * 0.05f), PrimitiveType.Cylinder, Vector3.back);
+            Port(r, "Port_ShaftOutput", PortShaft, new Vector3(0, 0, cs * 0.52f),
+                new Vector3(cs * 0.14f, cs * 0.14f, cs * 0.05f), PrimitiveType.Cylinder, Vector3.forward);
         }
 
         // ════════════════════════════════════════════════════════════════
@@ -1300,7 +1314,7 @@ namespace VoxelEngine.Maritime
 
             // The shaft-input port BEYOND the guard ring — gold, unmistakable.
             Port(r, "Port_ShaftInput", PortShaft, new Vector3(0, bodyY, -cs * 0.72f),
-                new Vector3(cs * 0.15f, cs * 0.15f, cs * 0.05f));
+                new Vector3(cs * 0.15f, cs * 0.15f, cs * 0.05f), PrimitiveType.Cube, Vector3.back);
 
             Socket(r, "Socket_StatorAxis", new Vector3(0, bodyY, cs * 0.10f));
         }

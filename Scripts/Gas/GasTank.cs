@@ -104,6 +104,13 @@ namespace VoxelEngine.Gas
             return take;
         }
 
+        /// <summary>Voids stored gas after an explicit player confirmation.</summary>
+        public void Drain()
+        {
+            storedAmount = 0f;
+            storedGasType = selectedGasType;
+        }
+
         /// <summary>Fill a portable hydrogen tank stack from bulk. Returns ml transferred.</summary>
         public float FillPortable(ItemStack portable, float maxMl)
         {

@@ -32,6 +32,8 @@ namespace VoxelEngine.GridSystem
 
         private FixedJoint _joint;
         private float _dockTimer;
+        private bool _manuallyUndocked;
+        private bool _madeGridKinematic;
 
         public override float ContentMass => container != null ? MassUtil.ContainerMass(container) : 0f;
 
@@ -95,30 +97,59 @@ namespace VoxelEngine.GridSystem
         // ── Docking (magnetic lock via FixedJoint) ───────
         private void FixedUpdate()
         {
-            if (!Enabled || IsDocked || !autoDock || Grid == null || Grid.Body == null) return;
+            // A destroyed/broken joint must also release occupancy and physics
+            // ownership, otherwise a ship could remain kinematic after a dock broke.
+            if (_joint == null && (ConnectedBaseDock != null || _madeGridKinematic))
+                DisconnectInternal(manual: false);
+
+            if (!Enabled)
+            {
+                DisconnectInternal(manual: false);
+                return;
+            }
+            if (IsDocked || !autoDock || _manuallyUndocked || Grid == null || Grid.Body == null) return;
             _dockTimer += Time.fixedDeltaTime;
             if (_dockTimer < 0.3f) return;
             _dockTimer = 0f;
-            TryDock();
+            TryDockInternal();
         }
 
         /// <summary>Lock onto a docking port / base dock the connector is facing.</summary>
         public void TryDock()
         {
+            _manuallyUndocked = false;
+            TryDockInternal();
+        }
+
+        private void TryDockInternal()
+        {
             if (IsDocked || Grid == null || Grid.Body == null) return;
             float cs = EffectiveCellSize;
-            if (Physics.Raycast(transform.position, transform.up, out var hit, cs * 1.0f))
-            {
-                var otherDock = hit.collider.GetComponentInParent<GridDockingPort>();
-                var baseDock  = hit.collider.GetComponentInParent<BaseDock>();
-                if (otherDock != null && otherDock.Grid == Grid) return; // not our own ship
+            if (!Physics.Raycast(transform.position, transform.up, out var hit, cs * 1.0f, ~0, QueryTriggerInteraction.Ignore)) return;
 
-                _joint = Grid.gameObject.AddComponent<FixedJoint>();
-                _joint.breakForce = lockStrength;
-                _joint.breakTorque = lockStrength;
-                _joint.connectedBody = hit.collider.attachedRigidbody; // null = locked to world/base
-                _joint.enableCollision = false;
-                ConnectedBaseDock = baseDock;
+            var otherDock = hit.collider.GetComponentInParent<GridDockingPort>();
+            var baseDock = hit.collider.GetComponentInParent<BaseDock>();
+            if (otherDock != null && otherDock.Grid == Grid) return; // never dock to our own ship
+            if (otherDock == null && baseDock == null) return;       // never lock to arbitrary scenery
+            if (otherDock != null && otherDock.IsDocked) return;
+            if (baseDock != null && baseDock.isOccupied) return;
+
+            _joint = Grid.gameObject.AddComponent<FixedJoint>();
+            // A player-selected dock is a hard stationary lock. Finite break forces
+            // caused rapid break/recreate flicker when a heavy ship settled on a pad.
+            _joint.breakForce = float.PositiveInfinity;
+            _joint.breakTorque = float.PositiveInfinity;
+            _joint.connectedBody = hit.collider.attachedRigidbody; // null = static base/terrain
+            _joint.enableCollision = false;
+            ConnectedBaseDock = baseDock;
+            if (ConnectedBaseDock != null) ConnectedBaseDock.isOccupied = true;
+
+            Grid.Body.linearVelocity = Vector3.zero;
+            Grid.Body.angularVelocity = Vector3.zero;
+            if (_joint.connectedBody == null)
+            {
+                Grid.Body.isKinematic = true;
+                _madeGridKinematic = true;
             }
         }
 
@@ -126,8 +157,20 @@ namespace VoxelEngine.GridSystem
 
         public void Disconnect()
         {
+            DisconnectInternal(manual: true);
+        }
+
+        private void DisconnectInternal(bool manual)
+        {
             if (_joint != null) { Destroy(_joint); _joint = null; }
+            if (ConnectedBaseDock != null) ConnectedBaseDock.isOccupied = false;
             ConnectedBaseDock = null;
+            if (_madeGridKinematic && Grid != null && Grid.Body != null)
+            {
+                Grid.Body.isKinematic = false;
+                _madeGridKinematic = false;
+            }
+            if (manual) _manuallyUndocked = true;
         }
 
         public void Undock() => Disconnect();

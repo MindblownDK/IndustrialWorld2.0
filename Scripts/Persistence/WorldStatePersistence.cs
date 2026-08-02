@@ -1058,8 +1058,11 @@ namespace VoxelEngine.Persistence
 
                 var entry = new SavedGrid
                 {
-                    pos = grid.transform.position,
-                    rot = grid.transform.rotation,
+                    // Rigidbody pose is authoritative for interpolated movable grids.
+                    // Transform pose can lag a physics step and was responsible for
+                    // some restored ships reopening at an unintended upright angle.
+                    pos = grid.Body != null ? grid.Body.position : grid.transform.position,
+                    rot = grid.Body != null ? grid.Body.rotation : grid.transform.rotation,
                     gridSize = (int)grid.gridSize,
                     gravityScale = grid.gravityScale,
                     dampenersOn = grid.DampenersOn,
@@ -1098,6 +1101,21 @@ namespace VoxelEngine.Persistence
                         precisionHostPos = block.PrecisionHostGridPos,
                         container = TryFindContainer(block.gameObject)
                     };
+
+                    if (block is GridGasTank gasTankBlock)
+                    {
+                        savedBlock.hasGasTankState = true;
+                        savedBlock.gasTankType = (int)gasTankBlock.gasType;
+                        savedBlock.gasTankStored = gasTankBlock.stored;
+                        savedBlock.gasTankMode = (int)gasTankBlock.mode;
+                    }
+                    else if (block is GridLiquidTank liquidTankBlock)
+                    {
+                        savedBlock.hasLiquidTankState = true;
+                        savedBlock.liquidTankType = (int)liquidTankBlock.liquidType;
+                        savedBlock.liquidTankStored = liquidTankBlock.stored;
+                        savedBlock.liquidTankMode = (int)liquidTankBlock.mode;
+                    }
 
                     if (block is GridCryobed cryoBlock)
                     {
@@ -1163,7 +1181,7 @@ namespace VoxelEngine.Persistence
 
                 var grid = GridEntity.Create(savedGrid.pos, (GridSize)savedGrid.gridSize);
                 grid.name = "Grid (restored)";
-                grid.transform.rotation = savedGrid.rot;
+                grid.RestorePersistentPose(savedGrid.pos, savedGrid.rot, savedGrid.velocity, savedGrid.angularVelocity);
                 grid.gravityScale = savedGrid.gravityScale > 0f ? savedGrid.gravityScale : grid.gravityScale;
                 grid.DampenersOn = savedGrid.dampenersOn;
                 grid.HydrogenStored = Mathf.Max(0f, savedGrid.hydrogenStored);
@@ -1174,11 +1192,6 @@ namespace VoxelEngine.Persistence
                 RestoreGridBlocks(grid, savedGrid.blocks, false);
                 RestoreGridBlocks(grid, savedGrid.blocks, true);
 
-                if (grid.Body != null)
-                {
-                    grid.Body.linearVelocity = savedGrid.velocity;
-                    grid.Body.angularVelocity = savedGrid.angularVelocity;
-                }
                 grid.RecalculateMass();
             }
         }
@@ -1276,6 +1289,24 @@ namespace VoxelEngine.Persistence
                     var gp = block.GetComponent<VoxelEngine.Building.BlockPaint>() ?? block.gameObject.AddComponent<VoxelEngine.Building.BlockPaint>();
                     gp.Finish = (VoxelEngine.Building.PaintFinishId)saved.paintFinish;
                 }
+                if (saved.hasGasTankState && block is GridGasTank restoredGridGas)
+                {
+                    if (System.Enum.IsDefined(typeof(VoxelEngine.Gas.GasType), saved.gasTankType))
+                        restoredGridGas.gasType = (VoxelEngine.Gas.GasType)saved.gasTankType;
+                    if (System.Enum.IsDefined(typeof(GridTankMode), saved.gasTankMode))
+                        restoredGridGas.mode = (GridTankMode)saved.gasTankMode;
+                    restoredGridGas.stored = Mathf.Clamp(saved.gasTankStored, 0f, restoredGridGas.capacity);
+                    restoredGridGas.blockName = $"{restoredGridGas.gasType} Tank";
+                }
+                else if (saved.hasLiquidTankState && block is GridLiquidTank restoredGridLiquid)
+                {
+                    if (System.Enum.IsDefined(typeof(LiquidType), saved.liquidTankType))
+                        restoredGridLiquid.liquidType = (LiquidType)saved.liquidTankType;
+                    if (System.Enum.IsDefined(typeof(GridTankMode), saved.liquidTankMode))
+                        restoredGridLiquid.mode = (GridTankMode)saved.liquidTankMode;
+                    restoredGridLiquid.stored = Mathf.Clamp(saved.liquidTankStored, 0f, restoredGridLiquid.capacity);
+                }
+
                 if (saved.container != null) RestoreContainer(go, saved.container);
                 if (saved.runtime != null) RestoreFactoryRuntime(go, saved.runtime);
             }
@@ -2088,6 +2119,16 @@ namespace VoxelEngine.Persistence
             public string customName;
             public bool cryobedClaimed;
             public float cryobedOxygen;
+            // Additive grid-tank state. Legacy saves leave these flags false and
+            // preserve prefab defaults; current saves retain type, amount, and mode.
+            public bool hasGasTankState;
+            public int gasTankType;
+            public float gasTankStored;
+            public int gasTankMode;
+            public bool hasLiquidTankState;
+            public int liquidTankType;
+            public float liquidTankStored;
+            public int liquidTankMode;
             public SavedContainer container;
             public SavedPlacedBlock runtime;
         }

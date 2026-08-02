@@ -29,6 +29,7 @@ namespace VoxelEngine.GridSystem
         private FixedJoint _joint;
         private float _checkTimer;
         private float _autoLockGraceTimer;
+        private bool _madeGridKinematic;
 
         // Player-requested unlock latch: once the player unlocks (P / UI) we stay unlocked
         // until they choose to lock again — auto-lock will NOT instantly re-grab the surface.
@@ -71,7 +72,17 @@ namespace VoxelEngine.GridSystem
 
         private bool CanAutoLock()
         {
-            return Enabled && autoLock && !IsLocked && !_manuallyUnlocked && Grid != null && Grid.Body != null;
+            return Enabled && autoLock && !IsLocked && !_manuallyUnlocked
+                && Grid != null && Grid.Body != null && !HasOtherLockedGear();
+        }
+
+        private bool HasOtherLockedGear()
+        {
+            if (Grid == null) return false;
+            foreach (var block in Grid.AllBlocks)
+                if (block is GridLandingGear other && other != this && other.IsLocked)
+                    return true;
+            return false;
         }
 
         /// <summary>Attempt to lock onto a surface near the gear. Casts and contact checks in
@@ -85,7 +96,7 @@ namespace VoxelEngine.GridSystem
 
         private bool TryLockInternal()
         {
-            if (!Enabled || IsLocked || Grid == null || Grid.Body == null) return false;
+            if (!Enabled || IsLocked || Grid == null || Grid.Body == null || HasOtherLockedGear()) return false;
 
             float cs = EffectiveCellSize;
             float reach = cs * 2.5f;
@@ -157,6 +168,11 @@ namespace VoxelEngine.GridSystem
             // Kill the last bit of impact drift so the ship feels magnetically clamped.
             Grid.Body.linearVelocity = Vector3.zero;
             Grid.Body.angularVelocity = Vector3.zero;
+            if (connectedBody == null)
+            {
+                Grid.Body.isKinematic = true;
+                _madeGridKinematic = true;
+            }
             _manuallyUnlocked = false;
             return true;
         }
@@ -172,6 +188,21 @@ namespace VoxelEngine.GridSystem
             {
                 Destroy(_joint);
                 _joint = null;
+            }
+
+            if (_madeGridKinematic && Grid != null && Grid.Body != null && !HasOtherLockedGear())
+            {
+                // A docking port may still hold the ship to a static base; leave
+                // its ownership intact if it is currently docked.
+                bool staticDocked = false;
+                foreach (var block in Grid.AllBlocks)
+                    if (block is GridDockingPort dock && dock.IsDocked)
+                    {
+                        staticDocked = true;
+                        break;
+                    }
+                if (!staticDocked) Grid.Body.isKinematic = false;
+                _madeGridKinematic = false;
             }
 
             if (manual) _manuallyUnlocked = true;

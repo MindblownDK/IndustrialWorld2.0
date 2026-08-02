@@ -256,6 +256,7 @@ namespace VoxelEngine.Maritime
             // Temporary managed buffers (we promote to NativeArrays at the end).
             var mechNodes = new List<MechanicalNode>(total);
             var mechPositions = new List<Vector3Int>(total);
+            var mechBlocks = new List<GridBlock>(total);
             var hullNodes = new List<MechanicalNode>(total);
             var hullBlockSources = new List<GridHullBlock>(total);
             var posToMechIndex = new Dictionary<Vector3Int, int>(total);
@@ -289,6 +290,7 @@ namespace VoxelEngine.Maritime
 
                     mechNodes.Add(node);
                     mechPositions.Add(gpos);
+                    mechBlocks.Add(block);
                     posToMechIndex[gpos] = mechNodes.Count - 1;
                     mechBlockByIndex.Add(mech);
                 }
@@ -302,7 +304,7 @@ namespace VoxelEngine.Maritime
             }
 
             // ── Build propulsion chains via BFS over mechanical 6-neighbours ──
-            var chains = BuildChains(mechNodes, mechPositions, posToMechIndex);
+            var chains = BuildChains(mechNodes, mechPositions, mechBlocks, posToMechIndex);
 
             // Note: turbocharger boost is now computed per-engine in RefreshMaritimeNode
             // (CountTurbos scans for adjacent turbochargers each tick).
@@ -459,7 +461,8 @@ namespace VoxelEngine.Maritime
         }
 
         private ChainBuildResult BuildChains(List<MechanicalNode> mechNodes,
-            List<Vector3Int> mechPositions, Dictionary<Vector3Int, int> posToIndex)
+            List<Vector3Int> mechPositions, List<GridBlock> mechBlocks,
+            Dictionary<Vector3Int, int> posToIndex)
         {
             int n = mechNodes.Count;
             var visited = new bool[n];
@@ -484,11 +487,10 @@ namespace VoxelEngine.Maritime
                     Vector3Int p = mechPositions[cur];
                     foreach (var off in Neighbours6)
                     {
-                        if (posToIndex.TryGetValue(p + off, out int nb) && !visited[nb])
-                        {
-                            visited[nb] = true;
-                            queue.Enqueue(nb);
-                        }
+                        if (!posToIndex.TryGetValue(p + off, out int nb) || visited[nb]) continue;
+                        if (!MaritimeMechanicalPorts.CanConnect(mechBlocks[cur], mechBlocks[nb], _cellSize)) continue;
+                        visited[nb] = true;
+                        queue.Enqueue(nb);
                     }
                 }
 
@@ -512,7 +514,7 @@ namespace VoxelEngine.Maritime
                 List<(int idx, int parent)> ordered;
                 if (source >= 0)
                 {
-                    ordered = BfsOrdered(source, mechPositions, posToIndex, n);
+                    ordered = BfsOrdered(source, mechNodes, mechPositions, mechBlocks, posToIndex, n);
                 }
                 else
                 {
@@ -542,7 +544,8 @@ namespace VoxelEngine.Maritime
             return new ChainBuildResult { chains = chains, chainNodeOrder = order };
         }
 
-        private List<(int idx, int parent)> BfsOrdered(int source, List<Vector3Int> positions,
+        private List<(int idx, int parent)> BfsOrdered(int source, List<MechanicalNode> nodes,
+            List<Vector3Int> positions, List<GridBlock> blocks,
             Dictionary<Vector3Int, int> posToIndex, int total)
         {
             var visited = new bool[total];
@@ -556,10 +559,30 @@ namespace VoxelEngine.Maritime
                 result.Add((cur, parent));
                 Vector3Int p = positions[cur];
                 foreach (var off in Neighbours6)
-                    if (posToIndex.TryGetValue(p + off, out int nb) && !visited[nb])
-                    { visited[nb] = true; queue.Enqueue((nb, cur)); }
+                {
+                    if (!posToIndex.TryGetValue(p + off, out int nb) || visited[nb]) continue;
+                    if (!CanTraverseMechanicalEdge(cur, nb, nodes, blocks)) continue;
+                    visited[nb] = true;
+                    queue.Enqueue((nb, cur));
+                }
             }
             return result;
+        }
+
+        private bool CanTraverseMechanicalEdge(int fromIndex, int toIndex,
+            List<MechanicalNode> nodes, List<GridBlock> blocks)
+        {
+            if (fromIndex < 0 || toIndex < 0 || fromIndex >= blocks.Count || toIndex >= blocks.Count)
+                return false;
+
+            // A second engine/waterwheel may join an already sourced shaft bus from
+            // its own output side. The propagation job combines all producer torque,
+            // so include it after validating the physical port mate in either direction.
+            var toType = nodes[toIndex].Type;
+            if (toType == MechanicalNodeType.Engine || toType == MechanicalNodeType.Waterwheel)
+                return MaritimeMechanicalPorts.CanConnect(blocks[fromIndex], blocks[toIndex], _cellSize);
+
+            return MaritimeMechanicalPorts.CanTransfer(blocks[fromIndex], blocks[toIndex], _cellSize);
         }
 
         // ── Turbocharger: flag adjacent Giant Diesel engines (+40% torque) ──

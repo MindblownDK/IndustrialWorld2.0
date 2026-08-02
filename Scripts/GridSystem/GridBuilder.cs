@@ -246,7 +246,7 @@ namespace VoxelEngine.GridSystem
                     return;
                 }
             }
-            else
+            else if (!portSnapped)
             {
                 rotation *= Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
             }
@@ -1349,6 +1349,43 @@ namespace VoxelEngine.GridSystem
             return MaritimePortSnapKind.None;
         }
 
+        /// <summary>
+        /// Aligns a held shaft/gearbox/generator/propeller by mating its own
+        /// mechanical port directly to the clicked target port. Root placement is
+        /// derived from both port offsets, so visual shafts form one clean centreline
+        /// instead of sitting a cell-length outside an engine or raised above it.
+        /// </summary>
+        private bool TryApplyMechanicalPortSnap(GridBlockItem item, GridEntity grid, GridBlock hitBlock, RaycastHit hit,
+            ref Vector3Int gridPos, ref Vector3 worldPos, ref Quaternion rotation)
+        {
+            if (!MaritimeMechanicalPorts.TryFindNearestPort(hitBlock, hit.point, out var targetPort)) return false;
+            if (!MaritimeMechanicalPorts.TryGetPlacementPort(item, targetPort.Role,
+                    out Vector3 placedPortLocalPosition, out Vector3 placedPortLocalOutward, out _))
+                return false;
+
+            Vector3 desiredPlacedOutward = -targetPort.WorldOutward;
+            rotation = MaritimeMechanicalPorts.BuildAttachmentRotation(
+                placedPortLocalOutward,
+                desiredPlacedOutward,
+                grid.transform.up);
+            worldPos = targetPort.WorldPosition - rotation * placedPortLocalPosition;
+
+            Vector3Int outwardAxis = MaritimeMechanicalPorts.SnapToCardinalAxis(
+                grid.transform.InverseTransformDirection(targetPort.WorldOutward));
+            Vector3Int snappedCell = grid.WorldToGrid(worldPos);
+            if (snappedCell == hitBlock.GridPos && outwardAxis != Vector3Int.zero)
+                snappedCell = hitBlock.GridPos + outwardAxis;
+            if (!grid.CanPlace(snappedCell))
+            {
+                if (outwardAxis == Vector3Int.zero) return false;
+                snappedCell = hitBlock.GridPos + outwardAxis;
+                if (!grid.CanPlace(snappedCell)) return false;
+            }
+
+            gridPos = snappedCell;
+            return true;
+        }
+
         private bool TryApplyMaritimePortSnap(GridBlockItem item, GridEntity grid, GridBlock hitBlock, RaycastHit hit,
             ref Vector3Int gridPos, ref Vector3 worldPos, ref Quaternion rotation)
         {
@@ -1356,49 +1393,32 @@ namespace VoxelEngine.GridSystem
             MaritimePortSnapKind kind = GetMaritimePortSnapKind(item);
             if (kind == MaritimePortSnapKind.None) return false;
 
-            string[] portNames = kind == MaritimePortSnapKind.Exhaust
-                ? MaritimePorts.ExhaustOutputPrefixes
-                : MaritimePorts.ShaftPrefixes;
+            if (kind == MaritimePortSnapKind.ShaftDriven)
+                return TryApplyMechanicalPortSnap(item, grid, hitBlock, hit, ref gridPos, ref worldPos, ref rotation);
 
-            if (!TryFindNearestNamedPort(hitBlock.transform, portNames, hit.point, out var port))
+            // Exhaust pipes retain their existing single-port snap path.
+            if (!TryFindNearestNamedPort(hitBlock.transform, MaritimePorts.ExhaustOutputPrefixes, hit.point, out var port))
             {
-                if (kind == MaritimePortSnapKind.Exhaust)
-                {
-                    var gasPipe = hitBlock.GetComponentInChildren<VoxelEngine.Gas.GasPipe>(true);
-                    if (gasPipe == null) gasPipe = hitBlock.GetComponentInParent<VoxelEngine.Gas.GasPipe>();
-                    if (gasPipe == null) return false;
-                    port = gasPipe.transform;
-                }
-                else return false;
+                var gasPipe = hitBlock.GetComponentInChildren<VoxelEngine.Gas.GasPipe>(true);
+                if (gasPipe == null) gasPipe = hitBlock.GetComponentInParent<VoxelEngine.Gas.GasPipe>();
+                if (gasPipe == null) return false;
+                port = gasPipe.transform;
             }
 
             float cs = grid.gridSize.CellSize();
             Vector3 fallbackAxisWorld = hitBlock.transform.TransformDirection(
                 (Vector3)SnapToCardinalAxis(hitBlock.transform.InverseTransformPoint(port.position)));
             Vector3 outWorld = MaritimePorts.PortOutwardWorld(port, fallbackAxisWorld);
-
             Vector3 gridLocalPort = grid.transform.InverseTransformPoint(port.position);
             Vector3 outGridLocal = grid.transform.InverseTransformDirection(outWorld);
             Vector3Int outAxis = SnapToCardinalAxis(outGridLocal);
-            Vector3 cellPos = outAxis != Vector3Int.zero
-                ? gridLocalPort + (Vector3)outAxis * (cs * 0.55f)
-                : gridLocalPort;
-            Vector3Int snappedCell = RoundHalfUp(cellPos / cs);
+            Vector3Int snappedCell = RoundHalfUp((gridLocalPort + (Vector3)outAxis * (cs * 0.55f)) / cs);
             if (outAxis != Vector3Int.zero && snappedCell == hitBlock.GridPos)
                 snappedCell = hitBlock.GridPos + outAxis;
-            if (!grid.CanPlace(snappedCell))
-            {
-                Vector3Int portCell = RoundHalfUp(gridLocalPort / cs);
-                if (portCell == hitBlock.GridPos || !grid.CanPlace(portCell)) return false;
-                snappedCell = portCell;
-            }
-            gridPos = snappedCell;
+            if (!grid.CanPlace(snappedCell)) return false;
 
-            bool chainingShaft = kind == MaritimePortSnapKind.ShaftDriven
-                && hitBlock.GetComponentInChildren<GridDriveShaft>(true) != null;
-            worldPos = kind == MaritimePortSnapKind.ShaftDriven
-                ? port.position + outWorld * (chainingShaft ? cs : cs)
-                : port.position;
+            gridPos = snappedCell;
+            worldPos = port.position;
             Vector3 upAxis = Mathf.Abs(Vector3.Dot(outWorld, grid.transform.up)) > 0.95f
                 ? grid.transform.forward
                 : grid.transform.up;

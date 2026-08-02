@@ -1,9 +1,37 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.80.5-dev`
+**Current Version:** `6.80.6-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.80.6-dev] Mechanical Ports, Stable Docking & Tank-State Recovery
+
+**Type:** PATCH — vehicle placement, docking, save/load, and tank UX fixes; save-compatible.
+
+#### ⚙️ Mechanical ports and shaft topology
+- Added a shared `MaritimeMechanicalPorts` contract used by placement and the propulsion graph.
+- Gearbox, shaft, chain drive, generator, and propeller snaps now mate actual mechanical port positions instead of offsetting roots by a full cell.
+- Gearboxes act as bidirectional carriers: either connected end can receive rotation; the other end carries it onward.
+- Mechanical graph edges now require physically facing compatible ports. An engine's output only drives a correctly mated shaft; a reversed/wrong-side shaft no longer receives rotation.
+- Added explicit gearbox ports plus corrected outward directions on generator, propeller, and chain-drive ports. `MaritimeMeshBuilder` v25 refreshes them through Step 13.
+
+#### 🛬 Landing pad / gear stability
+- Docking ports no longer create joints against arbitrary scenery.
+- Static landing-pad locks use unbreakable joints, zero motion, and hold the grid kinematic while docked, removing rapid lock/unlock flicker.
+- Landing gear now prevents competing multiple gear locks on one grid and holds a static lock stationary until released.
+
+#### 💾 Save/load recovery
+- Movable grids now save Rigidbody pose directly and restore through a short physics hold, preventing restored ships from snapping upright during collider reconstruction.
+- Grid Gas Tanks and Grid Liquid Tanks now persist their stored type, amount, and Auto/Stockpile mode. Legacy saves remain valid.
+
+#### 🛢️ Safe tank type changes
+- Selecting a different non-empty gas/liquid type now opens a modal choice:
+  - **VOID GAS** / **VOID LIQUID** — discard contents and change type.
+  - **CANCEL** — preserve contents and current type.
+- Applied to grid gas tanks, grid liquid tanks, and static gas tanks.
+
+---
 
 ### [6.80.5-dev] Maritime Power Chain Stabilization
 

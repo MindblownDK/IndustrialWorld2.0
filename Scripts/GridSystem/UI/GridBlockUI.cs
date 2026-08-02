@@ -84,15 +84,27 @@ namespace VoxelEngine.GridSystem.UI
                 bool active = tank.liquidType == lt;
                 var btn = T.SmallButton(lt.DisplayName(), () =>
                 {
-                    if (tank.SetLiquidType(captured))
-                        VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();   // instant UI update
+                    if (active) return;
+                    if (tank.stored <= 0.001f)
+                    {
+                        if (tank.SetLiquidType(captured))
+                            VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+                        return;
+                    }
+
+                    VoxelEngine.UI.GameUIController.Instance?.ShowTankTypeVoidConfirmation(
+                        "Liquid", captured.DisplayName(), tank.stored, () =>
+                        {
+                            tank.Drain();
+                            tank.SetLiquidType(captured);
+                            VoxelEngine.UI.BuildFeedbackHud.Show("Liquid tank changed", captured.DisplayName(), null, captured.Color());
+                        });
                 }, active ? lt.Color() : (Color?)null);
-                btn.SetEnabled(tank.stored <= 0.001f || active);
                 typeRow.Add(btn);
             }
             p.Add(typeRow);
             if (tank.stored > 0.001f)
-                p.Add(T.Muted("Drain the tank to change its liquid type."));
+                p.Add(T.Muted("Selecting another type asks whether to void liquid or cancel."));
 
             p.Add(T.Spacer(6));
             var modeRow = Row();
@@ -143,14 +155,25 @@ namespace VoxelEngine.GridSystem.UI
                 bool active = tank.gasType == gt;
                 var btn = T.SmallButton(gt.ToString(), () =>
                 {
-                    if (tank.SetGasType(captured)) VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
-                    else VoxelEngine.UI.BuildFeedbackHud.Show("Gas Tank", "Empty the tank before changing type", null, Color.yellow);
+                    if (active) return;
+                    if (tank.stored <= 0.001f)
+                    {
+                        if (tank.SetGasType(captured)) VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+                        return;
+                    }
+
+                    VoxelEngine.UI.GameUIController.Instance?.ShowTankTypeVoidConfirmation(
+                        "Gas", captured.ToString(), tank.stored, () =>
+                        {
+                            tank.Drain();
+                            tank.SetGasType(captured);
+                            VoxelEngine.UI.BuildFeedbackHud.Show("Gas tank changed", captured.ToString(), null, T.AccentCyan);
+                        });
                 }, active ? T.AccentCyan : (Color?)null);
-                btn.SetEnabled(tank.stored <= 0.001f || active);
                 typeRow.Add(btn);
             }
             p.Add(typeRow);
-            if (tank.stored > 0.001f) p.Add(T.Muted("Empty the tank to change its gas type."));
+            if (tank.stored > 0.001f) p.Add(T.Muted("Selecting another type asks whether to void gas or cancel."));
             p.Add(T.Spacer(6));
             var modeRow = Row();
             modeRow.Add(T.SmallButton("Auto", () => { tank.mode = GridTankMode.Auto; VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel(); },
