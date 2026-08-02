@@ -1340,6 +1340,7 @@ namespace VoxelEngine.GridSystem
             if (item.blockPrefab.GetComponentInChildren<GridExhaustPipe>(true) != null)
                 return MaritimePortSnapKind.Exhaust;
             if (item.blockPrefab.GetComponentInChildren<GridDriveShaft>(true) != null
+                || item.blockPrefab.GetComponentInChildren<GridShaftHousing>(true) != null
                 || item.blockPrefab.GetComponentInChildren<GridRotationTransfer>(true) != null
                 || item.blockPrefab.GetComponentInChildren<GridEncasedChainDrive>(true) != null
                 || item.blockPrefab.GetComponentInChildren<GridGearbox>(true) != null

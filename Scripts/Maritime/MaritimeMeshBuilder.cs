@@ -35,7 +35,9 @@ namespace VoxelEngine.Maritime
         //      color-coded variable ports.
         // v25: gearbox/generator/propeller/chain mechanical ports carry explicit
         //      outward vectors so visual snapping and drivetrain direction agree.
-        public const int Version = 25;
+        // v26: adds the watertight shaft housing mesh and its exact bidirectional
+        //      shaft locators for sealed-hull drivetrain runs.
+        public const int Version = 26;
         private static Shader Lit => Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
         public static System.Func<Material, string, Material> MaterialPersister;
         private static int _matCounter;
@@ -147,6 +149,7 @@ namespace VoxelEngine.Maritime
             else if (n.Contains("turbocharger_large"))   BuildTurbo(root, cs, true);
             else if (n.Contains("turbocharger"))         BuildTurbo(root, cs, false);
             else if (n.Contains("rotationtransfer"))     BuildRotationTransfer(root, cs);
+            else if (n.Contains("shafthousing"))         BuildShaftHousing(root, cs);
             else if (n.Contains("encasedchaindrive"))    BuildEncasedChainDrive(root, cs);
             else if (n.Contains("shippingcontainer"))    BuildShippingContainer(root, cs);
             else if (n.Contains("gearbox"))              BuildGearbox(root, cs);
@@ -167,7 +170,7 @@ namespace VoxelEngine.Maritime
             // Auto-attach animator if the block has animatable parts.
             if (root.GetComponent<MaritimeAnimator>() == null && n.ContainsAny(
                 "propeller", "epropeller", "engine_", "turbocharger", "gearbox",
-                "waterwheel", "maritimegenerator", "helm", "driveshaft",
+                "waterwheel", "maritimegenerator", "helm", "driveshaft", "shafthousing",
                 "rotationtransfer", "encasedchaindrive"))
             {
                 root.AddComponent<MaritimeAnimator>();
@@ -1196,6 +1199,54 @@ namespace VoxelEngine.Maritime
                 new Vector3(cs * 0.13f, cs * 0.13f, cs * 0.035f), PrimitiveType.Cylinder, Vector3.back);
 
             Socket(r, "Socket_DriveCore", V0);
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        //  WATERTIGHT SHAFT HOUSING — sealed hull penetration
+        //  The enclosure is a welded marine gland with a rotating shaft core,
+        //  twin compression seals, drain lip, and two explicit shaft ports.
+        // ════════════════════════════════════════════════════════════════
+        static void BuildShaftHousing(GameObject r, float cs)
+        {
+            // Welded pressure body: one solid surrounding block so a drivetrain
+            // can pass through a hull without reading as an exposed shaft opening.
+            Box(r, DarkSteel, V0, new Vector3(cs * 0.92f, cs * 0.82f, cs * 0.92f));
+            Box(r, Steel, new Vector3(0f, cs * 0.12f, 0f), new Vector3(cs * 0.78f, cs * 0.48f, cs * 0.78f));
+            Box(r, CastIron, new Vector3(0f, -cs * 0.34f, 0f), new Vector3(cs * 0.84f, cs * 0.08f, cs * 0.84f));
+
+            // Inspection plate and a small wet-side seal status stripe.
+            Box(r, Brass, new Vector3(0f, cs * 0.37f, 0f), new Vector3(cs * 0.38f, cs * 0.025f, cs * 0.32f));
+            Box(r, GlowOrange, new Vector3(0f, cs * 0.385f, -cs * 0.26f), new Vector3(cs * 0.22f, cs * 0.018f, cs * 0.045f));
+            for (int bi = 0; bi < 4; bi++)
+            {
+                float x = (bi < 2 ? -1f : 1f) * cs * 0.30f;
+                float z = (bi % 2 == 0 ? -1f : 1f) * cs * 0.30f;
+                Sphere(r, Chrome, new Vector3(x, cs * 0.39f, z), cs * 0.026f);
+            }
+
+            // The rotating core is deliberately enclosed but visible at both seal
+            // collars, giving the player immediate RPM feedback without a hull hole.
+            var spin = new GameObject("ShaftSpin");
+            spin.transform.SetParent(r.transform, false);
+            spin.transform.localPosition = new Vector3(0f, cs * 0.015f, 0f);
+            var shaft = Cyl(spin, Chrome, V0, cs * 0.060f, cs * 1.04f);
+            shaft.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            Box(spin, Brass, new Vector3(cs * 0.066f, 0f, 0f), new Vector3(cs * 0.018f, cs * 0.020f, cs * 0.86f));
+
+            for (int side = 0; side < 2; side++)
+            {
+                float z = side == 0 ? -cs * 0.43f : cs * 0.43f;
+                var gland = Cyl(r, Rubber, new Vector3(0f, cs * 0.015f, z), cs * 0.19f, cs * 0.075f);
+                gland.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                var clamp = Cyl(r, Brass, new Vector3(0f, cs * 0.015f, z + (side == 0 ? -cs * 0.045f : cs * 0.045f)), cs * 0.145f, cs * 0.030f);
+                clamp.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            }
+
+            Port(r, "Port_ShaftIO_F", PortShaft, new Vector3(0f, cs * 0.015f, cs * 0.50f),
+                new Vector3(cs * 0.14f, cs * 0.14f, cs * 0.035f), PrimitiveType.Cylinder, Vector3.forward);
+            Port(r, "Port_ShaftIO_B", PortShaft, new Vector3(0f, cs * 0.015f, -cs * 0.50f),
+                new Vector3(cs * 0.14f, cs * 0.14f, cs * 0.035f), PrimitiveType.Cylinder, Vector3.back);
+            Socket(r, "Socket_SealedShaftAxis", V0);
         }
 
         // ════════════════════════════════════════════════════════════════

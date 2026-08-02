@@ -1,9 +1,42 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.80.6-dev`
+**Current Version:** `6.81.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.81.0-dev] Mechanical Belts & Watertight Shaft Housings
+
+**Type:** MINOR — new save-compatible maritime drivetrain system and sealed hull block.
+
+#### 🔩 Persistent gearbox selection
+- Grid Gearboxes now save and restore the player-selected free-form gear ratio plus the retained legacy gear-slot value.
+- Loading a ship no longer resets the gearbox panel to its prefab default ratio.
+
+#### 🟨 Mechanical Belt routing
+- Added the craftable **Mechanical Belt** item and a direct two-click workflow:
+  1. Hold a belt and **right-click a Drive Shaft or Watertight Shaft Housing**.
+  2. **Right-click a parallel shaft** on the same movable grid to install the belt.
+- Belt links validate shaft parallelism, pulley plane, duplicate links, grid ownership, and configured span limits before consuming an item.
+- A belt is a bidirectional mechanical bus: any aligned shaft placed through its visible belt run becomes an automatic take-off point for additional generator, propeller, or drivetrain outputs.
+- Added no-collider belt runs, pulleys, and a live selection preview. **Shift + right-click** a shaft removes its attached belts and returns their items.
+- Belt links persist with movable grids and are safely pruned if an endpoint shaft is dismantled.
+
+#### 🌊 Watertight Shaft Housing
+- Added **Watertight Shaft Housing**: a waterproof hull block with a visible rotating through-shaft, compression seals, and bidirectional mechanical ports.
+- It acts as a sealed hull penetration instead of an exposed shaft line, preserving hull water-tightness while carrying drivetrain RPM.
+- Added maritime panel and ship-terminal status for sealed shaft speed / integrity.
+
+#### ♻️ Encased Chain Drive retirement
+- The Encased Chain Drive is removed from new Step 13 crafting and research unlocks, replaced by the Shaft Housing + Mechanical Belt workflow.
+- Its legacy asset, prefab, mechanical behavior, and existing save references remain intact so no ship or inventory is destroyed by the migration.
+
+#### 🛠️ Setup and compatibility
+- Step 13 non-destructively creates missing Shaft Housing/Belt content, repairs research links, retires only the legacy recipe’s discoverability, and preserves existing balance values and custom prefab work.
+- `MaritimeMeshBuilder` v26 regenerates the new sealed-housing mesh and exact shaft ports through the approved setup workflow.
+- Unity validation is required for this new belt/housing delivery before the vehicle-power roadmap advances.
+
+---
 
 ### [6.80.6-dev] Mechanical Ports, Stable Docking & Tank-State Recovery
 

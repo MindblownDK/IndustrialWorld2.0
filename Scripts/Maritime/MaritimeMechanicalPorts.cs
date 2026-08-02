@@ -154,6 +154,50 @@ namespace VoxelEngine.Maritime
             return localDirection.z >= 0f ? new Vector3Int(0, 0, 1) : new Vector3Int(0, 0, -1);
         }
 
+        /// <summary>
+        /// Resolves the physical shaft axis of a carrier from its opposing mechanical
+        /// ports. This keeps belt validation correct for both modern Z-axis shafts and
+        /// legacy components whose authored shaft runs on another local axis.
+        /// </summary>
+        public static bool TryGetCarrierAxis(GridBlock owner, out Vector3 worldAxis)
+        {
+            worldAxis = Vector3.forward;
+            if (owner == null) return false;
+
+            var ports = new List<MechanicalPort>(4);
+            CollectPorts(owner.transform, owner, owner.EffectiveCellSize, ports);
+            if (ports.Count >= 2)
+            {
+                float bestDistance = 0f;
+                Vector3 bestAxis = Vector3.zero;
+                for (int i = 0; i < ports.Count; i++)
+                {
+                    for (int j = i + 1; j < ports.Count; j++)
+                    {
+                        // Opposite ports identify the axis; a same-side pair on a
+                        // multi-port block must never be mistaken for a shaft line.
+                        if (Vector3.Dot(ports[i].WorldOutward, ports[j].WorldOutward) > -0.55f)
+                            continue;
+                        Vector3 delta = ports[j].WorldPosition - ports[i].WorldPosition;
+                        float distance = delta.sqrMagnitude;
+                        if (distance <= bestDistance || distance < 0.0001f) continue;
+                        bestDistance = distance;
+                        bestAxis = delta.normalized;
+                    }
+                }
+                if (bestAxis.sqrMagnitude > 0.0001f)
+                {
+                    worldAxis = bestAxis;
+                    return true;
+                }
+            }
+
+            Vector3 fallback = owner.transform.forward;
+            if (fallback.sqrMagnitude < 0.0001f) return false;
+            worldAxis = fallback.normalized;
+            return true;
+        }
+
         private static bool FindCompatiblePair(List<MechanicalPort> aPorts, List<MechanicalPort> bPorts,
             float cellSize, bool requireAtoB)
         {
@@ -259,6 +303,7 @@ namespace VoxelEngine.Maritime
         private static bool IsBidirectionalCarrier(GridBlock owner)
         {
             return owner is GridDriveShaft
+                || owner is GridShaftHousing
                 || owner is GridGearbox
                 || owner is GridEncasedChainDrive;
         }
@@ -267,9 +312,9 @@ namespace VoxelEngine.Maritime
         {
             if (owner == null) return;
             float y = 0f;
-            if (owner is GridDriveShaft) y = cellSize * 0.015f;
+            if (owner is GridDriveShaft || owner is GridShaftHousing) y = cellSize * 0.015f;
 
-            if (owner is GridDriveShaft || owner is GridGearbox || owner is GridEncasedChainDrive)
+            if (owner is GridDriveShaft || owner is GridShaftHousing || owner is GridGearbox || owner is GridEncasedChainDrive)
             {
                 AddFallback(root, ports, new Vector3(0f, y, -cellSize * 0.50f), Vector3.back, MechanicalPortRole.Bidirectional);
                 AddFallback(root, ports, new Vector3(0f, y, cellSize * 0.50f), Vector3.forward, MechanicalPortRole.Bidirectional);

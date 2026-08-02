@@ -164,6 +164,9 @@ namespace VoxelEngine.Maritime
                 case GridDriveShaft ds:
                     AnimateDriveShaft(ds, dt);
                     break;
+                case GridShaftHousing housing:
+                    AnimateShaftHousing(housing, dt);
+                    break;
                 case GridEncasedChainDrive cd:
                     AnimateChainDrive(cd, dt);
                     break;
@@ -262,6 +265,12 @@ namespace VoxelEngine.Maritime
         {
             if (_shaftSpin == null) return;
             if (ds.CurrentRPM > 0.5f) SpinZ(_shaftSpin, ds.CurrentRPM, dt);
+        }
+
+        private void AnimateShaftHousing(GridShaftHousing housing, float dt)
+        {
+            if (_shaftSpin == null) return;
+            if (housing.CurrentRPM > 0.5f) SpinZ(_shaftSpin, housing.CurrentRPM, dt);
         }
 
         private void AnimateChainDrive(GridEncasedChainDrive chainDrive, float dt)

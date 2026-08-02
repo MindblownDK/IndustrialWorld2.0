@@ -22,6 +22,7 @@
 //    • GridTurbocharger        — boost pressure + turbo rotations.
 //    • GridWaterwheel          — dual-mode status.
 //    • GridDriveShaft          — RPM passthrough.
+//    • GridShaftHousing        — sealed shaft pass-through + RPM.
 //    • GridExhaustPipe         — venting status.
 //    • GridHelm                — throttle + steer status.
 
@@ -52,6 +53,7 @@ namespace VoxelEngine.Maritime
                 GridTurbocharger tc         => TurbochargerPanel(tc),
                 GridWaterwheel ww           => WaterwheelPanel(ww),
                 GridDriveShaft ds           => DriveShaftPanel(ds),
+                GridShaftHousing housing    => ShaftHousingPanel(housing),
                 GridExhaustPipe ex          => ExhaustPipePanel(ex),
                 GridHelm helm               => HelmPanel(helm),
                 GridHullBlock hull          => HullPanel(hull),
@@ -718,6 +720,27 @@ namespace VoxelEngine.Maritime
             p.Add(T.Muted("Transmits torque from an engine to propellers, gearboxes, or generators. " +
                           "If disabled or destroyed, the propulsion chain stops downstream."));
 
+            return p;
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        //  WATERTIGHT SHAFT HOUSING — sealed mechanical pass-through
+        // ════════════════════════════════════════════════════════════════
+        private static VisualElement ShaftHousingPanel(GridShaftHousing housing)
+        {
+            var p = T.MachinePanel();
+            bool spinning = housing.CurrentRPM > 1f;
+            string status = spinning ? "● SEALED + ROTATING" : "● SEALED";
+            Color statusColor = spinning ? T.AccentGreen : T.AccentTeal;
+
+            var (hdr, _, _, _) = T.HeaderRow("◉ Watertight Shaft Housing", status, statusColor);
+            p.Add(hdr);
+            p.Add(T.AccentDivider(T.AccentTeal));
+            p.Add(T.StatRow("⚙", "Shaft Speed", $"{housing.CurrentRPM:0} RPM", T.AccentTeal));
+            p.Add(T.StatRow("⚡", "Max Safe RPM", $"{housing.maxSafeRPM:0} RPM", T.AccentAmber));
+            p.Add(T.StatRow("💧", "Hull Seal", housing.waterproof ? "WATERTIGHT" : "CHECK SEAL", housing.waterproof ? T.AccentGreen : T.AccentRed));
+            p.Add(T.Spacer(6));
+            p.Add(T.Muted("A sealed hull block with a through-shaft. Use it where a mechanical line crosses the water-facing hull, then belt-link parallel shafts to branch additional outputs."));
             return p;
         }
 

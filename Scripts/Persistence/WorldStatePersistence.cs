@@ -1117,6 +1117,13 @@ namespace VoxelEngine.Persistence
                         savedBlock.liquidTankMode = (int)liquidTankBlock.mode;
                     }
 
+                    if (block is VoxelEngine.Maritime.GridGearbox gearbox)
+                    {
+                        savedBlock.hasGearboxState = true;
+                        savedBlock.gearboxRatio = gearbox.EffectiveRatio;
+                        savedBlock.gearboxSelectedGear = gearbox.selectedGear;
+                    }
+
                     if (block is GridCryobed cryoBlock)
                     {
                         savedBlock.customName = cryoBlock.blockName;
@@ -1137,6 +1144,23 @@ namespace VoxelEngine.Persistence
                     CaptureFactoryRuntime(block.gameObject, savedBlock.runtime);
                     entry.blocks.Add(savedBlock);
                 }
+
+                // Belts are logical links rather than blocks, so they live on the
+                // grid payload and restore after their shaft endpoints exist.
+                var belts = grid.GetComponent<VoxelEngine.Maritime.MechanicalBeltNetwork>();
+                if (belts != null)
+                {
+                    belts.PruneMissingEndpoints();
+                    foreach (var link in belts.Links)
+                    {
+                        entry.mechanicalBelts.Add(new SavedMechanicalBelt
+                        {
+                            endpointA = link.endpointA,
+                            endpointB = link.endpointB
+                        });
+                    }
+                }
+
                 save.grids.Add(entry);
             }
         }
@@ -1191,6 +1215,17 @@ namespace VoxelEngine.Persistence
                 // their host-cell relationship and attached pipe topology.
                 RestoreGridBlocks(grid, savedGrid.blocks, false);
                 RestoreGridBlocks(grid, savedGrid.blocks, true);
+
+                if (savedGrid.mechanicalBelts != null && savedGrid.mechanicalBelts.Count > 0)
+                {
+                    var links = new List<VoxelEngine.Maritime.MechanicalBeltLink>(savedGrid.mechanicalBelts.Count);
+                    foreach (var savedBelt in savedGrid.mechanicalBelts)
+                    {
+                        if (savedBelt == null) continue;
+                        links.Add(new VoxelEngine.Maritime.MechanicalBeltLink(savedBelt.endpointA, savedBelt.endpointB));
+                    }
+                    VoxelEngine.Maritime.MechanicalBeltNetwork.GetOrAdd(grid)?.RestoreLinks(links);
+                }
 
                 grid.RecalculateMass();
             }
@@ -1306,6 +1341,9 @@ namespace VoxelEngine.Persistence
                         restoredGridLiquid.mode = (GridTankMode)saved.liquidTankMode;
                     restoredGridLiquid.stored = Mathf.Clamp(saved.liquidTankStored, 0f, restoredGridLiquid.capacity);
                 }
+
+                if (saved.hasGearboxState && block is VoxelEngine.Maritime.GridGearbox restoredGearbox)
+                    restoredGearbox.RestorePersistentSettings(saved.gearboxRatio, saved.gearboxSelectedGear);
 
                 if (saved.container != null) RestoreContainer(go, saved.container);
                 if (saved.runtime != null) RestoreFactoryRuntime(go, saved.runtime);
@@ -2097,7 +2135,15 @@ namespace VoxelEngine.Persistence
             public bool dampenersOn = true;
             public float hydrogenStored;
             public float oxygenStored;
+            // Additive 6.81.0: logical shaft-to-shaft belt links. Old saves omit
+            // the collection and continue to restore with no belts.
+            public List<SavedMechanicalBelt> mechanicalBelts = new();
             public List<SavedGridBlock> blocks = new();
+        }
+        [Serializable] private class SavedMechanicalBelt
+        {
+            public Vector3Int endpointA;
+            public Vector3Int endpointB;
         }
         [Serializable] private class SavedGridBlock
         {
@@ -2129,6 +2175,11 @@ namespace VoxelEngine.Persistence
             public int liquidTankType;
             public float liquidTankStored;
             public int liquidTankMode;
+            // Additive gearbox setting state. The exact free-form ratio is the
+            // authoritative player choice; selectedGear preserves legacy UI slots.
+            public bool hasGearboxState;
+            public float gearboxRatio;
+            public int gearboxSelectedGear;
             public SavedContainer container;
             public SavedPlacedBlock runtime;
         }

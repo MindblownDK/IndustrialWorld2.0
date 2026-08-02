@@ -81,6 +81,18 @@ namespace VoxelEngine.Maritime
             gearRatio = Mathf.Clamp(ratio, MinGearRatio, MaxGearRatio);
         }
 
+        /// <summary>
+        /// Restores the player's selected gearbox setting after <see cref="OnPlaced"/>
+        /// has initialized prefab defaults during a grid load. The hidden legacy gear
+        /// slot is retained alongside the exact free-form ratio so older saves and UI
+        /// states remain meaningful.
+        /// </summary>
+        public void RestorePersistentSettings(float ratio, int persistedSelectedGear)
+        {
+            if (!float.IsNaN(ratio) && !float.IsInfinity(ratio)) SetRatio(ratio);
+            selectedGear = Mathf.Clamp(persistedSelectedGear, 0, 20);
+        }
+
         public override void PopulateMaritimeNode(ref MechanicalNode node)
         {
             node.GearRatio = EffectiveRatio;

@@ -10,6 +10,7 @@ using VoxelEngine.Core;
 using VoxelEngine.Crafting;
 using VoxelEngine.Items;
 using VoxelEngine.Materials;
+using VoxelEngine.Maritime;
 using VoxelEngine.Modification;
 using VoxelEngine.Networks;
 using VoxelEngine.Settings;
@@ -40,6 +41,8 @@ namespace VoxelEngine.Player
 
         // Lazy-init wrench runtime — only created the first time the player swings a wrench.
         private WrenchInteraction _wrench;
+        // Two-click shaft pulley workflow for the consumable Mechanical Belt item.
+        private MechanicalBeltInteraction _mechanicalBelt;
 
         private void Awake()
         {
@@ -123,6 +126,7 @@ namespace VoxelEngine.Player
             // so call it BEFORE the early-out — otherwise a player holding the wrench
             // but not pressing any button never sees their selection time-out.
             if (_wrench != null) _wrench.Tick();
+            if (_mechanicalBelt != null) _mechanicalBelt.Tick(inventory, shootCamera);
 
             var ray = shootCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
             bool hasHit = TryRaycastIgnoringSelf(ray, out var hit, reach);
@@ -252,6 +256,23 @@ namespace VoxelEngine.Player
             }
 
             var heldStack = inventory.ActiveStack;
+
+            // ── MECHANICAL BELT dispatch — RMB shaft → RMB shaft creates one
+            // persistent belt link. Shift+RMB a shaft removes/refunds its belts.
+            // Consume this input before generic grid UI so clicking a shaft never
+            // opens its panel while the player is routing a drivetrain.
+            if (!heldStack.IsEmpty && heldStack.item is MechanicalBeltItem mechanicalBelt)
+            {
+                if (buildDown)
+                {
+                    _mechanicalBelt ??= new MechanicalBeltInteraction();
+                    if (hasHit) _mechanicalBelt.OnUse(hit, inventory, mechanicalBelt, IsShiftHeld());
+                    else _mechanicalBelt.OnMiss(mechanicalBelt);
+                    _nextHit = Time.time + 0.12f;
+                    return;
+                }
+                if (mineHeld || buildHeld) return;
+            }
 
             // ── WEAPON dispatch — LMB attacks with melee/ranged/thrown weapons, even when
             //    aiming at open sky (each mode does its own hit detection). ──

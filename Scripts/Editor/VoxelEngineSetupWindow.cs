@@ -165,12 +165,13 @@ namespace VoxelEngine.EditorTools
             AddInfo(scroll,
                 "Step 13 builds the MARITIME PROPULSION & MECHANICAL NETWORK:\n" +
                 "  • Hull materials (Untreated Wood, Tar Plank, Iron Hull, Balsa Wood)\n" +
-                "  • Propulsion (Waterwheel, Drive Shaft, Propellers, Engines, Ship Turbos, Gearbox, Generator)\n" +
+                "  • Propulsion (Waterwheel, Drive Shaft, Watertight Shaft Housing, Mechanical Belt, Propellers, Engines, Ship Turbos, Gearbox, Generator)\n" +
                 "  • Premium engine models: Crude Inline-4, HFO V8 with glass inspection windows, MGO V12 with\n" +
                 "    gantry walkways, quartz viewports and a belt-driven seawater pump (rebuilds via mesh version)\n" +
                 "  • Engine upgrade modules: High-Flow Turbocharger, Efficiency Tuning Chip,\n" +
                 "    Overclocked Fuel Injectors, Super-Cooler Radiator Jacket (engines + generators)\n" +
                 "  • Free-ratio bidirectional gearbox (typed number + slider, 0.25×–20×)\n" +
+                "  • Watertight Shaft Housing + two-click Mechanical Belt branching (RMB shaft → RMB shaft)\n" +
                 "  • Heat-seizure repair rules: engines that overheat past 100 °C seize and need\n" +
                 "    spare parts (from their own recipe) to be repaired\n" +
                 "  • v17 meshes: marine funnel exhaust stack, pillow-block drive shaft, guarded-coupling generator\n" +
@@ -6728,6 +6729,40 @@ root =>
                 return b;
             }
 
+            VoxelEngine.Maritime.MechanicalBeltItem MakeMechanicalBeltItem(string assetName, string display, Color tint)
+            {
+                string path = $"{ITEMS}/{assetName}.asset";
+                bool existed = AssetDatabase.LoadAssetAtPath<VoxelEngine.Maritime.MechanicalBeltItem>(path) != null;
+                var belt = AssetDatabase.LoadAssetAtPath<VoxelEngine.Maritime.MechanicalBeltItem>(path);
+                if (belt == null)
+                {
+                    belt = ScriptableObject.CreateInstance<VoxelEngine.Maritime.MechanicalBeltItem>();
+                    AssetDatabase.CreateAsset(belt, path);
+                }
+                // New content gets authored defaults once. Re-running Step 13 preserves
+                // player/project balance edits to belt reach, stack count, and mass.
+                if (!existed)
+                {
+                    belt.itemId = "mechanical_belt";
+                    belt.displayName = display;
+                    belt.description = "A reinforced marine drive belt. Right-click one parallel shaft pulley, then another to route a belt. Insert shafts through the belt run for extra take-off outputs. Shift-right-click a shaft to remove and recover attached belts.";
+                    belt.iconTint = tint;
+                    belt.maxStack = 20;
+                    belt.massPerUnit = 2f;
+                    belt.category = "Maritime";
+                    belt.minSpanMeters = 0.75f;
+                    belt.maxSpanMeters = 20f;
+                    belt.maxBeltsPerGrid = 64;
+                }
+                else
+                {
+                    if (string.IsNullOrEmpty(belt.itemId)) belt.itemId = "mechanical_belt";
+                    if (string.IsNullOrEmpty(belt.category)) belt.category = "Maritime";
+                }
+                EditorUtility.SetDirty(belt);
+                return belt;
+            }
+
             GameObject MakeMPref<T>(string name, Color color, Vector3 scale, VoxelEngine.GridSystem.GridSize size, System.Action<T> config = null) where T : VoxelEngine.GridSystem.GridBlock
             {
                 string path = $"{PREFABS}/{name}.prefab";
@@ -6866,6 +6901,42 @@ root =>
                 EditorUtility.SetDirty(r);
                 if (registry != null && !registry.recipes.Contains(r)) registry.recipes.Add(r);
                 recipes.Add(r); return r;
+            }
+
+            // The Encased Chain Drive is retired from new crafting/research rather
+            // than deleted. Its asset, prefab, and runtime class remain untouched so
+            // existing inventories and saved ships continue to load safely.
+            void RetireLegacyEncasedChainDriveRecipe()
+            {
+                var legacyRecipe = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeDefinition>(
+                    $"{RECIPES}/Recipe_MEncasedChainDrive.asset");
+                if (legacyRecipe == null) return;
+
+                bool registryChanged = false;
+                if (registry != null && registry.recipes != null)
+                {
+                    while (registry.recipes.Remove(legacyRecipe)) registryChanged = true;
+                    if (registryChanged) EditorUtility.SetDirty(registry);
+                }
+
+                if (tree == null || tree.nodes == null) return;
+                bool treeChanged = false;
+                foreach (var node in tree.nodes)
+                {
+                    if (node == null || node.unlocksRecipes == null || node.unlocksRecipes.Length == 0) continue;
+                    var retained = new List<VoxelEngine.Crafting.RecipeDefinition>(node.unlocksRecipes.Length);
+                    bool nodeChanged = false;
+                    foreach (var unlocked in node.unlocksRecipes)
+                    {
+                        if (unlocked == legacyRecipe) { nodeChanged = true; continue; }
+                        if (unlocked != null) retained.Add(unlocked);
+                    }
+                    if (!nodeChanged) continue;
+                    node.unlocksRecipes = retained.ToArray();
+                    EditorUtility.SetDirty(node);
+                    treeChanged = true;
+                }
+                if (treeChanged) EditorUtility.SetDirty(tree);
             }
 
             var SzL = VoxelEngine.GridSystem.GridSize.Large;
@@ -7010,11 +7081,18 @@ root =>
             var itemRotTransfer = MakeMItem("MItem_RotationTransfer", "Rotation Transfer", new Color(0.62f,0.58f,0.46f), rotTransferPref, SzL, 140, 360);
             AddMRecipe("Recipe_MRotationTransfer", "Rotation Transfer", itemRotTransfer, (ironPlate, 3), (ironGear, 2));
 
-            // Encased Chain Drive
-            var chainDrivePref = MakeMPref<VoxelEngine.Maritime.GridEncasedChainDrive>("EncasedChainDrive_Large", new Color(0.32f,0.34f,0.36f), Vector3.one, SzL,
-                c => { c.maxSafeRPM = 2600f; });
-            var itemChainDrive = MakeMItem("MItem_EncasedChainDrive", "Encased Chain Drive", new Color(0.32f,0.34f,0.36f), chainDrivePref, SzL, 900, 2200);
-            AddMRecipe("Recipe_MEncasedChainDrive", "Encased Chain Drive", itemChainDrive, (ironPlate, 4), (ironGear, 3), (steelPlate, 1));
+            // Watertight Shaft Housing — replaces the craftable Encased Chain Drive.
+            // It is a sealed hull block with a rotating shaft through its centre, so
+            // drivetrain runs can cross a wet hull without reading as an open hole.
+            var shaftHousingPref = MakeMPref<VoxelEngine.Maritime.GridShaftHousing>("ShaftHousing_Large", new Color(0.30f,0.38f,0.42f), Vector3.one, SzL,
+                h => { h.maxSafeRPM = 3200f; h.buoyancyFactor = 0.55f; h.healthMultiplier = 1.15f; });
+            var itemShaftHousing = MakeMItem("MItem_ShaftHousing", "Watertight Shaft Housing", new Color(0.30f,0.38f,0.42f), shaftHousingPref, SzL, 340, 1000);
+            AddMRecipe("Recipe_MShaftHousing", "Watertight Shaft Housing", itemShaftHousing, (ironPlate, 4), (ironGear, 2), (steelPlate, 1));
+
+            // Mechanical Belt — a consumable two-click pulley link, not a grid block.
+            var itemMechanicalBelt = MakeMechanicalBeltItem("Item_MechanicalBelt", "Mechanical Belt", new Color(0.88f,0.62f,0.16f));
+            AddMRecipe("Recipe_MMechanicalBelt", "Mechanical Belt", itemMechanicalBelt, (ironPlate, 2), (ironGear, 1), (copperWire, 2));
+            RetireLegacyEncasedChainDriveRecipe();
 
             // Small Propeller
             var propSPref = MakeMPref<VoxelEngine.Maritime.GridPropeller>("Propeller_Small_Large", new Color(0.85f,0.65f,0.25f), Vector3.one, SzL,
@@ -7204,7 +7282,8 @@ root =>
             SetDesc(itemWheel, "3x3x1 cast-iron waterwheel with oak paddles. DUAL-MODE: Generates torque from water current when stationary, OR produces paddle thrust when driven by a shaft on a moving ship. Place in flowing water.");
             SetDesc(itemShaft, "Drive shaft that transmits rotational torque from an engine to a propeller, gearbox, or generator. If a shaft is disabled or destroyed, the propulsion chain downstream stops. Chain blocks together engine-first.");
             SetDesc(itemRotTransfer, "Rotation Transfer casing. Carries shaft RPM like a drive shaft while visually routing rotation straight, up, or down. Rotate the block while placing to turn the route left/right.");
-            SetDesc(itemChainDrive, "Encased Chain Drive. Heavy protected marine chain case with visible sprockets and propeller mount points. Carries rotational force between engines, gearboxes, shafts, and shaft-driven propellers.");
+            SetDesc(itemShaftHousing, "Watertight Shaft Housing. A sealed hull block with a rotating through-shaft, twin compression seals, and direct shaft ports. Use it where a drivetrain crosses the wet hull so the mechanical line remains protected from seawater.");
+            SetDesc(itemMechanicalBelt, "Mechanical Belt. Hold it, right-click one parallel shaft pulley, then right-click another shaft on the same ship to install a belt. Place aligned shafts through the belt run to create additional take-off outputs. Shift-right-click a shaft to remove and recover its attached belts.");
             SetDesc(itemShipContainer, "Maritime shipping container storage. Styled like a real intermodal container and carries 5x the mass of a Large Cargo Container.");
             SetDesc(itemPropS, "3-blade cast bronze propeller (detail-scale). Low thrust but highly maneuverable. Consumes shaft torque through its movable Rotation input point 0 mount. Place below the waterline facing the direction you want to push.");
             SetDesc(itemPropL, "4-blade heavy steel industrial propeller. Extreme thrust with a movable Rotation input point 0 mount for shaft/chain-drive alignment. Built for big ship drivetrains and visible cavitation under load.");
@@ -7277,12 +7356,19 @@ root =>
                     return n;
                 }
 
-                // Tier 1: Hydro-Mechanics (Waterwheel, shafts/transfers, Untreated Wood, Small Propeller, Helm)
+                // Tier 1: Hydro-Mechanics (waterwheel, shafts/belts, sealed hull drives, small propeller, helm)
                 var t1 = MakeMaritimeNode("res_maritime_hydromech", "Hydro-Mechanics",
-                    "Master water power. Unlocks the Waterwheel, Drive Shaft, Rotation Transfer, Encased Chain Drive, Untreated Wood hull, Small Propeller, and the Helm.",
+                    "Master water power. Unlocks the Waterwheel, Drive Shaft, Rotation Transfer, Watertight Shaft Housing, Mechanical Belt, Untreated Wood hull, Small Propeller, and the Helm.",
                     1, 6, 40f, new[] { (sciT2, 10) },
-                    recipes.FindAll(r => r != null && (r.name.Contains("Waterwheel") || r.name.Contains("DriveShaft") || r.name.Contains("RotationTransfer") || r.name.Contains("EncasedChainDrive") || r.name.Contains("UntreatedWood") || r.name.Contains("PropSmall") || r.name.Contains("Helm") || r.name.Contains("Exhaust"))).ToArray(),
+                    recipes.FindAll(r => r != null && (r.name.Contains("Waterwheel") || r.name.Contains("DriveShaft") || r.name.Contains("RotationTransfer") || r.name.Contains("ShaftHousing") || r.name.Contains("MechanicalBelt") || r.name.Contains("UntreatedWood") || r.name.Contains("PropSmall") || r.name.Contains("Helm") || r.name.Contains("Exhaust"))).ToArray(),
                     nShip != null ? new[] { nShip } : null);
+                // Targeted migration of the setup-generated legacy wording only;
+                // custom research descriptions remain untouched.
+                if (t1 != null && !string.IsNullOrEmpty(t1.description) && t1.description.Contains("Encased Chain Drive"))
+                {
+                    t1.description = "Master water power. Unlocks the Waterwheel, Drive Shaft, Rotation Transfer, Watertight Shaft Housing, Mechanical Belt, Untreated Wood hull, Small Propeller, and the Helm.";
+                    EditorUtility.SetDirty(t1);
+                }
 
                 // Tier 2: Steam & Internal Combustion (Small Engine, Exhaust, Tar Plank, Balsa, Gearbox)
                 var t2 = MakeMaritimeNode("res_maritime_combustion", "Steam & Internal Combustion",
@@ -7337,7 +7423,7 @@ root =>
                 $"Maritime content built!\n\n" +
                 $"BLOCKS ({recipes.Count} prefabs + items + recipes):\n" +
                 "  Hull: Untreated Wood, Tar Plank, Iron Hull, Balsa Wood\n" +
-                "  Propulsion: Waterwheel, Drive Shaft, Rotation Transfer, Encased Chain Drive, Small/Large Propeller, Exhaust, Crude Inline-4 / HFO V8 / MGO V12 Engines, Turbocharger, free-ratio Gearbox (0.25×–20×), Generator, E-Propeller, Bilge Pump, Helm\n" +
+                "  Propulsion: Waterwheel, Drive Shaft, Rotation Transfer, Watertight Shaft Housing, Mechanical Belt, Small/Large Propeller, Exhaust, Crude Inline-4 / HFO V8 / MGO V12 Engines, Turbocharger, free-ratio Gearbox (0.25×–20×), Generator, E-Propeller, Bilge Pump, Helm\n" +
                 "  Modules: High-Flow Turbocharger, Efficiency Tuning Chip, Overclocked Fuel Injectors, Super-Cooler Radiator Jacket\n" +
                 "  Storage: Shipping Container (5x Large Cargo capacity)\n\n" +
                 "RESEARCH TREE (5-tier Maritime Engineering):\n" +
@@ -7346,8 +7432,8 @@ root =>
                 "  T3: Heavy Industrial Maritime\n" +
                 "  T4: MSC Loreto-class Propulsion\n" +
                 "  T5: Maritime Performance Tuning (upgrade modules)\n\n" +
-                "NOTE: v17 rebuilt Exhaust Pipe / Drive Shaft / Generator visuals in place\n" +
-                "and engines got heat-seizure repair costs (spare parts from their own recipe).\n" +
+                "NOTE: v26 rebuilds the Watertight Shaft Housing plus current shaft/gearbox/generator port visuals in place\n" +
+                "and engines retain their heat-seizure repair costs (spare parts from their own recipe).\n" +
                 "Mesh version auto-upgrades all other prefabs in place.\n" +
                 "MaritimeSettings asset created in Maritime/.\n" +
                 "All recipes gated behind the research tree.",

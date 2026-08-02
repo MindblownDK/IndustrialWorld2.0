@@ -303,8 +303,18 @@ namespace VoxelEngine.Maritime
                 nodeId++;
             }
 
-            // ── Build propulsion chains via BFS over mechanical 6-neighbours ──
-            var chains = BuildChains(mechNodes, mechPositions, mechBlocks, posToMechIndex);
+            // ── Build propulsion chains via physical mechanical neighbours plus
+            //    explicit belt buses. A belt is intentionally a logical shaft-to-shaft
+            //    link, so it joins the graph without occupying a grid cell itself.
+            var beltEdges = new List<MechanicalBeltEdge>(8);
+            if (mechBlocks.Count > 0)
+            {
+                var mechanicalIndexByBlock = new Dictionary<GridBlock, int>(mechBlocks.Count);
+                for (int i = 0; i < mechBlocks.Count; i++)
+                    if (mechBlocks[i] != null) mechanicalIndexByBlock[mechBlocks[i]] = i;
+                _grid.GetComponent<MechanicalBeltNetwork>()?.CollectMechanicalEdges(mechanicalIndexByBlock, beltEdges);
+            }
+            var chains = BuildChains(mechNodes, mechPositions, mechBlocks, posToMechIndex, beltEdges);
 
             // Note: turbocharger boost is now computed per-engine in RefreshMaritimeNode
             // (CountTurbos scans for adjacent turbochargers each tick).
@@ -462,9 +472,10 @@ namespace VoxelEngine.Maritime
 
         private ChainBuildResult BuildChains(List<MechanicalNode> mechNodes,
             List<Vector3Int> mechPositions, List<GridBlock> mechBlocks,
-            Dictionary<Vector3Int, int> posToIndex)
+            Dictionary<Vector3Int, int> posToIndex, List<MechanicalBeltEdge> beltEdges)
         {
             int n = mechNodes.Count;
+            var beltNeighbours = BuildBeltNeighbours(n, beltEdges);
             var visited = new bool[n];
             var chains = new List<PropulsionChain>(8);
             var order = new List<(int oldIndex, int chainId, int parentOldIndex)>(n);
@@ -492,6 +503,15 @@ namespace VoxelEngine.Maritime
                         visited[nb] = true;
                         queue.Enqueue(nb);
                     }
+                    if (beltNeighbours[cur] != null)
+                    {
+                        foreach (int nb in beltNeighbours[cur])
+                        {
+                            if (visited[nb]) continue;
+                            visited[nb] = true;
+                            queue.Enqueue(nb);
+                        }
+                    }
                 }
 
                 // Choose the source: prefer an engine, then a waterwheel.
@@ -514,7 +534,7 @@ namespace VoxelEngine.Maritime
                 List<(int idx, int parent)> ordered;
                 if (source >= 0)
                 {
-                    ordered = BfsOrdered(source, mechNodes, mechPositions, mechBlocks, posToIndex, n);
+                    ordered = BfsOrdered(source, mechNodes, mechPositions, mechBlocks, posToIndex, beltNeighbours, n);
                 }
                 else
                 {
@@ -546,7 +566,7 @@ namespace VoxelEngine.Maritime
 
         private List<(int idx, int parent)> BfsOrdered(int source, List<MechanicalNode> nodes,
             List<Vector3Int> positions, List<GridBlock> blocks,
-            Dictionary<Vector3Int, int> posToIndex, int total)
+            Dictionary<Vector3Int, int> posToIndex, List<int>[] beltNeighbours, int total)
         {
             var visited = new bool[total];
             var result = new List<(int, int)>(16);
@@ -565,8 +585,37 @@ namespace VoxelEngine.Maritime
                     visited[nb] = true;
                     queue.Enqueue((nb, cur));
                 }
+                // Mechanical belts only connect validated bidirectional shaft
+                // carriers, so either belt end may become the live input side.
+                if (beltNeighbours != null && beltNeighbours[cur] != null)
+                {
+                    foreach (int nb in beltNeighbours[cur])
+                    {
+                        if (visited[nb]) continue;
+                        visited[nb] = true;
+                        queue.Enqueue((nb, cur));
+                    }
+                }
             }
             return result;
+        }
+
+        private static List<int>[] BuildBeltNeighbours(int nodeCount, List<MechanicalBeltEdge> beltEdges)
+        {
+            var neighbours = new List<int>[nodeCount];
+            if (beltEdges == null) return neighbours;
+
+            for (int i = 0; i < beltEdges.Count; i++)
+            {
+                var edge = beltEdges[i];
+                if (edge.A < 0 || edge.B < 0 || edge.A >= nodeCount || edge.B >= nodeCount || edge.A == edge.B)
+                    continue;
+                neighbours[edge.A] ??= new List<int>(2);
+                neighbours[edge.B] ??= new List<int>(2);
+                if (!neighbours[edge.A].Contains(edge.B)) neighbours[edge.A].Add(edge.B);
+                if (!neighbours[edge.B].Contains(edge.A)) neighbours[edge.B].Add(edge.A);
+            }
+            return neighbours;
         }
 
         private bool CanTraverseMechanicalEdge(int fromIndex, int toIndex,

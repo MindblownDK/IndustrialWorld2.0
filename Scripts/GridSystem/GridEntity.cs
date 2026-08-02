@@ -412,6 +412,9 @@ namespace VoxelEngine.GridSystem
             // Notify the maritime propulsion graph that the ship changed
             // (it lazily rebuilds next FixedUpdate — zero per-block work).
             NotifyMaritimeDirty();
+            // A newly placed parallel shaft may sit inside an existing mechanical
+            // belt run and therefore become an additional live take-off point.
+            GetComponent<VoxelEngine.Maritime.MechanicalBeltNetwork>()?.NotifyGridTopologyChanged();
             // Tell pipe visuals the topology changed so they rebuild their arms
             // (event-driven — no continuous polling).
             VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged();
@@ -426,6 +429,9 @@ namespace VoxelEngine.GridSystem
             RecalculateMass();
 
             NotifyMaritimeDirty();
+            // Remove belt links whose pulley was just dismantled and refresh any
+            // remaining belt take-offs before the next drivetrain graph rebuild.
+            GetComponent<VoxelEngine.Maritime.MechanicalBeltNetwork>()?.NotifyGridTopologyChanged();
             VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged();
 
             if (_blocks.Count == 0 && (PrecisionAttachments == null || PrecisionAttachments.Count == 0))
