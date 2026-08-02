@@ -1,9 +1,368 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.78.7-dev`
+**Current Version:** `6.78.22-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.78.22-dev] Icon Batch 18 — Landing Gear Redo + Disk Rainbow & Shell Ammo
+
+**Type:** PATCH — art/content, save-compatible. Zero C# changes.
+
+#### ♻️ Remade icon (Thomas feedback)
+- 🧲 `gitem_landinggear` (GridSystem) — rebuilt as a classic magnetic lock-gear: chunky light-grey armored mount block with a big round segmented magnetic disc underneath and a warning-yellow ring accent. The runner-up design (a square mag-pad) was too good to waste, so it became `block_stationarydockingport` (Industrial) — bonus icon!
+
+#### 🎨 Disk tier family via hue-shift (identical art, tier = color, matched to each asset's `iconTint`)
+- 🟢 `disk_1k` · 🩵 `disk_4k` · 🔵 `disk_16k` · 🟣 `disk_64k` · 🩷 `disk_90k` (Survival) — rugged cartridge with glowing holo-disc core + accent stripe
+
+#### 🎨 New item icons (7 more)
+Coverage now **174 / 398** itemIds (14 files this batch: 10 generated + 4 hue-derived).
+
+- 💥 `item_shell_explosive` (Combat) — heavy shell with red nose band
+- 🔵 `item_shell_scatter` (Combat) — scatter shell, blue band, pellets peeking out
+- 🗿 `item_giant_shell` (Combat) — enormous blunt-nosed naval shell
+- 🎯 `item_aa_rounds` (Combat) — 4-round AA clip, brass + cyan proximity tips
+- 📎 `ammo_magazine` (GridSystem) — loaded curved rifle magazine
+- 🛞 `gitem_wheel_3x3` (GridSystem) — deep-tread off-road wheel, steel rim
+- 🌀 `gitem_gyroscope` (GridSystem) — gimbal-mounted flywheel gyro block
+
+#### Files touched
+- `VoxelEngineAssets/ItemIcons/GridSystem/gitem_landinggear.png` — replaced (GUID/binding preserved)
+- 13 new icons under `ItemIcons/{Survival,Combat,GridSystem,Industrial}/` (+.meta), sprite metas + `icon:` refs written
+- `Scripts/Core/GameVersion.cs` — Patch 21 → 22
+
+---
+
+### [6.78.21-dev] Icon Batch 17 — Power Blocks + CPU/RAM Tier Families
+
+**Type:** PATCH — art/content, save-compatible. Zero C# changes.
+
+#### 🎨 Tier families via hue-shift (identical art, tier = color)
+- 🟤🟦🟣 **CPU family** — `cpu_1` (copper pins) / `cpu_2` (cyan pins) / `cpu_4` (purple pins): one master render, pin hue shifted to match the game's tier color language
+- 🟦🔵 **RAM family** — `ram_4` (cyan LED strip) / `ram_16` (royal-blue strip, matching its asset `iconTint`)
+
+#### 🎨 New item icons (8 more)
+Coverage now **162 / 398** itemIds (13 icons this batch: 10 generated + 3 hue-derived).
+
+- 🔋 `gitem_batterylarge` (GridSystem) — tall battery cabinet, two green charge windows
+- 🔋 `gitem_batterygiant` (GridSystem) — massive battery bank, four charge windows + busbar terminals
+- 🛬 `gitem_landinggear` (GridSystem) — hydraulic landing strut with wide footpad
+- ☀️ `gitem_solarpanel` (GridSystem) — deep-blue photovoltaic panel, silver frame
+- 💣 `item_shell_standard` (Combat) — long olive artillery shell, copper driving band
+- 🛢️ `item_crudeoilbarrel` (Industrial) — black ribbed oil drum with rusty rim
+- ⚪ `item_plastic` (Industrial) — heap of glossy polymer pellets
+- 🌿 `item_biomass` (Survival) — twine-tied bundle of green plant clippings
+
+#### Files touched
+- 13 new icons under `ItemIcons/{GridSystem,Survival,Combat,Industrial}/` (+.meta), sprite metas + `icon:` refs written
+- `Scripts/Core/GameVersion.cs` — Patch 20 → 21
+
+---
+
+### [6.78.20-dev] Icon Batch 16 — Handheld Arsenal & Core Tools
+
+**Type:** PATCH — art/content, save-compatible. Zero C# changes.
+
+#### 🎨 New item icons (10)
+High-visibility handheld set — weapons and tools you stare at in hand and hotbar all session. Coverage now **149 / 398** itemIds.
+
+- 🔫 `weapon_rifle` (Combat) — industrial assault rifle, wooden furniture + box magazine, diagonal
+- 💣 `weapon_grenade` (Combat) — olive pineapple frag grenade with lever and ring
+- 🗡️ `iron_sword` (Combat) — sturdy broadsword with fuller and leather grip
+- 🔫 `iron_pistol` (Combat) — heavy industrial revolver with wooden grip
+- ⛏️ `wooden_pickaxe` (Tools) — crude stone-tipped wooden pickaxe
+- 🪓 `wooden_axe` (Tools) — twine-lashed crude wooden axe
+- 🔧 `wrench` (Survival) — polished combination wrench, open + ring end
+- 🥉 `item_bullets` (Combat) — upright brass rifle rounds, copper tips
+- 🪟 `item_glass` (Industrial) — clear glass sheet with diagonal sheen and beveled edge
+- 👨‍✈️ `gitem_cockpitsmall` (GridSystem) — compact cockpit block with wraparound cyan canopy
+
+#### Files touched
+- 10 new icons under `ItemIcons/{Combat,Tools,Survival,Industrial,GridSystem}/` (+.meta), sprite metas + `icon:` refs written
+- `Scripts/Core/GameVersion.cs` — Patch 19 → 20
+
+---
+
+### [6.78.19-dev] Icon Batch 15 — Unified Splitter Tier Family + Combat & Components
+
+**Type:** PATCH — art/content, save-compatible. Zero C# changes.
+
+#### 🎨 Splitter tier family unified (Thomas feedback)
+All three conveyor splitters now share **one identical base design** (warm-grey steel cube, four black rubber belts with rollers, one belt end exiting each side, no arrows) and differ **only by tier color**, taken straight from each asset's own `iconTint`:
+
+- 🟢 `block_conveyorsplittermk1` — green accent ring + corner lights
+- 🔵 `block_conveyorsplittermk2` — cyan accent ring + corner lights
+- 🟣 `block_conveyorsplittermk3` — purple accent ring + corner lights
+
+The old mismatched mk2/mk3 cube art (the "compact dark steel cube") is gone. Variants were produced by hue-shifting the master render, so the three are truly pixel-identical apart from tier color.
+
+#### 🎨 New item icons (9)
+Coverage now **139 / 398** itemIds.
+
+- 🔫 `block_turret` (Combat) — compact light machine-gun turret, swivel base + slim double barrel
+- 🟪 `block_antimatter_bomb` (Combat) — dark armor cube with swirling purple antimatter core behind a round window
+- 🦾 `block_assembler` (Blocks) — factory cube with open bay, orange robot arm over a tray
+- 🔩 `item_steelplate` (Industrial) — fanned stack of 3 brushed steel plates
+- ⚙️ `item_ironplate` (Industrial) — stack of 3 rough raw-iron plates with rust-toned edges
+- 🟩 `item_circuit` (Industrial) — green PCB with copper traces and central chip
+- 🟦 `item_advcircuit` (Industrial) — dark-blue advanced PCB, gold traces, cyan-lit processor
+- 🔋 `gitem_batterysmall` (GridSystem) — compact battery cube with glowing green charge window and brass terminals
+- 🚀 `gitem_hydrothruster_small` (GridSystem) — gunmetal thruster block with bell nozzle and cyan inner glow
+
+#### Files touched
+- `VoxelEngineAssets/ItemIcons/Factory/block_conveyorsplittermk{1,2,3}.png` — replaced with the unified tier family (GUIDs/bindings preserved)
+- 9 new icons under `ItemIcons/{Combat,Blocks,Industrial,GridSystem}/` (+.meta), sprite metas + `icon:` refs written
+- `Scripts/Core/GameVersion.cs` — Patch 18 → 19
+
+---
+
+### [6.78.18-dev] Icon Batch 14 — Junction Binding Fix + Combat & Relay Set
+
+**Type:** PATCH — art/content, save-compatible. Zero C# changes.
+
+#### 🔧 Fixed binding (root cause of repeat junction complaint)
+- 🔀 `block_conveyorsplittermk2` — the batch 12/13 junction remakes were accidentally written to an orphaned file (`ItemIcons/GridSystem/splittermk2.png`) that no item asset references; the real in-game item kept showing the old arrow-heavy icon. The new art is now saved over the correct, already-bound file `ItemIcons/Factory/block_conveyorsplittermk2.png` (GUID unchanged), and the orphan file is deleted. Junction now shows: **exactly 4 rubber belts with visible rollers, one per side, no arrows, no down-belt, bright readable steel cube**. Full-tree audit confirms zero remaining orphan icons.
+
+#### ♻️ Verified remakes from 6.78.17 (unchanged)
+- ⛏️ `block_quarry` and 🌀 `block_hydrogenengine` already match the requested stationary-block / turbine-intake designs — art kept as shipped.
+
+#### 🎨 New item icons (7)
+Coverage now **130 / 398** itemIds.
+
+- 🧨 `block_powder_keg` (Combat) — wooden powder keg, iron hoops, cork + coiled fuse
+- 💣 `block_mortar_turret` (Combat) — squat armored mortar with steep-angled stubby tube
+- 🔌 `block_powerrelay` (Industrial) — grey electrical cabinet with 3 ceramic bushings and copper cable loop
+- ⚡ `block_hvpowerrelay` (HighVoltage) — dark open-frame HV relay with 3 stacked porcelain insulators and copper terminals
+- 🧪 `block_pipeglass` (Industrial) — clear glass fluid pipe with cyan liquid flowing inside
+- 🔩 `block_pipesolid` (Industrial) — steel fluid pipe with flange couplings and red valve wheel
+- 🖥️ `block_patternterminal` (Factory) — pattern encoding console with glowing green 3×3 grid screen
+
+#### Files touched
+- `VoxelEngineAssets/ItemIcons/Factory/block_conveyorsplittermk2.png` — replaced with corrected junction art (binding preserved)
+- `VoxelEngineAssets/ItemIcons/GridSystem/splittermk2.png` (+.meta) — orphaned file removed
+- 7 new icons under `ItemIcons/{Combat,Industrial,HighVoltage,Factory}/` (+.meta), sprite metas + `icon:` refs written
+- `Scripts/Core/GameVersion.cs` — Patch 17 → 18
+
+---
+
+### [6.78.17-dev] Icon Batch 13 — Powerline & Pipe Set + Three Remakes
+
+**Type:** PATCH — art/content, save-compatible. Zero C# changes.
+
+#### 🎨 New item icons (7)
+Ten-tile coverage continues — now **123 / 398** itemIds carry premium hand-tuned sticker-style icons.
+
+- ⚡ `block_hvtower` (HighVoltage) — galvanized lattice HV pylon with twin crossarms and insulator strings
+- 🔌 `block_lvpowerrelay` (HighVoltage) — compact LV relay pole with transformer box and crackling insulators
+- 🪵 `block_powerpole` (Industrial) — wooden utility pole with crossarm, ceramic insulators and wire stubs
+- 📦 `block_itempipe` (Industrial) — square-section riveted steel item duct
+- 🔍 `block_itempipe_glass` (Industrial) — clear glass item tube with a visible crate sliding inside
+- 💡 `block_light` (Factory) — dark industrial light block with one bright warm lamp face
+- 💥 `block_giant_shell_turret` (Combat) — massive artillery dome turret with one very long elevated heavy barrel
+
+#### ♻️ Remade icons (3, Thomas feedback)
+- 🔀 `splittermk2` — compact square conveyor junction: now a clean cube with **exactly 4 belts (one per side)**; the stray down-belt and all painted arrows are gone
+- ⛏️ `block_quarry` — rebuilt as a **stationary cubic frame block** with a front gantry carrying three drill augers; no wheels, no cab
+- 🌀 `block_hydrogenengine` — rebuilt as a proper hydrogen engine: chunky gunmetal block whose face is **one large circular turbine intake** with visible fan blades and a cyan accent ring
+
+#### Files touched
+- `VoxelEngineAssets/ItemIcons/HighVoltage/block_hvtower.png` (+.meta)
+- `VoxelEngineAssets/ItemIcons/HighVoltage/block_lvpowerrelay.png` (+.meta)
+- `VoxelEngineAssets/ItemIcons/Industrial/block_powerpole.png` (+.meta)
+- `VoxelEngineAssets/ItemIcons/Industrial/block_itempipe.png` (+.meta)
+- `VoxelEngineAssets/ItemIcons/Industrial/block_itempipe_glass.png` (+.meta)
+- `VoxelEngineAssets/ItemIcons/Factory/block_light.png` (+.meta)
+- `VoxelEngineAssets/ItemIcons/Combat/block_giant_shell_turret.png` (+.meta)
+- `VoxelEngineAssets/ItemIcons/GridSystem/splittermk2.png` (remade in place — GUID/binding unchanged)
+- `VoxelEngineAssets/ItemIcons/Industrial/block_quarry.png` (remade in place — GUID/binding unchanged)
+- `VoxelEngineAssets/ItemIcons/Power/block_hydrogenengine.png` (remade in place — GUID/binding unchanged)
+- Sprite `.meta` + `icon:` bindings written/patched for the 7 new icons across their item/block assets
+- `Scripts/Core/GameVersion.cs` — Patch 16 → 17
+
+---
+
+### [6.78.16-dev] Icon Batch 12 — Heavy Industry + Three Remakes
+
+**Type:** PATCH — art batch + art-direction fixes (save-compatible).
+
+#### 🎨 Remade per feedback
+- **Energy relic turret**: rebuilt from a muddy dark blob into an elegant white-marble pedestal with gold trim, slim bronze prongs holding one floating prismatic cyan crystal — premium and clean.
+- **Splitter mk3 (square)**: belt geometry was wrong — re-made as a square junction with exactly **one input and four output belts, one per side, nothing more**.
+- **Splitter mk2 (wide)**: the painted arrows now follow the real flow — input arrow points INTO the junction, output arrows point OUT.
+
+#### 🏗️ Icon batch 12 — the heavy industry set (7 new icons)
+- **Energy & extraction**: big **power station** with cooling towers, hydraulic **pumpjack** (nodding donkey — unmistakable), **oil refinery** with its distillation column and flare, and the cyan-fed **hydrogen engine**.
+- **Field tech**: automatic **quarry** gantry drill and the chunky **portable reactor** with a glowing blue core window.
+- **Research** (new category): the **research lab** with observation dome and sample tanks.
+- All die-cut sticker style, zero background, auto-bound by itemId.
+- Workspace housekeeping: `New models` + `Imported Textures` removed (~39 MB; git copies untouched).
+- **Coverage: 113 / 398 itemIds.**
+
+#### Files touched
+- `VoxelEngineAssets/ItemIcons/{Survival,Industrial,Research,Factory,Combat}/` (+7 new PNGs & metas, 3 regenerated)
+- Definition assets auto-bound by itemId
+- `Scripts/Core/GameVersion.cs` (6.78.15 → 6.78.16), `Changelog.md`
+
+---
+
+### [6.78.15-dev] Icon Batch 11 — Terminals, Splitters & Energy Pipes
+
+**Type:** PATCH — art batch (save-compatible).
+
+#### 🔌 Icon batch 11 — ten more items got sticker icons
+- **Splitters complete**: 3-way mk2 junction and 4-way cross mk3 join the mk1 T — output count reads straight off the junction shape.
+- **Terminals**: cyan-holo **wireless storage terminal**, blueprint-screen **crafting terminal**, and the retro-green **disk manipulator** with its reel slot.
+- **Chemical plant**: lime bubbling reaction vats — unmistakably chemistry.
+- **Energy pipe tier ladder** (all four): copper coils → gold coils → matte iron coils → **glowing cyan superconductor** — same pipe body, coil colour = tier, never mix them up again.
+- All die-cut sticker style, zero background, auto-bound by itemId.
+- **Coverage: 106 / 398 itemIds.**
+
+#### Files touched
+- `VoxelEngineAssets/ItemIcons/{Factory,Industrial,Survival,Power}/` (+10 PNGs & metas)
+- Definition assets auto-bound by itemId
+- `Scripts/Core/GameVersion.cs` (6.78.14 → 6.78.15), `Changelog.md`
+
+---
+
+### [6.78.14-dev] Icon Batch 10 — Turret Arsenal & Pipe Logistics
+
+**Type:** PATCH — art batch (save-compatible).
+
+#### 🔫 Icon batch 10 — ten more items got sticker icons
+- **Defense arsenal complete**: rotary-barrel minigun, missile-pod anti-air battery, long-barrel artillery cannon, the rail-mounted **Gustav** siege gun, and the arcane **energy relic turret** with its floating cyan crystal — five turrets, five unmistakable silhouettes.
+- **Logistics**: enclosed drop chute with its items window and the wide-mouth loading funnel hopper.
+- **Gas plumbing**: flanged steel gas pipe + the **glass gas pipe** with cyan flow visibly moving through the glass — you can literally see the gas.
+- **Comfort**: frosted blue cryo-sleep pod joins the humble bed.
+- Word from the grindstone: the unused `Liquid` asset folder was removed from the workspace copy (1,044 files) to stay under the file limit — pull it back from git any time if it's needed again.
+- **Coverage: 96 / 398 itemIds.**
+
+#### Files touched
+- `VoxelEngineAssets/ItemIcons/{Combat,Factory,Survival}/` (+10 PNGs & metas)
+- Definition assets auto-bound by itemId
+- `Scripts/Core/GameVersion.cs` (6.78.13 → 6.78.14), `Changelog.md`
+
+---
+
+### [6.78.13-dev] Icon Batch 9 — The Production Line
+
+**Type:** PATCH — art batch (save-compatible).
+
+#### 🏗️ Icon batch 9 — ten more items got sticker icons
+- **Conveyor family grows**: plain grey *basic* belt, orange-striped *fast* belt and the T-junction *splitter mk1* — speed reads off the stripe colour and the split is unmistakable next to straight sections.
+- **Assembler tiers mk1→mk3**: olive single-arm starter → blue-grey dual-arm with glass chamber → dark high-tech unit with glowing violet panel; the ladder is obvious in the build menu.
+- **Electric furnace**: brushed-steel sibling of the stone furnace, glowing coil window versus open fire mouth.
+- **Survival tech**: twin-cell electrolyser with gas tubes, and the glass-dome **biofarm** with crops growing under lights inside.
+- **Defense opens**: the red **flamethrower turret** with its fuel tank and pilot flame.
+- All die-cut sticker style, zero background, auto-bound by itemId.
+- **Coverage: 86 / 398 itemIds.**
+
+#### Files touched
+- `VoxelEngineAssets/ItemIcons/{Factory,Survival,Combat}/` (+10 PNGs & metas)
+- Definition assets auto-bound by itemId
+- `Scripts/Core/GameVersion.cs` (6.78.12 → 6.78.13), `Changelog.md`
+
+---
+
+### [6.78.12-dev] Icon Batch 8 — Core Base Blocks + Harvester & Helm Fixes
+
+**Type:** PATCH — art batch + art-direction fixes (save-compatible).
+
+#### 🎨 Re-created per feedback
+- **Harvester** is now what it actually IS in-game: a **stationary** crop-harvesting block — boxy olive machine bolted to a fixed frame with the cutter bar and toothed reel jutting out front. No wheels, no tracks.
+- **Crusader great helm** got its front ventilation slits made prominent — unmistakably a helm now, no more tankard.
+
+#### 🏭 Icon batch 8 — the everyday base blocks (8 new icons)
+- **Blocks** (new category): banded storage chest, glowing-mouth furnace, workbench with vise & tools, and the humble survival bed.
+- **Power** (new category): the **grid battery** block — green charge bars matching its in-game gauge — and the coal generator with its hopper and copper coils.
+- **Factory**: heavy ore crusher with jaws and flywheel.
+- **Survival**: riveted industrial gas tank with pressure gauge and cyan level window.
+- All die-cut sticker style, zero background, auto-bound by itemId.
+- **Coverage: 76 / 398 itemIds.**
+
+#### Files touched
+- `VoxelEngineAssets/ItemIcons/{Blocks,Power,Factory,Survival}/` (+8 new PNGs & metas, 2 regenerated)
+- Definition assets auto-bound by itemId
+- `Scripts/Core/GameVersion.cs` (6.78.11 → 6.78.12), `Changelog.md`
+
+---
+
+### [6.78.11-dev] Icon Batch 7 + Paladin & Helmet Art Fixes
+
+**Type:** PATCH — art batch + art-direction fixes (save-compatible).
+
+#### 🎨 Re-created per feedback
+- **Paladin bulwark**: the wings are gone — now a clean holy heavy cuirass with polished golden trim and a radiant sun emblem on the breastplate.
+- **Space helmet**: no more astronaut bubble — it's a medieval **crusader great helm** (flat-topped steel).
+
+#### 🏭 Icon batch 7 — the block_ continent opens (8 new icons)
+- **HighVoltage**: LV junction connector box + the stacked-ceramic HV insulator connector — the two connectors are finally distinguishable.
+- **Survival**: automated harvester unit and a glowing armored **reactor core**.
+- **Factory**: express conveyor section with yellow speed chevrons.
+- **WindPower** (new category): streamlined T90 turbine nacelle + its rolled **blueprint scroll** (blueprint = blue, obviously).
+- **GridSystem**: handheld ore detector with radar screen and whip antenna.
+- All die-cut sticker style, zero background, auto-bound by itemId.
+- **Coverage: 68 / 398 itemIds.**
+
+#### Files touched
+- `VoxelEngineAssets/ItemIcons/{HighVoltage,Survival,Factory,WindPower,GridSystem,Combat}/` (+8 new PNGs & metas, 2 regenerated)
+- Definition assets auto-bound by itemId
+- `Scripts/Core/GameVersion.cs` (6.78.10 → 6.78.11), `Changelog.md`
+
+---
+
+### [6.78.10-dev] Icon Batch 6 — Armor Ladder Complete, Trophies & Hull Woods
+
+**Type:** PATCH — art batch (save-compatible).
+
+#### 🛡️ Icon batch 6 — ten more items got sticker icons
+- **Armor ladder complete** (6 tiers, 6 unmistakable silhouettes): quilted initiate gambeson, squire leather, knight chainmail, templar cuirass, golden-winged **paladin bulwark** and the white celestial **stellar archon** power armor — plus the **space helmet** (Survival) for vacuum work.
+- **Fauna trophies** (new category): armored hide plate, curled manticore stinger and the crackling **roc storm core** orb — boss drops that look like trophies.
+- **Maritime woods** (new category): pale lightweight balsa beam, glossy black tar-coated plank and curved raw hull timber — shipbuilding grades read at a glance.
+- All die-cut sticker style, zero background, auto-bound by itemId.
+- **Coverage: 60 / 398 itemIds.**
+
+#### Files touched
+- `VoxelEngineAssets/ItemIcons/{Combat,Survival,Fauna,Maritime}/` (+10 PNGs & metas)
+- Definition assets auto-bound by itemId
+- `Scripts/Core/GameVersion.cs` (6.78.9 → 6.78.10), `Changelog.md`
+
+---
+
+### [6.78.9-dev] Icon Batch 5 — Seeds, Ores & Armor Ladder
+
+**Type:** PATCH — art batch (save-compatible).
+
+#### 🌱 Icon batch 5 — ten more items got sticker icons
+- **Seed family complete**: carrot, corn, potato, pumpkin and wheat seed packets join the berry one — every packet spills its *own* seed type, so the crop reads straight off the icon in the planter UI.
+- **Ore family complete**: copper ore (grey rock, gleaming orange veins) pairs with iron ore; plus a **sand** heap for the glass/cement chain.
+- **Armor ladder begins**: squire leather vest → knight chainmail hauberk → templar steel cuirass — three tiers, three unmistakable silhouettes (gambeson, paladin bulwark and stellar archon still to come).
+- All die-cut sticker style, zero background, auto-bound by itemId (family duplicate definitions patched too).
+- **Coverage: 50 / 398 itemIds.**
+
+#### Files touched
+- `VoxelEngineAssets/ItemIcons/{Farming,Industrial,Combat}/` (+10 PNGs & metas)
+- Definition assets auto-bound by itemId (incl. duplicate folders)
+- `Scripts/Core/GameVersion.cs` (6.78.8 → 6.78.9), `Changelog.md`
+
+---
+
+### [6.78.8-dev] Icon Batch 4 — Full Food Table & Family Completions
+
+**Type:** PATCH — art batch (save-compatible).
+
+#### 🎃 Icon batch 4 — ten more items got sticker icons
+- **The Farming table is complete**: small pumpkin, hearty stew bowl, berry pie slice, cornbread, roast potato halves, creamy pumpkin soup — crops and kitchen dishes now read at a glance.
+- **Pickaxe family complete**: the primitive stone pickaxe (lashed rock head) and dark tactical steel pickaxe join the iron one — tier quality reads straight off the silhouette.
+- **Wire family complete**: gold LV and graphite LV spools join the copper LV spool and the heavy HV cable — four visually distinct wire types, impossible to confuse in a chest.
+- All die-cut sticker style, zero background, auto-bound by itemId.
+- **Coverage: 40 / 398 itemIds.**
+
+#### Files touched
+- `VoxelEngineAssets/ItemIcons/{Farming,Tools,Items}/` (+10 PNGs & metas)
+- 10 definition assets (icon references auto-bound by itemId)
+- `Scripts/Core/GameVersion.cs` (6.78.7 → 6.78.8), `Changelog.md`
+
+---
 
 ### [6.78.7-dev] Icon Batch 3 — Food, Wires & Axe
 
