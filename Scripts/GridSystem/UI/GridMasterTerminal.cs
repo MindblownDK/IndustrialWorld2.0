@@ -979,8 +979,6 @@ namespace VoxelEngine.GridSystem.UI
                 return gb.IsOverstressed ? "OVERSTRESSED" : $"{gb.OutputRPM:0} RPM";
             if (block is VoxelEngine.Maritime.GridRotationTransfer rt)
                 return rt.CurrentRPM > 1f ? $"{rt.CurrentRPM:0} RPM" : "Stopped";
-            if (block is VoxelEngine.Maritime.GridEncasedChainDrive cd)
-                return cd.CurrentRPM > 1f ? $"{cd.CurrentRPM:0} RPM" : "Stopped";
             if (block is VoxelEngine.Maritime.GridShaftHousing housing)
                 return housing.CurrentRPM > 1f ? $"{housing.CurrentRPM:0} RPM · SEALED" : "SEALED";
             if (block is VoxelEngine.Maritime.GridPropeller prop)
@@ -1022,7 +1020,6 @@ namespace VoxelEngine.GridSystem.UI
             if (block is VoxelEngine.Maritime.GridTurbocharger) return "Turbochargers";
             if (block is VoxelEngine.Maritime.GridWaterwheel) return "Waterwheels";
             if (block is VoxelEngine.Maritime.GridRotationTransfer) return "Rotation Transfers";
-            if (block is VoxelEngine.Maritime.GridEncasedChainDrive) return "Legacy Chain Drives";
             if (block is VoxelEngine.Maritime.GridShaftHousing) return "Watertight Shaft Housings";
             if (block is VoxelEngine.Maritime.GridDriveShaft) return "Drive Shafts";
             if (block is VoxelEngine.Maritime.GridExhaustPipe) return "Exhaust Pipes";

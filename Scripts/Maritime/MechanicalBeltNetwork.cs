@@ -87,16 +87,12 @@ namespace VoxelEngine.Maritime
         }
 
         /// <summary>
-        /// Only true shaft carriers may receive a belt. Gearboxes remain direct-port
-        /// equipment; this prevents a belt from bypassing their selected ratio.
-        /// Legacy chain drives remain eligible only so old saved ships can be upgraded
-        /// without losing their existing mechanical endpoint.
+        /// Only direct shaft carriers may receive a belt. Gearboxes remain direct-port
+        /// equipment so a belt can never bypass their selected ratio.
         /// </summary>
         public static bool IsBeltEligibleShaft(GridBlock block)
         {
-            return block is GridDriveShaft
-                || block is GridShaftHousing
-                || block is GridEncasedChainDrive;
+            return block is GridDriveShaft || block is GridShaftHousing;
         }
 
         private void Awake()

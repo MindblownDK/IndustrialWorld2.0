@@ -1342,7 +1342,6 @@ namespace VoxelEngine.GridSystem
             if (item.blockPrefab.GetComponentInChildren<GridDriveShaft>(true) != null
                 || item.blockPrefab.GetComponentInChildren<GridShaftHousing>(true) != null
                 || item.blockPrefab.GetComponentInChildren<GridRotationTransfer>(true) != null
-                || item.blockPrefab.GetComponentInChildren<GridEncasedChainDrive>(true) != null
                 || item.blockPrefab.GetComponentInChildren<GridGearbox>(true) != null
                 || item.blockPrefab.GetComponentInChildren<GridMaritimeGenerator>(true) != null
                 || item.blockPrefab.GetComponentInChildren<GridPropeller>(true) != null)

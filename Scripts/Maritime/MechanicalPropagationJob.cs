@@ -67,7 +67,7 @@ namespace VoxelEngine.Maritime
             // ── Determine / compute all live torque sources ─────────────
             // Any engine/waterwheel in the connected mechanical component can feed
             // the shared shaft bus. This lets players join multiple engines into one
-            // Rotation Transfer / Encased Chain Drive and have their torque combine,
+            // Rotation Transfers and direct shaft carriers have their torque combine,
             // regardless of which side they used as the physical input.
             float torque = 0f;
             float rpmWeighted = 0f;

@@ -6903,19 +6903,28 @@ root =>
                 recipes.Add(r); return r;
             }
 
-            // The Encased Chain Drive is retired from new crafting/research rather
-            // than deleted. Its asset, prefab, and runtime class remain untouched so
-            // existing inventories and saved ships continue to load safely.
-            void RetireLegacyEncasedChainDriveRecipe()
+            // Remove stale Encased Chain Drive links from the active recipe registry
+            // and research tree. The actual legacy assets are intentionally removed
+            // by this breaking-content delivery; this repair also cleans projects
+            // that still carry an old asset after a partial update.
+            void RemoveEncasedChainDriveCatalogLinks()
             {
                 var legacyRecipe = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeDefinition>(
                     $"{RECIPES}/Recipe_MEncasedChainDrive.asset");
-                if (legacyRecipe == null) return;
 
                 bool registryChanged = false;
                 if (registry != null && registry.recipes != null)
                 {
-                    while (registry.recipes.Remove(legacyRecipe)) registryChanged = true;
+                    for (int i = registry.recipes.Count - 1; i >= 0; i--)
+                    {
+                        var candidate = registry.recipes[i];
+                        // Once the deleted asset imports as a missing reference Unity
+                        // presents it as null, so remove both that null and a still-live
+                        // legacy reference during partial-update recovery.
+                        if (candidate != null && (legacyRecipe == null || candidate != legacyRecipe)) continue;
+                        registry.recipes.RemoveAt(i);
+                        registryChanged = true;
+                    }
                     if (registryChanged) EditorUtility.SetDirty(registry);
                 }
 
@@ -6928,8 +6937,12 @@ root =>
                     bool nodeChanged = false;
                     foreach (var unlocked in node.unlocksRecipes)
                     {
-                        if (unlocked == legacyRecipe) { nodeChanged = true; continue; }
-                        if (unlocked != null) retained.Add(unlocked);
+                        if (unlocked == null || (legacyRecipe != null && unlocked == legacyRecipe))
+                        {
+                            nodeChanged = true;
+                            continue;
+                        }
+                        if (!retained.Contains(unlocked)) retained.Add(unlocked);
                     }
                     if (!nodeChanged) continue;
                     node.unlocksRecipes = retained.ToArray();
@@ -6937,6 +6950,62 @@ root =>
                     treeChanged = true;
                 }
                 if (treeChanged) EditorUtility.SetDirty(tree);
+            }
+
+            VoxelEngine.Crafting.RecipeDefinition EnsureMechanicalBeltRecipe(VoxelEngine.Maritime.MechanicalBeltItem belt)
+            {
+                var recipe = AddMRecipe("Recipe_MMechanicalBelt", "Mechanical Belt", belt,
+                    (ironPlate, 2), (ironGear, 1), (copperWire != null ? copperWire : copperIngot, 2));
+                if (recipe == null) return null;
+
+                // Repair only absent/wrong identity links. Existing numeric balance
+                // (cost, craft time, output count) is left untouched on reruns.
+                bool repaired = false;
+                if (recipe.outputItem != belt) { recipe.outputItem = belt; repaired = true; }
+                if (string.IsNullOrEmpty(recipe.displayName)) { recipe.displayName = "Mechanical Belt"; repaired = true; }
+                if (recipe.outputCount <= 0) { recipe.outputCount = 1; repaired = true; }
+                if (recipe.requiredStation != VoxelEngine.Crafting.StationTier.Assembler)
+                {
+                    recipe.requiredStation = VoxelEngine.Crafting.StationTier.Assembler;
+                    repaired = true;
+                }
+                if (recipe.inputs == null || recipe.inputs.Length == 0)
+                {
+                    var inputs = new List<VoxelEngine.Crafting.RecipeIngredient>();
+                    if (ironPlate != null) inputs.Add(new VoxelEngine.Crafting.RecipeIngredient { item = ironPlate, count = 2 });
+                    if (ironGear != null) inputs.Add(new VoxelEngine.Crafting.RecipeIngredient { item = ironGear, count = 1 });
+                    var wire = copperWire != null ? copperWire : copperIngot;
+                    if (wire != null) inputs.Add(new VoxelEngine.Crafting.RecipeIngredient { item = wire, count = 2 });
+                    recipe.inputs = inputs.ToArray();
+                    repaired = true;
+                }
+                if (recipe.unlockedByDefault) { recipe.unlockedByDefault = false; repaired = true; }
+                if (repaired) EditorUtility.SetDirty(recipe);
+                return recipe;
+            }
+
+            void EnsureResearchUnlock(VoxelEngine.Research.ResearchNode node, VoxelEngine.Crafting.RecipeDefinition recipe)
+            {
+                if (node == null || recipe == null) return;
+                var unlocks = new List<VoxelEngine.Crafting.RecipeDefinition>();
+                bool repaired = false;
+                if (node.unlocksRecipes != null)
+                {
+                    foreach (var existing in node.unlocksRecipes)
+                    {
+                        if (existing == null) { repaired = true; continue; }
+                        if (unlocks.Contains(existing)) { repaired = true; continue; }
+                        unlocks.Add(existing);
+                    }
+                }
+                if (!unlocks.Contains(recipe))
+                {
+                    unlocks.Add(recipe);
+                    repaired = true;
+                }
+                if (!repaired) return;
+                node.unlocksRecipes = unlocks.ToArray();
+                EditorUtility.SetDirty(node);
             }
 
             var SzL = VoxelEngine.GridSystem.GridSize.Large;
@@ -7081,9 +7150,8 @@ root =>
             var itemRotTransfer = MakeMItem("MItem_RotationTransfer", "Rotation Transfer", new Color(0.62f,0.58f,0.46f), rotTransferPref, SzL, 140, 360);
             AddMRecipe("Recipe_MRotationTransfer", "Rotation Transfer", itemRotTransfer, (ironPlate, 3), (ironGear, 2));
 
-            // Watertight Shaft Housing — replaces the craftable Encased Chain Drive.
-            // It is a sealed hull block with a rotating shaft through its centre, so
-            // drivetrain runs can cross a wet hull without reading as an open hole.
+            // Watertight Shaft Housing: sealed hull block with a rotating shaft
+            // through its centre, so drivetrain runs cross wet hulls safely.
             var shaftHousingPref = MakeMPref<VoxelEngine.Maritime.GridShaftHousing>("ShaftHousing_Large", new Color(0.30f,0.38f,0.42f), Vector3.one, SzL,
                 h => { h.maxSafeRPM = 3200f; h.buoyancyFactor = 0.55f; h.healthMultiplier = 1.15f; });
             var itemShaftHousing = MakeMItem("MItem_ShaftHousing", "Watertight Shaft Housing", new Color(0.30f,0.38f,0.42f), shaftHousingPref, SzL, 340, 1000);
@@ -7091,8 +7159,8 @@ root =>
 
             // Mechanical Belt — a consumable two-click pulley link, not a grid block.
             var itemMechanicalBelt = MakeMechanicalBeltItem("Item_MechanicalBelt", "Mechanical Belt", new Color(0.88f,0.62f,0.16f));
-            AddMRecipe("Recipe_MMechanicalBelt", "Mechanical Belt", itemMechanicalBelt, (ironPlate, 2), (ironGear, 1), (copperWire, 2));
-            RetireLegacyEncasedChainDriveRecipe();
+            var recipeMechanicalBelt = EnsureMechanicalBeltRecipe(itemMechanicalBelt);
+            RemoveEncasedChainDriveCatalogLinks();
 
             // Small Propeller
             var propSPref = MakeMPref<VoxelEngine.Maritime.GridPropeller>("Propeller_Small_Large", new Color(0.85f,0.65f,0.25f), Vector3.one, SzL,
@@ -7369,6 +7437,9 @@ root =>
                     t1.description = "Master water power. Unlocks the Waterwheel, Drive Shaft, Rotation Transfer, Watertight Shaft Housing, Mechanical Belt, Untreated Wood hull, Small Propeller, and the Helm.";
                     EditorUtility.SetDirty(t1);
                 }
+                // Explicit repair: the Mechanical Belt is always gated by Tier 1
+                // Hydro-Mechanics, including projects whose node already existed.
+                EnsureResearchUnlock(t1, recipeMechanicalBelt);
 
                 // Tier 2: Steam & Internal Combustion (Small Engine, Exhaust, Tar Plank, Balsa, Gearbox)
                 var t2 = MakeMaritimeNode("res_maritime_combustion", "Steam & Internal Combustion",

@@ -304,8 +304,7 @@ namespace VoxelEngine.Maritime
         {
             return owner is GridDriveShaft
                 || owner is GridShaftHousing
-                || owner is GridGearbox
-                || owner is GridEncasedChainDrive;
+                || owner is GridGearbox;
         }
 
         private static void AddFallbackPorts(Transform root, GridBlock owner, float cellSize, List<MechanicalPort> ports)
@@ -314,7 +313,7 @@ namespace VoxelEngine.Maritime
             float y = 0f;
             if (owner is GridDriveShaft || owner is GridShaftHousing) y = cellSize * 0.015f;
 
-            if (owner is GridDriveShaft || owner is GridShaftHousing || owner is GridGearbox || owner is GridEncasedChainDrive)
+            if (owner is GridDriveShaft || owner is GridShaftHousing || owner is GridGearbox)
             {
                 AddFallback(root, ports, new Vector3(0f, y, -cellSize * 0.50f), Vector3.back, MechanicalPortRole.Bidirectional);
                 AddFallback(root, ports, new Vector3(0f, y, cellSize * 0.50f), Vector3.forward, MechanicalPortRole.Bidirectional);

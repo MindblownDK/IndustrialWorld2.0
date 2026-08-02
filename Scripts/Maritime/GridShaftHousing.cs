@@ -1,8 +1,7 @@
 // Assets/Scripts/VoxelEngine/Maritime/GridShaftHousing.cs
 //
-// Watertight Shaft Housing — a sealed hull module with a through-shaft. It
-// replaces the craftable Encased Chain Drive in new maritime builds: the hull
-// stays closed to the sea while the mechanical line continues through it.
+// Watertight Shaft Housing — a sealed hull module with a through-shaft. The
+// hull stays closed to the sea while the mechanical line continues through it.
 
 using UnityEngine;
 

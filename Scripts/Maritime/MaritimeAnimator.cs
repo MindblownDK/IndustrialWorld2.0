@@ -61,7 +61,6 @@ namespace VoxelEngine.Maritime
         private Transform _helmWheel;       // helm steering wheel
         private Transform _crankshaft;      // engine crankshaft (visible pulley)
         private Transform _shaftSpin;       // drive shaft / output coupler visual spin
-        private Transform _chainRotor;      // chain drive sprocket rotor
         private Transform _seaPump;         // MGO seawater pump pulley (accessory belt)
 
         private Quaternion _crankBaseRot = Quaternion.identity;
@@ -92,7 +91,6 @@ namespace VoxelEngine.Maritime
             _helmWheel = FindDeep("HelmWheel");
             _crankshaft = FindDeep("CrankPulley");
             _shaftSpin = FindDeep("ShaftSpin");
-            _chainRotor = FindDeep("ChainRotor");
             _seaPump = FindDeep("SeaPump");
 
             if (_crankshaft != null) _crankBaseRot = _crankshaft.localRotation;
@@ -166,9 +164,6 @@ namespace VoxelEngine.Maritime
                     break;
                 case GridShaftHousing housing:
                     AnimateShaftHousing(housing, dt);
-                    break;
-                case GridEncasedChainDrive cd:
-                    AnimateChainDrive(cd, dt);
                     break;
                 case GridRotationTransfer rt:
                     AnimateRotationTransfer(rt, dt);
@@ -271,12 +266,6 @@ namespace VoxelEngine.Maritime
         {
             if (_shaftSpin == null) return;
             if (housing.CurrentRPM > 0.5f) SpinZ(_shaftSpin, housing.CurrentRPM, dt);
-        }
-
-        private void AnimateChainDrive(GridEncasedChainDrive chainDrive, float dt)
-        {
-            if (_chainRotor != null && chainDrive.CurrentRPM > 0.5f) SpinX(_chainRotor, chainDrive.CurrentRPM, dt);
-            if (_shaftSpin != null && chainDrive.CurrentRPM > 0.5f) SpinZ(_shaftSpin, chainDrive.CurrentRPM, dt);
         }
 
         private void AnimateRotationTransfer(GridRotationTransfer transfer, float dt)

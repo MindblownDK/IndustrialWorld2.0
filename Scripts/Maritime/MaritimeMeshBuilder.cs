@@ -33,8 +33,8 @@ namespace VoxelEngine.Maritime
         //      fuel/coolant/oxygen/item service ports REMOVED from all three engines
         //      (exhaust + shaft ports stay) — those services now use player-placed
         //      color-coded variable ports.
-        // v25: gearbox/generator/propeller/chain mechanical ports carry explicit
-        //      outward vectors so visual snapping and drivetrain direction agree.
+        // v25: gearbox/generator/propeller mechanical ports carry explicit outward
+        //      vectors so visual snapping and drivetrain direction agree.
         // v26: adds the watertight shaft housing mesh and its exact bidirectional
         //      shaft locators for sealed-hull drivetrain runs.
         public const int Version = 26;
@@ -150,7 +150,6 @@ namespace VoxelEngine.Maritime
             else if (n.Contains("turbocharger"))         BuildTurbo(root, cs, false);
             else if (n.Contains("rotationtransfer"))     BuildRotationTransfer(root, cs);
             else if (n.Contains("shafthousing"))         BuildShaftHousing(root, cs);
-            else if (n.Contains("encasedchaindrive"))    BuildEncasedChainDrive(root, cs);
             else if (n.Contains("shippingcontainer"))    BuildShippingContainer(root, cs);
             else if (n.Contains("gearbox"))              BuildGearbox(root, cs);
             else if (n.Contains("waterwheel"))           BuildWaterwheel(root, cs);
@@ -171,7 +170,7 @@ namespace VoxelEngine.Maritime
             if (root.GetComponent<MaritimeAnimator>() == null && n.ContainsAny(
                 "propeller", "epropeller", "engine_", "turbocharger", "gearbox",
                 "waterwheel", "maritimegenerator", "helm", "driveshaft", "shafthousing",
-                "rotationtransfer", "encasedchaindrive"))
+                "rotationtransfer"))
             {
                 root.AddComponent<MaritimeAnimator>();
             }
@@ -973,53 +972,6 @@ namespace VoxelEngine.Maritime
             Port(r, "Port_RotationOutput_Straight", PortShaft, new Vector3(0, 0, cs * 0.48f), new Vector3(cs * 0.13f, cs * 0.13f, cs * 0.05f), PrimitiveType.Cube, Vector3.forward);
             Port(r, "Port_RotationOutput_Up", PortShaft, new Vector3(0, cs * 0.48f, 0), new Vector3(cs * 0.13f, cs * 0.05f, cs * 0.13f), PrimitiveType.Cube, Vector3.up);
             Port(r, "Port_RotationOutput_Down", PortShaft, new Vector3(0, -cs * 0.48f, 0), new Vector3(cs * 0.13f, cs * 0.05f, cs * 0.13f), PrimitiveType.Cube, Vector3.down);
-        }
-
-        // ════════════════════════════════════════════════════════════════
-        //  ENCASED CHAIN DRIVE — heavy marine reduction chain housing
-        // ════════════════════════════════════════════════════════════════
-        static void BuildEncasedChainDrive(GameObject r, float cs)
-        {
-            float width = cs * 1.15f;
-            float height = cs * 0.78f;
-            float length = cs * 2.40f;
-
-            Box(r, DarkSteel, new Vector3(0, -height * 0.18f, 0), new Vector3(length, height * 0.42f, width));
-            Box(r, Steel, new Vector3(0, height * 0.02f, 0), new Vector3(length * 0.94f, height * 0.22f, width * 0.78f));
-            Box(r, DarkSteel, new Vector3(0, height * 0.26f, 0), new Vector3(length * 0.86f, height * 0.12f, width * 0.66f));
-
-            for (int i = 0; i < 5; i++)
-            {
-                float x = Mathf.Lerp(-length * 0.34f, length * 0.34f, i / 4f);
-                Box(r, Brass, new Vector3(x, height * 0.28f, width * 0.18f), new Vector3(cs * 0.10f, cs * 0.05f, cs * 0.18f));
-                Box(r, Brass, new Vector3(x, -height * 0.24f, width * 0.18f), new Vector3(cs * 0.10f, cs * 0.05f, cs * 0.18f));
-                Box(r, Brass, new Vector3(x, height * 0.28f, -width * 0.18f), new Vector3(cs * 0.10f, cs * 0.05f, cs * 0.18f));
-                Box(r, Brass, new Vector3(x, -height * 0.24f, -width * 0.18f), new Vector3(cs * 0.10f, cs * 0.05f, cs * 0.18f));
-            }
-
-            var rotor = new GameObject("ChainRotor");
-            rotor.transform.SetParent(r.transform, false);
-            rotor.transform.localPosition = V0;
-            var sprocketA = Cyl(rotor, Brass, new Vector3(-length * 0.34f, 0, 0), cs * 0.24f, cs * 0.12f);
-            sprocketA.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
-            var sprocketB = Cyl(rotor, Brass, new Vector3(length * 0.34f, 0, 0), cs * 0.24f, cs * 0.12f);
-            sprocketB.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
-            Box(rotor, Rubber, new Vector3(0, height * 0.12f, width * 0.22f), new Vector3(length * 0.70f, cs * 0.05f, cs * 0.06f));
-            Box(rotor, Rubber, new Vector3(0, -height * 0.12f, width * 0.22f), new Vector3(length * 0.70f, cs * 0.05f, cs * 0.06f));
-            Box(rotor, Rubber, new Vector3(0, height * 0.12f, -width * 0.22f), new Vector3(length * 0.70f, cs * 0.05f, cs * 0.06f));
-            Box(rotor, Rubber, new Vector3(0, -height * 0.12f, -width * 0.22f), new Vector3(length * 0.70f, cs * 0.05f, cs * 0.06f));
-
-            // Support feet and inspection cover.
-            Box(r, Steel, new Vector3(-length * 0.28f, -height * 0.48f, 0), new Vector3(cs * 0.16f, height * 0.34f, cs * 0.24f));
-            Box(r, Steel, new Vector3(length * 0.28f, -height * 0.48f, 0), new Vector3(cs * 0.16f, height * 0.34f, cs * 0.24f));
-            Box(r, GlowOrange, new Vector3(0, height * 0.40f, 0), new Vector3(length * 0.32f, cs * 0.05f, cs * 0.16f));
-
-            Port(r, "Port_RotationInput", PortShaft, new Vector3(-length * 0.56f, 0, 0),
-                new Vector3(cs * 0.06f, cs * 0.16f, cs * 0.16f), PrimitiveType.Cube, Vector3.left);
-            Port(r, "Port_RotationOutput", PortShaft, new Vector3(length * 0.56f, 0, 0),
-                new Vector3(cs * 0.06f, cs * 0.16f, cs * 0.16f), PrimitiveType.Cube, Vector3.right);
-            Port(r, "Propeller mount point 0", PortTurbo, new Vector3(0, 0, width * 0.54f), new Vector3(cs * 0.18f, cs * 0.18f, cs * 0.06f));
-            Port(r, "Propeller mount point 1", PortTurbo, new Vector3(0, 0, -width * 0.54f), new Vector3(cs * 0.18f, cs * 0.18f, cs * 0.06f));
         }
 
         // ════════════════════════════════════════════════════════════════

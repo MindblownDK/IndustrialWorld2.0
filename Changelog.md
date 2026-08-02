@@ -1,9 +1,30 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.81.0-dev`
+**Current Version:** `7.0.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.0.0-dev] Remove Encased Chain Drive + Mechanical Belt Crafting
+
+**Type:** MAJOR — intentional removal of an obsolete maritime block and its assets. Existing saves that contain an Encased Chain Drive will no longer restore that block, as explicitly approved.
+
+#### 🧹 Complete Encased Chain Drive removal
+- Removed `GridEncasedChainDrive`, its mesh-builder route, animator route, placement/topology/terminal references, prefab, item, recipe, and generated material assets.
+- This resolves `CS0246` when the old Encased Chain Drive script is absent: no runtime code references that type anymore.
+- The block is intentionally not preserved on old ships; ships that contained it lose that block after updating to this major version.
+
+#### 🟨 Mechanical Belt recipe and research gate
+- Step 13 now explicitly creates and repairs the **Mechanical Belt** item and `Recipe_MMechanicalBelt`.
+- The belt recipe is registered with the recipe registry, requires the normal maritime assembler workflow, and is gated by **Hydro-Mechanics** (`res_maritime_hydromech`) — the Tier 1 maritime research node.
+- Step 13 also repairs the research unlock on existing Hydro-Mechanics nodes, so the belt cannot disappear merely because the node predates this feature.
+- No manual prefab, item, recipe, or research asset authoring is required.
+
+#### 🛠️ Setup behavior
+- Step 13 clears any stale Encased Chain Drive recipe/research links left by a partial project update.
+- It preserves the normal non-destructive repair behavior for all remaining maritime content, balance values, recipes, and custom prefab work.
+
+---
 
 ### [6.81.0-dev] Mechanical Belts & Watertight Shaft Housings
 
