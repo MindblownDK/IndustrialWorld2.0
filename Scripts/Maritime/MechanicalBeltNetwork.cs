@@ -647,20 +647,44 @@ namespace VoxelEngine.Maritime
         private void CreatePulley(Vector3 localPosition, Vector3 axisLocal, float cellSize)
         {
             if (_visualRoot == null) return;
-            var pulley = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            pulley.name = "Belt_Pulley";
-            pulley.hideFlags = HideFlags.DontSave;
+
+            // Build an open segmented rim rather than a solid cylinder. The old
+            // cylinder occupied the shaft's centre and looked as though Belt_Pulley
+            // had been pushed inside the shaft. This leaves a visible axle hole while
+            // keeping a heavy, wide pulley around it.
+            var pulley = new GameObject("Belt_Pulley")
+            {
+                hideFlags = HideFlags.DontSave
+            };
             pulley.transform.SetParent(_visualRoot.transform, false);
             pulley.transform.localPosition = localPosition;
-            pulley.transform.localRotation = Quaternion.FromToRotation(Vector3.up, axisLocal);
-            float radius = Mathf.Max(0.14f, cellSize * 0.165f);
-            // Cylinder Y becomes the shaft axis after rotation: widen it across
-            // the pulley face, not radially/taller in the belt loop plane.
-            float width = Mathf.Max(0.18f, cellSize * 0.20f);
-            pulley.transform.localScale = new Vector3(radius * 2f, width, radius * 2f);
-            DisableCollider(pulley);
-            var renderer = pulley.GetComponent<MeshRenderer>();
-            if (renderer != null) renderer.sharedMaterial = PulleyMaterial;
+
+            Vector3 axis = axisLocal.sqrMagnitude > 0.0001f ? axisLocal.normalized : Vector3.up;
+            Vector3 reference = Mathf.Abs(Vector3.Dot(axis, Vector3.up)) < 0.90f ? Vector3.up : Vector3.right;
+            Vector3 radialA = Vector3.Cross(axis, reference).normalized;
+            Vector3 radialB = Vector3.Cross(axis, radialA).normalized;
+            float radius = Mathf.Max(0.16f, cellSize * 0.19f);
+            float rimThickness = Mathf.Max(0.030f, cellSize * 0.035f);
+            float axialWidth = Mathf.Max(0.22f, cellSize * 0.30f);
+            const int segments = 12;
+
+            for (int i = 0; i < segments; i++)
+            {
+                float angle = i * (Mathf.PI * 2f / segments);
+                Vector3 radial = radialA * Mathf.Cos(angle) + radialB * Mathf.Sin(angle);
+                Vector3 tangent = -radialA * Mathf.Sin(angle) + radialB * Mathf.Cos(angle);
+                var rim = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                rim.name = "Rim";
+                rim.hideFlags = HideFlags.DontSave;
+                rim.transform.SetParent(pulley.transform, false);
+                rim.transform.localPosition = radial * radius;
+                rim.transform.localRotation = Quaternion.LookRotation(tangent, axis);
+                rim.transform.localScale = new Vector3(rimThickness, axialWidth,
+                    Mathf.Max(rimThickness * 1.8f, radius * 0.62f));
+                DisableCollider(rim);
+                var renderer = rim.GetComponent<MeshRenderer>();
+                if (renderer != null) renderer.sharedMaterial = PulleyMaterial;
+            }
         }
 
         private void CreateVisualCube(string name, Vector3 localPosition, Quaternion rotation,

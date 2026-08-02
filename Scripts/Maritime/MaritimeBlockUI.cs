@@ -209,6 +209,9 @@ namespace VoxelEngine.Maritime
                 heatColor));
             var (heatBar, _) = T.ProgressBar(eng.Heat01, heatColor, 6, false);
             p.Add(heatBar);
+            p.Add(T.Muted(eng.HasThermalPerformanceUpgrade
+                ? "Performance hardware installed — high mechanical load can push this engine past the stock thermal envelope."
+                : "Stock thermal governor active — without performance hardware this engine is capped at 89°C."));
 
             if (eng.CriticalFailure)
             {

@@ -647,6 +647,8 @@ namespace VoxelEngine.Maritime
         {
             float dt = Time.fixedDeltaTime;
             EnsureModuleSlots();
+            // Physical turbo state participates in module/thermal totals this tick.
+            CountTurbos();
             RefreshModuleTotals();
 
             // Explicitly toggling an engine OFF resets a protective mechanical
@@ -730,10 +732,7 @@ namespace VoxelEngine.Maritime
             IsRunning = FuelBuffer > 0.01f && requestedThrottle > 0.01f;
             float effectiveFuel = IsRunning ? FuelFill01 * requestedThrottle * exhaustPenalty : 0f;
 
-            // Count connected turbos and apply stacked boost to the torque.
-            // Physical turbo blocks also provide RPM cap bonus, fuel use increase,
-            // and smoke velocity (matching the HighFlowTurbocharger module effects).
-            CountTurbos();
+            // Connected turbos were refreshed before thermal/fuel work this tick.
             // Realistic torque curve: available torque sags as the shaft approaches
             // redline, so raw SPEED now genuinely costs TORQUE.
             float speedStressTerm = EngineSpeed01;
@@ -757,6 +756,19 @@ namespace VoxelEngine.Maritime
         public override void ApplyResults(in MechanicalNode node)
         {
             CurrentRPM = node.CurrentRPM;
+            // Preserve the trip readout while the protection breaker owns the
+            // shutdown. Otherwise the next no-source propagation tick would display
+            // a harmless 4–8% idle value while still saying OVERSTRESSED.
+            if (IsOverstressShutdown)
+            {
+                CurrentRPM = 0f;
+                CurrentTorque = 0f;
+                MechanicalLoadRatio = Mathf.Max(1f, MechanicalLoadRatio);
+                MechanicalLoad01 = 1f;
+                Stress01 = 1f;
+                return;
+            }
+
             // The node's ShaftTorque is the aggregate bus on multi-engine builds;
             // show this engine's own serviced torque instead of duplicating the
             // whole bus value on every source.
@@ -877,6 +889,18 @@ namespace VoxelEngine.Maritime
         /// continuous ACTIVE coolant flow is mandatory during operation.</summary>
         public bool RequiresActiveCoolantFlow => EfficiencyChipCount > 0;
 
+        /// <summary>
+        /// Stock engines are thermally governed: they can work hard but never exceed
+        /// the 89°C safe ceiling. Performance modules or physical turbochargers opt
+        /// into the higher-risk thermal envelope and can then overheat if abused.
+        /// </summary>
+        public bool HasThermalPerformanceUpgrade => TurboModuleCount > 0
+            || EfficiencyChipCount > 0
+            || InjectorModuleCount > 0
+            || RadiatorModuleCount > 0
+            || AipModuleCount > 0
+            || ConnectedTurboCount > 0;
+
         // ══════════════════════════════════════════════════════════════
         //  THERMAL MODEL — heat builds with load, coolant + radiator sink it
         // ══════════════════════════════════════════════════════════════
@@ -895,13 +919,16 @@ namespace VoxelEngine.Maritime
 
             bool loadActive = IsRunning && requestedThrottle > 0.01f;
 
-            // Heat generation: throttle load × injector bonus (+50% per injector type module).
+            // Heat generation rises continuously with real mechanical stress, not
+            // only after an arbitrary warning threshold. A loaded generator bank now
+            // has a visible thermal consequence even before the protective trip.
             float heatGen = loadActive
                 ? baseHeatRate * requestedThrottle * (1f + Mathf.Max(0f, _moduleHeatBonus))
                 : 0f;
-            // Overwork penalty: an overstressed engine (high RPM, high load on a sagged
-            // torque curve) wastes a third more energy as heat.
-            if (IsOverstressed) heatGen *= 1.35f;
+            float stressHeatMultiplier = 1f
+                + Stress01 * 0.55f
+                + Mathf.Max(0f, MechanicalLoadRatio - 1f) * 0.75f;
+            heatGen *= stressHeatMultiplier;
 
             // Dissipation: passive base + flowing coolant (premium coolant sinks 25% better),
             // multiplied by ACTIVE radiator jackets (water must be flowing for the bonus).
@@ -918,8 +945,11 @@ namespace VoxelEngine.Maritime
             if (loadActive && RequiresActiveCoolantFlow && !HasCoolant)
                 net += EfficiencyChipDryHeatRate;
 
-            // No coolant flow at all on a liquid engine slowly bakes the block too.
-            TemperatureC = Mathf.Clamp(TemperatureC + net * dt, AmbientTemperatureC, MaxTemperatureC);
+            // Stock engines have a conservative mechanical governor and never cross
+            // the 89°C safe limit. Installing a performance module or turbo deliberately
+            // removes that safety ceiling so high load can create real thermal risk.
+            float thermalCeiling = HasThermalPerformanceUpgrade ? MaxTemperatureC : 89f;
+            TemperatureC = Mathf.Clamp(TemperatureC + net * dt, AmbientTemperatureC, thermalCeiling);
 
             // Critical mechanical failure at 100°C — shaft stops, heavy black smoke,
             // and the engine SEIZES: it needs spare-parts repairs to ever run again.

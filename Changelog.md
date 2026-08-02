@@ -1,9 +1,37 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.2.0-dev`
+**Current Version:** `7.3.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.3.0-dev] Tiered Armor Loadouts, Honest Trips & True Belt Width
+
+**Type:** MINOR — save-compatible armor progression, drivetrain safety clarity, and belt visual correction.
+
+#### 🛡️ Tiered armor loadouts
+- Armor tier now governs both upgrade-slot capacity and allowed normal-module tier:
+  - T1 → 1 slot / modules through T1
+  - T2 → 2 slots / modules through T2
+  - T3 → 3 slots / modules through T3
+  - T4 → 4 slots / modules through T4
+  - T5 → 5 slots / modules through T5
+  - T6 → 6 slots / modules through T5
+- Hazmat consumes one slot and requires T5+ armor; T6 supports all five normal branches plus Hazmat.
+- Improving an existing branch uses no extra slot. Existing saved armor remains intact even if it predates these limits.
+- Armor Upgrade Station validation, active-process validation, completion, telemetry, and module preview now enforce/explain the tier rules.
+
+#### ⛔ Honest engine overload state
+- Fixed the contradictory **OVERSTRESSED** status that could remain visible after stress had fallen to an idle value.
+- A protective trip now preserves a clear 100% stress readout and `OVERSTRESSED — STOPPED` state until the player toggles the engine OFF, reduces load, and turns it ON again.
+- Stock engines now scale heat continuously with mechanical stress but are thermally governed to **never exceed 89°C** without performance hardware.
+- Installing engine modules or physical turbochargers unlocks the higher-risk thermal envelope: high mechanical load can then generate enough heat to overheat or seize the engine.
+
+#### 🟨 True pulley-face belt width
+- Corrected belt geometry a second time so width expands along the shaft/pulley face, not in the belt loop plane.
+- Replaced the solid `Belt_Pulley` cylinder with a wide segmented open rim, leaving the shaft axle visibly clear instead of embedding the pulley inside it.
+
+---
 
 ### [7.2.0-dev] Armor Capacity Progression & Overstress Protection
 
