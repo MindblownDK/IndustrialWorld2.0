@@ -415,11 +415,6 @@ namespace VoxelEngine.Player
             float cruise = Mathf.Max(0f, drivePack.drainMlPerSecond > 0f ? drivePack.drainMlPerSecond : drivePack.drainPerSecond);
             float boostDrain = Mathf.Max(0f, drivePack.boostDrainMlPerSecond > 0f ? drivePack.boostDrainMlPerSecond : drivePack.boostDrainPerSecond);
 
-            // Armor Mobility Servos: higher tiers sip less fuel per second.
-            float fuelEff = JetpackFuelEfficiency;
-            cruise *= fuelEff;
-            boostDrain *= fuelEff;
-
             // Twin drive: two identical packs share the work — drain the fuller one
             // so the pair behaves like one tank with double capacity.
             ItemStack drainStack = driveStack;
@@ -795,83 +790,9 @@ namespace VoxelEngine.Player
 
         public bool HasBreathingKit => EquippedHelmet != null && EquippedHelmet.sealedHelmet && EquippedOxygenTank != null;
         public float BonusOxygen => HasBreathingKit ? Mathf.Max(0f, EquippedOxygenTank.bonusOxygen) : 0f;
-        public float OxygenDrainMultiplier => (HasBreathingKit
+        public float OxygenDrainMultiplier => HasBreathingKit
             ? Mathf.Clamp(EquippedOxygenTank.drainMultiplier * EquippedHelmet.oxygenEfficiency, 0.05f, 1f)
-            : 1f) * OxygenEfficiencyMultiplier;
-
-        // ════════════════════════════════════════════════════════════
-        //          ARMOR STATION UPGRADES (11.3 / 4.7.0)
-        // ════════════════════════════════════════════════════════════
-        // Upgrades are stored on the worn armour stack (see ArmorUpgrades).
-        // These accessors are the single source of truth for the damage / oxygen
-        // / fall / jetpack hooks, so every consumer reads the same numbers.
-
-        /// <summary>Current tier of one upgrade branch on the worn armour (0..5).</summary>
-        public int GetArmorUpgradeTier(ArmorUpgradeKind kind)
-        {
-            EnsureContainers();
-            return ArmorUpgrades.GetTier(_armorSlots.GetSlot(0), kind);
-        }
-
-        /// <summary>True when the worn armour carries the Hazmat seal (radiation immunity).</summary>
-        public bool HasHazmatProtection
-        {
-            get
-            {
-                EnsureContainers();
-                return ArmorUpgrades.HasHazmat(_armorSlots.GetSlot(0));
-            }
-        }
-
-        /// <summary>Multiplier on incoming burn / environmental heat damage (1 = full).</summary>
-        public float HeatDamageMultiplier
-            => Mathf.Clamp(1f - ArmorUpgradeKindInfo.DamageReductionPerTier(ArmorUpgradeKind.HeatTolerance)
-                            * GetArmorUpgradeTier(ArmorUpgradeKind.HeatTolerance), 0.10f, 1f);
-
-        /// <summary>Multiplier on incoming radiation damage (0 = immune via Hazmat).</summary>
-        public float RadiationDamageMultiplier
-            => HasHazmatProtection ? 0f
-                : Mathf.Clamp(1f - ArmorUpgradeKindInfo.DamageReductionPerTier(ArmorUpgradeKind.RadiationShielding)
-                              * GetArmorUpgradeTier(ArmorUpgradeKind.RadiationShielding), 0.10f, 1f);
-
-        /// <summary>Multiplier on fall damage (1 = full, 0.4 = max Impact Padding).</summary>
-        public float FallDamageMultiplier
-            => Mathf.Clamp(1f - ArmorUpgradeKindInfo.DamageReductionPerTier(ArmorUpgradeKind.FallImpact)
-                            * GetArmorUpgradeTier(ArmorUpgradeKind.FallImpact), 0.10f, 1f);
-
-        /// <summary>Multiplier on oxygen drain (1 = full, lower = slower drain).</summary>
-        public float OxygenEfficiencyMultiplier
-            => Mathf.Clamp(1f - ArmorUpgradeKindInfo.DamageReductionPerTier(ArmorUpgradeKind.OxygenEfficiency)
-                            * GetArmorUpgradeTier(ArmorUpgradeKind.OxygenEfficiency), 0.10f, 1f);
-
-        /// <summary>Multiplier on jetpack flight speed (1 = base, up to 1.3 at T5).</summary>
-        public float JetpackSpeedMultiplier
-            => 1f + ArmorUpgradeKindInfo.DamageReductionPerTier(ArmorUpgradeKind.Mobility)
-                   * GetArmorUpgradeTier(ArmorUpgradeKind.Mobility);
-
-        /// <summary>Multiplier on jetpack fuel drain (1 = base, down to 0.7 at T5).</summary>
-        public float JetpackFuelEfficiency
-            => Mathf.Clamp(1f - ArmorUpgradeKindInfo.DamageReductionPerTier(ArmorUpgradeKind.Mobility)
-                            * GetArmorUpgradeTier(ArmorUpgradeKind.Mobility), 0.10f, 1f);
-
-        /// <summary>
-        /// Apply an upgrade module to the currently worn armour. The module is NOT consumed
-        /// here — the caller removes it from inventory after a successful apply.
-        /// Returns true when the armour was upgraded (and the module should be spent).
-        /// </summary>
-        public bool TryApplyArmorUpgrade(ArmorUpgradeItem module)
-        {
-            EnsureContainers();
-            if (module == null) return false;
-            var stack = _armorSlots.GetSlot(0);
-            if (stack == null || stack.IsEmpty || stack.item is not ArmorItem) return false;
-
-            if (!ArmorUpgrades.TryApply(stack, module)) return false;
-
-            _armorSlots.SetSlot(0, stack);   // persists the packed durability
-            SyncEquippedArmor();
-            return true;
-        }
+            : 1f;
 
         /// <summary>
         /// If the active hotbar stack is a JetpackItem, move one into the first free

@@ -9,9 +9,7 @@ namespace VoxelEngine.Crafting
     /// Workstation tiers. A recipe with stationTier == None can be crafted in the player
     /// inventory (no station required). Higher tiers require being near a matching station.
     /// </summary>
-    // Ordering is meaningful: a station grants every recipe whose tier is <= its own.
-    // ArmorStation sits above Assembler so it doubles as the armour/jetpack station.
-    public enum StationTier { None, CraftingBench, Furnace, Assembler, ArmorStation }
+    public enum StationTier { None, CraftingBench, Furnace, Assembler }
 
     [Serializable]
     public struct RecipeIngredient
@@ -43,8 +41,24 @@ namespace VoxelEngine.Crafting
         public bool unlockedByDefault = true;
 
         public Sprite GetIcon() => icon != null ? icon : (outputItem ? outputItem.icon : null);
-        public string GetName() => string.IsNullOrEmpty(displayName)
-            ? (outputItem ? outputItem.displayName : name)
-            : displayName;
+        public string GetName()
+        {
+            if (!string.IsNullOrEmpty(displayName)) return displayName;
+            if (outputItem != null && !string.IsNullOrEmpty(outputItem.displayName))
+                return outputItem.displayName;
+            // Never leak the raw asset name ("Recipe_IronPlate") into the UI —
+            // prettify it ("Iron Plate") so placeholder recipes still read clean.
+            return PrettifyAssetName(name);
+        }
+
+        private static string PrettifyAssetName(string raw)
+        {
+            if (string.IsNullOrEmpty(raw)) return "Recipe";
+            var s = raw;
+            if (s.StartsWith("MachineRecipe_")) s = s.Substring("MachineRecipe_".Length);
+            else if (s.StartsWith("Recipe_")) s = s.Substring("Recipe_".Length);
+            else if (s.StartsWith("Smelt_")) s = s.Substring("Smelt_".Length);
+            return s.Replace('_', ' ');
+        }
     }
 }

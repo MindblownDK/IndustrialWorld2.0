@@ -113,19 +113,26 @@ namespace VoxelEngine.Crafting
             p.Add(GUI.SectionTitle("Recipes  (click to select · Auto by default)"));
 
             // "Auto" option clears the lock.
-            p.Add(RecipeRow("⟳  Auto (first available)", "", selected == null, current != null && selected == null,
+            p.Add(RecipeRow("⟳  Auto (first available)", "", null, default, selected == null, current != null && selected == null,
                 () => onSelect(null)));
 
             foreach (var r in recipes)
             {
                 if (r == null) continue;
                 var captured = r;
-                p.Add(RecipeRow(r.GetDisplayName(), Summary(r), selected == r, current == r,
+                // Icon: first item output's sprite, tinted chip as fallback.
+                Sprite rIcon = null; Color rTint = T.TextMuted;
+                if (r.outputs != null && r.outputs.Length > 0 && r.outputs[0].item != null)
+                {
+                    rIcon = r.outputs[0].item.icon;
+                    rTint = r.outputs[0].item.iconTint;
+                }
+                p.Add(RecipeRow(r.GetDisplayName(), Summary(r), rIcon, rTint, selected == r, current == r,
                     () => onSelect(captured)));
             }
         }
 
-        private static VisualElement RecipeRow(string name, string summary, bool selected, bool active, System.Action onClick)
+        private static VisualElement RecipeRow(string name, string summary, Sprite icon, Color iconTint, bool selected, bool active, System.Action onClick)
         {
             var btn = new Button(onClick);
             btn.style.flexDirection = FlexDirection.Column;
@@ -135,10 +142,45 @@ namespace VoxelEngine.Crafting
             btn.style.backgroundColor = new StyleColor(selected
                 ? new Color(0.18f, 0.72f, 0.88f, 0.28f)
                 : new Color(0.12f, 0.14f, 0.18f, 0.95f));
+            var titleRow = new VisualElement();
+            titleRow.style.flexDirection = FlexDirection.Row;
+            titleRow.style.alignItems = Align.Center;
+            titleRow.pickingMode = PickingMode.Ignore;
+            if (icon != null || iconTint != default)
+            {
+                var iconSlot = new VisualElement();
+                iconSlot.style.width = 26; iconSlot.style.height = 26;
+                iconSlot.style.marginRight = 7;
+                iconSlot.style.alignItems = Align.Center;
+                iconSlot.style.justifyContent = Justify.Center;
+                iconSlot.style.backgroundColor = new StyleColor(new Color(0.09f, 0.10f, 0.13f, 0.9f));
+                T.Radius(iconSlot, 4);
+                iconSlot.pickingMode = PickingMode.Ignore;
+                if (icon != null)
+                {
+                    var iconImg = new Image { sprite = icon };
+                    iconImg.scaleMode = ScaleMode.ScaleToFit;
+                    iconImg.style.width = 22; iconImg.style.height = 22;
+                    iconImg.pickingMode = PickingMode.Ignore;
+                    iconSlot.Add(iconImg);
+                }
+                else
+                {
+                    var chip = new VisualElement();
+                    chip.style.width = 16; chip.style.height = 16;
+                    chip.style.backgroundColor = new StyleColor(iconTint);
+                    T.Radius(chip, 3);
+                    chip.pickingMode = PickingMode.Ignore;
+                    iconSlot.Add(chip);
+                }
+                titleRow.Add(iconSlot);
+            }
             var title = new Label((selected ? "◉ " : "○ ") + name);
             title.style.unityFontStyleAndWeight = FontStyle.Bold;
             title.style.color = new StyleColor(active ? T.AccentGreen : selected ? T.AccentCyan : new Color(0.85f,0.88f,0.92f));
-            btn.Add(title);
+            title.pickingMode = PickingMode.Ignore;
+            titleRow.Add(title);
+            btn.Add(titleRow);
             if (!string.IsNullOrEmpty(summary))
             {
                 var sub = new Label(summary);

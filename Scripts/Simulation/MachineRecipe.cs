@@ -70,9 +70,24 @@ namespace VoxelEngine.Simulation
 
         public Sprite GetIcon() => icon != null ? icon : (outputItem ? outputItem.icon : null);
 
-        public string GetName() => string.IsNullOrEmpty(displayName)
-            ? (outputItem ? outputItem.displayName : name)
-            : displayName;
+        public string GetName()
+        {
+            if (!string.IsNullOrEmpty(displayName)) return displayName;
+            if (outputItem != null && !string.IsNullOrEmpty(outputItem.displayName))
+                return outputItem.displayName;
+            // Prettified asset-name fallback — never show raw "MachineRecipe_X" in UI.
+            return PrettifyAssetName(name);
+        }
+
+        private static string PrettifyAssetName(string raw)
+        {
+            if (string.IsNullOrEmpty(raw)) return "Recipe";
+            var s = raw;
+            if (s.StartsWith("MachineRecipe_")) s = s.Substring("MachineRecipe_".Length);
+            else if (s.StartsWith("Recipe_")) s = s.Substring("Recipe_".Length);
+            else if (s.StartsWith("Smelt_")) s = s.Substring("Smelt_".Length);
+            return s.Replace('_', ' ');
+        }
 
         /// <summary>
         /// Check if the given set of input items matches this recipe.

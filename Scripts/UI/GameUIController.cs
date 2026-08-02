@@ -2605,12 +2605,6 @@ namespace VoxelEngine.UI
                 && (int)maxStation < (int)Crafting.StationTier.Assembler)
                 maxStation = Crafting.StationTier.Assembler;
 
-            // The generic center crafting browser is capped at the Assembler: exclusive
-            // stations (Armor Station) and their recipes are only usable by opening that
-            // station, never from the general inventory crafting panel — even while near one.
-            if ((int)maxStation > (int)Crafting.StationTier.Assembler)
-                maxStation = Crafting.StationTier.Assembler;
-
             var allRecipes = Crafter.AvailableRecipes(recipeRegistry, maxStation);
 
             IItemContainer craftSource = inventory.container;
@@ -3593,9 +3587,7 @@ namespace VoxelEngine.UI
                 panel.Add(MakeDivider());
             }
 
-            // Exclusive stations (e.g. the Armor Station) list only their own recipes;
-            // regular stations list every recipe up to their tier.
-            var recipes = Crafter.AvailableRecipesForStation(recipeRegistry, st);
+            var recipes = Crafter.AvailableRecipes(recipeRegistry, st.tier);
             BuildRecipeBrowser(panel, recipes, inventory.container, inventory.container,
                 emptyMessage: "No recipes available at this station tier.",
                 // GetEntityId — Unity 6+ replacement for the now-deprecated
@@ -3874,6 +3866,7 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
             if (st.item.icon != null)
             {
                 var img = new Image { sprite = st.item.icon };
+                img.scaleMode = ScaleMode.ScaleToFit; // match BuildSlot: tight-cropped generated icons must fit, not crop (fixes blank recipe/crafter icons)
                 img.style.width = 40; img.style.height = 40;
                 img.style.marginLeft = 4; img.style.marginTop = 4;
                 img.pickingMode = PickingMode.Ignore;
@@ -4374,6 +4367,7 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
             if (recipe.GetIcon() != null)
             {
                 var img = new Image { sprite = recipe.GetIcon() };
+                img.scaleMode = ScaleMode.ScaleToFit; // match BuildSlot: tight-cropped generated icons must fit, not crop (fixes blank recipe/crafter icons)
                 img.style.width = 36; img.style.height = 36;
                 icon.Add(img);
             }

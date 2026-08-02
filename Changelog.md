@@ -1,73 +1,669 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.79.1-dev`
+**Current Version:** `6.78.46-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
 
-### [6.79.1-dev] Armor Station Now Exclusive — Only Armour Recipes
+### [6.78.46-dev] Hollow Recipes Can Never Surface (Code-Enforced)
 
-**Type:** PATCH — behaviour/balance fix, save-compatible. No schema or API change.
+**Type:** PATCH — bugfix (crafting list), save-compatible.
 
-#### 🛡️ Armor Station shows only armour
-- Fixed: the Armor Station listed **every unlocked recipe** (because its tier ranks above the Assembler). It now lists **only armour recipes**.
-- Added `CraftingStation.exclusiveRecipes` — when set, the station's recipe list is filtered to recipes that require **exactly** its tier. The Armor Station sets this, so it shows only the 6 armour tiers + the upgrade modules + the Hazmat seal.
+#### 🐛 The bug (screenshot 2)
+Some crafting tiles were still gray and named like `AxeWood` / `PickWood` — those were the legacy
+stub recipes (no output item, no ingredients). The 6.78.45 registry-edit didn't apply on every
+checkout, and `AvailableRecipes` trusted the registry blindly, so stubs could still leak through
+(including via research-unlock lookups that ignore `unlockedByDefault`).
 
-#### 🔒 All armour is crafted only at the Armor Station
-- The six Crusader armour recipes (Initiate's Gambeson → Stellar Archon Plate) moved from Crafting Bench / Assembler to **Armor Station** only.
-- The generic inventory crafting browser is now capped at the Assembler, so Armor-Station-tier recipes never appear there — even when standing next to an Armor Station. You must open the Armor Station to craft or upgrade armour.
-- Rerun Step 24 and Step 48 to refresh the armour/module recipe gating (non-destructive; balance values untouched).
+#### 🔧 The fix
+- `Crafter.AvailableRecipes` now **hard-filters hollow recipes in code**: anything with a missing
+  `outputItem` or an empty ingredient list is skipped permanently — no asset edit required, survives
+  merges, registries and research states. This wipes out the gray tiles AND the raw `AxeWood`-style
+  names in one stroke; real recipes already display proper tier names ("Wooden Axe", "Iron Pickaxe")
+  via their output item's `displayName`.
+- Data hygiene follow-up: `Recipe_TilledSoil` (another hollow placeholder) also removed from
+  `RecipeRegistry.asset` (now 229 entries, all real & craftable).
 
 #### Files touched
-- `Scripts/Crafting/CraftingStation.cs` — added `exclusiveRecipes`
-- `Scripts/Crafting/Crafter.cs` — added `AvailableRecipesForStation`
-- `Scripts/Combat/ArmorStation.cs` — marks itself exclusive
-- `Scripts/UI/GameUIController.cs` — station panel uses exclusive filter; center browser capped at Assembler
-- `Scripts/Editor/VoxelEngineSetupWindow.cs` — Step 24 armour recipes → Armor Station
-- `Scripts/Core/GameVersion.cs` — Patch 0 → 1
+- `Scripts/Crafting/Crafter.cs` — hollow-recipe guard in `AvailableRecipes`
+- `VoxelEngineAssets/RecipeRegistry.asset` — 230 → 229 entries
+- `Scripts/Core/GameVersion.cs` — Patch 45 → 46
 
 ---
 
-### [6.79.0-dev] Armor Station + Armour Upgrade Modules
+### [6.78.45-dev] Self-Healing Icon Bindings + Hollow Recipe Cleanup
 
-**Type:** MINOR — new feature/system, save-compatible. New block, items, recipes, research node and stat hooks.
+**Type:** PATCH — bugfix (icon binding resilience + data hygiene), save-compatible.
 
-#### 🛠️ Armor Station (new placed block)
-- New `ArmorStation` crafting station (derives from `CraftingStation`). Its tier ranks **above** the Assembler, so standing at it naturally grants every bench/furnace/assembler recipe — armour, jetpacks and the new upgrade modules all craft here.
-- It opens the shared crafting UI on interaction and is found by `Crafter.MaxAccessibleStation`.
-- New `StationTier.ArmorStation` enum value (appended after `Assembler`, so existing saves/assets are untouched).
-- Placed via the new `Block_ArmorStation` block item (crafted at the Assembler).
+#### 🐛 The bug (screenshot-confirmed)
+Crafting screen tiles rendered as plain coloured boxes — `recipe.GetIcon()` came back null for
+everything, meaning the sprite references inside ItemDefinitions had gone missing in the project.
+Root cause class: icon bindings are GUID references; if a PNG is ever imported **without its
+companion `.meta`** (fresh clone, partial copy, manual drag-in), Unity mints a NEW GUID and every
+reference to the sprite silently nulls out. Names/descriptions still work, so it fails invisibly.
 
-#### 🧬 Five upgrade families, five tiers each + Hazmat
-- **Heat Tolerance (T1–5)** — reduces burn & environmental heat damage 5%/tier (max 25%).
-- **Radiation Shielding (T1–5)** — reduces radiation damage 8%/tier (max 40%).
-- **Oxygen Efficiency (T1–5)** — reduces oxygen drain 10%/tier (max 50%).
-- **Impact Padding (Fall Impact T1–5)** — reduces fall damage 12%/tier (max 60%).
-- **Mobility Servos (T1–5)** — jetpack speed +6%/tier, jetpack fuel drain −6%/tier.
-- **Hazmat Module** — special seal granting **full radiation immunity** on any worn armour piece.
+#### 🛡️ The fix — `ItemIconSync` v2 (editor, auto self-heal)
+- Runs **automatically once per editor session** after domain reload (`InitializeOnLoadMethod`),
+  plus the manual menu item remains: `Tools ▸ Voxel Engine ▸ Sync Item Icons`.
+- For every `ItemDefinition` with a missing icon it searches `Assets/VoxelEngineAssets/ItemIcons/**`
+  by itemId (exact file match) and re-binds the sprite, then saves.
+- 100 % non-destructive: healthy bindings are never touched; binds-by-content so it heals GUID
+  drift no matter how the PNGs arrived in the project.
+- Logs a warning only when it actually repaired something.
 
-#### 🔧 Application & storage
-- Equip armour, hold an upgrade module, RMB the Armor Station → the module is consumed and the worn armour's tier for that branch is raised (never reduced).
-- Upgrades are **bit-packed into `ItemStack.durability`** on the armour piece, so they survive save/load and equip/unequip with zero schema changes (same trick as jetpack fuel).
-- Armour equip/unequip now carries durability/charge across the slot so upgrades are never lost when swapping pieces.
-
-#### ⚙️ Stat wiring
-- `PlayerEquipment` exposes aggregate upgrade modifiers (heat/radiation/fall/oxygen/mobility) as the single source of truth for the hooks.
-- `PlayerStats` applies environmental heat & radiation (new `PlayerHazardService`, reading the active body's `temperature` + new `radiationLevel`), reduces burn DoT via Heat Tolerance, and gains `ApplyRadiation(...)`.
-- `PlayerController` applies fall mitigation on hard landings and the Mobility speed bonus in jetpack flight.
-- `PlayerHazardService` is the first slim slice of the roadmap's future Radiation/Heat systems (reactor fallout, re-entry heat, heated rooms remain later work).
-
-#### 🧭 Research
-- New `res_armor_station` node (prereq: Advanced Manufacturing) gates the station block + all upgrade modules.
-- Setup **Step 48** is non-destructive & idempotent: creates the Armor Station prefab/block, the 26 module items + recipes, and the research node. It never overwrites existing armour, balance, or custom prefab geometry.
+#### 🧹 Hollow recipe cleanup (the "Instant / no ingredients" tiles)
+- Removed **21 uncraftable entries** from `RecipeRegistry.asset`:
+  - 9 legacy stubs (`Recipe_Bed`, `Recipe_PickWood`, `Recipe_Plank`, …) — no inputs, no output item.
+  - 12 Factory/Wire placeholders (`Recipe_AssemblerMk1-3`, `Recipe_Conveyor*`, `Recipe_Crusher`,
+    `Recipe_Funnel`, `Recipe_LEDStripFactory`, `Recipe_Wire_Cu_LV`, `Recipe_PowerRelay`) — empty
+    ingredient lists make them read as "Instant, craft of nothing". They belong in machine crafting
+    once proper costs are authored.
 
 #### Files touched
-- New: `Scripts/Combat/ArmorUpgradeKind.cs`, `ArmorUpgradeItem.cs`, `ArmorUpgrades.cs`, `ArmorStation.cs` (+.meta)
-- New: `Scripts/Player/PlayerHazardService.cs` (+.meta)
-- Edited: `Scripts/Player/PlayerEquipment.cs`, `PlayerStats.cs`, `PlayerController.cs`, `PlayerInteractionTool.cs`
-- Edited: `Scripts/Crafting/RecipeDefinition.cs` (StationTier), `Scripts/Cosmos/BodySettings.cs` (radiationLevel)
-- Edited: `Scripts/Editor/VoxelEngineSetupWindow.cs` (Step 48)
-- `Scripts/Core/GameVersion.cs` — Minor 78 → 79
+- `Scripts/Editor/ItemIconSync.cs` — rewritten (auto self-healing)
+- `VoxelEngineAssets/RecipeRegistry.asset` — 251 → 230 entries
+- `Scripts/Core/GameVersion.cs` — Patch 44 → 45
+
+---
+
+### [6.78.44-dev] Crafter UIs — Real Item Icons Everywhere + Recipe Name Cleanup
+
+**Type:** PATCH — bugfix/polish (UI), save-compatible.
+
+#### 🐛 What Thomas saw
+- Item icons showed perfectly in inventory but **no crafter UI ever drew them** — Assembler/Crusher/
+  Quarry recipe cards, Oil Refinery & Chemical Plant recipe books, the Recipe Browser, and the
+  Crafting Terminal all rendered text rows with a plain colored dot. There was no icon code there at all.
+- Some recipes surfaced raw asset names (`Recipe_…`) instead of a clean item name.
+
+#### ✨ Icons added (sprite, `ScaleToFit`, tinted-chip fallback — same look as inventory slots)
+- `MachineUIs.MachineRecipeCard` — 34px output icon slot on every machine recipe card
+  (Assembler, Crusher, Quarry — all `ProcessingMachinePanel` machines)
+- `ProcessorUI.RecipeRow` — 26px icon from the recipe's first item output
+  (Oil Refinery, Chemical Plant)
+- `RecipeBrowserUI` node rows — 30px icon slot replaces the bare tint dot when an icon exists
+- `StorageUI` Crafting Terminal — icons on craft-queue rows and available-pattern rows
+
+#### 🏷️ Recipe name fixes
+- `RecipeDefinition.GetName()` + `MachineRecipe.GetName()` now return a prettified fallback
+  (`Recipe_IronPlate` → "Iron Plate") instead of leaking raw asset names when `displayName` is empty.
+- Disabled 9 legacy stub recipes in `VoxelEngineAssets/Recipes/` (Bed, Axe×2, Chest, CraftingBench,
+  GrinderTool, LevelingTool, PickWood, Plank) — they have **no inputs and no output item**, so they
+  could only ever render as broken unnamed tiles. `unlockedByDefault: 0` hides them until they're
+  properly authored with ingredients + output.
+
+#### Files touched
+- `Scripts/UI/MachineUIs.cs`, `Scripts/Crafting/ProcessorUI.cs`, `Scripts/UI/RecipeBrowserUI.cs`,
+  `Scripts/Storage/StorageUI.cs`, `Scripts/Crafting/RecipeDefinition.cs`,
+  `Scripts/Simulation/MachineRecipe.cs`
+- 9 stub recipe assets (`unlockedByDefault: 0`)
+- `Scripts/Core/GameVersion.cs` — Patch 43 → 44
+
+---
+
+### [6.78.43-dev] Fix — Crafter & Recipe UI Icons Not Rendering
+
+**Type:** PATCH — bugfix (UI icon rendering), save-compatible.
+
+#### 🐛 The bug
+Item icons rendered perfectly in inventory (`GameUIController.BuildSlot`) but were blank in every
+crafting context: crafting screen recipe tiles + detail header + ingredients, Assembler/crafter
+recipe rows, craft feedback toasts, item filter dialog, extractor port config, and the drag ghost.
+
+#### 🔍 Root cause
+Data-side was fully audited and is pristine (408/408 ItemDefinitions bound, all 334 recipes
+resolve `outputItem.icon`). The working inventory slot is the **only** renderer that sets
+`img.scaleMode = ScaleMode.ScaleToFit` — every other site created `new Image { sprite = ... }`
+with the default scale mode, which mishandles the tight-cropped generated sticker sprites at
+fixed slot sizes.
+
+#### 🔧 The fix (9 call sites unified onto the proven BuildSlot pattern)
+- `Scripts/UI/CraftingScreen.cs` — recipe tile, recipe detail header, ingredient icons
+- `Scripts/UI/GameUIController.cs` — `BuildRecipeRow` output icon, drag ghost
+- `Scripts/Storage/StorageUI.cs` — storage cell icon
+- `Scripts/UI/BuildFeedbackHud.cs` — toast icon
+- `Scripts/UI/ItemFilterDialog.cs` — filter row icon
+- `Scripts/UI/PortConfigHud.cs` — port config icon
+
+#### Files touched
+- 6 UI scripts (one-line `scaleMode` additions), `Scripts/Core/GameVersion.cs` — Patch 42 → 43
+
+---
+
+### [6.78.42-dev] Icon Batch 39 — FINAL: T90 Blueprints & Quarry Upgrades (398/398)
+
+**Type:** PATCH — art/content, save-compatible. Zero C# changes.
+
+🏁 **Icon mission complete — all 398 unique itemIds now have a premium bound icon.**
+
+#### 📜 T90 blueprint trio (Survival)
+- 📐 `item_blueprint_blade_t90` — blueprint-blue sheet, white-line turbine blade schematic
+- ⚙️ `item_blueprint_gearbox_t90` — blueprint sheet, twin-gear gearbox schematic
+- 🗼 `item_blueprint_tower_t90` — blueprint sheet, lattice tower schematic with dim marks
+
+#### ⛏️ Quarry upgrade chip family (one master → hue derives, matches `iconTint`)
+- 🩵 `upgrade_quarry_speed` — hex gunmetal chip, glowing teal drill emblem (master)
+- 💜 `upgrade_quarry_efficiency` — same chip, violet emblem (teal → violet hue derive)
+- 🟡 `upgrade_quarry_range` — same chip, gold emblem (teal → gold hue derive)
+
+#### Files touched
+- `VoxelEngineAssets/ItemIcons/Survival/` — +6 icons (.png + .meta)
+- ItemDefinition assets patched to reference the new sprite GUIDs (398/398 bound)
+- `Scripts/Core/GameVersion.cs` — Patch 41 → 42
+
+---
+
+### [6.78.41-dev] Icon Batch 38 — Farm Food Set & Field Parts
+
+**Type:** PATCH — art/content, save-compatible. Zero C# changes.
+
+#### 🌾 Farm-to-table food (5)
+- 🍞 `bread` — rustic scored golden loaf
+- 🥕 `carrot` — bright orange carrot with leafy tuft
+- 🌽 `corn` — golden ear with peeled-back husks
+- 🌾 `wheat` — tied bundle of three wheat stalks
+- 🍲 `stew` — hearty chunky bowl with steam wisp
+
+#### 🔧 Parts & modules
+- 🌫️ `exhaust_pipe` — bent dark-steel exhaust with clamp ring
+- 🧵 `copper_lv_wire` — coiled spool of copper LV wire with loose end
+- 🧊 `closed_cycle_aip_module` — frosty pale-blue submarine AIP unit
+- 🌋 `item_ash` — dark powdery ash mound with ember specks
+- 🛢️ `item_flame_canister` — orange fuel canister with flame symbol
+
+#### Files touched
+- `VoxelEngineAssets/ItemIcons/{Survival,Maritime,Items,Fauna,Combat}/` — +10 icons (.png + .meta)
+- ItemDefinition assets patched to reference the new sprite GUIDs
+- `Scripts/Core/GameVersion.cs` — Patch 40 → 41
+
+---
+
+### [6.78.40-dev] Icon Batch 37 — Terminals, Ship Console, Ores & Relic
+
+**Type:** PATCH — art/content, save-compatible. Zero C# changes.
+
+#### 🏭 Factory & computing
+- 💡 `block_ledstripfactory` — LED strip machine with glowing cyan light bar channel
+- 🗄️ `block_serverrack` — tall dark blade-server cabinet, status LEDs
+- 🖥️ `block_storageterminal` — steel terminal with blue slot-grid screen
+
+#### 📡 Blocks & ship control
+- 📷 `camera_block` — compact brass security camera with dark lens eye
+- 🎛️ `ship_control_console` — naval console desk, gauges + steering lever
+
+#### ⛏️ Resources & salvage
+- 🔵 `cobalt` — deep blue cobalt ore cluster
+- ⚪ `lithium` — pale silvery lithium chunks, icy sheen
+- 🟠 `item_copperplate` — stack of polished copper plates
+- ⚙️ `item_giant_pinion` — weathered bronze giant gear
+
+#### 💜 Relic
+- 🔮 `item_relic_capacitor` — violet-glowing alien energy cell in ornate clamps
+
+#### Files touched
+- `VoxelEngineAssets/ItemIcons/{Factory,Survival,GridSystem,Maritime,Nuclear,Industrial,Combat,Fauna}/` — +10 icons (.png + .meta)
+- ItemDefinition assets patched to reference the new sprite GUIDs
+- `Scripts/Core/GameVersion.cs` — Patch 39 → 40
+
+---
+
+### [6.78.39-dev] Icon Batch 36 — Rotors, Barrels, PSU Pair, Helm & Hull
+
+**Type:** PATCH — art/content, save-compatible. Zero C# changes.
+
+#### 🌬️ Wind power
+- 🌀 `block_vlarge_rotor` — three-blade turbine rotor master, head-on read
+- 🌀 `block_vsmall_rotor` — same rotor, scale-derived ×0.70 (size = tier language, tints identical)
+
+#### 🌱 Blocks & props
+- 🟫 `block_tilledsoil` — furrowed farmland block with fresh sprouts
+- 🎯 `block_training_dummy` — straw-stuffed wooden practice dummy
+
+#### 🛢️ Barrel trio (one master → tint derives, matches `iconTint`)
+- ⬜ `item_emptybarrel` — bare galvanized drum, open bung
+- 🟡 `item_liquidfuel` — fuel-yellow drum
+- 🟤 `item_refinedoilbarrel` — dark refined-oil drum
+
+#### 🖥️ Computer hardware
+- 🩶 `psu_500` — compact PSU, fan grille + cable bundle
+- 🟥 `psu_2k` — scale-derived tier tint (deep red-orange) for the bigger unit
+
+#### ⚓ Maritime
+- ☸️ `helm` — classic wooden ship's wheel, brass-trimmed spokes
+- 🛡️ `iron_hull` — riveted iron hull armor plate
+
+#### Files touched
+- `VoxelEngineAssets/ItemIcons/{WindPower,Survival,Combat,Industrial,Maritime}/` — +11 icons (.png + .meta)
+- ItemDefinition assets patched to reference the new sprite GUIDs
+- `Scripts/Core/GameVersion.cs` — Patch 38 → 39
+
+---
+
+### [6.78.38-dev] Icon Batch 35 — GridSystem Machine Suite + Nacelle Pair & Tanks
+
+**Type:** PATCH — art/content, save-compatible. Zero C# changes.
+
+#### 🏭 GridSystem machines (7)
+- 🛢️ `gitem_refinery` — compact refinery block, distillation column + amber bubbling window
+- ⚡ `gitem_electricfurnace` — glowing coil element behind grate, arcing copper terminals
+- ⚗️ `gitem_chemicalplant` — looping condenser coil with bubbling green liquid
+- 🌱 `gitem_biofarm` — grow tray, 3 sprouts under a purple grow lamp
+- ❄️ `gitem_cryobed` — sleek cryo pod with frosted misty canopy
+- ☢️ `gitem_portablereactor` — armored cube with swirling blue-green core viewport
+- 🌀 `gitem_hydrogenengine` — small turbine-intake engine block, cyan ring (matches big-brother hydrogen engine language)
+
+#### 🌬️ WindPower + Fluids
+- 🌬️ `block_t236_nacelle` (WindPower) — streamlined white nacelle capsule; `block_t150_nacelle` derived at 85% slot scale
+- 🧪 `block_tankglass` (Fluids) — clear tank half-full of glowing blue liquid, cradle frame
+- 🛢️ `block_tanksolid` (Fluids) — riveted steel tank, banded, with level sight glass
+
+#### Files touched
+- 11 new icons under `ItemIcons/{GridSystem,WindPower,Fluids}/` (+.meta), sprite metas + `icon:` refs written
+- `Scripts/Core/GameVersion.cs` — Patch 37 → 38
+
+---
+
+### [6.78.37-dev] Icon Batch 34 — GridSystem Doors, Lights & Utility Strays
+
+**Type:** PATCH — art/content, save-compatible. Zero C# changes.
+
+#### 🚪 Doors & access (GridSystem)
+- 🏦 `gitem_heavyvaultdoor` — circular vault door in armored frame, 3-spoke locking wheel + bolt lugs
+- ↔️ `gitem_largedoubleslidingdoor` — twin panels half-open with a glowing amber gap
+- ↕️ `gitem_largegridslidingdoor` — single panel half-slid with amber reveal
+
+#### 💡 Lighting family (GridSystem)
+- 🔦 `gitem_dualgridspotlightsmall` — compact bar with two small glowing spot heads
+- 🔦 `gitem_dualgridspotlightlarge` — heavy bar with two big ribbed-lens spots
+- 🔆 `gitem_largegridspotlight` — big single yoke-mounted spotlight, cross reflector
+- ⬜ `gitem_gridlightblock` — cube with bright white diffuser face
+- ➖ `gitem_largegridledstrip` — long channel strip with continuous warm glow
+
+#### 🧰 Utility (GridSystem)
+- 🫙 `gitem_gastank` — cradled pressure cylinder, brass valve + cyan-lit gauge
+- 💥 `gitem_demolisher` — armored charge block with orange explosive core + red det lamp
+
+#### Files touched
+- 10 new icons under `VoxelEngineAssets/ItemIcons/GridSystem/` (+.meta), sprite metas + `icon:` refs written
+- `Scripts/Core/GameVersion.cs` — Patch 36 → 37
+
+---
+
+### [6.78.36-dev] Icon Batch 33 — Engine Upgrades + Pump Quartet & Power Blocks
+
+**Type:** PATCH — art/content, save-compatible. Zero C# changes.
+
+#### 🏎️ Engine upgrade parts (Maritime, 12 icons this batch: 10 generated + 2 derived)
+- 🌀 turbocharger trio — `large_turbocharger` master (snail housing + glowing hot turbine); `small_turbocharger` derived at 70% scale; `high_flow_turbocharger` at 85% with boosted hot-glow saturation
+- 💉 `overclocked_fuel_injectors` — polished fuel rail, 4 nozzles with glowing tips
+- ❄️ `super_cooler_radiator_jacket` — finned radiator core with electric fan
+- 💚 `efficiency_tuning_chip` — tuning chip card with emerald glow stripe + gold pins
+
+#### 💧 Pump quartet
+- 💙 `block_waterpump` (Fluids — NEW category folder) — blue pump housing, volute chamber + pressure gauge
+- ⚓ `marine_water_pump` (Maritime) — bronze-green corrosion-proof hull pump with strainer
+- 🛟 `bilge_pump` (Maritime) — white/red submersible canister with float switch
+- 💦 `block_sprinkler` (Survival) — brass impact sprinkler on stake, arcing droplets
+
+#### ⚙️ Power & processing
+- 🌫️ `block_steamturbine` (Survival) — ribbed turbine casing with steam inlet + terminal box
+- ♻️ `block_wastereprocessor` (Survival) — olive cabinet, orange recycling drum window
+
+#### Files touched
+- `VoxelEngineAssets/ItemIcons/Fluids/` — NEW category folder (+folder .meta)
+- 12 new icons under `ItemIcons/{Maritime,Fluids,Survival}/` (+.meta), sprite metas + `icon:` refs written
+- `Scripts/Core/GameVersion.cs` — Patch 35 → 36
+
+---
+
+### [6.78.35-dev] Icon Batch 32 — Ruins Complete + Power Grid Finale
+
+**Type:** PATCH — art/content, save-compatible. Zero C# changes.
+
+#### 🧪 Acid biome — complete family (3, Survival/CelestialBlocks) — ALL ruine biomes now done!
+- 🏦 `block_ruin_acid_corrodedvault` — acid-eaten vault, green corrosion crust, wheel door
+- 💚 `block_ruin_acid_crystalspire` — pitted toxic-yellow crystal cluster
+- 🥽 `block_ruin_acid_dissolvedlab` — lab cabin with ragged acid-melted holes
+
+#### 🏛️ Greek biome — complete family (2)
+- 🔥 `block_ruin_greek_oracleshrine` — marble column shrine, bronze brazier flame
+- 🏛️ `block_ruin_greek_treasurytemple` — grand three-column temple pediment on stylobate steps
+
+#### ⚡ Power grid blocks (5)
+- ⬆️ `block_stepuptransformer` (HighVoltage) — tall transformer, 3 rising porcelain bushings
+- ⬇️ `block_stepdowntransformer` (HighVoltage) — compact ribbed transformer can
+- 🏗️ `block_substation` (HighVoltage) — concrete pad with transformer + insulator gantry
+- 🟠 `block_powerbusbar` (Survival) — frame rack with 3 copper bars on ceramic standoffs
+- 🗄️ `block_nasblock` (Survival) — NAS cube with 4 drive bays + status LEDs
+
+#### Files touched
+- 10 new icons under `ItemIcons/{Survival,HighVoltage}/` (+.meta), sprite metas + `icon:` refs written
+- `Scripts/Core/GameVersion.cs` — Patch 34 → 35
+
+---
+
+### [6.78.34-dev] Icon Batch 31 — Ruin Set-Pieces, Wave 3 (Mars / Moon / Crystal / Desolate)
+
+**Type:** PATCH — art/content, save-compatible. Zero C# changes.
+
+#### 🔴 Mars biome — complete family (3, Survival/CelestialBlocks)
+- 🏚️ `block_ruin_mars_dustbunker` — half-buried bunker with red dust drifts
+- 🏘️ `block_ruin_mars_frontieroutpost` — twin dust-crusted modules joined by a flex tunnel
+- 📻 `block_ruin_mars_waystation` — roadside module with collapsed antenna mast, faded yellow stripe
+
+#### 🌑 Moon biome — complete family (3)
+- 🌕 `block_ruin_moon_habitatdome` — regolith-dusted dome, cracked visor window
+- 📡 `block_ruin_moon_listeningpost` — equipment hut with big parabolic dish skyward
+- 🛰️ `block_ruin_moon_outpost` — grey cylinder module on four landing legs
+
+#### 💎 Crystal biome — complete family (3)
+- 💜 `block_ruin_crystal_geodeshrine` — split boulder with glowing amethyst cluster inside
+- 🛕 `block_ruin_crystal_luminatemple` — pale stone temple with teal crystal orb niche
+- 🩵 `block_ruin_crystal_prismspire` — trio of iridescent cyan-pink crystal spikes
+
+#### 🏜️ Desolate biome
+- 🩹 `block_ruin_desolate_dryoutpost` — cracked adobe shack, broken tattered windsock pole
+
+#### Files touched
+- 10 new icons under `VoxelEngineAssets/ItemIcons/Survival/` (+.meta), sprite metas + `icon:` refs written
+- `Scripts/Core/GameVersion.cs` — Patch 33 → 34
+
+---
+
+### [6.78.33-dev] Icon Batch 30 — Ruin Set-Pieces, Wave 2 (Volcanic / Venus / Ice)
+
+**Type:** PATCH — art/content, save-compatible. Zero C# changes.
+
+#### 🌋 Volcanic biome — complete family (4, Survival/CelestialBlocks)
+- 🪨 `block_ruin_volcanic_ashkeep` — cracked basalt keep with ash-dusted ledges + faint ember crack
+- ⚫ `block_ruin_volcanic_charreddome` — blackened dome with dying ember seam
+- 🔥 `block_ruin_volcanic_magmaforge` — forge with glowing orange magma crucible mouth
+- 💜 `block_ruin_volcanic_obsidiancitadel` — glossy faceted obsidian structure, violet shimmer
+
+#### 🌕 Venus biome — complete family (3)
+- 🏯 `block_ruin_venus_ashcitadel` — pale ochre tower with bone-ash crust
+- 🛡️ `block_ruin_venus_pressuredome` — ribbed titanium pressure dome, twin lock hatches
+- 💛 `block_ruin_venus_sulfurrefinery` — corroded refinery with yellow sulfur-crusted pipes
+
+#### ❄️ Ice biome — complete family (3)
+- 📡 `block_ruin_ice_cryostation` — frost-coated research module, icicles + frozen window
+- 🚪 `block_ruin_ice_frozenbunker` — snow-blanketed bunker, frosted blast door ajar
+- 🧊 `block_ruin_ice_glacialdome` — dome sealed in clear ice shell with trapped bubbles
+
+#### Files touched
+- 10 new icons under `VoxelEngineAssets/ItemIcons/Survival/` (+.meta), sprite metas + `icon:` refs written
+- `Scripts/Core/GameVersion.cs` — Patch 32 → 33
+
+---
+
+### [6.78.32-dev] Icon Batch 29 — Ruin Set-Pieces, Wave 1 (Pirate Biome + Industrial)
+
+**Type:** PATCH — art/content, save-compatible. Zero C# changes.
+
+#### 🏴‍☠️ Pirate biome — complete family (5, Survival/CelestialBlocks)
+- 🗼 `block_ruin_pirate_junktower` — crooked stacked scrap tower, crow-nest + bent antenna
+- 💰 `block_ruin_pirate_lootcache` — crate heap with overflowing gold + gem chest
+- 🍸 `block_ruin_pirate_neonden` — scrap shack with magenta neon tube frame
+- 🛡️ `block_ruin_pirate_scrapfort` — welded plate fort with rebar spikes
+- ⛺ `block_ruin_pirate_wreckcamp` — hull-shelter with orange tarp roof
+
+#### 🏚️ Industrial & water ruins (5, Survival)
+- 🏭 `block_ruinfactory` — collapsed sawtooth roof factory, broken brick chimney
+- 🏬 `block_ruinwarehouse` — sagging corrugated hall, half-fallen roller door
+- 🌊 `block_ruin_water_stiltplatform` — barnacled stilt deck with rope ladder
+- 🫧 `block_ruin_water_sunkendome` — geodesic dome with algae waterline + broken porthole
+- 🔴 `block_ruin_mars_habitat` — dust-crusted pressure dome, cracked porthole, bent antenna
+
+#### Files touched
+- 10 new icons under `VoxelEngineAssets/ItemIcons/Survival/` (+.meta), sprite metas + `icon:` refs written
+- `Scripts/Core/GameVersion.cs` — Patch 31 → 32
+
+---
+
+### [6.78.31-dev] Icon Batch 28 — GridSystem Functional Blocks
+
+**Type:** PATCH — art/content, save-compatible. Zero C# changes.
+
+#### 🧱 12 new block icons (GridSystem category)
+- 🛗 `gitem_piston` — armored base with extended steel piston shaft + push plate
+- 📦 `gitem_cargolarge` — ribbed yellow-grey cargo crate with latched door
+- 📦 `gitem_cargosmall` — same crate derived at 70% slot scale (identical art family)
+- 🛡️ `gitem_armorlarge` — thick beveled armor slab, corner rivets
+- 🛡️ `gitem_armorsmall` — same slab derived at 70% slot scale
+- 📡 `gitem_beacon` — antenna mast with glowing red dome lamp
+- 🪟 `gitem_glassblock` — framed armored glass window block
+- 🫧 `gitem_liquidtank` — glass reservoir at two-thirds cyan fill, pipe stubs
+- ⚗️ `gitem_h2o2generator` — cabinet with twin bubbling glass chambers
+- 💡 `gitem_ledstrip` — slim channel bar with warm glowing diffuser
+- 🔫 `gitem_weapon` — stubby cannon mount with side ammo drum
+- ⭕ `gitem_dockingport` — round segmented docking hatch with clamp ring + green status lamp
+
+#### Files touched
+- 12 new icons under `VoxelEngineAssets/ItemIcons/GridSystem/` (+.meta), sprite metas + `icon:` refs written
+- `Scripts/Core/GameVersion.cs` — Patch 30 → 31
+
+---
+
+### [6.78.30-dev] Icon Batch 27 — Complete Fauna Loot Set + Oxygen Tank
+
+**Type:** PATCH — art/content, save-compatible. Zero C# changes.
+
+#### 🐉 All 9 remaining fauna loot drops (Fauna category)
+- 🦎 `item_basilisk_scale` — iridescent green-black curved scale, golden edge shimmer
+- ❤️ `item_griffin_heart` — crimson heart with golden down feathers, faint magical glow
+- 🦅 `item_griffin_talon` — hooked dark ivory claw, leather-stumped base
+- 🌀 `item_karkadann_horn` — massive twisted obsidian-violet spiral horn with silver rings
+- ☠️ `item_venom_gland` — purple sac bulging with glowing toxic-green venom
+- 🟫 `item_hide` — rolled tan pelt with fur end + thong tie
+- 🛡️ `item_plated_hide` — dark pelt with natural bone-armor scales
+- 🥩 `item_raw_meat` — marbled red steak with fat veins + bone corner
+- 🐑 `item_wool` — fluffy cream fleece bundle, twine wrap
+
+#### 🫧 Survival gear
+- 🟢 `oxygen_tank` (Survival) — white steel cylinder, green shoulder band, brass valve + pressure gauge
+
+#### Files touched
+- 10 new icons under `ItemIcons/{Fauna,Survival}/` (+.meta), sprite metas + `icon:` refs written
+- `Scripts/Core/GameVersion.cs` — Patch 29 → 30
+
+---
+
+### [6.78.29-dev] Icon Batch 26 — Maritime Mega-Batch (19 icons!)
+
+**Type:** PATCH — art/content, save-compatible. Zero C# changes.
+
+#### 📦 Shipping container family — 5 icons from 1 master
+- 🔵 `shipping_container_large_blue` / ⚪ `shipping_container_large_gray` (hue-desaturated panels)
+- 🔵⚪ `shipping_container_small_blue` / `shipping_container_small_gray` (same art at 75% slot scale)
+- 🟤 `shipping_container_old` — rust-brown weathered treatment
+
+#### 🖥️ Screen family — 5 icons from 1 master (size = slot scale, matching shared cyan `iconTint`)
+- 🖥️ `screen_extralarge` → `screen_large` → `screen_medium` → `screen_small` (full→0.88→0.74→0.58) + `screen_wide` (height-flattened variant)
+- (GridSystem/ScreenItems category; cyan wave-graph monitor)
+
+#### 🛥️ Maritime engines — 3 distinct engine heroes by size class
+- 🟤 `crude_engine` — weathered single-cylinder rope-start boat engine
+- ⚙️ `heavy_fuel_oil_engine` — dark cast block, rust exhaust manifold
+- 🔩 `mgo_engine` — giant diesel with exhaust stack + flywheel on skid
+
+#### 🌀 Propellers + fauna loot
+- 🥇 `large_propeller` — 4-blade brass ship prop; `small_propeller` derived at 66% scale
+- ⚡ `electrical_propeller` — streamlined blue-grey electric pod with ring shroud
+- 🪶 `item_griffin_feather` (Fauna) — golden flight feather
+- 👁️ `item_petrified_eye` (Fauna) — stone sphere with fossilized amber iris
+- 🔥 `item_ifrit_ember` (Fauna) — volcanic rock with glowing fire cracks
+
+#### Files touched
+- 19 new icons under `ItemIcons/{Maritime,GridSystem,Fauna}/` (+.meta), sprite metas + `icon:` refs written
+- `Scripts/Core/GameVersion.cs` — Patch 28 → 29
+
+---
+
+### [6.78.28-dev] Icon Batch 25 — Drawer Redo + Upgrade Chip Rainbow & Tool Set
+
+**Type:** PATCH — art/content, save-compatible. Zero C# changes.
+
+#### ♻️ Remade icon (Thomas feedback)
+- 🗄️ `block_storagedrawer` (Survival) — now a **single drawer front with one big clean white label panel** (thin dark frame + small knob below), drawer-mod style: the stored item can be shown on that white face in-game
+
+#### 💳 Drawer upgrade chip family — 6 icons from 1 master, stripe hue matched to each asset's `iconTint`
+- 🔵 `drawerupgrade_stack_1x` · 🩵 `drawerupgrade_stack_2x` · 🟢 `drawerupgrade_stack_4x` · 🟡 `drawerupgrade_stack_8x` · 🟠 `drawerupgrade_stack_16x` · 🟣 `drawerupgrade_void` (Survival)
+
+#### 🛠️ New tool icons (4)
+- 🌾 `hoe` (Survival) — wooden-handled lashed iron hoe
+- 🧰 `grinder_tool` (Tools) — orange angle grinder with cutting disc
+- 🖌️ `tool_paint` (Tools) — paint sprayer with visible blue paint cup
+- 📏 `leveling_tool` (Tools) — yellow spirit level with green bubble vials
+
+#### ⚙️ New block/item icons (4)
+- 🌀 `gitem_gyroscopesmall` (GridSystem) — compact gimbal flywheel housing
+- 🔩 `gitem_drill` (GridSystem) — armored block with front spiral auger bit
+- 🦷 `gitem_grinder` (GridSystem) — armored block with toothed crusher rollers
+- ⚙️ `item_irongear` (Industrial) — heavy 8-tooth iron cog
+
+#### Files touched
+- `VoxelEngineAssets/ItemIcons/Survival/block_storagedrawer.png` — replaced (GUID/binding preserved)
+- 14 new icons under `ItemIcons/{Survival,Tools,GridSystem,Industrial}/` (+.meta), sprite metas + `icon:` refs written
+- `Scripts/Core/GameVersion.cs` — Patch 27 → 28
+
+---
+
+### [6.78.27-dev] Icon Batch 24 — Wind Turbine Part Families (22 icons!)
+
+**Type:** PATCH — art/content, save-compatible. Zero C# changes.
+
+#### 🌬️ T90 / T150 / T236 turbine part families — 18 icons from 6 master renders
+Same component, three sizes: art is pixel-identical per part and **icon scale = tier** (T236 fills the slot, T150 ≈ 80%, T90 ≈ 66%), so players instantly read which turbine a part belongs to. Matches their shared steel `iconTint`.
+
+- 🔪 blade set — `block_t90_blade` / `block_t150_blade` / `block_t236_blade` — white fiberglass blade
+- ⚙️ gearbox set — cast housing, meshing gears window, shaft stubs
+- 🔋 generator set — finned cylinder, copper slip ring band
+- 🎯 hub set — white spinner nose cone with 3 blade sockets
+- 🏗️ monopole set — smooth tube pole segment with flange rings
+- 🗼 tower set — tapered galvanized lattice truss segment
+- (WindPower category; all 18 bound to their `WindPower/Items` assets)
+
+#### 🎨 New item icons (4 more)
+- 🌬️ `block_vlarge_blades` (WindPower) — big face-on 3-blade rotor
+- 🌬️ `block_vsmall_blades` (WindPower) — compact 3-blade rotor
+- 🌊 `waterwheel` (Maritime) — big oak paddle waterwheel
+- 🛥️ `maritime_generator` (Maritime) — grey-green marine genset with flywheel housing
+
+#### Files touched
+- 22 new icons under `ItemIcons/{WindPower,Maritime}/` (+.meta), sprite metas + `icon:` refs written
+- `Scripts/Core/GameVersion.cs` — Patch 26 → 27
+
+---
+
+### [6.78.26-dev] Icon Batch 23 — Single-Slope Roof + Storage & Mechanical Sets
+
+**Type:** PATCH — art/content, save-compatible. Zero C# changes.
+
+#### ♻️ Remade icon (Thomas feedback)
+- 🏠 `build_roof` (Tiered) — no more gable triangle: now a clean **single-slope shed roof** — one flat terracotta shingle plane on a simple wedge with fascia board, matching the rest of the build family
+
+#### 🗄️ New storage family icons (5, oak + steel design language)
+- 🗄️ `block_storagedrawer` (Survival) — twin oak drawer cabinet, metal pulls + label frames
+- 🖥️ `block_storagedrawercontroller` (Survival) — drawer bank with glowing green grid terminal
+- 📤 `block_storageexporter` (Survival) — green-lit output port ejecting a crate
+- 📥 `block_storageimporter` (Survival) — amber intake hopper swallowing a crate
+- 🪟 `block_storageitemdisplay` (Survival) — glass display window showing one golden gear inside
+
+#### ⚙️ New mechanical power icons (4, Maritime)
+- ⚙️ `gearbox` — cast-iron casing with meshing brass gears in a round window
+- 🔩 `drive_shaft` — polished shaft tube with universal joints at both ends
+- ↔️ `rotation_transfer` — right-angle bevel gearbox elbow
+- ⛓️ `encased_chain_drive` — slim casing with roller chain loop around two sprockets
+
+#### Files touched
+- `VoxelEngineAssets/ItemIcons/Tiered/build_roof.png` — replaced (GUID/binding preserved)
+- 9 new icons under `ItemIcons/{Survival,Maritime}/` (+.meta), sprite metas + `icon:` refs written
+- `Scripts/Core/GameVersion.cs` — Patch 25 → 26
+
+---
+
+### [6.78.25-dev] Icon Batch 22 — Complete Base-Building Set
+
+**Type:** PATCH — art/content, save-compatible. Zero C# changes.
+
+#### 🏠 New Tiered category: all 10 build pieces, one cozy timber-frame design language (white plaster + dark wood beams)
+Every piece you'd snap together into a starter base, instantly readable at slot size:
+
+- 🧱 `build_foundation` — thick stone plinth with timber trim
+- 🧱 `build_wall` — full plaster + beam wall panel
+- 🪟 `build_window` — wall panel with 4-pane mullioned window, faint glass glint
+- 🚪 `build_door` — wall panel with closed wooden door + brass knob
+- 🕳️ `build_doorway` — wall panel with open portal frame
+- 🪵 `build_floor` — lying wooden plank deck tile
+- 🧱 `build_halfwall` — half-height panel with top rail
+- 🏛️ `build_pillar` — square wooden column, stone foot and cap
+- 🪜 `build_stairs` — 4-step wooden staircase with side stringer
+- 🏠 `build_roof` — terracotta shingle gable slope with ridge cap
+
+#### Files touched
+- `VoxelEngineAssets/ItemIcons/Tiered/` — NEW category folder (+folder .meta, established guid scheme); icons bind to the `Tiered/Tokens/Token_*.asset` definitions
+- 10 new icons (+.meta), sprite metas + `icon:` refs written
+- `Scripts/Core/GameVersion.cs` — Patch 24 → 25
+
+---
+
+### [6.78.24-dev] Icon Batch 21 — Lost Five Restored + Thruster Family Complete
+
+**Type:** PATCH — art/content, save-compatible. Zero C# changes.
+
+#### 🔁 Regenerated the five icons lost in the cleanup (13 icons this batch: 10 generated + 3 remodelled/derived)
+- 💣 `item_mortar_explosive` (Combat) — mortar bomb master (red-orange nose band)
+- 🟡 `item_mortar_illum` / ⚪ `item_mortar_smoke` (Combat) — same round hue-derived: yellow illumination band / grey smoke band
+- ☢️ `block_tsar_bomb` (Combat) — enormous finned bomb casing, blunt nose + box tail
+- 🛞 `gitem_wheel_2x2` (GridSystem) — compact 4-lug wheel · 🛞 `gitem_wheel_5x5` (GridSystem) — massive chevron-tread wheel with armored hub
+
+#### 🚀 Thruster family — now 7 strong, one shared design (octagonal housing + bell, color = type, size = size)
+- 🔷 `gitem_hydrothruster_small` — REDONE into the family style (cyan burn, small bell)
+- 🟠 `gitem_atmothruster_large` — big orange jet flame burst
+- ⚪ `gitem_thrustersmall` — neutral pale ice-blue glow utility thruster
+
+#### ☢️ Nuclear additions
+- 🟡 `item_highlevelwaste` (Nuclear) — sealed yellow cask, bolted lid, amber heat slit
+- 🔩 `item_depleteduranium` (Nuclear) — dense dark DU slug with lathe pattern
+- 👨‍✈️ `gitem_cockpitlarge` (GridSystem) — wide canopy cockpit with center pillar, matches cockpit small
+
+#### Files touched
+- `VoxelEngineAssets/ItemIcons/GridSystem/gitem_hydrothruster_small.png` — replaced in family style (GUID/binding preserved)
+- 12 new icons under `ItemIcons/{Combat,GridSystem,Nuclear}/` (+.meta), sprite metas + `icon:` refs written
+- `Scripts/Core/GameVersion.cs` — Patch 23 → 24
+
+---
+
+### [6.78.23-dev] Icon Batch 19/20 — Thruster Family, Nuclear Set + Workspace Slim-Down
+
+**Type:** PATCH — art/content, save-compatible. Zero C# changes.
+
+#### 🧹 Workspace maintenance (per Thomas)
+- Cleared all previously delivered icon PNGs from the workspace copy after Thomas downloaded them (git/local copies are the source of truth for him; sprite `.meta` files and all `icon:` asset bindings remain untouched, so nothing unbinds). New batches continue here.
+
+#### 🚀 Thruster icon family established (Thomas feedback)
+All thrusters now share one design language — **dark octagonal armored housing + exposed engine bell nozzle**, differentiated by size and flame/plasma color:
+
+- 🔷 `gitem_hydrothruster_large` — REMADE: proper large rocket thruster, huge flared bell with bright cyan hydrogen burn, turbopump ring + feed pipes
+- 🟣 `gitem_ionthruster_small` / 🟣 `gitem_ionthruster_large` — violet plasma-grid glow, small/large bell
+- 🟠 `gitem_atmothruster_small` — warm orange jet glow with intake fan hint
+
+(Note: `gitem_hydrothruster_small` from an older batch still uses the pre-family design — queued for a family-style redo next batch.)
+
+#### ☢️ New Nuclear category icons (4) + processor
+- ⚫ `item_controlrod` (Nuclear — NEW icon folder) — bundle of 5 matte control rods, steel collars
+- 🟢 `item_enrichedfuelrod` (Nuclear) — silver rod with radioactive green core glow through window slits
+- 🟠 `item_spentfuelrod` (Nuclear) — scorched dull rod with faint ember seam
+- ⚪ `item_leupellet` (Nuclear) — ceramic tray of dark uranium pellets
+- ⚙️ `block_uraniumprocessor` (Survival) — centrifuge cabinet with porthole drum + green status lamps
+
+#### ⚠️ Interrupted-batch note
+Five icons generated right before a session interruption (mortar explosive base, tsar bomb, wheel 2x2/5x5 gen files) were caught in the workspace cleanup before delivery — they post-date the downloaded snapshot and will be **regenerated next batch** (mortar rounds trio incl. illum/smoke derivations, tsar bomb, wheel family).
+
+#### Files touched
+- `VoxelEngineAssets/ItemIcons/Nuclear/` — NEW category folder (+folder .meta following the established IW/Folder guid scheme)
+- 8 new icons + 1 remake under `ItemIcons/{GridSystem,Nuclear,Survival}/` (+.meta), sprite metas + `icon:` refs written
+- `Scripts/Core/GameVersion.cs` — Patch 22 → 23
 
 ---
 

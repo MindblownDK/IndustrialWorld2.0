@@ -404,14 +404,35 @@ namespace VoxelEngine.UI
             card.style.alignItems = Align.Center;
             if (selected) T.Border(card, 1, accent);
 
-            var dot = new VisualElement();
-            dot.style.width = 8;
-            dot.style.height = 8;
-            dot.style.marginRight = 8;
-            dot.style.backgroundColor = new StyleColor(selected ? accent : T.TextMuted);
-            T.Radius(dot, 4);
-            dot.pickingMode = PickingMode.Ignore;
-            card.Add(dot);
+            // Output icon slot — premium slot look; falls back to a tint chip.
+            var iconSlot = new VisualElement();
+            iconSlot.style.width = 34; iconSlot.style.height = 34;
+            iconSlot.style.marginRight = 8;
+            iconSlot.style.alignItems = Align.Center;
+            iconSlot.style.justifyContent = Justify.Center;
+            iconSlot.style.backgroundColor = new StyleColor(T.BgSlot);
+            T.Radius(iconSlot, 5);
+            iconSlot.pickingMode = PickingMode.Ignore;
+            var recipeIcon = recipe.GetIcon();
+            if (recipeIcon != null)
+            {
+                var rImg = new Image { sprite = recipeIcon };
+                rImg.scaleMode = ScaleMode.ScaleToFit;
+                rImg.style.width = 30; rImg.style.height = 30;
+                rImg.pickingMode = PickingMode.Ignore;
+                iconSlot.Add(rImg);
+            }
+            else
+            {
+                var tintChip = new VisualElement();
+                tintChip.style.width = 22; tintChip.style.height = 22;
+                tintChip.style.backgroundColor = new StyleColor(
+                    recipe.outputItem != null ? recipe.outputItem.iconTint : accent);
+                T.Radius(tintChip, 4);
+                tintChip.pickingMode = PickingMode.Ignore;
+                iconSlot.Add(tintChip);
+            }
+            card.Add(iconSlot);
 
             var column = new VisualElement();
             column.style.flexGrow = 1;

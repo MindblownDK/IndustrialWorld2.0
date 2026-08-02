@@ -445,16 +445,6 @@ namespace VoxelEngine.EditorTools
                 "  • Re-runnable. Does not strip existing jetpack assets.");
             AddWizardButton(scroll, "47. Refresh Jetpack Fuel Accounting", BuildJetpackFuelContent, 40);
 
-            AddInfo(scroll,
-                "Step 48 builds the ARMOR STATION + armour upgrade modules (non-destructive):\\n" +
-                "  • Armor Station block (higher-tier crafting station for armour & jetpacks)\\n" +
-                "  • Upgrade modules: Heat Tolerance / Radiation Shielding / Oxygen Efficiency /\\n" +
-                "    Impact Padding / Mobility Servos — 5 tiers each + the Hazmat seal\\n" +
-                "  • RMB the station while holding a module + wearing armour -> apply it\\n" +
-                "  • res_armor_station research node gates the station + modules\\n" +
-                "  • Non-destructive: existing armour/balance values preserved. Re-runnable.");
-            AddWizardButton(scroll, "48. Build Armor Station + Upgrade Modules", BuildArmorStationContent, 56);
-
             AddSpacer(scroll, 20);
         }
 
@@ -1528,7 +1518,6 @@ namespace VoxelEngine.EditorTools
                 VoxelEngine.Crafting.StationTier.CraftingBench => 2f,
                 VoxelEngine.Crafting.StationTier.Furnace       => 0f,
                 VoxelEngine.Crafting.StationTier.Assembler     => 4f,
-                VoxelEngine.Crafting.StationTier.ArmorStation  => 6f,
                 _ => 0f
             };
             r.requiredStation = station; r.craftSeconds = defaultSeconds; r.unlockedByDefault = true;
@@ -13447,232 +13436,26 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
                 "Sealed void-metal armour with glowing energy relays. Worthy of the strongest Crusaders — the pinnacle of the Order.",
                 6, 0.62f, new Color(0.22f, 0.20f, 0.28f));
 
-            // ── Recipes (escalating difficulty) — all armour is crafted ONLY at the Armor Station ──
-            AddRecipe("Recipe_Armor_InitiateGambeson", "Initiate's Gambeson", t1, 1, VoxelEngine.Crafting.StationTier.ArmorStation, true, (woodLog, 4), (plank, 4));
-            AddRecipe("Recipe_Armor_SquireLeather", "Squire's Leather", t2, 1, VoxelEngine.Crafting.StationTier.ArmorStation, true, (woodLog, 2), (ironIngot, 3));
-            AddRecipe("Recipe_Armor_KnightChainmail", "Knight's Chainmail", t3, 1, VoxelEngine.Crafting.StationTier.ArmorStation, true, (ironIngot, 5), (copperWire, 3));
-            AddRecipe("Recipe_Armor_TemplarPlate", "Templar's Plate", t4, 1, VoxelEngine.Crafting.StationTier.ArmorStation, true, (ironPlate, 5), (steelIngot, 3), (copperWire, 4));
-            AddRecipe("Recipe_Armor_PaladinBulwark", "Paladin's Bulwark", t5, 1, VoxelEngine.Crafting.StationTier.ArmorStation, true, (steelPlate, 8), (circuit, 3), (copperWire, 6));
-            AddRecipe("Recipe_Armor_StellarArchon", "Stellar Archon Plate", t6, 1, VoxelEngine.Crafting.StationTier.ArmorStation, true, (steelPlate, 12), (advCircuit, 4), (goldWire, 6));
+            // ── Recipes (escalating difficulty) ──
+            AddRecipe("Recipe_Armor_InitiateGambeson", "Initiate's Gambeson", t1, 1, VoxelEngine.Crafting.StationTier.CraftingBench, true, (woodLog, 4), (plank, 4));
+            AddRecipe("Recipe_Armor_SquireLeather", "Squire's Leather", t2, 1, VoxelEngine.Crafting.StationTier.CraftingBench, true, (woodLog, 2), (ironIngot, 3));
+            AddRecipe("Recipe_Armor_KnightChainmail", "Knight's Chainmail", t3, 1, VoxelEngine.Crafting.StationTier.Assembler, true, (ironIngot, 5), (copperWire, 3));
+            AddRecipe("Recipe_Armor_TemplarPlate", "Templar's Plate", t4, 1, VoxelEngine.Crafting.StationTier.Assembler, true, (ironPlate, 5), (steelIngot, 3), (copperWire, 4));
+            AddRecipe("Recipe_Armor_PaladinBulwark", "Paladin's Bulwark", t5, 1, VoxelEngine.Crafting.StationTier.Assembler, true, (steelPlate, 8), (circuit, 3), (copperWire, 6));
+            AddRecipe("Recipe_Armor_StellarArchon", "Stellar Archon Plate", t6, 1, VoxelEngine.Crafting.StationTier.Assembler, true, (steelPlate, 12), (advCircuit, 4), (goldWire, 6));
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
             EditorUtility.DisplayDialog("Voxel Engine — Crusader Armor (6 Tiers)",
                 "Built 6 tiers of Crusader armor:\n\n" +
-                "1. Initiate's Gambeson (8% reduction)\n" +
-                "2. Squire's Leather (15%)\n" +
-                "3. Knight's Chainmail (25%)\n" +
-                "4. Templar's Plate (38%)\n" +
-                "5. Paladin's Bulwark (50%)\n" +
-                "6. Stellar Archon Plate (62%)\n\n" +
-                "All six are crafted ONLY at the Armor Station (Step 48) — not at the bench or assembler.\n" +
+                "1. Initiate's Gambeson (8% reduction) — Crafting Bench\n" +
+                "2. Squire's Leather (15%) — Crafting Bench\n" +
+                "3. Knight's Chainmail (25%) — Assembler\n" +
+                "4. Templar's Plate (38%) — Assembler\n" +
+                "5. Paladin's Bulwark (50%) — Assembler\n" +
+                "6. Stellar Archon Plate (62%) — Assembler\n\n" +
                 "Equip: put the armor in your hotbar, select it, and press RMB. Old armor returns to your inventory.\n" +
                 "Incoming damage is now reduced by the equipped tier's percentage.",
-                "OK");
-        }
-
-        // ============================================================
-        //      STEP 48 - ARMOR STATION & ARMOUR UPGRADE MODULES
-        // ============================================================
-        private void BuildArmorStationContent()
-        {
-            const string stationFolder = ASSET_ROOT + "/Combat/ArmorStation";
-            const string moduleFolder  = ASSET_ROOT + "/Combat/ArmorUpgrades";
-            const string blockFolder   = ASSET_ROOT + "/Blocks";
-            const string researchFolder= ASSET_ROOT + "/Research";
-            const string nodesFolder   = researchFolder + "/Nodes";
-            const string itemsFolder   = ASSET_ROOT + "/Items";
-
-            EnsureFolder(stationFolder);
-            EnsureFolder(moduleFolder);
-
-            ItemDefinition FindItem(string name)
-            {
-                var guids = AssetDatabase.FindAssets(name + " t:ItemDefinition");
-                foreach (var g in guids)
-                {
-                    var pp = AssetDatabase.GUIDToAssetPath(g);
-                    if (System.IO.Path.GetFileNameWithoutExtension(pp) == name)
-                        return AssetDatabase.LoadAssetAtPath<ItemDefinition>(pp);
-                }
-                return null;
-            }
-
-            var steelPlate = FindItem("Item_SteelPlate");
-            var ironPlate  = FindItem("Item_IronPlate");
-            var copperWire = FindItem("Item_CopperLVWire");
-            var goldWire   = FindItem("Item_GoldLVWire");
-            var circuit    = FindItem("Item_Circuit");
-            var advCircuit = FindItem("Item_AdvancedCircuit");
-
-            // ── 1) Armor Station block (prefab + block item + build recipe) ──
-            string stationPath = $"{stationFolder}/ArmorStation.prefab";
-            GameObject root = null;
-            bool loaded = false;
-            if (AssetDatabase.LoadMainAssetAtPath(stationPath) != null)
-            {
-                try { root = PrefabUtility.LoadPrefabContents(stationPath); StripMissingScripts(root); loaded = true; }
-                catch { AssetDatabase.DeleteAsset(stationPath); }
-            }
-            if (root == null)
-            {
-                root = new GameObject("ArmorStation");
-                var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                cube.name = "Mesh";
-                cube.transform.SetParent(root.transform, false);
-                cube.transform.localScale = new Vector3(1.4f, 1.7f, 1.3f);
-                var mat = MakeColoredMat(stationFolder, "Mat_ArmorStation", new Color(0.26f, 0.36f, 0.31f));
-                cube.GetComponent<Renderer>().sharedMaterial = mat;
-            }
-            var asComp = EnsureComponent<VoxelEngine.Combat.ArmorStation>(root);
-            asComp.tier = VoxelEngine.Crafting.StationTier.ArmorStation;
-            asComp.displayName = "Armor Station";
-            asComp.exclusiveRecipes = true;   // only armour recipes show at this station
-            var stationPrefab = PrefabUtility.SaveAsPrefabAsset(root, stationPath);
-            if (root != null)
-            {
-                if (loaded) PrefabUtility.UnloadPrefabContents(root);
-                else Object.DestroyImmediate(root);
-            }
-
-            var blockArmorStation = MakeBlock(blockFolder, "Block_ArmorStation", "Armor Station",
-                new Color(0.26f, 0.36f, 0.31f), stationPrefab, "Stations");
-            var recArmorStation = AddRecipe("Recipe_ArmorStation", "Armor Station", blockArmorStation, 1,
-                VoxelEngine.Crafting.StationTier.Assembler, false,
-                (steelPlate != null ? steelPlate : FindItem("Item_SteelIngot"), 4),
-                (circuit != null ? circuit : FindItem("Item_IronIngot"), 2));
-
-            // ── 2) Upgrade module items + recipes ──
-            // Scale ingredient counts with tier so higher tiers cost progressively more.
-            int Scale(int baseCount, int tier)
-                => Mathf.Max(1, Mathf.RoundToInt(baseCount * (1f + (tier - 1) * 0.5f)));
-
-            (ItemDefinition item, int baseCount)[] BaseIngs(VoxelEngine.Combat.ArmorUpgradeKind kind)
-            {
-                switch (kind)
-                {
-                    case VoxelEngine.Combat.ArmorUpgradeKind.HeatTolerance:      return new[] { (steelPlate, 2), (copperWire, 1) };
-                    case VoxelEngine.Combat.ArmorUpgradeKind.RadiationShielding: return new[] { (steelPlate, 2), (circuit, 1) };
-                    case VoxelEngine.Combat.ArmorUpgradeKind.OxygenEfficiency:   return new[] { (copperWire, 2), (steelPlate, 1) };
-                    case VoxelEngine.Combat.ArmorUpgradeKind.FallImpact:         return new[] { (steelPlate, 3) };
-                    case VoxelEngine.Combat.ArmorUpgradeKind.Mobility:           return new[] { (circuit, 2), (steelPlate, 2) };
-                    default:                                                     return new (ItemDefinition, int)[0];
-                }
-            }
-
-            System.Collections.Generic.List<VoxelEngine.Crafting.RecipeDefinition> moduleRecipes =
-                new System.Collections.Generic.List<VoxelEngine.Crafting.RecipeDefinition>();
-
-            foreach (var kind in System.Enum.GetValues(typeof(VoxelEngine.Combat.ArmorUpgradeKind)))
-            {
-                var k = (VoxelEngine.Combat.ArmorUpgradeKind)kind;
-                var baseIngs = BaseIngs(k);
-                for (int t = 1; t <= VoxelEngine.Combat.ArmorUpgradeKindInfo.MaxTier; t++)
-                {
-                    string assetName = $"Item_ArmorUpgrade_{k}_{t}";
-                    string display = $"{VoxelEngine.Combat.ArmorUpgradeKindInfo.DisplayName(k)} Module (T{t})";
-                    var mod = GetOrCreateAsset<VoxelEngine.Combat.ArmorUpgradeItem>($"{moduleFolder}/{assetName}.asset");
-                    mod.itemId = $"{assetName}".ToLower();
-                    mod.displayName = display;
-                    mod.description = VoxelEngine.Combat.ArmorUpgradeKindInfo.Description(k);
-                    mod.iconTint = new Color(0.45f, 0.85f, 1f);
-                    mod.maxStack = 1; mod.massPerUnit = 1.5f;
-                    mod.kind = k; mod.tier = t; mod.isHazmat = false;
-                    mod.category = "Armor Upgrades";
-                    EditorUtility.SetDirty(mod);
-
-                    var inputs = new System.Collections.Generic.List<(ItemDefinition, int)>();
-                    foreach (var (item, baseCount) in baseIngs)
-                        if (item != null) inputs.Add((item, Scale(baseCount, t)));
-                    var recipe = AddRecipe($"Recipe_ArmorUpgrade_{k}_{t}", display, mod, 1,
-                        VoxelEngine.Crafting.StationTier.ArmorStation, false, inputs.ToArray());
-                    moduleRecipes.Add(recipe);
-                }
-            }
-
-            // Hazmat seal module — full radiation immunity on any armour piece.
-            var hazmat = GetOrCreateAsset<VoxelEngine.Combat.ArmorUpgradeItem>($"{moduleFolder}/Item_HazmatModule.asset");
-            hazmat.itemId = "item_hazmat_module";
-            hazmat.displayName = "Hazmat Module";
-            hazmat.description = "Applies the Hazmat seal to any worn armour piece, granting full radiation immunity.";
-            hazmat.iconTint = new Color(0.55f, 0.95f, 0.35f);
-            hazmat.maxStack = 1; hazmat.massPerUnit = 2f;
-            hazmat.kind = VoxelEngine.Combat.ArmorUpgradeKind.HeatTolerance; // kind unused for hazmat
-            hazmat.tier = 1; hazmat.isHazmat = true;
-            hazmat.category = "Armor Upgrades";
-            EditorUtility.SetDirty(hazmat);
-            var recHazmat = AddRecipe("Recipe_HazmatModule", "Hazmat Module", hazmat, 1,
-                VoxelEngine.Crafting.StationTier.ArmorStation, false,
-                (advCircuit != null ? advCircuit : circuit, 1),
-                (steelPlate != null ? steelPlate : ironPlate, 3),
-                (goldWire != null ? goldWire : copperWire, 1));
-            moduleRecipes.Add(recHazmat);
-
-            // ── 3) Research node: res_armor_station ──
-            string treePath = researchFolder + "/ResearchTree.asset";
-            var tree = AssetDatabase.LoadAssetAtPath<VoxelEngine.Research.ResearchTree>(treePath);
-            if (tree == null)
-            {
-                AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
-                EditorUtility.DisplayDialog("Voxel Engine — Armor Station",
-                    "Run Step 7 (Build Research Content) first — the ResearchTree asset doesn't exist yet.",
-                    "OK");
-                return;
-            }
-
-            VoxelEngine.Research.ResearchNode FindNode(string id)
-            {
-                foreach (var nd in tree.nodes)
-                    if (nd != null && nd.nodeId == id) return nd;
-                return null;
-            }
-
-            var sciT2 = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ScienceItem>($"{itemsFolder}/Item_ScienceT2.asset");
-            var sciT3 = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ScienceItem>($"{itemsFolder}/Item_ScienceT3.asset");
-
-            string nodePath = $"{nodesFolder}/res_armor_station.asset";
-            var node = AssetDatabase.LoadAssetAtPath<VoxelEngine.Research.ResearchNode>(nodePath);
-            if (node == null) node = ScriptableObject.CreateInstance<VoxelEngine.Research.ResearchNode>();
-            node.nodeId = "res_armor_station";
-            node.displayName = "Armor Station";
-            node.description = "The Armor Station forges and refits Crusader armour. Unlocks the Armor Station block " +
-                               "and the five armour-upgrade module families (Heat Tolerance, Radiation Shielding, " +
-                               "Oxygen Efficiency, Impact Padding, Mobility Servos) plus the Hazmat seal.";
-            node.category = VoxelEngine.Research.ResearchCategory.Environment;
-            node.subCategory = VoxelEngine.Research.ResearchSubCategory.General;
-            node.tier = 4; node.column = 4;
-            node.iconTint = new Color(0.45f, 0.85f, 1f);
-            node.researchSeconds = 90f;
-            var cost = new System.Collections.Generic.List<VoxelEngine.Research.ResearchNode.ScienceCost>();
-            if (sciT2 != null) cost.Add(new VoxelEngine.Research.ResearchNode.ScienceCost { pack = sciT2, count = 20 });
-            if (sciT3 != null) cost.Add(new VoxelEngine.Research.ResearchNode.ScienceCost { pack = sciT3, count = 10 });
-            node.cost = cost.ToArray();
-            var unlocks = new System.Collections.Generic.List<VoxelEngine.Crafting.RecipeDefinition> { recArmorStation };
-            foreach (var r in moduleRecipes) if (r != null) unlocks.Add(r);
-            node.unlocksRecipes = unlocks.ToArray();
-            var nAdvMfg = FindNode("res_adv_manufacturing");
-            node.prerequisites = nAdvMfg != null
-                ? new[] { nAdvMfg }
-                : new VoxelEngine.Research.ResearchNode[0];
-            node.upgradeKind = VoxelEngine.Research.PlayerUpgradeKind.None;
-            node.maxRanks = 1;
-            if (!AssetDatabase.Contains(node)) AssetDatabase.CreateAsset(node, nodePath);
-            else EditorUtility.SetDirty(node);
-            if (!tree.nodes.Contains(node)) tree.nodes.Add(node);
-
-            AssetDatabase.SaveAssets();
-            AssetDatabase.Refresh();
-            EditorUtility.DisplayDialog("Voxel Engine — Armor Station",
-                "Built the Armor Station + upgrade modules:\n\n" +
-                "• Armor Station block (higher-tier crafting station)\n" +
-                "• 5 upgrade families x 5 tiers + Hazmat seal\n" +
-                "• res_armor_station research gates the station + modules\n\n" +
-                "How to use:\n" +
-                "  1. Research 'Armor Station' at the Research Lab.\n" +
-                "  2. Craft the Armor Station at an Assembler, place it.\n" +
-                "  3. Craft an upgrade module at the station.\n" +
-                "  4. Equip armour, hold the module, RMB the station to apply it.\n\n" +
-                "Upgrades are stored on the armour and survive save/load and equip/unequip.",
                 "OK");
         }
 

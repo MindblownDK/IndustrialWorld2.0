@@ -406,6 +406,7 @@ namespace VoxelEngine.UI
             if (sprite != null)
             {
                 var img = new Image { sprite = sprite };
+                img.scaleMode = ScaleMode.ScaleToFit; // match BuildSlot: tight-cropped generated icons must fit, not crop (fixes blank recipe/crafter icons)
                 img.style.width = TILE_ICON; img.style.height = TILE_ICON;
                 img.pickingMode = PickingMode.Ignore;
                 tile.Add(img);
@@ -498,6 +499,7 @@ namespace VoxelEngine.UI
             if (sprite != null)
             {
                 var img = new Image { sprite = sprite };
+                img.scaleMode = ScaleMode.ScaleToFit; // match BuildSlot: tight-cropped generated icons must fit, not crop (fixes blank recipe/crafter icons)
                 img.style.width = 40; img.style.height = 40;
                 img.pickingMode = PickingMode.Ignore;
                 iconWrap.Add(img);
@@ -557,6 +559,7 @@ namespace VoxelEngine.UI
                     if (ing.item.icon != null)
                     {
                         var im = new Image { sprite = ing.item.icon };
+                        im.scaleMode = ScaleMode.ScaleToFit; // match BuildSlot: tight-cropped generated icons must fit, not crop (fixes blank recipe/crafter icons)
                         im.style.width = 18; im.style.height = 18;
                         im.pickingMode = PickingMode.Ignore;
                         sw.Add(im);

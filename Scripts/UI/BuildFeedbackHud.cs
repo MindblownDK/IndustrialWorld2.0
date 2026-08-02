@@ -84,6 +84,7 @@ namespace VoxelEngine.UI
             if (icon != null)
             {
                 var img = new Image { sprite = icon };
+                img.scaleMode = ScaleMode.ScaleToFit; // match BuildSlot: tight-cropped generated icons must fit, not crop (fixes blank recipe/crafter icons)
                 img.style.width     = 20;
                 img.style.height    = 20;
                 img.style.marginRight = 8;

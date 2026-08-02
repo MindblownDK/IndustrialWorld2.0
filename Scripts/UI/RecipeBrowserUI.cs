@@ -1075,13 +1075,36 @@ namespace VoxelEngine.UI
             top.style.alignItems = Align.Center;
             node.Add(top);
 
-            var iconDot = new VisualElement();
-            iconDot.style.width = 10;
-            iconDot.style.height = 10;
-            iconDot.style.marginRight = 8;
-            iconDot.style.backgroundColor = new StyleColor(recipe.Output != null ? recipe.Output.iconTint : T.AccentCyan);
-            T.Radius(iconDot, 5);
-            top.Add(iconDot);
+            // Output icon slot (sprite when bound, tint dot otherwise).
+            if (recipe.Output != null && recipe.Output.icon != null)
+            {
+                var iconSlot = new VisualElement();
+                iconSlot.style.width = 30;
+                iconSlot.style.height = 30;
+                iconSlot.style.marginRight = 8;
+                iconSlot.style.alignItems = Align.Center;
+                iconSlot.style.justifyContent = Justify.Center;
+                iconSlot.style.backgroundColor = new StyleColor(T.BgSlot);
+                T.Radius(iconSlot, 5);
+                iconSlot.pickingMode = PickingMode.Ignore;
+                var iconImg = new Image { sprite = recipe.Output.icon };
+                iconImg.scaleMode = ScaleMode.ScaleToFit;
+                iconImg.style.width = 26;
+                iconImg.style.height = 26;
+                iconImg.pickingMode = PickingMode.Ignore;
+                iconSlot.Add(iconImg);
+                top.Add(iconSlot);
+            }
+            else
+            {
+                var iconDot = new VisualElement();
+                iconDot.style.width = 10;
+                iconDot.style.height = 10;
+                iconDot.style.marginRight = 8;
+                iconDot.style.backgroundColor = new StyleColor(recipe.Output != null ? recipe.Output.iconTint : T.AccentCyan);
+                T.Radius(iconDot, 5);
+                top.Add(iconDot);
+            }
 
             var name = new Label(recipe.Output != null ? recipe.Output.displayName : recipe.Name);
             name.style.flexGrow = 1;

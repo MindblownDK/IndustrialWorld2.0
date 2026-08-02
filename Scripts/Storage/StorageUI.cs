@@ -204,6 +204,7 @@ namespace VoxelEngine.Storage
                     if (def != null && def.icon != null)
                     {
                         var img = new Image { sprite = def.icon };
+                        img.scaleMode = ScaleMode.ScaleToFit; // match BuildSlot: tight-cropped generated icons must fit, not crop (fixes blank recipe/crafter icons)
                         img.style.width  = 40;
                         img.style.height = 40;
                         img.pickingMode  = PickingMode.Ignore;
@@ -313,6 +314,38 @@ namespace VoxelEngine.Storage
         }
 
         // Helper: compact number format (1,234 → 1.2k  for large counts).
+
+        private static VisualElement RecipeIconSlot(Sprite sprite, Color tint)
+        {
+            // Small premium slot with the recipe's output icon; tint chip fallback.
+            var slot = new VisualElement();
+            slot.style.width = 26; slot.style.height = 26;
+            slot.style.marginRight = 7;
+            slot.style.alignItems = Align.Center;
+            slot.style.justifyContent = Justify.Center;
+            slot.style.backgroundColor = new StyleColor(new Color(0.09f, 0.10f, 0.13f, 0.9f));
+            T.Radius(slot, 4);
+            slot.pickingMode = PickingMode.Ignore;
+            if (sprite != null)
+            {
+                var sImg = new Image { sprite = sprite };
+                sImg.scaleMode = ScaleMode.ScaleToFit;
+                sImg.style.width = 22; sImg.style.height = 22;
+                sImg.pickingMode = PickingMode.Ignore;
+                slot.Add(sImg);
+            }
+            else
+            {
+                var chip = new VisualElement();
+                chip.style.width = 14; chip.style.height = 14;
+                chip.style.backgroundColor = new StyleColor(tint);
+                T.Radius(chip, 3);
+                chip.pickingMode = PickingMode.Ignore;
+                slot.Add(chip);
+            }
+            return slot;
+        }
+
         private static string FormatCount(int n)
         {
             if (n >= 1_000_000) return $"{n / 1_000_000.0:0.#}M";
@@ -502,6 +535,9 @@ namespace VoxelEngine.Storage
                     row.style.backgroundColor = new StyleColor(T.BgCard);
                     T.Radius(row, 4);
 
+                    row.Add(RecipeIconSlot(job.recipe.GetIcon(),
+                        job.recipe.outputItem != null ? job.recipe.outputItem.iconTint : T.TextMuted));
+
                     var n = new Label($"{job.recipe.GetName()} ×{job.count}");
                     n.style.color    = new StyleColor(T.TextPrimary);
                     n.style.fontSize = 12;
@@ -539,6 +575,9 @@ namespace VoxelEngine.Storage
                     row.style.paddingTop      = 4; row.style.paddingBottom = 4;
                     row.style.backgroundColor = new StyleColor(T.BgSlot);
                     T.Radius(row, 4);
+
+                    row.Add(RecipeIconSlot(pat.recipe.GetIcon(),
+                        pat.recipe.outputItem != null ? pat.recipe.outputItem.iconTint : T.TextMuted));
 
                     var n = new Label(pat.recipe.GetName());
                     n.style.color    = new StyleColor(T.TextSecondary);
