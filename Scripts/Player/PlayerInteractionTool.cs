@@ -490,15 +490,27 @@ namespace VoxelEngine.Player
                         if (equipment != null)
                         {
                             var armorSlots = equipment.ArmorSlots;
-                            // Return currently-equipped armor (if any) to the inventory first.
-                            var current = equipment.EquippedArmor;
-                            if (current != null)
+                            // Armor upgrades are stored on each ItemStack. Preserve all
+                            // per-instance state while swapping worn armor rather than
+                            // recreating a clean stack from its shared definition.
+                            var currentStack = armorSlots.GetSlot(0);
+                            if (currentStack != null && !currentStack.IsEmpty)
                             {
-                                armorSlots.SetSlot(0, new VoxelEngine.Items.ItemStack());             // clear -> sync sets equippedArmor = null
-                                inventory.container.Insert(new VoxelEngine.Items.ItemStack(current, 1));
+                                armorSlots.SetSlot(0, new VoxelEngine.Items.ItemStack());
+                                var leftover = inventory.container.Insert(currentStack.Clone());
+                                if (leftover != null && !leftover.IsEmpty)
+                                    VoxelEngine.Items.DroppedItem.Spawn(leftover, transform.position + Vector3.up * 0.6f, Vector3.up);
                             }
-                            armorSlots.SetSlot(0, new VoxelEngine.Items.ItemStack { item = armor, count = 1 }); // sync sets equippedArmor = armor
-                            inventory.container.Remove(armor, 1);
+
+                            armorSlots.SetSlot(0, new VoxelEngine.Items.ItemStack
+                            {
+                                item = armor,
+                                count = 1,
+                                durability = armorStack.durability,
+                                charge = armorStack.charge,
+                                payload = armorStack.payload,
+                            });
+                            inventory.container.SetSlot(inventory.activeHotbarIndex, new VoxelEngine.Items.ItemStack());
                             inventory.container.RaiseChanged();
                             VoxelEngine.UI.BuildFeedbackHud.Show("Equipped", armor.displayName, armor.icon, new Color(0.4f, 0.8f, 1f));
                         }
@@ -927,6 +939,15 @@ namespace VoxelEngine.Player
 
                 var furnace = hit.collider.GetComponentInParent<Furnace>();
                 if (furnace != null) { UI.GameUIController.Instance?.OpenFurnace(furnace); return; }
+
+                // The anvil-style upgrade station has its own transactional UI and
+                // must be resolved before generic CraftingStation interaction.
+                var armorUpgradeStation = hit.collider.GetComponentInParent<VoxelEngine.Combat.ArmorUpgradeStation>();
+                if (armorUpgradeStation != null)
+                {
+                    UI.GameUIController.Instance?.OpenArmorUpgradeStation(armorUpgradeStation);
+                    return;
+                }
 
                 var station = hit.collider.GetComponentInParent<CraftingStation>();
                 if (station != null) { UI.GameUIController.Instance?.OpenStation(station); return; }

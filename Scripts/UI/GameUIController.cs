@@ -118,6 +118,7 @@ namespace VoxelEngine.UI
             _browserState[panelId] = (search, category);
         }
         private CraftingStation _openStation;
+        private VoxelEngine.Combat.ArmorUpgradeStation _openArmorUpgradeStation;
         private bool _previousLooking;
 
         // Drag-drop state
@@ -893,9 +894,50 @@ namespace VoxelEngine.UI
             Refresh();
         }
 
+        private void ClearArmorUpgradeStationBinding()
+        {
+            if (_openArmorUpgradeStation != null)
+                _openArmorUpgradeStation.OnStateChanged -= Refresh;
+            _openArmorUpgradeStation = null;
+        }
+
+        public void OpenArmorUpgradeStation(VoxelEngine.Combat.ArmorUpgradeStation station)
+        {
+            if (station == null) return;
+            if (!_inventoryOpen) UIState.PushBlock();
+
+            ClearArmorUpgradeStationBinding();
+            _openArmorUpgradeStation = station;
+            _openArmorUpgradeStation.OnStateChanged += Refresh;
+            _openStation = null;
+            _activeQueue = null;
+            _rightContainer = null; _openChest = null;
+            _openFurnace = null; _openElectric = null; _openCoalGen = null;
+            _openQuarry = null; _openReactor = null; _openTurbine = null;
+            _openPortReactor = null; _openProcessor = null; _openReprocessor = null;
+            _openElectrolyser = null; _openBiofarm = null; _openHydroEngine = null;
+            _openGasTank = null; _openWaterPump = null; _openWindTurbine = null;
+            _openGridBlock = null; _openOilRefinery = null; _openChemPlant = null;
+            _openGridTerminal = null;
+            _openStorageTerminal = null; _openServerRack = null; _openPatternTerminal = null;
+            _openCraftTerminal = null; _openImporter = null; _openExporter = null;
+            _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
+            _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
+            _openCrusher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
+            _openDefense = null; _openPowerBattery = null; _openVoltageStation = null;
+            _inventoryOpen = true;
+            UnwatchAllContainers();
+            WatchContainer(station.ArmorSlot);
+            WatchContainer(station.ModuleSlot);
+            WatchContainer(station.OutputSlot);
+            UnlockCursor();
+            Refresh();
+        }
+
         public void OpenStation(CraftingStation st)
         {
             if (!_inventoryOpen) UIState.PushBlock();
+            ClearArmorUpgradeStationBinding();
             _openStation    = st;
             _rightContainer = null; _openChest = null;
             _openFurnace    = null;
@@ -931,6 +973,7 @@ namespace VoxelEngine.UI
             _openElectric   = null;
             _openCoalGen    = null;
             _openStation    = null;
+            ClearArmorUpgradeStationBinding();
             _openQuarry     = null;
             _openReactor    = null; _openTurbine      = null;
             _openPortReactor= null; _openProcessor    = null;
@@ -947,6 +990,7 @@ namespace VoxelEngine.UI
             _openCrusher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             _openDefense = null;
             _openPowerBattery = null;
+            _openVoltageStation = null;
             _productionStatsOpen = false;
             _recipeBrowserOpen = false;
             _activeQueue    = null;
@@ -1147,7 +1191,7 @@ namespace VoxelEngine.UI
                     _openPowerstation != null || _openStorageDrawer != null ||
                     _openDrawerController != null || _openItemDisplay != null ||
                     _openCrusher != null || _openAssembler != null || _openFunnel != null || _openSplitter != null ||
-                    _openDefense != null;
+                    _openDefense != null || _openArmorUpgradeStation != null;
                 if ((anyRightTargetOpen || CraftingScreen.Visible) && (_productionStatsOpen || _recipeBrowserOpen))
                 {
                     _productionStatsOpen = false;
@@ -1165,13 +1209,13 @@ namespace VoxelEngine.UI
                     _openPowerstation != null || _openStorageDrawer != null ||
                     _openDrawerController != null || _openItemDisplay != null ||
                     _openCrusher != null || _openAssembler != null || _openFunnel != null || _openSplitter != null ||
-                    _openDefense != null;
+                    _openDefense != null || _openArmorUpgradeStation != null;
                 // The station pane (_openStation) renders its OWN crafting list on
                 // the right, so we suppress the center panel only in that case.
                 // For every other right panel (chest / furnace / storage terminal)
                 // we keep crafting available — the panel simply shrinks to sit in
                 // the gap between the inventory and the right panel.
-                if (CraftingScreen.Visible && _openStation == null)
+                if (CraftingScreen.Visible && _openStation == null && _openArmorUpgradeStation == null)
                 {
                     BuildCenterCrafting(_contentLayer, aRightPanelIsOpen);
                     _craftPanelWasVisible = true;
@@ -1219,6 +1263,7 @@ namespace VoxelEngine.UI
                 else if (_openVoltageStation   != null) _contentLayer.Add(VoxelEngine.Simulation.VoltageStationUI.BuildPanel(_openVoltageStation));
                 else if (_openDefense != null) BuildDefensePanel(_contentLayer, _openDefense);
                 else if (_openPowerBattery != null) _contentLayer.Add(BuildRightPowerBattery(_openPowerBattery));
+                else if (_openArmorUpgradeStation != null) BuildRightArmorUpgradeStation(_contentLayer, _openArmorUpgradeStation);
                 else if (_openStation  != null) BuildRightStationCrafting(_contentLayer, _openStation);
             }
             else
@@ -2270,7 +2315,7 @@ namespace VoxelEngine.UI
                    _openItemDisplay != null || _openCrusher != null || _openAssembler != null ||
                    _openFunnel != null || _openSplitter != null || _openGridBlock != null ||
                    _openOilRefinery != null || _openChemPlant != null || _openStation != null ||
-                   _openVoltageStation != null || _openDefense != null;
+                   _openArmorUpgradeStation != null || _openVoltageStation != null || _openDefense != null;
         }
 
         // Premium equipment panel docked to the right of the inventory: ARMOR +
@@ -2327,6 +2372,20 @@ namespace VoxelEngine.UI
                     stat.style.whiteSpace = WhiteSpace.Normal;
                     readout.Add(stat);
                     card.Add(readout);
+
+                    var installed = new Label(
+                        $"Heat T{equipment.GetArmorUpgradeTier(VoxelEngine.Combat.ArmorUpgradeKind.HeatTolerance)} · " +
+                        $"Rad T{equipment.GetArmorUpgradeTier(VoxelEngine.Combat.ArmorUpgradeKind.RadiationShielding)}\n" +
+                        $"O₂ T{equipment.GetArmorUpgradeTier(VoxelEngine.Combat.ArmorUpgradeKind.OxygenEfficiency)} · " +
+                        $"Impact T{equipment.GetArmorUpgradeTier(VoxelEngine.Combat.ArmorUpgradeKind.FallImpact)}\n" +
+                        $"Mobility T{equipment.GetArmorUpgradeTier(VoxelEngine.Combat.ArmorUpgradeKind.Mobility)}" +
+                        (equipment.HasHazmatProtection ? " · HAZMAT" : string.Empty));
+                    installed.style.fontSize = 8;
+                    installed.style.whiteSpace = WhiteSpace.Normal;
+                    installed.style.color = new StyleColor(UITheme.TextSecondary);
+                    installed.style.marginTop = -5;
+                    installed.style.marginBottom = 10;
+                    card.Add(installed);
                 }
                 else
                 {
@@ -2603,6 +2662,12 @@ namespace VoxelEngine.UI
             var maxStation = Crafter.MaxAccessibleStation(inventory.transform.position, stationRadius);
             if (storageCraftingUnlocked && (craftRack != null || wirelessActive)
                 && (int)maxStation < (int)Crafting.StationTier.Assembler)
+                maxStation = Crafting.StationTier.Assembler;
+
+            // Dedicated stations own their own recipe lists. Even while standing
+            // beside an Armor Station, the general inventory browser stays capped
+            // at Assembler recipes so armor/module production remains intentional.
+            if ((int)maxStation > (int)Crafting.StationTier.Assembler)
                 maxStation = Crafting.StationTier.Assembler;
 
             var allRecipes = Crafter.AvailableRecipes(recipeRegistry, maxStation);
@@ -3537,6 +3602,18 @@ namespace VoxelEngine.UI
             AppendItemPorts(panel, ef);
         }
 
+        // ----- RIGHT (anvil-style armor upgrades) -----
+        private void BuildRightArmorUpgradeStation(VisualElement root, VoxelEngine.Combat.ArmorUpgradeStation station)
+        {
+            var panel = ArmorUpgradeStationPanel.Build(
+                station,
+                (container, index, stack, hotbarHighlight, interactive) =>
+                    BuildSlot(container, index, stack, hotbarHighlight, interactive),
+                Refresh);
+            DockRightPanel(panel, 510);
+            root.Add(panel);
+        }
+
         // ----- RIGHT (crafting bench / assembler) -----
         private void BuildRightStationCrafting(VisualElement root, CraftingStation st)
         {
@@ -3587,7 +3664,7 @@ namespace VoxelEngine.UI
                 panel.Add(MakeDivider());
             }
 
-            var recipes = Crafter.AvailableRecipes(recipeRegistry, st.tier);
+            var recipes = Crafter.AvailableRecipesForStation(recipeRegistry, st);
             BuildRecipeBrowser(panel, recipes, inventory.container, inventory.container,
                 emptyMessage: "No recipes available at this station tier.",
                 // GetEntityId — Unity 6+ replacement for the now-deprecated

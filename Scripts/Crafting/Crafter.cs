@@ -67,25 +67,48 @@ namespace VoxelEngine.Crafting
 
         public static List<RecipeDefinition> AvailableRecipes(RecipeRegistry registry, StationTier maxStation)
         {
+            return CollectAvailableRecipes(registry, recipe => (int)recipe.requiredStation <= (int)maxStation);
+        }
+
+        /// <summary>
+        /// Gets the recipe list for one placed station. Exclusive stations use an
+        /// exact-tier filter so dedicated stations stay focused rather than exposing
+        /// the entire lower-tier catalogue.
+        /// </summary>
+        public static List<RecipeDefinition> AvailableRecipesForStation(RecipeRegistry registry, CraftingStation station)
+        {
+            if (station == null) return AvailableRecipes(registry, StationTier.None);
+            return station.exclusiveRecipes
+                ? CollectAvailableRecipes(registry, recipe => recipe.requiredStation == station.tier)
+                : AvailableRecipes(registry, station.tier);
+        }
+
+        private static List<RecipeDefinition> CollectAvailableRecipes(
+            RecipeRegistry registry,
+            System.Func<RecipeDefinition, bool> stationFilter)
+        {
             var list = new List<RecipeDefinition>();
-            if (registry == null) return list;
-            var rm = VoxelEngine.Research.ResearchManager.Instance;
-            foreach (var r in registry.recipes)
+            if (registry == null || stationFilter == null) return list;
+
+            var researchManager = VoxelEngine.Research.ResearchManager.Instance;
+            foreach (var recipe in registry.recipes)
             {
-                if (r == null) continue;
-                // Never surface hollow placeholder recipes: a recipe with no output
-                // item — or no ingredients at all — can neither be named, shown with
-                // an icon, nor crafted. Legacy stubs and machine-only placeholders
-                // must stay out of hand-crafting lists no matter what the data says.
-                if (r.outputItem == null) continue;
-                if (r.inputs == null || r.inputs.Length == 0) continue;
-                // Recipe is craftable if it's unlocked-by-default OR research has unlocked it.
-                if (rm != null)
+                if (recipe == null || recipe.outputItem == null) continue;
+                // Never surface hollow placeholders. They cannot be crafted safely
+                // and should not leak raw asset names into player-facing UIs.
+                if (recipe.inputs == null || recipe.inputs.Length == 0) continue;
+                if (!stationFilter(recipe)) continue;
+
+                if (researchManager != null)
                 {
-                    if (!rm.IsRecipeUnlocked(r)) continue;
+                    if (!researchManager.IsRecipeUnlocked(recipe)) continue;
                 }
-                else if (!r.unlockedByDefault) continue;
-                if ((int)r.requiredStation <= (int)maxStation) list.Add(r);
+                else if (!recipe.unlockedByDefault)
+                {
+                    continue;
+                }
+
+                list.Add(recipe);
             }
             return list;
         }

@@ -445,6 +445,16 @@ namespace VoxelEngine.EditorTools
                 "  • Re-runnable. Does not strip existing jetpack assets.");
             AddWizardButton(scroll, "47. Refresh Jetpack Fuel Accounting", BuildJetpackFuelContent, 40);
 
+            AddInfo(scroll,
+                "Step 48 completes the ARMOR workflow (non-destructive):\n" +
+                "  • Armor Station — premium armory workbench for armor and module crafting\n" +
+                "  • Armor Upgrade Station — premium anvil for timed module installation\n" +
+                "  • Five module families × five tiers plus the Hazmat seal\n" +
+                "  • Installation base time is 30 seconds: T1 30s through T5/Hazmat 150s\n" +
+                "  • Repairs missing links while preserving existing recipe costs, craft times, materials, and prefab custom work.\n" +
+                "Re-runnable. Idempotent.");
+            AddWizardButton(scroll, "48. Build Armor Stations + Timed Upgrades (Non-Destructive)", BuildArmorStationsAndUpgrades, 72);
+
             AddSpacer(scroll, 20);
         }
 
@@ -13368,6 +13378,780 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
 
 
         // ============================================================
+        //   STEP 48 - ARMOR STATIONS + TIMED ARMOR UPGRADES
+        //
+        //   All content is created/repaired through this wizard. Existing
+        //   asset values and custom prefab children are preserved; only missing
+        //   generated content and required links are added.
+        // ============================================================
+        private void BuildArmorStationsAndUpgrades()
+        {
+            const string armorFolder = ASSET_ROOT + "/Combat/Armor";
+            const string armorStationFolder = ASSET_ROOT + "/Combat/ArmorStation";
+            const string upgradeStationFolder = ASSET_ROOT + "/Combat/ArmorUpgradeStation";
+            const string upgradeModuleFolder = ASSET_ROOT + "/Combat/ArmorUpgrades";
+            const string blockFolder = ASSET_ROOT + "/Blocks";
+            const string recipeFolder = ASSET_ROOT + "/Recipes";
+            const string researchFolder = ASSET_ROOT + "/Research";
+            const string researchNodeFolder = researchFolder + "/Nodes";
+            const string itemFolder = ASSET_ROOT + "/Items";
+
+            EnsureFolder(armorFolder);
+            EnsureFolder(armorStationFolder);
+            EnsureFolder(upgradeStationFolder);
+            EnsureFolder(upgradeModuleFolder);
+            EnsureFolder(blockFolder);
+            EnsureFolder(recipeFolder);
+            EnsureFolder(researchFolder);
+            EnsureFolder(researchNodeFolder);
+
+            int createdAssets = 0;
+            int repairedLinks = 0;
+            int preservedAssets = 0;
+
+            T GetOrCreateSafeAsset<T>(string path, out bool created) where T : ScriptableObject
+            {
+                created = false;
+                var typed = AssetDatabase.LoadAssetAtPath<T>(path);
+                if (typed != null)
+                {
+                    preservedAssets++;
+                    return typed;
+                }
+
+                var conflicting = AssetDatabase.LoadMainAssetAtPath(path);
+                if (conflicting != null)
+                {
+                    Debug.LogError($"[VoxelEngineSetupWindow] Step 48 preserved '{path}' because it is not a {typeof(T).Name}. Resolve the asset-type conflict manually.");
+                    return null;
+                }
+
+                var folder = Path.GetDirectoryName(path)?.Replace("\\", "/");
+                if (!string.IsNullOrEmpty(folder)) EnsureFolder(folder);
+                typed = ScriptableObject.CreateInstance<T>();
+                AssetDatabase.CreateAsset(typed, path);
+                created = true;
+                createdAssets++;
+                Debug.Log($"[VoxelEngineSetupWindow] Step 48 created asset: {path}");
+                return typed;
+            }
+
+            ItemDefinition FindItem(string assetName)
+            {
+                var guids = AssetDatabase.FindAssets(assetName + " t:ItemDefinition");
+                foreach (var guid in guids)
+                {
+                    var path = AssetDatabase.GUIDToAssetPath(guid);
+                    if (Path.GetFileNameWithoutExtension(path) != assetName) continue;
+                    var item = AssetDatabase.LoadAssetAtPath<ItemDefinition>(path);
+                    if (item != null) return item;
+                }
+                return null;
+            }
+
+            Material EnsureMaterial(string folder, string assetName, Color color, bool emissive)
+            {
+                string path = $"{folder}/{assetName}.mat";
+                var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+                if (material != null)
+                {
+                    preservedAssets++;
+                    return material;
+                }
+
+                if (AssetDatabase.LoadMainAssetAtPath(path) != null)
+                {
+                    Debug.LogError($"[VoxelEngineSetupWindow] Step 48 preserved '{path}' because it is not a Material.");
+                    return null;
+                }
+
+                var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+                if (shader == null)
+                {
+                    Debug.LogError($"[VoxelEngineSetupWindow] Step 48 could not create '{path}' because no supported lit shader was found.");
+                    return null;
+                }
+
+                material = new Material(shader) { name = assetName };
+                material.color = color;
+                if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", color);
+                if (material.HasProperty("_Metallic")) material.SetFloat("_Metallic", emissive ? 0.2f : 0.78f);
+                if (material.HasProperty("_Smoothness")) material.SetFloat("_Smoothness", emissive ? 0.42f : 0.58f);
+                if (emissive)
+                {
+                    material.EnableKeyword("_EMISSION");
+                    if (material.HasProperty("_EmissionColor")) material.SetColor("_EmissionColor", color * 1.8f);
+                }
+                AssetDatabase.CreateAsset(material, path);
+                createdAssets++;
+                return material;
+            }
+
+            GameObject EnsureGeneratedPrimitive(
+                Transform parent,
+                string name,
+                PrimitiveType type,
+                Vector3 localPosition,
+                Vector3 localEuler,
+                Vector3 localScale,
+                Material material)
+            {
+                var existing = parent.Find(name);
+                GameObject part;
+                bool wasCreated = existing == null;
+                if (wasCreated)
+                {
+                    part = GameObject.CreatePrimitive(type);
+                    part.name = name;
+                    part.transform.SetParent(parent, false);
+                    var collider = part.GetComponent<Collider>();
+                    if (collider != null) UnityEngine.Object.DestroyImmediate(collider);
+                    createdAssets++;
+                }
+                else
+                {
+                    part = existing.gameObject;
+                    if (part.GetComponent<MeshFilter>() == null || part.GetComponent<MeshRenderer>() == null)
+                    {
+                        Debug.LogWarning($"[VoxelEngineSetupWindow] Step 48 left custom child '{name}' on '{parent.name}' untouched because it is not generated mesh geometry.");
+                        return part;
+                    }
+                    repairedLinks++;
+                }
+
+                // Generated parts are authored only when missing. On later runs,
+                // preserve the designer's transforms and materials instead of
+                // resetting visual work that may have been customized in Unity.
+                if (wasCreated)
+                {
+                    part.transform.localPosition = localPosition;
+                    part.transform.localRotation = Quaternion.Euler(localEuler);
+                    part.transform.localScale = localScale;
+                }
+                var renderer = part.GetComponent<Renderer>();
+                if (renderer != null && material != null && (wasCreated || renderer.sharedMaterial == null))
+                    renderer.sharedMaterial = material;
+                return part;
+            }
+
+            Transform EnsureGeneratedEmpty(Transform parent, string name, Vector3 localPosition, Vector3 localEuler)
+            {
+                var existing = parent.Find(name);
+                if (existing == null)
+                {
+                    var child = new GameObject(name);
+                    child.transform.SetParent(parent, false);
+                    existing = child.transform;
+                    existing.localPosition = localPosition;
+                    existing.localRotation = Quaternion.Euler(localEuler);
+                    existing.localScale = Vector3.one;
+                    createdAssets++;
+                }
+                else
+                {
+                    repairedLinks++;
+                }
+
+                return existing;
+            }
+
+            Light EnsureGeneratedLight(Transform parent, string name, Vector3 localPosition, Color color, float intensity, float range)
+            {
+                var child = parent.Find(name);
+                bool wasCreated = child == null;
+                if (wasCreated)
+                {
+                    child = new GameObject(name).transform;
+                    child.SetParent(parent, false);
+                    child.localPosition = localPosition;
+                    child.localRotation = Quaternion.identity;
+                    createdAssets++;
+                }
+                else
+                {
+                    repairedLinks++;
+                }
+
+                var light = child.GetComponent<Light>();
+                if (light == null)
+                {
+                    light = child.gameObject.AddComponent<Light>();
+                    light.type = LightType.Point;
+                    light.color = color;
+                    light.intensity = intensity;
+                    light.range = range;
+                    light.shadows = LightShadows.None;
+                    createdAssets++;
+                }
+                return light;
+            }
+
+            void EnsureRootCollider(GameObject root, Vector3 center, Vector3 size)
+            {
+                if (root.GetComponent<Collider>() != null) return;
+                var collider = root.AddComponent<BoxCollider>();
+                collider.center = center;
+                collider.size = size;
+                createdAssets++;
+            }
+
+            GameObject GetOrCreateFeaturePrefab(string path, string defaultName, System.Action<GameObject> ensureContent)
+            {
+                var mainAsset = AssetDatabase.LoadMainAssetAtPath(path);
+                if (mainAsset != null && !(mainAsset is GameObject))
+                {
+                    Debug.LogError($"[VoxelEngineSetupWindow] Step 48 preserved '{path}' because it is not a prefab. No asset was removed.");
+                    return null;
+                }
+
+                bool existed = mainAsset is GameObject;
+                GameObject root = null;
+                bool loadedContents = false;
+                try
+                {
+                    if (existed)
+                    {
+                        try
+                        {
+                            root = PrefabUtility.LoadPrefabContents(path);
+                            loadedContents = true;
+                        }
+                        catch (System.Exception ex)
+                        {
+                            Debug.LogError($"[VoxelEngineSetupWindow] Step 48 could not open '{path}' and left it untouched. Unity said: {ex.Message}");
+                            return AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                        }
+                    }
+                    else
+                    {
+                        root = new GameObject(defaultName);
+                    }
+
+                    ensureContent?.Invoke(root);
+                    var saved = PrefabUtility.SaveAsPrefabAsset(root, path);
+                    if (saved == null)
+                    {
+                        Debug.LogError($"[VoxelEngineSetupWindow] Step 48 could not save prefab '{path}'. Existing content was left untouched.");
+                        return AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                    }
+
+                    if (existed) preservedAssets++;
+                    else createdAssets++;
+                    return saved;
+                }
+                finally
+                {
+                    if (root != null)
+                    {
+                        if (loadedContents) PrefabUtility.UnloadPrefabContents(root);
+                        else UnityEngine.Object.DestroyImmediate(root);
+                    }
+                }
+            }
+
+            var armorSteel = EnsureMaterial(armorStationFolder, "Mat_ArmorStation", new Color(0.23f, 0.29f, 0.31f), false);
+            var armorDark = EnsureMaterial(armorStationFolder, "Mat_ArmorStationDark", new Color(0.055f, 0.07f, 0.085f), false);
+            var armorBrass = EnsureMaterial(armorStationFolder, "Mat_ArmorStationBrass", new Color(0.57f, 0.39f, 0.16f), false);
+            var armorGlow = EnsureMaterial(armorStationFolder, "Mat_ArmorStationGlow", new Color(0.12f, 0.80f, 0.92f), true);
+
+            var upgradeSteel = EnsureMaterial(upgradeStationFolder, "Mat_ArmorUpgradeAnvil", new Color(0.22f, 0.24f, 0.27f), false);
+            var upgradeDark = EnsureMaterial(upgradeStationFolder, "Mat_ArmorUpgradeDark", new Color(0.04f, 0.045f, 0.055f), false);
+            var upgradeBrass = EnsureMaterial(upgradeStationFolder, "Mat_ArmorUpgradeBrass", new Color(0.66f, 0.43f, 0.16f), false);
+            var upgradeGlow = EnsureMaterial(upgradeStationFolder, "Mat_ArmorUpgradeGlow", new Color(1f, 0.27f, 0.06f), true);
+
+            var armorStationPrefab = GetOrCreateFeaturePrefab(
+                $"{armorStationFolder}/ArmorStation.prefab",
+                "ArmorStation",
+                root =>
+                {
+                    var station = root.GetComponent<VoxelEngine.Combat.ArmorStation>();
+                    if (station == null) station = root.AddComponent<VoxelEngine.Combat.ArmorStation>();
+                    station.tier = VoxelEngine.Crafting.StationTier.ArmorStation;
+                    station.exclusiveRecipes = true;
+                    if (string.IsNullOrWhiteSpace(station.displayName)) station.displayName = "Armor Station";
+
+                    EnsureRootCollider(root, new Vector3(0f, 0.95f, 0f), new Vector3(2.35f, 1.9f, 1.45f));
+                    var parent = root.transform;
+                    EnsureGeneratedPrimitive(parent, "Generated_Base", PrimitiveType.Cube, new Vector3(0f, 0.16f, 0f), Vector3.zero, new Vector3(2.3f, 0.32f, 1.35f), armorDark);
+                    EnsureGeneratedPrimitive(parent, "Generated_Workbench", PrimitiveType.Cube, new Vector3(0f, 0.82f, 0f), Vector3.zero, new Vector3(2.12f, 0.18f, 1.18f), armorSteel);
+                    EnsureGeneratedPrimitive(parent, "Generated_BackCabinet", PrimitiveType.Cube, new Vector3(0f, 1.42f, -0.46f), Vector3.zero, new Vector3(1.96f, 1.05f, 0.18f), armorDark);
+                    EnsureGeneratedPrimitive(parent, "Generated_LeftPillar", PrimitiveType.Cube, new Vector3(-0.92f, 1.37f, -0.22f), Vector3.zero, new Vector3(0.16f, 1.34f, 0.22f), armorSteel);
+                    EnsureGeneratedPrimitive(parent, "Generated_RightPillar", PrimitiveType.Cube, new Vector3(0.92f, 1.37f, -0.22f), Vector3.zero, new Vector3(0.16f, 1.34f, 0.22f), armorSteel);
+                    EnsureGeneratedPrimitive(parent, "Generated_TorsoDisplay", PrimitiveType.Cube, new Vector3(0f, 1.37f, -0.28f), Vector3.zero, new Vector3(0.64f, 0.70f, 0.13f), armorSteel);
+                    EnsureGeneratedPrimitive(parent, "Generated_Shoulders", PrimitiveType.Cube, new Vector3(0f, 1.72f, -0.27f), Vector3.zero, new Vector3(0.98f, 0.16f, 0.18f), armorBrass);
+                    EnsureGeneratedPrimitive(parent, "Generated_Helmet", PrimitiveType.Sphere, new Vector3(0f, 2.00f, -0.27f), Vector3.zero, new Vector3(0.42f, 0.39f, 0.18f), armorSteel);
+                    EnsureGeneratedPrimitive(parent, "Generated_Visor", PrimitiveType.Cube, new Vector3(0f, 2.00f, -0.47f), Vector3.zero, new Vector3(0.28f, 0.08f, 0.035f), armorGlow);
+                    EnsureGeneratedPrimitive(parent, "Generated_LeftToolRack", PrimitiveType.Cube, new Vector3(-0.68f, 1.30f, 0.20f), new Vector3(0f, 0f, -15f), new Vector3(0.18f, 0.78f, 0.18f), armorBrass);
+                    EnsureGeneratedPrimitive(parent, "Generated_RightToolRack", PrimitiveType.Cube, new Vector3(0.68f, 1.30f, 0.20f), new Vector3(0f, 0f, 15f), new Vector3(0.18f, 0.78f, 0.18f), armorBrass);
+                    EnsureGeneratedPrimitive(parent, "Generated_StatusStrip", PrimitiveType.Cube, new Vector3(0f, 0.93f, 0.61f), Vector3.zero, new Vector3(1.35f, 0.06f, 0.025f), armorGlow);
+                    EnsureGeneratedLight(parent, "Generated_StatusLight", new Vector3(0f, 1.32f, 0.20f), new Color(0.12f, 0.80f, 0.92f), 1.1f, 3.2f);
+                });
+
+            var armorUpgradeStationPrefab = GetOrCreateFeaturePrefab(
+                $"{upgradeStationFolder}/ArmorUpgradeStation.prefab",
+                "ArmorUpgradeStation",
+                root =>
+                {
+                    var station = root.GetComponent<VoxelEngine.Combat.ArmorUpgradeStation>();
+                    if (station == null) station = root.AddComponent<VoxelEngine.Combat.ArmorUpgradeStation>();
+                    if (station.baseUpgradeSeconds <= 0f)
+                    {
+                        station.baseUpgradeSeconds = VoxelEngine.Combat.ArmorUpgradeStation.DefaultBaseUpgradeSeconds;
+                        repairedLinks++;
+                    }
+
+                    EnsureRootCollider(root, new Vector3(0f, 0.72f, 0f), new Vector3(1.72f, 1.45f, 1.05f));
+                    var parent = root.transform;
+                    EnsureGeneratedPrimitive(parent, "Generated_Foot", PrimitiveType.Cube, new Vector3(0f, 0.12f, 0f), Vector3.zero, new Vector3(1.55f, 0.24f, 0.92f), upgradeDark);
+                    EnsureGeneratedPrimitive(parent, "Generated_Base", PrimitiveType.Cube, new Vector3(0f, 0.34f, 0f), Vector3.zero, new Vector3(0.88f, 0.26f, 0.56f), upgradeSteel);
+                    EnsureGeneratedPrimitive(parent, "Generated_Waist", PrimitiveType.Cube, new Vector3(0f, 0.58f, 0f), Vector3.zero, new Vector3(0.48f, 0.42f, 0.40f), upgradeSteel);
+                    EnsureGeneratedPrimitive(parent, "Generated_Face", PrimitiveType.Cube, new Vector3(0f, 0.86f, 0f), Vector3.zero, new Vector3(1.18f, 0.18f, 0.56f), upgradeSteel);
+                    EnsureGeneratedPrimitive(parent, "Generated_Horn", PrimitiveType.Cylinder, new Vector3(0f, 0.87f, 0.48f), new Vector3(90f, 0f, 0f), new Vector3(0.26f, 0.50f, 0.26f), upgradeSteel);
+                    EnsureGeneratedPrimitive(parent, "Generated_BrassBand", PrimitiveType.Cube, new Vector3(0f, 0.45f, -0.30f), Vector3.zero, new Vector3(0.66f, 0.08f, 0.055f), upgradeBrass);
+                    EnsureGeneratedPrimitive(parent, "Generated_ForgeCore", PrimitiveType.Cube, new Vector3(0f, 0.40f, 0.31f), Vector3.zero, new Vector3(0.36f, 0.16f, 0.04f), upgradeGlow);
+
+                    var hammerPivot = EnsureGeneratedEmpty(parent, "Generated_HammerPivot", new Vector3(-0.48f, 1.38f, 0.08f), new Vector3(8f, 0f, -12f));
+                    EnsureGeneratedPrimitive(hammerPivot, "Generated_HammerHandle", PrimitiveType.Cylinder, new Vector3(0f, -0.36f, 0f), Vector3.zero, new Vector3(0.065f, 0.38f, 0.065f), upgradeBrass);
+                    EnsureGeneratedPrimitive(hammerPivot, "Generated_HammerHead", PrimitiveType.Cube, new Vector3(0f, -0.73f, 0f), Vector3.zero, new Vector3(0.34f, 0.18f, 0.20f), upgradeDark);
+                    EnsureGeneratedPrimitive(hammerPivot, "Generated_HammerPeen", PrimitiveType.Cylinder, new Vector3(0f, -0.73f, 0.18f), new Vector3(90f, 0f, 0f), new Vector3(0.10f, 0.20f, 0.10f), upgradeDark);
+                    var forgeLight = EnsureGeneratedLight(parent, "Generated_ForgeLight", new Vector3(0f, 0.82f, 0.28f), new Color(1f, 0.36f, 0.08f), 0.45f, 3.8f);
+                    station.ConfigureVisuals(hammerPivot, forgeLight);
+                });
+
+            VoxelEngine.Items.BlockItem EnsureStationBlock(
+                string assetName,
+                string displayName,
+                string description,
+                Color tint,
+                GameObject prefab)
+            {
+                var block = GetOrCreateSafeAsset<VoxelEngine.Items.BlockItem>($"{blockFolder}/{assetName}.asset", out bool wasCreated);
+                if (block == null) return null;
+
+                if (wasCreated)
+                {
+                    block.itemId = assetName.ToLowerInvariant();
+                    block.displayName = displayName;
+                    block.description = description;
+                    block.iconTint = tint;
+                    block.maxStack = 20;
+                    block.massPerUnit = 10f;
+                    block.gridSize = Vector3Int.one;
+                    block.allowStacking = true;
+                    block.blockHealth = 240;
+                    block.miningTier = 2;
+                    block.category = "Stations";
+                }
+                else
+                {
+                    if (string.IsNullOrWhiteSpace(block.itemId)) { block.itemId = assetName.ToLowerInvariant(); repairedLinks++; }
+                    if (string.IsNullOrWhiteSpace(block.displayName)) { block.displayName = displayName; repairedLinks++; }
+                    if (string.IsNullOrWhiteSpace(block.description)) { block.description = description; repairedLinks++; }
+                    if (string.IsNullOrWhiteSpace(block.category)) { block.category = "Stations"; repairedLinks++; }
+                    if (block.maxStack <= 0) { block.maxStack = 20; repairedLinks++; }
+                    if (block.massPerUnit <= 0f) { block.massPerUnit = 10f; repairedLinks++; }
+                    if (block.blockHealth <= 0) { block.blockHealth = 240; repairedLinks++; }
+                    if (block.iconTint.a <= 0f) block.iconTint = tint;
+                }
+
+                if (block.placedPrefab == null && prefab != null)
+                {
+                    block.placedPrefab = prefab;
+                    repairedLinks++;
+                }
+                else if (block.placedPrefab != null && prefab != null && block.placedPrefab != prefab)
+                {
+                    Debug.LogWarning($"[VoxelEngineSetupWindow] Step 48 preserved custom prefab link on '{assetName}'. Assign '{prefab.name}' manually only if that link was unintended.");
+                }
+
+                EditorUtility.SetDirty(block);
+                return block;
+            }
+
+            var armorStationBlock = EnsureStationBlock(
+                "Block_ArmorStation",
+                "Armor Station",
+                "A premium armory workbench for crafting Crusader armor, upgrade modules, and the Armor Upgrade Station.",
+                new Color(0.20f, 0.68f, 0.78f),
+                armorStationPrefab);
+            var armorUpgradeStationBlock = EnsureStationBlock(
+                "Block_ArmorUpgradeStation",
+                "Armor Upgrade Station",
+                "An anvil workstation that installs one armor upgrade module at a time. Tier 1 takes 30 seconds; higher tiers take longer.",
+                new Color(0.92f, 0.52f, 0.16f),
+                armorUpgradeStationPrefab);
+
+            VoxelEngine.Combat.ArmorItem EnsureArmor(
+                string assetName,
+                string displayName,
+                string description,
+                int tier,
+                float reduction,
+                Color tint)
+            {
+                var armor = GetOrCreateSafeAsset<VoxelEngine.Combat.ArmorItem>($"{armorFolder}/{assetName}.asset", out bool wasCreated);
+                if (armor == null) return null;
+
+                if (wasCreated)
+                {
+                    armor.itemId = assetName.ToLowerInvariant();
+                    armor.displayName = displayName;
+                    armor.description = description;
+                    armor.tier = tier;
+                    armor.damageReduction = reduction;
+                    armor.iconTint = tint;
+                    armor.maxStack = 1;
+                    armor.massPerUnit = 2f + tier;
+                    armor.category = "Armor";
+                }
+                else
+                {
+                    if (string.IsNullOrWhiteSpace(armor.itemId)) { armor.itemId = assetName.ToLowerInvariant(); repairedLinks++; }
+                    if (string.IsNullOrWhiteSpace(armor.displayName)) { armor.displayName = displayName; repairedLinks++; }
+                    if (string.IsNullOrWhiteSpace(armor.description)) { armor.description = description; repairedLinks++; }
+                    if (armor.tier <= 0) { armor.tier = tier; repairedLinks++; }
+                    if (armor.damageReduction <= 0f) { armor.damageReduction = reduction; repairedLinks++; }
+                    if (armor.maxStack <= 0) { armor.maxStack = 1; repairedLinks++; }
+                    if (armor.massPerUnit <= 0f) { armor.massPerUnit = 2f + tier; repairedLinks++; }
+                    if (string.IsNullOrWhiteSpace(armor.category)) { armor.category = "Armor"; repairedLinks++; }
+                }
+
+                EditorUtility.SetDirty(armor);
+                return armor;
+            }
+
+            var initiateArmor = EnsureArmor("Armor_InitiateGambeson", "Initiate's Gambeson",
+                "Quilted cloth of the newly sworn. Better than nothing — barely.", 1, 0.08f, new Color(0.50f, 0.45f, 0.38f));
+            var squireArmor = EnsureArmor("Armor_SquireLeather", "Squire's Leather",
+                "Boiled leather over padded gambeson. A squire's first real protection.", 2, 0.15f, new Color(0.35f, 0.25f, 0.15f));
+            var knightArmor = EnsureArmor("Armor_KnightChainmail", "Knight's Chainmail",
+                "Full chain hauberk under a tabard. The mark of a true Crusader Knight.", 3, 0.25f, new Color(0.70f, 0.72f, 0.75f));
+            var templarArmor = EnsureArmor("Armor_TemplarPlate", "Templar's Plate",
+                "Steel plate with heraldic surcoat. The Templar stands where others fall.", 4, 0.38f, new Color(0.85f, 0.85f, 0.88f));
+            var paladinArmor = EnsureArmor("Armor_PaladinBulwark", "Paladin's Bulwark",
+                "Blessed reinforced plate with gold relic trim. Worn by the Order's finest.", 5, 0.50f, new Color(0.88f, 0.80f, 0.30f));
+            var stellarArmor = EnsureArmor("Armor_StellarArchon", "Stellar Archon Plate",
+                "Sealed void-metal armor with glowing energy relays. Worthy of the strongest Crusaders.", 6, 0.62f, new Color(0.22f, 0.20f, 0.28f));
+
+            var recipeRegistry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeRegistry>($"{ASSET_ROOT}/RecipeRegistry.asset");
+            if (recipeRegistry == null)
+                Debug.LogWarning("[VoxelEngineSetupWindow] Step 48 could not find RecipeRegistry.asset. Recipes were authored but must be registered after Step 4.");
+
+            VoxelEngine.Crafting.RecipeIngredient[] MakeIngredients(params (ItemDefinition item, int count)[] inputs)
+            {
+                var ingredients = new List<VoxelEngine.Crafting.RecipeIngredient>();
+                foreach (var (item, count) in inputs)
+                    if (item != null && count > 0)
+                        ingredients.Add(new VoxelEngine.Crafting.RecipeIngredient { item = item, count = count });
+                return ingredients.ToArray();
+            }
+
+            VoxelEngine.Crafting.RecipeDefinition EnsureRecipe(
+                string assetName,
+                string displayName,
+                ItemDefinition output,
+                VoxelEngine.Crafting.StationTier requiredStation,
+                params (ItemDefinition item, int count)[] defaultInputs)
+            {
+                var recipe = GetOrCreateSafeAsset<VoxelEngine.Crafting.RecipeDefinition>($"{recipeFolder}/{assetName}.asset", out bool wasCreated);
+                if (recipe == null) return null;
+
+                if (wasCreated)
+                {
+                    recipe.displayName = displayName;
+                    recipe.outputItem = output;
+                    recipe.outputCount = 1;
+                    recipe.requiredStation = requiredStation;
+                    recipe.craftSeconds = 0f;
+                    recipe.unlockedByDefault = false;
+                    recipe.inputs = MakeIngredients(defaultInputs);
+                }
+                else
+                {
+                    if (string.IsNullOrWhiteSpace(recipe.displayName)) { recipe.displayName = displayName; repairedLinks++; }
+                    if (recipe.outputItem == null) { recipe.outputItem = output; repairedLinks++; }
+                    if (recipe.outputCount <= 0) { recipe.outputCount = 1; repairedLinks++; }
+                    if (recipe.requiredStation != requiredStation) { recipe.requiredStation = requiredStation; repairedLinks++; }
+                    if (recipe.inputs == null || recipe.inputs.Length == 0)
+                    {
+                        recipe.inputs = MakeIngredients(defaultInputs);
+                        repairedLinks++;
+                    }
+                    // This research-gated content must not leak into the default list.
+                    if (recipe.unlockedByDefault) { recipe.unlockedByDefault = false; repairedLinks++; }
+                }
+
+                if (recipeRegistry != null)
+                {
+                    if (recipeRegistry.recipes == null) recipeRegistry.recipes = new List<VoxelEngine.Crafting.RecipeDefinition>();
+                    if (!recipeRegistry.recipes.Contains(recipe))
+                    {
+                        recipeRegistry.recipes.Add(recipe);
+                        repairedLinks++;
+                    }
+                }
+                EditorUtility.SetDirty(recipe);
+                return recipe;
+            }
+
+            var woodLog = FindItem("Item_WoodLog");
+            var plank = FindItem("Item_WoodenPlank");
+            var ironIngot = FindItem("Item_IronIngot");
+            var steelIngot = FindItem("Item_SteelIngot");
+            var ironPlate = FindItem("Item_IronPlate");
+            var steelPlate = FindItem("Item_SteelPlate");
+            var copperWire = FindItem("Item_CopperLVWire");
+            var goldWire = FindItem("Item_GoldLVWire");
+            var circuit = FindItem("Item_Circuit");
+            var advancedCircuit = FindItem("Item_AdvancedCircuit") ?? FindItem("Item_AdvCircuit");
+
+            var structuralMetal = steelPlate ?? steelIngot ?? ironPlate ?? ironIngot;
+            var electronicPart = circuit ?? ironPlate ?? ironIngot;
+            var wirePart = copperWire ?? goldWire ?? ironIngot;
+
+            var armorStationRecipe = EnsureRecipe("Recipe_ArmorStation", "Armor Station", armorStationBlock,
+                VoxelEngine.Crafting.StationTier.Assembler,
+                (structuralMetal, 4), (electronicPart, 2), (wirePart, 2));
+            var armorUpgradeStationRecipe = EnsureRecipe("Recipe_ArmorUpgradeStation", "Armor Upgrade Station", armorUpgradeStationBlock,
+                VoxelEngine.Crafting.StationTier.ArmorStation,
+                (structuralMetal, 5), (electronicPart, 2), (wirePart, 2));
+
+            var allArmorRecipes = new List<VoxelEngine.Crafting.RecipeDefinition>
+            {
+                armorStationRecipe,
+                armorUpgradeStationRecipe,
+                EnsureRecipe("Recipe_Armor_InitiateGambeson", "Initiate's Gambeson", initiateArmor,
+                    VoxelEngine.Crafting.StationTier.ArmorStation, (woodLog, 4), (plank, 4)),
+                EnsureRecipe("Recipe_Armor_SquireLeather", "Squire's Leather", squireArmor,
+                    VoxelEngine.Crafting.StationTier.ArmorStation, (woodLog, 2), (ironIngot, 3)),
+                EnsureRecipe("Recipe_Armor_KnightChainmail", "Knight's Chainmail", knightArmor,
+                    VoxelEngine.Crafting.StationTier.ArmorStation, (ironIngot, 5), (copperWire, 3)),
+                EnsureRecipe("Recipe_Armor_TemplarPlate", "Templar's Plate", templarArmor,
+                    VoxelEngine.Crafting.StationTier.ArmorStation, (ironPlate, 5), (steelIngot, 3), (copperWire, 4)),
+                EnsureRecipe("Recipe_Armor_PaladinBulwark", "Paladin's Bulwark", paladinArmor,
+                    VoxelEngine.Crafting.StationTier.ArmorStation, (steelPlate, 8), (circuit, 3), (copperWire, 6)),
+                EnsureRecipe("Recipe_Armor_StellarArchon", "Stellar Archon Plate", stellarArmor,
+                    VoxelEngine.Crafting.StationTier.ArmorStation, (steelPlate, 12), (advancedCircuit, 4), (goldWire, 6)),
+            };
+
+            Color ModuleTint(VoxelEngine.Combat.ArmorUpgradeKind kind)
+            {
+                return kind switch
+                {
+                    VoxelEngine.Combat.ArmorUpgradeKind.HeatTolerance => new Color(1f, 0.40f, 0.16f),
+                    VoxelEngine.Combat.ArmorUpgradeKind.RadiationShielding => new Color(0.48f, 0.95f, 0.34f),
+                    VoxelEngine.Combat.ArmorUpgradeKind.OxygenEfficiency => new Color(0.28f, 0.78f, 1f),
+                    VoxelEngine.Combat.ArmorUpgradeKind.FallImpact => new Color(0.93f, 0.70f, 0.22f),
+                    VoxelEngine.Combat.ArmorUpgradeKind.Mobility => new Color(0.66f, 0.42f, 1f),
+                    _ => new Color(0.45f, 0.85f, 1f),
+                };
+            }
+
+            (ItemDefinition item, int baseCount)[] ModuleIngredients(VoxelEngine.Combat.ArmorUpgradeKind kind)
+            {
+                return kind switch
+                {
+                    VoxelEngine.Combat.ArmorUpgradeKind.HeatTolerance => new[] { (structuralMetal, 2), (wirePart, 1) },
+                    VoxelEngine.Combat.ArmorUpgradeKind.RadiationShielding => new[] { (structuralMetal, 2), (electronicPart, 1) },
+                    VoxelEngine.Combat.ArmorUpgradeKind.OxygenEfficiency => new[] { (wirePart, 2), (structuralMetal, 1) },
+                    VoxelEngine.Combat.ArmorUpgradeKind.FallImpact => new[] { (structuralMetal, 3) },
+                    VoxelEngine.Combat.ArmorUpgradeKind.Mobility => new[] { (electronicPart, 2), (structuralMetal, 2) },
+                    _ => System.Array.Empty<(ItemDefinition item, int baseCount)>(),
+                };
+            }
+
+            int ScaleModuleCost(int baseCount, int tier)
+            {
+                return Mathf.Max(1, Mathf.RoundToInt(baseCount * (1f + (tier - 1) * 0.5f)));
+            }
+
+            VoxelEngine.Combat.ArmorUpgradeItem EnsureModule(
+                VoxelEngine.Combat.ArmorUpgradeKind kind,
+                int tier)
+            {
+                string assetName = $"Item_ArmorUpgrade_{kind}_{tier}";
+                var module = GetOrCreateSafeAsset<VoxelEngine.Combat.ArmorUpgradeItem>($"{upgradeModuleFolder}/{assetName}.asset", out bool wasCreated);
+                if (module == null) return null;
+
+                module.kind = kind;
+                module.tier = tier;
+                module.isHazmat = false;
+                if (wasCreated)
+                {
+                    module.itemId = assetName.ToLowerInvariant();
+                    module.displayName = $"{VoxelEngine.Combat.ArmorUpgradeKindInfo.DisplayName(kind)} Module (T{tier})";
+                    module.description = VoxelEngine.Combat.ArmorUpgradeKindInfo.Description(kind);
+                    module.iconTint = ModuleTint(kind);
+                    module.maxStack = 1;
+                    module.massPerUnit = 1.5f;
+                    module.category = "Armor Upgrades";
+                }
+                else
+                {
+                    if (string.IsNullOrWhiteSpace(module.itemId)) { module.itemId = assetName.ToLowerInvariant(); repairedLinks++; }
+                    if (string.IsNullOrWhiteSpace(module.displayName)) { module.displayName = $"{VoxelEngine.Combat.ArmorUpgradeKindInfo.DisplayName(kind)} Module (T{tier})"; repairedLinks++; }
+                    if (string.IsNullOrWhiteSpace(module.description)) { module.description = VoxelEngine.Combat.ArmorUpgradeKindInfo.Description(kind); repairedLinks++; }
+                    if (module.maxStack <= 0) { module.maxStack = 1; repairedLinks++; }
+                    if (module.massPerUnit <= 0f) { module.massPerUnit = 1.5f; repairedLinks++; }
+                    if (string.IsNullOrWhiteSpace(module.category)) { module.category = "Armor Upgrades"; repairedLinks++; }
+                }
+                EditorUtility.SetDirty(module);
+                return module;
+            }
+
+            var moduleRecipes = new List<VoxelEngine.Crafting.RecipeDefinition>();
+            foreach (VoxelEngine.Combat.ArmorUpgradeKind kind in System.Enum.GetValues(typeof(VoxelEngine.Combat.ArmorUpgradeKind)))
+            {
+                foreach (int tier in new[] { 1, 2, 3, 4, 5 })
+                {
+                    var module = EnsureModule(kind, tier);
+                    var baseIngredients = ModuleIngredients(kind);
+                    var ingredients = new List<(ItemDefinition item, int count)>();
+                    foreach (var (item, baseCount) in baseIngredients)
+                        ingredients.Add((item, ScaleModuleCost(baseCount, tier)));
+
+                    var recipe = EnsureRecipe($"Recipe_ArmorUpgrade_{kind}_{tier}",
+                        module != null ? module.DefaultDisplayName : $"{VoxelEngine.Combat.ArmorUpgradeKindInfo.DisplayName(kind)} Module (T{tier})",
+                        module,
+                        VoxelEngine.Crafting.StationTier.ArmorStation,
+                        ingredients.ToArray());
+                    if (recipe != null) moduleRecipes.Add(recipe);
+                }
+            }
+
+            var hazmatModule = GetOrCreateSafeAsset<VoxelEngine.Combat.ArmorUpgradeItem>($"{upgradeModuleFolder}/Item_HazmatModule.asset", out bool hazmatCreated);
+            if (hazmatModule != null)
+            {
+                hazmatModule.kind = VoxelEngine.Combat.ArmorUpgradeKind.HeatTolerance;
+                hazmatModule.tier = 1;
+                hazmatModule.isHazmat = true;
+                if (hazmatCreated)
+                {
+                    hazmatModule.itemId = "item_hazmat_module";
+                    hazmatModule.displayName = "Hazmat Module";
+                    hazmatModule.description = "Applies a permanent Hazmat seal that grants full radiation immunity to one armor piece.";
+                    hazmatModule.iconTint = new Color(0.55f, 0.95f, 0.35f);
+                    hazmatModule.maxStack = 1;
+                    hazmatModule.massPerUnit = 2f;
+                    hazmatModule.category = "Armor Upgrades";
+                }
+                else
+                {
+                    if (string.IsNullOrWhiteSpace(hazmatModule.itemId)) { hazmatModule.itemId = "item_hazmat_module"; repairedLinks++; }
+                    if (string.IsNullOrWhiteSpace(hazmatModule.displayName)) { hazmatModule.displayName = "Hazmat Module"; repairedLinks++; }
+                    if (string.IsNullOrWhiteSpace(hazmatModule.description)) { hazmatModule.description = "Applies a permanent Hazmat seal that grants full radiation immunity to one armor piece."; repairedLinks++; }
+                    if (hazmatModule.maxStack <= 0) { hazmatModule.maxStack = 1; repairedLinks++; }
+                    if (hazmatModule.massPerUnit <= 0f) { hazmatModule.massPerUnit = 2f; repairedLinks++; }
+                    if (string.IsNullOrWhiteSpace(hazmatModule.category)) { hazmatModule.category = "Armor Upgrades"; repairedLinks++; }
+                }
+                EditorUtility.SetDirty(hazmatModule);
+            }
+
+            var hazmatRecipe = EnsureRecipe("Recipe_HazmatModule", "Hazmat Module", hazmatModule,
+                VoxelEngine.Crafting.StationTier.ArmorStation,
+                (advancedCircuit ?? circuit ?? electronicPart, 1),
+                (structuralMetal, 3),
+                (goldWire ?? copperWire ?? wirePart, 1));
+            if (hazmatRecipe != null) moduleRecipes.Add(hazmatRecipe);
+
+            var researchTree = GetOrCreateSafeAsset<VoxelEngine.Research.ResearchTree>($"{researchFolder}/ResearchTree.asset", out bool createdResearchTree);
+            if (researchTree != null)
+            {
+                if (researchTree.nodes == null) researchTree.nodes = new List<VoxelEngine.Research.ResearchNode>();
+
+                VoxelEngine.Research.ResearchNode FindNode(string nodeId)
+                {
+                    foreach (var node in researchTree.nodes)
+                        if (node != null && node.nodeId == nodeId) return node;
+
+                    var guids = AssetDatabase.FindAssets(nodeId + " t:ResearchNode");
+                    foreach (var guid in guids)
+                    {
+                        var node = AssetDatabase.LoadAssetAtPath<VoxelEngine.Research.ResearchNode>(AssetDatabase.GUIDToAssetPath(guid));
+                        if (node != null && node.nodeId == nodeId) return node;
+                    }
+                    return null;
+                }
+
+                var researchNode = GetOrCreateSafeAsset<VoxelEngine.Research.ResearchNode>($"{researchNodeFolder}/res_armor_station.asset", out bool createdResearchNode);
+                if (researchNode != null)
+                {
+                    var scienceT2 = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ScienceItem>($"{itemFolder}/Item_ScienceT2.asset");
+                    var scienceT3 = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ScienceItem>($"{itemFolder}/Item_ScienceT3.asset");
+                    var advancedManufacturing = FindNode("res_adv_manufacturing");
+
+                    if (createdResearchNode)
+                    {
+                        researchNode.nodeId = "res_armor_station";
+                        researchNode.displayName = "Armor Stations";
+                        researchNode.description = "Unlocks the Armor Station, the anvil-style Armor Upgrade Station, all Crusader armor tiers, upgrade modules, and the Hazmat seal.";
+                        researchNode.category = VoxelEngine.Research.ResearchCategory.Environment;
+                        researchNode.subCategory = VoxelEngine.Research.ResearchSubCategory.Production;
+                        researchNode.tier = 4;
+                        researchNode.column = 4;
+                        researchNode.iconTint = new Color(0.45f, 0.85f, 1f);
+                        researchNode.researchSeconds = 90f;
+                        var costs = new List<VoxelEngine.Research.ResearchNode.ScienceCost>();
+                        if (scienceT2 != null) costs.Add(new VoxelEngine.Research.ResearchNode.ScienceCost { pack = scienceT2, count = 20 });
+                        if (scienceT3 != null) costs.Add(new VoxelEngine.Research.ResearchNode.ScienceCost { pack = scienceT3, count = 10 });
+                        researchNode.cost = costs.ToArray();
+                        researchNode.prerequisites = advancedManufacturing != null
+                            ? new[] { advancedManufacturing }
+                            : System.Array.Empty<VoxelEngine.Research.ResearchNode>();
+                        researchNode.upgradeKind = VoxelEngine.Research.PlayerUpgradeKind.None;
+                        researchNode.maxRanks = 1;
+                    }
+                    else
+                    {
+                        if (string.IsNullOrWhiteSpace(researchNode.nodeId)) { researchNode.nodeId = "res_armor_station"; repairedLinks++; }
+                        if (string.IsNullOrWhiteSpace(researchNode.displayName)) { researchNode.displayName = "Armor Stations"; repairedLinks++; }
+                        if (string.IsNullOrWhiteSpace(researchNode.description)) { researchNode.description = "Unlocks armor fabrication, timed upgrades, and Hazmat sealing."; repairedLinks++; }
+                        if (researchNode.tier <= 0) { researchNode.tier = 4; repairedLinks++; }
+                        if (researchNode.maxRanks <= 0) { researchNode.maxRanks = 1; repairedLinks++; }
+                        if ((researchNode.prerequisites == null || researchNode.prerequisites.Length == 0) && advancedManufacturing != null)
+                        {
+                            researchNode.prerequisites = new[] { advancedManufacturing };
+                            repairedLinks++;
+                        }
+                    }
+
+                    var mergedUnlocks = new List<VoxelEngine.Crafting.RecipeDefinition>();
+                    if (researchNode.unlocksRecipes != null)
+                        foreach (var existing in researchNode.unlocksRecipes)
+                            if (existing != null && !mergedUnlocks.Contains(existing)) mergedUnlocks.Add(existing);
+                    foreach (var recipe in allArmorRecipes)
+                        if (recipe != null && !mergedUnlocks.Contains(recipe)) mergedUnlocks.Add(recipe);
+                    foreach (var recipe in moduleRecipes)
+                        if (recipe != null && !mergedUnlocks.Contains(recipe)) mergedUnlocks.Add(recipe);
+                    researchNode.unlocksRecipes = mergedUnlocks.ToArray();
+
+                    if (!researchTree.nodes.Contains(researchNode))
+                    {
+                        researchTree.nodes.Add(researchNode);
+                        repairedLinks++;
+                    }
+                    EditorUtility.SetDirty(researchNode);
+                    EditorUtility.SetDirty(researchTree);
+                }
+            }
+
+            if (recipeRegistry != null) EditorUtility.SetDirty(recipeRegistry);
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
+            string summary =
+                "Armor stations and timed upgrades are ready.\n\n" +
+                "• Armor Station: dedicated armor and module crafting\n" +
+                "• Armor Upgrade Station: premium anvil workflow\n" +
+                "• Installation duration: T1 30s, T2 60s, T3 90s, T4 120s, T5/Hazmat 150s\n" +
+                "• Upgrade progress and installed modules persist through save/load\n\n" +
+                $"Step 48 summary — generated elements/assets: {createdAssets}, repaired links: {repairedLinks}, preserved existing assets: {preservedAssets}.\n" +
+                "Run this step a second time to verify the non-destructive path.";
+            Debug.Log($"[VoxelEngineSetupWindow] {summary.Replace("\n", " ")}");
+            EditorUtility.DisplayDialog("Voxel Engine — Armor Stations", summary, "OK");
+        }
+
+        // ============================================================
         //   STEP 24 - CRUSADER ARMOR (6 tiers): from Initiate's Gambeson
         //   to the ultimate Stellar Archon Plate. Each tier reduces more
         //   incoming damage. Equip via RMB in the hotbar.
@@ -13397,23 +14181,40 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
             var copperWire = FindItem("Item_CopperLVWire");
             var goldWire   = FindItem("Item_GoldLVWire");
             var circuit    = FindItem("Item_Circuit");
-            var advCircuit = FindItem("Item_AdvancedCircuit");
+            var advCircuit = FindItem("Item_AdvancedCircuit") ?? FindItem("Item_AdvCircuit");
 
             VoxelEngine.Combat.ArmorItem MakeArmor(string assetName, string display, string desc, int tier, float reduction, Color tint)
             {
                 string path = $"{ARMOR_FOLDER}/{assetName}.asset";
-                var a = GetOrCreateAsset<VoxelEngine.Combat.ArmorItem>(path);
-                a.itemId = assetName.ToLower();
-                a.displayName = display;
-                a.description = desc;
-                a.tier = tier;
-                a.damageReduction = reduction;
-                a.iconTint = tint;
-                a.maxStack = 1;
-                a.massPerUnit = 2f + tier;
-                a.category = "Armor";
-                EditorUtility.SetDirty(a);
-                return a;
+                bool existed = AssetDatabase.LoadAssetAtPath<VoxelEngine.Combat.ArmorItem>(path) != null;
+                var armor = GetOrCreateAsset<VoxelEngine.Combat.ArmorItem>(path);
+                if (!existed)
+                {
+                    armor.itemId = assetName.ToLowerInvariant();
+                    armor.displayName = display;
+                    armor.description = desc;
+                    armor.tier = tier;
+                    armor.damageReduction = reduction;
+                    armor.iconTint = tint;
+                    armor.maxStack = 1;
+                    armor.massPerUnit = 2f + tier;
+                    armor.category = "Armor";
+                }
+                else
+                {
+                    // Only repair missing identity data. Existing armor balance,
+                    // descriptions, icons, tint, and mass remain designer-owned.
+                    if (string.IsNullOrWhiteSpace(armor.itemId)) armor.itemId = assetName.ToLowerInvariant();
+                    if (string.IsNullOrWhiteSpace(armor.displayName)) armor.displayName = display;
+                    if (string.IsNullOrWhiteSpace(armor.description)) armor.description = desc;
+                    if (armor.tier <= 0) armor.tier = tier;
+                    if (armor.damageReduction <= 0f) armor.damageReduction = reduction;
+                    if (armor.maxStack <= 0) armor.maxStack = 1;
+                    if (armor.massPerUnit <= 0f) armor.massPerUnit = 2f + tier;
+                    if (string.IsNullOrWhiteSpace(armor.category)) armor.category = "Armor";
+                }
+                EditorUtility.SetDirty(armor);
+                return armor;
             }
 
             // ── 6 Tiers of Crusader Armor ──
@@ -13436,26 +14237,38 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
                 "Sealed void-metal armour with glowing energy relays. Worthy of the strongest Crusaders — the pinnacle of the Order.",
                 6, 0.62f, new Color(0.22f, 0.20f, 0.28f));
 
-            // ── Recipes (escalating difficulty) ──
-            AddRecipe("Recipe_Armor_InitiateGambeson", "Initiate's Gambeson", t1, 1, VoxelEngine.Crafting.StationTier.CraftingBench, true, (woodLog, 4), (plank, 4));
-            AddRecipe("Recipe_Armor_SquireLeather", "Squire's Leather", t2, 1, VoxelEngine.Crafting.StationTier.CraftingBench, true, (woodLog, 2), (ironIngot, 3));
-            AddRecipe("Recipe_Armor_KnightChainmail", "Knight's Chainmail", t3, 1, VoxelEngine.Crafting.StationTier.Assembler, true, (ironIngot, 5), (copperWire, 3));
-            AddRecipe("Recipe_Armor_TemplarPlate", "Templar's Plate", t4, 1, VoxelEngine.Crafting.StationTier.Assembler, true, (ironPlate, 5), (steelIngot, 3), (copperWire, 4));
-            AddRecipe("Recipe_Armor_PaladinBulwark", "Paladin's Bulwark", t5, 1, VoxelEngine.Crafting.StationTier.Assembler, true, (steelPlate, 8), (circuit, 3), (copperWire, 6));
-            AddRecipe("Recipe_Armor_StellarArchon", "Stellar Archon Plate", t6, 1, VoxelEngine.Crafting.StationTier.Assembler, true, (steelPlate, 12), (advCircuit, 4), (goldWire, 6));
+            // Step 48 owns recipe creation and all station/research wiring. Step 24
+            // only repairs already-present armor recipe gating so rerunning this
+            // legacy armor-definition step never overwrites recipe inputs or timing.
+            foreach (var recipeName in new[]
+            {
+                "Recipe_Armor_InitiateGambeson",
+                "Recipe_Armor_SquireLeather",
+                "Recipe_Armor_KnightChainmail",
+                "Recipe_Armor_TemplarPlate",
+                "Recipe_Armor_PaladinBulwark",
+                "Recipe_Armor_StellarArchon"
+            })
+            {
+                var recipe = FindRecipeByName(recipeName);
+                if (recipe == null) continue;
+                recipe.requiredStation = VoxelEngine.Crafting.StationTier.ArmorStation;
+                recipe.unlockedByDefault = false;
+                EditorUtility.SetDirty(recipe);
+            }
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
             EditorUtility.DisplayDialog("Voxel Engine — Crusader Armor (6 Tiers)",
-                "Built 6 tiers of Crusader armor:\n\n" +
-                "1. Initiate's Gambeson (8% reduction) — Crafting Bench\n" +
-                "2. Squire's Leather (15%) — Crafting Bench\n" +
-                "3. Knight's Chainmail (25%) — Assembler\n" +
-                "4. Templar's Plate (38%) — Assembler\n" +
-                "5. Paladin's Bulwark (50%) — Assembler\n" +
-                "6. Stellar Archon Plate (62%) — Assembler\n\n" +
-                "Equip: put the armor in your hotbar, select it, and press RMB. Old armor returns to your inventory.\n" +
-                "Incoming damage is now reduced by the equipped tier's percentage.",
+                "Built/repaired 6 tiers of Crusader armor:\n\n" +
+                "1. Initiate's Gambeson (8% reduction)\n" +
+                "2. Squire's Leather (15%)\n" +
+                "3. Knight's Chainmail (25%)\n" +
+                "4. Templar's Plate (38%)\n" +
+                "5. Paladin's Bulwark (50%)\n" +
+                "6. Stellar Archon Plate (62%)\n\n" +
+                "Armor recipes are now reserved for the Armor Station. Run Step 48 to generate or repair both armor stations, upgrade modules, research links, and timed anvil installation.\n" +
+                "Equip: put armor in your hotbar, select it, and press RMB. Old armor returns to your inventory with installed upgrades intact.",
                 "OK");
         }
 

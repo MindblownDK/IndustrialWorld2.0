@@ -1290,6 +1290,7 @@ namespace VoxelEngine.UI
             {
                 StationTier.None => "Hand Crafting",
                 StationTier.Assembler => "Assembler Station",
+                StationTier.ArmorStation => "Armor Station",
                 StationTier.CraftingBench => "Crafting Bench",
                 _ => station.ToString()
             };

@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.79.2-dev`
-**Roadmap Version:** `6.79.2-dev`
+**Current Version:** `6.80.1-dev`
+**Roadmap Version:** `6.80.1-dev`
 **Date:** 2026-08-02
-**Status:** Celestial Ruins & Themed Worlds COMPLETED (6.32.0–6.36.3) — 33 themed ruins across 11 planets, slot-chest loot, breakable/salvage, per-block colliders; Crusader Ruins Premium (6.30.0); Offline Survival (11.4) Completed + Grid Gravity Fixed (6.27.3) + Passive Oxygen (11.5); World Management (11.7) Completed; Power, Vehicles & Combat (4.7.0) remains WORKING ON — base defense network + ammo logistics + status UX shipped (6.57–6.68), jetpack fuel (6.72–6.77) + Armor Station upgrades (6.79.0) shipped; vehicle power validation and remaining life-support/paint still open
+**Status:** Celestial Ruins & Themed Worlds COMPLETED (6.32.0–6.36.3) — 33 themed ruins across 11 planets, slot-chest loot, breakable/salvage, per-block colliders; Crusader Ruins Premium (6.30.0); Offline Survival (11.4) Completed + Grid Gravity Fixed (6.27.3) + Passive Oxygen (11.5); World Management (11.7) Completed; Power, Vehicles & Combat (4.7.0) remains WORKING ON — base defense network + ammo logistics + status UX shipped (6.57–6.68), jetpack fuel (6.72–6.77) + Armor Stations and timed upgrades (6.80.0-dev; 6.80.1-dev compile repair) implemented; Unity validation, vehicle power validation, and remaining life-support/paint still open
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
 ---
@@ -79,13 +79,13 @@ The design goal is a seamless blend of:
 | Research UI | 🛠️ WORKING ON | Spatial pan/zoom canvas with era labels, glowing connectors, zoom controls, and bottom detail panel (5.41.0-dev) |
 | Damage / destruction | 🛠️ WORKING ON | **6.26.0-dev:** Player death flow now has a premium death screen and selectable respawn anchors. Grid/static block destruction remains open. |
 | Weapons / combat | 🟡 PARTIALLY COMPLETE | Personal weapons (sword/pistol/rifle/grenade), mythical roster + Roc, bombs, full base defense network (Auto/Artillery/Flame/Mortar/Giant/AA/Energy) + ammo logistics (6.57–6.68). Missiles, grid weapons parity, and conserve-ammo UI remain open. |
-| Radiation system | ❌ MISSING | No reactor radiation, waste, or hazmat protection |
-| Heat system | ❌ MISSING | No atmospheric entry heat, block heat tolerance, heatshields |
+| Radiation system | 🟡 PARTIALLY COMPLETE | **6.80.0-dev:** ambient celestial-body radiation, Radiation Shielding modules, and Hazmat sealing are implemented for armor. Reactor waste, fallout zones, geiger UX, and full ecology effects remain open. |
+| Heat system | 🟡 PARTIALLY COMPLETE | **6.80.0-dev:** environmental heat and burn mitigation are wired to Heat Tolerance modules. Atmospheric entry, block thermal simulation, engine heat, and heatshields remain open. |
 | Oxygen / life support | ❌ MISSING | No underwater/space suffocation, helmets, tanks |
 | Airtight systems | ❌ MISSING | No airtight doors, vents, or pressurized rooms |
-| Fall damage | ✅ COMPLETED | **6.25.0-dev:** Player fall damage now tracks downward impact speed along local gravity and applies scaled HP damage on landing. Armor mitigation remains future armor-upgrade work. |
+| Fall damage | ✅ COMPLETED | **6.25.0-dev:** Player fall damage tracks downward impact speed along local gravity. **6.80.0-dev:** Impact Padding upgrades reduce the resulting hard-landing damage per worn armor piece. |
 | Painting / finishes | ✅ COMPLETED | **6.71.0-dev:** Paint Tool + 15 cosmetic finishes for static/grid blocks, HUD swatch, inspection readout, additive save/restore, Step 46 authoring. |
-| Armor crafting/upgrades | 🟡 PARTIALLY COMPLETE | 6 tiers of Crusader armor (6.42) + Armor Station + upgrade modules (6.79.0): Heat Tolerance / Radiation Shielding / Oxygen Efficiency / Impact Padding / Mobility Servos (5 tiers) + Hazmat seal, applied to worn armour and saved on the piece. Remaining: full radiation/heat systems (reactor fallout, re-entry heat, heated rooms) and armor-station final Unity validation. |
+| Armor crafting/upgrades | 🛠️ WORKING ON | **6.80.0-dev:** dedicated Armor Station plus separate anvil-style Armor Upgrade Station; Heat Tolerance / Radiation Shielding / Oxygen Efficiency / Impact Padding / Mobility Servos (5 tiers) and a Hazmat seal are installed per armor piece. Timed installation is 30s at T1 through 150s at T5/Hazmat, with additive save/load for equipped armor, station inputs, output, and progress. Step 48 authors all content non-destructively. Remaining: Unity validation and broader reactor/re-entry/heated-room hazard systems. |
 | Crusader player identity | ❌ MISSING | Player faction, heraldry, armor presentation, and Order progression need implementation |
 | Passive livestock | 🚧 IN PROGRESS | **6.43.0-dev:** Cow/Sheep/Pig + `PassiveAnimal` framework + spawner/temperate scatter done. **6.44.0-dev:** rideable horse (mount, full WASD steer, gallop, jump) done. Breeding/needs/husbandry + population limits remain. |
 | Mythical enemies / bosses | ✅ ROSTER COMPLETE (Leviathan sea-boss pending water/naval) | **6.41:** Ghoul. **6.45:** Manticore. **6.46:** Griffin. **6.47:** Karkadann. **6.48:** Ifrit Djinn. **6.49:** Roc mini-boss. **6.50.0-dev:** Basilisk (petrify gaze). All listed land mythical enemies + 1 boss done; Leviathan (sea serpent boss) remains pending water/naval combat support. |
@@ -469,7 +469,7 @@ A late-game **Jump Drive** provides charged, coordinate-based faster-than-light 
 |---------|-------|------------------|-------|-------------------|
 | **4.5.0** | Factory Foundations | 🛠️ **WORKING ON** | Conveyor belts, chutes, basic machines, grid lights, machine UI | Medium — prefab generation, animation clips |
 | **4.6.0** | Production Lines & UI Revolution | 🛠️ **WORKING ON** | Assemblers, recipe chains, UI theme system, research UI overhaul | Medium — recipes, themes, panels |
-| **4.7.0** | Power, Vehicles & Combat | 🛠️ **WORKING ON** (Combat + base defense in progress) | Engines, batteries, damage framework, Iron Sword/Pistol, Training Dummy, Ghoul enemy, 6-tier Crusader armor + equipment panel, passive livestock (Cow/Sheep/Pig), 6 mythical enemies + Roc boss, grenade + rifle, Auto Turret, Heavy Cannon/Minigun/Gustav, Flamethrower Turret (6.62.0), Mortar Turret (6.63.0), Giant Shell Turret (6.64.0), Anti-Air Turret (6.65.0), Energy / Relic Turret (6.66.0), automated ammo logistics (6.67.0), defense status UX (6.68.0), conserve-ammo/reserve (6.69.0), engagement range/arc (6.70.0), painting system (6.71.0), jetpack fuel (6.72.0), H₂ canister (6.73.0), portable H₂ tank ml + H₂ vitals (6.74.0), Armor Station + upgrade modules (6.79.0) | High — combat prefabs, physics |
+| **4.7.0** | Power, Vehicles & Combat | 🛠️ **WORKING ON** (Combat + base defense in progress) | Engines, batteries, damage framework, Iron Sword/Pistol, Training Dummy, Ghoul enemy, 6-tier Crusader armor + equipment panel, passive livestock (Cow/Sheep/Pig), 6 mythical enemies + Roc boss, grenade + rifle, Auto Turret, Heavy Cannon/Minigun/Gustav, Flamethrower Turret (6.62.0), Mortar Turret (6.63.0), Giant Shell Turret (6.64.0), Anti-Air Turret (6.65.0), Energy / Relic Turret (6.66.0), automated ammo logistics (6.67.0), defense status UX (6.68.0), conserve-ammo/reserve (6.69.0), engagement range/arc (6.70.0), painting system (6.71.0), jetpack fuel (6.72.0), H₂ canister (6.73.0), portable H₂ tank ml + H₂ vitals (6.74.0), Armor Station + timed Armor Upgrade Station (6.80.0-dev; Unity validation pending) | High — combat prefabs, physics |
 | **4.8.0** | Logistics 2.0, Screens & Trajectory | 🛠️ **WORKING ON** | Trains, drones, configurable screens, trajectory camera, orbit map (`M`) | High — train track, camera rigs, panels |
 | **4.9.0** | Living Worlds | 🟡 **PARTIALLY COMPLETE** | Ruins, weather, water flow, enemies, planet skies, gravity/orbit fixes | Very High — worldgen, AI, fluids, rendering |
 | **5.0.0** | Orbital Expansion | 🟡 **PARTIALLY COMPLETE** | Rockets, space stations, asteroid mining, orbital cargo, space ambiance | Very High — new scene/zone system |
@@ -732,7 +732,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Unified grid screen sources | ✅ COMPLETED | Thomas validated the unified screen/data-source work. Detail providers use precision-safe encoded addresses while legacy Structural addresses remain compatible. |
 | Unified pipe placement and networks | ✅ COMPLETED | Thomas validated existing Item/Gas/Liquid pipe Detail placement, one-to-five-cell Grid/world links, rotation-independent alignment, correct visual direction, midpoint arms, live ghost previews, stable topology, resource-safe ghosts, and wrench disconnect behavior. No duplicate pipe content was introduced. |
 | Vehicle power foundations | 🛠️ WORKING ON | **6.9.0-dev** centralizes battery transfer so Recharge/Discharge modes work together, keeps Auto batteries deterministic, routes maritime fuel/coolant through the unified liquid-pipe network, adds a dedicated crude-engine solid-fuel hopper, and refreshes Step 13 ship-engine/turbo/chain-drive/generator visuals at large premium scale. **6.9.1-dev** further densifies the engine meshes so they read as solid industrial ship machinery with heavier superstructure, railings, housings, and larger flywheels inspired by the supplied reference. **6.9.2-dev** refines the three ship engines again to look less synthetic, relocates visual fuel/coolant/exhaust/rotation ports to more believable service points, centers the major flywheel/output faces, and moves turbo attachment markers onto sensible engine locations. **6.9.3-dev** adds idle engine shaft output for visible running behavior, animates chain-drive/rotation-transfer/generator coupling visuals, and snaps exhaust/shaft-driven maritime parts to the nearest believable matching engine or drivetrain port during placement. **6.17.1-dev** adds [DefaultExecutionOrder(-20)] to MaritimePropulsionSystem (runs before GridEntity), [DefaultExecutionOrder(0)] to GridEntity, maritime power sync in GridEntity.UpdatePower() so generator output and electrical-propeller demand flow into the grid battery pool, and fixes coolant consumption timing (use current-frame conditions instead of last-frame IsRunning). **6.18.0-dev** adds color-coded VARIABLE service ports on the HFO V8 / MGO V12 (aim any engine face → a fuel/coolant/oxygen port appears on the surface, always outside the hull; 1 fuel / 1 coolant / 1 oxygen / 2 exhaust caps, over-cap placement refused with a red ghost + message), rewrites the liquid+gas tank corridor probe onto the detail lattice with overlapping spheres so tanks a few cells off a pipe run connect and fuel/oxygen/coolant actually pump in, auto-orients the exhaust pipe's intake flange onto the engine's exhaust collector, and rebuilds the maritime propellers as true lofted screw blades. **6.19.0-dev** makes the propeller blades scale with the cell and render double-sided (they were invisible before), mounts the color-coded port collars flush on the hull (no more floating), slims the port so it no longer swallows a gas pipe, snaps the pipe hub to the fine Detail lattice, extends variable ports to the Crude Inline-4 (oxygen + item intake, new Item service, per-tier gating), removes the static fuel/coolant/oxygen/item engine ports (exhaust + shaft kept), widens the tank corridor/proximity reach so a tank ~0.5 m off a run connects (incl. diagonal), makes pipe-visual rebuilds event-driven (TopologyVersion bumped on block add/remove) to kill the close-pipe lag, and infers the carried liquid type so a second fuel run is refused with "Fuel input already connected (max 1)". Unity validation of the full maritime fuel→engine→shaft→propeller power chain remains open. |
-| Damage, armor, weapons, and life support | 🟡 PARTIALLY COMPLETE | Basic block HP/damage and one grid weapon foundation exist. **6.79.0-dev** adds the Armor Station + upgrade modules (Heat Tolerance / Radiation Shielding / Oxygen Efficiency / Impact Padding / Mobility Servos, 5 tiers each) + Hazmat seal, applied to worn armour and saved on the piece; a slim environmental heat/radiation hazard (PlayerHazardService) gives the upgrades real effect. Full typed damage, pooled ballistics, airtight support, and the rest of the radiation/heat combat content remain open. |
+| Damage, armor, weapons, and life support | 🟡 PARTIALLY COMPLETE | Basic block HP/damage and one grid weapon foundation exist. **6.80.0-dev** provides a dedicated Armor Station, a separate timed anvil-style Armor Upgrade Station, five module branches (five tiers each), Hazmat sealing, per-piece persistence, and a slim environmental heat/radiation hook. Step 48 authors/repairs the content non-destructively. Unity validation, full typed damage, pooled ballistics, airtight support, and the rest of the radiation/heat combat content remain open. |
 
 **Crusader identity requirements:**
 - Crusader armor silhouette, sealed helmet, tabard/heraldry slots, Order banners, and rank presentation.
@@ -786,9 +786,10 @@ Statuses are evidence-based and move forward only after code/content review and 
     - Remote-detonated charge.
     - Demolition pack for terrain/grid mining.
 
-11. **Armor Station**
-    - New crafting station for armor, armor upgrades, and jetpacks.
-    - Upgrade modules: heat tolerance, radiation shielding, oxygen efficiency, mobility.
+11. **Armor Station + Armor Upgrade Station**
+    - **Armor Station:** exclusive armory workbench for armor, module, and station crafting.
+    - **Armor Upgrade Station:** separate premium anvil that installs one module onto one armor piece at a time.
+    - Both stations, their recipes, items, research links, and generated visuals are authored non-destructively through `Tools > Voxel Engine > Voxel Engine Setup` Step 48.
 
 12. **Jetpack**
     - Separate inventory slot.
@@ -797,10 +798,9 @@ Statuses are evidence-based and move forward only after code/content review and 
     - Upgradable thrust and fuel capacity at the armor station.
 
 13. **Player Armor Upgrades**
-    - Heat tolerance tiers 1–5.
-    - Radiation shielding tiers 1–5.
-    - Oxygen efficiency tiers 1–5.
-    - Fall impact reduction tiers 1–5.
+    - Heat tolerance, radiation shielding, oxygen efficiency, impact padding, and mobility servo tiers 1–5.
+    - Installation time starts at 30 seconds for T1 and scales to 150 seconds at T5; Hazmat sealing also takes 150 seconds.
+    - Progress, station inputs/output, and installed state persist additively through save/load.
 
 14. **Hazmat Suit & Hazmat Armor Upgrade**
     - Full hazmat suit for heavy radiation zones.
@@ -1603,17 +1603,18 @@ For each version, these are the high-level Unity tasks you will perform manually
 10. Improve small-grid snap and maritime grid buoyancy blocks.
 11. Add damage VFX: sparks, smoke, fire, debris.
 12. Set up collision damage thresholds for grids and terrain.
-13. Create Crusader armor models, sealed helmets, tabards/heraldry, Order banners, rank presentation, and inventory slots (helmet, chest, legs, boots, backpack, jetpack).
-14. Create armor station prefab for crafting armor, upgrades, and jetpacks.
-15. Create jetpack prefab with fuel slot and upgrade tiers.
-16. Create hazmat suit and hazmat armor upgrade module prefabs.
-17. Create space helmet and oxygen tank prefabs with visor toggle.
+13. Run **Tools > Voxel Engine > Voxel Engine Setup > 48. Build Armor Stations + Timed Upgrades**. It non-destructively creates/repairs the six armor definitions, Armor Station, anvil-style Armor Upgrade Station, module items, recipes, and research links; do not manually create those prefabs or assets.
+14. Run Step 48 a second time and confirm the Console reports preserved/repaired links without resetting recipe costs, craft times, materials, or custom prefab children.
+15. Create jetpack prefab with fuel slot and upgrade tiers through the applicable Voxel Engine Setup step.
+16. Create hazmat suit and Hazmat module content through Step 48; verify the module appears in the Armor Station after its research unlock.
+17. Create space helmet and oxygen tank prefabs with visor toggle through the Voxel Engine Setup workflow.
 18. Create geiger counter item/tool.
 19. Create painting tool item and 15 material finish variants.
 20. Add fall damage system and oxygen underwater system.
-21. **Run setup wizard step (non-destructive)**
-    - Step 18 for power/vehicle/combat/armor/painting blocks.
-    - Preserve existing grid power values and weapon damage.
+21. **Run setup wizard steps (non-destructive)**
+    - Step 18 for power/vehicle/combat/painting blocks.
+    - Step 48 for the complete armor workflow, including both station prefabs, items, recipes, research links, and timed installation setup.
+    - Preserve existing grid power values, weapon damage, recipe costs, craft times, materials, and custom prefab work.
 
 ### For 4.8.0 (Logistics 2.0, Screens & Trajectory)
 
@@ -1728,7 +1729,7 @@ For each version, these are the high-level Unity tasks you will perform manually
 - **6.22.0-dev:** Added `PlayerEquipment` with two jetpack slots, `JetpackItem` data assets for Hydrogen Boost / Atmospheric / Hybrid families, quick-equip from the active hotbar stack, Step 12 item/recipe generation, and PlayerController flight gating/speed modifiers from equipped jetpacks.
 - **6.22.1-dev:** Jetpack slots now appear in the Inventory UI and persist through save/load via an additive player save field.
 - **6.22.2-dev:** Jetpack slot UX polish: shift-click from hotbar/backpack equips into the first free slot, shift-click from equipment returns to inventory, the Sort button is removed from equipment slots, the Jetpack Bay panel has an ONLINE/EMPTY visual state, and flight mode shuts off immediately when the last usable jetpack is removed.
-- **6.22.3-dev:** Jetpack Bay no longer uses a heavy boxed frame, the ONLINE/EMPTY pill sits beside the title on the left, drag/drop slot changes refresh immediately, and Hydrogen Boost Pack sprint boost has a short subtle spool-up. **6.72.0–6.73.0-dev:** Fuel/power accounting shipped. **6.73.0:** refillable Hydrogen Canisters (fill from world H₂ Gas Tanks); H₂/Hybrid packs auto-recharge from inventory canisters at ≤10% fuel; Charged Cells for power packs; Jetpack Bay fuel bar; empty-pack flight cut. **6.79.0-dev** ships the Armor Station + upgrade modules: Mobility Servos (jetpack speed +6%/tier, fuel drain −6%/tier), plus Heat Tolerance / Radiation Shielding / Oxygen Efficiency / Impact Padding (5 tiers each) and the Hazmat seal. Remaining: final Unity validation of the armor-station upgrade flow.
+- **6.22.3-dev:** Jetpack Bay no longer uses a heavy boxed frame, the ONLINE/EMPTY pill sits beside the title on the left, drag/drop slot changes refresh immediately, and Hydrogen Boost Pack sprint boost has a short subtle spool-up. **6.72.0–6.73.0-dev:** Fuel/power accounting shipped. **6.73.0:** refillable Hydrogen Canisters (fill from world H₂ Gas Tanks); H₂/Hybrid packs auto-recharge from inventory canisters at ≤10% fuel; Charged Cells for power packs; Jetpack Bay fuel bar; empty-pack flight cut. **6.80.0-dev** adds the dedicated Armor Station plus a separate timed Armor Upgrade Station: Mobility Servos (jetpack speed +6%/tier, fuel drain −6%/tier), Heat Tolerance / Radiation Shielding / Oxygen Efficiency / Impact Padding (5 tiers each), and Hazmat sealing. Installation runs from 30 seconds at T1 to 150 seconds at T5/Hazmat; final Unity validation remains required.
 
 ### 11.4 Cryobeds, Offline Survival & Oxygen — ✅ COMPLETED (6.28.0-dev)
 - Add static and Grid cryobed items/blocks.

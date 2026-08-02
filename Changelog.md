@@ -1,9 +1,55 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.78.47-dev`
+**Current Version:** `6.80.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.80.1-dev] Fix — Step 48 Compile Repair
+
+**Type:** PATCH — compile fix, save-compatible.
+
+- Fixed `CS0103` in `VoxelEngineSetupWindow.cs`: Step 48 now uses `System.Enum.GetValues(...)` explicitly, matching the file's namespace imports.
+- No prefab, recipe, item, research, balance, or save-data values changed.
+
+---
+
+### [6.80.0-dev] Armor Stations + Timed Upgrade Forge
+
+**Type:** MINOR — new save-compatible armor workstation system.
+
+#### 🛡️ Dedicated armor workflow
+- Restored the missing armor-module runtime bindings and made the **Armor Station** an exclusive armory workbench: it shows only armor-station recipes rather than the whole lower-tier crafting catalogue.
+- Added a separate **Armor Upgrade Station** with a premium anvil silhouette, forged-steel/brass materials, animated hammer, forge glow, and a focused UI Toolkit installation panel.
+- The Assembler crafts the Armor Station; the Armor Station then crafts six armor tiers, the Armor Upgrade Station, five module families × five tiers, and the Hazmat module. All of these recipes are research-gated by **Armor Stations**.
+
+#### ⏱️ Timed installation
+- Put one armor piece and one module into the upgrade station, then start installation.
+- Base upgrade time is **30 seconds**: T1 = 30s, T2 = 60s, T3 = 90s, T4 = 120s, T5/Hazmat = 150s.
+- The module is consumed only when installation completes. Cancelling safely leaves both inputs in the station.
+- Installed modules are stored per armor piece, never on the shared armor definition.
+
+#### ⚙️ Fully wired effects
+- Heat Tolerance reduces burn/environmental heat damage.
+- Radiation Shielding and Hazmat protection reduce or eliminate radiation damage.
+- Oxygen Efficiency reduces oxygen drain.
+- Impact Padding reduces hard-landing damage.
+- Mobility Servos increase jetpack speed and reduce fuel drain.
+
+#### 💾 Additive persistence
+- The equipped armor slot, installed module state, upgrade-station inputs/output, and elapsed upgrade progress all persist through save/load.
+- Legacy saves remain valid; absent armor fields initialize safely.
+
+#### 🛠️ Non-destructive authoring
+- Added **Tools ▸ Voxel Engine ▸ Voxel Engine Setup ▸ Step 48: Build Armor Stations + Timed Upgrades**.
+- Step 48 creates missing armor content and repairs required links while preserving existing recipe ingredients, crafting times, prefab custom work, materials, and numeric tuning.
+- Run Step 48 twice to verify idempotence; Unity validation remains required before the roadmap scope is marked completed.
+
+#### Files touched
+- New armor runtime: `ArmorStation`, `ArmorUpgradeStation`, `ArmorUpgradeItem`, `ArmorUpgradeKind`, `ArmorUpgrades`, `PlayerHazardService`
+- Updated crafting, player equipment/stats/controller, interaction, persistence, UI Toolkit panel, setup wizard, and versioning
+
+---
 
 ### [6.78.47-dev] Real Recipes for Retired Stubs + Full Recipe Health Audit
 

@@ -237,6 +237,9 @@ namespace VoxelEngine.Persistence
                 jetpackSlots = equipment != null ? SerializeContainer(equipment.JetpackSlots) : null,
                 helmetSlots = equipment != null ? SerializeContainer(equipment.HelmetSlots) : null,
                 oxygenTankSlots = equipment != null ? SerializeContainer(equipment.OxygenTankSlots) : null,
+                // Additive armor slot save: ItemStack.durability contains installed
+                // module tiers, so this preserves the exact upgraded armor piece.
+                armorSlots = equipment != null ? SerializeContainer(equipment.ArmorSlots) : null,
                 activeHotbarIndex = inv.activeHotbarIndex
             };
             return true;
@@ -451,6 +454,17 @@ namespace VoxelEngine.Persistence
                 scfg.sourcePositionsZ = string.Join(",", zs);
                 scfg.sourceInstanceIds = string.Join(",", ids);
                 entry.screenConfig = scfg;
+            }
+
+            var armorUpgradeStation = go.GetComponentInChildren<VoxelEngine.Combat.ArmorUpgradeStation>(true);
+            if (armorUpgradeStation != null)
+            {
+                entry.armorUpgradeStationState = new SavedArmorUpgradeStationState
+                {
+                    isUpgrading = armorUpgradeStation.IsUpgrading,
+                    elapsedSeconds = armorUpgradeStation.ElapsedSeconds,
+                    totalSeconds = armorUpgradeStation.TotalSeconds
+                };
             }
 
             CaptureMaritimePorts(go, entry);
@@ -788,6 +802,13 @@ namespace VoxelEngine.Persistence
                 AttachPortSnapshot(go, sc);
                 return sc;
             }
+
+            var armorUpgradeStation = go.GetComponentInChildren<VoxelEngine.Combat.ArmorUpgradeStation>(true);
+            if (armorUpgradeStation != null)
+                return SerializeMulti(
+                    armorUpgradeStation.ArmorSlot,
+                    armorUpgradeStation.ModuleSlot,
+                    armorUpgradeStation.OutputSlot);
 
             var chest = go.GetComponentInChildren<Chest>();
             if (chest != null)
@@ -1289,6 +1310,7 @@ namespace VoxelEngine.Persistence
             if (save.player.jetpackSlots != null) DeserializeInto(equipment.JetpackSlots, save.player.jetpackSlots);
             if (save.player.helmetSlots != null) DeserializeInto(equipment.HelmetSlots, save.player.helmetSlots);
             if (save.player.oxygenTankSlots != null) DeserializeInto(equipment.OxygenTankSlots, save.player.oxygenTankSlots);
+            if (save.player.armorSlots != null) DeserializeInto(equipment.ArmorSlots, save.player.armorSlots);
             inv.SetActiveHotbar(save.player.activeHotbarIndex);
         }
 
@@ -1563,6 +1585,15 @@ namespace VoxelEngine.Persistence
                 }
             }
 
+            var armorUpgradeStation = go.GetComponentInChildren<VoxelEngine.Combat.ArmorUpgradeStation>(true);
+            if (armorUpgradeStation != null && saved.armorUpgradeStationState != null)
+            {
+                armorUpgradeStation.RestoreProgress(
+                    saved.armorUpgradeStationState.isUpgrading,
+                    saved.armorUpgradeStationState.elapsedSeconds,
+                    saved.armorUpgradeStationState.totalSeconds);
+            }
+
             RestoreMaritimePorts(go, saved.maritimePorts);
             RestoreLightingRuntime(go, saved.lightingConfig);
             RestoreDefenseRuntime(go, saved.defenseState);
@@ -1800,6 +1831,16 @@ namespace VoxelEngine.Persistence
             {
                 gridGas.EnsureContainers();
                 DeserializeInto(gridGas.PortableSlot, sc);
+                return;
+            }
+
+            var armorUpgradeStation = go.GetComponentInChildren<VoxelEngine.Combat.ArmorUpgradeStation>(true);
+            if (armorUpgradeStation != null)
+            {
+                DeserializeMulti(sc,
+                    armorUpgradeStation.ArmorSlot,
+                    armorUpgradeStation.ModuleSlot,
+                    armorUpgradeStation.OutputSlot);
                 return;
             }
 
@@ -2060,6 +2101,9 @@ namespace VoxelEngine.Persistence
             // Additive in 6.23.1: sealed helmet + oxygen tank equipment slots.
             public SavedContainer helmetSlots;
             public SavedContainer oxygenTankSlots;
+            // Additive armor equipment slot. Legacy saves omit this and keep an
+            // empty armor slot; upgraded armor retains its packed durability state.
+            public SavedContainer armorSlots;
             public int activeHotbarIndex;
         }
         [Serializable] private class SavedPlacedBlock
@@ -2108,6 +2152,15 @@ namespace VoxelEngine.Persistence
             // Defense runtime (turret ammo / filter / autoMode / fuel buffer). Null for
             // non-defense blocks. Additive — legacy saves leave it null.
             public SavedDefenseState defenseState;
+            // Armor Upgrade Station process state. Inputs are stored in `container`; this
+            // additive record only resumes elapsed time after those inputs restore.
+            public SavedArmorUpgradeStationState armorUpgradeStationState;
+        }
+        [Serializable] private class SavedArmorUpgradeStationState
+        {
+            public bool isUpgrading;
+            public float elapsedSeconds;
+            public float totalSeconds;
         }
         [Serializable] private class SavedDefenseState
         {

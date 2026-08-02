@@ -66,6 +66,13 @@ namespace VoxelEngine.Player
             EnsureContainers();
         }
 
+        private void Start()
+        {
+            // Covers scene-load ordering where PlayerStats is not available when
+            // the serialized armor container first raises its change event.
+            SyncEquippedArmor();
+        }
+
         private void EnsureContainers()
         {
             if (_jetpackSlots == null) _jetpackSlots = new ItemContainer("Jetpack Slots", JetpackSlotCount);
@@ -414,6 +421,13 @@ namespace VoxelEngine.Player
 
             float cruise = Mathf.Max(0f, drivePack.drainMlPerSecond > 0f ? drivePack.drainMlPerSecond : drivePack.drainPerSecond);
             float boostDrain = Mathf.Max(0f, drivePack.boostDrainMlPerSecond > 0f ? drivePack.boostDrainMlPerSecond : drivePack.boostDrainPerSecond);
+
+            // Mobility Servos improve the whole equipped flight package rather than
+            // only a specific jetpack family. The armor is the single source of this
+            // modifier, so swapping armor changes fuel efficiency immediately.
+            float fuelEfficiency = JetpackFuelEfficiency;
+            cruise *= fuelEfficiency;
+            boostDrain *= fuelEfficiency;
 
             // Twin drive: two identical packs share the work — drain the fuller one
             // so the pair behaves like one tank with double capacity.
@@ -771,28 +785,98 @@ namespace VoxelEngine.Player
             }
         }
 
-        /// <summary>Currently worn armor (drives PlayerStats damage mitigation).</summary>
-        public ArmorItem EquippedArmor
+        /// <summary>Current armor stack, including its per-piece installed upgrade state.</summary>
+        public ItemStack EquippedArmorStack
         {
             get
             {
                 EnsureContainers();
-                var stack = _armorSlots.GetSlot(0);
+                return _armorSlots.GetSlot(0);
+            }
+        }
+
+        /// <summary>Currently worn armor definition (drives base damage mitigation).</summary>
+        public ArmorItem EquippedArmor
+        {
+            get
+            {
+                var stack = EquippedArmorStack;
                 return stack != null && !stack.IsEmpty ? stack.item as ArmorItem : null;
             }
         }
 
         private void SyncEquippedArmor()
         {
-            var ps = PlayerStats.Instance;
-            if (ps != null) ps.equippedArmor = EquippedArmor;
+            var playerStats = PlayerStats.Instance;
+            if (playerStats != null) playerStats.equippedArmor = EquippedArmor;
         }
 
         public bool HasBreathingKit => EquippedHelmet != null && EquippedHelmet.sealedHelmet && EquippedOxygenTank != null;
         public float BonusOxygen => HasBreathingKit ? Mathf.Max(0f, EquippedOxygenTank.bonusOxygen) : 0f;
-        public float OxygenDrainMultiplier => HasBreathingKit
-            ? Mathf.Clamp(EquippedOxygenTank.drainMultiplier * EquippedHelmet.oxygenEfficiency, 0.05f, 1f)
-            : 1f;
+        public float OxygenDrainMultiplier
+        {
+            get
+            {
+                float lifeSupportMultiplier = HasBreathingKit
+                    ? Mathf.Clamp(EquippedOxygenTank.drainMultiplier * EquippedHelmet.oxygenEfficiency, 0.05f, 1f)
+                    : 1f;
+                return lifeSupportMultiplier * ArmorOxygenEfficiencyMultiplier;
+            }
+        }
+
+        // ── Installed armor module modifiers ────────────────────────
+
+        public int GetArmorUpgradeTier(ArmorUpgradeKind kind)
+        {
+            return ArmorUpgrades.GetTier(EquippedArmorStack, kind);
+        }
+
+        public bool HasHazmatProtection => ArmorUpgrades.HasHazmat(EquippedArmorStack);
+
+        public float HeatDamageMultiplier => Mathf.Clamp(
+            1f - ArmorUpgradeKindInfo.EffectPerTier(ArmorUpgradeKind.HeatTolerance)
+                 * GetArmorUpgradeTier(ArmorUpgradeKind.HeatTolerance),
+            0.10f, 1f);
+
+        public float RadiationDamageMultiplier => HasHazmatProtection
+            ? 0f
+            : Mathf.Clamp(
+                1f - ArmorUpgradeKindInfo.EffectPerTier(ArmorUpgradeKind.RadiationShielding)
+                     * GetArmorUpgradeTier(ArmorUpgradeKind.RadiationShielding),
+                0.10f, 1f);
+
+        public float FallDamageMultiplier => Mathf.Clamp(
+            1f - ArmorUpgradeKindInfo.EffectPerTier(ArmorUpgradeKind.FallImpact)
+                 * GetArmorUpgradeTier(ArmorUpgradeKind.FallImpact),
+            0.10f, 1f);
+
+        public float ArmorOxygenEfficiencyMultiplier => Mathf.Clamp(
+            1f - ArmorUpgradeKindInfo.EffectPerTier(ArmorUpgradeKind.OxygenEfficiency)
+                 * GetArmorUpgradeTier(ArmorUpgradeKind.OxygenEfficiency),
+            0.10f, 1f);
+
+        public float JetpackSpeedMultiplier => 1f +
+            ArmorUpgradeKindInfo.EffectPerTier(ArmorUpgradeKind.Mobility)
+            * GetArmorUpgradeTier(ArmorUpgradeKind.Mobility);
+
+        public float JetpackFuelEfficiency => Mathf.Clamp(
+            1f - ArmorUpgradeKindInfo.EffectPerTier(ArmorUpgradeKind.Mobility)
+                 * GetArmorUpgradeTier(ArmorUpgradeKind.Mobility),
+            0.10f, 1f);
+
+        /// <summary>
+        /// Backward-compatible direct application API. The Armor Upgrade Station
+        /// owns normal timed installation; this remains useful for future scripted
+        /// rewards without consuming the module itself.
+        /// </summary>
+        public bool TryApplyArmorUpgrade(ArmorUpgradeItem module)
+        {
+            var armorStack = EquippedArmorStack;
+            if (!ArmorUpgrades.TryApply(armorStack, module)) return false;
+            _armorSlots.SetSlot(0, armorStack);
+            SyncEquippedArmor();
+            return true;
+        }
 
         /// <summary>
         /// If the active hotbar stack is a JetpackItem, move one into the first free

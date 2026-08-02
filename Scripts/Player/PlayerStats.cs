@@ -21,9 +21,14 @@ namespace VoxelEngine.Player
         // Poison damage-over-time (venomous creatures); bypasses armor.
         private float _poisonTimer;
         private float _poisonDps;
-        // Burn damage-over-time (fire creatures); ESCALATES with armor (heated plate burns hotter).
+        // Burn damage-over-time (fire creatures); escalates with heavy base armor,
+        // then is mitigated by installed Heat Tolerance modules.
         private float _burnTimer;
         private float _burnDps;
+        // Radiation is kept separate from poison/burn so Hazmat and Radiation
+        // Shielding can protect it without changing other damage types.
+        private float _radiationTimer;
+        private float _radiationDps;
         public float baseMaxStamina     = 100f;
         public float baseDamage         = 5f;     // bare-hand contribution
         public float baseSprintMultiplier = 1.6f;
@@ -113,17 +118,21 @@ namespace VoxelEngine.Player
                 if (Health <= 0f) Die();
             }
 
-            // Burn: fire DoT that bypasses armor AND escalates with it (heavier plate burns hotter).
+            // Burn: fire DoT bypasses base physical mitigation and escalates with
+            // heavy plate, while installed Heat Tolerance reduces the final heat hit.
             if (_burnTimer > 0f)
             {
                 _burnTimer -= Time.deltaTime;
-                float armorFactor = (equippedArmor != null ? equippedArmor.damageReduction : 0f);
-                float effective = _burnDps * (1f + armorFactor * 1.5f);
+                float armorFactor = equippedArmor != null ? equippedArmor.damageReduction : 0f;
+                float heatMultiplier = equipment != null ? equipment.HeatDamageMultiplier : 1f;
+                float effective = _burnDps * (1f + armorFactor * 1.5f) * heatMultiplier;
                 Health = Mathf.Max(0f, Health - effective * Time.deltaTime);
                 OnStatsChanged?.Invoke();
                 if (_burnTimer <= 0f) _burnDps = 0f;
                 if (Health <= 0f) Die();
             }
+
+            ApplyEnvironmentalHazards(equipment);
 
             if (Health > MaxHealth)   Health = MaxHealth;
             if (Stamina > MaxStamina) Stamina = MaxStamina;
@@ -199,6 +208,50 @@ namespace VoxelEngine.Player
             _poisonTimer = Mathf.Max(_poisonTimer, duration);
             OnStatsChanged?.Invoke();
         }
+        /// <summary>Applies a time-limited radiation effect after armor mitigation.</summary>
+        public void ApplyRadiation(float dps, float duration)
+        {
+            if (dps <= 0f || duration <= 0f) return;
+            var equipment = GetComponent<PlayerEquipment>();
+            float multiplier = equipment != null ? equipment.RadiationDamageMultiplier : 1f;
+            _radiationDps = Mathf.Max(_radiationDps, dps * multiplier);
+            _radiationTimer = Mathf.Max(_radiationTimer, duration);
+            OnStatsChanged?.Invoke();
+        }
+
+        private void ApplyEnvironmentalHazards(PlayerEquipment equipment)
+        {
+            bool tookDamage = false;
+
+            float heatDamage = PlayerHazardService.HeatDamagePerSecond();
+            if (heatDamage > 0f)
+            {
+                float multiplier = equipment != null ? equipment.HeatDamageMultiplier : 1f;
+                Health = Mathf.Max(0f, Health - heatDamage * multiplier * Time.deltaTime);
+                tookDamage = true;
+            }
+
+            float radiationDamage = PlayerHazardService.RadiationDamagePerSecond();
+            if (radiationDamage > 0f)
+            {
+                float multiplier = equipment != null ? equipment.RadiationDamageMultiplier : 1f;
+                Health = Mathf.Max(0f, Health - radiationDamage * multiplier * Time.deltaTime);
+                tookDamage = true;
+            }
+
+            if (_radiationTimer > 0f)
+            {
+                _radiationTimer -= Time.deltaTime;
+                Health = Mathf.Max(0f, Health - _radiationDps * Time.deltaTime);
+                if (_radiationTimer <= 0f) _radiationDps = 0f;
+                tookDamage = true;
+            }
+
+            if (!tookDamage) return;
+            OnStatsChanged?.Invoke();
+            if (Health <= 0f) Die();
+        }
+
         /// <summary>Apply a burn damage-over-time effect. Burns ESCALATE with worn armor (heated steel hurts more). Refreshes/extends an active burn.</summary>
         public void ApplyBurn(float dps, float duration)
         {

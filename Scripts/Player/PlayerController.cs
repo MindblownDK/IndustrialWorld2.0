@@ -562,6 +562,9 @@ namespace VoxelEngine.Player
             float damage = Mathf.Pow(severity, Mathf.Max(0.1f, fallDamageExponent)) * stats.MaxHealth;
             if (damage <= 0.1f) return;
 
+            var equipment = GetComponent<PlayerEquipment>();
+            if (equipment != null) damage *= equipment.FallDamageMultiplier;
+
             stats.TakeDamage(damage);
             VoxelEngine.UI.BuildFeedbackHud.Show(
                 "Hard Landing",
@@ -656,6 +659,7 @@ namespace VoxelEngine.Player
             }
             float boostFactor = boosting ? Mathf.Lerp(1f, packBoost, _jetpackBoostCharge) : 1f;
             float spd = flySpeed * packSpeed * (boosting ? flySprintMultiplier * boostFactor : 1f);
+            if (equipment != null) spd *= equipment.JetpackSpeedMultiplier;
             Vector3 wishVel = wishDir.sqrMagnitude > 0.0001f ? wishDir.normalized * spd : Vector3.zero;
 
             // Inertial-dampener feel: smooth toward target, no gravity in fly mode.
