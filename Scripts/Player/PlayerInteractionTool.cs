@@ -490,14 +490,28 @@ namespace VoxelEngine.Player
                         if (equipment != null)
                         {
                             var armorSlots = equipment.ArmorSlots;
-                            // Return currently-equipped armor (if any) to the inventory first.
+                            // Return currently-equipped armor (if any) to the inventory first,
+                            // preserving its per-instance state (upgrade tiers in durability).
+                            var currentStack = armorSlots.GetSlot(0);
                             var current = equipment.EquippedArmor;
-                            if (current != null)
+                            if (current != null && currentStack != null && !currentStack.IsEmpty)
                             {
                                 armorSlots.SetSlot(0, new VoxelEngine.Items.ItemStack());             // clear -> sync sets equippedArmor = null
-                                inventory.container.Insert(new VoxelEngine.Items.ItemStack(current, 1));
+                                inventory.container.Insert(new VoxelEngine.Items.ItemStack
+                                {
+                                    item = current,
+                                    count = 1,
+                                    durability = currentStack.durability,
+                                    charge = currentStack.charge,
+                                });
                             }
-                            armorSlots.SetSlot(0, new VoxelEngine.Items.ItemStack { item = armor, count = 1 }); // sync sets equippedArmor = armor
+                            armorSlots.SetSlot(0, new VoxelEngine.Items.ItemStack
+                            {
+                                item = armor,
+                                count = 1,
+                                durability = armorStack.durability,   // carry upgrade tiers onto the worn piece
+                                charge = armorStack.charge,
+                            });                                        // sync sets equippedArmor = armor
                             inventory.container.Remove(armor, 1);
                             inventory.container.RaiseChanged();
                             VoxelEngine.UI.BuildFeedbackHud.Show("Equipped", armor.displayName, armor.icon, new Color(0.4f, 0.8f, 1f));
@@ -927,6 +941,36 @@ namespace VoxelEngine.Player
 
                 var furnace = hit.collider.GetComponentInParent<Furnace>();
                 if (furnace != null) { UI.GameUIController.Instance?.OpenFurnace(furnace); return; }
+
+                // Armor Station: hold an upgrade module + RMB to apply it to the worn armour.
+                // Without a module the station falls through to the generic crafting UI below.
+                var armorStation = hit.collider.GetComponentInParent<VoxelEngine.Combat.ArmorStation>();
+                if (armorStation != null)
+                {
+                    var held = inventory.ActiveStack;
+                    if (!held.IsEmpty && held.item is VoxelEngine.Combat.ArmorUpgradeItem module)
+                    {
+                        var eq = inventory.GetComponent<VoxelEngine.Player.PlayerEquipment>();
+                        if (eq != null && eq.TryApplyArmorUpgrade(module))
+                        {
+                            inventory.container.Remove(module, 1);
+                            inventory.container.RaiseChanged();
+                            VoxelEngine.UI.BuildFeedbackHud.Show(
+                                "Upgrade Applied",
+                                module.isHazmat ? "Hazmat seal applied to your armour"
+                                                : $"{VoxelEngine.Combat.ArmorUpgradeKindInfo.DisplayName(module.kind)} T{eq.GetArmorUpgradeTier(module.kind)}",
+                                module.icon, new Color(0.45f, 0.9f, 1f));
+                        }
+                        else
+                        {
+                            VoxelEngine.UI.BuildFeedbackHud.Show(
+                                "Armor Station",
+                                "Equip armour and hold an upgrade module to apply it.",
+                                module.icon, Color.yellow);
+                        }
+                        return;
+                    }
+                }
 
                 var station = hit.collider.GetComponentInParent<CraftingStation>();
                 if (station != null) { UI.GameUIController.Instance?.OpenStation(station); return; }

@@ -45,6 +45,12 @@ namespace VoxelEngine.Cosmos
                  "with this temperature are excluded from generation.")]
         public float temperature = 15f;
 
+        [Range(0f, 4f)]
+        [Tooltip("Surface radiation dose (damage per second). 0 = safe. Drives the armour " +
+                 "Radiation Shielding upgrade and the Hazmat seal. Biomes/worlds set this " +
+                 "in the Voxel Engine Setup wizard.")]
+        public float radiationLevel = 0f;
+
         [Range(0f, 3f)]
         [Tooltip("Base wind strength. The WindField modulates this with smooth gusts at runtime.")]
         public float windStrength = 1f;

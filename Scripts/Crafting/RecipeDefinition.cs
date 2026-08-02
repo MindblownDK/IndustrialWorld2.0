@@ -9,7 +9,9 @@ namespace VoxelEngine.Crafting
     /// Workstation tiers. A recipe with stationTier == None can be crafted in the player
     /// inventory (no station required). Higher tiers require being near a matching station.
     /// </summary>
-    public enum StationTier { None, CraftingBench, Furnace, Assembler }
+    // Ordering is meaningful: a station grants every recipe whose tier is <= its own.
+    // ArmorStation sits above Assembler so it doubles as the armour/jetpack station.
+    public enum StationTier { None, CraftingBench, Furnace, Assembler, ArmorStation }
 
     [Serializable]
     public struct RecipeIngredient

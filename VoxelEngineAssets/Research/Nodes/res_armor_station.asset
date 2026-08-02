@@ -1,0 +1,66 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe52eb4685f86c44d967d9cd3e4bd91a, type: 3}
+  m_Name: res_armor_station
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Research.ResearchNode
+  nodeId: res_armor_station
+  displayName: Armor Station
+  description: The Armor Station forges and refits Crusader armour. Unlocks the Armor
+    Station block and the five armour-upgrade module families (Heat Tolerance, Radiation
+    Shielding, Oxygen Efficiency, Impact Padding, Mobility Servos) plus the Hazmat
+    seal.
+  iconTint: {r: 0.45, g: 0.85, b: 1, a: 1}
+  category: 0
+  subCategory: 0
+  tier: 4
+  column: 4
+  eraLabel: 
+  prerequisites:
+  - {fileID: 11400000, guid: ff208b9d191fcff48a6bbe83d6d44a88, type: 2}
+  researchSeconds: 90
+  cost:
+  - pack: {fileID: 11400000, guid: 080d81aee84fd5b4486b15264d31da24, type: 2}
+    count: 20
+  - pack: {fileID: 11400000, guid: 8c4bb8c69288cbe4bb74ab787695d922, type: 2}
+    count: 10
+  unlocksRecipes:
+  - {fileID: 11400000, guid: 99237f2748d2b3542b3c4d939c9656fb, type: 2}
+  - {fileID: 11400000, guid: c2175e4a94d897646bd162cd0076f11c, type: 2}
+  - {fileID: 11400000, guid: f5999b80094ecf949946c457598d7e37, type: 2}
+  - {fileID: 11400000, guid: eeda0779159703e4aa8cf2dae00fb821, type: 2}
+  - {fileID: 11400000, guid: dd9895da17617fc42bc310ea65d86aa0, type: 2}
+  - {fileID: 11400000, guid: 903d58c89dce211428708be362c5cdc6, type: 2}
+  - {fileID: 11400000, guid: 949d1c525c216054bb2b2f0f842963cc, type: 2}
+  - {fileID: 11400000, guid: eed0687c9f741d2439665f4e20e88219, type: 2}
+  - {fileID: 11400000, guid: 578e49c015bb99c4c8e2ffd3cba248c6, type: 2}
+  - {fileID: 11400000, guid: 7685e5c88d4df424e860e84a5a13e24d, type: 2}
+  - {fileID: 11400000, guid: 6fb1ad02b7f0a564b86ca81d002df3c5, type: 2}
+  - {fileID: 11400000, guid: cc56aa403a34313498f41078b9a38dbe, type: 2}
+  - {fileID: 11400000, guid: a29bed9adf183dc45b3017ae71962635, type: 2}
+  - {fileID: 11400000, guid: 3c9ad4e44eb3db040a8b05a71d489fb5, type: 2}
+  - {fileID: 11400000, guid: 1a95b67a3f9f8194fb6c063159f7c463, type: 2}
+  - {fileID: 11400000, guid: 444b803c9b3ac094384ba32bb487a9d1, type: 2}
+  - {fileID: 11400000, guid: 15609cedeb81f1d44b511ebfd3db952a, type: 2}
+  - {fileID: 11400000, guid: 072a9cf660730574d93f6efb8c53ec35, type: 2}
+  - {fileID: 11400000, guid: f4d5233d090a0bc42bbaa1e56b9d86f1, type: 2}
+  - {fileID: 11400000, guid: b210f6ebc294b6d44858ad89f5479fb6, type: 2}
+  - {fileID: 11400000, guid: 6ee0e905e40d08f4a81047143de958fe, type: 2}
+  - {fileID: 11400000, guid: bf29a06dee022f145bcb102a7ee5d3dc, type: 2}
+  - {fileID: 11400000, guid: 140e0e5f2ba07ad4497410a619517dc6, type: 2}
+  - {fileID: 11400000, guid: 3dac3c3d03fb2394186be9fd35d80f1a, type: 2}
+  - {fileID: 11400000, guid: 5c96e9e9639592947beeb622917c37a8, type: 2}
+  - {fileID: 11400000, guid: 8ceba9c9e3ea4204cbe9d27fe2f13e2c, type: 2}
+  - {fileID: 11400000, guid: 0ec6635ca42fd324c8eb69f4494c3e7b, type: 2}
+  upgradeKind: 0
+  upgradePerRankAmount: 0
+  maxRanks: 1
+  costScalesWithRank: 1

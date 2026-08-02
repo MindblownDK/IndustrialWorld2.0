@@ -1,9 +1,52 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.78.22-dev`
+**Current Version:** `6.79.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.79.0-dev] Armor Station + Armour Upgrade Modules
+
+**Type:** MINOR — new feature/system, save-compatible. New block, items, recipes, research node and stat hooks.
+
+#### 🛠️ Armor Station (new placed block)
+- New `ArmorStation` crafting station (derives from `CraftingStation`). Its tier ranks **above** the Assembler, so standing at it naturally grants every bench/furnace/assembler recipe — armour, jetpacks and the new upgrade modules all craft here.
+- It opens the shared crafting UI on interaction and is found by `Crafter.MaxAccessibleStation`.
+- New `StationTier.ArmorStation` enum value (appended after `Assembler`, so existing saves/assets are untouched).
+- Placed via the new `Block_ArmorStation` block item (crafted at the Assembler).
+
+#### 🧬 Five upgrade families, five tiers each + Hazmat
+- **Heat Tolerance (T1–5)** — reduces burn & environmental heat damage 5%/tier (max 25%).
+- **Radiation Shielding (T1–5)** — reduces radiation damage 8%/tier (max 40%).
+- **Oxygen Efficiency (T1–5)** — reduces oxygen drain 10%/tier (max 50%).
+- **Impact Padding (Fall Impact T1–5)** — reduces fall damage 12%/tier (max 60%).
+- **Mobility Servos (T1–5)** — jetpack speed +6%/tier, jetpack fuel drain −6%/tier.
+- **Hazmat Module** — special seal granting **full radiation immunity** on any worn armour piece.
+
+#### 🔧 Application & storage
+- Equip armour, hold an upgrade module, RMB the Armor Station → the module is consumed and the worn armour's tier for that branch is raised (never reduced).
+- Upgrades are **bit-packed into `ItemStack.durability`** on the armour piece, so they survive save/load and equip/unequip with zero schema changes (same trick as jetpack fuel).
+- Armour equip/unequip now carries durability/charge across the slot so upgrades are never lost when swapping pieces.
+
+#### ⚙️ Stat wiring
+- `PlayerEquipment` exposes aggregate upgrade modifiers (heat/radiation/fall/oxygen/mobility) as the single source of truth for the hooks.
+- `PlayerStats` applies environmental heat & radiation (new `PlayerHazardService`, reading the active body's `temperature` + new `radiationLevel`), reduces burn DoT via Heat Tolerance, and gains `ApplyRadiation(...)`.
+- `PlayerController` applies fall mitigation on hard landings and the Mobility speed bonus in jetpack flight.
+- `PlayerHazardService` is the first slim slice of the roadmap's future Radiation/Heat systems (reactor fallout, re-entry heat, heated rooms remain later work).
+
+#### 🧭 Research
+- New `res_armor_station` node (prereq: Advanced Manufacturing) gates the station block + all upgrade modules.
+- Setup **Step 48** is non-destructive & idempotent: creates the Armor Station prefab/block, the 26 module items + recipes, and the research node. It never overwrites existing armour, balance, or custom prefab geometry.
+
+#### Files touched
+- New: `Scripts/Combat/ArmorUpgradeKind.cs`, `ArmorUpgradeItem.cs`, `ArmorUpgrades.cs`, `ArmorStation.cs` (+.meta)
+- New: `Scripts/Player/PlayerHazardService.cs` (+.meta)
+- Edited: `Scripts/Player/PlayerEquipment.cs`, `PlayerStats.cs`, `PlayerController.cs`, `PlayerInteractionTool.cs`
+- Edited: `Scripts/Crafting/RecipeDefinition.cs` (StationTier), `Scripts/Cosmos/BodySettings.cs` (radiationLevel)
+- Edited: `Scripts/Editor/VoxelEngineSetupWindow.cs` (Step 48)
+- `Scripts/Core/GameVersion.cs` — Minor 78 → 79
+
+---
 
 ### [6.78.22-dev] Icon Batch 18 — Landing Gear Redo + Disk Rainbow & Shell Ammo
 

@@ -114,16 +114,22 @@ namespace VoxelEngine.Player
             }
 
             // Burn: fire DoT that bypasses armor AND escalates with it (heavier plate burns hotter).
+            // Heat Tolerance armour upgrades reduce the effective burn (mitigation is applied last).
             if (_burnTimer > 0f)
             {
                 _burnTimer -= Time.deltaTime;
                 float armorFactor = (equippedArmor != null ? equippedArmor.damageReduction : 0f);
-                float effective = _burnDps * (1f + armorFactor * 1.5f);
+                float heatMul = equipment != null ? equipment.HeatDamageMultiplier : 1f;
+                float effective = _burnDps * (1f + armorFactor * 1.5f) * heatMul;
                 Health = Mathf.Max(0f, Health - effective * Time.deltaTime);
                 OnStatsChanged?.Invoke();
                 if (_burnTimer <= 0f) _burnDps = 0f;
                 if (Health <= 0f) Die();
             }
+
+            // Environmental heat / radiation (PlayerHazardService) — reduced by the worn
+            // armour's Heat Tolerance / Radiation Shielding upgrades and the Hazmat seal.
+            ApplyEnvironmentalHazards(equipment);
 
             if (Health > MaxHealth)   Health = MaxHealth;
             if (Stamina > MaxStamina) Stamina = MaxStamina;
@@ -199,6 +205,56 @@ namespace VoxelEngine.Player
             _poisonTimer = Mathf.Max(_poisonTimer, duration);
             OnStatsChanged?.Invoke();
         }
+        /// <summary>Apply a radiation damage-over-time effect (reduced by Radiation Shielding / Hazmat). Refreshes/extends.</summary>
+        public void ApplyRadiation(float dps, float duration)
+        {
+            if (dps <= 0f || duration <= 0f) return;
+            var equipment = GetComponent<PlayerEquipment>();
+            float mul = equipment != null ? equipment.RadiationDamageMultiplier : 1f;
+            _radDps   = Mathf.Max(_radDps, dps * mul);
+            _radTimer = Mathf.Max(_radTimer, duration);
+            OnStatsChanged?.Invoke();
+        }
+
+        private float _radTimer;
+        private float _radDps;
+
+        private void ApplyEnvironmentalHazards(PlayerEquipment equipment)
+        {
+            bool ticked = false;
+
+            float heatHazard = PlayerHazardService.HeatDamagePerSecond();
+            if (heatHazard > 0f)
+            {
+                float mul = equipment != null ? equipment.HeatDamageMultiplier : 1f;
+                Health = Mathf.Max(0f, Health - heatHazard * mul * Time.deltaTime);
+                ticked = true;
+            }
+
+            float radHazard = PlayerHazardService.RadiationDamagePerSecond();
+            if (radHazard > 0f)
+            {
+                float mul = equipment != null ? equipment.RadiationDamageMultiplier : 1f;
+                Health = Mathf.Max(0f, Health - radHazard * mul * Time.deltaTime);
+                ticked = true;
+            }
+
+            // A time-limited radiation effect (e.g. an area burst) ticks down here too.
+            if (_radTimer > 0f)
+            {
+                _radTimer -= Time.deltaTime;
+                Health = Mathf.Max(0f, Health - _radDps * Time.deltaTime);
+                ticked = true;
+                if (_radTimer <= 0f) _radDps = 0f;
+            }
+
+            if (ticked)
+            {
+                OnStatsChanged?.Invoke();
+                if (Health <= 0f) Die();
+            }
+        }
+
         /// <summary>Apply a burn damage-over-time effect. Burns ESCALATE with worn armor (heated steel hurts more). Refreshes/extends an active burn.</summary>
         public void ApplyBurn(float dps, float duration)
         {
