@@ -112,7 +112,18 @@ namespace VoxelEngine.GridSystem
             }
 
             var ray = buildCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
-            if (!TryRaycastIgnoringSelf(ray, out var hit, reach))
+            bool hasHit = TryRaycastIgnoringSelf(ray, out var hit, reach);
+            // Belt placement surfaces are trigger-only so they never influence ship
+            // physics or ordinary interaction. When holding a shaft/housing, include
+            // that dedicated trigger raycast and let the player aim at the belt itself.
+            if (MechanicalBeltNetwork.IsBeltTakeoffItem(gbi)
+                && TryRaycastMechanicalBeltSurface(ray, reach, out var beltHit)
+                && (!hasHit || beltHit.distance <= hit.distance + 0.015f))
+            {
+                hit = beltHit;
+                hasHit = true;
+            }
+            if (!hasHit)
             {
                 HideGhost();
                 HideLedStretchGhost();
@@ -122,13 +133,18 @@ namespace VoxelEngine.GridSystem
             }
 
             GridEntity targetGrid = hit.collider.GetComponentInParent<GridEntity>();
+            var beltPlacementSurface = hit.collider != null
+                ? hit.collider.GetComponent<MechanicalBeltPlacementSurface>()
+                : null;
+            bool aimingBeltTakeoff = beltPlacementSurface != null && MechanicalBeltNetwork.IsBeltTakeoffItem(gbi);
             // Reset per-frame cap flag
             s_portCapBlocked = false;
             s_portCapReason = null;
             s_portCapPipeFamily = null;
 
             // ── Precision path (small blocks onto large grid) ─────
-            if (targetGrid != null
+            if (!aimingBeltTakeoff
+                && targetGrid != null
                 && targetGrid.gridSize == GridSize.Large
                 && gbi.gridSize == GridSize.Small)
             {
@@ -151,49 +167,70 @@ namespace VoxelEngine.GridSystem
             bool placingTurbo = IsTurbochargerItem(gbi, out var turboTier);
             bool portSnapped = false;
 
-            GridEntity attachGrid = (targetGrid != null && targetGrid.gridSize == gbi.gridSize)
-                ? targetGrid : FindNearbyGrid(hit.point, gbi.gridSize);
-
-            if (attachGrid != null)
+            GridEntity attachGrid;
+            if (aimingBeltTakeoff)
             {
-                float cs = gbi.gridSize.CellSize();
-                Vector3 probe = hit.point + hit.normal * (cs * 0.5f);
-                gridPos = attachGrid.WorldToGrid(probe);
-                if (!attachGrid.CanPlace(gridPos))
+                if (!beltPlacementSurface.TryGetShaftPlacement(gbi, hit.point,
+                        out attachGrid, out gridPos, out worldPos, out rotation, out string beltFailure))
                 {
-                    gridPos = attachGrid.WorldToGrid(hit.point + hit.normal * (cs * 1.0f));
-                    if (!attachGrid.CanPlace(gridPos)) { HideGhost(); HideGhostPortRing(); return; }
+                    HideGhost();
+                    HideGhostPortRing();
+                    if (GameSettings.WasPressed(InputAction.Build))
+                        VoxelEngine.UI.BuildFeedbackHud.Show("Belt Take-off Blocked", beltFailure ?? "No usable shaft cell on this belt.", gbi.icon, Color.red);
+                    return;
                 }
-                targetGrid = attachGrid;
-                worldPos = attachGrid.GridToWorld(gridPos);
-                rotation = attachGrid.transform.rotation;
 
-                if (!placingTurbo && targetedBlock != null)
-                    portSnapped = TryApplyMaritimePortSnap(gbi, attachGrid, targetedBlock, hit, ref gridPos, ref worldPos, ref rotation);
-                if (!portSnapped && !attachGrid.HasNeighbor(gridPos)) { HideGhost(); HideGhostPortRing(); return; }
+                targetGrid = attachGrid;
+                // This is an exact belt-axis snap: retain the authoritative pulley
+                // rotation and skip ordinary neighbour / player-rotation placement.
+                portSnapped = true;
             }
             else
             {
-                float cs = gbi.gridSize.CellSize();
-                Vector3 planetCenter = GravityProvider.ActiveBody.transform.position;
-                Vector3 toPoint = hit.point - planetCenter;
-                float altitude = toPoint.magnitude;
-                Vector3 up = toPoint.normalized;
-                float snappedAlt = Mathf.Ceil(altitude / cs) * cs + cs * 0.5f;
-                Vector3 forward = Vector3.Cross(up, Vector3.right);
-                if (forward.sqrMagnitude < 0.001f)
-                    forward = Vector3.Cross(up, Vector3.forward);
-                forward = forward.normalized;
-                Vector3 right = Vector3.Cross(forward, up).normalized;
-                Vector3 tangentOffset = hit.point - planetCenter - up * Vector3.Dot(toPoint, up);
-                float localX = Vector3.Dot(tangentOffset, right);
-                float localZ = Vector3.Dot(tangentOffset, forward);
-                localX = Mathf.Round(localX / cs) * cs;
-                localZ = Mathf.Round(localZ / cs) * cs;
-                worldPos = planetCenter + up * snappedAlt + right * localX + forward * localZ;
-                gridPos = Vector3Int.zero;
-                targetGrid = null;
-                rotation = BuildSurfacePlacementRotation(worldPos, hit.normal);
+                attachGrid = (targetGrid != null && targetGrid.gridSize == gbi.gridSize)
+                    ? targetGrid : FindNearbyGrid(hit.point, gbi.gridSize);
+
+                if (attachGrid != null)
+                {
+                    float cs = gbi.gridSize.CellSize();
+                    Vector3 probe = hit.point + hit.normal * (cs * 0.5f);
+                    gridPos = attachGrid.WorldToGrid(probe);
+                    if (!attachGrid.CanPlace(gridPos))
+                    {
+                        gridPos = attachGrid.WorldToGrid(hit.point + hit.normal * (cs * 1.0f));
+                        if (!attachGrid.CanPlace(gridPos)) { HideGhost(); HideGhostPortRing(); return; }
+                    }
+                    targetGrid = attachGrid;
+                    worldPos = attachGrid.GridToWorld(gridPos);
+                    rotation = attachGrid.transform.rotation;
+
+                    if (!placingTurbo && targetedBlock != null)
+                        portSnapped = TryApplyMaritimePortSnap(gbi, attachGrid, targetedBlock, hit, ref gridPos, ref worldPos, ref rotation);
+                    if (!portSnapped && !attachGrid.HasNeighbor(gridPos)) { HideGhost(); HideGhostPortRing(); return; }
+                }
+                else
+                {
+                    float cs = gbi.gridSize.CellSize();
+                    Vector3 planetCenter = GravityProvider.ActiveBody.transform.position;
+                    Vector3 toPoint = hit.point - planetCenter;
+                    float altitude = toPoint.magnitude;
+                    Vector3 up = toPoint.normalized;
+                    float snappedAlt = Mathf.Ceil(altitude / cs) * cs + cs * 0.5f;
+                    Vector3 forward = Vector3.Cross(up, Vector3.right);
+                    if (forward.sqrMagnitude < 0.001f)
+                        forward = Vector3.Cross(up, Vector3.forward);
+                    forward = forward.normalized;
+                    Vector3 right = Vector3.Cross(forward, up).normalized;
+                    Vector3 tangentOffset = hit.point - planetCenter - up * Vector3.Dot(toPoint, up);
+                    float localX = Vector3.Dot(tangentOffset, right);
+                    float localZ = Vector3.Dot(tangentOffset, forward);
+                    localX = Mathf.Round(localX / cs) * cs;
+                    localZ = Mathf.Round(localZ / cs) * cs;
+                    worldPos = planetCenter + up * snappedAlt + right * localX + forward * localZ;
+                    gridPos = Vector3Int.zero;
+                    targetGrid = null;
+                    rotation = BuildSurfacePlacementRotation(worldPos, hit.normal);
+                }
             }
 
             if (gbi.gridSize == GridSize.Large
@@ -312,6 +349,30 @@ namespace VoxelEngine.GridSystem
                 if (candidate.collider == null) continue;
                 if (selfRoot != null && candidate.collider.transform.IsChildOf(selfRoot)) continue;
                 if (VoxelEngine.Player.PlayerRaycastFilter.IsOwnPlayerCollider(candidate.collider, transform)) continue;
+                hit = candidate;
+                return true;
+            }
+            hit = default;
+            return false;
+        }
+
+        /// <summary>
+        /// Belt take-off surfaces are trigger colliders so they do not participate in
+        /// vehicle physics or ordinary interactions. Query them only while a held
+        /// shaft/housing needs an exact in-belt placement target.
+        /// </summary>
+        private bool TryRaycastMechanicalBeltSurface(Ray ray, float maxDistance, out RaycastHit hit)
+        {
+            var hits = Physics.RaycastAll(ray, maxDistance, ~0, QueryTriggerInteraction.Collide);
+            System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+            Transform selfRoot = transform.root;
+            for (int i = 0; i < hits.Length; i++)
+            {
+                var candidate = hits[i];
+                if (candidate.collider == null) continue;
+                if (selfRoot != null && candidate.collider.transform.IsChildOf(selfRoot)) continue;
+                if (VoxelEngine.Player.PlayerRaycastFilter.IsOwnPlayerCollider(candidate.collider, transform)) continue;
+                if (candidate.collider.GetComponent<MechanicalBeltPlacementSurface>() == null) continue;
                 hit = candidate;
                 return true;
             }
@@ -1339,7 +1400,8 @@ namespace VoxelEngine.GridSystem
             if (item == null || item.blockPrefab == null) return MaritimePortSnapKind.None;
             if (item.blockPrefab.GetComponentInChildren<GridExhaustPipe>(true) != null)
                 return MaritimePortSnapKind.Exhaust;
-            if (item.blockPrefab.GetComponentInChildren<GridDriveShaft>(true) != null
+            if (item.blockPrefab.GetComponentInChildren<GridMaritimeEngine>(true) != null
+                || item.blockPrefab.GetComponentInChildren<GridDriveShaft>(true) != null
                 || item.blockPrefab.GetComponentInChildren<GridShaftHousing>(true) != null
                 || item.blockPrefab.GetComponentInChildren<GridRotationTransfer>(true) != null
                 || item.blockPrefab.GetComponentInChildren<GridGearbox>(true) != null

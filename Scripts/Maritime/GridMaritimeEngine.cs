@@ -250,11 +250,15 @@ namespace VoxelEngine.Maritime
         /// <summary>Current torque output (for UI).</summary>
         public float CurrentTorque { get; private set; }
 
-        /// <summary>0..1 stress level (torque vs max, with exhaust + heat penalties).</summary>
+        /// <summary>0..1 stress level resolved from real downstream drivetrain load, speed, exhaust, and heat.</summary>
         public float Stress01 { get; private set; }
+        /// <summary>0..1 share of available engine torque currently demanded by all connected mechanical loads.</summary>
+        public float MechanicalLoad01 { get; private set; }
+        /// <summary>Unclamped downstream torque demand / available torque. Values above one mean the engine is bogging under overload.</summary>
+        public float MechanicalLoadRatio { get; private set; }
 
         /// <summary>True when the engine is overstressed (torque demand exceeds safe limits).</summary>
-        public bool IsOverstressed => Stress01 > 0.95f;
+        public bool IsOverstressed => Stress01 > 0.92f;
 
         /// <summary>Number of turbochargers connected to this engine (for UI).</summary>
         public int ConnectedTurboCount { get; private set; }
@@ -733,19 +737,35 @@ namespace VoxelEngine.Maritime
 
             node.FuelAvailable01 = effectiveFuel;
 
-            // Stress: same pull at high RPM (where the curve sags) is much harder on
-            // the engine than at low RPM; back-pressure and heat add their share.
-            CurrentTorque = node.MaxTorque * effectiveFuel;
-            float loadStress = effectiveFuel / Mathf.Max(0.35f, torqueCurve) * 0.55f;
-            Stress01 = Mathf.Clamp01(speedStressTerm * 0.45f + loadStress
-                + ExhaustFill01 * 0.30f + Heat01 * 0.20f);
-            // An overstressed engine converts the extra friction to heat (applied in
-            // TickThermal next tick — single-frame feedback, keeps the loop stable).
+            // Mechanical load/stress is resolved after the propagation job has seen
+            // every generator, propeller, gearbox ratio, and belt take-off. Do not
+            // estimate it from throttle here — that was why extra generators left the
+            // engine stuck near the same low stress percentage.
         }
 
         public override void ApplyResults(in MechanicalNode node)
         {
             CurrentRPM = node.CurrentRPM;
+            // The node's ShaftTorque is the aggregate bus on multi-engine builds;
+            // show this engine's own serviced torque instead of duplicating the
+            // whole bus value on every source.
+            CurrentTorque = Mathf.Max(0f, node.MaxTorque * node.FuelAvailable01 * node.DriveService01);
+            MechanicalLoadRatio = Mathf.Max(0f, node.MechanicalLoadRatio);
+            MechanicalLoad01 = Mathf.Clamp01(MechanicalLoadRatio);
+
+            // Real drivetrain stress: finite downstream torque demand is the primary
+            // signal, with speed, exhaust back-pressure, and heat layered on top.
+            // Above 100% demand the engine bogs and stress rises sharply toward a
+            // thermal/repairable failure instead of pretending the load is free.
+            float speed01 = EngineSpeed01;
+            float overload = Mathf.Max(0f, MechanicalLoadRatio - 1f);
+            Stress01 = Mathf.Clamp01(
+                0.04f
+                + MechanicalLoad01 * 0.68f
+                + speed01 * speed01 * 0.14f
+                + overload * 0.55f
+                + ExhaustFill01 * 0.20f
+                + Heat01 * 0.14f);
         }
 
         /// <summary>Scan only named turbo attachment slots and compute stacked boost.</summary>

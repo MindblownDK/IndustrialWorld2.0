@@ -410,10 +410,12 @@ namespace VoxelEngine.Maritime
                 BlockHeight = _cellSize,
                 BuoyancyFactor = DefaultBuoyancyFactor(block),
                 GearRatio = 1f,
+                AppliedGearRatio = 1f,
                 MaxGearSpeed = settings.globalGearSpeedCap,
                 PropellerSize = 1f,
                 ThrustCoefficient = settings.thrustCoefficient,
                 OutputMultiplier = 1f,
+                DriveService01 = 1f,
             };
         }
 

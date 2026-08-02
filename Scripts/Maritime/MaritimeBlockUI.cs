@@ -184,8 +184,8 @@ namespace VoxelEngine.Maritime
 
             p.Add(T.StatRow("🔄", "Torque", $"{eng.CurrentTorque:0} N·m", T.AccentGold));
             p.Add(T.StatRow("⚙", "Speed", $"{eng.CurrentRPM:0} RPM", T.AccentTeal));
-            p.Add(T.Muted("Torque curve: available torque sags as RPM climbs — " +
-                          "more speed = less pull, and running close to redline raises stress."));
+            p.Add(T.StatRow("⛓", "Mechanical Load", $"{eng.MechanicalLoadRatio * 100f:0}%", eng.MechanicalLoadRatio > 1f ? T.AccentRed : T.AccentTeal));
+            p.Add(T.Muted("Torque curve: available torque sags as RPM climbs. Generator banks, propellers, and gearbox ratios now feed real mechanical load back into engine stress."));
 
             // Stress bar.
             Color stressColor = eng.IsOverstressed ? T.AccentRed
@@ -425,18 +425,21 @@ namespace VoxelEngine.Maritime
 
             // Gear ratio display.
             p.Add(T.StatRow("🔩", "Gear Ratio", $"{gb.EffectiveRatio:0.##}×", T.AccentGold));
+            if (Mathf.Abs(gb.AppliedRatio - gb.EffectiveRatio) > 0.01f)
+                p.Add(T.StatRow("⛔", "Governed Ratio", $"{gb.AppliedRatio:0.##}× at current RPM", T.AccentAmber));
             p.Add(T.StatRow("⚡", "Max Speed", $"{gb.maxOutputSpeed:0} RPM", T.AccentCyan));
 
             p.Add(T.Spacer(4));
 
             // Input stats.
             p.Add(T.StatRow("↙", "Input Speed", $"{gb.InputRPM:0} RPM", T.AccentTeal));
-            p.Add(T.StatRow("↙", "Input Torque", "~conserved", T.TextSecondary));
+            p.Add(T.StatRow("↙", "Input Torque", $"{gb.InputTorque:0} N·m", T.TextSecondary));
 
             // Output stats.
             p.Add(T.StatRow("↗", "Output Speed", $"{gb.OutputRPM:0} RPM", T.AccentTeal));
             float outTorque = gb.gearRatio > 0.01f ? 1f / gb.gearRatio : 0f;
-            p.Add(T.StatRow("↗", "Output Torque", $"{outTorque * 100f:0}% of input", T.AccentGold));
+            p.Add(T.StatRow("↗", "Output Torque", $"{gb.OutputTorque:0} N·m · {outTorque * 100f:0}%", T.AccentGold));
+            p.Add(T.StatRow("⛓", "Mechanical Load", $"{gb.MechanicalLoadRatio * 100f:0}%", gb.MechanicalLoadRatio > 1f ? T.AccentRed : T.AccentTeal));
 
             p.Add(T.Spacer(6));
 

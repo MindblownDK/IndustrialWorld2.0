@@ -150,6 +150,7 @@ namespace VoxelEngine.Maritime
             node.MaxTorque = 0f; // generator is a pure load sink
             node.GearRatio = 1f;
             node.OutputMultiplier = 1f;
+            node.RatedElectricalOutputWatts = Mathf.Max(0f, maxWattOutput);
         }
 
         public override void RefreshMaritimeNode(ref MechanicalNode node, float throttle)
@@ -160,6 +161,7 @@ namespace VoxelEngine.Maritime
             node.FuelAvailable01 = Enabled ? 1f : 0f;
             node.MaxRPM = maxRPM; // speed bonus saturates against rated RPM
             node.OutputMultiplier = ModuleOutputMultiplier;
+            node.RatedElectricalOutputWatts = Mathf.Max(0f, EffectiveMaxWattOutput);
             if (!Enabled)
                 node.SetFlag(MechanicalFlags.Broken);
             else

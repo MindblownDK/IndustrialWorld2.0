@@ -78,9 +78,13 @@ namespace VoxelEngine.Research
         private VisualElement _progressFill;
 
         private bool             _open;
+        private bool             _searchHasFocus;
         private ResearchNode     _selected;
         private ResearchSubCategory? _activeSub = null;
         private string           _searchQuery = string.Empty;
+
+        /// <summary>True while the Research search field owns keyboard input.</summary>
+        public static bool IsSearchFocused => Instance != null && Instance._open && Instance._searchHasFocus;
 
         private float _zoom = 1.0f;
         private const float ZOOM_MIN = 0.35f;
@@ -110,7 +114,7 @@ namespace VoxelEngine.Research
 
         private void Update()
         {
-            if (GameSettings.WasPressed(InputAction.Research))
+            if (GameSettings.WasPressed(InputAction.Research) && !_searchHasFocus)
             {
                 if (VoxelEngine.UI.UIState.PauseConsumedThisFrame) return;
                 if (_open) Close();
@@ -155,6 +159,8 @@ namespace VoxelEngine.Research
         {
             if (!_open) return;
             _open = false;
+            _searchHasFocus = false;
+            VoxelEngine.UI.UIState.TextInputActive = false;
             VoxelEngine.UI.UIState.PopBlock();
             HideUI();
         }
@@ -299,6 +305,16 @@ namespace VoxelEngine.Research
             {
                 _searchQuery = (evt.newValue ?? "").Trim();
                 RebuildCanvas();
+            });
+            _searchField.RegisterCallback<FocusInEvent>(_ =>
+            {
+                _searchHasFocus = true;
+                VoxelEngine.UI.UIState.TextInputActive = true;
+            });
+            _searchField.RegisterCallback<FocusOutEvent>(_ =>
+            {
+                _searchHasFocus = false;
+                VoxelEngine.UI.UIState.TextInputActive = false;
             });
             _searchField.label = "";
             var sfLabel = _searchField.Q<Label>();

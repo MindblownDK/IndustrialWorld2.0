@@ -88,8 +88,10 @@ namespace VoxelEngine.Maritime
         public float PowerCommand01;
 
         // ── Gearbox ──────────────────────────────────────────────────
-        /// <summary>Speed multiplier (≥1 = faster, less torque). 1 = direct shaft.</summary>
+        /// <summary>Player-selected speed multiplier (≥1 = faster, less torque). 1 = direct shaft.</summary>
         public float GearRatio;
+        /// <summary>Actual ratio after the output RPM governor/clamp is applied.</summary>
+        public float AppliedGearRatio;
         /// <summary>Hard RPM clamp for this gearbox (stops runaway gearing).</summary>
         public float MaxGearSpeed;
         /// <summary>Per-node shaft torque arriving at this node after upstream transforms
@@ -99,6 +101,16 @@ namespace VoxelEngine.Maritime
         public float ShaftRpm;
         /// <summary>Extra output multiplier for consumers (upgrade modules on generators).</summary>
         public float OutputMultiplier;
+        /// <summary>Generator rated electrical output after live module configuration (W).</summary>
+        public float RatedElectricalOutputWatts;
+        /// <summary>Electrical output requested by the generator at its current shaft speed (W).</summary>
+        public float RequestedElectricalWatts;
+        /// <summary>Downstream mechanical torque demand accumulated at this node (N·m).</summary>
+        public float MechanicalLoadTorque;
+        /// <summary>Demand divided by locally available torque. Values above one mean overload.</summary>
+        public float MechanicalLoadRatio;
+        /// <summary>0..1 drivetrain service after all connected mechanical loads are resolved.</summary>
+        public float DriveService01;
 
         // ── Propeller / wheel consumers ──────────────────────────────
         /// <summary>Size multiplier (1× small, 3× large, etc.).</summary>

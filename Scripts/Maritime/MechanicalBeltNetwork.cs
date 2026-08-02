@@ -95,6 +95,14 @@ namespace VoxelEngine.Maritime
             return block is GridDriveShaft || block is GridShaftHousing;
         }
 
+        /// <summary>True when a held grid item may be placed as an in-belt shaft take-off.</summary>
+        public static bool IsBeltTakeoffItem(GridBlockItem item)
+        {
+            if (item == null || item.blockPrefab == null) return false;
+            return item.blockPrefab.GetComponentInChildren<GridDriveShaft>(true) != null
+                || item.blockPrefab.GetComponentInChildren<GridShaftHousing>(true) != null;
+        }
+
         private void Awake()
         {
             _grid = GetComponent<GridEntity>();
@@ -161,6 +169,102 @@ namespace VoxelEngine.Maritime
             float minSpan = beltItem != null ? beltItem.EffectiveMinSpan : DefaultMinSpan;
             float maxSpan = beltItem != null ? beltItem.EffectiveMaxSpan : DefaultMaxSpan;
             return ValidatePulleyGeometry(first, second, minSpan, maxSpan, out failure);
+        }
+
+        /// <summary>
+        /// Resolves an empty, grid-aligned shaft cell directly under a player's belt
+        /// aim point. The shaft adopts the belt pulleys' axis, bypassing the ordinary
+        /// structural-neighbour requirement because the belt itself is its mechanical
+        /// and visual attachment.
+        /// </summary>
+        public bool TryGetBeltTapPlacement(Vector3Int endpointA, Vector3Int endpointB,
+            GridBlockItem item, Vector3 worldHit, out GridEntity grid, out Vector3Int gridPos,
+            out Vector3 worldPosition, out Quaternion rotation, out string failure)
+        {
+            grid = Grid;
+            gridPos = default;
+            worldPosition = default;
+            rotation = Quaternion.identity;
+            failure = null;
+
+            if (grid == null)
+            {
+                failure = "That belt is not attached to a movable grid.";
+                return false;
+            }
+            if (!IsBeltTakeoffItem(item))
+            {
+                failure = "Only a Drive Shaft or Watertight Shaft Housing can be placed into a belt.";
+                return false;
+            }
+            if (item.gridSize != grid.gridSize)
+            {
+                failure = "The shaft scale must match the belt grid scale.";
+                return false;
+            }
+
+            var link = new MechanicalBeltLink(endpointA, endpointB);
+            if (!HasLink(endpointA, endpointB) || !TryResolveLink(link, out var a, out var b))
+            {
+                failure = "That belt link is no longer available.";
+                return false;
+            }
+            if (!TryGetShaftAxis(a, out _))
+            {
+                failure = "Could not resolve the belt pulley axis.";
+                return false;
+            }
+
+            float cellSize = grid.gridSize.CellSize();
+            Vector3 start = grid.transform.InverseTransformPoint(a.transform.position);
+            Vector3 end = grid.transform.InverseTransformPoint(b.transform.position);
+            Vector3 span = end - start;
+            float spanSqr = span.sqrMagnitude;
+            if (spanSqr < 0.0001f)
+            {
+                failure = "That belt has no usable span.";
+                return false;
+            }
+
+            Vector3 localHit = grid.transform.InverseTransformPoint(worldHit);
+            float along = Mathf.Clamp01(Vector3.Dot(localHit - start, span) / spanSqr);
+            Vector3 projected = start + span * along;
+            float tapTolerance = Mathf.Max(0.18f, cellSize * 0.38f);
+            if ((localHit - projected).sqrMagnitude > tapTolerance * tapTolerance
+                || along <= 0.02f || along >= 0.98f)
+            {
+                failure = "Aim at an empty middle section of the belt.";
+                return false;
+            }
+
+            gridPos = grid.WorldToGrid(grid.transform.TransformPoint(projected));
+            if (gridPos == a.GridPos || gridPos == b.GridPos)
+            {
+                failure = "Aim between the two belt pulleys, not at an endpoint.";
+                return false;
+            }
+            if (!grid.CanPlace(gridPos))
+            {
+                failure = "That belt take-off cell is already occupied.";
+                return false;
+            }
+
+            // Ensure the rounded lattice cell still lies on the actual belt run.
+            Vector3 snapped = new Vector3(gridPos.x, gridPos.y, gridPos.z) * cellSize;
+            float snappedAlong = Mathf.Clamp01(Vector3.Dot(snapped - start, span) / spanSqr);
+            Vector3 snappedLine = start + span * snappedAlong;
+            if ((snapped - snappedLine).sqrMagnitude > tapTolerance * tapTolerance
+                || snappedAlong <= 0.02f || snappedAlong >= 0.98f)
+            {
+                failure = "No shaft lattice cell falls under that part of the belt.";
+                return false;
+            }
+
+            worldPosition = grid.GridToWorld(gridPos);
+            // The existing pulley orientation is the authoritative shaft axis, so
+            // newly inserted take-offs remain parallel without player rotation drift.
+            rotation = a.transform.rotation;
+            return true;
         }
 
         /// <summary>Adds one belt after validation. The caller owns item consumption.</summary>
@@ -297,7 +401,7 @@ namespace VoxelEngine.Maritime
             _visualsDirty = true;
         }
 
-        /// <summary>Recreates simple no-collider visual belts beneath the moving grid.</summary>
+        /// <summary>Recreates reinforced belt visuals plus trigger-only shaft placement surfaces beneath the moving grid.</summary>
         public void RebuildVisuals()
         {
             _visualsDirty = false;
@@ -339,7 +443,7 @@ namespace VoxelEngine.Maritime
                     Vector3 start = grid.transform.InverseTransformPoint(startBlock.transform.position);
                     Vector3 end = grid.transform.InverseTransformPoint(endBlock.transform.position);
                     CreateBeltRun(start, end, axisLocal,
-                        Mathf.Min(startBlock.EffectiveCellSize, endBlock.EffectiveCellSize));
+                        Mathf.Min(startBlock.EffectiveCellSize, endBlock.EffectiveCellSize), _links[i]);
                 }
             }
         }
@@ -482,7 +586,8 @@ namespace VoxelEngine.Maritime
             output.Sort((left, right) => left.Along.CompareTo(right.Along));
         }
 
-        private void CreateBeltRun(Vector3 start, Vector3 end, Vector3 shaftAxis, float cellSize)
+        private void CreateBeltRun(Vector3 start, Vector3 end, Vector3 shaftAxis, float cellSize,
+            MechanicalBeltLink ownerLink)
         {
             Vector3 rawDirection = end - start;
             Vector3 direction = Vector3.ProjectOnPlane(rawDirection, shaftAxis);
@@ -492,9 +597,12 @@ namespace VoxelEngine.Maritime
             Vector3 side = Vector3.Cross(shaftAxis, direction).normalized;
             if (side.sqrMagnitude < 0.0001f) return;
 
-            float runGap = Mathf.Max(0.06f, cellSize * 0.10f);
-            float runWidth = Mathf.Max(0.035f, cellSize * 0.040f);
-            float thickness = Mathf.Max(0.018f, cellSize * 0.018f);
+            // Reinforced marine belt: deliberately broad twin runs and larger pulleys
+            // so a high-torque drivetrain reads as engineered equipment, not a thin
+            // decorative cable.
+            float runGap = Mathf.Max(0.11f, cellSize * 0.17f);
+            float runWidth = Mathf.Max(0.070f, cellSize * 0.090f);
+            float thickness = Mathf.Max(0.032f, cellSize * 0.032f);
             Quaternion rotation = Quaternion.LookRotation(direction, shaftAxis);
             Vector3 center = (start + end) * 0.5f;
 
@@ -506,7 +614,33 @@ namespace VoxelEngine.Maritime
             // A short central travel marker keeps the dark rubber legible against
             // iron hulls without turning the belt into a glowing cable.
             CreateVisualCube("Belt_TravelMarker", center, rotation,
-                new Vector3(runWidth * 0.45f, thickness * 0.55f, Mathf.Min(length * 0.24f, cellSize * 0.45f)), IndicatorMaterial);
+                new Vector3(runWidth * 0.65f, thickness * 0.60f, Mathf.Min(length * 0.26f, cellSize * 0.55f)), IndicatorMaterial);
+            CreatePlacementSurface(center, rotation, length, cellSize, ownerLink);
+        }
+
+        private void CreatePlacementSurface(Vector3 localPosition, Quaternion rotation, float length,
+            float cellSize, MechanicalBeltLink ownerLink)
+        {
+            if (_visualRoot == null) return;
+            var surface = new GameObject("Belt_ShaftPlacement")
+            {
+                hideFlags = HideFlags.DontSave
+            };
+            surface.transform.SetParent(_visualRoot.transform, false);
+            surface.transform.localPosition = localPosition;
+            surface.transform.localRotation = rotation;
+
+            var collider = surface.AddComponent<BoxCollider>();
+            collider.isTrigger = true;
+            // Broad aim surface spanning both reinforced belt runs. It participates
+            // only in GridBuilder's dedicated trigger raycast, never ship physics.
+            collider.size = new Vector3(
+                Mathf.Max(cellSize * 0.72f, 0.75f),
+                Mathf.Max(cellSize * 0.32f, 0.30f),
+                length + Mathf.Max(cellSize * 0.10f, 0.08f));
+
+            var placement = surface.AddComponent<MechanicalBeltPlacementSurface>();
+            placement.Configure(this, ownerLink.endpointA, ownerLink.endpointB);
         }
 
         private void CreatePulley(Vector3 localPosition, Vector3 axisLocal, float cellSize)
@@ -518,8 +652,8 @@ namespace VoxelEngine.Maritime
             pulley.transform.SetParent(_visualRoot.transform, false);
             pulley.transform.localPosition = localPosition;
             pulley.transform.localRotation = Quaternion.FromToRotation(Vector3.up, axisLocal);
-            float radius = Mathf.Max(0.10f, cellSize * 0.115f);
-            float width = Mathf.Max(0.035f, cellSize * 0.030f);
+            float radius = Mathf.Max(0.14f, cellSize * 0.165f);
+            float width = Mathf.Max(0.070f, cellSize * 0.060f);
             pulley.transform.localScale = new Vector3(radius * 2f, width, radius * 2f);
             DisableCollider(pulley);
             var renderer = pulley.GetComponent<MeshRenderer>();

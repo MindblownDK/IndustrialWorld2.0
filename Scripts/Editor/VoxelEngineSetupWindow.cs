@@ -172,6 +172,7 @@ namespace VoxelEngine.EditorTools
                 "    Overclocked Fuel Injectors, Super-Cooler Radiator Jacket (engines + generators)\n" +
                 "  • Free-ratio bidirectional gearbox (typed number + slider, 0.25×–20×)\n" +
                 "  • Watertight Shaft Housing + two-click Mechanical Belt branching (RMB shaft → RMB shaft)\n" +
+                "  • Runtime item-persistence catalog (protects Portable Batteries / H₂ Tanks on login)\n" +
                 "  • Heat-seizure repair rules: engines that overheat past 100 °C seize and need\n" +
                 "    spare parts (from their own recipe) to be repaired\n" +
                 "  • v17 meshes: marine funnel exhaust stack, pillow-block drive shaft, guarded-coupling generator\n" +
@@ -6633,6 +6634,7 @@ root =>
                 EditorUtility.SetDirty(tree);
             }
 
+            EnsureItemPersistenceCatalog();
             if (registry != null) EditorUtility.SetDirty(registry);
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
@@ -7486,6 +7488,9 @@ root =>
                 EditorUtility.SetDirty(ms);
             }
 
+            // Runtime persistence catalog keeps inventory-only equipment assets
+            // resolvable on login, including Portable Batteries and H₂ Tanks.
+            EnsureItemPersistenceCatalog();
             if (registry != null) EditorUtility.SetDirty(registry);
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
@@ -9547,6 +9552,59 @@ root =>
                 AssetDatabase.CreateAsset(asset, path);
             }
             return asset;
+        }
+
+        /// <summary>
+        /// Builds a Resources-visible, additive item catalog used by world persistence.
+        /// It prevents inventory-only assets (not referenced by the startup scene) from
+        /// resolving to null during login/save restore. Existing catalog references are
+        /// retained; missing catalog entries are repaired by scanning every ItemDefinition.
+        /// </summary>
+        private static void EnsureItemPersistenceCatalog()
+        {
+            const string resourcesRoot = "Assets/Resources";
+            const string catalogFolder = resourcesRoot + "/VoxelEngine";
+            const string catalogPath = catalogFolder + "/ItemPersistenceCatalog.asset";
+            EnsureFolder(resourcesRoot);
+            EnsureFolder(catalogFolder);
+
+            var catalog = GetOrCreateAsset<VoxelEngine.Items.ItemPersistenceCatalog>(catalogPath);
+            var merged = new List<VoxelEngine.Items.ItemDefinition>();
+            if (catalog.items != null)
+            {
+                foreach (var existing in catalog.items)
+                    if (existing != null && !merged.Contains(existing)) merged.Add(existing);
+            }
+
+            var guids = new HashSet<string>(AssetDatabase.FindAssets("t:ItemDefinition"));
+            // Explicitly include portable equipment subclasses even in projects where
+            // an AssetDatabase base-type query is narrowed by importer/version rules.
+            foreach (var filter in new[] { "t:PortableBatteryItem", "t:HydrogenCanisterItem", "t:JetpackItem" })
+                foreach (var guid in AssetDatabase.FindAssets(filter)) guids.Add(guid);
+
+            var orderedGuids = new List<string>(guids);
+            orderedGuids.Sort((left, right) => string.CompareOrdinal(
+                AssetDatabase.GUIDToAssetPath(left), AssetDatabase.GUIDToAssetPath(right)));
+            foreach (var guid in orderedGuids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                var item = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>(path);
+                if (item != null && !merged.Contains(item)) merged.Add(item);
+            }
+
+            bool changed = catalog.items == null || catalog.items.Count != merged.Count;
+            if (!changed && catalog.items != null)
+            {
+                for (int i = 0; i < merged.Count; i++)
+                {
+                    if (catalog.items[i] == merged[i]) continue;
+                    changed = true;
+                    break;
+                }
+            }
+            if (!changed) return;
+            catalog.items = merged;
+            EditorUtility.SetDirty(catalog);
         }
 
         private static GameObject GetOrCreatePrefab(string path, string name, System.Action<GameObject> onUpdate)
@@ -13508,6 +13566,7 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
                 (ironPlate != null ? ironPlate : steelPlate, 4),
                 (copperWire, 3));
 
+            EnsureItemPersistenceCatalog();
             AssetDatabase.SaveAssets();
         }
 

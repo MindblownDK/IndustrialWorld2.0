@@ -1,9 +1,41 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.0.0-dev`
+**Current Version:** `7.1.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.1.0-dev] Belt Take-Off Placement, Real Load Stress & Save Recovery
+
+**Type:** MINOR — new save-compatible drivetrain interaction, mechanical load simulation, and persistence recovery.
+
+#### 🟨 Belt take-off placement and reinforced visual
+- Mechanical Belts now generate a dedicated, trigger-only aim surface along each run.
+- Hold a **Drive Shaft** or **Watertight Shaft Housing**, aim at an empty middle section of the belt, and place it directly into the belt as a parallel powered take-off.
+- Added an exact belt-axis placement path that bypasses ordinary structural-neighbour placement only for validated belt take-offs.
+- Rebuilt the belt visual as a substantially wider reinforced twin-run assembly with larger pulleys and a broad interaction envelope.
+
+#### ⚙️ Exact engine / motor port snapping
+- Maritime engines are now included in mechanical-port placement detection.
+- A held engine can snap its actual output shaft to a compatible shaft port at the correct centreline height instead of falling back to lattice-height placement.
+
+#### 📈 Real mechanical load and stress
+- Replaced throttle-only engine stress with a backward drivetrain load pass.
+- Generator rated output now creates real torque demand, transformed correctly through gearbox ratios and shared across all connected engine sources.
+- Generator banks, propellers, gearbox ratios, finite source torque, overload service, RPM bogging, and output derating now feed engine/gearbox stress.
+- Gearboxes now expose governed actual ratio, resolved input/output torque, mechanical-load percentage, and load-aware stress in their panel.
+- Engines now show live mechanical load alongside torque, speed, and stress.
+
+#### 🔋 Portable equipment save recovery
+- Added a setup-authored Resources persistence catalog for `ItemDefinition` assets outside Resources.
+- Portable Batteries and Portable Hydrogen Tanks now resolve reliably by item ID during login/load instead of being silently deserialized as empty slots.
+- The catalog includes all discovered item assets and explicitly includes portable battery, portable hydrogen, and jetpack subclasses.
+
+#### 🔎 Research and restored-grid polish
+- Pressing **Y** while the Research UI search field owns keyboard focus now types/searches normally instead of closing the Research UI.
+- Restored grids now perform a bounded post-collider ground-clearance lift while still kinematic, preventing the small ground penetration seen immediately after loading a save.
+
+---
 
 ### [7.0.0-dev] Remove Encased Chain Drive + Mechanical Belt Crafting
 

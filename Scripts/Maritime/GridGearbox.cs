@@ -55,10 +55,20 @@ namespace VoxelEngine.Maritime
         public float InputRPM { get; private set; }
         /// <summary>Output RPM (after gear ratio, clamped).</summary>
         public float OutputRPM => CurrentRPM;
+        /// <summary>Actual ratio after output RPM governor clamping.</summary>
+        public float AppliedRatio { get; private set; } = 1f;
         /// <summary>True when output torque demand exceeds safe limits.</summary>
         public bool IsOverstressed { get; private set; }
         /// <summary>0..1 stress level for UI.</summary>
         public float Stress01 { get; private set; }
+        /// <summary>0..1 actual downstream torque demand relative to this gearbox's output capacity.</summary>
+        public float MechanicalLoad01 { get; private set; }
+        /// <summary>Unclamped downstream torque demand / available output torque. Above one means overload.</summary>
+        public float MechanicalLoadRatio { get; private set; }
+        /// <summary>Resolved input torque after the chain's finite-power service pass.</summary>
+        public float InputTorque { get; private set; }
+        /// <summary>Resolved output torque after this gearbox ratio.</summary>
+        public float OutputTorque { get; private set; }
 
         /// <summary>Effective ratio, always inside MinGearRatio..MaxGearRatio.</summary>
         public float EffectiveRatio => Mathf.Clamp(gearRatio, MinGearRatio, MaxGearRatio);
@@ -72,6 +82,7 @@ namespace VoxelEngine.Maritime
             // silently killed gears above ~1.3× on stock engines.
             if (maxOutputSpeed <= 2000f) maxOutputSpeed = 10000f;
             gearRatio = EffectiveRatio; // fold legacy ratios into the new range
+            AppliedRatio = EffectiveRatio;
         }
 
         /// <summary>Set a free-form ratio (typed field / slider in the UI) — applied
@@ -79,6 +90,9 @@ namespace VoxelEngine.Maritime
         public void SetRatio(float ratio)
         {
             gearRatio = Mathf.Clamp(ratio, MinGearRatio, MaxGearRatio);
+            // Until the next mechanical tick determines any governor clamp, show the
+            // player's selected ratio rather than a stale previous result.
+            AppliedRatio = gearRatio;
         }
 
         /// <summary>
@@ -114,12 +128,25 @@ namespace VoxelEngine.Maritime
         public override void ApplyResults(in MechanicalNode node)
         {
             CurrentRPM = node.CurrentRPM;
-            // Input speed = output ÷ ratio (the job already applied the ratio upstream).
-            InputRPM = CurrentRPM / Mathf.Max(0.01f, EffectiveRatio);
-            // Stress: if we're near the speed cap, the gearbox is stressed.
+            AppliedRatio = Mathf.Max(0.01f, node.AppliedGearRatio);
+            // Input speed/torque use the actual governor-clamped ratio, not an
+            // impossible selected ratio above the RPM limit.
+            InputRPM = CurrentRPM / AppliedRatio;
+            OutputTorque = Mathf.Max(0f, node.ShaftTorque);
+            InputTorque = OutputTorque * AppliedRatio;
+            MechanicalLoadRatio = Mathf.Max(0f, node.MechanicalLoadRatio);
+            MechanicalLoad01 = Mathf.Clamp01(MechanicalLoadRatio);
+
+            // Both speed and actual downstream torque load matter. A gearbox at a
+            // safe RPM but feeding a large generator bank now shows the corresponding
+            // mechanical stress instead of reporting nearly idle forever.
             float speedRatio = maxOutputSpeed > 0f ? CurrentRPM / maxOutputSpeed : 0f;
-            Stress01 = Mathf.Clamp01(speedRatio);
-            IsOverstressed = Stress01 > 0.95f;
+            float overload = Mathf.Max(0f, MechanicalLoadRatio - 1f);
+            Stress01 = Mathf.Clamp01(
+                speedRatio * 0.25f
+                + MechanicalLoad01 * 0.72f
+                + overload * 0.55f);
+            IsOverstressed = Stress01 > 0.92f;
         }
     }
 }

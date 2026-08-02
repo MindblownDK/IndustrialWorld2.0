@@ -36,6 +36,7 @@ namespace VoxelEngine.Persistence
         private Dictionary<string, BlockItem>                 _blockById  = new();
         private Dictionary<string, TieredBlockDefinition>     _tieredById = new();
         private Dictionary<string, GridBlockItem>             _gridBlockById = new();
+        private readonly HashSet<string> _missingSavedItemWarnings = new();
 
         private bool _loaded;
         private float _saveTimer;
@@ -89,10 +90,26 @@ namespace VoxelEngine.Persistence
             }
 
             foreach (var item in Resources.LoadAll<ItemDefinition>("")) CacheItem(item);
+
+            // The setup-authored catalog is the runtime-safe bridge for item assets
+            // stored outside Resources. Without it, a portable battery/H₂ tank that
+            // exists only inside a save can fail lookup at login and deserialize as an
+            // empty stack even though its itemId and charge were saved correctly.
+            foreach (var catalog in Resources.LoadAll<ItemPersistenceCatalog>(""))
+            {
+                if (catalog == null || catalog.items == null) continue;
+                foreach (var item in catalog.items) CacheItem(item);
+            }
+
             // Setup-generated content is frequently referenced by scene registries
             // without living under a Resources folder. Include every loaded asset so
             // editor and player builds resolve the same stable item IDs.
             foreach (var item in Resources.FindObjectsOfTypeAll<ItemDefinition>()) CacheItem(item);
+            foreach (var catalog in Resources.FindObjectsOfTypeAll<ItemPersistenceCatalog>())
+            {
+                if (catalog == null || catalog.items == null) continue;
+                foreach (var item in catalog.items) CacheItem(item);
+            }
 
             foreach (var def in Resources.LoadAll<TieredBlockDefinition>(""))
                 _tieredById[def.family.ToString()] = def;
@@ -1228,6 +1245,9 @@ namespace VoxelEngine.Persistence
                 }
 
                 grid.RecalculateMass();
+                // Colliders now exist, so resolve only the small post-load terrain
+                // interpenetration before the restore pose releases physics.
+                grid.ResolvePersistentGroundClearance();
             }
         }
 
@@ -2075,7 +2095,12 @@ namespace VoxelEngine.Persistence
                 return VoxelEngine.Storage.StorageDrawer.CreatePackedDrawerStack(baseBlock, payload);
             }
 
-            if (!_itemById.TryGetValue(e.itemId, out var item)) return new ItemStack();
+            if (!_itemById.TryGetValue(e.itemId, out var item))
+            {
+                if (_missingSavedItemWarnings.Add(e.itemId))
+                    Debug.LogWarning($"[WorldState] Saved item '{e.itemId}' was not present in the runtime item cache. Run the relevant Voxel Engine Setup step to repair the persistence catalog before saving again; this stack could not be restored this session.");
+                return new ItemStack();
+            }
             return new ItemStack { item = item, count = e.count, durability = e.durability, charge = e.charge };
         }
 

@@ -61,6 +61,7 @@ namespace VoxelEngine.GridSystem
         private Quaternion _restoreRotation;
         private Vector3 _restoreVelocity;
         private Vector3 _restoreAngularVelocity;
+        private static readonly RaycastHit[] s_restoreGroundHits = new RaycastHit[24];
         private bool _touchingIce;
         private float _lastIceContactTime = -999f;
         private const float IceGridBrakeMultiplier = 0.18f;
@@ -511,6 +512,72 @@ namespace VoxelEngine.GridSystem
                 _rb.linearVelocity = Vector3.zero;
                 _rb.angularVelocity = Vector3.zero;
             }
+        }
+
+        /// <summary>
+        /// Runs once after a saved grid's blocks and colliders have been recreated.
+        /// It preserves the saved pose but lifts a small interpenetration out of the
+        /// supporting terrain/dock, preventing restored grids from settling visibly
+        /// into the ground on the first post-load physics frame.
+        /// </summary>
+        public void ResolvePersistentGroundClearance()
+        {
+            if (_rb == null || BlockCount <= 0) return;
+
+            Vector3 up = GravityProvider.GetUp(_restorePosition);
+            if (up.sqrMagnitude < 0.0001f)
+                up = Physics.gravity.sqrMagnitude > 0.0001f ? -Physics.gravity.normalized : Vector3.up;
+            else
+                up.Normalize();
+
+            Physics.SyncTransforms();
+            float desiredClearance = Mathf.Max(0.025f, gridSize.CellSize() * 0.015f);
+            float maxLift = Mathf.Max(0.15f, gridSize.CellSize() * 0.42f);
+            float neededLift = 0f;
+            int samples = 0;
+
+            foreach (var block in AllBlocks)
+            {
+                if (block == null) continue;
+                var collider = block.GetComponentInChildren<Collider>(true);
+                if (collider == null || !collider.enabled || collider.isTrigger) continue;
+
+                Bounds bounds = collider.bounds;
+                float supportExtent = Mathf.Abs(up.x) * bounds.extents.x
+                    + Mathf.Abs(up.y) * bounds.extents.y
+                    + Mathf.Abs(up.z) * bounds.extents.z;
+                Vector3 origin = bounds.center + up * (supportExtent + block.EffectiveCellSize * 0.75f);
+                int hitCount = Physics.RaycastNonAlloc(origin, -up, s_restoreGroundHits,
+                    supportExtent + block.EffectiveCellSize * 2.5f, ~0, QueryTriggerInteraction.Ignore);
+
+                float nearestDistance = float.PositiveInfinity;
+                RaycastHit nearest = default;
+                for (int i = 0; i < hitCount; i++)
+                {
+                    var hit = s_restoreGroundHits[i];
+                    if (hit.collider == null || !hit.collider.enabled) continue;
+                    if (hit.collider.transform.IsChildOf(transform)) continue;
+                    if (VoxelEngine.Player.PlayerRaycastFilter.IsOwnPlayerCollider(hit.collider, transform)) continue;
+                    if (hit.distance >= nearestDistance) continue;
+                    nearestDistance = hit.distance;
+                    nearest = hit;
+                }
+                if (nearest.collider == null) continue;
+
+                float bottomAlongUp = Vector3.Dot(bounds.center, up) - supportExtent;
+                float supportAlongUp = Vector3.Dot(nearest.point, up);
+                float clearance = bottomAlongUp - supportAlongUp;
+                if (clearance < desiredClearance)
+                    neededLift = Mathf.Max(neededLift, desiredClearance - clearance);
+
+                if (++samples >= 32) break;
+            }
+
+            if (neededLift <= 0.0005f || neededLift > maxLift) return;
+            _restorePosition += up * neededLift;
+            transform.SetPositionAndRotation(_restorePosition, _restoreRotation);
+            _rb.position = _restorePosition;
+            _rb.rotation = _restoreRotation;
         }
 
         private static bool IsFiniteQuaternion(Quaternion value)

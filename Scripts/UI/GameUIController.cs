@@ -281,7 +281,8 @@ namespace VoxelEngine.UI
             if (!HasLivePanel()) return;
 
             // Keyboard capture state — suppress player movement/jetpack keys while typing.
-            VoxelEngine.UI.UIState.TextInputActive = _searchHasFocus || RecipeBrowserUI.IsSearchFocused;
+            VoxelEngine.UI.UIState.TextInputActive = _searchHasFocus || RecipeBrowserUI.IsSearchFocused
+                || VoxelEngine.Research.ResearchUI.IsSearchFocused;
 
             // Live-update the open furnace panel in-place every frame (no rebuild needed).
             TickFurnaceLiveUI();
@@ -407,7 +408,8 @@ namespace VoxelEngine.UI
 
             // While the search field has keyboard focus, don't react to hotkey-style keys
             // — the player is typing into the search box.
-            bool typing = _searchHasFocus || RecipeBrowserUI.IsSearchFocused || PortConfigHud.IsAnyDropdownOpen;
+            bool typing = _searchHasFocus || RecipeBrowserUI.IsSearchFocused
+                || VoxelEngine.Research.ResearchUI.IsSearchFocused || PortConfigHud.IsAnyDropdownOpen;
 
             // Toggle inventory / ship terminal — but NOT while typing in a search/name field.
             bool weAreOpen = _inventoryOpen || _rightContainer != null || _openGridTerminal != null;
