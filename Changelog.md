@@ -1,9 +1,21 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `6.80.1-dev`
+**Current Version:** `6.80.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [6.80.2-dev] Fix — Armor Station Recipe, Anvil & Equipment UX
+
+**Type:** PATCH — runtime/UI/setup fixes, save-compatible.
+
+- **Armor Station recipes:** its focused catalog now recognizes legacy armor recipes and module recipes, and remains usable once the station is placed even if a scene research cache has not refreshed yet. The generic inventory crafting browser remains unchanged.
+- **Anvil hammer:** corrected the generated hammer rest position and changed its animation to a controlled vertical strike onto the anvil face. Step 48 repairs the previous generated pivot position without touching custom pivots.
+- **Air equip:** RMB now equips an active armor item before the raycast early-out, so looking at open air works exactly like looking at a surface.
+- **Shift-click routing:** equipment auto-equip only runs from a plain inventory view. With an Armor Station, Armor Upgrade Station, chest, or another external panel open, Shift-click routes armor/modules to that panel instead. Armor goes to the upgrade station's Armor slot; modules go to its Module slot.
+- **Always-visible equipment bays:** Armor, Life Support, and Jetpack Bay now remain visible beside inventory while a chest, machine, Armor Station, or Armor Upgrade Station is open.
+
+---
 
 ### [6.80.1-dev] Fix — Step 48 Compile Repair
 

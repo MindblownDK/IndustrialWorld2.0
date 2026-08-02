@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`
-**Current Version:** `6.80.1-dev`
-**Roadmap Version:** `6.80.1-dev`
+**Current Version:** `6.80.2-dev`
+**Roadmap Version:** `6.80.2-dev`
 **Date:** 2026-08-02
-**Status:** Celestial Ruins & Themed Worlds COMPLETED (6.32.0–6.36.3) — 33 themed ruins across 11 planets, slot-chest loot, breakable/salvage, per-block colliders; Crusader Ruins Premium (6.30.0); Offline Survival (11.4) Completed + Grid Gravity Fixed (6.27.3) + Passive Oxygen (11.5); World Management (11.7) Completed; Power, Vehicles & Combat (4.7.0) remains WORKING ON — base defense network + ammo logistics + status UX shipped (6.57–6.68), jetpack fuel (6.72–6.77) + Armor Stations and timed upgrades (6.80.0-dev; 6.80.1-dev compile repair) implemented; Unity validation, vehicle power validation, and remaining life-support/paint still open
+**Status:** Celestial Ruins & Themed Worlds COMPLETED (6.32.0–6.36.3) — 33 themed ruins across 11 planets, slot-chest loot, breakable/salvage, per-block colliders; Crusader Ruins Premium (6.30.0); Offline Survival (11.4) Completed + Grid Gravity Fixed (6.27.3) + Passive Oxygen (11.5); World Management (11.7) Completed; Power, Vehicles & Combat (4.7.0) remains WORKING ON — base defense network + ammo logistics + status UX shipped (6.57–6.68), jetpack fuel (6.72–6.77) + Armor Stations and timed upgrades (6.80.0-dev; 6.80.1-dev compile repair; 6.80.2-dev recipe/anvil/equipment UX fixes) implemented; Unity validation, vehicle power validation, and remaining life-support/paint still open
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
 ---

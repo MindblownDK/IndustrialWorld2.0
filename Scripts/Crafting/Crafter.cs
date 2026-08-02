@@ -78,14 +78,33 @@ namespace VoxelEngine.Crafting
         public static List<RecipeDefinition> AvailableRecipesForStation(RecipeRegistry registry, CraftingStation station)
         {
             if (station == null) return AvailableRecipes(registry, StationTier.None);
+
+            // Owning an Armor Station is the progression gate. Once it is placed,
+            // its focused armory catalogue must remain usable even when a scene's
+            // research-tree reference has not yet refreshed its unlock cache.
+            // This also recognizes legacy armor recipes that were authored before
+            // the dedicated ArmorStation tier existed.
+            if (station is VoxelEngine.Combat.ArmorStation)
+                return CollectAvailableRecipes(registry, IsArmorStationRecipe, ignoreResearchLock: true);
+
             return station.exclusiveRecipes
                 ? CollectAvailableRecipes(registry, recipe => recipe.requiredStation == station.tier)
                 : AvailableRecipes(registry, station.tier);
         }
 
+        private static bool IsArmorStationRecipe(RecipeDefinition recipe)
+        {
+            if (recipe == null || recipe.outputItem == null) return false;
+            if (recipe.requiredStation == StationTier.ArmorStation) return true;
+            if (recipe.outputItem is VoxelEngine.Combat.ArmorItem) return true;
+            if (recipe.outputItem is VoxelEngine.Combat.ArmorUpgradeItem) return true;
+            return string.Equals(recipe.outputItem.itemId, "block_armorupgradestation", System.StringComparison.OrdinalIgnoreCase);
+        }
+
         private static List<RecipeDefinition> CollectAvailableRecipes(
             RecipeRegistry registry,
-            System.Func<RecipeDefinition, bool> stationFilter)
+            System.Func<RecipeDefinition, bool> stationFilter,
+            bool ignoreResearchLock = false)
         {
             var list = new List<RecipeDefinition>();
             if (registry == null || stationFilter == null) return list;
@@ -99,13 +118,16 @@ namespace VoxelEngine.Crafting
                 if (recipe.inputs == null || recipe.inputs.Length == 0) continue;
                 if (!stationFilter(recipe)) continue;
 
-                if (researchManager != null)
+                if (!ignoreResearchLock)
                 {
-                    if (!researchManager.IsRecipeUnlocked(recipe)) continue;
-                }
-                else if (!recipe.unlockedByDefault)
-                {
-                    continue;
+                    if (researchManager != null)
+                    {
+                        if (!researchManager.IsRecipeUnlocked(recipe)) continue;
+                    }
+                    else if (!recipe.unlockedByDefault)
+                    {
+                        continue;
+                    }
                 }
 
                 list.Add(recipe);

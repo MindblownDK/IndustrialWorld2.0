@@ -2285,19 +2285,19 @@ namespace VoxelEngine.UI
 
             BuildLeftPanel(row);   // inventory (flex child — fills the row height)
 
-            if (!AnyCenterOrRightPanelOpen())
-            {
-                var gap = new VisualElement();
-                gap.style.width = 8;
-                gap.style.flexShrink = 0;
-                row.Add(gap);
-                row.Add(BuildEquipmentPanel());
-            }
+            // Keep the equipment bays visible with every inventory-backed panel.
+            // They are active drop targets, so hiding them while a chest/station is
+            // open makes equipment routing inconsistent with the plain inventory.
+            var gap = new VisualElement();
+            gap.style.width = 8;
+            gap.style.flexShrink = 0;
+            row.Add(gap);
+            row.Add(BuildEquipmentPanel());
         }
 
-        // True when a center panel (crafting) or any right panel (production stats,
-        // recipe browser, or an opened container/machine/terminal) is shown — i.e. when
-        // the armor panel would overlap something. The armor panel only renders when false.
+        // True when another inventory-backed panel is open. Equipment bays remain
+        // visible, but this flag stops Shift-click from auto-equipping instead of
+        // routing an item into the active chest, station, or machine.
         private bool AnyCenterOrRightPanelOpen()
         {
             if (CraftingScreen.Visible) return true;
@@ -2319,10 +2319,9 @@ namespace VoxelEngine.UI
         }
 
         // Premium equipment panel docked to the right of the inventory: ARMOR +
-        // JETPACK BAY + LIFE SUPPORT, grouped in one card. Hidden whenever a center
-        // panel (crafting) or any right panel (production stats, recipe browser, or an
-        // opened container/machine/terminal) needs the space. The armor slot syncs
-        // PlayerStats.equippedArmor (read by TakeDamage) automatically.
+        // JETPACK BAY + LIFE SUPPORT, grouped in one card. It remains visible with
+        // chest, station, and machine panels so each equipment slot stays a reliable
+        // drag/drop target. The armor slot syncs PlayerStats.equippedArmor automatically.
         private VisualElement BuildEquipmentPanel()
         {
             var equipment = inventory != null ? inventory.GetComponent<VoxelEngine.Player.PlayerEquipment>() : null;
@@ -4761,8 +4760,12 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
             var helmetSlots = equipment != null ? equipment.HelmetSlots : null;
             var oxygenSlots = equipment != null ? equipment.OxygenTankSlots : null;
             var armorSlots  = equipment != null ? equipment.ArmorSlots      : null;
+            // Shift-click auto-equips only from a plain inventory view. When a
+            // station, chest, or other external panel is open, the active panel
+            // owns the transfer destination instead.
+            bool allowQuickEquip = !AnyCenterOrRightPanelOpen();
 
-            if (sourceC == inventory.container && srcStack.item is SpaceHelmetItem && helmetSlots != null)
+            if (sourceC == inventory.container && allowQuickEquip && srcStack.item is SpaceHelmetItem && helmetSlots != null)
             {
                 var cloneHelmet = new ItemStack { item = srcStack.item, count = 1, durability = srcStack.durability, charge = srcStack.charge, payload = srcStack.payload };
                 var leftoverHelmet = helmetSlots.Insert(cloneHelmet);
@@ -4777,7 +4780,7 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                 return;
             }
 
-            if (sourceC == inventory.container && srcStack.item is OxygenTankItem && oxygenSlots != null)
+            if (sourceC == inventory.container && allowQuickEquip && srcStack.item is OxygenTankItem && oxygenSlots != null)
             {
                 var cloneTank = new ItemStack { item = srcStack.item, count = 1, durability = srcStack.durability, charge = srcStack.charge, payload = srcStack.payload };
                 var leftoverTank = oxygenSlots.Insert(cloneTank);
@@ -4792,7 +4795,7 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                 return;
             }
 
-            if (sourceC == inventory.container && srcStack.item is VoxelEngine.Combat.ArmorItem && armorSlots != null)
+            if (sourceC == inventory.container && allowQuickEquip && srcStack.item is VoxelEngine.Combat.ArmorItem && armorSlots != null)
             {
                 var cloneArmor = new ItemStack { item = srcStack.item, count = 1, durability = srcStack.durability, charge = srcStack.charge, payload = srcStack.payload };
                 var leftoverArmor = armorSlots.Insert(cloneArmor);
@@ -4882,7 +4885,7 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
 
             // Jetpack QoL: shift-click from either hotbar or backpack equips into the
             // dedicated jetpack slots before any external machine/storage routing.
-            if (sourceC == inventory.container && srcStack.item is JetpackItem && jetpackSlots != null)
+            if (sourceC == inventory.container && allowQuickEquip && srcStack.item is JetpackItem && jetpackSlots != null)
             {
                 var cloneJet = new ItemStack { item = srcStack.item, count = 1, durability = srcStack.durability, charge = srcStack.charge, payload = srcStack.payload };
                 var leftoverJet = jetpackSlots.Insert(cloneJet);
@@ -5026,6 +5029,12 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
             // If source IS the player inventory: pick the right side based on item type.
             if (inventory != null && sourceC == inventory.container)
             {
+                if (_openArmorUpgradeStation != null)
+                {
+                    if (item is VoxelEngine.Combat.ArmorItem) return _openArmorUpgradeStation.ArmorSlot;
+                    if (item is VoxelEngine.Combat.ArmorUpgradeItem) return _openArmorUpgradeStation.ModuleSlot;
+                    return null;
+                }
                 if (_rightContainer != null) return _rightContainer;
                 if (_openFurnace != null)
                 {

@@ -61,6 +61,46 @@ namespace VoxelEngine.Player
             }
         }
 
+        private bool TryEquipActiveArmor()
+        {
+            if (inventory == null) return false;
+            var armorStack = inventory.ActiveStack;
+            if (armorStack == null || armorStack.IsEmpty || armorStack.item is not VoxelEngine.Combat.ArmorItem armor)
+                return false;
+
+            var equipment = inventory.GetComponent<VoxelEngine.Player.PlayerEquipment>();
+            if (equipment == null)
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show("Armor", "Equipment slots are unavailable.", armor.icon, Color.yellow);
+                return true;
+            }
+
+            var armorSlots = equipment.ArmorSlots;
+            // Armor upgrades live on each ItemStack. Preserve all per-instance state
+            // while returning the previously worn piece and equipping the new one.
+            var currentStack = armorSlots.GetSlot(0);
+            if (currentStack != null && !currentStack.IsEmpty)
+            {
+                armorSlots.SetSlot(0, new VoxelEngine.Items.ItemStack());
+                var leftover = inventory.container.Insert(currentStack.Clone());
+                if (leftover != null && !leftover.IsEmpty)
+                    VoxelEngine.Items.DroppedItem.Spawn(leftover, transform.position + Vector3.up * 0.6f, Vector3.up);
+            }
+
+            armorSlots.SetSlot(0, new VoxelEngine.Items.ItemStack
+            {
+                item = armor,
+                count = 1,
+                durability = armorStack.durability,
+                charge = armorStack.charge,
+                payload = armorStack.payload,
+            });
+            inventory.container.SetSlot(inventory.activeHotbarIndex, new VoxelEngine.Items.ItemStack());
+            inventory.container.RaiseChanged();
+            VoxelEngine.UI.BuildFeedbackHud.Show("Equipped", armor.displayName, armor.icon, new Color(0.4f, 0.8f, 1f));
+            return true;
+        }
+
         private void Update()
         {
             if (VoxelEngine.UI.UIState.IsBlocking) return;   // suppress mining/build while menus open
@@ -273,6 +313,10 @@ namespace VoxelEngine.Player
                 if (mineHeld || buildHeld) return;
             }
 
+            // Armor is a self-targeted equipment action. Resolve it before the
+            // raycast early-out so RMB equips it while aiming into open air.
+            if (buildDown && TryEquipActiveArmor()) return;
+
             if (!hasHit)
             {
                 // Mining tools still play their swing when aimed at the sky (nothing to hit).
@@ -479,45 +523,6 @@ namespace VoxelEngine.Player
 
             if (buildDown)
             {
-                // Armor equip (RMB an armor item in the hotbar -> wear it). Routes through the
-                // dedicated armor equipment slot so the inventory UI and PlayerStats.equippedArmor
-                // (read by TakeDamage) stay perfectly in sync. Old armor returns to the inventory.
-                {
-                    var armorStack = inventory.ActiveStack;
-                    if (!armorStack.IsEmpty && armorStack.item is VoxelEngine.Combat.ArmorItem armor)
-                    {
-                        var equipment = inventory.GetComponent<VoxelEngine.Player.PlayerEquipment>();
-                        if (equipment != null)
-                        {
-                            var armorSlots = equipment.ArmorSlots;
-                            // Armor upgrades are stored on each ItemStack. Preserve all
-                            // per-instance state while swapping worn armor rather than
-                            // recreating a clean stack from its shared definition.
-                            var currentStack = armorSlots.GetSlot(0);
-                            if (currentStack != null && !currentStack.IsEmpty)
-                            {
-                                armorSlots.SetSlot(0, new VoxelEngine.Items.ItemStack());
-                                var leftover = inventory.container.Insert(currentStack.Clone());
-                                if (leftover != null && !leftover.IsEmpty)
-                                    VoxelEngine.Items.DroppedItem.Spawn(leftover, transform.position + Vector3.up * 0.6f, Vector3.up);
-                            }
-
-                            armorSlots.SetSlot(0, new VoxelEngine.Items.ItemStack
-                            {
-                                item = armor,
-                                count = 1,
-                                durability = armorStack.durability,
-                                charge = armorStack.charge,
-                                payload = armorStack.payload,
-                            });
-                            inventory.container.SetSlot(inventory.activeHotbarIndex, new VoxelEngine.Items.ItemStack());
-                            inventory.container.RaiseChanged();
-                            VoxelEngine.UI.BuildFeedbackHud.Show("Equipped", armor.displayName, armor.icon, new Color(0.4f, 0.8f, 1f));
-                        }
-                        return;
-                    }
-                }
-
                 // 0) Water Bucket placement.
                 var stackRmb = inventory.ActiveStack;
                 if (!stackRmb.IsEmpty && stackRmb.item is WaterBucket && stackRmb.durability > 0)

@@ -13710,7 +13710,17 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
                     EnsureGeneratedPrimitive(parent, "Generated_BrassBand", PrimitiveType.Cube, new Vector3(0f, 0.45f, -0.30f), Vector3.zero, new Vector3(0.66f, 0.08f, 0.055f), upgradeBrass);
                     EnsureGeneratedPrimitive(parent, "Generated_ForgeCore", PrimitiveType.Cube, new Vector3(0f, 0.40f, 0.31f), Vector3.zero, new Vector3(0.36f, 0.16f, 0.04f), upgradeGlow);
 
-                    var hammerPivot = EnsureGeneratedEmpty(parent, "Generated_HammerPivot", new Vector3(-0.48f, 1.38f, 0.08f), new Vector3(8f, 0f, -12f));
+                    // Keep the hammer head above the anvil face at rest; the runtime
+                    // station animation then drops it straight onto the work surface.
+                    var hammerRestPosition = new Vector3(0f, 1.92f, 0f);
+                    var hammerPivot = EnsureGeneratedEmpty(parent, "Generated_HammerPivot", hammerRestPosition, Vector3.zero);
+                    var legacyHammerPosition = new Vector3(-0.48f, 1.38f, 0.08f);
+                    if ((hammerPivot.localPosition - legacyHammerPosition).sqrMagnitude < 0.0004f)
+                    {
+                        hammerPivot.localPosition = hammerRestPosition;
+                        hammerPivot.localRotation = Quaternion.identity;
+                        repairedLinks++;
+                    }
                     EnsureGeneratedPrimitive(hammerPivot, "Generated_HammerHandle", PrimitiveType.Cylinder, new Vector3(0f, -0.36f, 0f), Vector3.zero, new Vector3(0.065f, 0.38f, 0.065f), upgradeBrass);
                     EnsureGeneratedPrimitive(hammerPivot, "Generated_HammerHead", PrimitiveType.Cube, new Vector3(0f, -0.73f, 0f), Vector3.zero, new Vector3(0.34f, 0.18f, 0.20f), upgradeDark);
                     EnsureGeneratedPrimitive(hammerPivot, "Generated_HammerPeen", PrimitiveType.Cylinder, new Vector3(0f, -0.73f, 0.18f), new Vector3(90f, 0f, 0f), new Vector3(0.10f, 0.20f, 0.10f), upgradeDark);

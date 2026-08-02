@@ -32,6 +32,7 @@ namespace VoxelEngine.Combat
         [SerializeField] private float _elapsedSeconds;
         [SerializeField] private float _totalSeconds;
 
+        private Vector3 _hammerRestPosition;
         private Quaternion _hammerRestRotation;
         private bool _hammerRestCached;
         private float _nextStateNotifyAt;
@@ -242,6 +243,7 @@ namespace VoxelEngine.Combat
         private void CacheVisualState()
         {
             if (_hammerPivot == null || _hammerRestCached) return;
+            _hammerRestPosition = _hammerPivot.localPosition;
             _hammerRestRotation = _hammerPivot.localRotation;
             _hammerRestCached = true;
         }
@@ -258,7 +260,11 @@ namespace VoxelEngine.Combat
                     strike = Mathf.Sin(phase * Mathf.PI);
                     strike *= strike;
                 }
-                _hammerPivot.localRotation = _hammerRestRotation * Quaternion.Euler(-58f * strike, 0f, 0f);
+                // The hammer travels vertically onto the anvil face instead of
+                // rotating through its body. A small tilt gives the impact a tactile
+                // feel while keeping the head visibly above the work surface at rest.
+                _hammerPivot.localPosition = _hammerRestPosition + Vector3.down * (0.15f * strike);
+                _hammerPivot.localRotation = _hammerRestRotation * Quaternion.Euler(5f * strike, 0f, 0f);
             }
 
             if (_forgeLight != null)
