@@ -166,6 +166,14 @@ namespace VoxelEngine.Meshing
                 float gy = (vd010 + vd110 + vd011 + vd111) - (vd000 + vd100 + vd001 + vd101);
                 float gz = (vd001 + vd101 + vd011 + vd111) - (vd000 + vd100 + vd010 + vd110);
                 float3 nrm = -math.normalizesafe(new float3(gx, gy, gz), new float3(0, 1, 0));
+                if (isSphere)
+                {
+                    // Density gradients can flip at cube/chunk boundaries. Keep every terrain
+                    // normal facing away from the body core so lighting, grass, and material
+                    // slope treatment wrap consistently around the entire planet.
+                    float3 radialUp = math.normalizesafe(chunkOrigin + local, new float3(0, 1, 0));
+                    if (math.dot(nrm, radialUp) < 0f) nrm = -nrm;
+                }
                 normalScratch[vertexCount] = nrm;
                 colorScratch[vertexCount]  = ApplyTerrainShading(materialColors[dominantMat], local, nrm, cx, cy, cz);
 

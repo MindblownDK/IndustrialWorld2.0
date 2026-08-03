@@ -1,9 +1,32 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.11.2-dev`
+**Current Version:** `7.11.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.11.3-dev] Real Ocean Basins, Dirt Drops & Surface Continuity
+
+**Type:** PATCH — real-water rendering, complete surface continuity, mining-drop, and oil-seep follow-up; no save/API break.
+
+#### 💧 Real water, never a wrapped cave sphere
+- Disabled and removes every retained `ProceduralWaterPatchRenderer` at runtime/setup. The former mathematical sea shell was the remaining reason mined caves still appeared to strike water.
+- Real generated water voxels now own every visible ocean, lake, pool, bucket, and oil surface; `WaterMeshBuilder` no longer skips sea-level water for a fake shell.
+- Full-planet LOD now stays active at all altitudes but is inset beneath real local voxel terrain. Nearby chunks depth-occlude it, while the sampled LOD fills every unstreamed part of the planet instead of leaving a square chunk bubble or missing horizon.
+
+#### 🪨 Dirt and actual terrain continuity
+- Step 8 / Step 16 setup now repairs the missing setup-authored `Item_Clay.asset` as **Dirt**, creates/repairs Grass/Dirt material definitions, and links absent Clay/Grass mining drops without overwriting custom rewards.
+- Corrected the original normal-item authoring path so future setup runs actually save newly created material item assets.
+- Forced radial terrain normals outward and made terrain surface passes two-sided, removing spherical chunk-face winding holes and improving wrapped grass/lighting continuity.
+
+#### 🛢 Grounded crude seep geometry
+- Surface puddle cells now individually resolve their local radial hillside/ocean surface before oil is written, preventing the prior fixed-radius disc from scattering crude across slopes.
+- Increased the tapering funnel mouth to match the puddle and reduced crude lateral spread to one voxel step, keeping dense oil cohesive as it descends into the deep reservoir.
+
+#### ✅ Static delivery checks
+- Source parsing and targeted real-water/LOD/dirt/oil regression assertions are run locally. Unity compilation and Play Mode validation remain pending from Thomas.
+
+---
 
 ### [7.11.2-dev] Full Planet Surface LOD & Active-World Mining Repair
 

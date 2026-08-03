@@ -226,7 +226,8 @@ namespace VoxelEngine.Generation
 
                 var touched = new HashSet<Chunk>();
                 BuildSurfacePuddle(world, surface, up, puddleRadius, touched);
-                BuildRadialFunnel(world, surface, reservoirTop, up, infinite ? 2 : 1, 1, touched);
+                int funnelMouthRadius = Mathf.Clamp(puddleRadius - 1, 2, infinite ? 4 : 3);
+                BuildRadialFunnel(world, surface, reservoirTop, up, funnelMouthRadius, 1, touched);
                 BuildReservoir(world, Vector3Int.RoundToInt(reservoirCenter), reservoirRadius, touched);
                 FlushTouchedChunks(world, touched);
 
@@ -340,11 +341,31 @@ namespace VoxelEngine.Generation
             for (int b = -radius; b <= radius; b++)
             {
                 if (a * a + b * b > radius * radius) continue;
-                Vector3 basePoint = surface + tangentA * a + tangentB * b;
-                // Two shallow layers turn land or ocean surface into one readable crude seep.
-                WriteOil(world, Vector3Int.RoundToInt(basePoint), touched);
-                WriteOil(world, Vector3Int.RoundToInt(basePoint - up), touched);
+                Vector3 probe = surface + tangentA * a + tangentB * b;
+                // Follow each point back to its own local radial terrain surface. The old
+                // fixed-radius disk cut across slopes and made oil appear as random scattered
+                // cells instead of a puddle that sits naturally on the land.
+                if (!TryResolvePuddleSurface(world, probe, out Vector3Int localSurface)) continue;
+                Vector3 localUp = GetUpDir(localSurface);
+                WriteOil(world, localSurface, touched);
+                WriteOil(world, Vector3Int.RoundToInt((Vector3)localSurface - localUp), touched);
             }
+        }
+
+        private static bool TryResolvePuddleSurface(SphereWorld world, Vector3 probe, out Vector3Int surface)
+        {
+            surface = default;
+            Vector3 radialUp = probe.sqrMagnitude > 0.0001f ? probe.normalized : Vector3.up;
+            // Search from just outside the expected seep plane inward. This finds the actual
+            // local hillside/ocean surface for every puddle cell and never writes into air.
+            for (int offset = 10; offset >= -24; offset--)
+            {
+                Vector3Int candidate = Vector3Int.RoundToInt(probe + radialUp * offset);
+                if (!TryGetLoadedVoxel(world, candidate, out Voxel voxel)) return false;
+                if (!voxel.IsSolid && !FluidMaterialUtility.IsFluid(voxel)) continue;
+                if (TryFindExposedSurface(world, candidate, radialUp, out surface, out _)) return true;
+            }
+            return false;
         }
 
         /// <summary>

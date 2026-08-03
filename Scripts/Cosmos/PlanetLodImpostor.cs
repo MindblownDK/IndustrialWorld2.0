@@ -205,11 +205,12 @@ namespace VoxelEngine.Cosmos
 
                 SphereDensity.EvaluateColumn(prm, _biomes, d3, out float surfaceR, out int biomeI);
                 float alt = surfaceR - prm.MeanSurfaceRadius;
-                // Offset slightly OUTWARD so the LOD doesn't z-fight with voxel terrain
-                // (they'd be at the same depth and flicker). A small outward push puts the LOD
-                // just above the real terrain, like a backdrop sphere.
-                float lodSkin = Mathf.Max(24f, prm.radiusWorld * 0.01f);
-                verts[i] = dir * (prm.MeanSurfaceRadius + alt + lodSkin + 5f);
+                // Keep the full-planet shell just INSIDE the sampled terrain. Nearby opaque
+                // voxel chunks therefore depth-occlude it, while unstreamed terrain beyond
+                // the local chunk bubble still has a continuous sampled surface instead of a
+                // square horizon/missing world.
+                float lodInset = Mathf.Clamp(prm.radiusWorld * 0.001f, 2f, 12f);
+                verts[i] = dir * Mathf.Max(1f, surfaceR - lodInset);
                 float latitude = Mathf.Abs(dir.y);
                 Color baseCol = ColorFor(alt, latitude);
                 // Apply the body's custom display colour as a tint if set.
@@ -255,17 +256,10 @@ namespace VoxelEngine.Cosmos
         private void UpdateFade(CelestialBody body)
         {
             if (meshRenderer == null || _lodMaterial == null) return;
-            // The voxel terrain owns the near view. Fade the far shell completely out near
-            // the ground; keeping it at 60% alpha over local chunks caused dark top-oriented
-            // bands and hid correctly wrapped grass/terrain on the sides of a planet.
+            // This sampled shell stays enabled at every altitude, but it is inset beneath
+            // real voxel terrain. Detailed chunks naturally hide it nearby; outside the stream
+            // bubble it fills the entire planet surface with the matching procedural LOD.
             float a = 1f;
-            if (viewer != null)
-            {
-                float altitude = Mathf.Max(0f, body.AltitudeAt(viewer.position));
-                float hideBelow = body.SurfaceRadius * Mathf.Clamp(hideBelowAltitudeFactor, 0.01f, 0.5f);
-                float showAbove = body.SurfaceRadius * Mathf.Max(showAboveAltitudeFactor, hideBelowAltitudeFactor + 0.01f);
-                a = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(hideBelow, showAbove, altitude));
-            }
             if (_lodMaterial.HasProperty("_Tint"))
             {
                 var tint = _lodMaterial.GetColor("_Tint"); tint.a = a; _lodMaterial.SetColor("_Tint", tint);

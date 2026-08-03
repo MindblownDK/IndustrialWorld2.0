@@ -35,7 +35,7 @@ namespace VoxelEngine.EditorTools
                 MaterialId.Iron, MaterialId.Copper, MaterialId.Coal, MaterialId.Nickel,
                 MaterialId.Silicon, MaterialId.Cobalt, MaterialId.Silver, MaterialId.Gold,
                 MaterialId.Magnesium, MaterialId.Platinum, MaterialId.Uranium, MaterialId.Lithium,
-                MaterialId.Ice, MaterialId.CrudeOil, MaterialId.Stone, MaterialId.Sand, MaterialId.Clay,
+                MaterialId.Ice, MaterialId.CrudeOil, MaterialId.Stone, MaterialId.Sand, MaterialId.Clay, MaterialId.Grass,
             };
 
             foreach (var id in ids)

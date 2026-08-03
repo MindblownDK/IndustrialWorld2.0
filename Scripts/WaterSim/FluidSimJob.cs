@@ -46,7 +46,7 @@ namespace VoxelEngine.WaterSim
         private const int WaterMaxFall        = 255;
         private const int OilMaxFall          = 20;   // dense but viscous: sinks distinctly slower than water
         private const int WaterHorizontalStep = 64;
-        private const int OilHorizontalStep   = 4;    // very slow horizontal spread
+        private const int OilHorizontalStep   = 1;    // dense crude stays cohesive around its seep/funnel
         private const int OilWaterSwapStride  = 8;    // full-cell density swaps pulse at 1/8 of fluid ticks
 
         public void Execute()

@@ -29,9 +29,8 @@ namespace VoxelEngine.WaterSim
         public void Apply()
         {
             WaterMeshBuilder.RenderingEnabled = renderNativeWater;
-            // Open-ocean water is rendered by ProceduralWaterPatchRenderer's curved shell;
-            // detailed voxel meshes retain lakes, rivers, buckets, and all oil.
-            WaterMeshBuilder.SkipVoxelWaterAtOrBelowSeaLevel = true;
+            // Real generated voxel fluid owns oceans, lakes, rivers, buckets, and oil.
+            WaterMeshBuilder.SkipVoxelWaterAtOrBelowSeaLevel = false;
 
             FluidManager.EnsureInstance();
             var manager = FluidManager.Instance;

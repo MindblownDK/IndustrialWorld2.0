@@ -189,10 +189,10 @@ namespace VoxelEngine.EditorTools
                 "Step 16 rebuilds the active scene's native spherical water stack:\n" +
                 "  • Removes legacy external-ocean components and Assets/Liquid when present\n" +
                 "  • Creates native VoxelWaterURP water + viscous crude materials\n" +
-                "  • Curved spherical ocean shell, voxel pools/lakes, and radial boat wakes\n" +
-                "  • Finite/infinite pool pump telemetry, internal tanks, and existing pipe transport\n" +
+                "  • Real voxel ocean basins, lakes/pools, and radial boat wakes — no wrapped water sphere\n" +
+                "  • Finite/infinite pool pump telemetry, internal tanks, existing pipe transport, and Dirt-drop repair\n" +
                 "Re-runnable. Idempotent. Run after Step 8.");
-            AddWizardButton(scroll, "16. Rebuild Native Spherical Water (remove legacy ocean, pools, pipes + boat wakes)", BuildFluidContent, 56);
+            AddWizardButton(scroll, "16. Rebuild Real Spherical Water (ocean basins, dirt drops, pools, pipes + boat wakes)", BuildFluidContent, 56);
 
             AddSpacer(scroll, 6);
             AddInfo(scroll,
@@ -555,9 +555,9 @@ namespace VoxelEngine.EditorTools
                 if (item == null)
                 {
                     item = ScriptableObject.CreateInstance<ItemDefinition>();
-
+                    AssetDatabase.CreateAsset(item, path);
                 }
-                item.itemId = id.ToString().ToLower();
+                item.itemId = id == MaterialId.Clay ? "dirt" : id.ToString().ToLower();
                 item.displayName = display;
                 item.maxStack = 999;
                 item.massPerUnit = 1f;
@@ -566,7 +566,7 @@ namespace VoxelEngine.EditorTools
             }
             MakeItem(MaterialId.Stone,     "Stone");
             MakeItem(MaterialId.Sand,      "Sand");
-            MakeItem(MaterialId.Clay,      "Clay");
+            MakeItem(MaterialId.Clay,      "Dirt");
             MakeItem(MaterialId.Ice,       "Ice");
             MakeItem(MaterialId.Iron,      "Iron Ore");
             MakeItem(MaterialId.Copper,    "Copper Ore");
@@ -618,6 +618,7 @@ namespace VoxelEngine.EditorTools
             Make(MaterialId.Stone,      "Stone",       new Color(0.45f,0.42f,0.40f), 1.0f, itemMap[MaterialId.Stone]);
             Make(MaterialId.Sand,       "Sand",        new Color(0.92f,0.84f,0.55f), 0.4f, itemMap[MaterialId.Sand]);
             Make(MaterialId.Clay,       "Clay/Dirt",   new Color(0.40f,0.27f,0.16f), 0.6f, itemMap[MaterialId.Clay]);
+            Make(MaterialId.Grass,      "Grass/Dirt",  new Color(0.24f,0.52f,0.18f), 0.4f, itemMap[MaterialId.Clay]);
             Make(MaterialId.Ice,        "Ice",         new Color(0.78f,0.92f,0.98f), 0.7f, itemMap[MaterialId.Ice]);
             Make(MaterialId.WaterVoxel, "Water (Voxel)", new Color(0.15f,0.35f,0.7f,0.85f), 0.1f, null, fluid:true, mineable:false);
             Make(MaterialId.WaterLiquid,"Water (Liquid)",new Color(0.15f,0.35f,0.7f,0.85f), 0.1f, null, fluid:true, mineable:false);
@@ -2984,6 +2985,7 @@ namespace VoxelEngine.EditorTools
             EnsureFolder(prefabsFolder);
             EnsureFolder(blocksFolder);
             EnsureFolder(recipesFolder);
+            EnsureSurfaceMiningDrops();
 
             // ---- Pull common items ----
             var ironIngot   = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{itemsFolder}/Item_IronIngot.asset");
@@ -3176,11 +3178,67 @@ namespace VoxelEngine.EditorTools
                 "* Buckets preserve water or crude oil as real voxel liquid\n" +
                 "* Water Tank (Solid + Glass variants, 10,000 L each)\n" +
                 "* Pool Pump: finite volume / ∞ source UI + internal tank + pipe output\n" +
-                "* Native curved spherical ocean, voxel lakes/pools, and ship wakes\n" +
-                "* Liquid Pipes (Solid + Glass, 50 L/s capacity, any supported liquid)\n" +
+                "* Real voxel ocean basins, lakes/pools, grounded crude, and ship wakes\n" +
+                "* Dirt mining-drop repair plus Liquid Pipes (Solid + Glass, 50 L/s capacity)\n" +
                 "* Legacy Crest content removed: " + removedLegacyCrestObjects + " scene components/objects\n" +
                 "* FluidNetworkManager + FluidSimManager + NativeWaterWakeSystem ready",
                 "OK");
+        }
+
+        /// <summary>
+        /// Repairs the hand-mineable dirt chain through setup. Historic projects could have a
+        /// Clay/Dirt material with a null drop because its ItemDefinition was instantiated but
+        /// never written as an asset. This creates the missing Dirt item and only fills absent
+        /// drop links, preserving any custom authored material rewards.
+        /// </summary>
+        private static void EnsureSurfaceMiningDrops()
+        {
+            string itemsFolder = ASSET_ROOT + "/Items";
+            EnsureFolder(itemsFolder);
+            string dirtPath = itemsFolder + "/Item_Clay.asset";
+            var dirt = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>(dirtPath);
+            if (dirt == null)
+            {
+                dirt = ScriptableObject.CreateInstance<VoxelEngine.Items.ItemDefinition>();
+                AssetDatabase.CreateAsset(dirt, dirtPath);
+            }
+            dirt.itemId = "dirt";
+            dirt.displayName = "Dirt";
+            dirt.description = "Hand-mined soil from grassy and clay terrain.";
+            dirt.iconTint = new Color(0.40f, 0.27f, 0.16f);
+            dirt.maxStack = Mathf.Max(999, dirt.maxStack);
+            dirt.massPerUnit = Mathf.Max(0.1f, dirt.massPerUnit);
+            dirt.category = "Resources";
+            EditorUtility.SetDirty(dirt);
+
+            var registry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Materials.MaterialRegistry>(ASSET_ROOT + "/MaterialRegistry.asset");
+            if (registry == null) return;
+            registry.definitions ??= new List<VoxelEngine.Materials.VoxelMaterialDefinition>();
+
+            EnsureSurfaceDrop(VoxelEngine.Materials.MaterialId.Clay, "Clay/Dirt", new Color(0.40f, 0.27f, 0.16f));
+            EnsureSurfaceDrop(VoxelEngine.Materials.MaterialId.Grass, "Grass/Dirt", new Color(0.24f, 0.52f, 0.18f));
+            registry.Build();
+            EditorUtility.SetDirty(registry);
+
+            void EnsureSurfaceDrop(VoxelEngine.Materials.MaterialId id, string display, Color color)
+            {
+                var definition = AssetDatabase.LoadAssetAtPath<VoxelEngine.Materials.VoxelMaterialDefinition>($"{ASSET_ROOT}/Materials/Mat_{id}.asset");
+                if (definition == null)
+                {
+                    definition = ScriptableObject.CreateInstance<VoxelEngine.Materials.VoxelMaterialDefinition>();
+                    AssetDatabase.CreateAsset(definition, $"{ASSET_ROOT}/Materials/Mat_{id}.asset");
+                }
+                definition.id = id;
+                if (string.IsNullOrEmpty(definition.displayName) || definition.displayName == "Stone") definition.displayName = display;
+                if (definition.color == Color.clear || definition.color == Color.gray) definition.color = color;
+                definition.hardness = Mathf.Max(0.2f, definition.hardness);
+                definition.miningTier = 0;
+                definition.isMineable = true;
+                if (definition.dropItem == null) definition.dropItem = dirt;
+                definition.dropAmount = Mathf.Max(1, definition.dropAmount);
+                if (!registry.definitions.Contains(definition)) registry.definitions.Add(definition);
+                EditorUtility.SetDirty(definition);
+            }
         }
 
         // ────────────────────────────────────────────────────────────
@@ -3210,12 +3268,16 @@ namespace VoxelEngine.EditorTools
                 bootstrap = root.AddComponent<VoxelEngine.WaterSim.PlanetWaterRendererBootstrap>();
             }
             bootstrap.renderVoxelLiquidSurfaces = true;
-            bootstrap.renderNativeSphericalOceanPatch = true;
+            bootstrap.renderNativeSphericalOceanPatch = false;
             bootstrap.meshBuildBudgetPerFrame = Mathf.Clamp(bootstrap.meshBuildBudgetPerFrame, 4, 12);
             bootstrap.nativeOceanSearchRadius = Mathf.Clamp(bootstrap.nativeOceanSearchRadius, 192f, 512f);
             bootstrap.nativeOceanTileSize = Mathf.Clamp(bootstrap.nativeOceanTileSize, 8f, 16f);
             bootstrap.waterMaterialOverride = water;
             bootstrap.oilMaterialOverride = oil;
+            foreach (var legacyWrappedWater in Object.FindObjectsByType<VoxelEngine.WaterSim.ProceduralWaterPatchRenderer>(FindObjectsInactive.Include))
+            {
+                if (legacyWrappedWater != null) Object.DestroyImmediate(legacyWrappedWater);
+            }
 
             var performance = bootstrap.GetComponent<VoxelEngine.WaterSim.FluidPerformanceBootstrap>();
             if (performance == null) performance = bootstrap.gameObject.AddComponent<VoxelEngine.WaterSim.FluidPerformanceBootstrap>();

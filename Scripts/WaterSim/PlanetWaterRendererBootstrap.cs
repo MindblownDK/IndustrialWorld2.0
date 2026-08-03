@@ -19,8 +19,8 @@ namespace VoxelEngine.WaterSim
         [Range(1, 24)] public int meshBuildBudgetPerFrame = 4;
         [Tooltip("Render detailed voxel liquid surfaces for lakes, rivers, buckets, and oil pools.")]
         public bool renderVoxelLiquidSurfaces = true;
-        [Tooltip("Render the in-house camera-local curved ocean shell around the active spherical body.")]
-        public bool renderNativeSphericalOceanPatch = true;
+        [Tooltip("Legacy compatibility only. Real ocean water now renders exclusively from generated voxel ocean basins; the old wrapped shell is disabled.")]
+        [HideInInspector] public bool renderNativeSphericalOceanPatch = false;
         [Range(64f, 1024f)] public float nativeOceanSearchRadius = 384f;
         [Range(4f, 32f)] public float nativeOceanTileSize = 12f;
 
@@ -37,12 +37,14 @@ namespace VoxelEngine.WaterSim
 
         private float _nextLiquidReschedule;
         private ProceduralWaterPatchRenderer _nativeOcean;
+        private bool _legacyPatchesDisabled;
 
         private void Awake()
         {
             FluidManager.EnsureInstance();
             NativeWaterWakeSystem.EnsureInstance();
             ApplyMaterialOverrides();
+            DisableLegacyWrappedPatches();
             EnsureNativeOceanPatch();
             PublishSphericalShaderContext();
             ApplyProfile();
@@ -51,6 +53,7 @@ namespace VoxelEngine.WaterSim
         private void Update()
         {
             ApplyMaterialOverrides();
+            if (!_legacyPatchesDisabled) DisableLegacyWrappedPatches();
             EnsureNativeOceanPatch();
             PublishSphericalShaderContext();
             if (renderVoxelLiquidSurfaces)
@@ -61,29 +64,28 @@ namespace VoxelEngine.WaterSim
             ApplyProfile();
         }
 
+        private void DisableLegacyWrappedPatches()
+        {
+            _legacyPatchesDisabled = true;
+            foreach (var patch in Object.FindObjectsByType<ProceduralWaterPatchRenderer>(FindObjectsInactive.Include))
+            {
+                if (patch == null) continue;
+                patch.enabled = false;
+                var filter = patch.GetComponent<MeshFilter>();
+                if (filter != null && filter.sharedMesh != null) filter.sharedMesh.Clear();
+                var renderer = patch.GetComponent<MeshRenderer>();
+                if (renderer != null) renderer.enabled = false;
+            }
+        }
+
         private void EnsureNativeOceanPatch()
         {
-            bool shouldRender = renderNativeSphericalOceanPatch && ActiveWorld.Current is SphereWorld;
+            // A full mathematical sea shell looks like water in every mined cave below sea
+            // level. Real water is now rendered only from actual generated fluid voxels, so
+            // explicitly disable any retained legacy patch component.
             if (_nativeOcean == null)
                 _nativeOcean = GetComponent<ProceduralWaterPatchRenderer>();
-
-            if (!shouldRender)
-            {
-                if (_nativeOcean != null) _nativeOcean.enabled = false;
-                return;
-            }
-
-            if (_nativeOcean == null)
-                _nativeOcean = gameObject.AddComponent<ProceduralWaterPatchRenderer>();
-
-            _nativeOcean.enabled = true;
-            _nativeOcean.viewpoint = ActiveWorld.Current?.Viewer;
-            _nativeOcean.searchRadius = nativeOceanSearchRadius;
-            _nativeOcean.tileSize = nativeOceanTileSize;
-            _nativeOcean.fastSphericalOceanPatch = true;
-            _nativeOcean.waterMaterial = waterMaterialOverride != null
-                ? waterMaterialOverride
-                : WaterMeshBuilder.GetWaterMaterial();
+            if (_nativeOcean != null) _nativeOcean.enabled = false;
         }
 
         private void ScheduleNearbyLiquidChunks()
@@ -123,9 +125,8 @@ namespace VoxelEngine.WaterSim
         private void ApplyMaterialOverrides()
         {
             WaterMeshBuilder.RenderingEnabled = renderVoxelLiquidSurfaces;
-            // The native curved patch owns open sea. Voxel topology owns every finite body.
-            WaterMeshBuilder.SkipVoxelWaterAtOrBelowSeaLevel = renderNativeSphericalOceanPatch
-                && ActiveWorld.Current is SphereWorld;
+            // Real generated ocean/lake/pool voxels own every visible water surface.
+            WaterMeshBuilder.SkipVoxelWaterAtOrBelowSeaLevel = false;
             WaterMeshBuilder.SetMaterialOverrides(waterMaterialOverride, oilMaterialOverride);
         }
 

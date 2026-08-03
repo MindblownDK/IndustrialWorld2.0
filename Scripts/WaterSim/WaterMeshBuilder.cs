@@ -29,11 +29,10 @@ namespace VoxelEngine.WaterSim
         public static bool RenderingEnabled { get; set; } = true;
 
         /// <summary>
-        /// When true, water at or below the spherical sea shell is rendered by the
-        /// in-house curved ocean patch. Voxel meshes continue to own lakes, rivers,
-        /// buckets, and all oil pools, avoiding duplicate surfaces at the shoreline.
+        /// Legacy compatibility switch. Native water now renders every real generated liquid
+        /// surface, including ocean basins; keep this false to prevent a fake wrapped sea shell.
         /// </summary>
-        public static bool SkipVoxelWaterAtOrBelowSeaLevel { get; set; } = true;
+        public static bool SkipVoxelWaterAtOrBelowSeaLevel { get; set; } = false;
 
         /// <summary>
         /// Small negative bias in voxel units for the native patch/voxel hand-off.

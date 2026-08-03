@@ -36,6 +36,10 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
         {
             Name "ForwardLit"
             Tags { "LightMode"="UniversalForward" }
+            // Spherical surface-net quads can cross Cartesian chunk faces with opposite
+            // winding. Two-sided terrain prevents far-side/radial seam holes; normals are
+            // explicitly oriented away from the body core in SurfaceNetsJob.
+            Cull Off
 
             HLSLPROGRAM
             #pragma vertex   vert
