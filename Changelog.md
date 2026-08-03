@@ -1,9 +1,28 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.9.2-dev`
+**Current Version:** `7.9.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.9.3-dev] Oil Reservoir Generation & Cockpit Compile Recovery
+
+**Type:** PATCH — compile recovery and world-generation correction; no save schema or public API break.
+
+#### 🛢 Purpose-built oil sites
+- Removed the spherical-world underwater crude-noise branch that created random oil patches throughout water volume.
+- Rebuilt `OilReservoirDecorator` around one coherent site: a shallow exposed oil puddle, a narrow radial/vertical bore, and a deep filled reservoir sourced from real crude-oil ore markers.
+- Surface probing now follows ocean water to the true water/air boundary instead of mistaking the sea floor or an unloaded chunk boundary for the surface.
+- Added bounded deferred retries for deep marker chunks that finish before their streamed surface chunks, plus targeted fluid/terrain remesh scheduling for the completed feature.
+
+#### 🧰 Immediate compile correction
+- Restored the missing public `GridEntity.PilotDampenerHoldActive` state consumed by the revised dampener controller and Flight Computer HUD.
+- This resolves the reported `CS0103` / `CS1061` errors in `GridEntity` and `GridPilotHud`.
+
+#### ✅ Static delivery checks
+- Revised C# source parses cleanly locally. Unity compilation and Play Mode validation remain pending from Thomas.
+
+---
 
 ### [7.9.2-dev] Cockpit Hold, Grid Battery Charging & Ship Control LCD
 

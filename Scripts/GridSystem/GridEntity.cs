@@ -97,6 +97,8 @@ namespace VoxelEngine.GridSystem
         public bool    DampenersOn { get; set; } = true;
         /// <summary>True while an unpiloted, unlocked grid is autonomously cancelling drift.</summary>
         public bool AutonomousDampenersActive { get; private set; }
+        /// <summary>True while an occupied cockpit is actively cancelling all grid velocity.</summary>
+        public bool PilotDampenerHoldActive { get; private set; }
         /// <summary>Current local atmosphere/space state for HUDs and future flight systems.</summary>
         public AtmosphereSample CurrentAtmosphere => AtmosphereManager.Sample(transform.position);
 
