@@ -3,55 +3,49 @@ using UnityEngine;
 namespace VoxelEngine.WaterSim
 {
     /// <summary>
-    /// v3.20 – automatically applies Crest-optimized performance defaults
-    /// to FluidManager and disables legacy voxel water mesh rendering.
-    /// Eliminates lag spikes and chunk-gap artifacts.
+    /// Applies performance-safe defaults for the in-house spherical voxel-water stack.
+    /// The CPU liquid simulation remains authoritative for buckets, pumps, pools,
+    /// pipes, buoyancy, and persistence; optional GPU density assist stays disabled
+    /// unless a project explicitly enables it.
     /// </summary>
     [DefaultExecutionOrder(-1000)]
     public class FluidPerformanceBootstrap : MonoBehaviour
     {
-        [Header("Crest Mode")]
-        public bool enableCrestMode = true;
+        [Header("Native Water Mode")]
+        [Tooltip("Render native voxel lakes/pools plus the curved spherical ocean patch.")]
+        public bool renderNativeWater = true;
+        [Tooltip("Optional GPU density-assist. Disable for the lowest-overhead fully native path.")]
+        public bool useNativeVolumetricAssist;
 
         [Header("Tuning")]
         [Range(4f, 12f)] public float tickRate = 8f;
         [Range(2, 12)] public int maxChunksPerTick = 6;
         public int computeFrameSkip = 2;
 
-        private void Awake()
-        {
-            Apply();
-        }
+        private void Awake() => Apply();
+        private void OnEnable() => Apply();
 
-        private void OnEnable()
-        {
-            Apply();
-        }
-
-        [ContextMenu("Apply Now")]
+        [ContextMenu("Apply Native Water Defaults")]
         public void Apply()
         {
-            // Disable legacy voxel surface – Crest is authoritative visual in v3.20
-            WaterMeshBuilder.RenderingEnabled = false;
+            WaterMeshBuilder.RenderingEnabled = renderNativeWater;
+            // Open-ocean water is rendered by ProceduralWaterPatchRenderer's curved shell;
+            // detailed voxel meshes retain lakes, rivers, buckets, and all oil.
+            WaterMeshBuilder.SkipVoxelWaterAtOrBelowSeaLevel = true;
 
-            var fm = FluidManager.Instance;
-            if (fm == null)
-            {
-                FluidManager.EnsureInstance();
-                fm = FluidManager.Instance;
-            }
-            if (fm == null) return;
+            FluidManager.EnsureInstance();
+            var manager = FluidManager.Instance;
+            if (manager == null) return;
 
-            fm.tickRate = tickRate;
-            fm.maxChunksPerTick = maxChunksPerTick;
-            fm.computeIterationsPerFrame = 1;
-            fm.computeFrameSkip = computeFrameSkip;
-            // Use reflection to set useCrestVisualMode = enableCrestMode
-            var t = typeof(FluidManager);
-            var f = t.GetField("useCrestVisualMode", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
-            if (f != null) f.SetValue(fm, enableCrestMode);
+            manager.tickRate = tickRate;
+            manager.maxChunksPerTick = maxChunksPerTick;
+            manager.computeIterationsPerFrame = 1;
+            manager.computeFrameSkip = Mathf.Max(1, computeFrameSkip);
+            manager.useNativeVolumetricAssist = useNativeVolumetricAssist;
+            NativeWaterWakeSystem.EnsureInstance();
 
-            Debug.Log($"[FluidPerformanceBootstrap] CrestMode={enableCrestMode} tick={tickRate} chunks/tick={maxChunksPerTick} – lag optimized (v3.20.0)");
+            Debug.Log($"[FluidPerformanceBootstrap] NativeWater tick={tickRate:0.#} chunks/tick={maxChunksPerTick} " +
+                      $"GPU-assist={useNativeVolumetricAssist}.");
         }
     }
 }

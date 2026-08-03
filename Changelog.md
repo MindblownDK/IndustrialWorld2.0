@@ -1,9 +1,35 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.10.2-dev`
+**Current Version:** `7.11.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.11.0-dev] Native Spherical Water, Pool Pumps & Boat Wakes
+
+**Type:** MINOR — new save-compatible native spherical-water presentation and wake system, with additive liquid-state persistence.
+
+#### 🌊 Native water — no external ocean runtime
+- Removed all shipped external-ocean integration scripts, binders, clip/depth helpers, oil controller, and wake emitter code. Step 8 / Step 16 now removes legacy scene components and deletes `Assets/Liquid` when that old package path exists; `VoxelEngineAssets/Fluids` remains as the game’s own bucket/pump/tank/pipe content.
+- Re-enabled and rebuilt the in-house curved ocean renderer as a camera-local **spherical sea shell**. It publishes the active body centre to `VoxelWaterURP`, so radial waves, normals, and water visuals no longer use raw scene-origin math.
+- Native voxel meshes retain finite lakes, rivers, buckets, and all crude pools; the curved shell owns open ocean water without double surfaces.
+- Added in-house radial boat wakes: maritime ships submit actual submerged movement to a 16-stamp native wake registry, and the water shader renders fading V-wake foam plus subtle surface displacement around spherical planets.
+
+#### 🪣 Pools, pumps, tanks, and pipes
+- Repaired finite-pool pumping: `FluidManager.ScanPool` now returns the scanned cells as well as litres/voxel count, allowing a normal finite source to truly drain into the pump buffer instead of only reporting volume.
+- Pump source acquisition now follows local radial down/tangent directions on spherical planets, not global world-Y. Its existing UI continues to show **NO SOURCE / FINITE / ∞ INFINITE**, pool litres, pool voxels, threshold progress, intake/output rates, pipe-network status, and the live internal tank.
+- Large connected water or crude pools are classified as infinite; the pump creates liquid directly in its internal tank without draining that source. Finite sources drain voxel-by-voxel. Output now honours the connected pipe network’s bottleneck before filling compatible tanks.
+- Added additive save/restore for world and grid liquid tank contents plus Water Pump internal liquid type/buffer.
+
+#### 🛢 Dense crude geology
+- Refined natural crude sites to visibly form **surface seep → tapered radial funnel → deep reservoir** on the existing oil-rich spherical worlds.
+- Per the approved game rule, crude oil is denser than water and sinks through it in deliberately slow deterministic pulses; its fall and lateral spread are much slower than water.
+- Buckets, pumps, tanks, pipes, and the refinery share the same voxel-liquid types. The Pirate-only Jack Pump infinite-node gate remains unchanged.
+
+#### ✅ Static delivery checks
+- Source parsing and native-water/oil/pump regression assertions are run locally. Unity compilation and Play Mode validation remain pending from Thomas.
+
+---
 
 ### [7.10.2-dev] Oil-Rich Seep Distribution & Pirate-Only Infinite Nodes
 

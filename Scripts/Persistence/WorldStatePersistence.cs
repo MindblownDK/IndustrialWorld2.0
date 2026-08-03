@@ -334,6 +334,22 @@ namespace VoxelEngine.Persistence
 
         private static void CaptureFactoryRuntime(GameObject go, SavedPlacedBlock entry)
         {
+            var liquidTank = go.GetComponentInChildren<VoxelEngine.Fluids.WaterTank>(true);
+            if (liquidTank != null)
+            {
+                entry.hasFluidTankState = true;
+                entry.fluidTankType = (int)liquidTank.liquidType;
+                entry.fluidTankLitres = Mathf.Clamp(liquidTank.StoredLitres, 0f, Mathf.Max(0f, liquidTank.capacityLitres));
+            }
+
+            var liquidPump = go.GetComponentInChildren<VoxelEngine.Fluids.WaterPump>(true);
+            if (liquidPump != null)
+            {
+                entry.hasFluidPumpState = true;
+                entry.fluidPumpType = (int)liquidPump.liquidType;
+                entry.fluidPumpLitres = Mathf.Clamp(liquidPump.internalLitres, 0f, Mathf.Max(0f, liquidPump.internalCapacityLitres));
+            }
+
             var belt = go.GetComponentInChildren<VoxelEngine.Simulation.ConveyorBelt>(true);
             if (belt != null)
             {
@@ -1006,6 +1022,11 @@ namespace VoxelEngine.Persistence
                 durability = s == null || s.IsEmpty ? 0 : s.durability,
                 charge = s == null || s.IsEmpty ? 0 : s.charge
             };
+            if (s != null && s.payload is VoxelEngine.Items.LiquidType liquidPayload)
+            {
+                saved.hasLiquidPayload = true;
+                saved.liquidPayloadType = (int)liquidPayload;
+            }
             if (s != null && s.payload is VoxelEngine.Storage.StorageDrawer.DrawerItemPayload payload)
             {
                 saved.isPackedDrawer = true;
@@ -1548,6 +1569,26 @@ namespace VoxelEngine.Persistence
 
         private void RestoreFactoryRuntime(GameObject go, SavedPlacedBlock saved)
         {
+            if (saved.hasFluidTankState)
+            {
+                var liquidTank = go.GetComponentInChildren<VoxelEngine.Fluids.WaterTank>(true);
+                if (liquidTank != null && System.Enum.IsDefined(typeof(VoxelEngine.Items.LiquidType), saved.fluidTankType))
+                {
+                    liquidTank.liquidType = (VoxelEngine.Items.LiquidType)saved.fluidTankType;
+                    liquidTank.water = Mathf.Clamp(saved.fluidTankLitres, 0f, Mathf.Max(0f, liquidTank.capacityLitres));
+                }
+            }
+
+            if (saved.hasFluidPumpState)
+            {
+                var liquidPump = go.GetComponentInChildren<VoxelEngine.Fluids.WaterPump>(true);
+                if (liquidPump != null && System.Enum.IsDefined(typeof(VoxelEngine.Items.LiquidType), saved.fluidPumpType))
+                {
+                    liquidPump.liquidType = (VoxelEngine.Items.LiquidType)saved.fluidPumpType;
+                    liquidPump.internalLitres = Mathf.Clamp(saved.fluidPumpLitres, 0f, Mathf.Max(0f, liquidPump.internalCapacityLitres));
+                }
+            }
+
             var belt = go.GetComponentInChildren<VoxelEngine.Simulation.ConveyorBelt>(true);
             if (belt != null && saved.conveyorItems != null)
             {
@@ -2152,7 +2193,10 @@ namespace VoxelEngine.Persistence
                     Debug.LogWarning($"[WorldState] Saved item '{e.itemId}' was not present in the runtime item cache. Run the relevant Voxel Engine Setup step to repair the persistence catalog before saving again; this stack could not be restored this session.");
                 return new ItemStack();
             }
-            return new ItemStack { item = item, count = e.count, durability = e.durability, charge = e.charge };
+            var stack = new ItemStack { item = item, count = e.count, durability = e.durability, charge = e.charge };
+            if (e.hasLiquidPayload && System.Enum.IsDefined(typeof(VoxelEngine.Items.LiquidType), e.liquidPayloadType))
+                stack.payload = (VoxelEngine.Items.LiquidType)e.liquidPayloadType;
+            return stack;
         }
 
         private void DeserializeInto(ItemContainer c, SavedContainer sc)
@@ -2297,6 +2341,14 @@ namespace VoxelEngine.Persistence
             // hasBatteryCharge false and the block keeps its prefab charge.
             public bool hasBatteryCharge;
             public float batteryCharge;
+            // Additive native liquid persistence. Legacy saves leave the flags false and
+            // keep prefab defaults, while new saves retain tank contents and pump buffers.
+            public bool hasFluidTankState;
+            public int fluidTankType;
+            public float fluidTankLitres;
+            public bool hasFluidPumpState;
+            public int fluidPumpType;
+            public float fluidPumpLitres;
             // Wind turbine part condition (0..100). 0 = "not set" (legacy saves)
             // and restores as factory-new. Only written for WindTurbinePart blocks.
             public float windCondition;
@@ -2455,6 +2507,10 @@ namespace VoxelEngine.Persistence
             // Secondary per-instance pool (additive, save-compatible — legacy saves
             // deserialize as 0). Hybrid jetpacks store their power cell (Wh) here.
             public int charge;
+            // Additive bucket/liquid payload. A filled bucket must remember whether it
+            // carries water or crude oil across save/load.
+            public bool hasLiquidPayload;
+            public int liquidPayloadType;
             public bool isPackedDrawer;
             public string packedOriginalItemId;
             public string drawerInstanceId;

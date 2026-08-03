@@ -6,13 +6,12 @@
 //
 // Liquids:
 //   • Water (WaterLiquid) — fast, low viscosity, high throughput
-//   • Crude Oil (CrudeOil) — viscous, slow fall, slow spread, floats over water
+//   • Crude Oil (CrudeOil) — dense, viscous, slow fall, slow spread, sinks through water
 //
 // Rules:
-//  1. Gravity: liquid falls down; oil capped at 64/tick vs water 255
-//  2. Oil remains above water so authored surface puddles stay visible
+//  1. Gravity: liquid falls down; oil is capped far below water throughput
+//  2. Dense oil slowly displaces full water cells downward in deterministic pulses
 //  3. Pressure equalization: horizontal flow from high to low pressure
-//     Viscosity limits transfer step per tick (oil 10, water 48)
 //  4. Micro-cleanup: tiny floating drops (< 3 level) with air below just fall
 //  5. Clean-up: empty fluid voxels reset to Air so terrain queries stay sane
 
@@ -36,6 +35,7 @@ namespace VoxelEngine.WaterSim
         public int downZ;
 
         public NativeArray<int> changed; // single-element array, 0 or 1
+        public int simulationStep;
 
         private const byte AirMat        = (byte)MaterialId.Air;
         private const byte WaterMat      = (byte)MaterialId.WaterLiquid;
@@ -44,9 +44,10 @@ namespace VoxelEngine.WaterSim
 
         // Viscosity parameters — oil is much more viscous than water
         private const int WaterMaxFall        = 255;
-        private const int OilMaxFall          = 32;   // slow — viscous drag
+        private const int OilMaxFall          = 20;   // dense but viscous: sinks distinctly slower than water
         private const int WaterHorizontalStep = 64;
-        private const int OilHorizontalStep   = 6;    // very slow horizontal spread
+        private const int OilHorizontalStep   = 4;    // very slow horizontal spread
+        private const int OilWaterSwapStride  = 8;    // full-cell density swaps pulse at 1/8 of fluid ticks
 
         public void Execute()
         {
@@ -102,10 +103,26 @@ namespace VoxelEngine.WaterSim
                 int maxFall = isOil ? OilMaxFall : WaterMaxFall;
                 int hStep   = isOil ? OilHorizontalStep : WaterHorizontalStep;
 
-                // Oil is less dense than water. Do not swap it downward through a
-                // water cell: a reservoir seep must remain a readable surface puddle.
                 int belowI = Pad(x + downX, y + downY, z + downZ, SP);
                 var below = voxels[belowI];
+
+                // Dense crude oil sinks through water, but the one-material-per-voxel save
+                // format cannot represent a partial mix. Swap only fully occupied cells and
+                // stagger those swaps deterministically so oil descends much slower than water.
+                if (isOil && !below.IsSolid && below.waterLevel >= 250 && below.material != OilMat
+                    && v.waterLevel >= 250 && ShouldDisplaceWater(x, y, z))
+                {
+                    byte waterLevel = below.waterLevel;
+                    byte oilLevel = v.waterLevel;
+                    below.material = OilMat;
+                    below.waterLevel = oilLevel;
+                    v.material = WaterMat;
+                    v.waterLevel = waterLevel;
+                    voxels[belowI] = below;
+                    voxels[i] = v;
+                    any = true;
+                    continue;
+                }
 
                 // --- Rule 1: gravity — vertical down-flow ---
                 if (!below.IsSolid && CanShareCell(below, liquidMat))
@@ -186,6 +203,15 @@ namespace VoxelEngine.WaterSim
             n.waterLevel      = (byte)(n.waterLevel + transfer);
             n.material        = liquidMat;
             voxels[ni] = n;
+        }
+
+        private bool ShouldDisplaceWater(int x, int y, int z)
+        {
+            unchecked
+            {
+                int hash = x * 73856093 ^ y * 19349663 ^ z * 83492791 ^ simulationStep * 265443577;
+                return (hash & (OilWaterSwapStride - 1)) == 0;
+            }
         }
 
         private static byte NormalizeFluidMaterial(ref Voxel voxel)

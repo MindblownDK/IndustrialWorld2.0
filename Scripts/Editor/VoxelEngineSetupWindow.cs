@@ -118,7 +118,7 @@ namespace VoxelEngine.EditorTools
             AddWizardButton(scroll, "5. Build Tiered Building Content (10 player-scale families x 4 tiers + Hammer)", BuildTieredContent, 40);
             AddWizardButton(scroll, "6. Build Power Content (4 wire tiers + Generator + Battery + Light)", BuildPowerContent, 40);
             AddWizardButton(scroll, "7. Build Research Content (Tech tree + Science packs + Research Lab)", BuildResearchContent, 40);
-            AddWizardButton(scroll, "8. Build Fluid Content (Water bucket, tank, pump, pipes)", BuildFluidContent, 40);
+            AddWizardButton(scroll, "8. Build Native Spherical Fluid Content (buckets, pool pumps, tanks, pipes, wakes)", BuildFluidContent, 48);
 
             AddSpacer(scroll, 6);
             AddInfo(scroll,
@@ -186,14 +186,13 @@ namespace VoxelEngine.EditorTools
 
             AddSpacer(scroll, 6);
             AddInfo(scroll,
-                "Step 16 configures Crest water for the active scene:\n" +
-                "  • UI Toolkit panel fit settings\n" +
-                "  • Shallow/clear Crest water material settings\n" +
-                "  • Crest dynamic waves + flow simulation where available\n" +
-                "  • Planet water bootstrap material overrides\n" +
-                "  • Water-only maritime wake emitters on ship grids\n" +
-                "Re-runnable. Idempotent. Run after importing Crest into Liquid/.");
-            AddWizardButton(scroll, "16. Configure Crest Water Integration (UI fit, shallow water, flow + boat wakes)", CrestWaterSetupUtility.Configure, 56);
+                "Step 16 rebuilds the active scene's native spherical water stack:\n" +
+                "  • Removes legacy external-ocean components and Assets/Liquid when present\n" +
+                "  • Creates native VoxelWaterURP water + viscous crude materials\n" +
+                "  • Curved spherical ocean shell, voxel pools/lakes, and radial boat wakes\n" +
+                "  • Finite/infinite pool pump telemetry, internal tanks, and existing pipe transport\n" +
+                "Re-runnable. Idempotent. Run after Step 8.");
+            AddWizardButton(scroll, "16. Rebuild Native Spherical Water (remove legacy ocean, pools, pipes + boat wakes)", BuildFluidContent, 56);
 
             AddSpacer(scroll, 6);
             AddInfo(scroll,
@@ -2980,6 +2979,7 @@ namespace VoxelEngine.EditorTools
             const string recipesFolder  = fluidFolder + "/Recipes";
             const string itemsFolder    = ASSET_ROOT + "/Items";
 
+            int removedLegacyCrestObjects = RemoveLegacyCrestWaterContent();
             EnsureFolder(fluidFolder);
             EnsureFolder(prefabsFolder);
             EnsureFolder(blocksFolder);
@@ -3005,7 +3005,7 @@ namespace VoxelEngine.EditorTools
             }
             bucket.itemId       = "water_bucket";
             bucket.displayName  = "Water Bucket";
-            bucket.description  = "LMB scoops a water voxel into the bucket. RMB places it elsewhere — and it spreads to fill holes! Use durability to track if it's filled (1 = full, 0 = empty).";
+            bucket.description  = "LMB scoops water or crude oil into the bucket. RMB places the carried liquid into the native voxel simulation. Durability tracks filled state (1 = full, 0 = empty).";
             bucket.iconTint     = new Color(0.20f, 0.50f, 0.85f);
             bucket.maxStack     = 1;
             bucket.maxDurability= 1;
@@ -3139,7 +3139,7 @@ namespace VoxelEngine.EditorTools
             var bTankGlass = MakeFluidBlock("Block_TankGlass", "Water Tank (Glass)", new Color(0.55f,0.75f,0.95f), tankGlass,
                 "Same as the solid tank but the water level is visible through the glass.");
             var bPump      = MakeFluidBlock("Block_WaterPump", "Water Pump",         new Color(0.55f,0.30f,0.20f), pumpPrefab,
-                "Pulls 20 L/s of water into the network while powered (~30 W). Connect cables to power, pipes to tanks.");
+                "Scans a nearby water or crude-oil pool, shows finite litres or ∞ source status, buffers liquid internally, then sends it through connected pipes and tanks while powered (~30 W).");
             var bPipeSolid = MakeFluidBlock("Block_PipeSolid", "Liquid Pipe (Solid) · 0.5 m", new Color(0.55f,0.30f,0.20f), pipeSolid,
                 "Carries up to 50 L/s of any supported liquid. Place between tanks, pumps, and liquid-fed machines to connect them.");
             var bPipeGlass = MakeFluidBlock("Block_PipeGlass", "Liquid Pipe (Glass) · 0.5 m", new Color(0.55f,0.75f,0.95f), pipeGlass,
@@ -3166,15 +3166,188 @@ namespace VoxelEngine.EditorTools
             if (Object.FindAnyObjectByType<VoxelEngine.Fluids.FluidSimManager>() == null)
                 new GameObject("FluidSimManager").AddComponent<VoxelEngine.Fluids.FluidSimManager>();
 
+            ConfigureNativeSphericalWaterRuntime(prefabsFolder);
+            UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(UnityEngine.SceneManagement.SceneManager.GetActiveScene());
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
             EditorUtility.DisplayDialog("Voxel Engine",
-                "Fluid content created!\n\n" +
-                "* Water Bucket (LMB scoop, RMB place — spreads to fill holes)\n" +
-                "* Water Tank (Solid + Glass variants, 1000L each)\n" +
-                "* Water Pump (20 L/s, ~30 W)\n" +
+                "Native spherical fluid content created!\n\n" +
+                "* Buckets preserve water or crude oil as real voxel liquid\n" +
+                "* Water Tank (Solid + Glass variants, 10,000 L each)\n" +
+                "* Pool Pump: finite volume / ∞ source UI + internal tank + pipe output\n" +
+                "* Native curved spherical ocean, voxel lakes/pools, and ship wakes\n" +
                 "* Liquid Pipes (Solid + Glass, 50 L/s capacity, any supported liquid)\n" +
-                "* 6 new recipes added to RecipeRegistry\n" +
-                "* FluidNetworkManager + FluidSimManager spawned in scene",
+                "* Legacy Crest content removed: " + removedLegacyCrestObjects + " scene components/objects\n" +
+                "* FluidNetworkManager + FluidSimManager + NativeWaterWakeSystem ready",
                 "OK");
+        }
+
+        // ────────────────────────────────────────────────────────────
+        //  Native spherical water helpers (Step 8)
+        // ────────────────────────────────────────────────────────────
+        private static void ConfigureNativeSphericalWaterRuntime(string prefabsFolder)
+        {
+            var water = EnsureNativeWaterMaterial(
+                $"{prefabsFolder}/Mat_NativeSphericalWater.mat",
+                "Mat_NativeSphericalWater",
+                new Color(0.08f, 0.52f, 0.82f, 0.94f),
+                new Color(0.01f, 0.06f, 0.22f, 0.98f),
+                deepWaveAmplitude: 0.85f,
+                waveSpeed: 0.55f);
+            var oil = EnsureNativeWaterMaterial(
+                $"{prefabsFolder}/Mat_NativeCrudeOil.mat",
+                "Mat_NativeCrudeOil",
+                new Color(0.12f, 0.085f, 0.05f, 0.92f),
+                new Color(0.02f, 0.015f, 0.01f, 0.98f),
+                deepWaveAmplitude: 0.04f,
+                waveSpeed: 0.12f);
+
+            var bootstrap = Object.FindAnyObjectByType<VoxelEngine.WaterSim.PlanetWaterRendererBootstrap>(FindObjectsInactive.Include);
+            if (bootstrap == null)
+            {
+                var root = new GameObject("NativeSphericalWater");
+                bootstrap = root.AddComponent<VoxelEngine.WaterSim.PlanetWaterRendererBootstrap>();
+            }
+            bootstrap.renderVoxelLiquidSurfaces = true;
+            bootstrap.renderNativeSphericalOceanPatch = true;
+            bootstrap.meshBuildBudgetPerFrame = Mathf.Clamp(bootstrap.meshBuildBudgetPerFrame, 4, 12);
+            bootstrap.nativeOceanSearchRadius = Mathf.Clamp(bootstrap.nativeOceanSearchRadius, 192f, 512f);
+            bootstrap.nativeOceanTileSize = Mathf.Clamp(bootstrap.nativeOceanTileSize, 8f, 16f);
+            bootstrap.waterMaterialOverride = water;
+            bootstrap.oilMaterialOverride = oil;
+
+            var performance = bootstrap.GetComponent<VoxelEngine.WaterSim.FluidPerformanceBootstrap>();
+            if (performance == null) performance = bootstrap.gameObject.AddComponent<VoxelEngine.WaterSim.FluidPerformanceBootstrap>();
+            performance.renderNativeWater = true;
+            performance.useNativeVolumetricAssist = false;
+
+            if (Object.FindAnyObjectByType<VoxelEngine.WaterSim.NativeWaterWakeSystem>(FindObjectsInactive.Include) == null)
+                new GameObject("NativeWaterWakeSystem").AddComponent<VoxelEngine.WaterSim.NativeWaterWakeSystem>();
+
+            EditorUtility.SetDirty(bootstrap);
+            EditorUtility.SetDirty(performance);
+            EditorUtility.SetDirty(water);
+            EditorUtility.SetDirty(oil);
+        }
+
+        private static Material EnsureNativeWaterMaterial(string path, string materialName, Color shallow, Color deep,
+            float deepWaveAmplitude, float waveSpeed)
+        {
+            var shader = Shader.Find("VoxelEngine/VoxelWaterURP")
+                ?? Shader.Find("Universal Render Pipeline/Lit")
+                ?? Shader.Find("Standard");
+            var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+            bool created = material == null;
+            if (created)
+            {
+                material = new Material(shader) { name = materialName };
+                AssetDatabase.CreateAsset(material, path);
+            }
+
+            // Setup owns the native conversion, but once a non-Crest native material exists,
+            // preserve hand-tuned properties on subsequent runs.
+            bool legacyExternal = material.shader == null || material.shader.name.StartsWith("Crest/");
+            if (created || legacyExternal)
+            {
+                material.shader = shader;
+                material.name = materialName;
+                material.SetOverrideTag("RenderType", "Transparent");
+                material.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+                material.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+                material.SetInt("_ZWrite", 0);
+                material.SetInt("_Cull", (int)UnityEngine.Rendering.CullMode.Off);
+                material.renderQueue = 3000;
+                if (material.HasProperty("_Surface")) material.SetFloat("_Surface", 1f);
+                if (material.HasProperty("_ShallowColor")) material.SetColor("_ShallowColor", shallow);
+                if (material.HasProperty("_DeepColor")) material.SetColor("_DeepColor", deep);
+                if (material.HasProperty("_FoamColor")) material.SetColor("_FoamColor", Color.white);
+                if (material.HasProperty("_DeepWaveAmplitude")) material.SetFloat("_DeepWaveAmplitude", deepWaveAmplitude);
+                if (material.HasProperty("_DeepWaveSpeed")) material.SetFloat("_DeepWaveSpeed", waveSpeed);
+                if (material.HasProperty("_SecondaryWaveAmplitude")) material.SetFloat("_SecondaryWaveAmplitude", deepWaveAmplitude * 0.42f);
+                if (material.HasProperty("_SecondaryWaveSpeed")) material.SetFloat("_SecondaryWaveSpeed", waveSpeed * 1.65f);
+                if (material.HasProperty("_NormalScale")) material.SetFloat("_NormalScale", deepWaveAmplitude < 0.1f ? 0.45f : 2.2f);
+                if (material.HasProperty("_Gloss")) material.SetFloat("_Gloss", deepWaveAmplitude < 0.1f ? 1f : 0.94f);
+                if (material.HasProperty("_PlanetWaveBlend")) material.SetFloat("_PlanetWaveBlend", 1f);
+            }
+            return material;
+        }
+
+        /// <summary>
+        /// Removes old external-ocean scene/prefab components, bridge material, and the
+        /// previous Assets/Liquid package path when it exists. This never
+        /// touches VoxelEngineAssets/Fluids, which owns our buckets, pumps, tanks, and pipes.
+        /// </summary>
+        private static int RemoveLegacyCrestWaterContent()
+        {
+            int removed = 0;
+            var transforms = Object.FindObjectsByType<Transform>(FindObjectsInactive.Include);
+            foreach (var transform in transforms)
+            {
+                if (transform == null || !transform.gameObject.scene.IsValid()) continue;
+                removed += RemoveLegacyCrestComponents(transform.gameObject);
+            }
+
+            // Existing authored prefabs may have received a legacy wake/binder component in a
+            // prior setup pass. Remove only those identified external-water components; leave all
+            // custom meshes, materials, colliders, and gameplay components untouched.
+            foreach (var guid in AssetDatabase.FindAssets("t:Prefab"))
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                if (string.IsNullOrEmpty(path) || path.StartsWith("Assets/Liquid/", System.StringComparison.Ordinal)) continue;
+                GameObject root = null;
+                try
+                {
+                    root = PrefabUtility.LoadPrefabContents(path);
+                    int prefabRemoved = 0;
+                    foreach (var transform in root.GetComponentsInChildren<Transform>(true))
+                        prefabRemoved += RemoveLegacyCrestComponents(transform.gameObject);
+                    if (prefabRemoved > 0)
+                    {
+                        PrefabUtility.SaveAsPrefabAsset(root, path);
+                        removed += prefabRemoved;
+                    }
+                }
+                catch (System.Exception ex)
+                {
+                    Debug.LogWarning($"[NativeWaterSetup] Could not inspect legacy-water prefab '{path}': {ex.Message}");
+                }
+                finally
+                {
+                    if (root != null) PrefabUtility.UnloadPrefabContents(root);
+                }
+            }
+
+            foreach (var rootName in new[] { "Crest Ocean", "Crest Oil Ocean", "CrestVoxelBridge", "Crest Wake Probes" })
+            {
+                var root = GameObject.Find(rootName);
+                if (root == null) continue;
+                Object.DestroyImmediate(root);
+                removed++;
+            }
+
+            const string oldBridge = "Assets/Resources/CrestOcean_VoxelBridge.mat";
+            if (AssetDatabase.LoadAssetAtPath<Material>(oldBridge) != null && AssetDatabase.DeleteAsset(oldBridge)) removed++;
+            if (AssetDatabase.IsValidFolder("Assets/Liquid") && AssetDatabase.DeleteAsset("Assets/Liquid")) removed++;
+            return removed;
+        }
+
+        private static int RemoveLegacyCrestComponents(GameObject go)
+        {
+            if (go == null) return 0;
+            int removed = 0;
+            foreach (var component in go.GetComponents<Component>())
+            {
+                if (component == null) continue;
+                string typeName = component.GetType().FullName ?? string.Empty;
+                if (!typeName.StartsWith("Crest.", System.StringComparison.Ordinal)
+                    && !typeName.StartsWith("VoxelEngine.WaterSim.Crest", System.StringComparison.Ordinal)
+                    && !typeName.StartsWith("VoxelEngine.Maritime.Crest", System.StringComparison.Ordinal))
+                    continue;
+                Object.DestroyImmediate(component);
+                removed++;
+            }
+            return removed;
         }
 
         // ============================================================

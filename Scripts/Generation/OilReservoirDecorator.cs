@@ -226,7 +226,7 @@ namespace VoxelEngine.Generation
 
                 var touched = new HashSet<Chunk>();
                 BuildSurfacePuddle(world, surface, up, puddleRadius, touched);
-                BuildVerticalBore(world, surface, reservoirTop, up, 1, touched);
+                BuildRadialFunnel(world, surface, reservoirTop, up, infinite ? 2 : 1, 1, touched);
                 BuildReservoir(world, Vector3Int.RoundToInt(reservoirCenter), reservoirRadius, touched);
                 FlushTouchedChunks(world, touched);
 
@@ -347,8 +347,12 @@ namespace VoxelEngine.Generation
             }
         }
 
-        private static void BuildVerticalBore(SphereWorld world, Vector3Int surface, Vector3 reservoirTop,
-            Vector3 up, int radius, HashSet<Chunk> touched)
+        /// <summary>
+        /// A tapered radial funnel visibly connects the surface seep to its deep reservoir.
+        /// Dense crude then settles through this path more slowly than water in FluidSimJob.
+        /// </summary>
+        private static void BuildRadialFunnel(SphereWorld world, Vector3Int surface, Vector3 reservoirTop,
+            Vector3 up, int mouthRadius, int throatRadius, HashSet<Chunk> touched)
         {
             Vector3 start = surface - up;
             Vector3 direction = reservoirTop - start;
@@ -357,7 +361,9 @@ namespace VoxelEngine.Generation
 
             for (int step = 0; step <= steps; step++)
             {
-                Vector3 center = Vector3.Lerp(start, reservoirTop, step / (float)steps);
+                float progress = step / (float)steps;
+                int radius = Mathf.Max(throatRadius, Mathf.RoundToInt(Mathf.Lerp(mouthRadius, throatRadius, progress)));
+                Vector3 center = Vector3.Lerp(start, reservoirTop, progress);
                 for (int a = -radius; a <= radius; a++)
                 for (int b = -radius; b <= radius; b++)
                 {

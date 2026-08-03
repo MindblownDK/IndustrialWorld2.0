@@ -1,55 +1,89 @@
 using UnityEngine;
 using VoxelEngine.Core;
+using VoxelEngine.Cosmos;
 
 namespace VoxelEngine.WaterSim
 {
     /// <summary>
-    /// Ensures the planet water runtime is alive in every game scene without changing
-    /// any existing save/runtime contract. This keeps the simulation, mesh generation,
-    /// buoyancy probes, pumps, and generators active together.
+    /// Owns the native water presentation for spherical worlds: voxel-backed pools and
+    /// lakes, a camera-local curved ocean shell, radial shader context, wakes, buoyancy,
+    /// pumps, and the shared liquid simulation. No external ocean renderer is required.
     /// </summary>
     public class PlanetWaterRendererBootstrap : MonoBehaviour
     {
-        [Tooltip("Optional shared ocean profile. If null, the runtime defaults baked into the water materials are used.")]
+        [Tooltip("Optional shared ocean profile. If null, the native water materials use their safe defaults.")]
         public PlanetOceanProfile oceanProfile;
 
-        [Tooltip("How many queued liquid chunks may rebuild their water meshes per frame.")]
+        [Header("Native Surface Budget")]
+        [Tooltip("How many queued voxel-liquid chunks may rebuild their detailed meshes per frame.")]
         [Range(1, 24)] public int meshBuildBudgetPerFrame = 4;
-
-        [Tooltip("When Crest is used as the scene water renderer, leave voxel liquid data active for pumps/buoyancy but stop rendering the old chunk-local liquid surface meshes.")]
-        public bool renderVoxelLiquidSurfaces = true; // v3.20.2 – Crest material bridged to voxel mesh, no ocean plane
+        [Tooltip("Render detailed voxel liquid surfaces for lakes, rivers, buckets, and oil pools.")]
+        public bool renderVoxelLiquidSurfaces = true;
+        [Tooltip("Render the in-house camera-local curved ocean shell around the active spherical body.")]
+        public bool renderNativeSphericalOceanPatch = true;
+        [Range(64f, 1024f)] public float nativeOceanSearchRadius = 384f;
+        [Range(4f, 32f)] public float nativeOceanTileSize = 12f;
 
         [Tooltip("Schedules nearby generated liquid chunks in case a scene was previously saved with liquid surfaces disabled.")]
         public bool rescheduleVisibleLiquidSurfaces = true;
-
         [Range(1, 8)] public int liquidRescheduleChunkRadius = 3;
         [Range(0.25f, 5f)] public float liquidRescheduleInterval = 1.0f;
 
-        private float _nextLiquidReschedule;
-
-        [Header("Visual Materials")]
-        [Tooltip("Optional imported/stylized water material. Simulation, pumps and buoyancy keep using voxel liquid data.")]
+        [Header("Native Materials")]
+        [Tooltip("Optional setup-authored water material using VoxelEngine/VoxelWaterURP.")]
         public Material waterMaterialOverride;
-
-        [Tooltip("Optional imported/stylized oil material. If left empty, the built-in viscous oil material is used.")]
+        [Tooltip("Optional setup-authored viscous crude-oil material using VoxelEngine/VoxelWaterURP.")]
         public Material oilMaterialOverride;
+
+        private float _nextLiquidReschedule;
+        private ProceduralWaterPatchRenderer _nativeOcean;
 
         private void Awake()
         {
             FluidManager.EnsureInstance();
+            NativeWaterWakeSystem.EnsureInstance();
             ApplyMaterialOverrides();
+            EnsureNativeOceanPatch();
+            PublishSphericalShaderContext();
             ApplyProfile();
         }
 
         private void Update()
         {
             ApplyMaterialOverrides();
+            EnsureNativeOceanPatch();
+            PublishSphericalShaderContext();
             if (renderVoxelLiquidSurfaces)
             {
                 ScheduleNearbyLiquidChunks();
                 WaterMeshBuilder.Pump(Mathf.Max(1, meshBuildBudgetPerFrame));
             }
             ApplyProfile();
+        }
+
+        private void EnsureNativeOceanPatch()
+        {
+            bool shouldRender = renderNativeSphericalOceanPatch && ActiveWorld.Current is SphereWorld;
+            if (_nativeOcean == null)
+                _nativeOcean = GetComponent<ProceduralWaterPatchRenderer>();
+
+            if (!shouldRender)
+            {
+                if (_nativeOcean != null) _nativeOcean.enabled = false;
+                return;
+            }
+
+            if (_nativeOcean == null)
+                _nativeOcean = gameObject.AddComponent<ProceduralWaterPatchRenderer>();
+
+            _nativeOcean.enabled = true;
+            _nativeOcean.viewpoint = ActiveWorld.Current?.Viewer;
+            _nativeOcean.searchRadius = nativeOceanSearchRadius;
+            _nativeOcean.tileSize = nativeOceanTileSize;
+            _nativeOcean.fastSphericalOceanPatch = true;
+            _nativeOcean.waterMaterial = waterMaterialOverride != null
+                ? waterMaterialOverride
+                : WaterMeshBuilder.GetWaterMaterial();
         }
 
         private void ScheduleNearbyLiquidChunks()
@@ -70,40 +104,49 @@ namespace VoxelEngine.WaterSim
                 var coord = center + new Vector3Int(x, y, z);
                 if (!world.TryGetChunk(coord, out var chunk) || chunk == null || !chunk.isGenerated) continue;
 
-                // Generation/meshing jobs can still be in flight for chunks that are already marked
-                // generated. Complete them before main-thread voxel reads to satisfy Unity's
-                // NativeArray safety system and prevent SphereChunkGenJob read/write races.
                 world.CompleteGenJobForChunk(chunk);
                 world.CompleteMeshJobForChunk(chunk);
-
-                if (ChunkHasVisibleLiquid(chunk))
-                    WaterMeshBuilder.Schedule(chunk);
+                if (ChunkHasVisibleLiquid(chunk)) WaterMeshBuilder.Schedule(chunk);
             }
         }
 
         private static bool ChunkHasVisibleLiquid(Chunk chunk)
         {
-            const int S = VoxelConstants.CHUNK_SIZE;
-            for (int z = 0; z < S; z += 2)
-            for (int y = 0; y < S; y += 2)
-            for (int x = 0; x < S; x += 2)
-            {
-                var v = chunk.GetVoxelLocal(x, y, z);
-                if (FluidMaterialUtility.IsFluid(v)) return true;
-            }
+            const int size = VoxelConstants.CHUNK_SIZE;
+            for (int z = 0; z < size; z += 2)
+            for (int y = 0; y < size; y += 2)
+            for (int x = 0; x < size; x += 2)
+                if (FluidMaterialUtility.IsFluid(chunk.GetVoxelLocal(x, y, z))) return true;
             return false;
         }
 
         private void ApplyMaterialOverrides()
         {
             WaterMeshBuilder.RenderingEnabled = renderVoxelLiquidSurfaces;
+            // The native curved patch owns open sea. Voxel topology owns every finite body.
+            WaterMeshBuilder.SkipVoxelWaterAtOrBelowSeaLevel = renderNativeSphericalOceanPatch
+                && ActiveWorld.Current is SphereWorld;
             WaterMeshBuilder.SetMaterialOverrides(waterMaterialOverride, oilMaterialOverride);
+        }
+
+        private static void PublishSphericalShaderContext()
+        {
+            if (ActiveWorld.Current is SphereWorld sphere && sphere.body != null)
+            {
+                Vector3 center = sphere.body.transform.position;
+                Shader.SetGlobalVector("_VoxelWaterBodyCenter", new Vector4(center.x, center.y, center.z, 1f));
+                Shader.SetGlobalFloat("_VoxelWaterIsPlanet", 1f);
+            }
+            else
+            {
+                Shader.SetGlobalVector("_VoxelWaterBodyCenter", Vector4.zero);
+                Shader.SetGlobalFloat("_VoxelWaterIsPlanet", 0f);
+            }
         }
 
         private void ApplyProfile()
         {
             if (oceanProfile == null) return;
-
             Shader.SetGlobalFloat("_PlanetOceanDeepWaveAmplitude", oceanProfile.deepWaveAmplitude);
             Shader.SetGlobalFloat("_PlanetOceanDeepWaveFrequency", oceanProfile.deepWaveFrequency);
             Shader.SetGlobalFloat("_PlanetOceanDeepWaveSpeed", oceanProfile.deepWaveSpeed);

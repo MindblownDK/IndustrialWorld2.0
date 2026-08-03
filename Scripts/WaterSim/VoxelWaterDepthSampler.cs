@@ -6,7 +6,7 @@ namespace VoxelEngine.WaterSim
 {
     /// <summary>
     /// Main-thread helper for deriving real water depth from procedural voxel data.
-    /// Crest handles visuals, but this keeps shallow/deep decisions grounded in the
+    /// The native spherical water renderer handles visuals, while this keeps shallow/deep decisions grounded in the
     /// generated world: beaches, lakes, pumps and maritime systems all read the same data.
     /// </summary>
     public static class VoxelWaterDepthSampler

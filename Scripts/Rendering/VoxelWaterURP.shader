@@ -82,6 +82,17 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float  _FlowNormalStrength, _FlowFoamStrength;
             CBUFFER_END
 
+            // Native spherical-water context + a compact wake registry. These globals are
+            // written by PlanetWaterRendererBootstrap / NativeWaterWakeSystem and deliberately
+            // avoid a dependency on an external ocean renderer or flat XZ wake texture.
+            #define VOXEL_WAKE_MAX 16
+            float4 _VoxelWaterBodyCenter;
+            float _VoxelWaterIsPlanet;
+            int _VoxelWakeCount;
+            float4 _VoxelWakePositions[VOXEL_WAKE_MAX];
+            float4 _VoxelWakeDirections[VOXEL_WAKE_MAX];
+            float4 _VoxelWakeData[VOXEL_WAKE_MAX];
+
             struct A2V
             {
                 float4 posOS  : POSITION;
@@ -110,6 +121,51 @@ Shader "VoxelEngine/VoxelWaterURP"
             }
             float FBM(float2 p) { float v = 0; float a = 0.5; [unroll] for (int i = 0; i < 4; i++) { v += ValueNoise(p) * a; p = p * 2.03 + 17.1; a *= 0.5; } return v; }
             float FBM6(float2 p) { float v = 0; float a = 0.5; [unroll] for (int i = 0; i < 6; i++) { v += ValueNoise(p) * a; p = p * 2.03 + 17.1; a *= 0.5; } return v; }
+
+            float3 NativeWaterUp(float3 worldPos)
+            {
+                float3 radial = worldPos - _VoxelWaterBodyCenter.xyz;
+                float radialLengthSq = dot(radial, radial);
+                radial = radialLengthSq > 0.0001 ? radial * rsqrt(radialLengthSq) : float3(0, 1, 0);
+                return normalize(lerp(float3(0, 1, 0), radial, saturate(_VoxelWaterIsPlanet)));
+            }
+
+            float NativeWakeFoam(float3 worldPos, float3 waterUp)
+            {
+                float foam = 0.0;
+                [unroll]
+                for (int wi = 0; wi < VOXEL_WAKE_MAX; wi++)
+                {
+                    if (wi >= _VoxelWakeCount) continue;
+                    float4 wakePos = _VoxelWakePositions[wi];
+                    float4 wakeDir = _VoxelWakeDirections[wi];
+                    float4 wakeData = _VoxelWakeData[wi];
+                    float life = wakeData.z;
+                    if (life <= 0.001) continue;
+
+                    float3 direction = wakeDir.xyz;
+                    float directionLengthSq = dot(direction, direction);
+                    if (directionLengthSq <= 0.0001) continue;
+                    direction *= rsqrt(directionLengthSq);
+
+                    float3 delta = worldPos - wakePos.xyz;
+                    delta -= waterUp * dot(delta, waterUp);
+                    float forward = dot(delta, direction);
+                    float trail = max(0.0, -forward);
+                    float wakeLength = max(0.1, wakeData.x);
+                    if (trail > wakeLength) continue;
+
+                    float lateral = length(delta - direction * forward);
+                    float width = max(0.2, wakeDir.w);
+                    float spread = width + trail * 0.24;
+                    float lineWidth = lerp(0.22, max(0.5, width * 0.55), saturate(trail / wakeLength));
+                    float vLine = exp(-abs(lateral - spread) / lineWidth);
+                    float propWash = exp(-lateral / max(0.4, width * 0.75)) * exp(-trail / max(0.4, wakeLength * 0.25));
+                    float tailFade = saturate(1.0 - trail / wakeLength);
+                    foam = max(foam, (vLine * 0.95 + propWash * 0.7) * tailFade * wakeData.y * life);
+                }
+                return saturate(foam);
+            }
 
             float3 Gerstner(float2 xz, float2 dir, float amp, float freq, float speed, float chop, float t)
             {
@@ -163,7 +219,7 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float3 posOS = i.posOS.xyz;
                 float3 worldPos = TransformObjectToWorld(posOS);
 
-                float3 radialUp = normalize(worldPos);
+                float3 radialUp = NativeWaterUp(worldPos);
                 float topFacing = saturate(max(i.normOS.y, dot(normalize(i.normOS), radialUp)));
                 float shoreDepthMask = saturate(i.color.r);
                 float tideMask = i.color.g;
@@ -183,9 +239,14 @@ Shader "VoxelEngine/VoxelWaterURP"
                     worldPos = TransformObjectToWorld(posOS);
                 }
 
+                // Wake displacement stays deliberately subtle; foam carries most of the
+                // readable boat trail while this keeps the surface tied to radial planet up.
+                float wakeDisplacement = NativeWakeFoam(worldPos, radialUp);
+                worldPos += radialUp * wakeDisplacement * 0.055;
+
                 o.posWS  = worldPos;
                 o.posCS  = TransformWorldToHClip(worldPos);
-                o.normWS = normalize(worldPos);
+                o.normWS = NativeWaterUp(worldPos);
                 o.fog    = ComputeFogFactor(o.posCS.z);
                 o.scrPos = ComputeScreenPos(o.posCS);
                 o.flowUV = i.uv2;
@@ -207,7 +268,7 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float tideMask = i.data.y;
                 float geometryDepth01 = saturate(i.data.w);
 
-                float3 radialUp = normalize(i.posWS);
+                float3 radialUp = NativeWaterUp(i.posWS);
                 float3 tanA = cross(radialUp, float3(0,1,0));
                 if (dot(tanA, tanA) < 0.001) tanA = cross(radialUp, float3(0,0,1));
                 tanA = normalize(tanA);
@@ -247,7 +308,8 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float flowFoam = saturate(flowSpeed - 1.2) * _FlowFoamStrength * 0.4;
                 float2 foamScrollUV = surfUV + normalize(flowDir + 0.001) * t * 0.3;
                 flowFoam *= saturate(FBM(foamScrollUV * 1.5) * 1.5);
-                float foam = saturate(shoreFoam + crestFoam + flowFoam);
+                float wakeFoam = NativeWakeFoam(i.posWS, radialUp);
+                float foam = saturate(shoreFoam + crestFoam + flowFoam + wakeFoam);
 
                 float NdV = saturate(dot(V, N));
                 float fresnel = pow(1.0 - NdV, _FresnelPower);

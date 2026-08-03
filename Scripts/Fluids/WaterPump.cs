@@ -103,7 +103,10 @@ namespace VoxelEngine.Fluids
         private void PushToNetwork(float dt)
         {
             if (internalLitres <= 0.01f || network == null) return;
-            float remaining = Mathf.Min(internalLitres, outputLps * dt);
+            float pipeLimit = network.bottleneckLps > 0f
+                ? network.bottleneckLps * Mathf.Max(0f, dt)
+                : outputLps * Mathf.Max(0f, dt);
+            float remaining = Mathf.Min(internalLitres, outputLps * dt, pipeLimit);
             foreach (var node in network.nodes)
             {
                 if (remaining <= 0.01f) break;
@@ -141,7 +144,7 @@ namespace VoxelEngine.Fluids
 
             FluidManager.EnsureInstance();
 
-            Vector3Int origin = world.WorldToVoxel(transform.position + Vector3.down * 0.5f);
+            Vector3Int origin = world.WorldToVoxel(transform.position);
             if (!FindSeed(world, origin, out var seed)) return;
 
             _lastSourceVoxel = seed;
@@ -150,7 +153,7 @@ namespace VoxelEngine.Fluids
             if (FluidManager.Instance != null)
             {
                 var result = FluidManager.Instance.ScanPool(
-                    seed, liquidType, reach, infiniteVoxelThreshold, maxPoolScanVoxels);
+                    seed, liquidType, reach, infiniteVoxelThreshold, maxPoolScanVoxels, _poolCells);
                 _sourceVoxels = result.voxels;
                 _sourceLitres = result.litres;
                 _sourceInfinite = result.isInfinite;
@@ -167,16 +170,33 @@ namespace VoxelEngine.Fluids
 
         private bool FindSeed(VoxelEngine.Core.IVoxelWorld world, Vector3Int origin, out Vector3Int seed)
         {
-            int r = Mathf.CeilToInt(reach);
-            for (int dy = 0; dy >= -r; dy--)
-            for (int dz = -r; dz <= r; dz++)
-            for (int dx = -r; dx <= r; dx++)
+            int r = Mathf.Clamp(Mathf.CeilToInt(reach), 1, 12);
+            Vector3 down = Vector3.down;
+            if (world is VoxelEngine.Cosmos.SphereWorld sphere && sphere.body != null)
+                down = -sphere.body.UpAt(transform.position);
+            if (down.sqrMagnitude < 0.0001f) down = Vector3.down;
+            down.Normalize();
+
+            Vector3 reference = Mathf.Abs(Vector3.Dot(down, Vector3.up)) < 0.9f ? Vector3.up : Vector3.right;
+            Vector3 tangentA = Vector3.Cross(reference, down).normalized;
+            Vector3 tangentB = Vector3.Cross(down, tangentA).normalized;
+            Vector3 pumpPosition = transform.position;
+
+            for (int depth = 0; depth <= r; depth++)
+            for (int a = -r; a <= r; a++)
+            for (int b = -r; b <= r; b++)
             {
-                var p = origin + new Vector3Int(dx, dy, dz);
+                if (a * a + b * b > r * r) continue;
+                Vector3 probe = pumpPosition + down * (depth + 0.5f) + tangentA * a + tangentB * b;
+                var p = world.WorldToVoxel(probe);
                 var v = world.GetVoxelWorld(p);
-                if (FluidMaterialUtility.Matches(v, liquidType)) { seed = p; return true; }
+                if (FluidMaterialUtility.Matches(v, liquidType))
+                {
+                    seed = p;
+                    return true;
+                }
             }
-            seed = default;
+            seed = origin;
             return false;
         }
 
@@ -228,7 +248,9 @@ namespace VoxelEngine.Fluids
             if (_poolCells.Count == 0) ScanSource();
             if (_poolCells.Count == 0) return 0f;
 
-            _poolCells.Sort((a, b) => b.y.CompareTo(a.y));
+            // World-Y ordering is wrong on a spherical planet. Drain from the closest
+            // sampled source cells so a pump behaves consistently on every latitude.
+            _poolCells.Sort((a, b) => (a - _lastSourceVoxel).sqrMagnitude.CompareTo((b - _lastSourceVoxel).sqrMagnitude));
             for (int i = 0; i < _poolCells.Count && drained < litres; i++)
             {
                 float remaining = litres - drained;
