@@ -1857,11 +1857,16 @@ namespace VoxelEngine.UI
             header.Add(title);
 
             bool online = equipment.HasBreathingKit;
-            var status = new Label(online ? "SEALED" : "OPEN");
+            var playerStats = VoxelEngine.Player.PlayerStats.Instance;
+            string supportState = playerStats != null ? playerStats.LifeSupportStatus : (online ? "SEALED" : "OPEN");
+            bool hazard = playerStats != null && playerStats.RequiresLifeSupport;
+            var status = new Label(hazard ? supportState : (online ? "SEALED" : "OPEN"));
             status.style.marginLeft = 8;
             status.style.fontSize = 9;
             status.style.unityFontStyleAndWeight = FontStyle.Bold;
-            status.style.color = online ? new Color(0.30f, 0.95f, 0.55f) : new Color(0.95f, 0.62f, 0.18f);
+            status.style.color = hazard
+                ? (online ? new Color(0.30f, 0.95f, 0.55f) : UITheme.AccentRed)
+                : online ? new Color(0.30f, 0.95f, 0.55f) : new Color(0.95f, 0.62f, 0.18f);
             status.style.backgroundColor = new StyleColor(new Color(0f, 0f, 0f, 0.32f));
             status.style.paddingLeft = 7;
             status.style.paddingRight = 7;

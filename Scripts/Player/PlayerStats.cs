@@ -11,6 +11,14 @@ using VoxelEngine.Research;
 
 namespace VoxelEngine.Player
 {
+    /// <summary>Current atmosphere state used by player oxygen and life-support UI.</summary>
+    public enum OxygenEnvironment
+    {
+        Breathable = 0,
+        Underwater = 1,
+        Vacuum = 2,
+    }
+
     public class PlayerStats : MonoBehaviour
     {
         public static PlayerStats Instance { get; private set; }
@@ -54,6 +62,10 @@ namespace VoxelEngine.Player
         public float Hunger      { get; private set; }
         public float MaxOxygen   { get; private set; }
         public float Oxygen      { get; private set; }
+        public OxygenEnvironment CurrentOxygenEnvironment { get; private set; } = OxygenEnvironment.Breathable;
+        public bool RequiresLifeSupport => CurrentOxygenEnvironment != OxygenEnvironment.Breathable;
+        public bool IsVacuumExposure => CurrentOxygenEnvironment == OxygenEnvironment.Vacuum;
+        public string LifeSupportStatus { get; private set; } = "BREATHABLE";
 
         public event Action OnStatsChanged;
 
@@ -90,23 +102,42 @@ namespace VoxelEngine.Player
             Hunger -= Time.deltaTime * 0.08f; // ~20 min to go from 100 to 0
             if (Hunger < 0f) { Hunger = 0f; TakeDamage(Time.deltaTime * 2f); }
 
-            // Oxygen: drains when head underwater. A sealed helmet + oxygen tank
-            // extends reserve and slows drain; this is the foundation for the later
-            // vacuum/room-pressure life-support pass.
+            // Oxygen/life support: underwater and non-breathable atmosphere both
+            // consume the same reserve. A sealed helmet + oxygen tank extends that
+            // reserve and slows drain; oxygen-efficiency armor upgrades apply through
+            // PlayerEquipment.OxygenDrainMultiplier.
             var equipment = GetComponent<PlayerEquipment>();
             MaxOxygen = baseMaxOxygen + (equipment != null ? equipment.BonusOxygen : 0f);
-            var ws = GetComponent<PlayerWaterState>();
-            bool oxygenBlocked = ws != null && (ws.IsHeadUnderwater || (ws.IsSwimming && ws.WaterDepth > 0.90f));
+            var waterState = GetComponent<PlayerWaterState>();
+            CurrentOxygenEnvironment = ResolveOxygenEnvironment(waterState);
+            bool oxygenBlocked = CurrentOxygenEnvironment != OxygenEnvironment.Breathable;
+            bool sealed = equipment != null && equipment.HasBreathingKit;
+
             if (oxygenBlocked)
             {
+                float baseDrain = CurrentOxygenEnvironment == OxygenEnvironment.Vacuum ? 9f : 5f;
+                // An unsealed player loses breathable reserve rapidly in vacuum.
+                if (CurrentOxygenEnvironment == OxygenEnvironment.Vacuum && !sealed) baseDrain *= 2f;
                 float drainMul = equipment != null ? equipment.OxygenDrainMultiplier : 1f;
-                Oxygen -= Time.deltaTime * 5f * drainMul;
-                if (Oxygen < 0f) { Oxygen = 0f; TakeDamage(Time.deltaTime * 10f); }
+                Oxygen -= Time.deltaTime * baseDrain * drainMul;
+                if (Oxygen <= 0f)
+                {
+                    Oxygen = 0f;
+                    float suffocationDamage = CurrentOxygenEnvironment == OxygenEnvironment.Vacuum ? 18f : 10f;
+                    ApplyOxygenFailureDamage(suffocationDamage * Time.deltaTime);
+                }
             }
             else
             {
-                Oxygen = Mathf.Min(MaxOxygen, Oxygen + Time.deltaTime * 25f); // fast regen
+                Oxygen = Mathf.Min(MaxOxygen, Oxygen + Time.deltaTime * 25f); // fast recharge in breathable air
             }
+
+            LifeSupportStatus = CurrentOxygenEnvironment switch
+            {
+                OxygenEnvironment.Underwater => sealed ? "SUBMERGED · SEALED" : "SUBMERGED · HOLDING BREATH",
+                OxygenEnvironment.Vacuum => sealed ? "VACUUM · LIFE SUPPORT" : "VACUUM · NO LIFE SUPPORT",
+                _ => "BREATHABLE",
+            };
 
             // Poison: damage-over-time that bypasses armor (Manticore venom, etc.).
             if (_poisonTimer > 0f)
@@ -138,6 +169,29 @@ namespace VoxelEngine.Player
             if (Stamina > MaxStamina) Stamina = MaxStamina;
             if (Hunger > MaxHunger)   Hunger = MaxHunger;
             if (Oxygen > MaxOxygen)   Oxygen = MaxOxygen;
+        }
+
+        private OxygenEnvironment ResolveOxygenEnvironment(PlayerWaterState waterState)
+        {
+            bool underwater = waterState != null
+                && (waterState.IsHeadUnderwater || (waterState.IsSwimming && waterState.WaterDepth > 0.90f));
+            if (underwater) return OxygenEnvironment.Underwater;
+
+            var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
+            if (body == null || body.settings == null) return OxygenEnvironment.Breathable;
+            float density = VoxelEngine.GridSystem.AtmosphereManager.GetAirDensity(transform.position);
+            bool breathable = body.settings.HasOxygen
+                && density >= PlayerEquipment.AtmosphereDensityThreshold;
+            return breathable ? OxygenEnvironment.Breathable : OxygenEnvironment.Vacuum;
+        }
+
+        /// <summary>Suffocation/vacuum damage bypasses physical armor mitigation.</summary>
+        private void ApplyOxygenFailureDamage(float amount)
+        {
+            if (amount <= 0f) return;
+            Health = Mathf.Max(0f, Health - amount);
+            OnStatsChanged?.Invoke();
+            if (Health <= 0f) Die();
         }
 
         // ============================================================

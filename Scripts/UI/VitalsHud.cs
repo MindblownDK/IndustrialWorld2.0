@@ -95,8 +95,15 @@ namespace VoxelEngine.UI
             UpdateBarMl(_h2Fill, _h2Val, h2Cur, h2Max, ref _prevH2, new Color(0.35f, 0.85f, 1.0f));
 
             UpdateBar(_hungerFill, _hungerVal, st.Hunger, st.MaxHunger, ref _prevHunger, T.AccentAmber);
-            UpdateBar(_oxyFill, _oxyVal, st.Oxygen, st.MaxOxygen, ref _prevOxy,
-                new Color(0.18f, 0.68f, 0.94f));
+            Color oxygenColor = st.CurrentOxygenEnvironment switch
+            {
+                OxygenEnvironment.Vacuum => T.AccentRed,
+                OxygenEnvironment.Underwater => T.AccentAmber,
+                _ => new Color(0.18f, 0.68f, 0.94f),
+            };
+            UpdateBar(_oxyFill, _oxyVal, st.Oxygen, st.MaxOxygen, ref _prevOxy, oxygenColor);
+            if (_oxyIcon != null)
+                _oxyIcon.style.color = new StyleColor(oxygenColor);
 
             TickPowerPill();
         }

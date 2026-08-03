@@ -1,9 +1,30 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.3.2-dev`
+**Current Version:** `7.4.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.4.0-dev] Vacuum Life Support Foundations
+
+**Type:** MINOR — new save-compatible player survival behavior using existing life-support equipment.
+
+#### 🫁 Breathable air, underwater, and vacuum
+- Added runtime oxygen-environment resolution for breathable atmosphere, underwater exposure, and vacuum/airless bodies.
+- Player oxygen now drains in vacuum as well as underwater; no helmet/tank in vacuum drains reserve rapidly and suffocation damage bypasses physical armor.
+- A sealed Space Helmet plus Oxygen Tank expands reserve and applies the existing tank/helmet/armor oxygen-efficiency drain reductions in both hazards.
+- Breathable atmosphere restores oxygen quickly as before.
+
+#### 📟 Clear life-support feedback
+- Added `LifeSupportStatus`, `RequiresLifeSupport`, and vacuum exposure state to player stats.
+- Oxygen vitals now turn amber underwater and red in vacuum.
+- The inventory Life Support panel reports the current environmental status, including sealed/unsealed underwater and vacuum states.
+
+#### 🛠️ Setup-connected equipment copy
+- Step 11 now describes the Space Helmet and Oxygen Tank as active underwater/vacuum equipment instead of future-only foundations.
+- No new manual assets are required; existing helmet, tank, armor oxygen-efficiency, UI slots, and save payloads remain compatible.
+
+---
 
 ### [7.3.2-dev] Wrapped Belts, Snap Roll, Editable Gears & Ground Hold
 

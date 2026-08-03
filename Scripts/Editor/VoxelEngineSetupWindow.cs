@@ -4124,7 +4124,7 @@ namespace VoxelEngine.EditorTools
             var spaceHelmet = GetOrCreateAsset<VoxelEngine.Items.SpaceHelmetItem>($"{MISC_ITEMS}/Equip_SpaceHelmet.asset");
             spaceHelmet.itemId = "space_helmet";
             spaceHelmet.displayName = "Space Helmet";
-            spaceHelmet.description = "Sealed helmet foundation for underwater and future vacuum life support. Equip with an Oxygen Tank for extended breathing.";
+            spaceHelmet.description = "Sealed helmet for underwater and vacuum life support. Equip with an Oxygen Tank to carry a larger oxygen reserve and slow oxygen drain.";
             spaceHelmet.iconTint = new Color(0.72f, 0.86f, 1.00f);
             spaceHelmet.maxStack = 1;
             spaceHelmet.massPerUnit = 6f;
@@ -4136,7 +4136,7 @@ namespace VoxelEngine.EditorTools
             var oxygenTank = GetOrCreateAsset<VoxelEngine.Items.OxygenTankItem>($"{MISC_ITEMS}/Equip_OxygenTank.asset");
             oxygenTank.itemId = "oxygen_tank";
             oxygenTank.displayName = "Oxygen Tank";
-            oxygenTank.description = "Wearable oxygen reserve. Equip with a Space Helmet to extend underwater air and prepare for future vacuum survival.";
+            oxygenTank.description = "Wearable oxygen reserve. Equip with a sealed Space Helmet to survive longer underwater and in vacuum; oxygen-efficiency armor upgrades further reduce drain.";
             oxygenTank.iconTint = new Color(0.42f, 0.75f, 1.00f);
             oxygenTank.maxStack = 1;
             oxygenTank.massPerUnit = 8f;
