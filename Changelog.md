@@ -1,9 +1,28 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.11.1-dev`
+**Current Version:** `7.11.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.11.2-dev] Full Planet Surface LOD & Active-World Mining Repair
+
+**Type:** PATCH — full-sphere LOD, terrain/grass wrapping, interaction, and cave-water follow-up; no save/API break.
+
+#### 🪐 Full planet surface from orbit
+- Replaced the unreliable white built-in-material LOD with a native vertex-colour `PlanetSurfaceLodURP` shader. The active body now renders as its sampled ocean/land/mountain sphere rather than a white coarse hexasphere.
+- Upgraded the full-planet mesh into true near/mid/far vertex-budget LODs (10,242 / 2,562 / 642 vertices depending on altitude and graphics tier), while local voxel chunks remain the close-range editable detail layer.
+- Repaired parent-body binding and transparent hand-off: the far shell is disabled on the ground, never writes depth over terrain, then returns as a colored spherical surface in flight/orbit. Distant system bodies continue using their authored `displayColor` proxies.
+
+#### ⛏ Terrain, grass, caves, and liquid interaction
+- Fixed hand/pickaxe routing to the active spherical world and its real material registry, including radial hit resolution and liquid-collider ray filtering.
+- Converted grass/scatter placement and wind bending to radial/tangent coordinates. Terrain material noise, slopes, and triplanar coordinates now use the active body centre, eliminating the top-of-planet-only appearance.
+- Restricted generated water to real ocean basins, repaired legacy dry-cave water locally as a player mines, and lets real local liquid trigger swim/escape and mining correctly.
+
+#### ✅ Static delivery checks
+- Source parsing and targeted spherical-terrain/LOD/mining/water regression assertions are run locally. Unity compilation and Play Mode validation remain pending from Thomas.
+
+---
 
 ### [7.11.1-dev] Spherical Terrain, Dry Caves & Planet LOD Repair
 

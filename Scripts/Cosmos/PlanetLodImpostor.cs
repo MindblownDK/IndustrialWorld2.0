@@ -37,9 +37,9 @@ namespace VoxelEngine.Cosmos
         [Tooltip("MeshRenderer for the LOD sphere. Auto-created if missing.")]
         public MeshRenderer meshRenderer;
 
-        [Range(16, 512)]
-        [Tooltip("Icosphere subdivision level (higher = smoother from space, more verts).")]
-        public int resolution = 128;
+        [Range(642, 10242)]
+        [Tooltip("Highest vertex budget for the sampled full-planet surface. Runtime distance LOD selects a cheaper mesh farther out.")]
+        public int resolution = 2562;
 
         [Tooltip("Optional biome registry for accurate surface colours.")]
         public BiomeRegistry biomeRegistry;
@@ -56,7 +56,7 @@ namespace VoxelEngine.Cosmos
         private Mesh _mesh;
         private Material _lodMaterial;
         private NativeArray<BiomeData> _biomes;
-        private int _lastResolution;
+        private int _lastEffectiveResolution;
         private int _lastSeed;
 
         private void OnEnable()
@@ -73,10 +73,11 @@ namespace VoxelEngine.Cosmos
             var resolvedBody = ResolveBody();
             if (resolvedBody == null || resolvedBody.settings == null) return;
 
+            int effectiveResolution = ResolveRuntimeResolution(resolvedBody);
             bool needRebuild = !_biomes.IsCreated ||
-                               _lastResolution != resolution ||
-                               _lastSeed != body.genParams.seed;
-            if (needRebuild) Rebuild();
+                               _lastEffectiveResolution != effectiveResolution ||
+                               _lastSeed != resolvedBody.genParams.seed;
+            if (needRebuild) Rebuild(effectiveResolution);
 
             UpdateFade(resolvedBody);
         }
@@ -91,6 +92,20 @@ namespace VoxelEngine.Cosmos
                 return body;
             }
             return body;
+        }
+
+        private int ResolveRuntimeResolution(CelestialBody resolvedBody)
+        {
+            int highest = Mathf.Clamp(resolution, 642, 10242);
+            if (viewer == null || resolvedBody == null) return highest;
+
+            float altitude = Mathf.Max(0f, resolvedBody.AltitudeAt(viewer.position));
+            float radius = Mathf.Max(1f, resolvedBody.SurfaceRadius);
+            // The body remains a full mesh at every distance, but its sampling budget steps
+            // down in orbit. This is a genuine far/mid/near planet LOD rather than chunk loading.
+            if (altitude >= radius * 4f) return Mathf.Min(highest, 642);
+            if (altitude >= radius * 1.2f) return Mathf.Min(highest, 2562);
+            return highest;
         }
 
         private void EnsureComponents()
@@ -111,50 +126,46 @@ namespace VoxelEngine.Cosmos
         {
             if (_lodMaterial != null) return;
 
-            // Try shaders in order of preference. URP/Unlit is ideal: it renders vertex colours
-            // (multiplied by _BaseColor) AND supports alpha transparency — both critical for the LOD.
-            Shader shader = Shader.Find("Universal Render Pipeline/Unlit")
+            // The built-in URP materials do not reliably consume mesh vertex colours, which
+            // produced the reported white hexasphere. This native shader explicitly shades the
+            // sampled ocean/land colour map and supports a clean alpha hand-off to voxel chunks.
+            Shader shader = Shader.Find("VoxelEngine/PlanetSurfaceLodURP")
+                          ?? Shader.Find("Universal Render Pipeline/Unlit")
                           ?? Shader.Find("Universal Render Pipeline/Lit")
                           ?? Shader.Find("Unlit/Color")
                           ?? Shader.Find("Standard");
 
-            _lodMaterial = new Material(shader);
-            _lodMaterial.name = "Mat_PlanetLOD_Runtime";
-
-            // White base colour so vertex colours pass through unchanged.
-            if (_lodMaterial.HasProperty("_BaseColor"))
-                _lodMaterial.SetColor("_BaseColor", Color.white);
-            if (_lodMaterial.HasProperty("_Color"))
-                _lodMaterial.SetColor("_Color", Color.white);
-
-            // For URP/Lit: switch to transparent surface so alpha fade works.
-            if (_lodMaterial.HasProperty("_Surface"))
-            {
-                _lodMaterial.SetFloat("_Surface", 1f);  // 1 = transparent
-                _lodMaterial.SetFloat("_Blend", 0f);    // 0 = alpha blend
-            }
-            // For Unlit/Color: enable alpha.
+            _lodMaterial = new Material(shader) { name = "Mat_PlanetSurfaceLOD_Runtime" };
+            if (_lodMaterial.HasProperty("_Tint")) _lodMaterial.SetColor("_Tint", Color.white);
+            if (_lodMaterial.HasProperty("_AtmosphereRim")) _lodMaterial.SetColor("_AtmosphereRim", new Color(0.18f, 0.42f, 0.78f, 1f));
             _lodMaterial.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
             _lodMaterial.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-            // ZWrite ON so the opaque far-view sphere renders into the depth buffer and is
-            // actually VISIBLE (ZWrite=0 made it sort behind opaque geometry → invisible).
-            _lodMaterial.SetInt("_ZWrite", 1);
+            // A faded shell must never write depth over nearby real voxel terrain.
+            _lodMaterial.SetInt("_ZWrite", 0);
 
             if (meshRenderer != null) meshRenderer.sharedMaterial = _lodMaterial;
         }
 
-        private void Rebuild()
+        private void Rebuild(int targetResolution = -1)
         {
             var resolvedBody = ResolveBody();
             if (resolvedBody == null || resolvedBody.settings == null) return;
             resolvedBody.ApplySettings();
+            if (_lodMaterial != null && _lodMaterial.HasProperty("_AtmosphereRim"))
+            {
+                Color rim = resolvedBody.settings.displayColor.a > 0.01f
+                    ? Color.Lerp(new Color(0.18f, 0.42f, 0.78f, 1f), resolvedBody.settings.displayColor, 0.35f)
+                    : new Color(0.18f, 0.42f, 0.78f, 1f);
+                _lodMaterial.SetColor("_AtmosphereRim", rim);
+            }
 
             BiomeData[] biomeArr = resolvedBody.BuildBiomeData(biomeRegistry);
             if (_biomes.IsCreated) _biomes.Dispose();
             _biomes = new NativeArray<BiomeData>(biomeArr.Length, Allocator.Persistent);
             for (int i = 0; i < biomeArr.Length; i++) _biomes[i] = biomeArr[i];
 
-            var (verts, tris, colors) = BuildIcosphere(resolvedBody, resolution);
+            if (targetResolution <= 0) targetResolution = ResolveRuntimeResolution(resolvedBody);
+            var (verts, tris, colors) = BuildIcosphere(resolvedBody, targetResolution);
 
             if (_mesh == null)
             {
@@ -169,8 +180,8 @@ namespace VoxelEngine.Cosmos
             _mesh.RecalculateBounds();
             if (meshFilter != null) meshFilter.sharedMesh = _mesh;
 
-            _lastResolution = resolution;
-            _lastSeed = body.genParams.seed;
+            _lastEffectiveResolution = targetResolution;
+            _lastSeed = resolvedBody.genParams.seed;
         }
 
         private (Vector3[] verts, int[] tris, Color[] colors) BuildIcosphere(CelestialBody body, int targetVerts)
@@ -203,7 +214,7 @@ namespace VoxelEngine.Cosmos
                 Color baseCol = ColorFor(alt, latitude);
                 // Apply the body's custom display colour as a tint if set.
                 if (body != null && body.settings != null && body.settings.displayColor.a > 0.01f)
-                    baseCol = Color.Lerp(baseCol, body.settings.displayColor, 0.4f);
+                    baseCol = Color.Lerp(baseCol, body.settings.displayColor, 0.72f);
                 colors[i] = baseCol;
             }
 
@@ -255,7 +266,11 @@ namespace VoxelEngine.Cosmos
                 float showAbove = body.SurfaceRadius * Mathf.Max(showAboveAltitudeFactor, hideBelowAltitudeFactor + 0.01f);
                 a = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(hideBelow, showAbove, altitude));
             }
-            if (_lodMaterial.HasProperty("_BaseColor"))
+            if (_lodMaterial.HasProperty("_Tint"))
+            {
+                var tint = _lodMaterial.GetColor("_Tint"); tint.a = a; _lodMaterial.SetColor("_Tint", tint);
+            }
+            else if (_lodMaterial.HasProperty("_BaseColor"))
             {
                 var col = _lodMaterial.GetColor("_BaseColor"); col.a = a; _lodMaterial.SetColor("_BaseColor", col);
             }

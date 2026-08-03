@@ -55,10 +55,10 @@ namespace VoxelEngine.Cosmos
         /// <summary>LOD icosphere resolution per tier (higher = smoother from space).</summary>
         public static int LodResolution => Current switch
         {
-            GraphicsTier.Low  => 32,
-            GraphicsTier.Mid  => 64,
-            GraphicsTier.High => 128,
-            _                 => 256,
+            GraphicsTier.Low  => 642,
+            GraphicsTier.Mid  => 2562,
+            GraphicsTier.High => 10242,
+            _                 => 10242,
         };
 
         /// <summary>Waterfall scan range (metres) per tier.</summary>
