@@ -17,11 +17,11 @@ namespace VoxelEngine.GridSystem
         private static VisualElement _container;
         private static GridCockpit _cachedCockpit;
         private static float _cockpitSearchTimer;
-        private static Label _speedLabel, _altLabel, _environmentLabel, _gravityGLabel, _gravityDetailLabel, _gravityReferenceLabel, _powerLabel, _h2Label, _dampLabel, _batteryValueLabel, _offlineLabel;
-        private static VisualElement _gravityModule, _gravityLcdBezel, _powerFill, _h2Fill, _batteryGaugeFill;
+        private static Label _speedLabel, _altLabel, _environmentLabel, _gravityGLabel, _gravityDetailLabel, _gravityReferenceLabel, _trajectoryStatusLabel, _trajectorySpeedLabel, _trajectoryApsisLabel, _powerLabel, _h2Label, _dampLabel, _batteryValueLabel, _offlineLabel;
+        private static VisualElement _gravityModule, _gravityLcdBezel, _trajectoryModule, _trajectoryLcdBezel, _powerFill, _h2Fill, _batteryGaugeFill;
         private static VisualElement[] _gravitySegments;
         private static float _smoothSpeed, _smoothAlt, _smoothPower;
-        private const int LayoutRevision = 9;
+        private const int LayoutRevision = 10;
         private const int GravitySegmentCount = 8;
         private static readonly Color GravityLcdGlass = new(0.105f, 0.125f, 0.075f, 0.98f);
         private static readonly Color GravityLcdFrame = new(0.31f, 0.37f, 0.21f, 0.88f);
@@ -203,7 +203,7 @@ namespace VoxelEngine.GridSystem
             _container.Add(_environmentLabel);
             _container.Add(T.Spacer(8));
             _container.Add(BuildGravityModule());
-            _container.Add(T.Spacer(10));
+            _container.Add(BuildTrajectoryModule());
 
             _powerLabel = T.StatLabel("Power", T.AccentGold);
             _container.Add(_powerLabel);
@@ -382,6 +382,97 @@ namespace VoxelEngine.GridSystem
             return module;
         }
 
+        private static VisualElement BuildTrajectoryModule()
+        {
+            _trajectoryModule = new VisualElement { name = "CockpitTrajectoryComputer" };
+            _trajectoryModule.style.marginTop = 8;
+            _trajectoryModule.style.marginBottom = 10;
+            _trajectoryModule.style.paddingLeft = 7;
+            _trajectoryModule.style.paddingRight = 7;
+            _trajectoryModule.style.paddingTop = 6;
+            _trajectoryModule.style.paddingBottom = 6;
+            _trajectoryModule.style.backgroundColor = new StyleColor(new Color(0.028f, 0.034f, 0.035f, 0.96f));
+            _trajectoryModule.style.display = DisplayStyle.None;
+            _trajectoryModule.pickingMode = PickingMode.Ignore;
+            T.Radius(_trajectoryModule, 2f);
+            T.Border(_trajectoryModule, 1f, new Color(0.25f, 0.29f, 0.34f, 0.90f));
+
+            var header = new VisualElement { name = "TrajectoryHeader" };
+            header.style.flexDirection = FlexDirection.Row;
+            header.style.alignItems = Align.Center;
+            header.style.marginBottom = 4;
+            header.pickingMode = PickingMode.Ignore;
+            _trajectoryModule.Add(header);
+
+            var title = new Label("COAST PATH");
+            title.style.flexGrow = 1;
+            title.style.fontSize = 8;
+            title.style.letterSpacing = 1.1f;
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            title.style.color = new StyleColor(T.TextMuted);
+            title.pickingMode = PickingMode.Ignore;
+            header.Add(title);
+
+            _trajectoryStatusLabel = new Label("SUBORBITAL");
+            _trajectoryStatusLabel.style.fontSize = 7;
+            _trajectoryStatusLabel.style.letterSpacing = 0.7f;
+            _trajectoryStatusLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _trajectoryStatusLabel.style.color = new StyleColor(T.AccentAmber);
+            _trajectoryStatusLabel.pickingMode = PickingMode.Ignore;
+            header.Add(_trajectoryStatusLabel);
+
+            _trajectoryLcdBezel = new VisualElement { name = "TrajectoryLcdBezel" };
+            _trajectoryLcdBezel.style.paddingLeft = 5;
+            _trajectoryLcdBezel.style.paddingRight = 5;
+            _trajectoryLcdBezel.style.paddingTop = 4;
+            _trajectoryLcdBezel.style.paddingBottom = 4;
+            _trajectoryLcdBezel.style.backgroundColor = new StyleColor(new Color(0.018f, 0.022f, 0.019f, 0.98f));
+            _trajectoryLcdBezel.pickingMode = PickingMode.Ignore;
+            T.Radius(_trajectoryLcdBezel, 1f);
+            T.Border(_trajectoryLcdBezel, 1f, GravityLcdFrame);
+            _trajectoryModule.Add(_trajectoryLcdBezel);
+
+            var lcd = new VisualElement { name = "TrajectoryLcd" };
+            lcd.style.paddingLeft = 5;
+            lcd.style.paddingRight = 5;
+            lcd.style.paddingTop = 3;
+            lcd.style.paddingBottom = 3;
+            lcd.style.backgroundColor = new StyleColor(GravityLcdGlass);
+            lcd.style.overflow = Overflow.Hidden;
+            lcd.pickingMode = PickingMode.Ignore;
+            T.Radius(lcd, 1f);
+            _trajectoryLcdBezel.Add(lcd);
+
+            var scanLine = new VisualElement();
+            scanLine.style.position = Position.Absolute;
+            scanLine.style.left = 2;
+            scanLine.style.right = 2;
+            scanLine.style.top = 12;
+            scanLine.style.height = 1;
+            scanLine.style.backgroundColor = new StyleColor(new Color(0.77f, 0.88f, 0.48f, 0.06f));
+            scanLine.pickingMode = PickingMode.Ignore;
+            lcd.Add(scanLine);
+
+            _trajectorySpeedLabel = new Label("TAN 0.0 · CIRC 0.0 m/s");
+            _trajectorySpeedLabel.style.fontSize = 8;
+            _trajectorySpeedLabel.style.letterSpacing = 0.35f;
+            _trajectorySpeedLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _trajectorySpeedLabel.style.color = new StyleColor(GravityLcdInk);
+            _trajectorySpeedLabel.pickingMode = PickingMode.Ignore;
+            lcd.Add(_trajectorySpeedLabel);
+
+            _trajectoryApsisLabel = new Label("PE — · AP —");
+            _trajectoryApsisLabel.style.marginTop = 2;
+            _trajectoryApsisLabel.style.fontSize = 8;
+            _trajectoryApsisLabel.style.letterSpacing = 0.35f;
+            _trajectoryApsisLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _trajectoryApsisLabel.style.color = new StyleColor(new Color(GravityLcdInk.r, GravityLcdInk.g, GravityLcdInk.b, 0.82f));
+            _trajectoryApsisLabel.pickingMode = PickingMode.Ignore;
+            lcd.Add(_trajectoryApsisLabel);
+
+            return _trajectoryModule;
+        }
+
         private static void BuildOfflineWarning(VisualElement uiRoot)
         {
             _offlineLabel = new Label("POWER OFFLINE");
@@ -532,6 +623,7 @@ namespace VoxelEngine.GridSystem
                 _environmentLabel.style.color = new StyleColor(environmentColor);
             }
             UpdateGravityReadout(grid);
+            UpdateTrajectoryReadout(grid);
 
             float powerBal = grid.PowerBalance;
             float powerLoad = grid.PowerGenerated > 0.1f ? grid.PowerConsumed / grid.PowerGenerated : (grid.PowerConsumed > 0 ? 1f : 0f);
@@ -593,6 +685,66 @@ namespace VoxelEngine.GridSystem
             if (gravity.Gees <= 0.20f || gravity.SurfaceFraction <= 0.15f) return new Color(0.45f, 0.74f, 0.90f);
             if (gravity.Gees <= 0.70f || gravity.SurfaceFraction <= 0.50f) return new Color(0.56f, 0.82f, 0.72f);
             return GravityLcdInk;
+        }
+
+        private static void UpdateTrajectoryReadout(GridEntity grid)
+        {
+            if (_trajectoryModule == null || _trajectoryStatusLabel == null || _trajectorySpeedLabel == null
+                || _trajectoryApsisLabel == null || grid == null) return;
+
+            Vector3 velocity = grid.Body != null ? grid.Body.linearVelocity : Vector3.zero;
+            OrbitalTelemetrySample trajectory = OrbitalTelemetry.Sample(grid.transform.position, velocity, grid.gravityScale);
+            var body = GravityProvider.ActiveBody;
+            float displayAltitude = body != null
+                ? Mathf.Max(25f, body.AtmosphereHeight * 0.35f)
+                : float.PositiveInfinity;
+            bool show = trajectory.IsAvailable && (trajectory.State == OrbitalFlightState.Orbiting
+                || trajectory.State == OrbitalFlightState.Escape
+                || trajectory.Altitude >= displayAltitude);
+            _trajectoryModule.style.display = show ? DisplayStyle.Flex : DisplayStyle.None;
+            if (!show) return;
+
+            Color statusColor = trajectory.State switch
+            {
+                OrbitalFlightState.Orbiting => T.AccentGreen,
+                OrbitalFlightState.Escape => new Color(0.70f, 0.52f, 1.00f),
+                OrbitalFlightState.Suborbital => T.AccentAmber,
+                OrbitalFlightState.Atmospheric => T.AccentAmber,
+                _ => T.TextMuted,
+            };
+            Color ink = trajectory.State == OrbitalFlightState.Orbiting ? new Color(0.72f, 0.84f, 0.42f)
+                : trajectory.State == OrbitalFlightState.Escape ? new Color(0.70f, 0.58f, 1.00f)
+                : new Color(0.98f, 0.71f, 0.24f);
+            string motion = Mathf.Abs(trajectory.RadialSpeed) < 0.5f ? "COAST"
+                : trajectory.RadialSpeed > 0f ? "RISING" : "FALLING";
+            string state = trajectory.State switch
+            {
+                OrbitalFlightState.Orbiting => "ORBITAL",
+                OrbitalFlightState.Escape => "ESCAPE",
+                OrbitalFlightState.Suborbital => "SUBORBITAL",
+                OrbitalFlightState.Atmospheric => "ATMOSPHERIC",
+                _ => "SURFACE",
+            };
+
+            _trajectoryStatusLabel.text = state + " · " + motion;
+            _trajectoryStatusLabel.style.color = new StyleColor(statusColor);
+            _trajectorySpeedLabel.text = $"TAN {trajectory.TangentialSpeed:0.0} · CIRC {trajectory.CircularSpeed:0.0} m/s";
+            _trajectoryApsisLabel.text = trajectory.IsEscaping
+                ? $"PE {FormatTrajectoryDistance(trajectory.PeriapsisAltitude)} · ESC {trajectory.EscapeSpeed:0.0} m/s"
+                : $"PE {FormatTrajectoryDistance(trajectory.PeriapsisAltitude)} · AP {FormatTrajectoryDistance(trajectory.ApoapsisAltitude)}";
+            _trajectorySpeedLabel.style.color = new StyleColor(ink);
+            _trajectoryApsisLabel.style.color = new StyleColor(new Color(ink.r, ink.g, ink.b, 0.82f));
+            T.Border(_trajectoryModule, 1f, new Color(statusColor.r, statusColor.g, statusColor.b, 0.38f));
+            if (_trajectoryLcdBezel != null)
+                T.Border(_trajectoryLcdBezel, 1f, new Color(ink.r, ink.g, ink.b, 0.70f));
+        }
+
+        private static string FormatTrajectoryDistance(float altitude)
+        {
+            if (float.IsNaN(altitude) || float.IsInfinity(altitude)) return "—";
+            string sign = altitude >= 0f ? "+" : "−";
+            float abs = Mathf.Abs(altitude);
+            return abs >= 1000f ? $"{sign}{abs / 1000f:0.0} km" : $"{sign}{abs:0} m";
         }
 
         private static void UpdateBatteryGauge(GridEntity grid)

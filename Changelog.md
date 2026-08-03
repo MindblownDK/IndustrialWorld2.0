@@ -1,9 +1,25 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.7.0-dev`
+**Current Version:** `7.8.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.8.0-dev] Orbital Coast-Path Flight Computer
+
+**Type:** MINOR — new save-compatible orbital diagnostics for cockpit flight.
+
+#### ◌ Real orbital solution, no physics fakery
+- Added `OrbitalTelemetry`, an allocation-free solver built from the grid’s real position, velocity, effective gravity scale, and the active body’s inverse-square gravity field.
+- It calculates radial/tangential velocity, circular speed, escape speed, eccentricity, periapsis, apoapsis, and current coast-path energy without changing ship physics, dampeners, thrust, or saves.
+- The solver distinguishes atmospheric flight, suborbital impact paths, valid bound orbits, and escape trajectories.
+
+#### 🧭 Cockpit coast-path computer
+- Added a conditional **COAST PATH** LCD module to the ship systems panel; it appears only once a ship reaches meaningful upper-atmosphere/space altitude.
+- It reports state plus rise/fall direction, current tangential speed versus required circular speed, and predicted periapsis/apoapsis clearance.
+- The module explicitly describes a released-thrust ballistic solution, so pilots can understand what the ship will do rather than receive hidden autopilot behavior.
+
+---
 
 ### [7.7.0-dev] Vacuum Starfield Ambiance & Compact Gravity LCD
 
