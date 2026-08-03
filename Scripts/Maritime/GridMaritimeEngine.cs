@@ -265,6 +265,9 @@ namespace VoxelEngine.Maritime
         /// reducing mechanical load to reset the breaker.
         /// </summary>
         public bool IsOverstressShutdown { get; private set; }
+        private float _overstressRetryAt;
+        private int _overstressTripBlockCount = -1;
+        private const float OverstressRetrySeconds = 0.75f;
 
         /// <summary>Number of turbochargers connected to this engine (for UI).</summary>
         public int ConnectedTurboCount { get; private set; }
@@ -651,10 +654,20 @@ namespace VoxelEngine.Maritime
             CountTurbos();
             RefreshModuleTotals();
 
-            // Explicitly toggling an engine OFF resets a protective mechanical
-            // overload trip. The player must then reduce the load/gear and re-enable
-            // it rather than letting an impossible generator bank flicker on/off.
-            if (!Enabled) IsOverstressShutdown = false;
+            // Explicitly toggling an engine OFF resets a protective trip immediately.
+            // If the player removes a drivetrain block, reset on that topology change;
+            // otherwise make a short guarded retry so disabling a generator can clear
+            // an overload without leaving a stale 100% state forever.
+            if (!Enabled)
+            {
+                ClearOverstressShutdown();
+            }
+            else if (IsOverstressShutdown
+                && ((Grid != null && Grid.BlockCount != _overstressTripBlockCount)
+                    || Time.time >= _overstressRetryAt))
+            {
+                ClearOverstressShutdown();
+            }
 
             float requestedThrottle = Enabled && idleWhenEnabled
                 ? Mathf.Max(throttle, idleThrottleFraction)
@@ -759,7 +772,7 @@ namespace VoxelEngine.Maritime
             // Preserve the trip readout while the protection breaker owns the
             // shutdown. Otherwise the next no-source propagation tick would display
             // a harmless 4–8% idle value while still saying OVERSTRESSED.
-            if (IsOverstressShutdown)
+            if (IsOverstressShutdown && Time.time < _overstressRetryAt)
             {
                 CurrentRPM = 0f;
                 CurrentTorque = 0f;
@@ -793,9 +806,18 @@ namespace VoxelEngine.Maritime
             if (Stress01 >= 0.999f)
             {
                 IsOverstressShutdown = true;
+                _overstressRetryAt = Time.time + OverstressRetrySeconds;
+                _overstressTripBlockCount = Grid != null ? Grid.BlockCount : -1;
                 IsRunning = false;
                 CurrentTorque = 0f;
             }
+        }
+
+        private void ClearOverstressShutdown()
+        {
+            IsOverstressShutdown = false;
+            _overstressRetryAt = 0f;
+            _overstressTripBlockCount = -1;
         }
 
         /// <summary>Scan only named turbo attachment slots and compute stacked boost.</summary>

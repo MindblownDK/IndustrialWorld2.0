@@ -1,9 +1,30 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.3.0-dev`
+**Current Version:** `7.3.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.3.1-dev] Tangent Belts, Recovering Overstress & Stock Thermal Governor
+
+**Type:** PATCH — visual/mechanical correction and thermal-protection refinement; save-compatible.
+
+#### 🟨 Belt runs now meet pulley rims correctly
+- Moved each straight belt run to the pulley tangent instead of the pulley centreline.
+- Belt bands and the travel marker no longer cut through the centre of `Belt_Pulley` / the shaft axle.
+- Kept the wide pulley-face belt profile and expanded the invisible take-off surface to cover the tangent runs.
+
+#### ⛔ Overstress now clears honestly
+- Fixed protective overload state retention: removing or disabling a mechanical load now clears the stale trip immediately when topology changes.
+- A short guarded retry also clears a trip after load changes that do not alter block count, such as disabling a generator.
+- While the safety breaker is actively holding, the UI consistently reports 100% stress instead of a misleading idle percentage.
+
+#### 🌡 Stock engine heat ceiling
+- Mechanical stress now raises heat continuously.
+- Stock engines with no modules and no physical turbo remain hard-governed to **89°C**.
+- Performance modules or a physical turbo unlock the high-risk thermal envelope, where stress can push heat past 89°C and eventually into overheating/seizure.
+
+---
 
 ### [7.3.0-dev] Tiered Armor Loadouts, Honest Trips & True Belt Width
 

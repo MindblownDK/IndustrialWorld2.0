@@ -229,7 +229,10 @@ namespace VoxelEngine.Maritime
             Vector3 localHit = grid.transform.InverseTransformPoint(worldHit);
             float along = Mathf.Clamp01(Vector3.Dot(localHit - start, span) / spanSqr);
             Vector3 projected = start + span * along;
-            float tapTolerance = Mathf.Max(0.18f, cellSize * 0.38f);
+            // The visual belt runs tangent outside the pulley rim, so permit that
+            // intentional radial offset while still requiring the aim to lie on this
+            // belt's longitudinal span.
+            float tapTolerance = Mathf.Max(0.22f, cellSize * 0.55f);
             if ((localHit - projected).sqrMagnitude > tapTolerance * tapTolerance
                 || along <= 0.02f || along >= 0.98f)
             {
@@ -601,9 +604,13 @@ namespace VoxelEngine.Maritime
             // enlarged the loop-plane separation instead, which made the belt look
             // taller. Keep the top/bottom run separation compact and make the band
             // itself dramatically wider across the pulley face.
-            float runGap = Mathf.Max(0.055f, cellSize * 0.085f);
             float radialThickness = Mathf.Max(0.026f, cellSize * 0.030f);
             float axialBeltWidth = Mathf.Max(0.22f, cellSize * 0.30f);
+            float pulleyRadius = Mathf.Max(0.16f, cellSize * 0.19f);
+            // Straight belt runs must sit tangent to the pulley rim. Keeping them
+            // near the centreline was what made the belt visibly cut through each
+            // Belt_Pulley in the reported screenshot.
+            float runGap = pulleyRadius + radialThickness * 0.70f;
             Quaternion rotation = Quaternion.LookRotation(direction, shaftAxis);
             Vector3 center = (start + end) * 0.5f;
 
@@ -612,9 +619,9 @@ namespace VoxelEngine.Maritime
             CreateVisualCube("Belt_Run_B", center - side * runGap, rotation,
                 new Vector3(radialThickness, axialBeltWidth, length), BeltMaterial);
 
-            // A short central travel marker keeps the dark rubber legible against
-            // iron hulls without turning the belt into a glowing cable.
-            CreateVisualCube("Belt_TravelMarker", center, rotation,
+            // Keep the travel marker on a real belt run instead of across the pulley
+            // centres, so it cannot visually cut through the shaft axle.
+            CreateVisualCube("Belt_TravelMarker", center + side * runGap, rotation,
                 new Vector3(radialThickness * 0.70f, axialBeltWidth * 0.72f, Mathf.Min(length * 0.26f, cellSize * 0.55f)), IndicatorMaterial);
             CreatePlacementSurface(center, rotation, length, cellSize, ownerLink);
         }
@@ -635,8 +642,9 @@ namespace VoxelEngine.Maritime
             collider.isTrigger = true;
             // Broad aim surface spanning both reinforced belt runs. It participates
             // only in GridBuilder's dedicated trigger raycast, never ship physics.
+            float pulleyRadius = Mathf.Max(0.16f, cellSize * 0.19f);
             collider.size = new Vector3(
-                Mathf.Max(cellSize * 0.30f, 0.34f),
+                Mathf.Max(pulleyRadius * 2.55f, cellSize * 0.55f),
                 Mathf.Max(cellSize * 0.78f, 0.85f),
                 length + Mathf.Max(cellSize * 0.10f, 0.08f));
 

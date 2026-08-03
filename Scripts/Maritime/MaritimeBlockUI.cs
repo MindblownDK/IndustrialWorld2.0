@@ -196,7 +196,7 @@ namespace VoxelEngine.Maritime
             var (stressBar, _) = T.ProgressBar(eng.Stress01, stressColor, 6, false);
             p.Add(stressBar);
             if (eng.IsOverstressShutdown)
-                p.Add(T.Muted("OVERSTRESSED: engine protection tripped. Reduce generator/propeller load, then toggle the engine OFF and ON to reset."));
+                p.Add(T.Muted("OVERSTRESSED: engine protection tripped. Remove or disable load to reset immediately; otherwise it makes a guarded retry shortly after the trip."));
 
             // ── Heat ──────────────────────────────────────────────────
             p.Add(T.Spacer(6));
