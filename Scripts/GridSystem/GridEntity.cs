@@ -95,6 +95,8 @@ namespace VoxelEngine.GridSystem
         public float   RotationPitch { get; set; }
         public float   RotationRoll { get; set; }
         public bool    DampenersOn { get; set; } = true;
+        /// <summary>True while an unpiloted, unlocked grid is autonomously cancelling drift.</summary>
+        public bool AutonomousDampenersActive { get; private set; }
 
         // ── Thrust feel ────────────────────────────────────────────
         // Thrust doesn't hit instantly; it spools up/down so heavy ships feel weighty.
@@ -369,6 +371,51 @@ namespace VoxelEngine.GridSystem
             }
 
             return false;
+        }
+
+        /// <summary>True if a landing gear or docking port already owns a hard stationary lock.</summary>
+        private bool HasStationaryLock()
+        {
+            foreach (var block in AllBlocks)
+            {
+                if (block is GridLandingGear gear && gear.IsLocked) return true;
+                if (block is GridDockingPort dock && dock.IsDocked) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Checks stored electricity/hydrogen or live generation for autonomous
+        /// dampeners. An unpowered, fuel-less abandoned ship intentionally drifts.
+        /// </summary>
+        public bool HasAutonomousDampenerEnergy()
+        {
+            if (PowerGenerated > 0.01f) return true;
+            foreach (var block in AllBlocks)
+            {
+                switch (block)
+                {
+                    case GridBattery battery when battery.storedWh > 0.1f:
+                        return true;
+                    case GridGasTank tank when tank.gasType == Gas.GasType.Hydrogen && tank.stored > 0.1f:
+                        return true;
+                    case GridHydrogenEngine hydrogenEngine when hydrogenEngine.internalHydrogen > 0.1f:
+                        return true;
+                    case GridH2O2Generator h2o2 when h2o2.h2Stored > 0.1f:
+                        return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>Stops a restored ship from retaining stale saved drift when its dampeners have energy.</summary>
+        public void StabilizeRestoredVelocityIfPossible()
+        {
+            if (_rb == null || !DampenersOn || HasStationaryLock() || !HasAutonomousDampenerEnergy()) return;
+            _restoreVelocity = Vector3.zero;
+            _restoreAngularVelocity = Vector3.zero;
+            _rb.linearVelocity = Vector3.zero;
+            _rb.angularVelocity = Vector3.zero;
         }
 
         private void ApplyGravity()
@@ -975,8 +1022,11 @@ namespace VoxelEngine.GridSystem
             {
                 // Decay any remaining smoothed input so the ship doesn't lurch when re-entered.
                 _smoothedThrustInput = Vector3.MoveTowards(_smoothedThrustInput, Vector3.zero, THRUST_SPOOL_RATE * 2f * Time.fixedDeltaTime);
+                ApplyAutonomousDampenerThrust();
                 return;
             }
+
+            AutonomousDampenersActive = false;
 
             // Control-seat local frame (so "forward" = where the pilot is looking).
             Transform frame = CurrentControlFrame;
@@ -1008,7 +1058,7 @@ namespace VoxelEngine.GridSystem
 
                 // Consume this thruster's fuel/power + get its usable thrust (N), then push
                 // the ship along the thruster's real push direction (so it stays balanced).
-                float thrustN = thruster.AvailableThrust(input, this) * fraction;
+                float thrustN = thruster.AvailableThrust(input, this, fraction) * fraction;
                 worldForce += thruster.PushDirection * thrustN;
             }
 
@@ -1037,10 +1087,58 @@ namespace VoxelEngine.GridSystem
             _rb.angularDamping = _touchingIce ? 0.6f : 3f;
         }
 
+        /// <summary>
+        /// Uses installed reverse-facing thrusters as visible, resource-consuming
+        /// braking authority whenever an unpiloted ship is left unlocked with
+        /// dampeners enabled. Residual velocity is finished by UpdateDampeners.
+        /// </summary>
+        private void ApplyAutonomousDampenerThrust()
+        {
+            AutonomousDampenersActive = false;
+            if (_rb == null || !DampenersOn || HasStationaryLock() || !HasAutonomousDampenerEnergy()) return;
+
+            Vector3 velocity = _rb.linearVelocity;
+            Vector3 gravity = CurrentGravityAcceleration();
+            bool preserveGravityAxis = gravity.sqrMagnitude > 0.0001f && !ShouldDampenerHoldHover();
+            Vector3 brakeVelocity = preserveGravityAxis
+                ? Vector3.ProjectOnPlane(velocity, gravity.normalized)
+                : velocity;
+            float speed = brakeVelocity.magnitude;
+            if (speed < 0.005f)
+            {
+                AutonomousDampenersActive = true;
+                return;
+            }
+
+            Vector3 desiredDirection = -brakeVelocity / speed;
+            float demand01 = Mathf.Clamp01(speed / 3f);
+            Vector3 brakingForce = Vector3.zero;
+            foreach (var block in AllBlocks)
+            {
+                if (block is not GridThruster thruster || !thruster.IsOperational) continue;
+                float alignment = Vector3.Dot(thruster.PushDirection.normalized, desiredDirection);
+                if (alignment <= 0.15f) continue;
+                float fraction = Mathf.Clamp01(alignment * demand01);
+                thruster.ThrustFraction = Mathf.Max(thruster.ThrustFraction, fraction);
+                float thrust = thruster.AvailableThrust(Vector3.zero, this, fraction) * fraction;
+                brakingForce += thruster.PushDirection * thrust;
+            }
+
+            if (brakingForce.sqrMagnitude > 0.0001f)
+                _rb.AddForce(brakingForce * THRUST_GAIN, ForceMode.Force);
+            AutonomousDampenersActive = true;
+        }
+
         // ── Inertia Dampeners ──────────────────────────────────────
         private void UpdateDampeners()
         {
             if (!DampenersOn) return;
+
+            // An unpiloted grid only receives damping authority when it has stored
+            // power/hydrogen or live generation. This prevents an abandoned, empty
+            // hull from magically stopping while a powered ship holds station.
+            bool autonomous = !IsControlled;
+            if (autonomous && !AutonomousDampenersActive) return;
 
             // Only dampen when the pilot isn't actively asking for thrust.
             bool isThrusting = HasManualThrustInput();
@@ -1051,7 +1149,10 @@ namespace VoxelEngine.GridSystem
                 // Mass-aware braking: heavier ships take longer to cancel drift, so the
                 // dampeners feel like they're wrestling real inertia.
                 float massFactor = 10000f / Mathf.Max(10000f, _rb.mass);
-                float brake = 2.5f * massFactor;
+                // Autonomous space hold needs to arrest saved/login drift decisively.
+                // Installed reverse thrusters provide the visible/resource-consuming
+                // force above; this controller settles the remaining velocity.
+                float brake = autonomous ? 12f : 2.5f * massFactor;
                 bool iceRecovery = IsRecoveringFromIceContact();
                 if (iceRecovery) brake *= IceGridBrakeMultiplier;
 
@@ -1101,10 +1202,12 @@ namespace VoxelEngine.GridSystem
             }
 
             Vector3 angVel = _rb.angularVelocity;
-            if (!isThrusting && angVel.sqrMagnitude > 0.01f)
+            if (!isThrusting && angVel.sqrMagnitude > 0.0001f)
             {
-                float angularBrake = _touchingIce ? 0.75f : 4f;
+                float angularBrake = _touchingIce ? 0.75f : autonomous ? 10f : 4f;
                 _rb.angularVelocity = Vector3.Lerp(angVel, Vector3.zero, angularBrake * Time.fixedDeltaTime);
+                if (autonomous && _rb.angularVelocity.sqrMagnitude < 0.0004f)
+                    _rb.angularVelocity = Vector3.zero;
             }
         }
 

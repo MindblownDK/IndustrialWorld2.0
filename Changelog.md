@@ -1,9 +1,29 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.4.0-dev`
+**Current Version:** `7.4.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.4.1-dev] Autonomous Space Dampers & Grid Battery Persistence
+
+**Type:** PATCH — space-grid stabilization, restore safety, and compile recovery; save-compatible.
+
+#### 🛰️ Autonomous dampers for unattended ships
+- An unlocked, unpiloted grid with dampeners enabled now automatically counters drift when it has stored electricity, stored hydrogen, or live generation.
+- Reverse-facing installed thrusters provide visible/resource-consuming braking authority; the dampener controller settles residual velocity and angular drift to true standstill in space.
+- Locked landing gear/docking systems retain ownership and are excluded from autonomous dampening.
+- Autonomous damping remains gravity-aware: it does not cancel natural vertical fall when hover authority is unavailable.
+
+#### 💾 Restore runaway prevention
+- Grid Battery stored charge and mode now persist in movable-grid saves.
+- Restored powered/hydrogen-fuelled dampened grids zero stale saved linear/angular velocity after blocks restore, preventing the repeated login/catch-up speed escalation reported in space.
+
+#### 🧰 Life-support compile repair
+- Fixed the reserved-keyword compile error in `PlayerStats` that cascaded into the reported CS1001/CS1519/CS1022 errors.
+- Vacuum life-support code now compiles with `hasSealedKit` as the local equipment state.
+
+---
 
 ### [7.4.0-dev] Vacuum Life Support Foundations
 

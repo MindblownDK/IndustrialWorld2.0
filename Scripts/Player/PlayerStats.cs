@@ -111,13 +111,13 @@ namespace VoxelEngine.Player
             var waterState = GetComponent<PlayerWaterState>();
             CurrentOxygenEnvironment = ResolveOxygenEnvironment(waterState);
             bool oxygenBlocked = CurrentOxygenEnvironment != OxygenEnvironment.Breathable;
-            bool sealed = equipment != null && equipment.HasBreathingKit;
+            bool hasSealedKit = equipment != null && equipment.HasBreathingKit;
 
             if (oxygenBlocked)
             {
                 float baseDrain = CurrentOxygenEnvironment == OxygenEnvironment.Vacuum ? 9f : 5f;
                 // An unsealed player loses breathable reserve rapidly in vacuum.
-                if (CurrentOxygenEnvironment == OxygenEnvironment.Vacuum && !sealed) baseDrain *= 2f;
+                if (CurrentOxygenEnvironment == OxygenEnvironment.Vacuum && !hasSealedKit) baseDrain *= 2f;
                 float drainMul = equipment != null ? equipment.OxygenDrainMultiplier : 1f;
                 Oxygen -= Time.deltaTime * baseDrain * drainMul;
                 if (Oxygen <= 0f)
@@ -134,8 +134,8 @@ namespace VoxelEngine.Player
 
             LifeSupportStatus = CurrentOxygenEnvironment switch
             {
-                OxygenEnvironment.Underwater => sealed ? "SUBMERGED · SEALED" : "SUBMERGED · HOLDING BREATH",
-                OxygenEnvironment.Vacuum => sealed ? "VACUUM · LIFE SUPPORT" : "VACUUM · NO LIFE SUPPORT",
+                OxygenEnvironment.Underwater => hasSealedKit ? "SUBMERGED · SEALED" : "SUBMERGED · HOLDING BREATH",
+                OxygenEnvironment.Vacuum => hasSealedKit ? "VACUUM · LIFE SUPPORT" : "VACUUM · NO LIFE SUPPORT",
                 _ => "BREATHABLE",
             };
 

@@ -1134,6 +1134,13 @@ namespace VoxelEngine.Persistence
                         savedBlock.liquidTankMode = (int)liquidTankBlock.mode;
                     }
 
+                    if (block is GridBattery gridBattery)
+                    {
+                        savedBlock.hasGridBatteryState = true;
+                        savedBlock.gridBatteryStoredWh = gridBattery.storedWh;
+                        savedBlock.gridBatteryMode = (int)gridBattery.mode;
+                    }
+
                     if (block is VoxelEngine.Maritime.GridGearbox gearbox)
                     {
                         savedBlock.hasGearboxState = true;
@@ -1222,9 +1229,9 @@ namespace VoxelEngine.Persistence
 
                 var grid = GridEntity.Create(savedGrid.pos, (GridSize)savedGrid.gridSize);
                 grid.name = "Grid (restored)";
-                grid.RestorePersistentPose(savedGrid.pos, savedGrid.rot, savedGrid.velocity, savedGrid.angularVelocity);
                 grid.gravityScale = savedGrid.gravityScale > 0f ? savedGrid.gravityScale : grid.gravityScale;
                 grid.DampenersOn = savedGrid.dampenersOn;
+                grid.RestorePersistentPose(savedGrid.pos, savedGrid.rot, savedGrid.velocity, savedGrid.angularVelocity);
                 grid.HydrogenStored = Mathf.Max(0f, savedGrid.hydrogenStored);
                 grid.OxygenStored = Mathf.Max(0f, savedGrid.oxygenStored);
 
@@ -1245,6 +1252,9 @@ namespace VoxelEngine.Persistence
                 }
 
                 grid.RecalculateMass();
+                // A powered/hydrogen-fuelled unlocked grid with dampeners on must
+                // never resume a stale serialized drift vector in space.
+                grid.StabilizeRestoredVelocityIfPossible();
                 // Colliders now exist, so resolve only the small post-load terrain
                 // interpenetration before the restore pose releases physics.
                 grid.ResolvePersistentGroundClearance();
@@ -1360,6 +1370,13 @@ namespace VoxelEngine.Persistence
                     if (System.Enum.IsDefined(typeof(GridTankMode), saved.liquidTankMode))
                         restoredGridLiquid.mode = (GridTankMode)saved.liquidTankMode;
                     restoredGridLiquid.stored = Mathf.Clamp(saved.liquidTankStored, 0f, restoredGridLiquid.capacity);
+                }
+
+                if (saved.hasGridBatteryState && block is GridBattery restoredGridBattery)
+                {
+                    if (System.Enum.IsDefined(typeof(GridBatteryMode), saved.gridBatteryMode))
+                        restoredGridBattery.mode = (GridBatteryMode)saved.gridBatteryMode;
+                    restoredGridBattery.storedWh = Mathf.Clamp(saved.gridBatteryStoredWh, 0f, restoredGridBattery.capacityWh);
                 }
 
                 if (saved.hasGearboxState && block is VoxelEngine.Maritime.GridGearbox restoredGearbox)
@@ -2200,6 +2217,11 @@ namespace VoxelEngine.Persistence
             public int liquidTankType;
             public float liquidTankStored;
             public int liquidTankMode;
+            // Additive grid-battery state. Stored charge is required for autonomous
+            // dampeners to hold a restored ship still before a generator spins up.
+            public bool hasGridBatteryState;
+            public float gridBatteryStoredWh;
+            public int gridBatteryMode;
             // Additive gearbox setting state. The exact free-form ratio is the
             // authoritative player choice; selectedGear preserves legacy UI slots.
             public bool hasGearboxState;

@@ -72,7 +72,7 @@ namespace VoxelEngine.GridSystem
 
         /// <summary>Full thrust (N) this engine provides toward the pilot's desired direction,
         /// consuming its fuel/power. Direction handling is done by the grid (intuitive WASD).</summary>
-        public float AvailableThrust(Vector3 input, GridEntity grid)
+        public float AvailableThrust(Vector3 input, GridEntity grid, float resourceFraction = 1f)
         {
             float thrust = maxThrustN;
 
@@ -83,7 +83,7 @@ namespace VoxelEngine.GridSystem
             }
             if (thrusterType == ThrusterType.Hydrogen && grid != null)
             {
-                float consumed = hydrogenPerSecond * Time.fixedDeltaTime;
+                float consumed = hydrogenPerSecond * Mathf.Clamp01(resourceFraction) * Time.fixedDeltaTime;
                 float drawn = GridGasNetwork.Instance != null
                     ? GridGasNetwork.Instance.DrawGasFor(this, Gas.GasType.Hydrogen, consumed)
                     : 0f;
