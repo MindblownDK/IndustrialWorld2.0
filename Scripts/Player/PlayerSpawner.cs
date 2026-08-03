@@ -491,8 +491,8 @@ namespace VoxelEngine.Player
                 // A fully oceanic/custom body has no density-confirmed dry land. Do not make
                 // the player watch a long sequence of trial teleports; hold one safe point
                 // above the selected water column and report the authoring issue once.
-                Vector3 up = body.UpAt(preferred);
-                SetPosition(preferred + (up.sqrMagnitude > 0.0001f ? up.normalized : Vector3.up) * 4f);
+                Vector3 surfaceUp = body.UpAt(preferred);
+                SetPosition(preferred + (surfaceUp.sqrMagnitude > 0.0001f ? surfaceUp.normalized : Vector3.up) * 4f);
                 Debug.LogError("[PlayerSpawner] No dry spherical spawn was found in the authored density field; held player above the selected water column without relocation hopping.");
                 yield break;
             }

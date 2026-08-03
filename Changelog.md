@@ -1,9 +1,18 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.11.10-dev`
+**Current Version:** `7.11.11-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.11.11-dev] Spawn Scope Compile Recovery
+
+**Type:** PATCH — Unity compiler recovery; no save/API break.
+
+- Renamed the nested spherical fallback up-vector local in `PlayerSpawner.EnsureDrySpawn`, resolving the reported `CS0136` local-name scope collision.
+- No generation, spawn-selection, performance-budget, save, prefab, recipe, or balance behaviour changed from `7.11.10-dev`.
+
+---
 
 ### [7.11.10-dev] Seamless Surface Spawn & Streaming Performance Recovery
 
