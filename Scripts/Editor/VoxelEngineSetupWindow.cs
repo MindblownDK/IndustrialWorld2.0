@@ -126,7 +126,7 @@ namespace VoxelEngine.EditorTools
                 "  • Iron / Copper / Steel PLATES, Iron Gear, Copper Wire, Glass\n" +
                 "  • Electronic & Advanced Circuits\n" +
                 "  • Empty Barrel / Crude-Oil Barrel / Refined-Oil Barrel / Plastic Bar\n" +
-                "  • Pumpjack + Oil Refinery prefabs & recipes\n" +
+                "  • Pirate Jack Pump + Oil Refinery prefabs & recipes\n" +
                 "  • Wireless Storage Terminal (new block)\n" +
                 "  • Factory research tree expansion (Plating, Electronics,\n" +
                 "    Oil Extraction, Oil Refining, Plastics, Logistics Network,\n" +
@@ -3293,6 +3293,11 @@ namespace VoxelEngine.EditorTools
             // Refined oil is also a fuel (long burn time): useful in furnaces.
             refinedBarrel.fuelSeconds = 60f; EditorUtility.SetDirty(refinedBarrel);
             var plastic     = MakeIndustrialResource("Item_Plastic",    "Plastic Bar",     "Polymerised hydrocarbon block. Required for advanced circuits & insulation.", new Color(0.92f, 0.92f, 0.96f), VoxelEngine.Items.ResourceCategory.Component, "Oil");
+            // Rare relic component: never receives a crafting recipe. Setup adds it
+            // exclusively to Pirate ruin rare-loot pools below.
+            var pirateJackPumpHead = MakeIndustrialResource("Item_PirateJackPumpHead", "Pirate Jack Pump Head",
+                "A heavy forged pump head stripped from a Pirate ruin. Required to assemble a Jack Pump; it cannot be crafted.",
+                new Color(0.30f, 0.26f, 0.20f), VoxelEngine.Items.ResourceCategory.Component, "Pirate Relics", maxStack: 1);
 
             // ====================================================================
             //  2) FACTORY MACHINES — Pumpjack, Oil Refinery, Wireless Storage Term
@@ -3318,20 +3323,29 @@ namespace VoxelEngine.EditorTools
                 return prefab;
             }
 
-            // ─ Pumpjack ─
-            var pumpjackPrefab = MakeIndustrialPrefab("Pumpjack",
-                new Color(0.20f, 0.20f, 0.22f), new Vector3(1.6f, 2.2f, 1.6f),
-                root =>
-                {
-                    var pump = root.AddComponent<VoxelEngine.Crafting.Pumpjack>();
-                    pump.emptyBarrel        = emptyBarrel;
-                    pump.crudeOilBarrel     = crudeBarrel;
-                    pump.secondsPerCycle    = 8f;
-                    pump.baseWattsPerSecond = 250f;
-                    pump.idleWattsPerSecond = 10f;
-                    pump.scanDepth          = 24;
-                    pump.scanRadius         = 2;
-                });
+            // ─ Jack Pump ─
+            // Kept at the existing Pumpjack asset path so old placed blocks repair
+            // cleanly, while the authored visual becomes a real walking-beam unit.
+            var jackPumpDark = MakeColoredMat(prefabsFolder, "Mat_JackPumpDark", new Color(0.085f, 0.09f, 0.095f));
+            var jackPumpSteel = MakeColoredMat(prefabsFolder, "Mat_JackPumpSteel", new Color(0.32f, 0.34f, 0.36f));
+            var jackPumpBrass = MakeColoredMat(prefabsFolder, "Mat_JackPumpBrass", new Color(0.62f, 0.42f, 0.16f));
+            var jackPumpOil = MakeColoredMat(prefabsFolder, "Mat_JackPumpOil", new Color(0.055f, 0.045f, 0.035f));
+            var pumpjackPrefab = GetOrCreatePrefab($"{prefabsFolder}/Pumpjack.prefab", "JackPump", root =>
+            {
+                var pump = EnsureComponent<VoxelEngine.Crafting.Pumpjack>(root);
+                pump.emptyBarrel = emptyBarrel;
+                pump.crudeOilBarrel = crudeBarrel;
+                pump.secondsPerCycle = 14f;
+                pump.baseWattsPerSecond = 4000f;
+                pump.idleWattsPerSecond = 120f;
+                pump.scanDepth = 120;
+                pump.scanRadius = 3;
+
+                var power = EnsureComponent<VoxelEngine.Power.PowerConsumer>(root);
+                power.connectRadius = 2.2f;
+                power.wattsPerSecond = pump.idleWattsPerSecond;
+                EnsureJackPumpVisuals(root.transform, jackPumpDark, jackPumpSteel, jackPumpBrass, jackPumpOil);
+            });
 
             // ─ Oil Refinery (CraftingStation + OilRefinery + processing recipes) ─
             string refineryPath = $"{prefabsFolder}/OilRefinery.prefab";
@@ -3432,8 +3446,14 @@ namespace VoxelEngine.EditorTools
                 return b;
             }
 
-            var blockPumpjack   = MakeIndustrialBlock("Block_Pumpjack",    "Pumpjack",          new Color(0.20f,0.20f,0.22f), pumpjackPrefab,
-                "Powered surface extractor. Scans the column below itself for Crude Oil voxels, lifts one barrel per cycle (consumes an Empty Barrel). Place over an oil pool. ~250 W while running.");
+            var blockPumpjack = MakeIndustrialBlock("Block_Pumpjack", "Jack Pump", new Color(0.20f, 0.20f, 0.22f), pumpjackPrefab,
+                "Heavy walking-beam oil extractor. Runs only on a rare infinite Pirate World oil node; consumes Empty Barrels and draws 4 kW while pumping.", hp: 1400);
+            blockPumpjack.maxStack = 5;
+            blockPumpjack.massPerUnit = 35f;
+            blockPumpjack.miningTier = 3;
+            EditorUtility.SetDirty(blockPumpjack);
+            ConfigurePirateInfiniteOilPlanet();
+            EnsurePirateJackPumpHeadRuinLoot(pirateJackPumpHead);
             var blockRefinery   = MakeIndustrialBlock("Block_OilRefinery", "Oil Refinery",      new Color(0.30f,0.20f,0.10f), refineryPrefab,
                 "Industrial multi-recipe processor. Crude Oil Barrel → Refined Oil Barrel + Empty Barrel, and Refined Oil + Coal → Plastic Bar + Empty Barrel. 2 input / 4 output / 2 upgrade slots. 400 W base draw.");
             var blockChemPlant  = MakeIndustrialBlock("Block_ChemicalPlant", "Chemical Plant",  new Color(0.40f,0.55f,0.35f), chemPlantPrefab,
@@ -3590,7 +3610,8 @@ namespace VoxelEngine.EditorTools
 
             // ── Oil chain (gated by Oil Extraction / Refining / Plastics) ──
             var recEmptyBarrel = AddRecipe("Recipe_EmptyBarrel", "Empty Barrel", emptyBarrel, 1, VoxelEngine.Crafting.StationTier.Assembler, false, ((VoxelEngine.Items.ItemDefinition)steelPlate, 1), ((VoxelEngine.Items.ItemDefinition)ironPlate, 2));
-            var recPumpjack    = AddRecipe("Recipe_Pumpjack", "Pumpjack", blockPumpjack, 1, VoxelEngine.Crafting.StationTier.Assembler, false, ((VoxelEngine.Items.ItemDefinition)steelPlate, 8), ((VoxelEngine.Items.ItemDefinition)ironGear, 6), ((VoxelEngine.Items.ItemDefinition)circuitBasic, 2));
+            var recPumpjack = EnsureJackPumpRecipe(registry, blockPumpjack, pirateJackPumpHead,
+                steelPlate, ironGear, circuitBasic, circuitAdv, copperPlate);
             var recRefinery    = AddRecipe("Recipe_OilRefinery", "Oil Refinery", blockRefinery, 1, VoxelEngine.Crafting.StationTier.Assembler, false, ((VoxelEngine.Items.ItemDefinition)steelPlate, 12), ((VoxelEngine.Items.ItemDefinition)ironGear, 8), ((VoxelEngine.Items.ItemDefinition)circuitBasic, 4), ((VoxelEngine.Items.ItemDefinition)copperPlate, 4));
             var recChemPlant   = AddRecipe("Recipe_ChemicalPlant", "Chemical Plant", blockChemPlant, 1, VoxelEngine.Crafting.StationTier.Assembler, false, ((VoxelEngine.Items.ItemDefinition)steelPlate, 12), ((VoxelEngine.Items.ItemDefinition)circuitAdv, 4), ((VoxelEngine.Items.ItemDefinition)copperWire, 8), ((VoxelEngine.Items.ItemDefinition)glass, 4));
             var recDock        = AddRecipe("Recipe_StationaryDockingPort", "Docking Pad", blockDock, 1, VoxelEngine.Crafting.StationTier.Assembler, true, ((VoxelEngine.Items.ItemDefinition)steelPlate, 10), ((VoxelEngine.Items.ItemDefinition)copperWire, 6));
@@ -3755,14 +3776,25 @@ namespace VoxelEngine.EditorTools
                 unlocks: new[] { recAdvCircuit },
                 prereqs: new[] { nElectronics, nAdvMfg });
 
-            // T3 — Oil Extraction: unlocks Empty Barrel + Pumpjack. Prereqs: Steel Alloy.
-            var nOilExtraction = MakeOrUpdateEnvNode("res_oil_extraction", "Oil Extraction",
-                "Press steel into Empty Barrels and assemble Pumpjacks to extract Crude Oil from underground reservoirs.",
+            // T3 — Oil Logistics: creates Empty Barrels, but not the relic-gated Jack Pump.
+            var nOilExtraction = MakeOrUpdateEnvNode("res_oil_extraction", "Oil Logistics",
+                "Press steel into Empty Barrels and establish the logistics needed to handle crude oil. Rare Pirate technology is required for a Jack Pump.",
                 tier: 3, col: 4, sub: VoxelEngine.Research.ResearchSubCategory.Chemistry,
                 tint: new Color(0.10f, 0.08f, 0.06f), seconds: 70f,
                 cost: new[] { (sciT2, 20), (sciT3, 10) },
-                unlocks: new[] { recEmptyBarrel, recPumpjack },
+                unlocks: new[] { recEmptyBarrel },
                 prereqs: new[] { nSteelAlloy });
+
+            // T4 — Pirate Oil Recovery: the recipe is deliberately impossible to
+            // complete without the uncraftable Jack Pump Head recovered in Pirate ruins.
+            var nPirateJackPump = MakeOrUpdateEnvNode("res_pirate_jack_pump", "Pirate Oil Recovery",
+                "Reverse-engineer a recovered Pirate Jack Pump Head into a high-draw walking-beam extractor for the Pirate World's rare infinite oil nodes.",
+                tier: 4, col: 4, sub: VoxelEngine.Research.ResearchSubCategory.Chemistry,
+                tint: new Color(0.32f, 0.26f, 0.18f), seconds: 150f,
+                cost: new[] { (sciT2, 45), (sciT3, 25) },
+                unlocks: new[] { recPumpjack },
+                prereqs: new[] { nOilExtraction, nAdvMfg });
+            LockRecipe(recPumpjack);
 
             // T4 — Oil Refining: unlocks Oil Refinery. Prereqs: Oil Extraction + Electronics.
             var nOilRefining = MakeOrUpdateEnvNode("res_oil_refining", "Oil Refining",
@@ -3884,7 +3916,7 @@ namespace VoxelEngine.EditorTools
                 "  • Glass (smelted at any furnace from Sand)\n" +
                 "  • Empty / Crude / Refined Oil Barrel, Plastic Bar\n\n" +
                 "BLOCKS\n" +
-                "  • Pumpjack (extracts oil from underground reservoirs)\n" +
+                "  • Jack Pump (rare Pirate node extractor; requires a Pirate Jack Pump Head)\n" +
                 "  • Oil Refinery (Crude → Refined → Plastic)\n" +
                 "  • Wireless Storage Terminal\n\n" +
                 "RESEARCH TREE (new nodes)\n" +
@@ -3926,6 +3958,220 @@ namespace VoxelEngine.EditorTools
                 r.inputs[j++] = new VoxelEngine.Crafting.RecipeIngredient { item = i.item, count = i.n };
             }
             EditorUtility.SetDirty(r);
+        }
+
+        /// <summary>Creates the head-gated Jack Pump recipe without overwriting a hand-tuned custom recipe.</summary>
+        private static VoxelEngine.Crafting.RecipeDefinition EnsureJackPumpRecipe(
+            VoxelEngine.Crafting.RecipeRegistry registry,
+            VoxelEngine.Items.ItemDefinition jackPump,
+            VoxelEngine.Items.ItemDefinition pirateHead,
+            VoxelEngine.Items.ItemDefinition steelPlate,
+            VoxelEngine.Items.ItemDefinition ironGear,
+            VoxelEngine.Items.ItemDefinition circuitBasic,
+            VoxelEngine.Items.ItemDefinition circuitAdvanced,
+            VoxelEngine.Items.ItemDefinition copperPlate)
+        {
+            const string recipePath = ASSET_ROOT + "/Recipes/Recipe_Pumpjack.asset";
+            var recipe = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeDefinition>(recipePath);
+            bool created = recipe == null;
+            if (recipe == null)
+            {
+                recipe = ScriptableObject.CreateInstance<VoxelEngine.Crafting.RecipeDefinition>();
+                AssetDatabase.CreateAsset(recipe, recipePath);
+            }
+
+            bool legacy = IsLegacyJackPumpRecipe(recipe, steelPlate, ironGear, circuitBasic);
+            if (created || legacy)
+            {
+                recipe.displayName = "Jack Pump";
+                recipe.outputItem = jackPump;
+                recipe.outputCount = 1;
+                recipe.requiredStation = VoxelEngine.Crafting.StationTier.Assembler;
+                recipe.craftSeconds = 90f;
+                recipe.inputs = BuildIngredients(
+                    (steelPlate, 30),
+                    (ironGear, 20),
+                    (copperPlate, 12),
+                    (circuitBasic, 8),
+                    (circuitAdvanced, 4),
+                    (pirateHead, 1));
+            }
+            else
+            {
+                // Preserve custom numeric balance while making the required relic
+                // non-optional on any pre-existing authored Jack Pump recipe.
+                recipe.outputItem ??= jackPump;
+                if (recipe.craftSeconds <= 0f) recipe.craftSeconds = 90f;
+                AppendIngredientIfMissing(recipe, pirateHead, 1);
+            }
+
+            recipe.unlockedByDefault = false;
+            if (registry != null)
+            {
+                registry.recipes.RemoveAll(r => r != null && r != recipe && r.name == "Recipe_Pumpjack");
+                if (!registry.recipes.Contains(recipe)) registry.recipes.Add(recipe);
+            }
+            EditorUtility.SetDirty(recipe);
+            return recipe;
+        }
+
+        private static bool IsLegacyJackPumpRecipe(VoxelEngine.Crafting.RecipeDefinition recipe,
+            VoxelEngine.Items.ItemDefinition steelPlate, VoxelEngine.Items.ItemDefinition ironGear,
+            VoxelEngine.Items.ItemDefinition circuitBasic)
+        {
+            if (recipe == null || recipe.inputs == null || recipe.inputs.Length != 3) return false;
+            return HasIngredient(recipe, steelPlate, 8)
+                && HasIngredient(recipe, ironGear, 6)
+                && HasIngredient(recipe, circuitBasic, 2);
+        }
+
+        private static bool HasIngredient(VoxelEngine.Crafting.RecipeDefinition recipe,
+            VoxelEngine.Items.ItemDefinition item, int count = -1)
+        {
+            if (recipe?.inputs == null || item == null) return false;
+            foreach (var ingredient in recipe.inputs)
+                if (ingredient.item == item && (count < 0 || ingredient.count == count)) return true;
+            return false;
+        }
+
+        private static VoxelEngine.Crafting.RecipeIngredient[] BuildIngredients(
+            params (VoxelEngine.Items.ItemDefinition item, int count)[] ingredients)
+        {
+            var list = new List<VoxelEngine.Crafting.RecipeIngredient>();
+            foreach (var entry in ingredients)
+                if (entry.item != null && entry.count > 0)
+                    list.Add(new VoxelEngine.Crafting.RecipeIngredient { item = entry.item, count = entry.count });
+            return list.ToArray();
+        }
+
+        private static void AppendIngredientIfMissing(VoxelEngine.Crafting.RecipeDefinition recipe,
+            VoxelEngine.Items.ItemDefinition item, int count)
+        {
+            if (recipe == null || item == null || count <= 0 || HasIngredient(recipe, item)) return;
+            var list = new List<VoxelEngine.Crafting.RecipeIngredient>(recipe.inputs ?? System.Array.Empty<VoxelEngine.Crafting.RecipeIngredient>())
+            {
+                new VoxelEngine.Crafting.RecipeIngredient { item = item, count = count }
+            };
+            recipe.inputs = list.ToArray();
+        }
+
+        /// <summary>Marks Pirate World as the sole author of rare infinite oil nodes.</summary>
+        private static void ConfigurePirateInfiniteOilPlanet()
+        {
+            var guids = AssetDatabase.FindAssets("t:PlanetTemplate", new[] { PLANET_FOLDER });
+            foreach (var guid in guids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                var planet = AssetDatabase.LoadAssetAtPath<VoxelEngine.Cosmos.PlanetTemplate>(path);
+                if (planet == null || planet.body == null) continue;
+
+                bool pirate = path.EndsWith("Planet_Pirate.asset")
+                    || (!string.IsNullOrEmpty(planet.body.bodyName)
+                        && planet.body.bodyName.IndexOf("pirate", System.StringComparison.OrdinalIgnoreCase) >= 0);
+                if (pirate)
+                {
+                    planet.body.enableInfiniteOilNodes = true;
+                    planet.body.infiniteOilNodeChance = 0.025f;
+                    planet.body.specials ??= new List<VoxelEngine.Cosmos.OreDeposit>();
+                    bool hasCrude = false;
+                    foreach (var deposit in planet.body.specials)
+                        if (deposit.material == VoxelEngine.Materials.MaterialId.CrudeOil) { hasCrude = true; break; }
+                    if (!hasCrude)
+                    {
+                        planet.body.specials.Add(new VoxelEngine.Cosmos.OreDeposit
+                        {
+                            material = VoxelEngine.Materials.MaterialId.CrudeOil,
+                            tier = VoxelEngine.Cosmos.OreTier.Special,
+                            scale = 0.04f,
+                            threshold = 0.70f,
+                            minDepth = 25,
+                            maxDepth = 90,
+                            abundance = 1f
+                        });
+                    }
+                }
+                else
+                {
+                    planet.body.enableInfiniteOilNodes = false;
+                }
+                EditorUtility.SetDirty(planet);
+            }
+        }
+
+        /// <summary>Adds the uncraftable relic head only to Pirate ruin rare rolls, preserving normal loot pools.</summary>
+        private static void EnsurePirateJackPumpHeadRuinLoot(VoxelEngine.Items.ItemDefinition head)
+        {
+            if (head == null) return;
+            string pirateRuinFolder = ASSET_ROOT + "/Survival/CelestialRuins";
+            foreach (var guid in AssetDatabase.FindAssets("Ruin_Pirate t:Prefab", new[] { pirateRuinFolder }))
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                var root = PrefabUtility.LoadPrefabContents(path);
+                try
+                {
+                    foreach (var chest in root.GetComponentsInChildren<VoxelEngine.Exploration.RuinChest>(true))
+                    {
+                        var rare = new List<VoxelEngine.Items.ItemDefinition>(chest.rareComponents ?? System.Array.Empty<VoxelEngine.Items.ItemDefinition>());
+                        if (!rare.Contains(head)) rare.Add(head);
+                        chest.rareComponents = rare.ToArray();
+                        chest.rareComponentChance = Mathf.Max(chest.rareComponentChance, 0.18f);
+                        EditorUtility.SetDirty(chest);
+                    }
+                    PrefabUtility.SaveAsPrefabAsset(root, path);
+                }
+                finally
+                {
+                    PrefabUtility.UnloadPrefabContents(root);
+                }
+            }
+        }
+
+        /// <summary>Builds the default realistic walking-beam visual only when custom visual work is absent.</summary>
+        private static void EnsureJackPumpVisuals(Transform root, Material dark, Material steel, Material brass, Material oil)
+        {
+            if (root == null || root.Find("JackPumpVisuals") != null) return;
+
+            var legacyMesh = root.Find("Mesh");
+            if (legacyMesh != null && (legacyMesh.localScale - new Vector3(1.6f, 2.2f, 1.6f)).sqrMagnitude < 0.001f)
+            {
+                var renderer = legacyMesh.GetComponent<Renderer>();
+                if (renderer != null) renderer.enabled = false;
+            }
+
+            var visuals = new GameObject("JackPumpVisuals").transform;
+            visuals.SetParent(root, false);
+
+            AddJackPumpPart(visuals, "SkidBase", PrimitiveType.Cube, new Vector3(0f, 0.14f, 0f), new Vector3(2.7f, 0.28f, 1.55f), Quaternion.identity, dark);
+            AddJackPumpPart(visuals, "Deck", PrimitiveType.Cube, new Vector3(0f, 0.34f, 0f), new Vector3(1.55f, 0.14f, 1.15f), Quaternion.identity, steel);
+            AddJackPumpPart(visuals, "MotorHousing", PrimitiveType.Cube, new Vector3(-0.72f, 0.68f, 0.12f), new Vector3(0.62f, 0.50f, 0.62f), Quaternion.identity, dark);
+            AddJackPumpPart(visuals, "Gearbox", PrimitiveType.Cylinder, new Vector3(-0.38f, 0.72f, 0.12f), new Vector3(0.38f, 0.20f, 0.38f), Quaternion.Euler(90f, 0f, 0f), brass);
+            AddJackPumpPart(visuals, "CrankWheel", PrimitiveType.Cylinder, new Vector3(-0.18f, 0.82f, 0.38f), new Vector3(0.74f, 0.10f, 0.74f), Quaternion.Euler(90f, 0f, 0f), brass);
+            AddJackPumpPart(visuals, "Counterweight", PrimitiveType.Cube, new Vector3(-0.43f, 1.03f, 0.38f), new Vector3(0.32f, 0.32f, 0.16f), Quaternion.identity, dark);
+            AddJackPumpPart(visuals, "PivotStand", PrimitiveType.Cube, new Vector3(0f, 1.22f, 0f), new Vector3(0.26f, 1.72f, 0.26f), Quaternion.identity, steel);
+            AddJackPumpPart(visuals, "WalkingBeam", PrimitiveType.Cube, new Vector3(0.38f, 1.72f, 0f), new Vector3(2.45f, 0.18f, 0.24f), Quaternion.Euler(0f, 0f, -5f), steel);
+            AddJackPumpPart(visuals, "HorseHead", PrimitiveType.Sphere, new Vector3(1.56f, 1.61f, 0f), new Vector3(0.42f, 0.34f, 0.42f), Quaternion.identity, dark);
+            AddJackPumpPart(visuals, "PolishedRod", PrimitiveType.Cylinder, new Vector3(1.58f, 0.82f, 0f), new Vector3(0.10f, 0.95f, 0.10f), Quaternion.identity, steel);
+            AddJackPumpPart(visuals, "Wellhead", PrimitiveType.Cylinder, new Vector3(1.58f, 0.32f, 0f), new Vector3(0.34f, 0.22f, 0.34f), Quaternion.identity, brass);
+            AddJackPumpPart(visuals, "OilOutput", PrimitiveType.Cylinder, new Vector3(0.88f, 0.50f, 0.46f), new Vector3(0.12f, 0.72f, 0.12f), Quaternion.Euler(90f, 0f, 0f), oil);
+            AddJackPumpPart(visuals, "PipeManifold", PrimitiveType.Cube, new Vector3(0.86f, 0.48f, 0.30f), new Vector3(0.78f, 0.16f, 0.16f), Quaternion.identity, brass);
+            AddJackPumpPart(visuals, "FrontBraceL", PrimitiveType.Cube, new Vector3(0.75f, 1.04f, -0.34f), new Vector3(0.12f, 1.45f, 0.12f), Quaternion.Euler(0f, 0f, -18f), steel);
+            AddJackPumpPart(visuals, "FrontBraceR", PrimitiveType.Cube, new Vector3(0.75f, 1.04f, 0.34f), new Vector3(0.12f, 1.45f, 0.12f), Quaternion.Euler(0f, 0f, -18f), steel);
+        }
+
+        private static GameObject AddJackPumpPart(Transform parent, string partName, PrimitiveType primitive,
+            Vector3 localPosition, Vector3 localScale, Quaternion localRotation, Material material)
+        {
+            var part = GameObject.CreatePrimitive(primitive);
+            part.name = partName;
+            part.transform.SetParent(parent, false);
+            part.transform.localPosition = localPosition;
+            part.transform.localRotation = localRotation;
+            part.transform.localScale = localScale;
+            var collider = part.GetComponent<Collider>();
+            if (collider != null) Object.DestroyImmediate(collider);
+            var renderer = part.GetComponent<Renderer>();
+            if (renderer != null) renderer.sharedMaterial = material;
+            return part;
         }
 
         private static void AppendSmeltingRecipe(string prefabPath, VoxelEngine.Crafting.SmeltingRecipe smRecipe, bool electric = false)
@@ -9727,6 +9973,7 @@ root =>
             var circuit     = FindItem("Item_Circuit");
             var plastic     = FindItem("Item_Plastic");
             var glass       = FindItem("Item_Glass");
+            var pirateJackPumpHead = FindItem("Item_PirateJackPumpHead");
 
             var bpNacelle = FindBlueprint("Item_Blueprint_Nacelle_t90");
             var bpGearbox = FindBlueprint("Item_Blueprint_Gearbox_t90");
@@ -10339,6 +10586,16 @@ root =>
                 if (childChest == null) childChest = chestGO.AddComponent<VoxelEngine.Exploration.RuinChest>();
                 childChest.ruinName = ruinDisplay; childChest.minComponents = keepMin; childChest.maxComponents = keepMax;
                 childChest.possibleComponents = finalComps; childChest.possibleFuel = finalFuel; childChest.possibleBlueprints = finalBps;
+                if (theme == "Pirate" && pirateJackPumpHead != null)
+                {
+                    childChest.rareComponents = new[] { pirateJackPumpHead };
+                    childChest.rareComponentChance = 0.18f;
+                }
+                else
+                {
+                    childChest.rareComponents = System.Array.Empty<ItemDefinition>();
+                    childChest.rareComponentChance = 0f;
+                }
 
                 // Beacon
                 var lightGO = new GameObject("RuinBeaconLight"); lightGO.transform.SetParent(root.transform, false);

@@ -162,6 +162,12 @@ namespace VoxelEngine.Cosmos
         [Header("Specials (crude oil, ice, …)")]
         public List<OreDeposit> specials = new List<OreDeposit>();
 
+        [Header("Rare Infinite Resource Nodes")]
+        [Tooltip("Enables the rare infinite crude-oil node sites on this spherical body. Author this only on Pirate World.")]
+        public bool enableInfiniteOilNodes;
+        [Tooltip("Chance that a crude-bearing geological cell becomes an infinite oil node. Kept deliberately low for Pirate World.")]
+        [Range(0.001f, 0.25f)] public float infiniteOilNodeChance = 0.025f;
+
         /// <summary>Enumerate every deposit across all tiers.</summary>
         public IEnumerable<OreDeposit> AllOres()
         {

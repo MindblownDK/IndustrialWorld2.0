@@ -851,6 +851,15 @@ namespace VoxelEngine.Persistence
                 return sc;
             }
 
+            var jackPump = go.GetComponentInChildren<VoxelEngine.Crafting.Pumpjack>();
+            if (jackPump != null)
+            {
+                jackPump.EnsureContainers();
+                var sc = SerializeMulti(jackPump.inputC, jackPump.outputC);
+                AttachPortSnapshot(go, sc);
+                return sc;
+            }
+
             var crusher = go.GetComponentInChildren<VoxelEngine.Simulation.Crusher>();
             if (crusher != null)
                 return SerializeMulti(crusher.inputC, crusher.outputC, crusher.upgradeC);
@@ -1987,6 +1996,15 @@ namespace VoxelEngine.Persistence
             {
                 efurn.EnsureContainers();
                 DeserializeMulti(sc, efurn.inputC, efurn.outputC, efurn.upgradeC);
+                RestorePortSnapshot(go, sc);
+                return;
+            }
+
+            var jackPump = go.GetComponentInChildren<VoxelEngine.Crafting.Pumpjack>();
+            if (jackPump != null)
+            {
+                jackPump.EnsureContainers();
+                DeserializeMulti(sc, jackPump.inputC, jackPump.outputC);
                 RestorePortSnapshot(go, sc);
                 return;
             }

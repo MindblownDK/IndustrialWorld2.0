@@ -28,6 +28,12 @@ namespace VoxelEngine.Exploration
         public ItemDefinition[] possibleFuel;
         [Tooltip("Blueprint cores that can be found here.")]
         public BlueprintDataCoreItem[] possibleBlueprints;
+
+        [Header("Rare Find")]
+        [Tooltip("Optional rare components, rolled independently after normal loot. Used for Pirate ruin relic parts.")]
+        public ItemDefinition[] rareComponents;
+        [Range(0f, 1f)] public float rareComponentChance = 0f;
+
         [Tooltip("Min/max components to roll.")]
         public int minComponents = 2;
         public int maxComponents = 5;
@@ -71,6 +77,12 @@ namespace VoxelEngine.Exploration
             {
                 var fuel = possibleFuel[Random.Range(0, possibleFuel.Length)];
                 if (fuel != null) container.Insert(new ItemStack(fuel, Random.Range(1, 3)));
+            }
+
+            if (rareComponents != null && rareComponents.Length > 0 && Random.value < Mathf.Clamp01(rareComponentChance))
+            {
+                var rare = rareComponents[Random.Range(0, rareComponents.Length)];
+                if (rare != null) container.Insert(new ItemStack(rare, 1));
             }
 
             if (possibleBlueprints != null && possibleBlueprints.Length > 0 && Random.value < 0.4f)

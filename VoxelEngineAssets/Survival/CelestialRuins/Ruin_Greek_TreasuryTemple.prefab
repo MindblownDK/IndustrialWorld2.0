@@ -208,6 +208,8 @@ MonoBehaviour:
   - {fileID: 11400000, guid: a493597288b3a4e43921c9467e5024f3, type: 2}
   - {fileID: 11400000, guid: 4dcc6acc218a640409f93293b0e92473, type: 2}
   - {fileID: 11400000, guid: f9bd2c1dd9aea16488a027f50fbb1885, type: 2}
+  rareComponents: []
+  rareComponentChance: 0
   minComponents: 3
   maxComponents: 6
   container:
@@ -739,7 +741,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Exploration.RuinBlockDrop
   salvage: {fileID: 11400000, guid: 96a60523ff509c84ba84cf35f6084bde, type: 2}
   count: 1
---- !u!1 &504813383534476082
+--- !u!1 &540401299255356543
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -747,49 +749,49 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 4989234364102618847}
-  - component: {fileID: 6460185841630803494}
-  - component: {fileID: 1038744511877644133}
-  - component: {fileID: 3034088718583051454}
-  - component: {fileID: 2088094964180456163}
-  - component: {fileID: 1735007745595287258}
+  - component: {fileID: 6466729474818682982}
+  - component: {fileID: 989355747143472531}
+  - component: {fileID: 4787220051292428782}
+  - component: {fileID: 47160122720063659}
+  - component: {fileID: 315292727028804251}
+  - component: {fileID: 3320423562660548738}
   m_Layer: 0
-  m_Name: Rubble_3
+  m_Name: Rubble_0
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &4989234364102618847
+--- !u!4 &6466729474818682982
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 504813383534476082}
+  m_GameObject: {fileID: 540401299255356543}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.940888, y: 0.014992296, z: 0.048214078, w: 0.33493352}
-  m_LocalPosition: {x: 3.5239503, y: 0.8639315, z: -1.7312673}
-  m_LocalScale: {x: 0.50982875, y: 0.407863, z: 0.50982875}
+  m_LocalRotation: {x: -0.5662431, y: 0.16562203, z: 0.07089065, w: 0.8043088}
+  m_LocalPosition: {x: 1.1932402, y: 0.7585805, z: -2.1252928}
+  m_LocalScale: {x: 0.24645123, y: 0.19716099, z: 0.24645123}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 5977372856029977356}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!33 &6460185841630803494
+--- !u!33 &989355747143472531
 MeshFilter:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 504813383534476082}
+  m_GameObject: {fileID: 540401299255356543}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
---- !u!65 &1038744511877644133
+--- !u!65 &4787220051292428782
 BoxCollider:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 504813383534476082}
+  m_GameObject: {fileID: 540401299255356543}
   m_Material: {fileID: 0}
   m_IncludeLayers:
     serializedVersion: 2
@@ -804,13 +806,13 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 1, y: 1, z: 1}
   m_Center: {x: 0, y: 0, z: 0}
---- !u!23 &3034088718583051454
+--- !u!23 &47160122720063659
 MeshRenderer:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 504813383534476082}
+  m_GameObject: {fileID: 540401299255356543}
   m_Enabled: 1
   m_CastShadows: 1
   m_ReceiveShadows: 1
@@ -853,13 +855,13 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
---- !u!114 &2088094964180456163
+--- !u!114 &315292727028804251
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 504813383534476082}
+  m_GameObject: {fileID: 540401299255356543}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 1f8b8158c33b76f4ea33ec446a9e15a3, type: 3}
@@ -868,13 +870,13 @@ MonoBehaviour:
   Item: {fileID: 0}
   Hp: 80
   onGrid: 1
---- !u!114 &1735007745595287258
+--- !u!114 &3320423562660548738
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 504813383534476082}
+  m_GameObject: {fileID: 540401299255356543}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a8408386432b5194b851b8ea6ccc30d7, type: 3}
@@ -3034,9 +3036,9 @@ Transform:
   - {fileID: 4774102897635808612}
   - {fileID: 5013020529422695660}
   - {fileID: 6446733762728100150}
+  - {fileID: 6466729474818682982}
   - {fileID: 4149250166235520767}
   - {fileID: 9034185098057091886}
-  - {fileID: 4989234364102618847}
   - {fileID: 7357084539009309542}
   - {fileID: 2939562056647156004}
   - {fileID: 3094968613273434377}
@@ -3395,9 +3397,9 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 3452826976694234241}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.32637134, y: 0.36006263, z: -0.6415911, w: -0.59346247}
-  m_LocalPosition: {x: -1.4612385, y: 0.83002084, z: 4.638467}
-  m_LocalScale: {x: 0.42505208, y: 0.34004167, z: 0.42505208}
+  m_LocalRotation: {x: 0.9014979, y: -0.3112751, z: -0.23054665, w: 0.1930223}
+  m_LocalPosition: {x: 2.051233, y: 0.8362231, z: -5.08937}
+  m_LocalScale: {x: 0.44055775, y: 0.3524462, z: 0.44055775}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 5977372856029977356}
@@ -3456,7 +3458,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 16b1e0249d12f8743b35b1d099642d71, type: 2}
+  - {fileID: 2100000, guid: d8ee67efdcf210d46b0421205a6c2640, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -3538,9 +3540,9 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 3771813146446591344}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.19217516, y: -0.47898757, z: -0.16317281, w: -0.8408414}
-  m_LocalPosition: {x: -2.503796, y: 0.78410816, z: -2.1334138}
-  m_LocalScale: {x: 0.31027043, y: 0.24821635, z: 0.31027043}
+  m_LocalRotation: {x: 0.28178173, y: 0.876692, z: -0.12070022, w: -0.37073135}
+  m_LocalPosition: {x: -2.5860653, y: 0.77330875, z: -2.4772892}
+  m_LocalScale: {x: 0.28327194, y: 0.22661756, z: 0.28327194}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 5977372856029977356}
@@ -4813,9 +4815,9 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 5167576413861985133}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.80509377, y: -0.06170825, z: -0.043315113, w: 0.5883367}
-  m_LocalPosition: {x: 0.802588, y: 0.8238215, z: -2.56464}
-  m_LocalScale: {x: 0.40955374, y: 0.327643, z: 0.40955374}
+  m_LocalRotation: {x: -0.6888304, y: 0.25980532, z: -0.12524386, w: 0.6650774}
+  m_LocalPosition: {x: 0.7817397, y: 0.85761386, z: 4.973398}
+  m_LocalScale: {x: 0.49403468, y: 0.39522776, z: 0.49403468}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 5977372856029977356}
@@ -4874,7 +4876,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: d8ee67efdcf210d46b0421205a6c2640, type: 2}
+  - {fileID: 2100000, guid: abcf217489849aa48bcbfd5a725fef70, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -4925,7 +4927,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a8408386432b5194b851b8ea6ccc30d7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Exploration.RuinBlockDrop
-  salvage: {fileID: 11400000, guid: 96a60523ff509c84ba84cf35f6084bde, type: 2}
+  salvage: {fileID: 11400000, guid: 9225024033f905e4187afc15d721e060, type: 2}
   count: 1
 --- !u!1 &5865004533712560503
 GameObject:
@@ -6805,9 +6807,9 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 7357643461979232217}
   serializedVersion: 2
-  m_LocalRotation: {x: -0.3227334, y: 0.48834932, z: 0.8081083, w: 0.065719455}
-  m_LocalPosition: {x: -3.069151, y: 0.8071296, z: 3.0462484}
-  m_LocalScale: {x: 0.367824, y: 0.2942592, z: 0.367824}
+  m_LocalRotation: {x: -0.34357843, y: 0.673176, z: -0.6349045, w: -0.16026326}
+  m_LocalPosition: {x: -0.36617613, y: 0.7530615, z: -2.0379643}
+  m_LocalScale: {x: 0.2326536, y: 0.18612288, z: 0.2326536}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 5977372856029977356}
@@ -6866,7 +6868,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: abcf217489849aa48bcbfd5a725fef70, type: 2}
+  - {fileID: 2100000, guid: 16b1e0249d12f8743b35b1d099642d71, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -6917,7 +6919,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a8408386432b5194b851b8ea6ccc30d7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Exploration.RuinBlockDrop
-  salvage: {fileID: 11400000, guid: 9225024033f905e4187afc15d721e060, type: 2}
+  salvage: {fileID: 11400000, guid: 96a60523ff509c84ba84cf35f6084bde, type: 2}
   count: 1
 --- !u!1 &7363843860764358719
 GameObject:

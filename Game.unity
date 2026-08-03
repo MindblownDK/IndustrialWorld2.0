@@ -1318,6 +1318,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Player.PlayerSpawner
   maxWaitSeconds: 12
   searchRadius: 32
+  drySpawnSearchAttempts: 24
 --- !u!114 &1700979168
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1374,6 +1375,10 @@ MonoBehaviour:
   iceGroundFriction: 0.85
   iceAccelerationMultiplier: 0.28
   iceSlideFrictionMultiplier: 0.35
+  terrainFootClearance: 0.06
+  uphillProbeDistance: 0.8
+  maxUphillAssistRise: 0.9
+  walkableGroundNormalMin: 0.18
   jumpHeight: 1.4
   gravity: -22
   coyoteTime: 0.12
@@ -1393,6 +1398,7 @@ MonoBehaviour:
   cameraPivot: {fileID: 1432126215}
   playerCamera: {fileID: 302093474}
   inspectorFlyToggle: 0
+  IsMounted: 0
 --- !u!143 &1700979171
 CharacterController:
   m_ObjectHideFlags: 0

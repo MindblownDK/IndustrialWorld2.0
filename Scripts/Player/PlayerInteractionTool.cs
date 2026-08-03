@@ -908,6 +908,8 @@ namespace VoxelEngine.Player
                 if (splitter != null) { UI.GameUIController.Instance?.OpenMachine(splitter); return; }
 
                 // Industrial fluid processors.
+                var jackPump = hit.collider.GetComponentInParent<VoxelEngine.Crafting.Pumpjack>();
+                if (jackPump != null) { UI.GameUIController.Instance?.OpenMachine(jackPump); return; }
                 var oilRefinery = hit.collider.GetComponentInParent<VoxelEngine.Crafting.OilRefinery>();
                 if (oilRefinery != null) { UI.GameUIController.Instance?.OpenMachine(oilRefinery); return; }
                 var chemPlant = hit.collider.GetComponentInParent<VoxelEngine.Industrial.StationaryChemicalPlant>();

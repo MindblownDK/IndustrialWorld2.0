@@ -1,9 +1,38 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.9.4-dev`
+**Current Version:** `7.10.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.10.0-dev] Pirate Infinite Oil Nodes & Jack Pump Industry
+
+**Type:** MINOR — new save-compatible Pirate World resource system, relic-gated industrial block, recipe, and research progression.
+
+#### 🛢 Pirate World infinite oil nodes
+- Added `BodySettings.enableInfiniteOilNodes` and a low node-chance setting. Setup configures **Pirate World** as the sole owner; all other spherical bodies filter crude-oil markers from their generated ore layers.
+- Pirate oil sites are very rare, deterministic geological nodes: visible puddle, radial bore, deep reservoir, and an infinite runtime node identity.
+- The node remains pumpable even when visible crude fluid has been disturbed, while the site itself remains geographically rare and Pirate-only.
+
+#### ⚙ Jack Pump block and high-power production
+- Upgraded the existing Pumpjack content into the **Jack Pump**: a realistic walking-beam prefab with motor, gearbox, crank wheel, counterweight, derrick, polished rod, wellhead, manifold, and animated pumping motion.
+- Jack Pumps consume Empty Barrels and emit Crude Oil Barrels from a two-slot output; they only run over a rare Pirate infinite-oil node.
+- Active draw is **4 kW**, standby draw is **120 W**, and each barrel takes **14 seconds**, making node extraction a serious industrial power commitment.
+- Added a dedicated Jack Pump UI, live node/power/cycle readout, item-port containers, player interaction opening, and save/restore for input/output inventories.
+
+#### ☠ Pirate relic progression
+- Added the uncraftable **Pirate Jack Pump Head** component. It is added only to the rare-loot roll of Pirate ruin chests (18% per chest roll), never to any crafting recipe or other world loot table.
+- Added the expensive 90-second Assembler recipe: 30 Steel Plates, 20 Iron Gears, 12 Copper Plates, 8 Electronic Circuits, 4 Advanced Circuits, and 1 Pirate Jack Pump Head.
+- Added **Pirate Oil Recovery** research (Tier 4), which unlocks the Jack Pump recipe after Oil Logistics and Advanced Manufacturing. Standard Oil Logistics now unlocks barrels only.
+
+#### 🛠 Setup-owned authoring
+- Step 10 of **Tools > Voxel Engine > Voxel Engine Setup** now creates/repairs the Jack Pump item/prefab/recipe/research, configures Pirate World, and patches existing Pirate ruin prefab loot non-destructively.
+- Step 20 also writes the rare head into newly rebuilt Pirate ruins.
+
+#### ✅ Static delivery checks
+- Revised source parses cleanly locally. Unity compilation and Play Mode validation remain pending from Thomas.
+
+---
 
 ### [7.9.4-dev] Spherical Oil Sites & Correct Planet Water FX
 

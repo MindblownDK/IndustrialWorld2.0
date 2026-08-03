@@ -20,6 +20,7 @@ namespace VoxelEngine.Generation
         private const int MinimumShaftDepth = 8;
         private const int PendingAttemptLimit = 48;
         private const int PendingRetryBudgetPerChunk = 2;
+        private const int NodeCellSize = 96;
 
         private struct PendingReservoir
         {
@@ -32,18 +33,25 @@ namespace VoxelEngine.Generation
         // tiny retry list so the feature waits for a genuine exposed surface instead
         // of treating an unloaded chunk boundary as an underwater oil puddle.
         private static readonly List<PendingReservoir> s_pending = new(32);
+        private static readonly HashSet<Vector3Int> s_claimedNodeCells = new();
 
         public static void Decorate(Chunk chunk, IVoxelWorld world)
         {
-            // IndustrialWorld terrain is spherical-only. Keeping this decorator bound
-            // to SphereWorld avoids a second flat-world generation path and keeps every
-            // bore aligned to a planet's radial gravity frame.
-            if (chunk == null || world is not SphereWorld || !chunk.isGenerated) return;
+            // IndustrialWorld terrain is spherical-only. Oil is deliberately a
+            // Pirate World resource, authored through BodySettings by setup.
+            if (chunk == null || world is not SphereWorld sphere || !chunk.isGenerated
+                || sphere.body == null || sphere.body.settings == null
+                || !sphere.body.settings.enableInfiniteOilNodes) return;
 
             RetryPending(world);
             if (!FindOilMarker(chunk, out Vector3Int marker)) return;
+            Vector3Int nodeCell = ToNodeCell(marker);
+            if (s_claimedNodeCells.Contains(nodeCell)
+                || !ShouldCreateReservoir(nodeCell, sphere.body.settings.infiniteOilNodeChance)) return;
 
-            if (!TryCreateReservoir(world, marker))
+            if (TryCreateReservoir(world, marker))
+                s_claimedNodeCells.Add(nodeCell);
+            else
                 QueuePending(world, marker);
         }
 
@@ -71,6 +79,23 @@ namespace VoxelEngine.Generation
 
 
 
+        private static Vector3Int ToNodeCell(Vector3Int marker)
+            => new(
+                Mathf.FloorToInt(marker.x / (float)NodeCellSize),
+                Mathf.FloorToInt(marker.y / (float)NodeCellSize),
+                Mathf.FloorToInt(marker.z / (float)NodeCellSize));
+
+        private static bool ShouldCreateReservoir(Vector3Int nodeCell, float chance)
+        {
+            chance = Mathf.Clamp(chance, 0.001f, 0.25f);
+            unchecked
+            {
+                int hash = nodeCell.x * 73856093 ^ nodeCell.y * 19349663 ^ nodeCell.z * 83492791;
+                float roll = (hash & 0x7fffffff) / (float)int.MaxValue;
+                return roll <= chance;
+            }
+        }
+
         private static bool TryCreateReservoir(IVoxelWorld world, Vector3Int marker)
         {
             Vector3 up = GetUpDir(world, marker);
@@ -92,6 +117,8 @@ namespace VoxelEngine.Generation
                 BuildVerticalBore(world, surface, reservoirTop, up, 1, touched);
                 BuildReservoir(world, marker, reservoirRadius, touched);
                 FlushTouchedChunks(world, touched);
+                if (world is SphereWorld sphere)
+                    PirateOilNode.Ensure(sphere, surface, marker);
             }
 
             return true;
@@ -257,9 +284,15 @@ namespace VoxelEngine.Generation
             {
                 PendingReservoir pending = s_pending[i];
                 if (!object.ReferenceEquals(pending.World, world)) continue;
+                if (s_claimedNodeCells.Contains(ToNodeCell(pending.Marker)))
+                {
+                    s_pending.RemoveAt(i);
+                    continue;
+                }
                 processed++;
                 if (TryCreateReservoir(world, pending.Marker))
                 {
+                    s_claimedNodeCells.Add(ToNodeCell(pending.Marker));
                     s_pending.RemoveAt(i);
                     continue;
                 }

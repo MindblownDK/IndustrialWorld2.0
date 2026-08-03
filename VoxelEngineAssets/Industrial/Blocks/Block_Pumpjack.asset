@@ -13,20 +13,19 @@ MonoBehaviour:
   m_Name: Block_Pumpjack
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Items.BlockItem
   itemId: block_pumpjack
-  displayName: Pumpjack
-  description: Powered surface extractor. Scans the column below itself for Crude
-    Oil voxels, lifts one barrel per cycle (consumes an Empty Barrel). Place over
-    an oil pool. ~250 W while running.
+  displayName: Jack Pump
+  description: Heavy walking-beam oil extractor. Runs only on a rare infinite Pirate
+    World oil node; consumes Empty Barrels and draws 4 kW while pumping.
   icon: {fileID: 21300000, guid: 6f00063689fd75c52ef1f3a388d52249, type: 3}
   iconTint: {r: 0.2, g: 0.2, b: 0.22, a: 1}
-  maxStack: 50
-  massPerUnit: 8
+  maxStack: 5
+  massPerUnit: 35
   category: Industrial
   viewmodelPrefab: {fileID: 0}
   placedPrefab: {fileID: 5046380633412393529, guid: f0e80c6cb7fc2884ab5be275875147c4, type: 3}
   gridSize: {x: 1, y: 1, z: 1}
   allowStacking: 0
-  blockHealth: 600
-  miningTier: 2
+  blockHealth: 1400
+  miningTier: 3
   placedMaterial: {fileID: 0}
   texture: {fileID: 0}

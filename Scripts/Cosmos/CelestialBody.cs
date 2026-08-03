@@ -198,7 +198,16 @@ namespace VoxelEngine.Cosmos
 
         /// <summary>Prebuilt ore layers for this body (common + rare + specials).</summary>
         public OreLayer[] BuildOreLayers()
-            => settings != null ? settings.BuildOreLayers().ToArray() : System.Array.Empty<OreLayer>();
+        {
+            if (settings == null) return System.Array.Empty<OreLayer>();
+            var layers = settings.BuildOreLayers();
+            // Infinite crude is a Pirate World resource. Other bodies must not
+            // generate dormant raw-oil markers that look collectible but cannot form
+            // a legitimate node or power a Jack Pump.
+            if (!settings.enableInfiniteOilNodes)
+                layers.RemoveAll(layer => layer.material == VoxelEngine.Materials.MaterialId.CrudeOil);
+            return layers.ToArray();
+        }
 
         /// <summary>
         /// Phase 3: remap biome surface materials by IDENTITY so the planet looks realistic.
