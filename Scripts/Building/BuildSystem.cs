@@ -708,7 +708,9 @@ namespace VoxelEngine.Building
                 Vector3 worldDelta = candidate.transform.position - ghostPosition;
                 Vector3 alignmentDelta = grid != null
                     ? grid.transform.InverseTransformVector(worldDelta)
-                    : worldDelta;
+                    // Static/surface-aligned pipes use their own local XYZ frame.
+                    // World axes broke vertical/side runs after pipes were rotated.
+                    : candidate.transform.InverseTransformVector(worldDelta);
                 if (!VoxelEngine.Networks.PipeAdjacency.IsCoplanarPipeLinkDelta(
                         alignmentDelta, cellSize, 5f, cellSize * 0.18f)) return;
                 float distance = worldDelta.sqrMagnitude;
@@ -1107,6 +1109,8 @@ namespace VoxelEngine.Building
         /// </summary>
         private void ComputePlacementPose(RaycastHit hit, BlockItem block, out Vector3 pos, out Quaternion rot)
         {
+            if (TryGetStaticPipeSnapPose(hit, block, out pos, out rot))
+                return;
             if (TryGetFactorySnapPose(hit, block, out pos, out rot))
                 return;
 
@@ -1116,6 +1120,46 @@ namespace VoxelEngine.Building
 
             pos = ComputePlacementPosition(hit, block);
             rot = GravityProvider.GetSurfaceRotation(pos) * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
+        }
+
+        /// <summary>
+        /// Static pipes have their own local XYZ frame (especially on spherical terrain).
+        /// Clicking an existing pipe face therefore extends the held matching pipe exactly
+        /// one local cell along X/Y/Z instead of world-grid rounding into a different plane.
+        /// </summary>
+        private bool TryGetStaticPipeSnapPose(RaycastHit hit, BlockItem held, out Vector3 pos, out Quaternion rot)
+        {
+            pos = default;
+            rot = default;
+            if (held == null || held.placedPrefab == null || hit.collider == null || !IsUnifiedPipe(held)) return false;
+
+            MonoBehaviour target = hit.collider.GetComponentInParent<VoxelEngine.Transport.ItemPipe>();
+            if (target == null) target = hit.collider.GetComponentInParent<VoxelEngine.Gas.GasPipe>();
+            if (target == null) target = hit.collider.GetComponentInParent<VoxelEngine.Fluids.WaterPipe>();
+            if (target == null || target.GetComponentInParent<GridEntity>() != null) return false;
+            if (!IsMatchingStaticPipeFamily(held, target)) return false;
+
+            Vector3 localHit = target.transform.InverseTransformPoint(hit.point);
+            if (localHit.sqrMagnitude < 0.0001f)
+                localHit = target.transform.InverseTransformDirection(hit.normal);
+            Vector3 localAxis = NearestLocalCardinal(localHit);
+            if (localAxis.sqrMagnitude < 0.0001f) return false;
+
+            float step = Mathf.Max(0.01f, gridSize);
+            pos = target.transform.position + target.transform.TransformDirection(localAxis).normalized * step;
+            rot = target.transform.rotation * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
+            return true;
+        }
+
+        private static bool IsMatchingStaticPipeFamily(BlockItem held, MonoBehaviour target)
+        {
+            if (held == null || held.placedPrefab == null || target == null) return false;
+            bool item = held.placedPrefab.GetComponentInChildren<VoxelEngine.Transport.ItemPipe>(true) != null;
+            bool gas = held.placedPrefab.GetComponentInChildren<VoxelEngine.Gas.GasPipe>(true) != null;
+            bool liquid = held.placedPrefab.GetComponentInChildren<VoxelEngine.Fluids.WaterPipe>(true) != null;
+            return (item && target is VoxelEngine.Transport.ItemPipe)
+                || (gas && target is VoxelEngine.Gas.GasPipe)
+                || (liquid && target is VoxelEngine.Fluids.WaterPipe);
         }
 
         private bool TryGetFactorySnapPose(RaycastHit hit, BlockItem block, out Vector3 pos, out Quaternion rot)

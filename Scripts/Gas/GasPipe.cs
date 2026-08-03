@@ -195,8 +195,8 @@ namespace VoxelEngine.Gas
                     var wPipe = col.GetComponentInParent<GasPipe>();
                     if (wPipe != null && wPipe != this)
                     {
-                        if (VoxelEngine.Networks.PipeAdjacency.IsCoplanarPipeLink(
-                                transform.position, wPipe.transform.position,
+                        if (VoxelEngine.Networks.PipeAdjacency.IsCoplanarPipeLinkDelta(
+                                VoxelEngine.Networks.PipeAdjacency.ConnectionDelta(this, wPipe),
                                 VoxelEngine.Networks.PipeAdjacency.DefaultGridSize, 5f))
                             _neighbourPosBuf.Add(Vector3.Lerp(transform.position, wPipe.transform.position, 0.5f));
                         continue;
@@ -225,8 +225,8 @@ namespace VoxelEngine.Gas
                     var other = col.GetComponentInParent<GasPipe>();
                     if (other != null && other != this)
                     {
-                        if (VoxelEngine.Networks.PipeAdjacency.IsCoplanarPipeLink(
-                                transform.position, other.transform.position,
+                        if (VoxelEngine.Networks.PipeAdjacency.IsCoplanarPipeLinkDelta(
+                                VoxelEngine.Networks.PipeAdjacency.ConnectionDelta(this, other),
                                 VoxelEngine.Networks.PipeAdjacency.DefaultGridSize, 5f))
                             _neighbourPosBuf.Add(Vector3.Lerp(transform.position, other.transform.position, 0.5f));
                         continue;

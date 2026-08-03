@@ -67,6 +67,7 @@ namespace VoxelEngine.UI
         {
             LoadPrefs();
             var panel = T.MachinePanel();
+            LcdHudTheme.ApplyChassis(panel, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.96f), 3f);
             panel.style.left = new StyleLength(new Length(34f, LengthUnit.Percent));
             panel.style.right = 12;
             panel.style.width = new StyleLength(new Length(54f, LengthUnit.Percent));
@@ -85,7 +86,7 @@ namespace VoxelEngine.UI
 
             var snapshot = ProductionStatsTracker.Instance.GetSnapshot();
             panel.Add(Header(snapshot));
-            panel.Add(T.AccentDivider(ProductionPanelThemeState.Accent));
+            panel.Add(T.AccentDivider(LcdHudTheme.Phosphor));
 
             var scroll = new ScrollView(ScrollViewMode.Vertical);
             scroll.style.flexGrow = 1;
@@ -136,6 +137,7 @@ namespace VoxelEngine.UI
             row.Add(T.IconBadge("◧", ProductionPanelThemeState.Accent));
             var title = T.Title("Production Statistics");
             title.style.flexGrow = 1;
+            title.style.color = new StyleColor(LcdHudTheme.Phosphor);
             title.AddToClassList("themed-title");
             row.Add(title);
 

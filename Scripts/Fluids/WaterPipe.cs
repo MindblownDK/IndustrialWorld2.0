@@ -142,8 +142,8 @@ namespace VoxelEngine.Fluids
                     if (worldPipe != null && worldPipe != this)
                     {
                         Vector3 d = worldPipe.transform.position - transform.position;
-                        if (VoxelEngine.Networks.PipeAdjacency.IsCoplanarPipeLink(
-                                transform.position, worldPipe.transform.position,
+                        if (VoxelEngine.Networks.PipeAdjacency.IsCoplanarPipeLinkDelta(
+                                VoxelEngine.Networks.PipeAdjacency.ConnectionDelta(this, worldPipe),
                                 VoxelEngine.Networks.PipeAdjacency.DefaultGridSize, 5f))
                         {
                             _neighbourPosBuf.Add(Vector3.Lerp(transform.position, worldPipe.transform.position, 0.5f));
@@ -191,8 +191,8 @@ namespace VoxelEngine.Fluids
                     var otherPipe = col.GetComponentInParent<WaterPipe>();
                     if (otherPipe != null && otherPipe != this)
                     {
-                        if (VoxelEngine.Networks.PipeAdjacency.IsCoplanarPipeLink(
-                                transform.position, otherPipe.transform.position,
+                        if (VoxelEngine.Networks.PipeAdjacency.IsCoplanarPipeLinkDelta(
+                                VoxelEngine.Networks.PipeAdjacency.ConnectionDelta(this, otherPipe),
                                 VoxelEngine.Networks.PipeAdjacency.DefaultGridSize, 5f))
                             _neighbourPosBuf.Add(Vector3.Lerp(transform.position, otherPipe.transform.position, 0.5f));
                         continue;

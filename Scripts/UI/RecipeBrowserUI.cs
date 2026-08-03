@@ -66,6 +66,7 @@ namespace VoxelEngine.UI
         public static VisualElement BuildPanel(RecipeRegistry registry, Inventory inventory = null)
         {
             var panel = T.MachinePanel();
+            LcdHudTheme.ApplyChassis(panel, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.96f), 3f);
             panel.style.left = new StyleLength(new Length(34f, LengthUnit.Percent));
             panel.style.right = 12;
             panel.style.width = new StyleLength(new Length(54f, LengthUnit.Percent));
@@ -88,7 +89,7 @@ namespace VoxelEngine.UI
             if (string.IsNullOrEmpty(_selectedOutputKey) && entries.Count > 0) _selectedOutputKey = OutputKey(entries[0].Output);
 
             panel.Add(Header());
-            panel.Add(T.AccentDivider(ProductionPanelThemeState.Accent));
+            panel.Add(T.AccentDivider(LcdHudTheme.Phosphor));
 
             var body = new VisualElement();
             body.style.flexDirection = FlexDirection.Row;
@@ -158,6 +159,7 @@ namespace VoxelEngine.UI
             row.Add(T.IconBadge("◫", ProductionPanelThemeState.Accent));
             var title = T.Title("Recipe Browser");
             title.style.flexGrow = 1;
+            title.style.color = new StyleColor(LcdHudTheme.Phosphor);
             title.AddToClassList("themed-title");
             row.Add(title);
             row.Add(T.SmallButton($"Theme: {ProductionPanelThemeState.Label}", () =>

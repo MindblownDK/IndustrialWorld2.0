@@ -146,7 +146,20 @@ namespace VoxelEngine.Networks
             var blockB = b.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
             if (blockA != null && blockB != null && blockA.Grid != null && blockA.Grid == blockB.Grid)
                 return blockA.Grid.transform.InverseTransformVector(worldDelta);
+
+            // Stationary pipes can be surface-aligned on spherical terrain or manually
+            // rotated. Evaluate their link in the source pipe's own XYZ frame instead
+            // of forcing world axes, so static pipe runs work in all three local planes.
+            if (IsPipeComponent(a) && IsPipeComponent(b))
+                return a.transform.InverseTransformVector(worldDelta);
             return worldDelta;
+        }
+
+        private static bool IsPipeComponent(Component component)
+        {
+            return component is VoxelEngine.Transport.ItemPipe
+                || component is VoxelEngine.Gas.GasPipe
+                || component is VoxelEngine.Fluids.WaterPipe;
         }
 
         public static bool IsAxisAlignedWithin(Vector3 a, Vector3 b,

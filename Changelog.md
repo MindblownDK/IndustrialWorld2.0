@@ -14,12 +14,15 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 - Rebuilt the cockpit as a practical **FLIGHT COMPUTER**: rectangular instrument chassis, phosphor compass, primary speed/altitude screen, LCD bus/H₂/battery/dampener readouts, plus the existing gravity and coast-path instruments.
 - Rebuilt player vitals into a compact **SUIT STATUS** monitor with rectangular LCD rows and segment gauges for HP, H₂, hunger, O₂, and carried power.
 
-#### 🎒 Instrumented hotbar
+#### 🎒 Instrumented inventory and hotbar
+- Added a Crusader helmet mark before the Inventory title and a hand-built Crusader cross emblem in the inventory header’s top-right corner.
+- Rebuilt Inventory, Crafting, Armor, Jetpack Bay, Life Support, Production Statistics, and Recipe Browser outer surfaces under the same fitted LCD chassis language.
 - Rebuilt the held-item notification as a fitted LCD `HELD ITEM` screen.
 - Rebuilt the hotbar into a physical instrument rack with compact phosphor key labels, scan lines, selected-slot screen glass, and non-generic bezel treatment.
 
 #### ━ Pipe follow-up hardening
 - Restored pipe runs of up to five small lattice cells on an exact shared plane, while retaining the new strict rejection of diagonal/off-plane links.
+- Static pipes now snap and evaluate links in their own local X/Y/Z frame, restoring rotated/surface-aligned stationary runs as well as grid runs.
 - Structural grid blocks now reject any occupied precision-detail volume, preventing them from engulfing grid pipes even when aimed through a neighbouring hull block.
 - Static normal blocks now reject placed conduit/cable volumes instead of burying pipes inside themselves.
 

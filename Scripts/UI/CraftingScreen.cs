@@ -100,10 +100,10 @@ namespace VoxelEngine.UI
             btn.style.paddingLeft    = 12;
             btn.style.paddingRight   = 12;
             btn.style.marginTop      = 10;
-            Color baseBg = open ? new Color(T.AccentCyan.r, T.AccentCyan.g, T.AccentCyan.b, 0.16f) : T.BgSlot;
+            Color baseBg = open ? LcdHudTheme.Glass : LcdHudTheme.GlassDark;
             btn.style.backgroundColor = new StyleColor(baseBg);
-            T.Radius(btn, T.ButtonRadius);
-            T.Border(btn, 1, open ? T.BorderBright : T.BorderDim);
+            T.Radius(btn, 1f);
+            T.Border(btn, 1, open ? LcdHudTheme.Phosphor : LcdHudTheme.Bezel);
 
             var left = new VisualElement();
             left.style.flexDirection = FlexDirection.Row;
@@ -112,7 +112,7 @@ namespace VoxelEngine.UI
 
             var icon = new Label("\u2692"); // ⚒ hammer & pick
             icon.style.fontSize   = 15;
-            icon.style.color      = new StyleColor(open ? T.AccentCyan : T.TextSecondary);
+            icon.style.color      = new StyleColor(open ? LcdHudTheme.Phosphor : LcdHudTheme.PhosphorDim);
             icon.style.marginRight = 8;
             icon.pickingMode      = PickingMode.Ignore;
             left.Add(icon);
@@ -121,14 +121,14 @@ namespace VoxelEngine.UI
             label.style.fontSize              = 11;
             label.style.letterSpacing         = 1.6f;
             label.style.unityFontStyleAndWeight = FontStyle.Bold;
-            label.style.color                 = new StyleColor(open ? T.TextPrimary : T.TextSecondary);
+            label.style.color                 = new StyleColor(open ? LcdHudTheme.Phosphor : T.TextSecondary);
             label.pickingMode                 = PickingMode.Ignore;
             left.Add(label);
             btn.Add(left);
 
             var chev = new Label(open ? "\u25BC" : "\u25B6"); // ▼ / ▶
             chev.style.fontSize = 10;
-            chev.style.color    = new StyleColor(open ? T.AccentCyan : T.TextMuted);
+            chev.style.color    = new StyleColor(open ? LcdHudTheme.Phosphor : T.TextMuted);
             chev.pickingMode    = PickingMode.Ignore;
             btn.Add(chev);
 
@@ -139,8 +139,8 @@ namespace VoxelEngine.UI
             {
                 btn.style.scale = new StyleScale(new Scale(new Vector3(1.015f, 1.015f, 1f)));
                 btn.style.backgroundColor = new StyleColor(open
-                    ? new Color(T.AccentCyan.r, T.AccentCyan.g, T.AccentCyan.b, 0.26f)
-                    : T.BgHover);
+                    ? new Color(LcdHudTheme.Phosphor.r, LcdHudTheme.Phosphor.g, LcdHudTheme.Phosphor.b, 0.20f)
+                    : new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.85f));
             });
             btn.RegisterCallback<MouseLeaveEvent>(_ =>
             {
@@ -182,6 +182,7 @@ namespace VoxelEngine.UI
             string panelId)
         {
             recipes ??= new List<RecipeDefinition>();
+            LcdHudTheme.ApplyChassis(panel, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.96f), 3f);
 
             // ── Header: badge + title + search ──────────────────────────────
             var header = new VisualElement();
@@ -189,9 +190,10 @@ namespace VoxelEngine.UI
             header.style.alignItems    = Align.Center;
             header.style.marginBottom  = 6;
 
-            header.Add(T.IconBadge("\u2692", T.AccentCyan));
+            header.Add(T.IconBadge("\u2692", LcdHudTheme.Phosphor));
             var title = T.Title("CRAFTING");
             title.style.flexGrow = 1;
+            title.style.color = new StyleColor(LcdHudTheme.Phosphor);
             header.Add(title);
 
             var search = new TextField { value = GetSearch(panelId) };
@@ -200,7 +202,7 @@ namespace VoxelEngine.UI
             search.style.alignSelf  = Align.Center;
             header.Add(search);
             panel.Add(header);
-            panel.Add(T.AccentDivider());
+            panel.Add(T.AccentDivider(LcdHudTheme.Phosphor));
 
             // ── Body: 3 columns ─────────────────────────────────────────────
             var body = new VisualElement();

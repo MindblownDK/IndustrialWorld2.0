@@ -1322,9 +1322,14 @@ namespace VoxelEngine.UI
             if (showSort) wrapper.Add(sortRow);
 
             // Slot grid
-            var grid = new VisualElement();
+            var grid = new VisualElement { name = "InventoryLcdSlotGrid" };
             grid.style.flexDirection = FlexDirection.Row;
             grid.style.flexWrap = Wrap.Wrap;
+            grid.style.paddingLeft = 4;
+            grid.style.paddingRight = 4;
+            grid.style.paddingTop = 4;
+            grid.style.paddingBottom = 4;
+            LcdHudTheme.ApplyScreen(grid, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.82f), 1f);
 
             int end = endIdx < 0 ? container.Slots.Count : endIdx;
             for (int i = startIdx; i < end; i++)
@@ -1342,8 +1347,9 @@ namespace VoxelEngine.UI
             box.style.marginBottom = 10;
             box.style.paddingTop = 2;
             box.style.paddingBottom = 4;
-            box.style.paddingLeft = 2;
-            box.style.paddingRight = 2;
+            box.style.paddingLeft = 6;
+            box.style.paddingRight = 6;
+            LcdHudTheme.ApplyScreen(box, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.84f), 1f);
 
             var header = new VisualElement();
             header.style.flexDirection = FlexDirection.Row;
@@ -1355,7 +1361,7 @@ namespace VoxelEngine.UI
             title.style.fontSize = 10;
             title.style.unityFontStyleAndWeight = FontStyle.Bold;
             title.style.letterSpacing = 1.2f;
-            title.style.color = UITheme.AccentCyan;
+            title.style.color = LcdHudTheme.Phosphor;
             header.Add(title);
 
             // NOTE: ensure/auto-refuel is done by OpenInventory BEFORE the build —
@@ -1368,8 +1374,9 @@ namespace VoxelEngine.UI
             _jbStatusPill.style.paddingRight = 7;
             _jbStatusPill.style.paddingTop = 2;
             _jbStatusPill.style.paddingBottom = 2;
-            SetBorderRadius(_jbStatusPill, 9);
-            _jbStatusPill.style.backgroundColor = new StyleColor(new Color(0f, 0f, 0f, 0.32f));
+            SetBorderRadius(_jbStatusPill, 1);
+            _jbStatusPill.style.backgroundColor = new StyleColor(LcdHudTheme.GlassDark);
+            UITheme.Border(_jbStatusPill, 1f, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.82f));
             _jbStatus = new Label("");
             _jbStatus.style.fontSize = 9;
             _jbStatus.style.unityFontStyleAndWeight = FontStyle.Bold;
@@ -1480,24 +1487,28 @@ namespace VoxelEngine.UI
             if (!visible) return (null, null, null);
             var row = new VisualElement();
             row.style.marginTop = 4; row.style.marginLeft = 2; row.style.marginRight = 2;
+            row.style.paddingLeft = 5; row.style.paddingRight = 5;
+            row.style.paddingTop = 3; row.style.paddingBottom = 3;
+            LcdHudTheme.ApplyScreen(row, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.78f), 1f);
 
             var label = new Label($"{name}  {cur} / {cap} {unit}");
             label.style.fontSize = 9;
-            label.style.color = accent;
+            label.style.color = LcdHudTheme.Phosphor;
             label.style.marginBottom = 3;
             row.Add(label);
 
             var track = new VisualElement();
             track.style.height = 6;
-            track.style.backgroundColor = new StyleColor(new Color(0.08f, 0.1f, 0.14f, 0.95f));
-            SetBorderRadius(track, 3);
+            track.style.backgroundColor = new StyleColor(LcdHudTheme.GlassDark);
+            SetBorderRadius(track, 1);
+            UITheme.Border(track, 1f, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.75f));
             track.style.overflow = Overflow.Hidden;
 
             var fill = new VisualElement();
             fill.style.height = 6;
             fill.style.width = new StyleLength(new Length(cap > 0 ? Mathf.Clamp01(cur / (float)cap) * 100f : 0f, LengthUnit.Percent));
             fill.style.backgroundColor = new StyleColor(accent);
-            SetBorderRadius(fill, 3);
+            SetBorderRadius(fill, 1);
             track.Add(fill);
             row.Add(track);
             return (row, fill, label);
@@ -1850,8 +1861,9 @@ namespace VoxelEngine.UI
             var box = new VisualElement();
             box.style.marginTop = 2;
             box.style.marginBottom = 10;
-            box.style.paddingLeft = 2;
-            box.style.paddingRight = 2;
+            box.style.paddingLeft = 6;
+            box.style.paddingRight = 6;
+            LcdHudTheme.ApplyScreen(box, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.84f), 1f);
 
             var header = new VisualElement();
             header.style.flexDirection = FlexDirection.Row;
@@ -1863,7 +1875,7 @@ namespace VoxelEngine.UI
             title.style.fontSize = 10;
             title.style.unityFontStyleAndWeight = FontStyle.Bold;
             title.style.letterSpacing = 1.2f;
-            title.style.color = UITheme.AccentAmber;
+            title.style.color = LcdHudTheme.Phosphor;
             header.Add(title);
 
             bool online = equipment.HasBreathingKit;
@@ -1877,12 +1889,13 @@ namespace VoxelEngine.UI
             status.style.color = hazard
                 ? (online ? new Color(0.30f, 0.95f, 0.55f) : UITheme.AccentRed)
                 : online ? new Color(0.30f, 0.95f, 0.55f) : new Color(0.95f, 0.62f, 0.18f);
-            status.style.backgroundColor = new StyleColor(new Color(0f, 0f, 0f, 0.32f));
+            status.style.backgroundColor = new StyleColor(LcdHudTheme.GlassDark);
             status.style.paddingLeft = 7;
             status.style.paddingRight = 7;
             status.style.paddingTop = 2;
             status.style.paddingBottom = 2;
-            SetBorderRadius(status, 9);
+            SetBorderRadius(status, 1);
+            UITheme.Border(status, 1f, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.82f));
             header.Add(status);
             box.Add(header);
 
@@ -1905,8 +1918,8 @@ namespace VoxelEngine.UI
             box.style.paddingBottom = 7;
             box.style.paddingLeft = 9;
             box.style.paddingRight = 9;
-            box.style.backgroundColor = new StyleColor(new Color(0.08f, 0.10f, 0.14f, 0.82f));
-            SetBorderRadius(box, 5);
+            box.style.backgroundColor = new StyleColor(LcdHudTheme.Glass);
+            LcdHudTheme.ApplyScreen(box, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.90f), 1f);
 
             float current = inventory != null ? inventory.CurrentWeightKg : 0f;
             float max = inventory != null ? inventory.MaxWeightKg : VoxelEngine.Menu.WorldSession.DefaultPlayerInventoryWeightKg;
@@ -2365,6 +2378,7 @@ namespace VoxelEngine.UI
             var equipment = inventory != null ? inventory.GetComponent<VoxelEngine.Player.PlayerEquipment>() : null;
 
             var card = MakePanel();
+            LcdHudTheme.ApplyChassis(card, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.96f), 3f);
             card.style.width = 184;
             card.style.flexShrink = 0;
             card.style.paddingTop = 11; card.style.paddingBottom = 12;
@@ -2394,8 +2408,8 @@ namespace VoxelEngine.UI
                 if (armor != null)
                 {
                     var readout = new VisualElement();
-                    readout.style.backgroundColor = new StyleColor(new Color(0.07f, 0.09f, 0.13f, 0.85f));
-                    SetBorderRadius(readout, 5);
+                    readout.style.backgroundColor = new StyleColor(LcdHudTheme.Glass);
+                    LcdHudTheme.ApplyScreen(readout, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.86f), 1f);
                     readout.style.paddingTop = 6; readout.style.paddingBottom = 6;
                     readout.style.paddingLeft = 9; readout.style.paddingRight = 9;
                     readout.style.marginBottom = 10;
@@ -2445,9 +2459,96 @@ namespace VoxelEngine.UI
             return card;
         }
 
+        private VisualElement BuildCrusaderInventoryHeader()
+        {
+            var row = new VisualElement { name = "CrusaderInventoryHeader" };
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.style.marginBottom = 7;
+            row.pickingMode = PickingMode.Ignore;
+
+            row.Add(BuildCrusaderHelmetMark());
+            var title = new Label("INVENTORY");
+            title.style.flexGrow = 1;
+            title.style.fontSize = 15;
+            title.style.letterSpacing = 1.45f;
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            title.style.color = new StyleColor(LcdHudTheme.Phosphor);
+            title.pickingMode = PickingMode.Ignore;
+            row.Add(title);
+            row.Add(BuildCrusaderEmblem());
+            return row;
+        }
+
+        private static VisualElement BuildCrusaderHelmetMark()
+        {
+            var mark = new VisualElement { name = "CrusaderHelmetMark" };
+            mark.style.width = 24;
+            mark.style.height = 22;
+            mark.style.marginRight = 8;
+            mark.style.backgroundColor = new StyleColor(LcdHudTheme.GlassDark);
+            mark.pickingMode = PickingMode.Ignore;
+            LcdHudTheme.ApplyScreen(mark, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.92f), 1f);
+
+            var dome = new VisualElement();
+            dome.style.position = Position.Absolute;
+            dome.style.left = 5; dome.style.right = 5;
+            dome.style.top = 3; dome.style.height = 10;
+            dome.style.backgroundColor = new StyleColor(LcdHudTheme.Phosphor);
+            dome.pickingMode = PickingMode.Ignore;
+            SetBorderRadius(dome, 5);
+            mark.Add(dome);
+
+            var visor = new VisualElement();
+            visor.style.position = Position.Absolute;
+            visor.style.left = 6; visor.style.right = 6;
+            visor.style.top = 10; visor.style.height = 4;
+            visor.style.backgroundColor = new StyleColor(LcdHudTheme.GlassDark);
+            visor.pickingMode = PickingMode.Ignore;
+            mark.Add(visor);
+
+            var neck = new VisualElement();
+            neck.style.position = Position.Absolute;
+            neck.style.left = 8; neck.style.right = 8;
+            neck.style.top = 14; neck.style.height = 4;
+            neck.style.backgroundColor = new StyleColor(new Color(LcdHudTheme.Phosphor.r, LcdHudTheme.Phosphor.g, LcdHudTheme.Phosphor.b, 0.72f));
+            neck.pickingMode = PickingMode.Ignore;
+            mark.Add(neck);
+            return mark;
+        }
+
+        private static VisualElement BuildCrusaderEmblem()
+        {
+            var crest = new VisualElement { name = "CrusaderEmblem" };
+            crest.style.width = 27;
+            crest.style.height = 27;
+            crest.style.marginLeft = 7;
+            crest.style.backgroundColor = new StyleColor(LcdHudTheme.GlassDark);
+            crest.pickingMode = PickingMode.Ignore;
+            LcdHudTheme.ApplyScreen(crest, new Color(UITheme.AccentGold.r, UITheme.AccentGold.g, UITheme.AccentGold.b, 0.82f), 1f);
+
+            var vertical = new VisualElement();
+            vertical.style.position = Position.Absolute;
+            vertical.style.width = 4; vertical.style.height = 18;
+            vertical.style.left = 11; vertical.style.top = 4;
+            vertical.style.backgroundColor = new StyleColor(UITheme.AccentGold);
+            vertical.pickingMode = PickingMode.Ignore;
+            crest.Add(vertical);
+
+            var horizontal = new VisualElement();
+            horizontal.style.position = Position.Absolute;
+            horizontal.style.width = 16; horizontal.style.height = 4;
+            horizontal.style.left = 5; horizontal.style.top = 10;
+            horizontal.style.backgroundColor = new StyleColor(UITheme.AccentGold);
+            horizontal.pickingMode = PickingMode.Ignore;
+            crest.Add(horizontal);
+            return crest;
+        }
+
         private void BuildLeftPanel(VisualElement parent)
         {
             var panel = MakePanel();
+            LcdHudTheme.ApplyChassis(panel, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.96f), 3f);
             // Laid out as a flex child of the left-area row so the ARMOR panel can dock
             // to its right. Stretches to the row height (the row is top:12 / bottom:72).
             panel.style.flexShrink = 1;
@@ -2458,7 +2559,7 @@ namespace VoxelEngine.UI
             panel.style.height     = new StyleLength(new Length(100, LengthUnit.Percent));
             parent.Add(panel);
 
-            panel.Add(MakeTitle("Inventory"));
+            panel.Add(BuildCrusaderInventoryHeader());
             panel.Add(BuildInventoryWeightReadout());
 
             // Backpack grid with sort button

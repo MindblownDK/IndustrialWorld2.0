@@ -14,6 +14,7 @@ namespace VoxelEngine.UI
     {
         private const float ShowSeconds = 2.15f;
         private const float FadeSeconds = 0.38f;
+        private const int LayoutRevision = 2;
 
         private static VisualElement _root;
         private static VisualElement _card;
@@ -24,14 +25,23 @@ namespace VoxelEngine.UI
         private static ItemDefinition _lastItem;
         private static bool _observed;
         private static float _shownAt = -999f;
+        private static int _mountedRevision;
 
         public static void EnsureMounted(VisualElement uiRoot)
         {
             if (uiRoot == null) return;
-            if (_root == uiRoot && _card != null && _card.parent == uiRoot) return;
+            if (_root == uiRoot && _card != null && _card.parent == uiRoot
+                && _mountedRevision == LayoutRevision) return;
 
             _root = uiRoot;
             if (_card != null) _card.RemoveFromHierarchy();
+            // Domain-reload-disabled play sessions can retain the prior HUD hierarchy
+            // while static fields are recreated. Clear every legacy card by name so the
+            // old plain item text can never sit behind the new LCD readout.
+            VisualElement stale;
+            while ((stale = uiRoot.Q<VisualElement>("HotbarItemNameHud")) != null)
+                stale.RemoveFromHierarchy();
+            _mountedRevision = LayoutRevision;
 
             _card = new VisualElement { name = "HotbarItemNameHud" };
             _card.style.position = Position.Absolute;
