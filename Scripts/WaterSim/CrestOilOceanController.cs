@@ -69,7 +69,10 @@ namespace VoxelEngine.WaterSim
                 var v = world.GetVoxelWorld(p);
                 if (FluidMaterialUtility.IsFluid(v) && FluidMaterialUtility.LiquidFromVoxel(v) == LiquidType.CrudeOil)
                 {
-                    oilPos = ((Vector3)p + Vector3.one * 0.5f) * VoxelConstants.VOXEL_SIZE;
+                    Vector3 localOilPosition = ((Vector3)p + Vector3.one * 0.5f) * VoxelConstants.VOXEL_SIZE;
+                    oilPos = world is VoxelEngine.Cosmos.SphereWorld sphere && sphere.body != null
+                        ? sphere.body.transform.TransformPoint(localOilPosition)
+                        : localOilPosition;
                     return true;
                 }
             }

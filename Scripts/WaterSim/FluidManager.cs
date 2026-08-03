@@ -147,7 +147,10 @@ namespace VoxelEngine.WaterSim
 
             foreach (var coord in _activeChunks)
             {
-                Vector3 chunkWorldPos = (Vector3)(coord * VoxelConstants.CHUNK_SIZE);
+                Vector3 chunkLocalPos = (Vector3)(coord * VoxelConstants.CHUNK_SIZE);
+                Vector3 chunkWorldPos = world is VoxelEngine.Cosmos.SphereWorld sphere && sphere.body != null
+                    ? sphere.body.transform.TransformPoint(chunkLocalPos)
+                    : chunkLocalPos;
                 float dist = Vector3.Distance(camPos, chunkWorldPos);
 
                 if (!_sparseChunks.TryGetValue(coord, out var sparse))

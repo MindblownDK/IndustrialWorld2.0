@@ -52,17 +52,16 @@ namespace VoxelEngine.Player
                 var world = VoxelEngine.Core.ActiveWorld.Current;
                 if (world != null)
                 {
-                    if (VoxelEngine.WaterSim.PlanetWaterUtility.IsPlanetWorld && VoxelEngine.WaterSim.PlanetWaterUtility.SignedDistanceToSea(transform.position) <= 0.1f)
-                    {
+                    var vp = world.WorldToVoxel(transform.position);
+                    var v = world.GetVoxelWorld(vp);
+                    // A planet's sea radius is only a broad ocean shell. Camera FX
+                    // must be driven by a real local liquid voxel so mountains, dry
+                    // coasts, and the far side of an offset planet never look submerged.
+                    if (VoxelEngine.WaterSim.FluidMaterialUtility.IsFluid(v) || (v.waterLevel > 10 && !v.IsSolid))
                         IsUnderwater = true;
-                    }
-                    else
-                    {
-                        var vp = world.WorldToVoxel(transform.position);
-                        var v = world.GetVoxelWorld(vp);
-                        if (v.waterLevel > 10) IsUnderwater = true;
-                        if (_waterState != null && _waterState.WaterSurfaceY > transform.position.y) IsUnderwater = true;
-                    }
+                    else if (!VoxelEngine.WaterSim.PlanetWaterUtility.IsPlanetWorld
+                        && _waterState != null && _waterState.WaterSurfaceY > transform.position.y)
+                        IsUnderwater = true;
                 }
             }
 

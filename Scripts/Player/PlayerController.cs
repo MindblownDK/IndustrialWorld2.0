@@ -493,7 +493,9 @@ namespace VoxelEngine.Player
             if (inWater)
             {
                 float surfY = waterState.WaterSurfaceY;
-                float depth = GravityProvider.IsRadial ? (surfY - transform.position.magnitude) : (surfY - transform.position.y);
+                float depth = GravityProvider.IsRadial
+                    ? Mathf.Max(0f, -VoxelEngine.WaterSim.PlanetWaterUtility.SignedDistanceToSea(transform.position))
+                    : (surfY - transform.position.y);
 
                 // ── Build 3D swim direction using camera look ────────────────
                 Vector3 camFwd = cameraPivot != null

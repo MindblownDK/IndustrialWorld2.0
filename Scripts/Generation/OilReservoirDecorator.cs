@@ -7,6 +7,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.Core;
+using VoxelEngine.Cosmos;
 using VoxelEngine.Materials;
 using VoxelEngine.WaterSim;
 
@@ -14,7 +15,7 @@ namespace VoxelEngine.Generation
 {
     public static class OilReservoirDecorator
     {
-        private const int MarkerScanStride = 2;
+        private const int MarkerScanStride = 1;
         private const int MaxSurfaceProbeSteps = 192;
         private const int MinimumShaftDepth = 8;
         private const int PendingAttemptLimit = 48;
@@ -34,11 +35,13 @@ namespace VoxelEngine.Generation
 
         public static void Decorate(Chunk chunk, IVoxelWorld world)
         {
-            if (chunk == null || world == null || !chunk.isGenerated) return;
+            // IndustrialWorld terrain is spherical-only. Keeping this decorator bound
+            // to SphereWorld avoids a second flat-world generation path and keeps every
+            // bore aligned to a planet's radial gravity frame.
+            if (chunk == null || world is not SphereWorld || !chunk.isGenerated) return;
 
             RetryPending(world);
             if (!FindOilMarker(chunk, out Vector3Int marker)) return;
-            if (!ShouldCreateReservoir(marker)) return;
 
             if (!TryCreateReservoir(world, marker))
                 QueuePending(world, marker);
@@ -66,17 +69,7 @@ namespace VoxelEngine.Generation
             return false;
         }
 
-        private static bool ShouldCreateReservoir(Vector3Int marker)
-        {
-            unchecked
-            {
-                // Ore markers already occur in clustered veins. One in three anchors
-                // becomes a visible extraction site so deposits stay meaningful rather
-                // than turning every crude voxel into a surface feature.
-                int hash = marker.x * 73856093 ^ marker.y * 19349663 ^ marker.z * 83492791;
-                return ((hash & 0x7fffffff) % 3) == 0;
-            }
-        }
+
 
         private static bool TryCreateReservoir(IVoxelWorld world, Vector3Int marker)
         {
@@ -106,12 +99,8 @@ namespace VoxelEngine.Generation
 
         private static Vector3 GetUpDir(IVoxelWorld world, Vector3Int voxel)
         {
-            if (world is VoxelEngine.Cosmos.SphereWorld)
-            {
-                Vector3 radial = ((Vector3)voxel).normalized;
-                return radial.sqrMagnitude > 0.0001f ? radial : Vector3.up;
-            }
-            return Vector3.up;
+            Vector3 radial = ((Vector3)voxel).normalized;
+            return radial.sqrMagnitude > 0.0001f ? radial : Vector3.up;
         }
 
         /// <summary>

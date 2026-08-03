@@ -1,9 +1,28 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.9.3-dev`
+**Current Version:** `7.9.4-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.9.4-dev] Spherical Oil Sites & Correct Planet Water FX
+
+**Type:** PATCH — spherical-world generation and water-state corrections; no save schema or public API break.
+
+#### 🛢 Spherical oil generation only
+- Bound `OilReservoirDecorator` to `SphereWorld`; the inactive flat-world generation path no longer owns oil-site decoration.
+- Removed the additional reservoir rarity gate and scans every real solid crude-oil marker, restoring actual site creation instead of leaving planets without oil.
+- Oil sites now remain structured as a visible surface puddle, narrow radial bore, and deep reservoir. Crude oil now stays above water rather than swapping downward through it, so a surface puddle remains readable.
+
+#### 🌊 No false underwater effect around a planet
+- Corrected spherical water distance calculations to use the active celestial body’s local frame instead of raw scene-origin magnitude.
+- Underwater camera FX now requires a real liquid voxel at the camera/head; it no longer activates merely because a player is inside a mathematical sea-radius shell on a mountain, dry coast, or far side of an offset planet.
+- Corrected related player swim depth, water LOD, depth sampling, and oil visual anchor calculations to use world-to-body-local conversion.
+
+#### ✅ Static delivery checks
+- Revised source parses cleanly locally. Unity compilation and Play Mode validation remain pending from Thomas.
+
+---
 
 ### [7.9.3-dev] Oil Reservoir Generation & Cockpit Compile Recovery
 

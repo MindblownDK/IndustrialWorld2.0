@@ -249,7 +249,7 @@ namespace VoxelEngine.WaterSim
             if (terrainRadius <= 0f) return false;
 
             depth = Mathf.Max(0f, bestWaterRadius - terrainRadius);
-            signedSurface = bestWaterRadius - worldPosition.magnitude;
+            signedSurface = bestWaterRadius - (worldPosition - bodyCenter).magnitude;
             return depth > 0.01f;
         }
 

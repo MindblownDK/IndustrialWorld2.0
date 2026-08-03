@@ -854,10 +854,6 @@ namespace VoxelEngine.Core
             p.chunk.genCompletedTime = Time.time;
             p.chunk.isScattered = false; // (re)evaluate scatter once neighbours are ready
 
-            // Natural crude oil reservoirs: crude-oil ore markers become a surface
-            // seep + vertical funnel + deep pool, filled by the unified liquid sim.
-            VoxelEngine.Generation.OilReservoirDecorator.Decorate(p.chunk, this);
-
             // Stitch borders for seamless meshing.
             StitchBordersWithNeighbours(p.chunk);
 
