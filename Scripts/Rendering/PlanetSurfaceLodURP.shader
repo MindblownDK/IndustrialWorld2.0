@@ -17,7 +17,8 @@ Shader "VoxelEngine/PlanetSurfaceLodURP"
             Tags { "LightMode"="UniversalForward" }
             Blend SrcAlpha OneMinusSrcAlpha
             ZWrite Off
-            Cull Back
+            // The full spherical proxy must survive every radial winding edge.
+            Cull Off
 
             HLSLPROGRAM
             #pragma vertex vert

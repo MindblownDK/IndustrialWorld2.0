@@ -40,7 +40,7 @@ namespace VoxelEngine.Cosmos
             {
                 Debug.LogWarning("[CosmosTemplateLibrary] Failed to load: " + ex.Message +
                                  ". If Resources/CosmosTemplateLibrary.asset exists with a broken script " +
-                                 "reference, delete it and re-run Tools ▸ Voxel Engine ▸ Create Solar System (Sol).");
+                                 "reference, delete it and run Tools ▸ Voxel Engine ▸ Voxel Engine Setup ▸ Step 21.");
                 _cached = null;
             }
             return _cached;

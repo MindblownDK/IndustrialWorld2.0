@@ -269,6 +269,7 @@ namespace VoxelEngine.EditorTools
                 "  • 11 themed biomes with planet-correct surface materials + ruin scatter\n" +
                 "  • Mars/Venus reconfigured + 8 new planets (Acid, Pirate, Greek, Ice, Water, Desolate, Volcanic, Crystal)\n" +
                 "  • Moon wired to the Lunar biome; all planets appended to System_Sol\n" +
+                "  • Creates/repairs the runtime CosmosTemplateLibrary + Asteroids_MainBelt automatically\n" +
                 "  • 5 new voxel surface materials (Martian Dust, Venus Ash, Acid Bog, Volcanic Basalt, Crystal Geode)\n" +
                 "Run AFTER Steps 1 and 20. Re-runnable. Idempotent.");
             AddWizardButton(scroll, "21. Build Celestial Worlds — Planets, Themed Biomes & Ruin Spawning (Phase 2)", BuildCelestialWorldsContent, 72);
@@ -11060,6 +11061,7 @@ root =>
             {
                 string path = $"{PLANETS_DIR}/Planet_{assetName}.asset";
                 var p = GetOrCreateAsset<PlanetTemplate>(path);
+                if (p.body == null) p.body = BodySettings.CreateEarthlike();
                 p.body.bodyName = bodyName;
                 p.body.temperature = temp;
                 p.body.oxygenLevel = oxygen;
@@ -11110,20 +11112,33 @@ root =>
 
             // ── Append all themed planets to System_Sol (non-destructive: only add missing) ──
             string sysPath = $"{PLANETS_DIR}/System_Sol.asset";
-            var sys = AssetDatabase.LoadAssetAtPath<SolarSystemTemplate>(sysPath);
+            // Step 21 owns the complete celestial-system authoring path. A missing System_Sol
+            // is created here rather than requiring a separate manual asset step.
+            var sys = GetOrCreateAsset<SolarSystemTemplate>(sysPath);
             if (sys != null)
             {
+                if (string.IsNullOrWhiteSpace(sys.systemName)) sys.systemName = "Sol System";
+                if (sys.sun == null) sys.sun = new SunSettings { displayName = "Sol", sunCount = 1, intensity = 1.3f };
+                if (sys.minPlanetSeparationKm <= 0f) sys.minPlanetSeparationKm = 500f;
+                if (sys.maxPlanetSeparationKm <= sys.minPlanetSeparationKm) sys.maxPlanetSeparationKm = 10000f;
+
                 var list = (sys.planets != null) ? new List<PlanetTemplate>(sys.planets) : new List<PlanetTemplate>();
-                list.RemoveAll(pl => pl != null && pl.body != null && pl.body.bodyName == "Greek"); // legacy Greek -> Olympus rename
+                // Preserve existing orbital/seed indices. A legacy null slot is intentionally
+                // retained rather than removed (seed tables are index-aligned); CosmicRegistry
+                // skips it safely. Only a legacy live Greek template is repaired in place.
+                for (int i = 0; i < list.Count; i++)
+                {
+                    if (list[i] != null && list[i].body != null && list[i].body.bodyName == "Greek")
+                        list[i] = pGreek;
+                }
+                var earth = AssetDatabase.LoadAssetAtPath<PlanetTemplate>($"{PLANETS_DIR}/Planet_Earth.asset");
+                if (earth != null && !list.Contains(earth)) list.Insert(0, earth);
                 foreach (var p in new[] { pMars, pVenus, pAcid, pPirate, pGreek, pIce, pWater, pDesolate, pVolcanic, pCrystal })
                     if (p != null && !list.Contains(p)) list.Add(p);
                 sys.planets = list.ToArray();
                 AssetDatabase.DeleteAsset($"{PLANETS_DIR}/Planet_Greek.asset"); // remove legacy asset (renamed to Olympus)
                 EditorUtility.SetDirty(sys);
-            }
-            else
-            {
-                Debug.LogWarning("[CelestialWorlds] System_Sol.asset not found — run 'Tools ▸ Voxel Engine ▸ Create Solar System (Sol)' first, then re-run this step.");
+                EnsureSolarSystemRuntimeLinks(sys);
             }
 
             // Keep the oil-rich seep distribution and Planet_Pirate-only infinite-node
@@ -11137,11 +11152,142 @@ root =>
                 "• 11 themed biomes (Lunar, Martian, Venusian, Acid, Pirate, Greek, Frozen, Ocean, Desolate, Volcanic, Crystal)\n" +
                 "• 10 planets configured (Mars/Venus reconfigured + 8 new) with themed terrain + ruin scatter\n" +
                 "• Moon wired to the Lunar biome\n" +
-                "• All appended to System_Sol\n\n" +
+                "• All appended to System_Sol\n" +
+                "• Runtime CosmosTemplateLibrary + Asteroids_MainBelt repaired automatically\n\n" +
                 "New surface materials: Martian Dust, Venus Ash, Acid Bog, Volcanic Basalt, Crystal Geode.\n" +
                 "Ruins now spawn on their own world via biome scatter (~0.0006 density).\n\n" +
                 "IMPORTANT: re-run Step 1 (Create All Assets) once to register the 5 new materials in the MaterialRegistry, then create/visit a new world to see them.",
                 "OK");
+        }
+
+        /// <summary>
+        /// Step 21 owns the build-safe bridge from the authored System_Sol asset to runtime.
+        /// It creates only missing assets/links, preserves any existing belt tuning, removes
+        /// null references that cannot render, and never asks designers to hand-author a
+        /// Resources registry or asteroid asset.
+        /// </summary>
+        private void EnsureSolarSystemRuntimeLinks(SolarSystemTemplate system)
+        {
+            if (system == null) return;
+
+            const string resourcesFolder = "Assets/Resources";
+            const string libraryPath = resourcesFolder + "/CosmosTemplateLibrary.asset";
+            const string beltPath = ASSET_ROOT + "/Planets/Asteroids_MainBelt.asset";
+            EnsureFolder(resourcesFolder);
+
+            int repaired = 0;
+            var library = AssetDatabase.LoadAssetAtPath<CosmosTemplateLibrary>(libraryPath);
+            if (library == null)
+            {
+                if (AssetDatabase.LoadMainAssetAtPath(libraryPath) == null)
+                {
+                    library = ScriptableObject.CreateInstance<CosmosTemplateLibrary>();
+                    AssetDatabase.CreateAsset(library, libraryPath);
+                    repaired++;
+                }
+                else
+                {
+                    Debug.LogError("[CelestialWorlds] Preserved conflicting Resources/CosmosTemplateLibrary.asset; it is not a CosmosTemplateLibrary.");
+                }
+            }
+            if (library != null)
+            {
+                library.systems ??= new List<SolarSystemTemplate>();
+                if (!library.systems.Contains(system))
+                {
+                    library.systems.Add(system);
+                    repaired++;
+                }
+                EditorUtility.SetDirty(library);
+            }
+
+            var belt = AssetDatabase.LoadAssetAtPath<AsteroidFieldTemplate>(beltPath);
+            bool createdBelt = false;
+            if (belt == null)
+            {
+                if (AssetDatabase.LoadMainAssetAtPath(beltPath) == null)
+                {
+                    belt = ScriptableObject.CreateInstance<AsteroidFieldTemplate>();
+                    AssetDatabase.CreateAsset(belt, beltPath);
+                    createdBelt = true;
+                    repaired++;
+                }
+                else
+                {
+                    Debug.LogError("[CelestialWorlds] Preserved conflicting Asteroids_MainBelt asset; it is not an AsteroidFieldTemplate.");
+                }
+            }
+            if (belt != null)
+            {
+                if (belt.settings == null)
+                {
+                    belt.settings = new AsteroidFieldSettings();
+                    createdBelt = true;
+                    repaired++;
+                }
+                // Only a newly-created/missing settings block receives defaults; existing
+                // density/resources/sizes remain designer-owned on repeated setup runs.
+                if (createdBelt)
+                {
+                    belt.settings.density = 1f;
+                    belt.settings.resourceCount = 3;
+                    belt.settings.possibleResources = new[]
+                    {
+                        MaterialId.Iron, MaterialId.Nickel, MaterialId.Silicon,
+                        MaterialId.Platinum, MaterialId.Ice
+                    };
+                    belt.settings.sizeRangeKm = new Vector2(0.03f, 0.35f);
+                    belt.settings.shellRadiusKm = new Vector2(8000f, 12000f);
+                }
+                if (belt.solarSystem == null)
+                {
+                    belt.solarSystem = system;
+                    repaired++;
+                }
+                EditorUtility.SetDirty(belt);
+
+                var fields = system.asteroidFields != null
+                    ? new List<AsteroidFieldTemplate>(system.asteroidFields)
+                    : new List<AsteroidFieldTemplate>();
+                int beforeFields = fields.Count;
+                fields.RemoveAll(field => field == null);
+                if (!fields.Contains(belt)) fields.Add(belt);
+                if (fields.Count != beforeFields || system.asteroidFields == null)
+                {
+                    system.asteroidFields = fields.ToArray();
+                    repaired++;
+                }
+            }
+
+            var planets = system.planets != null
+                ? new List<PlanetTemplate>(system.planets)
+                : new List<PlanetTemplate>();
+            // Do not remove a malformed slot here: system seed tables are index-aligned. Step
+            // 21 repairs the known legacy slot in place above, while unrelated custom systems
+            // retain their order and are skipped safely by CosmicRegistry until repaired.
+            foreach (var planet in planets)
+            {
+                if (planet == null || planet.body == null || planet.solarSystem != null) continue;
+                planet.solarSystem = system;
+                EditorUtility.SetDirty(planet);
+                repaired++;
+            }
+
+            // Repair null bootstrap links in the currently open scene without overwriting an
+            // intentionally custom assigned system. Runtime still resolves the Resources library
+            // for every scene/build, so no manual scene assignment is required.
+            foreach (var bootstrap in Object.FindObjectsByType<CosmosBootstrap>(FindObjectsInactive.Include))
+            {
+                if (bootstrap == null || bootstrap.solarSystemTemplate != null) continue;
+                bootstrap.solarSystemTemplate = system;
+                EditorUtility.SetDirty(bootstrap);
+                repaired++;
+            }
+
+            EditorUtility.SetDirty(system);
+            CosmosTemplateLibrary.InvalidateCache();
+            Debug.Log("[CelestialWorlds] Runtime System_Sol bridge repaired: " + repaired +
+                      " link(s); persistent asteroid belt " + (belt != null ? "ready" : "unavailable") + ".");
         }
 
         // ============================================================

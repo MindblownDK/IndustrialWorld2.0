@@ -23,6 +23,12 @@ namespace VoxelEngine.Core
         public bool isGenerated;            // density data filled
         public bool isScattered;            // tree/rock scatter has been placed
         public bool isModified;             // player has edited this chunk -> needs persistence
+
+        // Incremented every time this pooled Chunk is rented. SphereWorld records this value
+        // with queued work so an old queue entry can never generate/mesh a later coordinate
+        // after fast movement has recycled the same Chunk object.
+        public int streamEpoch;
+
         public VoxelEngine.Fluids.FluidGrid fluidGrid;
         public VoxelEngine.Fluids.OilGrid oilGrid;      // lazy-allocated when oil is placed
         public UnityEngine.GameObject waterMeshGO;       // child GO holding the water-surface mesh

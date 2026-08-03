@@ -125,6 +125,10 @@ namespace VoxelEngine.Generation
                 if (!voxel.IsSolid) continue;
 
                 Vector3Int anchor = new(baseX + x, baseY + y, baseZ + z);
+                // Never let a cave wall or deep interior voxel nominate an oil site. The same
+                // sampled radial surface used by terrain/scatter must own the candidate.
+                if (!world.IsNearSampledTerrainSurface(anchor, 3f)) continue;
+
                 Vector3 up = GetUpDir(anchor);
                 Vector3Int outer = anchor + Vector3Int.RoundToInt(up);
                 bool outerLoaded = TryGetLoadedVoxel(world, outer, out Voxel outerVoxel);
@@ -226,8 +230,11 @@ namespace VoxelEngine.Generation
 
                 var touched = new HashSet<Chunk>();
                 BuildSurfacePuddle(world, surface, up, puddleRadius, touched);
-                int funnelMouthRadius = Mathf.Clamp(puddleRadius - 1, 2, infinite ? 4 : 3);
-                BuildRadialFunnel(world, surface, reservoirTop, up, funnelMouthRadius, 1, touched);
+                // The old multi-voxel bore was an exposed player-sized shaft: once its oil
+                // moved, players could walk below the terrain through a generation scar. Keep
+                // the readable broad puddle, but use a sealed one-cell geological conduit below
+                // an intact surface cap. The deep reservoir remains mineable only intentionally.
+                BuildRadialFunnel(world, surface, reservoirTop, up, 1, 0, touched);
                 BuildReservoir(world, Vector3Int.RoundToInt(reservoirCenter), reservoirRadius, touched);
                 FlushTouchedChunks(world, touched);
 
@@ -347,8 +354,10 @@ namespace VoxelEngine.Generation
                 // cells instead of a puddle that sits naturally on the land.
                 if (!TryResolvePuddleSurface(world, probe, out Vector3Int localSurface)) continue;
                 Vector3 localUp = GetUpDir(localSurface);
-                WriteOil(world, localSurface, touched);
-                WriteOil(world, Vector3Int.RoundToInt((Vector3)localSurface - localUp), touched);
+                // Preserve the terrain cell underneath the visible puddle. Oil lives in the
+                // exterior air/fluid cell, so the player sees a pooled surface rather than a
+                // carved hole with no collision floor.
+                WriteSurfaceOil(world, localSurface, localUp, touched);
             }
         }
 
@@ -369,28 +378,27 @@ namespace VoxelEngine.Generation
         }
 
         /// <summary>
-        /// A tapered radial funnel visibly connects the surface seep to its deep reservoir.
-        /// Dense crude then settles through this path more slowly than water in FluidSimJob.
+        /// Builds a narrow, sealed oil-bearing conduit below the surface puddle. It deliberately
+        /// leaves a solid cap and never cuts a player-sized vertical tunnel through terrain.
+        /// The broad visual read remains at the puddle; the conduit/reservoir communicate the
+        /// geology only once a player deliberately mines into the deposit.
         /// </summary>
         private static void BuildRadialFunnel(SphereWorld world, Vector3Int surface, Vector3 reservoirTop,
             Vector3 up, int mouthRadius, int throatRadius, HashSet<Chunk> touched)
         {
-            Vector3 start = surface - up;
+            Vector3 start = surface - up * 2f;
             Vector3 direction = reservoirTop - start;
             int steps = Mathf.Max(1, Mathf.CeilToInt(direction.magnitude));
-            GetTangentBasis(up, out Vector3 tangentA, out Vector3 tangentB);
+            // Keep at least two metres of intact terrain below the surface puddle. Parameters
+            // remain in the signature for saved/runtime call compatibility; the conduit itself
+            // is intentionally one cell wide, independent of the old broad-mouth setting.
+            int sealedCapSteps = Mathf.Max(2, mouthRadius + throatRadius + 1);
 
-            for (int step = 0; step <= steps; step++)
+            for (int step = sealedCapSteps; step <= steps; step++)
             {
                 float progress = step / (float)steps;
-                int radius = Mathf.Max(throatRadius, Mathf.RoundToInt(Mathf.Lerp(mouthRadius, throatRadius, progress)));
                 Vector3 center = Vector3.Lerp(start, reservoirTop, progress);
-                for (int a = -radius; a <= radius; a++)
-                for (int b = -radius; b <= radius; b++)
-                {
-                    if (a * a + b * b > radius * radius) continue;
-                    WriteOil(world, Vector3Int.RoundToInt(center + tangentA * a + tangentB * b), touched);
-                }
+                WriteOil(world, Vector3Int.RoundToInt(center), touched);
             }
         }
 
@@ -433,6 +441,22 @@ namespace VoxelEngine.Generation
             }
             value = world.GetVoxelWorld(voxel);
             return true;
+        }
+
+        private static void WriteSurfaceOil(SphereWorld world, Vector3Int surface, Vector3 up, HashSet<Chunk> touched)
+        {
+            if (world == null) return;
+            if (TryGetLoadedVoxel(world, surface, out Voxel current) && FluidMaterialUtility.IsFluid(current))
+            {
+                // At a genuine ocean surface, replace only the top fluid cell with crude.
+                WriteOil(world, surface, touched);
+                return;
+            }
+
+            Vector3Int exterior = Vector3Int.RoundToInt((Vector3)surface + up);
+            if (!TryGetLoadedVoxel(world, exterior, out Voxel above)) return;
+            if (above.IsSolid) return;
+            WriteOil(world, exterior, touched);
         }
 
         private static void WriteOil(SphereWorld world, Vector3Int voxel, HashSet<Chunk> touched)

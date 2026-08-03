@@ -20,9 +20,9 @@ namespace VoxelEngine.Cosmos
 {
     public class CosmosBootstrap : MonoBehaviour
     {
-        [Tooltip("Planet template to spawn. LEAVE EMPTY to auto-use a built-in Earth body " +
-                 "(gravity 1g, oxygen, grass, full ore catalogue). To customise, run " +
-                 "Tools ▸ Voxel Engine ▸ Author Earth Planet Template. NOTE: the old " +
+        [Tooltip("Planet template to spawn. LEAVE EMPTY to auto-use the setup-owned home body " +
+                 "(gravity 1g, oxygen, grass, full ore catalogue). Celestial content is repaired " +
+                 "through Tools ▸ Voxel Engine ▸ Voxel Engine Setup ▸ Step 21. NOTE: the old " +
                  "Planet_Earthlike.asset is a DIFFERENT type (flat-world PlanetSettings) and " +
                  "won't fit this slot.")]
         public PlanetTemplate planetTemplate;
@@ -55,6 +55,12 @@ namespace VoxelEngine.Cosmos
         [Range(3, 16)] public int viewDistance = 8;   // local editable voxel detail radius; full planet uses LOD outside it
 
         private GameObject _bodyGO;
+        private SphereWorld _sphereWorld;
+        private PlanetLodImpostor _terrainLod;
+        private PlanetOceanLodRenderer _oceanLod;
+        private GpuGrassRenderer _grass;
+        private WaterfallSystem _waterfalls;
+        private bool _awaitingViewerSurfacePlacement;
 
         // Camera handoff is intentionally kept here with the body bootstrap: it owns the
         // active celestial profile and can restore the scene's original camera state cleanly.
@@ -68,11 +74,7 @@ namespace VoxelEngine.Cosmos
         {
             ResolvePlanetTemplate();
             ResolveAssets();
-            if (viewer == null)
-            {
-                var pc = FindAnyObjectByType<VoxelEngine.Player.PlayerController>();
-                if (pc != null) viewer = pc.transform;
-            }
+            ResolveViewerReference();
 
             EnsureGravityProvider();
 
@@ -106,16 +108,13 @@ namespace VoxelEngine.Cosmos
             // Keep the authored PlanetTemplate radius exactly. Test-radius overrides made the
             // LOD, ocean basins, gravity, and streaming disagree about the planet's size.
             body.ApplySettings();
-            if (placeViewerOnPlanetSurface && viewer != null)
-            {
-                // A real 6–8 km planet cannot use the old 0.5 km test-core placement.
-                // Anchor the player to the top radial surface instead of spawning them
-                // inside the solid body or using a misleading tiny test radius.
-                _bodyGO.transform.position = viewer.position - Vector3.up * (body.SurfaceRadius + initialSurfaceClearance);
-            }
+            _awaitingViewerSurfacePlacement = placeViewerOnPlanetSurface;
+            if (_awaitingViewerSurfacePlacement && viewer != null)
+                AnchorViewerToAuthoredSurface(body);
 
             // ── SphereWorld streamer ── (fields set BEFORE Awake thanks to inactive GO)
             var world = _bodyGO.AddComponent<SphereWorld>();
+            _sphereWorld = world;
             world.body = body;
             // Override the terrain material with the enhanced shader (procedural detail +
             // slope shading). Falls back to the resolved material if the shader is missing.
@@ -151,6 +150,7 @@ namespace VoxelEngine.Cosmos
             lodGO.transform.SetParent(_bodyGO.transform, false);
             lodGO.transform.localPosition = Vector3.zero;
             var lod = lodGO.AddComponent<PlanetLodImpostor>();
+            _terrainLod = lod;
             lod.body = body;
             lod.viewer = viewer;
             lod.biomeRegistry = biomeRegistry;
@@ -160,6 +160,7 @@ namespace VoxelEngine.Cosmos
             var oceanLodGO = new GameObject("OceanLOD");
             oceanLodGO.transform.SetParent(_bodyGO.transform, false);
             var oceanLod = oceanLodGO.AddComponent<PlanetOceanLodRenderer>();
+            _oceanLod = oceanLod;
             oceanLod.body = body;
             oceanLod.viewer = viewer;
             oceanLod.biomeRegistry = biomeRegistry;
@@ -167,6 +168,7 @@ namespace VoxelEngine.Cosmos
             // ── Distant bodies + sparse vacuum starfield ────────────────
             // Needs a CosmicRegistry in the scene to know where the other bodies are.
             EnsureCosmicRegistry();
+            var activeSolarSystem = solarSystemTemplate;
             var spaceGO = new GameObject("SpaceRenderer");
             spaceGO.AddComponent<SpaceBodyRenderer>();
             // Sparse camera-relative stars fade in through the same atmosphere-to-vacuum
@@ -185,20 +187,21 @@ namespace VoxelEngine.Cosmos
             var quasarGO = new GameObject("Quasar");
             var quasar = quasarGO.AddComponent<QuasarRenderer>();
             // Use the system template's quasar settings if available.
-            if (solarSystemTemplate != null)
-                quasar.settings = solarSystemTemplate.quasar;
+            if (activeSolarSystem != null)
+                quasar.settings = activeSolarSystem.quasar;
 
             // ── Asteroid field (Phase 5) ──
             var asteroidGO = new GameObject("AsteroidField");
             var asteroids = asteroidGO.AddComponent<AsteroidFieldRenderer>();
-            // Use the system template's asteroid field settings if available.
-            if (solarSystemTemplate != null && solarSystemTemplate.asteroidFields != null && solarSystemTemplate.asteroidFields.Length > 0)
-                asteroids.settings = solarSystemTemplate.asteroidFields[0].settings;
+            // A real authored belt wins; otherwise a deterministic runtime fallback keeps
+            // the automatically bootstrapped solar system visually alive.
+            asteroids.settings = ResolveAsteroidVisualSettings(activeSolarSystem);
 
             // ── GPU grass renderer (Phase 4) ──
             var grassGO = new GameObject("GrassRenderer");
             grassGO.transform.SetParent(_bodyGO.transform, false);
             var grass = grassGO.AddComponent<GpuGrassRenderer>();
+            _grass = grass;
             grass.body = body;
             grass.viewer = viewer;
 
@@ -206,6 +209,7 @@ namespace VoxelEngine.Cosmos
             var waterfallGO = new GameObject("Waterfalls");
             waterfallGO.transform.SetParent(_bodyGO.transform, false);
             var waterfalls = waterfallGO.AddComponent<WaterfallSystem>();
+            _waterfalls = waterfalls;
             waterfalls.body = body;
             waterfalls.viewer = viewer;
 
@@ -236,6 +240,9 @@ namespace VoxelEngine.Cosmos
 
             // ── Activate LAST: now every Awake/OnEnable sees a fully-wired component graph. ──
             _bodyGO.SetActive(true);
+            // A scene may spawn its Player after this bootstrap's Awake. Propagate a late
+            // viewer immediately when it already exists, otherwise Start/Update retry safely.
+            TryResolveViewerAndAnchor();
 
             var wind = FindAnyObjectByType<WindField>();
             if (wind != null) wind.ApplyBody(body.settings);
@@ -247,7 +254,56 @@ namespace VoxelEngine.Cosmos
 
             Debug.Log($"[CosmosBootstrap] Spawned '{body.DisplayName}' at {_bodyGO.transform.position}, " +
                       $"seed {seed}, radius {body.settings.radiusKm:0.##} km, radial gravity ACTIVE. " +
-                      $"Camera far clip raised — look up toward the body and fly to it!");
+                      $"Full-planet LOD and local editable terrain stream are ready.");
+        }
+
+        /// <summary>
+        /// Finds the player after either bootstrap order (scene-authored player before Cosmos or
+        /// setup-spawned player after Cosmos). This removes the one-frame race that otherwise
+        /// leaves SphereWorld without a viewer and strands its stream at the fallback origin.
+        /// </summary>
+        private void ResolveViewerReference()
+        {
+            if (viewer != null) return;
+            var player = FindAnyObjectByType<VoxelEngine.Player.PlayerController>();
+            if (player != null) viewer = player.transform;
+        }
+
+        private void AnchorViewerToAuthoredSurface(CelestialBody body)
+        {
+            if (body == null || viewer == null) return;
+            // Keep the initial local frame simple and stable: viewer sits at the north radial
+            // surface, while all later movement/streaming is fully body-relative.
+            body.transform.position = viewer.position
+                - Vector3.up * (body.SurfaceRadius + initialSurfaceClearance);
+            _awaitingViewerSurfacePlacement = false;
+        }
+
+        private void PropagateViewer()
+        {
+            if (_sphereWorld != null) _sphereWorld.viewer = viewer;
+            if (_terrainLod != null) _terrainLod.viewer = viewer;
+            if (_oceanLod != null) _oceanLod.viewer = viewer;
+            if (_grass != null) _grass.viewer = viewer;
+            if (_waterfalls != null) _waterfalls.viewer = viewer;
+        }
+
+        private void TryResolveViewerAndAnchor()
+        {
+            ResolveViewerReference();
+            if (viewer == null) return;
+            PropagateViewer();
+
+            if (_awaitingViewerSurfacePlacement)
+            {
+                var body = _bodyGO != null ? _bodyGO.GetComponent<CelestialBody>() : null;
+                if (body != null)
+                {
+                    AnchorViewerToAuthoredSurface(body);
+                    EnsureCameraFarClip();
+                    Debug.Log("[CosmosBootstrap] Late viewer resolved; anchored to the authored spherical surface.");
+                }
+            }
         }
 
         /// <summary>
@@ -276,9 +332,111 @@ namespace VoxelEngine.Cosmos
             }
         }
 
+        private SolarSystemTemplate ResolveSolarSystemTemplate()
+        {
+            if (solarSystemTemplate != null) return solarSystemTemplate;
+
+            // The setup-owned Resources library is the build-safe path. Direct AssetDatabase
+            // lookup below remains an editor recovery path only; builds never depend on it.
+            var library = CosmosTemplateLibrary.Load();
+            if (library != null && library.systems != null)
+            {
+                solarSystemTemplate = library.FindByName("Sol System");
+                if (solarSystemTemplate == null)
+                {
+                    foreach (var candidate in library.systems)
+                    {
+                        if (candidate == null) continue;
+                        solarSystemTemplate = candidate;
+                        break;
+                    }
+                }
+            }
+
+            if (solarSystemTemplate == null)
+                solarSystemTemplate = Resources.Load<SolarSystemTemplate>("System_Sol");
+#if UNITY_EDITOR
+            if (solarSystemTemplate == null)
+                solarSystemTemplate = UnityEditor.AssetDatabase.LoadAssetAtPath<SolarSystemTemplate>(
+                    "Assets/VoxelEngineAssets/Planets/System_Sol.asset");
+#endif
+            return solarSystemTemplate;
+        }
+
+        private SolarSystemTemplate CreateRuntimeSolarFallback()
+        {
+            // Last-resort visual/runtime safety net for a scene that predates Step 21. It is not
+            // an authored asset and is never saved; Step 21 remains the canonical way to create
+            // System_Sol, its library entry, and its real asteroid-belt asset.
+            var system = ScriptableObject.CreateInstance<SolarSystemTemplate>();
+            system.name = "System_Sol_RuntimeFallback";
+            system.hideFlags = HideFlags.DontSave;
+            system.systemName = "Sol System";
+            system.sun = new SunSettings
+            {
+                displayName = "Sol",
+                sunCount = 1,
+                intensity = 1.3f,
+                glowColor = new Color(1f, 0.95f, 0.78f, 1f)
+            };
+            system.minPlanetSeparationKm = 500f;
+            system.maxPlanetSeparationKm = 10000f;
+
+            var planets = new System.Collections.Generic.List<PlanetTemplate>();
+            if (planetTemplate != null) planets.Add(planetTemplate);
+
+            PlanetTemplate Proxy(string name, float radiusKm, Color color, float orbit)
+            {
+                var template = ScriptableObject.CreateInstance<PlanetTemplate>();
+                template.name = "Runtime_" + name;
+                template.hideFlags = HideFlags.DontSave;
+                template.body = BodySettings.CreateEarthlike();
+                template.body.bodyName = name;
+                template.body.radiusKm = radiusKm;
+                template.body.displayColor = color;
+                template.distanceFromSun = orbit;
+                template.orbitSpeed = 0.8f;
+                return template;
+            }
+
+            planets.Add(Proxy("Amber World", 6f, new Color(0.85f, 0.52f, 0.20f, 1f), 3400f));
+            planets.Add(Proxy("Azure World", 7f, new Color(0.18f, 0.45f, 0.82f, 1f), 5600f));
+            planets.Add(Proxy("Verdant World", 6f, new Color(0.30f, 0.70f, 0.40f, 1f), 7900f));
+            planets.Add(Proxy("Violet World", 5f, new Color(0.55f, 0.36f, 0.82f, 1f), 10500f));
+            system.planets = planets.ToArray();
+            return system;
+        }
+
+        private static AsteroidFieldSettings ResolveAsteroidVisualSettings(SolarSystemTemplate system)
+        {
+            if (system != null && system.asteroidFields != null)
+            {
+                foreach (var field in system.asteroidFields)
+                    if (field != null && field.settings != null) return field.settings;
+            }
+
+            // Visual fallback until Setup writes the shared belt asset into System_Sol.
+            return new AsteroidFieldSettings
+            {
+                density = 1f,
+                resourceCount = 3,
+                possibleResources = new[]
+                {
+                    VoxelEngine.Materials.MaterialId.Iron,
+                    VoxelEngine.Materials.MaterialId.Nickel,
+                    VoxelEngine.Materials.MaterialId.Silicon,
+                    VoxelEngine.Materials.MaterialId.Platinum,
+                    VoxelEngine.Materials.MaterialId.Ice
+                },
+                sizeRangeKm = new Vector2(0.03f, 0.35f),
+                shellRadiusKm = new Vector2(8000f, 12000f)
+            };
+        }
+
         /// <summary>
         /// Ensure a CosmicRegistry exists and is populated with the solar system template.
-        /// Without this, SpaceBodyRenderer has nothing to render (no moon/planets in the sky).
+        /// The resolved system is assigned to both bootstrap and registry, so Inspector state,
+        /// runtime layout, distant planets, and asteroid visuals all share one source of truth.
         /// </summary>
         private void EnsureCosmicRegistry()
         {
@@ -288,29 +446,25 @@ namespace VoxelEngine.Cosmos
                 var regGO = new GameObject("CosmicRegistry");
                 registry = regGO.AddComponent<CosmicRegistry>();
             }
-            if (!registry.IsReady)
+
+            var system = ResolveSolarSystemTemplate();
+            if (system == null)
             {
-                // Use the inspector-assigned template, or auto-load System_Sol.
-                var sys = solarSystemTemplate;
-                if (sys == null) sys = Resources.Load<SolarSystemTemplate>("System_Sol");
-#if UNITY_EDITOR
-                if (sys == null)
-                    sys = UnityEditor.AssetDatabase.LoadAssetAtPath<SolarSystemTemplate>(
-                        "Assets/VoxelEngineAssets/Planets/System_Sol.asset");
-#endif
-                if (sys != null)
-                {
-                    var session = VoxelEngine.Menu.WorldSession.Instance;
-                    int seed = session != null ? session.seed : 1337;
-                    registry.GenerateLayout(sys, seed);
-                    Debug.Log("[CosmosBootstrap] CosmicRegistry populated with " + sys.systemName +
-                              " — " + registry.Bodies.Count + " bodies (planets + moons visible in sky).");
-                }
-                else
-                {
-                    Debug.LogWarning("[CosmosBootstrap] No SolarSystemTemplate found. Run " +
-                                     "Tools ▸ Voxel Engine ▸ Create Solar System (Sol) to see other planets.");
-                }
+                system = CreateRuntimeSolarFallback();
+                solarSystemTemplate = system;
+                Debug.LogWarning("[CosmosBootstrap] System_Sol was not yet setup-owned at runtime; using a temporary visual fallback. Run Step 21 to author the persistent system library and belt.");
+            }
+
+            var session = VoxelEngine.Menu.WorldSession.Instance;
+            int seed = session != null ? session.seed : 1337;
+            bool needsLayout = !registry.IsReady || registry.systemTemplate != system || registry.Bodies.Count == 0;
+            registry.systemTemplate = system;
+            registry.worldSeed = seed;
+            if (needsLayout)
+            {
+                registry.GenerateLayout(system, seed);
+                Debug.Log("[CosmosBootstrap] System_Sol assigned automatically: " + registry.Bodies.Count +
+                          " bodies and " + registry.Asteroids.Count + " asteroids are ready for sky rendering.");
             }
         }
 
@@ -336,13 +490,7 @@ namespace VoxelEngine.Cosmos
             if (session != null && session.seedState != null && session.seedState.planets != null)
             {
                 int spawnIdx = Mathf.Clamp(session.spawnPlanetIndex, 0, session.seedState.planets.Count - 1);
-                var sys = solarSystemTemplate;
-                if (sys == null) sys = Resources.Load<SolarSystemTemplate>("System_Sol");
-#if UNITY_EDITOR
-                if (sys == null)
-                    sys = UnityEditor.AssetDatabase.LoadAssetAtPath<SolarSystemTemplate>(
-                        "Assets/VoxelEngineAssets/Planets/System_Sol.asset");
-#endif
+                var sys = ResolveSolarSystemTemplate();
                 if (sys != null && sys.planets != null && spawnIdx < sys.planets.Length && sys.planets[spawnIdx] != null)
                 {
                     planetTemplate = sys.planets[spawnIdx];
@@ -360,7 +508,7 @@ namespace VoxelEngine.Cosmos
                 planetTemplate = CreateDefaultEarthTemplate();
                 Debug.Log("[CosmosBootstrap] No PlanetTemplate asset found — using an in-memory " +
                           "Earth default (gravity 1g, oxygen, grass, full ore catalogue). " +
-                          "To customise: Tools ▸ Voxel Engine ▸ Author Earth Planet Template.");
+                          "Run Tools ▸ Voxel Engine ▸ Voxel Engine Setup ▸ Step 21 to author/repair celestial assets.");
             }
         }
 
@@ -406,8 +554,14 @@ namespace VoxelEngine.Cosmos
             return t;
         }
 
+        private void Start()
+        {
+            TryResolveViewerAndAnchor();
+        }
+
         private void Update()
         {
+            if (viewer == null || _awaitingViewerSurfacePlacement) TryResolveViewerAndAnchor();
             UpdateAtmosphereSpaceCamera();
         }
 

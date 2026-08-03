@@ -21,6 +21,8 @@ Shader "VoxelEngine/PlanetOceanLodURP"
             Tags { "LightMode"="UniversalForward" }
             Blend SrcAlpha OneMinusSrcAlpha
             ZWrite Off
+            // Ocean triangles use verified outward icosphere winding; keep back-face culling
+            // so the far side cannot blend through the transparent near-side ocean.
             Cull Back
 
             HLSLPROGRAM

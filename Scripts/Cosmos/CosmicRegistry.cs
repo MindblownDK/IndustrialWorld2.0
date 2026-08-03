@@ -76,7 +76,11 @@ namespace VoxelEngine.Cosmos
             _asteroids.Clear();
             if (template == null) { IsReady = false; return; }
 
-            var rng = new Unity.Mathematics.Random((uint)(seed > 0 ? seed : 1));
+            // Keep the inspector/runtime registry contract honest even when CosmosBootstrap
+            // creates this component before it has assigned the automatically resolved system.
+            systemTemplate = template;
+            worldSeed = seed != 0 ? seed : 1337;
+            var rng = new Unity.Mathematics.Random((uint)(worldSeed > 0 ? worldSeed : 1));
 
             Sun = new SunInstance
             {
@@ -86,12 +90,14 @@ namespace VoxelEngine.Cosmos
 
             // ── Planets ──────────────────────────────────────────
             float planetRadius = rng.NextFloat(400f, 1200f); // innermost ring
-            if (template.planets == null) template.planets = System.Array.Empty<PlanetTemplate>();
+            // Never mutate an authored template at runtime merely because a legacy system has
+            // no planet array. The setup path owns persistent asset repair.
+            PlanetTemplate[] templates = template.planets ?? System.Array.Empty<PlanetTemplate>();
 
-            for (int i = 0; i < template.planets.Length; i++)
+            for (int i = 0; i < templates.Length; i++)
             {
-                var pt = template.planets[i];
-                if (pt == null) continue;
+                var pt = templates[i];
+                if (pt == null || pt.body == null) continue;
 
                 if (i > 0)
                     planetRadius += rng.NextFloat(template.minPlanetSeparationKm, template.maxPlanetSeparationKm);
@@ -111,7 +117,7 @@ namespace VoxelEngine.Cosmos
                     settings        = pt.body,
                     planetTemplate  = pt,
                     orbitRadiusKm   = planetRadius,
-                    orbitAngle      = (template.planets.Length > 1 ? (i / (float)(template.planets.Length - 1)) : 0f) * Mathf.PI * 2f
+                    orbitAngle      = (templates.Length > 1 ? (i / (float)(templates.Length - 1)) : 0f) * Mathf.PI * 2f
                                       + rng.NextFloat(0f, 0.6f),
                     orbitAngularSpd = Mathf.Max(0.05f, pt.orbitSpeed) * BaseAngularRate / Mathf.Sqrt(Mathf.Max(1f, planetRadius)),
                     inclination     = inclination,
@@ -129,7 +135,7 @@ namespace VoxelEngine.Cosmos
                 for (int m = 0; m < moonCount; m++)
                 {
                     var mt = pt.moons[m];
-                    if (mt == null) continue;
+                    if (mt == null || mt.body == null) continue;
 
                     float lo = mt.orbitRadiusKm.x, hi = mt.orbitRadiusKm.y;
                     moonRadius += Mathf.Max(MinMoonGapKm, rng.NextFloat(lo, hi)); // strictly increasing
@@ -156,21 +162,43 @@ namespace VoxelEngine.Cosmos
             }
 
             // ── Asteroids ────────────────────────────────────────
+            bool hasAuthoredField = false;
             if (template.asteroidFields != null)
             {
                 foreach (var field in template.asteroidFields)
                 {
-                    if (field == null) continue;
-                    SpawnAsteroids(field, ref rng);
+                    if (field == null || field.settings == null) continue;
+                    hasAuthoredField = true;
+                    SpawnAsteroids(field.settings, ref rng);
                 }
             }
+            // Existing systems created before the belt asset have an empty array. Populate a
+            // deterministic runtime belt instead of leaving the entire solar system lifeless;
+            // Step 21 later replaces this with the setup-owned Asteroids_MainBelt asset.
+            if (!hasAuthoredField || _asteroids.Count == 0) SpawnAsteroids(CreateFallbackAsteroidSettings(), ref rng);
 
             IsReady = true;
         }
 
-        private void SpawnAsteroids(AsteroidFieldTemplate field, ref Unity.Mathematics.Random rng)
+        private static AsteroidFieldSettings CreateFallbackAsteroidSettings()
         {
-            var s = field.settings;
+            return new AsteroidFieldSettings
+            {
+                density = 1f,
+                resourceCount = 3,
+                possibleResources = new[]
+                {
+                    MaterialId.Iron, MaterialId.Nickel, MaterialId.Silicon,
+                    MaterialId.Platinum, MaterialId.Ice
+                },
+                sizeRangeKm = new Vector2(0.03f, 0.35f),
+                shellRadiusKm = new Vector2(8000f, 12000f)
+            };
+        }
+
+        private void SpawnAsteroids(AsteroidFieldSettings s, ref Unity.Mathematics.Random rng)
+        {
+            if (s == null) return;
             int count = Mathf.Clamp(Mathf.RoundToInt(60f * s.density), 0, 400);
 
             // Pick up to resourceCount distinct materials from the pool; remainder = stone.

@@ -37,7 +37,7 @@ namespace VoxelEngine.Cosmos
         [Tooltip("MeshRenderer for the LOD sphere. Auto-created if missing.")]
         public MeshRenderer meshRenderer;
 
-        [Range(642, 10242)]
+        [Range(642, 40962)]
         [Tooltip("Highest vertex budget for the sampled full-planet surface. Runtime distance LOD selects a cheaper mesh farther out.")]
         public int resolution = 2562;
 
@@ -96,7 +96,7 @@ namespace VoxelEngine.Cosmos
 
         private int ResolveRuntimeResolution(CelestialBody resolvedBody)
         {
-            int highest = Mathf.Clamp(resolution, 642, 10242);
+            int highest = Mathf.Clamp(resolution, 642, 40962);
             if (viewer == null || resolvedBody == null) return highest;
 
             float altitude = Mathf.Max(0f, resolvedBody.AltitudeAt(viewer.position));

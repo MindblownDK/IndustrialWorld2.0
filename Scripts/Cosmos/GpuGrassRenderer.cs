@@ -174,6 +174,10 @@ namespace VoxelEngine.Cosmos
                 Vector3Int voxel = Vector3Int.RoundToInt(radial * (estimate + offset));
                 Voxel value = world.GetVoxelWorld(voxel);
                 if (!value.IsSolid) continue;
+                // Use the same radial exterior proof as tree/rock scatter. This prevents a
+                // grass field from selecting a cave wall when a local chunk edge is still
+                // streaming and keeps all vegetation attached to the planet's real surface.
+                if (world is SphereWorld sphere && !sphere.TryGetExteriorSurface(voxel, out _, out _)) continue;
                 Vector3Int outward = voxel + Vector3Int.RoundToInt(radial);
                 Voxel above = world.GetVoxelWorld(outward);
                 if (above.IsSolid || above.waterLevel > 0) continue;

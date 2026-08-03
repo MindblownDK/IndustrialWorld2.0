@@ -21,7 +21,7 @@ namespace VoxelEngine.Cosmos
         public CelestialBody body;
         public BiomeRegistry biomeRegistry;
         public Transform viewer;
-        [Range(642, 10242)] public int resolution = 2562;
+        [Range(642, 40962)] public int resolution = 2562;
         [Range(0.05f, 2f)] public float surfaceInset = 0.35f;
         [Range(0f, 128f)] public float localCutoutPadding = 0f;
 
@@ -70,7 +70,7 @@ namespace VoxelEngine.Cosmos
 
         private int ResolveRuntimeResolution(CelestialBody resolved)
         {
-            int highest = Mathf.Clamp(resolution, 642, 10242);
+            int highest = Mathf.Clamp(resolution, 642, 40962);
             if (viewer == null || resolved == null) return highest;
             float altitude = Mathf.Max(0f, resolved.AltitudeAt(viewer.position));
             float radius = Mathf.Max(1f, resolved.SurfaceRadius);

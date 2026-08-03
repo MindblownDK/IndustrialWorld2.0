@@ -55,10 +55,13 @@ namespace VoxelEngine.Cosmos
         /// <summary>LOD icosphere resolution per tier (higher = smoother from space).</summary>
         public static int LodResolution => Current switch
         {
-            GraphicsTier.Low  => 642,
-            GraphicsTier.Mid  => 2562,
-            GraphicsTier.High => 10242,
-            _                 => 10242,
+            // The terrain shell is the continuous non-streamed planet, not an optional
+            // cosmetic. Keep even Low above the old coarse hexasphere budget, then give
+            // High/Ultra the near-surface density needed to hide chunk-streaming squares.
+            GraphicsTier.Low  => 2562,
+            GraphicsTier.Mid  => 10242,
+            GraphicsTier.High => 40962,
+            _                 => 40962,
         };
 
         /// <summary>Waterfall scan range (metres) per tier.</summary>

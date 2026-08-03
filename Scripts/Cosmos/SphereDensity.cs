@@ -226,8 +226,13 @@ namespace VoxelEngine.Cosmos
 
             int depth = (int)math.round(surfaceRadius - radius);
 
-            // Caves.
-            if (depth > 6 && radius > coreRadius + 6f && surfaceRadius > prm.seaRadius - 1f)
+            // Caves are deliberately kept below a continuous radial crust. Earlier cave
+            // noise could begin only a few metres below the sampled surface, occasionally
+            // opening a cave straight through a terrain chunk and making it look missing.
+            // A sealed 8 m minimum shell preserves a reliable playable planet surface while
+            // retaining genuine underground caves deeper inside dry land.
+            int protectedSurfaceCrust = math.max(8, biome.surfaceDepth + biome.subsurfaceDepth + 2);
+            if (depth > protectedSurfaceCrust && radius > coreRadius + 6f && surfaceRadius > prm.seaRadius - 1f)
             {
                 float cave = noise.snoise(worldPos * 0.045f) * 0.5f + 0.5f;
                 cave += noise.snoise(worldPos * 0.09f + 50f) * 0.25f;

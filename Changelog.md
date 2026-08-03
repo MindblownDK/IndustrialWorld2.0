@@ -1,9 +1,51 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.11.7-dev`
+**Current Version:** `7.11.9-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.11.9-dev] Spherical World Generation Integrity & Celestial Visibility
+
+**Type:** PATCH — spherical chunk-generation, exterior-scatter, full-planet continuity, and automatic celestial-visual recovery; no save/API break.
+
+#### 🌍 Reliable spherical terrain instead of streaming scars
+- Corrected the padded spherical generation origin so voxel samples and `SurfaceNets` coordinates agree across every chunk boundary; this removes the one-voxel overlap/slit source behind floating, offset, and apparently missing terrain chunks.
+- Added rent-epoch guards to terrain and native-water work queues. A recycled pooled chunk now rejects stale generation, meshing, and liquid rebuild work after fast travel, preventing old queue entries from writing a new coordinate in the air or under the planet.
+- Removed the remaining neighbour-wait mesh stall from the spherical stream: each deterministic padded chunk can mesh immediately, while the sampled full-planet LOD remains present beyond editable local detail.
+- Protected an 8 m minimum radial terrain crust before cave carving, so caves remain underground and cannot randomly puncture the playable surface.
+- Raised near-surface full-planet LOD budgets to 2,562 / 10,242 / 40,962 vertices by quality tier and made the terrain proxy two-sided, eliminating coarse square-horizon/one-sided proxy failures while retaining visual-only LOD interaction.
+
+#### 🌲 Exterior-only, separated vegetation
+- Rebuilt chunk scatter around the exact radial density surface rather than rounded global-axis neighbours. Trees/rocks now reject cave walls, deep terrain, water, and unstreamed false surfaces, and roots are projected slightly above the real spherical iso-surface.
+- Added cross-chunk live placement reservations plus tree-canopy clearance. Adjacent chunks cannot spawn trees into one another, including when they finish generation on separate frames.
+- Applied the same exterior proof to GPU grass so it cannot select underground cave surfaces.
+
+#### 🛢 Stable oil geology
+- Oil candidates now require the true sampled exterior surface. Surface puddles preserve their terrain floor; deep deposits use a sealed one-cell conduit below an intact cap instead of a player-sized open bore.
+- This keeps puddle/reservoir geology readable without creating an accidental route beneath the planet at an oil site.
+
+#### ☀️ Automatic System_Sol, planets, and asteroids
+- `CosmosBootstrap` now resolves the setup-owned `CosmosTemplateLibrary` before editor-only fallbacks, assigns the resolved `System_Sol` to both bootstrap and `CosmicRegistry`, retries late player/viewer binding, and anchors a late-spawned viewer safely on the authored-scale surface.
+- `CosmicRegistry` supplies deterministic fallback asteroid instances when a legacy system has no belt. `AsteroidFieldRenderer` now uses registry belt data at visible proxy sizes, while distant planet proxies use unlit authored colours for reliable sky readability.
+- Step 21 now non-destructively creates/repairs `System_Sol`, its `Resources/CosmosTemplateLibrary` registration, `Asteroids_MainBelt`, legacy celestial links, and null bootstrap links. Existing custom belt tuning and custom bootstrap assignments are preserved.
+
+#### ✅ Static delivery checks
+- Parsed the modified spherical-world, water, scatter, oil, celestial, setup, and version C# sources with Tree-sitter and ran targeted source/sparse-workspace assertions locally.
+- Unity compilation and Play Mode validation remain pending from Thomas; this entry does not claim Unity confirmation.
+
+---
+
+### [7.11.8-dev] Full-Scale Bootstrap & Automatic Solar System Recovery
+
+**Type:** PATCH — authored planet scale, automatic solar-system assignment, and asteroid fallback repair; no save/API break.
+
+- Removed the remaining `CosmosBootstrap.testRadiusKm` workflow and preserves each selected template’s authored radius at runtime.
+- Added a runtime-only session seed override so bootstrap never mutates shared `PlanetTemplate` settings or loses the selected seed when `SphereWorld` reapplies settings.
+- Added viewer-to-surface anchoring and actual-radius camera clipping for full-size planets.
+- `CosmosBootstrap` now resolves and assigns `System_Sol` automatically, drives `CosmicRegistry` from it, and supplies a deterministic visual asteroid-belt fallback when no authored belt asset is present.
+
+---
 
 ### [7.11.7-dev] Ocean LOD Compile Recovery & Craft Queue Serialization Guard
 

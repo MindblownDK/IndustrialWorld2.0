@@ -18,8 +18,22 @@ namespace VoxelEngine.WaterSim
 {
     public static class WaterMeshBuilder
     {
-        private static readonly Queue<Chunk> _queue = new();
-        private static readonly HashSet<Chunk> _queued = new();
+        // Water meshes are scheduled independently from terrain jobs. Chunks are pooled, so
+        // capture the rent epoch here as well; an old liquid rebuild must never attach itself to
+        // a later coordinate that reused the same Chunk object after streaming movement.
+        private readonly struct QueuedChunk
+        {
+            public readonly Chunk chunk;
+            public readonly int epoch;
+            public QueuedChunk(Chunk chunk)
+            {
+                this.chunk = chunk;
+                epoch = chunk != null ? chunk.streamEpoch : 0;
+            }
+        }
+
+        private static readonly Queue<QueuedChunk> _queue = new();
+        private static readonly Dictionary<Chunk, int> _queuedEpoch = new();
         private static Material _waterMat;
         private static Material _oilMat;
         private static Material _externalWaterMat;
@@ -76,7 +90,7 @@ namespace VoxelEngine.WaterSim
         public static void ResetForNewWorld()
         {
             _queue.Clear();
-            _queued.Clear();
+            _queuedEpoch.Clear();
             _sphereSurfaceCells.Clear();
             if (_waterMat != null && _waterMat != _externalWaterMat) { if (Application.isPlaying) Object.Destroy(_waterMat); else Object.DestroyImmediate(_waterMat); }
             if (_oilMat != null && _oilMat != _externalOilMat) { if (Application.isPlaying) Object.Destroy(_oilMat); else Object.DestroyImmediate(_oilMat); }
@@ -86,8 +100,11 @@ namespace VoxelEngine.WaterSim
 
         public static void Schedule(Chunk c)
         {
-            if (!RenderingEnabled) return;
-            if (c != null && _queued.Add(c)) _queue.Enqueue(c);
+            if (!RenderingEnabled || c == null) return;
+            int epoch = c.streamEpoch;
+            if (_queuedEpoch.TryGetValue(c, out int queuedEpoch) && queuedEpoch == epoch) return;
+            _queuedEpoch[c] = epoch;
+            _queue.Enqueue(new QueuedChunk(c));
         }
 
         public static void Pump(int budget)
@@ -95,15 +112,19 @@ namespace VoxelEngine.WaterSim
             if (!RenderingEnabled)
             {
                 _queue.Clear();
-                _queued.Clear();
+                _queuedEpoch.Clear();
                 return;
             }
             EnsureMats();
             int done = 0;
             while (done < budget && _queue.Count > 0)
             {
-                var c = _queue.Dequeue(); _queued.Remove(c);
-                if (c == null || !c.isGenerated) continue;
+                QueuedChunk queued = _queue.Dequeue();
+                Chunk c = queued.chunk;
+                if (c == null || c.streamEpoch != queued.epoch || c.go == null || !c.go.activeSelf) continue;
+                if (_queuedEpoch.TryGetValue(c, out int queuedEpoch) && queuedEpoch == queued.epoch)
+                    _queuedEpoch.Remove(c);
+                if (!c.isGenerated) continue;
 
                 // Water mesh generation reads voxel NativeArrays on the main thread. Make sure
                 // world generation/terrain meshing jobs are complete first, especially for

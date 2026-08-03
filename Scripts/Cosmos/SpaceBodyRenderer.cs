@@ -23,10 +23,10 @@ namespace VoxelEngine.Cosmos
         [Header("Scaling")]
         [Tooltip("Cosmic distances (km) are compressed to this visual range (metres) so other " +
                  "planets are actually visible in the sky without floating-origin.")]
-        public float visualRange = 8000f;
+        public float visualRange = 6500f;
 
         [Tooltip("Base visual size of a planet (metres at 1× scale).")]
-        public float planetVisualScale = 200f;
+        public float planetVisualScale = 260f;
 
         [Tooltip("Base visual size of a moon.")]
         public float moonVisualScale = 60f;
@@ -202,7 +202,11 @@ namespace VoxelEngine.Cosmos
             // Ensure material exists.
             if (v.mr.sharedMaterial == null)
             {
-                var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+                // Sky proxies need to remain readable on day/night sides and against every
+                // atmosphere backdrop. Unlit colour is intentional for this compressed visual LOD.
+                var shader = Shader.Find("Universal Render Pipeline/Unlit")
+                          ?? Shader.Find("Universal Render Pipeline/Lit")
+                          ?? Shader.Find("Standard");
                 v.mr.sharedMaterial = new Material(shader) { name = "Mat_SpaceBody" };
             }
             var mat = v.mr.sharedMaterial;
