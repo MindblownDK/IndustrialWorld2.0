@@ -310,11 +310,14 @@ namespace VoxelEngine.Cosmos
             }
             else
             {
-                if (radius <= prm.seaRadius)
+                // Only true ocean basins receive generated water. A cave excavated below the
+                // mathematical sea shell on otherwise dry land must remain air: players should
+                // encounter water only in oceans, intentional lakes, or placed/pumped liquid.
+                bool oceanBasin = surfaceRadius < prm.seaRadius - 1f;
+                if (oceanBasin && radius <= prm.seaRadius)
                 {
-                    // Ocean volume is always water. Crude oil is authored by
-                    // OilReservoirDecorator as one coherent surface puddle + bore +
-                    // underground reservoir, never as random submerged noise patches.
+                    // Crude oil is authored separately as one coherent surface seep, tapered
+                    // funnel, and deep reservoir — never as random submerged noise patches.
                     return new Voxel(-5, (byte)MaterialId.WaterLiquid, 255);
                 }
                 return new Voxel((sbyte)math.clamp(density, -127f, -1f), (byte)MaterialId.Air, 0);

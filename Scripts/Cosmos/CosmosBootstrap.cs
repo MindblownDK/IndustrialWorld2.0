@@ -141,6 +141,7 @@ namespace VoxelEngine.Cosmos
             lodGO.transform.SetParent(_bodyGO.transform, false);
             lodGO.transform.localPosition = Vector3.zero;
             var lod = lodGO.AddComponent<PlanetLodImpostor>();
+            lod.body = body;
             lod.viewer = viewer;
             lod.biomeRegistry = biomeRegistry;
             // The LOD creates its OWN material internally (URP/Unlit with vertex-colour + alpha

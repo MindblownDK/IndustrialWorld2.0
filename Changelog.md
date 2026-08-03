@@ -1,9 +1,32 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.11.0-dev`
+**Current Version:** `7.11.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.11.1-dev] Spherical Terrain, Dry Caves & Planet LOD Repair
+
+**Type:** PATCH — spherical-world interaction, terrain orientation, cave-water, and far-LOD fixes; no save/API break.
+
+#### ⛏ Reliable mining in terrain and liquid
+- Rebound `PlayerInteractionTool` to `ActiveWorld.Current` and that world’s `MaterialRegistry` every frame, preventing the disabled legacy flat-world reference from silently blocking hand/pickaxe mining on sphere terrain.
+- Hardened terrain hit resolution to enter the radial terrain surface before editing, and ignores liquid visual colliders so a player can keep mining while submerged in water or crude oil.
+- Real-liquid swim state now activates from any actual local liquid voxel, including a mined/pumped pocket away from the global sea shell; jump/swim depth uses local fluid depth so players can escape rather than getting wedged in a hole.
+
+#### 🌍 Wrapped terrain, grass, and full-planet LOD
+- Rebuilt GPU grass placement from a top-of-planet XZ scan into a radial/tangent surface search. Blades, scatter yaw, wind bending, terrain noise, triplanar mapping, and slope shading now follow the body’s local radial frame around the entire sphere.
+- Added body-centre shader globals from `SphereWorld`, fixing offset-planet terrain/grass orientation instead of treating scene origin or global Y as the top of every planet.
+- Repaired `PlanetLodImpostor` body binding: the far shell now resolves the actual parent body rather than an empty child component, fades completely out near voxel terrain, and appears from orbit with proper spherical LOD. Existing distant-body proxies continue using each template’s `displayColor` (including acid-world green).
+
+#### 💧 Dry caves and legacy water repair
+- Spherical density now generates water only in true terrain-defined ocean basins. Dry-land caves excavated below the mathematical sea radius remain air; placed/pumped liquid and oceans remain valid fluid.
+- Added a small local migration cleanup when mining removes terrain: old auto-generated dry-cave water around that excavation is cleared while real ocean basins and current-session player-placed liquid are preserved.
+
+#### ✅ Static delivery checks
+- Source parsing and targeted regression assertions are run locally. Unity compilation and Play Mode validation remain pending from Thomas.
+
+---
 
 ### [7.11.0-dev] Native Spherical Water, Pool Pumps & Boat Wakes
 

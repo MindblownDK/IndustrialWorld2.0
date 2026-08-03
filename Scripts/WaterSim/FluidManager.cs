@@ -39,6 +39,10 @@ namespace VoxelEngine.WaterSim
 
         private readonly HashSet<Vector3Int> _activeChunks = new();
         private readonly Queue<Vector3Int> _workQueue = new();
+        // Runtime marker for player/bucket-placed water. It lets a local legacy-water cleanup
+        // distinguish deliberate placed liquid from the old cave-fill generation bug.
+        private readonly HashSet<Vector3Int> _playerPlacedLiquid = new();
+        private IVoxelWorld _placementWorld;
         private float _timer;
         private int _simulationStep;
 
@@ -359,6 +363,38 @@ namespace VoxelEngine.WaterSim
             WaterMeshBuilder.Schedule(target);
         }
 
+        private void EnsurePlacementWorld(IVoxelWorld world)
+        {
+            if (object.ReferenceEquals(_placementWorld, world)) return;
+            _placementWorld = world;
+            _playerPlacedLiquid.Clear();
+        }
+
+        /// <summary>
+        /// Removes legacy auto-generated water around a freshly mined dry cave. Real ocean basins
+        /// and bucket/pump-placed liquid are preserved. New SphereDensity output no longer creates
+        /// this water; this is a local migration repair for already-generated terrain.
+        /// </summary>
+        public void PruneLegacyDryCaveWater(Vector3Int center, int radius = 2)
+        {
+            var world = ActiveWorld.Current;
+            if (world is not SphereWorld sphere || sphere.body == null) return;
+            EnsurePlacementWorld(world);
+            radius = Mathf.Clamp(radius, 1, 6);
+            for (int z = -radius; z <= radius; z++)
+            for (int y = -radius; y <= radius; y++)
+            for (int x = -radius; x <= radius; x++)
+            {
+                var cell = center + new Vector3Int(x, y, z);
+                if ((cell - center).sqrMagnitude > radius * radius) continue;
+                if (_playerPlacedLiquid.Contains(cell) || sphere.IsNaturalOceanBasinAt(cell)) continue;
+                Voxel voxel = world.GetVoxelWorld(cell);
+                if (!FluidMaterialUtility.Matches(voxel, LiquidType.Water)) continue;
+                world.SetVoxelWorld(cell, Voxel.Empty, remesh: true);
+                _playerPlacedLiquid.Remove(cell);
+            }
+        }
+
         public void PlaceWater(Vector3Int worldVoxel, byte level = 255) => PlaceLiquid(worldVoxel, LiquidType.Water, level);
         public void PlaceOil(Vector3Int worldVoxel, byte level = 255) => PlaceLiquid(worldVoxel, LiquidType.CrudeOil, level);
 
@@ -366,6 +402,7 @@ namespace VoxelEngine.WaterSim
         {
             var world = ActiveWorld.Current;
             if (world == null || !TryGetChunkAndLocal(world, worldVoxel, out var coord, out var ch, out int lx, out int ly, out int lz)) return;
+            EnsurePlacementWorld(world);
 
             world.CompleteGenJobForChunk(ch);
             world.CompleteMeshJobForChunk(ch);
@@ -375,6 +412,7 @@ namespace VoxelEngine.WaterSim
 
             FluidMaterialUtility.SetLiquid(ref v, liquid, level);
             ch.SetVoxelLocal(lx, ly, lz, v);
+            _playerPlacedLiquid.Add(worldVoxel);
             ch.isDirty = true;
             MarkActive(coord);
             WaterMeshBuilder.Schedule(ch);
@@ -418,7 +456,12 @@ namespace VoxelEngine.WaterSim
 
             byte drained = v.waterLevel < maxLevel ? v.waterLevel : maxLevel;
             v.waterLevel = (byte)(v.waterLevel - drained);
-            if (v.waterLevel == 0) FluidMaterialUtility.ClearLiquid(ref v);
+            if (v.waterLevel == 0)
+            {
+                FluidMaterialUtility.ClearLiquid(ref v);
+                EnsurePlacementWorld(world);
+                _playerPlacedLiquid.Remove(worldVoxel);
+            }
             ch.SetVoxelLocal(lx, ly, lz, v);
             ch.isDirty = true;
             MarkActive(coord);

@@ -493,8 +493,10 @@ namespace VoxelEngine.Player
             if (inWater)
             {
                 float surfY = waterState.WaterSurfaceY;
+                // Use the real local voxel-liquid depth. A mined or player-filled pool can be
+                // above/below the global sea shell, so sea-radius math alone would trap swimmers.
                 float depth = GravityProvider.IsRadial
-                    ? Mathf.Max(0f, -VoxelEngine.WaterSim.PlanetWaterUtility.SignedDistanceToSea(transform.position))
+                    ? waterState.WaterDepth * 1.8f
                     : (surfY - transform.position.y);
 
                 // ── Build 3D swim direction using camera look ────────────────

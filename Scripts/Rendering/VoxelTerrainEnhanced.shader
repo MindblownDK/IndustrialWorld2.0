@@ -82,6 +82,24 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
                 float  _SpecularVar;
             CBUFFER_END
 
+            // Published by SphereWorld. Body-local coordinates keep terrain detail,
+            // slope shading, and material variation wrapped around offset planets.
+            float4 _VoxelTerrainBodyCenter;
+            float _VoxelTerrainIsPlanet;
+
+            float3 TerrainCoordinate(float3 worldPos)
+            {
+                return lerp(worldPos, worldPos - _VoxelTerrainBodyCenter.xyz, saturate(_VoxelTerrainIsPlanet));
+            }
+
+            float3 TerrainUp(float3 worldPos)
+            {
+                float3 radial = worldPos - _VoxelTerrainBodyCenter.xyz;
+                float lenSq = dot(radial, radial);
+                radial = lenSq > 0.0001 ? radial * rsqrt(lenSq) : float3(0, 1, 0);
+                return normalize(lerp(float3(0, 1, 0), radial, saturate(_VoxelTerrainIsPlanet)));
+            }
+
             // ── Procedural noise (hash-based value noise + FBM) ──
             float hash31(float3 p)
             {
@@ -138,13 +156,15 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
                 UNITY_SETUP_INSTANCE_ID(IN);
                 float3 worldPos = IN.positionWS;
                 float3 worldNormal = normalize(IN.normalWS);
+                float3 terrainCoord = TerrainCoordinate(worldPos);
+                float3 terrainUp = TerrainUp(worldPos);
 
                 // ── Base colour from vertex colour (material ID → colour) ──
                 float3 baseColor = _BaseColor.rgb * IN.color.rgb;
 
                 // ── Procedural micro-detail: multi-octave noise for surface texture ──
                 // This gives the terrain a rocky/grainy appearance without textures.
-                float3 noisePos = worldPos * _NoiseFreq;
+                float3 noisePos = terrainCoord * _NoiseFreq;
                 float detail = fbm3(noisePos);
                 float detail2 = fbm3(noisePos * 3.2 + 10.0);
                 float microDetail = detail * 0.6 + detail2 * 0.4;
@@ -155,14 +175,14 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
 
                 // ── Slope-aware shading: steep = darker (enhances relief) ──
                 // Support both flat world (Y-up) and spherical planets (radial-up from center)
-                float radialUpDot = abs(dot(worldNormal, normalize(worldPos)));
+                float radialUpDot = abs(dot(worldNormal, terrainUp));
                 float flatUpDot = abs(worldNormal.y);
-                float upDot = max(flatUpDot, radialUpDot);
+                float upDot = lerp(flatUpDot, radialUpDot, saturate(_VoxelTerrainIsPlanet));
                 float slopeFactor = lerp(1.0 - _SlopeDarken, 1.0, saturate(upDot * 1.5));
                 baseColor *= slopeFactor;
 
                 // ── Specular variation: some surfaces shinier (wet rock look) ──
-                float specVar = fbm3(worldPos * _DetailScale * 0.5);
+                float specVar = fbm3(terrainCoord * _DetailScale * 0.5);
                 float smoothness = _Smoothness + specVar * _SpecularVar * 0.3;
                 smoothness = saturate(smoothness);
 

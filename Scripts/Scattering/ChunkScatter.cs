@@ -137,8 +137,12 @@ namespace VoxelEngine.Scattering
                     
                     Vector3 localBodyPos = posCenter + tangentX * rng.NextFloat(-0.4f, 0.4f) + tangentZ * rng.NextFloat(-0.4f, 0.4f);
 
-                    Quaternion randomYaw = Quaternion.Euler(0, rng.NextFloat(0, 360f), 0);
-                    Quaternion localBodyRot = isSphere ? Quaternion.FromToRotation(Vector3.up, upDir) * randomYaw : randomYaw;
+                    Quaternion randomYaw = isSphere
+                        ? Quaternion.AngleAxis(rng.NextFloat(0f, 360f), upDir)
+                        : Quaternion.Euler(0f, rng.NextFloat(0f, 360f), 0f);
+                    Quaternion localBodyRot = isSphere
+                        ? randomYaw * Quaternion.FromToRotation(Vector3.up, upDir)
+                        : randomYaw;
 
                     // Convert body-local pos/rot to world space for Instantiate
                     Transform rootTransform = chunk.go.transform.parent;

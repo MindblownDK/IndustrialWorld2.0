@@ -247,7 +247,12 @@ namespace VoxelEngine.Cosmos
             // otherwise callers route terrain queries into a dead CelestialBody and throw
             // MissingReferenceException every frame (breaking the whole world on reload).
             VoxelEngine.Core.ActiveWorld.ClearIfCurrent(this);
-            if (Instance == this) Instance = null;
+            if (Instance == this)
+            {
+                Shader.SetGlobalVector("_VoxelTerrainBodyCenter", Vector4.zero);
+                Shader.SetGlobalFloat("_VoxelTerrainIsPlanet", 0f);
+                Instance = null;
+            }
         }
 
         private float _diagTimer;
@@ -257,6 +262,7 @@ namespace VoxelEngine.Cosmos
         private void Update()
         {
             if (viewer == null || body == null) return;
+            PublishTerrainShaderContext();
             UpdateStreaming();
             DispatchGenerationJobs();
             DispatchMeshingJobs();
@@ -309,6 +315,14 @@ namespace VoxelEngine.Cosmos
                           $"genQ:{_genQueue.Count} meshQ:{_meshQueue.Count} | " +
                           $"seaRadius:{body?.SeaRadius} meanSurf:{body?.SurfaceRadius}");
             }
+        }
+
+        private void PublishTerrainShaderContext()
+        {
+            if (body == null) return;
+            Vector3 center = body.transform.position;
+            Shader.SetGlobalVector("_VoxelTerrainBodyCenter", new Vector4(center.x, center.y, center.z, 1f));
+            Shader.SetGlobalFloat("_VoxelTerrainIsPlanet", 1f);
         }
 
         // ---- Streaming (body-relative cartesian) ----
@@ -718,6 +732,21 @@ namespace VoxelEngine.Cosmos
         }
 
         public bool TryGetChunk(Vector3Int coord, out Chunk chunk) => _chunks.TryGetValue(coord, out chunk);
+
+        /// <summary>
+        /// True when a body-local voxel sits below the authored terrain surface of a genuine
+        /// ocean basin. Used only to clean legacy generated cave water; it never treats the
+        /// global sea shell itself as proof that a dry underground cavity should contain water.
+        /// </summary>
+        public bool IsNaturalOceanBasinAt(Vector3Int localVoxel)
+        {
+            if (body == null || !_biomes.IsCreated) return false;
+            float3 local = new float3(localVoxel.x + 0.5f, localVoxel.y + 0.5f, localVoxel.z + 0.5f)
+                * VoxelConstants.VOXEL_SIZE;
+            float3 direction = math.normalizesafe(local, new float3(0f, 1f, 0f));
+            SphereDensity.EvaluateColumn(body.genParams, _biomes, direction, out float surfaceRadius, out _);
+            return surfaceRadius < body.genParams.seaRadius - 1f;
+        }
 
         public Voxel GetVoxelWorld(Vector3Int worldVoxel)
         {

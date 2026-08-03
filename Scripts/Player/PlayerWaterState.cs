@@ -38,9 +38,13 @@ namespace VoxelEngine.Player
 
                 bool actuallyInWater = pFeetInLiquid || pWaistInLiquid || pHeadInLiquid;
 
-                IsSwimming = actuallyInWater && (pWaistInLiquid || pHeadInLiquid || submerged > 0.75f);
-                IsHeadUnderwater = actuallyInWater && pHeadInLiquid && submerged > 0.2f;
-                WaterDepth = IsSwimming ? Mathf.Clamp01(Mathf.Max(submerged, 1.8f) / 1.8f) : 0f;
+                // Any real liquid at the feet is enough to enter swim locomotion. This keeps
+                // a player from being wedged in a mined oil/water pocket on dry land, while the
+                // actual voxel checks prevent the mathematical sea shell from causing false swim.
+                IsSwimming = actuallyInWater;
+                IsHeadUnderwater = pHeadInLiquid;
+                float localDepth = pHeadInLiquid ? 1.8f : (pWaistInLiquid ? 1.0f : (pFeetInLiquid ? 0.45f : 0f));
+                WaterDepth = IsSwimming ? Mathf.Clamp01(Mathf.Max(submerged, localDepth) / 1.8f) : 0f;
                 return;
             }
 

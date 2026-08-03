@@ -23,7 +23,6 @@ namespace VoxelEngine.Cosmos
     /// GPU-instanced grass field that follows the viewer and waves in the wind.
     /// Attach to the same GameObject as (or a child of) the active SphereWorld.
     /// </summary>
-    [RequireComponent(typeof(CelestialBody))]
     public class GpuGrassRenderer : MonoBehaviour
     {
         [Header("References")]
@@ -101,108 +100,104 @@ namespace VoxelEngine.Cosmos
         private void RebuildField()
         {
             var world = ActiveWorld.Current;
-            if (world == null) { _instanceCount = 0; return; }
+            if (world == null || body == null) { _instanceCount = 0; return; }
 
-            // Quality-scaled density.
             float densityMul = GetQualityDensityMul();
             if (densityMul <= 0f) { _instanceCount = 0; return; }
             float density = baseDensity * densityMul;
-
-            // Sample candidate positions in a disc around the viewer.
-            // We scan a voxel grid within `range` and place grass on Grass-surface voxels.
             Vector3 viewerLocal = body.transform.InverseTransformPoint(viewer.position);
+            Vector3 localUp = viewerLocal.sqrMagnitude > 0.0001f ? viewerLocal.normalized : Vector3.up;
+            GetTangentBasis(localUp, out Vector3 tangentA, out Vector3 tangentB);
+
             int voxelRange = Mathf.CeilToInt(range);
+            int step = density > 1.5f ? 1 : 2;
             var candidates = new List<Matrix4x4>(2048);
 
-            // Step in voxels — coarser step = fewer samples but still dense coverage because each
-            // hit spawns `density` blades via jitter.
-            int step = density > 1.5f ? 1 : 2;
-            float3 vLocal = viewerLocal;
-
-            for (int dz = -voxelRange; dz <= voxelRange; dz += step)
-            for (int dx = -voxelRange; dx <= voxelRange; dx += step)
+            // Every candidate begins on a tangent plane around the viewer, then is projected
+            // along the radial direction onto the true spherical voxel surface. This avoids
+            // the old top-of-planet XZ scan that made grass vanish or lie incorrectly elsewhere.
+            for (int v = -voxelRange; v <= voxelRange; v += step)
+            for (int u = -voxelRange; u <= voxelRange; u += step)
             {
-                // Only within the circular range.
-                if (dx * dx + dz * dz > range * range) continue;
+                if (u * u + v * v > range * range) continue;
 
-                // Find the surface voxel at this XZ offset (scan downward from above).
-                int wx = Mathf.FloorToInt(vLocal.x) + dx;
-                int wz = Mathf.FloorToInt(vLocal.z) + dz;
+                Vector3 probeLocal = viewerLocal + tangentA * u + tangentB * v;
+                Vector3 radial = probeLocal.sqrMagnitude > 0.0001f ? probeLocal.normalized : localUp;
+                if (!TryFindRadialGrassSurface(world, radial, out Vector3Int surfaceVoxel, out byte surfaceMaterial))
+                    continue;
+                if (surfaceMaterial != (byte)MaterialId.Grass) continue;
 
-                // Scan a window of Y values around the viewer to find the topmost solid voxel.
-                int topY = int.MinValue;
-                byte topMat = 0;
-                for (int dy = 8; dy >= -8; dy--)
-                {
-                    int wy = Mathf.FloorToInt(vLocal.y) + dy;
-                    var voxel = world.GetVoxelWorld(new Vector3Int(wx, wy, wz));
-                    if (voxel.density > 0)
-                    {
-                        topY = wy; topMat = voxel.material; break;
-                    }
-                }
-                if (topY == int.MinValue) continue;
+                Vector3 surfaceLocal = ((Vector3)surfaceVoxel + Vector3.one * 0.5f) * VoxelConstants.VOXEL_SIZE;
+                Vector3 radialUpLocal = surfaceLocal.sqrMagnitude > 0.0001f ? surfaceLocal.normalized : radial;
+                Vector3Int outward = surfaceVoxel + Vector3Int.RoundToInt(radialUpLocal);
+                var above = world.GetVoxelWorld(outward);
+                if (above.IsSolid || above.waterLevel > 0) continue;
 
-                // Only grass material (skip sand/desert/stone/snow/water).
-                if (topMat != (byte)MaterialId.Grass) continue;
+                Vector3 terrainNormalLocal = EstimateSurfaceNormal(world, surfaceVoxel, radialUpLocal);
+                Vector3 terrainNormalWorld = body.transform.TransformDirection(terrainNormalLocal).normalized;
+                GetTangentBasis(radialUpLocal, out Vector3 localTangentA, out Vector3 localTangentB);
 
-                // Convert the surface voxel to world position.
-                float3 localPos = new float3(wx + 0.5f, topY + 1f, wz + 0.5f);
-                float3 worldPos = body.transform.TransformPoint(localPos);
-
-                // Slope check: the surface normal must be roughly aligned with radial up.
-                float3 radialUp = math.normalizesafe(worldPos - (float3)body.transform.position, new float3(0, 1, 0));
-                
-                // Get terrain normal from density gradient (in body-local space)
-                float gradX = world.GetVoxelWorld(new Vector3Int(wx - 1, topY, wz)).density - world.GetVoxelWorld(new Vector3Int(wx + 1, topY, wz)).density;
-                float gradY = world.GetVoxelWorld(new Vector3Int(wx, topY - 1, wz)).density - world.GetVoxelWorld(new Vector3Int(wx, topY + 1, wz)).density;
-                float gradZ = world.GetVoxelWorld(new Vector3Int(wx, topY, wz - 1)).density - world.GetVoxelWorld(new Vector3Int(wx, topY, wz + 1)).density;
-                
-                float3 localNormal = math.normalizesafe(new float3(gradX, gradY, gradZ));
-                float3 terrainNormal = body.transform.TransformDirection(localNormal);
-                
-                // Blend with radial up to keep grass slightly upright, preventing it from sticking perfectly horizontal on cliffs
-                terrainNormal = math.normalizesafe(math.lerp(radialUp, terrainNormal, 0.6f));
-
-                // Sample one voxel above to estimate the normal (cheap).
-                float aboveDensity = world.GetVoxelWorld(new Vector3Int(wx, topY + 2, wz)).density;
-                if (aboveDensity > 0) continue; // buried — skip
-
-                // Spawn `density` blades (jittered) at this position.
                 int bladeCount = Mathf.Max(1, Mathf.RoundToInt(density));
-                var rng = new Unity.Mathematics.Random((uint)((wx * 73856093) ^ (wz * 19349663) ^ (topY * 83492791) + 1));
-                for (int b = 0; b < bladeCount; b++)
+                uint hash = (uint)(surfaceVoxel.x * 73856093 ^ surfaceVoxel.y * 19349663 ^ surfaceVoxel.z * 83492791);
+                var rng = new Unity.Mathematics.Random(math.max(1u, hash));
+                for (int blade = 0; blade < bladeCount; blade++)
                 {
-                    float3 jitter = new float3(
-                        rng.NextFloat(-0.5f, 0.5f),
-                        0f,
-                        rng.NextFloat(-0.5f, 0.5f));
-                    float3 bladePos = worldPos + jitter;
-
-                    // Orient blade: rotate the mesh's local UP (Vector3.up) to align with terrain normal.
-                    // FromToRotation is the foolproof "stand this upright along this direction"
-                    // method — it ALWAYS produces a valid rotation, unlike LookRotation which
-                    // breaks when forward and up are nearly parallel.
-                    Quaternion rot = Quaternion.FromToRotation(Vector3.up, (Vector3)terrainNormal);
-                    // Add random yaw around terrainNormal for natural variation.
-                    rot = Quaternion.AngleAxis(rng.NextFloat(0f, 360f), (Vector3)terrainNormal) * rot;
-                    float h = bladeHeight * (1f + rng.NextFloat(-heightVariance, heightVariance));
-                    float3 scale = new float3(bladeWidth, h, 1f);
-
-                    candidates.Add(Matrix4x4.TRS(bladePos, rot, scale));
+                    Vector3 localJitter = localTangentA * rng.NextFloat(-0.5f, 0.5f)
+                        + localTangentB * rng.NextFloat(-0.5f, 0.5f);
+                    Vector3 worldPosition = body.transform.TransformPoint(surfaceLocal + localJitter + radialUpLocal * 0.35f);
+                    Quaternion rotation = Quaternion.FromToRotation(Vector3.up, terrainNormalWorld);
+                    rotation = Quaternion.AngleAxis(rng.NextFloat(0f, 360f), terrainNormalWorld) * rotation;
+                    float height = bladeHeight * (1f + rng.NextFloat(-heightVariance, heightVariance));
+                    candidates.Add(Matrix4x4.TRS(worldPosition, rotation, new Vector3(bladeWidth, height, 1f)));
                 }
 
-                // Hard cap to avoid runaway memory.
                 if (candidates.Count > 60000) goto done;
             }
-            done:
 
-            // Upload to the GPU buffer.
+        done:
             if (_matrices.IsCreated) _matrices.Dispose();
             _instanceCount = candidates.Count;
             if (_instanceCount == 0) return;
             _matrices = new NativeArray<Matrix4x4>(_instanceCount, Allocator.Persistent);
             for (int i = 0; i < _instanceCount; i++) _matrices[i] = candidates[i];
+        }
+
+        private bool TryFindRadialGrassSurface(IVoxelWorld world, Vector3 radial, out Vector3Int surfaceVoxel, out byte surfaceMaterial)
+        {
+            surfaceVoxel = default;
+            surfaceMaterial = 0;
+            float estimate = body.SurfaceRadius / VoxelConstants.VOXEL_SIZE;
+            // Terrain variation is compact; search outwards first so the first valid boundary
+            // is the exposed radial surface rather than a cave wall below it.
+            for (int offset = 48; offset >= -96; offset--)
+            {
+                Vector3Int voxel = Vector3Int.RoundToInt(radial * (estimate + offset));
+                Voxel value = world.GetVoxelWorld(voxel);
+                if (!value.IsSolid) continue;
+                Vector3Int outward = voxel + Vector3Int.RoundToInt(radial);
+                Voxel above = world.GetVoxelWorld(outward);
+                if (above.IsSolid || above.waterLevel > 0) continue;
+                surfaceVoxel = voxel;
+                surfaceMaterial = value.material;
+                return true;
+            }
+            return false;
+        }
+
+        private static Vector3 EstimateSurfaceNormal(IVoxelWorld world, Vector3Int voxel, Vector3 fallback)
+        {
+            float gx = world.GetVoxelWorld(voxel + Vector3Int.left).density - world.GetVoxelWorld(voxel + Vector3Int.right).density;
+            float gy = world.GetVoxelWorld(voxel + Vector3Int.down).density - world.GetVoxelWorld(voxel + Vector3Int.up).density;
+            float gz = world.GetVoxelWorld(voxel + Vector3Int.back).density - world.GetVoxelWorld(voxel + Vector3Int.forward).density;
+            Vector3 normal = new Vector3(gx, gy, gz);
+            return normal.sqrMagnitude > 0.0001f ? normal.normalized : fallback;
+        }
+
+        private static void GetTangentBasis(Vector3 up, out Vector3 tangentA, out Vector3 tangentB)
+        {
+            Vector3 reference = Mathf.Abs(Vector3.Dot(up, Vector3.up)) < 0.9f ? Vector3.up : Vector3.right;
+            tangentA = Vector3.Cross(reference, up).normalized;
+            tangentB = Vector3.Cross(up, tangentA).normalized;
         }
 
         private float GetQualityDensityMul()

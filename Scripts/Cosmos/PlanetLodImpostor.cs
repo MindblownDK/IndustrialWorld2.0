@@ -25,10 +25,12 @@ using VoxelEngine.Generation;
 
 namespace VoxelEngine.Cosmos
 {
-    [RequireComponent(typeof(CelestialBody))]
     [ExecuteAlways]
     public class PlanetLodImpostor : MonoBehaviour
     {
+        [Tooltip("The physical celestial body this child LOD represents. Assigned by CosmosBootstrap.")]
+        public CelestialBody body;
+
         [Tooltip("MeshFilter that will receive the generated LOD sphere. Auto-created if missing.")]
         public MeshFilter meshFilter;
 
@@ -68,15 +70,27 @@ namespace VoxelEngine.Cosmos
 
         private void Update()
         {
-            var body = GetComponentInParent<CelestialBody>();
-            if (body == null || body.settings == null) return;
+            var resolvedBody = ResolveBody();
+            if (resolvedBody == null || resolvedBody.settings == null) return;
 
             bool needRebuild = !_biomes.IsCreated ||
                                _lastResolution != resolution ||
                                _lastSeed != body.genParams.seed;
             if (needRebuild) Rebuild();
 
-            UpdateFade(body);
+            UpdateFade(resolvedBody);
+        }
+
+        private CelestialBody ResolveBody()
+        {
+            if (body != null && body.settings != null) return body;
+            foreach (var candidate in GetComponentsInParent<CelestialBody>(true))
+            {
+                if (candidate == null || candidate.settings == null) continue;
+                body = candidate;
+                return body;
+            }
+            return body;
         }
 
         private void EnsureComponents()
@@ -131,16 +145,16 @@ namespace VoxelEngine.Cosmos
 
         private void Rebuild()
         {
-            var body = GetComponentInParent<CelestialBody>();
-            if (body == null || body.settings == null) return;
-            body.ApplySettings();
+            var resolvedBody = ResolveBody();
+            if (resolvedBody == null || resolvedBody.settings == null) return;
+            resolvedBody.ApplySettings();
 
-            BiomeData[] biomeArr = body.BuildBiomeData(biomeRegistry);
+            BiomeData[] biomeArr = resolvedBody.BuildBiomeData(biomeRegistry);
             if (_biomes.IsCreated) _biomes.Dispose();
             _biomes = new NativeArray<BiomeData>(biomeArr.Length, Allocator.Persistent);
             for (int i = 0; i < biomeArr.Length; i++) _biomes[i] = biomeArr[i];
 
-            var (verts, tris, colors) = BuildIcosphere(body, resolution);
+            var (verts, tris, colors) = BuildIcosphere(resolvedBody, resolution);
 
             if (_mesh == null)
             {
@@ -183,8 +197,8 @@ namespace VoxelEngine.Cosmos
                 // Offset slightly OUTWARD so the LOD doesn't z-fight with voxel terrain
                 // (they'd be at the same depth and flicker). A small outward push puts the LOD
                 // just above the real terrain, like a backdrop sphere.
-                float maxAlt = prm.radiusWorld * 0.15f; // accounts for mountains
-                verts[i] = dir * (prm.MeanSurfaceRadius + alt + maxAlt + 5f);
+                float lodSkin = Mathf.Max(24f, prm.radiusWorld * 0.01f);
+                verts[i] = dir * (prm.MeanSurfaceRadius + alt + lodSkin + 5f);
                 float latitude = Mathf.Abs(dir.y);
                 Color baseCol = ColorFor(alt, latitude);
                 // Apply the body's custom display colour as a tint if set.
@@ -230,16 +244,16 @@ namespace VoxelEngine.Cosmos
         private void UpdateFade(CelestialBody body)
         {
             if (meshRenderer == null || _lodMaterial == null) return;
-            // The LOD is always visible so a whole planet can be seen from the surface.
+            // The voxel terrain owns the near view. Fade the far shell completely out near
+            // the ground; keeping it at 60% alpha over local chunks caused dark top-oriented
+            // bands and hid correctly wrapped grass/terrain on the sides of a planet.
             float a = 1f;
             if (viewer != null)
             {
-                float alt = body.AltitudeAt(viewer.position);
-                float r = body.SurfaceRadius;
-                float surfaceFadeStart = r * 0.15f;
-                float surfaceFadeEnd = r * 0.02f;
-                if (alt < surfaceFadeStart)
-                    a = Mathf.Lerp(0.6f, 1f, Mathf.Clamp01((alt - surfaceFadeEnd) / Mathf.Max(0.001f, surfaceFadeStart - surfaceFadeEnd)));
+                float altitude = Mathf.Max(0f, body.AltitudeAt(viewer.position));
+                float hideBelow = body.SurfaceRadius * Mathf.Clamp(hideBelowAltitudeFactor, 0.01f, 0.5f);
+                float showAbove = body.SurfaceRadius * Mathf.Max(showAboveAltitudeFactor, hideBelowAltitudeFactor + 0.01f);
+                a = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(hideBelow, showAbove, altitude));
             }
             if (_lodMaterial.HasProperty("_BaseColor"))
             {
@@ -249,7 +263,7 @@ namespace VoxelEngine.Cosmos
             {
                 var col = _lodMaterial.GetColor("_Color"); col.a = a; _lodMaterial.SetColor("_Color", col);
             }
-            meshRenderer.enabled = true;
+            meshRenderer.enabled = a > 0.001f;
         }
 
         private void Release()

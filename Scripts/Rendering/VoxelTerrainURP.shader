@@ -71,6 +71,14 @@ Shader "VoxelEngine/VoxelTerrainURP"
             TEXTURE2D(_BaseMap);
             SAMPLER(sampler_BaseMap);
 
+            float4 _VoxelTerrainBodyCenter;
+            float _VoxelTerrainIsPlanet;
+
+            float3 TerrainMappingPosition(float3 worldPos)
+            {
+                return lerp(worldPos, worldPos - _VoxelTerrainBodyCenter.xyz, saturate(_VoxelTerrainIsPlanet));
+            }
+
             Varyings vert(Attributes IN)
             {
                 Varyings OUT = (Varyings)0;
@@ -109,7 +117,7 @@ Shader "VoxelEngine/VoxelTerrainURP"
                 UNITY_SETUP_INSTANCE_ID(IN);
 
                 float3 baseTint = _BaseColor.rgb * IN.color.rgb;
-                float3 tex = SampleTriplanar(IN.positionWS, normalize(IN.normalWS), _BaseMap_ST.xy);
+                float3 tex = SampleTriplanar(TerrainMappingPosition(IN.positionWS), normalize(IN.normalWS), _BaseMap_ST.xy);
                 float3 albedo = lerp(baseTint, baseTint * tex, _TexBlend);
 
                 InputData inputData = (InputData)0;
