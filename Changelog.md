@@ -1,9 +1,25 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.6.0-dev`
+**Current Version:** `7.6.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.6.1-dev] Instrument LCD Gravity Readout
+
+**Type:** PATCH — gravity telemetry visual polish; no save or API break.
+
+#### 📟 Purpose-built field instruments
+- Replaced the rounded gravity orb and directional arrow with a restrained, rectangular **GRAVITY FIELD** instrument face.
+- The on-foot panel now uses recessed phosphor-style LCD glass, practical captioning, subtle scan lines, a fitted bezel, and a clear `G` / `m/s²` readout.
+- The cockpit module now uses the same fitted LCD language instead of a generic glowing status card.
+
+#### ▰ Discrete surface reference display
+- Rebuilt **surface pull** as a physical-looking segmented reference meter rather than a smooth generic progress bar.
+- Ten on-foot segments and eight cockpit segments extinguish progressively as local gravity falls with altitude.
+- The display now makes the reference explicit: body surface percentage, flat-field reference, and coreward/downward vector are each labelled separately.
+
+---
 
 ### [7.6.0-dev] Premium Gravity Pull Telemetry
 

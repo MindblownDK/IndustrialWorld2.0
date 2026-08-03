@@ -17,10 +17,16 @@ namespace VoxelEngine.GridSystem
         private static VisualElement _container;
         private static GridCockpit _cachedCockpit;
         private static float _cockpitSearchTimer;
-        private static Label _speedLabel, _altLabel, _environmentLabel, _gravityGLabel, _gravityDetailLabel, _powerLabel, _h2Label, _dampLabel, _batteryValueLabel, _offlineLabel;
-        private static VisualElement _gravityModule, _gravityDot, _gravityFill, _powerFill, _h2Fill, _batteryGaugeFill;
+        private static Label _speedLabel, _altLabel, _environmentLabel, _gravityGLabel, _gravityDetailLabel, _gravityReferenceLabel, _powerLabel, _h2Label, _dampLabel, _batteryValueLabel, _offlineLabel;
+        private static VisualElement _gravityModule, _gravityLcdBezel, _powerFill, _h2Fill, _batteryGaugeFill;
+        private static VisualElement[] _gravitySegments;
         private static float _smoothSpeed, _smoothAlt, _smoothPower;
-        private const int LayoutRevision = 8;
+        private const int LayoutRevision = 9;
+        private const int GravitySegmentCount = 8;
+        private static readonly Color GravityLcdGlass = new(0.105f, 0.125f, 0.075f, 0.98f);
+        private static readonly Color GravityLcdFrame = new(0.31f, 0.37f, 0.21f, 0.88f);
+        private static readonly Color GravityLcdInk = new(0.72f, 0.84f, 0.42f, 1f);
+        private static readonly Color GravityLcdOff = new(0.085f, 0.10f, 0.07f, 0.98f);
         private static int _mountedRevision;
         
         // Compass. The strip is three full 360° cycles wide so heading wrap-around never
@@ -232,31 +238,23 @@ namespace VoxelEngine.GridSystem
         {
             var module = new VisualElement { name = "CockpitGravityPull" };
             _gravityModule = module;
-            module.style.paddingLeft = 9;
-            module.style.paddingRight = 9;
-            module.style.paddingTop = 7;
-            module.style.paddingBottom = 7;
-            module.style.backgroundColor = new StyleColor(new Color(T.AccentPurple.r, T.AccentPurple.g, T.AccentPurple.b, 0.10f));
+            module.style.paddingLeft = 7;
+            module.style.paddingRight = 7;
+            module.style.paddingTop = 6;
+            module.style.paddingBottom = 6;
+            module.style.backgroundColor = new StyleColor(new Color(0.028f, 0.034f, 0.035f, 0.96f));
             module.pickingMode = PickingMode.Ignore;
-            T.Radius(module, 6f);
-            T.Border(module, 1f, new Color(T.AccentPurple.r, T.AccentPurple.g, T.AccentPurple.b, 0.44f));
+            T.Radius(module, 2f);
+            T.Border(module, 1f, new Color(0.25f, 0.29f, 0.34f, 0.90f));
 
             var header = new VisualElement();
             header.style.flexDirection = FlexDirection.Row;
             header.style.alignItems = Align.Center;
+            header.style.marginBottom = 4;
             header.pickingMode = PickingMode.Ignore;
             module.Add(header);
 
-            _gravityDot = new VisualElement { name = "CockpitGravityPulse" };
-            _gravityDot.style.width = 6;
-            _gravityDot.style.height = 6;
-            _gravityDot.style.marginRight = 6;
-            _gravityDot.style.backgroundColor = new StyleColor(T.AccentPurple);
-            _gravityDot.pickingMode = PickingMode.Ignore;
-            T.Radius(_gravityDot, 3f);
-            header.Add(_gravityDot);
-
-            var title = new Label("GRAVITY PULL");
+            var title = new Label("GRAVITY FIELD");
             title.style.flexGrow = 1;
             title.style.fontSize = 8;
             title.style.letterSpacing = 1.1f;
@@ -265,40 +263,121 @@ namespace VoxelEngine.GridSystem
             title.pickingMode = PickingMode.Ignore;
             header.Add(title);
 
-            _gravityGLabel = new Label("1.00 G");
-            _gravityGLabel.style.fontSize = 13;
-            _gravityGLabel.style.letterSpacing = 0.35f;
+            var moduleId = new Label("G-06");
+            moduleId.style.fontSize = 7;
+            moduleId.style.letterSpacing = 0.7f;
+            moduleId.style.unityFontStyleAndWeight = FontStyle.Bold;
+            moduleId.style.color = new StyleColor(T.TextMuted);
+            moduleId.pickingMode = PickingMode.Ignore;
+            header.Add(moduleId);
+
+            _gravityLcdBezel = new VisualElement { name = "CockpitGravityLcdBezel" };
+            _gravityLcdBezel.style.height = 38;
+            _gravityLcdBezel.style.paddingLeft = 5;
+            _gravityLcdBezel.style.paddingRight = 5;
+            _gravityLcdBezel.style.paddingTop = 3;
+            _gravityLcdBezel.style.paddingBottom = 3;
+            _gravityLcdBezel.style.backgroundColor = new StyleColor(new Color(0.018f, 0.022f, 0.019f, 0.98f));
+            _gravityLcdBezel.pickingMode = PickingMode.Ignore;
+            T.Radius(_gravityLcdBezel, 1f);
+            T.Border(_gravityLcdBezel, 1f, GravityLcdFrame);
+            module.Add(_gravityLcdBezel);
+
+            var lcd = new VisualElement { name = "CockpitGravityLcd" };
+            lcd.style.flexGrow = 1;
+            lcd.style.backgroundColor = new StyleColor(GravityLcdGlass);
+            lcd.style.flexDirection = FlexDirection.Row;
+            lcd.style.alignItems = Align.Center;
+            lcd.style.overflow = Overflow.Hidden;
+            lcd.pickingMode = PickingMode.Ignore;
+            T.Radius(lcd, 1f);
+            _gravityLcdBezel.Add(lcd);
+
+            for (int i = 0; i < 2; i++)
+            {
+                var line = new VisualElement();
+                line.style.position = Position.Absolute;
+                line.style.left = 2;
+                line.style.right = 2;
+                line.style.top = 8 + i * 15;
+                line.style.height = 1;
+                line.style.backgroundColor = new StyleColor(new Color(0.77f, 0.88f, 0.48f, 0.06f));
+                line.pickingMode = PickingMode.Ignore;
+                lcd.Add(line);
+            }
+
+            _gravityGLabel = new Label("1.00G");
+            _gravityGLabel.style.width = 69;
+            _gravityGLabel.style.marginLeft = 5;
+            _gravityGLabel.style.fontSize = 18;
+            _gravityGLabel.style.letterSpacing = 0.55f;
             _gravityGLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
-            _gravityGLabel.style.color = new StyleColor(T.AccentPurple);
+            _gravityGLabel.style.color = new StyleColor(GravityLcdInk);
             _gravityGLabel.pickingMode = PickingMode.Ignore;
-            header.Add(_gravityGLabel);
+            lcd.Add(_gravityGLabel);
 
-            _gravityDetailLabel = new Label("9.81 m/s² · COREWARD");
-            _gravityDetailLabel.style.fontSize = 9;
-            _gravityDetailLabel.style.marginTop = 3;
-            _gravityDetailLabel.style.color = new StyleColor(T.TextSecondary);
+            _gravityDetailLabel = new Label("09.81 m/s² · COREWARD");
+            _gravityDetailLabel.style.flexGrow = 1;
+            _gravityDetailLabel.style.marginTop = 1;
+            _gravityDetailLabel.style.fontSize = 8;
+            _gravityDetailLabel.style.letterSpacing = 0.35f;
+            _gravityDetailLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _gravityDetailLabel.style.color = new StyleColor(new Color(GravityLcdInk.r, GravityLcdInk.g, GravityLcdInk.b, 0.82f));
             _gravityDetailLabel.pickingMode = PickingMode.Ignore;
-            module.Add(_gravityDetailLabel);
+            lcd.Add(_gravityDetailLabel);
 
-            var track = new VisualElement { name = "CockpitGravityTrack" };
-            track.style.height = 4;
-            track.style.marginTop = 5;
-            track.style.backgroundColor = new StyleColor(new Color(0.12f, 0.14f, 0.20f, 0.90f));
-            track.style.overflow = Overflow.Hidden;
-            track.pickingMode = PickingMode.Ignore;
-            T.Radius(track, 2f);
-            module.Add(track);
+            var referenceRow = new VisualElement { name = "CockpitGravityReference" };
+            referenceRow.style.flexDirection = FlexDirection.Row;
+            referenceRow.style.alignItems = Align.Center;
+            referenceRow.style.marginTop = 5;
+            referenceRow.pickingMode = PickingMode.Ignore;
+            module.Add(referenceRow);
 
-            _gravityFill = new VisualElement { name = "CockpitGravityFill" };
-            _gravityFill.style.position = Position.Absolute;
-            _gravityFill.style.left = 0;
-            _gravityFill.style.top = 0;
-            _gravityFill.style.bottom = 0;
-            _gravityFill.style.width = new StyleLength(new Length(100f, LengthUnit.Percent));
-            _gravityFill.style.backgroundColor = new StyleColor(T.AccentPurple);
-            _gravityFill.pickingMode = PickingMode.Ignore;
-            T.Radius(_gravityFill, 2f);
-            track.Add(_gravityFill);
+            var referenceCaption = new Label("SFC REF");
+            referenceCaption.style.width = 39;
+            referenceCaption.style.fontSize = 7;
+            referenceCaption.style.letterSpacing = 0.9f;
+            referenceCaption.style.unityFontStyleAndWeight = FontStyle.Bold;
+            referenceCaption.style.color = new StyleColor(T.TextMuted);
+            referenceCaption.pickingMode = PickingMode.Ignore;
+            referenceRow.Add(referenceCaption);
+
+            var segmentTrack = new VisualElement { name = "CockpitGravitySegments" };
+            segmentTrack.style.flexDirection = FlexDirection.Row;
+            segmentTrack.style.flexGrow = 1;
+            segmentTrack.style.height = 11;
+            segmentTrack.style.paddingLeft = 2;
+            segmentTrack.style.paddingRight = 2;
+            segmentTrack.style.paddingTop = 2;
+            segmentTrack.style.paddingBottom = 2;
+            segmentTrack.style.backgroundColor = new StyleColor(new Color(0.018f, 0.022f, 0.019f, 0.98f));
+            segmentTrack.pickingMode = PickingMode.Ignore;
+            T.Radius(segmentTrack, 1f);
+            T.Border(segmentTrack, 1f, new Color(GravityLcdFrame.r, GravityLcdFrame.g, GravityLcdFrame.b, 0.72f));
+            referenceRow.Add(segmentTrack);
+
+            _gravitySegments = new VisualElement[GravitySegmentCount];
+            for (int i = 0; i < GravitySegmentCount; i++)
+            {
+                var segment = new VisualElement { name = "CockpitGravitySegment" + i };
+                segment.style.flexGrow = 1;
+                segment.style.marginRight = i < GravitySegmentCount - 1 ? 1 : 0;
+                segment.style.backgroundColor = new StyleColor(GravityLcdOff);
+                segment.pickingMode = PickingMode.Ignore;
+                T.Radius(segment, 1f);
+                _gravitySegments[i] = segment;
+                segmentTrack.Add(segment);
+            }
+
+            _gravityReferenceLabel = new Label("100%");
+            _gravityReferenceLabel.style.width = 35;
+            _gravityReferenceLabel.style.marginLeft = 6;
+            _gravityReferenceLabel.style.fontSize = 9;
+            _gravityReferenceLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _gravityReferenceLabel.style.unityTextAlign = TextAnchor.MiddleRight;
+            _gravityReferenceLabel.style.color = new StyleColor(GravityLcdInk);
+            _gravityReferenceLabel.pickingMode = PickingMode.Ignore;
+            referenceRow.Add(_gravityReferenceLabel);
 
             return module;
         }
@@ -479,27 +558,41 @@ namespace VoxelEngine.GridSystem
 
         private static void UpdateGravityReadout(GridEntity grid)
         {
-            if (_gravityGLabel == null || _gravityDetailLabel == null || _gravityFill == null || grid == null) return;
+            if (_gravityGLabel == null || _gravityDetailLabel == null || _gravityReferenceLabel == null
+                || _gravitySegments == null || grid == null) return;
 
             GravityFieldSample gravity = GravityProvider.Sample(grid.transform.position, grid.gravityScale);
-            Color accent = gravity.Gees >= 1.75f ? T.AccentAmber
-                : gravity.Gees <= 0.20f || gravity.SurfaceFraction <= 0.15f ? T.AccentBlue
-                : gravity.Gees <= 0.70f || gravity.SurfaceFraction <= 0.50f ? T.AccentCyan
-                : T.AccentPurple;
+            Color ink = ResolveCockpitLcdInk(gravity);
             string direction = gravity.IsRadial ? "COREWARD" : "DOWNWARD";
+            int litSegments = Mathf.Clamp(Mathf.RoundToInt(gravity.SurfaceFraction * GravitySegmentCount), 0, GravitySegmentCount);
 
-            _gravityGLabel.text = $"{gravity.Gees:0.00} G";
-            _gravityDetailLabel.text = $"{gravity.Magnitude:0.00} m/s² · {direction}";
-            _gravityGLabel.style.color = new StyleColor(accent);
+            _gravityGLabel.text = $"{gravity.Gees:0.00}G";
+            _gravityDetailLabel.text = $"{gravity.Magnitude:00.00} m/s² · {direction}";
+            _gravityReferenceLabel.text = gravity.IsRadial ? $"{gravity.SurfaceFraction * 100f:0}%" : "100%";
+            _gravityGLabel.style.color = new StyleColor(ink);
+            _gravityDetailLabel.style.color = new StyleColor(new Color(ink.r, ink.g, ink.b, 0.82f));
+            _gravityReferenceLabel.style.color = new StyleColor(ink);
             if (_gravityModule != null)
+                T.Border(_gravityModule, 1f, new Color(ink.r, ink.g, ink.b, 0.36f));
+            if (_gravityLcdBezel != null)
+                T.Border(_gravityLcdBezel, 1f, new Color(ink.r, ink.g, ink.b, 0.70f));
+
+            for (int i = 0; i < _gravitySegments.Length; i++)
             {
-                _gravityModule.style.backgroundColor = new StyleColor(new Color(accent.r, accent.g, accent.b, 0.10f));
-                T.Border(_gravityModule, 1f, new Color(accent.r, accent.g, accent.b, 0.44f));
+                var segment = _gravitySegments[i];
+                if (segment == null) continue;
+                segment.style.backgroundColor = new StyleColor(i < litSegments
+                    ? new Color(ink.r, ink.g, ink.b, 0.90f)
+                    : GravityLcdOff);
             }
-            _gravityDot.style.backgroundColor = new StyleColor(accent);
-            _gravityDot.style.opacity = 0.64f + Mathf.Sin(Time.unscaledTime * 3.2f) * 0.28f;
-            _gravityFill.style.backgroundColor = new StyleColor(accent);
-            T.SetFillPercent(_gravityFill, gravity.SurfaceFraction);
+        }
+
+        private static Color ResolveCockpitLcdInk(GravityFieldSample gravity)
+        {
+            if (gravity.Gees >= 1.75f) return new Color(0.98f, 0.71f, 0.24f);
+            if (gravity.Gees <= 0.20f || gravity.SurfaceFraction <= 0.15f) return new Color(0.45f, 0.74f, 0.90f);
+            if (gravity.Gees <= 0.70f || gravity.SurfaceFraction <= 0.50f) return new Color(0.56f, 0.82f, 0.72f);
+            return GravityLcdInk;
         }
 
         private static void UpdateBatteryGauge(GridEntity grid)

@@ -1,8 +1,8 @@
 // Assets/Scripts/VoxelEngine/UI/GravityPullHud.cs
 //
-// Premium local-gravity telemetry for on-foot exploration. The cockpit gets an
-// integrated companion module in GridPilotHud, while this card owns the bottom-
-// left anchor when the player is on foot.
+// Deliberately restrained, instrument-style local-gravity telemetry for on-foot
+// exploration. It reads as a fitted ship/field monitor rather than a decorative
+// hologram: recessed LCD glass, practical labels, and a discrete reference meter.
 
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -15,18 +15,25 @@ namespace VoxelEngine.UI
 {
     public static class GravityPullHud
     {
+        private const int SurfaceSegmentCount = 10;
+
+        // Muted phosphor palette: old practical instrumentation, not a neon hologram.
+        private static readonly Color LcdGlass = new(0.105f, 0.125f, 0.075f, 0.98f);
+        private static readonly Color LcdFrame = new(0.31f, 0.37f, 0.21f, 0.88f);
+        private static readonly Color LcdInk = new(0.72f, 0.84f, 0.42f, 1f);
+        private static readonly Color LcdOff = new(0.085f, 0.10f, 0.07f, 0.98f);
+
         private static VisualElement _root;
         private static VisualElement _card;
-        private static VisualElement _accentLine;
-        private static VisualElement _pulseDot;
-        private static VisualElement _orb;
-        private static VisualElement _meterFill;
+        private static VisualElement _lcdScreen;
+        private static VisualElement _lcdBorder;
+        private static VisualElement[] _surfaceSegments;
         private static Label _bodyLabel;
-        private static Label _pullArrow;
-        private static Label _gLabel;
-        private static Label _accelerationLabel;
-        private static Label _directionLabel;
-        private static Label _surfaceLabel;
+        private static Label _lcdGLabel;
+        private static Label _lcdAccelerationLabel;
+        private static Label _vectorLabel;
+        private static Label _surfaceValueLabel;
+        private static Label _surfaceStateLabel;
 
         private static PlayerController _player;
         private static float _nextPlayerSearchAt;
@@ -46,202 +53,232 @@ namespace VoxelEngine.UI
             _card.style.position = Position.Absolute;
             _card.style.left = 18;
             _card.style.bottom = 18;
-            _card.style.width = 254;
-            _card.style.paddingLeft = 13;
-            _card.style.paddingRight = 13;
-            _card.style.paddingTop = 10;
+            _card.style.width = 282;
+            _card.style.paddingLeft = 10;
+            _card.style.paddingRight = 10;
+            _card.style.paddingTop = 9;
             _card.style.paddingBottom = 10;
-            _card.style.backgroundColor = new StyleColor(new Color(0.025f, 0.032f, 0.052f, 0.94f));
+            _card.style.backgroundColor = new StyleColor(new Color(0.035f, 0.042f, 0.052f, 0.96f));
             _card.style.opacity = 0f;
             _card.style.display = DisplayStyle.None;
             _card.style.overflow = Overflow.Hidden;
-            _card.style.transitionProperty = new System.Collections.Generic.List<StylePropertyName> { "opacity", "translate" };
-            _card.style.transitionDuration = new System.Collections.Generic.List<TimeValue>
-            {
-                new(0.18f, TimeUnit.Second),
-                new(0.18f, TimeUnit.Second)
-            };
+            _card.style.transitionProperty = new System.Collections.Generic.List<StylePropertyName> { "opacity" };
+            _card.style.transitionDuration = new System.Collections.Generic.List<TimeValue> { new(0.16f, TimeUnit.Second) };
             _card.pickingMode = PickingMode.Ignore;
-            T.Radius(_card, 10f);
-            T.Border(_card, 1f, new Color(T.AccentPurple.r, T.AccentPurple.g, T.AccentPurple.b, 0.58f));
+            T.Radius(_card, 3f);
+            T.Border(_card, 1f, new Color(0.25f, 0.29f, 0.34f, 0.92f));
             uiRoot.Add(_card);
 
-            _accentLine = new VisualElement { name = "GravityAccent" };
-            _accentLine.style.position = Position.Absolute;
-            _accentLine.style.left = 0;
-            _accentLine.style.top = 0;
-            _accentLine.style.bottom = 0;
-            _accentLine.style.width = 3;
-            _accentLine.style.backgroundColor = new StyleColor(T.AccentPurple);
-            _accentLine.pickingMode = PickingMode.Ignore;
-            _card.Add(_accentLine);
-
             BuildHeader();
-            BuildReadout();
-            BuildSurfaceMeter();
+            BuildInstrumentFace();
             _visible = false;
         }
 
         private static void BuildHeader()
         {
-            var row = new VisualElement { name = "GravityHeader" };
+            var row = new VisualElement { name = "GravityInstrumentHeader" };
             row.style.flexDirection = FlexDirection.Row;
             row.style.alignItems = Align.Center;
             row.style.marginBottom = 7;
             row.pickingMode = PickingMode.Ignore;
             _card.Add(row);
 
-            _pulseDot = new VisualElement { name = "GravityPulse" };
-            _pulseDot.style.width = 7;
-            _pulseDot.style.height = 7;
-            _pulseDot.style.marginRight = 7;
-            _pulseDot.style.backgroundColor = new StyleColor(T.AccentPurple);
-            _pulseDot.pickingMode = PickingMode.Ignore;
-            T.Radius(_pulseDot, 4f);
-            row.Add(_pulseDot);
-
-            var title = new Label("GRAVITY PULL");
+            var title = new Label("GRAVITY FIELD");
             title.style.flexGrow = 1;
-            title.style.fontSize = 10;
+            title.style.fontSize = 9;
             title.style.letterSpacing = 1.45f;
             title.style.unityFontStyleAndWeight = FontStyle.Bold;
             title.style.color = new StyleColor(T.TextSecondary);
             title.pickingMode = PickingMode.Ignore;
             row.Add(title);
 
-            _bodyLabel = new Label("LOCAL FIELD");
-            _bodyLabel.style.fontSize = 8;
-            _bodyLabel.style.letterSpacing = 0.75f;
-            _bodyLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
-            _bodyLabel.style.color = new StyleColor(T.TextMuted);
-            _bodyLabel.style.unityTextAlign = TextAnchor.MiddleRight;
-            _bodyLabel.pickingMode = PickingMode.Ignore;
-            row.Add(_bodyLabel);
+            var module = new Label("MON-01");
+            module.style.fontSize = 8;
+            module.style.letterSpacing = 0.8f;
+            module.style.unityFontStyleAndWeight = FontStyle.Bold;
+            module.style.color = new StyleColor(T.TextMuted);
+            module.pickingMode = PickingMode.Ignore;
+            row.Add(module);
         }
 
-        private static void BuildReadout()
+        private static void BuildInstrumentFace()
         {
-            var row = new VisualElement { name = "GravityReadout" };
-            row.style.flexDirection = FlexDirection.Row;
-            row.style.alignItems = Align.Center;
-            row.pickingMode = PickingMode.Ignore;
-            _card.Add(row);
+            var main = new VisualElement { name = "GravityInstrumentFace" };
+            main.style.flexDirection = FlexDirection.Row;
+            main.style.alignItems = Align.Stretch;
+            main.pickingMode = PickingMode.Ignore;
+            _card.Add(main);
 
-            _orb = new VisualElement { name = "GravityOrb" };
-            _orb.style.width = 46;
-            _orb.style.height = 46;
-            _orb.style.marginRight = 11;
-            _orb.style.backgroundColor = new StyleColor(new Color(T.AccentPurple.r, T.AccentPurple.g, T.AccentPurple.b, 0.16f));
-            _orb.pickingMode = PickingMode.Ignore;
-            T.Radius(_orb, 23f);
-            T.Border(_orb, 1f, new Color(T.AccentPurple.r, T.AccentPurple.g, T.AccentPurple.b, 0.75f));
-            row.Add(_orb);
+            BuildLcd(main);
+            BuildReferenceColumn(main);
+        }
 
-            var innerRing = new VisualElement();
-            innerRing.style.position = Position.Absolute;
-            innerRing.style.left = 7;
-            innerRing.style.top = 7;
-            innerRing.style.width = 30;
-            innerRing.style.height = 30;
-            innerRing.style.borderLeftWidth = innerRing.style.borderRightWidth = 1;
-            innerRing.style.borderTopWidth = innerRing.style.borderBottomWidth = 1;
-            var ringColor = new StyleColor(new Color(T.AccentPurple.r, T.AccentPurple.g, T.AccentPurple.b, 0.32f));
-            innerRing.style.borderLeftColor = ringColor;
-            innerRing.style.borderRightColor = ringColor;
-            innerRing.style.borderTopColor = ringColor;
-            innerRing.style.borderBottomColor = ringColor;
-            innerRing.pickingMode = PickingMode.Ignore;
-            T.Radius(innerRing, 15f);
-            _orb.Add(innerRing);
+        private static void BuildLcd(VisualElement parent)
+        {
+            _lcdBorder = new VisualElement { name = "GravityLcdBezel" };
+            _lcdBorder.style.width = 128;
+            _lcdBorder.style.height = 76;
+            _lcdBorder.style.paddingLeft = 7;
+            _lcdBorder.style.paddingRight = 7;
+            _lcdBorder.style.paddingTop = 6;
+            _lcdBorder.style.paddingBottom = 5;
+            _lcdBorder.style.backgroundColor = new StyleColor(new Color(0.018f, 0.022f, 0.019f, 0.98f));
+            _lcdBorder.pickingMode = PickingMode.Ignore;
+            T.Radius(_lcdBorder, 2f);
+            T.Border(_lcdBorder, 1f, LcdFrame);
+            parent.Add(_lcdBorder);
 
-            _pullArrow = new Label("↓");
-            _pullArrow.style.position = Position.Absolute;
-            _pullArrow.style.left = 0;
-            _pullArrow.style.right = 0;
-            _pullArrow.style.top = 0;
-            _pullArrow.style.bottom = 1;
-            _pullArrow.style.fontSize = 25;
-            _pullArrow.style.unityFontStyleAndWeight = FontStyle.Bold;
-            _pullArrow.style.unityTextAlign = TextAnchor.MiddleCenter;
-            _pullArrow.style.color = new StyleColor(T.AccentPurple);
-            _pullArrow.pickingMode = PickingMode.Ignore;
-            _orb.Add(_pullArrow);
+            _lcdScreen = new VisualElement { name = "GravityLcdScreen" };
+            _lcdScreen.style.flexGrow = 1;
+            _lcdScreen.style.backgroundColor = new StyleColor(LcdGlass);
+            _lcdScreen.style.overflow = Overflow.Hidden;
+            _lcdScreen.pickingMode = PickingMode.Ignore;
+            T.Radius(_lcdScreen, 1f);
+            _lcdBorder.Add(_lcdScreen);
 
-            var column = new VisualElement();
+            // Subtle horizontal scan lines make this look like a physical LCD without
+            // relying on an external texture or a generic glow effect.
+            for (int i = 0; i < 5; i++)
+            {
+                var line = new VisualElement();
+                line.style.position = Position.Absolute;
+                line.style.left = 2;
+                line.style.right = 2;
+                line.style.top = 7 + i * 12;
+                line.style.height = 1;
+                line.style.backgroundColor = new StyleColor(new Color(0.77f, 0.88f, 0.48f, 0.055f));
+                line.pickingMode = PickingMode.Ignore;
+                _lcdScreen.Add(line);
+            }
+
+            var caption = new Label("LOCAL PULL");
+            caption.style.marginLeft = 5;
+            caption.style.marginTop = 4;
+            caption.style.fontSize = 7;
+            caption.style.letterSpacing = 1.1f;
+            caption.style.unityFontStyleAndWeight = FontStyle.Bold;
+            caption.style.color = new StyleColor(new Color(LcdInk.r, LcdInk.g, LcdInk.b, 0.72f));
+            caption.pickingMode = PickingMode.Ignore;
+            _lcdScreen.Add(caption);
+
+            _lcdGLabel = new Label("1.00G");
+            _lcdGLabel.style.marginLeft = 5;
+            _lcdGLabel.style.marginTop = -2;
+            _lcdGLabel.style.fontSize = 27;
+            _lcdGLabel.style.letterSpacing = 1.0f;
+            _lcdGLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _lcdGLabel.style.color = new StyleColor(LcdInk);
+            _lcdGLabel.pickingMode = PickingMode.Ignore;
+            _lcdScreen.Add(_lcdGLabel);
+
+            _lcdAccelerationLabel = new Label("09.81 m/s²");
+            _lcdAccelerationLabel.style.marginLeft = 6;
+            _lcdAccelerationLabel.style.marginTop = -3;
+            _lcdAccelerationLabel.style.fontSize = 9;
+            _lcdAccelerationLabel.style.letterSpacing = 0.6f;
+            _lcdAccelerationLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _lcdAccelerationLabel.style.color = new StyleColor(new Color(LcdInk.r, LcdInk.g, LcdInk.b, 0.82f));
+            _lcdAccelerationLabel.pickingMode = PickingMode.Ignore;
+            _lcdScreen.Add(_lcdAccelerationLabel);
+        }
+
+        private static void BuildReferenceColumn(VisualElement parent)
+        {
+            var column = new VisualElement { name = "GravityReferenceColumn" };
             column.style.flexGrow = 1;
+            column.style.marginLeft = 10;
             column.pickingMode = PickingMode.Ignore;
-            row.Add(column);
+            parent.Add(column);
 
-            _gLabel = new Label("1.00 G");
-            _gLabel.style.fontSize = 24;
-            _gLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
-            _gLabel.style.letterSpacing = 0.5f;
-            _gLabel.style.color = new StyleColor(T.AccentPurple);
-            _gLabel.pickingMode = PickingMode.Ignore;
-            column.Add(_gLabel);
+            var bodyCaption = SmallCaption("BODY");
+            column.Add(bodyCaption);
 
-            _accelerationLabel = new Label("9.81 m/s²");
-            _accelerationLabel.style.fontSize = 10;
-            _accelerationLabel.style.marginTop = -2;
-            _accelerationLabel.style.color = new StyleColor(T.TextSecondary);
-            _accelerationLabel.pickingMode = PickingMode.Ignore;
-            column.Add(_accelerationLabel);
+            _bodyLabel = new Label("LOCAL FIELD");
+            _bodyLabel.style.fontSize = 12;
+            _bodyLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _bodyLabel.style.color = new StyleColor(T.TextPrimary);
+            _bodyLabel.style.marginTop = 1;
+            _bodyLabel.style.whiteSpace = WhiteSpace.NoWrap;
+            _bodyLabel.style.overflow = Overflow.Hidden;
+            _bodyLabel.style.textOverflow = TextOverflow.Ellipsis;
+            _bodyLabel.pickingMode = PickingMode.Ignore;
+            column.Add(_bodyLabel);
 
-            _directionLabel = new Label("PULL VECTOR · COREWARD");
-            _directionLabel.style.fontSize = 8;
-            _directionLabel.style.marginTop = 3;
-            _directionLabel.style.letterSpacing = 0.85f;
-            _directionLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
-            _directionLabel.style.color = new StyleColor(T.TextMuted);
-            _directionLabel.pickingMode = PickingMode.Ignore;
-            column.Add(_directionLabel);
+            var vectorCaption = SmallCaption("VECTOR");
+            vectorCaption.style.marginTop = 5;
+            column.Add(vectorCaption);
+
+            _vectorLabel = new Label("COREWARD");
+            _vectorLabel.style.fontSize = 10;
+            _vectorLabel.style.letterSpacing = 0.7f;
+            _vectorLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _vectorLabel.style.color = new StyleColor(T.TextSecondary);
+            _vectorLabel.pickingMode = PickingMode.Ignore;
+            column.Add(_vectorLabel);
+
+            var surfaceRow = new VisualElement { name = "GravitySurfaceReference" };
+            surfaceRow.style.flexDirection = FlexDirection.Row;
+            surfaceRow.style.alignItems = Align.Center;
+            surfaceRow.style.marginTop = 6;
+            surfaceRow.pickingMode = PickingMode.Ignore;
+            column.Add(surfaceRow);
+
+            var surfaceCaption = SmallCaption("SFC REF");
+            surfaceCaption.style.flexGrow = 1;
+            surfaceRow.Add(surfaceCaption);
+
+            _surfaceValueLabel = new Label("100%");
+            _surfaceValueLabel.style.fontSize = 12;
+            _surfaceValueLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _surfaceValueLabel.style.color = new StyleColor(LcdInk);
+            _surfaceValueLabel.pickingMode = PickingMode.Ignore;
+            surfaceRow.Add(_surfaceValueLabel);
+
+            var segmentTrack = new VisualElement { name = "GravitySurfaceSegments" };
+            segmentTrack.style.flexDirection = FlexDirection.Row;
+            segmentTrack.style.height = 12;
+            segmentTrack.style.marginTop = 3;
+            segmentTrack.style.paddingLeft = 2;
+            segmentTrack.style.paddingRight = 2;
+            segmentTrack.style.paddingTop = 2;
+            segmentTrack.style.paddingBottom = 2;
+            segmentTrack.style.backgroundColor = new StyleColor(new Color(0.018f, 0.022f, 0.019f, 0.98f));
+            segmentTrack.pickingMode = PickingMode.Ignore;
+            T.Radius(segmentTrack, 1f);
+            T.Border(segmentTrack, 1f, new Color(LcdFrame.r, LcdFrame.g, LcdFrame.b, 0.72f));
+            column.Add(segmentTrack);
+
+            _surfaceSegments = new VisualElement[SurfaceSegmentCount];
+            for (int i = 0; i < SurfaceSegmentCount; i++)
+            {
+                var segment = new VisualElement { name = "GravitySegment" + i };
+                segment.style.flexGrow = 1;
+                segment.style.marginRight = i < SurfaceSegmentCount - 1 ? 1 : 0;
+                segment.style.backgroundColor = new StyleColor(LcdOff);
+                segment.pickingMode = PickingMode.Ignore;
+                T.Radius(segment, 1f);
+                _surfaceSegments[i] = segment;
+                segmentTrack.Add(segment);
+            }
+
+            _surfaceStateLabel = new Label("AT SURFACE REFERENCE");
+            _surfaceStateLabel.style.marginTop = 4;
+            _surfaceStateLabel.style.fontSize = 7;
+            _surfaceStateLabel.style.letterSpacing = 0.65f;
+            _surfaceStateLabel.style.color = new StyleColor(T.TextMuted);
+            _surfaceStateLabel.pickingMode = PickingMode.Ignore;
+            column.Add(_surfaceStateLabel);
         }
 
-        private static void BuildSurfaceMeter()
+        private static Label SmallCaption(string text)
         {
-            var header = new VisualElement { name = "GravitySurfaceHeader" };
-            header.style.flexDirection = FlexDirection.Row;
-            header.style.alignItems = Align.Center;
-            header.style.marginTop = 9;
-            header.pickingMode = PickingMode.Ignore;
-            _card.Add(header);
-
-            var label = new Label("SURFACE PULL");
-            label.style.flexGrow = 1;
-            label.style.fontSize = 8;
+            var label = new Label(text);
+            label.style.fontSize = 7;
             label.style.letterSpacing = 1.1f;
             label.style.unityFontStyleAndWeight = FontStyle.Bold;
             label.style.color = new StyleColor(T.TextMuted);
             label.pickingMode = PickingMode.Ignore;
-            header.Add(label);
-
-            _surfaceLabel = new Label("100%");
-            _surfaceLabel.style.fontSize = 8;
-            _surfaceLabel.style.letterSpacing = 0.7f;
-            _surfaceLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
-            _surfaceLabel.style.color = new StyleColor(T.AccentPurple);
-            _surfaceLabel.pickingMode = PickingMode.Ignore;
-            header.Add(_surfaceLabel);
-
-            var track = new VisualElement { name = "GravitySurfaceTrack" };
-            track.style.height = 5;
-            track.style.marginTop = 4;
-            track.style.backgroundColor = new StyleColor(new Color(0.14f, 0.16f, 0.22f, 0.92f));
-            track.style.overflow = Overflow.Hidden;
-            track.pickingMode = PickingMode.Ignore;
-            T.Radius(track, 3f);
-            _card.Add(track);
-
-            _meterFill = new VisualElement { name = "GravitySurfaceFill" };
-            _meterFill.style.position = Position.Absolute;
-            _meterFill.style.left = 0;
-            _meterFill.style.top = 0;
-            _meterFill.style.bottom = 0;
-            _meterFill.style.width = new StyleLength(new Length(100f, LengthUnit.Percent));
-            _meterFill.style.backgroundColor = new StyleColor(T.AccentPurple);
-            _meterFill.pickingMode = PickingMode.Ignore;
-            T.Radius(_meterFill, 3f);
-            track.Add(_meterFill);
+            return label;
         }
 
         public static void Tick()
@@ -280,38 +317,43 @@ namespace VoxelEngine.UI
 
         private static void ApplyReadout(GravityFieldSample gravity, float gees, float surfacePull)
         {
-            Color accent = ResolveAccent(gravity);
+            Color ink = ResolveLcdInk(gravity);
             var body = GravityProvider.ActiveBody;
             string bodyName = body != null ? body.DisplayName.ToUpperInvariant() : "LOCAL FIELD";
-            string direction = gravity.IsRadial ? "PULL VECTOR · COREWARD" : "PULL VECTOR · DOWNWARD";
+            string direction = gravity.IsRadial ? "COREWARD" : "DOWNWARD";
+            int litSegments = Mathf.Clamp(Mathf.RoundToInt(surfacePull * SurfaceSegmentCount), 0, SurfaceSegmentCount);
 
             _bodyLabel.text = bodyName;
-            _gLabel.text = $"{gees:0.00} G";
-            _accelerationLabel.text = $"{gravity.Magnitude:0.00} m/s²";
-            _directionLabel.text = direction;
-            _surfaceLabel.text = gravity.IsRadial ? $"{surfacePull * 100f:0}%" : "NOMINAL";
-            T.SetFillPercent(_meterFill, surfacePull);
+            _lcdGLabel.text = $"{gees:0.00}G";
+            _lcdAccelerationLabel.text = $"{gravity.Magnitude:00.00} m/s²";
+            _vectorLabel.text = direction;
+            _surfaceValueLabel.text = gravity.IsRadial ? $"{surfacePull * 100f:0}%" : "100%";
+            _surfaceStateLabel.text = gravity.IsRadial
+                ? (surfacePull >= 0.995f ? "AT SURFACE REFERENCE" : "RELATIVE SURFACE PULL")
+                : "FLAT FIELD REFERENCE";
 
-            _gLabel.style.color = new StyleColor(accent);
-            _pullArrow.style.color = new StyleColor(accent);
-            _surfaceLabel.style.color = new StyleColor(accent);
-            _pulseDot.style.backgroundColor = new StyleColor(accent);
-            _accentLine.style.backgroundColor = new StyleColor(accent);
-            _orb.style.backgroundColor = new StyleColor(new Color(accent.r, accent.g, accent.b, 0.16f));
-            T.Border(_orb, 1f, new Color(accent.r, accent.g, accent.b, 0.75f));
-            _meterFill.style.backgroundColor = new StyleColor(accent);
-            T.Border(_card, 1f, new Color(accent.r, accent.g, accent.b, 0.58f));
+            _lcdGLabel.style.color = new StyleColor(ink);
+            _lcdAccelerationLabel.style.color = new StyleColor(new Color(ink.r, ink.g, ink.b, 0.84f));
+            _surfaceValueLabel.style.color = new StyleColor(ink);
+            T.Border(_lcdBorder, 1f, new Color(ink.r, ink.g, ink.b, 0.70f));
+            T.Border(_card, 1f, new Color(ink.r, ink.g, ink.b, 0.35f));
 
-            float pulse = 0.64f + Mathf.Sin(Time.unscaledTime * 3.2f) * 0.28f;
-            _pulseDot.style.opacity = pulse;
+            for (int i = 0; i < _surfaceSegments.Length; i++)
+            {
+                var segment = _surfaceSegments[i];
+                if (segment == null) continue;
+                segment.style.backgroundColor = new StyleColor(i < litSegments
+                    ? new Color(ink.r, ink.g, ink.b, 0.90f)
+                    : LcdOff);
+            }
         }
 
-        private static Color ResolveAccent(GravityFieldSample gravity)
+        private static Color ResolveLcdInk(GravityFieldSample gravity)
         {
-            if (gravity.Gees >= 1.75f) return T.AccentAmber;
-            if (gravity.Gees <= 0.20f || gravity.SurfaceFraction <= 0.15f) return T.AccentBlue;
-            if (gravity.Gees <= 0.70f || gravity.SurfaceFraction <= 0.50f) return T.AccentCyan;
-            return T.AccentPurple;
+            if (gravity.Gees >= 1.75f) return new Color(0.98f, 0.71f, 0.24f);
+            if (gravity.Gees <= 0.20f || gravity.SurfaceFraction <= 0.15f) return new Color(0.45f, 0.74f, 0.90f);
+            if (gravity.Gees <= 0.70f || gravity.SurfaceFraction <= 0.50f) return new Color(0.56f, 0.82f, 0.72f);
+            return LcdInk;
         }
 
         private static void SetVisible(bool visible)
