@@ -137,7 +137,10 @@ namespace VoxelEngine.Cosmos
                 var above = world.GetVoxelWorld(outward);
                 if (above.IsSolid || above.waterLevel > 0) continue;
 
-                Vector3 terrainNormalLocal = EstimateSurfaceNormal(world, surfaceVoxel, radialUpLocal);
+                // Keep blades perpendicular to the planet's radial frame. Surface-net gradient
+                // estimates can tilt wildly across a Cartesian chunk seam, making grass look
+                // flat relative to world Y instead of wrapped around the sphere.
+                Vector3 terrainNormalLocal = radialUpLocal;
                 Vector3 terrainNormalWorld = body.transform.TransformDirection(terrainNormalLocal).normalized;
                 GetTangentBasis(radialUpLocal, out Vector3 localTangentA, out Vector3 localTangentB);
 

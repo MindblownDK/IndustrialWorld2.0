@@ -1457,7 +1457,17 @@ namespace VoxelEngine.Player
             if (v.density > 0)
             {
                 var def = registry.Get(v.material);
-                if (def != null && def.miningTier > tier) return; // wrong tool tier — no progress
+                if (def != null && def.miningTier > tier)
+                {
+                    // Every solid remains breakable by hand or an under-tier tool. The tier
+                    // requirement now controls efficiency instead of creating an invisible
+                    // hard lock: correct tools stay fast, while improvised mining is deliberate
+                    // and much slower with a smaller effective brush.
+                    int tierGap = def.miningTier - tier;
+                    strength = Mathf.Max(1f, strength * Mathf.Pow(0.22f, tierGap));
+                    radius = Mathf.Min(radius, 0.65f);
+                    rate = Mathf.Max(0.35f, rate * Mathf.Pow(0.55f, tierGap));
+                }
             }
 
             VoxelEditor.Subtract(world, registry, miningPoint, radius, strength);

@@ -215,7 +215,7 @@ namespace VoxelEngine.UI
             // displayable info. Don't give up at the first collider: ghosts, held-tool
             // viewmodels and other transient blockers must never swallow the card when
             // the player has items or tools in hand.
-            if (!TryResolveAlongRay(ray, out var info))
+            if (!TryResolveAlongRay(ray, out var info) && !TryResolveVoxelAlongRay(ray, out info))
             {
                 Hide();
                 return;
@@ -411,31 +411,69 @@ namespace VoxelEngine.UI
             if (world != null)
             {
                 Vector3 samplePoint = hit.point - hit.normal.normalized * 0.15f;
-                Vector3Int voxelPosition = world.WorldToVoxel(samplePoint);
-                var voxel = world.GetVoxelWorld(voxelPosition);
-                if (voxel.material != (byte)MaterialId.Air)
-                {
-                    byte materialByte = voxel.material == (byte)MaterialId.LegacySolidFloor
-                        ? (byte)MaterialId.Stone
-                        : voxel.material;
-                    var definition = world.MaterialRegistry?.Get(materialByte);
-                    var materialId = (MaterialId)materialByte;
-                    info.title = definition != null && !string.IsNullOrWhiteSpace(definition.displayName)
-                        ? definition.displayName
-                        : materialId.ToString();
-                    info.detail = "VOXEL MATERIAL";
-                    info.status = definition != null
-                        ? $"Hardness: {definition.hardness:0.0} · Mining tier: {definition.miningTier}"
-                        : $"Material ID: {(byte)materialId}";
-                    return true;
-                }
+                if (TryDescribeVoxel(world, world.WorldToVoxel(samplePoint), out info)) return true;
             }
+
+            // A terrain chunk without a resolved voxel should not become a meaningless root
+            // object name; let the ray-marched voxel fallback below identify the real material.
+            if (hit.collider.gameObject.name.StartsWith("Chunk_", System.StringComparison.Ordinal))
+                return false;
 
             string fallback = hit.collider.transform.root.name;
             if (string.IsNullOrWhiteSpace(fallback)) return false;
             info.title = fallback.Replace("(Clone)", string.Empty).Trim();
             info.detail = "WORLD OBJECT";
             info.status = $"Distance: {hit.distance:0.0} m";
+            return true;
+        }
+
+        private static bool TryResolveVoxelAlongRay(Ray ray, out TargetInfo info)
+        {
+            info = default;
+            var world = ActiveWorld.Current;
+            if (world == null) return false;
+
+            Vector3Int lastVoxel = new Vector3Int(int.MinValue, int.MinValue, int.MinValue);
+            // A collider can be deferred for a newly streamed chunk while its voxel data is
+            // already valid. Marching the short inspection reach keeps the top-left title alive
+            // during that hand-off instead of flashing blank/no-object.
+            for (float distance = 0.35f; distance <= ProbeDistance; distance += 0.5f)
+            {
+                Vector3Int voxelPosition = world.WorldToVoxel(ray.GetPoint(distance));
+                if (voxelPosition == lastVoxel) continue;
+                lastVoxel = voxelPosition;
+                if (TryDescribeVoxel(world, voxelPosition, out info)) return true;
+            }
+            return false;
+        }
+
+        private static bool TryDescribeVoxel(IVoxelWorld world, Vector3Int voxelPosition, out TargetInfo info)
+        {
+            info = default;
+            if (world == null) return false;
+            Voxel voxel;
+            if (world is VoxelEngine.Cosmos.SphereWorld sphere)
+            {
+                if (!sphere.TryGetVoxelReady(voxelPosition, out voxel)) return false;
+            }
+            else
+            {
+                voxel = world.GetVoxelWorld(voxelPosition);
+            }
+            if (voxel.density <= 0 && voxel.material == (byte)MaterialId.Air) return false;
+
+            byte materialByte = voxel.material == (byte)MaterialId.LegacySolidFloor
+                ? (byte)MaterialId.Stone
+                : voxel.material;
+            var definition = world.MaterialRegistry?.Get(materialByte);
+            var materialId = (MaterialId)materialByte;
+            info.title = definition != null && !string.IsNullOrWhiteSpace(definition.displayName)
+                ? definition.displayName
+                : materialId.ToString();
+            info.detail = "VOXEL MATERIAL";
+            info.status = definition != null
+                ? $"Hardness: {definition.hardness:0.0} · Mining tier: {definition.miningTier}"
+                : $"Material ID: {(byte)materialId}";
             return true;
         }
 

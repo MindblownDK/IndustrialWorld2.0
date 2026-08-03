@@ -743,10 +743,21 @@ namespace VoxelEngine.Cosmos
             if (nearest != null) QueueMesh(nearest);
         }
 
+        private static bool HasValidCollisionGeometry(Mesh mesh)
+        {
+            if (mesh == null || mesh.vertexCount < 3 || mesh.subMeshCount < 1) return false;
+            if (mesh.GetIndexCount(0) < 3u) return false;
+            // SurfaceNets intentionally allocates one placeholder vertex for an empty mesh.
+            // Bounds reject that placeholder and any degenerate single-point triangle before
+            // it reaches MeshCollider (which otherwise logs an error every frame).
+            return mesh.bounds.size.sqrMagnitude > 0.0000001f;
+        }
+
         private void ApplyColliderState(Chunk chunk, Mesh mesh, bool hasIndices)
         {
             if (chunk == null || chunk.meshCollider == null) return;
-            if (hasIndices && ShouldHaveCollider(chunk))
+            bool canCollide = hasIndices && HasValidCollisionGeometry(mesh) && ShouldHaveCollider(chunk);
+            if (canCollide)
             {
                 if (chunk.meshCollider.sharedMesh != mesh) chunk.meshCollider.sharedMesh = mesh;
             }
@@ -763,7 +774,7 @@ namespace VoxelEngine.Cosmos
                 Chunk chunk = pair.Value;
                 if (chunk == null || chunk.meshCollider == null || chunk.meshFilter == null) continue;
                 Mesh mesh = chunk.meshFilter.sharedMesh;
-                ApplyColliderState(chunk, mesh, mesh != null && mesh.vertexCount > 0);
+                ApplyColliderState(chunk, mesh, HasValidCollisionGeometry(mesh));
             }
         }
 
@@ -1117,6 +1128,11 @@ namespace VoxelEngine.Cosmos
             }
             return found;
         }
+
+        /// <summary>Non-blocking ready-voxel query for HUD/visual probes. Unlike GetVoxelWorld,
+        /// it never completes a pending mesh job on the main thread.</summary>
+        public bool TryGetVoxelReady(Vector3Int localVoxel, out Voxel voxel)
+            => TryGetGeneratedVoxel(localVoxel, out voxel);
 
         private bool TryGetGeneratedVoxel(Vector3Int localVoxel, out Voxel voxel)
         {

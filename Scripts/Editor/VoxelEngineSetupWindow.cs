@@ -3216,12 +3216,37 @@ namespace VoxelEngine.EditorTools
             if (registry == null) return;
             registry.definitions ??= new List<VoxelEngine.Materials.VoxelMaterialDefinition>();
 
-            EnsureSurfaceDrop(VoxelEngine.Materials.MaterialId.Clay, "Clay/Dirt", new Color(0.40f, 0.27f, 0.16f));
-            EnsureSurfaceDrop(VoxelEngine.Materials.MaterialId.Grass, "Grass/Dirt", new Color(0.24f, 0.52f, 0.18f));
+            // Sand may already live in the industrial content folder. Reuse it by itemId so
+            // this setup repair never creates a duplicate custom item.
+            var sand = FindOrCreateSurfaceItem("sand", "Sand", new Color(0.92f, 0.84f, 0.55f));
+            EnsureSurfaceDrop(VoxelEngine.Materials.MaterialId.Sand, "Sand", new Color(0.92f, 0.84f, 0.55f), sand);
+            EnsureSurfaceDrop(VoxelEngine.Materials.MaterialId.Clay, "Clay/Dirt", new Color(0.40f, 0.27f, 0.16f), dirt);
+            EnsureSurfaceDrop(VoxelEngine.Materials.MaterialId.Grass, "Grass/Dirt", new Color(0.24f, 0.52f, 0.18f), dirt);
             registry.Build();
             EditorUtility.SetDirty(registry);
 
-            void EnsureSurfaceDrop(VoxelEngine.Materials.MaterialId id, string display, Color color)
+            VoxelEngine.Items.ItemDefinition FindOrCreateSurfaceItem(string itemId, string display, Color tint)
+            {
+                foreach (string guid in AssetDatabase.FindAssets("t:ItemDefinition", new[] { ASSET_ROOT }))
+                {
+                    var existing = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>(AssetDatabase.GUIDToAssetPath(guid));
+                    if (existing != null && string.Equals(existing.itemId, itemId, System.StringComparison.OrdinalIgnoreCase)) return existing;
+                }
+
+                string path = itemsFolder + "/Item_" + char.ToUpperInvariant(itemId[0]) + itemId.Substring(1) + ".asset";
+                var created = ScriptableObject.CreateInstance<VoxelEngine.Items.ItemDefinition>();
+                created.itemId = itemId;
+                created.displayName = display;
+                created.description = "Hand-mined " + display.ToLowerInvariant() + " resource.";
+                created.iconTint = tint;
+                created.maxStack = 999;
+                created.massPerUnit = 1f;
+                created.category = "Resources";
+                AssetDatabase.CreateAsset(created, path);
+                return created;
+            }
+
+            void EnsureSurfaceDrop(VoxelEngine.Materials.MaterialId id, string display, Color color, VoxelEngine.Items.ItemDefinition fallbackDrop)
             {
                 var definition = AssetDatabase.LoadAssetAtPath<VoxelEngine.Materials.VoxelMaterialDefinition>($"{ASSET_ROOT}/Materials/Mat_{id}.asset");
                 if (definition == null)
@@ -3235,7 +3260,7 @@ namespace VoxelEngine.EditorTools
                 definition.hardness = Mathf.Max(0.2f, definition.hardness);
                 definition.miningTier = 0;
                 definition.isMineable = true;
-                if (definition.dropItem == null) definition.dropItem = dirt;
+                if (definition.dropItem == null) definition.dropItem = fallbackDrop;
                 definition.dropAmount = Mathf.Max(1, definition.dropAmount);
                 if (!registry.definitions.Contains(definition)) registry.definitions.Add(definition);
                 EditorUtility.SetDirty(definition);

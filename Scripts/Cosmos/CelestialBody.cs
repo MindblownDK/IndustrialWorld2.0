@@ -66,9 +66,11 @@ namespace VoxelEngine.Cosmos
             // too low (0) = all beach. +4m gives realistic continents with visible oceans.
             genParams.baseHeight          = settings.waterLevel + 4f;
             genParams.seaRadius           = radiusM + settings.waterLevel;
-            // Continent wavelength ≈ planet circumference / ~6 continents.
-            float circumference           = Mathf.PI * 2f * radiusM;
-            genParams.continentScaleDir   = (2f * Mathf.PI) / Mathf.Max(1f, circumference / 1200f);
+            // Direction-space noise receives a unit vector, not metre coordinates. The old
+            // inverse-radius formula reduced continent frequency to ~0.15 on full-size worlds,
+            // creating one rigid near-flat shell. Use a stable direction-space continental
+            // scale, with the authored factor preserving designer control across planet sizes.
+            genParams.continentScaleDir   = Mathf.Clamp(2.4f * settings.continentScaleFactor, 0.6f, 7f);
             genParams.mountainScale       = settings.mountainScale;
 
             // Earth-like gravity baseline (9.81) scaled by the body's gravity multiplier.

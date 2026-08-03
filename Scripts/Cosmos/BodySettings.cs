@@ -193,7 +193,24 @@ namespace VoxelEngine.Cosmos
         /// The narrow Pirate fallback preserves already-created 7.10.1 worlds until setup runs.
         /// </summary>
         public bool CanGenerateFiniteCrudeOilSeeps => enableCrudeOilSeeps
-            || (IsPirateWorld && crudeOilSeepSettingsVersion == 0);
+            || (crudeOilSeepSettingsVersion == 0 && IsLegacyOilRichWorld);
+
+        // Existing worlds created before Step 21 did not serialize the finite-seep flags even
+        // though their templates already contained crude-oil layers. Keep the intended selected
+        // oil worlds productive until setup writes explicit authored values; unrelated worlds
+        // remain oil-free and the Pirate-only infinite rule stays separate.
+        private bool IsLegacyOilRichWorld
+        {
+            get
+            {
+                string name = bodyName?.Trim() ?? string.Empty;
+                return string.Equals(name, "Earth", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(name, "Ocean World", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(name, "Acid World", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(name, "Desolate World", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(name, "Pirate World", StringComparison.OrdinalIgnoreCase);
+            }
+        }
 
         /// <summary>
         /// Infinite nodes are never a general oil-world feature: they remain exclusive to the
@@ -219,7 +236,19 @@ namespace VoxelEngine.Cosmos
         public bool CanGeneratePirateOilNodes => CanGenerateInfiniteJackPumpNodes;
 
         /// <summary>Finite seep frequency with a defensive clamp for legacy serialized data.</summary>
-        public float ResolveCrudeOilSiteChance() => Mathf.Clamp(crudeOilSiteChance, 0.01f, 0.75f);
+        public float ResolveCrudeOilSiteChance()
+        {
+            if (crudeOilSeepSettingsVersion == 0)
+            {
+                string name = bodyName?.Trim() ?? string.Empty;
+                if (string.Equals(name, "Earth", StringComparison.OrdinalIgnoreCase)) return 0.08f;
+                if (string.Equals(name, "Ocean World", StringComparison.OrdinalIgnoreCase)) return 0.10f;
+                if (string.Equals(name, "Acid World", StringComparison.OrdinalIgnoreCase)) return 0.06f;
+                if (string.Equals(name, "Desolate World", StringComparison.OrdinalIgnoreCase)) return 0.05f;
+                if (string.Equals(name, "Pirate World", StringComparison.OrdinalIgnoreCase)) return 0.12f;
+            }
+            return Mathf.Clamp(crudeOilSiteChance, 0.01f, 0.75f);
+        }
 
         /// <summary>Rare Jack Pump node frequency with a defensive clamp for legacy serialized data.</summary>
         public float ResolveInfiniteOilNodeChance() => Mathf.Clamp(infiniteOilNodeChance, 0.001f, 0.25f);

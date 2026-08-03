@@ -1,9 +1,36 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.11.12-dev`
+**Current Version:** `7.11.13-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.11.13-dev] Valid Terrain Colliders, Wrapped Grass & Living Planet Recovery
+
+**Type:** PATCH — collision validity, voxel inspection/mining, spherical terrain shaping, vegetation orientation, and legacy oil/drop recovery; no save/API break.
+
+#### 🧱 Valid gameplay terrain
+- Mesh colliders now require three indexed, non-degenerate vertices before assignment. Empty SurfaceNets placeholder meshes are rejected, eliminating the repeated `ChunkMesh must have at least three distinct vertices` console spam.
+- The nearby collider window still keeps physics cheap, but correctly promotes valid terrain collision as the player approaches.
+- World inspection now ray-marches ready spherical voxels when a collider is temporarily unavailable, preserving the top-left material/object title during streaming instead of showing nothing.
+
+#### 🌍 Rounded terrain and real mountains
+- Corrected planet direction-space continent scaling, which had collapsed authored-size worlds into a near-flat rigid shell.
+- Converted biome terrain frequencies from metre-authored values into stable spherical direction-space frequencies, seeded the terrain field per world, and added smooth continent-only tectonic mountain masks.
+- Reworked slope sampling to use physical metre spans rather than oversized fixed angular offsets, removing widespread artificial cliff/ramp material changes.
+- High/Ultra now retain the detailed capped planet proxy in orbit, with procedural surface variation for readable continents from space.
+
+#### 🌿 Mining, grass, water, and oil recovery
+- Grass blades now align directly to radial planet-up, avoiding chunk-gradient tilt that made grass appear flat against global space rather than wrapped around the sphere.
+- Under-tier tools and hands now mine every solid voxel at reduced speed/brush efficiency instead of hard-locking materials. Correct tools remain much faster.
+- Step 16 surface-drop repair now also repairs missing Sand drops, alongside Dirt/Grass drops, without overwriting custom rewards.
+- Legacy oil-rich templates now restore intended finite seep eligibility/chances for Earth, Ocean, Acid, Desolate, and Pirate worlds until Step 21 writes explicit settings. Natural oceans return through the corrected continent/ocean field.
+
+#### ✅ Static delivery checks
+- Parsed terrain, streaming, meshing, water, player, HUD, material, celestial, and setup C# sources with Tree-sitter.
+- Ran targeted collider/HUD/mining/terrain/oil/version/sparse-workspace assertions locally. Unity compile and Play Mode validation remain pending from Thomas.
+
+---
 
 ### [7.11.12-dev] Bounded Voxel Streaming, Low-Cost Water & Detailed Space Surface
 

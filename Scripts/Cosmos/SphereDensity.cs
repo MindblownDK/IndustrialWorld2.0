@@ -85,9 +85,13 @@ namespace VoxelEngine.Cosmos
         /// </summary>
         public static float LandMask(int seed, in float3 dir, float continentScaleDir)
         {
-            float3 p = dir + SeedOffset(seed, 3);
-            float coarse = noise.snoise(p * continentScaleDir)             * 0.5f + 0.5f;
-            float shape  = noise.snoise(p * continentScaleDir * 2.3f + 13f) * 0.5f + 0.5f;
+            // Apply frequency to the unit direction before the seed translation. This keeps
+            // continental scale stable on authored-size planets instead of collapsing into one
+            // nearly flat land/ocean band as radius grows.
+            float scale = math.max(0.25f, continentScaleDir);
+            float3 p = dir * scale + SeedOffset(seed, 3);
+            float coarse = noise.snoise(p)             * 0.5f + 0.5f;
+            float shape  = noise.snoise(p * 2.3f + 13f) * 0.5f + 0.5f;
             float land   = coarse * 0.72f + shape * 0.28f;
             return math.saturate(math.smoothstep(0.34f, 0.62f, land));
         }
@@ -110,9 +114,12 @@ namespace VoxelEngine.Cosmos
             float3 tangent1 = math.normalizesafe(math.cross(dir, refVec), new float3(1, 0, 0));
             float3 tangent2 = math.normalizesafe(math.cross(dir, tangent1), new float3(0, 0, 1));
 
-            // Small angular offset (~1° in direction space).
-            float3 d1 = math.normalizesafe(dir + tangent1 * 0.02f, dir);
-            float3 d2 = math.normalizesafe(dir + tangent2 * 0.02f, dir);
+            // Sample a stable physical span instead of a fixed large angular offset. Full-size
+            // planets otherwise interpret 0.02 radians as a huge distance and report artificial
+            // cliff slopes everywhere.
+            float angularStep = math.clamp(16f / math.max(1f, prm.radiusWorld), 0.0005f, 0.006f);
+            float3 d1 = math.normalizesafe(dir + tangent1 * angularStep, dir);
+            float3 d2 = math.normalizesafe(dir + tangent2 * angularStep, dir);
 
             EvaluateColumn(prm, biomes, d1, out float h1, out _);
             EvaluateColumn(prm, biomes, d2, out float h2, out _);
@@ -173,16 +180,16 @@ namespace VoxelEngine.Cosmos
                 float w = math.exp((s - bestScore) * 2.5f);
                 if (w < 0.0005f) continue;
 
-                float detail;
-                if (b.ridgedness > 0.01f)
-                {
-                    float n = 1f - math.abs(noise.snoise(dir * b.heightFrequency + i * 5.1f));
-                    detail = math.lerp(noise.snoise(dir * b.heightFrequency + i * 5.1f), n * n, b.ridgedness);
-                }
-                else
-                {
-                    detail = noise.snoise(dir * b.heightFrequency + i * 5.1f);
-                }
+                // Biome height frequencies were authored in world-metre terms. Convert them
+                // into direction-space frequency using the planet radius. Keep this one-noise
+                // sample per biome so radial chunk generation remains Burst-friendly; broad
+                // mountain structure is added once below through the shared tectonic field.
+                float terrainScale = math.max(0.65f, prm.radiusWorld * b.heightFrequency * 0.12f);
+                float micro = noise.snoise(dir * terrainScale + SeedOffset(prm.seed, 10 + i) + i * 5.1f);
+                float ridged = 1f - math.abs(micro);
+                float detail = b.ridgedness > 0.01f
+                    ? math.lerp(micro, ridged * 2f - 1f, b.ridgedness)
+                    : micro;
 
                 float biomeHeight = b.heightOffset + detail * b.heightAmplitude * prm.mountainScale;
 
@@ -198,6 +205,15 @@ namespace VoxelEngine.Cosmos
             float coastPull  = math.smoothstep(0f, 0.45f, landMask);
             float oceanFloor = -25f;
             float terrainOffset = math.lerp(oceanFloor, blended, coastPull);
+
+            // Sparse tectonic ridges create visible mountain chains only inside established
+            // continents. Smooth masks avoid the old rigid stepped slopes while giving orbit
+            // and surface play a readable highland silhouette.
+            float tectonic = 1f - math.abs(noise.snoise(dir * (prm.continentScaleDir * 2.8f)
+                + SeedOffset(prm.seed, 7)));
+            float mountainMask = math.saturate((landMask - 0.50f) * 2f)
+                * math.smoothstep(0.58f, 0.84f, tectonic);
+            terrainOffset += mountainMask * 52f * prm.mountainScale;
 
             surfaceRadius = prm.MeanSurfaceRadius + terrainOffset;
         }
@@ -286,10 +302,11 @@ namespace VoxelEngine.Cosmos
                     // Cheap slope estimate: sample height noise at an offset.
                     float3 refVec = math.abs(dir.y) < 0.9f ? new float3(0, 1, 0) : new float3(1, 0, 0);
                     float3 tangent = math.normalizesafe(math.cross(dir, refVec), new float3(1, 0, 0));
-                    float3 dirOff = math.normalizesafe(dir + tangent * 0.03f, dir);
+                    float angularStep = math.clamp(12f / math.max(1f, prm.radiusWorld), 0.0005f, 0.005f);
+                    float3 dirOff = math.normalizesafe(dir + tangent * angularStep, dir);
                     EvaluateColumn(prm, biomes, dirOff, out float surfaceOff, out _);
                     float heightDiff = math.abs(surfaceOff - surfaceRadius);
-                    if (heightDiff > 8f)   // only genuine cliffs/mountain faces → rock
+                    if (heightDiff > 10f)  // only genuine cliffs/mountain faces → rock
                         material = (byte)MaterialId.Stone;
                 }
 
